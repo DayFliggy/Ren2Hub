@@ -23,7 +23,7 @@ func ListAdminRequestDiagnostics(c *gin.Context) { listRequestDiagnostics(c, fal
 func getRequestDiagnostic(c *gin.Context, self bool) {
 	requestID := c.Param("request_id")
 	if !service.ValidRequestCorrelationID(requestID) || len(requestID) > 64 {
-		common.ApiErrorMsg(c, "Invalid request identifier")
+		common.ApiErrorT(c, "Invalid request identifier")
 		return
 	}
 	userID := 0
@@ -36,12 +36,12 @@ func getRequestDiagnostic(c *gin.Context, self bool) {
 	}
 	row, err := model.GetGatewayRequestDiagnostic(c.Request.Context(), requestID, userID, time.Now().Add(-service.RequestDiagnosticRetentionDays*24*time.Hour).Unix())
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "code": "REQUEST_DIAGNOSTIC_UNAVAILABLE", "message": "Request diagnostics are unavailable or expired."})
+		common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Request diagnostics are unavailable or expired."), gin.H{"code": "REQUEST_DIAGNOSTIC_UNAVAILABLE"})
 		return
 	}
 	if err != nil {
 		_ = c.Error(err)
-		c.JSON(500, gin.H{"success": false, "message": "Diagnostic storage unavailable."})
+		common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("Diagnostic storage unavailable."))
 		return
 	}
 	internal := false
@@ -56,7 +56,7 @@ func getRequestDiagnostic(c *gin.Context, self bool) {
 	result, err := service.ProjectRequestDiagnostic(*row, internal)
 	if err != nil {
 		_ = c.Error(err)
-		c.JSON(500, gin.H{"success": false, "message": "Diagnostic data unavailable."})
+		common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("Diagnostic data unavailable."))
 		return
 	}
 	common.ApiSuccess(c, result)
@@ -66,20 +66,20 @@ func listRequestDiagnostics(c *gin.Context, self bool) {
 	filter := model.RequestDiagnosticFilter{RequestID: c.Query("request_id"), TraceID: c.Query("trace_id"), ThreadID: c.Query("thread_id")}
 	for _, value := range []string{filter.RequestID, filter.TraceID, filter.ThreadID} {
 		if value != "" && !service.ValidRequestCorrelationID(value) {
-			c.JSON(400, gin.H{"success": false, "message": "Invalid correlation identifier."})
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid correlation identifier."))
 			return
 		}
 	}
 	if raw := c.Query("token_id"); raw != "" {
 		id, err := strconv.Atoi(raw)
 		if err != nil || id <= 0 {
-			c.JSON(400, gin.H{"success": false, "message": "Invalid token ID."})
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid token ID."))
 			return
 		}
 		filter.TokenID = id
 	}
 	if (filter.TraceID != "" || filter.ThreadID != "") && filter.TokenID <= 0 {
-		c.JSON(400, gin.H{"success": false, "message": "A token ID is required for correlation queries."})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("A token ID is required for correlation queries."))
 		return
 	}
 	if self {
@@ -91,13 +91,13 @@ func listRequestDiagnostics(c *gin.Context, self bool) {
 	}
 	page, size := common.GetPageQuery(c).Page, common.GetPageQuery(c).PageSize
 	if page < 1 || page > 100000 || size < 1 || size > 100 {
-		c.JSON(400, gin.H{"success": false, "message": "Invalid diagnostic pagination."})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid diagnostic pagination."))
 		return
 	}
 	rows, total, err := model.QueryGatewayRequestDiagnostics(c.Request.Context(), filter, (page-1)*size, size, time.Now().Add(-service.RequestDiagnosticRetentionDays*24*time.Hour).Unix())
 	if err != nil {
 		_ = c.Error(err)
-		c.JSON(500, gin.H{"success": false, "message": "Diagnostic storage unavailable."})
+		common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("Diagnostic storage unavailable."))
 		return
 	}
 	internal := false
@@ -114,7 +114,7 @@ func listRequestDiagnostics(c *gin.Context, self bool) {
 		item, err := service.ProjectRequestDiagnostic(row, internal)
 		if err != nil {
 			_ = c.Error(err)
-			c.JSON(500, gin.H{"success": false, "message": "Diagnostic data unavailable."})
+			common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("Diagnostic data unavailable."))
 			return
 		}
 		items = append(items, item)

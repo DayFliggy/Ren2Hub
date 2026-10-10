@@ -82,12 +82,16 @@ func TestUpdateOptionsBulkRejectsInvalidPatchBeforePersistence(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, response.Code)
 	var payload struct {
-		Success bool   `json:"success"`
-		Message string `json:"message"`
+		Success       bool           `json:"success"`
+		Message       string         `json:"message"`
+		MessageKey    string         `json:"message_key"`
+		MessageParams map[string]any `json:"message_params"`
 	}
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
 	assert.False(t, payload.Success)
-	assert.Contains(t, payload.Message, "GitHub Client Id")
+	assert.Equal(t, "Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", payload.MessageKey)
+	assert.Equal(t, map[string]any{"provider": "GitHub"}, payload.MessageParams)
+	assert.Equal(t, "Cannot enable GitHub OAuth. Enter the GitHub Client ID and Client Secret first.", payload.Message)
 	assert.Equal(t, "", common.OptionMap["GitHubClientId"])
 }
 
@@ -103,7 +107,7 @@ func TestUpdateOptionsBulkRejectsNonScalarValues(t *testing.T) {
 	UpdateOptionsBulk(context)
 
 	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assert.Contains(t, response.Body.String(), "字符串、数值或布尔值")
+	assert.JSONEq(t, `{"success":false,"message":"Option values must be strings, numbers, or booleans","message_key":"Option values must be strings, numbers, or booleans"}`, response.Body.String())
 }
 
 func TestGetOptionSecretStatusNeverReturnsSecretValues(t *testing.T) {

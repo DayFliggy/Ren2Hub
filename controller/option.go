@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"regexp"
 	"sort"
@@ -10,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/pkg/billing"
@@ -266,7 +263,7 @@ func normalizeOptionValue(value any) (string, error) {
 	case int:
 		return common.Interface2String(typed), nil
 	default:
-		return "", fmt.Errorf("配置项值只能是字符串、数值或布尔值")
+		return "", common.NewMessage("Option values must be strings, numbers, or booleans")
 	}
 }
 
@@ -298,48 +295,37 @@ func validateJSON(value string) error {
 	return common.UnmarshalJsonStr(value, &decoded)
 }
 
-func validateStringMap(value string, name string) error {
-	var values map[string]string
-	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
-		if err == nil {
-			err = fmt.Errorf("必须是 JSON 对象")
-		}
-		return fmt.Errorf("%s%s", name, ": "+err.Error())
-	}
-	return nil
-}
-
 func validateStringList(value string, name string) error {
 	var values []string
-	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
-		if err == nil {
-			err = fmt.Errorf("必须是 JSON 数组")
-		}
-		return fmt.Errorf("%s%s", name, ": "+err.Error())
+	if err := common.UnmarshalJsonStr(value, &values); err != nil {
+		return common.NewMessage("Invalid {{name}}: {{error}}", map[string]any{"name": name, "error": err.Error()})
+	}
+	if values == nil {
+		return common.NewMessage("{{name}} must be a JSON array", map[string]any{"name": name})
 	}
 	for _, item := range values {
 		if strings.TrimSpace(item) == "" {
-			return fmt.Errorf("%s: 不允许空字符串", name)
+			return common.NewMessage("{{name}} cannot contain empty strings", map[string]any{"name": name})
 		}
 	}
 	return nil
 }
 
-func validatePositiveIntList(value string, name string) error {
+func validateAmountOptions(value string) error {
 	var values []int
-	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
-		if err == nil {
-			err = fmt.Errorf("必须是 JSON 数组")
-		}
-		return fmt.Errorf("%s: %w", name, err)
+	if err := common.UnmarshalJsonStr(value, &values); err != nil {
+		return common.NewMessage("Invalid top-up amount options: {{error}}", map[string]any{"error": err.Error()})
+	}
+	if values == nil {
+		return common.NewMessage("Top-up amount options must be a JSON array")
 	}
 	seen := make(map[int]struct{}, len(values))
 	for _, item := range values {
 		if item <= 0 {
-			return fmt.Errorf("%s: 金额必须为正整数", name)
+			return common.NewMessage("Top-up amount options must be positive integers")
 		}
 		if _, ok := seen[item]; ok {
-			return fmt.Errorf("%s: 金额不能重复", name)
+			return common.NewMessage("Top-up amount options cannot repeat")
 		}
 		seen[item] = struct{}{}
 	}
@@ -348,19 +334,19 @@ func validatePositiveIntList(value string, name string) error {
 
 func validateDiscountMap(value string) error {
 	var values map[string]float64
-	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
-		if err == nil {
-			err = fmt.Errorf("必须是 JSON 对象")
-		}
-		return fmt.Errorf("充值折扣: %w", err)
+	if err := common.UnmarshalJsonStr(value, &values); err != nil {
+		return common.NewMessage("Invalid top-up discounts: {{error}}", map[string]any{"error": err.Error()})
+	}
+	if values == nil {
+		return common.NewMessage("Top-up discounts must be a JSON object")
 	}
 	for amount, discount := range values {
 		parsed, err := strconv.Atoi(amount)
 		if err != nil || parsed <= 0 {
-			return fmt.Errorf("充值折扣金额必须为正整数: %s", amount)
+			return common.NewMessage("Top-up discount amounts must be positive integers: {{amount}}", map[string]any{"amount": amount})
 		}
 		if discount <= 0 || discount > 1 {
-			return fmt.Errorf("充值折扣必须大于 0 且不超过 1: %s", amount)
+			return common.NewMessage("Top-up discounts must be greater than 0 and at most 1: {{amount}}", map[string]any{"amount": amount})
 		}
 	}
 	return nil
@@ -368,22 +354,22 @@ func validateDiscountMap(value string) error {
 
 func validateChannelAffinityRules(value string) error {
 	var rules []operation_setting.ChannelAffinityRule
-	if err := common.UnmarshalJsonStr(value, &rules); err != nil || rules == nil {
-		if err == nil {
-			err = fmt.Errorf("必须是 JSON 数组")
-		}
-		return fmt.Errorf("渠道亲和性规则: %w", err)
+	if err := common.UnmarshalJsonStr(value, &rules); err != nil {
+		return common.NewMessage("Invalid channel affinity rules: {{error}}", map[string]any{"error": err.Error()})
+	}
+	if rules == nil {
+		return common.NewMessage("Channel affinity rules must be a JSON array")
 	}
 	for _, rule := range rules {
 		if strings.TrimSpace(rule.Name) == "" {
-			return fmt.Errorf("渠道亲和性规则名称不能为空")
+			return common.NewMessage("Channel affinity rule names cannot be empty")
 		}
 		if rule.TTLSeconds < 0 {
-			return fmt.Errorf("渠道亲和性规则 TTL 不能为负数")
+			return common.NewMessage("Channel affinity rule TTL cannot be negative")
 		}
 		for _, pattern := range append(append([]string{}, rule.ModelRegex...), rule.PathRegex...) {
 			if _, err := regexp.Compile(pattern); err != nil {
-				return fmt.Errorf("渠道亲和性规则正则无效: %w", err)
+				return common.NewMessage("Invalid channel affinity rule regex: {{error}}", map[string]any{"error": err.Error()})
 			}
 		}
 	}
@@ -394,11 +380,11 @@ func validateChannelAffinitySettingValue(key, value string) error {
 	switch key {
 	case "channel_affinity_setting.max_entries":
 		if n, err := strconv.Atoi(strings.TrimSpace(value)); err != nil || n <= 0 {
-			return fmt.Errorf("渠道亲和性容量必须为正整数")
+			return common.NewMessage("Channel affinity capacity must be a positive integer")
 		}
 	case "channel_affinity_setting.default_ttl_seconds":
 		if n, err := strconv.Atoi(strings.TrimSpace(value)); err != nil || n < 0 {
-			return fmt.Errorf("渠道亲和性 TTL 不能为负数")
+			return common.NewMessage("Channel affinity TTL cannot be negative")
 		}
 	case "channel_affinity_setting.rules":
 		return validateChannelAffinityRules(value)
@@ -412,10 +398,10 @@ func validateChannelAffinitySettingValue(key, value string) error {
 func validateOptionPatch(values map[string]string) error {
 	for key := range values {
 		if model.IsRetiredBillingOption(key) {
-			return errors.New("automatic price publication is no longer supported")
+			return common.NewMessage("automatic price publication is no longer supported")
 		}
 		if key == "QuotaPerUnit" {
-			return errors.New("quota conversion is fixed at 500000 per USD")
+			return common.NewMessage("quota conversion is fixed at 500000 per USD")
 		}
 	}
 	snapshot := optionSnapshot(values)
@@ -429,58 +415,58 @@ func validateOptionPatch(values map[string]string) error {
 			return err
 		}
 		if key == "" {
-			return fmt.Errorf("配置项名称不能为空")
+			return common.NewMessage("Option name cannot be empty")
 		}
 		if isPaymentComplianceOptionKey(key) {
-			return fmt.Errorf("合规确认字段不允许通过通用设置接口修改")
+			return common.NewMessage("Compliance confirmation fields cannot be changed through the general settings API")
 		}
 		if (key == "QuotaForInviter" || key == "QuotaForInvitee") && isPositiveOptionValue(value) && !operation_setting.IsPaymentComplianceConfirmed() {
-			return fmt.Errorf("支付合规确认后才可设置邀请奖励")
+			return common.NewMessage("Invite rewards can be set only after payment compliance is confirmed")
 		}
 
 		switch key {
 		case "GitHubOAuthEnabled":
 			if value == "true" && (!optionValuePresent(snapshot, "GitHubClientId") || !optionValuePresent(snapshot, "GitHubClientSecret")) {
-				return fmt.Errorf("无法启用 GitHub OAuth，请先填入 GitHub Client Id 以及 GitHub Client Secret！")
+				return common.NewMessage("Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", map[string]any{"provider": "GitHub"})
 			}
 		case "discord.enabled":
 			if value == "true" && (!optionValuePresent(snapshot, "discord.client_id") || !optionValuePresent(snapshot, "discord.client_secret")) {
-				return fmt.Errorf("无法启用 Discord OAuth，请先填入 Discord Client Id 以及 Discord Client Secret！")
+				return common.NewMessage("Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", map[string]any{"provider": "Discord"})
 			}
 		case "oidc.enabled":
 			if value == "true" && (!optionValuePresent(snapshot, "oidc.client_id") || !optionValuePresent(snapshot, "oidc.client_secret")) {
-				return fmt.Errorf("无法启用 OIDC 登录，请先填入 OIDC Client Id 以及 OIDC Client Secret！")
+				return common.NewMessage("Cannot enable OIDC login. Enter the OIDC Client ID and Client Secret first.")
 			}
 		case "LinuxDOOAuthEnabled":
 			if value == "true" && (!optionValuePresent(snapshot, "LinuxDOClientId") || !optionValuePresent(snapshot, "LinuxDOClientSecret")) {
-				return fmt.Errorf("无法启用 LinuxDO OAuth，请先填入 LinuxDO Client Id 以及 LinuxDO Client Secret！")
+				return common.NewMessage("Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", map[string]any{"provider": "LinuxDO"})
 			}
 		case "EmailDomainRestrictionEnabled":
 			if value == "true" && !optionListPresent(snapshot, "EmailDomainWhitelist") {
-				return fmt.Errorf("无法启用邮箱域名限制，请先填入限制的邮箱域名！")
+				return common.NewMessage("Cannot enable the email domain restriction. Enter the allowed email domains first.")
 			}
 		case "WeChatAuthEnabled":
 			if value == "true" && !optionValuePresent(snapshot, "WeChatServerAddress") {
-				return fmt.Errorf("无法启用微信登录，请先填入微信登录相关配置信息！")
+				return common.NewMessage("Cannot enable WeChat login. Enter the WeChat login settings first.")
 			}
 		case "TurnstileCheckEnabled":
 			if value == "true" && (!optionValuePresent(snapshot, "TurnstileSiteKey") || !optionValuePresent(snapshot, "TurnstileSecretKey")) {
-				return fmt.Errorf("无法启用 Turnstile 校验，请先填入 Turnstile 校验相关配置信息！")
+				return common.NewMessage("Cannot enable Turnstile verification. Enter the Turnstile settings first.")
 			}
 		case "TelegramOAuthEnabled":
 			if value == "true" && !optionValuePresent(snapshot, "TelegramBotToken") {
-				return fmt.Errorf("无法启用 Telegram OAuth，请先填入 Telegram Bot Token！")
+				return common.NewMessage("Cannot enable Telegram OAuth. Enter the Telegram Bot Token first.")
 			}
 		case "theme.frontend":
 			if value != "default" {
-				return fmt.Errorf("Classic 前端已移除，主题只能设置为 default")
+				return common.NewMessage("The Classic frontend has been removed. The theme can only be set to default")
 			}
 		case "GroupRatio":
 			if err := ratio_setting.CheckGroupRatio(value); err != nil {
 				return err
 			}
 		case "payment_setting.amount_options":
-			if err := validatePositiveIntList(value, "充值金额选项"); err != nil {
+			if err := validateAmountOptions(value); err != nil {
 				return err
 			}
 		case "payment_setting.amount_discount":
@@ -493,20 +479,20 @@ func validateOptionPatch(values map[string]string) error {
 			}
 		case "global.chat_completions_to_responses_policy":
 			if err := validateJSON(value); err != nil {
-				return fmt.Errorf("Chat Completions 转 Responses 策略无效: %w", err)
+				return common.NewMessage("Invalid Chat Completions to Responses policy: {{error}}", map[string]any{"error": err.Error()})
 			}
 		case "gemini.version_settings", "claude.model_headers_settings":
 			if err := validateJSON(value); err != nil {
-				return fmt.Errorf("模型高级配置无效: %w", err)
+				return common.NewMessage("Invalid advanced model settings: {{error}}", map[string]any{"error": err.Error()})
 			}
 		case "gemini.thinking_adapter_budget_tokens_percentage", "claude.thinking_adapter_budget_tokens_percentage":
 			percentage, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 			if err != nil || percentage < 0.1 || percentage > 1 {
-				return fmt.Errorf("Token 预算比例必须在 0.1 到 1 之间")
+				return common.NewMessage("The token budget ratio must be between 0.1 and 1")
 			}
 		case "grok.violation_deduction_amount":
 			if _, err := billing.ParseAmountUSD(strings.TrimSpace(value)); err != nil {
-				return fmt.Errorf("Grok 违规扣费必须为非负数字")
+				return common.NewMessage("The Grok violation fee must be a non-negative number")
 			}
 		case "channel_affinity_setting.max_entries", "channel_affinity_setting.default_ttl_seconds", "channel_affinity_setting.rules":
 			if err := validateChannelAffinitySettingValue(key, value); err != nil {
@@ -515,16 +501,16 @@ func validateOptionPatch(values map[string]string) error {
 		case "monitor_setting.channel_test_concurrency":
 			concurrency, err := strconv.Atoi(strings.TrimSpace(value))
 			if err != nil || concurrency < 1 || concurrency > 32 {
-				return fmt.Errorf("渠道测试并发必须在 1 到 32 之间")
+				return common.NewMessage("Channel test concurrency must be between 1 and 32")
 			}
 		case "monitor_setting.channel_test_mode":
 			if value != operation_setting.ChannelTestModeScheduledAll && value != operation_setting.ChannelTestModeAutoBanOnly && value != operation_setting.ChannelTestModePassiveRecovery {
-				return fmt.Errorf("自动测试策略无效")
+				return common.NewMessage("Invalid automatic test policy")
 			}
 		case "FileUploadPermission", "FileDownloadPermission", "ImageUploadPermission", "ImageDownloadPermission":
 			role, err := strconv.Atoi(strings.TrimSpace(value))
 			if err != nil || !common.IsValidateRole(role) {
-				return fmt.Errorf("文件访问权限角色无效")
+				return common.NewMessage("Invalid file access permission role")
 			}
 		case "Price":
 			if _, err := operation_setting.ParseEpayPrice(value); err != nil {
@@ -584,7 +570,7 @@ func validateOptionPatch(values map[string]string) error {
 	if snapshot["oidc.enabled"] == "true" {
 		for _, key := range oidcEndpointKeys {
 			if !optionValuePresent(snapshot, key) {
-				return fmt.Errorf("无法启用 OIDC 登录，请先填入完整的 OIDC 端点配置")
+				return common.NewMessage("Cannot enable OIDC login. Enter all OIDC endpoint settings first.")
 			}
 		}
 	}
@@ -598,48 +584,41 @@ func validateOptionPatch(values map[string]string) error {
 			continue
 		}
 		if err := oauth.ValidateOAuthEndpoint(value); err != nil {
-			return fmt.Errorf("OIDC 端点必须使用可公开访问的 HTTPS 地址")
+			return common.NewMessage("OIDC endpoints must use publicly accessible HTTPS addresses")
 		}
 	}
 	return nil
-}
-
-func writeOptionValidationError(c *gin.Context, err error) {
-	c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 }
 
 func UpdateOption(c *gin.Context) {
 	var option OptionUpdateRequest
 	err := common.DecodeJson(c.Request.Body, &option)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "无效的参数",
-		})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid parameters"))
 		return
 	}
 	normalizedValue, err := normalizeOptionValue(option.Value)
 	if err != nil {
-		writeOptionValidationError(c, err)
+		common.ApiError(c, err)
 		return
 	}
 	option.Value = normalizedValue
 	if err = validateOptionPatch(map[string]string{option.Key: normalizedValue}); err != nil {
-		writeOptionValidationError(c, err)
+		common.ApiError(c, err)
 		return
 	}
 	switch option.Key {
 	case "QuotaForInviter", "QuotaForInvitee", "AffiliateEnabled":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
-			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
+			common.ApiErrorT(c, "Payment, redemption, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
 			return
 		}
 	case "AffiliateActivatedAt":
-		common.ApiErrorMsg(c, "邀请返利激活时间不允许直接修改")
+		common.ApiErrorT(c, "The invite rebate activation time cannot be changed directly")
 		return
 	default:
 		if isPaymentComplianceOptionKey(option.Key) {
-			common.ApiErrorMsg(c, "合规确认字段不允许通过通用设置接口修改")
+			common.ApiErrorT(c, "Compliance confirmation fields cannot be changed through the general settings API")
 			return
 		}
 	}
@@ -647,7 +626,7 @@ func UpdateOption(c *gin.Context) {
 	case "AffiliateEnabled":
 		enabled, parseErr := strconv.ParseBool(option.Value.(string))
 		if parseErr != nil {
-			common.ApiErrorMsg(c, "邀请返利开关参数无效")
+			common.ApiErrorT(c, "Invalid invite rebate switch value")
 			return
 		}
 		if err := model.SetAffiliateProgramEnabled(enabled); err != nil {
@@ -660,7 +639,7 @@ func UpdateOption(c *gin.Context) {
 	case "AffiliateRegistrationRequired":
 		if option.Value == "true" {
 			if common.AffiliateActivatedAt <= 0 {
-				common.ApiErrorMsg(c, "请先激活邀请返利计划")
+				common.ApiErrorT(c, "Activate the invite rebate program first")
 				return
 			}
 			hasSeed, seedErr := model.HasActiveAffiliateSeed()
@@ -669,194 +648,136 @@ func UpdateOption(c *gin.Context) {
 				return
 			}
 			if !hasSeed {
-				common.ApiErrorMsg(c, "至少需要一个有效的管理员或根用户邀请码")
+				common.ApiErrorT(c, "At least one valid administrator or root user invite code is required")
 				return
 			}
 		}
 	case "AffiliateRebateRateBps":
 		value, parseErr := strconv.Atoi(option.Value.(string))
 		if parseErr != nil || value < 0 || value > 10000 {
-			common.ApiErrorMsg(c, "返利比例必须在 0 到 10000 基点之间")
+			common.ApiErrorT(c, "The rebate rate must be between 0 and 10000 basis points")
 			return
 		}
 	case "AffiliateFreezeHours", "AffiliateDurationDays":
 		value, parseErr := strconv.Atoi(option.Value.(string))
 		if parseErr != nil || value < 0 {
-			common.ApiErrorMsg(c, "邀请返利周期不能为负数")
+			common.ApiErrorT(c, "Invite rebate periods cannot be negative")
 			return
 		}
 	case "AffiliatePerInviteeCap":
 		_, parseErr := model.AffiliateCapQuota(option.Value.(string))
 		if parseErr != nil {
-			common.ApiErrorMsg(c, "单个受邀用户返利上限必须是非负有限数值")
+			common.ApiErrorT(c, "The rebate cap per invitee must be a finite non-negative number")
 			return
 		}
 	case "QuotaForInviter":
 		if common.AffiliateActivatedAt > 0 && isPositiveOptionValue(option.Value.(string)) {
-			common.ApiErrorMsg(c, "邀请返利计划激活后固定邀请人奖励已废弃")
+			common.ApiErrorT(c, "The fixed inviter reward is retired once the invite rebate program is active")
 			return
 		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && common.GitHubClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 GitHub OAuth，请先填入 GitHub Client Id 以及 GitHub Client Secret！",
-			})
+			common.ApiErrorT(c, "Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", map[string]any{"provider": "GitHub"})
 			return
 		}
 	case "discord.enabled":
 		if option.Value == "true" && system_setting.GetDiscordSettings().ClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Discord OAuth，请先填入 Discord Client Id 以及 Discord Client Secret！",
-			})
+			common.ApiErrorT(c, "Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", map[string]any{"provider": "Discord"})
 			return
 		}
 	case "oidc.enabled":
 		if option.Value == "true" && system_setting.GetOIDCSettings().ClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 OIDC 登录，请先填入 OIDC Client Id 以及 OIDC Client Secret！",
-			})
+			common.ApiErrorT(c, "Cannot enable OIDC login. Enter the OIDC Client ID and Client Secret first.")
 			return
 		}
 	case "LinuxDOOAuthEnabled":
 		if option.Value == "true" && common.LinuxDOClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 LinuxDO OAuth，请先填入 LinuxDO Client Id 以及 LinuxDO Client Secret！",
-			})
+			common.ApiErrorT(c, "Cannot enable {{provider}} OAuth. Enter the {{provider}} Client ID and Client Secret first.", map[string]any{"provider": "LinuxDO"})
 			return
 		}
 	case "EmailDomainRestrictionEnabled":
 		if option.Value == "true" && len(common.EmailDomainWhitelist) == 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用邮箱域名限制，请先填入限制的邮箱域名！",
-			})
+			common.ApiErrorT(c, "Cannot enable the email domain restriction. Enter the allowed email domains first.")
 			return
 		}
 	case "WeChatAuthEnabled":
 		if option.Value == "true" && common.WeChatServerAddress == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用微信登录，请先填入微信登录相关配置信息！",
-			})
+			common.ApiErrorT(c, "Cannot enable WeChat login. Enter the WeChat login settings first.")
 			return
 		}
 	case "TurnstileCheckEnabled":
 		if option.Value == "true" && common.TurnstileSiteKey == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Turnstile 校验，请先填入 Turnstile 校验相关配置信息！",
-			})
-
+			common.ApiErrorT(c, "Cannot enable Turnstile verification. Enter the Turnstile settings first.")
 			return
 		}
 	case "TelegramOAuthEnabled":
 		if option.Value == "true" && common.TelegramBotToken == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Telegram OAuth，请先填入 Telegram Bot Token！",
-			})
+			common.ApiErrorT(c, "Cannot enable Telegram OAuth. Enter the Telegram Bot Token first.")
 			return
 		}
 	case "theme.frontend":
 		if option.Value != "default" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Classic 前端已移除，主题只能设置为 default",
-			})
+			common.ApiErrorT(c, "The Classic frontend has been removed. The theme can only be set to default")
 			return
 		}
 	case "GroupRatio":
 		err = ratio_setting.CheckGroupRatio(option.Value.(string))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "gemini.safety_settings":
 		err = model_setting.ValidateGeminiSafetySettings(option.Value.(string))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "claude.default_max_tokens":
 		err = model_setting.ValidateClaudeDefaultMaxTokens(option.Value.(string))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "ModelRequestRateLimitGroup":
 		err = setting.CheckModelRequestRateLimitGroup(option.Value.(string))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "AutomaticDisableStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "AutomaticRetryStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "console_setting.api_info":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "console_setting.announcements":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "Announcements")
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "console_setting.faq":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "FAQ")
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	case "console_setting.uptime_kuma_groups":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "UptimeKumaGroups")
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiError(c, err)
 			return
 		}
 	}
@@ -880,10 +801,7 @@ func UpdateOption(c *gin.Context) {
 func UpdateOptionsBulk(c *gin.Context) {
 	var request OptionBulkUpdateRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || len(request.Options) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "无效的参数",
-		})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid parameters"))
 		return
 	}
 
@@ -891,16 +809,13 @@ func UpdateOptionsBulk(c *gin.Context) {
 	for key, value := range request.Options {
 		normalizedValue, err := normalizeOptionValue(value)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			common.ApiErrorStatus(c, http.StatusBadRequest, err)
 			return
 		}
 		values[key] = normalizedValue
 	}
 	if err := validateOptionPatch(values); err != nil {
-		writeOptionValidationError(c, err)
+		common.ApiError(c, err)
 		return
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
