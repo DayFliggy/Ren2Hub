@@ -36,6 +36,10 @@
 | Sub2API apicompat（拒答转 Chat） | 本地偏离保留 | Responses 拒答在非流式、流式、缓冲三条路径转为 Chat `refusal` 字段，增量与终态快照只交付一次 | `relaykit/relayconvert/internal/oai_responses/` | `TestResponsesRefusalReachesChatRefusalField` | NewAPI 提供拒答映射时比较 |
 | 本地（拒答转 Claude） | 本地偏离保留 | 拒答转为 Claude text 块并设 `stop_reason: "refusal"`，优先于 tool_use、end_turn 与长度截断；记 warning `responses_refusal_reduced`（safe/allow 放行，strict 拒绝）；只交付一次。AxonHub 静默丢弃，三个上游都没有该映射 | `relaykit/relayconvert/` | `TestResponsesRefusalReachesClaudeUnderConversionPolicy` | 上游提供映射时比较 |
 | 本地 AUDIT1009-02（拒答转 Gemini） | 等待上游 | Responses 拒答转 Gemini（请求历史与响应两个方向）被丢弃，三个项目都没有映射 | — | — | NewAPI 修复后按其实现同步 |
+| 本地 AUDIT1009B-09（Haiku 5.5 能力行） | 等待上游 | Claude 能力表没有 Haiku 5.5 专属行，落到旧默认行：推理意图渲染为 `thinking.budget_tokens`，非默认 `temperature` 原样发送；Anthropic 文档写明两者对 Haiku 5.5 返回 400（默认 effort `medium`、`disabled` 仅 high 及以下）。NewAPI 同样缺 | `relaykit/relayconvert/reasoning/claude.go` | — | NewAPI 补齐后按其实现同步 |
+| 本地 AUDIT1009B-10（Bedrock Sonnet 5 强制工具） | 等待上游 | Bedrock 上 Sonnet 5 配强制 `tool_choice` 时 Anthropic 要求显式 `thinking:disabled`，转换不发送 thinking，模型按默认开启思考运行；与 NewAPI 一致 | `relaykit/relayconvert/reasoning/claude.go` | — | NewAPI 修复后按其实现同步 |
+| 本地 AUDIT1009B-11（`input_image` 无 `detail`） | 等待上游 | Responses `input_image` 不带 `detail` 时转 Chat 的 `image_url` 是字符串而非对象；与 NewAPI 一致 | `relaykit/relayconvert/internal/oai_responses/to_oai_chat_req.go` | — | NewAPI 修复后按其实现同步 |
+| 本地 AUDIT1009B-12（Fable 5 effort 诊断） | 等待上游 | Fable 5/5.1 能力行未设置 `supportsEffort`，关闭思考意图以默认 effort 发送，诊断文字"使用最低档"与实际不符；不导致 400，与 NewAPI 一致 | `relaykit/relayconvert/reasoning/claude.go` | — | NewAPI 修复后按其实现同步 |
 | Sub2API `412718edf` | 本地偏离保留 | `ClaudeMediaMessage` 对 thinking 块始终输出 `thinking` 与 `signature` 键，未知签名为空串，其他块不变；转换生成的 thinking 块不伪造签名 | `relaykit/dto/claude.go` | `TestClaudeThinkingBlockAlwaysCarriesSignatureKey`、`TestGeneratedClaudeThinkingBlocksCarryEmptySignature` | NewAPI 同样输出该键时回归 |
 | Sub2API apicompat（旧版 `function_call`） | 本地偏离保留 | `dto.Message` 带 `function_call`；旧版调用与紧随的同名结果配对为工具调用与结果，Claude、Responses 用稳定的 `call_legacy_N`，Gemini 按名匹配；无法配对记 error（safe/strict 拒绝，allow 省略未应答调用）；缺 `name` 或 JSON 无效在请求分析阶段返回 400，原生 Chat 转发也不例外 | `relaykit/dto/`、`relaykit/relayconvert/` | `TestLegacyFunctionCallPairBecomesToolExchange`、`TestUnpairedLegacyFunctionHistoryIsDiagnosed` | NewAPI 支持旧版 `function_call` 时比较 |
 | 本地（无名工具） | 本地偏离保留 | Chat 转 Responses 的无名工具调用在 JSON 与 SSE 返回协议错误，不伪装 completed，不重放已接受请求；NewAPI 跳过无名调用 | `relaykit/relayconvert/internal/oai_chat/` | `TestNamelessChatToolCannotBecomeCompletedResponse`、`TestGatewayNamelessToolFailsWithoutReplayingAcceptedWork` | — |
@@ -80,6 +84,7 @@
 | NewAPI `acb347a19`（百炼 Anthropic 端点） | 已吸收 | 渠道设置 `WebSearchBillingKey` 时按该键计 `search_strategy_agent` 并补 `cc_entrypoint` 系统标记；发送前只要求实际计费的 `search_strategy_agent`，不要求永不计费的 `tool:web_search` | `relay/channel/ali/web_search.go`、`relay/helper/pricing_requirements.go` | `TestWebSearchBillingKeyReplacesProtocolRequirement` | — |
 | NewAPI `d10f11fff` | 已吸收 | Gemini grounding 按一次响应内去重后的非空网页与图片搜索查询数计 `google_search`，跨流式帧与全部候选，原生、Chat、Responses 共用计数；`google_search_grounded_prompt` 只在冻结报价定价时计入。不按模型代际预置计费键，按次计费由运营为 `google_search_grounded_prompt:gemini-2.5*` 定价并把同前缀 `google_search` 设为 0 | `relay/channel/gemini/` | `TestGeminiHandlersCountGroundingQueries` | 查询数不保证与 Google 账单一致；Google 在响应中报告计费次数时改用该值 |
 | 本地 AUDIT1009-02（发送前定价） | 等待上游 | Gemini `enterpriseWebSearch` 与 `/v1/alpha/search` 计费但发送前不要求定价，未定价时结算回落到冻结估算；NewAPI 依靠预置价格 | — | — | NewAPI 修复后按其实现同步 |
+| 本地 AUDIT1009B-13（转换流失败的 prompt 估算） | 等待上游 | 转换流以 `response.failed` 结束且只报告 completion 时，handler 补齐的 prompt 估算没有写入 BillingUsage，结算按 input 0 计；补齐 completion 的一侧正常并标为估算。与 NewAPI `chat_via_responses.go` 同一段代码一致 | `relay/channel/openai/chat_via_responses.go` | — | NewAPI 修复后按其实现同步 |
 | NewAPI `acb347a19`（其余部分） | 延期 | 智谱与百炼 Chat 的 `WebSearchEncoder` 渠道级搜索编码（含强制搜索推断计数）、Advanced Custom 转 Responses、Moonshot Responses 透传未吸收 | — | — | 属于新能力；编码诊断在本地默认 safe 策略下会拒绝请求，需单独设计后立项 |
 
 ## 插件与异步任务
@@ -130,6 +135,7 @@
 | NewAPI `feefe09f`（TLS） | 已吸收 | 中继、受保护 Fetch 与模型同步各自克隆 TLS 配置 | `common/init.go`、`service/` | `TestHTTPTransportsKeepIndependentTLSSettings`、`TestModelSyncTLSConfigurationIsIndependent` | — |
 | AxonHub `2bf8e2c9` | 已吸收 | Playground 无持久 Token 的请求以逻辑模型冻结价格，跨渠道重试分别映射上游模型，真实响应模型只用于诊断，未授权别名不发送 | `router/`、`controller/relay.go` | `TestGatewayPlaygroundModelIdentityWithoutPersistentToken` | 改变 Playground 初始化或路由时复验 |
 | Sub2API Redis 失败放行资金预占 | 刻意不吸收 | 准入与资金预留不因 Redis 故障放行；未配置 Redis 时实际准入改用进程内预留 | `service/` | — | 只有保持现有预留与恢复不变量的证据充分时复评 |
+| 本地 AUDIT1009B-14（Gemini 400 API key not valid） | 等待上游 | Gemini 以 400 `API key not valid` 报告失效 Key 时归为输入错误，不换渠道、不冷却 Key；NewAPI 同样不重试 400 | `service/route_health.go` | — | NewAPI 修复后按其实现同步 |
 
 ## 支付
 
@@ -187,6 +193,7 @@
 | Sub2API `43c4c882`、`46f5f5e8` | 不适用 | Antigravity 账号池错误脱敏与账号池文案，本地没有该账号池 | — | — | 引入账号池时 |
 | AxonHub `5c789977`、`563f89db`、`89d36d61`、`5af5400e`、`dddd7d70`、`4904a5df` | 刻意不吸收 | Codex 订阅渠道与 Vue Playground 已退役；敏感词为拦截不改写；模型开发商数据与 neuralwatt 窗口不进入价格和路由 | — | — | 对应产品能力重新获批时 |
 | AxonHub Decisions API、Codex 窗口、Antigravity、React/GraphQL/Ent、全文请求存储；Sub2API 完整账号池与自动兑换 | 刻意不吸收 | 不符合当前单实例网关和资金模型 | — | — | 对应产品能力获批时 |
+| 本地 AUDIT1009B-15（MySQL 分组大小写） | 等待上游 | 用户列表分组统计在 MySQL 默认排序规则下不区分大小写，`vip` 与 `VIP` 合并计数并互相筛中；PostgreSQL、SQLite 分开计数。只影响显示，与 NewAPI 一致 | `model/user.go` | — | NewAPI 修复后按其实现同步 |
 
 ## 结构差异
 
