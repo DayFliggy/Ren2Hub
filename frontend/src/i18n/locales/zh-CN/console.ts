@@ -1121,6 +1121,9 @@ export default {
     passThroughBody: '透传请求体',
     passThroughBodyHint:
       'API 格式一致时保留原始请求体，绕过模型映射、参数覆盖与协议转换；高级路由使用各自的透传设置。',
+    tlsInsecureSkipVerify: '忽略上游证书校验',
+    tlsInsecureSkipVerifyHint:
+      '接受无法通过校验的上游证书，例如自签名证书。仅对可信的内网上游开启。',
     parameterOverrides: '参数覆盖 JSON',
     headerOverrides: '请求头覆盖 JSON',
     jsonOverridesHint: '输入 JSON 对象；留空清除覆盖。保存时由服务器校验。',

@@ -82,6 +82,7 @@ const originalOtherSettings = ref<Record<string, unknown>>({})
 const settingsError = ref('')
 const responsesWebSocket = ref(false)
 const passThroughBody = ref(false)
+const tlsInsecureSkipVerify = ref(false)
 const paramOverride = ref('')
 const headerOverride = ref('')
 const fieldSettings = reactive<Partial<Record<ChannelSettingField, boolean>>>(
@@ -522,6 +523,7 @@ watch(
           originalOtherSettings.value[field.key] === true
       responsesWebSocket.value = setting.responses_websocket_enabled === true
       passThroughBody.value = setting.pass_through_body_enabled === true
+      tlsInsecureSkipVerify.value = setting.tls_insecure_skip_verify === true
       advancedConfig.value = JSON.stringify(
         originalOtherSettings.value.advanced_custom ??
           advancedChannelPreset(form.type),
@@ -593,6 +595,12 @@ async function submit() {
       passThroughBody.value !== (settings.pass_through_body_enabled === true)
     )
       settings.pass_through_body_enabled = passThroughBody.value
+    if (
+      canSensitiveWrite.value &&
+      tlsInsecureSkipVerify.value !==
+        (settings.tls_insecure_skip_verify === true)
+    )
+      settings.tls_insecure_skip_verify = tlsInsecureSkipVerify.value
     if (
       canSensitiveWrite.value &&
       supportsResponsesWebSocket.value &&
@@ -1351,6 +1359,14 @@ async function submit() {
             ><ConsoleToggle
               v-model="passThroughBody"
               :label="t('channels.passThroughBody')"
+              :disabled="saving || !canSensitiveWrite"
+          /></FormField>
+          <FormField
+            :label="t('channels.tlsInsecureSkipVerify')"
+            :hint="t('channels.tlsInsecureSkipVerifyHint')"
+            ><ConsoleToggle
+              v-model="tlsInsecureSkipVerify"
+              :label="t('channels.tlsInsecureSkipVerify')"
               :disabled="saving || !canSensitiveWrite"
           /></FormField>
           <FormField

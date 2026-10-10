@@ -5,13 +5,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 
@@ -53,7 +53,7 @@ func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	newToken, err := exchangeJwtForAccessToken(signedJWT, info)
+	newToken, err := exchangeJwtForAccessToken(context.Background(), signedJWT, info.ChannelSetting.Proxy)
 	if err != nil {
 		return "", fmt.Errorf("failed to exchange JWT for access token: %w", err)
 	}
@@ -103,36 +103,6 @@ func createSignedJWT(email, privateKeyPEM string) (string, error) {
 	return signedToken, nil
 }
 
-func exchangeJwtForAccessToken(signedJWT string, info *relaycommon.RelayInfo) (string, error) {
-
-	authURL := "https://www.googleapis.com/oauth2/v4/token"
-	data := url.Values{}
-	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
-	data.Set("assertion", signedJWT)
-
-	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
-	if err != nil {
-		return "", fmt.Errorf("new proxy http client failed: %w", err)
-	}
-
-	resp, err := client.PostForm(authURL, data)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-
-	if accessToken, ok := result["access_token"].(string); ok {
-		return accessToken, nil
-	}
-
-	return "", fmt.Errorf("failed to get access token: %v", result)
-}
-
 func AcquireAccessToken(creds Credentials, proxy string) (string, error) {
 	return AcquireAccessTokenWithContext(context.Background(), creds, proxy)
 }
@@ -142,27 +112,26 @@ func AcquireAccessTokenWithContext(ctx context.Context, creds Credentials, proxy
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	return exchangeJwtForAccessTokenWithProxyContext(ctx, signedJWT, proxy)
+	return exchangeJwtForAccessToken(ctx, signedJWT, proxy)
 }
 
-func exchangeJwtForAccessTokenWithProxyContext(ctx context.Context, signedJWT string, proxy string) (string, error) {
-	authURL := "https://www.googleapis.com/oauth2/v4/token"
+// googleOAuthTokenURL is a variable only so tests can serve the exchange locally.
+var googleOAuthTokenURL = "https://www.googleapis.com/oauth2/v4/token"
+
+// exchangeJwtForAccessToken trades a signed service-account JWT for an access
+// token at Google's OAuth endpoint. It goes through the channel proxy only and
+// always verifies the certificate; the channel's TLS setting does not apply.
+func exchangeJwtForAccessToken(ctx context.Context, signedJWT string, proxy string) (string, error) {
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 	data.Set("assertion", signedJWT)
 
-	var client *http.Client
-	var err error
-	if proxy != "" {
-		client, err = service.GetHttpClientWithProxy(proxy)
-		if err != nil {
-			return "", fmt.Errorf("new proxy http client failed: %w", err)
-		}
-	} else {
-		client = service.GetHttpClient()
+	client, err := service.GetHttpClientWithProxy(proxy)
+	if err != nil {
+		return "", fmt.Errorf("new proxy http client failed: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, authURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, googleOAuthTokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", err
 	}
@@ -173,8 +142,8 @@ func exchangeJwtForAccessTokenWithProxyContext(ctx context.Context, signedJWT st
 	}
 	defer resp.Body.Close()
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var result map[string]any
+	if err := common.DecodeJson(resp.Body, &result); err != nil {
 		return "", err
 	}
 

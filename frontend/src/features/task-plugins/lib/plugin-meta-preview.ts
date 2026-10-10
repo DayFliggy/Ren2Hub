@@ -151,15 +151,15 @@ export function previewFromServer(
 
 /** Source absence is a fact; only unresolved source fields fall back to index hints. */
 export function resolvePluginMetaPreview(
-  plugin: MarketplacePlugin,
+  plugin: MarketplacePlugin | undefined,
   version: MarketplaceIndexVersion | undefined,
   source: PluginMetaPreview | undefined
 ): PluginMetaPreview['fields'] {
-  const latest = version?.version === plugin.latest
+  const latest = version?.version === plugin?.latest
   const index: Record<keyof PluginPreviewValues, unknown> = {
-    models: latest ? plugin.models : undefined,
-    protocols: latest ? plugin.protocols : undefined,
-    channelTypes: latest ? plugin.channelTypes : undefined,
+    models: latest ? plugin?.models : undefined,
+    protocols: latest ? plugin?.protocols : undefined,
+    channelTypes: latest ? plugin?.channelTypes : undefined,
     routes: undefined,
     baseUrl: version?.baseUrl,
     allowedHosts: version?.allowedHosts,

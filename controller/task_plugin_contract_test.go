@@ -38,6 +38,29 @@ func TestPluginMetadataPreviewNeverExecutesAndReportsDynamicFields(t *testing.T)
 	assert.Contains(t, w.Body.String(), `"unresolved":["models"]`)
 }
 
+// The upload dialog lists the request domains from this response.
+func TestPluginMetadataPreviewReturnsDeclaredAllowedHosts(t *testing.T) {
+	source := `export const meta={key:"fixture",version:"1.0.0",models:["m"],allowedHosts:["files.example.com","cdn.example.com:8443"]};`
+	body, err := common.Marshal(map[string]any{"source": source})
+	require.NoError(t, err)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/plugin/task/preview", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	PreviewTaskPlugin(c)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Meta       map[string]any `json:"meta"`
+			Unresolved []string       `json:"unresolved"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &response))
+	require.True(t, response.Success, w.Body.String())
+	assert.Empty(t, response.Data.Unresolved)
+	assert.Equal(t, []any{"files.example.com", "cdn.example.com:8443"}, response.Data.Meta["allowedHosts"])
+}
+
 func TestTaskPluginSyncReusesHashAndSuppressesDisabledFactory(t *testing.T) {
 	db, _ := setupGatewayAPI(t)
 	require.NoError(t, db.AutoMigrate(&model.Task{}, &model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}, &model.BillingRecovery{}, &model.Ability{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}))

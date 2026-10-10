@@ -200,3 +200,21 @@ func TestMidjourneyPollDatabaseFailureIsReported(t *testing.T) {
 	_, err := runMidjourneyTaskUpdateOnce(context.Background(), nil)
 	require.ErrorIs(t, err, assert.AnError)
 }
+
+func TestMidjourneyPollHonorsChannelTLSInsecureSkipVerify(t *testing.T) {
+	db := setupMidjourneyPoll(t)
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `[{"id":"tls-provider-job","status":"SUCCESS","progress":"100%","imageUrl":"https://fixture.invalid/result"}]`)
+	}))
+	defer upstream.Close()
+	verifying := seedMidjourneyPollTask(t, db, upstream.URL, "verifying", "tls-provider-job")
+	skipping := seedMidjourneyPollTask(t, db, upstream.URL, "skipping", "tls-provider-job")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", skipping.ChannelId).Update("setting", `{"tls_insecure_skip_verify":true}`).Error)
+
+	_, err := runMidjourneyTaskUpdateOnce(context.Background(), nil)
+	require.Error(t, err, "the verifying channel must reject the self-signed upstream")
+	require.NoError(t, db.First(&verifying, verifying.Id).Error)
+	require.NoError(t, db.First(&skipping, skipping.Id).Error)
+	assert.Equal(t, "SUBMITTED", verifying.Status)
+	assert.Equal(t, "SUCCESS", skipping.Status)
+}

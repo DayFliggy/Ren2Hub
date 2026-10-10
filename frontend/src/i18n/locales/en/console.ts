@@ -1156,6 +1156,9 @@ export default {
     passThroughBody: 'Pass through request body',
     passThroughBodyHint:
       'Preserve the original body when API formats match, bypassing model mapping, parameter overrides and conversion. Advanced routes use their own passthrough setting.',
+    tlsInsecureSkipVerify: 'Skip upstream TLS verification',
+    tlsInsecureSkipVerifyHint:
+      'Accept upstream certificates that fail validation, such as self-signed ones. Only enable for trusted internal upstreams.',
     parameterOverrides: 'Parameter overrides JSON',
     headerOverrides: 'Header overrides JSON',
     jsonOverridesHint:
