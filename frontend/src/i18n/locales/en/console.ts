@@ -2452,6 +2452,7 @@ export default {
     transferTitle: 'Transfer invite rewards',
     transferHint:
       'Minimum transfer is $1. Transferred quota can fund model calls.',
+    transferSuccess: 'Transferred to your account balance',
     howTitle: 'How it works',
     howStep1Title: 'Copy your code or invite link',
     howStep1Desc:

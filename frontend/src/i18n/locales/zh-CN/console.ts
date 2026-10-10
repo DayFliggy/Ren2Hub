@@ -2375,6 +2375,7 @@ export default {
     transfer: '转入余额',
     transferTitle: '邀请奖励转余额',
     transferHint: '单次至少转入 $1，转入后可用于模型调用。',
+    transferSuccess: '已转入账户余额',
     howTitle: '如何运作',
     howStep1Title: '复制邀请码或邀请链接',
     howStep1Desc: '每位用户都有唯一邀请码，链接会自动携带该邀请码。',

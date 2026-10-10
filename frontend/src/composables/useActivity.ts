@@ -76,11 +76,11 @@ export function useActivity() {
   async function claim(id: number, taskId?: string) {
     claiming.value = true
     try {
-      const res = await api.post<{ message: string; reward: string }>(
-        '/api/next/activity/claim',
-        { activity_id: id, task_id: taskId }
-      )
-      toast.success(res.message || t('activity.claim.success'))
+      await api.post('/api/next/activity/claim', {
+        activity_id: id,
+        task_id: taskId,
+      })
+      toast.success(t('activity.claim.success'))
       await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error))

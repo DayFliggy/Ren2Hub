@@ -121,11 +121,11 @@ export function useInvite() {
       transferOperation = { amount: quota, id: crypto.randomUUID() }
     transferring.value = true
     try {
-      const response = await api.post<{ message: string }>(
-        '/api/next/invite/transfer',
-        { amount: quota, operation_id: transferOperation.id }
-      )
-      toast.success(response.message)
+      await api.post('/api/next/invite/transfer', {
+        amount: quota,
+        operation_id: transferOperation.id,
+      })
+      toast.success(t('invite.transferSuccess'))
       transferOpen.value = false
       transferDollars.value = ''
       transferOperation = null
