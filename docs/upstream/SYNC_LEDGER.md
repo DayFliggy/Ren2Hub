@@ -1,6 +1,6 @@
 # 上游同步账本
 
-本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `e0483122c7d3693629f0e84473380a8c9506c56a`（`relaykit/v0.3.0`）、Sub2API `3a6fd1c9db07203ca308aaba69e502bc1f35b307`（0.2.15）、AxonHub `e863c6fe1942deddd0f6e471fa003c430e5314f0`，下一轮从这三个提交向后比较。
+本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `c6741c36a9a1a729554ad94ee99f21602a214a23`（`v1.0.0-rc.43`；其中 `128089fa7` 全站国际化延期）、Sub2API `3a6fd1c9db07203ca308aaba69e502bc1f35b307`（0.2.15）、AxonHub `e863c6fe1942deddd0f6e471fa003c430e5314f0`，下一轮从这三个提交向后比较。
 
 逐批的比较窗口、执行过程和验收数据保存在 Git 历史中：在 Ren2Hub 目录运行 `git log -- docs/upstream/SYNC_LEDGER.md` 定位批次，再用 `git show <commit>:docs/upstream/SYNC_LEDGER.md` 读取。接口字段以[网关 API](../routing/GATEWAY_API.md)、[协议支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md)、[插件 API](../plugin-api/v1.md)、[模型定价](../billing/PRICING.md)和[鉴权合同](../authentication.md)为准，本账本只记处置与本地合同。
 
