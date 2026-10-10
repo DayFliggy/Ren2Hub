@@ -223,11 +223,7 @@ func ListRouteCatalog(c *gin.Context) {
 func parseRouteProfileID(c *gin.Context) (int, bool) {
 	profileID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || profileID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "invalid route profile id",
-			"code":    "BAD_REQUEST",
-		})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid route profile ID"), gin.H{"code": "BAD_REQUEST"})
 		return 0, false
 	}
 	return profileID, true
@@ -336,21 +332,13 @@ func writeRouteError(c *gin.Context, err error) {
 		status = http.StatusInternalServerError
 		code = "INTERNAL_ERROR"
 	}
-	c.JSON(status, gin.H{"success": false, "message": err.Error(), "code": code})
+	common.ApiErrorStatus(c, status, err, gin.H{"code": code})
 }
 
 func writeRouteBindingError(c *gin.Context) {
-	c.JSON(http.StatusBadRequest, gin.H{
-		"success": false,
-		"message": "invalid route profile request",
-		"code":    "BAD_REQUEST",
-	})
+	common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid route profile request"), gin.H{"code": "BAD_REQUEST"})
 }
 
 func writeRoutePreviewBindingError(c *gin.Context) {
-	c.JSON(http.StatusBadRequest, gin.H{
-		"success": false,
-		"message": "invalid route preview request",
-		"code":    "BAD_REQUEST",
-	})
+	common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid route preview request"), gin.H{"code": "BAD_REQUEST"})
 }

@@ -27,12 +27,12 @@ const (
 )
 
 var (
-	ErrAffiliateCodeRequired  = errors.New("邀请码不能为空")
-	ErrAffiliateCodeInvalid   = errors.New("邀请码无效")
-	ErrAffiliateCodeDisabled  = errors.New("邀请码已停用")
-	ErrAffiliateCodeLimit     = errors.New("邀请码使用次数已达上限")
-	ErrAffiliateQuotaEmpty    = errors.New("邀请额度不足")
-	ErrAffiliateProgramLocked = errors.New("邀请返利计划激活后不可停用")
+	ErrAffiliateCodeRequired  = common.NewMessage("Invitation code is required")
+	ErrAffiliateCodeInvalid   = common.NewMessage("Invalid invitation code")
+	ErrAffiliateCodeDisabled  = common.NewMessage("Invitation code is disabled")
+	ErrAffiliateCodeLimit     = common.NewMessage("Invitation code has reached its usage limit")
+	ErrAffiliateQuotaEmpty    = common.NewMessage("Invitation reward balance is insufficient")
+	ErrAffiliateProgramLocked = common.NewMessage("The invitation rebate program cannot be disabled after activation")
 )
 
 var affiliateCodeAlphabet = []byte("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
@@ -240,7 +240,7 @@ func SnapshotAffiliateBaseQuota(payMoney float64, unitPrice float64) (common.Quo
 		return 0, nil
 	}
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		return 0, errors.New("支付合规状态无效，无法创建返利订单")
+		return 0, common.NewMessage("Payment compliance is not confirmed, so the rebate order cannot be created")
 	}
 	return AffiliateBaseQuotaFromPayment(payMoney, unitPrice)
 }
@@ -454,10 +454,10 @@ func ThawAffiliateQuota(userId int) (common.Quota, error) {
 
 func TransferAffiliateQuota(userId int, amount common.Quota, operationID string) (common.Quota, common.Quota, error) {
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		return 0, 0, errors.New("邀请返利功能未启用")
+		return 0, 0, common.NewMessage("Invitation rebates are not enabled")
 	}
 	if amount < 500000 || operationID == "" || len(operationID) > 96 {
-		return 0, 0, errors.New("invalid affiliate transfer")
+		return 0, 0, common.NewMessage("Invalid invitation reward transfer")
 	}
 	var newBalance common.Quota
 	eventID := fmt.Sprintf("affiliate-transfer:%d:%s", userId, operationID)
@@ -535,14 +535,14 @@ func ActivateAffiliateProgram() error {
 		return nil
 	}
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		return errors.New("支付合规确认后才能激活邀请返利计划")
+		return common.NewMessage("Confirm payment compliance before activating the invitation rebate program")
 	}
 	hasSeed, err := HasActiveAffiliateSeed()
 	if err != nil {
 		return err
 	}
 	if !hasSeed {
-		return errors.New("至少需要一个有效的管理员或根用户邀请码才能激活")
+		return common.NewMessage("Activation requires at least one active invitation code of an administrator or root user")
 	}
 	now := time.Now().Unix()
 	values := map[string]string{

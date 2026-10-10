@@ -1556,5 +1556,5 @@ func PrepareTaskPluginSubmit() gin.HandlerFunc {
 }
 
 func taskPluginWarn(ctx context.Context, format string, args ...any) {
-	logger.LogWarn(ctx, fmt.Sprintf(format, args...))
+	logger.LogWarn(ctx, common.LogText(format, args...))
 }

@@ -11,8 +11,8 @@ import (
 )
 
 func billingAPIError(c *gin.Context, err error) {
-	logger.LogError(c, "billing API error: "+err.Error())
-	c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "billing operation unavailable"})
+	logger.LogError(c, common.LogText("billing API error: %s", err.Error()))
+	common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("Billing operation is unavailable"))
 }
 
 func billingPage(c *gin.Context) (int, int) {

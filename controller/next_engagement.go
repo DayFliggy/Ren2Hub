@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -39,7 +37,7 @@ func ValidateInviteCode(c *gin.Context) {
 		Code string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.Code) == "" {
-		nextBusinessError(c, errors.New("邀请码不能为空"), "VALIDATION_ERROR")
+		nextBusinessError(c, model.ErrAffiliateCodeRequired, "VALIDATION_ERROR")
 		return
 	}
 	if err := model.ValidateAffiliateCode(request.Code); err != nil {
@@ -175,7 +173,7 @@ func NextTransferInviteQuota(c *gin.Context) {
 		OperationID string       `json:"operation_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.Amount <= 0 {
-		nextBusinessError(c, errors.New("invalid transfer amount"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid transfer amount"), "VALIDATION_ERROR")
 		return
 	}
 	transferred, balance, err := model.TransferAffiliateQuota(c.GetInt("id"), request.Amount, request.OperationID)
@@ -189,8 +187,7 @@ func NextTransferInviteQuota(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{
-		"message": "已转入账户余额", "transferred": transferred,
-		"balance": balance, "remaining_reward": user.AffQuota,
+		"transferred": transferred, "balance": balance, "remaining_reward": user.AffQuota,
 	})
 }
 
@@ -401,7 +398,7 @@ func NextGetActivities(c *gin.Context) {
 
 func NextCheckin(c *gin.Context) {
 	if !operation_setting.GetCheckinSetting().Enabled {
-		nextBusinessError(c, errors.New("签到功能未启用"), "ACTIVITY_DISABLED")
+		nextBusinessError(c, common.NewMessage("Check-in feature is not enabled"), "ACTIVITY_DISABLED")
 		return
 	}
 	checkin, err := model.UserCheckin(c.GetInt("id"))
@@ -416,7 +413,7 @@ func NextCheckin(c *gin.Context) {
 	records, recordsErr := model.GetUserCheckinRecords(c.GetInt("id"), "1970-01-01", now.Format("2006-01-02"))
 	streak := 0
 	if recordsErr != nil {
-		common.SysError(fmt.Sprintf("failed to load check-in streak for user %d: %v", c.GetInt("id"), recordsErr))
+		common.SysError(common.LogText("failed to load check-in streak for user %d: %v", c.GetInt("id"), recordsErr))
 	} else {
 		streak, _ = nextStreaks(records, now)
 	}
@@ -428,7 +425,7 @@ func NextClaimActivity(c *gin.Context) {
 		ActivityID int `json:"activity_id"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.ActivityID != nextNewcomerActivityID {
-		nextBusinessError(c, errors.New("activity does not support claiming"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("This activity does not support claiming"), "VALIDATION_ERROR")
 		return
 	}
 	user, err := model.GetUserById(c.GetInt("id"), true)
@@ -442,12 +439,12 @@ func NextClaimActivity(c *gin.Context) {
 		return
 	}
 	if !allDone {
-		nextBusinessError(c, errors.New("complete all newcomer tasks before claiming"), "TASKS_INCOMPLETE")
+		nextBusinessError(c, common.NewMessage("Complete all newcomer tasks before claiming"), "TASKS_INCOMPLETE")
 		return
 	}
 	if err := model.ClaimActivityReward(user.Id, nextNewcomerActivityKey, nextNewcomerReward); err != nil {
 		nextBusinessError(c, err, "CLAIM_FAILED")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"message": "领取成功", "reward": common.Quota(nextNewcomerReward)})
+	common.ApiSuccess(c, gin.H{"reward": common.Quota(nextNewcomerReward)})
 }

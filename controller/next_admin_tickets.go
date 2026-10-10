@@ -73,15 +73,15 @@ func NextListAdminTickets(c *gin.Context) {
 	category := strings.TrimSpace(c.Query("category"))
 	priority := strings.TrimSpace(c.Query("priority"))
 	if status != "" && !model.IsTicketStatus(status) {
-		nextBusinessError(c, errors.New("invalid ticket status"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket status"), "VALIDATION_ERROR")
 		return
 	}
 	if category != "" && !validNextTicketCategory(category) {
-		nextBusinessError(c, errors.New("invalid ticket category"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket category"), "VALIDATION_ERROR")
 		return
 	}
 	if priority != "" && !validNextTicketPriority(priority) {
-		nextBusinessError(c, errors.New("invalid ticket priority"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket priority"), "VALIDATION_ERROR")
 		return
 	}
 	filter := model.AdminTicketFilter{
@@ -102,7 +102,7 @@ func NextListAdminTickets(c *gin.Context) {
 		default:
 			parsed, err := strconv.Atoi(assignee)
 			if err != nil || parsed <= 0 {
-				nextBusinessError(c, errors.New("invalid ticket assignee"), "VALIDATION_ERROR")
+				nextBusinessError(c, common.NewMessage("Invalid ticket assignee"), "VALIDATION_ERROR")
 				return
 			}
 			assigneeID = parsed
@@ -209,13 +209,13 @@ func NextAddAdminTicketMessage(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
 	form, err := c.MultipartForm()
 	if err != nil {
-		nextBusinessError(c, errors.New("invalid multipart request"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid multipart request"), "VALIDATION_ERROR")
 		return
 	}
 	defer form.RemoveAll()
 	content := strings.TrimSpace(c.PostForm("content"))
 	if content == "" || len([]rune(content)) > 2000 {
-		nextBusinessError(c, errors.New("ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
 		return
 	}
 	attachments, paths, err := saveNextTicketAttachments(form.File["attachments"])
@@ -227,7 +227,7 @@ func NextAddAdminTicketMessage(c *gin.Context) {
 	if err != nil {
 		removeNextTicketFiles(paths)
 		if errors.Is(err, model.ErrTicketClosed) {
-			nextBusinessError(c, errors.New("closed tickets cannot receive replies"), "TICKET_CLOSED")
+			nextBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 			return
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -265,7 +265,7 @@ func NextUpdateAdminTicketStatus(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, errors.New("invalid status"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket status"), "VALIDATION_ERROR")
 		return
 	}
 	ticket, err := model.UpdateAdminTicketStatus(ticketID, c.GetInt("id"), request.Status)
@@ -290,17 +290,17 @@ func NextAssignAdminTicket(c *gin.Context) {
 		AssigneeID *int `json:"assignee_id"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, errors.New("invalid assignee"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket assignee"), "VALIDATION_ERROR")
 		return
 	}
 	if request.AssigneeID != nil {
 		if *request.AssigneeID <= 0 {
-			nextBusinessError(c, errors.New("invalid assignee"), "VALIDATION_ERROR")
+			nextBusinessError(c, common.NewMessage("Invalid ticket assignee"), "VALIDATION_ERROR")
 			return
 		}
 		assignee, err := model.GetUserById(*request.AssigneeID, false)
 		if err != nil || assignee.Status != common.UserStatusEnabled || !serviceauthz.Can(assignee.Id, assignee.Role, serviceauthz.TicketReply) {
-			nextBusinessError(c, errors.New("ticket assignee is not available"), "VALIDATION_ERROR")
+			nextBusinessError(c, common.NewMessage("Ticket assignee is not available"), "VALIDATION_ERROR")
 			return
 		}
 	}
@@ -336,7 +336,7 @@ func NextAssignAdminTicket(c *gin.Context) {
 func NextDownloadAdminTicketAttachment(c *gin.Context) {
 	attachmentID, err := strconv.Atoi(c.Param("attachment_id"))
 	if err != nil || attachmentID <= 0 {
-		nextBusinessError(c, errors.New("invalid attachment id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid attachment ID"), "VALIDATION_ERROR")
 		return
 	}
 	attachment, err := model.GetTicketAttachment(attachmentID)
