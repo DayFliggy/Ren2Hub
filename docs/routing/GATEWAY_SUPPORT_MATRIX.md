@@ -22,7 +22,7 @@ Responses 流式和缓冲共用同一输出项累计器。部分最终快照按�
 
 响应语义的无法实现项在所有策略下拒绝。`safe` 允许有诊断的纯展示损失，`strict` 拒绝所有已声明损失；`allow` 仅放宽已有实现声明的降级，不能伪造终态或绕过原生状态归属。文档／文件引用等没有等价目标表示的引用仍明确拒绝，不能由 URL 引用支持推导为所有引用均已支持。
 
-跨协议响应里的推理签名（Claude thinking 的 `signature`、Gemini 的 `thoughtSignature`）无法在目标协议续用，转换结果不含这些值，每个响应或每条流记录一次 warning `provider_state_dropped`：`safe` 与 `allow` 放行，`strict` 拒绝。同协议原生响应原样保留签名。加密的托管工具结果（`encrypted_content`）和引用位置（`encrypted_index`）属于可见答案的一部分，仍在所有策略下拒绝跨协议转换。
+跨协议响应里的推理签名（Claude thinking 的 `signature`、`redacted_thinking` 的加密 `data`、Gemini 的 `thoughtSignature`）无法在目标协议续用，转换结果不含这些值，每个响应或每条流记录一次 warning `provider_state_dropped`：`safe` 与 `allow` 放行，`strict` 拒绝。同协议原生响应原样保留签名。加密的托管工具结果（`encrypted_content`）和引用位置（`encrypted_index`）属于可见答案的一部分，仍在所有策略下拒绝跨协议转换。
 
 Chat/Responses/Claude/Gemini 分别指 OpenAI Chat、OpenAI Responses、Anthropic Messages、generateContent。`转 X` 使用 RelayKit，`投影` 使用供应商专用数据结构，`拒绝` 指预扣和发送前拒绝。实际特性仍受策略、模型映射、权限和配置约束。
 

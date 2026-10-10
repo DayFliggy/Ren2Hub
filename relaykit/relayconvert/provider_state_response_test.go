@@ -155,3 +155,66 @@ func countDiagnostics(diagnostics []types.ConversionDiagnostic, code string) int
 	}
 	return count
 }
+
+// Claude's redacted_thinking block is encrypted reasoning with no visible
+// text, so it follows the signature rule: the cross-protocol response is
+// delivered without its data and reported once as provider_state_dropped,
+// which safe and allow pass and strict rejects, in JSON and in streams.
+func TestCrossProtocolResponseDropsRedactedThinking(t *testing.T) {
+	const body = `{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{"type":"redacted_thinking","data":"` + providerStateSecret + `"},{"type":"text","text":"hello"}],"stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":2}}`
+	events := []string{
+		`{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","usage":{"input_tokens":3,"output_tokens":0}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"` + providerStateSecret + `"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+		`{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"hello"}}`,
+		`{"type":"content_block_stop","index":1}`,
+		`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`,
+		`{"type":"message_stop"}`,
+	}
+	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, types.RelayFormatGemini} {
+		for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyAllow, types.ConversionLossPolicyStrict} {
+			t.Run(string(target)+"_"+string(policy), func(t *testing.T) {
+				info := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: policy}, UpstreamModelName: "test-model", ChannelMetaAttached: true}
+				result, err := ConvertResponse(context.Background(), info, target, providerStateResponse(t, types.RelayFormatClaude, body))
+				if policy == types.ConversionLossPolicyStrict {
+					require.ErrorContains(t, err, "reasoning signatures cannot cross protocols")
+				} else {
+					require.NoError(t, err)
+					encoded, err := kitutil.Marshal(result.Value)
+					require.NoError(t, err)
+					assert.NotContains(t, string(encoded), providerStateSecret)
+					assert.Contains(t, string(encoded), "hello")
+					assert.Equal(t, 1, countDiagnostics(result.Diagnostics, "provider_state_dropped"))
+					assert.Zero(t, countDiagnostics(result.Diagnostics, "continuation_state_lost"))
+				}
+
+				state, err := NewResponseStreamState(types.RelayFormatClaude, target, ResponseStreamOptions{ID: "stream_1", Model: "test-model"})
+				require.NoError(t, err)
+				var results []ResponseResult
+				var streamErr error
+				for _, event := range events {
+					chunk, err := ConvertStreamResponseChunk(context.Background(), info, state, providerStateResponse(t, types.RelayFormatClaude, event))
+					if err != nil {
+						streamErr = err
+						break
+					}
+					results = append(results, chunk...)
+				}
+				if policy == types.ConversionLossPolicyStrict {
+					require.ErrorContains(t, streamErr, "reasoning signatures cannot cross protocols")
+					return
+				}
+				require.NoError(t, streamErr)
+				final, err := FinalizeStreamResponse(context.Background(), info, state)
+				require.NoError(t, err)
+				results = append(results, final...)
+				encoded, err := kitutil.Marshal(streamValues(results))
+				require.NoError(t, err)
+				assert.NotContains(t, string(encoded), providerStateSecret)
+				assert.Contains(t, string(encoded), "hello")
+				assert.Equal(t, 1, countDiagnostics(state.Diagnostics(), "provider_state_dropped"))
+			})
+		}
+	}
+}
