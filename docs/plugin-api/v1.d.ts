@@ -40,7 +40,16 @@ export interface HostUtils {
    * request fails with "invalid Volcengine signing URL". Region defaults to cn-north-1, Service to cv.
    */
   volcSignV4(request: {Method: string; URL: string; Headers?: Record<string, string>; Body?: string; AccessKey: string; SecretKey: string; Region?: string; Service?: string; Timestamp?: number}): Record<string, string>;
+  /**
+   * Synchronous read-only request from buildSubmitRequest, buildQueryRequest, parseTaskResult, buildBatchQueryRequest,
+   * parseBatchResult and buildContentRequest to the channel Base URL host or allowedHosts; every other hook, including
+   * the usage hooks, throws. At most 4 per hook call, 15 s each, 30 s in total, 1 MiB per body; redirects are returned, not followed.
+   */
+  fetch(request: FetchRequest): FetchResponse;
 }
+export interface FetchRequest {url: string; method?: "GET" | "HEAD"; headers?: Record<string, string>; responseType?: "json" | "bytes"}
+/** headers holds the first value of each header under its canonical name; body is parsed JSON when the response parses, otherwise text, and "" for HEAD; with responseType "bytes" it is an ArrayBuffer of the response bytes. */
+export interface FetchResponse {status: number; headers: Record<string, string>; body: JSONValue | string | ArrayBuffer}
 /** Decimal text such as "3.5" or "1e1", or a number accepted by the usage boundary. */
 export type DecimalInput = string | number;
 /**

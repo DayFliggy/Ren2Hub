@@ -67,8 +67,9 @@ func VideoProxy(c *gin.Context) {
 				writeTaskArtifactProjectionError(c, errTaskArtifactPluginUnavailable)
 				return
 			}
-			descriptor, err := provider.BuildContentRequest(task, artifact.Key, relaychannel.TaskArtifactClientRequest{Method: c.Request.Method, Headers: taskArtifactClientHeaders(c.Request.Header)})
+			descriptor, err := provider.BuildContentRequest(c.Request.Context(), task, artifact.Key, relaychannel.TaskArtifactClientRequest{Method: c.Request.Method, Headers: taskArtifactClientHeaders(c.Request.Header)})
 			if err != nil {
+				logger.LogWarn(c.Request.Context(), fmt.Sprintf("Failed to resolve plugin video content for task %s: %v", taskID, err))
 				writeTaskArtifactProjectionError(c, err)
 				return
 			}
