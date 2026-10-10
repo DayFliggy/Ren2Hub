@@ -33,6 +33,20 @@ const publicHttp = axios.create({
   timeout: 15_000,
 })
 
+/**
+ * Sends the console language with every request, so text the backend
+ * translates itself (emails, errors before sign-in) matches the console.
+ */
+export function sendConsoleLanguage(client: AxiosInstance): void {
+  client.interceptors.request.use((config) => {
+    config.headers.set('Accept-Language', getLocale())
+    return config
+  })
+}
+
+sendConsoleLanguage(http)
+sendConsoleLanguage(publicHttp)
+
 const AUTH_ENDPOINTS = new Set([
   '/api/user/login',
   '/api/user/login/2fa',

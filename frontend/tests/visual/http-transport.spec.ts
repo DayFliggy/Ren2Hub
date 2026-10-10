@@ -89,3 +89,34 @@ test('canceling an in-flight authenticated transport request rejects without ret
   expect(result).toEqual({ resolved: false, code: 'ERR_CANCELED' })
   expect(sends).toBe(1)
 })
+
+test('both transports send the console language as Accept-Language', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+  await page.route('**/__transport_fixture', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<title>Transport fixture</title>',
+    })
+  )
+  const languages: Array<string | undefined> = []
+  await page.route('**/api/transport-language-probe', async (route) => {
+    languages.push((await route.request().allHeaders())['accept-language'])
+    await route.fulfill({ json: { success: true, data: null } })
+  })
+  await page.goto('/__transport_fixture')
+  await page.evaluate(async () => {
+    const transportSource = '/src/api/httpTransport.ts'
+    const i18nSource = '/src/i18n/index.ts'
+    const { httpTransport, publicHttpTransport } = await import(transportSource)
+    const { setLocale } = await import(i18nSource)
+    const probe = '/api/transport-language-probe'
+    await httpTransport.request('GET', probe)
+    await publicHttpTransport.request('GET', probe)
+    await setLocale('zh-CN')
+    await httpTransport.request('GET', probe)
+    await publicHttpTransport.request('GET', probe)
+  })
+  expect(languages).toEqual(['en', 'en', 'zh-CN', 'zh-CN'])
+})

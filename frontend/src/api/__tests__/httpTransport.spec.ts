@@ -9,6 +9,7 @@ import {
 import {
   createHttpTransport,
   createPublicHttpTransport,
+  sendConsoleLanguage,
 } from '@/api/httpTransport'
 import { setLocale } from '@/i18n'
 import { mergeServerMessages } from '@/i18n/serverMessages'
@@ -427,6 +428,26 @@ describe('HTTP authentication transport', () => {
     } finally {
       await setLocale('en')
     }
+  })
+
+  it('sends the current console language as Accept-Language', async () => {
+    const languages: unknown[] = []
+    const client = axios.create({
+      adapter: async (config) => {
+        languages.push(config.headers.get('Accept-Language'))
+        return { data: {}, status: 200, statusText: 'OK', headers: {}, config }
+      },
+    })
+    sendConsoleLanguage(client)
+    try {
+      await setLocale('zh-CN')
+      await client.get('/api/status')
+      await setLocale('en')
+      await client.get('/api/status')
+    } finally {
+      await setLocale('en')
+    }
+    expect(languages).toEqual(['zh-CN', 'en'])
   })
 
   it('keeps public requests free of credentials and refresh side effects', async () => {
