@@ -1,6 +1,7 @@
 /** Ren2Hub API v1. Based on upstream d04c118c, adapted to the local immutable execution and billing contract. */
 export type JSONValue = null | boolean | number | string | readonly JSONValue[] | {readonly [key: string]: JSONValue};
-export type HostCapability = "json-clone@1" | "submit-sse-delta@1";
+/** json-clone@1 and submit-sse-delta@1 are accepted for earlier hosts; new plugins need neither. */
+export type HostCapability = "json-clone@1" | "submit-sse-delta@1" | "duration-auto@1";
 /** Kinds of upstream a driver can address: the vendor API itself, or another New API gateway with the same plugin installed. */
 export type UpstreamKind = "vendor" | "new_api";
 /** Host-injected on every driver hook context. With "new_api" the driver uses its own native-route prefix and the host already set Bearer credentials. */
@@ -40,7 +41,16 @@ export interface HostUtils {
    * request fails with "invalid Volcengine signing URL". Region defaults to cn-north-1, Service to cv.
    */
   volcSignV4(request: {Method: string; URL: string; Headers?: Record<string, string>; Body?: string; AccessKey: string; SecretKey: string; Region?: string; Service?: string; Timestamp?: number}): Record<string, string>;
+  /**
+   * Synchronous read-only request from buildSubmitRequest, buildQueryRequest, parseTaskResult, buildBatchQueryRequest,
+   * parseBatchResult and buildContentRequest to the channel Base URL host or allowedHosts; every other hook, including
+   * the usage hooks, throws. At most 4 per hook call, 15 s each, 30 s in total, 1 MiB per body; redirects are returned, not followed.
+   */
+  fetch(request: FetchRequest): FetchResponse;
 }
+export interface FetchRequest {url: string; method?: "GET" | "HEAD"; headers?: Record<string, string>; responseType?: "json" | "bytes"}
+/** headers holds the first value of each header under its canonical name; body is parsed JSON when the response parses, otherwise text, and "" for HEAD; with responseType "bytes" it is an ArrayBuffer of the response bytes. */
+export interface FetchResponse {status: number; headers: Record<string, string>; body: JSONValue | string | ArrayBuffer}
 /** Decimal text such as "3.5" or "1e1", or a number accepted by the usage boundary. */
 export type DecimalInput = string | number;
 /**
@@ -114,7 +124,7 @@ export type JSONChange =
   | {op: "set" | "append"; path: JSONPath; value: JSONValue}
   | {op: "appendText"; path: JSONPath; value: string};
 export interface SubmitEventDeltaResult {changes: readonly JSONChange[]; state: JSONValue; done: boolean}
-/** With submit-sse-delta@1, state is small control data; changes build the separate response body. */
+/** Used when the plugin declares submit-sse-delta@1 or exports it without parseSubmitEvent: state is small control data; changes build the separate response body. */
 export declare function parseSubmitEventDelta(ctx: DriverContext, event: SubmitEvent, previousState: JSONValue | null): SubmitEventDeltaResult;
 export declare function parseSubmitEvent(ctx: DriverContext, event: SubmitEvent, previousState: JSONValue | null): {state: JSONValue; done: boolean};
 export declare function parseSubmitResponse(ctx: DriverContext, response: UpstreamResponse): {taskId: string; taskData?: unknown; immediate?: NormalizedTaskResult; state?: unknown};

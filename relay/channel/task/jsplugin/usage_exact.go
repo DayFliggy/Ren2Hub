@@ -2,9 +2,11 @@ package jsplugin
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -13,6 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 func decodeUsageJSON(data []byte) (any, error) {
@@ -76,8 +79,20 @@ func exactQueryContext(ctx map[string]any, task *model.Task) (map[string]any, er
 	return result, nil
 }
 
-func usageResultContext(result *relaycommon.TaskInfo) map[string]any {
-	return map[string]any{"taskId": result.TaskID, "status": result.Status, "progress": result.Progress}
+// usageResultContext is the parsed result extractUsageOnComplete receives. Like
+// upstream's TaskInfo it carries, as plugin_state, the state this parse
+// returned: the hook's task.state is still the state from before this poll.
+func usageResultContext(result *relaycommon.TaskInfo) (map[string]any, error) {
+	view := map[string]any{"taskId": result.TaskID, "status": result.Status, "progress": result.Progress}
+	if len(result.PluginState) == 0 {
+		return view, nil
+	}
+	state, err := decodeUsageJSON(result.PluginState)
+	if err != nil {
+		return nil, err
+	}
+	view["plugin_state"] = state
+	return view, nil
 }
 
 // A batch entry names its exact source location. Parsed protocol data is not
@@ -109,6 +124,28 @@ func usageAtPath(root any, path []any) (any, error) {
 		}
 	}
 	return value, nil
+}
+
+// isAutoDuration reports whether a request duration is exactly -1, the
+// vendor's "the model picks the length", written as a number or numeric text.
+func isAutoDuration(value any) bool {
+	var text string
+	switch number := value.(type) {
+	case float64:
+		return number == -1
+	case int64:
+		return number == -1
+	case int:
+		return number == -1
+	case json.Number:
+		text = string(number)
+	case string:
+		text = strings.TrimSpace(number)
+	default:
+		return false
+	}
+	parsed, err := decimal.NewFromString(text)
+	return err == nil && parsed.Equal(decimal.NewFromInt(-1))
 }
 
 func normalizeLimitedUsage(value any, maximum int, integer bool) (any, error) {

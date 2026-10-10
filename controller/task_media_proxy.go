@@ -16,11 +16,11 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/http/httpguts"
 )
 
 var errTaskMediaRequestRejected = errors.New("task media request rejected")
@@ -306,20 +306,11 @@ func doTaskMediaRequest(client *http.Client, request *http.Request, responseHead
 }
 
 func applyTaskMediaRequestHeaders(destination http.Header, headers map[string]string) error {
-	if len(headers) > 64 {
+	if jsplugin.ValidateRequestHeaders(headers) != nil {
 		return errTaskMediaRequestRejected
 	}
 	for name, value := range headers {
-		name = strings.TrimSpace(name)
-		if !httpguts.ValidHeaderFieldName(name) || !httpguts.ValidHeaderFieldValue(value) || len(value) > 8192 {
-			return errTaskMediaRequestRejected
-		}
-		switch strings.ToLower(name) {
-		case "host", "content-length", "accept-encoding", "connection", "proxy-connection", "keep-alive",
-			"proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade":
-			return errTaskMediaRequestRejected
-		}
-		destination.Set(name, value)
+		destination.Set(strings.TrimSpace(name), value)
 	}
 	return nil
 }

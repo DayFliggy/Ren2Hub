@@ -105,3 +105,40 @@ export function extractUsageOnComplete() { throw new Error("provider usage unava
 	assert.NotEmpty(t, response.Immediate.UsageError, "a hook failure cannot settle using other available counters")
 	assert.Empty(t, response.Immediate.UsageFacts)
 }
+
+// A completing poll can learn a billed fact, such as an output resolution read
+// from the result file, and keep it in the state it returns. The completion
+// hook sees that state as result.plugin_state, while task.state is still the
+// state stored before the poll.
+func TestTaskAdaptorCompletionUsageSeesTheStateItsPollReturned(t *testing.T) {
+	const source = `
+export const meta = {apiVersion:1,key:"completion-state",name:"Completion",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task",
+  usageSchema:{tier:{enum:["low","high"]},seconds:{type:"number",unit:"second"}}};
+export function buildSubmitRequest(ctx) { return {url:ctx.baseUrl+"/submit"}; }
+export function parseSubmitResponse() { return {taskId:"upstream-job"}; }
+export function buildQueryRequest(ctx) { return {url:ctx.baseUrl+"/query"}; }
+function result(ctx, body) { return {taskId:"upstream-job",status:"SUCCESS",state:Object.assign({}, ctx.state || {}, {tier:body.tier})}; }
+export function parseTaskResult(ctx, body) { return result(ctx, body); }
+export function parseBatchResult(ctx, body) { return [Object.assign(result(ctx.tasks[0], body), {usagePath:["tier"]})]; }
+export function extractUsageOnComplete(task, result) {
+  const state = (result && result.plugin_state) || {};
+  return {tier: state.tier, seconds: state.seconds + (task.state ? 0 : 100)};
+}
+`
+	plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	stored := &model.Task{TaskID: "public-job", PrivateData: model.TaskPrivateData{UpstreamTaskID: "upstream-job", PluginState: []byte(`{"seconds":2.5}`)}}
+	body := []byte(`{"tier":"low"}`)
+
+	result, err := New(plugin).ParseTaskResultForTask(stored, nil, body)
+	require.NoError(t, err)
+	assert.Empty(t, result.UsageError)
+	assert.JSONEq(t, `{"seconds":2.5,"tier":"low"}`, string(result.PluginState))
+	assert.Equal(t, map[string]any{"tier": "low", "seconds": "2.5"}, result.UsageFacts)
+
+	results, err := New(plugin).ParseBatchResult([]*model.Task{stored}, nil, body)
+	require.NoError(t, err)
+	require.Contains(t, results, "upstream-job")
+	assert.Empty(t, results["upstream-job"].TaskInfo.UsageError)
+	assert.Equal(t, map[string]any{"tier": "low", "seconds": "2.5"}, results["upstream-job"].TaskInfo.UsageFacts)
+}

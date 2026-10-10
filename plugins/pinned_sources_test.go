@@ -31,13 +31,15 @@ func pinnedPlugin(t *testing.T, key string) (*jsplugin.LoadedPlugin, string) {
 // refuses a key and version whose stored source differs. Each pinned-<sha>
 // directory holds the byte copies shipped by one deployed release.
 func TestReleasedFactorySourcesCompileAndKeepTheirIdentity(t *testing.T) {
+	// Built-in plugins each pinned release shipped.
+	releasedPlugins := map[string]int{"pinned-10ccd9a2f": 10, "pinned-1bb6e849e": 10, "pinned-12435f4d5": 11}
 	releases, err := filepath.Glob("testdata/pinned-*")
 	require.NoError(t, err)
-	require.NotEmpty(t, releases)
+	require.Len(t, releases, len(releasedPlugins))
 	for _, release := range releases {
 		entries, err := os.ReadDir(release)
 		require.NoError(t, err)
-		require.Len(t, entries, 10)
+		require.Len(t, entries, releasedPlugins[filepath.Base(release)], release)
 		for _, entry := range entries {
 			key := strings.TrimSuffix(entry.Name(), ".js")
 			t.Run(filepath.Base(release)+"/"+key, func(t *testing.T) {

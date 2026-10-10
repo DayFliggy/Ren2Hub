@@ -1,6 +1,7 @@
 package jsplugin
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,6 +78,32 @@ export function ordinary() { return {seconds: 1.5, runs}; }
 	require.NoError(t, engine.CallInto(t.Context(), &ordinary, "ordinary"))
 	assert.Equal(t, 1.5, ordinary.Seconds)
 	assert.Zero(t, ordinary.Runs, "a refused usage hook must not run")
+}
+
+// Usage facts come from the hook's arguments only: a usage hook cannot reach
+// the network even when its caller's context carries a fetcher.
+func TestUsageHooksCannotFetch(t *testing.T) {
+	engine, err := Compile(`
+export function extractUsage() { return {seconds: utils.fetch({url: "https://api.example/usage"}).body.seconds}; }
+export function extractUsageOnSubmit() { return {seconds: utils.fetch({url: "https://api.example/usage"}).body.seconds}; }
+export function extractUsageOnComplete() { return {seconds: utils.fetch({url: "https://api.example/usage"}).body.seconds}; }
+export function parseTaskResult() { return {seconds: utils.fetch({url: "https://api.example/usage"}).body.seconds}; }
+`, Options{Key: "usage-fetch", Version: "1.0.0"})
+	require.NoError(t, err)
+	fetches := 0
+	ctx := WithFetcher(t.Context(), func(context.Context, FetchRequest) (FetchResponse, error) {
+		fetches++
+		return FetchResponse{Status: 200, Body: []byte(`{"seconds":5}`)}, nil
+	})
+	for _, hook := range []string{"extractUsage", "extractUsageOnSubmit", "extractUsageOnComplete"} {
+		_, err = engine.Call(ctx, hook)
+		require.ErrorContains(t, err, "utils.fetch is not available in "+hook, hook)
+	}
+	assert.Zero(t, fetches)
+	value, err := engine.Call(ctx, "parseTaskResult")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"seconds": int64(5)}, value)
+	assert.Equal(t, 1, fetches)
 }
 
 func TestUsageHooksSeeSourceDecimalsWithoutHostRounding(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func setupVideoTaskLifecycle(t *testing.T) *gorm.DB {
 	return db
 }
 
-func seedBoundVideoTask(t *testing.T, db *gorm.DB, channelType int, endpoint string, status model.TaskStatus) (*model.Channel, *model.Task) {
+func seedBoundVideoTask(t *testing.T, db *gorm.DB, pluginKey string, channelType int, endpoint string, status model.TaskStatus) (*model.Channel, *model.Task) {
 	t.Helper()
 	channel := &model.Channel{Type: channelType, Name: "video-owner", Key: "sk-original\nsk-other", BaseURL: &endpoint,
 		Status: common.ChannelStatusEnabled, ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2}}
@@ -62,12 +63,12 @@ func seedBoundVideoTask(t *testing.T, db *gorm.DB, channelType int, endpoint str
 	task.PrivateData.UpstreamTaskID, task.PrivateData.TokenId = "provider-job", 1
 	task.PrivateData.BillingSource = service.BillingSourceWallet
 	task.PrivateData.SubmissionRequestID = "video-submit"
-	sora, found := jsplugin.DefaultRegistry.Get("sora")
+	plugin, found := jsplugin.DefaultRegistry.Get(pluginKey)
 	require.True(t, found)
-	version, err := model.GetTaskPluginVersion("sora", sora.Meta.Version)
+	version, err := model.GetTaskPluginVersion(pluginKey, plugin.Meta.Version)
 	require.NoError(t, err)
 	ref := model.TaskPluginRef{Key: version.Key, Version: version.Version, SourceHash: version.SourceHash}
-	task.Platform = "sora"
+	task.Platform = constant.TaskPlatform(pluginKey)
 	task.PrivateData.PluginRef = &ref
 	task.PrivateData.PluginAttemptID = "video-attempt"
 	task.Data = []byte("{}")
@@ -129,7 +130,7 @@ func TestVideoContentUsesOriginalTaskCredential(t *testing.T) {
 					_, _ = io.WriteString(w, "video-fixture")
 				}))
 				defer upstream.Close()
-				channel, task := seedBoundVideoTask(t, db, channelType, upstream.URL, model.TaskStatusSuccess)
+				channel, task := seedBoundVideoTask(t, db, "sora", channelType, upstream.URL, model.TaskStatusSuccess)
 				updates := map[string]any{"key": "sk-other\nsk-original"}
 				switch scenario {
 				case "replaced":
@@ -162,6 +163,88 @@ func TestVideoContentUsesOriginalTaskCredential(t *testing.T) {
 			})
 		}
 	}
+}
+
+// hailuo looks the MiniMax download link up with utils.fetch; the signed link
+// then gets a plain GET without the channel key, even for HEAD clients. A
+// failed lookup is an explicit error and never falls back to the result URL.
+func TestTaskArtifactContentFollowsHailuoRetrieveLink(t *testing.T) {
+	db := setupVideoTaskLifecycle(t)
+	fetchSettings := system_setting.GetFetchSetting()
+	previousProtection := fetchSettings.EnableSSRFProtection
+	fetchSettings.EnableSSRFProtection = false
+	t.Cleanup(func() { fetchSettings.EnableSSRFProtection = previousProtection })
+	var mu sync.Mutex
+	var signedRequests []string
+	var resultURLRequests atomic.Int32
+	var upstream *httptest.Server
+	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/files/retrieve":
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "Bearer sk-original", r.Header.Get("Authorization"))
+			if r.URL.Query().Get("file_id") == "login-fail" {
+				_, _ = io.WriteString(w, `{"base_resp":{"status_code":1004,"status_msg":"login fail"}}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"file":{"download_url":"`+upstream.URL+`/oss/video.mp4?Expires=1&Signature=sig"},"base_resp":{"status_code":0}}`)
+		case "/oss/video.mp4":
+			mu.Lock()
+			signedRequests = append(signedRequests, r.Method+" range="+r.Header.Get("Range")+" authorization="+r.Header.Get("Authorization"))
+			mu.Unlock()
+			w.Header().Set("Content-Type", "video/mp4")
+			if r.Header.Get("Range") != "" {
+				w.Header().Set("Content-Range", "bytes 0-3/10")
+				w.WriteHeader(http.StatusPartialContent)
+				_, _ = io.WriteString(w, "mp4!")
+				return
+			}
+			_, _ = io.WriteString(w, "mp4!video!")
+		case "/result-url.mp4":
+			resultURLRequests.Add(1)
+			_, _ = io.WriteString(w, "result-url")
+		default:
+			t.Errorf("unexpected upstream request %s", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+	_, task := seedBoundVideoTask(t, db, "hailuo", constant.ChannelTypeMiniMax, upstream.URL, model.TaskStatusSuccess)
+	task.PrivateData.ResultURL = upstream.URL + "/result-url.mp4"
+	request := func(handler gin.HandlerFunc, method, fileID string) *httptest.ResponseRecorder {
+		task.Data = []byte(`{"file_id":"` + fileID + `"}`)
+		require.NoError(t, db.Save(task).Error)
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set("id", 1)
+		c.Params = gin.Params{{Key: "key", Value: task.TaskID}, {Key: "task_id", Value: task.TaskID}, {Key: "artifact_key", Value: "video"}}
+		c.Request = httptest.NewRequest(method, "/v1/tasks/"+task.TaskID+"/artifacts/video/content", nil)
+		if method == http.MethodGet {
+			c.Request.Header.Set("Range", "bytes=0-3")
+		}
+		handler(c)
+		return recorder
+	}
+
+	ranged := request(TaskArtifactContent, http.MethodGet, "file-1")
+	assert.Equal(t, http.StatusPartialContent, ranged.Code, ranged.Body.String())
+	assert.Equal(t, "mp4!", ranged.Body.String())
+	assert.Equal(t, "bytes 0-3/10", ranged.Header().Get("Content-Range"))
+
+	head := request(TaskArtifactContent, http.MethodHead, "file-1")
+	assert.Equal(t, http.StatusOK, head.Code)
+	assert.Empty(t, head.Body.String())
+	assert.Equal(t, "video/mp4", head.Header().Get("Content-Type"))
+
+	for _, handler := range []gin.HandlerFunc{TaskArtifactContent, VideoProxy} {
+		failed := request(handler, http.MethodGet, "login-fail")
+		assert.Equal(t, http.StatusInternalServerError, failed.Code)
+		assert.Contains(t, failed.Body.String(), "artifact_plugin_error")
+	}
+	assert.Zero(t, resultURLRequests.Load(), "a failed content request must not fall back to the result URL")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"GET range=bytes=0-3 authorization=", "GET range= authorization="}, signedRequests)
 }
 
 // A pre-plugin video task stored a public result URL. The OpenAI video

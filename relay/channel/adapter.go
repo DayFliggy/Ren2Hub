@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"io"
 	"net/http"
 
@@ -89,7 +90,7 @@ type TaskContentRequest struct {
 }
 
 type TaskContentRequestProvider interface {
-	BuildContentRequest(*model.Task, string, TaskArtifactClientRequest) (*TaskContentRequest, error)
+	BuildContentRequest(context.Context, *model.Task, string, TaskArtifactClientRequest) (*TaskContentRequest, error)
 }
 
 type TaskValidatedUsageFactsProvider interface {

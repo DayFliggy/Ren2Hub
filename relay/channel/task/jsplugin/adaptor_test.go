@@ -438,7 +438,7 @@ export function buildContentRequest(ctx) {
 	artifacts, err := adaptor.ListArtifacts(task)
 	require.NoError(t, err)
 	require.Equal(t, []channel.TaskArtifact{{Key: "video", Type: "video", MimeType: "video/mp4"}}, artifacts)
-	descriptor, err := adaptor.BuildContentRequest(task, "video", channel.TaskArtifactClientRequest{Method: http.MethodHead})
+	descriptor, err := adaptor.BuildContentRequest(t.Context(), task, "video", channel.TaskArtifactClientRequest{Method: http.MethodHead})
 	require.NoError(t, err)
 	require.NotNil(t, descriptor)
 	assert.Equal(t, "https://provider.example/content/video", descriptor.URL)
@@ -458,7 +458,7 @@ export function parseTaskResult(){return {status:"SUCCESS"};}
 	artifacts, err = fallback.ListArtifacts(&model.Task{})
 	require.NoError(t, err)
 	assert.Nil(t, artifacts)
-	descriptor, err = fallback.BuildContentRequest(&model.Task{}, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
+	descriptor, err = fallback.BuildContentRequest(t.Context(), &model.Task{}, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
 	require.NoError(t, err)
 	assert.Nil(t, descriptor)
 }
@@ -499,6 +499,7 @@ export function buildContentRequest(ctx) { return {url:"https://cdn.example/vide
 	adaptor := New(plugin)
 	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://provider.example"}})
 	descriptor, err := adaptor.BuildContentRequest(
+		t.Context(),
 		&model.Task{TaskID: "task", Data: []byte(`{}`)},
 		"video",
 		channel.TaskArtifactClientRequest{Method: http.MethodGet},
@@ -507,6 +508,143 @@ export function buildContentRequest(ctx) { return {url:"https://cdn.example/vide
 	require.NotNil(t, descriptor)
 	assert.True(t, descriptor.Credentialless)
 	assert.Equal(t, "https://cdn.example/video.mp4", descriptor.URL)
+}
+
+func TestTaskAdaptorHookFetchReachesRequestHostsOnly(t *testing.T) {
+	service.InitHttpClient()
+	extra := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"from":"extra"}`))
+	}))
+	defer extra.Close()
+	base := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/info":
+			assert.Equal(t, "Bearer key", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"from":"base"}`))
+		case "/moved":
+			http.Redirect(w, r, extra.URL+"/elsewhere", http.StatusFound)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+	}))
+	defer base.Close()
+	source := strings.Replace(mockPlugin, `fetchMode: "per_task",`, `fetchMode: "per_task", allowedHosts: ["`+strings.TrimPrefix(extra.URL, "http://")+`"],`, 1)
+	source = strings.Replace(source, `export function listArtifacts() { return []; }
+export function buildContentRequest() { throw new Error("artifact_not_found"); }`, `export function listArtifacts() { return [{key: "video", type: "video"}]; }
+export function buildContentRequest(ctx) {
+  const base = utils.fetch({url: ctx.baseUrl + "/info", headers: {Authorization: "Bearer " + ctx.apiKey}});
+  const extra = utils.fetch({url: "http://" + meta.allowedHosts[0] + "/info"});
+  const moved = utils.fetch({url: ctx.baseUrl + "/moved"});
+  let denied = "";
+  try { utils.fetch({url: "https://other.example/info"}); } catch (e) { denied = e.message; }
+  return {url: ctx.baseUrl + "/content", method: "GET", headers: {
+    "X-Base": base.body.from, "X-Extra": extra.body.from, "X-Moved": moved.status + " " + moved.headers.Location, "X-Denied": denied,
+  }};
+}`, 1)
+	source = strings.Replace(source, `render: function(ctx, task) { return {id: task.task_id, status: "completed"}; }`,
+		`render: function(ctx, task) { return utils.fetch({url: "https://provider.example/info"}).body; }`, 1)
+	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	adaptor := New(plugin)
+	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: base.URL, ApiKey: "key"}})
+
+	descriptor, err := adaptor.BuildContentRequest(t.Context(), &model.Task{TaskID: "task", Data: []byte(`{}`)}, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
+	require.NoError(t, err)
+	require.NotNil(t, descriptor)
+	assert.Equal(t, map[string]string{
+		"X-Base":   "base",
+		"X-Extra":  "extra",
+		"X-Moved":  "302 " + extra.URL + "/elsewhere",
+		"X-Denied": `utils.fetch to other.example failed: plugin request host "other.example" is not allowed`,
+	}, descriptor.Headers)
+
+	// Renderers run on every client read and may not fetch.
+	_, err = adaptor.ConvertToOpenAIVideo(&model.Task{TaskID: "task_public", Status: model.TaskStatusSuccess})
+	assert.ErrorContains(t, err, "utils.fetch is not available in protocols.openai_video.render")
+}
+
+// The submit, query and result hooks fetch through the channel; usage hooks,
+// whose facts are billed, cannot, so a fetching usage hook is a usage error.
+func TestTaskAdaptorDriverHooksFetchButUsageHooksCannot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service.InitHttpClient()
+	var lookups []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if name, found := strings.CutPrefix(r.URL.Path, "/lookup/"); found {
+			lookups = append(lookups, name)
+			_, _ = w.Write([]byte(`{"value":"` + name + `"}`))
+			return
+		}
+		assert.Equal(t, "/tasks/upstream-1", r.URL.Path)
+		assert.Equal(t, "query", r.Header.Get("X-Plugin"))
+		_, _ = w.Write([]byte(`{"id":"upstream-1"}`))
+	}))
+	defer server.Close()
+	source := strings.NewReplacer(
+		`headers: {"X-Plugin": "submit"}`, `headers: {"X-Plugin": utils.fetch({url: ctx.baseUrl + "/lookup/submit"}).body.value}`,
+		`headers: {"X-Plugin": "query"}`, `headers: {"X-Plugin": utils.fetch({url: ctx.baseUrl + "/lookup/query"}).body.value}`,
+		`url: body.url}`, `url: utils.fetch({url: ctx.baseUrl + "/lookup/result"}).body.value}`,
+		`return {upstreamUnits: 23};`, `return {upstreamUnits: utils.fetch({url: task.baseUrl + "/lookup/23"}).body.value};`,
+	).Replace(mockPlugin)
+	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	adaptor := New(plugin)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: server.URL, ApiKey: "secret"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}}
+	adaptor.Init(info)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "hello"})
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	req := httptest.NewRequest(http.MethodPost, server.URL+"/submit", nil)
+	require.NoError(t, adaptor.BuildRequestHeader(c, req, info))
+	assert.Equal(t, "submit", req.Header.Get("X-Plugin"))
+
+	task := &model.Task{Action: info.Action, PrivateData: model.TaskPrivateData{UpstreamTaskID: "upstream-1"}}
+	queryResp, err := adaptor.FetchTaskForTask(server.URL, "secret", task, "")
+	require.NoError(t, err)
+	queryBody, err := io.ReadAll(queryResp.Body)
+	require.NoError(t, err)
+	require.NoError(t, queryResp.Body.Close())
+	result, err := adaptor.ParseTaskResultForTask(task, queryResp, queryBody)
+	require.NoError(t, err)
+	assert.Equal(t, "SUCCESS", result.Status)
+	assert.Equal(t, "result", result.Url)
+	assert.Equal(t, "plugin completion usage hook failed", result.UsageError)
+	assert.Nil(t, result.UsageFacts)
+	assert.Equal(t, []string{"submit", "query", "result"}, lookups)
+
+	lookups = nil
+	batchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if name, found := strings.CutPrefix(r.URL.Path, "/lookup/"); found {
+			lookups = append(lookups, name)
+			_, _ = w.Write([]byte(`{"value":"` + name + `"}`))
+			return
+		}
+		assert.Equal(t, "/batch", r.URL.Path)
+		assert.Equal(t, "batch", r.Header.Get("X-Plugin"))
+		_, _ = w.Write([]byte(`{"items":[{"id":"task-a","status":"SUCCESS","usage":23}]}`))
+	}))
+	defer batchServer.Close()
+	batchSource := strings.NewReplacer(
+		`headers: { "X-Plugin": "batch" }`, `headers: { "X-Plugin": utils.fetch({url: ctx.baseUrl + "/lookup/batch"}).body.value }`,
+		`url: (item.urls || [])[0] || ""`, `url: utils.fetch({url: ctx.baseUrl + "/lookup/" + item.id}).body.value`,
+	).Replace(batchMockPlugin)
+	batchPlugin, err := pluginruntime.NewRegistry().Register(batchSource, pluginruntime.Options{})
+	require.NoError(t, err)
+	batch := New(batchPlugin)
+	batch.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: batchServer.URL, ApiKey: "secret"}})
+	tasks := []*model.Task{{PrivateData: model.TaskPrivateData{UpstreamTaskID: "task-a"}}}
+	batchResp, err := batch.FetchBatchTasks(batchServer.URL, "secret", tasks, "")
+	require.NoError(t, err)
+	batchBody, err := io.ReadAll(batchResp.Body)
+	require.NoError(t, err)
+	require.NoError(t, batchResp.Body.Close())
+	results, err := batch.ParseBatchResult(tasks, batchResp, batchBody)
+	require.NoError(t, err)
+	require.Contains(t, results, "task-a")
+	assert.Equal(t, "task-a", results["task-a"].TaskInfo.Url)
+	assert.Equal(t, "23", results["task-a"].TaskInfo.UsageFacts["upstreamUnits"])
+	assert.Equal(t, []string{"batch", "task-a"}, lookups)
 }
 
 func TestTaskAdaptorMapsJSContract(t *testing.T) {
@@ -878,6 +1016,52 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
 		assert.Equal(t, "5", ratios["duration"])
+	})
+
+	t.Run("duration -1 passes only for plugins that declare duration-auto@1", func(t *testing.T) {
+		declaring, err := pluginruntime.NewRegistry().Register(strings.Replace(source, `fetchMode: "per_task",`, `fetchMode: "per_task", requiredCapabilities: ["duration-auto@1"],`, 1), pluginruntime.Options{})
+		require.NoError(t, err)
+		for _, tc := range []struct {
+			name      string
+			declaring bool
+			body      map[string]any
+			accepted  bool
+		}{
+			{"undeclared plugins keep rejecting it", false, map[string]any{"metadata": map[string]any{"duration": -1}}, false},
+			{"vendor parameters and declared usage fields", true, map[string]any{
+				"duration": -1,
+				"metadata": map[string]any{"seconds": "-1", "parameters": map[string]any{"durationSeconds": -1}},
+			}, true},
+			{"other negative durations", true, map[string]any{"metadata": map[string]any{"duration": -2}}, false},
+			{"fractions near -1", true, map[string]any{"metadata": map[string]any{"duration": "-1.5"}}, false},
+			{"durations above the host limit", true, map[string]any{"metadata": map[string]any{"duration": relaycommon.MaxTaskDurationSeconds + 1}}, false},
+			{"negative counts", true, map[string]any{"metadata": map[string]any{"count": -1}}, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				adaptor, context, info := newRequest(t, tc.body)
+				if tc.declaring {
+					adaptor = New(declaring)
+					adaptor.Init(info)
+				}
+				taskErr := adaptor.ValidateRequestAndSetAction(context, info)
+				if tc.accepted {
+					assert.Nil(t, taskErr)
+					return
+				}
+				require.NotNil(t, taskErr)
+				assert.Equal(t, "plugin_usage_invalid", taskErr.Code)
+			})
+		}
+
+		adaptor, context, info := newRequest(t, map[string]any{
+			"metadata":         map[string]any{"duration": -1},
+			"hookUsageEntries": []any{map[string]any{"name": "duration", "value": -1}},
+		})
+		adaptor = New(declaring)
+		adaptor.Init(info)
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+		_, err = adaptor.ExtractUsageFactsValidated(context, info)
+		assert.Error(t, err, "usage facts stay non-negative")
 	})
 
 	t.Run("declared token facts use the token bound instead of duration cap", func(t *testing.T) {
@@ -1957,6 +2141,26 @@ export function parseSubmitEventDelta(ctx,event,previous) {
 			assert.Equal(t, map[string]any{"units": "0"}, parsed.Immediate.UsageFacts)
 		})
 	}
+
+	t.Run("delta hook exported without the declaration", func(t *testing.T) {
+		undeclared := strings.Replace(source, `requiredCapabilities:["submit-sse-delta@1"],`, "", 1)
+		undeclared = strings.Replace(undeclared, "export function parseSubmitEvent(", "function unusedSnapshotHook(", 1)
+		plugin, err := pluginruntime.CompilePlugin(undeclared, pluginruntime.Options{})
+		require.NoError(t, err)
+		require.Empty(t, plugin.Meta.RequiredCapabilities)
+		info := &relaycommon.RelayInfo{OriginModelName: "alias", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "document", ChannelBaseUrl: "https://provider.example"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "public-document"}}
+		adaptor := New(plugin)
+		adaptor.Init(info)
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/compile", nil)
+		c.Set("task_request", map[string]any{})
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+		stream := "data: " + first + "\n\ndata: " + last + "\n\n"
+		response := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}
+		parsed, taskErr := adaptor.ParseResponse(c, response, info)
+		require.Nil(t, taskErr)
+		assert.JSONEq(t, `{"document":"helloworld","units":0}`, string(parsed.TaskData))
+	})
 }
 
 func TestAlibabaSubmitDeltaDoesNotMutateControlState(t *testing.T) {
