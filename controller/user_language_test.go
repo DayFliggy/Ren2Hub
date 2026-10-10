@@ -93,3 +93,46 @@ func TestUpdateSelfSavesOnlySupportedLanguages(t *testing.T) {
 		assert.Equal(t, tc.want, cached.GetSetting().Language, tc.body)
 	}
 }
+
+// A verification mail goes to an address that may have no account yet, so it
+// follows the request language. A password reset mail follows the language
+// saved on the account, then the request language.
+func TestAccountEmailsFollowTheReaderLanguage(t *testing.T) {
+	user, _ := setupSecurityEnrollmentTest(t)
+	mailbox := newSecurityMailbox(t)
+	previousSystemName := common.SystemName
+	common.SystemName = "Gateway"
+	t.Cleanup(func() { common.SystemName = previousSystemName })
+	send := func(handler gin.HandlerFunc, path, acceptLanguage string) {
+		response := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(response)
+		c.Request = httptest.NewRequest(http.MethodGet, path, nil)
+		if acceptLanguage != "" {
+			c.Request.Header.Set("Accept-Language", acceptLanguage)
+		}
+		handler(c)
+		require.Contains(t, response.Body.String(), `"success":true`, path)
+	}
+	lastMail := func(receiver string) string {
+		mailbox.mutex.Lock()
+		defer mailbox.mutex.Unlock()
+		mails := mailbox.mail[receiver]
+		require.NotEmpty(t, mails, receiver)
+		return mails[len(mails)-1]
+	}
+
+	send(SendEmailVerification, "/api/verification?email=new@example.com", "zh-CN")
+	assert.Contains(t, lastMail("new@example.com"), "您好，你正在进行Gateway邮箱验证。")
+	send(SendEmailVerification, "/api/verification?email=new@example.com", "")
+	assert.Contains(t, lastMail("new@example.com"), "Hello, you are verifying your email address for Gateway.")
+
+	require.NoError(t, model.DB.Model(user).Updates(map[string]any{"email": "reader@example.com", "setting": `{"language":"zh-CN"}`}).Error)
+	send(SendPasswordResetEmail, "/api/reset_password?email=reader@example.com", "en-US")
+	assert.Contains(t, lastMail("reader@example.com"), "您好，你正在进行Gateway密码重置。")
+
+	require.NoError(t, model.DB.Model(user).Update("setting", "").Error)
+	send(SendPasswordResetEmail, "/api/reset_password?email=reader@example.com", "zh-TW")
+	assert.Contains(t, lastMail("reader@example.com"), "您好，您正在進行Gateway密碼重設。")
+	send(SendPasswordResetEmail, "/api/reset_password?email=reader@example.com", "")
+	assert.Contains(t, lastMail("reader@example.com"), "Hello, you are resetting your password for Gateway.")
+}

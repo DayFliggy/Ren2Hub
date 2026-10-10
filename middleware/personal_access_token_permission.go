@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
@@ -38,9 +37,9 @@ func RequireCurrentUserPermission(c *gin.Context, permission authz.Permission) b
 		return true
 	}
 	if _, isPAT := c.Get("personal_access_token"); isPAT || c.GetBool("use_access_token") {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "PAT_SCOPE_DENIED", "message": "Personal access token scope does not permit this operation."})
+		abortWithWebMessage(c, http.StatusForbidden, "PAT_SCOPE_DENIED", common.NewMessage("Personal access token scope does not permit this operation."))
 		return false
 	}
-	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege)})
+	abortWithWebMessage(c, http.StatusForbidden, "", common.NewMessage("Unauthorized, insufficient privileges"))
 	return false
 }

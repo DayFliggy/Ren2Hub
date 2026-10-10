@@ -3,7 +3,6 @@ package controller
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -228,7 +227,7 @@ func GetTokenUsage(c *gin.Context) {
 
 	token, err := model.GetTokenByKey(strings.TrimPrefix(tokenKey, "sk-"), false)
 	if err != nil {
-		common.SysError("failed to get token by key: " + err.Error())
+		common.SysError(common.LogText("failed to get token by key: %s", err.Error()))
 		common.ApiErrorI18n(c, i18n.MsgTokenGetInfoFailed)
 		return
 	}
@@ -275,24 +274,24 @@ func AddToken(c *gin.Context) {
 		token.ConversionPolicy = string(types.ConversionLossPolicySafe)
 	}
 	if !validTokenConversionPolicy(token.ConversionPolicy) {
-		common.ApiError(c, fmt.Errorf("invalid conversion_policy"))
+		common.ApiErrorT(c, "Invalid conversion policy")
 		return
 	}
 	if len(token.Name) > 50 {
-		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
+		common.ApiErrorT(c, "Token name is too long")
 		return
 	}
 	// 非无限额度时，检查额度值是否超出有效范围
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
-			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
+			common.ApiErrorT(c, "Quota value cannot be negative")
 			return
 		}
 	}
 	key, err := common.GenerateKey()
 	if err != nil {
-		common.ApiErrorI18n(c, i18n.MsgTokenGenerateFailed)
-		common.SysLog("failed to generate token key: " + err.Error())
+		common.ApiErrorT(c, "Failed to generate token")
+		common.SysLog(common.LogText("failed to generate token key: %s", err.Error()))
 		return
 	}
 	cleanToken := model.Token{
@@ -313,21 +312,21 @@ func AddToken(c *gin.Context) {
 	if request.Type == "manual" {
 		mode = model.RouteModeManual
 	} else if request.Type != "" && request.Type != "auto" {
-		common.ApiErrorMsg(c, "invalid token type")
+		common.ApiErrorT(c, "Invalid token type")
 		return
 	}
 	err = cleanToken.InsertWithRouteMode(mode)
 	if err != nil {
 		if errors.Is(err, model.ErrTokenCountLimit) {
-			c.JSON(http.StatusOK, gin.H{"success": false, "code": "TOKEN_COUNT_LIMIT", "message": fmt.Sprintf("已达到最大令牌数量限制 (%d)", operation_setting.GetMaxUserTokens())})
+			common.ApiErrorWithCode(c, common.NewMessage("Maximum number of tokens reached ({{max}})", map[string]any{"max": operation_setting.GetMaxUserTokens()}), "TOKEN_COUNT_LIMIT")
 			return
 		}
 		if errors.Is(err, model.ErrTokenCreationRateLimit) {
-			c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "code": "TOKEN_CREATION_RATE_LIMIT", "message": "令牌创建过于频繁，请稍后重试"})
+			common.ApiErrorStatus(c, http.StatusTooManyRequests, common.NewMessage("Tokens are being created too often, please try again later"), gin.H{"code": "TOKEN_CREATION_RATE_LIMIT"})
 			return
 		}
 		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			common.ApiErrorStatus(c, http.StatusConflict, err)
 			return
 		}
 		common.ApiError(c, err)
@@ -378,7 +377,7 @@ func UpdateToken(c *gin.Context) {
 		if known := tokenRequestFieldCase(field); known != "" && known != field {
 			// encoding/json would decode the value case-insensitively while
 			// the presence check is exact, so the setting would be dropped.
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("unknown field %q; use %q", field, known)})
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Unknown field {{field}}; use {{name}}", map[string]any{"field": strconv.Quote(field), "name": strconv.Quote(known)}))
 			return
 		}
 		present[field] = true
@@ -386,18 +385,18 @@ func UpdateToken(c *gin.Context) {
 	token := request.Token
 	setTokenAuditParams(c, model.AuditFields{"id": token.Id, "name": token.Name, "status": token.Status, "operation_id": request.OperationID, "expected_version": request.ExpectedVersion})
 	if len(token.Name) > 50 {
-		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
+		common.ApiErrorT(c, "Token name is too long")
 		return
 	}
 	if statusOnly == "" && token.ConversionPolicy != "" && !validTokenConversionPolicy(token.ConversionPolicy) {
-		common.ApiError(c, fmt.Errorf("invalid conversion_policy"))
+		common.ApiErrorT(c, "Invalid conversion policy")
 		return
 	}
 	token.UserId = userId
 	err = token.UpdateFromRequest(request.OperationID, request.ExpectedVersion, statusOnly != "", present)
 	if err != nil {
 		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			common.ApiErrorStatus(c, http.StatusConflict, err)
 			return
 		}
 		common.ApiError(c, err)
@@ -453,7 +452,7 @@ type TokenBatch struct {
 func DeleteTokenBatch(c *gin.Context) {
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
-		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 	setTokenAuditParams(c, model.AuditFields{"requested_count": len(tokenBatch.Ids)})
@@ -475,11 +474,11 @@ func DeleteTokenBatch(c *gin.Context) {
 func GetTokenKeysBatch(c *gin.Context) {
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
-		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 	if len(tokenBatch.Ids) > 100 {
-		common.ApiErrorI18n(c, i18n.MsgBatchTooMany, map[string]any{"Max": 100})
+		common.ApiErrorT(c, "Too many items in batch request, maximum is {{max}}", map[string]any{"max": 100})
 		return
 	}
 	setTokenAuditParams(c, model.AuditFields{"ids": tokenBatch.Ids, "requested_count": len(tokenBatch.Ids)})

@@ -138,7 +138,7 @@ func CreatePersonalAccessToken(c *gin.Context) {
 		ExpiresAt int64    `json:"expires_at"`
 	}
 	if common.DecodeJson(c.Request.Body, &request) != nil {
-		common.ApiErrorMsg(c, "Invalid personal access token input")
+		common.ApiErrorT(c, "Invalid personal access token input")
 		return
 	}
 	if _, _, _, err := model.NormalizePATInput(request.Name, request.Scopes, request.ExpiresAt, c.GetInt("role")); err != nil {
@@ -152,7 +152,8 @@ func CreatePersonalAccessToken(c *gin.Context) {
 			return
 		}
 		if !allowed {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "PAT_SCOPE_DENIED", "message": "Scope exceeds current permissions."})
+			common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("Scope exceeds current permissions."), gin.H{"code": "PAT_SCOPE_DENIED"})
+			c.Abort()
 			return
 		}
 	}
@@ -172,7 +173,7 @@ func CreatePersonalAccessToken(c *gin.Context) {
 func RevokePersonalAccessToken(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		common.ApiErrorMsg(c, "Invalid personal access token ID")
+		common.ApiErrorT(c, "Invalid personal access token ID")
 		return
 	}
 	context, err := common.Marshal(gin.H{"id": id})
@@ -195,12 +196,12 @@ func RevokePersonalAccessToken(c *gin.Context) {
 func GetAuditLogs(c *gin.Context) {
 	page := common.GetPageQuery(c)
 	if page.Page < 1 || page.PageSize < 1 || page.Page > 100000000 {
-		common.ApiErrorMsg(c, "Invalid audit pagination")
+		common.ApiErrorT(c, "Invalid audit pagination")
 		return
 	}
 	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id"), Keyword: strings.TrimSpace(c.Query("keyword"))}
 	if utf8.RuneCountInString(filter.Keyword) > 128 {
-		common.ApiErrorMsg(c, "Invalid audit keyword")
+		common.ApiErrorT(c, "Invalid audit keyword")
 		return
 	}
 	viewerRole := c.GetInt("role")
@@ -210,26 +211,26 @@ func GetAuditLogs(c *gin.Context) {
 		filter.SelfView = true
 	}
 	if !model.ValidAuditCategory(filter.Category) || !model.ValidTokenFingerprint(filter.TokenRef) || !model.ValidTokenFingerprint(filter.ExcludeTokenRef) {
-		common.ApiErrorMsg(c, "Invalid audit filters")
+		common.ApiErrorT(c, "Invalid audit filters")
 		return
 	}
 	for name, target := range map[string]*int64{"start_timestamp": &filter.StartTimestamp, "end_timestamp": &filter.EndTimestamp} {
 		if raw := c.Query(name); raw != "" {
 			parsed, err := strconv.ParseInt(raw, 10, 64)
 			if err != nil || parsed < 0 {
-				common.ApiErrorMsg(c, "Invalid audit time range")
+				common.ApiErrorT(c, "Invalid audit time range")
 				return
 			}
 			*target = parsed
 		}
 	}
 	if filter.EndTimestamp > 0 && filter.EndTimestamp < filter.StartTimestamp {
-		common.ApiErrorMsg(c, "Invalid audit time range")
+		common.ApiErrorT(c, "Invalid audit time range")
 		return
 	}
 	if raw := c.Query("success"); raw != "" {
 		if raw != "true" && raw != "false" {
-			common.ApiErrorMsg(c, "Invalid audit result")
+			common.ApiErrorT(c, "Invalid audit result")
 			return
 		}
 		success := raw == "true"

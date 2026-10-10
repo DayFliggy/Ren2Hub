@@ -21,7 +21,7 @@ func TestValidateSetupCredentialsUsesUnicodeCharacterCounts(t *testing.T) {
 	tests := []struct {
 		name    string
 		request SetupRequest
-		message string
+		wantKey string
 	}{
 		{
 			name: "accepts twelve unicode username characters",
@@ -38,7 +38,7 @@ func TestValidateSetupCredentialsUsesUnicodeCharacterCounts(t *testing.T) {
 				Password:        "password123",
 				ConfirmPassword: "password123",
 			},
-			message: "用户名长度不能超过12个字符",
+			wantKey: "Username must be {{max}} characters or fewer",
 		},
 		{
 			name: "accepts eight unicode password characters",
@@ -52,9 +52,14 @@ func TestValidateSetupCredentialsUsesUnicodeCharacterCounts(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if message := validateSetupCredentials(test.request); message != test.message {
-				t.Fatalf("validateSetupCredentials() = %q, want %q", message, test.message)
+			err := validateSetupCredentials(test.request)
+			if test.wantKey == "" {
+				require.NoError(t, err)
+				return
 			}
+			var message *common.Message
+			require.ErrorAs(t, err, &message)
+			assert.Equal(t, test.wantKey, message.Key)
 		})
 	}
 }

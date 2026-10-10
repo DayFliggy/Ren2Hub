@@ -280,3 +280,57 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, databaseFailureResponse.Code)
 	assert.Contains(t, databaseFailureResponse.Body.String(), "AUTH_INTERNAL_ERROR")
 }
+
+// Dashboard authentication errors go to the web console, which translates
+// message_key; message keeps the English text whatever the request language.
+func TestDashboardAuthErrorsAreWebConsoleMessages(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	router := gin.New()
+	router.GET("/protected", UserAuth(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Accept-Language", "zh-CN")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusUnauthorized, response.Code)
+	assert.JSONEq(t, `{"success":false,"code":"AUTH_UNAUTHORIZED","message":"Unauthorized, invalid access token","message_key":"Unauthorized, invalid access token"}`, response.Body.String())
+}
+
+// Relay errors go to AI clients, so the token middleware translates them in
+// the language the request states, English when it states none.
+func TestSetupContextForTokenTranslatesTheChannelSelectError(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	require.NoError(t, i18n.Init())
+	user := &model.User{Username: "channel-select-user", Password: "password-placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "middleware-aff-channel-select"}
+	require.NoError(t, model.DB.Create(user).Error)
+
+	for _, tc := range []struct {
+		acceptLanguage string
+		want           string
+	}{
+		{"zh-CN", "普通用户不支持指定渠道"},
+		{"", "Regular users cannot specify a channel"},
+	} {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		if tc.acceptLanguage != "" {
+			c.Request.Header.Set("Accept-Language", tc.acceptLanguage)
+		}
+		c.Set(common.RequestIdKey, "req-1")
+		err := SetupContextForToken(c, &model.Token{Id: 1, UserId: user.Id, Key: "channel-select-key"}, "channel-select-key", "5")
+		require.Error(t, err, tc.acceptLanguage)
+		assert.True(t, c.IsAborted(), tc.acceptLanguage)
+		assert.Equal(t, http.StatusForbidden, recorder.Code, tc.acceptLanguage)
+		var body struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+		assert.Equal(t, tc.want+" (request id: req-1)", body.Error.Message, tc.acceptLanguage)
+	}
+}
