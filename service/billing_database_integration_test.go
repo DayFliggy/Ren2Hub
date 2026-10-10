@@ -137,7 +137,8 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 					}
 					params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, Quota: common.Quota(quota),
 						PromptTokens: 17, CompletionTokens: 3, ModelName: "billing-integration", TokenName: "integration",
-						Group: "default", Other: map[string]interface{}{"billing_source": "wallet"}}
+						Group: "default", Other: map[string]interface{}{"billing_source": "wallet"},
+						Content: []*common.Message{common.NewMessage("Model {{model}}", map[string]any{"model": "gpt-4-gizmo-x"}), common.NewMessage("Upstream returned no usage")}}
 					if scenario == "refund_before_settlement" {
 						info.Billing.Refund(c)
 						assert.Error(t, info.Billing.Settle(quota))
@@ -207,6 +208,13 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 					var other map[string]any
 					require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
 					assert.EqualValues(t, source, other["usage_source"], "recovery must retain the original usage evidence")
+					// The snapshot carries structured content to the log row, also when the
+					// row is written by recovery after a failed insert.
+					assert.Equal(t, "Model gpt-4-gizmo-x, Upstream returned no usage", log.Content)
+					assert.Equal(t, []any{
+						map[string]any{"key": "Model {{model}}", "params": map[string]any{"model": "gpt-4-gizmo-x"}},
+						map[string]any{"key": "Upstream returned no usage"},
+					}, other["content_parts"])
 				})
 			}
 		})

@@ -3,7 +3,6 @@ package model
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -135,11 +134,34 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 	}
 }
 
+// logContentPartsKey is the key of a log's structured content in other.
+const logContentPartsKey = "content_parts"
+
+// SetLogContent stores structured log content under other.content_parts,
+// which the web console renders in the viewer's language, and returns the
+// English text kept in the content column for exports and API callers.
+//
+// content_parts is visible to the owner of the log (see formatUserLogs), so
+// the params of each part may only carry what the content column already
+// shows the user; anything else belongs in admin_info.
+func SetLogContent(other map[string]any, parts []*common.Message) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	texts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		texts = append(texts, part.Error())
+	}
+	other[logContentPartsKey] = parts
+	return strings.Join(texts, ", ")
+}
+
 func formatUserLogs(logs []*Log, startIdx int) {
 	safeOtherKeys := map[string]struct{}{
 		"cache_tokens": {}, "frt": {}, "reasoning_effort": {},
 		"fast_mode": {}, "service_tier": {}, "speed": {},
 		"billing_source": {}, "billing_preference": {},
+		logContentPartsKey: {},
 	}
 	for i := range logs {
 		var otherMap map[string]interface{}
@@ -217,25 +239,27 @@ func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	return logs, err
 }
 
-func RecordLog(userId int, logType int, content string) {
+func RecordLog(userId int, logType int, content *common.Message) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
 	}
 	username, _ := GetUsernameById(userId, false)
+	other := map[string]any{}
 	log := &Log{
 		UserId:    userId,
 		Username:  username,
 		CreatedAt: common.GetTimestamp(),
 		Type:      logType,
-		Content:   content,
+		Content:   SetLogContent(other, []*common.Message{content}),
+		Other:     common.MapToJsonStr(other),
 	}
 	err := createLog(log)
 	if err != nil {
-		common.SysLog("failed to record log: " + err.Error())
+		common.SysLog(common.LogText("failed to record log: %s", err.Error()))
 	}
 }
 
-func RecordTopupLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+func RecordTopupLog(userId int, content *common.Message, callerIp string, paymentMethod string, callbackPaymentMethod string) {
 	username, _ := GetUsernameById(userId, false)
 	adminInfo := map[string]interface{}{
 		"server_ip":               common.GetIp(),
@@ -253,19 +277,19 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 		Username:  username,
 		CreatedAt: common.GetTimestamp(),
 		Type:      LogTypeTopup,
-		Content:   content,
+		Content:   SetLogContent(other, []*common.Message{content}),
 		Ip:        callerIp,
 		Other:     common.MapToJsonStr(other),
 	}
 	err := createLog(log)
 	if err != nil {
-		common.SysLog("failed to record topup log: " + err.Error())
+		common.SysLog(common.LogText("failed to record topup log: %s", err.Error()))
 	}
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
 	isStream bool, group string, other map[string]interface{}) {
-	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
+	logger.LogInfo(c, common.LogText("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
@@ -305,7 +329,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	}
 	err := createLog(log)
 	if err != nil {
-		logger.LogError(c, "failed to record log: "+err.Error())
+		logger.LogError(c, common.LogText("failed to record log: %s", err.Error()))
 	}
 }
 
@@ -316,7 +340,7 @@ type RecordConsumeLogParams struct {
 	ModelName        string                 `json:"model_name"`
 	TokenName        string                 `json:"token_name"`
 	Quota            common.Quota           `json:"quota"`
-	Content          string                 `json:"content"`
+	Content          []*common.Message      `json:"content"`
 	TokenId          int                    `json:"token_id"`
 	UseTimeSeconds   int                    `json:"use_time_seconds"`
 	IsStream         bool                   `json:"is_stream"`
@@ -330,7 +354,12 @@ func BuildConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) 
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	createdAt := common.GetTimestamp()
-	otherData, err := common.Marshal(params.Other)
+	other := params.Other
+	if other == nil {
+		other = map[string]interface{}{}
+	}
+	content := SetLogContent(other, params.Content)
+	otherData, err := common.Marshal(other)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +375,7 @@ func BuildConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) 
 		Username:         username,
 		CreatedAt:        createdAt,
 		Type:             LogTypeConsume,
-		Content:          params.Content,
+		Content:          content,
 		PromptTokens:     params.PromptTokens,
 		CompletionTokens: params.CompletionTokens,
 		TokenName:        params.TokenName,
@@ -522,8 +551,8 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	}
 	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
 	if err != nil {
-		common.SysError("failed to count user logs: " + err.Error())
-		return nil, 0, errors.New("查询日志失败")
+		common.SysError(common.LogText("failed to count user logs: %s", err.Error()))
+		return nil, 0, common.NewMessage("Failed to query logs")
 	}
 	order := "logs.id desc"
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
@@ -531,8 +560,8 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	}
 	err = tx.Order(order).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
-		common.SysError("failed to search user logs: " + err.Error())
-		return nil, 0, errors.New("查询日志失败")
+		common.SysError(common.LogText("failed to search user logs: %s", err.Error()))
+		return nil, 0, common.NewMessage("Failed to query logs")
 	}
 
 	if err = attachChannelNames(logs); err != nil {
@@ -715,13 +744,13 @@ func sumUsedQuota(userId int, logType int, startTimestamp int64, endTimestamp in
 
 	// 执行查询
 	if err := tx.Scan(&stat).Error; err != nil {
-		common.SysError("failed to query log stat: " + err.Error())
-		return stat, errors.New("查询统计数据失败")
+		common.SysError(common.LogText("failed to query log stat: %s", err.Error()))
+		return stat, common.NewMessage("Failed to query statistics")
 	}
 	var rate Stat
 	if err := rpmTpmQuery.Scan(&rate).Error; err != nil {
-		common.SysError("failed to query rpm/tpm stat: " + err.Error())
-		return stat, errors.New("查询统计数据失败")
+		common.SysError(common.LogText("failed to query rpm/tpm stat: %s", err.Error()))
+		return stat, common.NewMessage("Failed to query statistics")
 	}
 
 	stat.Rpm, stat.Tpm = rate.Rpm, rate.Tpm

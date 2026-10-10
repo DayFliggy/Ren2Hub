@@ -87,7 +87,7 @@ func failTaskWithoutResult(ctx context.Context, task *model.Task, reason string)
 	if task.FinishTime == 0 {
 		task.FinishTime = time.Now().Unix()
 	}
-	_, err := completeTaskBilling(ctx, task, from, 0, reason)
+	_, err := completeTaskBilling(ctx, task, from, 0, nil)
 	return err
 }
 
@@ -394,7 +394,7 @@ func pollSunoCredentialGroup(ctx context.Context, adaptor TaskPollingAdaptor, ch
 		var won bool
 		var err error
 		if task.Status == model.TaskStatusFailure {
-			won, err = completeTaskBilling(ctx, task, prevStatus, 0, task.FailReason)
+			won, err = completeTaskBilling(ctx, task, prevStatus, 0, nil)
 		} else {
 			won, err = task.UpdateWithStatus(prevStatus)
 		}

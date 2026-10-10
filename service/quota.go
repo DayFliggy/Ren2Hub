@@ -23,7 +23,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	if usage.TotalTokens == 0 && !(relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput()) {
 		return nil
 	}
-	params, err := buildWssConsumptionParams(ctx, relayInfo, usage, "")
+	params, err := buildWssConsumptionParams(ctx, relayInfo, usage, nil)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 }
 
 func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelName string,
-	usage *dto.RealtimeUsage, extraContent string) {
+	usage *dto.RealtimeUsage, extraContent []*common.Message) {
 	var err error
 	usage, err = NormalizeRealtimeUsage(usage)
 	if err != nil {
@@ -66,7 +66,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	settleBillingConsumption(ctx, relayInfo, params, usage.TotalTokens > 0 || relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput())
 }
 
-func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, extraContent string) (model.RecordConsumeLogParams, error) {
+func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, extraContent []*common.Message) (model.RecordConsumeLogParams, error) {
 	facts := NormalizedBillingUsage(usage.CanonicalUsage(), "openai")
 	if relayInfo.PriceData.UsePrice && (relayInfo.HasValidOutput() || usage.Observation != nil && usage.Observation.Complete && usage.Observation.Terminal == "completed") {
 		facts.Quantities["calls"] = "1"
@@ -89,8 +89,8 @@ func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		TokenId: relayInfo.TokenId, UseTimeSeconds: int(time.Since(relayInfo.StartTime).Seconds()), IsStream: relayInfo.IsStream, Group: relayInfo.UsingGroup, Other: other}, nil
 }
 
-func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {
-	PostTextConsumeQuota(ctx, relayInfo, usage, []string{extraContent})
+func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []*common.Message) {
+	PostTextConsumeQuota(ctx, relayInfo, usage, extraContent)
 }
 
 func checkAndSendQuotaNotify(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int) {

@@ -60,7 +60,7 @@ func TestRealtimeReservesCumulativeUsageAndSettlesOnce(t *testing.T) {
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
 	assert.EqualValues(t, 20, info.Billing.GetPreConsumedQuota())
 	for i := 0; i < 2; i++ {
-		PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: confirmedRealtimeObservation()}, "")
+		PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: confirmedRealtimeObservation()}, nil)
 		require.NoError(t, info.BillingSettlementError)
 	}
 	info.Billing.Refund(c)
@@ -89,7 +89,7 @@ func TestRealtimeReservationStopsAtAvailableFunds(t *testing.T) {
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 880).Error)
 	assert.EqualValues(t, 40, user.Quota)
-	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 120, Observation: confirmedRealtimeObservation()}, "")
+	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 120, Observation: confirmedRealtimeObservation()}, nil)
 	require.NoError(t, info.BillingSettlementError)
 	require.NoError(t, model.DB.First(&user, 880).Error)
 	assert.EqualValues(t, -20, user.Quota, "already incurred usage is settled once even when the session cannot reserve further")
@@ -106,7 +106,7 @@ func TestRealtimePerCallPriceIsReservedAndChargedOncePerSession(t *testing.T) {
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{}))
 	assert.EqualValues(t, 20, info.Billing.GetPreConsumedQuota())
-	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{Observation: confirmedRealtimeObservation()}, "")
+	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{Observation: confirmedRealtimeObservation()}, nil)
 	require.NoError(t, info.BillingSettlementError)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 880).Error)
@@ -149,7 +149,7 @@ func TestRealtimeStaleSessionSettlesLastCumulativeUsage(t *testing.T) {
 	assert.Equal(t, 1, summary.Settled)
 	assertBillingIntegrationBalances(t, info, 80, 80, 20, 20, 1, 1)
 
-	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: confirmedRealtimeObservation()}, "confirmed final usage")
+	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: confirmedRealtimeObservation()}, []*common.Message{common.NewMessage("confirmed final usage")})
 	require.NoError(t, info.BillingSettlementError)
 	assertBillingIntegrationBalances(t, info, 80, 80, 20, 20, 1, 1)
 }
@@ -221,7 +221,7 @@ func TestRealtimeUnconfirmedUsageSettlesObservedTotal(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c, info := realtimeBillingSession(t)
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
-			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: test.observation}, "")
+			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: test.observation}, nil)
 			require.NoError(t, info.BillingSettlementError)
 			info.Billing.Refund(c)
 			summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)

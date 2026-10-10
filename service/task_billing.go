@@ -18,7 +18,7 @@ import (
 
 func taskConsumptionParams(c *gin.Context, info *relaycommon.RelayInfo) model.RecordConsumeLogParams {
 	tokenName := c.GetString("token_name")
-	logContent := fmt.Sprintf("操作 %s", info.Action)
+	logContent := []*common.Message{common.NewMessage("Action {{action}}", map[string]any{"action": info.Action})}
 	other := map[string]interface{}{"is_task": true, "request_path": c.Request.URL.Path}
 	InjectBillingPriceInfo(other, info)
 	if info.IsModelMapped {
@@ -110,9 +110,10 @@ func taskModelName(task *model.Task) string {
 // completeTaskBilling keeps provider completion separate from recoverable
 // accounting. Once the intent commits, polling must never replay the job.
 // A failed completion transaction leaves the task non-terminal, so the next
-// poll or the timeout sweep finishes it.
-func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (bool, error) {
-	consumption, err := taskCompletionConsumption(task, actualQuota, reason, clamps...)
+// poll or the timeout sweep finishes it. settlement describes how a completed
+// task was priced; a failed task passes nil and its log carries the fail reason.
+func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, settlement *common.Message, clamps ...*common.QuotaClamp) (bool, error) {
+	consumption, err := taskCompletionConsumption(task, actualQuota, settlement, clamps...)
 	if err != nil {
 		return false, err
 	}
@@ -123,9 +124,13 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 	return true, deliverTaskCompletion(ctx, task, actualQuota)
 }
 
-func taskCompletionConsumption(task *model.Task, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (model.BillingConsumption, error) {
+func taskCompletionConsumption(task *model.Task, actualQuota common.Quota, settlement *common.Message, clamps ...*common.QuotaClamp) (model.BillingConsumption, error) {
 	other := taskBillingOther(task)
-	other["task_id"], other["reason"] = task.TaskID, reason
+	content := task.FailReason
+	if settlement != nil {
+		content = model.SetLogContent(other, []*common.Message{settlement})
+	}
+	other["task_id"], other["reason"] = task.TaskID, content
 	other["pre_consumed_quota"], other["actual_quota"] = task.Quota, actualQuota
 	for _, clamp := range clamps {
 		attachQuotaSaturationToOther(other, clamp)
@@ -145,7 +150,7 @@ func taskCompletionConsumption(task *model.Task, actualQuota common.Quota, reaso
 	consumption := model.BillingConsumption{
 		Log: model.Log{UserId: task.UserId, Username: username, CreatedAt: common.GetTimestamp(),
 			TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId, ModelName: taskModelName(task),
-			Group: task.Group, Content: reason, Other: string(encoded)},
+			Group: task.Group, Content: content, Other: string(encoded)},
 		CountUsage: true, LogEnabled: actualQuota < task.Quota || common.LogConsumeEnabled,
 		ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled, NodeName: nodeName,
 	}
@@ -173,9 +178,9 @@ func deliverTaskCompletion(ctx context.Context, task *model.Task, actualQuota co
 // completed task consumes its accepted quote and its usage facts: the frozen
 // submit facts overwritten key by key by the provider's completion facts.
 // When those facts cannot be priced it consumes its submission estimate.
-func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relaycommon.TaskInfo) (common.Quota, string, *common.QuotaClamp, error) {
+func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relaycommon.TaskInfo) (common.Quota, *common.Message, *common.QuotaClamp, error) {
 	if task.Status == model.TaskStatusFailure {
-		return 0, task.FailReason, nil, nil
+		return 0, nil, nil, nil
 	}
 	var submitted map[string]any
 	if snapshot := task.PrivateData.BillingContext; snapshot != nil && snapshot.Quote != nil && snapshot.Quote.PriceVersion.TaskUsage &&
@@ -185,19 +190,19 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 		// instead of settling at the estimate derived from those same facts.
 		// An attempt that never persisted an estimate merges from nothing.
 		if err != nil && !errors.Is(err, model.ErrBillingEstimateMissing) {
-			return 0, "", nil, err
+			return 0, nil, nil, err
 		}
 		submitted = facts
 	}
 	quota, err := actualTaskCompletionQuota(task, result, submitted)
 	if err == nil {
-		return quota, "按冻结报价结算", nil, nil
+		return quota, common.NewMessage("Settled at the frozen quote"), nil, nil
 	}
 	quota, estimateErr := frozenTaskCompletionQuota(task)
 	if estimateErr != nil {
-		return 0, "", nil, errors.Join(err, estimateErr)
+		return 0, nil, nil, errors.Join(err, estimateErr)
 	}
-	return quota, "完成用量无法计价，按提交时估算结算", nil, nil
+	return quota, common.NewMessage("Completion usage could not be priced, settled at the submission estimate"), nil, nil
 }
 
 func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo, submitted map[string]any) (common.Quota, error) {

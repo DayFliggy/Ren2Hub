@@ -46,12 +46,12 @@ func TestUnpricedFinalUsageSettlesAtBestPersistedEvidence(t *testing.T) {
 				case "text":
 					PostTextConsumeQuota(c, info, usage, nil)
 				case "audio":
-					PostAudioConsumeQuota(c, info, usage, "")
+					PostAudioConsumeQuota(c, info, usage, nil)
 				case "realtime_reserve":
 					require.Error(t, PreWssConsumeQuota(c, info, realtime))
 					continue
 				case "realtime_final", "realtime_collected":
-					PostWssConsumeQuota(c, info, info.OriginModelName, realtime, "")
+					PostWssConsumeQuota(c, info, info.OriginModelName, realtime, nil)
 				}
 				require.NoError(t, info.BillingSettlementError)
 			}

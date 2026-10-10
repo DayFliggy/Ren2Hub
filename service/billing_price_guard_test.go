@@ -98,7 +98,7 @@ func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycom
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 1, TotalTokens: 11}))
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}))
 			require.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
-			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 10, TotalTokens: 20, Observation: &dto.UsageObservation{Source: "provider", Complete: true, Terminal: "completed"}}, "")
+			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 10, TotalTokens: 20, Observation: &dto.UsageObservation{Source: "provider", Complete: true, Terminal: "completed"}}, nil)
 		} else {
 			PostTextConsumeQuota(c, info, &dto.Usage{PromptTokens: 10, CompletionTokens: 10, TotalTokens: 20, UsageSource: "provider"}, nil)
 		}

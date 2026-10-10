@@ -527,7 +527,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		ModelName:        info.OriginModelName,
 		TokenName:        "模型测试",
 		Quota:            common.Quota(quota),
-		Content:          "模型测试",
+		Content:          []*common.Message{common.NewMessage("Model test")},
 		UseTimeSeconds:   int(consumedTime),
 		IsStream:         info.IsStream,
 		Group:            info.UsingGroup,

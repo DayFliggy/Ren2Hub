@@ -95,7 +95,7 @@ type RelayInfo struct {
 	ResponseUsage           *dto.Usage
 	ResponseModel           *ResponseModel
 	ResponseUsageKind       string
-	ResponseUsageLogContent []string
+	ResponseUsageLogContent []*common.Message
 	RouteCapabilityModel    string
 	TokenId                 int
 	TokenKey                string
@@ -1004,7 +1004,7 @@ func (info *RelayInfo) PrepareUpstreamSend(body ...io.Reader) error {
 	return nil
 }
 
-func (info *RelayInfo) CaptureResponseUsage(usage *dto.Usage, kind string, content []string) {
+func (info *RelayInfo) CaptureResponseUsage(usage *dto.Usage, kind string, content []*common.Message) {
 	if info == nil {
 		return
 	}

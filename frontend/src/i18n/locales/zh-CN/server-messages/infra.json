@@ -1,3 +1,23 @@
 {
-  "Unsupported language": "不支持的语言"
+  "Unsupported language": "不支持的语言",
+  "Failed to query logs": "查询日志失败",
+  "Failed to query statistics": "查询统计数据失败",
+  "Online top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}": "使用在线充值成功，充值金额: {{quota}}，支付金额：{{amount}}",
+  "Administrator completed the order, amount added: {{quota}}, payment amount: {{amount}}": "管理员补单成功，充值金额: {{quota}}，支付金额：{{amount}}",
+  "{{provider}} top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}": "{{provider}}充值成功，充值额度: {{quota}}，支付金额: {{amount}}",
+  "Crypto top-up succeeded, amount added: {{quota}}": "虚拟币充值成功，充值额度: {{quota}}",
+  "Topped up {{quota}} with a redemption code, code ID {{id}}": "通过兑换码充值 {{quota}}，兑换码ID {{id}}",
+  "Action {{action}}": "操作 {{action}}",
+  "Model {{model}}": "模型 {{model}}",
+  "Model test": "模型测试",
+  "Upstream returned no usage": "上游无计费信息",
+  "Upstream returned no usage, so nothing was charged (possibly an upstream timeout)": "上游没有返回计费信息，无法扣费（可能是上游超时）",
+  "{{name}} called {{count}} times, cost {{quota}}": "{{name}} 调用 {{count}} 次，调用花费 {{quota}}",
+  "Size {{size}}": "大小 {{size}}",
+  "Quality {{quality}}": "品质 {{quality}}",
+  "Image count {{count}}": "生成数量 {{count}}",
+  "realtime usage: {{source}}": "实时用量：{{source}}",
+  "Violation fee charged": "已收取违规费用",
+  "Settled at the frozen quote": "按冻结报价结算",
+  "Completion usage could not be priced, settled at the submission estimate": "完成用量无法计价，按提交时估算结算"
 }

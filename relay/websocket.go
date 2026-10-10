@@ -3,6 +3,7 @@ package relay
 import (
 	"fmt"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -36,7 +37,7 @@ func WssHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.
 
 	usage, newAPIError := adaptor.DoResponse(c, nil, info)
 	if realtimeUsage, ok := usage.(*dto.RealtimeUsage); ok && realtimeUsage != nil {
-		info.CaptureResponseUsage(realtimeUsage.CanonicalUsage(), "realtime", []string{"realtime usage: " + realtimeUsage.CanonicalUsage().UsageSource})
+		info.CaptureResponseUsage(realtimeUsage.CanonicalUsage(), "realtime", []*common.Message{common.NewMessage("realtime usage: {{source}}", map[string]any{"source": realtimeUsage.CanonicalUsage().UsageSource})})
 	}
 	if newAPIError != nil {
 		// reset status code 重置状态码

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -370,6 +369,6 @@ func RechargeGmpay(payment GmpayPayment, callerIp string) (alreadyDone bool, err
 	if alreadyDone {
 		return true, nil
 	}
-	RecordTopupLog(topUp.UserId, fmt.Sprintf("虚拟币充值成功，充值额度: %v", logger.LogQuota(quotaToAdd)), callerIp, topUp.PaymentMethod, PaymentProviderGmpay)
+	RecordTopupLog(topUp.UserId, common.NewMessage("Crypto top-up succeeded, amount added: {{quota}}", map[string]any{"quota": logger.FormatQuota(quotaToAdd)}), callerIp, topUp.PaymentMethod, PaymentProviderGmpay)
 	return false, nil
 }

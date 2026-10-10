@@ -132,7 +132,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 	log, err := model.BuildConsumeLog(ctx, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId, ModelName: info.OriginModelName,
 		TokenName: ctx.GetString("token_name"), Quota: charge.FinalQuota,
-		Content: "Violation fee charged", TokenId: info.TokenId,
+		Content: []*common.Message{common.NewMessage("Violation fee charged")}, TokenId: info.TokenId,
 		UseTimeSeconds: int(time.Since(info.StartTime).Seconds()), IsStream: info.IsStream,
 		Group: info.UsingGroup, Other: other,
 	})
