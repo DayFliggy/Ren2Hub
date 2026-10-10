@@ -3,7 +3,6 @@ package controller
 import (
 	"errors"
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -19,7 +18,7 @@ func UpdatePasskeyDomains(c *gin.Context) {
 		RemovalConfirmation string  `json:"removal_confirmation"`
 	}
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.RPID == nil || request.LegacyRPIDs == nil || request.Origins == nil {
-		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 	change, err := model.UpdatePasskeyDomainOptions(map[string]string{
@@ -41,9 +40,9 @@ func UpdatePasskeyDomains(c *gin.Context) {
 func writePasskeyDomainSettingsError(c *gin.Context, err error) {
 	var removal *model.PasskeyDomainRemovalError
 	if errors.As(err, &removal) {
-		c.JSON(http.StatusConflict, gin.H{
-			"success": false, "code": "PASSKEY_RP_ID_REMOVAL_CONFIRMATION_REQUIRED",
-			"message": i18n.T(c, i18n.MsgPasskeyRPIDRemovalConfirmation), "data": removal.Change,
+		common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("Review the affected Passkeys and confirm the domain removal. If the settings or impact have changed, confirmation is required again."), gin.H{
+			"code": "PASSKEY_RP_ID_REMOVAL_CONFIRMATION_REQUIRED",
+			"data": removal.Change,
 		})
 		return
 	}
