@@ -1,3 +1,6 @@
+import { getLocale } from '@/i18n'
+import { serverResponseMessage } from '@/i18n/serverMessages'
+
 import { ApiError, type ApiResponse } from './types'
 import type { ApiTransport, RequestOptions } from './transport'
 import { AuthSessionInvalidatedError } from './authSession'
@@ -105,7 +108,9 @@ export function createApiClient(
           })
         }
         if (!envelope.success) {
-          throw new ApiError(envelope.message || 'Request failed', {
+          const message =
+            serverResponseMessage(getLocale(), payload) || 'Request failed'
+          throw new ApiError(message, {
             status: 200,
             business: true,
             data: payload.data,

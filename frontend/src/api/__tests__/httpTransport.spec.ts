@@ -10,6 +10,8 @@ import {
   createHttpTransport,
   createPublicHttpTransport,
 } from '@/api/httpTransport'
+import { setLocale } from '@/i18n'
+import { mergeServerMessages } from '@/i18n/serverMessages'
 import type { AuthBundle } from '@/types/auth'
 
 const bundle: AuthBundle = {
@@ -388,6 +390,43 @@ describe('HTTP authentication transport', () => {
       transport.request('GET', '/api/user/self')
     ).rejects.toMatchObject({ status: 401 })
     expect(getAuthBundle()).toBeNull()
+  })
+
+  it('translates the message key of an HTTP error response', async () => {
+    mergeServerMessages('zh-CN', {
+      'Too many requests, retry after {{seconds}} seconds':
+        '请求过多，请在 {{seconds}} 秒后重试',
+    })
+    const request = vi.fn().mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 429'), {
+        isAxiosError: true,
+        response: {
+          status: 429,
+          data: {
+            success: false,
+            code: 'RATE_LIMITED',
+            message: 'Too many requests, retry after 30 seconds',
+            message_key: 'Too many requests, retry after {{seconds}} seconds',
+            message_params: { seconds: 30 },
+          },
+        },
+      })
+    )
+    const transport = createPublicHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+    try {
+      await setLocale('zh-CN')
+      await expect(
+        transport.request('POST', '/api/user/login')
+      ).rejects.toMatchObject({
+        message: '请求过多，请在 30 秒后重试',
+        status: 429,
+        code: 'RATE_LIMITED',
+      })
+    } finally {
+      await setLocale('en')
+    }
   })
 
   it('keeps public requests free of credentials and refresh side effects', async () => {

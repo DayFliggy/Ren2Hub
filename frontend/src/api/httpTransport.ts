@@ -1,5 +1,8 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 
+import { getLocale } from '@/i18n'
+import { serverResponseMessage } from '@/i18n/serverMessages'
+
 import { ApiError, type ApiResponse } from './types'
 import type { ApiTransport, HttpMethod, RequestOptions } from './transport'
 import {
@@ -67,9 +70,9 @@ function toApiError(error: unknown): never {
   if (axios.isAxiosError(error)) {
     const payload = errorPayload(error)
     const message =
-      typeof payload?.message === 'string' && payload.message
-        ? payload.message
-        : error.message || 'Network request failed'
+      serverResponseMessage(getLocale(), payload) ||
+      error.message ||
+      'Network request failed'
     throw new ApiError(message, {
       status: error.response?.status,
       code: typeof payload?.code === 'string' ? payload.code : undefined,

@@ -4,6 +4,8 @@ import { createApiClient } from '@/api/createClient'
 import { AuthSessionInvalidatedError } from '@/api/authSession'
 import type { ApiTransport } from '@/api/transport'
 import { ApiError } from '@/api/types'
+import { setLocale } from '@/i18n'
+import { mergeServerMessages } from '@/i18n/serverMessages'
 
 describe('API client request scope', () => {
   it('preserves pagination metadata without mixing plain and envelope requests', async () => {
@@ -43,6 +45,36 @@ describe('API client request scope', () => {
       code: 'INVALID_OPTION',
       data: { fields: ['example'] },
     })
+  })
+  it('translates a business error message key in the console language', async () => {
+    mergeServerMessages('zh-CN', {
+      'Channel {{id}} is busy': '渠道 {{id}} 正忙',
+    })
+    const client = createApiClient({
+      request: vi.fn().mockResolvedValue({
+        success: false,
+        code: 'CHANNEL_BUSY',
+        message: 'Channel 7 is busy',
+        message_key: 'Channel {{id}} is busy',
+        message_params: { id: 7 },
+        data: { retry: true },
+      }),
+    } as unknown as ApiTransport)
+    try {
+      await setLocale('zh-CN')
+      await expect(client.post('/api/channel/test')).rejects.toMatchObject({
+        message: '渠道 7 正忙',
+        business: true,
+        code: 'CHANNEL_BUSY',
+        data: { retry: true },
+      })
+      await setLocale('en')
+      await expect(client.post('/api/channel/test')).rejects.toMatchObject({
+        message: 'Channel 7 is busy',
+      })
+    } finally {
+      await setLocale('en')
+    }
   })
   it('forwards PATCH bodies through the transport', async () => {
     const request = vi.fn().mockResolvedValue({

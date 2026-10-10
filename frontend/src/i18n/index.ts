@@ -4,6 +4,7 @@ import enCommon from './locales/en/common'
 import enHome from './locales/en/home'
 import zhCNCommon from './locales/zh-CN/common'
 import zhCNHome from './locales/zh-CN/home'
+import { loadServerMessages } from './serverMessages'
 
 export type LocaleCode = 'zh-CN' | 'en'
 
@@ -123,7 +124,11 @@ function loadDomainForLocale(
 
 export function loadMessageDomain(domain: MessageDomain): Promise<void> {
   domainLoads.add(domain)
-  return loadDomainForLocale(domain, getLocale())
+  const locale = getLocale()
+  return Promise.all([
+    loadDomainForLocale(domain, locale),
+    loadServerMessages(locale),
+  ]).then(() => undefined)
 }
 
 export function setLocale(locale: string): Promise<void> {
@@ -131,9 +136,10 @@ export function setLocale(locale: string): Promise<void> {
   // Backfill every already-requested domain in the target language first, so
   // the flip never renders raw keys. On a load failure the flip still happens
   // (better a fallback string than a switch that silently does nothing).
-  return Promise.allSettled(
-    [...domainLoads].map((domain) => loadDomainForLocale(domain, locale))
-  ).then(() => {
+  return Promise.allSettled([
+    ...[...domainLoads].map((domain) => loadDomainForLocale(domain, locale)),
+    loadServerMessages(locale),
+  ]).then(() => {
     i18n.global.locale.value = locale
     document.documentElement.lang = locale
     try {

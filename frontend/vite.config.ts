@@ -30,6 +30,9 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            // One lazy request for every stream's zh-CN server message file.
+            if (id.includes('/src/i18n/locales/zh-CN/server-messages/'))
+              return 'i18n-server-zh-CN'
             if (!id.includes('node_modules')) return undefined
             if (id.includes('echarts')) return 'vendor-chart'
             if (

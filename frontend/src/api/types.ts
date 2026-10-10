@@ -1,7 +1,11 @@
 /** Backend business envelope: every /api response uses this shape. */
 export interface ApiResponse<T> {
   success: boolean
+  /** English text, kept for API callers that do not translate. */
   message?: string
+  /** English source text with {{name}} placeholders; the console translates it. */
+  message_key?: string
+  message_params?: Record<string, unknown>
   data: T
   total?: number
 }
