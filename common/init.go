@@ -47,6 +47,8 @@ func InitEnv() {
 		os.Exit(0)
 	}
 
+	DefaultLanguage = os.Getenv("DEFAULT_LANGUAGE")
+
 	if os.Getenv("SESSION_SECRET") != "" {
 		ss := os.Getenv("SESSION_SECRET")
 		if ss == "random_string" {
