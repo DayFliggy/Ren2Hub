@@ -63,7 +63,8 @@ func fetchAdvancedCustomBalance(ctx context.Context, channel *model.Channel) (ch
 			request.Host = headers.Get(name)
 		}
 	}
-	client, err := service.NewProxyHttpClient(channel.GetSetting().Proxy)
+	setting := channel.GetSetting()
+	client, err := service.GetHttpClientWithProxySettings(setting.Proxy, setting)
 	if err != nil {
 		return channelBalanceResult{}, sanitizeFetchModelsError(err, key)
 	}

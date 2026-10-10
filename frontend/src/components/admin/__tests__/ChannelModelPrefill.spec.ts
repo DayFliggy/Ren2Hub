@@ -214,6 +214,51 @@ describe('channel model prefill integration', () => {
     })
     wrapper.unmount()
   })
+  it('saves turning on the upstream TLS verification skip with the other settings', async () => {
+    mocks.canSensitiveWrite = true
+    const { wrapper, save } = setup({
+      setting: JSON.stringify({ proxy: 'http://proxy.test' }),
+    })
+    const toggle = wrapper.get(
+      '[role="switch"][aria-label="channels.tlsInsecureSkipVerify"]'
+    )
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    await toggle.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('channels.saveChannel'))!
+      .trigger('click')
+    await flushPromises()
+    expect(JSON.parse(save.mock.calls[0]![0].setting)).toEqual({
+      proxy: 'http://proxy.test',
+      tls_insecure_skip_verify: true,
+    })
+    wrapper.unmount()
+  })
+  it('shows a saved upstream TLS verification skip and saves turning it off', async () => {
+    mocks.canSensitiveWrite = true
+    const { wrapper, save } = setup({
+      setting: JSON.stringify({
+        proxy: 'http://proxy.test',
+        tls_insecure_skip_verify: true,
+      }),
+    })
+    const toggle = wrapper.get(
+      '[role="switch"][aria-label="channels.tlsInsecureSkipVerify"]'
+    )
+    expect(toggle.attributes('aria-checked')).toBe('true')
+    await toggle.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('channels.saveChannel'))!
+      .trigger('click')
+    await flushPromises()
+    expect(JSON.parse(save.mock.calls[0]![0].setting)).toEqual({
+      proxy: 'http://proxy.test',
+      tls_insecure_skip_verify: false,
+    })
+    wrapper.unmount()
+  })
   it('omits sensitive settings on an ordinary routing edit', async () => {
     const { wrapper, save } = setup({
       type: 60,
@@ -226,6 +271,11 @@ describe('channel model prefill integration', () => {
     expect(
       wrapper
         .get('[role="switch"][aria-label="channels.responsesWebSocket"]')
+        .attributes('disabled')
+    ).toBeDefined()
+    expect(
+      wrapper
+        .get('[role="switch"][aria-label="channels.tlsInsecureSkipVerify"]')
         .attributes('disabled')
     ).toBeDefined()
     await wrapper

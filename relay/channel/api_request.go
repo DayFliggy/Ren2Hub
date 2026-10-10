@@ -417,7 +417,11 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	if err := info.PrepareUpstreamSend(requestBody); err != nil {
 		return nil, err
 	}
-	targetConn, _, err := websocket.DefaultDialer.DialContext(c.Request.Context(), fullRequestURL, targetHeader)
+	dialer := *websocket.DefaultDialer
+	if info.ChannelSetting.TLSInsecureSkipVerify {
+		dialer.TLSClientConfig = common2.InsecureTLSConfig
+	}
+	targetConn, _, err := dialer.DialContext(c.Request.Context(), fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", common.SanitizeURLForLog(fullRequestURL), err)
 	}

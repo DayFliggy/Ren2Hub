@@ -114,7 +114,8 @@ func DoMidjourneyHttpRequest(c *gin.Context, info *relaycommon.RelayInfo, timeou
 	if err := credential.BindCredential(requestCtx, channel, info.ApiKey); err != nil {
 		return fail(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable)
 	}
-	client, err := GetHttpClientWithProxy(channel.GetSetting().Proxy)
+	channelSetting := channel.GetSetting()
+	client, err := GetHttpClientWithProxySettings(channelSetting.Proxy, channelSetting)
 	if err != nil {
 		return fail(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable)
 	}

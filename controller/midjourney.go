@@ -174,7 +174,8 @@ func pollMidjourneyCredential(ctx context.Context, channelID int, tasks []*model
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("mj-api-secret", key)
-	client, err := service.GetHttpClientWithProxy(channel.GetSetting().Proxy)
+	channelSetting := channel.GetSetting()
+	client, err := service.GetHttpClientWithProxySettings(channelSetting.Proxy, channelSetting)
 	if err != nil {
 		return err
 	}
