@@ -46,7 +46,7 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 
 已知冷却或已确认没有 Provider 发送额度的渠道提前跳过；未知状态不伪装成充足，发送前原子预留仍是最终判定。拿槽后再次复核当前资格、健康与额度，不合格则释放并继续已有候选扫描；每次发送使用本次健康 epoch，旧观察结果不能清除新冷却。排队后和发送前重新读取数据库中的渠道端点、启用状态与所选凭据；Key 或端点身份改变时拒绝旧请求，不在队列中局部替换 Authorization。
 
-上游错误是否计为 Key 或模型能力故障，先看供应商的结构化错误码（任意状态均有效）；错误消息文本只在状态码已表明同一类别时采用：Key 文本仅限 401/403，模型文本仅限 404。供应商常在 400、422、429 的消息里回显请求取值，这类文本不能让单个调用方冷却共享的 Key 或模型能力，实现见 `service/route_health.go` 的 `classifyProviderRouteError`。
+上游错误是否计为 Key 或模型能力故障，先看供应商的结构化错误码和错误对象里的 type（任意状态均有效，type 为 `authentication_error` 计 Key）；401 无论错误码如何都计 Key（DeepSeek 失效 Key 返回 401 加 `invalid_request_error`）。错误消息里任意位置的文本只在状态码已表明同一类别时采用：Key 文本仅限 401/403，模型文本仅限 404。供应商常在 400、422、429 的消息里回显请求取值，这类文本不能让单个调用方冷却共享的 Key 或模型能力。以失败短语开头的消息是供应商自己的措辞，任意状态都采用：`incorrect api key provided`、`invalid api key` 计 Key（xAI 失效 Key 返回 400），`invalid model:`、`model not found` 计模型能力（Mistral 未知模型返回 400）；但供应商把错误标为请求错误（错误码或 type 含 `invalid_request`）时不采用，因为请求校验器的消息以客户端给的字段名开头。Anthropic 404 `not_found_error` 且消息以 `model:` 开头计模型能力。Gemini 失效 Key 返回 400 `INVALID_ARGUMENT`，与 NewAPI 一样按请求错误处理。实现见 `service/route_health.go` 的 `classifyProviderRouteError`。
 
 文本、Midjourney 和视频的发送前拒绝使用同一处理：可扫描独立备用渠道，候选用尽后仍可使用此前繁忙渠道尚未使用的唯一排队机会，末候选超价或不能转换也不能丢掉该机会；已排过队或绑定原任务的请求继续遵守各自边界。最多扫描 64 个不同渠道，最多 3 次真实发送；扫描、满载及发送前拒绝不消耗发送次数，也不处罚供应商健康。
 

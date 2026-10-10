@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"gorm.io/gorm"
 )
 
@@ -40,39 +41,71 @@ type RouteErrorClassification struct {
 }
 
 // ClassifyRouteError keeps retry and health side effects out of HTTP error
-// parsing. Status, provider code, and a short message are the only inputs; no
-// request body or credential is ever retained.
-func ClassifyRouteError(status int, providerCode, message string, streamStarted bool) RouteErrorClassification {
+// parsing. Status, the provider's error code and type, and a short message are
+// the only inputs; no request body or credential is ever retained.
+func ClassifyRouteError(status int, providerCode, providerType, message string, streamStarted bool) RouteErrorClassification {
 	if strings.HasPrefix(providerCode, "route_lease") || strings.HasPrefix(providerCode, "route_admission") {
 		return RouteErrorClassification{Class: RouteErrorAdmission}
 	}
-	classification := classifyProviderRouteError(status, providerCode, message)
+	classification := classifyProviderRouteError(status, providerCode, providerType, message)
 	if streamStarted {
 		classification.Retryable, classification.Failoverable = false, false
 	}
 	return classification
 }
 
-func classifyProviderRouteError(status int, providerCode, message string) RouteErrorClassification {
+// RouteErrorType returns the error type the provider reported inside its error
+// object (OpenAI and Anthropic "type"), which the error code does not carry.
+// Errors without a provider error object report their local code here.
+func RouteErrorType(apiErr *types.NewAPIError) string {
+	if apiErr == nil {
+		return ""
+	}
+	switch relayError := apiErr.RelayError.(type) {
+	case types.OpenAIError:
+		return relayError.Type
+	case types.ClaudeError:
+		return relayError.Type
+	}
+	return ""
+}
+
+var (
+	routeKeyFailureText       = []string{"invalid api key", "incorrect api key"}
+	routeKeyFailurePrefixes   = []string{"incorrect api key provided", "invalid api key"}
+	routeModelFailureText     = []string{"model not found", "unsupported model", "invalid model"}
+	routeModelFailurePrefixes = []string{"invalid model:", "model not found"}
+)
+
+func classifyProviderRouteError(status int, providerCode, providerType, message string) RouteErrorClassification {
 	code := strings.ToLower(strings.TrimSpace(providerCode))
+	kind := strings.ToLower(strings.TrimSpace(providerType))
 	text := strings.ToLower(strings.TrimSpace(message))
-	// Providers echo request values in error messages ("Invalid value: '...'"),
-	// so message text only confirms a class the status already names. Otherwise
-	// any caller could cool a shared key or capability with a crafted field.
-	keyText := (status == 401 || status == 403) &&
-		(strings.Contains(text, "invalid api key") || strings.Contains(text, "incorrect api key"))
-	modelText := status == 404 &&
-		(strings.Contains(text, "model not found") || strings.Contains(text, "unsupported model") || strings.Contains(text, "invalid model"))
+	// Providers echo request values inside error messages ("Invalid value:
+	// '...'"), so text found anywhere only confirms a class the status already
+	// names. A message that starts with a failure phrase is the provider's own
+	// wording (xAI answers a bad key with 400, Mistral a bad model with 400) and
+	// counts at any status, unless the provider typed the error as a request
+	// error: request validators start messages with the client's field name.
+	providerWording := !strings.Contains(code, "invalid_request") && !strings.Contains(kind, "invalid_request")
+	keyText := (status == 401 || status == 403) && containsAnyText(text, routeKeyFailureText) ||
+		providerWording && hasAnyTextPrefix(text, routeKeyFailurePrefixes)
+	modelText := status == 404 && containsAnyText(text, routeModelFailureText) ||
+		providerWording && hasAnyTextPrefix(text, routeModelFailurePrefixes) ||
+		// Anthropic: 404 not_found_error "model: <name>".
+		status == 404 && strings.Contains(kind, "not_found_error") && strings.HasPrefix(text, "model:")
 	switch {
 	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
-		strings.Contains(code, "authentication_error") || keyText:
+		strings.Contains(code, "authentication_error") || strings.Contains(kind, "authentication_error") || keyText:
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
 	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "model_not_supported") || strings.Contains(code, "invalid_model") || modelText:
 		return RouteErrorClassification{Class: RouteErrorModel, Failoverable: true, MarkCapability: true}
-	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
-		return RouteErrorClassification{Class: RouteErrorInput}
+	// 401 is authentication whatever the code says; DeepSeek sends a bad key
+	// as 401 with code invalid_request_error.
 	case status == 401:
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
+	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
+		return RouteErrorClassification{Class: RouteErrorInput}
 	case status == 403 || strings.Contains(code, "permission"):
 		return RouteErrorClassification{Class: RouteErrorPermission}
 	case status == 408 || status == 409 || status == 425 || status == 429 || status >= 500 || strings.Contains(code, "rate_limit") || strings.Contains(code, "timeout"):
@@ -80,6 +113,24 @@ func classifyProviderRouteError(status int, providerCode, message string) RouteE
 	default:
 		return RouteErrorClassification{Class: RouteErrorUnknown, Retryable: status >= 500, Failoverable: status >= 500, MarkChannelModel: status >= 500}
 	}
+}
+
+func containsAnyText(text string, phrases []string) bool {
+	for _, phrase := range phrases {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAnyTextPrefix(text string, phrases []string) bool {
+	for _, phrase := range phrases {
+		if strings.HasPrefix(text, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // CanRouteFailover is the final guard before a retry may switch resources.
@@ -382,7 +433,7 @@ func ObserveLiveRouteErrorForKeyWithRetryAfter(ctx context.Context, channelID in
 }
 
 func observeLiveRouteError(ctx context.Context, channelID int, requestModel, keyScope string, status int, providerCode, message string, streamStarted bool, retryAfter time.Duration) error {
-	classification := ClassifyRouteError(status, providerCode, message, streamStarted)
+	classification := ClassifyRouteError(status, providerCode, "", message, streamStarted)
 	if !classification.MarkChannelModel && !classification.MarkCapability && !classification.MarkKey {
 		return nil
 	}

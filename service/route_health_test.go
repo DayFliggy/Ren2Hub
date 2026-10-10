@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,24 +18,24 @@ import (
 )
 
 func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
-	assert.Equal(t, RouteErrorKey, ClassifyRouteError(401, "", "", false).Class)
-	assert.True(t, ClassifyRouteError(401, "", "", false).MarkKey)
-	assert.True(t, ClassifyRouteError(401, "", "", false).Failoverable)
-	assert.Equal(t, RouteErrorKey, ClassifyRouteError(403, "invalid_api_key", "", false).Class)
-	ordinaryNotFound := ClassifyRouteError(404, "", "route not found", false)
+	assert.Equal(t, RouteErrorKey, ClassifyRouteError(401, "", "", "", false).Class)
+	assert.True(t, ClassifyRouteError(401, "", "", "", false).MarkKey)
+	assert.True(t, ClassifyRouteError(401, "", "", "", false).Failoverable)
+	assert.Equal(t, RouteErrorKey, ClassifyRouteError(403, "invalid_api_key", "", "", false).Class)
+	ordinaryNotFound := ClassifyRouteError(404, "", "", "route not found", false)
 	assert.Equal(t, RouteErrorUnknown, ordinaryNotFound.Class)
 	assert.False(t, ordinaryNotFound.MarkCapability)
 	assert.False(t, ordinaryNotFound.MarkChannelModel)
-	assert.Equal(t, RouteErrorModel, ClassifyRouteError(404, "model_not_found", "", false).Class)
-	assert.Equal(t, RouteErrorModel, ClassifyRouteError(400, "unsupported_model", "", false).Class)
-	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).MarkCapability)
-	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).Failoverable)
-	assert.Equal(t, RouteErrorTransient, ClassifyRouteError(502, "", "", true).Class)
-	assert.True(t, ClassifyRouteError(502, "", "", true).MarkChannelModel)
-	assert.False(t, ClassifyRouteError(502, "", "", true).Failoverable)
-	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), true, false))
-	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, true))
-	assert.True(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, false))
+	assert.Equal(t, RouteErrorModel, ClassifyRouteError(404, "model_not_found", "", "", false).Class)
+	assert.Equal(t, RouteErrorModel, ClassifyRouteError(400, "unsupported_model", "", "", false).Class)
+	assert.True(t, ClassifyRouteError(404, "model_not_found", "", "", false).MarkCapability)
+	assert.True(t, ClassifyRouteError(404, "model_not_found", "", "", false).Failoverable)
+	assert.Equal(t, RouteErrorTransient, ClassifyRouteError(502, "", "", "", true).Class)
+	assert.True(t, ClassifyRouteError(502, "", "", "", true).MarkChannelModel)
+	assert.False(t, ClassifyRouteError(502, "", "", "", true).Failoverable)
+	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", "", false), true, false))
+	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", "", false), false, true))
+	assert.True(t, CanRouteFailover(ClassifyRouteError(503, "", "", "", false), false, false))
 }
 
 // Providers echo client-supplied values in request errors, for example
@@ -46,7 +48,7 @@ func TestClassifyRouteErrorIgnoresEchoedTextOutsideMatchingStatus(t *testing.T) 
 	modelTexts := []string{"Invalid value: 'model not found'.", "Invalid value: 'unsupported model'.", "Invalid value: 'invalid model'."}
 	for _, status := range []int{400, 422, 429} {
 		for _, text := range append(append([]string{}, keyTexts...), modelTexts...) {
-			classification := ClassifyRouteError(status, "invalid_request_error", text, false)
+			classification := ClassifyRouteError(status, "invalid_request_error", "", text, false)
 			assert.False(t, classification.MarkKey, "status %d text %q", status, text)
 			assert.False(t, classification.MarkCapability, "status %d text %q", status, text)
 			assert.NotEqual(t, RouteErrorKey, classification.Class, "status %d text %q", status, text)
@@ -56,27 +58,72 @@ func TestClassifyRouteErrorIgnoresEchoedTextOutsideMatchingStatus(t *testing.T) 
 
 	for _, status := range []int{401, 403} {
 		for _, text := range keyTexts {
-			classification := ClassifyRouteError(status, "", text, false)
+			classification := ClassifyRouteError(status, "", "", text, false)
 			assert.Equal(t, RouteErrorKey, classification.Class, "status %d text %q", status, text)
 			assert.True(t, classification.MarkKey, "status %d text %q", status, text)
 		}
 	}
 	for _, text := range modelTexts {
-		classification := ClassifyRouteError(404, "", text, false)
+		classification := ClassifyRouteError(404, "", "", text, false)
 		assert.Equal(t, RouteErrorModel, classification.Class, text)
 		assert.True(t, classification.MarkCapability, text)
 	}
 
 	for _, code := range []string{"invalid_api_key", "invalid_credential", "authentication_error"} {
-		assert.True(t, ClassifyRouteError(400, code, "", false).MarkKey, code)
+		assert.True(t, ClassifyRouteError(400, code, "", "", false).MarkKey, code)
 	}
 	for _, code := range []string{"model_not_found", "unsupported_model", "model_not_supported", "invalid_model"} {
-		assert.True(t, ClassifyRouteError(400, code, "", false).MarkCapability, code)
+		assert.True(t, ClassifyRouteError(400, code, "", "", false).MarkCapability, code)
+	}
+}
+
+// Real provider error bodies go through the production parse path. Key and
+// model failures that providers report with 400 or a generic code still mark
+// the key or capability, while values a client can echo into a request error
+// stay input errors.
+func TestClassifyRouteErrorRecognizesProviderKeyAndModelFailures(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   RouteErrorClass
+	}{
+		// anomalyco/opencode#52112
+		{"xai bad key", 400, `{"code":"invalid-argument","error":"Incorrect API key provided. You can obtain an API key from https://console.x.ai."}`, RouteErrorKey},
+		// forum.cursor.com/t/grok-code-broken/142879
+		{"xai bad key masked", 400, `{"code":"Client specified an invalid argument","error":"Incorrect API key provided: sk***kA. You can obtain an API key from https://console.x.ai."}`, RouteErrorKey},
+		// mistralai/mistral-vibe#617
+		{"mistral unknown model", 400, `{"object":"error","message":"Invalid model: mistral-medium-3.5","type":"invalid_model","param":null,"code":"1500"}`, RouteErrorModel},
+		// deepseek-ai/DeepSeek-R1#82
+		{"deepseek bad key", 401, `{"error":{"message":"Authentication Fails (no such user)","type":"authentication_error","param":null,"code":"invalid_request_error"}}`, RouteErrorKey},
+		{"openai bad key", 401, `{"error":{"message":"Incorrect API key provided: sk-abc.","type":"invalid_request_error","param":null,"code":"invalid_api_key"}}`, RouteErrorKey},
+		{"anthropic bad key", 401, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`, RouteErrorKey},
+		{"openai unknown model", 404, `{"error":{"message":"The model 'gpt-9' does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}`, RouteErrorModel},
+		{"anthropic unknown model", 404, `{"type":"error","error":{"type":"not_found_error","message":"model: claude-9"}}`, RouteErrorModel},
+		{"anthropic other missing resource", 404, `{"type":"error","error":{"type":"not_found_error","message":"File not found: file_abc"}}`, RouteErrorUnknown},
+		// Echoed client values stay request errors.
+		{"openai echoed value", 400, `{"error":{"message":"Invalid value: 'invalid api key'. Supported values are: 'auto'.","type":"invalid_request_error","param":"service_tier","code":"invalid_value"}}`, RouteErrorInput},
+		{"validator echoes a field name first", 400, `{"type":"error","error":{"type":"invalid_request_error","message":"incorrect api key provided: Extra inputs are not permitted"}}`, RouteErrorInput},
+		{"validator echoes a model-like field first", 422, `{"error":{"message":"invalid model: field required","type":"invalid_request_error","param":null,"code":null}}`, RouteErrorInput},
+		{"echoed key phrase mid message", 400, `{"error":"Unsupported tier 'incorrect api key provided'"}`, RouteErrorInput},
+		// Same as NewAPI: Gemini reports a bad key as 400 INVALID_ARGUMENT.
+		{"gemini bad key", 400, `{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}`, RouteErrorInput},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			response := &http.Response{StatusCode: tc.status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(tc.body))}
+			apiErr := RelayErrorHandler(context.Background(), response, false)
+			classification := ClassifyRouteError(apiErr.StatusCode, string(apiErr.GetErrorCode()), RouteErrorType(apiErr), apiErr.Error(), false)
+			assert.Equal(t, tc.want, classification.Class)
+			assert.Equal(t, tc.want == RouteErrorKey, classification.MarkKey)
+			assert.Equal(t, tc.want == RouteErrorModel, classification.MarkCapability)
+			assert.Equal(t, tc.want == RouteErrorKey || tc.want == RouteErrorModel, classification.Failoverable)
+		})
 	}
 }
 
 func TestClassifyRouteAdmissionFailureDoesNotAffectProviderHealth(t *testing.T) {
-	classification := ClassifyRouteError(http.StatusServiceUnavailable, AdmissionFailureCode, "route lease redis is unavailable", false)
+	classification := ClassifyRouteError(http.StatusServiceUnavailable, AdmissionFailureCode, "", "route lease redis is unavailable", false)
 
 	assert.Equal(t, RouteErrorAdmission, classification.Class)
 	assert.False(t, classification.Retryable)
@@ -111,7 +158,7 @@ func TestRouteHealthStateMachineUsesEpochAndCooldown(t *testing.T) {
 
 func TestDefaultRouteRetryBudgetSeparatesSameResourceAndFailover(t *testing.T) {
 	budget := DefaultRouteRetryBudget()
-	transient := ClassifyRouteError(503, "", "", false)
+	transient := ClassifyRouteError(503, "", "", "", false)
 	assert.False(t, budget.Allows(transient, RouteRetrySameKey, RouteRetryCounters{TotalAttempts: 1}))
 	assert.True(t, budget.Allows(transient, RouteRetrySameChannel, RouteRetryCounters{TotalAttempts: 1}))
 	assert.False(t, budget.Allows(transient, RouteRetrySameChannel, RouteRetryCounters{TotalAttempts: 2, SameChannelAttempts: 1}))

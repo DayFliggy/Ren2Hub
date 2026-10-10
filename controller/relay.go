@@ -1117,7 +1117,7 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 		selection.Decision.FailoverAttempt = counters.FailoverAttempts
 	}
 	if apiErr != nil {
-		classification := service.ClassifyRouteError(apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), info != nil && info.HasValidOutput())
+		classification := service.ClassifyRouteError(apiErr.StatusCode, string(apiErr.GetErrorCode()), service.RouteErrorType(apiErr), apiErr.Error(), info != nil && info.HasValidOutput())
 		if value, exists := c.Get("gateway_last_attempt_outcome"); exists {
 			if outcome, ok := value.(service.AttemptOutcome); ok && !outcome.Success {
 				classification = service.ClassifyAttemptOutcome(outcome)

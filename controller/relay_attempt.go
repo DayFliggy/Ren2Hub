@@ -437,6 +437,7 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 		c.Set("gateway_last_upstream_error", apiErr)
 	}
 	outcome.StatusCode, outcome.ProviderCode, outcome.Message, outcome.RetryAfter = apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), apiErr.RetryAfter
+	outcome.ProviderType = service.RouteErrorType(apiErr)
 	if types.IsSkipRetryError(apiErr) {
 		outcome.RetryPermission = service.AttemptRetryForbidden
 	}

@@ -39,6 +39,23 @@ func TestRelayAttemptClientCancellationPrecedesConversionFailure(t *testing.T) {
 	assert.False(t, classification.Failoverable)
 }
 
+// The attempt outcome carries the provider's error type, which the error code
+// does not: Anthropic reports a missing model only as type not_found_error.
+func TestRelayAttemptOutcomeCarriesProviderErrorType(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	info := &relaycommon.RelayInfo{UpstreamSent: true}
+	response := &http.Response{StatusCode: http.StatusNotFound, Header: http.Header{},
+		Body: io.NopCloser(strings.NewReader(`{"type":"error","error":{"type":"not_found_error","message":"model: claude-9"}}`))}
+	apiErr := service.RelayErrorHandler(context.Background(), response, false)
+	outcome := relayAttemptOutcome(c, info, apiErr, time.Now(), false)
+	assert.Equal(t, "not_found_error", outcome.ProviderType)
+	classification := service.ClassifyAttemptOutcome(outcome)
+	assert.Equal(t, service.RouteErrorModel, classification.Class)
+	assert.True(t, classification.MarkCapability)
+	assert.True(t, classification.Failoverable)
+}
+
 func TestRelayAttemptDisconnectedWriterIsClientFailure(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/realtime", nil)

@@ -463,7 +463,7 @@ func TestAutoRouteAttemptsSupportBoundedSameChannelAndFailoverChoices(t *testing
 		{ChannelID: 1}, {ChannelID: 1}, {ChannelID: 2}, {ChannelID: 2}, {ChannelID: 3}, {ChannelID: 3},
 	}, selection.Attempts)
 
-	transient := ClassifyRouteError(503, "", "", false)
+	transient := ClassifyRouteError(503, "", "", "", false)
 	candidate, index, found := selection.NextCandidateForError(0, 1, transient, RouteRetryCounters{TotalAttempts: 1})
 	require.True(t, found)
 	assert.Equal(t, 1, index)
@@ -474,7 +474,7 @@ func TestAutoRouteAttemptsSupportBoundedSameChannelAndFailoverChoices(t *testing
 	assert.Equal(t, 2, index)
 	assert.Equal(t, 2, candidate.ChannelID)
 
-	modelError := ClassifyRouteError(404, "model_not_found", "", false)
+	modelError := ClassifyRouteError(404, "model_not_found", "", "", false)
 	candidate, index, found = selection.NextCandidateForError(0, 1, modelError, RouteRetryCounters{TotalAttempts: 1})
 	require.True(t, found)
 	assert.Equal(t, 2, index)
