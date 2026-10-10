@@ -107,6 +107,36 @@ describe('UsersView group filter', () => {
     expect(lastListParams(get).group).toBeUndefined()
   })
 
+  it('keeps showing the selected group when the keyword leaves it out of the counts', async () => {
+    const get = await renderUsers()
+    await chooseGroup(/^premium/)
+
+    // The keyword matches no premium user, so premium leaves group_counts.
+    get.mockImplementation(
+      async () =>
+        structuredClone({
+          ...page,
+          items: [],
+          total: 0,
+          group_counts: { default: 1 },
+        }) as never
+    )
+    await wrapper!.get('input[type="search"]').setValue('nobody')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await flushPromises()
+    expect(lastListParams(get)).toMatchObject({
+      group: 'premium',
+      keyword: 'nobody',
+    })
+
+    const trigger = wrapper!.get('button[aria-label="User Group"]')
+    expect(trigger.text()).toContain('premium')
+    await trigger.trigger('click')
+    expect(
+      wrapper!.findAll('[role="option"]').map((item) => item.text())
+    ).toEqual(['All groups', 'default (1)', 'premium (0)'])
+  })
+
   it('offers only all groups when the response has no group counts', async () => {
     // A backend from before the group filter omits group_counts.
     const { group_counts: _omitted, ...legacyPage } = page
