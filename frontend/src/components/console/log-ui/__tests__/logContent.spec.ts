@@ -11,6 +11,7 @@ mergeServerMessages('zh-CN', {
     '在线充值成功，充值额度：{{quota}}',
   'Payment amount: {{amount}}': '支付金额：{{amount}}',
   'Model test': '模型测试',
+  'Task timed out without returning a result': '任务超时，未返回结果',
 })
 
 const topup = {
@@ -51,6 +52,20 @@ describe('log content', () => {
     ]) {
       expect(logContentText({ content, other }, 'zh-CN')).toBe(content)
     }
+  })
+
+  it('translates a refund row whose content is a gateway fail reason', () => {
+    const refund = {
+      content: 'Task timed out without returning a result',
+      other: { reason: 'Task timed out without returning a result' },
+    }
+    expect(logContentText(refund, 'zh-CN')).toBe('任务超时，未返回结果')
+    expect(logContentText(refund, 'en')).toBe(refund.content)
+    const provider = {
+      content: 'content policy violation: {{prompt}} | retry',
+      other: {},
+    }
+    expect(logContentText(provider, 'zh-CN')).toBe(provider.content)
   })
 
   it('translates the token name only for rows written without a token', () => {
