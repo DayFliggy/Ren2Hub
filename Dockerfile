@@ -38,7 +38,9 @@ COPY --from=frontend-builder /build/frontend/embed-dist ./frontend/embed-dist
 RUN go test -timeout 60s -run '^TestProductionEmbeddedAssetGraph$' .
 RUN version="${APP_VERSION:-$(cat VERSION)}" \
     && test -n "$version" \
-    && go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api
+    && go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api \
+    && go version -m new-api | head -n 1 | cut -d' ' -f2 > go-version \
+    && grep -Eq '^go[0-9]+\.[0-9]+' go-version
 
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
@@ -48,6 +50,10 @@ RUN apt-get update \
     && update-ca-certificates
 
 COPY --from=builder2 /build/new-api /
+# The Go toolchain that built the binary. Billing evidence with recorded time
+# values replays only on the same toolchain; read it with
+# docker run --rm --entrypoint cat <image> /etc/ren2hub/go-version
+COPY --from=builder2 /build/go-version /etc/ren2hub/go-version
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
 EXPOSE 3000
 WORKDIR /data

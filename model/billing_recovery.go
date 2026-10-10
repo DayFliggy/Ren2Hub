@@ -312,15 +312,27 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 	return rows, err
 }
 
-func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
-	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status IN ? AND consumption_state = ?)) AND updated_at < ?",
+// openBillingRecoveries selects every unfinished record: money not yet
+// settled or released, or a settled outcome whose consumption is undelivered.
+func openBillingRecoveries(db *gorm.DB) *gorm.DB {
+	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status IN ? AND consumption_state = ?))",
 		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending},
-		[]string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStatePending, cutoff)
+		[]string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStatePending)
+}
+
+func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
+	return openBillingRecoveries(db).Where("updated_at < ?", cutoff)
 }
 
 type BillingRecoveryBacklog struct {
+	// Pending counts open records idle past the stale cutoff, the ones the
+	// recovery worker should have finished.
 	Pending       int64 `json:"pending"`
 	OldestUpdated int64 `json:"oldest_updated_at"`
+	// Open counts every unfinished record regardless of age, including live
+	// requests and accepted async tasks. An upgrade or rollback that changes
+	// the Go toolchain requires it to be 0.
+	Open int64 `json:"open"`
 	// SettlementBlocked counts async jobs holding a provider result whose
 	// settlement evidence cannot be verified; each keeps its reservation.
 	// ReadGatewayMetrics fills it from the task tables (CountSettlementBlocked).
@@ -332,8 +344,12 @@ func ReadBillingRecoveryBacklog(ctx context.Context, cutoff int64) (BillingRecov
 	if DB == nil {
 		return backlog, errors.New("billing recovery database is unavailable")
 	}
-	err := staleBillingRecoveries(DB.WithContext(ctx), cutoff).
-		Select("COUNT(*) AS pending, COALESCE(MIN(updated_at), 0) AS oldest_updated").Scan(&backlog).Error
+	db := DB.WithContext(ctx)
+	if err := staleBillingRecoveries(db, cutoff).
+		Select("COUNT(*) AS pending, COALESCE(MIN(updated_at), 0) AS oldest_updated").Scan(&backlog).Error; err != nil {
+		return backlog, err
+	}
+	err := openBillingRecoveries(db).Count(&backlog.Open).Error
 	return backlog, err
 }
 

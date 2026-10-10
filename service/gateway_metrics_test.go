@@ -47,6 +47,8 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 	assert.Equal(t, "database", before.RecoveryScope)
 	assert.Equal(t, int64(6), before.Recovery.Pending)
 	assert.Equal(t, stale, before.Recovery.OldestUpdated)
+	// The upgrade gate also sees the live request the stale backlog hides.
+	assert.Equal(t, int64(7), before.Recovery.Open)
 	assert.ElementsMatch(t, []string{billing.SettlementConfirmed, billing.SettlementEstimated, billing.SettlementFrozenEstimate}, slices.Collect(maps.Keys(before.Billing.Settlements)))
 	rows, err := model.ListStaleBillingRecoveries(time.Now().Add(-BillingRecoveryStaleAfter()).Unix(), 100)
 	require.NoError(t, err)
