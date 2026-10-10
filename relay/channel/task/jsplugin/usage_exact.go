@@ -2,9 +2,11 @@ package jsplugin
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -13,6 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 func decodeUsageJSON(data []byte) (any, error) {
@@ -109,6 +112,28 @@ func usageAtPath(root any, path []any) (any, error) {
 		}
 	}
 	return value, nil
+}
+
+// isAutoDuration reports whether a request duration is exactly -1, the
+// vendor's "the model picks the length", written as a number or numeric text.
+func isAutoDuration(value any) bool {
+	var text string
+	switch number := value.(type) {
+	case float64:
+		return number == -1
+	case int64:
+		return number == -1
+	case int:
+		return number == -1
+	case json.Number:
+		text = string(number)
+	case string:
+		text = strings.TrimSpace(number)
+	default:
+		return false
+	}
+	parsed, err := decimal.NewFromString(text)
+	return err == nil && parsed.Equal(decimal.NewFromInt(-1))
 }
 
 func normalizeLimitedUsage(value any, maximum int, integer bool) (any, error) {

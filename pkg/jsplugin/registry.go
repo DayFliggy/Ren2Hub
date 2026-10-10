@@ -126,6 +126,14 @@ func (m Meta) SupportsUpstream(kind string) bool {
 	return kind == UpstreamKindVendor || slices.Contains(m.Upstreams, kind)
 }
 
+// AcceptsAutoDuration reports whether the plugin declared duration-auto@1:
+// request validation lets a duration of -1, the vendor's "the model picks the
+// length", through to its hooks. The plugin reserves the longest duration the
+// model can produce and settles the task on the usage the vendor reports.
+func (m Meta) AcceptsAutoDuration() bool {
+	return slices.Contains(m.RequiredCapabilities, CapabilityDurationAuto)
+}
+
 // UsageProfile replaces the plugin's default usage metadata for its models.
 type UsageProfile struct {
 	Models              []string                    `json:"models"`

@@ -208,7 +208,8 @@
       "items": {
         "enum": [
           "json-clone@1",
-          "submit-sse-delta@1"
+          "submit-sse-delta@1",
+          "duration-auto@1"
         ]
       }
     },

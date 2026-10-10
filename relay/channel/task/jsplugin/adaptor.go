@@ -1469,11 +1469,19 @@ func (a *TaskAdaptor) validateResolvedUsageValue(value any, usageSchema map[stri
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, item := range typed {
+			limit, canonical := canonicalUsageLimit(key)
+			// A duration of -1 asks the vendor to pick the length. Plugins that
+			// declare duration-auto@1 reserve the longest duration for it and
+			// settle on the usage the vendor reports; usage facts stay
+			// non-negative.
+			if canonical && limit == relaycommon.MaxTaskDurationSeconds && a.plugin.Meta.AcceptsAutoDuration() && isAutoDuration(item) {
+				continue
+			}
 			if schema, declared := usageSchema[key]; declared {
 				if _, err := normalizePluginUsage(item, schema); err != nil {
 					return err
 				}
-			} else if limit, canonical := canonicalUsageLimit(key); canonical {
+			} else if canonical {
 				if _, err := normalizeLimitedUsage(item, limit, limit == kitdto.MaxImageN); err != nil {
 					return err
 				}
