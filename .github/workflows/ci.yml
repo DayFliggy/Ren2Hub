@@ -31,7 +31,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: go.mod
+          # go.mod states the minimum language version; tests run on the patched
+          # toolchain the release image builds with (Dockerfile golang:1.26.9).
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.sum
             relaykit/go.sum
@@ -135,7 +137,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: go.mod
+          # Same toolchain as the test job and the release image.
+          go-version: '1.26.9'
           cache-dependency-path: |
             go.sum
             relaykit/go.sum
