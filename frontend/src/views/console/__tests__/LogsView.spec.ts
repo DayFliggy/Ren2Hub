@@ -12,6 +12,7 @@ import {
 
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { mergeServerMessages } from '@/i18n/serverMessages'
 import LogsView from '@/views/console/LogsView.vue'
 
 let wrapper: VueWrapper | null = null
@@ -65,5 +66,70 @@ describe('LogsView business log filters', () => {
     expect(options).not.toContain('管理')
     expect(options).not.toContain('系统')
     expect(options).not.toContain('登录')
+  })
+})
+
+describe('LogsView log content', () => {
+  it('shows content_parts and a channel test token in the console language', async () => {
+    mergeServerMessages('zh-CN', {
+      'Model test': '模型测试',
+      'Channel test for {{model}} took {{seconds}}s':
+        '渠道测试 {{model}} 用时 {{seconds}} 秒',
+    })
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === '/api/log/self/groups') return Promise.resolve(['default'])
+      if (path === '/api/log/self/stat') {
+        return Promise.resolve({
+          total_requests: 1,
+          total_quota: '0',
+          today_requests: 1,
+          today_quota: '0',
+        })
+      }
+      return Promise.resolve({
+        page: 1,
+        page_size: 10,
+        total: 1,
+        items: [
+          {
+            id: 21,
+            type: 2,
+            token_id: 0,
+            token_name: 'Model test',
+            model_name: 'gpt-4o',
+            channel_name: 'OpenAI',
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            other: JSON.stringify({
+              content_parts: [
+                {
+                  key: 'Channel test for {{model}} took {{seconds}}s',
+                  params: { model: 'gpt-4o', seconds: 1.5 },
+                },
+              ],
+            }),
+            quota: '0',
+            use_time: 1500,
+            is_stream: false,
+            content: 'Channel test for gpt-4o took 1.5s',
+            created_at: 1_700_000_000,
+          },
+        ],
+      })
+    })
+    wrapper = mount(LogsView, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia(), i18n],
+        stubs: { LogsNavTabs: true },
+      },
+    })
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('渠道测试 gpt-4o 用时 1.5 秒')
+    expect(text).toContain('模型测试')
+    expect(text).not.toContain('Channel test for gpt-4o')
+    expect(text).not.toContain('Model test')
   })
 })

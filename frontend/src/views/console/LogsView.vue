@@ -35,11 +35,16 @@ import LogBillingDetail from '@/components/console/log-ui/LogBillingDetail.vue'
 import RequestDiagnosticsPanel from '@/components/console/log-ui/RequestDiagnosticsPanel.vue'
 import RequestDiagnosticsBrowser from '@/components/console/log-ui/RequestDiagnosticsBrowser.vue'
 import type { RequestDiagnosticFilter } from '@/api/requestDiagnostics'
+import { getLocale } from '@/i18n'
 import { requestDiagnosticsMessages } from '@/i18n/requestDiagnostics'
 import { useAuthStore } from '@/stores/auth'
 import LogModelMismatch from '@/components/console/log-ui/LogModelMismatch.vue'
 import LogGroupFilter from '@/components/console/log-ui/LogGroupFilter.vue'
 import LogMobileCard from '@/components/console/log-ui/LogMobileCard.vue'
+import {
+  logContentText,
+  logTokenName,
+} from '@/components/console/log-ui/logContent'
 import LogReasoningEffort from '@/components/console/log-ui/LogReasoningEffort.vue'
 import {
   getLogExportValues,
@@ -405,7 +410,7 @@ async function doExport() {
       download(
         ...serializeSpreadsheet(
           LOG_EXPORT_HEADERS,
-          items.map(getLogExportValues),
+          items.map((log) => getLogExportValues(log, getLocale())),
           'excel'
         )
       )
@@ -413,7 +418,7 @@ async function doExport() {
       download(
         ...serializeSpreadsheet(
           LOG_EXPORT_HEADERS,
-          items.map(getLogExportValues),
+          items.map((log) => getLogExportValues(log, getLocale())),
           'csv'
         )
       )
@@ -644,9 +649,9 @@ onBeforeUnmount(() => {
           <div class="flex min-w-0 flex-col items-start gap-1.5">
             <span
               class="block max-w-full truncate font-mono text-xs text-[var(--text-secondary)]"
-              :title="(row as LogItem).token_name"
+              :title="logTokenName(row as LogItem, getLocale())"
             >
-              {{ (row as LogItem).token_name }}
+              {{ logTokenName(row as LogItem, getLocale()) }}
             </span>
             <StatusChip :tone="typeTone[(row as LogItem).type]">
               {{ t(typeLabelKey[(row as LogItem).type]) }}
@@ -698,7 +703,7 @@ onBeforeUnmount(() => {
         <template #cell-content="{ row }">
           <LogDetailTrigger
             align="right"
-            :content="(row as LogItem).content"
+            :content="logContentText(row as LogItem, getLocale())"
             :label="t('logs.viewLogDetails')"
             @activate="openLogDetails(row as LogItem)"
           />

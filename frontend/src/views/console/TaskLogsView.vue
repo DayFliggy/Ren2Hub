@@ -29,9 +29,16 @@ import TaskArtifactsCell from '@/components/console/log-ui/TaskArtifactsCell.vue
 import { taskPreviewMode } from '@/components/console/log-ui/taskArtifacts'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
+import { getLocale } from '@/i18n'
+import { translateServerText } from '@/i18n/serverMessages'
 import { formatQuota, formatTime } from '@/utils/format'
 
 const { t } = useI18n()
+
+/** Gateway fail reasons are fixed English sentences; provider text passes through. */
+function failReason(row: { fail_reason: string }): string {
+  return translateServerText(getLocale(), row.fail_reason)
+}
 const toast = useToast()
 
 const rows = ref<RelayTaskLogItem[]>([])
@@ -243,7 +250,7 @@ function formatDuration(row: RelayTaskLogItem): string {
             :title="t('relayLogs.viewDetails')"
             @click="failureRow = row as RelayTaskLogItem"
           >
-            {{ (row as RelayTaskLogItem).fail_reason }}
+            {{ failReason(row as RelayTaskLogItem) }}
           </button>
           <TaskArtifactsCell v-else :task="row as RelayTaskLogItem" />
         </template>
@@ -305,7 +312,7 @@ function formatDuration(row: RelayTaskLogItem): string {
             class="mt-2 block w-full truncate text-left text-sm text-[var(--status-danger-text)]"
             @click="failureRow = row"
           >
-            {{ row.fail_reason }}
+            {{ failReason(row) }}
           </button>
           <div class="mt-3 flex items-center justify-between gap-2">
             <span class="text-xs text-[var(--text-tertiary)]">
@@ -356,7 +363,7 @@ function formatDuration(row: RelayTaskLogItem): string {
       <p
         class="whitespace-pre-wrap break-words text-sm text-[var(--status-danger-text)]"
       >
-        {{ failureRow?.fail_reason }}
+        {{ failureRow ? failReason(failureRow) : '' }}
       </p>
       <template #footer>
         <div class="flex justify-end">

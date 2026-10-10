@@ -361,6 +361,30 @@ describe('live API contracts', () => {
     )
   })
 
+  it('keeps the token id that marks rows written without a token', () => {
+    const row = {
+      id: 13,
+      type: 2,
+      token_name: 'Model test',
+      model_name: 'gpt-4o',
+      channel_name: 'OpenAI',
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      quota: '0',
+      use_time: 0,
+      is_stream: false,
+      content: 'Model test',
+      created_at: 1_700_000_000,
+    }
+    const parse = (item: Record<string, unknown>) =>
+      parseLogPage({ page: 1, page_size: 20, total: 1, items: [item] }).items[0]
+
+    expect(parse({ ...row, token_id: 0 })?.token_id).toBe(0)
+    expect(parse({ ...row, token_id: 42 })?.token_id).toBe(42)
+    expect(parse(row)).not.toHaveProperty('token_id')
+    expectInvalidResponse(() => parse({ ...row, token_id: 'zero' }))
+  })
+
   it('parses successful login records in the ordinary user log contract', () => {
     const page = parseLogPage({
       page: 1,

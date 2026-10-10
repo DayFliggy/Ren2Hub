@@ -2,9 +2,11 @@
 import { useI18n } from 'vue-i18n'
 
 import StatusChip from '@/components/common/StatusChip.vue'
+import { getLocale } from '@/i18n'
 import type { LogItem, LogType } from '@/types/console'
 import { formatQuota, formatTime } from '@/utils/format'
 
+import { logContentText, logTokenName } from './logContent'
 import LogDetailTrigger from './LogDetailTrigger.vue'
 import LogModelMismatch from './LogModelMismatch.vue'
 import LogPerformanceCell from './LogPerformanceCell.vue'
@@ -94,9 +96,9 @@ const typeLabelKey: Record<LogType, string> = {
         <dt class="text-[var(--text-tertiary)]">{{ t('logs.colToken') }}</dt>
         <dd
           class="mt-0.5 truncate font-mono text-[var(--text-secondary)]"
-          :title="log.token_name"
+          :title="logTokenName(log, getLocale())"
         >
-          {{ log.token_name }}
+          {{ logTokenName(log, getLocale()) }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -121,7 +123,7 @@ const typeLabelKey: Record<LogType, string> = {
         <dt class="sr-only">{{ t('logs.colContent') }}</dt>
         <dd>
           <LogDetailTrigger
-            :content="log.content"
+            :content="logContentText(log, getLocale())"
             :label="t('logs.viewLogDetails')"
             @activate="emit('view-details', log)"
           />

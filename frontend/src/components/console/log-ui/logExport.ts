@@ -1,6 +1,8 @@
+import type { LocaleCode } from '@/i18n'
 import type { LogItem } from '@/types/console'
 import { formatTime } from '@/utils/format'
 
+import { logContentText, logTokenName } from './logContent'
 import { getLogMetadata } from './logMetadata'
 
 export const LOG_EXPORT_HEADERS = [
@@ -23,11 +25,14 @@ export const LOG_EXPORT_HEADERS = [
   'content',
 ] as const
 
-export function getLogExportValues(log: LogItem): Array<string | number> {
+export function getLogExportValues(
+  log: LogItem,
+  locale: LocaleCode
+): Array<string | number> {
   const reasoningEffort = getLogMetadata(log).reasoningEffort
   return [
     formatTime(log.created),
-    log.token_name,
+    logTokenName(log, locale),
     log.type,
     log.model,
     log.channel,
@@ -42,6 +47,6 @@ export function getLogExportValues(log: LogItem): Array<string | number> {
     log.latency,
     log.tps,
     log.quota,
-    log.content,
+    logContentText(log, locale),
   ]
 }

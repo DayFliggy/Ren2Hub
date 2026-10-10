@@ -371,6 +371,8 @@ export interface LogItem {
   /** Stable gateway request identity; absent on historical or non-request rows. */
   request_id?: string
   type: LogType
+  /** 0 marks a row written without a token, such as a channel test. */
+  token_id?: number
   token_name: string // 使用的 API 令牌名称
   model: string
   channel: string // 渠道名称

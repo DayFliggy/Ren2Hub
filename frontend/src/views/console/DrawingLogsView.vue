@@ -24,6 +24,8 @@ import {
 } from '@/components/console/log-ui/relayTaskStatus'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
+import { getLocale } from '@/i18n'
+import { translateServerText } from '@/i18n/serverMessages'
 import { formatQuota, formatTime } from '@/utils/format'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
@@ -406,7 +408,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
           <p
             class="whitespace-pre-wrap break-words text-sm text-[var(--status-danger-text)]"
           >
-            {{ detailRow.fail_reason }}
+            {{ translateServerText(getLocale(), detailRow.fail_reason) }}
           </p>
         </div>
       </div>
