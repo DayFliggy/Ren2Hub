@@ -27,6 +27,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -2329,4 +2330,37 @@ func TestTaskAdaptorChainsSunoBatchFetchThroughNewAPIUpstream(t *testing.T) {
 	require.Contains(t, results, "task_up_public")
 	assert.Equal(t, "SUCCESS", results["task_up_public"].TaskInfo.Status)
 	assert.Equal(t, []string{"POST /suno/submit/MUSIC", "POST /suno/fetch"}, seen)
+}
+
+// A channel that skips upstream certificate checks reaches a self-signed
+// provider from plugin hooks; a verifying channel keeps rejecting it.
+func TestTaskAdaptorHookFetchFollowsChannelTLSSetting(t *testing.T) {
+	service.InitHttpClient()
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"from":"tls"}`))
+	}))
+	defer upstream.Close()
+	source := strings.Replace(mockPlugin, `export function listArtifacts() { return []; }
+export function buildContentRequest() { throw new Error("artifact_not_found"); }`, `export function listArtifacts() { return [{key: "video", type: "video"}]; }
+export function buildContentRequest(ctx) {
+  let from = "";
+  try { from = utils.fetch({url: ctx.baseUrl + "/info"}).body.from; } catch (e) { from = "failed"; }
+  return {url: ctx.baseUrl + "/content", method: "GET", headers: {"X-From": from}};
+}`, 1)
+	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
+	require.NoError(t, err)
+
+	for _, test := range []struct {
+		skip bool
+		want string
+	}{{true, "tls"}, {false, "failed"}} {
+		adaptor := New(plugin)
+		adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: upstream.URL, ApiKey: "key",
+			ChannelSetting: kitdto.ChannelSettings{TLSInsecureSkipVerify: test.skip},
+		}})
+		descriptor, err := adaptor.BuildContentRequest(t.Context(), &model.Task{TaskID: "task", Data: []byte(`{}`)}, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
+		require.NoError(t, err)
+		assert.Equal(t, test.want, descriptor.Headers["X-From"], "skip=%v", test.skip)
+	}
 }

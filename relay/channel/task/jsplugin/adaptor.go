@@ -633,7 +633,11 @@ func (a *TaskAdaptor) FetchTaskForTask(baseURL, key string, task *model.Task, pr
 // requests: task polls and utils.fetch share it, through the channel proxy.
 // Per-channel transport settings belong here.
 func (a *TaskAdaptor) channelHTTPClient(proxy string) (*http.Client, error) {
-	return service.GetHttpClientWithProxy(proxy)
+	setting := kitdto.ChannelSettings{}
+	if a.info != nil && a.info.HasChannelMeta() {
+		setting = a.info.ChannelSetting
+	}
+	return service.GetHttpClientWithProxySettings(proxy, setting)
 }
 
 // hookFetcher sends a driver hook's utils.fetch requests to the hosts its
