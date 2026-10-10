@@ -454,13 +454,12 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	relayClient.CheckRedirect = keepUpstreamRedirectResponse
 	if common2.DebugEnabled && req != nil && req.URL != nil {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
-		logger.LogDebug(c, fmt.Sprintf(
-			"http transport select: host=%s protocol=%s shards=%d policy=%s",
+		logger.LogDebug(c, "http transport select: host=%s protocol=%s shards=%d policy=%s",
 			req.URL.Host,
 			policy.Protocol,
 			policy.Shards,
 			policy.String(),
-		))
+		)
 	}
 
 	// Heartbeats start only after semantic output commits in the stream scanner.
@@ -486,14 +485,13 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	info.UpstreamAccepted = resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
 	if common2.DebugEnabled {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
-		logger.LogDebug(c, fmt.Sprintf(
-			"http transport negotiated: host=%s protocol=%s shards=%d policy=%s negotiated=%s",
+		logger.LogDebug(c, "http transport negotiated: host=%s protocol=%s shards=%d policy=%s negotiated=%s",
 			req.URL.Host,
 			policy.Protocol,
 			policy.Shards,
 			policy.String(),
 			resp.Proto,
-		))
+		)
 	}
 
 	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {

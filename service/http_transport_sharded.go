@@ -2,7 +2,6 @@ package service
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -72,15 +71,13 @@ func (s *shardedRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		}
 		logger.LogDebug(
 			req.Context(),
-			fmt.Sprintf(
-				"http transport: host=%s protocol=%s shard=%d/%d policy=%s negotiated=%s",
-				host,
-				s.policy.Protocol,
-				idx,
-				s.n,
-				s.policy.cacheKeyPart(),
-				proto,
-			),
+			"http transport: host=%s protocol=%s shard=%d/%d policy=%s negotiated=%s",
+			host,
+			s.policy.Protocol,
+			idx,
+			s.n,
+			s.policy.cacheKeyPart(),
+			proto,
 		)
 	}
 	return resp, err
