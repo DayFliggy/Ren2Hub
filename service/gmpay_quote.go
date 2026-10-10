@@ -55,11 +55,11 @@ type GmpayQuote struct {
 // The gateway callback does not prove which network ultimately received payment.
 func BuildGmpayQuote(config *GmpayConfig, userID int, group string, request GmpayQuoteRequest) (*GmpayQuote, error) {
 	if !config.Enabled() {
-		return nil, &GmpayError{"PAYMENT_UNAVAILABLE", "当前管理员未配置支付信息"}
+		return nil, &GmpayError{"PAYMENT_UNAVAILABLE", common.NewMessage("Payment information has not been configured by administrator")}
 	}
 	asset, ok := config.FindAsset(request.PaymentMethod)
 	if !ok {
-		return nil, &GmpayError{"PAYMENT_UNAVAILABLE", "支付方式不存在"}
+		return nil, &GmpayError{"PAYMENT_UNAVAILABLE", common.NewMessage("Payment method does not exist")}
 	}
 	minimum, err := operation_setting.GmpayMinimumUSD(config.MinTopUp, asset)
 	if err != nil {
@@ -73,7 +73,7 @@ func BuildGmpayQuote(config *GmpayConfig, userID int, group string, request Gmpa
 		}
 	}
 	if request.Amount <= 0 || (unit != "USD" && unit != "TOKENS") {
-		return nil, &GmpayError{"VALIDATION_ERROR", "充值数量或单位无效"}
+		return nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("Invalid top-up amount or unit")}
 	}
 	quota := decimal.NewFromInt(request.Amount)
 	if unit == "USD" {
@@ -81,10 +81,10 @@ func BuildGmpayQuote(config *GmpayConfig, userID int, group string, request Gmpa
 	}
 	expected, err := common.WalletQuotaFromDecimal(quota)
 	if err != nil {
-		return nil, &GmpayError{"VALIDATION_ERROR", "充值额度超出系统可表示范围"}
+		return nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("Top-up quota exceeds the range the system can represent")}
 	}
 	if expected < common.Quota(minimum*500000) {
-		return nil, &GmpayError{"VALIDATION_ERROR", fmt.Sprintf("充值额度不能小于 %d USD", minimum)}
+		return nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("Top-up quota cannot be less than {{min}} USD", map[string]any{"min": minimum})}
 	}
 	ratio, ok := config.Ratios[group]
 	if !ok {
@@ -104,10 +104,10 @@ func BuildGmpayQuote(config *GmpayConfig, userID int, group string, request Gmpa
 	// evidence only and must never feed back into the credited quota.
 	minor := quota.Mul(decimal.RequireFromString("0.000002")).Mul(config.Price).Mul(ratio).Mul(discount).Round(2).Mul(decimal.NewFromInt(100))
 	if !minor.IsPositive() || minor.GreaterThan(decimal.NewFromInt(math.MaxInt64)) {
-		return nil, &GmpayError{"VALIDATION_ERROR", "支付金额超出系统可表示范围"}
+		return nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("Payment amount exceeds the range the system can represent")}
 	}
 	if minor.LessThanOrEqual(decimal.NewFromInt(1)) {
-		return nil, &GmpayError{"VALIDATION_ERROR", "支付金额必须大于 0.01 USD"}
+		return nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("Payment amount must be greater than 0.01 USD")}
 	}
 	quote := &GmpayQuote{
 		// The quote echoes the bare asset the client submitted, matching the Epay
@@ -139,7 +139,7 @@ func QuoteGmpay(ctx context.Context, userID int, request GmpayQuoteRequest) (*Gm
 		return nil, nil, err
 	}
 	if !config.Enabled() {
-		return nil, nil, &GmpayError{"PAYMENT_UNAVAILABLE", "当前管理员未配置支付信息"}
+		return nil, nil, &GmpayError{"PAYMENT_UNAVAILABLE", common.NewMessage("Payment information has not been configured by administrator")}
 	}
 	var user model.User
 	if err = model.DB.WithContext(ctx).Select("id", "group").First(&user, userID).Error; err != nil {
@@ -151,7 +151,7 @@ func QuoteGmpay(ctx context.Context, userID int, request GmpayQuoteRequest) (*Gm
 	}
 	if err = model.ValidateTopUpQuotaCapacity(userID, quote.ExpectedQuota); err != nil {
 		if errors.Is(err, model.ErrTopUpQuotaLimitExceeded) {
-			return nil, nil, &GmpayError{"VALIDATION_ERROR", "top-up quota limit exceeded"}
+			return nil, nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("Top-up quota limit exceeded")}
 		}
 		return nil, nil, err
 	}
@@ -231,12 +231,12 @@ func CreateGmpayTopUp(ctx context.Context, userID int, request GmpayQuoteRequest
 	if err != nil {
 		var business *GmpayError
 		if request.QuoteFingerprint != "" && errors.As(err, &business) && (business.Code == "PAYMENT_UNAVAILABLE" || business.Code == "VALIDATION_ERROR") {
-			return nil, &GmpayError{"QUOTE_CHANGED", "报价已变化，请重新确认"}
+			return nil, &GmpayError{"QUOTE_CHANGED", common.NewMessage("The quote has changed. Please confirm it again.")}
 		}
 		return nil, err
 	}
 	if request.QuoteFingerprint != "" && !hmac.Equal([]byte(request.QuoteFingerprint), []byte(quote.QuoteFingerprint)) {
-		return nil, &GmpayError{"QUOTE_CHANGED", "报价已变化，请重新确认"}
+		return nil, &GmpayError{"QUOTE_CHANGED", common.NewMessage("The quote has changed. Please confirm it again.")}
 	}
 	if quote.AmountMinor <= 0 {
 		return nil, errors.New("invalid gmpay payable amount")
@@ -275,7 +275,7 @@ func CreateGmpayTopUp(ctx context.Context, userID int, request GmpayQuoteRequest
 		Name: fmt.Sprintf("TUC%d", quote.Amount),
 	}
 	if _, _, err = gmpay.BuildCreateOrder(config.Merchant, gatewayOrder); err != nil {
-		return nil, &GmpayError{"VALIDATION_ERROR", "支付配置或金额不符合网关要求"}
+		return nil, &GmpayError{"VALIDATION_ERROR", common.NewMessage("The payment configuration or amount does not meet the gateway requirements")}
 	}
 	if err = model.CreateGmpayOrder(ctx, order, snapshot, merchant); err != nil {
 		return nil, err

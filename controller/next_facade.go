@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -178,7 +177,7 @@ func nextTopUpUsers(topUps []*model.TopUp) (map[int]*model.User, error) {
 func NextGetEpayTopUpConfig(c *gin.Context) {
 	config, err := service.LoadEpayConfig(c.Request.Context())
 	if err != nil {
-		common.ApiErrorMsg(c, "读取支付配置失败")
+		common.ApiErrorT(c, "Failed to read the payment configuration")
 		return
 	}
 	methods := make([]nextEpayPaymentMethod, 0, len(config.Methods))
@@ -186,7 +185,7 @@ func NextGetEpayTopUpConfig(c *gin.Context) {
 		for _, item := range config.Methods {
 			minimum, err := operation_setting.EpayMinimumUSD(config.MinTopUp, item)
 			if err != nil {
-				common.ApiErrorMsg(c, "支付方式配置无效")
+				common.ApiErrorT(c, "Invalid payment method configuration")
 				return
 			}
 			methods = append(methods, nextEpayPaymentMethod{Name: item["name"], Type: item["type"], Color: item["color"], MinTopUp: minimum})
@@ -212,7 +211,7 @@ func NextCreateEpayTopUp(c *gin.Context) {
 	method := strings.TrimSpace(strings.TrimPrefix(req.PaymentMethod, "epay:"))
 	order, orderErr := createEpayTopUpOrder(c, c.GetInt("id"), req.Amount, method, req.AmountUnit, req.QuoteFingerprint)
 	if orderErr != nil {
-		nextBusinessError(c, errors.New(orderErr.Message), orderErr.Code)
+		nextBusinessError(c, orderErr.Message, orderErr.Code)
 		return
 	}
 
@@ -247,7 +246,7 @@ func NextListUserOrders(c *gin.Context) {
 func NextGetUserOrder(c *gin.Context) {
 	topUp := model.GetTopUpByTradeNo(c.Param("order_no"))
 	if topUp == nil || topUp.UserId != c.GetInt("id") {
-		nextBusinessError(c, errors.New("order not found"), "NOT_FOUND")
+		nextBusinessError(c, common.NewMessage("Order not found"), "NOT_FOUND")
 		return
 	}
 	common.ApiSuccess(c, nextTopUpDTO(topUp, nil))
@@ -338,7 +337,7 @@ func NextListAdminOrders(c *gin.Context) {
 func NextGetAdminOrder(c *gin.Context) {
 	topUp := model.GetTopUpByTradeNo(c.Param("order_no"))
 	if topUp == nil {
-		nextBusinessError(c, errors.New("order not found"), "NOT_FOUND")
+		nextBusinessError(c, common.NewMessage("Order not found"), "NOT_FOUND")
 		return
 	}
 	user, err := model.GetUserById(topUp.UserId, false)
@@ -350,7 +349,7 @@ func NextGetAdminOrder(c *gin.Context) {
 	if topUp.PaymentProvider == model.PaymentProviderGmpay {
 		var snapshot model.GmpayOrder
 		if err := model.DB.WithContext(c.Request.Context()).First(&snapshot, topUp.Id).Error; err != nil {
-			common.ApiErrorMsg(c, "读取支付订单快照失败")
+			common.ApiErrorT(c, "Failed to read the payment order snapshot")
 			return
 		}
 		detail.Gmpay = &snapshot
@@ -373,7 +372,7 @@ func nextEpayRail(method string) string {
 func NextGetAdminOrderStats(c *gin.Context) {
 	rangeDays, err := strconv.Atoi(c.DefaultQuery("range", "30"))
 	if err != nil || (rangeDays != 7 && rangeDays != 30 && rangeDays != 90) {
-		nextBusinessError(c, errors.New("invalid statistics range"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid statistics range"), "VALIDATION_ERROR")
 		return
 	}
 	now := time.Now()

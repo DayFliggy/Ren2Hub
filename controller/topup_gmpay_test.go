@@ -579,6 +579,32 @@ func TestGmpayInputRejectionsDoNotCreateOrders(t *testing.T) {
 	assert.Zero(t, snapshots)
 }
 
+// A GMPay business rejection keeps its stable code and reaches the web console
+// as a message key, on the Vue contract and on the legacy endpoint.
+func TestGmpayRejectionCarriesMessageKey(t *testing.T) {
+	setupGmpayControllerTestDB(t, "https://gateway.example.test")
+	const key = `"message":"Payment method does not exist","message_key":"Payment method does not exist"`
+	for _, test := range []struct {
+		name    string
+		handler gin.HandlerFunc
+		want    string
+	}{
+		{"vue quote", NextQuoteGmpayTopUp, `{"success":false,"code":"PAYMENT_UNAVAILABLE",` + key + `}`},
+		{"vue create", NextCreateGmpayTopUp, `{"success":false,"code":"PAYMENT_UNAVAILABLE",` + key + `}`},
+		{"legacy create", RequestGmpay, `{"data":"Payment method does not exist","message":"error","message_key":"Payment method does not exist"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(response)
+			c.Set("id", 1)
+			c.Request = httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"amount":10,"amount_unit":"USD","payment_method":"usdt.missing"}`))
+			c.Request.Header.Set("Content-Type", "application/json")
+			test.handler(c)
+			assert.JSONEq(t, test.want, response.Body.String())
+		})
+	}
+}
+
 func TestGmpayCallbackBoundaryRejectsBeforeCrediting(t *testing.T) {
 	db := setupGmpayControllerTestDB(t, "https://payments.example.test")
 	order, _, _ := gmpayControllerTestPendingOrder(t, db)

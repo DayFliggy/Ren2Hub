@@ -17,14 +17,17 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// GmpayError mirrors EpayError: a stable code for the client and a message that
-// never carries merchant credentials.
+// GmpayError mirrors EpayError: a stable code for the client and a web console
+// message that never carries merchant credentials.
 type GmpayError struct {
 	Code    string
-	Message string
+	Message *common.Message
 }
 
-func (err *GmpayError) Error() string { return err.Message }
+func (err *GmpayError) Error() string { return err.Message.Error() }
+
+// Unwrap exposes the message, so error responses carry its message_key.
+func (err *GmpayError) Unwrap() error { return err.Message }
 
 // GmpayConfig is the GMPay checkout configuration. It is loaded from one SELECT
 // so a bulk credential rotation cannot be observed half-applied.

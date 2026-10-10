@@ -260,7 +260,7 @@ func MarkGmpayOrderResult(ctx context.Context, topUpID int, result GmpayOrderRes
 func RechargeGmpay(payment GmpayPayment, callerIp string) (alreadyDone bool, err error) {
 	tradeNo := payment.OrderNo
 	if tradeNo == "" {
-		return false, errors.New("未提供支付单号")
+		return false, errors.New("payment order number not provided")
 	}
 
 	refCol := "`trade_no`"
