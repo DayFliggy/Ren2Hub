@@ -79,8 +79,20 @@ func exactQueryContext(ctx map[string]any, task *model.Task) (map[string]any, er
 	return result, nil
 }
 
-func usageResultContext(result *relaycommon.TaskInfo) map[string]any {
-	return map[string]any{"taskId": result.TaskID, "status": result.Status, "progress": result.Progress}
+// usageResultContext is the parsed result extractUsageOnComplete receives. Like
+// upstream's TaskInfo it carries, as plugin_state, the state this parse
+// returned: the hook's task.state is still the state from before this poll.
+func usageResultContext(result *relaycommon.TaskInfo) (map[string]any, error) {
+	view := map[string]any{"taskId": result.TaskID, "status": result.Status, "progress": result.Progress}
+	if len(result.PluginState) == 0 {
+		return view, nil
+	}
+	state, err := decodeUsageJSON(result.PluginState)
+	if err != nil {
+		return nil, err
+	}
+	view["plugin_state"] = state
+	return view, nil
 }
 
 // A batch entry names its exact source location. Parsed protocol data is not

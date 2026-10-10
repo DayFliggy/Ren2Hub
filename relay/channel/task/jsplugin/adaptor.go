@@ -571,9 +571,13 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 	if err == nil {
 		err = completionInputErr
 	}
+	var resultContext map[string]any
+	if err == nil {
+		resultContext, err = usageResultContext(immediate)
+	}
 	var facts any
 	if err == nil {
-		facts, err = a.plugin.Engine.Call(c.Request.Context(), "extractUsageOnComplete", usageContext, usageResultContext(immediate), completionInput)
+		facts, err = a.plugin.Engine.Call(c.Request.Context(), "extractUsageOnComplete", usageContext, resultContext, completionInput)
 	}
 	if err != nil {
 		immediate.UsageError = "plugin completion usage hook failed"
@@ -812,9 +816,13 @@ func (a *TaskAdaptor) ParseBatchResult(tasks []*model.Task, resp *http.Response,
 			if hookErr == nil {
 				hookErr = pathErr
 			}
+			var resultContext map[string]any
+			if hookErr == nil {
+				resultContext, hookErr = usageResultContext(info)
+			}
 			var facts any
 			if hookErr == nil {
-				facts, hookErr = a.plugin.Engine.Call(a.callContext(), "extractUsageOnComplete", usageContext, usageResultContext(info), usageBody)
+				facts, hookErr = a.plugin.Engine.Call(a.callContext(), "extractUsageOnComplete", usageContext, resultContext, usageBody)
 			}
 			if hookErr == nil {
 				upstreamModel, _ := itemCtx["upstreamModel"].(string)
@@ -878,8 +886,12 @@ func (a *TaskAdaptor) ParseTaskResultForTask(task *model.Task, resp *http.Respon
 		if hookErr == nil {
 			hookErr = inputErr
 		}
+		var resultContext map[string]any
 		if hookErr == nil {
-			facts, hookErr = a.plugin.Engine.Call(a.callContext(), "extractUsageOnComplete", usageContext, usageResultContext(result), usageInput)
+			resultContext, hookErr = usageResultContext(result)
+		}
+		if hookErr == nil {
+			facts, hookErr = a.plugin.Engine.Call(a.callContext(), "extractUsageOnComplete", usageContext, resultContext, usageInput)
 		}
 		if hookErr == nil {
 			upstreamModel, _ := ctx["upstreamModel"].(string)
