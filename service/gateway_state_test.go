@@ -94,6 +94,43 @@ func assertGatewayStateOutputOwnership(t *testing.T, db *gorm.DB) {
 	require.ErrorIs(t, err, model.ErrGatewayStateUnknown)
 }
 
+// Gemini accepts proto field names, and passthrough forwards the client body
+// unchanged, so cached_content and thought_signature must be bound exactly
+// like cachedContent and thoughtSignature: an owned signature continues on its
+// channel, and a reference the Token does not own is rejected.
+func TestGatewayStateBindsGeminiSnakeCaseReferences(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	previous := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = previous; sqlDB, _ := db.DB(); _ = sqlDB.Close() })
+	require.NoError(t, db.AutoMigrate(&model.GatewayStateBinding{}, &model.GatewayCredential{}))
+
+	output, _ := gin.CreateTestContext(httptest.NewRecorder())
+	output.Request = httptest.NewRequest("POST", "/v1beta/models/gemini-3-pro:generateContent", nil)
+	output.Set("gateway_state_output", &gatewayStateOutput{owner: model.GatewayStateBinding{UserID: 1, TokenID: 2, ChannelID: 3, CredentialID: "identity", EndpointID: "endpoint", TransportID: "transport"}, signatures: make(map[int]string)})
+	require.NoError(t, BindGatewayOutput(output, []byte(`{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"sig-owned"}]}}]}`)))
+
+	resolve := func(tokenID int, body string) (*model.GatewayStateBinding, error) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set("id", 1)
+		c.Set("token_id", tokenID)
+		c.Request = httptest.NewRequest("POST", "/v1beta/models/gemini-3-pro:generateContent", strings.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		defer common.CleanupBodyStorage(c)
+		return ResolveGatewayRequestState(c)
+	}
+	const snakeSignature = `{"contents":[{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thought_signature":"sig-owned"}]}]}`
+	owner, err := resolve(2, snakeSignature)
+	require.NoError(t, err)
+	require.NotNil(t, owner)
+	assert.Equal(t, 3, owner.ChannelID)
+	_, err = resolve(4, snakeSignature)
+	require.ErrorIs(t, err, model.ErrGatewayStateUnknown)
+	_, err = resolve(2, `{"cached_content":"cachedContents/foreign","contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
+	require.ErrorIs(t, err, model.ErrGatewayStateUnknown)
+}
+
 func TestGatewayStateReferenceExtractionDoesNotInspectToolArguments(t *testing.T) {
 	var payload map[string]any
 	require.NoError(t, common.Unmarshal([]byte(`{"messages":[{"role":"assistant","content":[{"type":"thinking","signature":"opaque"},{"type":"tool_use","input":{"signature":"application-value"}}]}]}`), &payload))
@@ -101,11 +138,12 @@ func TestGatewayStateReferenceExtractionDoesNotInspectToolArguments(t *testing.T
 }
 
 // The converter attaches a public bypass value to cross-protocol Gemini
-// history; it is not provider state and needs no binding, while a real
-// thought signature in the same request still does.
+// history, and Google documents skip_thought_signature_validator for clients;
+// neither is provider state or needs a binding, while a real thought
+// signature in the same request still does.
 func TestGatewayStateReferencesSkipGeminiThoughtSignatureBypass(t *testing.T) {
 	var payload map[string]any
-	require.NoError(t, common.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"context_engineering_is_the_way_to_go"},{"text":"done","thoughtSignature":"provider-issued"}]}]}`), &payload))
+	require.NoError(t, common.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"context_engineering_is_the_way_to_go"},{"functionCall":{"name":"search","args":{}},"thought_signature":"skip_thought_signature_validator"},{"text":"done","thoughtSignature":"provider-issued"}]}]}`), &payload))
 	assert.Equal(t, []gatewayStateReference{{"thoughtSignature", "provider-issued"}}, stateReferences(payload, false))
 }
 
@@ -119,6 +157,8 @@ func TestGatewayOpaqueStateReferenceKinds(t *testing.T) {
 		{`{"messages":[{"content":[{"type":"redacted_thinking","data":"opaque"}]}]}`, "redacted_thinking", "opaque", false},
 		{`{"content":[{"type":"redacted_thinking","data":"opaque"}]}`, "redacted_thinking", "opaque", true},
 		{`{"cachedContent":"cachedContents/one"}`, "cached_content", "cachedContents/one", false},
+		{`{"cached_content":"cachedContents/one"}`, "cached_content", "cachedContents/one", false},
+		{`{"contents":[{"parts":[{"text":"x","thought_signature":"sig"}]}]}`, "thoughtSignature", "sig", false},
 		{`{"tools":[{"type":"code_interpreter","container":"container_one"}]}`, "container", "container_one", false},
 		{`{"output":[{"type":"code_interpreter_call","container_id":"container_one"}]}`, "container", "container_one", true},
 		{`{"input":[{"content":[{"type":"input_file","file_id":"file_one"}]}]}`, "file", "file_one", false},

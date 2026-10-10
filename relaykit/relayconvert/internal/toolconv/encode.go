@@ -76,7 +76,12 @@ func attachOpenAIChatRequest(request any, set Set) (any, []types.ConversionDiagn
 				diagnostics = append(diagnostics, geminiNativeWebSearchDiagnostics(index, definition, types.RelayFormatOpenAI)...)
 			}
 			if target.WebSearchOptions != nil {
-				return nil, diagnostics, fmt.Errorf("tools[%d]: multiple hosted web-search definitions cannot be represented by Chat Completions", index)
+				diagnostics = append(diagnostics, semanticLoss(
+					fmt.Sprintf("tools[%d]", index),
+					"duplicate_hosted_web_search",
+					"Chat Completions carries one hosted web search; this definition was dropped",
+				))
+				continue
 			}
 			options := &dto.WebSearchOptions{}
 			if definition.WebSearch != nil {
@@ -106,14 +111,28 @@ func attachOpenAIChatRequest(request any, set Set) (any, []types.ConversionDiagn
 		}
 	}
 
+	diagnostics = append(diagnostics, unsupportedHostedHistoryDiagnostics(types.RelayFormatOpenAI, set.History)...)
+	if len(target.Tools) == 0 {
+		return target, append(diagnostics, toolChoiceWithoutToolsDiagnostics(set)...), nil
+	}
 	normalizedChoice, allowedChoiceDiagnostics := narrowAllowedFunctionChoice(responsesCustomToolChoice(set.Choice, customTools), types.RelayFormatOpenAI)
 	choice, choiceDiagnostics := encodeOpenAIChatChoice(normalizedChoice)
 	target.ToolChoice = choice
 	target.ParallelTooCalls = set.ParallelAllowed
 	diagnostics = append(diagnostics, allowedChoiceDiagnostics...)
 	diagnostics = append(diagnostics, choiceDiagnostics...)
-	diagnostics = append(diagnostics, unsupportedHostedHistoryDiagnostics(types.RelayFormatOpenAI, set.History)...)
 	return target, diagnostics, nil
+}
+
+// toolChoiceWithoutToolsDiagnostics reports the tool_choice and
+// parallel_tool_calls controls omitted because no tool reached the target;
+// upstreams reject either control in a request without tools.
+func toolChoiceWithoutToolsDiagnostics(set Set) []types.ConversionDiagnostic {
+	if set.Choice == nil && set.ParallelAllowed == nil {
+		return nil
+	}
+	return []types.ConversionDiagnostic{presentationLoss("tool_choice", "tool_choice_without_tools",
+		"the target request has no function tools, so tool_choice and parallel_tool_calls were omitted")}
 }
 
 // jsonSchemaParameters returns function parameters as JSON Schema for a
@@ -366,13 +385,19 @@ func attachOpenAIResponsesRequest(request any, set Set) (any, []types.Conversion
 			))
 		}
 	}
-	if len(tools) > 0 {
-		encoded, err := kitutil.Marshal(tools)
-		if err != nil {
-			return nil, diagnostics, err
-		}
-		target.Tools = encoded
+	historyDiagnostics, err := appendHostedHistoryToOpenAIResponses(target, set)
+	if err != nil {
+		return nil, diagnostics, err
 	}
+	diagnostics = append(diagnostics, historyDiagnostics...)
+	if len(tools) == 0 {
+		return target, append(diagnostics, toolChoiceWithoutToolsDiagnostics(set)...), nil
+	}
+	encoded, err := kitutil.Marshal(tools)
+	if err != nil {
+		return nil, diagnostics, err
+	}
+	target.Tools = encoded
 	normalizedChoice, allowedChoiceDiagnostics := narrowAllowedFunctionChoice(set.Choice, types.RelayFormatOpenAIResponses)
 	choice, choiceDiagnostics, err := encodeOpenAIResponsesChoice(normalizedChoice, set.Source)
 	if err != nil {
@@ -384,11 +409,6 @@ func attachOpenAIResponsesRequest(request any, set Set) (any, []types.Conversion
 	}
 	diagnostics = append(diagnostics, allowedChoiceDiagnostics...)
 	diagnostics = append(diagnostics, choiceDiagnostics...)
-	historyDiagnostics, err := appendHostedHistoryToOpenAIResponses(target, set)
-	if err != nil {
-		return nil, diagnostics, err
-	}
-	diagnostics = append(diagnostics, historyDiagnostics...)
 	return target, diagnostics, nil
 }
 
@@ -488,9 +508,15 @@ func attachClaudeRequest(request any, set Set, options *convmeta.Options) (any, 
 			))
 		}
 	}
-	if len(tools) > 0 {
-		target.Tools = tools
+	historyDiagnostics, err := appendHostedHistoryToClaude(target, set)
+	if err != nil {
+		return nil, diagnostics, err
 	}
+	diagnostics = append(diagnostics, historyDiagnostics...)
+	if len(tools) == 0 {
+		return target, append(diagnostics, toolChoiceWithoutToolsDiagnostics(set)...), nil
+	}
+	target.Tools = tools
 	normalizedChoice, allowedChoiceDiagnostics := narrowAllowedFunctionChoice(responsesCustomToolChoice(set.Choice, customTools), types.RelayFormatClaude)
 	diagnostics = append(diagnostics, allowedChoiceDiagnostics...)
 	forced := normalizedChoice != nil && (normalizedChoice.Mode == ChoiceRequired || normalizedChoice.Mode == ChoiceNamed)
@@ -508,11 +534,6 @@ func attachClaudeRequest(request any, set Set, options *convmeta.Options) (any, 
 	choice, choiceDiagnostics := encodeClaudeChoice(normalizedChoice, set.ParallelAllowed, set.Source)
 	target.ToolChoice = choice
 	diagnostics = append(diagnostics, choiceDiagnostics...)
-	historyDiagnostics, err := appendHostedHistoryToClaude(target, set)
-	if err != nil {
-		return nil, diagnostics, err
-	}
-	diagnostics = append(diagnostics, historyDiagnostics...)
 	return target, diagnostics, nil
 }
 
@@ -645,6 +666,10 @@ func attachGeminiRequest(request any, set Set) (any, []types.ConversionDiagnosti
 			return nil, diagnostics, err
 		}
 		target.Tools = encoded
+	}
+	if len(functions) == 0 {
+		diagnostics = append(diagnostics, unsupportedHostedHistoryDiagnostics(types.RelayFormatGemini, set.History)...)
+		return target, append(diagnostics, toolChoiceWithoutToolsDiagnostics(set)...), nil
 	}
 	config, choiceDiagnostics := encodeGeminiChoice(responsesCustomToolChoice(set.Choice, customTools))
 	target.ToolConfig = config

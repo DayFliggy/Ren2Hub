@@ -50,7 +50,10 @@ func stateReferences(payload map[string]any, output bool) []gatewayStateReferenc
 		add("response", payload["previous_response_id"])
 	}
 	add("conversation", payload["conversation"])
+	// Gemini also accepts proto field names, and passthrough forwards them
+	// unchanged, so the snake_case spellings are the same references.
 	add("cached_content", payload["cachedContent"])
+	add("cached_content", payload["cached_content"])
 	if payload["container"] != "auto" {
 		add("container", payload["container"])
 	}
@@ -86,11 +89,15 @@ func stateReferences(payload map[string]any, output bool) []gatewayStateReferenc
 					add("file_uri", uri)
 				}
 			}
-			for _, name := range []string{"encrypted_content", "encrypted_index", "thoughtSignature", "signature"} {
-				if signature, _ := item[name].(string); name == "thoughtSignature" && relayconvert.IsThoughtSignatureBypass(signature) {
+			for _, name := range []string{"encrypted_content", "encrypted_index", "thoughtSignature", "thought_signature", "signature"} {
+				kind := name
+				if name == "thought_signature" {
+					kind = "thoughtSignature"
+				}
+				if signature, _ := item[name].(string); kind == "thoughtSignature" && relayconvert.IsThoughtSignatureBypass(signature) {
 					continue
 				}
-				add(name, item[name])
+				add(kind, item[name])
 			}
 			for _, name := range []string{"content", "parts", "message", "content_block", "delta", "item", "source", "file", "fileData", "file_data", "citations", "citation", "annotations", "url_citation"} {
 				inspect(item[name])

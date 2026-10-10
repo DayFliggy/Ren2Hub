@@ -259,13 +259,9 @@ func inspectClaudeContentBlock(block *dto.ClaudeMediaMessage, path string, to ty
 			}
 		}
 	}
-	if blockType == "redacted_thinking" && block.Data != "" {
-		diagnostics = append(diagnostics, responseSemanticLoss(
-			path+".data",
-			"continuation_state_lost",
-			"Claude encrypted thinking state cannot be represented by the target response",
-		))
-	}
+	// Encrypted redacted_thinking data is a reasoning signature like the
+	// thinking signature: converters never copy it, and the response guard
+	// reports it once as provider_state_dropped.
 	return diagnostics
 }
 

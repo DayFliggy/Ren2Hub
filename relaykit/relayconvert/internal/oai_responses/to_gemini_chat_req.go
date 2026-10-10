@@ -326,34 +326,33 @@ func responsesFunctionOutputItemToGeminiPart(c context.Context, item map[string]
 // responses (mediaInParts) carry only the documented image, PDF and plain-text
 // types; separate parts carry every type Gemini accepts. Media that cannot be
 // loaded or carried is omitted with an error diagnostic, so the conversion
-// policy decides whether the request is sent. A payload without media keeps
-// the historical response map; media in any other shape is omitted the same
-// way rather than written into that map as text.
+// policy decides whether the request is sent. A list that also holds parts
+// with no Gemini equivalent drops only those parts, with the same diagnostic,
+// and keeps its text and media. A payload without media keeps the historical
+// response map; media in any other shape is omitted the same way rather than
+// written into that map as text.
 func responsesToolOutputToGemini(c context.Context, value any, mediaInParts bool) (map[string]any, []dto.GeminiPart) {
 	rawParts, ok := value.([]any)
 	if !ok || len(rawParts) == 0 {
 		return responsesUnstructuredToolOutputToGemini(c, value), nil
 	}
-	parts := make([]map[string]any, 0, len(rawParts))
-	for _, rawPart := range rawParts {
-		part, isMap := rawPart.(map[string]any)
-		if !isMap {
-			return responsesUnstructuredToolOutputToGemini(c, value), nil
-		}
-		switch strings.TrimSpace(kitutil.Interface2String(part["type"])) {
-		case "input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video":
-		default:
-			return responsesUnstructuredToolOutputToGemini(c, value), nil
-		}
-		parts = append(parts, part)
+	unknownPart := func(rawPart any) bool { return responsesToolOutputPartType(rawPart) == "" }
+	if !responsesToolOutputHasMedia(value) && slices.ContainsFunc(rawParts, unknownPart) {
+		// Without media, a list holding other part types keeps the historical
+		// response map, as in NewAPI.
+		return GeminiResponseMap(value), nil
 	}
 
-	texts := make([]string, 0, len(parts))
-	labels := make([]string, 0, len(parts))
-	media := make([]dto.GeminiPart, 0, len(parts))
-	for _, part := range parts {
-		partType := strings.TrimSpace(kitutil.Interface2String(part["type"]))
+	texts := make([]string, 0, len(rawParts))
+	labels := make([]string, 0, len(rawParts))
+	media := make([]dto.GeminiPart, 0, len(rawParts))
+	for index, rawPart := range rawParts {
+		partType := responsesToolOutputPartType(rawPart)
+		part, _ := rawPart.(map[string]any)
 		switch partType {
+		case "":
+			addToolMediaOmitted(c, fmt.Sprintf("tool output part %d is not a text, image, file, audio or video part", index))
+			continue
 		case "input_text", "output_text", "text":
 			if text := kitutil.Interface2String(part["text"]); text != "" {
 				texts = append(texts, text)
@@ -393,11 +392,28 @@ func responsesToolOutputToGemini(c context.Context, value any, mediaInParts bool
 		return GeminiResponseMap(strings.Join(texts, "\n")), media
 	case len(media) > 0:
 		return map[string]any{}, media
-	default:
+	case len(labels) > 0:
 		// Every media part was omitted; name what was there instead of
 		// sending the payload as text.
 		return GeminiResponseMap(strings.Join(labels, " ")), nil
+	default:
+		return GeminiResponseMap("[tool output omitted]"), nil
 	}
+}
+
+// responsesToolOutputPartType returns the type of a tool output content part
+// the Gemini converter maps, or "" for any other element.
+func responsesToolOutputPartType(rawPart any) string {
+	part, isMap := rawPart.(map[string]any)
+	if !isMap {
+		return ""
+	}
+	partType := strings.TrimSpace(kitutil.Interface2String(part["type"]))
+	switch partType {
+	case "input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video":
+		return partType
+	}
+	return ""
 }
 
 // responsesUnstructuredToolOutputToGemini keeps a tool output that is not a

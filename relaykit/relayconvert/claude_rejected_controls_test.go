@@ -65,6 +65,10 @@ func TestConvertedForcedToolChoiceIsDowngradedWhereClaudeRejectsIt(t *testing.T)
 		// Bedrock and namespaced channel names resolve to the same model row.
 		{name: "bedrock opus 5.5 required", request: chatToolRequestForClaude("us.anthropic.claude-opus-5-5-20260101-v1:0", "required", ""), wantChoice: `{"type":"auto"}`, wantDowngraded: true},
 		{name: "namespaced sonnet 5.5 named", request: chatToolRequestForClaude("anthropic/claude-sonnet-5.5", named, ""), wantChoice: `{"type":"auto"}`, wantDowngraded: true},
+		// Dotted versions keep their row whatever follows them.
+		{name: "dotted opus 5.5 thinking variant required", request: chatToolRequestForClaude("anthropic/claude-opus-5.5:thinking", "required", ""), wantChoice: `{"type":"auto"}`, wantDowngraded: true},
+		{name: "dotted sonnet 5.5 dated named", request: chatToolRequestForClaude("claude-sonnet-5.5-20260401", named, ""), wantChoice: `{"type":"auto"}`, wantDowngraded: true},
+		{name: "dotted fable 5.1 nested namespace required", request: chatToolRequestForClaude("openrouter/anthropic/claude-fable-5.1", "required", ""), wantChoice: `{"type":"auto"}`, wantDowngraded: true},
 		{name: "opus 5 adaptive keeps any", request: chatToolRequestForClaude("claude-opus-5", "required", "high"), wantChoice: `{"type":"any"}`},
 		{name: "no thinking keeps tool", request: chatToolRequestForClaude("claude-sonnet-4-5", named, ""), wantChoice: `{"name":"lookup","type":"tool"}`},
 	}
@@ -135,6 +139,8 @@ func TestDisabledReasoningReachesClaudeAsAcceptedThinking(t *testing.T) {
 		{model: "claude-opus-5", wantThinking: `{"type":"disabled"}`},
 		{model: "us.anthropic.claude-opus-5-5-20260101-v1:0", wantThinking: `{"type":"adaptive"}`, wantOutput: `{"effort":"low"}`, wantDiagnostic: "claude_thinking_disable_unsupported"},
 		{model: "global.anthropic.claude-sonnet-5-5-v1:0", wantThinking: `{"type":"between_tools"}`, wantDiagnostic: "claude_thinking_disable_as_between_tools"},
+		{model: "anthropic/claude-sonnet-5.5:thinking", wantThinking: `{"type":"between_tools"}`, wantDiagnostic: "claude_thinking_disable_as_between_tools"},
+		{model: "claude-opus-5.5-20260401", wantThinking: `{"type":"adaptive"}`, wantOutput: `{"effort":"low"}`, wantDiagnostic: "claude_thinking_disable_unsupported"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {

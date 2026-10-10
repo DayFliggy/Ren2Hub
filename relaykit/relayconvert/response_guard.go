@@ -71,6 +71,11 @@ func guardResponseState(value any, target types.RelayFormat) (bool, error) {
 		if target == types.RelayFormatClaude && kind == "url_citation" {
 			return false, fmt.Errorf("native_state_required: Claude citation requires provider-issued source state")
 		}
+		if kind == "redacted_thinking" && value["data"] != nil && value["data"] != "" {
+			// Claude's encrypted thinking block is a reasoning signature with no
+			// visible text; converters never copy its data.
+			stateDropped = true
+		}
 		for key, item := range value {
 			if item != nil && item != "" {
 				switch key {
