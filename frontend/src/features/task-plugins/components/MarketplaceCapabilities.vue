@@ -19,11 +19,12 @@ import PluginModelList from './PluginModelList.vue'
 
 const props = withDefaults(
   defineProps<{
-    plugin: MarketplacePlugin
+    /** Omitted for a manual upload: only the source declarations are shown. */
+    plugin?: MarketplacePlugin
     version?: MarketplaceIndexVersion
     preview?: PluginMetaPreview
   }>(),
-  { version: undefined, preview: undefined }
+  { plugin: undefined, version: undefined, preview: undefined }
 )
 const emit = defineEmits<{ retry: [] }>()
 const { t } = useI18n()
