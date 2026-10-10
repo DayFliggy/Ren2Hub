@@ -32,17 +32,11 @@ func generateSignature(secret string, payload []byte) string {
 
 // SendWebhookNotify 发送 webhook 通知
 func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error {
-	// 处理占位符
-	content := data.Content
-	for _, value := range data.Values {
-		content = fmt.Sprintf(content, value)
-	}
-
 	// 构建 webhook 负载
 	payload := WebhookPayload{
 		Type:      data.Type,
 		Title:     data.Title,
-		Content:   content,
+		Content:   fillNotifyValues(data),
 		Values:    data.Values,
 		Timestamp: time.Now().Unix(),
 	}
