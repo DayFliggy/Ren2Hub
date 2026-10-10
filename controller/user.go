@@ -259,7 +259,7 @@ func Register(c *gin.Context) {
 		// 生成默认令牌
 		token := model.Token{
 			UserId:             cleanUser.Id,
-			Name:               cleanUser.Username + "的初始令牌",
+			Name:               i18n.T(c, i18n.MsgUserDefaultTokenName, map[string]any{"Username": cleanUser.Username}),
 			Key:                key,
 			CreatedTime:        common.GetTimestamp(),
 			AccessedTime:       common.GetTimestamp(),

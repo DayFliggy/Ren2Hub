@@ -16,6 +16,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
@@ -989,7 +990,12 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		// 当错误检查通过，才检查响应时间
 		if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
 			if milliseconds > disableThreshold {
-				err := fmt.Errorf("响应时间 %.2fs 超过阈值 %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
+				// The reason is stored with the channel and sent in the disable
+				// notice; no request states a language here.
+				err := errors.New(i18n.Translate("", i18n.MsgChannelResponseTimeExceeded, map[string]any{
+					"Seconds":   fmt.Sprintf("%.2f", float64(milliseconds)/1000.0),
+					"Threshold": fmt.Sprintf("%.2f", float64(disableThreshold)/1000.0),
+				}))
 				newAPIError = types.NewOpenAIError(err, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
 				shouldBanChannel = true
 			}
@@ -1045,7 +1051,8 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
 	summary := performChannelTests(ctx, selected, testUserID, allowDisable, report)
 	if notify && (ctx == nil || ctx.Err() == nil) {
-		service.NotifyRootUser(dto.NotifyTypeChannelTest, "通道测试完成", "所有通道测试已完成")
+		lang := service.RootUserLanguage()
+		service.NotifyRootUser(dto.NotifyTypeChannelTest, i18n.Translate(lang, i18n.MsgChannelTestCompletedSubject), i18n.Translate(lang, i18n.MsgChannelTestCompletedContent))
 	}
 	return summary, nil
 }
