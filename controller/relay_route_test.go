@@ -208,12 +208,12 @@ func TestNextLiveRouteAttemptUsesErrorScope(t *testing.T) {
 	})
 	beginLiveRouteUpstreamAttempt(c, 11)
 
-	keyFailure := service.ClassifyRouteError(401, "invalid_api_key", "", false)
+	keyFailure := service.ClassifyRouteError(401, "invalid_api_key", "", "", false)
 	index, found := nextLiveRouteAttemptForError(c, 0, 11, keyFailure)
 	require.True(t, found)
 	assert.Equal(t, 1, index)
 
-	modelFailure := service.ClassifyRouteError(400, "unsupported_model", "", false)
+	modelFailure := service.ClassifyRouteError(400, "unsupported_model", "", "", false)
 	index, found = nextLiveRouteAttemptForError(c, 0, 11, modelFailure)
 	require.True(t, found)
 	assert.Equal(t, 2, index)
@@ -254,7 +254,7 @@ func TestLiveRouteCandidateAdvanceStopsWhenRequestIsCancelled(t *testing.T) {
 
 	_, found := nextLiveRouteCandidateIndex(c, 0)
 	assert.False(t, found)
-	_, found = nextLiveRouteAttemptForError(c, 0, 101, service.ClassifyRouteError(http.StatusServiceUnavailable, "", "", false))
+	_, found = nextLiveRouteAttemptForError(c, 0, 101, service.ClassifyRouteError(http.StatusServiceUnavailable, "", "", "", false))
 	assert.False(t, found)
 }
 
@@ -512,7 +512,7 @@ func TestLiveRouteRenewalFailureIsAdmissionError(t *testing.T) {
 	})
 
 	assert.True(t, liveRouteRenewalFailed(c))
-	classification := service.ClassifyRouteError(http.StatusServiceUnavailable, service.AdmissionFailureCode, service.ErrGatewayStorageUnavailable.Error(), false)
+	classification := service.ClassifyRouteError(http.StatusServiceUnavailable, service.AdmissionFailureCode, "", service.ErrGatewayStorageUnavailable.Error(), false)
 	assert.Equal(t, service.RouteErrorAdmission, classification.Class)
 	assert.False(t, classification.Failoverable)
 }

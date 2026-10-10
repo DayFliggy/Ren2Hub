@@ -76,7 +76,7 @@ func TestRoutePlanningRetainsMoreThanThreeAndCapsDifferentChannels(t *testing.T)
 	candidate, _, found := selection.CandidateAtOrAfter(0)
 	require.True(t, found)
 	assert.Equal(t, result.Candidates[3].ChannelID, candidate.ChannelID)
-	assert.False(t, DefaultRouteRetryBudget().Allows(ClassifyRouteError(503, "", "", false), RouteRetryFailover, RouteRetryCounters{TotalAttempts: 3}))
+	assert.False(t, DefaultRouteRetryBudget().Allows(ClassifyRouteError(503, "", "", "", false), RouteRetryFailover, RouteRetryCounters{TotalAttempts: 3}))
 }
 
 func TestManualRouteStickyOnlyWinsInsideFirstPositionLayer(t *testing.T) {

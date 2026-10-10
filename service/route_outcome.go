@@ -32,6 +32,7 @@ type AttemptOutcome struct {
 	Success           bool
 	StatusCode        int
 	ProviderCode      string
+	ProviderType      string
 	Message           string
 	ResponseCommitted bool
 	RetryAfter        time.Duration
@@ -50,7 +51,7 @@ func ClassifyAttemptOutcome(outcome AttemptOutcome) RouteErrorClassification {
 	var classification RouteErrorClassification
 	switch outcome.Origin {
 	case AttemptOriginProvider:
-		classification = classifyProviderRouteError(outcome.StatusCode, outcome.ProviderCode, outcome.Message)
+		classification = classifyProviderRouteError(outcome.StatusCode, outcome.ProviderCode, outcome.ProviderType, outcome.Message)
 	case AttemptOriginTransport:
 		classification = RouteErrorClassification{Class: RouteErrorTransient, Retryable: true, Failoverable: true, MarkChannelModel: true}
 	case AttemptOriginAdmission:

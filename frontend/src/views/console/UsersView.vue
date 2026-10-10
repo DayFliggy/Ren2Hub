@@ -268,15 +268,22 @@ const statusOptions = computed(() => [
   },
 ])
 
-const groupOptions = computed(() => [
-  { value: '', label: t('users.allGroups') },
-  ...Object.keys(groupCounts.value)
-    .sort((left, right) => left.localeCompare(right))
-    .map((name) => ({
-      value: name,
-      label: `${name} (${groupCounts.value[name]})`,
-    })),
-])
+// Counts follow the keyword, so the selected group can drop out of them while
+// the list is still filtered by it. Keep it as an option with count 0, as
+// NewAPI's group list does not depend on the keyword either.
+const groupOptions = computed(() => {
+  const names = new Set(Object.keys(groupCounts.value))
+  if (group.value) names.add(group.value)
+  return [
+    { value: '', label: t('users.allGroups') },
+    ...[...names]
+      .sort((left, right) => left.localeCompare(right))
+      .map((name) => ({
+        value: name,
+        label: `${name} (${groupCounts.value[name] ?? 0})`,
+      })),
+  ]
+})
 
 const sortOptions = computed(() =>
   ADMIN_USER_SORT_FIELDS.map((field) => ({

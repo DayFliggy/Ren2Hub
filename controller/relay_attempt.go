@@ -137,7 +137,9 @@ func queueBusyLiveRouteCandidate(c *gin.Context) (int, bool) {
 		first := selection.Attempts[selected]
 		sameLayer := selection.Source == service.RouteSourceManual && selection.ManualLoadBalance && candidate.Position == first.Position
 		if selection.Decision.DynamicScoreApplied && candidate.Score != nil && first.Score != nil {
-			sameLayer = candidate.Priority == first.Priority && candidate.Score.LoadBucket == first.Score.LoadBucket
+			// A zero-weight backup does not take a weighted peer's queue.
+			sameLayer = candidate.Priority == first.Priority && candidate.Score.LoadBucket == first.Score.LoadBucket &&
+				(candidate.Score.EffectiveWeight > 0) == (first.Score.EffectiveWeight > 0)
 		}
 		if sameLayer && runtime.Queued*int64(selectedRuntime.Capacity) < selectedRuntime.Queued*int64(runtime.Capacity) {
 			selected, selectedRuntime = index, runtime
@@ -437,6 +439,7 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 		c.Set("gateway_last_upstream_error", apiErr)
 	}
 	outcome.StatusCode, outcome.ProviderCode, outcome.Message, outcome.RetryAfter = apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), apiErr.RetryAfter
+	outcome.ProviderType = service.RouteErrorType(apiErr)
 	if types.IsSkipRetryError(apiErr) {
 		outcome.RetryPermission = service.AttemptRetryForbidden
 	}

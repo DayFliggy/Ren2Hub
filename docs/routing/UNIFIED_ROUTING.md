@@ -4,7 +4,7 @@
 
 ## 路由和权限
 
-`middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式先检查模型能力和健康资格，再按优先级、错误率档、负载桶、首字延迟档、软亲和和稳定加权顺序选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
+`middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式先检查模型能力和健康资格，再按优先级、错误率档、是否有正权重、负载桶、首字延迟档、软亲和和稳定加权顺序选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
 
 Token 的所有权、启停、到期、额度、IP 和模型限制继续生效。旧 `Group`、`AutoGroups`、`CrossGroupRetry` 字段、业务组权限、组间价格和旧随机选择器退出运行路径。账号分类仍可用于充值和账号限流，但不授权模型或决定 Relay 价格。
 
@@ -40,13 +40,13 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 
 最终复核还使用当前 Token 的 IP 白名单和本次客户端 IP。排队期间收窄范围后不能按旧鉴权继续发送，也不能通过换渠道恢复已撤销的 Token 权限。原生引用 encrypted_index 纳入既有状态摘要归属检查，不记录引用原文。
 
-权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序为 `priority → 错误率档 → 5% 负载桶 → 首字延迟档 → 软亲和 → RequestID 稳定加权顺序`，实现见 `service/route_score.go` 的 `OrderAutoRouteCandidates`；关闭动态排序时保持静态顺序。priority 是绝对分层，其余键只在同一 priority 内比较。错误率档和首字延迟档只读渠道级健康行（Key 级行由失败路径写入，比率会偏高），样本达到 50 次才分档，样本不足的渠道按 good 参与比较，与健康同层渠道按负载和权重分配首次尝试，不会因样本少而永远拿不到流量；分档阈值为：错误率 5% 起为 warning、20% 起为 critical，平均首字延迟 3 秒起为 warning、10 秒起为 critical；阈值只在 `service/route_health.go` 维护。降级渠道在同一 priority 内排在健康渠道之后，仍保留为故障转移候选；稳定加权直接使用渠道配置权重，不按健康档缩放，语义与 NewAPI `GetRandomSatisfiedChannel` 一致：同一比较组内首次尝试按权重比例分配，权重为 0 的渠道在组内存在正权重渠道时不获得首次尝试、排在正权重渠道之后，组内全部为 0 时平均分配。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
+权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序为 `priority → 错误率档 → 是否有正权重 → 5% 负载桶 → 首字延迟档 → 软亲和 → RequestID 稳定加权顺序`，实现见 `service/route_score.go` 的 `OrderAutoRouteCandidates`；关闭动态排序时保持静态顺序。priority 是绝对分层，其余键只在同一 priority 内比较。错误率档和首字延迟档只读渠道级健康行（Key 级行由失败路径写入，比率会偏高），样本达到 50 次才分档，样本不足的渠道按 good 参与比较，与健康同层渠道按负载和权重分配首次尝试，不会因样本少而永远拿不到流量；分档阈值为：错误率 5% 起为 warning、20% 起为 critical，平均首字延迟 3 秒起为 warning、10 秒起为 critical；阈值只在 `service/route_health.go` 维护。降级渠道在同一 priority 内排在健康渠道之后，仍保留为故障转移候选；稳定加权直接使用渠道配置权重，不按健康档缩放，语义与 NewAPI `GetRandomSatisfiedChannel` 一致：同一 priority 和错误率档内只要存在正权重渠道，权重为 0 的渠道就不获得首次尝试，正权重渠道的负载和软亲和都不改变这一点；权重 0 的渠道排在后面，只作故障转移候选（正权重渠道满载时也会被立即尝试），全部为 0 时平均分配；正权重渠道之间在同一比较组内按权重比例分配首次尝试。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
 
-先立即尝试允许候选，全部繁忙后最多进入一个渠道队列。扫描期间变为空闲的候选可重新立即获取；池已回收且快照容量为零不代表不可用，最终仍由 manager 授槽。排队只比较仍合格、未冷却、队列未满的繁忙候选：自动动态模式在相同 priority 和负载桶内、手动负载均衡在相同 position 内按 `queued / effective_capacity` 较小者优先，平局保留原顺序。静态和非负载均衡手动模式保留原顺序。
+先立即尝试允许候选，全部繁忙后最多进入一个渠道队列。扫描期间变为空闲的候选可重新立即获取；池已回收且快照容量为零不代表不可用，最终仍由 manager 授槽。排队只比较仍合格、未冷却、队列未满的繁忙候选：自动动态模式在相同 priority、负载桶且同为正权重或同为权重 0 的候选内、手动负载均衡在相同 position 内按 `queued / effective_capacity` 较小者优先，平局保留原顺序。静态和非负载均衡手动模式保留原顺序。
 
 已知冷却或已确认没有 Provider 发送额度的渠道提前跳过；未知状态不伪装成充足，发送前原子预留仍是最终判定。拿槽后再次复核当前资格、健康与额度，不合格则释放并继续已有候选扫描；每次发送使用本次健康 epoch，旧观察结果不能清除新冷却。排队后和发送前重新读取数据库中的渠道端点、启用状态与所选凭据；Key 或端点身份改变时拒绝旧请求，不在队列中局部替换 Authorization。
 
-上游错误是否计为 Key 或模型能力故障，先看供应商的结构化错误码（任意状态均有效）；错误消息文本只在状态码已表明同一类别时采用：Key 文本仅限 401/403，模型文本仅限 404。供应商常在 400、422、429 的消息里回显请求取值，这类文本不能让单个调用方冷却共享的 Key 或模型能力，实现见 `service/route_health.go` 的 `classifyProviderRouteError`。
+上游错误是否计为 Key 或模型能力故障，先看供应商的结构化错误码和错误对象里的 type（任意状态均有效，type 为 `authentication_error` 计 Key）；401 无论错误码如何都计 Key（DeepSeek 失效 Key 返回 401 加 `invalid_request_error`）。错误消息里任意位置的文本只在状态码已表明同一类别时采用：Key 文本仅限 401/403，模型文本仅限 404。供应商常在 400、422、429 的消息里回显请求取值，这类文本不能让单个调用方冷却共享的 Key 或模型能力。以失败短语开头的消息是供应商自己的措辞，任意状态都采用：`incorrect api key provided`、`invalid api key` 计 Key（xAI 失效 Key 返回 400），`invalid model:`、`model not found` 计模型能力（Mistral 未知模型返回 400）；但供应商把错误标为请求错误（错误码或 type 含 `invalid_request`）时不采用，因为请求校验器的消息以客户端给的字段名开头。Anthropic 404 `not_found_error` 且消息以 `model:` 开头计模型能力。Gemini 失效 Key 返回 400 `INVALID_ARGUMENT`，与 NewAPI 一样按请求错误处理。实现见 `service/route_health.go` 的 `classifyProviderRouteError`。
 
 文本、Midjourney 和视频的发送前拒绝使用同一处理：可扫描独立备用渠道，候选用尽后仍可使用此前繁忙渠道尚未使用的唯一排队机会，末候选超价或不能转换也不能丢掉该机会；已排过队或绑定原任务的请求继续遵守各自边界。最多扫描 64 个不同渠道，最多 3 次真实发送；扫描、满载及发送前拒绝不消耗发送次数，也不处罚供应商健康。
 

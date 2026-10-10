@@ -59,11 +59,13 @@ type ScoredRouteCandidate struct {
 // loses to a healthy peer at the same priority but never crosses a priority
 // boundary the administrator set.
 //
-// Inside one tie group the weight follows NewAPI's GetRandomSatisfiedChannel:
-// first attempts are proportional to the configured weight, a zero-weight
-// channel gets none while a weighted peer exists, and an all-zero group shares
+// The weight follows NewAPI's GetRandomSatisfiedChannel: a zero-weight channel
+// gets no first attempt while a weighted peer of the same priority and error
+// band exists, however loaded that peer is, and an all-zero group shares
 // equally. Zero-weight channels rank after weighted ones and use rendezvous
 // weight 1 among themselves, so they remain ordered failover candidates.
+// Among weighted peers in one tie group first attempts are proportional to the
+// configured weight.
 func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string) []ScoredRouteCandidate {
 	ordered := ScoreRouteCandidates(candidates)
 	for index := range ordered {
@@ -81,6 +83,9 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 		if leftError != rightError {
 			return leftError < rightError
 		}
+		if leftWeighted, rightWeighted := left.Breakdown.EffectiveWeight > 0, right.Breakdown.EffectiveWeight > 0; leftWeighted != rightWeighted {
+			return leftWeighted
+		}
 		if left.Breakdown.LoadBucket != right.Breakdown.LoadBucket {
 			return left.Breakdown.LoadBucket < right.Breakdown.LoadBucket
 		}
@@ -90,9 +95,6 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 		}
 		if left.Candidate.Sticky != right.Candidate.Sticky {
 			return left.Candidate.Sticky
-		}
-		if leftWeighted, rightWeighted := left.Breakdown.EffectiveWeight > 0, right.Breakdown.EffectiveWeight > 0; leftWeighted != rightWeighted {
-			return leftWeighted
 		}
 		if left.Breakdown.SelectionRank != right.Breakdown.SelectionRank {
 			return left.Breakdown.SelectionRank < right.Breakdown.SelectionRank
