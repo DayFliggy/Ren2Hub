@@ -195,7 +195,7 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 
 参数覆盖的条件 `mode` 支持 `full`、`prefix`、`suffix`、`contains`、`regex`、`gt`、`gte`、`lt`、`lte`。`regex` 使用 Go RE2 语法（线性时间匹配，支持 `(?i)` 等内联标志），模式必须是字符串，非法模式在请求时报错；与其他文本比较一样，取值按字符串匹配，键不存在时遵循 `pass_missing_key` 且不编译模式。
 
-其他协议转 Gemini 时，`gemini.function_call_thought_signature_enabled`（默认开启，与 NewAPI 一致，控制台“模型”设置中可关闭）为历史里每个模型轮次填入一个思考签名绕过值 `context_engineering_is_the_way_to_go`，优先放在第一个函数调用上，没有函数调用时放在第一个文本部件上；已有签名的部件不改写。Gemini 3 对缺少签名的函数调用返回 400，Google 文档允许对来自其他模型的历史使用绕过值，并说明这会降低模型效果。关闭后转换结果不带签名，含函数调用历史的 Gemini 3 请求会被供应商拒绝。绕过值是公开常量而非供应商状态，归属查询不为它建立或要求绑定，最终请求的状态复核也不拦截它。供应商返回的真实签名仍按原生协议与绑定身份处理；跨协议响应中的签名按 `provider_state_dropped` 丢弃，见支持矩阵。
+其他协议转 Gemini 时，`gemini.function_call_thought_signature_enabled`（默认开启，与 NewAPI 一致，控制台“模型”设置中可关闭）为历史里每个模型轮次填入一个思考签名绕过值 `context_engineering_is_the_way_to_go`，优先放在第一个函数调用上，没有函数调用时放在第一个文本部件上；已有签名的部件不改写。Gemini 3 对缺少签名的函数调用返回 400，Google 文档允许对来自其他模型的历史使用绕过值，并说明这会降低模型效果。关闭后转换结果不带签名，含函数调用历史的 Gemini 3 请求会被供应商拒绝。绕过值是公开常量而非供应商状态，归属查询不为它和 Google 文档列出的 `skip_thought_signature_validator` 建立或要求绑定，入站与最终请求的状态复核都不拦截这两个值。供应商返回的真实签名仍按原生协议与绑定身份处理；跨协议响应中的签名按 `provider_state_dropped` 丢弃，见支持矩阵。
 
 `gateway_state_cleanup` 系统任务每 5 分钟删除最多 1000 条过期绑定，复用数据库任务租约，单次预算 5 秒。清理延迟不影响权限：查找时直接拒绝过期记录。任务只清理网关状态元数据，不操作账单、异步任务记录或完整会话。
 

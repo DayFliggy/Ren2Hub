@@ -138,11 +138,12 @@ func TestGatewayStateReferenceExtractionDoesNotInspectToolArguments(t *testing.T
 }
 
 // The converter attaches a public bypass value to cross-protocol Gemini
-// history; it is not provider state and needs no binding, while a real
-// thought signature in the same request still does.
+// history, and Google documents skip_thought_signature_validator for clients;
+// neither is provider state or needs a binding, while a real thought
+// signature in the same request still does.
 func TestGatewayStateReferencesSkipGeminiThoughtSignatureBypass(t *testing.T) {
 	var payload map[string]any
-	require.NoError(t, common.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"context_engineering_is_the_way_to_go"},{"text":"done","thoughtSignature":"provider-issued"}]}]}`), &payload))
+	require.NoError(t, common.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"context_engineering_is_the_way_to_go"},{"functionCall":{"name":"search","args":{}},"thought_signature":"skip_thought_signature_validator"},{"text":"done","thoughtSignature":"provider-issued"}]}]}`), &payload))
 	assert.Equal(t, []gatewayStateReference{{"thoughtSignature", "provider-issued"}}, stateReferences(payload, false))
 }
 

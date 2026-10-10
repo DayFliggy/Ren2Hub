@@ -32,11 +32,16 @@ func RequiresMediaOwnership(uri string) bool {
 		(strings.Contains(parsed.Path, "/files/") || strings.HasSuffix(parsed.Path, "/files"))
 }
 
-// IsThoughtSignatureBypass reports whether a Gemini thoughtSignature is the
-// public bypass value converters attach to cross-protocol history. It is not
-// provider-issued state, so it needs no ownership binding.
+// thoughtSignatureSkipValidator is the bypass value Google documents for both
+// the Gemini API and Vertex AI; converters attach NewAPI's value instead.
+const thoughtSignatureSkipValidator = "skip_thought_signature_validator"
+
+// IsThoughtSignatureBypass reports whether a Gemini thoughtSignature is a
+// public bypass value: the one converters attach to cross-protocol history, or
+// the one Google documents for clients. Neither is provider-issued state, so
+// neither needs an ownership binding.
 func IsThoughtSignatureBypass(value string) bool {
-	return value == sharedgemini.ThoughtSignatureBypassValue
+	return value == sharedgemini.ThoughtSignatureBypassValue || value == thoughtSignatureSkipValidator
 }
 
 func mediaString(value any) string {
