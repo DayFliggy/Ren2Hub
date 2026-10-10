@@ -18,8 +18,18 @@ export const availableLocales = [
   { code: 'en', name: 'English', flag: 'EN' },
 ] as const
 
-function isLocaleCode(value: unknown): value is LocaleCode {
+export function isLocaleCode(value: unknown): value is LocaleCode {
   return value === 'zh-CN' || value === 'en'
+}
+
+/** Whether this device has saved a language choice. */
+export function hasStoredLocale(): boolean {
+  try {
+    return isLocaleCode(window.localStorage.getItem(LOCALE_STORAGE_KEY))
+  } catch {
+    // A restricted storage context never keeps a choice.
+    return false
+  }
 }
 
 export function resolveInitialLocale(

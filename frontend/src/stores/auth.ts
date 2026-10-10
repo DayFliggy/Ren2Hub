@@ -167,6 +167,12 @@ export const useAuthStore = defineStore('auth', () => {
     persist(await api.self())
   }
 
+  async function saveLanguage(language: string): Promise<void> {
+    const api = await getAuthApi()
+    await api.updateLanguage(language)
+    persist(await api.self())
+  }
+
   async function changePassword(
     originalPassword: string,
     password: string,
@@ -220,6 +226,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     fetchSelf,
     updateProfile,
+    saveLanguage,
     changePassword,
     deleteAccount,
     invalidateLocalSession,

@@ -131,9 +131,11 @@
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
-import { availableLocales, getLocale, setLocale, type LocaleCode } from '@/i18n'
+import { useLocaleChoice } from '@/composables/useAccountLanguage'
+import { availableLocales, getLocale, type LocaleCode } from '@/i18n'
 
 const { t } = useI18n()
+const chooseLocale = useLocaleChoice()
 const props = withDefaults(defineProps<{ variant?: 'landing' | 'console' }>(), {
   variant: 'landing',
 })
@@ -181,7 +183,7 @@ function toggle() {
 }
 
 function choose(code: LocaleCode) {
-  setLocale(code)
+  void chooseLocale(code)
   current.value = code
   close(true)
 }

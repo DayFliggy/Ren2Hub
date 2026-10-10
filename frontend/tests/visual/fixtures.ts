@@ -32,6 +32,7 @@ const VISUAL_USER = {
   request_count: 32_132,
   created_at: Math.floor((FIXED_NOW - 37 * DAY_MS) / 1000),
   group: 'vip',
+  setting: JSON.stringify({ language: 'zh-CN' }),
 }
 
 const VISUAL_START_TIME = Math.floor(
@@ -1134,6 +1135,25 @@ export async function configureStablePage(
     ['/api/user/self/personal-access-tokens/scopes', []],
   ])
 
+  // One user record backs sign-in and /api/user/self, so a saved language
+  // reads back the way the backend stores it.
+  const selfUser = { ...VISUAL_USER, ...user }
+  await page.route('**/api/user/self', (route) => {
+    const request = route.request()
+    if (request.method() === 'GET') {
+      return route.fulfill({ json: { success: true, data: selfUser } })
+    }
+    const body: unknown =
+      request.method() === 'PUT' ? request.postDataJSON() : null
+    const language = (body as { language?: unknown } | null)?.language
+    if (typeof language !== 'string') return route.fallback()
+    selfUser.setting = JSON.stringify({
+      ...JSON.parse(selfUser.setting),
+      language,
+    })
+    return route.fulfill({ json: { success: true, message: '' } })
+  })
+
   await page.route('**/api/user/auth/refresh*', (route) => {
     const pagePath = new URL(page.url()).pathname
     const shouldAuthenticate = routeAwareAuth
@@ -1174,7 +1194,7 @@ export async function configureStablePage(
             last_active_at: nowSeconds,
             expires_at: nowSeconds + 86_400,
           },
-          user: { ...VISUAL_USER, ...user },
+          user: selfUser,
         },
       }),
     })

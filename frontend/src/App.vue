@@ -7,9 +7,11 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 
 import AppErrorBoundary from '@/components/common/AppErrorBoundary.vue'
 import ToastHost from '@/components/common/ToastHost.vue'
+import { useAccountLanguageAdoption } from '@/composables/useAccountLanguage'
 import { useTheme } from '@/composables/useTheme'
 
 useTheme()
+useAccountLanguageAdoption()
 const { t } = useI18n()
 function reload() {
   window.location.reload()

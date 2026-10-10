@@ -24,7 +24,8 @@ import { useBalanceVisibility } from '@/composables/useDashboard'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { setLocale } from '@/i18n'
+import { useLocaleChoice } from '@/composables/useAccountLanguage'
+import { isLocaleCode } from '@/i18n'
 import type { NotificationSettings, SettingsNotifyType } from '@/types/settings'
 
 import { isQuota } from '@/utils/quota'
@@ -36,6 +37,7 @@ defineProps<{ isAdmin: boolean }>()
 const { t, locale } = useI18n()
 const toast = useToast()
 const auth = useAuthStore()
+const chooseLocale = useLocaleChoice()
 const { preference: themeMode } = useTheme()
 const { hidden: balanceHidden } = useBalanceVisibility()
 
@@ -192,7 +194,7 @@ async function saveNotification(): Promise<void> {
 }
 
 function changeLocale(value: string): void {
-  setLocale(value)
+  if (isLocaleCode(value)) void chooseLocale(value)
 }
 
 function changeTheme(value: string): void {

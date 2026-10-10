@@ -143,6 +143,8 @@ export const authApi = {
     ),
   updateProfile: (patch: UserProfilePatch) =>
     api.put<unknown>('/api/user/self', patch),
+  updateLanguage: (language: string) =>
+    api.put<unknown>('/api/user/self', { language }),
   async changePassword(
     originalPassword: string,
     password: string,
