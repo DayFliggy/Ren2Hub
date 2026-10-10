@@ -72,10 +72,11 @@ func TestPollMissingUpstreamTaskReleasesReservationOnce(t *testing.T) {
 	task := seedFailurePollTask(t, 501, 501)
 	adaptor := &scriptedPollAdaptor{status: http.StatusNotFound, body: `{}`}
 
-	require.Error(t, pollOnce(t, adaptor, task))
+	// The stored reason is a fixed sentence; the class and status go to the server log.
+	require.ErrorContains(t, pollOnce(t, adaptor, task), "poll failed: not_found (HTTP 404)")
 	stored := reloadTask(t, task.ID)
 	assert.EqualValues(t, model.TaskStatusFailure, stored.Status)
-	assert.Equal(t, "poll failed: not_found (HTTP 404)", stored.FailReason)
+	assert.Equal(t, constant.TaskFailReasonUpstreamNotFound, stored.FailReason)
 	assert.Zero(t, stored.Quota)
 	assert.Equal(t, 10_000, getUserQuota(t, 501))
 
@@ -98,10 +99,10 @@ func TestPollTransientFailuresStopAtLimitAndRelease(t *testing.T) {
 		assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
 		assert.Equal(t, attempt, stored.PrivateData.PollFailures)
 	}
-	require.Error(t, pollOnce(t, adaptor, task))
+	require.ErrorContains(t, pollOnce(t, adaptor, task), "poll failed: transient (HTTP 503)")
 	stored := reloadTask(t, task.ID)
 	assert.EqualValues(t, model.TaskStatusFailure, stored.Status)
-	assert.Equal(t, "poll failed: transient (HTTP 503)", stored.FailReason)
+	assert.Equal(t, constant.TaskFailReasonPollGaveUp, stored.FailReason)
 	assert.Zero(t, stored.Quota)
 	assert.Equal(t, 10_000, getUserQuota(t, 502))
 }

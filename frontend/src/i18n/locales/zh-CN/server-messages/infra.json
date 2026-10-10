@@ -19,5 +19,9 @@
   "realtime usage: {{source}}": "实时用量：{{source}}",
   "Violation fee charged": "已收取违规费用",
   "Settled at the frozen quote": "按冻结报价结算",
-  "Completion usage could not be priced, settled at the submission estimate": "完成用量无法计价，按提交时估算结算"
+  "Completion usage could not be priced, settled at the submission estimate": "完成用量无法计价，按提交时估算结算",
+  "Task timed out without returning a result": "任务超时，未返回结果",
+  "Missing the upstream task identifier": "缺少上游任务标识",
+  "Upstream task not found": "上游任务不存在",
+  "Failed to query the upstream task status": "查询上游任务状态失败"
 }

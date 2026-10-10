@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,6 +61,13 @@ func TestServerMessageCatalog(t *testing.T) {
 		assert.Equal(t, placeholders(use.key), placeholders(translation), "%s: placeholders of the translation of %q", use.position, use.key)
 		if use.params != nil {
 			assert.Equal(t, placeholders(use.key), use.params, "%s: params of %q", use.position, use.key)
+		}
+	}
+	// Fail reasons are matched exactly, so they take no params.
+	for _, reason := range constant.TaskFailReasons {
+		_, ok := catalog[reason]
+		if assert.True(t, ok, "task fail reason %q has no translation in %s", reason, serverMessageDir) {
+			assert.Empty(t, placeholders(reason), "task fail reason %q", reason)
 		}
 	}
 	for key, translation := range catalog {

@@ -107,11 +107,11 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 // Midjourney submit times are Unix milliseconds.
 func midjourneyUnfinishableReason(task *model.Midjourney) string {
 	if task.MjId == "" {
-		return "missing upstream task identifier"
+		return constant.TaskFailReasonMissingUpstreamID
 	}
 	if constant.TaskTimeoutMinutes > 0 && task.SubmitTime > 0 &&
 		time.Now().UnixMilli()-task.SubmitTime > int64(constant.TaskTimeoutMinutes)*60*1000 {
-		return "任务超时，未返回结果"
+		return constant.TaskFailReasonTimedOut
 	}
 	return ""
 }
