@@ -123,7 +123,7 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 
 // recoverActiveBilling finishes a stale request from durable evidence alone.
 func recoverActiveBilling(ctx context.Context, recovery model.BillingRecovery) (string, error) {
-	template := model.Log{Content: "恢复任务按发送前估算结算", Other: billingFallbackOther(billingFallbackStale)}
+	template := billingFallbackLog(billingFallbackStale, common.NewMessage("Settled by recovery at the pre-send estimate"))
 	return finishActiveBilling(ctx, recovery.RequestID, "", template)
 }
 

@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -58,7 +57,7 @@ func InitChannelCache() {
 	// loadPricingAdvancedCustomConfigs. channelSyncLock MUST be released before
 	// invalidating the pricing cache, otherwise the reversed order deadlocks.
 	InvalidatePricingCache()
-	common.SysLog("channels synced from database")
+	common.SysLog(common.LogText("channels synced from database"))
 }
 
 func SyncChannelCache(frequency int) {
@@ -67,7 +66,7 @@ func SyncChannelCache(frequency int) {
 	}
 	common.BackgroundWorkers.Go(func(ctx context.Context) {
 		for common.WaitBackgroundInterval(ctx, time.Duration(frequency)*time.Second) {
-			common.SysLog("syncing channels from database")
+			common.SysLog(common.LogText("syncing channels from database"))
 			InitChannelCache()
 		}
 	})
@@ -82,7 +81,7 @@ func CacheGetChannel(id int) (*Channel, error) {
 
 	c, ok := channelsIDM[id]
 	if !ok {
-		return nil, fmt.Errorf("渠道# %d，已不存在", id)
+		return nil, common.NewMessage("Channel #{{id}} no longer exists", map[string]any{"id": id})
 	}
 	return c, nil
 }
@@ -100,7 +99,7 @@ func CacheGetChannelInfo(id int) (*ChannelInfo, error) {
 
 	c, ok := channelsIDM[id]
 	if !ok {
-		return nil, fmt.Errorf("渠道# %d，已不存在", id)
+		return nil, common.NewMessage("Channel #{{id}} no longer exists", map[string]any{"id": id})
 	}
 	return &c.ChannelInfo, nil
 }

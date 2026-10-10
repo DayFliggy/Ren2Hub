@@ -1,8 +1,6 @@
 package model
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -246,7 +244,7 @@ var fixLock = sync.Mutex{}
 func FixAbility() (int, int, error) {
 	lock := fixLock.TryLock()
 	if !lock {
-		return 0, 0, errors.New("已经有一个修复任务在运行中，请稍后再试")
+		return 0, 0, common.NewMessage("A repair task is already running. Please try again later")
 	}
 	defer fixLock.Unlock()
 
@@ -255,7 +253,7 @@ func FixAbility() (int, int, error) {
 	// deleted channels are still removed.
 	retired := DB.Model(&Channel{}).Select("id").Where("type IN ?", constant.RetiredChannelTypes())
 	if err := DB.Where("channel_id NOT IN (?)", retired).Delete(&Ability{}).Error; err != nil {
-		common.SysLog(fmt.Sprintf("Delete abilities failed: %s", err.Error()))
+		common.SysLog(common.LogText("Delete abilities failed: %s", err.Error()))
 		return 0, 0, err
 	}
 	var channels []*Channel
@@ -273,7 +271,7 @@ func FixAbility() (int, int, error) {
 		// Delete all abilities of this channel
 		err = DB.Where("channel_id IN ?", ids).Delete(&Ability{}).Error
 		if err != nil {
-			common.SysLog(fmt.Sprintf("Delete abilities failed: %s", err.Error()))
+			common.SysLog(common.LogText("Delete abilities failed: %s", err.Error()))
 			failCount += len(chunk)
 			continue
 		}
@@ -281,7 +279,7 @@ func FixAbility() (int, int, error) {
 		for _, channel := range chunk {
 			err = channel.AddAbilities(nil)
 			if err != nil {
-				common.SysLog(fmt.Sprintf("Add abilities for channel %d failed: %s", channel.Id, err.Error()))
+				common.SysLog(common.LogText("Add abilities for channel %d failed: %s", channel.Id, err.Error()))
 				failCount++
 			} else {
 				successCount++

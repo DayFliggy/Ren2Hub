@@ -41,8 +41,9 @@ func settleBillingFallback(ctx *gin.Context, info *relaycommon.RelayInfo, reason
 	if cause != nil {
 		logger.LogError(ctx, fmt.Sprintf("billing settles from persisted evidence (request_id=%s, reason=%s)", info.RequestId, reason))
 	}
-	template := model.Log{Content: "按发送前估算结算", Group: info.UsingGroup, ModelName: info.BillingModelName(),
-		IsStream: info.IsStream, UseTime: int(common.GetTimestamp() - info.StartTime.Unix()), Other: billingFallbackOther(reason)}
+	template := billingFallbackLog(reason, common.NewMessage("Settled at the pre-send estimate"))
+	template.Group, template.ModelName, template.IsStream = info.UsingGroup, info.BillingModelName(), info.IsStream
+	template.UseTime = int(common.GetTimestamp() - info.StartTime.Unix())
 	if ctx != nil {
 		template.TokenName, template.Username = ctx.GetString("token_name"), ctx.GetString("username")
 	}
@@ -53,12 +54,16 @@ func settleBillingFallback(ctx *gin.Context, info *relaycommon.RelayInfo, reason
 	}
 }
 
-func billingFallbackOther(reason string) string {
-	encoded, err := common.Marshal(map[string]any{"admin_info": map[string]any{"billing_fallback_reason": reason}})
+// billingFallbackLog is the log of a request settled at its frozen pre-send
+// estimate: content shows how it was settled, admin_info records why.
+func billingFallbackLog(reason string, content *common.Message) model.Log {
+	other := map[string]any{"admin_info": map[string]any{"billing_fallback_reason": reason}}
+	text := model.SetLogContent(other, []*common.Message{content})
+	encoded, err := common.Marshal(other)
 	if err != nil {
-		return ""
+		return model.Log{Content: text}
 	}
-	return string(encoded)
+	return model.Log{Content: text, Other: string(encoded)}
 }
 
 // finishActiveBilling is the only bill-first decision for a request without a

@@ -55,8 +55,10 @@ func TestChannelStatusSummaryBoundsAndStatus(t *testing.T) {
 		assert.Empty(t, reason)
 		assert.Zero(t, when)
 	}
-	assert.Contains(t, sanitizeChannelStatusReason(`{"secret":"private-key"}`), "原始正文已隐藏")
-	assert.Contains(t, sanitizeChannelStatusReason(`{"secret":`), "无法解析")
+	assert.Equal(t, "The upstream error response has no displayable message; its body is hidden", sanitizeChannelStatusReason(`{"secret":"private-key"}`))
+	assert.Equal(t, "The upstream error response could not be parsed; its body is hidden", sanitizeChannelStatusReason(`{"secret":`))
+	assert.Equal(t, "rate limited [upstream response body hidden]", sanitizeChannelStatusReason(`rate limited {"detail":"private"}`))
+	assert.Equal(t, "invalid key [hidden]", sanitizeChannelStatusReason(`invalid key sk-private0123`))
 	for _, raw := range []string{`invalid token: private-value`, `invalid "api_key": "private-value"`, `invalid API key=private-value`, `invalid 'password': 'private-value'`} {
 		assert.NotContains(t, sanitizeChannelStatusReason(raw), "private-value")
 	}

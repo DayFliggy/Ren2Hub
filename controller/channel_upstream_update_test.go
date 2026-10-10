@@ -605,8 +605,19 @@ func TestDetectAllChannelUpstreamModelUpdatesRejectsExistingActiveTask(t *testin
 	DetectAllChannelUpstreamModelUpdates(ctx)
 
 	require.Equal(t, http.StatusConflict, recorder.Code)
-	require.Contains(t, recorder.Body.String(), existing.TaskID)
-	require.Contains(t, recorder.Body.String(), "已有模型更新任务正在运行或等待中")
+	var body struct {
+		Success    bool   `json:"success"`
+		Message    string `json:"message"`
+		MessageKey string `json:"message_key"`
+		Data       struct {
+			TaskID string `json:"task_id"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+	assert.False(t, body.Success)
+	assert.Equal(t, existing.TaskID, body.Data.TaskID)
+	assert.Equal(t, "A model update task is already running or queued. Cannot start this manual task", body.MessageKey)
+	assert.Equal(t, body.MessageKey, body.Message)
 }
 
 func TestFetchPresetModelsPreviewUsesNativeModelRoute(t *testing.T) {
