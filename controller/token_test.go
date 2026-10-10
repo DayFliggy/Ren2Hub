@@ -575,6 +575,41 @@ func TestUpdateTokenKeepsOmittedSettings(t *testing.T) {
 	require.True(t, token.ModelLimitsEnabled)
 }
 
+// encoding/json decodes a differently cased key into the field, but presence
+// is checked by exact name, so the setting was dropped behind a success
+// response. Such a key is now rejected and nothing is written.
+func TestUpdateTokenRejectsCaseVariantFields(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "case-variant", "case-variant-key")
+	require.NoError(t, db.Model(token).Updates(map[string]any{"allow_ips": "192.0.2.10", "expired_time": int64(-1)}).Error)
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/",
+		map[string]any{"id": token.Id, "Allow_IPs": "198.51.100.7", "Expired_Time": int64(4102444800)}, 1)
+	UpdateToken(ctx)
+	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+	require.False(t, decodeAPIResponse(t, recorder).Success)
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.NotNil(t, token.AllowIps)
+	require.Equal(t, "192.0.2.10", *token.AllowIps)
+	require.EqualValues(t, -1, token.ExpiredTime)
+
+	// The exact names still apply, as the console form sends them.
+	ctx, recorder = newAuthenticatedContext(t, http.MethodPut, "/api/token/",
+		map[string]any{"id": token.Id, "allow_ips": "198.51.100.7", "expired_time": int64(4102444800)}, 1)
+	UpdateToken(ctx)
+	require.True(t, decodeAPIResponse(t, recorder).Success, recorder.Body.String())
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.Equal(t, "198.51.100.7", *token.AllowIps)
+	require.EqualValues(t, 4102444800, token.ExpiredTime)
+}
+
+// The fields the Vue key form sends are all declared by the request type.
+func TestTokenRequestDeclaresConsoleFormFields(t *testing.T) {
+	for _, field := range []string{"id", "name", "conversion_policy", "model_limits", "model_limits_enabled", "available_quota",
+		"unlimited_quota", "allow_ips", "expired_time", "expected_version", "operation_id", "type", "status"} {
+		require.Equal(t, field, tokenRequestFieldCase(field))
+	}
+}
+
 func TestUpdateTokenStatusOnlyRequiresStatus(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	token := seedToken(t, db, 1, "status-token", "status-required-key")
