@@ -166,9 +166,9 @@ func responsesRequestMessagesToChat(req *dto.OpenAIResponsesRequest) ([]dto.Mess
 		messages = append(messages, dto.Message{Role: "user", Content: input})
 		return messages, nil
 	case "array":
-		var items []map[string]any
-		if err := kitutil.Unmarshal(req.Input, &items); err != nil {
-			return nil, fmt.Errorf("invalid input array: %w", err)
+		items, err := InputItems(req.Input)
+		if err != nil {
+			return nil, err
 		}
 		// Chat Completions requires the tool messages answering one assistant tool_calls
 		// batch to stay contiguous, so media hoisted out of tool output items is

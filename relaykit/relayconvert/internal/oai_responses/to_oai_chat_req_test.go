@@ -571,3 +571,29 @@ func TestResponsesInputImageReachesChatAsImageURLObject(t *testing.T) {
 		})
 	}
 }
+
+// A message item between a function_call and its output must not split the
+// Chat tool exchange: upstreams reject assistant(tool_calls) followed by
+// anything but its tool messages (AxonHub 5659a526). InputItems moves the
+// output next to its call; the Chat converter reads input through it.
+func TestResponsesToolOutputStaysAdjacentToItsCallInChat(t *testing.T) {
+	got, err := ResponsesRequestToChatCompletionsRequest(context.Background(), &dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: mustRawMessage(t, []map[string]any{
+			{"role": "user", "content": "weather?"},
+			{"type": "function_call", "call_id": "call_1", "name": "lookup", "arguments": `{"q":"x"}`},
+			{"role": "user", "content": "also check tomorrow"},
+			{"type": "function_call_output", "call_id": "call_1", "output": "sunny"},
+		}),
+	})
+	require.NoError(t, err)
+
+	roles := make([]string, 0, len(got.Messages))
+	for _, message := range got.Messages {
+		roles = append(roles, message.Role)
+	}
+	require.Equal(t, []string{"user", "assistant", "tool", "user"}, roles)
+	assert.Equal(t, "call_1", got.Messages[1].ParseToolCalls()[0].ID)
+	assert.Equal(t, "call_1", got.Messages[2].ToolCallId)
+	assert.Equal(t, "also check tomorrow", got.Messages[3].StringContent())
+}
