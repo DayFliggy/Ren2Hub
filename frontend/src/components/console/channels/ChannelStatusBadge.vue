@@ -7,10 +7,20 @@ import {
   adminChannelStatusTone,
   isRetiredChannelType,
 } from '@/constants/adminChannels'
+import { isLocaleCode } from '@/i18n'
+import { translateServerText } from '@/i18n/serverMessages'
 import type { AdminChannel } from '@/types/console'
 
 const props = defineProps<{ channel: AdminChannel; mobile?: boolean }>()
 const { t, locale } = useI18n()
+// Reasons the gateway writes are fixed English sentences; provider text passes
+// through unchanged.
+const reasonText = computed(() => {
+  const reason = props.channel.status_reason ?? ''
+  return isLocaleCode(locale.value)
+    ? translateServerText(locale.value, reason)
+    : reason
+})
 const anchor = ref<HTMLButtonElement | null>(null)
 const shown = ref(false)
 const position = ref({ left: '0px', top: '0px' })
@@ -97,7 +107,7 @@ onBeforeUnmount(() => {
       >
         <p class="font-semibold">{{ t('channels.disabledReason') }}</p>
         <p class="mt-2 whitespace-pre-wrap">
-          {{ channel.status_reason || t('channels.disabledReasonMissing') }}
+          {{ reasonText || t('channels.disabledReasonMissing') }}
         </p>
         <p v-if="timestamp" class="mt-2 text-xs text-[var(--text-secondary)]">
           {{ t('channels.disabledAt', { time: timestamp }) }}

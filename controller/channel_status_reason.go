@@ -32,7 +32,7 @@ func sanitizeChannelStatusReason(reason string) string {
 			Error   json.RawMessage `json:"error"`
 		}
 		if common.Unmarshal([]byte(reason), &envelope) != nil {
-			return "The upstream error response could not be parsed; its body is hidden"
+			return constant.ChannelStatusReasonUnparsableBody
 		}
 		var nested struct {
 			Message string `json:"message"`
@@ -43,7 +43,7 @@ func sanitizeChannelStatusReason(reason string) string {
 			reason = envelope.Message
 		}
 		if reason == "" {
-			return "The upstream error response has no displayable message; its body is hidden"
+			return constant.ChannelStatusReasonNoDisplayableText
 		}
 	}
 	if at := strings.IndexAny(reason, "{["); at >= 0 {

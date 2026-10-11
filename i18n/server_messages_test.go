@@ -63,11 +63,11 @@ func TestServerMessageCatalog(t *testing.T) {
 			assert.Equal(t, placeholders(use.key), use.params, "%s: params of %q", use.position, use.key)
 		}
 	}
-	// Fail reasons are matched exactly, so they take no params.
-	for _, reason := range constant.TaskFailReasons {
+	// Fail and status reasons are matched exactly, so they take no params.
+	for _, reason := range append(append([]string{}, constant.TaskFailReasons...), constant.ChannelStatusReasons...) {
 		_, ok := catalog[reason]
-		if assert.True(t, ok, "task fail reason %q has no translation in %s", reason, serverMessageDir) {
-			assert.Empty(t, placeholders(reason), "task fail reason %q", reason)
+		if assert.True(t, ok, "gateway-written reason %q has no translation in %s", reason, serverMessageDir) {
+			assert.Empty(t, placeholders(reason), "gateway-written reason %q", reason)
 		}
 	}
 	for key, translation := range catalog {

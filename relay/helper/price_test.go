@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -79,7 +78,6 @@ func TestModelPricingEmptyAndExplicitZero(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, price.Quota)
 	assert.NotNil(t, price.Usage.Evidence)
-	require.NoError(t, i18n.Init())
 	info.OriginModelName = "missing"
 	_, err = ModelPriceHelper(c, info, 10, nil)
 	require.EqualError(t, err, "Model missing has not been priced by the administrator yet. Please contact the site administrator to enable this model.")

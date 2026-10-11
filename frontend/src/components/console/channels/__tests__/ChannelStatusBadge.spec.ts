@@ -3,6 +3,7 @@ import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 import ChannelStatusBadge from '../ChannelStatusBadge.vue'
 import type { AdminChannel } from '@/types/console'
+import { mergeServerMessages } from '@/i18n/serverMessages'
 
 function badge(mobile = false) {
   return mount(ChannelStatusBadge, {
@@ -68,4 +69,33 @@ it('shows retirement independently of the historical enabled state', async () =>
   expect(wrapper.find('button').exists()).toBe(false)
   expect(wrapper.attributes('title')).toBe('channels.retiredHint')
   wrapper.unmount()
+})
+
+describe('channel status reason language', () => {
+  it('translates a gateway-written reason and keeps provider text', async () => {
+    mergeServerMessages('zh-CN', { 'Insufficient balance': '余额不足' })
+    for (const [reason, expected] of [
+      ['Insufficient balance', '余额不足'],
+      ['provider unavailable', 'provider unavailable'],
+    ]) {
+      const wrapper = mount(ChannelStatusBadge, {
+        props: {
+          channel: { id: 1, status: 3, status_reason: reason } as AdminChannel,
+        },
+        global: {
+          plugins: [
+            createI18n({
+              legacy: false,
+              locale: 'zh-CN',
+              messages: { 'zh-CN': { channels: { disabledReason: '原因' } } },
+            }),
+          ],
+          stubs: { Teleport: true },
+        },
+      })
+      await wrapper.get('button').trigger('focus')
+      expect(wrapper.get('[role="tooltip"]').text()).toContain(expected)
+      wrapper.unmount()
+    }
+  })
 })

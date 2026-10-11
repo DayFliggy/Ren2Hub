@@ -63,6 +63,12 @@ func Init() error {
 
 // GetLocalizer returns a localizer for the specified language
 func GetLocalizer(lang string) *i18n.Localizer {
+	// The embedded locales load on first use, so translating before main runs
+	// Init (or in a test that never calls it) cannot dereference a nil bundle.
+	// A failure here means the embedded files are broken, a build defect.
+	if err := Init(); err != nil {
+		panic("i18n: embedded locales failed to load: " + err.Error())
+	}
 	lang = normalizeLang(lang)
 
 	mu.RLock()
