@@ -1,10 +1,16 @@
 package controller
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +56,58 @@ func TestResponsesWSCancelErrorDoesNotEndGeneration(t *testing.T) {
 	terminal, ambiguous, _ = responsesWSErrorEndsRequest(event, "stream-one", "resp-one", control)
 	assert.True(t, terminal)
 	assert.True(t, ambiguous)
+}
+
+// newResponsesWSTestPair returns the two ends of one WebSocket connection.
+func newResponsesWSTestPair(t *testing.T) (*websocket.Conn, *websocket.Conn) {
+	t.Helper()
+	accepted := make(chan *websocket.Conn, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if !assert.NoError(t, err) {
+			return
+		}
+		accepted <- conn
+	}))
+	t.Cleanup(server.Close)
+	dialed, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	require.NoError(t, err)
+	peer := <-accepted
+	t.Cleanup(func() { _ = dialed.Close(); _ = peer.Close() })
+	return dialed, peer
+}
+
+func TestResponsesWSShutdownSendsCloseFramesWithoutWaitingForWriters(t *testing.T) {
+	client, clientPeer := newResponsesWSTestPair(t)
+	target, targetPeer := newResponsesWSTestPair(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &responsesWSSession{ctx: ctx, cancel: cancel, client: client, target: target}
+	// Blocked network writers own these locks. Shutdown must not wait for
+	// them: its close frames are bounded control writes, and closing the
+	// sockets is what interrupts those writers.
+	s.clientWriteMu.Lock()
+	defer s.clientWriteMu.Unlock()
+	s.targetWriteMu.Lock()
+	defer s.targetWriteMu.Unlock()
+	done := make(chan struct{})
+	go func() { s.shutdown(websocket.CloseInternalServerErr, "upstream connection closed"); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("shutdown waited for a network writer")
+	}
+	// A dropped socket would read as a synthetic 1006; 1011 is the frame.
+	for _, conn := range []*websocket.Conn{clientPeer, targetPeer} {
+		require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second)))
+		_, _, err := conn.ReadMessage()
+		assert.True(t, websocket.IsCloseError(err, websocket.CloseInternalServerErr), "want a 1011 close frame, got %v", err)
+	}
+	assert.Nil(t, s.getTarget())
+
+	// An upstream dial that completes after shutdown is closed with a frame too.
+	late, latePeer := newResponsesWSTestPair(t)
+	assert.False(t, s.setTarget(late))
+	require.NoError(t, latePeer.SetReadDeadline(time.Now().Add(time.Second)))
+	_, _, err := latePeer.ReadMessage()
+	assert.True(t, websocket.IsCloseError(err, websocket.CloseNormalClosure), "want a 1000 close frame, got %v", err)
 }
