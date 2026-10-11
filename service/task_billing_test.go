@@ -376,7 +376,6 @@ func TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts(t *testing.T) {
 	}{
 		{"actual ten seconds", map[string]any{"seconds": 10}, 2000000, false},
 		{"confirmed zero", map[string]any{"seconds": 0}, 0, false},
-		{"missing actual cannot use estimate", nil, estimateQuota, true},
 		{"undeclared completion fact", map[string]any{"seconds": 10, "unexpected": 1}, estimateQuota, true},
 		{"schema maximum", map[string]any{"seconds": 301}, estimateQuota, true},
 	} {
@@ -496,20 +495,48 @@ func TestTaskCompletionMergesCompletionFactsOverFrozenSubmitFacts(t *testing.T) 
 }
 
 // Merging never makes unusable completion evidence priceable: a hook error
-// or an absent completion report still settles at the frozen estimate.
+// settles at the frozen estimate even when the hook also reported facts.
 func TestUnpricedTaskCompletionStillSettlesFrozenEstimate(t *testing.T) {
 	quote, submitted := mergedFactsQuote(t)
-	for _, result := range []*relaycommon.TaskInfo{
-		{UsageFacts: map[string]any{"seconds": "4"}, UsageError: "plugin completion usage facts are invalid"},
-		{},
+	task := acceptedUsageTask(t, quote, submitted, 1500000)
+	result := &relaycommon.TaskInfo{UsageFacts: map[string]any{"seconds": "4"}, UsageError: "plugin completion usage facts are invalid"}
+	quota, reason, _, err := taskCompletionQuota(nil, task, result)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1500000, quota)
+	assert.Equal(t, common.NewMessage("Completion usage could not be priced, settled at the submission estimate"), reason)
+	assert.True(t, billing.IsFrozenEstimateSource(task.PrivateData.BillingContext.Usage.Source))
+}
+
+// As upstream EvaluateTaskCompletionUsage, an empty completion report (no
+// hook, null or {}) prices the frozen submit facts. A price that only compares
+// category facts would otherwise read their defaults without failing and
+// settle a task submitted at 1080p with audio at the 720p silent price.
+func TestEmptyTaskCompletionPricesFrozenSubmitFacts(t *testing.T) {
+	schema := &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+		"resolution": {Type: "string", Enum: []string{"720p", "1080p"}, Source: billingexpr.UsageCompletionFact},
+		"audio":      {Type: "boolean", Source: billingexpr.UsageCompletionFact},
+	}}
+	quote := taskExpressionTestQuote(t, `(u("resolution") == "1080p" ? 0.5 : 0.2) * (u("audio") == true ? 2 : 1)`, schema)
+	submitted := map[string]any{"resolution": "1080p", "audio": true}
+	for _, test := range []struct {
+		name   string
+		result *relaycommon.TaskInfo
+		quota  common.Quota
+	}{
+		{"no completion hook or null facts", &relaycommon.TaskInfo{}, 500000},
+		{"empty completion facts", &relaycommon.TaskInfo{UsageFacts: map[string]any{}}, 500000},
+		{"completion fact overrides submit fact", &relaycommon.TaskInfo{UsageFacts: map[string]any{"resolution": "720p"}}, 200000},
 	} {
-		t.Run(result.UsageError, func(t *testing.T) {
-			task := acceptedUsageTask(t, quote, submitted, 1500000)
-			quota, reason, _, err := taskCompletionQuota(nil, task, result)
+		t.Run(test.name, func(t *testing.T) {
+			task := acceptedUsageTask(t, quote, submitted, 500000)
+			quota, reason, _, err := taskCompletionQuota(nil, task, test.result)
 			require.NoError(t, err)
-			assert.EqualValues(t, 1500000, quota)
-			assert.Equal(t, common.NewMessage("Completion usage could not be priced, settled at the submission estimate"), reason)
-			assert.True(t, billing.IsFrozenEstimateSource(task.PrivateData.BillingContext.Usage.Source))
+			assert.Equal(t, test.quota, quota)
+			assert.Equal(t, common.NewMessage("Settled at the frozen quote"), reason)
+			usage := task.PrivateData.BillingContext.Usage
+			assert.Equal(t, "task_completed", usage.Source)
+			assert.Equal(t, submitted, usage.EstimatedFacts)
+			assert.NotNil(t, usage.Evidence)
 		})
 	}
 }
@@ -638,7 +665,7 @@ func TestTaskCompletionLogContent(t *testing.T) {
 		content string
 	}{
 		{"priced", &relaycommon.TaskInfo{UsageFacts: map[string]any{"seconds": "4"}}, "Settled at the frozen quote"},
-		{"unpriced", &relaycommon.TaskInfo{}, "Completion usage could not be priced, settled at the submission estimate"},
+		{"unpriced", &relaycommon.TaskInfo{UsageError: "plugin completion usage hook failed"}, "Completion usage could not be priced, settled at the submission estimate"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			task := acceptedUsageTask(t, quote, submitted, 1500000)
