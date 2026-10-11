@@ -96,6 +96,9 @@ type Set struct {
 	ParallelAllowed  *bool
 	NativeToolConfig json.RawMessage
 	History          []HostedHistoryItem
+	// Model is the upstream model the definitions are attached for; target
+	// capability checks read it. The caller of AttachRequest sets it.
+	Model string
 }
 
 func (s Set) Empty() bool {

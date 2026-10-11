@@ -22,8 +22,30 @@ type RequestRequirements struct {
 	Tools          []ToolRequirement            `json:"tools,omitempty"`
 	Media          []MediaRequirement           `json:"media,omitempty"`
 	Diagnostics    []types.ConversionDiagnostic `json:"diagnostics,omitempty"`
-	Shape          *RequestShape                `json:"shape,omitempty"`
-	ToolIdentity   *ToolIdentityRequirements    `json:"tool_identity,omitempty"`
+	// GeminiTypedSchemaLoss holds schema losses that occur only on a Gemini
+	// upstream without parametersJsonSchema and responseJsonSchema.
+	GeminiTypedSchemaLoss []types.ConversionDiagnostic `json:"gemini_typed_schema_loss,omitempty"`
+	Shape                 *RequestShape                `json:"shape,omitempty"`
+	ToolIdentity          *ToolIdentityRequirements    `json:"tool_identity,omitempty"`
+}
+
+func (r *RequestRequirements) diagnosticCount() int {
+	return len(r.Diagnostics) + len(r.GeminiTypedSchemaLoss)
+}
+
+// UpstreamCapabilities describes the selected upstream where it changes what a
+// conversion loses.
+type UpstreamCapabilities struct {
+	// GeminiJSONSchema reports that a Gemini upstream accepts
+	// parametersJsonSchema and responseJsonSchema for the model.
+	GeminiJSONSchema bool
+}
+
+// UpstreamCapabilitiesOf reads the capabilities from conversion metadata.
+func UpstreamCapabilitiesOf(meta convmeta.Meta) UpstreamCapabilities {
+	return UpstreamCapabilities{
+		GeminiJSONSchema: convmeta.OptionsOf(meta).Gemini.SupportsJSONSchemaModel(convmeta.UpstreamModelName(meta)),
+	}
 }
 
 type ToolRequirement struct {
@@ -177,6 +199,12 @@ func AnalyzeRequest(request any) (RequestRequirements, error) {
 // PlanConversion fixes both directions before a candidate is admitted. It does
 // not claim that the host has implemented the corresponding provider adaptor.
 func PlanConversion(req RequestRequirements, target types.RelayFormat, policy types.ConversionLossPolicy) (ConversionPlan, error) {
+	return PlanConversionFor(req, target, policy, UpstreamCapabilities{})
+}
+
+// PlanConversionFor plans a conversion to an upstream with the given
+// capabilities; PlanConversion assumes none.
+func PlanConversionFor(req RequestRequirements, target types.RelayFormat, policy types.ConversionLossPolicy, upstream UpstreamCapabilities) (ConversionPlan, error) {
 	if policy == "" {
 		policy = types.ConversionLossPolicySafe
 	}
@@ -266,6 +294,12 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		diagnostic.From, diagnostic.To = req.Format, target
 		plan.Diagnostics = append(plan.Diagnostics, diagnostic)
 	}
+	if target == types.RelayFormatGemini && !upstream.GeminiJSONSchema {
+		for _, diagnostic := range req.GeminiTypedSchemaLoss {
+			diagnostic.From, diagnostic.To = req.Format, target
+			plan.Diagnostics = append(plan.Diagnostics, diagnostic)
+		}
+	}
 	return plan, types.RejectConversionLoss(policy, plan.Diagnostics)
 }
 
@@ -282,7 +316,7 @@ func ExecuteConversionPlan(ctx context.Context, meta convmeta.Meta, plan Convers
 	if err != nil {
 		return nil, err
 	}
-	current, err := PlanConversion(requirements, plan.To, plan.Policy)
+	current, err := PlanConversionFor(requirements, plan.To, plan.Policy, UpstreamCapabilitiesOf(meta))
 	if err != nil {
 		return &RequestResult{Diagnostics: current.Diagnostics}, err
 	}

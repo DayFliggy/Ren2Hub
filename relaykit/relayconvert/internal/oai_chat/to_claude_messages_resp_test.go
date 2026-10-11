@@ -532,3 +532,30 @@ func TestStreamResponseOpenAI2ClaudeTerminalUsesRealCounts(t *testing.T) {
 func ptr[T any](value T) *T {
 	return &value
 }
+
+// Some upstreams put the last reasoning token and the first answer text in one
+// chunk (NewAPI 5ac756284); the text must reach the Claude client in its own
+// block after the thinking block closes.
+func TestStreamResponseOpenAI2ClaudeKeepsTextSharingAChunkWithReasoning(t *testing.T) {
+	info := &convmeta.Values{}
+	responses := StreamResponseOpenAI2Claude(&dto.ChatCompletionsStreamResponse{
+		Id: "chatcmpl_mixed", Model: "gpt-test",
+		Choices: []dto.ChatCompletionsStreamResponseChoice{{
+			Delta: dto.ChatCompletionsStreamResponseChoiceDelta{ReasoningContent: ptr("done thinking"), Content: ptr("The answer")},
+		}},
+	}, info)
+
+	events := make([]string, 0, len(responses))
+	for _, response := range responses {
+		events = append(events, response.Type)
+	}
+	require.Equal(t, []string{"message_start", "content_block_start", "content_block_delta", "content_block_stop", "content_block_start", "content_block_delta"}, events)
+	assert.Equal(t, "thinking", responses[1].ContentBlock.Type)
+	assert.Equal(t, "done thinking", *responses[2].Delta.Thinking)
+	assert.Equal(t, 0, responses[3].GetIndex())
+	assert.Equal(t, "text", responses[4].ContentBlock.Type)
+	assert.Equal(t, 1, responses[4].GetIndex())
+	assert.Equal(t, "text_delta", responses[5].Delta.Type)
+	assert.Equal(t, "The answer", *responses[5].Delta.Text)
+	assert.Equal(t, 1, responses[5].GetIndex())
+}

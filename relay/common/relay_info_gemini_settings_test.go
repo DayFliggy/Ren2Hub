@@ -3,6 +3,7 @@ package common
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/stretchr/testify/assert"
 )
@@ -38,4 +39,37 @@ func TestRelayInfoConvOptionsCarriesGeminiThoughtSignatureSetting(t *testing.T) 
 
 	settings.FunctionCallThoughtSignatureEnabled = false
 	assert.False(t, (&RelayInfo{}).ConvOptions().Gemini.FunctionCallThoughtSignatureEnabled)
+}
+
+// Converted Gemini requests send JSON Schema in parametersJsonSchema and
+// responseJsonSchema on every channel except one whose Gemini API version for
+// the model is v1; Vertex AI accepts them whatever the version setting says
+// (NewAPI c10780e05).
+func TestRelayInfoConvOptionsGeminiJSONSchemaSupport(t *testing.T) {
+	settings := model_setting.GetGeminiSettings()
+	original := settings.VersionSettings
+	t.Cleanup(func() {
+		settings.VersionSettings = original
+	})
+	settings.VersionSettings = map[string]string{"default": "v1beta", "gemini-v1-model": "v1"}
+
+	tests := []struct {
+		name        string
+		channelType int
+		model       string
+		want        bool
+	}{
+		{name: "Gemini on the default version", channelType: constant.ChannelTypeGemini, model: "gemini-3.7-flash", want: true},
+		{name: "Gemini on v1", channelType: constant.ChannelTypeGemini, model: "gemini-v1-model", want: false},
+		{name: "Vertex AI", channelType: constant.ChannelTypeVertexAi, model: "gemini-v1-model", want: true},
+		{name: "other channel on v1", channelType: constant.ChannelTypeAdvancedCustom, model: "gemini-v1-model", want: false},
+		{name: "other channel on the default version", channelType: constant.ChannelTypeAdvancedCustom, model: "gemini-3.7-flash", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &RelayInfo{ChannelMeta: &ChannelMeta{ChannelType: tt.channelType}}
+
+			assert.Equal(t, tt.want, info.ConvOptions().Gemini.SupportsJSONSchemaModel(tt.model))
+		})
+	}
 }

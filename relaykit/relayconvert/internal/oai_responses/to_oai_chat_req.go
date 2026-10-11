@@ -473,12 +473,18 @@ func RequestTextToChatResponseFormat(raw json.RawMessage) (*dto.ResponseFormat, 
 
 func responsesImagePartToChatImageURL(part map[string]any) any {
 	if imageURL, ok := part["image_url"]; ok {
-		if detail, present := part["detail"]; present {
-			if url, ok := imageURL.(string); ok {
-				return map[string]any{"url": url, "detail": detail}
-			}
+		// Chat Completions takes the URL inside an object. Unlike NewAPI, an
+		// explicit detail is kept: the media plan promises it survives the
+		// Chat/Responses pair without a loss diagnostic.
+		url, isString := imageURL.(string)
+		if !isString {
+			return imageURL
 		}
-		return imageURL
+		chatImageURL := map[string]any{"url": url}
+		if detail, present := part["detail"]; present {
+			chatImageURL["detail"] = detail
+		}
+		return chatImageURL
 	}
 	imageURL := map[string]any{}
 	for _, key := range []string{"url", "file_id", "detail"} {

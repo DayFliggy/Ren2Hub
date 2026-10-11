@@ -244,7 +244,9 @@ func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any)
 				if err := kitutil.Unmarshal(encoded, &cloned); err != nil {
 					return err
 				}
-				if err := r.inspectSchemaProjection(definition["schema"], sharedgemini.RemoveAdditionalProperties(cloned, 0), path+".schema", 0); err != nil {
+				if err := r.inspectGeminiSchema(!sharedgemini.FitsTypedSchema(cloned), func() error {
+					return r.inspectSchemaProjection(definition["schema"], sharedgemini.RemoveAdditionalProperties(cloned, 0), path+".schema", 0)
+				}); err != nil {
 					return err
 				}
 			}
@@ -301,7 +303,25 @@ func (r *RequestRequirements) inspectToolSchema(schema any, path string) error {
 	} else if r.Format == types.RelayFormatOpenAI {
 		field = ".function.parameters"
 	}
-	return r.inspectSchemaProjection(schema, sharedgemini.CleanFunctionParameters(schema), path+field, 0)
+	jsonSchemaField, _, _ := sharedgemini.FunctionParameters(schema, true)
+	return r.inspectGeminiSchema(jsonSchemaField == "parametersJsonSchema", func() error {
+		return r.inspectSchemaProjection(schema, sharedgemini.CleanFunctionParameters(schema), path+field, 0)
+	})
+}
+
+// inspectGeminiSchema runs a Gemini schema projection check. When the typed
+// Schema cannot hold the schema as written, a Gemini upstream that accepts
+// JSON Schema receives it unchanged, so the losses found apply only to an
+// upstream that needs the typed Schema; PlanConversionFor decides.
+func (r *RequestRequirements) inspectGeminiSchema(sentAsJSONSchema bool, inspect func() error) error {
+	if !sentAsJSONSchema {
+		return inspect()
+	}
+	before := len(r.Diagnostics)
+	err := inspect()
+	r.GeminiTypedSchemaLoss = append(r.GeminiTypedSchemaLoss, r.Diagnostics[before:]...)
+	r.Diagnostics = r.Diagnostics[:before]
+	return err
 }
 
 func (r *RequestRequirements) projectionLoss(code, path, message string, target types.RelayFormat) {
@@ -332,7 +352,7 @@ func (r *RequestRequirements) inspectLegacyFunctionHistory(request any) error {
 }
 
 func (r *RequestRequirements) inspectSchemaProjection(original, converted any, path string, depth int) error {
-	if len(r.Diagnostics) >= 128 || len(path) > 1024 {
+	if r.diagnosticCount() >= 128 || len(path) > 1024 {
 		return fmt.Errorf("request exceeds conversion diagnostic limits")
 	}
 	if depth > 64 {
@@ -347,7 +367,7 @@ func (r *RequestRequirements) inspectSchemaProjection(original, converted any, p
 		}
 		slices.Sort(keys)
 		for _, key := range keys {
-			if len(r.Diagnostics) >= 128 {
+			if r.diagnosticCount() >= 128 {
 				return fmt.Errorf("request exceeds conversion diagnostic limits")
 			}
 			value := original[key]
