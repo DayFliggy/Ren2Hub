@@ -12,6 +12,7 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
+import { formatDate } from '@/utils/format'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
 import ConversionPolicySelect from '@/components/console/gateway/ConversionPolicySelect.vue'
 import type { ConversionPolicy } from '@/types/gateway'
@@ -67,10 +68,7 @@ watch(
         : ''
     form.unlimited = e?.unlimited ?? true
     form.ipText = e?.ip_limits?.join('\n') ?? ''
-    form.expireDate =
-      e && e.expired_time > 0
-        ? new Date(e.expired_time * 1000).toISOString().slice(0, 10)
-        : ''
+    form.expireDate = e && e.expired_time > 0 ? formatDate(e.expired_time) : ''
 
     vis.expiry = form.expireDate.length > 0
     advancedOpen.value = Boolean(
@@ -116,9 +114,11 @@ async function save() {
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean),
+      // The date is a local calendar day, as the key list shows it; a bare
+      // YYYY-MM-DD would parse as UTC midnight.
       expired_time:
         vis.expiry && form.expireDate
-          ? Math.floor(new Date(form.expireDate).getTime() / 1000)
+          ? Math.floor(new Date(`${form.expireDate}T00:00`).getTime() / 1000)
           : -1,
     }
     {

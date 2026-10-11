@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	ErrCurrentPasswordInvalid = errors.New("Current password is incorrect.")
-	ErrAccountPasswordState   = errors.New("Password settings have changed. Reload the page and try again.")
-	ErrLastLoginMethod        = errors.New("Add another login method before unlinking this account.")
-	ErrAccountBindingChanged  = errors.New("Account bindings have changed. Start this operation again.")
+	ErrCurrentPasswordInvalid = common.NewMessage("Current password is incorrect.")
+	ErrAccountPasswordState   = common.NewMessage("Password settings have changed. Reload the page and try again.")
+	ErrLastLoginMethod        = common.NewMessage("Add another login method before unlinking this account.")
+	ErrAccountBindingChanged  = common.NewMessage("Account bindings have changed. Start this operation again.")
 	ErrCannotDeleteRootUser   = errors.New("The root account cannot be deleted.")
 )
 

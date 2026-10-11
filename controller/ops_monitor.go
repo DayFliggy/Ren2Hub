@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -27,7 +26,7 @@ func GetOpsOverview(c *gin.Context) {
 func GetOpsRequests(c *gin.Context) {
 	hours, err := strconv.Atoi(c.DefaultQuery("hours", "24"))
 	if err != nil || hours < perfmetrics.OverviewMinHours || hours > perfmetrics.OverviewMaxHours {
-		common.ApiErrorMsg(c, fmt.Sprintf("hours must be between %d and %d", perfmetrics.OverviewMinHours, perfmetrics.OverviewMaxHours))
+		common.ApiErrorT(c, "hours must be between {{min}} and {{max}}", map[string]any{"min": perfmetrics.OverviewMinHours, "max": perfmetrics.OverviewMaxHours})
 		return
 	}
 	overview, err := perfmetrics.QueryOverview(hours)

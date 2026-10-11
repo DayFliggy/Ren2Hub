@@ -2,7 +2,6 @@ package service
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"html"
 	"math/big"
@@ -15,9 +14,9 @@ import (
 )
 
 var (
-	ErrAccountEmailInvalid    = errors.New("Please enter a valid email address")
-	ErrAccountEmailRestricted = errors.New("This email address is not allowed by the administrator's email policy.")
-	ErrEmailBindingDelivery   = errors.New("Verification email could not be sent. Start email verification again.")
+	ErrAccountEmailInvalid    = common.NewMessage("Please enter a valid email address")
+	ErrAccountEmailRestricted = common.NewMessage("This email address is not allowed by the administrator's email policy.")
+	ErrEmailBindingDelivery   = common.NewMessage("Verification email could not be sent. Start email verification again.")
 )
 
 type EmailBindingData struct {

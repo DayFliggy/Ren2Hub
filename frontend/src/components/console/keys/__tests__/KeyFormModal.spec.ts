@@ -130,4 +130,45 @@ describe('KeyFormModal', () => {
       put.mockRestore()
     }
   })
+
+  it('backfills and saves the expiry as the local calendar day', async () => {
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    // 2026-10-12 00:00 in UTC+8, which is still 2026-10-11 in UTC.
+    const localMidnight = Date.UTC(2026, 9, 11, 16) / 1000
+    const put = vi
+      .spyOn(api, 'put')
+      .mockRejectedValue(new Error('lost response'))
+    const editing = {
+      id: 3,
+      name: 'expiring',
+      type: 'auto',
+      available_quota: '0',
+      reserved_quota: '0',
+      used_quota: '0',
+      quota_version: 1,
+      unlimited: true,
+      model_limits: [],
+      ip_limits: [],
+      expired_time: localMidnight,
+    } as unknown as TokenSummary
+    const wrapper = mountForm(editing)
+    try {
+      await nextTick()
+      expect(
+        document.querySelector<HTMLInputElement>('[name="token-expiration"]')
+          ?.value
+      ).toBe('2026-10-12')
+      const button = [...document.body.querySelectorAll('button')].find(
+        (item) => item.textContent?.trim() === i18n.global.t('common.confirm')
+      )!
+      button.click()
+      await flushPromises()
+      const payload = put.mock.calls[0][1] as Record<string, unknown>
+      expect(payload.expired_time).toBe(localMidnight)
+    } finally {
+      wrapper.unmount()
+      put.mockRestore()
+      vi.unstubAllEnvs()
+    }
+  })
 })

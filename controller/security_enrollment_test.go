@@ -1532,6 +1532,24 @@ func TestSecurityErrorsCarryMessageKeys(t *testing.T) {
 		{"fixed security message", "TWOFA_ALREADY_ENABLED", "Two-factor authentication is already enabled.", func(c *gin.Context) {
 			writeSecurityOperationError(c, model.ErrTwoFAAlreadyEnabled)
 		}},
+		{"wrapped verification sentinel", "SECURITY_VERIFICATION_FAILED", "Verification failed. Please try again.", func(c *gin.Context) {
+			writeSecurityOperationError(c, fmt.Errorf("private database details: %w", service.ErrVerificationFailed))
+		}},
+		{"account sentinel", "CURRENT_PASSWORD_INVALID", "Current password is incorrect.", func(c *gin.Context) {
+			writeSecurityOperationError(c, model.ErrCurrentPasswordInvalid)
+		}},
+		{"password policy sentinel", "PASSWORD_POLICY_REJECTED", "Password must contain between 8 and 128 characters.", func(c *gin.Context) {
+			writeSecurityOperationError(c, common.ErrAccountPasswordLength)
+		}},
+		{"email binding sentinel", "EMAIL_BINDING_DELIVERY_FAILED", "Verification email could not be sent. Start email verification again.", func(c *gin.Context) {
+			writeSecurityOperationError(c, service.ErrEmailBindingDelivery)
+		}},
+		{"personal access token sentinel", "PAT_INPUT_INVALID", "invalid personal access token name, scopes or expiry", func(c *gin.Context) {
+			writeSecurityOperationError(c, model.ErrPATInput)
+		}},
+		{"channel key proof context", "SECURITY_CONTEXT_INVALID", "The action details are invalid.", func(c *gin.Context) {
+			middleware.SecureVerificationRequired()(c)
+		}},
 		{"OAuth provider error", "", "Invalid authorization code", func(c *gin.Context) {
 			handleOAuthError(c, oauthErr)
 		}},

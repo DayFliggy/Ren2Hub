@@ -16,10 +16,10 @@ import (
 const PersonalAccessTokenLimit = 20
 
 var (
-	ErrPATInvalid  = errors.New("personal access token is invalid")
-	ErrPATInput    = errors.New("invalid personal access token name, scopes or expiry")
-	ErrPATLimit    = errors.New("personal access token limit reached")
-	ErrPATNotFound = errors.New("personal access token was not found or is no longer active")
+	ErrPATInvalid  = common.NewMessage("personal access token is invalid")
+	ErrPATInput    = common.NewMessage("invalid personal access token name, scopes or expiry")
+	ErrPATLimit    = common.NewMessage("personal access token limit reached")
+	ErrPATNotFound = common.NewMessage("personal access token was not found or is no longer active")
 )
 
 // PATScopeRoles is the complete scope vocabulary. Resource permissions are

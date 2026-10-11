@@ -39,12 +39,12 @@ const (
 )
 
 var (
-	ErrVerificationFailed         = errors.New("Verification failed. Please try again.")
-	ErrVerificationUnavailable    = errors.New("This verification method is currently unavailable.")
-	ErrVerificationLocked         = errors.New("Two-factor authentication is temporarily locked.")
-	ErrVerificationFlowRequired   = errors.New("This verification method requires its dedicated verification flow.")
-	ErrVerificationContextInvalid = errors.New("The action details are invalid.")
-	ErrVerificationForbidden      = errors.New("You do not have permission to perform this action.")
+	ErrVerificationFailed         = common.NewMessage("Verification failed. Please try again.")
+	ErrVerificationUnavailable    = common.NewMessage("This verification method is currently unavailable.")
+	ErrVerificationLocked         = common.NewMessage("Two-factor authentication is temporarily locked.")
+	ErrVerificationFlowRequired   = common.NewMessage("This verification method requires its dedicated verification flow.")
+	ErrVerificationContextInvalid = common.NewMessage("The action details are invalid.")
+	ErrVerificationForbidden      = common.NewMessage("You do not have permission to perform this action.")
 )
 
 // VerificationOperation describes the action being authorized, independently of
