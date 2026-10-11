@@ -60,6 +60,12 @@ const {
 
 const typeLabel = (type: string) => (te(type) ? t(type) : type)
 const date = (stamp: number | null) => formatTimestamp(stamp, locale.value)
+// The cleanup boundary is picked to the second, so confirm it to the second.
+const cleanupDate = (stamp: number) =>
+  new Intl.DateTimeFormat(locale.value, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }).format(stamp * 1000)
 const interval = (seconds: number) =>
   durationParts(seconds)
     .map((part) => t(`ops.duration.${part.unit}`, { n: part.amount }))
@@ -384,6 +390,7 @@ async function cleanLogs() {
         ><input
           v-model="before"
           type="datetime-local"
+          step="1"
           required
           :disabled="creating"
       /></label>
@@ -410,7 +417,9 @@ async function cleanLogs() {
   <ConfirmDialog
     :open="logTarget !== null"
     :title="t('cleanupConfirm')"
-    :message="t('cleanupMessage', { date: logTarget ? date(logTarget) : '--' })"
+    :message="
+      t('cleanupMessage', { date: logTarget ? cleanupDate(logTarget) : '--' })
+    "
     :confirm-text="t('remove')"
     :loading="creating"
     @confirm="cleanLogs"

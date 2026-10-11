@@ -182,6 +182,13 @@
 | Sub2API `53158587` | 已吸收 | Axios 固定 `1.20.0`；公开 HTTP 请求使用 Fetch `credentials: omit`，不带同源 Cookie | `frontend/package.json`、`frontend/src/api/httpTransport.ts` | `frontend/src/api/__tests__/httpTransport.spec.ts` | — |
 | Sub2API `51060657` | 已吸收 | 渠道 priority、weight 由 `ChannelInlineNumber` 原地编辑，失败恢复原值 | `frontend/src/components/console/channels/ChannelInlineNumber.vue` | — | — |
 | Sub2API 其余界面竞态修复 | 刻意不吸收 | 本地已有等价守卫或没有对应页面 | — | — | 引入对应页面时复评 |
+| NewAPI `93ea55f3c` | 已吸收（Vue 改写） | 访问令牌到期时间与日志清理时间的 `datetime-local` 输入设 `step="1"`，选到秒并按秒提交；日志清理确认文案显示到秒。时间框部分清空时浏览器按无效输入拦截提交，不发出无效时间；访问令牌到期时间整体清空表示使用默认有效期。本地偏离：日志、看板等页面的日期范围筛选只按天选择（开始取当天 0 点，结束取 23:59:59），没有时间部分，不做秒级改造 | `frontend/src/components/console/PersonalAccessTokensPanel.vue`、`frontend/src/components/admin/ops/OpsSystemTasksCard.vue` | `PersonalAccessTokensPanel.spec.ts`、`OpsMonitorView.spec.ts` | 日期范围筛选加入时间部分时复评 |
+| NewAPI `96275d224` | 已吸收 | 本地已有该行为，未改代码：`DateRangePicker` 的月份与星期名称用 `Intl.DateTimeFormat` 按界面语言生成；登录会话列表的相对时间按界面语言输出（`relativeTime`）；通行密钥卡片显示绝对时间；公告编辑器不显示相对时间。控制台只有 zh-CN 与 en，没有上游 `zh`/`zhCN` 键名错配。原生日期输入的日历语言由浏览器决定 | `frontend/src/components/common/DateRangePicker.vue`、`frontend/src/utils/format.ts` | `format.spec.ts` | 新增界面语言或改用第三方日历组件时复评 |
+| NewAPI `06dd76a9d` | 不适用 | Vue 没有上游 Playground；Lab 对话存在服务端（`/api/lab/chat/conversation/:id`），浏览器只存侧栏折叠、隐私模式、提示音等界面偏好，不存对话或设置数据 | `frontend/src/composables/useLab.ts` | — | Lab 改为在浏览器保存对话或设置时复评 |
+| NewAPI `1fb6d07fe` | 不适用 | Vue 没有引入 `react-icons` 或 Simple Icons；图标只按名称从 `lucide-vue-next` 具名导入，供应商标志是 `public/models/` 下的静态图片 | — | — | 引入整包品牌图标库时复评 |
+| NewAPI `b892a6b2e` | 已吸收（Vue 改写） | 路由页面代码加载失败（Chromium、Firefox、Safari 的模块加载错误与 Vite 的 CSS 预加载错误）时，用 `sessionStorage` 标记后整页加载失败的目标地址一次；再失败显示可访问的重试页，导航成功后清除标记；无法写入标记时不自动加载，避免循环。本地原有逻辑只识别 Chromium 与 Safari 的脚本错误，且加载的是失败前的页面；Vue 错误页本来不显示状态码。可视化测试预置标记后断言重试页，契约不变 | `frontend/src/router/index.ts` | `chunkReload.spec.ts`、`tests/visual/routes.spec.ts`（重试页） | — |
+| NewAPI `0f38a14a5` | 不适用 | Vue 控制台没有字体偏好设置，正文字体固定为内置 Inter、Noto Sans SC 加系统无衬线回退 | `frontend/src/styles/base.css` | — | 加入字体偏好时复评 |
+| NewAPI `1ca79d57e`（前端） | 不适用 | Vue 模型卡只读 `/api/perf-metrics/summary` 的 24 小时汇总 `success_rate`，用 `HealthMeter` 画单个健康度，不读逐小时 `recent_success_series`，没有灰色占位格；解析器忽略新增字段，汇总字段不变时无需改动。后端查询改动由运行时流处理 | `frontend/src/composables/useModelMarket.ts`、`frontend/src/api/liveContracts.ts` | — | 模型卡改为显示逐小时成功率时按上游只渲染有数据的样本 |
 
 ## 依赖与构建
 

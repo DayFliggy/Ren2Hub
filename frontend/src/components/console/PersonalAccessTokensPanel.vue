@@ -367,6 +367,7 @@ onBeforeUnmount(() => {
           }}<TextInput
             v-model="expires"
             type="datetime-local"
+            step="1"
             :disabled="busy"
             :aria-label="t('pat.expiry')"
           /><span class="mt-1 block text-xs text-[var(--text-tertiary)]">{{

@@ -150,6 +150,32 @@ describe('PAT management', () => {
     wrapper.unmount()
   })
 
+  it('creates a token whose expiry keeps the seconds that were picked', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await button(wrapper, 'Create access token').trigger('click')
+    await wrapper.get('input[aria-label="Name"]').setValue('new')
+    await wrapper
+      .get('input[type="checkbox"][value="profile:read"]')
+      .setValue(true)
+    await wrapper
+      .get('input[type="datetime-local"]')
+      .setValue('2099-10-11T08:30:45')
+    // requestSubmit runs the browser's constraint validation first.
+    wrapper.get<HTMLFormElement>('form').element.requestSubmit()
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(
+      {
+        name: 'new',
+        scopes: ['profile:read'],
+        expires_at: new Date(2099, 9, 11, 8, 30, 45).getTime() / 1000,
+      },
+      'proof',
+      expect.any(AbortSignal)
+    )
+    wrapper.unmount()
+  })
+
   it('does not reveal a creation result received after account changes', async () => {
     let resolve!: (value: unknown) => void
     mocks.create.mockReturnValue(
