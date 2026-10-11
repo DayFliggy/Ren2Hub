@@ -8,7 +8,7 @@
 - `src/styles/tokens.css`：颜色、阴影、状态、品牌和 Canvas 共享令牌。
 - `src/styles/base.css`：Tailwind 层、文档默认值、焦点和选区规则。
 - `src/styles/home.css`：首页专属视觉，选择器限制在 `.landing-shell`；仅首页滚动状态允许作用于 `html.hero-scrollbar-hidden`。
-- `src/styles/console.css`：Console 与 Lab 的滚动区域，由两个懒加载布局按需引入。
+- `src/styles/console.css`：Console 的滚动区域，由懒加载的 Console 布局引入。
 - `src/styles/index.css`：全局汇总入口，只引入字体、令牌、基础规则和首页样式，不定义新的业务令牌。
 
 组件必须使用 `--page-background`、`--surface-container-*`、`--text-*`、`--outline-*`、`--accent`、`--signal`、`--support` 和 `--status-*` 等语义变量，不得在业务组件中复制主题色板。旧的 `--surface-*`、`--card-shadow` 和 `--sketch-*` 仅作为兼容别名。

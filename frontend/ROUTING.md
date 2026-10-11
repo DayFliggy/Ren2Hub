@@ -11,7 +11,9 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 | 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                                    |
 | 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                                                |
 | 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Admin，admin capability；其中系统任务与计费健康仅 Root，上游健康需 `channel:read` |
-| 延期模块 | 市场、发票、Farm、Bigame、Lab                                                                                                      | 保留源码，capability 未开放时拒绝进入                                                                                   |
+| 延期模块 | 市场、发票、Farm、Bigame                                                                                                           | 保留源码，capability 未开放时拒绝进入                                                                                   |
+
+顶部导航的“炼金室”是禁用的占位入口，不注册路由也没有页面；`/lab/*` 进入标准 404。
 
 普通用户模型目录使用 `/models`。管理侧边栏的“模型管理”入口分为“模型”（`/models/metadata`）、“供应商”（`/models/vendors`）和 Root 可见的“定价”（`/models/pricing`），切换分区时保留 query；上游的“部署”分区已停用。模型分区的筛选参数沿用上游的 `filter/vendor/status/sync/page/pageSize`，供应商分区为 `vFilter/vPage/vPageSize`。`/models/prefill-groups` 跳转到模型分区并以 `manage=prefill-groups` 打开预填充分组弹窗。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。
 

@@ -1,4 +1,4 @@
-/* Console and Lab scroll surfaces. Global focus treatment lives in base.css.
+/* Console scroll surfaces. Global focus treatment lives in base.css.
    手账质感工具类（texture-paper / display-title）在 base.css：认证页与 404
    不经过懒加载布局，也要能用。 */
 

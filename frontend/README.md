@@ -40,7 +40,6 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 - `/dashboard`、`/keys`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
 - `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
 - `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；空安装无价格，只有保存后生效，见[计费界面契约](docs/BILLING.md)
-- `/lab/*`：炼金室预留路由；后端 capability 未启用时拒绝访问
 
 旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不转换也不加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
 
@@ -54,7 +53,7 @@ src/
   assets/       由构建器处理的资源
   canvas/       首页世界地图引擎
   charts/       ECharts 适配
-  components/   common/home/auth/console/admin/lab/public/layout
+  components/   common/home/auth/console/admin/public/layout
   composables/  页面领域状态、请求取消与交互
   constants/    首页数据与导航定义
   i18n/         en/zh-CN 分域消息
@@ -67,8 +66,8 @@ src/
   __tests__/    全局测试设置
 ```
 
-炼金室、Token 农场、小游戏、开票和市场暂未接入。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
+顶部导航的“炼金室”是禁用的占位入口，背后没有页面和路由。Token 农场、小游戏、开票和市场暂未接入。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
 
-`common` 和 `home` 语言包随首屏加载，`auth`、`console`、`lab`、`setup` 按路由和当前语言延迟加载。`public/` 保存直接发布的资源，`src/assets/` 保存构建管理的图片和自托管字体。`dist/`、`embed-dist/` 与 `output/` 分别是构建产物、Go 嵌入产物和本地测试输出。
+`common` 和 `home` 语言包随首屏加载，`auth`、`console`、`setup` 按路由和当前语言延迟加载。`public/` 保存直接发布的资源，`src/assets/` 保存构建管理的图片和自托管字体。`dist/`、`embed-dist/` 与 `output/` 分别是构建产物、Go 嵌入产物和本地测试输出。
 
 主题和样式约束见[主题文档](docs/THEMES.md)，金额精度与钱包界面见[计费界面契约](docs/BILLING.md)，窄屏未解决的问题见[移动端待办](docs/MOBILE.md)。

@@ -208,7 +208,6 @@ describe('capability route guard', () => {
         invoices: 'disabled',
         farm: 'disabled',
         bigame: 'disabled',
-        lab: 'disabled',
       },
     })
 
@@ -218,7 +217,6 @@ describe('capability route guard', () => {
       '/console/keys/11/routing',
       '/console/farm',
       '/console/bigame',
-      '/lab/chat',
     ]) {
       await router.push(path)
       expect(router.currentRoute.value.name, path).toBe('dashboard')

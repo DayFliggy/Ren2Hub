@@ -8,9 +8,6 @@
  */
 const LEGACY_KEY_RENAMES: ReadonlyArray<readonly [string, string]> = [
   ['renren_sidebar_collapsed', 'ren2hub_sidebar_collapsed'],
-  ['renren_lab_sidebar_collapsed', 'ren2hub_lab_sidebar_collapsed'],
-  ['renren_lab_private', 'ren2hub_lab_private'],
-  ['renren_lab_sound', 'ren2hub_lab_sound'],
   ['renren_market_currency', 'ren2hub_market_currency'],
   ['renren_market_view', 'ren2hub_market_view'],
   ['renren_models_view', 'ren2hub_models_view'],

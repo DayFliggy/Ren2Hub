@@ -26,7 +26,6 @@ async function setup(role: number, capabilities: Record<string, string>) {
       ['/dashboard', 'dashboard'],
       ['/ops', 'ops-monitor'],
       ['/keys', 'keys'],
-      ['/lab/chat', 'lab-chat'],
     ].map(([path, name]) => ({
       path: path!,
       name: name!,
@@ -92,8 +91,16 @@ describe('top navigation', () => {
       await setup(10, { admin: 'live', lab: 'live' })
     )
     await flushPromises()
-    const labels = admin.findAll('button').map((button) => button.text())
-    expect(labels.slice(0, 4)).toEqual(['活动', '仪表盘', '运维监控', '控制台'])
+    const buttons = admin.findAll('button')
+    expect(buttons.slice(0, 5).map((button) => button.text())).toEqual([
+      '活动',
+      '仪表盘',
+      '运维监控',
+      '控制台',
+      '炼金室',
+    ])
+    // The alchemy placeholder has no pages, so a live capability cannot enable it.
+    expect(buttons[4]!.attributes()).toHaveProperty('disabled')
     expect(admin.get('[aria-current="page"]').text()).toBe('运维监控')
 
     const member = mount(TopNavMenu, await setup(1, { admin: 'live' }))
@@ -117,13 +124,15 @@ describe('top navigation', () => {
     })
     await flushPromises()
     const strip = topbar.get('[data-handdrawn="navigation-strip"]')
-    expect(strip.findAll('a, button').map((item) => item.text())).toEqual([
+    expect(strip.findAll('a').map((item) => item.text())).toEqual([
       '活动',
       '仪表盘',
       '运维监控',
       '控制台',
-      '炼金室',
     ])
+    const placeholder = strip.get('button')
+    expect(placeholder.text()).toContain('炼金室')
+    expect(placeholder.attributes()).toHaveProperty('disabled')
     expect(strip.get('[aria-current="page"]').attributes('href')).toBe('/ops')
   })
 })

@@ -30,7 +30,7 @@ const mobileItems = computed(() =>
     isAdmin: auth.isAdmin,
     surface: 'mobile',
     featureStatus: (feature) => app.featureStatus(feature),
-  }).flatMap((item) => (item.route ? [{ ...item, route: item.route }] : []))
+  })
 )
 
 const activeName = computed(() => {
@@ -143,7 +143,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
           <span class="text-[10px]">{{ t('nav.comingSoon') }}</span>
         </button>
         <RouterLink
-          v-else
+          v-else-if="item.route"
           :to="{ name: item.route }"
           class="mobile-pill flex min-h-11 shrink-0 items-center px-3.5 text-xs font-medium transition-all"
           :class="activeName === item.name ? 'active' : ''"

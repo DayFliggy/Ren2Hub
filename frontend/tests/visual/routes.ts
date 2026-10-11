@@ -64,10 +64,4 @@ export const VISUAL_ROUTES: VisualRoute[] = [
   { name: 'profile', path: '/profile' },
   { name: 'farm', path: '/farm' },
   { name: 'bigame', path: '/bigame' },
-  { name: 'lab-chat', path: '/lab/chat' },
-  { name: 'lab-chat-session', path: '/lab/chat/c-1' },
-  { name: 'lab-studio', path: '/lab/studio' },
-  { name: 'lab-assets', path: '/lab/assets' },
-  { name: 'lab-notes', path: '/lab/notes' },
-  { name: 'lab-plugins', path: '/lab/plugins' },
 ]

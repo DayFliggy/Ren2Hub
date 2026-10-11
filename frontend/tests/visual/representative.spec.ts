@@ -58,7 +58,6 @@ const darkScenarios: Scenario[] = [
     path: '/usage-logs',
     openLogDetails: true,
   },
-  { name: 'lab-chat', path: '/lab/chat' },
   { name: 'activity', path: '/activity' },
   { name: 'invite', path: '/invite' },
   {
