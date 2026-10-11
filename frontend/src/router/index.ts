@@ -579,21 +579,24 @@ router.beforeEach(async (to) => {
   return true
 })
 
-router.onError((error) => {
+// Chromium, Firefox and Safari script failures, and Vite's CSS preload failure.
+const CHUNK_LOAD_ERROR =
+  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
+
+router.onError((error, to) => {
   navigationError.value = true
   console.error('[router] Navigation failed', error)
-  const chunkFailed =
-    /Failed to fetch dynamically imported module|Importing a module script failed/i.test(
-      error.message
-    )
+  if (!(error instanceof Error) || !CHUNK_LOAD_ERROR.test(error.message)) return
+  // Load the page that failed once from the server; if it fails again, the
+  // marker is still set and the error state stays.
   try {
-    if (!chunkFailed || window.sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1')
-      return
+    if (window.sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1') return
     window.sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
-    window.location.reload()
   } catch {
-    // Storage may be unavailable; the visible error state still allows retry.
+    // Without a persistent marker, reloading could loop indefinitely.
+    return
   }
+  window.location.assign(router.resolve(to.fullPath).href)
 })
 
 router.afterEach((_to, _from, failure) => {

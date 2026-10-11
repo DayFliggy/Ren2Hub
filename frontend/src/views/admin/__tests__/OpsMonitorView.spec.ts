@@ -144,6 +144,34 @@ describe('ops monitor access', () => {
     expect(toggle.attributes('aria-expanded')).toBe('true')
     expect(history.text()).toContain('Clean up task history')
   })
+
+  it('cleans up logs before the exact second that was picked', async () => {
+    const view = await render(100)
+    const cleanup = vi
+      .spyOn(systemManagementApi, 'cleanup')
+      .mockResolvedValue({ task_id: 'task-1' } as never)
+    const menu = view
+      .findAll('button')
+      .find((button) => button.text() === 'Clean up logs')
+    await menu!.trigger('click')
+    const form = document.querySelector<HTMLFormElement>('#log-cleanup-form')!
+    const field = form.querySelector<HTMLInputElement>(
+      'input[type="datetime-local"]'
+    )!
+    field.value = '2026-01-02T03:04:05'
+    field.dispatchEvent(new Event('input'))
+    // requestSubmit runs the browser's constraint validation first.
+    form.requestSubmit()
+    await flushPromises()
+    const confirm = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Delete'
+    )
+    confirm!.click()
+    await flushPromises()
+    expect(cleanup).toHaveBeenCalledWith(
+      new Date(2026, 0, 2, 3, 4, 5).getTime() / 1000
+    )
+  })
 })
 
 describe('ops monitor data states', () => {
