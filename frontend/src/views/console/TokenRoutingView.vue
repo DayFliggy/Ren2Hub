@@ -38,7 +38,7 @@ import type {
   RouteProfileView,
 } from '@/types/routing'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
@@ -909,7 +909,9 @@ onMounted(() => void load())
             <div class="flex flex-wrap items-center gap-2 text-sm">
               <span v-if="preview.generated_at">{{
                 t('routing.snapshotTime', {
-                  time: new Date(preview.generated_at).toLocaleTimeString(),
+                  time: new Date(preview.generated_at).toLocaleTimeString(
+                    locale
+                  ),
                 })
               }}</span>
               <StatusChip tone="info">{{ preview.selection_mode }}</StatusChip>

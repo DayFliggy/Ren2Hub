@@ -7,7 +7,7 @@ import SysSettingsFormCard from '@/components/console/systemSettings/SysSettings
 import SysInputRow from '@/components/console/systemSettings/SysInputRow.vue'
 import SysToggleRow from '@/components/console/systemSettings/SysToggleRow.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const { settings, load, saveOptions } = useSystemSettings()
 
@@ -257,7 +257,9 @@ onMounted(async () => {
           :label="t('systemSettings.billing.affiliateActivatedAt')"
           :model-value="
             affiliate.AffiliateActivatedAt
-              ? new Date(affiliate.AffiliateActivatedAt * 1000).toLocaleString()
+              ? new Date(affiliate.AffiliateActivatedAt * 1000).toLocaleString(
+                  locale
+                )
               : t('systemSettings.billing.notActivated')
           "
           readonly

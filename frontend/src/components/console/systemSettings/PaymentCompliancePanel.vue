@@ -9,7 +9,7 @@ import { useToast } from '@/composables/useToast'
 
 const emit = defineEmits<{ confirmed: [] }>()
 const { rawValue } = useSystemSettings()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const open = ref(false)
 const loading = ref(false)
@@ -26,7 +26,7 @@ const confirmedText = computed(() =>
   confirmedAt.value
     ? t('systemSettings.paymentCompliance.confirmedTermsAt', {
         version: termsVersion.value,
-        time: new Date(confirmedAt.value * 1000).toLocaleString(),
+        time: new Date(confirmedAt.value * 1000).toLocaleString(locale.value),
       })
     : t('systemSettings.paymentCompliance.confirmedTerms', {
         version: termsVersion.value,

@@ -17,7 +17,7 @@ interface ProviderStatus {
   raw_metrics: string
 }
 const props = defineProps<{ channel: AdminChannel }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const data = ref<ProviderStatus | null>(null)
 const busy = ref(false)
 const error = ref('')
@@ -76,7 +76,7 @@ onBeforeUnmount(() => controller?.abort())
     <template v-if="data">
       <p>
         {{ t('channels.providerVersion') }}: {{ data.version || '—' }} ·
-        {{ new Date(data.sampled_at).toLocaleString() }}
+        {{ new Date(data.sampled_at).toLocaleString(locale) }}
       </p>
       <dl class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <template v-for="(endpoint, path) in data.endpoints" :key="path"
