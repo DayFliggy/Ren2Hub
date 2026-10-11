@@ -58,7 +58,8 @@ frontend/      — The only web application, served at `/`; Docker builds it and
 ### Backend (`i18n/`)
 
 - Library: `nicksnyder/go-i18n/v2`
-- Languages: en, zh
+- Languages: en, zh-CN, zh-TW (`i18n/locales/*.yaml`). AI client errors, emails and notifications follow the saved account language, then `Accept-Language`, then `DEFAULT_LANGUAGE` (English when unset).
+- Web console responses carry the English `message` plus `message_key`/`message_params` (`common.NewMessage`, `common.ApiErrorT`, `common.ApiSuccessT`); a key must be a string literal or constant so `TestServerMessageCatalog` can require its translation. Server log lines use `common.LogText`.
 
 ### Vue Frontend (`frontend/src/i18n/`)
 
@@ -67,7 +68,7 @@ frontend/      — The only web application, served at `/`; Docker builds it and
 - `common` and `home` are loaded with the initial bundle; `auth`, `console`, `lab`, and `setup` are merged lazily by route domain.
 - Translation files: `frontend/src/i18n/locales/{en,zh-CN}/{common,auth,console,lab,home,setup}.ts`; some features maintain paired messages in shared TypeScript modules under `frontend/src/i18n/`.
 - User-facing strings in Vue components must use `useI18n()` and stable translation keys.
-- Backend text for the web console (`message_key` with `message_params`, log `other.content_parts`, gateway task fail reasons) is translated by `frontend/src/i18n/serverMessages.ts`, not vue-i18n. Its zh-CN catalogs are flat JSON objects in `frontend/src/i18n/locales/zh-CN/server-messages/*.json`: each key is the backend's exact English source text with `{{name}}` placeholders, each value the Chinese text with the same placeholders; no nesting, comments or vue-i18n syntax. Every file in the directory loads lazily into one chunk, and a key may appear in several files only with the same value. English needs no catalog; a key without an entry shows the backend's English text.
+- Backend text for the web console (`message_key` with `message_params`, log `other.content_parts`, gateway task fail reasons and channel status reasons) is translated by `frontend/src/i18n/serverMessages.ts`, not vue-i18n. Its zh-CN catalogs are flat JSON objects in `frontend/src/i18n/locales/zh-CN/server-messages/*.json`: each key is the backend's exact English source text with `{{name}}` placeholders, each value the Chinese text with the same placeholder names; no nesting, comments or vue-i18n syntax. Every file in the directory loads lazily into one chunk. A key lives in one file only; keys several areas share go in `common.json`. English needs no catalog; a key without an entry shows the backend's English text.
 - For translation work, follow `.agents/skills/i18n-translate/SKILL.md` and edit the existing Vue message source. React/Next.js and shadcn/ui skills apply only when the target code actually uses those libraries; they do not gate ordinary Vue work.
 
 ## Rules
