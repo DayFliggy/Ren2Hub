@@ -35,10 +35,7 @@ func TurnstileCheck() gin.HandlerFunc {
 		if common.TurnstileCheckEnabled {
 			response := getTurnstileToken(c)
 			if response == "" {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile token 为空",
-				})
+				common.ApiErrorT(c, "Turnstile token is empty")
 				c.Abort()
 				return
 			}
@@ -50,51 +47,36 @@ func TurnstileCheck() gin.HandlerFunc {
 				"remoteip": {c.ClientIP()},
 			}.Encode()))
 			if err != nil {
-				common.SysError("create Turnstile verification request failed: " + err.Error())
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile 服务暂时不可用，请稍后重试",
-				})
+				common.SysError(common.LogText("create Turnstile verification request failed: %s", err.Error()))
+				common.ApiErrorT(c, "Turnstile service is temporarily unavailable, please try again later")
 				c.Abort()
 				return
 			}
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rawRes, err := turnstileHTTPClient.Do(req)
 			if err != nil {
-				common.SysError("Turnstile verification request failed: " + err.Error())
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile 服务暂时不可用，请稍后重试",
-				})
+				common.SysError(common.LogText("Turnstile verification request failed: %s", err.Error()))
+				common.ApiErrorT(c, "Turnstile service is temporarily unavailable, please try again later")
 				c.Abort()
 				return
 			}
 			defer rawRes.Body.Close()
 			if rawRes.StatusCode < http.StatusOK || rawRes.StatusCode >= http.StatusMultipleChoices {
-				common.SysError("Turnstile verification returned status " + rawRes.Status)
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile 服务暂时不可用，请稍后重试",
-				})
+				common.SysError(common.LogText("Turnstile verification returned status %s", rawRes.Status))
+				common.ApiErrorT(c, "Turnstile service is temporarily unavailable, please try again later")
 				c.Abort()
 				return
 			}
 			var res turnstileCheckResponse
 			err = common.DecodeJson(rawRes.Body, &res)
 			if err != nil {
-				common.SysError("decode Turnstile verification response failed: " + err.Error())
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile 服务暂时不可用，请稍后重试",
-				})
+				common.SysError(common.LogText("decode Turnstile verification response failed: %s", err.Error()))
+				common.ApiErrorT(c, "Turnstile service is temporarily unavailable, please try again later")
 				c.Abort()
 				return
 			}
 			if !res.Success {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile 校验失败，请刷新重试！",
-				})
+				common.ApiErrorT(c, "Turnstile verification failed, please refresh and try again!")
 				c.Abort()
 				return
 			}

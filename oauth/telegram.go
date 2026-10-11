@@ -3,7 +3,6 @@ package oauth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,11 +24,12 @@ const (
 	TelegramOAuthFlowContextKey = "telegram_oauth_flow"
 )
 
+// Errors of the Telegram flow that the web console translates.
 var (
-	ErrTelegramOAuthNotConfigured = errors.New("Telegram OAuth is not configured or enabled. Please contact your administrator.")
-	ErrTelegramOAuthConflict      = errors.New("The telegram OAuth provider name is reserved. Ask your administrator to rename the conflicting custom provider.")
-	ErrTelegramOAuthFailed        = errors.New("Telegram authorization failed. Please try again.")
-	ErrTelegramAccountNotBound    = errors.New("This Telegram account is not linked. Sign in using another method and link it first.")
+	ErrTelegramOAuthNotConfigured = common.NewMessage("Telegram OAuth is not configured or enabled. Please contact your administrator.")
+	ErrTelegramOAuthConflict      = common.NewMessage("The telegram OAuth provider name is reserved. Ask your administrator to rename the conflicting custom provider.")
+	ErrTelegramOAuthFailed        = common.NewMessage("Telegram authorization failed. Please try again.")
+	ErrTelegramAccountNotBound    = common.NewMessage("This Telegram account is not linked. Sign in using another method and link it first.")
 )
 
 // TelegramOAuthFlow keeps the PKCE secret and original client configuration on

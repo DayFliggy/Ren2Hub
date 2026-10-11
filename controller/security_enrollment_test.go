@@ -308,10 +308,11 @@ func TestSecurityEnrollmentRejectsMissingProofBeforeCreatingCredentials(t *testi
 }
 
 type securityEnrollmentResponse struct {
-	Success bool            `json:"success"`
-	Message string          `json:"message"`
-	Code    string          `json:"code"`
-	Data    json.RawMessage `json:"data"`
+	Success    bool            `json:"success"`
+	Message    string          `json:"message"`
+	MessageKey string          `json:"message_key"`
+	Code       string          `json:"code"`
+	Data       json.RawMessage `json:"data"`
 }
 
 func TestSecurityEnrollmentMethodPolicy(t *testing.T) {
@@ -1043,9 +1044,11 @@ func TestSecurityEnrollmentTwoFAFailureAccountingAndStorageErrors(t *testing.T) 
 		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
 		assert.False(t, body.Success, endpoint.path)
 		if endpoint.path == "/api/user/login/2fa" {
-			assert.Equal(t, "参数错误", body.Message, endpoint.path)
+			assert.Equal(t, "Invalid parameters", body.Message, endpoint.path)
+			assert.Equal(t, "Invalid parameters", body.MessageKey, endpoint.path)
 		} else {
 			assert.Equal(t, "SECURITY_PROOF_REQUIRED", body.Code, endpoint.path)
+			assert.Equal(t, "Additional verification required", body.MessageKey, endpoint.path)
 		}
 	}
 	stored, err := model.GetTwoFAByUserId(user.Id)
@@ -1408,23 +1411,21 @@ func TestSecurityEnrollmentMissingTargetsAreBusinessErrors(t *testing.T) {
 	_, identity := setupSecurityEnrollmentTest(t)
 	require.NoError(t, model.DB.AutoMigrate(&model.Channel{}))
 	for _, target := range []struct {
-		path, key string
-		handler   gin.HandlerFunc
+		path, message string
+		handler       gin.HandlerFunc
 	}{
-		{"/api/channel/999/key", i18n.MsgChannelNotExists, GetChannelKey},
-		{"/api/user/999/2fa", i18n.MsgUserNotExists, AdminDisable2FA},
+		{"/api/channel/999/key", "Channel does not exist", GetChannelKey},
+		{"/api/user/999/2fa", "User does not exist", AdminDisable2FA},
 	} {
-		var expectedMessage string
 		response := securityEnrollmentRequest("POST", target.path, "", "", identity, func(c *gin.Context) {
 			c.Params = gin.Params{{Key: "id", Value: "999"}}
-			expectedMessage = i18n.T(c, target.key)
 			target.handler(c)
 		})
 		assert.Equal(t, http.StatusOK, response.Code)
 		var body securityEnrollmentResponse
 		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
 		assert.False(t, body.Success)
-		assert.Equal(t, expectedMessage, body.Message)
+		assert.Equal(t, target.message, body.Message)
 		assert.NotEqual(t, "AUTH_UNAUTHORIZED", body.Code)
 		for _, id := range []string{"invalid", "0", "-1"} {
 			invalid := securityEnrollmentRequest("POST", target.path, "", "", identity, func(c *gin.Context) {
@@ -1511,5 +1512,41 @@ func TestSecurityEnrollmentRejectsChangedFirstFactorPolicy(t *testing.T) {
 				assert.True(t, factor == nil || !factor.IsEnabled)
 			})
 		}
+	}
+}
+
+// Security and OAuth errors reach the web console as message_key with the
+// English text in message, also when the error is a sentinel wrapped with
+// detail that must stay out of the response.
+func TestSecurityErrorsCarryMessageKeys(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	_, oauthErr := (&oauth.GitHubProvider{}).ExchangeToken(context.Background(), "", nil)
+	require.Error(t, oauthErr)
+	for _, tc := range []struct {
+		name, code, message string
+		write               func(*gin.Context)
+	}{
+		{"wrapped Telegram sentinel", "TELEGRAM_OAUTH_FAILED", "Telegram authorization failed. Please try again.", func(c *gin.Context) {
+			writeSecurityOperationError(c, fmt.Errorf("%w: token endpoint status 500", oauth.ErrTelegramOAuthFailed))
+		}},
+		{"fixed security message", "TWOFA_ALREADY_ENABLED", "Two-factor authentication is already enabled.", func(c *gin.Context) {
+			writeSecurityOperationError(c, model.ErrTwoFAAlreadyEnabled)
+		}},
+		{"OAuth provider error", "", "Invalid authorization code", func(c *gin.Context) {
+			handleOAuthError(c, oauthErr)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(response)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/telegram", nil)
+			tc.write(c)
+			var body securityEnrollmentResponse
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
+			assert.False(t, body.Success)
+			assert.Equal(t, tc.code, body.Code)
+			assert.Equal(t, tc.message, body.Message)
+			assert.Equal(t, tc.message, body.MessageKey)
+		})
 	}
 }

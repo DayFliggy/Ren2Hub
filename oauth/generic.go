@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -89,7 +88,7 @@ func (p *GenericOAuthProvider) GetConfig() *model.CustomOAuthProvider {
 
 func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error) {
 	if code == "" {
-		return nil, NewOAuthError(i18n.MsgOAuthInvalidCode, nil)
+		return nil, NewOAuthError(common.NewMessage(msgInvalidCode))
 	}
 
 	redirectUri := fmt.Sprintf("%s/oauth/%s", system_setting.ServerAddress, p.config.Slug)
@@ -114,8 +113,8 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 	}
 
 	if err := ValidateOAuthEndpoint(p.config.TokenEndpoint); err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("[OAuth-Generic-%s] token endpoint rejected", p.config.Slug))
-		return nil, NewOAuthError(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": p.config.Name})
+		logger.LogWarn(ctx, common.LogText("[OAuth-Generic-%s] token endpoint rejected", p.config.Slug))
+		return nil, NewOAuthError(common.NewMessage(msgConnectFailed, map[string]any{"provider": p.config.Name}))
 	}
 	req, err = http.NewRequestWithContext(ctx, "POST", p.config.TokenEndpoint, strings.NewReader(values.Encode()))
 	if err != nil {
@@ -134,8 +133,8 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 	client := NewOAuthEndpointHTTPClient(20 * time.Second)
 	res, err := client.Do(req)
 	if err != nil {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] token exchange request failed", p.config.Slug))
-		return nil, NewOAuthError(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": p.config.Name})
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] token exchange request failed", p.config.Slug))
+		return nil, NewOAuthError(common.NewMessage(msgConnectFailed, map[string]any{"provider": p.config.Name}))
 	}
 	defer res.Body.Close()
 
@@ -143,7 +142,7 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken read body error: %s", p.config.Slug, err.Error()))
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] ExchangeToken read body error: %s", p.config.Slug, err.Error()))
 		return nil, err
 	}
 
@@ -164,7 +163,7 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 		// Try to parse as URL-encoded (some OAuth servers like GitHub return this format)
 		parsedValues, parseErr := url.ParseQuery(bodyStr)
 		if parseErr != nil {
-			logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken parse error: %s", p.config.Slug, err.Error()))
+			logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] ExchangeToken parse error: %s", p.config.Slug, err.Error()))
 			return nil, err
 		}
 		tokenResponse.AccessToken = parsedValues.Get("access_token")
@@ -173,13 +172,13 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 	}
 
 	if tokenResponse.Error != "" {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] token exchange rejected by provider", p.config.Slug))
-		return nil, NewOAuthError(i18n.MsgOAuthTokenFailed, map[string]any{"Provider": p.config.Name})
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] token exchange rejected by provider", p.config.Slug))
+		return nil, NewOAuthError(common.NewMessage(msgTokenFailed, map[string]any{"provider": p.config.Name}))
 	}
 
 	if tokenResponse.AccessToken == "" {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken failed: empty access token", p.config.Slug))
-		return nil, NewOAuthError(i18n.MsgOAuthTokenFailed, map[string]any{"Provider": p.config.Name})
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] ExchangeToken failed: empty access token", p.config.Slug))
+		return nil, NewOAuthError(common.NewMessage(msgTokenFailed, map[string]any{"provider": p.config.Name}))
 	}
 
 	logger.LogDebug(ctx, "[OAuth-Generic-%s] ExchangeToken success: scope=%s", p.config.Slug, tokenResponse.Scope)
@@ -196,8 +195,8 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 
 func (p *GenericOAuthProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*OAuthUser, error) {
 	if err := ValidateOAuthEndpoint(p.config.UserInfoEndpoint); err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("[OAuth-Generic-%s] userinfo endpoint rejected", p.config.Slug))
-		return nil, NewOAuthError(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": p.config.Name})
+		logger.LogWarn(ctx, common.LogText("[OAuth-Generic-%s] userinfo endpoint rejected", p.config.Slug))
+		return nil, NewOAuthError(common.NewMessage(msgConnectFailed, map[string]any{"provider": p.config.Name}))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", p.config.UserInfoEndpoint, nil)
@@ -213,21 +212,21 @@ func (p *GenericOAuthProvider) GetUserInfo(ctx context.Context, token *OAuthToke
 	client := NewOAuthEndpointHTTPClient(20 * time.Second)
 	res, err := client.Do(req)
 	if err != nil {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] userinfo request failed", p.config.Slug))
-		return nil, NewOAuthError(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": p.config.Name})
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] userinfo request failed", p.config.Slug))
+		return nil, NewOAuthError(common.NewMessage(msgConnectFailed, map[string]any{"provider": p.config.Name}))
 	}
 	defer res.Body.Close()
 
 	logger.LogDebug(ctx, "[OAuth-Generic-%s] GetUserInfo response status: %d", p.config.Slug, res.StatusCode)
 
 	if res.StatusCode != http.StatusOK {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo failed: status=%d", p.config.Slug, res.StatusCode))
-		return nil, NewOAuthError(i18n.MsgOAuthGetUserErr, nil)
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] GetUserInfo failed: status=%d", p.config.Slug, res.StatusCode))
+		return nil, NewOAuthError(common.NewMessage(msgGetUserFailed))
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo read body error: %s", p.config.Slug, err.Error()))
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] GetUserInfo read body error: %s", p.config.Slug, err.Error()))
 		return nil, err
 	}
 
@@ -250,8 +249,8 @@ func (p *GenericOAuthProvider) GetUserInfo(ctx context.Context, token *OAuthToke
 	}
 
 	if userId == "" {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo failed: empty user ID (field: %s)", p.config.Slug, p.config.UserIdField))
-		return nil, NewOAuthError(i18n.MsgOAuthUserInfoEmpty, map[string]any{"Provider": p.config.Name})
+		logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] GetUserInfo failed: empty user ID (field: %s)", p.config.Slug, p.config.UserIdField))
+		return nil, NewOAuthError(common.NewMessage(msgUserInfoEmpty, map[string]any{"provider": p.config.Name}))
 	}
 
 	logger.LogDebug(ctx, "[OAuth-Generic-%s] userinfo parsed", p.config.Slug)
@@ -260,13 +259,13 @@ func (p *GenericOAuthProvider) GetUserInfo(ctx context.Context, token *OAuthToke
 	if policyRaw != "" {
 		policy, err := parseAccessPolicy(policyRaw)
 		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] invalid access policy: %s", p.config.Slug, err.Error()))
-			return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthGetUserErr, nil, "invalid access policy configuration")
+			logger.LogError(ctx, common.LogText("[OAuth-Generic-%s] invalid access policy: %s", p.config.Slug, err.Error()))
+			return nil, NewOAuthErrorWithRaw(common.NewMessage(msgGetUserFailed), "invalid access policy configuration")
 		}
 		allowed, failure := evaluateAccessPolicy(bodyStr, policy)
 		if !allowed {
 			message := renderAccessDeniedMessage(p.config.AccessDeniedMessage, p.config.Name, bodyStr, failure)
-			logger.LogWarn(ctx, fmt.Sprintf("[OAuth-Generic-%s] access denied by policy: field=%s op=%s",
+			logger.LogWarn(ctx, common.LogText("[OAuth-Generic-%s] access denied by policy: field=%s op=%s",
 				p.config.Slug, failure.Field, failure.Op))
 			return nil, &AccessDeniedError{Message: message}
 		}
