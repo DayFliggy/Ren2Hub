@@ -41,7 +41,7 @@ frontend/      — The only web application, served at `/`; Docker builds it and
   src/api/         — Same-origin HTTP transport, authentication, and validated API contracts
   src/canvas/      — Landing-page routing scene and animation engine
   src/charts/      — ECharts adapters
-  src/components/  — common, home, auth, console, lab, and layout components
+  src/components/  — common, home, auth, console, and layout components
   src/composables/ — Page-domain state and request lifecycles
   src/constants/   — Home data and shared navigation definitions
   src/i18n/        — Vue I18n setup and domain-split locale modules
@@ -50,7 +50,7 @@ frontend/      — The only web application, served at `/`; Docker builds it and
   src/styles/      — Fonts, semantic tokens, base, home, and console styles
   src/types/       — API and domain contracts
   src/utils/       — Formatting and URL-safety helpers
-  src/views/       — Home, auth, Console, and Lab route views
+  src/views/       — Home, auth, and Console route views
 ```
 
 ## Internationalization (i18n)
@@ -65,8 +65,8 @@ frontend/      — The only web application, served at `/`; Docker builds it and
 
 - Library: `vue-i18n`
 - Languages: zh-CN and en
-- `common` and `home` are loaded with the initial bundle; `auth`, `console`, `lab`, and `setup` are merged lazily by route domain.
-- Translation files: `frontend/src/i18n/locales/{en,zh-CN}/{common,auth,console,lab,home,setup}.ts`; some features maintain paired messages in shared TypeScript modules under `frontend/src/i18n/`.
+- `common` and `home` are loaded with the initial bundle; `auth`, `console`, and `setup` are merged lazily by route domain.
+- Translation files: `frontend/src/i18n/locales/{en,zh-CN}/{common,auth,console,home,setup}.ts`; some features maintain paired messages in shared TypeScript modules under `frontend/src/i18n/`.
 - User-facing strings in Vue components must use `useI18n()` and stable translation keys.
 - Backend text for the web console (`message_key` with `message_params`, log `other.content_parts`, gateway task fail reasons and channel status reasons) is translated by `frontend/src/i18n/serverMessages.ts`, not vue-i18n. Its zh-CN catalogs are flat JSON objects in `frontend/src/i18n/locales/zh-CN/server-messages/*.json`: each key is the backend's exact English source text with `{{name}}` placeholders, each value the Chinese text with the same placeholder names; no nesting, comments or vue-i18n syntax. Every file in the directory loads lazily into one chunk. A key lives in one file only; keys several areas share go in `common.json`. English needs no catalog; a key without an entry shows the backend's English text.
 - For translation work, follow `.agents/skills/i18n-translate/SKILL.md` and edit the existing Vue message source. React/Next.js and shadcn/ui skills apply only when the target code actually uses those libraries; they do not gate ordinary Vue work.

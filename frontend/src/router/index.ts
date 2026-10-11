@@ -438,51 +438,6 @@ const router = createRouter({
       ],
     },
     {
-      path: '/lab',
-      component: () => import('@/components/layout/LabLayout.vue'),
-      meta: {
-        requiresAuth: true,
-        topNav: 'alchemy',
-        protected: true,
-        feature: 'lab',
-        messageDomain: 'lab',
-      },
-      children: [
-        { path: '', redirect: { name: 'lab-chat' } },
-        {
-          path: 'chat',
-          name: 'lab-chat',
-          component: () => import('@/views/lab/ChatView.vue'),
-        },
-        {
-          path: 'chat/:id',
-          name: 'lab-chat-session',
-          component: () => import('@/views/lab/ChatView.vue'),
-          meta: { nav: 'lab-chat' },
-        },
-        {
-          path: 'studio',
-          name: 'lab-studio',
-          component: () => import('@/views/lab/StudioView.vue'),
-        },
-        {
-          path: 'assets',
-          name: 'lab-assets',
-          component: () => import('@/views/lab/AssetsView.vue'),
-        },
-        {
-          path: 'notes',
-          name: 'lab-notes',
-          component: () => import('@/views/lab/NotesView.vue'),
-        },
-        {
-          path: 'plugins',
-          name: 'lab-plugins',
-          component: () => import('@/views/lab/PluginsView.vue'),
-        },
-      ],
-    },
-    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),
@@ -541,11 +496,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.meta.messageDomain === 'lab') {
-    await Promise.all([loadMessageDomain('console'), loadMessageDomain('lab')])
-  } else if (to.meta.messageDomain) {
-    await loadMessageDomain(to.meta.messageDomain)
-  }
+  if (to.meta.messageDomain) await loadMessageDomain(to.meta.messageDomain)
   // SecurityAccessView uses the auth domain for password fields. The route is
   // reachable directly, so its lazy auth messages must be present before the
   // first render rather than relying on a previous sign-in visit.

@@ -5,7 +5,6 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import ConsoleNavStrip from '@/components/console/ConsoleNavStrip.vue'
-import LabNavStrip from '@/components/lab/LabNavStrip.vue'
 import { getAccessibleConsoleNavGroups } from '@/constants/navigation/consoleNav'
 import i18n, { loadMessageDomain } from '@/i18n'
 
@@ -25,14 +24,7 @@ async function routerAt(path: string) {
     }))
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
-      ...consoleRoutes,
-      { path: '/lab/chat', name: 'lab-chat', component: EmptyRoute },
-      { path: '/lab/studio', name: 'lab-studio', component: EmptyRoute },
-      { path: '/lab/assets', name: 'lab-assets', component: EmptyRoute },
-      { path: '/lab/notes', name: 'lab-notes', component: EmptyRoute },
-      { path: '/lab/plugins', name: 'lab-plugins', component: EmptyRoute },
-    ],
+    routes: consoleRoutes,
   })
   await router.push(path)
   await router.isReady()
@@ -56,16 +48,5 @@ describe('hand-drawn mobile navigation', () => {
     expect(
       wrapper.find('[data-console-nav-item="plan-management"]').exists()
     ).toBe(false)
-  })
-
-  it('marks the Lab strip and keeps the active route semantic', async () => {
-    await Promise.all([loadMessageDomain('console'), loadMessageDomain('lab')])
-    const router = await routerAt('/lab/chat')
-    const wrapper = mount(LabNavStrip, {
-      global: { plugins: [router, i18n] },
-    })
-
-    expect(wrapper.attributes('data-handdrawn')).toBe('navigation-strip')
-    expect(wrapper.get('[aria-current="page"]').text()).toBeTruthy()
   })
 })

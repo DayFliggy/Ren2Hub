@@ -604,22 +604,6 @@ html.light [data-handdrawn='chip'] {
   outline-offset: 1px;
 }
 
-html.light [data-handdrawn='brand-option'] {
-  border-color: var(--pencil-line-soft) !important;
-  box-shadow: 1px 1px 0 var(--pencil-line-faint);
-}
-
-html.light [data-handdrawn='ledger-list'] {
-  border-color: var(--pencil-line-soft) !important;
-  border-radius: var(--sketch-border-radius-lg) !important;
-  box-shadow: var(--pencil-surface-shadow);
-}
-
-html.light [data-handdrawn='ledger-list'] > :where(div, li) {
-  border-bottom-style: dashed;
-  border-bottom-color: var(--pencil-line-faint);
-}
-
 html.light [data-handdrawn='ledger-rows'] > * {
   border-color: var(--pencil-line-faint);
   border-top-style: dashed;
@@ -658,48 +642,6 @@ html.light .profile-binding-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-html.light .lab-assistant-message {
-  position: relative;
-  padding-left: 1.1rem;
-}
-
-html.light .lab-message-content {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-html.light .lab-assistant-message::before {
-  content: '';
-  position: absolute;
-  top: 0.35rem;
-  bottom: 0.2rem;
-  left: 0;
-  width: 3px;
-  background: linear-gradient(
-    180deg,
-    var(--pencil-line-soft),
-    var(--pencil-line-faint) 72%,
-    transparent
-  );
-  clip-path: polygon(32% 0, 100% 4%, 76% 93%, 0 100%);
-  transform: rotate(0.7deg);
-  pointer-events: none;
-}
-
-html.light
-  :where(
-    [data-handdrawn-page='studio'],
-    [data-handdrawn-page='assets'],
-    [data-handdrawn-page='plugins']
-  )
-  > .mx-auto {
-  padding-top: 3.5rem;
-}
-
-html.light [data-handdrawn-page='chat'] .subtle-scroll > .mx-auto:first-child {
-  padding-top: 3.5rem;
 }
 
 /* ===== Elegant Material night language =====
@@ -885,17 +827,11 @@ html.dark [data-handdrawn='ledger'] tr[data-selected='true'] {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-html.dark [data-handdrawn='ledger-list'],
 html.dark [data-handdrawn='ledger-rows'] > * {
   border-color: var(--outline-variant) !important;
   border-radius: var(--shape-card) !important;
   background-color: var(--surface-container);
   box-shadow: var(--elevation-1);
-}
-
-html.dark [data-handdrawn='ledger-list'] > :where(div, li) {
-  border-bottom-color: var(--outline-variant);
-  border-bottom-style: solid;
 }
 
 html.dark [data-handdrawn='tabs'] {
@@ -912,8 +848,7 @@ html.dark [data-handdrawn='toggle']:not(.console-toggle) {
   border: 1px solid var(--outline-variant);
 }
 
-html.dark [data-handdrawn='chip'],
-html.dark [data-handdrawn='brand-option'] {
+html.dark [data-handdrawn='chip'] {
   border-color: var(--outline-variant) !important;
 }
 
@@ -925,12 +860,6 @@ html.dark .pencil-progress {
 
 html.dark .pencil-brand-frame {
   filter: var(--brand-icon-shadow);
-}
-
-@media (hover: none), (pointer: coarse) {
-  .touch-row-action {
-    opacity: 1 !important;
-  }
 }
 
 /* 刷痕高亮：日间为笔刷多边形色块；夜间由令牌退化为细金下划线 */

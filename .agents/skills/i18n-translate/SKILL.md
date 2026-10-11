@@ -12,7 +12,7 @@ description: 维护 Ren2Hub Vue 3 前端的 en 与 zh-CN 翻译。用于 fronten
 先读取项目 `AGENTS.md` 中的 i18n 规则，再从调用处追踪实际消息来源。当前使用 `vue-i18n`、`useI18n()` 和稳定语义键，支持 `en`、`zh-CN`。
 
 - `frontend/src/i18n/index.ts` 定义语言及分域加载。
-- `frontend/src/i18n/locales/{en,zh-CN}/` 保存 `common`、`home`、`auth`、`console`、`lab`、`setup` 消息模块。
+- `frontend/src/i18n/locales/{en,zh-CN}/` 保存 `common`、`home`、`auth`、`console`、`setup` 消息模块。
 - 部分功能在 `frontend/src/i18n/` 的共享 TypeScript 文件中保存两种语言的消息。沿用调用处正在使用的来源，不另建副本。
 
 ## 修改流程

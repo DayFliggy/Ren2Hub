@@ -357,7 +357,6 @@ export async function configureStablePage(
       localStorage.setItem('ren2hub_theme_mode', selectedTheme)
       localStorage.setItem('ren2hub_locale', 'zh-CN')
       localStorage.setItem('ren2hub_sidebar_collapsed', 'false')
-      localStorage.setItem('ren2hub_lab_sidebar_collapsed', 'false')
       sessionStorage.clear()
     },
     {

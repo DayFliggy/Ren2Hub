@@ -4,7 +4,6 @@
  */
 import type { FeatureStatus } from '@/api/public'
 import { consoleEntryRoute } from './consoleNav'
-import { labEntryRoute } from './labNav'
 
 export type TopNavName =
   'activities' | 'dashboard' | 'ops' | 'console' | 'alchemy' | 'community'
@@ -49,12 +48,9 @@ export const topNavItems: readonly TopNavItem[] = [
   },
   // Direct link into the workspace layout; its sub-nav lives in the sidebar.
   { name: 'console', labelKey: 'nav.console', route: consoleEntryRoute },
-  {
-    name: 'alchemy',
-    labelKey: 'nav.alchemy',
-    route: labEntryRoute,
-    feature: 'lab',
-  },
+  // Placeholder with no pages behind it, so it stays disabled even if the
+  // lab capability is reported live.
+  { name: 'alchemy', labelKey: 'nav.alchemy', feature: 'lab', disabled: true },
   {
     name: 'community',
     labelKey: 'nav.community',
@@ -82,7 +78,9 @@ export function getVisibleTopNavItems(
 }
 
 /** Route guards derive from the same access rule as the visible entry. */
-export function getTopNavRouteMeta<N extends Exclude<TopNavName, 'community'>>(
+export function getTopNavRouteMeta<
+  N extends Exclude<TopNavName, 'alchemy' | 'community'>,
+>(
   name: N
 ): {
   topNav: N
