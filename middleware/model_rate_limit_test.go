@@ -46,3 +46,33 @@ func TestModelRateLimitFailureReleasesSuccessReservation(t *testing.T) {
 	assert.Equal(t, int64(1), client.ZCard(t.Context(), service.GatewayLogicalRateKey(82)+":success").Val())
 	assert.Zero(t, client.ZCard(t.Context(), service.GatewayLogicalRateKey(82)+":pending").Val())
 }
+
+// Without Redis the logical-request limit cannot be counted, so it rejects
+// with an explained OpenAI error instead of a bare status or a memory count.
+func TestModelRateLimitWithoutRedisExplainsRejection(t *testing.T) {
+	previousRedis, previousClient := common.RedisEnabled, common.RDB
+	previousEnabled := setting.ModelRequestRateLimitEnabled
+	common.RedisEnabled, common.RDB = false, nil
+	setting.ModelRequestRateLimitEnabled = true
+	t.Cleanup(func() {
+		common.RedisEnabled, common.RDB = previousRedis, previousClient
+		setting.ModelRequestRateLimitEnabled = previousEnabled
+	})
+	router := gin.New()
+	router.POST("/request", func(c *gin.Context) {
+		c.Set("id", 83)
+		c.Set(common.RequestIdKey, "req-unavailable")
+	}, ModelRequestRateLimit(), func(c *gin.Context) {
+		t.Error("an uncounted request reached the relay")
+	})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/request", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
+	want, err := common.Marshal(gin.H{"error": gin.H{
+		"message": common.MessageWithRequestId("rate_limit_unavailable", "req-unavailable"),
+		"type":    "new_api_error",
+		"code":    "",
+	}})
+	assert.NoError(t, err)
+	assert.JSONEq(t, string(want), response.Body.String())
+}

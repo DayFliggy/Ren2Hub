@@ -60,7 +60,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	}
 	userID, tokenID := c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId)
 	if s.lockedChannelID != 0 && (s.lockedUserID != userID || s.lockedTokenID != tokenID) {
-		state.closeAfter = true
+		state.closeCode = websocket.ClosePolicyViolation
 		return newResponsesWSInvalidRequestError(errors.New("websocket identity changed; reconnect required"))
 	}
 	common.SetContextKey(c, constant.ContextKeyOriginalModel, create.Request.Model)
@@ -139,7 +139,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				}
 			}
 			if !keyAllowed {
-				state.closeAfter = true
+				state.closeCode = websocket.ClosePolicyViolation
 				return newResponsesWSInvalidRequestError(errors.New("connection credential changed; reconnect required"))
 			}
 		}
@@ -175,7 +175,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			return newResponsesWSInvalidRequestError(err)
 		}
 		if s.lockedIdentity != "" && identity != s.lockedIdentity {
-			state.closeAfter = true
+			state.closeCode = websocket.ClosePolicyViolation
 			return newResponsesWSInvalidRequestError(errors.New("resolved model or connection settings changed; reconnect required"))
 		}
 		if err := service.BindGatewayWebSocketIdentity(c, identity); err != nil {
@@ -223,11 +223,11 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
 		if err := s.writeTarget(websocket.TextMessage, payload); err != nil {
-			state.closeAfter = true
+			state.closeCode = websocket.CloseInternalServerErr
 			return types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		result := s.readCall(c, state, create, info)
-		if result == nil || !info.UpstreamRejected || info.HasValidOutput() || state.closeAfter {
+		if result == nil || !info.UpstreamRejected || info.HasValidOutput() || state.closeCode != 0 {
 			return result
 		}
 		outcome := relayAttemptOutcome(c, info, result, attemptStarted, false)
@@ -360,7 +360,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 		case incoming := <-state.inbox:
 			if incoming.err != nil {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, incoming.err)
-				state.closeAfter = true
+				state.closeCode, state.closeReason = websocket.CloseInternalServerErr, "upstream connection closed"
 				return types.NewError(incoming.err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
 			idle.Reset(timeout)
@@ -369,7 +369,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				StreamID string `json:"stream_id"`
 			}
 			if err := common.Unmarshal(incoming.body, &event); err != nil {
-				state.closeAfter = true
+				state.closeCode = websocket.CloseInternalServerErr
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
 				return types.NewError(errors.New("invalid upstream websocket event"), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
@@ -392,13 +392,16 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 						controlSent = false
 					}
 					if err := s.writeClient(incoming.kind, incoming.body); err != nil {
-						state.closeAfter = true
+						state.closeCode = websocket.CloseInternalServerErr
 						return types.NewError(err, types.ErrorCodeBadResponse)
 					}
 					continue
 				}
 				info.UpstreamRejected = !info.UpstreamAccepted && !ambiguous && rejection.Status >= 400 && rejection.Status < 500 && rejection.Status != 408
-				state.terminal, state.closeAfter = &incoming, ambiguous
+				state.terminal = &incoming
+				if ambiguous {
+					state.closeCode = websocket.CloseInternalServerErr
+				}
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, errors.New("upstream websocket request rejected"))
 				if info.UpstreamRejected {
 					info.ResponseUsage = nil
@@ -416,7 +419,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 			}
 			if info.UpstreamAccepted && control != nil && !controlSent {
 				if err := s.writeTarget(websocket.TextMessage, control); err != nil {
-					state.closeAfter = true
+					state.closeCode = websocket.CloseInternalServerErr
 					return types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
 				}
 				controlSent = true
@@ -427,7 +430,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				c.Set("response_termination", termination)
 			}
 			if err := service.BindGatewayOutput(c, incoming.body); err != nil {
-				state.closeAfter = true
+				state.closeCode = websocket.CloseInternalServerErr
 				return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 			}
 			if semantic, _ := helper.StreamPayloadState(string(incoming.body)); semantic && (!termination.IsTerminal() || termination.IsSuccessful()) {
@@ -443,7 +446,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				return nil
 			}
 			if err := s.writeClient(incoming.kind, incoming.body); err != nil {
-				state.closeAfter = true
+				state.closeCode = websocket.CloseInternalServerErr
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
 				return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
@@ -459,17 +462,17 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 			control = pending.body
 			if info.UpstreamAccepted {
 				if err := s.writeTarget(websocket.TextMessage, control); err != nil {
-					state.closeAfter = true
+					state.closeCode = websocket.CloseInternalServerErr
 					return types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
 				}
 				controlSent = true
 			}
 		case <-idle.C:
-			state.closeAfter = true
+			state.closeCode, state.closeReason = websocket.CloseInternalServerErr, "upstream response timed out"
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, errors.New("upstream websocket timed out"))
 			return types.NewError(errors.New("upstream websocket timed out"), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 		case <-c.Request.Context().Done():
-			state.closeAfter = true
+			state.closeCode = websocket.CloseInternalServerErr
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
 			return types.NewError(c.Request.Context().Err(), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 		}
@@ -480,21 +483,26 @@ func (s *responsesWSSession) startTargetReader(target *websocket.Conn) {
 	s.workers.Go(func() {
 		for {
 			kind, body, err := target.ReadMessage()
-			state := s.getCurrent()
-			if state == nil {
-				if err != nil {
-					s.shutdown()
+			if state := s.getCurrent(); state != nil {
+				select {
+				case state.inbox <- responsesWSMessage{kind: kind, body: body, err: err}:
+					if err != nil {
+						return
+					}
+					continue
+				case <-state.done:
+				case <-s.ctx.Done():
 					return
 				}
-				continue
 			}
-			select {
-			case state.inbox <- responsesWSMessage{kind: kind, body: body, err: err}:
-			case <-state.done:
-			case <-s.ctx.Done():
-				return
-			}
+			// No request owns this message. An idle upstream that closed
+			// normally ends the client session with the same code.
 			if err != nil {
+				code := websocket.CloseInternalServerErr
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					code = err.(*websocket.CloseError).Code
+				}
+				s.shutdown(code, "upstream connection closed")
 				return
 			}
 		}
