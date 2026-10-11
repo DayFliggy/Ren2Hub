@@ -40,6 +40,7 @@ const {
   hasResults,
   pricingIssues,
   vendorOptions,
+  vendorLabel,
   load,
 } = useModelMarket()
 
@@ -57,7 +58,7 @@ const typeOptions = computed(() => [
 
 const vendorSelectOptions = computed(() => [
   { value: '', label: t('models.allVendors') },
-  ...vendorOptions.value.map((v) => ({ value: v, label: v })),
+  ...vendorOptions.value.map((v) => ({ value: v, label: vendorLabel(v) })),
 ])
 
 const sortOptions = computed(() => [
@@ -203,14 +204,14 @@ onMounted(load)
       <div v-if="detailModel" class="space-y-5">
         <!-- header meta -->
         <div class="flex items-center gap-3">
-          <VendorLogo :vendor="detailModel.vendor" :size="44" />
+          <VendorLogo :vendor="vendorLabel(detailModel.vendor)" :size="44" />
           <div class="flex-1">
             <div class="flex items-center gap-2">
               <StatusChip tone="info">{{ detailTypeLabel }}</StatusChip>
               <StatusChip tone="accent">{{ detailBillingLabel }}</StatusChip>
             </div>
             <p class="mt-1 text-sm text-[var(--text-tertiary)]">
-              {{ detailModel.vendor }}
+              {{ vendorLabel(detailModel.vendor) }}
             </p>
           </div>
           <ConsoleButton

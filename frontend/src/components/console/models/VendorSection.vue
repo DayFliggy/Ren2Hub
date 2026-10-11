@@ -25,12 +25,12 @@ const { t } = useI18n()
   <section class="mb-8">
     <!-- group header -->
     <header class="mb-3 flex items-center gap-3 px-1">
-      <VendorLogo :vendor="group.vendor" :size="40" />
+      <VendorLogo :vendor="group.label" :size="40" />
       <div class="min-w-0">
         <h2
           class="display-title truncate text-base font-semibold text-[var(--text-primary)]"
         >
-          {{ group.vendor }}
+          {{ group.label }}
         </h2>
         <p
           v-if="group.tagline"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
@@ -28,6 +29,7 @@ interface Catalog {
 
 const emit = defineEmits<{ saved: [] }>()
 
+const { t } = useI18n()
 const toast = useToast()
 const { load, rawValue, isSecretConfigured } = useSystemSettings()
 const loadingCatalog = ref(false)
@@ -72,11 +74,11 @@ function ensureProductBelongsToStore() {
 
 async function saveConfiguration(loadCatalogAfterSave = false) {
   if (!form.merchantId.trim() || !form.returnUrl.trim()) {
-    toast.error('请填写 Waffo Pancake 商户 ID 和返回地址。')
+    toast.error(t('systemSettings.waffoPancake.credentialsRequired'))
     return false
   }
   if (!form.privateKey.trim() && !privateKeyConfigured.value) {
-    toast.error('请填写 Waffo Pancake 私钥。')
+    toast.error(t('systemSettings.waffoPancake.privateKeyRequired'))
     return false
   }
 
@@ -93,7 +95,7 @@ async function saveConfiguration(loadCatalogAfterSave = false) {
     })
     form.privateKey = ''
     emit('saved')
-    toast.success('Waffo Pancake 配置已保存')
+    toast.success(t('systemSettings.waffoPancake.saved'))
     if (loadCatalogAfterSave) await loadCatalog()
     return true
   } catch (error) {
@@ -118,11 +120,11 @@ async function loadCatalog() {
 
 async function createPair() {
   if (!form.merchantId.trim() || !form.returnUrl.trim()) {
-    toast.error('请填写商户 ID 和返回地址后再创建店铺与产品。')
+    toast.error(t('systemSettings.waffoPancake.pairCredentialsRequired'))
     return
   }
   if (!form.privateKey.trim() && !privateKeyConfigured.value) {
-    toast.error('请填写私钥后再创建店铺与产品。')
+    toast.error(t('systemSettings.waffoPancake.pairPrivateKeyRequired'))
     return
   }
 
@@ -138,7 +140,7 @@ async function createPair() {
     })
     form.storeId = result.store_id
     form.productId = result.product_id
-    toast.success('已创建店铺与产品，请确认后保存配置。')
+    toast.success(t('systemSettings.waffoPancake.paired'))
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
@@ -153,28 +155,36 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="waffo-pancake-panel" aria-label="Waffo Pancake 配置">
+  <section
+    class="waffo-pancake-panel"
+    :aria-label="t('systemSettings.waffoPancake.label')"
+  >
     <div class="grid gap-4 sm:grid-cols-2">
-      <FormField label="商户 ID">
+      <FormField :label="t('systemSettings.waffoPancake.merchantId')">
         <TextInput v-model="form.merchantId" autocomplete="off" />
       </FormField>
-      <FormField label="私钥">
+      <FormField :label="t('systemSettings.waffoPancake.privateKey')">
         <TextInput
           v-model="form.privateKey"
           type="password"
           autocomplete="new-password"
         />
         <div v-if="privateKeyConfigured" class="mt-1 flex items-center gap-1.5">
-          <StatusChip tone="success" class="text-xs">已配置</StatusChip>
-          <span class="text-xs text-[var(--text-tertiary)]"
-            >留空会保留现有私钥</span
-          >
+          <StatusChip tone="success" class="text-xs">{{
+            t('systemSettings.waffoPancake.configured')
+          }}</StatusChip>
+          <span class="text-xs text-[var(--text-tertiary)]">{{
+            t('systemSettings.waffoPancake.keepPrivateKey')
+          }}</span>
         </div>
       </FormField>
-      <FormField label="返回地址" class="sm:col-span-2">
+      <FormField
+        :label="t('systemSettings.waffoPancake.returnUrl')"
+        class="sm:col-span-2"
+      >
         <TextInput v-model="form.returnUrl" type="url" autocomplete="off" />
       </FormField>
-      <FormField label="单位价格">
+      <FormField :label="t('systemSettings.waffoPancake.unitPrice')">
         <TextInput
           :model-value="String(form.unitPrice)"
           type="number"
@@ -184,7 +194,7 @@ onMounted(async () => {
           @update:model-value="form.unitPrice = Number($event)"
         />
       </FormField>
-      <FormField label="最低充值金额">
+      <FormField :label="t('systemSettings.waffoPancake.minTopUp')">
         <TextInput
           :model-value="String(form.minTopUp)"
           type="number"
@@ -203,7 +213,7 @@ onMounted(async () => {
         :loading="creating"
         @click="createPair"
       >
-        创建店铺和产品
+        {{ t('systemSettings.waffoPancake.createPair') }}
       </ConsoleButton>
       <ConsoleButton
         variant="secondary"
@@ -211,21 +221,23 @@ onMounted(async () => {
         :loading="saving || loadingCatalog"
         @click="saveConfiguration(true)"
       >
-        保存并加载目录
+        {{ t('systemSettings.waffoPancake.saveAndLoad') }}
       </ConsoleButton>
       <ConsoleButton size="sm" :loading="saving" @click="saveConfiguration()">
-        保存网关配置
+        {{ t('systemSettings.waffoPancake.save') }}
       </ConsoleButton>
     </div>
 
     <div v-if="catalog" class="mt-5 grid gap-4 sm:grid-cols-2">
-      <FormField label="店铺">
+      <FormField :label="t('systemSettings.waffoPancake.store')">
         <select
           v-model="form.storeId"
           class="waffo-select"
           @change="ensureProductBelongsToStore"
         >
-          <option value="">选择店铺</option>
+          <option value="">
+            {{ t('systemSettings.waffoPancake.selectStore') }}
+          </option>
           <option
             v-for="store in catalog.stores"
             :key="store.id"
@@ -235,13 +247,15 @@ onMounted(async () => {
           </option>
         </select>
       </FormField>
-      <FormField label="一次性产品">
+      <FormField :label="t('systemSettings.waffoPancake.product')">
         <select
           v-model="form.productId"
           class="waffo-select"
           :disabled="!selectedStore"
         >
-          <option value="">选择产品</option>
+          <option value="">
+            {{ t('systemSettings.waffoPancake.selectProduct') }}
+          </option>
           <option
             v-for="product in selectedStore?.onetimeProducts ?? []"
             :key="product.id"

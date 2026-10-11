@@ -3,7 +3,6 @@ import { mount } from '@vue/test-utils'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import AuthRelayFlow from '@/components/auth/AuthRelayFlow.vue'
-import { MODEL_NODES } from '@/constants/home/models'
 import { useTheme } from '@/composables/useTheme'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
@@ -32,7 +31,7 @@ describe('AuthRelayFlow', () => {
     const names = wrapper.findAll('.relay__name').map((n) => n.text())
 
     // v2：上游从 4 条减为 3 条
-    expect(names).toEqual(MODEL_NODES.slice(0, 3).map((m) => m.name))
+    expect(names).toEqual(['Claude', 'GPT', 'Gemini'])
   })
 
   it('lands every branch on the upstream column', () => {

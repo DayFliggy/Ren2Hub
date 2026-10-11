@@ -64,9 +64,7 @@ const visibleFields = computed(() => {
   return fields.filter((field) => {
     const text = [
       field.key,
-      field.label,
-      field.description,
-      field.labelKey ? t(field.labelKey) : '',
+      t(field.labelKey),
       field.descriptionKey ? t(field.descriptionKey) : '',
     ]
       .filter(Boolean)
@@ -160,7 +158,7 @@ async function saveSection() {
       } catch {
         toast.error(
           t('systemSettings.invalidJson', {
-            field: field.labelKey ? t(field.labelKey) : field.label,
+            field: t(field.labelKey),
           })
         )
         return
@@ -202,7 +200,7 @@ onMounted(() => load())
   <div v-if="domainConfig && activeSection" class="settings-domain-layout">
     <!-- Left Section Navigation Rail -->
     <aside class="settings-section-aside">
-      <nav class="settings-section-nav" :aria-label="domainConfig.titleKey">
+      <nav class="settings-section-nav" :aria-label="t(domainConfig.titleKey)">
         <button
           v-for="section in domainConfig.sections"
           :key="section.id"
@@ -218,25 +216,15 @@ onMounted(() => load())
             class="settings-active-bar"
             aria-hidden="true"
           />
-          <span class="truncate">{{
-            section.titleKey ? t(section.titleKey) : section.title
-          }}</span>
+          <span class="truncate">{{ t(section.titleKey) }}</span>
         </button>
       </nav>
     </aside>
 
     <div class="min-w-0 flex-1">
       <SysSettingsFormCard
-        :title="
-          activeSection.titleKey
-            ? t(activeSection.titleKey)
-            : activeSection.title
-        "
-        :description="
-          activeSection.descriptionKey
-            ? t(activeSection.descriptionKey)
-            : activeSection.description
-        "
+        :title="t(activeSection.titleKey)"
+        :description="t(activeSection.descriptionKey)"
         :saving="saving.value"
         :dirty="dirty && loaded && !loading && !sharedSaving"
         @save="saveSection"

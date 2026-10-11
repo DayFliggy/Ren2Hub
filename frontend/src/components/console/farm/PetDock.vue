@@ -91,8 +91,9 @@ const energyStyle = computed(() => {
 
         <!-- skill -->
         <p class="text-xs text-[var(--text-secondary)]">
-          <span class="font-medium text-[var(--text-primary)]"
-            >{{ t('farm.pet.skill') }}：</span
+          <span class="font-medium text-[var(--text-primary)]">{{
+            t('farm.pet.skill')
+          }}</span
           >{{ pet.skill }}
         </p>
       </div>

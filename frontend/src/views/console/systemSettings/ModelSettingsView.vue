@@ -363,7 +363,7 @@ onMounted(async () => {
         <SysToggleRow
           v-model="claude['claude.thinking_adapter_enabled']"
           :label="t('systemSettings.models.claudeThinkingAdapter')"
-          :description="t('systemSettings.models.claudeThinkingAdapterDesc')"
+          :description="t('systemSettings.fields.claudeThinkingAdapterHint')"
         />
       </div>
       <div class="mt-4">

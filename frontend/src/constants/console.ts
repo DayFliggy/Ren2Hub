@@ -15,21 +15,21 @@ export const MODELS = [
   'mistral-large-3',
 ]
 
-/** Per-vendor descriptive tagline shown in the group header. */
-export const vendorMeta: Record<string, string> = {
-  OpenAI: 'GPT 系列旗舰与多模态模型',
-  Anthropic: 'Claude 系列，长上下文与代码见长',
-  Google: 'Gemini 多模态与超长上下文',
-  DeepSeek: '国产开源，极致性价比',
-  阿里通义: '通义千问系列与多模态',
-  Alibaba: '通义千问系列与多模态',
-  xAI: 'Grok 实时联网大模型',
-  Moonshot: 'Kimi 长文与 Agent 能力',
-  'Moonshot AI': 'Kimi 长文与 Agent 能力',
-  智谱AI: 'GLM 系列与视觉生成',
-  'Zhipu AI': 'GLM 系列与视觉生成',
-  'Bytedance Seed': '豆包与 Seed 系列多模态模型',
-  Tencent: '混元系列与多模态模型',
+/** Message key of the tagline shown in each vendor's group header. */
+export const vendorTaglineKeys: Record<string, string> = {
+  OpenAI: 'models.vendorTaglines.openai',
+  Anthropic: 'models.vendorTaglines.anthropic',
+  Google: 'models.vendorTaglines.google',
+  DeepSeek: 'models.vendorTaglines.deepseek',
+  阿里通义: 'models.vendorTaglines.alibaba',
+  Alibaba: 'models.vendorTaglines.alibaba',
+  xAI: 'models.vendorTaglines.xai',
+  Moonshot: 'models.vendorTaglines.moonshot',
+  'Moonshot AI': 'models.vendorTaglines.moonshot',
+  智谱AI: 'models.vendorTaglines.zhipu',
+  'Zhipu AI': 'models.vendorTaglines.zhipu',
+  'Bytedance Seed': 'models.vendorTaglines.bytedanceSeed',
+  Tencent: 'models.vendorTaglines.tencent',
 }
 
 export interface VendorLogoMeta {

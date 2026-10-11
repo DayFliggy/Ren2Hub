@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { SYSTEM_SETTINGS_DOMAINS } from '@/constants/systemSettingsCatalog'
+import enConsole from '@/i18n/locales/en/console'
+import zhConsole from '@/i18n/locales/zh-CN/console'
+
+function message(messages: unknown, key: unknown): unknown {
+  if (typeof key !== 'string') return undefined
+  return key
+    .split('.')
+    .reduce<unknown>(
+      (node, part) =>
+        node && typeof node === 'object'
+          ? (node as Record<string, unknown>)[part]
+          : undefined,
+      messages
+    )
+}
 
 describe('system settings catalog', () => {
   it('provides a stable default deep link for every top-level domain', () => {
@@ -89,7 +104,6 @@ describe('system settings catalog', () => {
       'GmpayMinTopUp',
       'GmpayGroupRatio',
     ])
-    expect(epay.fields.every((field) => !!field.labelKey)).toBe(true)
     const payment = sections.find((section) => section.id === 'payment')!
     expect(
       payment.fields.some((field) => field.key === 'StripeApiSecret')
@@ -100,6 +114,28 @@ describe('system settings catalog', () => {
     expect(
       payment.fields.some((field) => field.key === 'WaffoSandboxPublicCert')
     ).toBe(true)
+  })
+
+  it('names every domain, section, field and option in both locales', () => {
+    const keys = SYSTEM_SETTINGS_DOMAINS.flatMap((domain) => [
+      domain.titleKey,
+      ...domain.sections.flatMap((section) => [
+        section.titleKey,
+        section.descriptionKey,
+        ...section.fields.flatMap((field) => [
+          field.labelKey,
+          ...(field.descriptionKey ? [field.descriptionKey] : []),
+          ...(field.options ?? []).map((option) => option.labelKey),
+        ]),
+      ]),
+    ])
+    for (const messages of [zhConsole, enConsole]) {
+      const missing = keys.filter((key) => {
+        const text = message(messages, key)
+        return typeof text !== 'string' || !text.trim()
+      })
+      expect(missing).toEqual([])
+    }
   })
 
   it('keeps model pricing out of system settings', () => {

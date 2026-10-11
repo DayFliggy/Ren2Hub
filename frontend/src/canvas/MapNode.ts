@@ -1,5 +1,7 @@
 // 平面地图上的节点。本文件先实现模型标记 ModelMarker；
 // 人群源 SourceNode 与 RenRen 枢纽 HubNode 在 P3 追加。
+import i18n from '@/i18n'
+import { modelNodeNameKey } from '@/constants/home/models'
 import { MODEL_COLORS } from './sceneParts'
 import { getCanvasTheme, type CanvasTheme } from './theme'
 
@@ -30,7 +32,6 @@ export class ModelMarker {
 
   constructor(
     public id: string,
-    public name: string,
     public img: HTMLImageElement,
     public r: number,
     theme: CanvasTheme = getCanvasTheme('dark')
@@ -38,6 +39,11 @@ export class ModelMarker {
     this.bob = Math.random() * Math.PI * 2
     this.speed = 0.02 + Math.random() * 0.015
     this.theme = theme
+  }
+
+  /** Read per draw so a language switch relabels the map without a reload. */
+  get name(): string {
+    return i18n.global.t(modelNodeNameKey(this.id))
   }
 
   get color(): string {

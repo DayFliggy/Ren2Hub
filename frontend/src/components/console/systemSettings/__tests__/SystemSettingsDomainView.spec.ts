@@ -4,6 +4,10 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { readonly, ref } from 'vue'
 import SystemSettingsDomainView from '../SystemSettingsDomainView.vue'
 import { useSystemSettings } from '@/composables/useSystemSettings'
+import {
+  SYSTEM_SETTINGS_DOMAINS,
+  type SystemSettingsDomainId,
+} from '@/constants/systemSettingsCatalog'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
 vi.mock('@/composables/useSystemSettings', () => ({
@@ -12,6 +16,15 @@ vi.mock('@/composables/useSystemSettings', () => ({
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }))
+// Integration panels load their own data; an offline API keeps them on their
+// empty or failed states, which still render their static copy.
+vi.mock('@/api/client', async (importOriginal) => {
+  const offline = () => Promise.reject(new Error('offline'))
+  return {
+    ...(await importOriginal<typeof import('@/api/client')>()),
+    api: { get: offline, post: offline, put: offline, delete: offline },
+  }
+})
 
 beforeAll(async () => {
   await loadMessageDomain('console')
@@ -74,21 +87,25 @@ beforeEach(() => {
   state = configure()
 })
 
-async function render() {
+async function render(
+  domain: SystemSettingsDomainId = 'billing',
+  section = 'epay'
+) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       {
-        path: '/billing/:section?',
-        name: 'system-settings-billing',
+        path: `/${domain}/:section?`,
+        name: `system-settings-${domain}`,
         component: SystemSettingsDomainView,
-        props: { domain: 'billing' },
+        props: { domain },
       },
+      { path: '/ops', name: 'ops-monitor', component: { render: () => null } },
     ],
   })
-  await router.push('/billing/epay')
+  await router.push(`/${domain}/${section}`)
   const wrapper = mount(SystemSettingsDomainView, {
-    props: { domain: 'billing' },
+    props: { domain },
     global: { plugins: [i18n, router] },
   })
   await flushPromises()
@@ -213,5 +230,23 @@ describe('EPay settings page', () => {
       'No settings match this search'
     )
     wrapper.unmount()
+  })
+})
+
+describe('system settings in English', () => {
+  it('renders every section without Chinese text or raw message keys', async () => {
+    for (const domain of SYSTEM_SETTINGS_DOMAINS) {
+      for (const section of domain.sections) {
+        const wrapper = await render(domain.id, section.id)
+        const html = wrapper.html()
+        const where = `${domain.id}/${section.id}`
+        // Han script plus CJK and full-width punctuation.
+        expect(html, where).not.toMatch(
+          /[\p{Script=Han}\u3000-\u303f\uff00-\uffef]/u
+        )
+        expect(html, where).not.toContain('systemSettings.')
+        wrapper.unmount()
+      }
+    }
   })
 })

@@ -68,6 +68,20 @@ export default {
   },
   canvas: {
     alt: 'Dot-matrix world map animation: requests converge on an AI gateway and route to available models',
+    models: {
+      claude: 'Claude',
+      openai: 'GPT',
+      gemini: 'Gemini',
+      deepseek: 'DeepSeek',
+      qwen: 'Qwen',
+      grok: 'Grok',
+      kimi: 'Kimi',
+      zhipu: 'GLM',
+      doubao: 'Doubao',
+      minimax: 'MiniMax',
+      hunyuan: 'Hunyuan',
+      mistral: 'Mistral',
+    },
   },
   signalConsole: {
     a11y: 'AI gateway routing animation console',

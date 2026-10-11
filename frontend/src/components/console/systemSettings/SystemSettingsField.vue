@@ -20,13 +20,9 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n({ useScope: 'local', messages: editorMessages })
 const { t: globalT } = useI18n({ useScope: 'global' })
-const label = computed(() =>
-  props.field.labelKey ? globalT(props.field.labelKey) : props.field.label
-)
+const label = computed(() => globalT(props.field.labelKey))
 const description = computed(() =>
-  props.field.descriptionKey
-    ? globalT(props.field.descriptionKey)
-    : props.field.description
+  props.field.descriptionKey ? globalT(props.field.descriptionKey) : ''
 )
 const schema = computed(() => SETTINGS_RECORD_EDITORS[props.field.key])
 const entries = ref<Array<{ key: string; value: string }>>([])
@@ -273,7 +269,7 @@ function remove(index: number) {
         :key="option.value"
         :value="option.value"
       >
-        {{ option.label }}
+        {{ globalT(option.labelKey) }}
       </option>
     </select>
     <input

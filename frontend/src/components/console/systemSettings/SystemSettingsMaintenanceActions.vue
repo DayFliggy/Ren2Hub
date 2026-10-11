@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import { api } from '@/api/console'
@@ -32,6 +33,7 @@ const props = defineProps<{
 type Action =
   'clear-affinity' | 'clear-cache' | 'reset-stats' | 'gc' | 'cleanup-logs'
 
+const { t } = useI18n()
 const toast = useToast()
 const pendingAction = ref<Action | null>(null)
 const loading = ref(false)
@@ -46,28 +48,33 @@ const actionText = computed(() => {
   switch (pendingAction.value) {
     case 'clear-affinity':
       return {
-        title: '清空渠道亲和性缓存',
-        message: '现有用户的渠道绑定将被移除。',
+        title: t('systemSettings.maintenance.clearAffinity'),
+        message: t('systemSettings.maintenance.clearAffinityMessage'),
       }
     case 'clear-cache':
-      return { title: '清理磁盘缓存', message: '将删除不活跃的磁盘缓存文件。' }
+      return {
+        title: t('systemSettings.maintenance.clearCache'),
+        message: t('systemSettings.maintenance.clearCacheMessage'),
+      }
     case 'reset-stats':
       return {
-        title: '重置缓存统计',
-        message: '将重置磁盘缓存的命中与未命中统计。',
+        title: t('systemSettings.maintenance.resetStats'),
+        message: t('systemSettings.maintenance.resetStatsMessage'),
       }
     case 'gc':
       return {
-        title: '执行垃圾回收',
-        message: '将立即执行 Go 运行时垃圾回收。',
+        title: t('systemSettings.maintenance.gc'),
+        message: t('systemSettings.maintenance.gcMessage'),
       }
     case 'cleanup-logs':
       return {
-        title: '清理日志文件',
-        message:
+        title: t('systemSettings.maintenance.cleanupLogs'),
+        message: t(
           logCleanupMode.value === 'by_count'
-            ? `将只保留最新 ${logCleanupValue.value} 个日志文件。`
-            : `将删除 ${logCleanupValue.value} 天前的日志文件。`,
+            ? 'systemSettings.maintenance.cleanupLogsByCount'
+            : 'systemSettings.maintenance.cleanupLogsByDays',
+          { count: logCleanupValue.value }
+        ),
       }
     default:
       return { title: '', message: '' }
@@ -137,7 +144,7 @@ async function runAction() {
         })
         break
     }
-    toast.success('操作已完成')
+    toast.success(t('systemSettings.maintenance.done'))
     pendingAction.value = null
     await loadStats()
   } catch (error) {
@@ -157,24 +164,32 @@ onMounted(loadStats)
     <div class="flex items-center justify-between gap-4">
       <div>
         <h3 class="display-title text-sm font-bold text-[var(--text-primary)]">
-          运行状态与维护
+          {{ t('systemSettings.maintenance.title') }}
         </h3>
         <p
           v-if="loadingStats"
           class="mt-0.5 text-xs text-[var(--text-tertiary)]"
         >
-          正在获取最新运行状态…
+          {{ t('systemSettings.maintenance.loadingStats') }}
         </p>
         <p
           v-else-if="kind === 'channel-affinity'"
           class="mt-0.5 text-xs text-[var(--text-tertiary)]"
         >
-          缓存 {{ affinityStats?.total ?? 0 }} 条，容量
-          {{ affinityStats?.cache_capacity ?? 0 }}。
+          {{
+            t('systemSettings.maintenance.affinitySummary', {
+              total: affinityStats?.total ?? 0,
+              capacity: affinityStats?.cache_capacity ?? 0,
+            })
+          }}
         </p>
         <p v-else class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-          缓存命中率 {{ cacheHitRate }}，日志文件
-          {{ logFiles?.file_count ?? 0 }} 个。
+          {{
+            t('systemSettings.maintenance.performanceSummary', {
+              rate: cacheHitRate,
+              count: logFiles?.file_count ?? 0,
+            })
+          }}
         </p>
       </div>
       <ConsoleButton
@@ -183,7 +198,7 @@ onMounted(loadStats)
         :loading="loadingStats"
         @click="loadStats"
       >
-        刷新
+        {{ t('common.refresh') }}
       </ConsoleButton>
     </div>
 
@@ -196,7 +211,7 @@ onMounted(loadStats)
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
       >
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
-          缓存条目
+          {{ t('systemSettings.maintenance.cacheEntries') }}
         </div>
         <div
           class="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]"
@@ -208,7 +223,7 @@ onMounted(loadStats)
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
       >
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
-          未知条目
+          {{ t('systemSettings.maintenance.unknownEntries') }}
         </div>
         <div
           class="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]"
@@ -220,7 +235,7 @@ onMounted(loadStats)
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
       >
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
-          缓存算法
+          {{ t('systemSettings.maintenance.cacheAlgorithm') }}
         </div>
         <div
           class="mt-1 font-mono text-base font-bold text-[var(--text-primary)]"
@@ -238,7 +253,7 @@ onMounted(loadStats)
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
       >
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
-          磁盘缓存
+          {{ t('systemSettings.maintenance.diskCache') }}
         </div>
         <div
           class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
@@ -250,7 +265,7 @@ onMounted(loadStats)
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
       >
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
-          当前内存
+          {{ t('systemSettings.maintenance.memory') }}
         </div>
         <div
           class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
@@ -274,7 +289,7 @@ onMounted(loadStats)
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
       >
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
-          日志占用
+          {{ t('systemSettings.maintenance.logSize') }}
         </div>
         <div
           class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
@@ -291,7 +306,7 @@ onMounted(loadStats)
           size="sm"
           @click="pendingAction = 'clear-affinity'"
         >
-          清空亲和性缓存
+          {{ t('systemSettings.maintenance.clearAffinityButton') }}
         </ConsoleButton>
       </div>
     </template>
@@ -302,39 +317,43 @@ onMounted(loadStats)
           size="sm"
           @click="pendingAction = 'clear-cache'"
         >
-          清理磁盘缓存
+          {{ t('systemSettings.maintenance.clearCache') }}
         </ConsoleButton>
         <ConsoleButton
           variant="secondary"
           size="sm"
           @click="pendingAction = 'reset-stats'"
         >
-          重置统计
+          {{ t('systemSettings.maintenance.resetStatsButton') }}
         </ConsoleButton>
         <ConsoleButton variant="ghost" size="sm" @click="pendingAction = 'gc'">
-          执行垃圾回收
+          {{ t('systemSettings.maintenance.gc') }}
         </ConsoleButton>
       </div>
       <div
         class="mt-4 flex flex-wrap items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/30 p-3"
       >
-        <span class="text-xs font-medium text-[var(--text-secondary)]"
-          >日志清理：</span
-        >
+        <span class="text-xs font-medium text-[var(--text-secondary)]">{{
+          t('systemSettings.maintenance.logCleanup')
+        }}</span>
         <select
           v-model="logCleanupMode"
           class="focus-ring h-8 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-xs text-[var(--text-primary)]"
-          aria-label="日志清理方式"
+          :aria-label="t('systemSettings.maintenance.logCleanupMode')"
         >
-          <option value="by_count">保留最新文件数</option>
-          <option value="by_days">按保留天数清理</option>
+          <option value="by_count">
+            {{ t('systemSettings.maintenance.byCount') }}
+          </option>
+          <option value="by_days">
+            {{ t('systemSettings.maintenance.byDays') }}
+          </option>
         </select>
         <input
           v-model.number="logCleanupValue"
           type="number"
           min="1"
           class="focus-ring h-8 w-20 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-xs text-[var(--text-primary)]"
-          aria-label="日志保留值"
+          :aria-label="t('systemSettings.maintenance.logCleanupValue')"
         />
         <ConsoleButton
           variant="danger"
@@ -342,7 +361,7 @@ onMounted(loadStats)
           :disabled="logCleanupValue < 1"
           @click="pendingAction = 'cleanup-logs'"
         >
-          清理日志
+          {{ t('systemSettings.maintenance.cleanupLogsButton') }}
         </ConsoleButton>
       </div>
     </template>
@@ -353,7 +372,7 @@ onMounted(loadStats)
     :title="actionText.title"
     :message="actionText.message"
     :loading="loading"
-    confirm-text="确认执行"
+    :confirm-text="t('systemSettings.maintenance.confirm')"
     @cancel="pendingAction = null"
     @confirm="runAction"
   />

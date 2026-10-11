@@ -64,6 +64,20 @@ export default {
   },
   canvas: {
     alt: 'AI 网关聚合全球大模型的点阵世界地图动画：各地用户请求汇聚到网关并自动路由到可用模型',
+    models: {
+      claude: 'Claude',
+      openai: 'GPT',
+      gemini: 'Gemini',
+      deepseek: 'DeepSeek',
+      qwen: 'Qwen',
+      grok: 'Grok',
+      kimi: 'Kimi',
+      zhipu: 'GLM',
+      doubao: '豆包',
+      minimax: 'MiniMax',
+      hunyuan: '混元',
+      mistral: 'Mistral',
+    },
   },
   signalConsole: {
     a11y: 'AI 网关路由动画控制台',
