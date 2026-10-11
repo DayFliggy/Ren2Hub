@@ -23,9 +23,10 @@ import (
 const disableFixtureKey = "disable-fixture"
 
 type pluginDisableResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Data    struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message"`
+	MessageKey string `json:"message_key"`
+	Data       struct {
 		Channels         []model.TaskPluginChannelRef `json:"channels"`
 		InFlightCount    int64                        `json:"in_flight_count"`
 		PluginEnabled    bool                         `json:"plugin_enabled"`
@@ -119,7 +120,7 @@ func TestTaskPluginDisableRequiresCascadeForBoundChannels(t *testing.T) {
 	for _, query := range []string{"", "?force=true"} {
 		result := requestPluginDisable(t, router, query)
 		assert.False(t, result.Success, "force does not replace cascade consent")
-		assert.Equal(t, "task plugin is still in use", result.Message)
+		assert.Equal(t, "Task plugin is still in use", result.MessageKey)
 		assert.ElementsMatch(t, []model.TaskPluginChannelRef{
 			{Id: channels[0].Id, Name: channels[0].Name, Type: channels[0].Type},
 			{Id: channels[1].Id, Name: channels[1].Name, Type: channels[1].Type},
@@ -209,7 +210,7 @@ func TestTaskPluginForceDisableRetainsPinnedExecutionAndBlocksDeletion(t *testin
 
 	blocked := requestPluginDisable(t, router, "?cascade=true")
 	assert.False(t, blocked.Success)
-	assert.Equal(t, "task plugin is still in use", blocked.Message)
+	assert.Equal(t, "Task plugin is still in use", blocked.MessageKey)
 	assert.EqualValues(t, 1, blocked.Data.InFlightCount)
 	require.Len(t, blocked.Data.Channels, 2)
 	for _, before := range channels {

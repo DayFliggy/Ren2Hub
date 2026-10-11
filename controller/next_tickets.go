@@ -69,7 +69,7 @@ func nextTicketStorageDir() string {
 func nextTicketID(c *gin.Context) (int, bool) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		nextBusinessError(c, errors.New("invalid ticket id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket ID"), "VALIDATION_ERROR")
 		return 0, false
 	}
 	return id, true
@@ -83,7 +83,7 @@ func nextBusinessError(c *gin.Context, err error, code string) {
 }
 
 func nextTicketNotFound(c *gin.Context) {
-	nextBusinessError(c, errors.New("ticket not found"), "NOT_FOUND")
+	nextBusinessError(c, common.NewMessage("Ticket not found"), "NOT_FOUND")
 }
 
 func nextTicketRole(message model.TicketMessage) string {
@@ -159,13 +159,13 @@ func buildNextTicketMessages(messages []model.TicketMessage, attachments []model
 
 func validateNextTicketFields(title, category, priority, content string) error {
 	if title == "" || len([]rune(title)) > 100 {
-		return errors.New("ticket title is required and must not exceed 100 characters")
+		return common.NewMessage("Ticket title is required and must not exceed 100 characters")
 	}
 	if content == "" || len([]rune(content)) > 2000 {
-		return errors.New("ticket content is required and must not exceed 2000 characters")
+		return common.NewMessage("Ticket content is required and must not exceed 2000 characters")
 	}
 	if !validNextTicketCategory(category) || !validNextTicketPriority(priority) {
-		return errors.New("invalid ticket category or priority")
+		return common.NewMessage("Invalid ticket category or priority")
 	}
 	return nil
 }
@@ -180,17 +180,17 @@ func validNextTicketPriority(value string) bool {
 
 func validateNextTicketReferences(modelID, requestID string) error {
 	if len([]rune(modelID)) > 128 {
-		return errors.New("model id must not exceed 128 characters")
+		return common.NewMessage("Model ID must not exceed 128 characters")
 	}
 	if len([]rune(requestID)) > 128 {
-		return errors.New("request id must not exceed 128 characters")
+		return common.NewMessage("Request ID must not exceed 128 characters")
 	}
 	return nil
 }
 
 func saveNextTicketAttachments(headers []*multipart.FileHeader) ([]model.TicketAttachment, []string, error) {
 	if len(headers) > maxTicketAttachmentCount {
-		return nil, nil, fmt.Errorf("at most %d attachments are allowed", maxTicketAttachmentCount)
+		return nil, nil, common.NewMessage("At most {{count}} attachments are allowed", map[string]any{"count": maxTicketAttachmentCount})
 	}
 	if len(headers) == 0 {
 		return nil, nil, nil
@@ -204,7 +204,7 @@ func saveNextTicketAttachments(headers []*multipart.FileHeader) ([]model.TicketA
 	for _, header := range headers {
 		if header.Size > maxTicketAttachmentSize {
 			removeNextTicketFiles(paths)
-			return nil, nil, fmt.Errorf("attachment %s exceeds 10 MB", filepath.Base(header.Filename))
+			return nil, nil, common.NewMessage("Attachment {{name}} exceeds 10 MB", map[string]any{"name": filepath.Base(header.Filename)})
 		}
 		file, err := header.Open()
 		if err != nil {
@@ -222,13 +222,13 @@ func saveNextTicketAttachments(headers []*multipart.FileHeader) ([]model.TicketA
 		}
 		if len(content) > maxTicketAttachmentSize {
 			removeNextTicketFiles(paths)
-			return nil, nil, fmt.Errorf("attachment %s exceeds 10 MB", filepath.Base(header.Filename))
+			return nil, nil, common.NewMessage("Attachment {{name}} exceeds 10 MB", map[string]any{"name": filepath.Base(header.Filename)})
 		}
 		mimeType := http.DetectContentType(content)
 		extension, allowed := ticketAttachmentExtensions[mimeType]
 		if !allowed {
 			removeNextTicketFiles(paths)
-			return nil, nil, fmt.Errorf("attachment %s has an unsupported image type", filepath.Base(header.Filename))
+			return nil, nil, common.NewMessage("Attachment {{name}} has an unsupported image type", map[string]any{"name": filepath.Base(header.Filename)})
 		}
 		keyBytes := make([]byte, 24)
 		if _, err := rand.Read(keyBytes); err != nil {
@@ -271,7 +271,7 @@ func NextListTickets(c *gin.Context) {
 	}
 	status := strings.TrimSpace(c.Query("status"))
 	if status != "" && !model.IsTicketStatus(status) {
-		nextBusinessError(c, errors.New("invalid ticket status"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket status"), "VALIDATION_ERROR")
 		return
 	}
 	tickets, total, err := model.ListUserTickets(c.GetInt("id"), c.Query("keyword"), status, page, pageSize)
@@ -290,7 +290,7 @@ func NextCreateTicket(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
 	form, err := c.MultipartForm()
 	if err != nil {
-		nextBusinessError(c, errors.New("invalid multipart request"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid multipart request"), "VALIDATION_ERROR")
 		return
 	}
 	defer form.RemoveAll()
@@ -382,19 +382,19 @@ func NextAddTicketMessage(c *gin.Context) {
 		return
 	}
 	if ticket.Status == model.TicketStatusClosed {
-		nextBusinessError(c, errors.New("closed tickets cannot receive replies"), "TICKET_CLOSED")
+		nextBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
 	form, err := c.MultipartForm()
 	if err != nil {
-		nextBusinessError(c, errors.New("invalid multipart request"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid multipart request"), "VALIDATION_ERROR")
 		return
 	}
 	defer form.RemoveAll()
 	content := strings.TrimSpace(c.PostForm("content"))
 	if content == "" || len([]rune(content)) > 2000 {
-		nextBusinessError(c, errors.New("ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
 		return
 	}
 	attachments, paths, err := saveNextTicketAttachments(form.File["attachments"])
@@ -405,7 +405,7 @@ func NextAddTicketMessage(c *gin.Context) {
 	message, updatedTicket, err := model.AddTicketMessage(ticketID, userID, content, attachments)
 	if errors.Is(err, model.ErrTicketClosed) {
 		removeNextTicketFiles(paths)
-		nextBusinessError(c, errors.New("closed tickets cannot receive replies"), "TICKET_CLOSED")
+		nextBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -437,7 +437,7 @@ func NextUpdateTicketStatus(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, errors.New("invalid status"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid ticket status"), "VALIDATION_ERROR")
 		return
 	}
 	ticket, err := model.UpdateTicketStatus(ticketID, c.GetInt("id"), request.Status)
@@ -460,7 +460,7 @@ func NextUpdateTicketStatus(c *gin.Context) {
 func NextDownloadTicketAttachment(c *gin.Context) {
 	attachmentID, err := strconv.Atoi(c.Param("attachment_id"))
 	if err != nil || attachmentID <= 0 {
-		nextBusinessError(c, errors.New("invalid attachment id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid attachment ID"), "VALIDATION_ERROR")
 		return
 	}
 	attachment, err := model.GetUserTicketAttachment(c.GetInt("id"), attachmentID)

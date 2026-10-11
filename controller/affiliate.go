@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 
@@ -72,7 +71,7 @@ func NextListAffiliateUsers(c *gin.Context) {
 func NextGetAffiliateUser(c *gin.Context) {
 	userId, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userId <= 0 {
-		nextBusinessError(c, errors.New("invalid user id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user ID"), "VALIDATION_ERROR")
 		return
 	}
 	target, err := model.GetUserById(userId, true)
@@ -81,7 +80,7 @@ func NextGetAffiliateUser(c *gin.Context) {
 		return
 	}
 	if !canManageTargetRole(c.GetInt("role"), target.Role) {
-		nextBusinessError(c, errors.New("insufficient permission"), "FORBIDDEN")
+		nextBusinessError(c, common.NewMessage("No permission to perform this action"), "FORBIDDEN")
 		return
 	}
 	if _, err := model.ThawAffiliateQuota(userId); err != nil {
@@ -104,12 +103,12 @@ func NextGetAffiliateUser(c *gin.Context) {
 func NextUpdateAffiliateUser(c *gin.Context) {
 	userId, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userId <= 0 {
-		nextBusinessError(c, errors.New("invalid user id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user ID"), "VALIDATION_ERROR")
 		return
 	}
 	var request affiliateUserConfigRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, errors.New("invalid affiliate settings"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid invitation settings"), "VALIDATION_ERROR")
 		return
 	}
 	target, err := model.GetUserById(userId, true)
@@ -118,15 +117,15 @@ func NextUpdateAffiliateUser(c *gin.Context) {
 		return
 	}
 	if !canManageTargetRole(c.GetInt("role"), target.Role) {
-		nextBusinessError(c, errors.New("insufficient permission"), "FORBIDDEN")
+		nextBusinessError(c, common.NewMessage("No permission to perform this action"), "FORBIDDEN")
 		return
 	}
 	if request.RateBps != nil && (*request.RateBps < 0 || *request.RateBps > 10000) {
-		nextBusinessError(c, errors.New("rate_bps must be between 0 and 10000"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Rebate rate must be between 0 and 10000 basis points"), "VALIDATION_ERROR")
 		return
 	}
 	if request.InviteLimit != nil && *request.InviteLimit < 0 {
-		nextBusinessError(c, errors.New("invite_limit cannot be negative"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invitation limit cannot be negative"), "VALIDATION_ERROR")
 		return
 	}
 
@@ -146,7 +145,7 @@ func NextUpdateAffiliateUser(c *gin.Context) {
 				return err
 			}
 			if count > 0 {
-				return errors.New("邀请码已存在")
+				return common.NewMessage("Invitation code already exists")
 			}
 			updates["aff_code"] = code
 			updates["aff_code_custom"] = true
@@ -165,7 +164,7 @@ func NextUpdateAffiliateUser(c *gin.Context) {
 			updates["aff_invite_limit"] = *request.InviteLimit
 		}
 		if len(updates) == 0 {
-			return errors.New("未提供可更新的邀请配置")
+			return common.NewMessage("No invitation settings to update")
 		}
 		return tx.Model(&model.User{}).Where("id = ?", userId).Updates(updates).Error
 	})
@@ -189,7 +188,7 @@ func NextUpdateAffiliateUser(c *gin.Context) {
 func NextResetAffiliateCode(c *gin.Context) {
 	userId, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userId <= 0 {
-		nextBusinessError(c, errors.New("invalid user id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user ID"), "VALIDATION_ERROR")
 		return
 	}
 	target, err := model.GetUserById(userId, true)
@@ -198,7 +197,7 @@ func NextResetAffiliateCode(c *gin.Context) {
 		return
 	}
 	if !canManageTargetRole(c.GetInt("role"), target.Role) {
-		nextBusinessError(c, errors.New("insufficient permission"), "FORBIDDEN")
+		nextBusinessError(c, common.NewMessage("No permission to perform this action"), "FORBIDDEN")
 		return
 	}
 	var code string

@@ -2,7 +2,7 @@ package controller
 
 import (
 	"errors"
-	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -54,16 +54,16 @@ func validateNextAdminUserWrite(request *nextAdminUserWriteRequest, creating boo
 	request.DisplayName = strings.TrimSpace(request.DisplayName)
 	request.Email = model.NormalizeEmail(request.Email)
 	if request.Username == "" || (creating && request.Password == "") {
-		return fmt.Errorf("username and password are required")
+		return common.NewMessage("Username and password are required")
 	}
 	if !model.ValidManagedUserRole(request.Role) {
-		return fmt.Errorf("invalid user role")
+		return common.NewMessage("Invalid user role")
 	}
 	if request.Status != 0 && request.Status != common.UserStatusEnabled && request.Status != common.UserStatusDisabled {
-		return fmt.Errorf("invalid user status")
+		return common.NewMessage("Invalid user status")
 	}
 	if creating && request.Status == 0 {
-		return fmt.Errorf("invalid user status")
+		return common.NewMessage("Invalid user status")
 	}
 	password := request.Password
 	if password == "" {
@@ -88,7 +88,7 @@ func buildNextAdminUserDTO(user *model.User) nextAdminUserDTO {
 func NextCreateAdminUser(c *gin.Context) {
 	var request nextAdminUserWriteRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, errors.New("invalid user input"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user input"), "VALIDATION_ERROR")
 		return
 	}
 	if err := validateNextAdminUserWrite(&request, true); err != nil {
@@ -96,7 +96,7 @@ func NextCreateAdminUser(c *gin.Context) {
 		return
 	}
 	if request.Role >= c.GetInt("role") {
-		nextBusinessError(c, errors.New("insufficient permission"), "FORBIDDEN")
+		nextBusinessError(c, common.NewMessage("No permission to perform this action"), "FORBIDDEN")
 		return
 	}
 	if request.Role == common.RoleAdminUser && requireAdminUserProof(c, "create_admin", 0) == nil {
@@ -128,7 +128,7 @@ func NextCreateAdminUser(c *gin.Context) {
 func NextUpdateAdminUser(c *gin.Context) {
 	var request nextAdminUserWriteRequest
 	if err := c.ShouldBindJSON(&request); err != nil || request.ID <= 0 {
-		nextBusinessError(c, errors.New("invalid user input"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user input"), "VALIDATION_ERROR")
 		return
 	}
 	if err := validateNextAdminUserWrite(&request, false); err != nil {
@@ -142,7 +142,7 @@ func NextUpdateAdminUser(c *gin.Context) {
 	}
 	operatorRole := c.GetInt("role")
 	if original.Role >= operatorRole || request.Role >= operatorRole {
-		nextBusinessError(c, errors.New("insufficient permission"), "FORBIDDEN")
+		nextBusinessError(c, common.NewMessage("No permission to perform this action"), "FORBIDDEN")
 		return
 	}
 	user := &model.User{
@@ -196,14 +196,14 @@ func NextDeleteAdminUsersBatch(c *gin.Context) {
 		IDs []int `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || len(request.IDs) == 0 || len(request.IDs) > 100 {
-		nextBusinessError(c, errors.New("invalid user batch"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid batch of users"), "VALIDATION_ERROR")
 		return
 	}
 	ids := make([]int, 0, len(request.IDs))
 	seen := make(map[int]struct{}, len(request.IDs))
 	for _, id := range request.IDs {
 		if id <= 0 {
-			nextBusinessError(c, errors.New("invalid user batch"), "VALIDATION_ERROR")
+			nextBusinessError(c, common.NewMessage("Invalid batch of users"), "VALIDATION_ERROR")
 			return
 		}
 		if _, exists := seen[id]; exists {
@@ -229,7 +229,7 @@ func NextListAdminUsers(c *gin.Context) {
 	keyword := strings.TrimSpace(c.Query("keyword"))
 	group := strings.TrimSpace(c.Query("group"))
 	if !utf8.ValidString(group) || utf8.RuneCountInString(group) > model.MaxUserGroupLength {
-		nextBusinessError(c, errors.New("invalid user group"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user group"), "VALIDATION_ERROR")
 		return
 	}
 	baseQuery := func() *gorm.DB {
@@ -329,12 +329,12 @@ func NextAdminUserStatus(c *gin.Context) {
 		Status int `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || (request.Status != common.UserStatusEnabled && request.Status != common.UserStatusDisabled) {
-		nextBusinessError(c, errors.New("invalid user status"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user status"), "VALIDATION_ERROR")
 		return
 	}
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		nextBusinessError(c, errors.New("invalid user id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid user ID"), "VALIDATION_ERROR")
 		return
 	}
 	action := "disable"
@@ -362,7 +362,7 @@ func NextAdminUserQuota(c *gin.Context) {
 		Reason          string       `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.ID <= 0 || request.Delta == 0 || request.OperationID == "" || len(request.OperationID) > 96 || request.ExpectedVersion == nil || strings.TrimSpace(request.Reason) == "" {
-		nextBusinessError(c, errors.New("invalid quota adjustment"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid quota adjustment"), "VALIDATION_ERROR")
 		return
 	}
 	user, err := model.AdjustManagedUserQuota(model.WalletAdjustment{EventID: "admin:" + request.OperationID, UserID: request.ID, Delta: request.Delta, ActorID: c.GetInt("id"), ExpectedVersion: request.ExpectedVersion, SourceID: request.OperationID, Reason: request.Reason}, c.GetInt("role"))
@@ -380,14 +380,14 @@ func NextAdminUserStatusBatch(c *gin.Context) {
 		Status int   `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || len(request.IDs) == 0 || len(request.IDs) > 100 || (request.Status != common.UserStatusEnabled && request.Status != common.UserStatusDisabled) {
-		nextBusinessError(c, errors.New("invalid user status batch"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid batch status update"), "VALIDATION_ERROR")
 		return
 	}
 	ids := make([]int, 0, len(request.IDs))
 	seen := make(map[int]struct{}, len(request.IDs))
 	for _, id := range request.IDs {
 		if id <= 0 {
-			nextBusinessError(c, errors.New("invalid user status batch"), "VALIDATION_ERROR")
+			nextBusinessError(c, common.NewMessage("Invalid batch status update"), "VALIDATION_ERROR")
 			return
 		}
 		if _, exists := seen[id]; exists {
@@ -414,18 +414,18 @@ func NextAdminUserStatusBatch(c *gin.Context) {
 
 func writeManagedUserError(c *gin.Context, err error) {
 	if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
-		c.JSON(409, gin.H{"success": false, "message": err.Error(), "code": "BILLING_CONFLICT"})
+		common.ApiErrorStatus(c, http.StatusConflict, err, gin.H{"code": "BILLING_CONFLICT"})
 		return
 	}
 	switch {
 	case errors.Is(err, model.ErrManagedUserVerificationRequired):
-		c.JSON(403, gin.H{"success": false, "code": "SECURITY_PROOF_REQUIRED", "message": "需要安全验证"})
+		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("Security verification is required for this user change"), gin.H{"code": "SECURITY_PROOF_REQUIRED"})
 	case errors.Is(err, model.ErrManagedUserNotFound):
-		nextBusinessError(c, errors.New("user not found"), "NOT_FOUND")
+		nextBusinessError(c, common.NewMessage("User not found"), "NOT_FOUND")
 	case errors.Is(err, model.ErrManagedUserForbidden):
-		nextBusinessError(c, errors.New("insufficient permission"), "FORBIDDEN")
+		nextBusinessError(c, common.NewMessage("No permission to perform this action"), "FORBIDDEN")
 	case errors.Is(err, common.ErrQuotaOverflow):
-		nextBusinessError(c, errors.New("quota adjustment is out of range"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Quota adjustment is out of range"), "VALIDATION_ERROR")
 	default:
 		common.ApiError(c, err)
 	}
@@ -717,25 +717,25 @@ func NextCreateAdminRedemptions(c *gin.Context) {
 		ExpiredTime int64  `json:"expired_time"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.Type != "quota" || request.Count < 1 || request.Count > 100 || request.Amount == "" {
-		nextBusinessError(c, errors.New("only quota redemption codes are supported"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Only quota redemption codes are supported"), "VALIDATION_ERROR")
 		return
 	}
 	amount, err := decimal.NewFromString(request.Amount)
 	if err != nil || !amount.IsPositive() {
-		nextBusinessError(c, errors.New("redemption amount is invalid"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Redemption amount is invalid"), "VALIDATION_ERROR")
 		return
 	}
 	quota, err := common.WalletQuotaFromDecimal(amount.Mul(decimal.NewFromInt(500000)))
 	if err != nil || quota <= 0 {
-		nextBusinessError(c, errors.New("redemption amount is out of range"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Redemption amount is out of range"), "VALIDATION_ERROR")
 		return
 	}
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		nextBusinessError(c, errors.New("payment compliance is required"), "PAYMENT_COMPLIANCE_REQUIRED")
+		nextBusinessError(c, common.NewMessage("Payment, redemption, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them."), "PAYMENT_COMPLIANCE_REQUIRED")
 		return
 	}
 	if request.ExpiredTime != -1 && request.ExpiredTime <= common.GetTimestamp() {
-		nextBusinessError(c, errors.New("invalid expiration time"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid expiration time"), "VALIDATION_ERROR")
 		return
 	}
 	keys := make([]string, 0, request.Count)
@@ -768,7 +768,7 @@ func NextCreateAdminRedemptions(c *gin.Context) {
 func NextAdminRedemptionStatus(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		nextBusinessError(c, errors.New("invalid redemption id"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid redemption code ID"), "VALIDATION_ERROR")
 		return
 	}
 	item, err := model.GetRedemptionById(id)
@@ -794,14 +794,14 @@ func NextDeleteAdminRedemptionsBatch(c *gin.Context) {
 		IDs []int `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || len(request.IDs) == 0 || len(request.IDs) > 500 {
-		nextBusinessError(c, errors.New("invalid redemption batch"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid batch of redemption codes"), "VALIDATION_ERROR")
 		return
 	}
 	ids := make([]int, 0, len(request.IDs))
 	seen := make(map[int]struct{}, len(request.IDs))
 	for _, id := range request.IDs {
 		if id <= 0 {
-			nextBusinessError(c, errors.New("invalid redemption batch"), "VALIDATION_ERROR")
+			nextBusinessError(c, common.NewMessage("Invalid batch of redemption codes"), "VALIDATION_ERROR")
 			return
 		}
 		if _, exists := seen[id]; exists {

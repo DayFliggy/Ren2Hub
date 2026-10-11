@@ -66,11 +66,11 @@ func UpdateGatewayConfig(c *gin.Context) {
 		return
 	}
 	if err := common.DecodeJson(bytes.NewReader(encoded), &config); err != nil || config.Version < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid gateway configuration", "code": "VALIDATION_ERROR"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid gateway configuration"), gin.H{"code": "VALIDATION_ERROR"})
 		return
 	}
 	if err := config.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error(), "code": "VALIDATION_ERROR"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err, gin.H{"code": "VALIDATION_ERROR"})
 		return
 	}
 	if err := model.SaveGatewayConfig(config); err != nil {
@@ -112,11 +112,11 @@ func UpdateGatewayUserAdmission(c *gin.Context) {
 	}
 	var override model.GatewayAdmissionOverride
 	if err := c.ShouldBindJSON(&override); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid gateway admission override", "code": "VALIDATION_ERROR"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid gateway admission override"), gin.H{"code": "VALIDATION_ERROR"})
 		return
 	}
 	if err := override.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error(), "code": "VALIDATION_ERROR"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err, gin.H{"code": "VALIDATION_ERROR"})
 		return
 	}
 	query := model.DB.WithContext(c.Request.Context()).Model(&model.User{}).Where("id = ?", user.Id)
@@ -138,7 +138,7 @@ func UpdateGatewayUserAdmission(c *gin.Context) {
 			return
 		}
 		if matched != 1 {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "message": "gateway user changed during update", "code": "CONFLICT"})
+			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("The user changed during the gateway admission update"), gin.H{"code": "CONFLICT"})
 			return
 		}
 	}
@@ -198,7 +198,7 @@ func GetGatewayChannelRuntime(c *gin.Context) {
 		if err == nil {
 			rate, rateStatus = &value, "available"
 		} else {
-			common.SysError("gateway provider runtime read failed: " + err.Error())
+			common.SysError(common.LogText("gateway provider runtime read failed: %s", err.Error()))
 		}
 	}
 	common.ApiSuccess(c, struct {
@@ -211,7 +211,7 @@ func GetGatewayChannelRuntime(c *gin.Context) {
 func ListGatewayChannelCredentials(c *gin.Context) {
 	channelID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || channelID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid channel id", "code": "VALIDATION_ERROR"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid channel ID"), gin.H{"code": "VALIDATION_ERROR"})
 		return
 	}
 	var channel model.Channel
@@ -250,7 +250,7 @@ func gatewayAdmissionUser(c *gin.Context) (model.User, bool) {
 	if c.Param("id") != "" {
 		parsed, err := strconv.Atoi(c.Param("id"))
 		if err != nil || parsed <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid user id", "code": "VALIDATION_ERROR"})
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid user ID"), gin.H{"code": "VALIDATION_ERROR"})
 			return model.User{}, false
 		}
 		userID = parsed
@@ -261,7 +261,7 @@ func gatewayAdmissionUser(c *gin.Context) (model.User, bool) {
 		return user, false
 	}
 	if c.Param("id") != "" && c.GetInt("role") < common.RoleRootUser && user.Role >= c.GetInt("role") {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "insufficient permission", "code": "FORBIDDEN"})
+		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("No permission to perform this action"), gin.H{"code": "FORBIDDEN"})
 		return user, false
 	}
 	return user, true
@@ -269,17 +269,17 @@ func gatewayAdmissionUser(c *gin.Context) (model.User, bool) {
 
 func writeGatewayAPIError(c *gin.Context, err error) {
 	if errors.Is(err, model.ErrGatewayConfigReference) || errors.Is(err, model.ErrGatewayTPMUnsupported) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error(), "code": "VALIDATION_ERROR"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err, gin.H{"code": "VALIDATION_ERROR"})
 		return
 	}
 	if errors.Is(err, model.ErrGatewayConfigConflict) {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error(), "code": "CONFLICT"})
+		common.ApiErrorStatus(c, http.StatusConflict, err, gin.H{"code": "CONFLICT"})
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "gateway resource not found", "code": "NOT_FOUND"})
+		common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Gateway resource not found"), gin.H{"code": "NOT_FOUND"})
 		return
 	}
-	common.SysError("gateway administration failed: " + err.Error())
-	c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "gateway runtime unavailable", "code": "GATEWAY_UNAVAILABLE"})
+	common.SysError(common.LogText("gateway administration failed: %s", err.Error()))
+	common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Gateway runtime is unavailable"), gin.H{"code": "GATEWAY_UNAVAILABLE"})
 }

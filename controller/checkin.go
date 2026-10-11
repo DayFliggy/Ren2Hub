@@ -14,7 +14,7 @@ import (
 func GetCheckinStatus(c *gin.Context) {
 	setting := operation_setting.GetCheckinSetting()
 	if !setting.Enabled {
-		common.ApiErrorMsg(c, "签到功能未启用")
+		common.ApiErrorT(c, "Check-in feature is not enabled")
 		return
 	}
 	userId := c.GetInt("id")
@@ -23,10 +23,7 @@ func GetCheckinStatus(c *gin.Context) {
 
 	stats, err := model.GetUserCheckinStats(userId, month)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.ApiError(c, err)
 		return
 	}
 
@@ -45,7 +42,7 @@ func GetCheckinStatus(c *gin.Context) {
 func DoCheckin(c *gin.Context) {
 	setting := operation_setting.GetCheckinSetting()
 	if !setting.Enabled {
-		common.ApiErrorMsg(c, "签到功能未启用")
+		common.ApiErrorT(c, "Check-in feature is not enabled")
 		return
 	}
 
@@ -53,20 +50,14 @@ func DoCheckin(c *gin.Context) {
 
 	checkin, err := model.UserCheckin(userId)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.ApiError(c, err)
 		return
 	}
 	recordUserSystemAudit(c, userId, "user.checkin", map[string]interface{}{
 		"quota": checkin.QuotaAwarded,
 	})
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "签到成功",
-		"data": gin.H{
-			"quota_awarded": checkin.QuotaAwarded,
-			"checkin_date":  checkin.CheckinDate},
+	common.ApiSuccessT(c, "Check-in successful", gin.H{
+		"quota_awarded": checkin.QuotaAwarded,
+		"checkin_date":  checkin.CheckinDate,
 	})
 }

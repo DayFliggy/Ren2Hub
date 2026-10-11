@@ -53,7 +53,7 @@ func TestUpdateTaskPluginMarketplaceSourcesRejectsEmptyList(t *testing.T) {
 	for _, body := range []string{`[]`, `null`} {
 		response := put(body)
 		assert.Equal(t, false, response["success"], "body %s must be rejected", body)
-		assert.Contains(t, response["message"], "marketplace source")
+		assert.Equal(t, "At least one marketplace source is required", response["message_key"])
 		stored := setting.GetTaskPluginMarketplaceSources()
 		require.Len(t, stored, 1, "rejected body %s must not change the stored sources", body)
 		assert.Equal(t, "Official", stored[0].Name)

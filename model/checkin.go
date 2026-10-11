@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -55,7 +54,7 @@ func HasCheckedInToday(userId int) (bool, error) {
 func UserCheckin(userId int) (*Checkin, error) {
 	setting := operation_setting.GetCheckinSetting()
 	if !setting.Enabled {
-		return nil, errors.New("签到功能未启用")
+		return nil, common.NewMessage("Check-in feature is not enabled")
 	}
 
 	// 检查今天是否已签到
@@ -64,7 +63,7 @@ func UserCheckin(userId int) (*Checkin, error) {
 		return nil, err
 	}
 	if hasChecked {
-		return nil, errors.New("今日已签到")
+		return nil, common.NewMessage("Already checked in today")
 	}
 
 	// 计算随机额度奖励
@@ -87,7 +86,7 @@ func UserCheckin(userId int) (*Checkin, error) {
 // The reward and daily unique claim commit together on every supported database.
 func userCheckinWithTransaction(checkin *Checkin, userId int, quotaAwarded common.Quota) (*Checkin, error) {
 	if quotaAwarded <= 0 {
-		return nil, errors.New("invalid checkin quota")
+		return nil, common.NewMessage("Invalid check-in reward amount")
 	}
 	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		if err := tx.Create(checkin).Error; err != nil {
