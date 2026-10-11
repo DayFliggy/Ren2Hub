@@ -103,10 +103,11 @@ test.describe('setup wizard', () => {
             lineHeight: Number.parseFloat(style.lineHeight),
           }
         })
+        // TextInput uses 16px below the sm breakpoint so iOS does not zoom on focus.
         expect(inputMetrics).toEqual({
           height: 44,
           paddingLeft: 16,
-          fontSize: 15,
+          fontSize: viewport.width < 640 ? 16 : 15,
           lineHeight: 22,
         })
 

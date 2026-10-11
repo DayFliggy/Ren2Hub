@@ -2,15 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
-// The real catalogs belong to the backend streams. The dev server serves the
-// placeholder catalog as a module, so this test answers it with fixture
-// entries in the same flat format.
-const CATALOG = {
-  'Online top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}':
-    '在线充值成功，充值额度：{{quota}}，支付金额：{{amount}}',
-  'Model test': '模型测试',
-}
-
+// The rows use keys of the real zh-CN server message catalog (infra.json).
 const ROWS = [
   {
     id: 601,
@@ -63,14 +55,6 @@ for (const theme of ['light', 'dark'] as const) {
         mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
       )
       await configureStablePage(page, { theme })
-      await page.route(
-        '**/src/i18n/locales/zh-CN/server-messages/_empty.json*',
-        (route) =>
-          route.fulfill({
-            contentType: 'text/javascript',
-            body: `export default ${JSON.stringify(CATALOG)}`,
-          })
-      )
       await page.route('**/api/log/self?*', (route) =>
         route.fulfill({
           json: {
@@ -85,7 +69,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(rows).toHaveCount(2)
       const topup = rows.nth(0).locator('[data-log-detail-trigger]')
       await expect(topup).toHaveText(
-        '在线充值成功，充值额度：$10.000000，支付金额：72.00'
+        '使用在线充值成功，充值金额: $10.000000，支付金额：72.00'
       )
       await expect(rows.nth(1)).toContainText('模型测试')
       // Rows written before content_parts keep their stored text.
