@@ -184,7 +184,7 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 	}
 	var submitted map[string]any
 	if snapshot := task.PrivateData.BillingContext; snapshot != nil && snapshot.Quote != nil && snapshot.Quote.PriceVersion.TaskUsage &&
-		result != nil && result.UsageError == "" && len(result.UsageFacts) > 0 {
+		result != nil && result.UsageError == "" {
 		facts, err := model.FrozenTaskUsageFacts(task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
 		// Facts that fail verification keep the task for the next attempt
 		// instead of settling at the estimate derived from those same facts.
@@ -231,10 +231,10 @@ func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo, s
 		if result == nil {
 			return 0, fmt.Errorf("plugin completion usage unavailable")
 		}
-		// As upstream EvaluateTaskCompletionUsage: every reported completion
-		// fact, explicit zero and false included, replaces the submit fact.
-		// Without completion facts nothing is merged, so a price that reads
-		// a fact still settles at the frozen estimate.
+		// As upstream EvaluateTaskCompletionUsage: the frozen submit facts
+		// are the base and every reported completion fact, explicit zero and
+		// false included, replaces its key. An empty completion report
+		// therefore prices exactly the submit facts the estimate priced.
 		merged := make(map[string]any, len(submitted)+len(result.UsageFacts))
 		maps.Copy(merged, submitted)
 		maps.Copy(merged, result.UsageFacts)
