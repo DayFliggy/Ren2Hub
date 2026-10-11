@@ -544,3 +544,56 @@ func mustRawMessage(t *testing.T, value any) []byte {
 	require.NoError(t, err)
 	return raw
 }
+
+// Chat Completions defines image_url as an object; a Responses input_image
+// URL string must not reach a Chat upstream bare (NewAPI 13c8e90b8,
+// AUDIT1009B-11). An explicit detail stays beside the URL.
+func TestResponsesInputImageReachesChatAsImageURLObject(t *testing.T) {
+	for name, test := range map[string]struct {
+		part map[string]any
+		want string
+	}{
+		"without detail": {part: map[string]any{"type": "input_image", "image_url": "https://example.test/a.png"}, want: `{"url":"https://example.test/a.png"}`},
+		"with detail":    {part: map[string]any{"type": "input_image", "image_url": "https://example.test/a.png", "detail": "high"}, want: `{"url":"https://example.test/a.png","detail":"high"}`},
+		"object":         {part: map[string]any{"type": "input_image", "image_url": map[string]any{"url": "https://example.test/a.png"}}, want: `{"url":"https://example.test/a.png"}`},
+		"file id":        {part: map[string]any{"type": "input_image", "file_id": "file_1"}, want: `{"file_id":"file_1"}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := ResponsesRequestToChatCompletionsRequest(context.Background(), &dto.OpenAIResponsesRequest{
+				Model: "gpt-test",
+				Input: mustRawMessage(t, []map[string]any{{"role": "user", "content": []map[string]any{test.part}}}),
+			})
+			require.NoError(t, err)
+
+			encoded, err := kitutil.Marshal(got.Messages[0].Content)
+			require.NoError(t, err)
+			assert.JSONEq(t, test.want, gjson.GetBytes(encoded, "0.image_url").Raw)
+		})
+	}
+}
+
+// A message item between a function_call and its output must not split the
+// Chat tool exchange: upstreams reject assistant(tool_calls) followed by
+// anything but its tool messages (AxonHub 5659a526). InputItems moves the
+// output next to its call; the Chat converter reads input through it.
+func TestResponsesToolOutputStaysAdjacentToItsCallInChat(t *testing.T) {
+	got, err := ResponsesRequestToChatCompletionsRequest(context.Background(), &dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: mustRawMessage(t, []map[string]any{
+			{"role": "user", "content": "weather?"},
+			{"type": "function_call", "call_id": "call_1", "name": "lookup", "arguments": `{"q":"x"}`},
+			{"role": "user", "content": "also check tomorrow"},
+			{"type": "function_call_output", "call_id": "call_1", "output": "sunny"},
+		}),
+	})
+	require.NoError(t, err)
+
+	roles := make([]string, 0, len(got.Messages))
+	for _, message := range got.Messages {
+		roles = append(roles, message.Role)
+	}
+	require.Equal(t, []string{"user", "assistant", "tool", "user"}, roles)
+	assert.Equal(t, "call_1", got.Messages[1].ParseToolCalls()[0].ID)
+	assert.Equal(t, "call_1", got.Messages[2].ToolCallId)
+	assert.Equal(t, "also check tomorrow", got.Messages[3].StringContent())
+}

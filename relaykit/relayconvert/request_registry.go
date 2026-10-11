@@ -254,7 +254,7 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	if err != nil {
 		return nil, err
 	}
-	plan, err := PlanConversion(requirements, target, convmeta.OptionsOf(info).EffectiveConversionPolicy())
+	plan, err := PlanConversionFor(requirements, target, convmeta.OptionsOf(info).EffectiveConversionPolicy(), UpstreamCapabilitiesOf(info))
 	if err != nil {
 		return &RequestResult{From: from, To: target, Diagnostics: plan.Diagnostics}, err
 	}
@@ -291,6 +291,7 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		steps = append(steps, step)
 	}
 
+	tools.Model = convmeta.UpstreamModelName(info)
 	current, toolDiagnostics, err := toolconv.AttachRequest(target, current, tools, convmeta.OptionsOf(info))
 	diagnostics := append(plan.Diagnostics, diagnosticCollector.Diagnostics()...)
 	diagnostics = append(diagnostics, toolDiagnostics...)

@@ -345,7 +345,7 @@ func TestClaudeDisableIntentRendersAcceptedThinkingMode(t *testing.T) {
 	}{
 		{model: "claude-opus-5-5", wantThinking: "adaptive", wantOutput: EffortLow, wantEffective: EffortLow, wantDiagnostics: []string{"claude_thinking_disable_unsupported"}},
 		{model: "claude-sonnet-5-5", wantThinking: "between_tools", wantEffective: EffortNone, wantDiagnostics: []string{"claude_thinking_disable_as_between_tools"}},
-		{model: "claude-fable-5-1", wantThinking: "adaptive", wantEffective: EffortHigh, wantDiagnostics: []string{"claude_thinking_disable_unsupported"}},
+		{model: "claude-fable-5-1", wantThinking: "adaptive", wantOutput: EffortLow, wantEffective: EffortLow, wantDiagnostics: []string{"claude_thinking_disable_unsupported"}},
 		{model: "claude-opus-5", wantThinking: "disabled", wantEffective: EffortNone},
 		{model: "claude-sonnet-5", wantThinking: "disabled", wantEffective: EffortNone},
 		{model: "claude-opus-4-8", wantThinking: "disabled", wantEffective: EffortNone},

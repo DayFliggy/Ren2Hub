@@ -462,7 +462,8 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 			return diagnostic.Code == "unknown_request_field"
 		})
 	}
-	plan, err := relayconvert.PlanConversion(requirements, surface.Target, policy)
+	upstream := relayconvert.UpstreamCapabilities{GeminiJSONSchema: model_setting.GeminiAcceptsJSONSchema(channel.Type, actualModel)}
+	plan, err := relayconvert.PlanConversionFor(requirements, surface.Target, policy, upstream)
 	if err != nil {
 		return plan, err
 	}
