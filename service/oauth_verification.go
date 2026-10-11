@@ -1,8 +1,8 @@
 package service
 
-import "errors"
+import "github.com/QuantumNous/new-api/common"
 
-var ErrOAuthAccountMismatch = errors.New("The OAuth account does not match the account linked to your profile.")
+var ErrOAuthAccountMismatch = common.NewMessage("The OAuth account does not match the account linked to your profile.")
 
 type OAuthVerificationFlow struct {
 	Scope           string `json:"scope"`

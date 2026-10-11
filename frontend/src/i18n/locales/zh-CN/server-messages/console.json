@@ -31,6 +31,8 @@
   "Invalid invitation reward transfer": "邀请奖励划转无效",
   "Invalid invitation settings": "邀请设置无效",
   "Invalid multipart request": "无效的表单上传请求",
+  "Invalid plugin icon: {{error}}": "插件图标无效：{{error}}",
+  "Invalid plugin metadata: {{error}}": "插件元数据无效：{{error}}",
   "Invalid quota adjustment": "无效的额度调整",
   "Invalid redemption code ID": "无效的兑换码 ID",
   "Invalid route preview request": "无效的路由预览请求",
@@ -64,6 +66,8 @@
   "Only quota redemption codes are supported": "仅支持额度兑换码",
   "Override plugin version not found; factory plugins cannot be deleted": "未找到自定义插件版本；出厂插件不可删除",
   "Payment compliance is not confirmed, so the rebate order cannot be created": "支付合规状态无效，无法创建返利订单",
+  "Plugin dry run failed: {{error}}": "插件干跑失败：{{error}}",
+  "Plugin routing check failed: {{error}}": "插件路由检查失败：{{error}}",
   "Plugin source SHA-256 does not match": "插件源码 SHA-256 校验不一致",
   "Plugin source exceeds the 8 MiB limit.": "插件源码超过 8 MiB 上限。",
   "Plugin source is required": "插件源码不能为空",
@@ -88,5 +92,6 @@
   "Ticket title is required and must not exceed 100 characters": "工单标题不能为空，且不能超过 100 个字符",
   "Unknown plugin metadata field: {{field}}": "未知的插件元数据字段：{{field}}",
   "User not found": "用户不存在",
-  "Username and password are required": "用户名和密码不能为空"
+  "Username and password are required": "用户名和密码不能为空",
+  "hours must be between {{min}} and {{max}}": "小时数必须在 {{min}} 到 {{max}} 之间"
 }

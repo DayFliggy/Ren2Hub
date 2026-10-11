@@ -70,7 +70,7 @@ type taskPluginUploadRequest struct {
 func UploadTaskPlugin(c *gin.Context) {
 	var request taskPluginUploadRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+		common.ApiErrorT(c, "Invalid request parameters: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	if len(request.Source) > maxTaskPluginSourceBytes {
@@ -91,13 +91,13 @@ func UploadTaskPlugin(c *gin.Context) {
 		return
 	}
 	if err = jsplugin.ValidateV1Meta(loaded.Meta); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+		common.ApiErrorT(c, "Invalid plugin metadata: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	icon := strings.TrimSpace(request.Icon)
 	if icon != "" {
 		if _, _, err = jsplugin.DecodeIconDataURI(icon); err != nil {
-			common.ApiErrorMsg(c, err.Error())
+			common.ApiErrorT(c, "Invalid plugin icon: {{error}}", map[string]any{"error": err.Error()})
 			return
 		}
 	}
@@ -107,7 +107,7 @@ func UploadTaskPlugin(c *gin.Context) {
 	}
 	if enabled {
 		if err = jsplugin.PreflightRoutingConflict(jsplugin.DefaultRegistry.Generation(), loaded); err != nil {
-			common.ApiErrorMsg(c, err.Error())
+			common.ApiErrorT(c, "Plugin routing check failed: {{error}}", map[string]any{"error": err.Error()})
 			return
 		}
 	}
@@ -398,7 +398,7 @@ type taskPluginDryRunRequest struct {
 func DryRunTaskPlugin(c *gin.Context) {
 	var request taskPluginDryRunRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+		common.ApiErrorT(c, "Invalid request parameters: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	detailSource := ""
@@ -431,7 +431,7 @@ func DryRunTaskPlugin(c *gin.Context) {
 		output, err = loaded.Engine.CallMember(context.Background(), request.Hook, request.Member, args...)
 	}
 	if err != nil {
-		common.ApiErrorMsg(c, err.Error())
+		common.ApiErrorT(c, "Plugin dry run failed: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	common.ApiSuccess(c, output)
@@ -483,7 +483,7 @@ type taskPluginActivateRequest struct {
 func ActivateTaskPlugin(c *gin.Context) {
 	var request taskPluginActivateRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+		common.ApiErrorT(c, "Invalid request parameters: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	versions, err := model.ListTaskPluginVersions(c.Param("key"))
@@ -639,7 +639,7 @@ func GetTaskPluginMarketplaceSources(c *gin.Context) {
 func UpdateTaskPluginMarketplaceSources(c *gin.Context) {
 	var sources []setting.TaskPluginMarketplaceSource
 	if err := c.ShouldBindJSON(&sources); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+		common.ApiErrorT(c, "Invalid request parameters: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	if sources == nil {
