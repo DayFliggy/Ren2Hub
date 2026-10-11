@@ -701,8 +701,6 @@ export async function configureStablePage(
           {
             id: 1,
             kind: 'checkin',
-            title: 'Daily check-in',
-            tagline: 'Claim a daily quota reward',
             status: 'ongoing',
             gradient: 'accent',
             badgeKey: 'hot',
@@ -736,8 +734,6 @@ export async function configureStablePage(
           {
             id: 2,
             kind: 'newcomer',
-            title: 'Newcomer gift',
-            tagline: 'Complete onboarding tasks to claim rewards',
             status: 'ongoing',
             gradient: 'signal',
             badgeKey: 'new',
@@ -771,8 +767,6 @@ export async function configureStablePage(
           {
             id: 4,
             kind: 'invite',
-            title: 'Invite rewards',
-            tagline: 'Invite new users to earn quota',
             status: 'ongoing',
             gradient: 'signal',
             start: Math.floor((FIXED_NOW - 35 * DAY_MS) / 1000),

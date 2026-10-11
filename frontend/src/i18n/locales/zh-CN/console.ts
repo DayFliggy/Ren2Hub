@@ -2451,6 +2451,7 @@ export default {
     },
     newcomer: {
       title: '新人礼包',
+      tagline: '完成新手任务后领取奖励',
       taskFirstKey: '创建第一个 API 令牌',
       taskFirstCall: '完成第一次模型调用',
       taskProfile: '完善个人资料',
@@ -2462,6 +2463,8 @@ export default {
       success: '领取成功',
     },
     invite: {
+      title: '邀请返利',
+      tagline: '受邀用户真实付费后按比例获得返利',
       goInvite: '去邀请',
       invited: '已邀请人数',
       rewardTotal: '累计奖励',

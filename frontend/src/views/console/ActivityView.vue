@@ -237,8 +237,8 @@ onMounted(load)
           <ActivityCard
             :id="inviteAct.id"
             :kind="inviteAct.kind"
-            :title="inviteAct.title"
-            :tagline="inviteAct.tagline"
+            :title="t('activity.invite.title')"
+            :tagline="t('activity.invite.tagline')"
             :status="inviteAct.status"
             :end="inviteAct.end"
             :icon="inviteAct.icon"

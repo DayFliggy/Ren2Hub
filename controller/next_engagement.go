@@ -319,7 +319,7 @@ func nextActivityPayload(user *model.User) (gin.H, error) {
 	activities := make([]gin.H, 0, 3)
 	if setting.Enabled {
 		activities = append(activities, gin.H{
-			"id": 1, "kind": "checkin", "title": "每日签到", "tagline": "每日签到领取额度奖励",
+			"id": 1, "kind": "checkin",
 			"status": "ongoing", "gradient": "accent", "badgeKey": "hot", "start": now.AddDate(0, -1, 0).Unix(), "end": now.AddDate(0, 1, 0).Unix(),
 			"icon": "M8 2v4M16 2v4M3 8h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
 			"checkin": gin.H{
@@ -335,13 +335,13 @@ func nextActivityPayload(user *model.User) (gin.H, error) {
 	}
 	activities = append(activities,
 		gin.H{
-			"id": nextNewcomerActivityID, "kind": "newcomer", "title": "新人礼包", "tagline": "完成新手任务后领取奖励",
+			"id": nextNewcomerActivityID, "kind": "newcomer",
 			"status": "ongoing", "gradient": "signal", "badgeKey": "new", "start": user.CreatedAt, "end": now.AddDate(1, 0, 0).Unix(),
 			"icon":     "M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z",
 			"newcomer": gin.H{"tasks": tasks, "claimed": newcomerClaimed},
 		},
 		gin.H{
-			"id": 4, "kind": "invite", "title": "邀请返利", "tagline": "受邀用户真实付费后按比例获得返利",
+			"id": 4, "kind": "invite",
 			"status": "ongoing", "gradient": "signal", "start": user.CreatedAt, "end": now.AddDate(10, 0, 0).Unix(),
 			"icon": "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM19 8v6M22 11h-6",
 			"invite": gin.H{

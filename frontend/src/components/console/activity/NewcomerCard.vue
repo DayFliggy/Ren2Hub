@@ -60,10 +60,10 @@ function confirmClaim() {
         </span>
         <div>
           <h3 class="text-base font-semibold text-[var(--text-primary)]">
-            {{ activity.title }}
+            {{ t('activity.newcomer.title') }}
           </h3>
           <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-            {{ activity.tagline }}
+            {{ t('activity.newcomer.tagline') }}
           </p>
         </div>
       </div>

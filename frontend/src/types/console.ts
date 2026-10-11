@@ -662,8 +662,6 @@ export type ActivityGradient = 'accent' | 'signal' | 'support'
 export interface ActivityBase {
   id: number
   kind: ActivityKind
-  title: string
-  tagline: string
   status: ActivityStatus
   gradient: ActivityGradient
   badgeKey?: 'hot' | 'new' | 'ending'

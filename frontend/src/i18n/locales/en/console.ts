@@ -2535,6 +2535,7 @@ export default {
     },
     newcomer: {
       title: 'Newcomer Pack',
+      tagline: 'Claim rewards after finishing the starter tasks',
       taskFirstKey: 'Create your first API token',
       taskFirstCall: 'Make your first model call',
       taskProfile: 'Complete your profile',
@@ -2547,6 +2548,8 @@ export default {
       success: 'Claimed successfully',
     },
     invite: {
+      title: 'Invite Rewards',
+      tagline: 'Earn a share when invited users make real payments',
       goInvite: 'Invite now',
       invited: 'Invited',
       rewardTotal: 'Total rewards',
