@@ -50,14 +50,63 @@ func responsesInputItems(raw []byte) ([]map[string]any, error) {
 		if err := kitutil.Unmarshal(raw, &items); err != nil {
 			return nil, fmt.Errorf("invalid input array: %w", err)
 		}
-		return items, nil
+		return keepToolOutputsAdjacent(items), nil
 	default:
 		return nil, fmt.Errorf("unsupported responses input type %q", kitutil.GetJsonType(raw))
 	}
 }
 
+// InputItems decodes Responses input in an order that turn-based protocols
+// accept: each tool output follows the run of calls that requested it.
 func InputItems(raw []byte) ([]map[string]any, error) {
 	return responsesInputItems(raw)
+}
+
+// keepToolOutputsAdjacent moves each tool output up to the run of calls that
+// requested it. Responses lets a client put a message between a call and its
+// output; Chat, Claude and Gemini reject a tool result that does not directly
+// follow its call. An output for a later call stays where the client put it.
+func keepToolOutputsAdjacent(items []map[string]any) []map[string]any {
+	ordered := make([]map[string]any, 0, len(items))
+	moved := make([]bool, len(items))
+	for i := 0; i < len(items); {
+		if moved[i] {
+			i++
+			continue
+		}
+		if !isResponsesToolCall(items[i]) {
+			ordered = append(ordered, items[i])
+			i++
+			continue
+		}
+		pending := make(map[string]bool)
+		for ; i < len(items) && isResponsesToolCall(items[i]); i++ {
+			ordered = append(ordered, items[i])
+			if callID := responsesCallID(items[i]); callID != "" {
+				pending[callID] = true
+			}
+		}
+		for j := i; j < len(items) && len(pending) > 0; j++ {
+			callID := strings.TrimSpace(kitutil.Interface2String(items[j]["call_id"]))
+			if moved[j] || !isResponsesToolOutput(items[j]) || !pending[callID] {
+				continue
+			}
+			ordered = append(ordered, items[j])
+			moved[j] = true
+			delete(pending, callID)
+		}
+	}
+	return ordered
+}
+
+func isResponsesToolCall(item map[string]any) bool {
+	itemType := strings.TrimSpace(kitutil.Interface2String(item["type"]))
+	return itemType == responsesInputTypeFunctionCall || itemType == responsesInputTypeCustomToolCall
+}
+
+func isResponsesToolOutput(item map[string]any) bool {
+	itemType := strings.TrimSpace(kitutil.Interface2String(item["type"]))
+	return itemType == responsesInputTypeFunctionCallOutput || itemType == responsesInputTypeCustomToolOutput
 }
 
 // omitTrailingAssistantText drops the assistant turns without tool calls that
