@@ -1,10 +1,10 @@
 import { expect, test, type Locator } from '@playwright/test'
 import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
-import {
-  PRICING_KEYS,
-  type ModelPricingChange,
-  type ModelPricingEntry,
-  type PricingValues,
+import { PRICING_KEYS } from '../../src/api/pricingKeys'
+import type {
+  ModelPricingChange,
+  ModelPricingEntry,
+  PricingValues,
 } from '../../src/api/pricingConfig'
 
 async function expectInside(part: Locator, container: Locator) {

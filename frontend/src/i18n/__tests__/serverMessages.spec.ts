@@ -19,8 +19,11 @@ mergeServerMessages('zh-CN', {
   'Task timed out': '任务超时',
 })
 
+// A translation may repeat a placeholder; the set of names must match, as in
+// the backend catalog test.
 function placeholders(text: string): string[] {
-  return [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]!).sort()
+  const names = [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]!)
+  return [...new Set(names)].sort()
 }
 
 describe('server message rendering', () => {

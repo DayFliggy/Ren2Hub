@@ -1,24 +1,12 @@
 import { api } from './client'
 import { invalidResponse, isRecord, requiredString } from './contracts'
+import { PRICING_KEYS, type PricingKey } from './pricingKeys'
 import type {
   BillingUsageSchema,
   BillingUsageExample,
 } from '@/features/pricing/types'
 
-export const PRICING_KEYS = [
-  'ModelPrice',
-  'ModelRatio',
-  'CompletionRatio',
-  'CacheRatio',
-  'CreateCacheRatio',
-  'ImageRatio',
-  'AudioRatio',
-  'AudioCompletionRatio',
-  'billing_setting.billing_mode',
-  'billing_setting.billing_expr',
-  'billing_setting.plugin_billing_expr',
-] as const
-export type PricingKey = (typeof PRICING_KEYS)[number]
+export { PRICING_KEYS, type PricingKey }
 export type PricingValues = Partial<
   Record<
     Exclude<PricingKey, 'billing_setting.plugin_billing_expr'>,

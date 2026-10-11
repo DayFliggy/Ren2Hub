@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
-import { PRICING_KEYS } from '../../src/api/pricingConfig'
+import { PRICING_KEYS } from '../../src/api/pricingKeys'
 
 const channel = {
   id: 157,

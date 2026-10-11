@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { PRICING_KEYS } from '../../src/api/pricingConfig'
+import { PRICING_KEYS } from '../../src/api/pricingKeys'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
 const model = {
