@@ -40,7 +40,7 @@ const ariaLabel = computed(() => {
   if (hasInviter.value) {
     parts.push(t('users.inviterId', { id: props.user.inviter_id }))
   }
-  return parts.join('，')
+  return parts.join(t('users.inviteSeparator'))
 })
 </script>
 

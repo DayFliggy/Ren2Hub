@@ -253,10 +253,8 @@ export class MapScene {
     )
     if (this.disposed) return
     this.markers = MODEL_GEO.map((geo) => {
-      const model = MODEL_NODES.find((candidate) => candidate.id === geo.id)
       return new ModelMarker(
         geo.id,
-        model?.name ?? geo.id,
         imageById.get(geo.id) ?? new Image(),
         this.nodeRadius(),
         this.theme

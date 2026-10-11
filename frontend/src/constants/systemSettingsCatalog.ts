@@ -20,26 +20,28 @@ export type SystemSettingFieldKind =
   | 'amount-list'
   | 'discount'
 
+export interface SystemSettingOption {
+  value: string
+  labelKey: string
+}
+
+/** Display text is held as message keys and translated where it renders. */
 export interface SystemSettingField {
   key: string
-  label: string
-  description?: string
-  labelKey?: string
+  labelKey: string
   descriptionKey?: string
   kind: SystemSettingFieldKind
   defaultValue: SystemSettingValue
   min?: number
   max?: number
   integer?: boolean
-  options?: ReadonlyArray<{ value: string; label: string }>
+  options?: readonly SystemSettingOption[]
 }
 
 export interface SystemSettingsSection {
   id: string
-  title: string
-  description: string
-  titleKey?: string
-  descriptionKey?: string
+  titleKey: string
+  descriptionKey: string
   fields: readonly SystemSettingField[]
   /** Keys managed by a dedicated integration panel instead of generic fields. */
   managedKeys?: readonly string[]
@@ -60,191 +62,101 @@ export interface SystemSettingsDomain {
   sections: readonly SystemSettingsSection[]
 }
 
+// Field helpers take message ids under systemSettings.fields; select options
+// take ids under systemSettings.options.
+const fieldKey = (id: string) => `systemSettings.fields.${id}`
+
+function field(
+  kind: SystemSettingFieldKind,
+  key: string,
+  label: string,
+  defaultValue: SystemSettingValue,
+  description?: string
+): SystemSettingField {
+  return {
+    key,
+    labelKey: fieldKey(label),
+    descriptionKey: description ? fieldKey(description) : undefined,
+    kind,
+    defaultValue,
+  }
+}
+
 const text = (
   key: string,
   label: string,
   defaultValue = '',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'text',
-  defaultValue,
-})
-const url = (
-  key: string,
-  label: string,
-  description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'url',
-  defaultValue: '',
-})
-const secret = (
-  key: string,
-  label: string,
-  description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'secret',
-  defaultValue: '',
-})
-const secretTextarea = (
-  key: string,
-  label: string,
-  description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'secret-textarea',
-  defaultValue: '',
-})
+) => field('text', key, label, defaultValue, description)
+const url = (key: string, label: string, description?: string) =>
+  field('url', key, label, '', description)
+const secret = (key: string, label: string, description?: string) =>
+  field('secret', key, label, '', description)
+const secretTextarea = (key: string, label: string, description?: string) =>
+  field('secret-textarea', key, label, '', description)
 const number = (
   key: string,
   label: string,
   defaultValue = 0,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'number',
-  defaultValue,
-})
+) => field('number', key, label, defaultValue, description)
 const toggle = (
   key: string,
   label: string,
   defaultValue = false,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'boolean',
-  defaultValue,
-})
-const textarea = (
-  key: string,
-  label: string,
-  description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'textarea',
-  defaultValue: '',
-})
+) => field('boolean', key, label, defaultValue, description)
+const textarea = (key: string, label: string, description?: string) =>
+  field('textarea', key, label, '', description)
 const json = (
   key: string,
   label: string,
   defaultValue = '{}',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'json',
-  defaultValue,
-})
+) => field('json', key, label, defaultValue, description)
 const list = (
   key: string,
   label: string,
   defaultValue = '[]',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'list',
-  defaultValue,
-})
+) => field('list', key, label, defaultValue, description)
 const keyValue = (
   key: string,
   label: string,
   defaultValue = '{}',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'key-value',
-  defaultValue,
-})
+) => field('key-value', key, label, defaultValue, description)
 const ratio = (
   key: string,
   label: string,
   defaultValue = '{}',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'ratio',
-  defaultValue,
+) => field('ratio', key, label, defaultValue, description)
+const option = (value: string, label: string): SystemSettingOption => ({
+  value,
+  labelKey: `systemSettings.options.${label}`,
 })
 const select = (
   key: string,
   label: string,
   defaultValue: string,
-  options: ReadonlyArray<{ value: string; label: string }>,
+  options: readonly SystemSettingOption[],
   description?: string
 ): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'select',
-  defaultValue,
+  ...field('select', key, label, defaultValue, description),
   options,
 })
-const role = (key: string, label: string): SystemSettingField =>
+const role = (key: string, label: string) =>
   select(key, label, '0', [
-    { value: '0', label: '访客用户' },
-    { value: '1', label: '普通用户' },
-    { value: '10', label: '管理员' },
-    { value: '100', label: '根管理员' },
+    option('0', 'guest'),
+    option('1', 'user'),
+    option('10', 'admin'),
+    option('100', 'root'),
   ])
-const amountList = (
-  key: string,
-  label: string,
-  description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'amount-list',
-  defaultValue: '[]',
-})
-const discount = (
-  key: string,
-  label: string,
-  description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'discount',
-  defaultValue: '{}',
-})
-
-function paymentField(
-  field: SystemSettingField,
-  label: string,
-  description?: string
-): SystemSettingField {
-  return {
-    ...field,
-    labelKey: `systemSettings.paymentFields.${label}`,
-    ...(description
-      ? { descriptionKey: `systemSettings.paymentFields.${description}` }
-      : {}),
-  }
-}
+const amountList = (key: string, label: string, description?: string) =>
+  field('amount-list', key, label, '[]', description)
+const discount = (key: string, label: string, description?: string) =>
+  field('discount', key, label, '{}', description)
 
 export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
   {
@@ -254,48 +166,44 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'system-info',
-        title: '系统信息',
-        description: '站点名称、公开地址、品牌内容与法律文本。',
+        titleKey: 'systemSettings.sections.systemInfo',
+        descriptionKey: 'systemSettings.sections.systemInfoDescription',
         fields: [
-          text('SystemName', '系统名称'),
-          url(
-            'ServerAddress',
-            '服务器地址',
-            '用于 OAuth 回调、Webhook 与外部集成。'
-          ),
-          url('Logo', 'Logo 地址'),
-          url('general_setting.docs_link', '文档链接'),
-          textarea('Footer', '页脚内容'),
-          textarea('About', '关于页面内容'),
-          textarea('HomePageContent', '首页内容'),
-          textarea('legal.user_agreement', '用户协议'),
-          textarea('legal.privacy_policy', '隐私政策'),
+          text('SystemName', 'systemName'),
+          url('ServerAddress', 'serverAddress', 'serverAddressHint'),
+          url('Logo', 'logoUrl'),
+          url('general_setting.docs_link', 'docsLink'),
+          textarea('Footer', 'footer'),
+          textarea('About', 'about'),
+          textarea('HomePageContent', 'homePageContent'),
+          textarea('legal.user_agreement', 'userAgreement'),
+          textarea('legal.privacy_policy', 'privacyPolicy'),
         ],
       },
       {
         id: 'file-access',
-        title: '文件与媒体访问',
-        description: '控制文件和图片上传、下载所需的最低角色。',
+        titleKey: 'systemSettings.sections.fileAccess',
+        descriptionKey: 'systemSettings.sections.fileAccessDescription',
         fields: [
-          role('FileUploadPermission', '文件上传权限'),
-          role('FileDownloadPermission', '文件下载权限'),
-          role('ImageUploadPermission', '图片上传权限'),
-          role('ImageDownloadPermission', '图片下载权限'),
+          role('FileUploadPermission', 'fileUpload'),
+          role('FileDownloadPermission', 'fileDownload'),
+          role('ImageUploadPermission', 'imageUpload'),
+          role('ImageDownloadPermission', 'imageDownload'),
         ],
       },
       {
         id: 'notice',
-        title: '系统公告',
-        description: '控制台公告和用户可见提醒。',
-        fields: [textarea('Notice', '公告内容')],
+        titleKey: 'systemSettings.sections.notice',
+        descriptionKey: 'systemSettings.sections.noticeDescription',
+        fields: [textarea('Notice', 'notice')],
       },
       {
         id: 'navigation',
-        title: '导航模块',
-        description: '控制首页顶部模块和管理员侧栏的可见导航。',
+        titleKey: 'systemSettings.sections.navigation',
+        descriptionKey: 'systemSettings.sections.navigationDescription',
         fields: [
-          json('HeaderNavModules', '顶部导航模块', '[]'),
-          json('SidebarModulesAdmin', '管理员侧栏模块', '[]'),
+          json('HeaderNavModules', 'headerNavModules', '[]'),
+          json('SidebarModulesAdmin', 'sidebarModulesAdmin', '[]'),
         ],
       },
     ],
@@ -307,54 +215,54 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'basic-auth',
-        title: '基础认证',
-        description: '注册、密码登录与邮箱注册策略。',
+        titleKey: 'systemSettings.sections.basicAuth',
+        descriptionKey: 'systemSettings.sections.basicAuthDescription',
         fields: [
-          toggle('PasswordLoginEnabled', '允许密码登录', true),
-          toggle('RegisterEnabled', '开放注册', true),
-          toggle('PasswordRegisterEnabled', '允许密码注册', true),
-          toggle('EmailVerificationEnabled', '要求邮箱验证'),
-          toggle('EmailDomainRestrictionEnabled', '限制注册邮箱域名'),
-          toggle('EmailAliasRestrictionEnabled', '禁止邮箱别名'),
+          toggle('PasswordLoginEnabled', 'passwordLogin', true),
+          toggle('RegisterEnabled', 'registerEnabled', true),
+          toggle('PasswordRegisterEnabled', 'passwordRegister', true),
+          toggle('EmailVerificationEnabled', 'emailVerification'),
+          toggle('EmailDomainRestrictionEnabled', 'emailDomainRestriction'),
+          toggle('EmailAliasRestrictionEnabled', 'emailAliasRestriction'),
           textarea(
             'EmailDomainWhitelist',
-            '邮箱域名白名单',
-            '以逗号或换行分隔。'
+            'emailDomainWhitelist',
+            'emailDomainWhitelistHint'
           ),
         ],
       },
       {
         id: 'oauth',
-        title: 'OAuth 集成',
-        description: '内置第三方登录提供商与回调配置。',
+        titleKey: 'systemSettings.sections.oauth',
+        descriptionKey: 'systemSettings.sections.oauthDescription',
         fields: [
-          toggle('GitHubOAuthEnabled', '启用 GitHub 登录'),
-          text('GitHubClientId', 'GitHub Client ID'),
-          secret('GitHubClientSecret', 'GitHub Client Secret'),
-          toggle('LinuxDOOAuthEnabled', '启用 LinuxDO 登录'),
-          text('LinuxDOClientId', 'LinuxDO Client ID'),
-          secret('LinuxDOClientSecret', 'LinuxDO Client Secret'),
-          number('LinuxDOMinimumTrustLevel', 'LinuxDO 最低信任等级', 0),
-          toggle('discord.enabled', '启用 Discord 登录'),
-          text('discord.client_id', 'Discord Client ID'),
-          secret('discord.client_secret', 'Discord Client Secret'),
-          toggle('TelegramOAuthEnabled', '启用 Telegram 登录'),
-          text('telegram.client_id', 'Telegram OAuth Client ID'),
-          secret('telegram.client_secret', 'Telegram OAuth Client Secret'),
-          secret('TelegramBotToken', 'Telegram Bot Token'),
-          text('TelegramBotName', 'Telegram Bot 用户名'),
-          toggle('WeChatAuthEnabled', '启用微信登录'),
-          url('WeChatServerAddress', '微信服务地址'),
-          secret('WeChatServerToken', '微信服务 Token'),
-          url('WeChatAccountQRCodeImageURL', '微信二维码图片地址'),
-          toggle('oidc.enabled', '启用 OIDC 登录'),
-          text('oidc.display_name', 'OIDC 显示名称'),
-          text('oidc.client_id', 'OIDC Client ID'),
-          secret('oidc.client_secret', 'OIDC Client Secret'),
-          url('oidc.well_known', 'OIDC Well-Known 地址'),
-          url('oidc.authorization_endpoint', 'OIDC 授权端点'),
-          url('oidc.token_endpoint', 'OIDC Token 端点'),
-          url('oidc.user_info_endpoint', 'OIDC 用户信息端点'),
+          toggle('GitHubOAuthEnabled', 'githubEnabled'),
+          text('GitHubClientId', 'githubClientId'),
+          secret('GitHubClientSecret', 'githubClientSecret'),
+          toggle('LinuxDOOAuthEnabled', 'linuxdoEnabled'),
+          text('LinuxDOClientId', 'linuxdoClientId'),
+          secret('LinuxDOClientSecret', 'linuxdoClientSecret'),
+          number('LinuxDOMinimumTrustLevel', 'linuxdoMinimumTrustLevel', 0),
+          toggle('discord.enabled', 'discordEnabled'),
+          text('discord.client_id', 'discordClientId'),
+          secret('discord.client_secret', 'discordClientSecret'),
+          toggle('TelegramOAuthEnabled', 'telegramEnabled'),
+          text('telegram.client_id', 'telegramClientId'),
+          secret('telegram.client_secret', 'telegramClientSecret'),
+          secret('TelegramBotToken', 'telegramBotToken'),
+          text('TelegramBotName', 'telegramBotName'),
+          toggle('WeChatAuthEnabled', 'wechatEnabled'),
+          url('WeChatServerAddress', 'wechatServerAddress'),
+          secret('WeChatServerToken', 'wechatServerToken'),
+          url('WeChatAccountQRCodeImageURL', 'wechatQrCodeUrl'),
+          toggle('oidc.enabled', 'oidcEnabled'),
+          text('oidc.display_name', 'oidcDisplayName'),
+          text('oidc.client_id', 'oidcClientId'),
+          secret('oidc.client_secret', 'oidcClientSecret'),
+          url('oidc.well_known', 'oidcWellKnown'),
+          url('oidc.authorization_endpoint', 'oidcAuthorizationEndpoint'),
+          url('oidc.token_endpoint', 'oidcTokenEndpoint'),
+          url('oidc.user_info_endpoint', 'oidcUserInfoEndpoint'),
         ],
       },
       {
@@ -364,38 +272,43 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           'passkey.legacy_rp_ids',
           'passkey.origins',
         ],
-        title: 'Passkey',
-        description: 'WebAuthn 依赖方与验证策略。',
+        titleKey: 'systemSettings.sections.passkey',
+        descriptionKey: 'systemSettings.sections.passkeyDescription',
         fields: [
-          toggle('passkey.enabled', '启用 Passkey'),
-          text('passkey.rp_display_name', '依赖方显示名称'),
-          toggle('passkey.allow_insecure_origin', '允许不安全来源'),
-          select('passkey.user_verification', '用户验证要求', 'preferred', [
-            { value: 'required', label: '必须' },
-            { value: 'preferred', label: '优先' },
-            { value: 'discouraged', label: '不要求' },
-          ]),
-          select('passkey.attachment_preference', '认证器偏好', '', [
-            { value: '', label: '不限制' },
-            { value: 'platform', label: '平台认证器' },
-            { value: 'cross-platform', label: '跨平台认证器' },
+          toggle('passkey.enabled', 'passkeyEnabled'),
+          text('passkey.rp_display_name', 'passkeyRpDisplayName'),
+          toggle('passkey.allow_insecure_origin', 'passkeyAllowInsecureOrigin'),
+          select(
+            'passkey.user_verification',
+            'passkeyUserVerification',
+            'preferred',
+            [
+              option('required', 'required'),
+              option('preferred', 'preferred'),
+              option('discouraged', 'discouraged'),
+            ]
+          ),
+          select('passkey.attachment_preference', 'passkeyAttachment', '', [
+            option('', 'anyAuthenticator'),
+            option('platform', 'platformAuthenticator'),
+            option('cross-platform', 'crossPlatformAuthenticator'),
           ]),
         ],
       },
       {
         id: 'bot-protection',
-        title: 'Bot 防护',
-        description: 'Cloudflare Turnstile 验证。',
+        titleKey: 'systemSettings.sections.botProtection',
+        descriptionKey: 'systemSettings.sections.botProtectionDescription',
         fields: [
-          toggle('TurnstileCheckEnabled', '启用 Turnstile'),
-          text('TurnstileSiteKey', 'Turnstile Site Key'),
-          secret('TurnstileSecretKey', 'Turnstile Secret Key'),
+          toggle('TurnstileCheckEnabled', 'turnstileEnabled'),
+          text('TurnstileSiteKey', 'turnstileSiteKey'),
+          secret('TurnstileSecretKey', 'turnstileSecretKey'),
         ],
       },
       {
         id: 'custom-oauth',
-        title: '自定义 OAuth',
-        description: '通过下方提供商管理面板维护自定义 OAuth/OIDC 登录。',
+        titleKey: 'systemSettings.sections.customOAuth',
+        descriptionKey: 'systemSettings.sections.customOAuthDescription',
         fields: [],
         integration: 'custom-oauth',
       },
@@ -408,150 +321,119 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'quota',
-        title: '配额与展示',
-        description: '注册、邀请、充值入口和货币展示规则。',
+        titleKey: 'systemSettings.sections.quota',
+        descriptionKey: 'systemSettings.sections.quotaDescription',
         fields: [
-          text('QuotaForNewUser', '新用户初始配额', '0'),
-          text('QuotaForInviter', '邀请人奖励', '0'),
-          text('QuotaForInvitee', '被邀请人奖励', '0'),
-          url('TopUpLink', '外部充值链接'),
-          number('USDExchangeRate', '美元汇率', 1),
-          toggle('DisplayInCurrencyEnabled', '以货币显示配额'),
-          toggle('DisplayTokenStatEnabled', '显示 Token 统计'),
+          text('QuotaForNewUser', 'newUserQuota', '0'),
+          text('QuotaForInviter', 'inviterReward', '0'),
+          text('QuotaForInvitee', 'inviteeReward', '0'),
+          url('TopUpLink', 'topUpLink'),
+          number('USDExchangeRate', 'usdExchangeRate', 1),
+          toggle('DisplayInCurrencyEnabled', 'displayInCurrency'),
+          toggle('DisplayTokenStatEnabled', 'displayTokenStat'),
           select(
             'general_setting.quota_display_type',
-            '配额显示类型',
+            'quotaDisplayType',
             'quota',
             [
-              { value: 'quota', label: '配额' },
-              { value: 'USD', label: '美元' },
-              { value: 'TOKENS', label: 'Token' },
-              { value: 'custom', label: '自定义货币' },
+              option('quota', 'quota'),
+              option('USD', 'usd'),
+              option('TOKENS', 'tokens'),
+              option('custom', 'customCurrency'),
             ]
           ),
-          text('general_setting.custom_currency_symbol', '自定义货币符号', '¤'),
+          text(
+            'general_setting.custom_currency_symbol',
+            'customCurrencySymbol',
+            '¤'
+          ),
           number(
             'general_setting.custom_currency_exchange_rate',
-            '自定义货币汇率',
+            'customCurrencyRate',
             1
           ),
         ],
       },
       {
         id: 'payment',
-        title: '通用支付设置',
-        titleKey: 'systemSettings.paymentSections.general',
-        description: '支付共用规则与合规确认。',
-        descriptionKey: 'systemSettings.paymentSections.generalDescription',
+        titleKey: 'systemSettings.sections.payment',
+        descriptionKey: 'systemSettings.sections.paymentDescription',
         fields: [
-          paymentField(
-            url('CustomCallbackAddress', '支付回调基础地址'),
-            'callbackAddress',
-            'callbackHint'
-          ),
-          paymentField(
-            ratio('TopupGroupRatio', '充值分组倍率'),
-            'groupRatio',
-            'groupRatioHint'
-          ),
-          secret('StripeApiSecret', 'Stripe API Secret'),
-          secret('StripeWebhookSecret', 'Stripe Webhook Secret'),
-          text('StripePriceId', 'Stripe Price ID'),
-          number('StripeUnitPrice', 'Stripe 单位价格', 1),
-          number('StripeMinTopUp', 'Stripe 最低充值', 1),
-          toggle('StripePromotionCodesEnabled', '启用 Stripe 优惠码'),
-          secret('CreemApiKey', 'Creem API Key'),
-          secret('CreemWebhookSecret', 'Creem Webhook Secret'),
-          toggle('CreemTestMode', 'Creem 测试模式'),
-          json('CreemProducts', 'Creem 产品配置', '[]'),
-          toggle('WaffoEnabled', '启用 Waffo'),
-          secret('WaffoApiKey', 'Waffo API Key'),
-          secret('WaffoPrivateKey', 'Waffo 私钥'),
-          secretTextarea('WaffoPublicCert', 'Waffo 公钥证书'),
-          toggle('WaffoSandbox', 'Waffo 沙箱模式'),
-          text('WaffoMerchantId', 'Waffo 商户 ID'),
-          text('WaffoCurrency', 'Waffo 货币', 'USD'),
-          number('WaffoUnitPrice', 'Waffo 单位价格', 1),
-          number('WaffoMinTopUp', 'Waffo 最低充值', 1),
-          url('WaffoNotifyUrl', 'Waffo 通知地址'),
-          url('WaffoReturnUrl', 'Waffo 返回地址'),
-          json('WaffoPayMethods', 'Waffo 支付方式', '[]'),
-          paymentField(
-            amountList('payment_setting.amount_options', '充值金额选项'),
+          url('CustomCallbackAddress', 'callbackAddress', 'callbackHint'),
+          ratio('TopupGroupRatio', 'groupRatio', '{}', 'groupRatioHint'),
+          secret('StripeApiSecret', 'stripeApiSecret'),
+          secret('StripeWebhookSecret', 'stripeWebhookSecret'),
+          text('StripePriceId', 'stripePriceId'),
+          number('StripeUnitPrice', 'stripeUnitPrice', 1),
+          number('StripeMinTopUp', 'stripeMinTopUp', 1),
+          toggle('StripePromotionCodesEnabled', 'stripePromotionCodes'),
+          secret('CreemApiKey', 'creemApiKey'),
+          secret('CreemWebhookSecret', 'creemWebhookSecret'),
+          toggle('CreemTestMode', 'creemTestMode'),
+          json('CreemProducts', 'creemProducts', '[]'),
+          toggle('WaffoEnabled', 'waffoEnabled'),
+          secret('WaffoApiKey', 'waffoApiKey'),
+          secret('WaffoPrivateKey', 'waffoPrivateKey'),
+          secretTextarea('WaffoPublicCert', 'waffoPublicCert'),
+          toggle('WaffoSandbox', 'waffoSandbox'),
+          text('WaffoMerchantId', 'waffoMerchantId'),
+          text('WaffoCurrency', 'waffoCurrency', 'USD'),
+          number('WaffoUnitPrice', 'waffoUnitPrice', 1),
+          number('WaffoMinTopUp', 'waffoMinTopUp', 1),
+          url('WaffoNotifyUrl', 'waffoNotifyUrl'),
+          url('WaffoReturnUrl', 'waffoReturnUrl'),
+          json('WaffoPayMethods', 'waffoPayMethods', '[]'),
+          amountList(
+            'payment_setting.amount_options',
             'amountOptions',
             'amountOptionsHint'
           ),
-          paymentField(
-            discount('payment_setting.amount_discount', '充值金额折扣'),
+          discount(
+            'payment_setting.amount_discount',
             'discount',
             'discountHint'
           ),
-          secret('WaffoSandboxApiKey', 'Waffo 沙箱 API Key'),
-          secret('WaffoSandboxPrivateKey', 'Waffo 沙箱私钥'),
-          secretTextarea('WaffoSandboxPublicCert', 'Waffo 沙箱公钥证书'),
+          secret('WaffoSandboxApiKey', 'waffoSandboxApiKey'),
+          secret('WaffoSandboxPrivateKey', 'waffoSandboxPrivateKey'),
+          secretTextarea('WaffoSandboxPublicCert', 'waffoSandboxPublicCert'),
         ],
         integration: 'payment-compliance',
       },
       {
         id: 'epay',
-        title: 'EPay 易支付',
-        titleKey: 'systemSettings.paymentSections.epay',
-        description: '人民币支付接口。',
-        descriptionKey: 'systemSettings.paymentSections.epayDescription',
+        titleKey: 'systemSettings.sections.epay',
+        descriptionKey: 'systemSettings.sections.epayDescription',
         fields: [
-          paymentField(url('PayAddress', '易支付地址'), 'epayAddress'),
-          paymentField(text('EpayId', '易支付商户 ID'), 'merchantId'),
-          paymentField(
-            secret('EpayKey', '易支付密钥'),
-            'merchantSecret',
-            'secretHint'
+          url('PayAddress', 'epayAddress'),
+          text('EpayId', 'merchantId'),
+          secret('EpayKey', 'merchantSecret', 'secretHint'),
+          toggle(
+            'payment_setting.epay_settlement_enabled',
+            'epaySettlement',
+            true,
+            'epaySettlementHint'
           ),
+          { ...number('Price', 'epayPrice', 7.3), min: 0 },
           {
-            ...toggle(
-              'payment_setting.epay_settlement_enabled',
-              '启用易支付结算',
-              true
-            ),
-            labelKey: 'systemSettings.epaySettlement',
-            descriptionKey: 'systemSettings.epaySettlementDescription',
+            ...number('MinTopUp', 'minimumUsd', 1),
+            min: 1,
+            max: 18446744073709,
+            integer: true,
           },
-          paymentField(
-            { ...number('Price', '基础价格', 7.3), min: 0 },
-            'epayPrice'
-          ),
-          paymentField(
-            {
-              ...number('MinTopUp', '最低购买额度', 1),
-              min: 1,
-              max: 18446744073709,
-              integer: true,
-            },
-            'minimumUsd'
-          ),
-          paymentField(
-            json('PayMethods', '易支付支付方式', '[]'),
-            'epayMethods',
-            'epayMethodsHint'
-          ),
+          json('PayMethods', 'epayMethods', '[]', 'epayMethodsHint'),
         ],
       },
       {
         id: 'gmpay',
-        title: 'GMPay 虚拟币支付',
         titleKey: 'systemSettings.gmpayPanel.title',
         descriptionKey: 'systemSettings.gmpayPanel.description',
-        description:
-          '探测网关公开的资产目录并勾选要开放的代币，保存后立即发布；凭据仅支持更新。',
         fields: [
-          {
-            ...toggle(
-              'payment_setting.gmpay_settlement_enabled',
-              '启用虚拟币结算',
-              true
-            ),
-            labelKey: 'systemSettings.gmpaySettlement',
-            descriptionKey: 'systemSettings.gmpaySettlementDescription',
-          },
+          toggle(
+            'payment_setting.gmpay_settlement_enabled',
+            'gmpaySettlement',
+            true,
+            'gmpaySettlementHint'
+          ),
         ],
         managedKeys: [
           'GmpayPayAddress',
@@ -566,8 +448,8 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       },
       {
         id: 'waffo-pancake',
-        title: 'Waffo Pancake',
-        description: '验证凭据、选择店铺与产品后，通过网关专用接口原子保存。',
+        titleKey: 'systemSettings.sections.waffoPancake',
+        descriptionKey: 'systemSettings.sections.waffoPancakeDescription',
         fields: [],
         managedKeys: [
           'WaffoPancakeMerchantID',
@@ -582,12 +464,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       },
       {
         id: 'checkin',
-        title: '签到奖励',
-        description: '每日签到的随机配额范围。',
+        titleKey: 'systemSettings.sections.checkin',
+        descriptionKey: 'systemSettings.sections.checkinDescription',
         fields: [
-          toggle('checkin_setting.enabled', '启用每日签到'),
-          text('checkin_setting.min_quota', '最小奖励', '100'),
-          text('checkin_setting.max_quota', '最大奖励', '500'),
+          toggle('checkin_setting.enabled', 'checkinEnabled'),
+          text('checkin_setting.min_quota', 'checkinMinQuota', '100'),
+          text('checkin_setting.max_quota', 'checkinMaxQuota', '500'),
         ],
       },
     ],
@@ -599,128 +481,137 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'routing',
-        title: '路由可靠性',
-        description: '上游重试、禁用与自动恢复规则。',
+        titleKey: 'systemSettings.sections.routing',
+        descriptionKey: 'systemSettings.sections.routingDescription',
         fields: [
-          number('RetryTimes', '请求重试次数'),
-          number('ChannelDisableThreshold', '自动禁用阈值', 5),
-          toggle('AutomaticDisableChannelEnabled', '自动禁用渠道'),
-          toggle('AutomaticEnableChannelEnabled', '自动恢复渠道'),
-          textarea('AutomaticDisableKeywords', '自动禁用关键词'),
-          textarea('AutomaticDisableStatusCodes', '自动禁用状态码范围'),
-          textarea('AutomaticRetryStatusCodes', '自动重试状态码范围'),
-          toggle('monitor_setting.auto_test_channel_enabled', '自动测试渠道'),
+          number('RetryTimes', 'retryTimes'),
+          number('ChannelDisableThreshold', 'channelDisableThreshold', 5),
+          toggle('AutomaticDisableChannelEnabled', 'autoDisableChannel'),
+          toggle('AutomaticEnableChannelEnabled', 'autoEnableChannel'),
+          textarea('AutomaticDisableKeywords', 'autoDisableKeywords'),
+          textarea('AutomaticDisableStatusCodes', 'autoDisableStatusCodes'),
+          textarea('AutomaticRetryStatusCodes', 'autoRetryStatusCodes'),
+          toggle(
+            'monitor_setting.auto_test_channel_enabled',
+            'autoTestChannel'
+          ),
           number(
             'monitor_setting.channel_test_concurrency',
-            '渠道测试并发（1–32）',
+            'channelTestConcurrency',
             1
           ),
           number(
             'monitor_setting.auto_test_channel_minutes',
-            '自动测试间隔（分钟）',
+            'autoTestMinutes',
             60
           ),
-          toggle('global.pass_through_request_enabled', '透传请求模式'),
-          {
-            ...list('global.thinking_model_blacklist', '思考模型黑名单', '[]'),
-            descriptionKey: 'systemSettings.thinkingBlacklistHint',
-          },
+          toggle('global.pass_through_request_enabled', 'passThroughRequest'),
+          list(
+            'global.thinking_model_blacklist',
+            'thinkingModelBlacklist',
+            '[]',
+            'thinkingModelBlacklistHint'
+          ),
           json(
             'global.chat_completions_to_responses_policy',
-            'Chat Completions 转 Responses 策略',
+            'chatCompletionsToResponses',
             '{}'
           ),
-          toggle('general_setting.ping_interval_enabled', '启用心跳检测'),
-          number('general_setting.ping_interval_seconds', '心跳间隔（秒）', 60),
+          toggle('general_setting.ping_interval_enabled', 'pingInterval'),
+          number(
+            'general_setting.ping_interval_seconds',
+            'pingIntervalSeconds',
+            60
+          ),
           select(
             'monitor_setting.channel_test_mode',
-            '自动测试策略',
+            'channelTestMode',
             'scheduled_all',
             [
-              { value: 'scheduled_all', label: '定时测试全部渠道' },
-              { value: 'auto_ban_only', label: '仅测试自动禁用渠道' },
-              { value: 'passive_recovery', label: '被动恢复' },
+              option('scheduled_all', 'scheduledAll'),
+              option('auto_ban_only', 'autoBanOnly'),
+              option('passive_recovery', 'passiveRecovery'),
             ]
           ),
         ],
       },
       {
         id: 'affinity',
-        title: '渠道亲和性',
-        description: '同一用户优先复用成功渠道，并可查看或清空缓存。',
+        titleKey: 'systemSettings.sections.affinity',
+        descriptionKey: 'systemSettings.sections.affinityDescription',
         fields: [
-          toggle('channel_affinity_setting.enabled', '启用渠道亲和性'),
+          toggle('channel_affinity_setting.enabled', 'affinityEnabled'),
           toggle(
             'channel_affinity_setting.switch_on_success',
-            '成功后更新绑定'
+            'affinitySwitchOnSuccess'
           ),
           number(
             'channel_affinity_setting.default_ttl_seconds',
-            '绑定有效期（秒）',
+            'affinityTtl',
             3600
           ),
           toggle(
             'channel_affinity_setting.keep_on_channel_disabled',
-            '渠道禁用后保留绑定'
+            'affinityKeepOnDisabled'
           ),
           number(
             'channel_affinity_setting.max_entries',
-            '最大绑定条目',
+            'affinityMaxEntries',
             100000
           ),
-          json('channel_affinity_setting.rules', '亲和性规则', '[]'),
+          json('channel_affinity_setting.rules', 'affinityRules', '[]'),
         ],
         integration: 'channel-affinity',
       },
       {
         id: 'vendor',
-        title: '模型供应商策略',
-        description: '供应商专属安全与生成策略。',
+        titleKey: 'systemSettings.sections.vendor',
+        descriptionKey: 'systemSettings.sections.vendorDescription',
         fields: [
-          keyValue('gemini.safety_settings', 'Gemini 安全策略'),
-          json('claude.default_max_tokens', 'Claude 默认 max_tokens'),
-          {
-            ...toggle(
-              'claude.thinking_adapter_enabled',
-              'Claude 思考后缀适配器'
-            ),
-            descriptionKey: 'systemSettings.models.claudeThinkingAdapterDesc',
-          },
+          keyValue('gemini.safety_settings', 'geminiSafety'),
+          json('claude.default_max_tokens', 'claudeDefaultMaxTokens'),
+          toggle(
+            'claude.thinking_adapter_enabled',
+            'claudeThinkingAdapter',
+            false,
+            'claudeThinkingAdapterHint'
+          ),
           number(
             'claude.thinking_adapter_budget_tokens_percentage',
-            'Claude 思考预算比例',
+            'claudeThinkingBudget',
             0.8
           ),
-          json('claude.model_headers_settings', 'Claude 模型请求头覆盖', '{}'),
-          json('gemini.version_settings', 'Gemini 版本覆盖', '{}'),
-          list('gemini.supported_imagine_models', 'Gemini Imagine 模型', '[]'),
-          {
-            ...toggle(
-              'gemini.thinking_adapter_enabled',
-              'Gemini 思考后缀适配器'
-            ),
-            descriptionKey: 'systemSettings.models.geminiThinkingAdapterDesc',
-          },
+          json('claude.model_headers_settings', 'claudeModelHeaders', '{}'),
+          json('gemini.version_settings', 'geminiVersions', '{}'),
+          list('gemini.supported_imagine_models', 'geminiImagineModels', '[]'),
+          toggle(
+            'gemini.thinking_adapter_enabled',
+            'geminiThinkingAdapter',
+            false,
+            'geminiThinkingAdapterHint'
+          ),
           number(
             'gemini.thinking_adapter_budget_tokens_percentage',
-            'Gemini 思考预算比例',
+            'geminiThinkingBudget',
             0.6
           ),
-          {
-            ...toggle(
-              'gemini.function_call_thought_signature_enabled',
-              'Gemini 函数调用思考签名',
-              true
-            ),
-            descriptionKey: 'systemSettings.models.geminiThoughtSignatureDesc',
-          },
+          toggle(
+            'gemini.function_call_thought_signature_enabled',
+            'geminiThoughtSignature',
+            true,
+            'geminiThoughtSignatureHint'
+          ),
           toggle(
             'gemini.remove_function_response_id_enabled',
-            '移除 Gemini 函数响应 ID'
+            'geminiRemoveFunctionResponseId'
           ),
-          toggle('grok.violation_deduction_enabled', 'Grok 违规扣费'),
-          text('grok.violation_deduction_amount', 'Grok 违规扣费金额', '0.05'),
-          list('qwen.sync_image_models', 'Qwen 图片模型', '[]'),
+          toggle('grok.violation_deduction_enabled', 'grokViolationDeduction'),
+          text(
+            'grok.violation_deduction_amount',
+            'grokViolationDeductionAmount',
+            '0.05'
+          ),
+          list('qwen.sync_image_models', 'qwenImageModels', '[]'),
         ],
       },
     ],
@@ -732,62 +623,60 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'rate-limit',
-        title: '请求限流',
-        description: '全局模型请求限流与按分组策略。',
+        titleKey: 'systemSettings.sections.rateLimit',
+        descriptionKey: 'systemSettings.sections.rateLimitDescription',
         fields: [
-          toggle('ModelRequestRateLimitEnabled', '启用请求限流'),
-          number('ModelRequestRateLimitCount', '时间窗口请求上限', 60),
-          number('ModelRequestRateLimitSuccessCount', '成功请求上限'),
-          number('ModelRequestRateLimitDurationMinutes', '限流窗口（分钟）', 1),
-          json('ModelRequestRateLimitGroup', '分组限流规则', '{}'),
+          toggle('ModelRequestRateLimitEnabled', 'rateLimitEnabled'),
+          number('ModelRequestRateLimitCount', 'rateLimitCount', 60),
+          number('ModelRequestRateLimitSuccessCount', 'rateLimitSuccessCount'),
+          number(
+            'ModelRequestRateLimitDurationMinutes',
+            'rateLimitDuration',
+            1
+          ),
+          json('ModelRequestRateLimitGroup', 'rateLimitGroups', '{}'),
         ],
       },
       {
         id: 'sensitive',
-        title: '敏感内容',
-        description: '请求/响应敏感词检测和处理方式。',
+        titleKey: 'systemSettings.sections.sensitive',
+        descriptionKey: 'systemSettings.sections.sensitiveDescription',
         fields: [
-          toggle('CheckSensitiveEnabled', '启用敏感词检测'),
-          toggle('CheckSensitiveOnPromptEnabled', '检测用户 Prompt'),
-          toggle('StopOnSensitiveEnabled', '命中后立即停止生成', true),
-          textarea('SensitiveWords', '敏感词列表'),
-          number('StreamCacheQueueLength', '流式缓存队列长度'),
+          toggle('CheckSensitiveEnabled', 'sensitiveCheck'),
+          toggle('CheckSensitiveOnPromptEnabled', 'sensitiveCheckPrompt'),
+          toggle('StopOnSensitiveEnabled', 'sensitiveStop', true),
+          textarea('SensitiveWords', 'sensitiveWords'),
+          number('StreamCacheQueueLength', 'streamCacheQueueLength'),
         ],
       },
       {
         id: 'ssrf',
-        title: 'SSRF 防护',
-        description: '域名、IP 和端口访问规则。',
+        titleKey: 'systemSettings.sections.ssrf',
+        descriptionKey: 'systemSettings.sections.ssrfDescription',
         fields: [
-          toggle(
-            'fetch_setting.enable_ssrf_protection',
-            '启用 SSRF 防护',
-            true
-          ),
-          toggle('fetch_setting.allow_private_ip', '允许私有 IP'),
-          toggle('fetch_setting.domain_filter_mode', '域名白名单模式'),
-          toggle('fetch_setting.ip_filter_mode', 'IP 白名单模式'),
-          list('fetch_setting.domain_list', '域名规则', '[]'),
-          list('fetch_setting.ip_list', 'IP / CIDR 规则', '[]'),
+          toggle('fetch_setting.enable_ssrf_protection', 'ssrfEnabled', true),
+          toggle('fetch_setting.allow_private_ip', 'ssrfAllowPrivateIp'),
+          toggle('fetch_setting.domain_filter_mode', 'ssrfDomainAllowlist'),
+          toggle('fetch_setting.ip_filter_mode', 'ssrfIpAllowlist'),
+          list('fetch_setting.domain_list', 'ssrfDomains', '[]'),
+          list('fetch_setting.ip_list', 'ssrfIps', '[]'),
           list(
             'fetch_setting.allowed_ports',
-            '允许端口',
+            'ssrfPorts',
             '["80", "443", "8080", "8443"]'
           ),
           toggle(
             'fetch_setting.apply_ip_filter_for_domain',
-            '对域名解析结果应用 IP 规则',
+            'ssrfApplyIpFilterToDomains',
             true
           ),
         ],
       },
       {
         id: 'token-limits',
-        title: 'Token 限制',
-        description: '用户 API Token 创建限制。',
-        fields: [
-          number('token_setting.max_user_tokens', '每位用户最大 Token 数'),
-        ],
+        titleKey: 'systemSettings.sections.tokenLimits',
+        descriptionKey: 'systemSettings.sections.tokenLimitsDescription',
+        fields: [number('token_setting.max_user_tokens', 'maxUserTokens')],
       },
     ],
   },
@@ -798,45 +687,48 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'dashboard',
-        title: '数据仪表盘',
-        description: '控制数据导出和默认时间范围。',
+        titleKey: 'systemSettings.sections.dashboard',
+        descriptionKey: 'systemSettings.sections.dashboardDescription',
         fields: [
-          toggle('DataExportEnabled', '启用数据导出', true),
-          number('DataExportInterval', '数据刷新间隔（分钟）', 5),
-          select('DataExportDefaultTime', '默认时间范围', 'hour', [
-            { value: 'hour', label: '小时' },
-            { value: 'day', label: '天' },
-            { value: 'week', label: '周' },
+          toggle('DataExportEnabled', 'dataExportEnabled', true),
+          number('DataExportInterval', 'dataExportInterval', 5),
+          select('DataExportDefaultTime', 'dataExportDefaultTime', 'hour', [
+            option('hour', 'hour'),
+            option('day', 'day'),
+            option('week', 'week'),
           ]),
         ],
       },
       {
         id: 'console-content',
-        title: '控制台内容',
-        description: '公告、API 地址、FAQ 和可用性面板。',
+        titleKey: 'systemSettings.sections.consoleContent',
+        descriptionKey: 'systemSettings.sections.consoleContentDescription',
         fields: [
-          toggle('console_setting.announcements_enabled', '显示公告'),
-          json('console_setting.announcements', '公告列表', '[]'),
-          toggle('console_setting.api_info_enabled', '显示 API 地址'),
-          json('console_setting.api_info', 'API 地址列表', '[]'),
-          toggle('console_setting.faq_enabled', '显示 FAQ'),
-          json('console_setting.faq', 'FAQ 列表', '[]'),
-          toggle('console_setting.uptime_kuma_enabled', '显示 Uptime Kuma'),
-          json('console_setting.uptime_kuma_groups', 'Uptime Kuma 分组', '[]'),
+          toggle(
+            'console_setting.announcements_enabled',
+            'announcementsEnabled'
+          ),
+          json('console_setting.announcements', 'announcements', '[]'),
+          toggle('console_setting.api_info_enabled', 'apiInfoEnabled'),
+          json('console_setting.api_info', 'apiInfo', '[]'),
+          toggle('console_setting.faq_enabled', 'faqEnabled'),
+          json('console_setting.faq', 'faq', '[]'),
+          toggle('console_setting.uptime_kuma_enabled', 'uptimeKumaEnabled'),
+          json('console_setting.uptime_kuma_groups', 'uptimeKumaGroups', '[]'),
         ],
       },
       {
         id: 'drawing',
-        title: '绘图能力',
-        description: 'Midjourney 代理功能与回调行为。',
+        titleKey: 'systemSettings.sections.drawing',
+        descriptionKey: 'systemSettings.sections.drawingDescription',
         fields: [
-          toggle('DrawingEnabled', '启用绘图'),
-          toggle('MjNotifyEnabled', '允许上游回调'),
-          toggle('MjAccountFilterEnabled', '允许 accountFilter 参数'),
-          toggle('MjForwardUrlEnabled', '重写回调 URL'),
-          toggle('MjModeClearEnabled', '清理 Prompt 模式标识'),
-          toggle('MjActionCheckSuccessEnabled', '要求任务成功后续操作'),
-          toggle('TaskEnabled', '启用任务能力'),
+          toggle('DrawingEnabled', 'drawingEnabled'),
+          toggle('MjNotifyEnabled', 'mjNotify'),
+          toggle('MjAccountFilterEnabled', 'mjAccountFilter'),
+          toggle('MjForwardUrlEnabled', 'mjForwardUrl'),
+          toggle('MjModeClearEnabled', 'mjModeClear'),
+          toggle('MjActionCheckSuccessEnabled', 'mjActionCheck'),
+          toggle('TaskEnabled', 'taskEnabled'),
         ],
       },
     ],
@@ -848,95 +740,97 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     sections: [
       {
         id: 'behavior',
-        title: '系统行为',
-        description: '控制台默认行为和运营模式。',
+        titleKey: 'systemSettings.sections.behavior',
+        descriptionKey: 'systemSettings.sections.behaviorDescription',
         fields: [
-          toggle('DefaultCollapseSidebar', '默认折叠侧栏'),
-          toggle('DemoSiteEnabled', '演示站模式'),
-          toggle('SelfUseModeEnabled', '自用模式'),
-          toggle('LogConsumeEnabled', '记录额度消耗日志', true),
+          toggle('DefaultCollapseSidebar', 'defaultCollapseSidebar'),
+          toggle('DemoSiteEnabled', 'demoSite'),
+          toggle('SelfUseModeEnabled', 'selfUseMode'),
+          toggle('LogConsumeEnabled', 'logConsume', true),
         ],
       },
       {
         id: 'email',
-        title: 'SMTP 邮件',
-        description: '出站邮件服务器和 TLS 策略。',
+        titleKey: 'systemSettings.sections.email',
+        descriptionKey: 'systemSettings.sections.emailDescription',
         fields: [
-          text('SMTPServer', 'SMTP 服务器'),
-          number('SMTPPort', 'SMTP 端口', 587),
-          text('SMTPAccount', 'SMTP 账户'),
-          text('SMTPFrom', '发件人'),
-          secret('SMTPToken', 'SMTP 密码或访问 Token'),
-          toggle('SMTPSSLEnabled', '启用 SSL/TLS'),
-          toggle('SMTPStartTLSEnabled', '启用 STARTTLS'),
-          toggle('SMTPInsecureSkipVerify', '跳过 TLS 证书校验'),
-          toggle('SMTPForceAuthLogin', '强制 AUTH LOGIN'),
+          text('SMTPServer', 'smtpServer'),
+          number('SMTPPort', 'smtpPort', 587),
+          text('SMTPAccount', 'smtpAccount'),
+          text('SMTPFrom', 'smtpFrom'),
+          secret('SMTPToken', 'smtpToken'),
+          toggle('SMTPSSLEnabled', 'smtpSsl'),
+          toggle('SMTPStartTLSEnabled', 'smtpStartTls'),
+          toggle('SMTPInsecureSkipVerify', 'smtpSkipVerify'),
+          toggle('SMTPForceAuthLogin', 'smtpForceAuthLogin'),
         ],
       },
       {
         id: 'monitoring',
-        title: '监控与告警',
-        description: '用户余额告警和性能指标采集。',
+        titleKey: 'systemSettings.sections.monitoring',
+        descriptionKey: 'systemSettings.sections.monitoringDescription',
         fields: [
-          text('QuotaRemindThreshold', '配额提醒阈值', '1000'),
-          toggle('perf_metrics_setting.enabled', '启用性能指标', true),
+          text('QuotaRemindThreshold', 'quotaRemindThreshold', '1000'),
+          toggle('perf_metrics_setting.enabled', 'perfMetricsEnabled', true),
           number(
             'perf_metrics_setting.flush_interval',
-            '指标落盘间隔（分钟）',
+            'perfMetricsFlushInterval',
             5
           ),
-          select('perf_metrics_setting.bucket_time', '指标聚合粒度', 'hour', [
-            { value: 'minute', label: '分钟' },
-            { value: '5min', label: '5 分钟' },
-            { value: 'hour', label: '小时' },
-          ]),
-          number('perf_metrics_setting.retention_days', '指标保留天数'),
+          select(
+            'perf_metrics_setting.bucket_time',
+            'perfMetricsBucket',
+            'hour',
+            [
+              option('minute', 'minute'),
+              option('5min', 'fiveMinutes'),
+              option('hour', 'hour'),
+            ]
+          ),
+          number('perf_metrics_setting.retention_days', 'perfMetricsRetention'),
         ],
       },
       {
         id: 'worker',
-        title: 'Worker 代理',
-        description: 'Worker 服务和 HTTP 图片请求策略。',
+        titleKey: 'systemSettings.sections.worker',
+        descriptionKey: 'systemSettings.sections.workerDescription',
         fields: [
-          url('WorkerUrl', 'Worker URL'),
-          secret('WorkerValidKey', 'Worker 验证密钥'),
-          toggle(
-            'WorkerAllowHttpImageRequestEnabled',
-            '允许 Worker 请求 HTTP 图片'
-          ),
+          url('WorkerUrl', 'workerUrl'),
+          secret('WorkerValidKey', 'workerValidKey'),
+          toggle('WorkerAllowHttpImageRequestEnabled', 'workerAllowHttpImage'),
         ],
       },
       {
         id: 'performance',
-        title: '性能与缓存',
-        description: '请求体磁盘缓存和资源阈值保护。',
+        titleKey: 'systemSettings.sections.performance',
+        descriptionKey: 'systemSettings.sections.performanceDescription',
         fields: [
-          toggle('performance_setting.disk_cache_enabled', '启用磁盘缓存'),
+          toggle('performance_setting.disk_cache_enabled', 'diskCacheEnabled'),
           number(
             'performance_setting.disk_cache_threshold_mb',
-            '磁盘缓存阈值（MB）',
+            'diskCacheThreshold',
             10
           ),
           number(
             'performance_setting.disk_cache_max_size_mb',
-            '最大缓存（MB）',
+            'diskCacheMaxSize',
             1024
           ),
-          text('performance_setting.disk_cache_path', '缓存目录'),
-          toggle('performance_setting.monitor_enabled', '启用资源监控'),
+          text('performance_setting.disk_cache_path', 'diskCachePath'),
+          toggle('performance_setting.monitor_enabled', 'resourceMonitor'),
           number(
             'performance_setting.monitor_cpu_threshold',
-            'CPU 阈值（%）',
+            'cpuThreshold',
             90
           ),
           number(
             'performance_setting.monitor_memory_threshold',
-            '内存阈值（%）',
+            'memoryThreshold',
             90
           ),
           number(
             'performance_setting.monitor_disk_threshold',
-            '磁盘阈值（%）',
+            'diskThreshold',
             95
           ),
         ],
@@ -944,8 +838,8 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       },
       {
         id: 'maintenance',
-        title: '系统维护',
-        description: '系统任务与运行状态的入口。',
+        titleKey: 'systemSettings.sections.maintenance',
+        descriptionKey: 'systemSettings.sections.maintenanceDescription',
         fields: [],
         integration: 'operations-maintenance',
       },

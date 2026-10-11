@@ -1062,7 +1062,7 @@ onBeforeUnmount(() => {
                   v-if="passkeyEnabled !== null"
                   class="mt-1 text-xs text-[var(--text-tertiary)]"
                 >
-                  {{ t('settings.lastUsed') }}：{{ passkeyLastUsedLabel }}
+                  {{ t('settings.lastUsed', { time: passkeyLastUsedLabel }) }}
                 </p>
               </div>
             </div>

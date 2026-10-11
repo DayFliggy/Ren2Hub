@@ -8,7 +8,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import BrandMark from '@/components/console/BrandMark.vue'
-import { MODEL_NODES } from '@/constants/home/models'
+import { MODEL_NODES, modelNodeNameKey } from '@/constants/home/models'
 import { useAppStore } from '@/stores'
 
 const { t } = useI18n()
@@ -45,7 +45,7 @@ function branchPath(index: number): string {
 const branches = computed(() =>
   MODEL_NODES.slice(0, UPSTREAM_COUNT).map((node, index) => ({
     id: node.id,
-    name: node.name,
+    name: t(modelNodeNameKey(node.id)),
     path: branchPath(index),
     /** 接驳车依次错开 0.14s 出站，读起来像逐条派发 */
     delay: `${(index * 0.14).toFixed(2)}s`,

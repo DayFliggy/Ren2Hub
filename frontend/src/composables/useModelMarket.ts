@@ -14,7 +14,7 @@ import {
 } from '@/api/liveContracts'
 import { ApiError } from '@/api/types'
 import type { MarketModel } from '@/types/console'
-import { vendorMeta } from '@/constants/console'
+import { vendorTaglineKeys } from '@/constants/console'
 import { useToast } from '@/composables/useToast'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { getModelManifest, type ModelManifestEntry } from '@/api/modelManifest'
@@ -29,8 +29,12 @@ export interface ModelMarketCatalog {
   vendors: string[]
 }
 
+/** Vendor key for models the pricing catalog gives no owner; labelled at display time. */
+export const PLATFORM_VENDOR = '__platform__'
+
 export interface VendorGroup {
   vendor: string
+  label: string
   tagline: string
   models: MarketModel[]
   healthy: number // health >= 95
@@ -81,7 +85,7 @@ export function buildLiveModelCatalog(
     const manifest = manifestByName.get(name)
     const price = pricingByName.get(name)
     const metrics = performanceByName.get(name)
-    const vendor = price?.owner_by.trim() || '平台'
+    const vendor = price?.owner_by.trim() || PLATFORM_VENDOR
     return {
       id: index + 1,
       name,
@@ -152,6 +156,10 @@ export function useModelMarket() {
   )
   const request = useLatestRequest()
 
+  function vendorLabel(name: string): string {
+    return name === PLATFORM_VENDOR ? t('models.platformVendor') : name
+  }
+
   async function load() {
     loading.value = true
     const result = await request.run(async (signal) => {
@@ -202,7 +210,7 @@ export function useModelMarket() {
       if (
         kw &&
         !m.name.toLowerCase().includes(kw) &&
-        !m.vendor.toLowerCase().includes(kw)
+        !vendorLabel(m.vendor).toLowerCase().includes(kw)
       )
         return false
       if (vendor.value && m.vendor !== vendor.value) return false
@@ -241,9 +249,11 @@ export function useModelMarket() {
       .filter((v) => byVendor.has(v))
       .map((v) => {
         const models = byVendor.get(v)!
+        const taglineKey = vendorTaglineKeys[v]
         return {
           vendor: v,
-          tagline: vendorMeta[v] ?? '',
+          label: vendorLabel(v),
+          tagline: taglineKey ? t(taglineKey) : '',
           models,
           healthy: models.filter((m) => m.health >= 95).length,
           degraded: models.filter((m) => m.health >= 80 && m.health < 95)
@@ -272,6 +282,7 @@ export function useModelMarket() {
     resultCount,
     hasResults,
     vendorOptions,
+    vendorLabel,
     load,
   }
 }

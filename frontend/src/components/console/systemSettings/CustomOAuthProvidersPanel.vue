@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -36,6 +37,7 @@ interface DiscoveryResponse {
   discovery: Record<string, unknown>
 }
 
+const { t } = useI18n()
 const toast = useToast()
 const providers = ref<CustomOAuthProvider[]>([])
 const loading = ref(false)
@@ -114,7 +116,7 @@ function openEdit(provider: CustomOAuthProvider) {
 
 async function discoverEndpoints() {
   if (!form.well_known.trim()) {
-    toast.error('请先填写 Well-Known 地址或 Issuer URL。')
+    toast.error(t('systemSettings.customOAuth.wellKnownRequired'))
     return
   }
 
@@ -134,7 +136,7 @@ async function discoverEndpoints() {
         .filter((scope): scope is string => typeof scope === 'string')
         .join(' ')
     }
-    toast.success('已从 Discovery 文档填充 OAuth 端点。')
+    toast.success(t('systemSettings.customOAuth.discovered'))
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
@@ -144,7 +146,7 @@ async function discoverEndpoints() {
 
 async function saveProvider() {
   if (!form.name.trim() || !form.slug.trim() || !form.client_id.trim()) {
-    toast.error('请填写名称、Slug 和 Client ID。')
+    toast.error(t('systemSettings.customOAuth.requiredFields'))
     return
   }
   if (
@@ -154,14 +156,14 @@ async function saveProvider() {
       !form.token_endpoint.trim() ||
       !form.user_info_endpoint.trim())
   ) {
-    toast.error('新提供商需要完整的 Client Secret 和 OAuth 端点。')
+    toast.error(t('systemSettings.customOAuth.newProviderIncomplete'))
     return
   }
   if (form.access_policy.trim()) {
     try {
       JSON.parse(form.access_policy)
     } catch {
-      toast.error('访问策略必须是有效的 JSON。')
+      toast.error(t('systemSettings.customOAuth.invalidPolicy'))
       return
     }
   }
@@ -176,7 +178,7 @@ async function saveProvider() {
     }
     dialogOpen.value = false
     await loadProviders()
-    toast.success('OAuth 提供商已保存')
+    toast.success(t('systemSettings.customOAuth.saved'))
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
@@ -191,7 +193,7 @@ async function deleteProvider() {
     await api.delete(`/api/custom-oauth-provider/${deleteTarget.value.id}`)
     deleteTarget.value = null
     await loadProviders()
-    toast.success('OAuth 提供商已删除')
+    toast.success(t('systemSettings.customOAuth.deleted'))
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
@@ -203,23 +205,28 @@ onMounted(loadProviders)
 </script>
 
 <template>
-  <section class="custom-oauth-panel" aria-label="自定义 OAuth 提供商">
+  <section
+    class="custom-oauth-panel"
+    :aria-label="t('systemSettings.customOAuth.title')"
+  >
     <div class="custom-oauth-panel-header">
       <div>
-        <h3>自定义 OAuth 提供商</h3>
-        <p>凭据不会在列表或编辑表单中回显。</p>
+        <h3>{{ t('systemSettings.customOAuth.title') }}</h3>
+        <p>{{ t('systemSettings.customOAuth.secretNotice') }}</p>
       </div>
-      <ConsoleButton size="sm" @click="openCreate">新增提供商</ConsoleButton>
+      <ConsoleButton size="sm" @click="openCreate">{{
+        t('systemSettings.customOAuth.add')
+      }}</ConsoleButton>
     </div>
 
     <div v-if="loading" class="py-4 text-sm text-[var(--text-tertiary)]">
-      加载中…
+      {{ t('common.loading') }}
     </div>
     <div
       v-else-if="providers.length === 0"
       class="py-4 text-sm text-[var(--text-tertiary)]"
     >
-      尚未配置自定义 OAuth 提供商。
+      {{ t('systemSettings.customOAuth.empty') }}
     </div>
     <div v-else class="custom-oauth-list">
       <article
@@ -239,16 +246,25 @@ onMounted(loadProviders)
         </div>
         <div class="flex items-center gap-2">
           <StatusChip :tone="provider.enabled ? 'success' : 'neutral'">
-            {{ provider.enabled ? '已启用' : '已停用' }}
+            {{
+              t(
+                provider.enabled
+                  ? 'systemSettings.customOAuth.enabled'
+                  : 'systemSettings.customOAuth.disabled'
+              )
+            }}
           </StatusChip>
-          <ConsoleButton variant="ghost" size="sm" @click="openEdit(provider)"
-            >编辑</ConsoleButton
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            @click="openEdit(provider)"
+            >{{ t('common.edit') }}</ConsoleButton
           >
           <ConsoleButton
             variant="danger"
             size="sm"
             @click="deleteTarget = provider"
-            >删除</ConsoleButton
+            >{{ t('common.delete') }}</ConsoleButton
           >
         </div>
       </article>
@@ -257,14 +273,24 @@ onMounted(loadProviders)
 
   <ConsoleModal
     :open="dialogOpen"
-    :title="editingId === null ? '新增 OAuth 提供商' : '编辑 OAuth 提供商'"
+    :title="
+      t(
+        editingId === null
+          ? 'systemSettings.customOAuth.createTitle'
+          : 'systemSettings.customOAuth.editTitle'
+      )
+    "
     size="lg"
     @close="dialogOpen = false"
   >
     <div class="grid gap-4 sm:grid-cols-2">
-      <FormField label="名称"><TextInput v-model="form.name" /></FormField>
+      <FormField :label="t('systemSettings.customOAuth.name')"
+        ><TextInput v-model="form.name"
+      /></FormField>
       <FormField label="Slug"><TextInput v-model="form.slug" /></FormField>
-      <FormField label="图标名称"><TextInput v-model="form.icon" /></FormField>
+      <FormField :label="t('systemSettings.customOAuth.icon')"
+        ><TextInput v-model="form.icon"
+      /></FormField>
       <FormField label="Client ID"
         ><TextInput v-model="form.client_id"
       /></FormField>
@@ -275,17 +301,23 @@ onMounted(loadProviders)
           autocomplete="new-password"
         />
       </FormField>
-      <FormField label="授权端点" class="sm:col-span-2"
+      <FormField
+        :label="t('systemSettings.customOAuth.authorizationEndpoint')"
+        class="sm:col-span-2"
         ><TextInput v-model="form.authorization_endpoint" type="url"
       /></FormField>
-      <FormField label="Token 端点" class="sm:col-span-2"
+      <FormField
+        :label="t('systemSettings.customOAuth.tokenEndpoint')"
+        class="sm:col-span-2"
         ><TextInput v-model="form.token_endpoint" type="url"
       /></FormField>
-      <FormField label="用户信息端点" class="sm:col-span-2"
+      <FormField
+        :label="t('systemSettings.customOAuth.userInfoEndpoint')"
+        class="sm:col-span-2"
         ><TextInput v-model="form.user_info_endpoint" type="url"
       /></FormField>
       <FormField label="Scopes"><TextInput v-model="form.scopes" /></FormField>
-      <FormField label="Well-Known 地址">
+      <FormField :label="t('systemSettings.customOAuth.wellKnown')">
         <div class="flex gap-2">
           <TextInput v-model="form.well_known" type="url" />
           <ConsoleButton
@@ -298,29 +330,36 @@ onMounted(loadProviders)
           </ConsoleButton>
         </div>
       </FormField>
-      <FormField label="用户 ID 字段"
+      <FormField :label="t('systemSettings.customOAuth.userIdField')"
         ><TextInput v-model="form.user_id_field"
       /></FormField>
-      <FormField label="用户名字段"
+      <FormField :label="t('systemSettings.customOAuth.usernameField')"
         ><TextInput v-model="form.username_field"
       /></FormField>
-      <FormField label="显示名字段"
+      <FormField :label="t('systemSettings.customOAuth.displayNameField')"
         ><TextInput v-model="form.display_name_field"
       /></FormField>
-      <FormField label="邮箱字段"
+      <FormField :label="t('systemSettings.customOAuth.emailField')"
         ><TextInput v-model="form.email_field"
       /></FormField>
-      <FormField label="客户端认证方式">
+      <FormField :label="t('systemSettings.customOAuth.authStyle')">
         <select v-model.number="form.auth_style" class="custom-oauth-select">
-          <option :value="0">自动</option>
-          <option :value="1">请求参数</option>
+          <option :value="0">
+            {{ t('systemSettings.customOAuth.authStyleAuto') }}
+          </option>
+          <option :value="1">
+            {{ t('systemSettings.customOAuth.authStyleParams') }}
+          </option>
           <option :value="2">Basic Auth Header</option>
         </select>
       </FormField>
-      <FormField label="访问拒绝消息"
+      <FormField :label="t('systemSettings.customOAuth.accessDeniedMessage')"
         ><TextInput v-model="form.access_denied_message"
       /></FormField>
-      <FormField label="访问策略 JSON" class="sm:col-span-2">
+      <FormField
+        :label="t('systemSettings.customOAuth.accessPolicy')"
+        class="sm:col-span-2"
+      >
         <textarea
           v-model="form.access_policy"
           rows="4"
@@ -331,10 +370,13 @@ onMounted(loadProviders)
       <div
         class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 sm:col-span-2"
       >
-        <span class="text-sm font-semibold text-[var(--text-primary)]"
-          >启用提供商</span
-        >
-        <ConsoleToggle v-model="form.enabled" label="启用提供商" />
+        <span class="text-sm font-semibold text-[var(--text-primary)]">{{
+          t('systemSettings.customOAuth.enableProvider')
+        }}</span>
+        <ConsoleToggle
+          v-model="form.enabled"
+          :label="t('systemSettings.customOAuth.enableProvider')"
+        />
       </div>
     </div>
     <template #footer>
@@ -343,21 +385,25 @@ onMounted(loadProviders)
           variant="secondary"
           :disabled="saving"
           @click="dialogOpen = false"
-          >取消</ConsoleButton
+          >{{ t('common.cancel') }}</ConsoleButton
         >
-        <ConsoleButton :loading="saving" @click="saveProvider"
-          >保存提供商</ConsoleButton
-        >
+        <ConsoleButton :loading="saving" @click="saveProvider">{{
+          t('systemSettings.customOAuth.save')
+        }}</ConsoleButton>
       </div>
     </template>
   </ConsoleModal>
 
   <ConfirmDialog
     :open="deleteTarget !== null"
-    title="删除 OAuth 提供商"
-    :message="`将删除 ${deleteTarget?.name ?? ''}。存在用户绑定时服务器会拒绝该操作。`"
+    :title="t('systemSettings.customOAuth.deleteTitle')"
+    :message="
+      t('systemSettings.customOAuth.deleteMessage', {
+        name: deleteTarget?.name ?? '',
+      })
+    "
     :loading="saving"
-    confirm-text="确认删除"
+    :confirm-text="t('systemSettings.customOAuth.confirmDelete')"
     @cancel="deleteTarget = null"
     @confirm="deleteProvider"
   />

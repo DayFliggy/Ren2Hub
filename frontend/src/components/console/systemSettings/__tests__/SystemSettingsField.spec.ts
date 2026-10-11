@@ -14,7 +14,7 @@ describe('payment setting field drafts', () => {
       props: {
         field: {
           key: 'TopupGroupRatio',
-          label: 'Group ratios',
+          labelKey: 'systemSettings.fields.groupRatio',
           kind: 'ratio',
           defaultValue: '{}',
         },
@@ -43,7 +43,7 @@ describe('payment setting field drafts', () => {
       props: {
         field: {
           key: 'PayMethods',
-          label: 'Payment methods',
+          labelKey: 'systemSettings.fields.epayMethods',
           kind: 'json',
           defaultValue: '[]',
         },

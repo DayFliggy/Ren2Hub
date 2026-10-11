@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildLiveModelCatalog } from '@/composables/useModelMarket'
+import { defineComponent } from 'vue'
+import { mount } from '@vue/test-utils'
+import {
+  buildLiveModelCatalog,
+  PLATFORM_VENDOR,
+  useModelMarket,
+} from '@/composables/useModelMarket'
 import { parsePricingModels } from '@/api/liveContracts'
+import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 describe('live model market adapter', () => {
   it('uses manifest capabilities and endpoints instead of broader pricing metadata', () => {
     const catalog = buildLiveModelCatalog(
@@ -120,5 +127,57 @@ describe('live model market adapter', () => {
     expect(catalog.vendors).toEqual(['Moonshot AI'])
     expect(catalog.models[0]?.price).toEqual({})
     expect(catalog.models[0]?.pricing?.billing_expr).toContain('len > 100')
+  })
+})
+
+describe('model market vendor groups', () => {
+  it('keeps ownerless models in one group whose name follows the language', async () => {
+    await loadMessageDomain('console')
+    await setLocale('en')
+    let market!: ReturnType<typeof useModelMarket>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          market = useModelMarket()
+          return () => null
+        },
+      }),
+      { global: { plugins: [i18n] } }
+    )
+    market.catalog.value = buildLiveModelCatalog(
+      ['house-a', 'kimi-k2', 'house-b'],
+      parsePricingModels([
+        {
+          model_name: 'kimi-k2',
+          owner_by: 'Moonshot AI',
+          quota_type: 0,
+          billing_mode: 'unconfigured',
+          model_ratio: 0,
+          completion_ratio: 0,
+        },
+      ]),
+      []
+    )
+
+    expect(
+      market.groups.value.map((group) => [group.label, group.models.length])
+    ).toEqual([
+      ['Platform', 2],
+      ['Moonshot AI', 1],
+    ])
+    expect(market.groups.value[1]?.tagline).toBe(
+      'Kimi long-context and agent capabilities'
+    )
+    market.keyword.value = 'platform'
+    expect(market.filtered.value.map((model) => model.name)).toEqual([
+      'house-a',
+      'house-b',
+    ])
+
+    market.keyword.value = ''
+    market.vendor.value = PLATFORM_VENDOR
+    await setLocale('zh-CN')
+    expect(market.groups.value.map((group) => group.label)).toEqual(['平台'])
+    wrapper.unmount()
   })
 })

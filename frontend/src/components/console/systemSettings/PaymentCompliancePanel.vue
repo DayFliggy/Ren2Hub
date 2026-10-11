@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import { api } from '@/api/console'
@@ -8,6 +9,7 @@ import { useToast } from '@/composables/useToast'
 
 const emit = defineEmits<{ confirmed: [] }>()
 const { rawValue } = useSystemSettings()
+const { t } = useI18n()
 const toast = useToast()
 const open = ref(false)
 const loading = ref(false)
@@ -20,13 +22,23 @@ const termsVersion = computed(() =>
 const confirmedAt = computed(() =>
   Number(rawValue('payment_setting.compliance_confirmed_at', 0))
 )
+const confirmedText = computed(() =>
+  confirmedAt.value
+    ? t('systemSettings.paymentCompliance.confirmedTermsAt', {
+        version: termsVersion.value,
+        time: new Date(confirmedAt.value * 1000).toLocaleString(),
+      })
+    : t('systemSettings.paymentCompliance.confirmedTerms', {
+        version: termsVersion.value,
+      })
+)
 
 async function confirm() {
   loading.value = true
   try {
     await api.post('/api/option/payment_compliance', { confirmed: true })
     open.value = false
-    toast.success('支付合规已确认')
+    toast.success(t('systemSettings.paymentCompliance.saved'))
     emit('confirmed')
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
@@ -39,25 +51,22 @@ async function confirm() {
 <template>
   <section class="compliance-panel">
     <div>
-      <h3>支付合规</h3>
-      <p v-if="confirmed">
-        已确认条款 {{ termsVersion
-        }}<span v-if="confirmedAt"
-          >，时间 {{ new Date(confirmedAt * 1000).toLocaleString() }}</span
-        >。
-      </p>
-      <p v-else>启用邀请奖励和在线支付前，必须完成合规确认。</p>
+      <h3>{{ t('systemSettings.paymentCompliance.title') }}</h3>
+      <p v-if="confirmed">{{ confirmedText }}</p>
+      <p v-else>{{ t('systemSettings.paymentCompliance.required') }}</p>
     </div>
-    <ConsoleButton v-if="!confirmed" size="sm" @click="open = true"
-      >确认合规条款</ConsoleButton
-    >
-    <span v-else class="compliance-badge">已确认</span>
+    <ConsoleButton v-if="!confirmed" size="sm" @click="open = true">{{
+      t('systemSettings.paymentCompliance.confirmTerms')
+    }}</ConsoleButton>
+    <span v-else class="compliance-badge">{{
+      t('systemSettings.paymentCompliance.confirmed')
+    }}</span>
   </section>
   <ConfirmDialog
     :open="open"
-    title="确认支付合规条款"
-    message="确认你已阅读并同意当前支付合规条款。该操作会记录管理员和时间。"
-    confirm-text="确认并记录"
+    :title="t('systemSettings.paymentCompliance.dialogTitle')"
+    :message="t('systemSettings.paymentCompliance.dialogMessage')"
+    :confirm-text="t('systemSettings.paymentCompliance.dialogConfirm')"
     :loading="loading"
     @cancel="open = false"
     @confirm="confirm"
