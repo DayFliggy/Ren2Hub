@@ -48,6 +48,24 @@ func TestResponsesTerminalOutputMarksOnlySuccessfulPayload(t *testing.T) {
 	}
 }
 
+// An audio-only Chat stream is real output: it commits the response instead of
+// buffering large audio deltas until the prelude limit or first-output timeout.
+func TestChatAudioDeltaIsSemanticOutput(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		semantic   bool
+	}{
+		{"audio bytes", `{"choices":[{"index":0,"delta":{"audio":{"id":"audio-one","data":"UklGRg=="}}}]}`, true},
+		{"audio transcript", `{"choices":[{"index":0,"delta":{"audio":{"transcript":"hello"}}}]}`, true},
+		{"empty audio", `{"choices":[{"index":0,"delta":{"audio":{"id":"audio-one"}}}]}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			semantic, _ := StreamPayloadState(tc.body)
+			assert.Equal(t, tc.semantic, semantic)
+		})
+	}
+}
+
 func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response, *relaycommon.RelayInfo) {
 	t.Helper()
 

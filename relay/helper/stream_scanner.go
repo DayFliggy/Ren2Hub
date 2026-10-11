@@ -215,6 +215,10 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 		if choice.Get("text").String() != "" || choice.Get("delta.content").String() != "" || choice.Get("delta.reasoning_content").String() != "" || choice.Get("delta.reasoning").String() != "" || len(choice.Get("delta.tool_calls").Array()) != 0 || choice.Get("delta.function_call").Exists() {
 			semantic = true
 		}
+		// Audio output carries no text; an empty audio object is not output.
+		if choice.Get("delta.audio.data").String() != "" || choice.Get("delta.audio.transcript").String() != "" {
+			semantic = true
+		}
 	}
 	candidates := value.Get("candidates").Array()
 	allCandidatesDone := len(candidates) > 0
