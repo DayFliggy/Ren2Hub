@@ -418,11 +418,21 @@ const successTone = computed(() => rateTone(successRate.value))
           >
             {{ t('dashboard.systemStatus.successRate') }}
           </p>
+          <!-- The server reports no rate until the last hour holds enough
+               relay requests to measure one. -->
           <p
+            v-if="successRate === null"
+            class="success-rate-value text-xs font-medium leading-none text-[var(--text-tertiary)]"
+            data-success-rate-empty
+          >
+            {{ t('common.none') }}
+          </p>
+          <p
+            v-else
             class="success-rate-value text-sm font-bold leading-none tabular-nums"
             :style="{ color: successTone.text }"
           >
-            {{ successRate === null ? '--' : `${formatMetric(successRate)}%` }}
+            {{ formatMetric(successRate) }}%
           </p>
         </div>
         <PrecisionTickDial
@@ -719,7 +729,9 @@ const successTone = computed(() => rateTone(successRate.value))
       <div
         class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2 text-[11px] sm:pt-2.5"
       >
-        <span class="flex items-center gap-1.5 text-[var(--text-tertiary)]">
+        <span
+          class="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[var(--text-tertiary)]"
+        >
           <svg
             width="13"
             height="13"
@@ -737,9 +749,12 @@ const successTone = computed(() => rateTone(successRate.value))
           </svg>
           {{ t('dashboard.systemStatus.version') }}
         </span>
-        <span class="font-mono text-[var(--text-secondary)]">{{
-          versionLabel
-        }}</span>
+        <span
+          class="min-w-0 truncate font-mono text-[var(--text-secondary)]"
+          :title="versionLabel"
+          data-system-version
+          >{{ versionLabel }}</span
+        >
       </div>
     </div>
   </ConsoleCard>

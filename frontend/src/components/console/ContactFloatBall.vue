@@ -59,9 +59,7 @@ const options = computed<ContactOption[]>(() => [
     @click="open = false"
   />
 
-  <div
-    class="contact-float-ball fixed bottom-7 right-7 z-50 flex flex-col items-center gap-3"
-  >
+  <div class="contact-float-ball fixed z-50 flex flex-col items-center gap-3">
     <!-- Contact options — animate in above the main button -->
     <Transition name="fab-stack">
       <div v-if="open" class="flex flex-col items-center gap-3">
@@ -195,7 +193,7 @@ const options = computed<ContactOption[]>(() => [
     <!-- Main FAB trigger button -->
     <button
       type="button"
-      class="flex h-14 w-14 items-center justify-center rounded-full shadow-[0_8px_24px_var(--shadow-color)] outline-none ring-2 ring-transparent transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-[var(--accent)]"
+      class="contact-float-trigger flex items-center justify-center rounded-full shadow-[0_8px_24px_var(--shadow-color)] outline-none ring-2 ring-transparent transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-[var(--accent)]"
       style="background: var(--accent); color: var(--accent-contrast)"
       :aria-label="open ? t('contact.close') : t('contact.open')"
       :aria-expanded="open"
@@ -228,11 +226,32 @@ const options = computed<ContactOption[]>(() => [
       </svg>
     </button>
   </div>
+
+  <!-- Reserves the trigger's footprint at the end of the page, so the last
+       content can scroll clear of the floating button. -->
+  <div class="contact-float-spacer" aria-hidden="true" />
 </template>
 
 <style scoped>
+.contact-float-ball,
+.contact-float-spacer {
+  --contact-float-inset: 1.75rem;
+  --contact-float-size: 3.5rem;
+}
+
 .contact-float-ball {
+  right: var(--contact-float-inset);
+  bottom: var(--contact-float-inset);
   width: max-content;
+}
+
+.contact-float-trigger {
+  width: var(--contact-float-size);
+  height: var(--contact-float-size);
+}
+
+.contact-float-spacer {
+  height: calc(var(--contact-float-inset) + var(--contact-float-size));
 }
 
 @media (max-width: 480px) {
@@ -241,6 +260,9 @@ const options = computed<ContactOption[]>(() => [
   .contact-float-ball {
     position: static;
     margin: 1rem 0 0 auto;
+  }
+  .contact-float-spacer {
+    display: none;
   }
 }
 

@@ -74,11 +74,14 @@ const accentClass = computed(() => [
           }}<template v-if="titleAccent"
             >{{
               titleSeparator
-            }}<!-- accent phrase carries the painted mark; punctuation stays outside it --><span
-              :class="accentClass"
-              >{{ titleAccentPrefix }}{{ titleAccent }}</span
+            }}<!-- accent phrase carries the painted mark; punctuation stays outside it,
+              but never starts a line on its own --><span
+              class="whitespace-nowrap"
+              ><span :class="accentClass" class="page-hero-accent"
+                >{{ titleAccentPrefix }}{{ titleAccent }}</span
+              >{{ titleSuffix }}</span
             ></template
-          >{{ titleSuffix }}
+          ><template v-else>{{ titleSuffix }}</template>
         </h1>
         <!-- hero metric slot (wallet balance, etc.) -->
         <slot />
@@ -125,3 +128,13 @@ const accentClass = computed(() => [
     <div v-else class="ink-divider mt-6" aria-hidden="true" />
   </div>
 </template>
+
+<style scoped>
+/* A long accent wraps inside itself and stays one em narrower than the
+   heading, so the punctuation held beside it still fits on the line. */
+.page-hero-accent {
+  max-width: calc(100% - 1em);
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+</style>

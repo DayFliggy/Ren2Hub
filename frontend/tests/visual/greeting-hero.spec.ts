@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 import {
   configureStablePage,
@@ -67,3 +67,58 @@ test('a long display name keeps the underline on each wrapped line', async ({
     clip: { x: 0, y: 0, width: 390, height: 460 },
   })
 })
+
+/** Where the closing "。" sits relative to the underlined name. */
+function greetingLayout(page: Page) {
+  return page.locator('[data-handdrawn="page-hero"] h1').evaluate((heading) => {
+    const accent = heading.querySelector('.brush-highlight')!
+    const walker = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT)
+    let suffix: Node | null = null
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.textContent?.includes('。')) suffix = node
+    }
+    const offset = suffix!.textContent!.lastIndexOf('。')
+    const range = document.createRange()
+    range.setStart(suffix!, offset)
+    range.setEnd(suffix!, offset + 1)
+    const mark = range.getBoundingClientRect()
+    const name = accent.getBoundingClientRect()
+    const middle = (mark.top + mark.bottom) / 2
+    // The name is an inline-block, so text after it starts at its right edge.
+    return {
+      suffixOnAccentLine:
+        mark.left >= name.right - 1 &&
+        middle > name.top &&
+        middle < name.bottom,
+      overflow: heading.scrollWidth - heading.clientWidth,
+    }
+  })
+}
+
+for (const name of [
+  'Alex Chen',
+  'Alexander Christopher Montgomery-Wellington',
+]) {
+  test(`the closing punctuation never starts a line (${name})`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, {
+      theme: 'light',
+      user: { display_name: name },
+    })
+    await page.setViewportSize({ width: 320, height: 800 })
+    await page.goto('/dashboard')
+    await waitForStablePage(page)
+
+    // Phone widths 8px apart move the name's end past the right edge in steps
+    // smaller than the 36px "。", so some width used to push it onto its own
+    // line.
+    for (let width = 320; width <= 480; width += 8) {
+      await page.setViewportSize({ width, height: 800 })
+      const layout = await greetingLayout(page)
+      expect(layout.suffixOnAccentLine, `${width}px`).toBe(true)
+      expect(layout.overflow, `${width}px`).toBeLessThanOrEqual(0)
+    }
+    await assertNoHorizontalOverflow(page)
+  })
+}

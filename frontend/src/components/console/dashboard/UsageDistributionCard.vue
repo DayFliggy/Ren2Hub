@@ -255,7 +255,7 @@ const topDaySummary = computed(() => {
 
 <style scoped>
 /*
- * From sm every period fits one stage height (month 162px, quarter 154px, year
+ * From sm every period fits one stage height (month 169px, quarter 154px, year
  * within it), so switching periods keeps the card height; from xl this also
  * aligns the overview row with BalanceCard. Surplus row height is centred.
  */

@@ -147,6 +147,9 @@ describe('SystemStatusCard', () => {
     expect(ring.attributes('data-success-rate-state')).toBe('unknown')
     expect(ring.findAll('.tick-standby')).toHaveLength(20)
     expect(ring.findAll('.tick-active')).toHaveLength(0)
+    // Without enough recent requests there is no rate: say so, not "--".
+    expect(wrapper.get('[data-success-rate-empty]').text()).toBe('No data')
+    expect(wrapper.find('header').text()).not.toContain('--')
   })
 
   it('uses a distinct visual gauge for each system resource', () => {
@@ -439,7 +442,7 @@ describe('SystemStatusCard', () => {
     expect(tiles[2]!.text()).toContain('--')
     expect(tiles[2]!.find('[data-bandwidth-sparkline]').exists()).toBe(false)
     expect(tiles[3]!.text()).toContain('--')
-    expect(wrapper.find('header').text()).toContain('--')
+    expect(wrapper.find('header').text()).toContain('No data')
   })
 
   it('keeps bandwidth values visible without drawing an incomplete series', () => {
