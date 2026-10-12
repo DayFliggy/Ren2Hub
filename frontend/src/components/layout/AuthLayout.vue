@@ -20,9 +20,9 @@ const app = useAppStore()
     class="night-page-texture texture-paper draft-grid flex min-h-screen flex-col bg-[var(--page-background)]"
     data-handdrawn-scope="auth"
   >
-    <!-- 顶部品牌栏 -->
+    <!-- 顶部品牌栏：与主体共用 1440px 容器和左右内边距，宽屏下两侧对齐 -->
     <header
-      class="relative z-20 flex h-16 shrink-0 items-center justify-between px-5 sm:px-8 xl:px-12"
+      class="relative z-20 mx-auto flex h-16 w-full max-w-[1440px] shrink-0 items-center justify-between px-5 sm:px-8 xl:px-12"
     >
       <RouterLink
         :to="{ name: 'home' }"
@@ -47,7 +47,7 @@ const app = useAppStore()
       </div>
     </header>
 
-    <!-- 主体：左叙事 + 右表单卡 -->
+    <!-- 主体：左叙事 + 右表单卡，两栏内容都在剩余高度内垂直居中 -->
     <div
       class="mx-auto grid w-full max-w-[1440px] flex-1 lg:grid-cols-[1fr_minmax(420px,480px)] lg:gap-10 lg:px-8 xl:gap-16 xl:px-12"
     >

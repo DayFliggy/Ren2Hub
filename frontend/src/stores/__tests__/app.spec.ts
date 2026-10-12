@@ -158,6 +158,17 @@ describe('public application state', () => {
     await vi.waitFor(() => expect(publicApi.pricing).toHaveBeenCalledTimes(1))
   })
 
+  it('skips the uptime request when the administrator disabled the panel', async () => {
+    publicApi.status.mockResolvedValueOnce({ uptime_kuma_enabled: false })
+    const store = useAppStore()
+
+    await store.initialize()
+
+    expect(publicApi.uptime).not.toHaveBeenCalled()
+    expect(store.uptimePercent).toBeNull()
+    expect(store.phase).toBe('ready')
+  })
+
   it('clamps malformed uptime ratios to the documented range', async () => {
     publicApi.uptime.mockResolvedValueOnce([
       { monitors: [{ uptime: 4, status: 1 }] },
