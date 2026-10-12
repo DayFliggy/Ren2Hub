@@ -181,12 +181,12 @@ test('deferred module entry points are disabled and routes fail closed', async (
 
   await page.goto('/profile', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
+  // The deferred tier benefits show a status note, not a dead button.
+  const identity = page.locator('.profile-identity')
+  await expect(identity.getByText('即将上线', { exact: true })).toBeVisible()
   await expect(
-    page.locator('.profile-identity').getByRole('button', {
-      name: '即将上线',
-      exact: true,
-    })
-  ).toBeDisabled()
+    identity.getByRole('button', { name: /即将上线|查看等级权益/ })
+  ).toHaveCount(0)
 
   for (const path of ['/market', '/invoice', '/farm', '/bigame']) {
     await page.goto(path, { waitUntil: 'domcontentloaded' })

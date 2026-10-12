@@ -71,13 +71,17 @@ const { t: clientText } = useI18n({
       >
         <header class="flex min-w-0 items-start justify-between gap-3">
           <div class="flex min-w-0 items-start gap-2.5">
-            <input
-              type="checkbox"
-              class="checkbox-round mt-1 shrink-0"
-              :checked="selectedIds.includes(token.id)"
-              :aria-label="t('keys.selectKey', { name: token.name })"
-              @change="toggleSelected(token)"
-            />
+            <!-- The padding makes a 24px pointer target around the glyph; the
+                 negative margins keep the glyph where mt-1 used to put it. -->
+            <label class="-mx-1 -mb-1 flex shrink-0 p-1">
+              <input
+                type="checkbox"
+                class="checkbox-round"
+                :checked="selectedIds.includes(token.id)"
+                :aria-label="t('keys.selectKey', { name: token.name })"
+                @change="toggleSelected(token)"
+              />
+            </label>
             <div class="min-w-0">
               <h2
                 class="truncate text-sm font-semibold text-[var(--text-primary)]"
@@ -134,7 +138,7 @@ const { t: clientText } = useI18n({
               <button
                 v-if="viewBilling"
                 type="button"
-                class="mt-1 block text-xs focus-ring"
+                class="-mb-1 flex min-h-6 items-center text-xs focus-ring"
                 @click="viewBilling(token)"
               >
                 {{ t('billing.reserved') }}

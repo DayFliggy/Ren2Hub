@@ -125,6 +125,10 @@ const checkboxClass = computed(() =>
     : 'h-4 w-4 accent-[var(--accent)]'
 )
 
+// Pads the 16-17px glyph to a 24px pointer target (WCAG 2.5.8); the negative
+// margin cancels the padding so the glyph and row height do not move.
+const checkboxTargetClass = '-m-1 inline-flex p-1 align-middle'
+
 const rowInteractive = computed(
   () => props.rowClickable || props.rowDblclickable
 )
@@ -503,14 +507,16 @@ onBeforeUnmount(() => {
         <thead class="bg-[var(--surface-table-header)]">
           <tr class="text-left text-xs text-[var(--text-secondary)]">
             <td v-if="selectable" class="w-10 px-3 py-3">
-              <input
-                type="checkbox"
-                :class="checkboxClass"
-                :checked="allChecked"
-                :disabled="selectionDisabled"
-                :aria-label="t('common.selectAll')"
-                @change="toggleAll"
-              />
+              <label :class="checkboxTargetClass">
+                <input
+                  type="checkbox"
+                  :class="checkboxClass"
+                  :checked="allChecked"
+                  :disabled="selectionDisabled"
+                  :aria-label="t('common.selectAll')"
+                  @change="toggleAll"
+                />
+              </label>
             </td>
             <td
               v-for="col in columns"
@@ -622,17 +628,19 @@ onBeforeUnmount(() => {
                 @click.stop
                 @dblclick.stop
               >
-                <input
-                  type="checkbox"
-                  :class="checkboxClass"
-                  :checked="selected.includes(row[rowKey] as string | number)"
-                  :disabled="selectionDisabled || !isRowSelectable(row)"
-                  :aria-label="
-                    rowSelectionLabel?.(row) ??
-                    t('common.selectRow', { index: dataRowNumber(row) })
-                  "
-                  @change="toggleRow(row)"
-                />
+                <label :class="checkboxTargetClass">
+                  <input
+                    type="checkbox"
+                    :class="checkboxClass"
+                    :checked="selected.includes(row[rowKey] as string | number)"
+                    :disabled="selectionDisabled || !isRowSelectable(row)"
+                    :aria-label="
+                      rowSelectionLabel?.(row) ??
+                      t('common.selectRow', { index: dataRowNumber(row) })
+                    "
+                    @change="toggleRow(row)"
+                  />
+                </label>
               </td>
               <td
                 v-for="col in columns"
