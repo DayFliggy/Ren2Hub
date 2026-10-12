@@ -151,12 +151,36 @@ test.describe('gateway isolated backend', () => {
         await page
           .getByText('Gemini 思考后缀适配器', { exact: true })
           .scrollIntoViewIfNeeded()
-        await expect(
-          page.getByRole('switch', {
-            name: 'Gemini 函数调用思考签名',
-            exact: true,
-          })
-        ).toHaveCount(0)
+        const thoughtSignature = page.getByRole('switch', {
+          name: 'Gemini 函数调用思考签名',
+          exact: true,
+        })
+        await expect(thoughtSignature).toBeVisible()
+        const originalSignature = await thoughtSignature.isChecked()
+        await thoughtSignature.setChecked(!originalSignature)
+        const signatureSaved = page.waitForResponse(
+          (response) =>
+            response.url().endsWith('/api/option/bulk') &&
+            response.request().method() === 'PUT'
+        )
+        await page
+          .getByRole('button', { name: '保存更改', exact: true })
+          .click()
+        expect((await (await signatureSaved).json()).success).toBe(true)
+        await page.reload()
+        await expect(thoughtSignature).toBeChecked({
+          checked: !originalSignature,
+        })
+        await thoughtSignature.setChecked(originalSignature)
+        const signatureRestored = page.waitForResponse(
+          (response) =>
+            response.url().endsWith('/api/option/bulk') &&
+            response.request().method() === 'PUT'
+        )
+        await page
+          .getByRole('button', { name: '保存更改', exact: true })
+          .click()
+        expect((await (await signatureRestored).json()).success).toBe(true)
         await assertNoHorizontalOverflow(page)
         await page.screenshot({
           path: `output/gateway-vendor-${theme}-${viewport.name}.png`,

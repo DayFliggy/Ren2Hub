@@ -545,7 +545,9 @@ func BatchInsertChannels(channels []Channel) error {
 		}
 	}()
 
-	for _, chunk := range lo.Chunk(channels, 50) {
+	for start := 0; start < len(channels); start += 50 {
+		// Retain GORM's generated IDs for the post-commit refresh notifications.
+		chunk := channels[start:min(start+50, len(channels))]
 		if err := tx.Create(&chunk).Error; err != nil {
 			tx.Rollback()
 			return err
