@@ -1260,7 +1260,7 @@ html.dark .runtime-flap::after {
   }
 
   .runtime-ledger-panel--requests {
-    grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.75fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr);
     column-gap: 0.5rem;
   }
 

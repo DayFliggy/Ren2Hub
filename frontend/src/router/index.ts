@@ -536,10 +536,13 @@ const CHUNK_LOAD_ERROR =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 router.onError((error, to) => {
-  navigationError.value =
-    error instanceof ApiError && error.status === 429
-      ? 'rate-limited'
-      : 'failed'
+  navigationError.value = {
+    kind:
+      error instanceof ApiError && error.status === 429
+        ? 'rate-limited'
+        : 'failed',
+    href: router.resolve(to.fullPath).href,
+  }
   console.error('[router] Navigation failed', error)
   if (!(error instanceof Error) || !CHUNK_LOAD_ERROR.test(error.message)) return
   // Load the page that failed once from the server; if it fails again, the
@@ -551,7 +554,7 @@ router.onError((error, to) => {
     // Without a persistent marker, reloading could loop indefinitely.
     return
   }
-  window.location.assign(router.resolve(to.fullPath).href)
+  window.location.assign(navigationError.value.href)
 })
 
 router.afterEach((_to, _from, failure) => {

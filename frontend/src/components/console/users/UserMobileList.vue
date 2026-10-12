@@ -76,15 +76,16 @@ const { t, locale } = useI18n()
       >
         <header class="flex min-w-0 items-start justify-between gap-3">
           <div class="flex min-w-0 items-start gap-2.5">
-            <input
-              type="checkbox"
-              class="checkbox-round mt-2 shrink-0"
-              :checked="selectedIds.includes(user.id)"
-              :disabled="selectionDisabled || !canManage(user)"
-              :aria-label="t('users.selectUser', { name: user.username })"
-              @click.stop
-              @change="toggleSelected(user)"
-            />
+            <label class="-mx-1 -mb-1 mt-1 flex shrink-0 p-1" @click.stop>
+              <input
+                type="checkbox"
+                class="checkbox-round"
+                :checked="selectedIds.includes(user.id)"
+                :disabled="selectionDisabled || !canManage(user)"
+                :aria-label="t('users.selectUser', { name: user.username })"
+                @change="toggleSelected(user)"
+              />
+            </label>
             <UserAvatar
               :username="user.username"
               :display-name="user.display_name"

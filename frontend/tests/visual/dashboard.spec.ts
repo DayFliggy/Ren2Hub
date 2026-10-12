@@ -275,13 +275,13 @@ test('quarter heatmap fills the width beside right-aligned analytics', async ({
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(mobileCell.height).toBe(14)
+  expect(mobileCell.height).toBe(24)
   expect(mobileCell.width).toBeGreaterThanOrEqual(mobileCell.height)
   expect(
     await card
       .locator('[data-usage-scroll]')
       .evaluate((element) => element.scrollWidth - element.clientWidth)
-  ).toBeLessThanOrEqual(1)
+  ).toBeGreaterThan(0)
   await assertNoHorizontalOverflow(page)
 })
 
@@ -440,9 +440,10 @@ test('usage distribution stays compact and contained on mobile', async ({
         heatmapOverflow: scroll ? scroll.scrollWidth - scroll.clientWidth : 0,
       }
     })
-    expect(metrics.height, `${period} card height`).toBeLessThanOrEqual(500)
+    // The seven touch rows and scroll hint reserve 60px beyond the calendar.
+    expect(metrics.height, `${period} card height`).toBeLessThanOrEqual(560)
     expect(metrics.overflow).toBe(0)
-    if (period === 'year') expect(metrics.heatmapOverflow).toBeGreaterThan(0)
+    if (period !== 'month') expect(metrics.heatmapOverflow).toBeGreaterThan(0)
     heights.push(metrics.height)
   }
 
@@ -586,6 +587,123 @@ test('usage heatmap exposes one roving cell and moves by date', async ({
   await expect(focused).toHaveAttribute('data-usage-date', /\d{4}-\d{2}-\d{2}/)
   expect(await focused.getAttribute('data-usage-date')).not.toBe(start)
 })
+
+for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
+  test.describe(`touch heatmap ${theme}`, () => {
+    test.use({ dashboardTheme: theme, hasTouch: true })
+
+    for (const width of [320, 390, 768]) {
+      test(`dense periods support touch and keyboard at ${width}px`, async ({
+        page,
+        context,
+      }, testInfo) => {
+        await page.setViewportSize({ width, height: 900 })
+        const card = page.locator('[data-usage-distribution]')
+        const heights: number[] = []
+        for (const period of PERIODS) {
+          await periodOption(card, period).tap()
+          const layout = await card.evaluate((element) => {
+            const heatmap = element.querySelector('[data-usage-layout]')!
+            const analytics = element.querySelector('[data-usage-analytics]')!
+            return {
+              height: element.getBoundingClientRect().height,
+              heatmapBottom: heatmap.getBoundingClientRect().bottom,
+              analyticsTop: analytics.getBoundingClientRect().top,
+              targets: Array.from(
+                heatmap.querySelectorAll('[data-usage-date]')
+              ).map((cell) => {
+                const rect = cell.getBoundingClientRect()
+                return { width: rect.width, height: rect.height }
+              }),
+            }
+          })
+          heights.push(layout.height)
+          for (const target of layout.targets) {
+            expect(target.width).toBeGreaterThanOrEqual(24)
+            expect(target.height).toBeGreaterThanOrEqual(24)
+          }
+          if (width < 640 || period === 'year') {
+            expect(layout.analyticsTop).toBeGreaterThan(layout.heatmapBottom)
+          }
+          if (period === 'month') continue
+
+          const scroll = card.locator('[data-usage-scroll]')
+          const overflow = await scroll.evaluate(
+            (element) => element.scrollWidth - element.clientWidth
+          )
+          if (width < 640 || period === 'year') {
+            expect(overflow).toBeGreaterThan(0)
+          }
+          if (overflow > 1) {
+            await expect(card.locator('[data-usage-drag-hint]')).toBeVisible()
+          }
+          const latest = card.locator('[data-usage-date]').last()
+          await latest.tap()
+          await expect(card.getByRole('tooltip')).toHaveText(
+            (await latest.getAttribute('aria-label'))!
+          )
+          await latest.press('ArrowUp')
+          await expect(page.locator(':focus')).toHaveAttribute(
+            'data-usage-date',
+            visualDateKey(1)
+          )
+          await page.keyboard.press('ArrowLeft')
+          await expect(page.locator(':focus')).toHaveAttribute(
+            'data-usage-date',
+            visualDateKey(8)
+          )
+          await page.keyboard.press('Home')
+          await expect(card.locator('[data-usage-date]').first()).toBeFocused()
+          await expect
+            .poll(() => scroll.evaluate((element) => element.scrollLeft))
+            .toBeLessThanOrEqual(4)
+          await page.keyboard.press('End')
+          await expect(latest).toBeFocused()
+
+          if (overflow <= 1) continue
+
+          await scroll.scrollIntoViewIfNeeded()
+          const box = await scroll.boundingBox()
+          if (!box) throw new Error('heatmap touch area missing')
+          const before = await scroll.evaluate((element) => element.scrollLeft)
+          expect(before).toBeGreaterThan(0)
+          const client = await context.newCDPSession(page)
+          const x = box.x + box.width / 3
+          const y = box.y + box.height / 2
+          await client.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x, y }],
+          })
+          for (let step = 1; step <= 6; step++) {
+            await client.send('Input.dispatchTouchEvent', {
+              type: 'touchMove',
+              touchPoints: [{ x: x + step * 12, y }],
+            })
+          }
+          await client.send('Input.dispatchTouchEvent', {
+            type: 'touchEnd',
+            touchPoints: [],
+          })
+          await client.detach()
+          await expect
+            .poll(() => scroll.evaluate((element) => element.scrollLeft))
+            .toBeLessThan(before)
+          await expect(
+            card.locator('[data-usage-scroll-fade="end"]')
+          ).toBeVisible()
+          await assertNoHorizontalOverflow(page)
+          await card.screenshot({
+            path: testInfo.outputPath(`${period}.png`),
+          })
+        }
+        expect(
+          Math.max(...heights) - Math.min(...heights),
+          JSON.stringify(heights)
+        ).toBeLessThan(1)
+      })
+    }
+  })
+}
 
 test('statistics trend supports the single-series modes', async ({ page }) => {
   await page.getByRole('tab', { name: '统计数据', exact: true }).click()

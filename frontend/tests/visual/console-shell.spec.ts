@@ -101,6 +101,47 @@ test('mobile strips mark hidden items and keep the current page in view', async 
   await expect(strip.locator('[data-nav-scroll-fade="start"]')).toBeVisible()
 })
 
+test('revealing mobile navigation shows the current page and preserves manual scrolling', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'dark', user: { role: 100 } })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/users')
+  await waitForStablePage(page)
+
+  const strip = page.locator('nav[data-handdrawn="navigation-strip"]')
+  const active = strip.locator('[aria-current="page"]')
+  const scroller = active.locator('..')
+  await expect(strip).toBeHidden()
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await expect(strip).toBeVisible()
+  await expect
+    .poll(() =>
+      active.evaluate((element) => {
+        const item = element.getBoundingClientRect()
+        const viewport = element.parentElement!.getBoundingClientRect()
+        return item.left >= viewport.left && item.right <= viewport.right
+      })
+    )
+    .toBe(true)
+
+  await scroller.hover()
+  await page.mouse.wheel(-2000, 0)
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollLeft))
+    .toBe(0)
+  // A small resize while the strip remains visible must respect the user's
+  // position instead of jumping back to the active page.
+  await page.setViewportSize({ width: 760, height: 1024 })
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  )
+  expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(0)
+})
+
 test('dashboard content scrolls clear of the floating support button', async ({
   page,
 }) => {

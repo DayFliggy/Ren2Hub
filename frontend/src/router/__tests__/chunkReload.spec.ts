@@ -22,8 +22,10 @@ function brokenRoute(error: unknown) {
   })
 }
 
+const BROKEN_PATH = '/broken-chunk?model=gpt%2F4&unit=K#prices'
+
 async function openBrokenRoute() {
-  await router.push('/broken-chunk').catch(() => undefined)
+  await router.push(BROKEN_PATH).catch(() => undefined)
 }
 
 beforeEach(async () => {
@@ -69,12 +71,24 @@ describe('route chunk load failures', () => {
 
       await openBrokenRoute()
       expect(assign).toHaveBeenCalledTimes(1)
-      expect(assign).toHaveBeenCalledWith('/broken-chunk')
+      expect(assign).toHaveBeenCalledWith(BROKEN_PATH)
 
       // The reloaded page fails the same way: no second reload.
       await openBrokenRoute()
       expect(assign).toHaveBeenCalledTimes(1)
-      expect(navigationError.value).toBe('failed')
+      expect(navigationError.value).toEqual({
+        kind: 'failed',
+        href: BROKEN_PATH,
+      })
+
+      await router.push('/404')
+      expect(navigationError.value).toBeNull()
+      expect(sessionStorage.getItem('ren2hub_chunk_reload')).toBeNull()
+
+      // A successful navigation clears the old failure and allows one reload
+      // for a later failed navigation.
+      await openBrokenRoute()
+      expect(assign).toHaveBeenCalledTimes(2)
     }
   )
 
@@ -84,7 +98,7 @@ describe('route chunk load failures', () => {
     await openBrokenRoute()
 
     expect(assign).not.toHaveBeenCalled()
-    expect(navigationError.value).toBe('failed')
+    expect(navigationError.value).toEqual({ kind: 'failed', href: BROKEN_PATH })
   })
 
   it('does not reload when session storage cannot hold the marker', async () => {
@@ -96,6 +110,6 @@ describe('route chunk load failures', () => {
     await openBrokenRoute()
 
     expect(assign).not.toHaveBeenCalled()
-    expect(navigationError.value).toBe('failed')
+    expect(navigationError.value).toEqual({ kind: 'failed', href: BROKEN_PATH })
   })
 })

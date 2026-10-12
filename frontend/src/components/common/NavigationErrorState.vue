@@ -8,10 +8,10 @@ import type { NavigationFailure } from '@/router/navigationState'
 
 const props = defineProps<{ failure: NavigationFailure }>()
 const { t } = useI18n()
-const rateLimited = computed(() => props.failure === 'rate-limited')
+const rateLimited = computed(() => props.failure.kind === 'rate-limited')
 
-function reload() {
-  window.location.reload()
+function retry() {
+  window.location.assign(props.failure.href)
 }
 </script>
 
@@ -35,7 +35,7 @@ function reload() {
       }}
     </p>
     <div class="flex flex-wrap items-center justify-center gap-3">
-      <ConsoleButton data-navigation-retry @click="reload"
+      <ConsoleButton data-navigation-retry @click="retry"
         ><RefreshCw :size="18" />{{ t('common.retry') }}</ConsoleButton
       >
       <!-- A full load of the home page also resets a router whose initial

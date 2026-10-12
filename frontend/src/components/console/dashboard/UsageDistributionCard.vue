@@ -264,4 +264,12 @@ const topDaySummary = computed(() => {
     min-height: 170px;
   }
 }
+
+/* Touch year cells need seven 24px rows plus the analytics band. Reserve the
+   same space for every period so switching does not move the cards below. */
+@media (min-width: 640px) and (any-pointer: coarse) {
+  .usage-stage {
+    min-height: 18rem;
+  }
+}
 </style>

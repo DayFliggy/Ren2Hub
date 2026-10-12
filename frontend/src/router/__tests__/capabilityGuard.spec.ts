@@ -141,23 +141,29 @@ describe('capability route guard', () => {
 
   // docs/authentication.md: a temporary refresh failure must leave the
   // session unchecked so a later navigation retries it.
-  it.each(['/sign-in', '/pricing'])(
-    'keeps a rate-limited session check on %s retryable',
-    async (path) => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      const auth = useAuthStore()
-      auth.checked = false
-      vi.spyOn(auth, 'fetchSelf').mockRejectedValue(
-        new ApiError('Too many requests', { status: 429 })
-      )
+  it.each([
+    '/sign-in?redirect=%2Fkeys%3Fpage%3D2#auth',
+    '/pricing?model=gpt%2F4&unit=K#prices',
+  ])('keeps a rate-limited session check on %s retryable', async (path) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const auth = useAuthStore()
+    auth.checked = false
+    vi.spyOn(auth, 'fetchSelf').mockRejectedValue(
+      new ApiError('Too many requests', { status: 429 })
+    )
 
-      await router.push(path).catch(() => undefined)
+    await router.push(path).catch(() => undefined)
 
-      expect(router.currentRoute.value.name).toBe('home')
-      expect(navigationError.value).toBe('rate-limited')
-      expect(auth.checked).toBe(false)
-    }
-  )
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(navigationError.value).toEqual({
+      kind: 'rate-limited',
+      href: path,
+    })
+    expect(auth.checked).toBe(false)
+
+    await router.push('/404')
+    expect(navigationError.value).toBeNull()
+  })
 
   it('fails closed for protected routes when status is unreachable', async () => {
     publicApi.status.mockRejectedValue(new Error('status unavailable'))

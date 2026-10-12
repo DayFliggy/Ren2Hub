@@ -636,6 +636,8 @@ test('home showcase remains intact at narrow mobile width', async ({
 
 const requestTotalViewports = [
   { name: 'narrow-phone', width: 320, height: 720 },
+  { name: 'small-phone', width: 360, height: 720 },
+  { name: 'phone', width: 390, height: 844 },
   { name: 'small-desktop', width: 1024, height: 768 },
 ] as const
 

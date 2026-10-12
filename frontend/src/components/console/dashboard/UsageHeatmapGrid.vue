@@ -158,11 +158,12 @@ function showTooltip(event: FocusEvent | MouseEvent, cell: UsageHeatmapCell) {
   }
 }
 
-function hideTooltip(date: string) {
+function hideTooltip(date: string, event?: PointerEvent) {
+  if (event?.currentTarget === document.activeElement) return
   if (tooltip.value?.date === date) tooltip.value = null
 }
 
-function onCellFocus(event: FocusEvent, cell: UsageHeatmapCell) {
+function onCellSelect(event: FocusEvent | MouseEvent, cell: UsageHeatmapCell) {
   focusDate.value = cell.date
   showTooltip(event, cell)
 }
@@ -187,8 +188,8 @@ function onCellKeydown(event: KeyboardEvent, cell: UsageHeatmapCell) {
   }
 
   let days: number
-  if (event.key === 'ArrowUp') days = -7
-  else if (event.key === 'ArrowDown') days = 7
+  if (event.key === 'ArrowUp') days = props.period === 'month' ? -7 : -1
+  else if (event.key === 'ArrowDown') days = props.period === 'month' ? 7 : 1
   else if (event.key === 'ArrowLeft') days = props.period === 'month' ? -1 : -7
   else if (event.key === 'ArrowRight') days = props.period === 'month' ? 1 : 7
   else return
@@ -206,7 +207,12 @@ async function alignLatest() {
 }
 function onScrollPointerDown(event: PointerEvent) {
   const target = event.currentTarget as HTMLElement
-  if (event.button !== 0 || target.scrollWidth <= target.clientWidth) return
+  if (
+    event.pointerType !== 'mouse' ||
+    event.button !== 0 ||
+    target.scrollWidth <= target.clientWidth
+  )
+    return
   dragging.value = true
   suppressClick = false
   dragStartX = event.clientX
@@ -283,10 +289,11 @@ onMounted(() => void alignLatest())
           "
           :data-usage-date="cell.date"
           :data-usage-level="cell.level"
-          @focus="onCellFocus($event, cell)"
+          @focus="onCellSelect($event, cell)"
+          @click="onCellSelect($event, cell)"
           @blur="hideTooltip(cell.date)"
-          @mouseenter="showTooltip($event, cell)"
-          @mouseleave="hideTooltip(cell.date)"
+          @pointerenter="showTooltip($event, cell)"
+          @pointerleave="hideTooltip(cell.date, $event)"
           @keydown="onCellKeydown($event, cell)"
         >
           {{ dayNumber(cell.date) }}
@@ -325,6 +332,7 @@ onMounted(() => void alignLatest())
             @pointerup="onScrollPointerEnd"
             @pointercancel="onScrollPointerEnd"
             @click.capture="onScrollClickCapture"
+            @scroll="tooltip = null"
           >
             <div class="usage-dense-content">
               <div class="usage-dense-months" aria-hidden="true">
@@ -361,10 +369,11 @@ onMounted(() => void alignLatest())
                   "
                   :data-usage-date="cell.date"
                   :data-usage-level="cell.level"
-                  @focus="onCellFocus($event, cell)"
+                  @focus="onCellSelect($event, cell)"
+                  @click="onCellSelect($event, cell)"
                   @blur="hideTooltip(cell.date)"
-                  @mouseenter="showTooltip($event, cell)"
-                  @mouseleave="hideTooltip(cell.date)"
+                  @pointerenter="showTooltip($event, cell)"
+                  @pointerleave="hideTooltip(cell.date, $event)"
                   @keydown="onCellKeydown($event, cell)"
                 />
               </div>
@@ -419,12 +428,9 @@ onMounted(() => void alignLatest())
 
 <style scoped>
 /*
- * Height contract. Below sm every period stacks the heatmap above the same
- * analytics block, so the root reserves the six-week month calendar height and
- * dense periods centre inside it. From sm the card stage owns the height (see
- * UsageDistributionCard) and the root shrinks to its content. Day cells are
- * 24px tall, the WCAG 2.2 minimum target size; the 2px row gap keeps the six
- * weeks (169px with the weekday header) within the 170px stage.
+ * Fine-pointer desktop layouts fit the six-week calendar in a 170px stage.
+ * Phones and coarse pointers reserve the taller dense grid below instead,
+ * including its month labels, focus-ring padding and horizontal scroll hint.
  */
 .usage-heatmap {
   --usage-calendar-width: 32px;
@@ -606,7 +612,6 @@ onMounted(() => void alignLatest())
 
 .usage-dense-scroll.is-draggable {
   cursor: grab;
-  touch-action: pan-y;
   user-select: none;
 }
 
@@ -637,11 +642,6 @@ onMounted(() => void alignLatest())
 @media (max-width: 359px) {
   .usage-heatmap {
     --usage-calendar-width: 30px;
-  }
-
-  /* 320px phones leave ~13.5px columns; keep quarter cells no taller. */
-  .usage-dense[data-period='quarter'] {
-    --usage-cell-height: 13px;
   }
 }
 
@@ -676,6 +676,30 @@ onMounted(() => void alignLatest())
      tablet), capped by the stage height; only phones pan through the weeks. */
   .usage-dense[data-period='year'] {
     --usage-cell-size: min(var(--usage-fit-cell), 12px);
+  }
+}
+
+/* Touch targets keep their own grid space. Pan through the weeks instead of
+   shrinking targets or allowing enlarged hit areas to cover neighbouring days. */
+@media (max-width: 639px), (any-pointer: coarse) {
+  .usage-heatmap {
+    min-height: 229px;
+  }
+
+  .usage-dense[data-period='quarter'],
+  .usage-dense[data-period='year'] {
+    --usage-cell-size: 24px;
+    --usage-cell-height: 24px;
+    --usage-column-gap: 3px;
+    --usage-row-gap: 3px;
+    --usage-columns: repeat(var(--usage-weeks), var(--usage-cell-size));
+  }
+
+  .usage-dense .usage-dense-content {
+    width: calc(
+      var(--usage-weeks) * (var(--usage-cell-size) + var(--usage-column-gap)) -
+        var(--usage-column-gap)
+    );
   }
 }
 </style>

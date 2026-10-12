@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
+import { ref, watch } from 'vue'
 
 import { useTableScrollFade } from '@/composables/useTableScrollFade'
 
@@ -23,12 +24,19 @@ const { canScrollLeft, canScrollRight } = useTableScrollFade(scroller)
 function centerActiveItem() {
   const strip = scroller.value
   const active = strip?.querySelector<HTMLElement>('[aria-current="page"]')
-  if (!strip || !active) return
+  if (!strip?.clientWidth || !active) return
   strip.scrollLeft =
     active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2
 }
 
-onMounted(centerActiveItem)
+// The strip mounts hidden on desktop. Reveal its current item when the mobile
+// layout becomes visible, without undoing manual scrolling on later resizes.
+let wasVisible = false
+useResizeObserver(scroller, ([entry]) => {
+  const visible = entry.contentRect.width > 0
+  if (visible && !wasVisible) centerActiveItem()
+  wasVisible = visible
+})
 watch(() => props.activeKey, centerActiveItem, { flush: 'post' })
 </script>
 

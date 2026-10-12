@@ -45,10 +45,12 @@ const ariaLabel = computed(() => {
 </script>
 
 <template>
+  <!-- Keep the absolutely positioned screen-reader text inside the table's
+       scroll viewport, including themes without a positioned card ancestor. -->
   <p
     v-if="isDormant"
     data-user-invite="dormant"
-    class="text-xs text-[var(--text-tertiary)]"
+    class="relative text-xs text-[var(--text-tertiary)]"
   >
     <span aria-hidden="true">—</span>
     <span class="sr-only">{{ ariaLabel }}</span>

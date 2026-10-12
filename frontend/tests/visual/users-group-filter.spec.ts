@@ -9,6 +9,7 @@ import {
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
+  { name: 'tablet', width: 768, height: 1024 },
   { name: 'mobile', width: 390, height: 844 },
 ] as const
 
@@ -78,6 +79,22 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await expect(
         page.getByText('default.member').filter({ visible: true }).first()
       ).toBeVisible()
+      if (viewport.name === 'tablet') {
+        // Dormant referral cells contain screen-reader text. It must remain
+        // inside the horizontal table scroller even when its column is hidden.
+        const table = page.locator('.data-table-body-viewport')
+        await expect(
+          table.locator('[data-user-invite="dormant"] .sr-only').first()
+        ).toContainText('无邀请记录')
+        await assertNoHorizontalOverflow(page)
+        await table.evaluate((element) => {
+          element.scrollLeft = element.scrollWidth
+        })
+        await expect
+          .poll(() => table.evaluate((element) => element.scrollLeft))
+          .toBeGreaterThan(0)
+        await assertNoHorizontalOverflow(page)
+      }
 
       await filter.click()
       await page.getByRole('option', { name: 'premium (1)' }).click()

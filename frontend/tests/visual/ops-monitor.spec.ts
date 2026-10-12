@@ -69,6 +69,9 @@ for (const theme of ['light', 'dark'] as const) {
       )
       await configureStablePage(page, { theme })
       await mockOps(page)
+      const clockTime = new Date('2026-07-27T04:00:00Z')
+      await page.clock.install({ time: clockTime })
+      await page.clock.pauseAt(clockTime)
       const errors = collectErrors(page)
       const api = recordApi(page)
       await page.goto('/ops')
@@ -100,9 +103,14 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(section(page, 'status')).toContainText('磁盘')
       await expect(section(page, 'status')).not.toContainText('版本')
       await expect(section(page, 'status')).not.toContainText('运行时长')
-      await expect(
-        section(page, 'status').locator('.ops-countdown-badge')
-      ).toHaveAttribute('title', '30s')
+      const countdown = section(page, 'status').locator('.ops-countdown-badge')
+      await expect(countdown).toHaveAttribute('title', '30s')
+      await page.clock.runFor(1000)
+      await expect(countdown).toHaveAttribute('title', '29s')
+      await section(page, 'status')
+        .getByRole('button', { name: '刷新', exact: true })
+        .click()
+      await expect(countdown).toHaveAttribute('title', '30s')
       await expect(page.locator('[data-ops-overall-status]')).toHaveAttribute(
         'data-status',
         'warning'

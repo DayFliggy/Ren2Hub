@@ -237,6 +237,28 @@ describe('UsageDistributionCard', () => {
     expect(active.dataset.usageDate).toBe(dateKey(expected))
   })
 
+  it.each(['季', '年'])(
+    'moves %s focus along the displayed day and week axes',
+    async (label) => {
+      const wrapper = render()
+      await period(wrapper, label).trigger('click')
+      const latest = wrapper.get('[data-usage-date="2026-07-27"]')
+      await latest.trigger('focus')
+      await latest.trigger('keydown', { key: 'ArrowUp' })
+      await Promise.resolve()
+      expect((document.activeElement as HTMLElement).dataset.usageDate).toBe(
+        '2026-07-26'
+      )
+      await wrapper
+        .get('[data-usage-date="2026-07-26"]')
+        .trigger('keydown', { key: 'ArrowLeft' })
+      await Promise.resolve()
+      expect((document.activeElement as HTMLElement).dataset.usageDate).toBe(
+        '2026-07-19'
+      )
+    }
+  )
+
   it('renders complete heatmap layout by default when empty', () => {
     const loading = render({ loading: true })
     expect(loading.find('[data-usage-loading]').exists()).toBe(true)

@@ -239,7 +239,7 @@ watch(
     <div
       v-else
       class="grid grid-cols-7 text-center text-[9px] text-[var(--text-tertiary)]"
-      :class="compact ? 'mt-0.5 leading-none' : 'mt-1'"
+      :class="compact ? 'mt-1 sm:mt-0.5 sm:leading-none' : 'mt-1'"
       data-usage-segment-labels
       aria-hidden="true"
     >

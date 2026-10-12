@@ -308,20 +308,24 @@ function responseDisplay(channel: AdminChannel): {
           >
             <header class="flex min-w-0 items-start justify-between gap-3">
               <div class="flex min-w-0 items-start gap-2.5">
-                <input
+                <label
                   v-if="canOperate || canSensitiveWrite"
-                  type="checkbox"
-                  class="checkbox-round mt-2 shrink-0"
-                  :checked="selectedIds.includes(channel.id)"
-                  :disabled="
-                    selectionDisabled || isRetiredChannelType(channel.type)
-                  "
-                  :aria-label="
-                    t('channels.selectChannel', { name: channel.name })
-                  "
+                  class="-mx-1 -mb-1 mt-1 flex shrink-0 p-1"
                   @click.stop
-                  @change="toggleSelected(channel)"
-                />
+                >
+                  <input
+                    type="checkbox"
+                    class="checkbox-round"
+                    :checked="selectedIds.includes(channel.id)"
+                    :disabled="
+                      selectionDisabled || isRetiredChannelType(channel.type)
+                    "
+                    :aria-label="
+                      t('channels.selectChannel', { name: channel.name })
+                    "
+                    @change="toggleSelected(channel)"
+                  />
+                </label>
                 <VendorLogo
                   v-if="visibleFields.includes('type')"
                   :vendor="channel.supplier"
