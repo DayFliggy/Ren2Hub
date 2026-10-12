@@ -194,6 +194,13 @@ func CriticalRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+func SessionRefreshRateLimit() func(c *gin.Context) {
+	if common.CriticalRateLimitEnable {
+		return rateLimitFactory(common.SessionRefreshRateLimitNum, common.SessionRefreshRateLimitDuration, "SR")
+	}
+	return defNext
+}
+
 func UserCriticalRateLimit(scope string) func(c *gin.Context) {
 	if !common.CriticalRateLimitEnable {
 		return defNext

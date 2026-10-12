@@ -226,6 +226,12 @@ var (
 	CriticalRateLimitNum            = 20
 	CriticalRateLimitDuration int64 = 20 * 60
 
+	// Every full page load restores the dashboard session through
+	// /api/user/auth/refresh, so it has its own IP budget instead of
+	// consuming the login budget above. Shares CriticalRateLimitEnable.
+	SessionRefreshRateLimitNum            = 60
+	SessionRefreshRateLimitDuration int64 = 60
+
 	UploadRateLimitNum            = 10
 	UploadRateLimitDuration int64 = 60
 
