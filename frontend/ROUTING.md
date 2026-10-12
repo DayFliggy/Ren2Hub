@@ -40,4 +40,4 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 
 `bun run test:visual` 默认启动或复用本地 Vite 服务。若验证 Go 产物，先准备 embed、构建并启动本地独立测试实例，再将 `PLAYWRIGHT_PORT` 设为该实例端口；Playwright 会复用该服务。`PLAYWRIGHT_THEME=light` 选择浅色。模拟 API 的用例验证界面与请求契约，不能替代使用真实 API 的浏览器冒烟验证。
 
-Vue 登录页提供密码与 2FA 流程，OAuth 回调页面用于账号绑定，未提供 Passkey、OAuth、WeChat 或 Telegram 登录入口。后端仍保留这些登录处理，是否可用由对应设置和请求校验决定；不能把前端入口范围等同于后端接口范围。会话和绑定规则见[认证契约](../docs/authentication.md)，Relay 边界见[统一路由](../docs/routing/UNIFIED_ROUTING.md)。
+Vue 登录页按服务端配置显示密码、Passkey 和 OAuth 登录入口；需要额外验证时进入 2FA challenge。OAuth 弹窗与回调同时用于登录、账号绑定和二次验证，支持已配置的 GitHub、Discord、Linux DO、OIDC、Telegram 与自定义 provider；没有独立 WeChat 登录入口。模块 capability 表示接口已接入，不能代替供应商配置或后端请求校验。会话和绑定规则见[认证契约](../docs/authentication.md)，Relay 边界见[统一路由](../docs/routing/UNIFIED_ROUTING.md)。

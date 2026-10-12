@@ -132,6 +132,14 @@ func ApplyReasoning(ctx context.Context, req *dto.ClaudeRequest, info convmeta.M
 		req.MaxTokens = rendered.MaxTokens
 	}
 	if rendered.Thinking != nil {
+		if !crossProtocol && req.Thinking != nil {
+			// Suffixes override modeled reasoning settings. Unknown native
+			// controls remain the provider's responsibility in every mode.
+			rendered.Thinking.Extra = req.Thinking.Extra
+			if rendered.Thinking.Type == "adaptive" {
+				rendered.Thinking.BlockBinding = req.Thinking.BlockBinding
+			}
+		}
 		req.Thinking = rendered.Thinking
 	}
 	outputEffort := rendered.OutputEffort

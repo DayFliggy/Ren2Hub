@@ -70,6 +70,7 @@ function moveActive(delta: number) {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     moveActive(1)

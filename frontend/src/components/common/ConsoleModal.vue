@@ -59,7 +59,7 @@ function focusableEls(): HTMLElement[] {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (!props.open || !isTopmostModalDialog(stackEntry)) return
+  if (e.isComposing || !props.open || !isTopmostModalDialog(stackEntry)) return
   if (e.key === 'Escape') {
     // A menu or picker inside the dialog already used this Escape to close
     // itself.

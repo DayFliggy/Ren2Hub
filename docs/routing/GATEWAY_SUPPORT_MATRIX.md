@@ -4,6 +4,8 @@
 
 ## 文本入口
 
+Claude 原生请求保留 `thinking.block_binding` 和未知 thinking 字段，包括显式 `0`、`false`、`null`；网关不会自行补造 binding。原生后缀重写在所有模式保留未知字段，只在 adaptive 恢复客户端 binding，`between_tools` 不继承它；共享入口覆盖 Claude、AWS 与 Vertex。跨 Chat、Responses、Gemini 的 `block_binding` 产生 error `claude_thinking_block_binding_not_portable`：safe/strict 发送前拒绝，allow 记录诊断后省略；未知 thinking 字段跨协议产生 `unknown_conversion_field` warning（safe/allow 放行，strict 拒绝）。同协议 JSON/SSE 的 `input_transformations` 原样交付。宿主合并所有 `anthropic-beta` 请求头，Bedrock 再拆为去空白、去空项的数组。
+
 工具媒体采用直接有序历史转换；缺失／重复调用 ID、不能表达的失败状态或图片 detail 不会因 `allow` 而放行。多候选响应必须逐个结束，不能由首个候选的 stop 证明整个请求完成。
 
 | 语义合同       | 支持范围与拒绝边界                                                                                                                                                                                                                                                                                          |

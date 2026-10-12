@@ -8,12 +8,15 @@ const sharedNow = ref(Math.floor(Date.now() / 1000))
 let sharedTimer: number | null = null
 let subscriberCount = 0
 
+function refreshVisibleClock() {
+  if (!document.hidden) sharedNow.value = Math.floor(Date.now() / 1000)
+}
+
 function subscribeTicker() {
   if (subscriberCount++ === 0) {
     sharedNow.value = Math.floor(Date.now() / 1000)
-    sharedTimer = window.setInterval(() => {
-      sharedNow.value = Math.floor(Date.now() / 1000)
-    }, 1000)
+    sharedTimer = window.setInterval(refreshVisibleClock, 1000)
+    document.addEventListener('visibilitychange', refreshVisibleClock)
   }
 }
 
@@ -21,6 +24,7 @@ function unsubscribeTicker() {
   if (--subscriberCount === 0 && sharedTimer !== null) {
     window.clearInterval(sharedTimer)
     sharedTimer = null
+    document.removeEventListener('visibilitychange', refreshVisibleClock)
   }
 }
 </script>

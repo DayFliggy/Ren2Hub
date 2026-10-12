@@ -6,6 +6,8 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 ## 能力
 
+`Thinking` 原生保留 `BlockBinding` 与 `Extra` 扩展字段；跨协议的损失必须经转换策略判断。完整诊断、宿主后缀及请求头合同见[协议支持矩阵](../docs/routing/GATEWAY_SUPPORT_MATRIX.md#文本入口)。
+
 - 在 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini `generateContent` 之间转换
 - 同时支持请求、非流式响应和增量流式响应
 - 自动根据 DTO 类型识别源协议，并选择内置的直接或多跳转换路径

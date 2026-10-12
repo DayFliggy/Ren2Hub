@@ -230,7 +230,7 @@ function closeTypeDropdown() {
 // Escape closes an open type list only; the dialog stays open. With the list
 // closed it reaches the dialog as usual.
 function onTypeDropdownEscape(event: KeyboardEvent) {
-  if (!typeDropdownOpen.value) return
+  if (event.isComposing || !typeDropdownOpen.value) return
   event.preventDefault()
   event.stopPropagation()
   closeTypeDropdown()
@@ -372,6 +372,7 @@ function removeModelTag(tag: string) {
 }
 
 function onModelInputKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
   const val = modelInput.value.trim()
   if ((e.key === 'Enter' || e.key === ',') && val) {
     e.preventDefault()

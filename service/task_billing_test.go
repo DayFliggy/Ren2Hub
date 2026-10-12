@@ -680,6 +680,7 @@ func TestTaskCompletionLogContent(t *testing.T) {
 			var other map[string]any
 			require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
 			assert.Equal(t, []any{map[string]any{"key": test.content}}, other["content_parts"])
+			assert.Equal(t, true, other["is_task"], "task settlement logs select task billing presentation")
 			assert.Equal(t, test.content, other["reason"])
 		})
 	}
@@ -694,6 +695,7 @@ func TestTaskCompletionLogContent(t *testing.T) {
 		var other map[string]any
 		require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
 		assert.NotContains(t, other, "content_parts")
+		assert.Equal(t, true, other["is_task"], "released task logs retain their task identity")
 		assert.Equal(t, "upstream said no", other["reason"])
 	})
 }

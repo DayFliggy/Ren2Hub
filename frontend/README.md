@@ -36,7 +36,7 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 
 - `/`：公开首页
 - `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`：认证与密码重置
-- `/oauth/:provider`：现有 OAuth 绑定回调
+- `/oauth/:provider`：OAuth 登录、绑定与二次验证的弹窗回调
 - `/dashboard`、`/keys`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
 - `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
 - `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；空安装无价格，只有保存后生效，见[计费界面契约](docs/BILLING.md)
@@ -46,6 +46,8 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 `/api/next/*` 是已有业务 API 门面，保留接口契约；`/api/models` 和 `/api/models/` 的不同语义也保留。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
 
 ## 源码结构
+
+共享弹窗、命令面板、渠道模型输入与工单回复在输入法组合期间不截获选词按键；正常 Enter 提交、Shift+Enter 换行及 Escape 关闭沿用原行为。活动倒计时按绝对截止时间计算，页面恢复可见立即校时，共享计时器和监听器在最后实例卸载时释放。模型供应商识别将 `meta/`、`muse-` 归入 Meta，`spark-` 仍属于讯飞。
 
 ```text
 src/

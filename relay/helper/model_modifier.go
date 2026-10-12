@@ -250,7 +250,13 @@ func applyModelControls(req dto.Request, parsed parsedModelModifiers) error {
 			request.TopP = parsed.topP
 		}
 		if parsed.hasThinking {
-			request.Thinking = nil
+			// The shared Claude renderer still needs native controls after the
+			// suffix replaces the modeled reasoning settings.
+			if thinking := request.Thinking; thinking != nil && (len(thinking.BlockBinding) > 0 || len(thinking.Extra) > 0) {
+				request.Thinking = &dto.Thinking{BlockBinding: thinking.BlockBinding, Extra: thinking.Extra}
+			} else {
+				request.Thinking = nil
+			}
 			if len(request.OutputConfig) > 0 && common.GetJsonType(request.OutputConfig) == "object" {
 				var output map[string]any
 				if err := common.Unmarshal(request.OutputConfig, &output); err == nil {

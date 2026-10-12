@@ -1,6 +1,6 @@
 # 上游同步账本
 
-本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `c10780e054e6e518c9d0d8a903526663c9b57d75`（`v1.0.0-rc.43` 之后的 main，含 `128089fa7` 全站国际化）、Sub2API `3a6fd1c9db07203ca308aaba69e502bc1f35b307`（0.2.15）、AxonHub `b6d184a898df3d3c8278dd7c4a622e615919d675`，下一轮从这三个提交向后比较。
+本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `767a82b8764778b847462ebecdc231eacd1e282c`（main）、Sub2API `9591136d45cef26453348ed9532a7ebbce7cf99c`（main）、AxonHub `7a0cfbf42b00829dd8811cc87488f6194ed5ae02`（unstable），下一轮从这三个提交向后比较。
 
 逐批的比较窗口、执行过程和验收数据保存在 Git 历史中：在 Ren2Hub 目录运行 `git log -- docs/upstream/SYNC_LEDGER.md` 定位批次，再用 `git show <commit>:docs/upstream/SYNC_LEDGER.md` 读取。接口字段以[网关 API](../routing/GATEWAY_API.md)、[协议支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md)、[插件 API](../plugin-api/v1.md)、[模型定价](../billing/PRICING.md)和[鉴权合同](../authentication.md)为准，本账本只记处置与本地合同。
 
@@ -14,6 +14,61 @@
 | 不适用 | 本地没有对应代码或产品 | 对应能力重新引入时复评 |
 
 状态沿用[适配矩阵](../../../skills/ren2hub-upstream-sync/references/adaptation-matrix.md)的定义：部分吸收的上游提交拆成多行分别标注；当前没有待验证条目。守护测试列给出测试函数或测试文件，“—”表示没有专门测试。
+
+## 2026-10-12 增量处置
+
+本轮于 `2026-10-12T12:33:03Z` 完成官方 HEAD、发布元数据与独立参考副本采集。完整窗口为 NewAPI `c10780e054e6e518c9d0d8a903526663c9b57d75..767a82b8764778b847462ebecdc231eacd1e282c`（13 提交）、Sub2API `3a6fd1c9db07203ca308aaba69e502bc1f35b307..9591136d45cef26453348ed9532a7ebbce7cf99c`（32 提交，其中 16 个 merge 只合并下列 16 项）、AxonHub `b6d184a898df3d3c8278dd7c4a622e615919d675..7a0cfbf42b00829dd8811cc87488f6194ed5ae02`（5 提交）。发布标签分别为 NewAPI `v1.0.0-rc.43`、Sub2API `v0.2.15`、AxonHub `v1.0.0-beta11`；标签与主干分开比较，不以 rc/beta 名称推定稳定性。
+
+“已吸收（既有）”表示当前合同已等价覆盖，不能当作本轮新功能。以下未采用项在对应产品或合同被明确引入后复评。此前的等待上游项未在该窗口得到修复，状态保留；没有新增未处置的 P0/P1。证据使用独立 checkout、三库、回环供应商及候选容器，不代表真实供应商认证或物理移动设备输入法验证。源码提交与正式部署证据分别记录，实际运行状态见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。
+
+### NewAPI
+
+| 提交 | 状态 | 当前行为与复评边界 |
+| --- | --- | --- |
+| `767a82b8764778b847462ebecdc231eacd1e282c` | 已吸收并保留本地诊断合同 | Claude 原生保留 `thinking.block_binding`、未知 thinking 字段与 `input_transformations`；后缀只在 adaptive 保留 binding，未知字段在原生重写仍保留；多值 beta 请求头合并，Bedrock 去空白/空项。跨协议损失遵守 safe/strict/allow，见[支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md#文本入口)及 `claude_thinking_binding_test.go`。共享重写覆盖 Claude/AWS/Vertex，不在单一 adaptor 补第二份逻辑 |
+| `2b85a8fc67bdb6d8d41a25f60f734dd3b9917618` | 不适用 | 上游登录条款同意提示；Vue 登录没有该同意流程，新增流程时复评 |
+| `2ed058795bf0ce968134aa8db18b0dd86b54c30e` | 已吸收 | CI 固定 `github.sha`，Bun 每周依赖检查；删除账户回归同时断言旧会话失效和无活跃会话。SQLite 单写连接与 immediate 事务已有 `TestSQLiteConnectionWritePolicy`，不退回较弱配置 |
+| `9948b1ef14ea17fb23539386c0cb09018671c955` | 已吸收 | 定价转换接受端点数组/map，规范化空白、拒绝非法数组，图片按次表达式保留 `image_count`；`model_pricing_conversion_endpoints_test.go` |
+| `4bfcf2812198913156a3e88a43e746b61a7b6ef5` | 不适用 | React lobehub 图标包更新不适用于 Vue 图标系统 |
+| `fc08b76f0fb3f95e7cb81667e7bf350200147fb3` | 已吸收（既有） | 历史阶梯读取冻结 `charge_result.trace.matched_tier`，不按当前配置重算；`LogBillingDetail.vue` |
+| `ba0e478e061ee0c824922d89c05620de878103cf` | 已吸收（既有） | Responses 转 Chat 的工具调用轮次保留同时出现的 assistant 正文；`to_oai_chat_req.go` |
+| `34b19421237fc4695e919cdd799c1b7813023085` | 已吸收 | 模型广场关闭时有效 Root 仍可读 pricing；会话过期/撤销、禁用/降权、PAT 权限边界不放宽；`header_nav_test.go` |
+| `b22a43b6e89e5349d8cdbddc88d570b16e15fb1f` | 已吸收 | 任务实际/估算结算与失败释放日志补 `is_task:true`；`service/task_billing_test.go` |
+| `bbf60b49f6a4cab709e49e57d45f7911fc7dccae` | 不适用 | 上游移动账单区分钱包/订阅资金来源，本地钱包是唯一来源 |
+| `3f926c3ef49745be273cd8f753fb691abdd7b836` | 已吸收（既有） | 本地已完成流的成功记录不因随后 context 取消而改失败，不存在上游该分支 |
+| `3827fd83076b9cbaa3f1d9f9d2957ae653573ed7` | 已吸收（既有） | 表达式卡显示完整原式，不采用丢失 cache-read 子式的 primary/secondary 投影 |
+| `42e694eb60fe3191795c00d416571ced716eb9c4` | 已吸收 | `meta/`、`muse-` 归类 Meta，独立 `spark-` 仍是讯飞；`modelProvider.spec.ts` |
+
+### Sub2API
+
+| 提交 | 状态 | 当前行为与复评边界 |
+| --- | --- | --- |
+| `f48866958b1ddcda57dab6844b6a3ade7783bc2d` | 刻意不吸收 | Codex image_generation 自动桥接仅对 OpenAI 账号开启；Ren2Hub 不按 User-Agent 自动注入托管图像工具，type 57 已退役。保留显式工具与插件协议合同。 |
+| `a56720855cf0c3ca38aea6da2a24c73e57ec1342` | 已吸收 | 活动共享倒计时恢复可见立即校时，按绝对截止时间计算，最后实例卸载移除监听；`CountdownPill.spec.ts`。运维轮询已有可见时重取。 |
+| `27de27ac6496e647c59866d9ba57de61ac356771` | 刻意不吸收 | 上游删除数据库 group 时事务清理内容审核 group_ids，并锁活跃组避免保存/删除竞态。本地敏感词全局匹配，无审核分组或订阅账号池，不存在该关联。不能移植 PostgreSQL JSONB 更新到三库合同。 |
+| `c4224045dc5cbf16f40c7b31aeb639aa0e211101` | 刻意不吸收 | 支付 QR 页面从每秒减一改为绝对 deadline。本地充值提交后跳外部 GMPay/Epay 收银台，没有自有 QR 倒计时；活动倒计时已按绝对时间。 |
+| `69d6d106fd365d8ed23b5a1c82eb3a968acc1454` | 刻意不吸收 | 上游 Monitor V2 静态平台配置缺少新增入口；本地 /ops 按运行时和渠道健康数据投影，没有该配置列表或平台白名单。 |
+| `ba280b3d5ea4d71e2f15fdb56ce60c4a05f422c1` | 刻意不吸收 | 上游请求详情从全量账号列表缓存解析 account_id 名称。本地无账号池；诊断通过真实 attempt 记录 channel_id/credential_id，并按 channels:read 和 ChannelRead 控制内部字段。不可新建全量账号缓存真相源。 |
+| `2bfc49477c0860058d2ff27d8ca40b0c3a1ca31c` | 已吸收（既有） | 上游 datetime-local 不能使用 UTC toISOString 默认值。本地日期选择使用 getFullYear/getMonth/getDate；PAT/日志清理输入留空，提交按本地 Date 解析；无同类 UTC 初始化。 |
+| `d01628975d9f4d2d3ac9f9792df1bc5946a87061` | 已吸收 | 共享弹窗、命令面板、渠道模型输入/类型搜索及工单回复在 `isComposing` 时不截获组合键；已有 MetadataTagInput guard 保留。4 个交互组件测试及浏览器回归保护正常提交和关闭；合成事件不等同物理输入法验证。 |
+| `bd2f53b855b79c6c20f9dee2187c78fa4ab7158c` | 刻意不吸收 | 上游 per-user group rate multiplier 必须有限且 >0。本地无同页；充值比例后端严格 >0；模型/用户组价格明确允许零，禁止照搬 >0 改掉免费语义。 |
+| `8e3d75b57b59b6bf8e9e695af27dab70ac360109` | 已吸收（既有） | 上游自动刷新只刷新基础数据不更新展开详情。本地 usePolledFeed 每个区域持有独立 feed，无永不失效的详情 cache；可见时重取且 abort/身份防旧响应覆盖。 |
+| `5753552b958084a7695fec7dfd923e30304ee108` | 刻意不吸收 | Gemini OAuth 获取供应商授权 URL 保留后端错误。本地 Gemini 是 API/Vertex 身份接入，未提供 Gemini 订阅 OAuth 账号池；站点 OAuth 走 ApiError 通道。 |
+| `29b2d721f46bddf5dc2555aad4adc063e0181d3b` | 已吸收（既有） | 上游嵌入静态文件测试修 logo.png 为实际存在 logo.svg。本地有真实 manifest 资源图和部署 smoke，不引用该上游 logo.png。 |
+| `66b7ce08e710ec5f9c5206c292ffcf3972fbe8cc` | 刻意不吸收 | 账号池分组多行名称不截断；本地无 AccountGroupsCell，普通用户组不等同订阅账号组。 |
+| `0f189af8de8374cca7ddd4095a39135fe4725814` | 已吸收（既有） | 上游 RPM 覆盖模态切组/关闭后丢弃旧请求。本地无对应页面，已统一 useLatestRequest；钱包报价有 quoteSequence/AbortController/卸载 guard。 |
+| `07185812655ec2e0740ca76882879c0b9ae5ee0a` | 刻意不吸收 | Codex/Work 远程目录缺 metadata 时 GPT-6.1 Sol 默认 500k。本地 Codex 静态 TOML 只导出管理员明确保存的 capability.ContextLimit，缺失保持未知，无私有远程目录和硬编码默认。 |
+| `43768680d38ccdbd8fffc2cb91d3c1fc778a61c6` | 刻意不吸收 | GPT-6.1 Sol OAuth/Setup Token 订阅取消长上下文附加费，API Key 仍按 API 价卡。本地 type 57 退役，没有订阅收费；唯一 model_pricing+冻结报价，不得套订阅豁免改官方 API 收费。 |
+
+### AxonHub
+
+| 提交 | 状态 | 当前行为与复评边界 |
+| --- | --- | --- |
+| `18cc192eb529a9413a23d0de0108f9109012be63` | 刻意不吸收 | 上游仅修复 S3 HTTPS PutObject 的 aws-chunked trailing checksum；Ren2Hub 不具有 S3 对象存储，TaskArtifactStore 返回 disabled，AWS SDK 用于 Bedrock。 |
+| `abd5bd73fe9b644e8495e060b1267dddc092b219` | 刻意不吸收 | 窗口修改模型开发商 JSON 数据，没有价格 API 结构变更。本地公开来源仅生成管理员可选择的草稿，不能自动改售价、授权或渠道能力。 |
+| `931fafff819a9202f48645839a0c47d3ccfe70fa` | 刻意不吸收 | 上游 Codex 私有 transformer 不再默认复制客户端 UA，清理 Http-Referer/X-Title/X-Platform/X-Zcode-/X-Os-。本地 type 57 已退役，通用请求只默认复制 Content-Type/Accept，显式管理员 header override 保留；标准 OpenAI Codex 模型能力继续存在。 |
+| `8262e95a5326c22718c22c2068dc75889dc4472e` | 已吸收 | 本地每次尝试已直读渠道 DB、重选可用 key、排除已尝试/不健康 key，发送前再核验身份。本批补齐渠道已删除时将所有该渠道候选标为 channel_disabled 并继续后续候选；真实数据库错误显式中止，不复制上游 transient lookup fallback。 |
+| `7a0cfbf42b00829dd8811cc87488f6194ed5ae02` | 刻意不吸收 | 上游为 React ModelsAssociationDialog 外层添加 overflow-hidden，修复该组件双滚动条。Ren2Hub 为独立 Vue 控制台，没有该 React 组件。 |
 
 ## 协议转换
 
@@ -145,7 +200,7 @@
 | NewAPI `8ca26d81d` | 已吸收 | 使用上游 `GlobalWebRateLimit(frontendFS)`、`ServeFrontendFiles` 和三个静态限流环境变量（默认关闭）；本地 `frontendFiles.Exists` 统一施加扩展名白名单并排除目录；嵌入的构建产物不计入 Web 限流，构建产物只压缩一次 | `middleware/rate-limit.go`、`middleware/frontend_static.go`、`router/web-router.go` | `TestVueStaticAssetsAreCompressedOnce`、`TestVueStaticAssetsDoNotConsumeWebRateLimit` | — |
 | NewAPI `common/init.go`（`GLOBAL_WEB_RATE_LIMIT`） | 本地偏离保留 | 默认值为 600，上游为 120 | `common/init.go` | — | 控制台请求模式改变时复评 |
 | NewAPI `feefe09f`（TLS） | 已吸收 | 中继、受保护 Fetch 与模型同步各自克隆 TLS 配置 | `common/init.go`、`service/` | `TestHTTPTransportsKeepIndependentTLSSettings`、`TestModelSyncTLSConfigurationIsIndependent` | — |
-| AxonHub `2bf8e2c9` | 已吸收 | Playground 无持久 Token 的请求以逻辑模型冻结价格，跨渠道重试分别映射上游模型，真实响应模型只用于诊断，未授权别名不发送 | `router/`、`controller/relay.go` | `TestGatewayPlaygroundModelIdentityWithoutPersistentToken` | 改变 Playground 初始化或路由时复验 |
+| AxonHub `2bf8e2c9` | 已吸收 | 内部 Token 0 回归请求以逻辑模型冻结价格，跨渠道重试分别映射上游模型，真实响应模型只用于诊断，未授权别名不发送 | `router/`、`controller/relay.go` | `TestGatewayPlaygroundModelIdentityWithoutPersistentToken` | 改变无持久 Token 的内部请求或路由时复验；Playground/Lab 产品入口已退役 |
 | Sub2API Redis 失败放行资金预占 | 刻意不吸收 | 准入与资金预留不因 Redis 故障放行；未配置 Redis 时实际准入改用进程内预留 | `service/` | — | 只有保持现有预留与恢复不变量的证据充分时复评 |
 | 本地 AUDIT1009B-14（Gemini 400 API key not valid） | 等待上游 | Gemini 以 400 `API key not valid` 报告失效 Key 时归为输入错误，不换渠道、不冷却 Key；NewAPI 同样不重试 400 | `service/route_health.go` | — | NewAPI 修复后按其实现同步 |
 | NewAPI `c6741c36a` | 已吸收 | 渠道设置 `tls_insecure_skip_verify` 让该渠道的 API 请求跳过证书校验：中转与任务提交、Realtime/Responses WebSocket、余额与模型列表（Ollama 模型列表除外，见下行）、经渠道代理的媒体、Midjourney 提交与轮询（本地这两条走渠道代理，一并纳入）、插件轮询与 `utils.fetch`。跳过校验的渠道不与校验渠道共用客户端或连接池；Vertex 与插件服务账号的凭据交换始终校验。Vue 渠道表单的开关在"高级设置"，需要 `sensitive_write`。Codex 部分不适用（type 57 已退役） | `relaykit/dto/channel_settings.go`、`service/http_client.go`、`service/http_transport_policy.go` | `service/http_client_transport_test.go`、`TestChannelUpstreamQueriesHonorTLSInsecureSkipVerify`、`TestMidjourneyPollHonorsChannelTLSInsecureSkipVerify`、`TestTaskAdaptorHookFetchFollowsChannelTLSSetting` | — |
@@ -189,7 +244,7 @@
 | Sub2API 其余界面竞态修复 | 刻意不吸收 | 本地已有等价守卫或没有对应页面 | — | — | 引入对应页面时复评 |
 | NewAPI `93ea55f3c` | 已吸收（Vue 改写） | 访问令牌到期时间与日志清理时间的 `datetime-local` 输入设 `step="1"`，选到秒并按秒提交；日志清理确认文案显示到秒。时间框部分清空时浏览器按无效输入拦截提交，不发出无效时间；访问令牌到期时间整体清空表示使用默认有效期。本地偏离：日志、看板等页面的日期范围筛选只按天选择（开始取当天 0 点，结束取 23:59:59），没有时间部分，不做秒级改造 | `frontend/src/components/console/PersonalAccessTokensPanel.vue`、`frontend/src/components/admin/ops/OpsSystemTasksCard.vue` | `PersonalAccessTokensPanel.spec.ts`、`OpsMonitorView.spec.ts` | 日期范围筛选加入时间部分时复评 |
 | NewAPI `96275d224` | 已吸收 | 本地已有该行为，未改代码：`DateRangePicker` 的月份与星期名称用 `Intl.DateTimeFormat` 按界面语言生成；登录会话列表的相对时间按界面语言输出（`relativeTime`）；通行密钥卡片显示绝对时间；公告编辑器不显示相对时间。控制台只有 zh-CN 与 en，没有上游 `zh`/`zhCN` 键名错配。原生日期输入的日历语言由浏览器决定 | `frontend/src/components/common/DateRangePicker.vue`、`frontend/src/utils/format.ts` | `format.spec.ts` | 新增界面语言或改用第三方日历组件时复评 |
-| NewAPI `06dd76a9d` | 不适用 | Vue 没有上游 Playground；Lab 对话存在服务端（`/api/lab/chat/conversation/:id`），浏览器只存侧栏折叠、隐私模式、提示音等界面偏好，不存对话或设置数据 | `frontend/src/composables/useLab.ts` | — | Lab 改为在浏览器保存对话或设置时复评 |
+| NewAPI `06dd76a9d` | 不适用 | Vue 的 Playground 与 Lab 页面及业务入口已退役；浏览器只保留界面偏好，没有该对话存储路径 | `router/web-router.go`、`frontend/src/router/` | — | 独立批准重新引入对话页面时复评 |
 | NewAPI `1fb6d07fe` | 不适用 | Vue 没有引入 `react-icons` 或 Simple Icons；图标只按名称从 `lucide-vue-next` 具名导入，供应商标志是 `public/models/` 下的静态图片 | — | — | 引入整包品牌图标库时复评 |
 | NewAPI `b892a6b2e` | 已吸收（Vue 改写） | 路由页面代码加载失败（Chromium、Firefox、Safari 的模块加载错误与 Vite 的 CSS 预加载错误）时，用 `sessionStorage` 标记后整页加载失败的目标地址一次；再失败显示可访问的重试页，导航成功后清除标记；无法写入标记时不自动加载，避免循环。本地原有逻辑只识别 Chromium 与 Safari 的脚本错误，且加载的是失败前的页面；Vue 错误页本来不显示状态码。可视化测试预置标记后断言重试页，契约不变 | `frontend/src/router/index.ts` | `chunkReload.spec.ts`、`tests/visual/routes.spec.ts`（重试页） | — |
 | NewAPI `0f38a14a5` | 不适用 | Vue 控制台没有字体偏好设置，正文字体固定为内置 Inter、Noto Sans SC 加系统无衬线回退 | `frontend/src/styles/base.css` | — | 加入字体偏好时复评 |

@@ -16,6 +16,8 @@
 
 ## 模型定价
 
+模型广场关闭时，Root 的有效浏览器会话仍可读取 `/api/pricing` 以维护价格；这不赋予 PAT 新权限。表达式转换接受端点数组或 map，图片按次价格保留数量乘法，不支持的配置显示后端原因并保留原草稿。
+
 Root 在 /models/pricing 维护 NewAPI 模型定价，入口为控制台侧边栏“模型管理”的定价分区。页面沿用模型列表与右侧编辑器布局，手机使用抽屉；支持已定价与未定价模型、可视化与 JSON、按 Token、按次、表达式、币种显示、缓存/图像/音频价格、阶梯与请求条件、任务 usage schema 与插件变体。元数据编辑只保存元数据。旧 `/system-settings/billing/model-pricing` 书签进入此分区。
 
 GET /api/option/model_pricing 返回 entries、options、empty_version；PATCH 同一路径提交 changes，每项为 model_name、expected_version、pricing 和可选 reset。唯一价格源为管理员保存的 11 项模型定价配置；保存冲突保留草稿。空安装无价格，清空不恢复内置目录或默认模型主价，空表达式不能当作免费；显式填写 0 才表示免费。实际模式为 ratio、per_call、expression；对外 billing_mode 使用 ratio 或 tiered_expr。
@@ -29,6 +31,8 @@ GET /api/option/model_pricing 返回 entries、options、empty_version；PATCH �
 公开 /api/pricing 使用上游扁平模型定价字段，Vue 公开价格页和模型目录共享解释；表达式显示原式，不伪造固定 Token 单价。每千/每百万 Token 切换只改变显示尺度。渠道售价倍率由后端应用一次；前端不再管理独立渠道价格、活动 PriceVersion 指针、来源证据发布或定时自动发布。账务执行仍保存冻结计价配置和加密求值证据，用于实际结算与恢复。
 
 ## 已保存的计费结果
+
+异步任务日志由 `other.is_task` 区分；实际、估算与失败释放均带该标记。阶梯名称读取结算时保存的 `charge_result.trace.matched_tier`，更改当前价格不会改变历史账单展示。
 
 日志详情只展示已保存的 `charge_result`，不读取当前价格重算。解析器校验金额、数量、版本组合和追踪字段；当前普通费用使用 `newapi-c71eefbc-v1 / newapi-v1`，当前违规费用保留 `newapi-c71eefbc-v1 / half-up-positive-minimum-v1`，历史 `billing-v3 / half-up-positive-minimum-v1` 只用于读取。未知或错配版本明确显示证据无效，缺失结果与畸形结果分别展示，不补成零费用。
 

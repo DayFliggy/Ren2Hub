@@ -24,6 +24,12 @@ function reset() {
 
 defineExpose({ reset })
 
+function onSubmitKeydown(event: KeyboardEvent) {
+  if (event.isComposing) return
+  event.preventDefault()
+  send()
+}
+
 function send() {
   const text = content.value.trim()
   if (!text || props.submitting || props.readonly) return
@@ -44,7 +50,7 @@ function send() {
       :placeholder="t('tickets.detail.replyPlaceholder')"
       :disabled="readonly"
       class="sketch-md w-full border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--accent)] focus-ring"
-      @keydown.enter.exact.prevent="send"
+      @keydown.enter.exact="onSubmitKeydown"
     />
 
     <TicketImageUploader v-if="showUploader" ref="uploader" :max-count="5" />

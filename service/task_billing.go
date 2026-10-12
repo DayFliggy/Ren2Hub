@@ -71,7 +71,7 @@ func prepareTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *mo
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
 func taskBillingOther(task *model.Task) map[string]interface{} {
-	other := make(map[string]interface{})
+	other := map[string]interface{}{"is_task": true}
 	if bc := task.PrivateData.BillingContext; bc != nil {
 		if bc.Quote != nil {
 			other["price_scope"] = bc.Quote.PriceVersion.ScopeKind

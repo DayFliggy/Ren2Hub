@@ -253,6 +253,10 @@ func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any)
 		}
 	case types.RelayFormatClaude:
 		messages, _ := payload["messages"].([]any)
+		thinking, _ := payload["thinking"].(map[string]any)
+		if _, present := thinking["block_binding"]; present {
+			r.projectionLoss("claude_thinking_block_binding_not_portable", "thinking.block_binding", "conversion cannot preserve Claude thinking block binding controls", "")
+		}
 		if _, present := payload["safeguards"]; present {
 			r.projectionLoss("claude_safeguards_not_portable", "safeguards", "conversion cannot preserve Claude safeguards", "")
 		}

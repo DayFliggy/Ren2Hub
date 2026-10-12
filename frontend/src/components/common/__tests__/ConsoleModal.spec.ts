@@ -22,6 +22,41 @@ const StackedModals = defineComponent({
 })
 
 describe('ConsoleModal', () => {
+  it.each(['modal', 'drawer'] as const)(
+    'leaves composing Escape and Tab to the input method in a %s',
+    async (presentation) => {
+      const wrapper = mount(ConsoleModal, {
+        attachTo: document.body,
+        props: { open: true, title: 'Edit', presentation },
+        slots: { default: '<input aria-label="Draft"><button>Save</button>' },
+      })
+      try {
+        await nextTick()
+        const input = document.body.querySelector('input')!
+        input.focus()
+        for (const key of ['Escape', 'Tab']) {
+          const event = new KeyboardEvent('keydown', {
+            key,
+            isComposing: true,
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true,
+          })
+          input.dispatchEvent(event)
+          expect(event.defaultPrevented).toBe(false)
+          expect(document.activeElement).toBe(input)
+          expect(wrapper.emitted('close')).toBeUndefined()
+        }
+        input.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        )
+        expect(wrapper.emitted('close')).toHaveLength(1)
+      } finally {
+        wrapper.unmount()
+      }
+    }
+  )
+
   it('leaves an Escape that a menu inside it already handled to that menu', async () => {
     const wrapper = mount(ConsoleModal, {
       attachTo: document.body,

@@ -102,6 +102,11 @@ func (c *requestFieldCollector) inspect(typ reflect.Type, value any, path string
 			}
 			fieldType := fields[strings.ToLower(name)]
 			if fieldType == nil {
+				// Thinking preserves unknown fields when forwarded natively. The
+				// retained-field pass still reports them for protocol conversion.
+				if !c.inspectRetained && typ == reflect.TypeFor[dto.Thinking]() {
+					continue
+				}
 				if len(c.unknown) >= 128 || len(childPath) > 1024 {
 					return fmt.Errorf("request exceeds extension diagnostic limits")
 				}

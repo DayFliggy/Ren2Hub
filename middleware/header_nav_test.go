@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -96,6 +97,83 @@ func TestHeaderNavModuleAuthRejectsDisabledPricing(t *testing.T) {
 	recorder := performHeaderNavRequest(t, HeaderNavModuleAuth("pricing"), false)
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestDisabledPricingRequiresCurrentRootAuthentication(t *testing.T) {
+	for _, tc := range []struct {
+		name, module, options, credential string
+		role, wantStatus                  int
+	}{
+		{name: "root session", role: common.RoleRootUser, wantStatus: http.StatusOK},
+		{name: "root login required", options: `{"pricing":{"enabled":false,"requireAuth":true}}`, role: common.RoleRootUser, wantStatus: http.StatusOK},
+		{name: "root legacy setting", options: `{"pricing":false}`, role: common.RoleRootUser, wantStatus: http.StatusOK},
+		{name: "ordinary user", role: common.RoleCommonUser, wantStatus: http.StatusForbidden},
+		{name: "administrator", role: common.RoleAdminUser, wantStatus: http.StatusForbidden},
+		{name: "expired session", role: common.RoleRootUser, credential: "expired", wantStatus: http.StatusUnauthorized},
+		{name: "tampered session", role: common.RoleRootUser, credential: "tampered", wantStatus: http.StatusUnauthorized},
+		{name: "revoked session", role: common.RoleRootUser, credential: "revoked", wantStatus: http.StatusUnauthorized},
+		{name: "disabled account", role: common.RoleRootUser, credential: "disabled", wantStatus: http.StatusUnauthorized},
+		{name: "demoted root", role: common.RoleRootUser, credential: "demoted", wantStatus: http.StatusForbidden},
+		{name: "root PAT cannot bypass undeclared route", role: common.RoleRootUser, credential: "pat", wantStatus: http.StatusForbidden},
+		{name: "root cannot bypass other module", module: "rankings", options: `{"rankings":false}`, role: common.RoleRootUser, wantStatus: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupDashboardAuthMiddlewareTest(t)
+			options := tc.options
+			if options == "" {
+				options = `{"pricing":{"enabled":false,"requireAuth":false}}`
+			}
+			withHeaderNavModules(t, options)
+			user := model.User{Username: "pricing-reader", Role: tc.role, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			require.NoError(t, model.DB.Create(&user).Error)
+			bundle, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "header-nav-test")
+			require.NoError(t, err)
+			token := bundle.AccessToken
+			switch tc.credential {
+			case "expired":
+				identity, internal, err := service.ParseDashboardAccessToken(token)
+				require.NoError(t, err)
+				require.True(t, internal)
+				token = issueExpiredDashboardAccessToken(t, identity)
+			case "tampered":
+				token = tamperDashboardToken(token)
+			case "revoked":
+				revoked, err := model.RevokeUserSession(user.Id, bundle.Session.SID, "test")
+				require.NoError(t, err)
+				require.True(t, revoked)
+			case "disabled":
+				require.NoError(t, model.DB.Model(&user).Update("status", common.UserStatusDisabled).Error)
+			case "demoted":
+				require.NoError(t, model.DB.Model(&user).Update("role", common.RoleAdminUser).Error)
+			case "pat":
+				token = "pat_pppppppppppppppppppppppppppppppppppppppppppppppp"
+				require.NoError(t, model.DB.Create(&model.PersonalAccessToken{UserID: user.Id, Name: "pricing", Digest: model.PersonalAccessTokenDigest(token), Scopes: []string{"models:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
+			}
+			module := tc.module
+			if module == "" {
+				module = "pricing"
+			}
+			handled := false
+			router := gin.New()
+			router.GET("/api/"+module, HeaderNavModuleAuth(module), func(c *gin.Context) {
+				handled = true
+				assert.Equal(t, user.Id, c.GetInt("id"))
+				assert.Equal(t, common.RoleRootUser, c.GetInt("role"))
+				_, session := GetSessionAuthIdentity(c)
+				assert.True(t, session)
+				c.JSON(http.StatusOK, gin.H{"success": true})
+			})
+			request := httptest.NewRequest(http.MethodGet, "/api/"+module, nil)
+			request.Header.Set("Authorization", "Bearer "+token)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			assert.Equal(t, tc.wantStatus, response.Code, response.Body.String())
+			assert.Equal(t, tc.wantStatus == http.StatusOK, handled)
+			if tc.credential == "pat" {
+				assert.Contains(t, response.Body.String(), "PAT_SCOPE_DENIED")
+			}
+		})
+	}
 }
 
 func TestHeaderNavModuleAuthRequiresLoginForPricing(t *testing.T) {

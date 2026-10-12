@@ -1,6 +1,8 @@
 # 移动端待办
 
-范围是 Ren2Hub 前端在 ≤767px（Tailwind `md` 断点以下）的交互、组件、样式与视觉回归覆盖，判定基准是 `frontend/docs/THEMES.md`。下列条目按 Ren2Hub `05c631c2b` 源码核对，路径相对 `frontend/`，行号为该版本的当前行号。条目修复后从本页删除。
+范围是 Ren2Hub 前端在 ≤767px（Tailwind `md` 断点以下）的交互、组件、样式与视觉回归覆盖，判定基准是 `frontend/docs/THEMES.md`。问题清单最初按 Ren2Hub `05c631c2b` 源码核对，路径相对 `frontend/`；保留的行号是历史定位，不代表当前代码行号。2026-10-12 已复核测试覆盖与本轮相关交互，其他待办仍需按具体页面复现，不能视为本轮全部重验。条目修复并验证后从本页删除。
+
+本轮已补共享弹窗、命令面板、渠道模型输入、工单回复的组合按键保护，以及活动倒计时恢复可见时立即校时。自动化合成事件不等同于 iOS/Android 物理输入法实测，ChipPicker 的 blur 与选词时序仍保留待验。
 
 ## 功能不可用
 
@@ -69,14 +71,14 @@
 
 ## 测试缺口
 
-| 位置                                 | 问题                                                                                                                                       | 移动端后果                                                                | 修法                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `playwright.config.ts:23`            | 全局 `reducedMotion: 'reduce'`                                                                                                             | 动画、过渡与 Canvas 运行路径没有视觉回归覆盖                              | 增加 `no-preference` 的移动端项目或用例                                      |
-| `tests/visual/`                      | 触控尺寸只在 `dashboard.spec.ts:452,725`、`system-status.spec.ts:80` 逐个断言，无通用断言                                                  | 本页大量 28–40px 目标都不会被测试拦下                                     | 在 `fixtures.ts` 增加“移动视口内可交互元素不小于 44px”的通用断言，按需白名单 |
-| `tests/visual/`                      | 控制台移动用例只用 390 宽；320、360 只出现在 `home-showcase.spec.ts`                                                                       | 窄屏溢出与截断（如工单筛选、标签条）无覆盖                                | 控制台关键页补 320 与 360 视口                                               |
-| `tests/visual/fixtures.ts:1360-1369` | `assertNoHorizontalOverflow` 只查 `documentElement` 与 `body`                                                                              | 内层滚动容器（`.data-table-body-viewport`、浮层面板）的截断与溢出检测不到 | 断言扩展到内层滚动容器，或对被裁浮层断言面板完整位于视口内                   |
-| `tests/visual/`                      | 无移动端输入字号断言                                                                                                                       | iOS 聚焦缩放回归无人发现                                                  | 移动视口下断言可聚焦 `input`/`select`/`textarea` 计算字号不小于 16px         |
-| 无                                   | 安全区、Canvas 帧率、`ChipPicker` 的 IME 与 blur 时序、`pageshow` 恢复、地址栏收放拉伸、`ConsoleToggle` 命中区重叠无法在桌面 Chromium 复现 | 这些条目只能靠真机定性                                                    | 在 iOS Safari 与 Android Chrome 上实测并记录结论                             |
+| 位置                                 | 问题                                                                                                                                       | 移动端后果                                                                                               | 修法                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `playwright.config.ts:23`            | 全局 `reducedMotion: 'reduce'`                                                                                                             | 已有 `home-showcase.spec.ts` 的 `no-preference` 运行断言，移动端动画、过渡与 Canvas 的完整视觉覆盖仍不足 | 增加 `no-preference` 的移动端项目或用例                                      |
+| `tests/visual/`                      | dashboard、system-status、console-shell 导航和 setup 输入已有局部 44px 断言，缺全站通用断言                                                | 本页大量 28–40px 目标都不会被测试拦下                                                                    | 在 `fixtures.ts` 增加“移动视口内可交互元素不小于 44px”的通用断言，按需白名单 |
+| `tests/visual/`                      | greeting-hero 已覆盖控制台 320–480（每 8px），system-status 有 320，console-shell 有 375；工单等关键页覆盖仍不足                           | 窄屏溢出与截断（如工单筛选、标签条）无覆盖                                                               | 控制台关键页补 320 与 360 视口                                               |
+| `tests/visual/fixtures.ts:1360-1369` | `assertNoHorizontalOverflow` 只查 `documentElement` 与 `body`                                                                              | 内层滚动容器（`.data-table-body-viewport`、浮层面板）的截断与溢出检测不到                                | 断言扩展到内层滚动容器，或对被裁浮层断言面板完整位于视口内                   |
+| `tests/visual/`                      | setup 已断言移动输入 16px，控制台各表单缺统一覆盖                                                                                          | 其他表单的 iOS 聚焦缩放仍可能漏检                                                                        | 移动视口下断言可聚焦 `input`/`select`/`textarea` 计算字号不小于 16px         |
+| 无                                   | 安全区、Canvas 帧率、`ChipPicker` 的 IME 与 blur 时序、`pageshow` 恢复、地址栏收放拉伸、`ConsoleToggle` 命中区重叠无法在桌面 Chromium 复现 | 这些条目只能靠真机定性                                                                                   | 在 iOS Safari 与 Android Chrome 上实测并记录结论                             |
 
 ## 建议顺序
 

@@ -141,6 +141,26 @@ func TestApplyReasoningModelSuffixModifierOverridesExplicitConflict(t *testing.T
 	assert.Equal(t, "model_modifier_overrode_request", diagnostics[0].Code)
 }
 
+func TestApplyReasoningModelSuffixRetainsClaudeNativeControls(t *testing.T) {
+	var request dto.ClaudeRequest
+	require.NoError(t, common.UnmarshalJsonStr(`{"model":"claude-opus-5-5-high","thinking":{"type":"enabled","budget_tokens":2048,"display":"omitted","block_binding":{"prefix_mismatch_behavior":"drop_block"},"future_enabled":false,"future_limit":0,"future_policy":null}}`, &request))
+	info := &relaycommon.RelayInfo{
+		OriginModelName: request.Model,
+		Request:         &request,
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: request.Model},
+	}
+	outbound, err := common.DeepCopy(&request)
+	require.NoError(t, err)
+	require.NoError(t, ApplyReasoningModelSuffix(nil, info, outbound))
+	encoded, err := common.Marshal(outbound.Thinking)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"block_binding":{"prefix_mismatch_behavior":"drop_block"},"future_enabled":false,"future_limit":0,"future_policy":null}`, string(encoded))
+	require.NotNil(t, info.ReasoningConversion)
+	assert.Equal(t, "high", info.ReasoningConversion.Effort)
+	assert.Equal(t, "enabled", request.Thinking.Type, "the original request remains available for retries")
+	assert.Equal(t, 2048, request.Thinking.GetBudgetTokens())
+}
+
 func TestApplyReasoningModelSuffixGeminiNoThinkingWhenAdapterEnabled(t *testing.T) {
 	settings := model_setting.GetGeminiSettings()
 	original := settings.ThinkingAdapterEnabled

@@ -145,6 +145,45 @@ func ResolveCacheWriteMode(name string, configured PricingValues) CacheWriteMode
 	return CacheWriteNone
 }
 
+// Model metadata accepts endpoint type arrays and custom path maps. Normalize
+// names before matching so padded image endpoints keep quantity-based pricing.
+func declaredEndpointNames(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	var value any
+	if err := common.UnmarshalJsonStr(raw, &value); err != nil {
+		return nil, err
+	}
+	switch endpoints := value.(type) {
+	case []any:
+		names := make([]string, 0, len(endpoints))
+		for _, endpoint := range endpoints {
+			name, ok := endpoint.(string)
+			if !ok {
+				return nil, errors.New("invalid endpoint type")
+			}
+			name = strings.TrimSpace(name)
+			if name == "" {
+				return nil, errors.New("invalid endpoint type")
+			}
+			names = append(names, name)
+		}
+		return names, nil
+	case map[string]any:
+		names := make([]string, 0, len(endpoints))
+		for endpoint := range endpoints {
+			endpoint = strings.TrimSpace(endpoint)
+			if endpoint != "" {
+				names = append(names, endpoint)
+			}
+		}
+		return names, nil
+	default:
+		return nil, errors.New("invalid endpoints")
+	}
+}
+
 func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPricingConversion, error) {
 	if draft == nil {
 		return nil, errors.New("pricing draft is required")
@@ -261,11 +300,11 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		}) {
 			continue
 		}
-		var endpoints map[string]any
-		if err := common.UnmarshalJsonStr(entry.Endpoints, &endpoints); err != nil {
+		endpoints, err := declaredEndpointNames(entry.Endpoints)
+		if err != nil {
 			return &ModelPricingConversion{UnsupportedReason: "The model routing configuration could not be verified."}, nil
 		}
-		for endpoint := range endpoints {
+		for _, endpoint := range endpoints {
 			switch constant.EndpointType(endpoint) {
 			case constant.EndpointTypeImageGeneration:
 				if fixedPrice {

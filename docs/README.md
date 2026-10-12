@@ -1,5 +1,7 @@
 # Ren2Hub 文档入口
 
+上游适配的当前基线、未采用能力和等待项统一在[同步账本](upstream/SYNC_LEDGER.md)。CI 按事件的 `github.sha` 检出同一提交；Vue Bun 依赖由 Dependabot 每周检查，提交到本地服务端不会自动触发 GitHub 工作流。
+
 本文索引当前源码的开发、接口和运维契约。主项目是 Go/Gin/GORM 网关、Vue 控制台与独立的 RelayKit、TokenKit 模块；当前仅允许一个网关进程承接业务流量。钱包是唯一资金来源，Token 是附加消费限额。
 
 ## 现行文档
@@ -35,7 +37,7 @@ Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/
 
 运行契约只在对应主题文档维护，复验方法见上表；本目录不保存执行结果，文档整理不算重新测试。主项目源码发布、服务器隔离验收与常驻应用部署是不同状态，部署版本、验收证据、备份和发布结果只由所属工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)记录。
 
-RenAI 工作区 `reference-projects/` 是本地研究材料，不是运行依赖或发布内容。参考仓库当前 HEAD 也不等于历史研究采用的提交。构建产物、测试数据库、未合并补丁和证据须分别识别，不能因为被 Git 忽略就统一删除。
+RenAI 工作区的可选 `reference-projects/` 或工作区外独立参考副本只用于研究，不是运行依赖或发布内容。参考仓库当前 HEAD 也不等于历史研究采用的提交。构建产物、测试数据库、未合并补丁和证据须分别识别，不能因为被 Git 忽略就统一删除。
 
 ## 历史追溯
 
