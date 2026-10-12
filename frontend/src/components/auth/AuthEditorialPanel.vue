@@ -23,11 +23,33 @@ const reducedMotion =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-const stats = computed(() => [
-  { label: t('auth.tickerModels'), value: app.modelCountLabel },
-  { label: t('auth.tickerUptime'), value: app.uptimeLabel },
-  { label: t('auth.tickerVersion'), value: app.versionLabel },
-])
+// Release builds report the full commit hash; show the conventional short
+// form and keep the full value in the tooltip. Tagged versions stay intact.
+const COMMIT_HASH = /^[0-9a-f]{10,40}$/i
+
+const stats = computed(() => {
+  const items: { label: string; value: string; title?: string }[] = [
+    { label: t('auth.tickerModels'), value: app.modelCountLabel },
+  ]
+  // Without an enabled uptime source that reported data there is nothing to show.
+  if (app.uptimePercent !== null)
+    items.push({ label: t('auth.tickerUptime'), value: app.uptimeLabel })
+  const version = app.versionLabel
+  items.push(
+    COMMIT_HASH.test(version)
+      ? {
+          label: t('auth.tickerVersion'),
+          value: version.slice(0, 9),
+          title: version,
+        }
+      : { label: t('auth.tickerVersion'), value: version }
+  )
+  return items
+})
+// Only advertise open registration once the status confirms it.
+const registrationOpen = computed(
+  () => app.statusReachable && app.registerEnabled
+)
 
 let globe: DotGlobe | null = null
 let disposed = false
@@ -73,7 +95,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="auth-panel relative hidden min-h-full flex-col overflow-hidden px-10 py-12 lg:flex xl:px-16"
+    class="auth-panel relative hidden min-h-full flex-col justify-center overflow-hidden px-10 py-12 lg:flex xl:px-16"
   >
     <!-- 点阵地球：右下角落沉入，纸面上的静谧星球。收到角落后不再压信任清单，
          也不再被 overflow-hidden 裁掉半个球。 -->
@@ -149,7 +171,11 @@ onBeforeUnmount(() => {
           </svg>
           {{ t('auth.editorial.point2') }}
         </li>
-        <li class="flex items-center gap-3.5">
+        <li
+          v-if="registrationOpen"
+          class="flex items-center gap-3.5"
+          data-registration-claim
+        >
           <svg
             width="16"
             height="16"
@@ -169,8 +195,10 @@ onBeforeUnmount(() => {
       </ul>
     </div>
 
-    <!-- 底部：SUPPORT 标注 + 真实运行数据（mt-auto 贴底，间距不再随视口高度漂移） -->
-    <div class="panel-measure panel-gap-pad relative z-10 mt-auto">
+    <!-- 底部：SUPPORT 标注 + 真实运行数据。三个内容块在整栏高度内垂直居中，
+         与表单卡同轴；高屏不再把脚注钉在视口底部、中间留出一大片空白。
+         面板本身仍撑满整栏，点阵地球继续沉入视口右下角。 -->
+    <div class="panel-measure panel-gap relative z-10">
       <div class="h-px w-full bg-[var(--border-default)]" />
       <p
         class="mt-5 flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]"
@@ -189,6 +217,7 @@ onBeforeUnmount(() => {
           {{ s.label }}
           <span
             class="ml-1.5 font-mono font-semibold text-[var(--text-primary)]"
+            :title="s.title"
             >{{ s.value }}</span
           >
         </p>
@@ -217,12 +246,6 @@ onBeforeUnmount(() => {
    高屏放开到 4rem 的编辑级呼吸。定值 margin 在 1024×820 + 英文下会多溢出 40px。 */
 .panel-gap {
   margin-top: clamp(1.5rem, 3.5vh, 4rem);
-}
-
-/* stats 用 padding 而不是 margin 表达最小间距：scoped 选择器的特异性高于
-   Tailwind 的 .mt-auto，写成 margin-top 会把 mt-auto 覆盖掉、脚注就不贴底了。 */
-.panel-gap-pad {
-  padding-top: clamp(1.5rem, 3.5vh, 4rem);
 }
 
 @media (min-width: 1280px) {

@@ -27,6 +27,15 @@ export default {
       retry: 'Retry view',
       home: 'Return home',
     },
+    navigationError: {
+      title: 'This page could not be displayed',
+      message:
+        'The page failed to load because of a temporary network or service problem. Retry, or return home.',
+      rateLimitedTitle: 'Too many requests',
+      rateLimitedMessage:
+        'This network has reached its request limit. Try again later, or return home for now.',
+      home: 'Return home',
+    },
     tableRows: 'Table rows',
     none: 'No data',
     prevPage: 'Prev',

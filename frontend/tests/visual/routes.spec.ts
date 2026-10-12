@@ -99,10 +99,40 @@ test('failed lazy navigation displays an accessible retry state', async ({
   await page.evaluate(() => sessionStorage.setItem('ren2hub_chunk_reload', '1'))
   await page.locator('a[href="/sign-in"]').first().click()
   await expect(page.getByRole('alert')).toContainText('此页面暂时无法显示')
+  await expect(
+    page.getByRole('alert').getByRole('link', { name: '返回首页' })
+  ).toHaveAttribute('href', '/')
   const retry = page.getByRole('button', { name: '重试', exact: true })
   await retry.focus()
   await expect(retry).toBeFocused()
 })
+
+// docs/authentication.md: a temporary refresh failure stays retryable; it is
+// neither a signed-out state nor a rendering error.
+for (const path of ['/sign-in', '/pricing']) {
+  test(`rate-limited session check on ${path} explains the limit and links home`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme: 'light', authenticated: false })
+    await page.route('**/api/user/auth/refresh', (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: 'Too many requests' }),
+      })
+    )
+    await page.goto(path, { waitUntil: 'networkidle' })
+
+    const alert = page.getByRole('alert')
+    await expect(alert).toContainText('请求过于频繁')
+    await expect(alert).not.toContainText('渲染')
+    expect(new URL(page.url()).pathname).toBe(path)
+    await assertNoHorizontalOverflow(page)
+    await alert.getByRole('link', { name: '返回首页' }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  })
+}
 
 for (const viewport of viewports) {
   test(`all routes smoke at ${viewport.name}`, async ({ page }) => {

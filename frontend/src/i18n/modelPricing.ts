@@ -137,7 +137,6 @@ const zh = {
   diffremoved: '移除',
   diffchanged: '已修改',
   diffUnset: '未设置',
-  total: '共 {count} 项',
   conflict: '保存失败，草稿已保留。重新加载前请核对服务端变化。',
   savedReloadFailed: '价格已保存，但刷新失败，请重新加载后再编辑。',
   required: '必填',
@@ -216,6 +215,8 @@ const zh = {
   importPreview: '确认所选价格',
   numeric: '数值',
   fieldType: '类型',
+  filterAll: '全部',
+  billingMode: '计费方式',
 }
 const en: Record<keyof typeof zh, string> = {
   ...zh,
@@ -366,7 +367,6 @@ const en: Record<keyof typeof zh, string> = {
   diffremoved: 'Removed',
   diffchanged: 'Changed',
   diffUnset: 'Not set',
-  total: '{count} items',
   conflict:
     'Saving failed; your draft is preserved. Review server changes before reloading.',
   savedReloadFailed:
@@ -449,5 +449,7 @@ const en: Record<keyof typeof zh, string> = {
   importPreview: 'Review selected prices',
   numeric: 'Number',
   fieldType: 'Type',
+  filterAll: 'All',
+  billingMode: 'Billing',
 }
 export const modelPricingMessages = { 'zh-CN': zh, en }

@@ -254,10 +254,12 @@ async function signInOAuth(provider: string) {
         />
       </FormField>
 
+      <!-- The 32px hit area overlaps the surrounding gaps through negative
+           margins, so the row keeps its compact visual height. -->
       <div v-if="!twoFactorFlowToken" class="flex justify-end">
         <RouterLink
           :to="{ name: 'reset' }"
-          class="text-xs font-medium text-[var(--accent-text)] hover:underline"
+          class="-mx-2 -my-2 inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-[var(--accent-text)] hover:underline focus-ring"
         >
           {{ t('auth.forgot') }}
         </RouterLink>

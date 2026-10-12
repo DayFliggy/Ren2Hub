@@ -104,6 +104,12 @@ export const useAppStore = defineStore('app', () => {
   const registerEnabled = computed(() =>
     parseBoolean(status.value.register_enabled, true)
   )
+  // The backend serves /api/uptime/status whenever groups are configured, so
+  // the administrator's panel switch is enforced here. A missing field keeps
+  // the backend default (enabled).
+  const uptimeEnabled = computed(() =>
+    parseBoolean(status.value.uptime_kuma_enabled, true)
+  )
   const affiliateRegistrationRequired = computed(() =>
     parseBoolean(status.value.affiliate_registration_required, false)
   )
@@ -166,7 +172,7 @@ export const useAppStore = defineStore('app', () => {
       const summaries = await Promise.allSettled([
         publicApi.notice(),
         canLoadPricing ? publicApi.pricing() : Promise.resolve(null),
-        publicApi.uptime(),
+        uptimeEnabled.value ? publicApi.uptime() : Promise.resolve([]),
       ])
       const [noticeResult, pricingResult, uptimeResult] = summaries
 
@@ -275,6 +281,7 @@ export const useAppStore = defineStore('app', () => {
     privacyPolicyEnabled,
     modelCountLabel,
     uptimeLabel,
+    uptimePercent,
     versionLabel,
     startTime,
     featureStatus,

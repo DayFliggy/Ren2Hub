@@ -3,7 +3,7 @@ import type {
   RouteLocationRaw,
   RouteRecordRaw,
 } from 'vue-router'
-import { publicApi } from '@/api/public'
+import { publicApi, type PublicStatus } from '@/api/public'
 import { isRecord } from '@/api/contracts'
 import { useAuthStore } from '@/stores/auth'
 import { parseHeaderModules } from '@/stores/app'
@@ -31,20 +31,24 @@ export function publicModuleAccess(value: unknown): {
 export async function guardPublicModule(
   to: RouteLocationNormalized
 ): Promise<true | RouteLocationRaw> {
+  let status: PublicStatus
   try {
-    const status = await publicApi.status()
-    const access = publicModuleAccess(
-      parseHeaderModules(status.HeaderNavModules)[String(to.meta.publicModule)]
-    )
-    if (!access.enabled) return { name: 'status-404' }
-    const auth = useAuthStore()
-    if (!auth.checked) await auth.fetchSelf()
-    if (access.requireAuth && !auth.isAuthenticated)
-      return { name: 'sign-in', query: { redirect: to.fullPath } }
-    return true
+    status = await publicApi.status()
   } catch {
     return { name: 'status-503' }
   }
+  const access = publicModuleAccess(
+    parseHeaderModules(status.HeaderNavModules)[String(to.meta.publicModule)]
+  )
+  if (!access.enabled) return { name: 'status-404' }
+  // A failed session check (for example a rate-limited refresh) propagates to
+  // the router's navigation error state like every other guarded route, so the
+  // page stays retryable instead of being reported as an unavailable service.
+  const auth = useAuthStore()
+  if (!auth.checked) await auth.fetchSelf()
+  if (access.requireAuth && !auth.isAuthenticated)
+    return { name: 'sign-in', query: { redirect: to.fullPath } }
+  return true
 }
 
 export async function guardLegalDocument(
