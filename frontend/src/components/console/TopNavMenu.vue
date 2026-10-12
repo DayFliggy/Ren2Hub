@@ -80,13 +80,13 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
-    class="flex items-center justify-center gap-1"
+    class="top-nav flex items-center justify-center gap-1"
     data-top-nav="desktop"
   >
-    <div v-for="group in navGroups" :key="group.name" class="relative">
+    <div v-for="group in navGroups" :key="group.name" class="relative shrink-0">
       <button
         type="button"
-        class="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all focus-ring"
+        class="top-nav-item flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all focus-ring"
         :class="[
           group.disabled
             ? 'cursor-not-allowed opacity-50'
@@ -164,3 +164,16 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Labels stay on one line (see the width tiers in ConsoleTopbar). In the
+   narrowest bar the widest menu only fits with tighter pills. */
+@container console-topbar (max-width: 919px) {
+  .top-nav {
+    gap: 2px;
+  }
+  .top-nav-item {
+    padding-inline: 0.625rem;
+  }
+}
+</style>

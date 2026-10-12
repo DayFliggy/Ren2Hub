@@ -24,7 +24,7 @@ const initial = computed(() =>
 async function logout() {
   await auth.logout()
   open.value = false
-  toast.info(t('common.logout'))
+  toast.info(t('common.signedOut'))
   router.push({ name: 'sign-in' })
 }
 
