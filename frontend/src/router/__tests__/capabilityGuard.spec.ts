@@ -16,8 +16,10 @@ const setupApi = vi.hoisted(() => ({
 vi.mock('@/api/public', () => ({ publicApi }))
 vi.mock('@/api/setup', () => ({ setupApi }))
 
+import { ApiError } from '@/api/types'
 import router from '@/router'
 import { sanitizeSetupRedirect, sanitizeRedirect } from '@/router'
+import { navigationError } from '@/router/navigationState'
 import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
 
@@ -136,6 +138,26 @@ describe('capability route guard', () => {
       '/404?tab=1'
     )
   })
+
+  // docs/authentication.md: a temporary refresh failure must leave the
+  // session unchecked so a later navigation retries it.
+  it.each(['/sign-in', '/pricing'])(
+    'keeps a rate-limited session check on %s retryable',
+    async (path) => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      const auth = useAuthStore()
+      auth.checked = false
+      vi.spyOn(auth, 'fetchSelf').mockRejectedValue(
+        new ApiError('Too many requests', { status: 429 })
+      )
+
+      await router.push(path).catch(() => undefined)
+
+      expect(router.currentRoute.value.name).toBe('home')
+      expect(navigationError.value).toBe('rate-limited')
+      expect(auth.checked).toBe(false)
+    }
+  )
 
   it('fails closed for protected routes when status is unreachable', async () => {
     publicApi.status.mockRejectedValue(new Error('status unavailable'))

@@ -26,6 +26,14 @@ export default {
       retry: '重试页面',
       home: '返回首页',
     },
+    navigationError: {
+      title: '此页面暂时无法显示',
+      message: '页面加载失败，可能是网络或服务暂时异常。请重试，或返回首页。',
+      rateLimitedTitle: '请求过于频繁',
+      rateLimitedMessage:
+        '当前网络的请求次数已达上限，请稍后再试，或先返回首页。',
+      home: '返回首页',
+    },
     tableRows: '表格数据行',
     none: '暂无数据',
     prevPage: '上一页',

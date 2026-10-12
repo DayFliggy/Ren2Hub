@@ -36,7 +36,7 @@ beforeEach(async () => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
   sessionStorage.clear()
   await router.push('/')
-  navigationError.value = false
+  navigationError.value = null
   // Only the reload target matters; history navigation stays in memory.
   Object.defineProperty(window, 'location', {
     value: { ...nativeLocation, origin: nativeLocation.origin, assign },
@@ -74,7 +74,7 @@ describe('route chunk load failures', () => {
       // The reloaded page fails the same way: no second reload.
       await openBrokenRoute()
       expect(assign).toHaveBeenCalledTimes(1)
-      expect(navigationError.value).toBe(true)
+      expect(navigationError.value).toBe('failed')
     }
   )
 
@@ -84,7 +84,7 @@ describe('route chunk load failures', () => {
     await openBrokenRoute()
 
     expect(assign).not.toHaveBeenCalled()
-    expect(navigationError.value).toBe(true)
+    expect(navigationError.value).toBe('failed')
   })
 
   it('does not reload when session storage cannot hold the marker', async () => {
@@ -96,6 +96,6 @@ describe('route chunk load failures', () => {
     await openBrokenRoute()
 
     expect(assign).not.toHaveBeenCalled()
-    expect(navigationError.value).toBe(true)
+    expect(navigationError.value).toBe('failed')
   })
 })

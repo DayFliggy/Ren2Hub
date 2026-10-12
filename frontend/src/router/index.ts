@@ -17,6 +17,7 @@ import { publicRoutes } from '@/router/publicRoutes'
 import { adminRoutes } from '@/router/adminRoutes'
 import { canonicalLegacyLocation } from '@/router/legacyRoutes'
 import { navigationError } from '@/router/navigationState'
+import { ApiError } from '@/api/types'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
@@ -535,7 +536,10 @@ const CHUNK_LOAD_ERROR =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 router.onError((error, to) => {
-  navigationError.value = true
+  navigationError.value =
+    error instanceof ApiError && error.status === 429
+      ? 'rate-limited'
+      : 'failed'
   console.error('[router] Navigation failed', error)
   if (!(error instanceof Error) || !CHUNK_LOAD_ERROR.test(error.message)) return
   // Load the page that failed once from the server; if it fails again, the
@@ -552,7 +556,7 @@ router.onError((error, to) => {
 
 router.afterEach((_to, _from, failure) => {
   if (failure) return
-  navigationError.value = false
+  navigationError.value = null
   try {
     window.sessionStorage.removeItem(CHUNK_RELOAD_KEY)
   } catch {
