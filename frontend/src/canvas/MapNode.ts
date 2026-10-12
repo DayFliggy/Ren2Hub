@@ -13,6 +13,12 @@ function hexToRgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`
 }
 
+// The map scrolls continuously, so markers fade out while they approach a side
+// edge instead of being drawn half outside the viewport. The inset covers the
+// hit-glow scale and the ±7px pointer parallax applied by MapScene.
+const MARKER_EDGE_INSET = 10
+const MARKER_EDGE_FADE = 40
+
 // 模型标记：Logo 钉在其公司所在城市上方，命中时高亮 + 显示名称。
 export class ModelMarker {
   x = 0 // Logo 屏幕坐标（散开后，逐帧随滚动更新）
@@ -26,6 +32,7 @@ export class ModelMarker {
   private offX = 0
   private offY = 0
   visible = true // 滚出视口时置 false：不绘制、不参与路由
+  edgeAlpha = 1 // 靠近左右边缘时的淡出系数（0~1），图标始终完整落在视口内
   private bob: number
   private speed: number
   private theme: CanvasTheme
@@ -77,9 +84,10 @@ export class ModelMarker {
     this.cityY = p.y
     this.x = p.x + this.offX
     this.y = p.y + this.offY
+    const edgeRoom = Math.min(this.x, w - this.x) - this.r - MARKER_EDGE_INSET
+    this.edgeAlpha = Math.min(1, Math.max(0, edgeRoom / MARKER_EDGE_FADE))
     const m = this.r + 30
-    this.visible =
-      this.x > -m && this.x < w + m && this.y > -m && this.y < h + m
+    this.visible = this.edgeAlpha > 0 && this.y > -m && this.y < h + m
   }
 
   update() {
@@ -96,6 +104,8 @@ export class ModelMarker {
     const y = this.cy()
     const r = this.r
     const color = this.color
+    ctx.save()
+    ctx.globalAlpha = this.edgeAlpha
 
     // 到城市锚点的连接线
     ctx.strokeStyle = hexToRgba(color, 0.22 + this.glow * 0.3)
@@ -139,7 +149,7 @@ export class ModelMarker {
       if (this.glow > 0.01) {
         ctx.save()
         ctx.globalCompositeOperation = this.theme.glowComposite
-        ctx.globalAlpha = Math.min(1, this.glow * 0.7)
+        ctx.globalAlpha = this.edgeAlpha * Math.min(1, this.glow * 0.7)
         ctx.drawImage(this.img, x - s / 2, y - s / 2, s, s)
         ctx.restore()
       }
@@ -157,6 +167,7 @@ export class ModelMarker {
       ctx.fillStyle = hexToRgba(this.theme.nodeLabelText, 0.6 + this.glow * 0.4)
       ctx.fillText(this.name, x, ty)
     }
+    ctx.restore()
   }
 
   hit(mx: number, my: number): boolean {

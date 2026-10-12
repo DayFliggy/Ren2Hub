@@ -306,9 +306,7 @@ const countryCodes = computed(() => {
   ]
 })
 
-const countryLine = computed(() =>
-  countryCodes.value.length ? countryCodes.value.join(' + ') : 'GLOBAL'
-)
+const countryLine = computed(() => summarizeChain(countryCodes.value, 'GLOBAL'))
 const countryPrefix = computed(() =>
   activeTraces.value.length ? 'FROM' : 'LAST'
 )
@@ -329,13 +327,31 @@ function traceTargetLine(trace: SignalRequestTrace) {
   return modelNames.length ? modelNames.join(' > ') : 'MODEL GATEWAY'
 }
 
+/* One-line rows (telemetry, origin, mobile ticker) show the first item and a
+   count so a long chain never ends in a mid-word ellipsis; the trace drawer,
+   the origin title and the screen-reader status keep the full list. */
+function summarizeChain(items: string[], fallback: string) {
+  if (!items.length) return fallback
+  if (items.length === 1) return items[0]
+  return `${items[0]} +${items.length - 1}`
+}
+
+function targetSummary(trace: SignalRequestTrace) {
+  const modelNames = trace.hops.map((hop) => hop.modelName).filter(Boolean)
+  return summarizeChain(modelNames, 'MODEL GATEWAY')
+}
+
 function formatLatency(latency?: number) {
   return typeof latency === 'number' ? `${Math.round(latency)}MS` : 'PENDING'
 }
 
 const inboundLine = computed(() => {
   const trace = focusedTrace.value
-  if (trace) return `${sourceLine(trace)} // ${phaseLabel(trace.phase)}`
+  if (trace) {
+    const labels = trace.sources.map((source) => source.label).filter(Boolean)
+    const sources = summarizeChain(labels, sourceLine(trace))
+    return `${sources} // ${phaseLabel(trace.phase)}`
+  }
 
   const sourceCount = props.snapshot.sourceCount ?? 0
   return sourceCount > 0
@@ -346,7 +362,7 @@ const inboundLine = computed(() => {
 const targetLine = computed(() => {
   const trace = focusedTrace.value
   if (trace)
-    return `${traceTargetLine(trace)} // ${formatLatency(trace.latencyMs)}`
+    return `${targetSummary(trace)} // ${formatLatency(trace.latencyMs)}`
 
   const { modelName, latencyMs, targetCount = 0 } = props.snapshot
   if (modelName) return `${modelName} // ${formatLatency(latencyMs)}`
@@ -372,7 +388,7 @@ const screenReaderStatus = computed(() => {
 // 移动端 ticker：目标行（模型链或待命）+ 当前延迟
 const tickerTarget = computed(() => {
   const trace = focusedTrace.value
-  if (trace) return traceTargetLine(trace)
+  if (trace) return targetSummary(trace)
   return props.snapshot.modelName ?? 'GATEWAY READY'
 })
 

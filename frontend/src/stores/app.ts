@@ -275,6 +275,7 @@ export const useAppStore = defineStore('app', () => {
     privacyPolicyEnabled,
     modelCountLabel,
     uptimeLabel,
+    uptimePercent,
     versionLabel,
     startTime,
     featureStatus,

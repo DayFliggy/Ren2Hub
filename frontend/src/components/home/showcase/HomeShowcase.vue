@@ -10,7 +10,7 @@ import RuntimePulseBand from './RuntimePulseBand.vue'
 
 const root = ref<HTMLElement | null>(null)
 const app = useAppStore()
-const { uptimeLabel, startTime } = storeToRefs(app)
+const { uptimeLabel, uptimePercent, startTime } = storeToRefs(app)
 const observesVisibility =
   typeof window !== 'undefined' && 'IntersectionObserver' in window
 const showcase = useHomeShowcase(startTime, {
@@ -31,7 +31,7 @@ onBeforeUnmount(stop)
   <main ref="root" class="home-showcase no-handdrawn">
     <RuntimePulseBand
       :runtime="showcase.runtime.value"
-      :uptime-label="uptimeLabel"
+      :uptime-label="uptimePercent === null ? null : uptimeLabel"
       :request-metrics="showcase.requestMetrics.value"
     />
   </main>

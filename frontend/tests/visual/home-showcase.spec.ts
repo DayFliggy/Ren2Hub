@@ -10,6 +10,7 @@ import {
 } from './fixtures'
 
 const heroViewports = [
+  { name: 'ultra-wide', width: 2560, height: 1264, titleSize: 64 },
   { name: 'wide-desktop', width: 1920, height: 1080, titleSize: 64 },
   { name: 'desktop', width: 1440, height: 900, titleSize: 58.4 },
   { name: 'short-desktop', width: 1366, height: 768, titleSize: 58.4 },
@@ -129,6 +130,15 @@ async function inspectHeroGeometry(page: import('@playwright/test').Page) {
     const nav = document.querySelector<HTMLElement>('.app-navbar nav')
     if (!nav) throw new Error('Home navigation missing')
     const navStyle = getComputedStyle(nav)
+    const navRect = nav.getBoundingClientRect()
+    const rail = document.querySelector<HTMLElement>('.signal-console__rail')
+    const railVisible =
+      rail !== null && getComputedStyle(rail).display !== 'none'
+    const progressDots = document.querySelector<HTMLElement>(
+      '[data-home-progress-dots]'
+    )
+    const progressDotsVisible =
+      progressDots !== null && getComputedStyle(progressDots).display !== 'none'
     const ticker = document.querySelector<HTMLElement>(
       '.signal-console__ticker'
     )
@@ -148,8 +158,34 @@ async function inspectHeroGeometry(page: import('@playwright/test').Page) {
       titleSize: Number.parseFloat(
         getComputedStyle(document.querySelector('.hero-title')!).fontSize
       ),
-      navWidth: nav.getBoundingClientRect().width,
+      navWidth: navRect.width,
       navMaxWidth: Number.parseFloat(navStyle.maxWidth),
+      navContent: {
+        left: navRect.left + Number.parseFloat(navStyle.paddingLeft),
+        right: navRect.right - Number.parseFloat(navStyle.paddingRight),
+      },
+      brand: bounds('.home-brand'),
+      signalConsole: railVisible ? bounds('.signal-console') : null,
+      truncatedTelemetry: railVisible
+        ? Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '.signal-console__telemetry-value, .signal-console__origin-value'
+            )
+          )
+            .filter((element) => element.scrollWidth > element.clientWidth + 1)
+            .map((element) => element.textContent?.trim() ?? '')
+        : [],
+      progressDots: progressDotsVisible
+        ? bounds('[data-home-progress-dots]')
+        : null,
+      progressDotTargets: progressDotsVisible
+        ? Array.from(
+            document.querySelectorAll<HTMLElement>('[data-home-progress-dot]')
+          ).map((element) => {
+            const rect = element.getBoundingClientRect()
+            return { width: rect.width, height: rect.height }
+          })
+        : [],
       focusPixels: {
         distinct: colors.size,
         contrast: maxLuma - minLuma,
@@ -200,6 +236,29 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       if (viewport.width >= 1280) {
         expect(geometry.navMaxWidth).toBeCloseTo(1280, 0)
         expect(geometry.navWidth).toBeCloseTo(1280, 0)
+      }
+      if (viewport.width >= 1024) {
+        // One container: the brand, the signal rail and the Hero copy share
+        // the navbar's content edges, and HUD rows never end in an ellipsis.
+        const { navContent } = geometry
+        expect(
+          Math.abs(geometry.brand.left - navContent.left)
+        ).toBeLessThanOrEqual(1)
+        expect(geometry.signalConsole).not.toBeNull()
+        expect(
+          Math.abs(geometry.signalConsole!.left - navContent.left)
+        ).toBeLessThanOrEqual(1)
+        expect(
+          Math.abs(geometry.copy.right - navContent.right)
+        ).toBeLessThanOrEqual(1)
+        expect(geometry.truncatedTelemetry).toEqual([])
+      }
+      if (geometry.progressDots) {
+        expect(overlapArea(geometry.progressDots, geometry.copy)).toBe(0)
+        for (const target of geometry.progressDotTargets) {
+          expect(target.width).toBeGreaterThanOrEqual(24)
+          expect(target.height).toBeGreaterThanOrEqual(24)
+        }
       }
 
       await assertInteractiveCentersVisible(page)
@@ -460,6 +519,44 @@ test('home runtime workbench remains self-contained', async ({ page }) => {
   await expect(page.getByText('渠道供应，也能自由买卖')).toHaveCount(0)
   await expect(page.getByText('每一枚令牌，都有自己的路由表')).toHaveCount(0)
 })
+
+for (const theme of ['light', 'dark'] as VisualTheme[]) {
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`${theme} ${viewport.width} availability is omitted without uptime data`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport)
+      await configureStablePage(page, { theme, authenticated: true })
+      await page.route('**/api/uptime/status', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, message: '', data: [] }),
+        })
+      )
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+      await waitForStablePage(page)
+
+      const metrics = page.locator('.hero-metrics > div')
+      await expect(metrics).toHaveCount(2)
+      await expect(page.locator('.hero-metrics')).not.toContainText('可用率')
+      const widths = await metrics.evaluateAll((items) =>
+        items.map((item) => item.getBoundingClientRect().width)
+      )
+      if (viewport.width < 1024) {
+        // The remaining items split the mobile row evenly.
+        expect(Math.abs(widths[0]! - widths[1]!)).toBeLessThanOrEqual(1)
+      }
+
+      await page.locator('#home-runtime').scrollIntoViewIfNeeded()
+      await expect(page.locator('.runtime-clock-group')).toHaveCount(4)
+      await expect(page.locator('.runtime-availability')).toHaveCount(0)
+    })
+  }
+}
 
 test('zero request trend uses a floating wave placeholder', async ({
   page,

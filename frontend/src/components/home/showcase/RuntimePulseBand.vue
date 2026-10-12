@@ -8,7 +8,8 @@ import type { HomeRuntime } from '@/types/homeShowcase'
 
 const props = defineProps<{
   runtime: HomeRuntime
-  uptimeLabel: string
+  /** null when no uptime source reports availability; the row is omitted. */
+  uptimeLabel: string | null
   requestMetrics: HomeRequestMetrics | null
 }>()
 
@@ -246,7 +247,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 可用率柱状图 -->
-        <div class="runtime-availability">
+        <div v-if="uptimeLabel !== null" class="runtime-availability">
           <span class="runtime-availability-bars" aria-hidden="true">
             <i
               v-for="(h, idx) in barHeights"
