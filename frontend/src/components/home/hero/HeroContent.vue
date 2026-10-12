@@ -118,7 +118,7 @@
 
     <!-- 指标（≤843px 高的移动设备隐藏：延迟数据已由 Ticker 呈现，为完整间距腾出空间） -->
     <dl
-      class="hero-metrics mt-5 grid w-full grid-cols-3 gap-2 text-center animate-fade-in max-sm:[@media(min-height:701px)]:mt-6 [@media(max-height:843px)_and_(max-width:1023px)]:hidden sm:mt-6 sm:gap-4 lg:mt-8 lg:flex lg:w-auto lg:gap-8 lg:text-right lg:justify-end"
+      class="hero-metrics mt-5 grid w-full auto-cols-fr grid-flow-col gap-2 text-center animate-fade-in max-sm:[@media(min-height:701px)]:mt-6 [@media(max-height:843px)_and_(max-width:1023px)]:hidden sm:mt-6 sm:gap-4 lg:mt-8 lg:flex lg:w-auto lg:gap-8 lg:text-right lg:justify-end"
       style="animation-delay: 0.95s"
     >
       <div v-for="m in metrics" :key="m.label" class="min-w-0">
@@ -162,7 +162,7 @@ const props = defineProps<{
 }>()
 
 const { t, tm } = useI18n()
-const { docsLink, showDocs, modelCountLabel, uptimeLabel } =
+const { docsLink, showDocs, modelCountLabel, uptimeLabel, uptimePercent } =
   storeToRefs(useAppStore())
 const { isAuthenticated } = storeToRefs(useAuthStore())
 
@@ -177,9 +177,13 @@ const latencyLabel = computed(() =>
     : '--'
 )
 
+// Availability comes only from Uptime Kuma: no item while that source is off
+// or has not measured anything, rather than a permanent "--".
 const metrics = computed(() => [
   { value: modelCountLabel.value, label: t('hero.metrics.models') },
-  { value: uptimeLabel.value, label: t('hero.metrics.uptime') },
+  ...(uptimePercent.value === null
+    ? []
+    : [{ value: uptimeLabel.value, label: t('hero.metrics.uptime') }]),
   { value: latencyLabel.value, label: t('hero.metrics.latency') },
 ])
 

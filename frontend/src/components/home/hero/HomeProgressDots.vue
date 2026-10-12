@@ -121,7 +121,9 @@ onBeforeUnmount(() => {
 .home-progress-dots {
   position: fixed;
   top: 50%;
-  right: max(0.85rem, env(safe-area-inset-right));
+  /* Centred in the .site-container gutter: Hero copy ends at the container's
+     content edge, so the 1.5rem hit targets never cover it. */
+  right: max(env(safe-area-inset-right), (var(--site-gutter) - 1.5rem) / 2);
   z-index: 60;
   display: grid;
   width: 1.5rem;

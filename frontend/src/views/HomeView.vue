@@ -36,15 +36,19 @@
         style="box-shadow: var(--hero-vignette)"
       />
 
-      <!-- 左栏：与 Canvas 联动的 ASCII 网关信号账本 -->
-      <HeroSignalConsole
-        :snapshot="signalSnapshot"
-        :class="{ 'is-immersive': immersive }"
-      />
+      <!-- 左栏：与 Canvas 联动的 ASCII 网关信号账本；左缘对齐导航栏容器 -->
+      <div class="site-container pointer-events-none absolute inset-0">
+        <div class="relative h-full">
+          <HeroSignalConsole
+            :snapshot="signalSnapshot"
+            :class="{ 'is-immersive': immersive }"
+          />
+        </div>
+      </div>
 
       <!-- 两栏内容（桌面：左图右文网格；移动：上舞台留白 + 下海报式直排） -->
       <div
-        class="hero-layout-track relative z-10 mx-auto flex w-full max-w-[100rem] flex-1 flex-col gap-6 self-stretch px-4 py-6 max-lg:gap-4 max-lg:py-4 sm:px-6 lg:grid lg:grid-cols-[minmax(18rem,0.78fr)_minmax(34rem,1.22fr)] lg:items-center lg:gap-10 lg:px-8 lg:py-14 xl:gap-14 xl:py-16 2xl:px-12"
+        class="hero-layout-track site-container relative z-10 flex flex-1 flex-col gap-6 self-stretch py-6 max-lg:gap-4 max-lg:py-4 lg:grid lg:grid-cols-[minmax(18rem,0.78fr)_minmax(34rem,1.22fr)] lg:items-center lg:gap-10 lg:py-14 xl:gap-14 xl:py-16"
       >
         <!-- 左：留空（地图与网关枢纽由全屏背景层透出） -->
         <div
@@ -98,6 +102,7 @@
           :class="{
             'pointer-events-none invisible translate-y-10 opacity-0': immersive,
           }"
+          data-hero-map-copy
         >
           <HeroContent :average-latency-ms="signalSnapshot.averageLatencyMs" />
         </div>

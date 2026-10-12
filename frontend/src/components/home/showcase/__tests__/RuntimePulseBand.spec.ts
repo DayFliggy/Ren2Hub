@@ -10,7 +10,11 @@ afterEach(() => {
   window.matchMedia = originalMatchMedia
 })
 
-function mountBand(available: boolean, requests24h = 300) {
+function mountBand(
+  available: boolean,
+  requests24h = 300,
+  uptimeLabel: string | null = '99.95%'
+) {
   window.matchMedia = vi.fn().mockReturnValue({
     matches: true,
     addEventListener: vi.fn(),
@@ -21,7 +25,7 @@ function mountBand(available: boolean, requests24h = 300) {
     global: { plugins: [i18n] },
     props: {
       runtime: { days: 1, hours: 2, minutes: 3, seconds: 4 },
-      uptimeLabel: '99.95%',
+      uptimeLabel,
       requestMetrics: available
         ? {
             available: true,
@@ -71,6 +75,19 @@ describe('RuntimePulseBand', () => {
       i18n.global.t('showcase.runtime.todaySuccess')
     )
     wrapper.unmount()
+  })
+
+  it('omits the availability row when no uptime source reports data', () => {
+    const measured = mountBand(true)
+    expect(measured.get('.runtime-availability strong').text()).toBe('99.95%')
+    measured.unmount()
+
+    const withoutSource = mountBand(true, 300, null)
+    expect(withoutSource.find('.runtime-availability').exists()).toBe(false)
+    expect(withoutSource.text()).not.toContain(
+      i18n.global.t('showcase.runtime.recentAvailability')
+    )
+    withoutSource.unmount()
   })
 
   it('uses length-only scaling without changing the request panel layout', () => {

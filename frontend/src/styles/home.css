@@ -1479,8 +1479,11 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
   z-index: 11;
   top: var(--signal-top);
   bottom: auto;
-  left: clamp(20px, 3vw, 48px);
-  width: min(360px, 25vw);
+  /* HomeView wraps the rail in .site-container, so 0 is the navbar's left edge.
+     360px fits the longest one-line telemetry summary and stays inside the
+     Hero's left grid column from 1024px up. */
+  left: 0;
+  width: 360px;
   height: calc(100vh - var(--signal-top) - var(--signal-bottom));
   min-height: 420px;
   color: var(--text-secondary);
@@ -1671,7 +1674,7 @@ html.dark .landing-shell .signal-console__more-dots {
   top: calc(100% + 13px);
   left: 0;
   display: grid;
-  width: min(360px, 25vw);
+  width: 100%;
   max-height: min(38vh, 330px);
   gap: 10px;
   padding: 0 0 2px clamp(12px, 1.25vw, 18px);
@@ -1950,6 +1953,7 @@ html.dark .landing-shell .signal-console__more-dots {
 }
 .landing-shell .signal-latency-meter {
   display: flex;
+  flex: none;
   align-items: baseline;
   width: fit-content;
   gap: 6px;
@@ -2078,7 +2082,6 @@ html.dark .landing-shell .signal-console__more-dots {
     --signal-top: 100px;
     --signal-bottom: 48px;
     min-height: 0;
-    width: min(330px, 23vw);
   }
   .landing-shell .signal-console__body {
     grid-template-rows: auto minmax(68px, 1fr) auto;

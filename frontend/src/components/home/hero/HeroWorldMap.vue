@@ -12,7 +12,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-import type { MapScene, SceneFocusRegion } from '@/canvas/MapScene'
+import type { MapScene, SceneRegion } from '@/canvas/MapScene'
 import type { SignalConsoleSnapshot } from '@/constants/home/signalConsole'
 import { useTheme } from '@/composables/useTheme'
 
@@ -33,14 +33,13 @@ let io: IntersectionObserver | null = null
 
 watch(resolvedTheme, (theme) => scene?.setTheme(theme))
 
-function readFocusRegion(): SceneFocusRegion | null {
+/** Reads the first rendered element matching `selector` in canvas coordinates. */
+function readRegion(selector: string): SceneRegion | null {
   const canvas = canvasEl.value
   if (!canvas) return null
   const canvasRect = canvas.getBoundingClientRect()
   const target = Array.from(
-    canvas.parentElement?.querySelectorAll<HTMLElement>(
-      '[data-hero-map-focus]'
-    ) ?? []
+    canvas.parentElement?.querySelectorAll<HTMLElement>(selector) ?? []
   ).find((element) => {
     const rect = element.getBoundingClientRect()
     return (
@@ -60,7 +59,15 @@ function readFocusRegion(): SceneFocusRegion | null {
   }
 }
 
-const onResize = useDebounceFn(() => scene?.resize(readFocusRegion()), 180)
+// The hub sits in the map focus column; model markers hide behind the copy.
+function resizeScene() {
+  scene?.resize(
+    readRegion('[data-hero-map-focus]'),
+    readRegion('[data-hero-map-copy]')
+  )
+}
+
+const onResize = useDebounceFn(resizeScene, 180)
 
 // 事件挂到 window 而非 canvas：右侧 HeroContent 等 HTML 层盖在画布上会吞掉指针事件，
 // 导致中间/右侧模型无法悬停聚焦。改为按 canvas 矩形自行换算坐标，让悬停「穿透」到画布，
@@ -321,7 +328,7 @@ onMounted(async () => {
       (snapshot) => emit('signalChange', snapshot),
       resolvedTheme.value
     )
-    scene.resize(readFocusRegion())
+    resizeScene()
     await scene.init()
   } catch (error) {
     // No 2D context (unsupported/constrained env) or init failed. The map is

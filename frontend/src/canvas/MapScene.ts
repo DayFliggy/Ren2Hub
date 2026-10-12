@@ -23,7 +23,8 @@ import type {
   SignalRouteHop,
 } from '@/constants/home/signalConsole'
 
-export interface SceneFocusRegion {
+/** A DOM box in canvas coordinates (the map focus column or the Hero copy). */
+export interface SceneRegion {
   x: number
   y: number
   width: number
@@ -156,7 +157,8 @@ export class MapScene {
 
   private map: WorldMap
   private rain: CharRain
-  private focusRegion: SceneFocusRegion | null = null
+  private focusRegion: SceneRegion | null = null
+  private copyRegion: SceneRegion | null = null
   private markers: ModelMarker[] = []
   private users: UserNode[] = []
   private channels: UserChannel[] = []
@@ -271,7 +273,7 @@ export class MapScene {
   }
 
   private placeHub() {
-    const radius = this.w < 640 ? 16 : 22
+    const radius = this.isCompactStage() ? 16 : 22
     const focus = this.resolveFocusPoint(radius)
     this.hub.setPos(focus.x, focus.y, radius)
     this.buildLinks()
@@ -308,12 +310,26 @@ export class MapScene {
     }))
   }
 
-  private nodeRadius(): number {
-    return this.w < 640 ? 13 : 16
+  /** Phones, and mobile map stages too short for the full-size hub. The hub
+   *  label hangs 2.1r + 16px below the hub centre (HubNode.draw), so with
+   *  r = 22 a stage under 2 × 62px (the 6rem strip of a landscape phone)
+   *  would push the label into the copy below it. */
+  private isCompactStage(): boolean {
+    if (this.w < 640) return true
+    if (this.w >= 1024 || !this.focusRegion) return false
+    return this.focusRegion.height < 124
   }
 
-  resize(focusRegion: SceneFocusRegion | null = this.focusRegion) {
+  private nodeRadius(): number {
+    return this.isCompactStage() ? 13 : 16
+  }
+
+  resize(
+    focusRegion: SceneRegion | null = this.focusRegion,
+    copyRegion: SceneRegion | null = this.copyRegion
+  ) {
     this.focusRegion = focusRegion
+    this.copyRegion = copyRegion
     this.dpr = Math.min(window.devicePixelRatio || 1, 2)
     const rect = this.canvas.getBoundingClientRect()
     this.w = rect.width
@@ -329,6 +345,9 @@ export class MapScene {
     this.markers.forEach((marker) => (marker.r = this.nodeRadius()))
     this.placeMarkers()
     this.placeHub()
+    // Resizing clears the canvas and reduced motion runs no frame loop to
+    // repaint it, so draw the static frame here.
+    if (this.reduced) this.draw()
   }
 
   private placeMarkers() {
@@ -394,19 +413,17 @@ export class MapScene {
   }
 
   private markerIntersectsHeroCopy(marker: ModelMarker): boolean {
-    if (this.w < 1024) return false
-    const margin = marker.r + 8
-    const x = marker.x + margin
-    const y = marker.y
-    const headlineZone =
-      x >= this.w * 0.68 &&
-      y + margin >= this.h * 0.2 &&
-      y - margin <= this.h * 0.49
-    const actionZone =
-      x >= this.w * 0.72 &&
-      y + margin >= this.h * 0.49 &&
-      y - margin <= this.h * 0.7
-    return headlineZone || actionZone
+    const copy = this.copyRegion
+    if (this.w < 1024 || !copy) return false
+    // Icons keep a 40px clear band around the copy, so an icon passing through
+    // a narrow right gutter never presses against the headline.
+    const margin = marker.r + 40
+    return (
+      marker.x + margin > copy.x &&
+      marker.x - margin < copy.x + copy.width &&
+      marker.y + margin > copy.y &&
+      marker.y - margin < copy.y + copy.height
+    )
   }
 
   setMouse(x: number, y: number, active: boolean) {
@@ -1267,7 +1284,7 @@ export class MapScene {
       const hub = { x: this.hub.x, y: this.hub.y }
       const marker = { x: link.mk.x, y: link.mk.y }
       const control = arcAway(hub, marker, center, 0.2)
-      const alpha = 0.05 + link.activity * 0.4
+      const alpha = (0.05 + link.activity * 0.4) * link.mk.edgeAlpha
       ctx.save()
       ctx.beginPath()
       ctx.moveTo(hub.x, hub.y)
