@@ -10,6 +10,7 @@ import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages }),
@@ -46,6 +47,29 @@ const models = computed(() =>
               : 'token') === mode.value)
   )
 )
+const vendorOptions = computed(() =>
+  (catalog.value?.vendors ?? []).map((item) => ({
+    value: String(item.id),
+    label: item.name,
+  }))
+)
+const modeOptions = computed(() => [
+  { value: 'expression', label: t('expression') },
+  { value: 'token', label: t('perToken') },
+  { value: 'request', label: t('perCall') },
+  { value: 'unconfigured', label: t('unpriced') },
+])
+const unitOptions = [
+  { value: 'M', label: '1M tokens' },
+  { value: 'K', label: '1K tokens' },
+]
+// FilterSelect speaks strings; bridge to the typed price unit.
+const unitModel = computed({
+  get: () => unit.value,
+  set: (value: string) => {
+    unit.value = value === 'K' ? 'K' : 'M'
+  },
+})
 const visible = computed(() =>
   models.value.slice(
     (page.value - 1) * pageSize.value,
@@ -83,11 +107,11 @@ onBeforeUnmount(() => controller?.abort())
 </script>
 <template>
   <PublicPage :title="detailId || t('title')">
+    <!-- The list total is shown once, by the pagination below the grid. -->
     <template #actions
       ><RouterLink v-if="detailId" :to="{ name: 'pricing' }">{{
         t('title')
-      }}</RouterLink
-      ><span v-else>{{ t('total', { count: models.length }) }}</span></template
+      }}</RouterLink></template
     >
     <ErrorBanner v-if="error" :message="error" @retry="load" />
     <p v-if="loading" role="status">{{ t('loading') }}</p>
@@ -129,28 +153,32 @@ onBeforeUnmount(() => controller?.abort())
     >
     <template v-else-if="!detailId"
       ><div class="public-pricing-filters">
-        <SearchInput v-model="search" :placeholder="t('search')" /><select
+        <SearchInput
+          v-model="search"
+          :placeholder="t('search')"
+          :aria-label="t('search')"
+          class="public-pricing-search"
+        />
+        <FilterSelect
           v-model="vendor"
-          :aria-label="t('provider')"
-        >
-          <option value="">{{ t('all') }}</option>
-          <option
-            v-for="item in catalog?.vendors ?? []"
-            :key="item.id"
-            :value="String(item.id)"
-          >
-            {{ item.name }}
-          </option></select
-        ><select v-model="mode" :aria-label="t('mode')">
-          <option value="">{{ t('all') }}</option>
-          <option value="expression">{{ t('expression') }}</option>
-          <option value="token">{{ t('perToken') }}</option>
-          <option value="request">{{ t('perCall') }}</option>
-          <option value="unconfigured">{{ t('unpriced') }}</option></select
-        ><select v-model="unit" :aria-label="t('unit')">
-          <option value="M">1M tokens</option>
-          <option value="K">1K tokens</option>
-        </select>
+          :options="vendorOptions"
+          :label="t('provider')"
+          :prefix-label="t('provider')"
+          :placeholder="t('filterAll')"
+        />
+        <FilterSelect
+          v-model="mode"
+          :options="modeOptions"
+          :label="t('billingMode')"
+          :prefix-label="t('billingMode')"
+          :placeholder="t('filterAll')"
+        />
+        <FilterSelect
+          v-model="unitModel"
+          :options="unitOptions"
+          :label="t('unit')"
+          :prefix-label="t('unit')"
+        />
       </div>
       <div class="public-pricing-grid">
         <article
@@ -185,18 +213,30 @@ onBeforeUnmount(() => controller?.abort())
   </PublicPage>
 </template>
 <style scoped>
+/* Search spans the row on narrow screens; the three filters share one line
+   from 640px and sit beside the search box from 1024px. */
 .public-pricing-filters {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
-.public-pricing-filters select {
-  background: var(--surface-solid);
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  padding: 0.5rem;
-  max-width: 100%;
+@media (min-width: 640px) {
+  .public-pricing-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .public-pricing-search {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 1024px) {
+  .public-pricing-filters {
+    grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+  }
+  .public-pricing-search {
+    grid-column: auto;
+  }
 }
 .public-pricing-grid {
   display: grid;
@@ -210,6 +250,8 @@ onBeforeUnmount(() => controller?.abort())
   border-radius: 0.75rem;
   background: var(--surface-solid);
   display: grid;
+  /* Cards in a row share its height; keep short price lists at the top. */
+  align-content: start;
   gap: 0.75rem;
 }
 h2 {
