@@ -234,9 +234,11 @@ test('dark wide logs keeps a balanced content width', async ({ page }) => {
 
   const logPage = page.locator('[data-log-page]')
   await expect(logPage).toBeVisible()
-  expect(
-    await logPage.evaluate((element) => element.getBoundingClientRect().width)
-  ).toBe(1276)
+  const logWidth = await logPage.evaluate(
+    (element) => element.getBoundingClientRect().width
+  )
+  expect(logWidth).toBeGreaterThan(1500)
+  expect(logWidth).toBeLessThanOrEqual(1688)
   const detailTrigger = page
     .locator('[data-log-detail-trigger]:visible')
     .first()
@@ -250,10 +252,15 @@ test('dark wide logs keeps a balanced content width', async ({ page }) => {
       )
     )
     .toBeGreaterThan(0.99)
-  await expect(page.locator('[data-log-cost]:visible').first()).toHaveCSS(
-    'font-size',
-    '14px'
-  )
+  const costFontRatio = await page
+    .locator('[data-log-cost]:visible')
+    .first()
+    .evaluate(
+      (element) =>
+        Number.parseFloat(getComputedStyle(element).fontSize) /
+        Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+    )
+  expect(costFontRatio).toBeCloseTo(0.875, 3)
   expect(
     await detailTrigger.evaluate(
       (element) => element.closest('td')?.getBoundingClientRect().width ?? 0
@@ -271,9 +278,11 @@ test('dark wide keys matches the balanced content width', async ({ page }) => {
 
   const keyPage = page.locator('[data-key-page]')
   await expect(keyPage).toBeVisible()
-  expect(
-    await keyPage.evaluate((element) => element.getBoundingClientRect().width)
-  ).toBe(1276)
+  const keyWidth = await keyPage.evaluate(
+    (element) => element.getBoundingClientRect().width
+  )
+  expect(keyWidth).toBeGreaterThan(1500)
+  expect(keyWidth).toBeLessThanOrEqual(1688)
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)
 })

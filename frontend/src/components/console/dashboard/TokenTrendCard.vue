@@ -75,7 +75,7 @@ interface TooltipParam {
 
 useEChart(
   el,
-  (p) => {
+  (p, scale = 1) => {
     const mood = lineMood(p)
     const dates = displayPoints.value.map((d) => d.date)
     const labels = {
@@ -102,14 +102,18 @@ useEChart(
       smooth: mood.line.smooth,
       showSymbol: !p.isDark,
       symbol: mood.line.symbol,
-      symbolSize: mood.line.symbolSize,
+      symbolSize: mood.line.symbolSize * scale,
       yAxisIndex: 0,
       data: displayPoints.value.map((d) => d[s.key]),
-      lineStyle: { color: s.color, ...mood.line.lineStyle },
+      lineStyle: {
+        color: s.color,
+        ...mood.line.lineStyle,
+        width: mood.line.lineStyle.width * scale,
+      },
       itemStyle: {
         color: s.color,
         borderColor: p.surfaceSolid,
-        borderWidth: 2,
+        borderWidth: 2 * scale,
       },
       areaStyle: {
         color: {
@@ -124,22 +128,27 @@ useEChart(
     }))
 
     return {
-      grid: { left: 52, right: 42, top: 26, bottom: 20 },
+      grid: {
+        left: 52 * scale,
+        right: 42 * scale,
+        top: 26 * scale,
+        bottom: 20 * scale,
+      },
       legend: {
         top: 0,
         left: 'center',
-        itemWidth: 10,
-        itemHeight: 10,
-        itemGap: 12,
+        itemWidth: 10 * scale,
+        itemHeight: 10 * scale,
+        itemGap: 12 * scale,
         icon: 'circle',
-        textStyle: { color: p.textTertiary, fontSize: 10 },
+        textStyle: { color: p.textTertiary, fontSize: 10 * scale },
         inactiveColor: p.borderSubtle,
       },
       tooltip: {
         trigger: 'axis',
         backgroundColor: p.surfaceSolid,
         borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 },
+        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
         formatter: (params: TooltipParam[]) => {
           if (!params.length) return ''
           const rows = params
@@ -148,15 +157,15 @@ useEChart(
                 s.seriesName === labels.hitRate
                   ? `${s.value}%`
                   : formatCompact(s.value)
-              return `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">
-                <span style="width:8px;height:8px;border-radius:2px;background:${s.color}"></span>
+              return `<div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.1875rem">
+                <span style="width:0.5rem;height:0.5rem;border-radius:0.125rem;background:${s.color}"></span>
                 <span style="color:${p.textSecondary}">${escapeHtml(s.seriesName)}:</span>
                 <span style="margin-left:auto;font-weight:600">${escapeHtml(value)}</span>
               </div>`
             })
             .join('')
-          return `<div style="min-width:186px">
-            <div style="font-weight:700;margin-bottom:2px">${escapeHtml(params[0]!.axisValueLabel)}</div>
+          return `<div style="min-width:11.625rem">
+            <div style="font-weight:700;margin-bottom:0.125rem">${escapeHtml(params[0]!.axisValueLabel)}</div>
             ${rows}
           </div>`
         },
@@ -169,7 +178,7 @@ useEChart(
         axisTick: { show: false },
         axisLabel: {
           color: p.textTertiary,
-          fontSize: 9,
+          fontSize: 9 * scale,
           interval: Math.max(0, Math.floor(dates.length / 5) - 1),
         },
       },
@@ -180,7 +189,7 @@ useEChart(
           splitLine: mood.splitLine,
           axisLabel: {
             color: p.textTertiary,
-            fontSize: 9,
+            fontSize: 9 * scale,
             formatter: (v: number) => formatCompact(v),
           },
         },
@@ -191,7 +200,7 @@ useEChart(
           splitLine: { show: false },
           axisLabel: {
             color: p.support,
-            fontSize: 9,
+            fontSize: 9 * scale,
             formatter: (v: number) => `${v}%`,
           },
         },
@@ -205,17 +214,18 @@ useEChart(
           yAxisIndex: 1,
           showSymbol: !p.isDark,
           symbol: mood.line.symbol,
-          symbolSize: mood.line.symbolSize,
+          symbolSize: mood.line.symbolSize * scale,
           data: displayPoints.value.map((d) => d.hit_rate),
           lineStyle: {
             color: p.support,
             ...mood.line.lineStyle,
+            width: mood.line.lineStyle.width * scale,
             type: p.isDark ? 'solid' : 'dashed',
           },
           itemStyle: {
             color: p.surfaceSolid,
             borderColor: p.support,
-            borderWidth: 2,
+            borderWidth: 2 * scale,
           },
         },
       ],
@@ -244,12 +254,12 @@ useEChart(
 
     <div
       v-if="loading"
-      class="h-[190px] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[196px]"
+      class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"
     />
     <div
       v-else
       ref="el"
-      class="h-[190px] w-full grow sm:h-[196px]"
+      class="h-[11.875rem] w-full grow sm:h-[12.25rem]"
       role="img"
       :aria-label="t('dashboard.tokenTrend.title')"
     />

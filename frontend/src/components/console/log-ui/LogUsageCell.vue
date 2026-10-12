@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        class="flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-[var(--text-tertiary)]"
+        class="flex min-w-0 items-center gap-1.5 text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
       >
         <template v-if="cacheSummaryAvailable">
           <span
@@ -291,7 +291,7 @@ onBeforeUnmount(() => {
               {{ formatTokenValue(usage.cacheWriteTokens) }}
               <span
                 v-if="usage.cacheTtl"
-                class="rounded border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-1 py-0.5 text-[10px] font-medium leading-none text-[var(--status-warning-text)]"
+                class="rounded border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-1 py-0.5 text-[0.625rem] font-medium leading-none text-[var(--status-warning-text)]"
               >
                 {{ usage.cacheTtl }}
               </span>

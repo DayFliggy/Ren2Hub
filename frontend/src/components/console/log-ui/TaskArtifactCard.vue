@@ -59,7 +59,7 @@ function retryMedia(): void {
       </p>
       <p
         v-if="artifact.mime_type"
-        class="truncate font-mono text-[11px] text-[var(--text-tertiary)]"
+        class="truncate font-mono text-[0.6875rem] text-[var(--text-tertiary)]"
       >
         {{ artifact.mime_type }}
       </p>

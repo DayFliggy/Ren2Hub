@@ -160,12 +160,14 @@ onBeforeUnmount(() => {
       :key="endpoint.id"
       class="flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-2 py-1"
     >
-      <span class="shrink-0 text-[11px] font-medium text-[var(--text-primary)]">
+      <span
+        class="shrink-0 text-[0.6875rem] font-medium text-[var(--text-primary)]"
+      >
         {{ endpoint.label }}
       </span>
       <span
         v-if="endpoint.isDefault"
-        class="shrink-0 rounded bg-[var(--status-success-soft)] px-1 py-px text-[9px] font-medium text-[var(--status-success-text)]"
+        class="shrink-0 rounded bg-[var(--status-success-soft)] px-1 py-px text-[0.5625rem] font-medium text-[var(--status-success-text)]"
       >
         {{ t('keys.endpoints.defaultBadge') }}
       </span>
@@ -174,14 +176,14 @@ onBeforeUnmount(() => {
         aria-hidden="true"
       />
       <code
-        class="min-w-0 break-all text-[11px] text-[var(--text-secondary)]"
+        class="min-w-0 break-all text-[0.6875rem] text-[var(--text-secondary)]"
         :title="endpoint.url"
       >
         {{ endpoint.url }}
       </code>
       <span
         v-if="results[endpoint.id].status !== 'idle'"
-        class="shrink-0 text-[10px] font-medium"
+        class="shrink-0 text-[0.625rem] font-medium"
         :class="
           results[endpoint.id].status === 'success'
             ? 'text-[var(--status-success-text)]'
@@ -239,7 +241,7 @@ onBeforeUnmount(() => {
       </button>
       <p
         v-if="endpoint.description"
-        class="w-full break-words text-[11px] text-[var(--text-secondary)]"
+        class="w-full break-words text-[0.6875rem] text-[var(--text-secondary)]"
       >
         {{ endpoint.description }}
       </p>

@@ -35,17 +35,22 @@ const peakHour = computed(() => {
 
 useEChart(
   el,
-  (p) => {
+  (p, scale = 1) => {
     const mood = lineMood(p)
     const values = data.value.map((h) => h.requests)
     const maxVal = Math.max(...values, 1)
     return {
-      grid: { left: 40, right: 12, top: 12, bottom: 28 },
+      grid: {
+        left: 40 * scale,
+        right: 12 * scale,
+        top: 12 * scale,
+        bottom: 28 * scale,
+      },
       tooltip: {
         trigger: 'axis',
         backgroundColor: p.surfaceSolid,
         borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 },
+        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
         axisPointer: p.isDark
           ? { type: 'shadow' }
           : {
@@ -53,7 +58,7 @@ useEChart(
               lineStyle: {
                 color: p.borderSubtle,
                 type: [7, 3, 2, 5],
-                width: 1,
+                width: 1 * scale,
               },
             },
       },
@@ -64,7 +69,7 @@ useEChart(
         axisTick: { show: false },
         axisLabel: {
           color: p.textTertiary,
-          fontSize: 9,
+          fontSize: 9 * scale,
           interval: 2,
           formatter: (v: string) => v.replace(':00', ''),
         },
@@ -73,7 +78,7 @@ useEChart(
         type: 'value',
         minInterval: 1,
         splitLine: mood.splitLine,
-        axisLabel: { color: p.textTertiary, fontSize: 10 },
+        axisLabel: { color: p.textTertiary, fontSize: 10 * scale },
       },
       series: [
         {
@@ -82,7 +87,7 @@ useEChart(
             value: v,
             itemStyle: {
               color: v > 0 && v === maxVal ? p.accent : `${p.accent}66`,
-              borderRadius: mood.barRadius,
+              borderRadius: mood.barRadius.map((radius) => radius * scale),
             },
           })),
           emphasis: {

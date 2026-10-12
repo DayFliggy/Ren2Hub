@@ -164,7 +164,7 @@ async function copyName() {
               class="grid min-h-12 grid-cols-2 gap-3 divide-x divide-[var(--border-default)]"
             >
               <div class="pr-2">
-                <div class="text-[11px] text-[var(--text-tertiary)]">
+                <div class="text-[0.6875rem] text-[var(--text-tertiary)]">
                   {{ t('models.priceInput') }}
                 </div>
                 <div class="mt-0.5 flex items-baseline gap-1">
@@ -174,13 +174,13 @@ async function copyName() {
                     {{ formatTokenPrice(model.price.input) }}
                   </span>
                   <span
-                    class="font-sans text-[10px] text-[var(--text-tertiary)]"
+                    class="font-sans text-[0.625rem] text-[var(--text-tertiary)]"
                     >/ 1M</span
                   >
                 </div>
               </div>
               <div v-if="model.price.output != null" class="pl-3">
-                <div class="text-[11px] text-[var(--text-tertiary)]">
+                <div class="text-[0.6875rem] text-[var(--text-tertiary)]">
                   {{ t('models.priceOutput') }}
                 </div>
                 <div class="mt-0.5 flex items-baseline gap-1">
@@ -190,7 +190,7 @@ async function copyName() {
                     {{ formatTokenPrice(model.price.output) }}
                   </span>
                   <span
-                    class="font-sans text-[10px] text-[var(--text-tertiary)]"
+                    class="font-sans text-[0.625rem] text-[var(--text-tertiary)]"
                     >/ 1M</span
                   >
                 </div>
@@ -212,7 +212,7 @@ async function copyName() {
             >
               <div
                 v-if="model.price.cache_read != null"
-                class="min-w-0 text-[11px] text-[var(--text-tertiary)]"
+                class="min-w-0 text-[0.6875rem] text-[var(--text-tertiary)]"
                 data-model-cache-read
               >
                 <div>{{ t('models.priceCache') }}</div>
@@ -221,14 +221,14 @@ async function copyName() {
                 >
                   {{ formatTokenPrice(model.price.cache_read) }}
                   <span
-                    class="font-sans text-[10px] font-normal text-[var(--text-tertiary)]"
+                    class="font-sans text-[0.625rem] font-normal text-[var(--text-tertiary)]"
                     >/ 1M</span
                   >
                 </div>
               </div>
               <div
                 v-if="model.price.cache_write != null"
-                class="min-w-0 text-[11px] text-[var(--text-tertiary)]"
+                class="min-w-0 text-[0.6875rem] text-[var(--text-tertiary)]"
                 data-model-cache-write
               >
                 <div>{{ t('models.priceCacheWrite') }}</div>
@@ -237,7 +237,7 @@ async function copyName() {
                 >
                   {{ formatTokenPrice(model.price.cache_write) }}
                   <span
-                    class="font-sans text-[10px] font-normal text-[var(--text-tertiary)]"
+                    class="font-sans text-[0.625rem] font-normal text-[var(--text-tertiary)]"
                     >/ 1M</span
                   >
                 </div>
@@ -269,7 +269,7 @@ async function copyName() {
         </StatusChip>
         <span
           v-if="tierCount"
-          class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-tertiary)]"
+          class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
           data-model-tier-count
         >
           {{ t('models.tierCount', { count: tierCount }) }}
@@ -278,7 +278,7 @@ async function copyName() {
 
       <div class="flex items-center gap-3 text-right">
         <div v-if="model.latency > 0" class="flex items-center gap-1 text-xs">
-          <span class="text-[10px] text-[var(--text-tertiary)]">{{
+          <span class="text-[0.625rem] text-[var(--text-tertiary)]">{{
             t('models.latency')
           }}</span>
           <span class="font-mono font-semibold text-[var(--text-secondary)]">
@@ -289,7 +289,7 @@ async function copyName() {
           v-if="model.tps > 0"
           class="hidden items-center gap-1 text-xs sm:flex"
         >
-          <span class="text-[10px] text-[var(--text-tertiary)]">TPS</span>
+          <span class="text-[0.625rem] text-[var(--text-tertiary)]">TPS</span>
           <span class="font-mono font-semibold text-[var(--text-secondary)]">
             {{ model.tps.toFixed(1) }}
           </span>
@@ -331,7 +331,7 @@ async function copyName() {
         }}</StatusChip>
         <span
           v-if="tierCount"
-          class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-tertiary)]"
+          class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
           data-model-tier-count
         >
           {{ t('models.tierCount', { count: tierCount }) }}
@@ -354,14 +354,14 @@ async function copyName() {
         <p class="font-mono text-xs font-semibold text-[var(--text-primary)]">
           {{ formatTokenPrice(model.price.input) }}
         </p>
-        <p class="font-mono text-[11px] text-[var(--text-tertiary)]">
+        <p class="font-mono text-[0.6875rem] text-[var(--text-tertiary)]">
           {{ formatTokenPrice(model.price.output) }} / 1M
         </p>
       </template>
     </div>
     <!-- latency + health -->
     <div class="hidden w-16 shrink-0 text-right sm:block">
-      <p class="text-[10px] uppercase text-[var(--text-tertiary)]">
+      <p class="text-[0.625rem] uppercase text-[var(--text-tertiary)]">
         {{ t('models.latency') }}
       </p>
       <p class="text-xs font-semibold text-[var(--text-primary)]">

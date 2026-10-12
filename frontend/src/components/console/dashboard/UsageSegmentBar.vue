@@ -154,13 +154,15 @@ watch(
       class="flex min-w-0 items-center justify-between gap-2"
       data-usage-segment-title
     >
-      <h3 class="truncate text-[11px] font-medium text-[var(--text-tertiary)]">
+      <h3
+        class="truncate text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
+      >
         {{ title }}
       </h3>
       <!-- A compact ranked summary stands in for the rows it hides from sm. -->
       <span
         v-if="summary || !visibleSegments.length"
-        class="truncate text-right text-[9px] tabular-nums text-[var(--text-tertiary)]"
+        class="truncate text-right text-[0.5625rem] tabular-nums text-[var(--text-tertiary)]"
         :class="{
           'max-sm:hidden':
             compact && layout === 'ranked' && visibleSegments.length,
@@ -207,7 +209,7 @@ watch(
       <div
         v-for="segment in segments"
         :key="segment.key"
-        class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px]"
+        class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[0.5625rem]"
       >
         <span
           class="size-1.5 rounded-sm"
@@ -226,7 +228,7 @@ watch(
       <div
         v-for="index in placeholderRows"
         :key="`placeholder-${index}`"
-        class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px] text-[var(--text-tertiary)]"
+        class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[0.5625rem] text-[var(--text-tertiary)]"
         aria-hidden="true"
         data-usage-segment-placeholder
       >
@@ -238,7 +240,7 @@ watch(
     <!-- The year band keeps its labels inside the shared stage height. -->
     <div
       v-else
-      class="grid grid-cols-7 text-center text-[9px] text-[var(--text-tertiary)]"
+      class="grid grid-cols-7 text-center text-[0.5625rem] text-[var(--text-tertiary)]"
       :class="compact ? 'mt-1 sm:mt-0.5 sm:leading-none' : 'mt-1'"
       data-usage-segment-labels
       aria-hidden="true"
@@ -251,7 +253,7 @@ watch(
     <div
       v-if="tooltip"
       :id="tooltipId"
-      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2 py-1 text-[10px] text-[var(--text-primary)] shadow-[var(--overlay-shadow)]"
+      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2 py-1 text-[0.625rem] text-[var(--text-primary)] shadow-[var(--overlay-shadow)]"
       :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }"
       role="tooltip"
     >

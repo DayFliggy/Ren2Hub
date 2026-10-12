@@ -208,12 +208,12 @@ function responseDisplay(channel: AdminChannel): {
                   v-for="match in group.labMatches"
                   :key="match.slug"
                   tone="info"
-                  class="text-[10px]"
+                  class="text-[0.625rem]"
                 >
                   {{ match.name }}
                 </StatusChip>
               </span>
-              <span class="block text-[10px] text-[var(--text-tertiary)]">
+              <span class="block text-[0.625rem] text-[var(--text-tertiary)]">
                 {{
                   batchProgress?.scope === 'supplier' &&
                   batchProgress.supplier === group.supplier

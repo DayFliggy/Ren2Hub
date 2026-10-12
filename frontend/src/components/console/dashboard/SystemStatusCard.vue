@@ -414,7 +414,7 @@ const successTone = computed(() => rateTone(successRate.value))
       <div class="flex items-center gap-2">
         <div class="text-right">
           <p
-            class="success-rate-label text-[11px] leading-none text-[var(--text-tertiary)]"
+            class="success-rate-label text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
           >
             {{ t('dashboard.systemStatus.successRate') }}
           </p>
@@ -452,7 +452,7 @@ const successTone = computed(() => rateTone(successRate.value))
         <div
           v-for="tile in tiles"
           :key="tile.key"
-          class="relative flex h-[88px] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 sm:h-[92px] sm:px-3 sm:py-2"
+          class="relative flex h-[5.5rem] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 sm:h-[5.75rem] sm:px-3 sm:py-2"
           :class="{ 'overflow-hidden': tile.key !== 'cpu' }"
           data-system-status-tile
           :data-metric="tile.key"
@@ -461,7 +461,7 @@ const successTone = computed(() => rateTone(successRate.value))
         >
           <div class="flex min-h-5 items-center justify-between gap-1">
             <p
-              class="flex min-w-0 items-center gap-1 text-[11px] text-[var(--text-tertiary)]"
+              class="flex min-w-0 items-center gap-1 text-[0.6875rem] text-[var(--text-tertiary)]"
             >
               <ArrowUpDown
                 v-if="tile.key === 'bandwidth'"
@@ -491,7 +491,7 @@ const successTone = computed(() => rateTone(successRate.value))
                  the load cells instead. -->
             <span
               v-if="tile.percent !== null && tile.key !== 'cpu'"
-              class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums sm:px-1.5"
+              class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[0.625rem] font-semibold tabular-nums sm:px-1.5"
               data-percent-badge
               :style="{
                 color: tile.tone.text,
@@ -525,7 +525,7 @@ const successTone = computed(() => rateTone(successRate.value))
               </span>
               <span
                 v-if="tile.unit"
-                class="text-[10px] font-medium text-[var(--text-tertiary)]"
+                class="text-[0.625rem] font-medium text-[var(--text-tertiary)]"
               >
                 {{ tile.unit }}
               </span>
@@ -592,16 +592,18 @@ const successTone = computed(() => rateTone(successRate.value))
                 {{ tile.storage.used }}
               </span>
               <span
-                class="text-[10px] font-normal text-[var(--text-tertiary)] opacity-40 sm:text-xs"
+                class="text-[0.625rem] font-normal text-[var(--text-tertiary)] opacity-40 sm:text-xs"
               >
                 /
               </span>
               <span
-                class="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)] sm:text-[13px]"
+                class="text-[0.6875rem] font-semibold tabular-nums text-[var(--text-secondary)] sm:text-[0.8125rem]"
               >
                 {{ tile.storage.total }}
               </span>
-              <span class="text-[10px] font-medium text-[var(--text-tertiary)]">
+              <span
+                class="text-[0.625rem] font-medium text-[var(--text-tertiary)]"
+              >
                 {{ tile.storage.unit }}
               </span>
             </div>
@@ -638,7 +640,7 @@ const successTone = computed(() => rateTone(successRate.value))
           <template v-else-if="tile.key === 'bandwidth'">
             <div class="mt-auto flex min-w-0 flex-col justify-end">
               <p
-                class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[10px] font-bold leading-tight tabular-nums sm:text-[11px]"
+                class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[0.625rem] font-bold leading-tight tabular-nums sm:text-[0.6875rem]"
               >
                 <template v-if="tile.bandwidth">
                   <span
@@ -690,13 +692,13 @@ const successTone = computed(() => rateTone(successRate.value))
                   {{ tile.storage.used }}
                 </span>
                 <span
-                  class="font-mono text-[10px] font-medium text-[var(--text-tertiary)]"
+                  class="font-mono text-[0.625rem] font-medium text-[var(--text-tertiary)]"
                 >
                   {{ tile.storage.unit }}
                 </span>
               </div>
               <div
-                class="mt-0.5 flex items-baseline gap-0.5 font-mono text-[10px] font-medium leading-none text-[var(--text-tertiary)] sm:mt-1 sm:gap-1 sm:text-[11px]"
+                class="mt-0.5 flex items-baseline gap-0.5 font-mono text-[0.625rem] font-medium leading-none text-[var(--text-tertiary)] sm:mt-1 sm:gap-1 sm:text-[0.6875rem]"
               >
                 <span class="opacity-50">/</span>
                 <span class="tabular-nums text-[var(--text-secondary)]">
@@ -727,7 +729,7 @@ const successTone = computed(() => rateTone(successRate.value))
       </div>
 
       <div
-        class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2 text-[11px] sm:pt-2.5"
+        class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2 text-[0.6875rem] sm:pt-2.5"
       >
         <span
           class="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[var(--text-tertiary)]"

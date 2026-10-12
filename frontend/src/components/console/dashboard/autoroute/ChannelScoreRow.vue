@@ -106,7 +106,7 @@ const segments = computed(() => {
             {{ entry.name }}
           </p>
           <p
-            class="truncate text-[10px] leading-tight text-[var(--text-tertiary)]"
+            class="truncate text-[0.625rem] leading-tight text-[var(--text-tertiary)]"
             :title="entry.supplier"
           >
             {{ entry.supplier }}
@@ -114,14 +114,14 @@ const segments = computed(() => {
         </div>
         <span class="flex shrink-0 items-center gap-2">
           <span
-            class="flex items-center gap-1 text-[11px] tabular-nums text-[var(--text-tertiary)] sm:text-xs"
+            class="flex items-center gap-1 text-[0.6875rem] tabular-nums text-[var(--text-tertiary)] sm:text-xs"
             :title="t('dashboard.autoRoute.factorLatency')"
           >
             <Timer :size="12" aria-hidden="true" />
             {{ latencyLabel(entry.latency) }}
           </span>
           <span
-            class="flex items-center gap-1 font-mono text-[11px] text-[var(--text-tertiary)] sm:text-xs"
+            class="flex items-center gap-1 font-mono text-[0.6875rem] text-[var(--text-tertiary)] sm:text-xs"
             :title="t('dashboard.autoRoute.factorQuota')"
             data-route-balance
           >
@@ -150,7 +150,10 @@ const segments = computed(() => {
             :title="segment.title"
           />
         </div>
-        <p v-else class="text-[10px] font-medium text-[var(--text-tertiary)]">
+        <p
+          v-else
+          class="text-[0.625rem] font-medium text-[var(--text-tertiary)]"
+        >
           {{ inactiveLabel }} · {{ t('dashboard.autoRoute.excluded') }}
         </p>
       </template>
@@ -165,7 +168,7 @@ const segments = computed(() => {
     >
       <span
         class="font-bold tabular-nums"
-        :class="compact ? 'text-[11px]' : 'text-xs'"
+        :class="compact ? 'text-[0.6875rem]' : 'text-xs'"
         :style="{ color: scoreColor }"
       >
         {{ entry.score }}
@@ -173,7 +176,7 @@ const segments = computed(() => {
     </MiniRing>
     <span
       v-else
-      class="max-w-20 shrink-0 text-right text-[10px] font-semibold text-[var(--status-danger-text)]"
+      class="max-w-20 shrink-0 text-right text-[0.625rem] font-semibold text-[var(--status-danger-text)]"
     >
       {{ inactiveLabel }}
     </span>

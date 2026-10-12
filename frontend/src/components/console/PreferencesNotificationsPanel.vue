@@ -224,7 +224,7 @@ function changeTheme(value: string): void {
         </div>
       </div>
       <span
-        class="font-mono text-[10px] tracking-[0.16em] text-[var(--text-tertiary)]"
+        class="font-mono text-[0.625rem] tracking-[0.16em] text-[var(--text-tertiary)]"
         >PREFERENCES</span
       >
     </header>

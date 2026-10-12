@@ -678,7 +678,7 @@ onMounted(() => void load())
               </div>
 
               <div
-                class="grid gap-4 border-t pt-4 lg:grid-cols-[minmax(0,1fr)_280px]"
+                class="grid gap-4 border-t pt-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]"
                 style="border-color: var(--border-subtle)"
               >
                 <div>

@@ -103,7 +103,7 @@ const { t, locale } = useI18n()
               </p>
               <p
                 v-if="visibleFields.includes('id')"
-                class="display-number mt-0.5 font-mono text-[11px] text-[var(--text-tertiary)]"
+                class="display-number mt-0.5 font-mono text-[0.6875rem] text-[var(--text-tertiary)]"
               >
                 #{{ user.id }}
               </p>
@@ -118,7 +118,7 @@ const { t, locale } = useI18n()
             </StatusChip>
             <span
               v-if="isSelf(user)"
-              class="text-[10px] text-[var(--text-tertiary)]"
+              class="text-[0.625rem] text-[var(--text-tertiary)]"
             >
               {{ t('users.selfHint') }}
             </span>

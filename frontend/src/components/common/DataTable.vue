@@ -117,6 +117,13 @@ const emit = defineEmits<{
   'row-dblclick': [row: T]
 }>()
 
+// Keep the pixel column API (also used for callers' width totals), but render
+// both tables in rem so their tracks grow together with console typography.
+function tableLength(length: string): string {
+  const pixels = /^(\d+(?:\.\d+)?)px$/.exec(length)
+  return pixels ? `${Number(pixels[1]) / 16}rem` : length
+}
+
 // `checkbox-round` lives in styles/console.css so the table, the mobile lists
 // and any future admin surface share one definition.
 const checkboxClass = computed(() =>
@@ -342,7 +349,8 @@ function measure() {
     )
   }
 
-  const nextHeaderWidth = viewport.offsetWidth
+  // Match the body's content box, excluding its reserved scrollbar gutter.
+  const nextHeaderWidth = viewport.clientWidth
   if (headerViewportWidth.value !== nextHeaderWidth) {
     headerViewportWidth.value = nextHeaderWidth
   }
@@ -494,14 +502,14 @@ onBeforeUnmount(() => {
         ref="headerTableRef"
         role="presentation"
         class="w-full table-fixed border-collapse text-sm will-change-transform"
-        :style="{ minWidth: minTableWidth }"
+        :style="{ minWidth: tableLength(minTableWidth) }"
       >
         <colgroup>
-          <col v-if="selectable" style="width: 40px" />
+          <col v-if="selectable" style="width: 2.5rem" />
           <col
             v-for="col in columns"
             :key="col.key"
-            :style="col.width ? { width: col.width } : undefined"
+            :style="col.width ? { width: tableLength(col.width) } : undefined"
           />
         </colgroup>
         <thead class="bg-[var(--surface-table-header)]">
@@ -523,7 +531,7 @@ onBeforeUnmount(() => {
               :key="col.key"
               class="px-3 py-3 font-semibold tracking-[0.12em] uppercase"
               style="
-                font-size: 10px;
+                font-size: 0.625rem;
                 font-family: var(--font-display);
                 color: var(--text-tertiary);
               "
@@ -557,14 +565,14 @@ onBeforeUnmount(() => {
       <table
         ref="bodyTableRef"
         class="w-full table-fixed border-collapse text-sm"
-        :style="{ minWidth: minTableWidth }"
+        :style="{ minWidth: tableLength(minTableWidth) }"
       >
         <colgroup>
-          <col v-if="selectable" style="width: 40px" />
+          <col v-if="selectable" style="width: 2.5rem" />
           <col
             v-for="col in columns"
             :key="col.key"
-            :style="col.width ? { width: col.width } : undefined"
+            :style="col.width ? { width: tableLength(col.width) } : undefined"
           />
         </colgroup>
 

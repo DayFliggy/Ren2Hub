@@ -93,7 +93,7 @@ const activeName = computed(
           v-if="
             item.name === 'ticket-management' && ticketQueue.summary.pending > 0
           "
-          class="flex min-w-5 items-center justify-center rounded-full bg-[var(--status-danger)] px-1 text-[10px] font-semibold leading-5 text-[var(--text-inverse)]"
+          class="flex min-w-5 items-center justify-center rounded-full bg-[var(--status-danger)] px-1 text-[0.625rem] font-semibold leading-5 text-[var(--text-inverse)]"
           :aria-label="
             t('tickets.admin.pendingCount', {
               count: ticketQueue.summary.pending,

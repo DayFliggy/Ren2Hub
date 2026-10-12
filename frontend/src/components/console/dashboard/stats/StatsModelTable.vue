@@ -67,7 +67,7 @@ watch(
           -->
           <thead>
             <tr
-              class="border-b border-[var(--border-subtle)] text-[11px] tracking-wider text-[var(--text-tertiary)]"
+              class="border-b border-[var(--border-subtle)] text-[0.6875rem] tracking-wider text-[var(--text-tertiary)]"
             >
               <th
                 class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-left font-semibold"

@@ -172,7 +172,7 @@ function buttonLabel(): string {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 0.1875rem;
   padding: 0;
   border: none;
   background: transparent;
@@ -180,22 +180,22 @@ function buttonLabel(): string {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Extends the tap target to 44×44px while keeping cells visually 8×16. */
+/* Scales the original 44px tap target with the console font size. */
 .cpu-load__trigger::before {
   content: '';
   position: absolute;
-  inset: -8px -7px -20px -7px;
+  inset: -0.5rem -0.4375rem -1.25rem -0.4375rem;
   border-radius: var(--shape-control);
 }
 
 .cpu-load__cell {
   position: relative;
   display: inline-flex;
-  width: 8px;
-  height: 16px;
+  width: 0.5rem;
+  height: 1rem;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: 0.1875rem;
   background: color-mix(in srgb, var(--text-primary) 12%, transparent);
   transition: background-color 200ms ease;
 }
@@ -213,9 +213,9 @@ function buttonLabel(): string {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 8px;
-  height: 16px;
-  border-radius: 3px;
+  width: 0.5rem;
+  height: 1rem;
+  border-radius: 0.1875rem;
   background: var(--tier);
   clip-path: inset(calc(100% - var(--fill-height, 0%)) 0 0 0);
   transition: clip-path 500ms var(--ease-spring-smooth);
@@ -223,11 +223,11 @@ function buttonLabel(): string {
 
 .cpu-load__readout {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 0.25rem);
   left: 50%;
-  transform: translateX(-50%) scale(0.94) translateY(-4px);
-  min-width: 160px;
-  padding: 10px 12px 11px;
+  transform: translateX(-50%) scale(0.94) translateY(-0.25rem);
+  min-width: 10rem;
+  padding: 0.625rem 0.75rem 0.6875rem;
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--shape-overlay);
@@ -248,8 +248,8 @@ function buttonLabel(): string {
 }
 
 .cpu-load__header {
-  margin: 0 0 8px;
-  font-size: 11px;
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -257,18 +257,18 @@ function buttonLabel(): string {
 
 .cpu-load__values {
   display: flex;
-  gap: 14px;
+  gap: 0.875rem;
   margin: 0;
 }
 
 .cpu-load__value-col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .cpu-load__caption {
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -278,7 +278,7 @@ function buttonLabel(): string {
 .cpu-load__figure {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);

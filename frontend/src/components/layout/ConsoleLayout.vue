@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeMount, onBeforeUnmount, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
@@ -10,9 +10,6 @@ import '@/styles/console.css'
 
 const route = useRoute()
 const app = useAppStore()
-const maxWidth = computed(() =>
-  route.meta.wide ? 'max-w-[1400px]' : 'max-w-[1200px]'
-)
 const noPageScroll = computed(() => Boolean(route.meta.noPageScroll))
 const featureStatus = computed(() => app.featureStatus(route.meta.feature))
 const isDisabled = computed(() => featureStatus.value === 'disabled')
@@ -28,7 +25,13 @@ function onScroll() {
   }, 2300)
 }
 
+// Scope rem sizing to the console, including overlays teleported to body.
+onBeforeMount(() => {
+  document.documentElement.setAttribute('data-console-layout', '')
+})
+
 onBeforeUnmount(() => {
+  document.documentElement.removeAttribute('data-console-layout')
   if (scrollTimer) clearTimeout(scrollTimer)
 })
 </script>
@@ -58,8 +61,8 @@ onBeforeUnmount(() => {
         </div>
         <main class="min-w-0 px-4 py-8 sm:px-6 lg:px-8">
           <div
-            class="mx-auto transition-[max-width] duration-300"
-            :class="maxWidth"
+            class="console-content mx-auto transition-[max-width] duration-300"
+            :class="{ 'console-content--wide': route.meta.wide }"
           >
             <RouterView v-slot="{ Component }">
               <Transition name="page" mode="out-in">

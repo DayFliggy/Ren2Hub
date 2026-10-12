@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
         />
         <div
           v-else
-          class="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-[var(--status-danger-text)]"
+          class="flex h-full w-full items-center justify-center px-1 text-center text-[0.625rem] text-[var(--status-danger-text)]"
         >
           {{ img.error ? t(img.error) : t('tickets.upload.uploadFailed') }}
         </div>

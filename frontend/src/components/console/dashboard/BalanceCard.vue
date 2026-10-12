@@ -208,7 +208,7 @@ const monthSpendDisplay = computed(() => {
           border-radius: var(--sketch-border-radius-sm);
         "
       >
-        <p class="text-[11px] text-[var(--text-secondary)]">
+        <p class="text-[0.6875rem] text-[var(--text-secondary)]">
           {{ t('dashboard.monthSpend') }}
         </p>
         <p
@@ -225,7 +225,7 @@ const monthSpendDisplay = computed(() => {
           border-radius: var(--sketch-border-radius-sm);
         "
       >
-        <p class="text-[11px] text-[var(--text-secondary)]">
+        <p class="text-[0.6875rem] text-[var(--text-secondary)]">
           {{ t('dashboard.balanceHint.avgBurn') }}
         </p>
         <p

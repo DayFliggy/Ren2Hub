@@ -37,7 +37,7 @@ const color = computed(() => {
       <span class="text-[var(--text-primary)]">
         {{ format(used) }}/{{ format(total) }}
       </span>
-      <span class="text-[10px] text-[var(--text-tertiary)]">
+      <span class="text-[0.625rem] text-[var(--text-tertiary)]">
         {{ Math.round(percent) }}%
       </span>
     </div>

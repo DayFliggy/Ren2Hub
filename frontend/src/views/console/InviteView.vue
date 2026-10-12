@@ -150,7 +150,7 @@ onMounted(load)
     </div>
 
     <!-- affiliate + invitees -->
-    <div class="grid gap-5 lg:grid-cols-[1fr_360px]">
+    <div class="grid gap-5 lg:grid-cols-[1fr_22.5rem]">
       <InviteAffiliateCard
         :code="info?.code ?? ''"
         :invite-link="inviteLink"
@@ -242,7 +242,7 @@ onMounted(load)
     </div>
 
     <!-- chart + reward balance -->
-    <div class="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
+    <div class="mt-5 grid gap-5 lg:grid-cols-[1fr_22.5rem]">
       <InviteMonthChart v-if="info" :series="info.monthly_series" />
       <SkeletonBlock v-else class="h-72" />
 

@@ -129,7 +129,7 @@ const progressPercent = computed(() => {
         <div
           v-for="(tier, i) in tiers"
           :key="tier.label"
-          class="flex flex-1 flex-col items-center rounded-lg py-2 text-center text-[10px]"
+          class="flex flex-1 flex-col items-center rounded-lg py-2 text-center text-[0.625rem]"
           :style="
             i === state.current_tier_index
               ? 'background:var(--accent-soft);color:var(--accent-text)'

@@ -109,7 +109,7 @@ const geometry = computed(() => {
     :viewBox="`0 0 ${WIDTH} ${height}`"
     preserveAspectRatio="none"
     class="w-full transition-all duration-300"
-    :style="{ height: `${height}px` }"
+    :style="{ height: `${height / 16}rem` }"
     aria-hidden="true"
   >
     <defs>

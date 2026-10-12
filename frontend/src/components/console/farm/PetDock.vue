@@ -56,7 +56,7 @@ const energyStyle = computed(() => {
             pet.name
           }}</span>
           <span
-            class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+            class="rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold"
             style="background: var(--accent-soft); color: var(--accent-text)"
           >
             {{ t('farm.pet.level', { n: pet.level }) }}
@@ -64,7 +64,7 @@ const energyStyle = computed(() => {
           <!-- low energy warning -->
           <span
             v-if="pet.energy <= 20"
-            class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+            class="rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold"
             style="
               background: var(--status-danger-soft);
               color: var(--status-danger-text);

@@ -1025,7 +1025,7 @@ async function runBulkStatus(
                     v-for="match in (row as SupplierTableRow).labMatches"
                     :key="match.slug"
                     tone="info"
-                    class="text-[10px]"
+                    class="text-[0.625rem]"
                   >
                     {{ match.name }}
                   </StatusChip>
@@ -1047,7 +1047,7 @@ async function runBulkStatus(
                     batchProgress.supplier ===
                       (row as SupplierTableRow).supplier
                   "
-                  class="mr-1 font-mono text-[10px] tabular-nums text-[var(--text-tertiary)]"
+                  class="mr-1 font-mono text-[0.625rem] tabular-nums text-[var(--text-tertiary)]"
                 >
                   {{ batchProgressText() }}
                 </span>
@@ -1129,7 +1129,7 @@ async function runBulkStatus(
               <span class="flex shrink-0 items-center gap-0.5">
                 <span
                   v-if="isPageBalance()"
-                  class="font-mono text-[9px] tabular-nums text-[var(--text-tertiary)]"
+                  class="font-mono text-[0.5625rem] tabular-nums text-[var(--text-tertiary)]"
                 >
                   {{ batchProgressText() }}
                 </span>
@@ -1273,7 +1273,7 @@ async function runBulkStatus(
                   )
                 }}
               </p>
-              <p class="text-[11px] text-[var(--text-tertiary)]">
+              <p class="text-[0.6875rem] text-[var(--text-tertiary)]">
                 {{
                   t('channels.channelRatioValue', {
                     ratio: formatDecimal(

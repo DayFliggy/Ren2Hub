@@ -90,7 +90,7 @@ const { t: clientText } = useI18n({
                 {{ token.name }}
               </h2>
               <p
-                class="mt-1 truncate font-mono text-[11px] text-[var(--text-tertiary)]"
+                class="mt-1 truncate font-mono text-[0.6875rem] text-[var(--text-tertiary)]"
                 :title="token.key_preview"
               >
                 {{ token.key_preview }}

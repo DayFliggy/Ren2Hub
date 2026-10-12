@@ -174,7 +174,7 @@ const cells = computed<Cell[]>(() => [
               :color="cell.color"
               :height="30"
             />
-            <div v-else class="h-[30px]" />
+            <div v-else class="h-[1.875rem]" />
           </div>
         </div>
       </div>

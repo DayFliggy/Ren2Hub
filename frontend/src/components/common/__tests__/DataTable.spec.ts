@@ -19,10 +19,10 @@ describe('DataTable keyboard rows', () => {
 
     expect(
       wrapper.get('.data-table-header-clip table').attributes('style')
-    ).toContain('min-width: 1000px')
+    ).toContain('min-width: 62.5rem')
     expect(
       wrapper.get('.data-table-body-viewport table').attributes('style')
-    ).toContain('min-width: 1000px')
+    ).toContain('min-width: 62.5rem')
   })
 
   it('keeps scroll position when only a row value changes', async () => {

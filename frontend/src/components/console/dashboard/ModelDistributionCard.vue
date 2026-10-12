@@ -93,13 +93,13 @@ function swatchColor(rowIndex: number): string {
 
 const { dispatch } = useEChart(
   el,
-  (p) => ({
+  (p, scale = 1) => ({
     color: props.items.length ? p.series : [p.borderSubtle],
     tooltip: {
       trigger: 'item',
       backgroundColor: p.surfaceSolid,
       borderColor: p.borderSubtle,
-      textStyle: { color: p.textPrimary, fontSize: 12 },
+      textStyle: { color: p.textPrimary, fontSize: 12 * scale },
       formatter: (params: { name: string; percent: number; value: number }) => {
         if (!props.items.length) return escapeHtml(t('dashboard.stats.noData'))
         return `${escapeHtml(params.name)}<br/>${escapeHtml(formatMoney(params.value))} · ${escapeHtml(String(params.percent))}%`
@@ -113,14 +113,14 @@ const { dispatch } = useEChart(
         avoidLabelOverlap: true,
         itemStyle: {
           borderColor: p.surfaceSolid,
-          borderWidth: 2,
-          borderRadius: p.isDark ? 4 : 0,
+          borderWidth: 2 * scale,
+          borderRadius: p.isDark ? 4 * scale : 0,
         },
         label: { show: false },
         emphasis: {
-          scaleSize: props.items.length ? 5 : 0,
+          scaleSize: props.items.length ? 5 * scale : 0,
           itemStyle: {
-            shadowBlur: p.isDark ? 12 : 6,
+            shadowBlur: (p.isDark ? 12 : 6) * scale,
             shadowColor: p.isDark
               ? 'rgba(0, 4, 16, 0.65)'
               : 'rgba(56, 55, 43, 0.16)',
@@ -136,7 +136,7 @@ const { dispatch } = useEChart(
         top: '42%',
         style: {
           text: String(props.items.length),
-          fontSize: 26,
+          fontSize: 26 * scale,
           fontWeight: 700,
           fontFamily: 'Ren2JetBrainsMono, monospace',
           fill: p.textPrimary,
@@ -149,7 +149,7 @@ const { dispatch } = useEChart(
         top: '56%',
         style: {
           text: t('dashboard.modelDist.modelsUsed'),
-          fontSize: 11,
+          fontSize: 11 * scale,
           fill: p.textTertiary,
           textAlign: 'center',
         },
@@ -254,7 +254,7 @@ watch(
             -->
             <thead>
               <tr
-                class="border-b border-[var(--border-subtle)] text-[11px] tracking-wider text-[var(--text-tertiary)]"
+                class="border-b border-[var(--border-subtle)] text-[0.6875rem] tracking-wider text-[var(--text-tertiary)]"
               >
                 <th
                   class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-table-header)] px-2 py-2 text-left font-semibold sm:px-2.5"

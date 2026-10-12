@@ -196,7 +196,7 @@ const accountStats = computed(() => [
           class="col-span-2 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-[var(--border-subtle)] pt-5 text-left sm:grid-cols-4 md:col-span-1 md:grid-cols-2 md:border-l md:border-t-0 md:pl-8 md:pt-0 md:text-right"
         >
           <div>
-            <dt class="text-[11px] text-[var(--text-tertiary)]">
+            <dt class="text-[0.6875rem] text-[var(--text-tertiary)]">
               {{ t('profile.joinDate') }}
             </dt>
             <dd
@@ -207,7 +207,7 @@ const accountStats = computed(() => [
             </dd>
           </div>
           <div>
-            <dt class="text-[11px] text-[var(--text-tertiary)]">
+            <dt class="text-[0.6875rem] text-[var(--text-tertiary)]">
               {{ t('profile.memberDuration') }}
             </dt>
             <dd
@@ -220,7 +220,7 @@ const accountStats = computed(() => [
             </dd>
           </div>
           <div>
-            <dt class="text-[11px] text-[var(--text-tertiary)]">
+            <dt class="text-[0.6875rem] text-[var(--text-tertiary)]">
               {{ t('profile.totalCalls') }}
             </dt>
             <dd
@@ -309,7 +309,7 @@ const accountStats = computed(() => [
           stat.value
         }}</strong>
         <span
-          class="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--accent-text)]"
+          class="mt-2 inline-flex items-center gap-1 text-[0.6875rem] text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--accent-text)]"
         >
           {{ stat.destination }}
           <ArrowUpRight :size="12" aria-hidden="true" />
@@ -321,7 +321,7 @@ const accountStats = computed(() => [
       <header class="profile-settings-heading" data-handdrawn="section-heading">
         <div class="min-w-0">
           <p
-            class="font-mono text-[10px] font-semibold text-[var(--accent-text)]"
+            class="font-mono text-[0.625rem] font-semibold text-[var(--accent-text)]"
           >
             {{ t('profile.settingsSectionEyebrow') }}
           </p>

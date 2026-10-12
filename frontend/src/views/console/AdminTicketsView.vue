@@ -403,7 +403,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
       data-handdrawn="surface"
     >
       <aside
-        class="min-w-0 flex-col border-r border-[var(--border-subtle)] lg:flex lg:w-[360px] lg:shrink-0"
+        class="min-w-0 flex-col border-r border-[var(--border-subtle)] lg:flex lg:w-[22.5rem] lg:shrink-0"
         :class="selectedID ? 'hidden' : 'flex w-full'"
         :aria-label="t('tickets.admin.queue')"
       >
@@ -634,7 +634,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
             </div>
           </header>
 
-          <div class="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div class="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
             <div class="flex min-h-0 flex-col">
               <div
                 class="subtle-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6"

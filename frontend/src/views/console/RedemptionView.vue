@@ -656,7 +656,7 @@ function exportCsv() {
                   </span>
                   <StatusChip
                     :tone="adminRedemptionStatusTone(code.status)"
-                    class="text-[10px]"
+                    class="text-[0.625rem]"
                   >
                     {{ t(adminRedemptionStatusLabelKey(code.status)) }}
                   </StatusChip>

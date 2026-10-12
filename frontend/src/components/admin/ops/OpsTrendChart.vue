@@ -78,7 +78,7 @@ const summary = computed(() =>
 
 useEChart(
   el,
-  (palette) => {
+  (palette, scale = 1) => {
     const mood = lineMood(palette)
     const clock = new Intl.DateTimeFormat(locale.value, {
       hour: '2-digit',
@@ -90,8 +90,11 @@ useEChart(
       const shape =
         props.kind === 'bar'
           ? {
-              barMaxWidth: 10,
-              itemStyle: { color, borderRadius: mood.barRadius },
+              barMaxWidth: 10 * scale,
+              itemStyle: {
+                color,
+                borderRadius: mood.barRadius.map((radius) => radius * scale),
+              },
             }
           : filled
             ? {
@@ -113,11 +116,11 @@ useEChart(
         data: withGaps(line.points, props.bucketSeconds),
         showSymbol: false,
         symbol: 'circle',
-        symbolSize: 4,
+        symbolSize: 4 * scale,
         smooth: mood.line.smooth,
         connectNulls: false,
         itemStyle: { color },
-        lineStyle: { width: 1.75, color },
+        lineStyle: { width: 1.75 * scale, color },
         ...shape,
       }
     })
@@ -134,18 +137,27 @@ useEChart(
               symbol: 'none',
               silent: true,
               tooltip: { show: false },
-              lineStyle: { width: 1, type: 'dashed', color: palette.warning },
+              lineStyle: {
+                width: 1 * scale,
+                type: 'dashed',
+                color: palette.warning,
+              },
             },
           ]
         : []
     return {
       animation: false,
-      grid: { top: 12, right: 8, bottom: 22, left: 40 },
+      grid: {
+        top: 12 * scale,
+        right: 8 * scale,
+        bottom: 22 * scale,
+        left: 40 * scale,
+      },
       tooltip: {
         trigger: 'axis',
         backgroundColor: palette.surfaceSolid,
         borderColor: palette.borderSubtle,
-        textStyle: { color: palette.textPrimary, fontSize: 12 },
+        textStyle: { color: palette.textPrimary, fontSize: 12 * scale },
         valueFormatter: (value: unknown) =>
           typeof value === 'number'
             ? `${axisNumber(value)}${props.unit}`
@@ -160,7 +172,7 @@ useEChart(
         splitLine: { show: false },
         axisLabel: {
           color: palette.textTertiary,
-          fontSize: 10,
+          fontSize: 10 * scale,
           hideOverlap: true,
           formatter: (value: number) => clock.format(value),
         },
@@ -175,7 +187,7 @@ useEChart(
         splitNumber: 3,
         axisLabel: {
           color: palette.textTertiary,
-          fontSize: 10,
+          fontSize: 10 * scale,
           formatter: (value: number) => axisNumber(value),
         },
         splitLine: { lineStyle: { type: 'solid', color: palette.chartGrid } },
@@ -204,6 +216,6 @@ useEChart(
         />{{ line.name }}
       </li>
     </ul>
-    <div ref="el" :style="{ height: `${height}px` }" aria-hidden="true" />
+    <div ref="el" :style="{ height: `${height / 16}rem` }" aria-hidden="true" />
   </figure>
 </template>

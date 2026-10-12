@@ -2,6 +2,30 @@
    手账质感工具类（texture-paper / display-title）在 base.css：认证页与 404
    不经过懒加载布局，也要能用。 */
 
+/* Preserve standard-PC density, then grow native rem controls with a ceiling.
+   The layout removes this attribute on exit so public pages keep their sizing. */
+html[data-console-layout] {
+  font-size: clamp(100%, calc(100% + 0.357143vw - 5.142857px), 125%);
+  --console-page-width: clamp(1200px, calc(50vw + 480px), 1760px);
+  --console-wide-width: clamp(1400px, calc(60vw + 536px), 2080px);
+  --console-list-width: clamp(1276px, calc(72vw + 239.2px), 2080px);
+}
+
+/* A wide but short window must retain room for rows and dialog contents. */
+@media (max-height: 900px) {
+  html[data-console-layout] {
+    font-size: clamp(100%, calc(100% + 0.357143vw - 5.142857px), 112.5%);
+  }
+}
+
+.console-content {
+  max-width: var(--console-page-width);
+}
+
+.console-content--wide {
+  max-width: var(--console-wide-width);
+}
+
 /* Round selection checkbox shared by DataTable and the admin mobile lists.
    Single source of truth — do not re-declare this in component styles.
    日间：微不圆手绘圈 + 粗勾线；夜间：uniform 圆 + MD state 感。 */

@@ -70,7 +70,7 @@ function deltaLabel(value: number): string {
 
 useEChart(
   el,
-  (palette) => {
+  (palette, scale = 1) => {
     const mood = lineMood(palette)
     const showConsume = mode.value === 'both' || mode.value === 'consume'
     const showRequests = mode.value === 'both' || mode.value === 'requests'
@@ -80,16 +80,16 @@ useEChart(
 
     return {
       grid: {
-        left: singleAxis ? 46 : 54,
-        right: singleAxis ? 14 : 54,
-        top: 40,
-        bottom: 28,
+        left: (singleAxis ? 46 : 54) * scale,
+        right: (singleAxis ? 14 : 54) * scale,
+        top: 40 * scale,
+        bottom: 28 * scale,
       },
       tooltip: {
         trigger: 'axis',
         backgroundColor: palette.surfaceSolid,
         borderColor: palette.borderSubtle,
-        textStyle: { color: palette.textPrimary, fontSize: 12 },
+        textStyle: { color: palette.textPrimary, fontSize: 12 * scale },
         formatter: (params: TooltipParam[]) => {
           if (!params.length) return ''
           const rows = params
@@ -98,14 +98,14 @@ useEChart(
                 entry.seriesName === consumeLabel
                   ? formatMoney(entry.value)
                   : formatNumber(entry.value)
-              return `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-                <span style="width:8px;height:8px;border-radius:50%;background:${entry.color}"></span>
+              return `<div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.25rem">
+                <span style="width:0.5rem;height:0.5rem;border-radius:50%;background:${entry.color}"></span>
                 <span style="color:${palette.textSecondary}">${escapeHtml(entry.seriesName)}</span>
                 <strong style="margin-left:auto">${escapeHtml(value)}</strong>
               </div>`
             })
             .join('')
-          return `<div style="min-width:150px"><strong>${escapeHtml(params[0]!.axisValueLabel)}</strong>${rows}</div>`
+          return `<div style="min-width:9.375rem"><strong>${escapeHtml(params[0]!.axisValueLabel)}</strong>${rows}</div>`
         },
       },
       legend: {
@@ -115,11 +115,11 @@ useEChart(
         ],
         top: 0,
         left: 'center',
-        textStyle: { color: palette.textTertiary, fontSize: 10 },
+        textStyle: { color: palette.textTertiary, fontSize: 10 * scale },
         icon: 'circle',
-        itemWidth: 12,
-        itemHeight: 12,
-        itemGap: 14,
+        itemWidth: 12 * scale,
+        itemHeight: 12 * scale,
+        itemGap: 14 * scale,
         inactiveColor: palette.borderSubtle,
       },
       xAxis: {
@@ -129,7 +129,7 @@ useEChart(
         axisTick: { show: false },
         axisLabel: {
           color: palette.textTertiary,
-          fontSize: 10,
+          fontSize: 10 * scale,
           interval: Math.floor(data.value.length / 6),
         },
       },
@@ -140,7 +140,7 @@ useEChart(
               splitLine: mood.splitLine,
               axisLabel: {
                 color: palette.textTertiary,
-                fontSize: 10,
+                fontSize: 10 * scale,
                 formatter: (value: number) =>
                   value >= 1000
                     ? `${Math.round(value / 100) / 10}K`
@@ -152,11 +152,14 @@ useEChart(
             {
               type: 'value',
               name: consumeLabel,
-              nameTextStyle: { color: palette.textTertiary, fontSize: 10 },
+              nameTextStyle: {
+                color: palette.textTertiary,
+                fontSize: 10 * scale,
+              },
               splitLine: mood.splitLine,
               axisLabel: {
                 color: palette.textTertiary,
-                fontSize: 10,
+                fontSize: 10 * scale,
                 formatter: (value: number) =>
                   value >= 1000
                     ? `${Math.round(value / 100) / 10}K`
@@ -166,11 +169,14 @@ useEChart(
             {
               type: 'value',
               name: requestsLabel,
-              nameTextStyle: { color: palette.textTertiary, fontSize: 10 },
+              nameTextStyle: {
+                color: palette.textTertiary,
+                fontSize: 10 * scale,
+              },
               splitLine: { show: false },
               axisLabel: {
                 color: palette.textTertiary,
-                fontSize: 10,
+                fontSize: 10 * scale,
                 formatter: (value: number) =>
                   value >= 1000
                     ? `${Math.round(value / 100) / 10}K`
@@ -186,11 +192,15 @@ useEChart(
                 type: 'line',
                 smooth: mood.line.smooth,
                 data: data.value.map((point) => quotaForChart(point.consume)),
-                lineStyle: { color: palette.accent, ...mood.line.lineStyle },
+                lineStyle: {
+                  color: palette.accent,
+                  ...mood.line.lineStyle,
+                  width: mood.line.lineStyle.width * scale,
+                },
                 itemStyle: {
                   color: palette.accent,
                   borderColor: palette.surfaceSolid,
-                  borderWidth: 2,
+                  borderWidth: 2 * scale,
                 },
                 areaStyle: {
                   color: {
@@ -204,7 +214,7 @@ useEChart(
                 },
                 showSymbol: !palette.isDark,
                 symbol: mood.line.symbol,
-                symbolSize: mood.line.symbolSize,
+                symbolSize: mood.line.symbolSize * scale,
                 yAxisIndex: 0,
               },
             ]
@@ -216,15 +226,19 @@ useEChart(
                 type: 'line',
                 smooth: mood.line.smooth,
                 data: data.value.map((point) => point.requests),
-                lineStyle: { color: palette.signal, ...mood.line.lineStyle },
+                lineStyle: {
+                  color: palette.signal,
+                  ...mood.line.lineStyle,
+                  width: mood.line.lineStyle.width * scale,
+                },
                 itemStyle: {
                   color: palette.signal,
                   borderColor: palette.surfaceSolid,
-                  borderWidth: 2,
+                  borderWidth: 2 * scale,
                 },
                 showSymbol: !palette.isDark,
                 symbol: mood.line.symbol,
-                symbolSize: mood.line.symbolSize,
+                symbolSize: mood.line.symbolSize * scale,
                 yAxisIndex: singleAxis ? 0 : 1,
               },
             ]
@@ -264,7 +278,7 @@ useEChart(
                 comparison?.quotaDelta !== undefined &&
                 !loading
               "
-              class="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
+              class="shrink-0 rounded px-1 py-0.5 text-[0.625rem] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
               :style="deltaStyle(comparison.quotaDelta)"
               data-trend-spend-delta
             >
@@ -297,7 +311,7 @@ useEChart(
                 comparison?.requestsDelta !== undefined &&
                 !loading
               "
-              class="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
+              class="shrink-0 rounded px-1 py-0.5 text-[0.625rem] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
               :style="deltaStyle(comparison.requestsDelta)"
               data-trend-requests-delta
             >

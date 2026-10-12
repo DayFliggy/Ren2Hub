@@ -42,7 +42,7 @@ const rarityTone = (r: string): RarityTone => {
       >
         <!-- source badge -->
         <span
-          class="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold"
+          class="shrink-0 rounded-md px-2 py-0.5 text-[0.625rem] font-semibold"
           :style="
             rec.source === 'spin'
               ? 'background:var(--signal-soft);color:var(--signal)'

@@ -45,7 +45,7 @@ function canClaim(item: MilestoneItem): boolean {
               item.label
             }}</span>
             <span
-              class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+              class="shrink-0 rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold"
               style="background: var(--accent-soft); color: var(--accent-text)"
             >
               {{ t('bigame.milestone.reward', { n: item.reward }) }}
@@ -65,7 +65,7 @@ function canClaim(item: MilestoneItem): boolean {
               }"
             />
           </div>
-          <p class="mt-1 text-[10px] text-[var(--text-tertiary)]">
+          <p class="mt-1 text-[0.625rem] text-[var(--text-tertiary)]">
             {{
               t('bigame.milestone.progress', {
                 cur: item.current.toLocaleString(),

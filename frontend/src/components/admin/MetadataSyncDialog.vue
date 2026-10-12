@@ -319,7 +319,7 @@ function display(field: string, value: string | number) {
         "
       >
         <span
-          class="flex h-5 w-5 items-center justify-center rounded-full text-[11px]"
+          class="flex h-5 w-5 items-center justify-center rounded-full text-[0.6875rem]"
           :class="
             step === index
               ? 'bg-[var(--accent)] text-[var(--accent-contrast)] font-semibold'

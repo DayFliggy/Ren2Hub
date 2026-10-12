@@ -90,11 +90,11 @@ const weekLabel = computed(() => {
           <p class="text-sm font-bold tracking-wide text-[var(--text-primary)]">
             {{ t('activity.checkin.signInLabel') }}
             <span
-              class="ml-1.5 font-mono text-[10px] font-normal tracking-widest text-[var(--text-tertiary)]"
+              class="ml-1.5 font-mono text-[0.625rem] font-normal tracking-widest text-[var(--text-tertiary)]"
               >SIGN-IN</span
             >
           </p>
-          <p class="text-[10px] text-[var(--text-tertiary)]">
+          <p class="text-[0.625rem] text-[var(--text-tertiary)]">
             {{ t('activity.checkin.signInSub') }}
           </p>
         </div>
@@ -133,7 +133,7 @@ const weekLabel = computed(() => {
       >
         <!-- date -->
         <p
-          class="font-mono text-[11px] tracking-widest text-[var(--text-tertiary)]"
+          class="font-mono text-[0.6875rem] tracking-widest text-[var(--text-tertiary)]"
         >
           {{ dateDisplay }}
         </p>
@@ -165,7 +165,9 @@ const weekLabel = computed(() => {
         </div>
 
         <!-- streak + next -->
-        <p class="mt-1 text-center text-[11px] text-[var(--text-tertiary)]">
+        <p
+          class="mt-1 text-center text-[0.6875rem] text-[var(--text-tertiary)]"
+        >
           <span class="font-medium text-[var(--text-secondary)]">
             {{
               t('activity.checkin.streakLong', {
@@ -188,7 +190,7 @@ const weekLabel = computed(() => {
             {{ t('activity.checkin.weekIncome') }}
           </p>
           <p
-            class="font-mono text-[10px] tracking-widest text-[var(--text-tertiary)]"
+            class="font-mono text-[0.625rem] tracking-widest text-[var(--text-tertiary)]"
           >
             {{ weekLabel }}
           </p>
@@ -251,7 +253,7 @@ const weekLabel = computed(() => {
       <!-- month progress bar -->
       <div class="mb-3">
         <div
-          class="mb-1.5 flex items-center justify-between text-[10px] text-[var(--text-tertiary)]"
+          class="mb-1.5 flex items-center justify-between text-[0.625rem] text-[var(--text-tertiary)]"
         >
           <span>{{ t('activity.checkin.monthProgress') }}</span>
           <span class="font-medium"

@@ -224,7 +224,7 @@ const topDaySummary = computed(() => {
       </div>
 
       <div
-        class="-mb-2 mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-2 text-[10px] text-[var(--text-tertiary)]"
+        class="-mb-2 mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-2 text-[0.625rem] text-[var(--text-tertiary)]"
         data-usage-footer
       >
         <div class="flex items-center gap-1.5">
@@ -261,7 +261,7 @@ const topDaySummary = computed(() => {
  */
 @media (min-width: 640px) {
   .usage-stage {
-    min-height: 170px;
+    min-height: 10.625rem;
   }
 }
 

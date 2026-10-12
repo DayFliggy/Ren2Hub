@@ -784,7 +784,7 @@ onBeforeUnmount(() => {
     />
 
     <div
-      class="grid items-start gap-8 xl:grid-cols-[minmax(0,1.75fr)_minmax(340px,1.15fr)] 2xl:gap-10"
+      class="grid items-start gap-8 xl:grid-cols-[minmax(0,1.75fr)_minmax(21.25rem,1.15fr)] 2xl:gap-10"
     >
       <!-- 主栏：凭据、认证、会话与凭证 -->
       <div class="min-w-0 space-y-8">
@@ -812,7 +812,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <span
-              class="hidden shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-tertiary)] sm:inline"
+              class="hidden shrink-0 font-mono text-[0.625rem] uppercase tracking-[0.16em] text-[var(--text-tertiary)] sm:inline"
               >{{ t('security.page.eyebrowAccount') }}</span
             >
           </header>
@@ -1038,7 +1038,7 @@ onBeforeUnmount(() => {
               </h3>
             </div>
             <span
-              class="hidden font-mono text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] sm:inline"
+              class="hidden font-mono text-[0.625rem] uppercase tracking-wider text-[var(--text-tertiary)] sm:inline"
               >{{ t('security.page.eyebrowVerify') }}</span
             >
           </header>

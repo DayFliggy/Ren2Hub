@@ -417,7 +417,7 @@ onMounted(() => void alignLatest())
     <div
       v-if="tooltip"
       :id="tooltipId"
-      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-[11px] text-[var(--text-primary)] shadow-[var(--overlay-shadow)]"
+      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-[0.6875rem] text-[var(--text-primary)] shadow-[var(--overlay-shadow)]"
       :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }"
       role="tooltip"
     >
@@ -428,16 +428,16 @@ onMounted(() => void alignLatest())
 
 <style scoped>
 /*
- * Fine-pointer desktop layouts fit the six-week calendar in a 170px stage.
+ * Fine-pointer desktop layouts fit the six-week calendar in a 10.625rem stage.
  * Phones and coarse pointers reserve the taller dense grid below instead,
  * including its month labels, focus-ring padding and horizontal scroll hint.
  */
 .usage-heatmap {
-  --usage-calendar-width: 32px;
-  --usage-calendar-height: 24px;
-  --usage-calendar-column-gap: 3px;
-  --usage-calendar-row-gap: 2px;
-  --usage-calendar-header: 15px;
+  --usage-calendar-width: 2rem;
+  --usage-calendar-height: 1.5rem;
+  --usage-calendar-column-gap: 0.1875rem;
+  --usage-calendar-row-gap: 0.125rem;
+  --usage-calendar-header: 0.9375rem;
   display: flex;
   min-height: calc(
     var(--usage-calendar-header) + 6 * var(--usage-calendar-height) + 5 *
@@ -469,8 +469,8 @@ onMounted(() => void alignLatest())
 .usage-calendar-weekdays {
   height: var(--usage-calendar-header);
   text-align: center;
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 0.5625rem;
+  line-height: 0.6875rem;
   color: var(--text-tertiary);
 }
 .usage-month-grid {
@@ -481,16 +481,16 @@ onMounted(() => void alignLatest())
 .usage-month-cell,
 .usage-month-placeholder {
   border: 1px solid;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 
 .usage-month-cell {
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  padding: 3px 5px;
+  padding: 0.1875rem 0.3125rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1;
   transition:
     transform 120ms ease,
@@ -504,25 +504,25 @@ onMounted(() => void alignLatest())
 }
 
 .usage-dense {
-  --usage-label-width: 12px;
-  --usage-label-gap: 6px;
-  --usage-axis-height: 14px;
+  --usage-label-width: 0.75rem;
+  --usage-label-gap: 0.375rem;
+  --usage-axis-height: 0.875rem;
 }
 
 /* Quarter cells keep a fixed height and stretch their width with the grid up
    to twice that height, so the weeks fill the space beside the analytics. */
 .usage-dense[data-period='quarter'] {
-  --usage-column-gap: 3px;
-  --usage-row-gap: 3px;
-  --usage-cell-height: 14px;
-  --usage-columns: repeat(var(--usage-weeks), minmax(12px, 28px));
+  --usage-column-gap: 0.1875rem;
+  --usage-row-gap: 0.1875rem;
+  --usage-cell-height: 0.875rem;
+  --usage-columns: repeat(var(--usage-weeks), minmax(0.75rem, 1.75rem));
 }
 
 /* Year cells stay square and fill the card width exactly with every week
    visible; phones keep them readable and pan through the weeks instead. */
 .usage-dense[data-period='year'] {
-  --usage-column-gap: 2px;
-  --usage-row-gap: 2px;
+  --usage-column-gap: 0.125rem;
+  --usage-row-gap: 0.125rem;
   --usage-fit-cell: calc(
     (
         100cqi - var(--usage-label-width) - var(--usage-label-gap) -
@@ -530,7 +530,7 @@ onMounted(() => void alignLatest())
       ) /
       var(--usage-weeks)
   );
-  --usage-cell-size: 14px;
+  --usage-cell-size: 0.875rem;
   --usage-cell-height: var(--usage-cell-size);
   --usage-columns: repeat(var(--usage-weeks), var(--usage-cell-size));
 }
@@ -542,7 +542,7 @@ onMounted(() => void alignLatest())
   grid-template-rows: repeat(7, var(--usage-cell-height));
   row-gap: var(--usage-row-gap);
   padding-top: calc(var(--usage-axis-height) + var(--usage-row-gap));
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1;
   color: var(--text-tertiary);
 }
@@ -573,9 +573,9 @@ onMounted(() => void alignLatest())
 }
 
 .usage-dense-month {
-  padding-left: 2px;
-  font-size: 9px;
-  line-height: 11px;
+  padding-left: 0.125rem;
+  font-size: 0.5625rem;
+  line-height: 0.6875rem;
   white-space: nowrap;
   color: var(--text-tertiary);
 }
@@ -590,7 +590,7 @@ onMounted(() => void alignLatest())
   width: 100%;
   height: var(--usage-cell-height);
   border: 1px solid;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   transition:
     transform 120ms ease,
     border-color 120ms ease,
@@ -598,10 +598,10 @@ onMounted(() => void alignLatest())
 }
 
 .usage-dense[data-period='year'] .usage-dense-cell {
-  border-radius: 3px;
+  border-radius: 0.1875rem;
 }
 
-/* The 4px padding keeps focus rings and hover lift inside the scroll clip. */
+/* The 0.25rem padding keeps focus rings and hover lift inside the scroll clip. */
 .usage-dense-scroll {
   scrollbar-width: none;
 }
@@ -622,11 +622,11 @@ onMounted(() => void alignLatest())
 .usage-drag-hint {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-top: 4px;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
   padding-left: calc(var(--usage-label-width) + var(--usage-label-gap));
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 0.625rem;
+  line-height: 0.875rem;
   color: var(--text-tertiary);
 }
 
@@ -641,41 +641,41 @@ onMounted(() => void alignLatest())
 
 @media (max-width: 359px) {
   .usage-heatmap {
-    --usage-calendar-width: 30px;
+    --usage-calendar-width: 1.875rem;
   }
 }
 
 @media (min-width: 640px) {
   .usage-heatmap {
-    --usage-calendar-width: 42px;
-    --usage-calendar-column-gap: 5px;
+    --usage-calendar-width: 2.625rem;
+    --usage-calendar-column-gap: 0.3125rem;
     min-height: 0;
   }
 
   .usage-month-cell,
   .usage-month-placeholder {
-    border-radius: 7px;
+    border-radius: 0.4375rem;
   }
 
   .usage-month-cell {
-    padding: 4px 6px;
-    font-size: 10px;
+    padding: 0.25rem 0.375rem;
+    font-size: 0.625rem;
   }
 
-  /* Seven 16px rows with 4px gaps (154px with the month axis) stay within
-     the 162px stacked and 170px desktop stage budgets. The wider column gap
+  /* Seven 1rem rows with 0.25rem gaps (9.625rem with the month axis) stay within
+     the 10.125rem stacked and 10.625rem desktop stage budgets. The wider column gap
      keeps each week reading as one column. */
   .usage-dense[data-period='quarter'] {
-    --usage-column-gap: 5px;
-    --usage-row-gap: 4px;
-    --usage-cell-height: 16px;
-    --usage-columns: repeat(var(--usage-weeks), minmax(12px, 32px));
+    --usage-column-gap: 0.3125rem;
+    --usage-row-gap: 0.25rem;
+    --usage-cell-height: 1rem;
+    --usage-columns: repeat(var(--usage-weeks), minmax(0.75rem, 2rem));
   }
 
-  /* Year spans the stage with every week visible (about 8px cells on a 640px
+  /* Year spans the stage with every week visible (about 0.5rem cells on a 640px
      tablet), capped by the stage height; only phones pan through the weeks. */
   .usage-dense[data-period='year'] {
-    --usage-cell-size: min(var(--usage-fit-cell), 12px);
+    --usage-cell-size: min(var(--usage-fit-cell), 0.75rem);
   }
 }
 
@@ -683,15 +683,15 @@ onMounted(() => void alignLatest())
    shrinking targets or allowing enlarged hit areas to cover neighbouring days. */
 @media (max-width: 639px), (any-pointer: coarse) {
   .usage-heatmap {
-    min-height: 229px;
+    min-height: 14.3125rem;
   }
 
   .usage-dense[data-period='quarter'],
   .usage-dense[data-period='year'] {
-    --usage-cell-size: 24px;
-    --usage-cell-height: 24px;
-    --usage-column-gap: 3px;
-    --usage-row-gap: 3px;
+    --usage-cell-size: 1.5rem;
+    --usage-cell-height: 1.5rem;
+    --usage-column-gap: 0.1875rem;
+    --usage-row-gap: 0.1875rem;
     --usage-columns: repeat(var(--usage-weeks), var(--usage-cell-size));
   }
 

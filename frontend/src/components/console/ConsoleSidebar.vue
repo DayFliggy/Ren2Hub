@@ -78,7 +78,7 @@ defineExpose({ collapsed })
 <template>
   <aside
     class="sticky top-0 hidden h-full shrink-0 select-none flex-col overflow-hidden border-r border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper transition-[width] duration-[250ms] lg:flex"
-    :style="{ width: collapsed ? '64px' : '220px' }"
+    :style="{ width: collapsed ? '4rem' : '13.75rem' }"
     data-handdrawn="navigation"
   >
     <!-- brand header: serif typeface for hand-crafted feel -->
@@ -128,7 +128,7 @@ defineExpose({ collapsed })
             />
           </div>
           <span
-            class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]"
+            class="text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]"
           >
             {{ t(group.labelKey) }}
           </span>
@@ -207,7 +207,7 @@ defineExpose({ collapsed })
                   item.name === 'ticket-management' &&
                   ticketQueue.summary.pending > 0
                 "
-                class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--status-danger)] px-1.5 text-[10px] font-semibold leading-5 text-[var(--text-inverse)]"
+                class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--status-danger)] px-1.5 text-[0.625rem] font-semibold leading-5 text-[var(--text-inverse)]"
                 :class="collapsed ? 'absolute right-1 top-1' : ''"
                 :aria-label="
                   t('tickets.admin.pendingCount', {
@@ -224,7 +224,7 @@ defineExpose({ collapsed })
 
               <span
                 v-if="!collapsed && item.disabled"
-                class="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-px text-[10px] text-[var(--text-tertiary)]"
+                class="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
               >
                 {{ t('nav.comingSoon') }}
               </span>

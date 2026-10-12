@@ -142,7 +142,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1276px]">
+  <div class="mx-auto max-w-[var(--console-list-width)]">
     <PageBreadcrumb
       :crumbs="[t('logs.breadcrumb.0'), t('relayLogs.drawingBreadcrumb')]"
     >

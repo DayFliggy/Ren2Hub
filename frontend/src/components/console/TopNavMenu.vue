@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
           <span class="min-w-0 flex-1 truncate">{{ t(child.labelKey) }}</span>
           <span
             v-if="child.disabled"
-            class="rounded bg-[var(--surface-muted)] px-1.5 py-px text-[10px] text-[var(--text-tertiary)]"
+            class="rounded bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
           >
             {{ t('nav.comingSoon') }}
           </span>

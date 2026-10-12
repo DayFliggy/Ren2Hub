@@ -56,7 +56,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
     data-handdrawn="navigation-top"
   >
     <nav
-      class="topbar-nav mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-1.5 px-3 sm:gap-3 sm:px-6 lg:h-16 lg:px-8"
+      class="topbar-nav mx-auto flex h-14 max-w-[max(1440px,calc(var(--console-wide-width)+4rem))] items-center justify-between gap-1.5 px-3 sm:gap-3 sm:px-6 lg:h-16 lg:px-8"
     >
       <!-- brand (mobile only) -->
       <div class="flex min-w-0 items-center gap-2.5 lg:hidden">
@@ -114,7 +114,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             t('nav.search')
           }}</span>
           <kbd
-            class="topbar-control-label hidden rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[10px] font-medium md:inline"
+            class="topbar-control-label hidden rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[0.625rem] font-medium md:inline"
           >
             {{ searchShortcut }}
           </kbd>
@@ -147,7 +147,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             disabled
           >
             {{ t(item.labelKey) }}
-            <span class="text-[10px]">{{ t('nav.comingSoon') }}</span>
+            <span class="text-[0.625rem]">{{ t('nav.comingSoon') }}</span>
           </button>
           <RouterLink
             v-else-if="item.route"

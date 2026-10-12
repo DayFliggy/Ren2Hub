@@ -46,7 +46,7 @@ const expPercent = computed(() =>
             style="background: var(--accent); color: var(--accent-contrast)"
           >
             <span
-              class="text-[10px] font-semibold uppercase tracking-wider opacity-80"
+              class="text-[0.625rem] font-semibold uppercase tracking-wider opacity-80"
               >FARM</span
             >
             <span class="text-xl font-bold leading-none">{{

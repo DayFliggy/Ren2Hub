@@ -56,7 +56,7 @@ function moodColor(mood: number): string {
               animal.name
             }}</span>
             <span
-              class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+              class="rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold"
               :style="moodColor(animal.mood)"
             >
               {{ t('farm.ranch.mood', { n: animal.mood }) }}

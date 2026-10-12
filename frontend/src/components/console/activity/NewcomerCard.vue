@@ -100,7 +100,7 @@ function confirmClaim() {
           >
             <path d="M20 6 9 17l-5-5" />
           </svg>
-          <span v-else class="text-[10px] font-bold">○</span>
+          <span v-else class="text-[0.625rem] font-bold">○</span>
         </span>
         <span class="flex-1 text-sm text-[var(--text-primary)]">{{
           t(task.labelKey)

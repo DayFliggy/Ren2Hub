@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div data-key-page class="mx-auto max-w-[1276px]">
+  <div data-key-page class="mx-auto max-w-[var(--console-list-width)]">
     <PageBreadcrumb :crumbs="[t('keys.breadcrumb.0'), t('keys.breadcrumb.1')]">
       <template #action>
         <KeyEndpointStrip />

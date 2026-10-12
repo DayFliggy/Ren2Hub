@@ -30,7 +30,10 @@ echarts.use([
   CanvasRenderer,
 ])
 
-export type OptionBuilder = (palette: ChartPalette) => EChartsCoreOption
+export type OptionBuilder = (
+  palette: ChartPalette,
+  scale?: number
+) => EChartsCoreOption
 
 /**
  * Binds an ECharts instance to an element. The option is built from the
@@ -48,10 +51,17 @@ export function useEChart(
   let chartTarget: HTMLElement | null = null
   let resizeObserver: ResizeObserver | null = null
   let themeObserver: MutationObserver | null = null
+  let renderedScale = 1
+
+  function layoutScale() {
+    const fontSize = getComputedStyle(document.documentElement).fontSize
+    return fontSize ? Number.parseFloat(fontSize) / 16 : 1
+  }
 
   function render() {
     if (!chart) return
-    const option = buildOption(chartPalette())
+    renderedScale = layoutScale()
+    const option = buildOption(chartPalette(), renderedScale)
     chart.setOption(
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? { ...option, animation: false }
@@ -91,7 +101,13 @@ export function useEChart(
     chart = echarts.init(target)
     render()
 
-    resizeObserver = new ResizeObserver(() => chart?.resize())
+    resizeObserver = new ResizeObserver(() => {
+      chart?.resize()
+      // ECharts' pixel options do not inherit the rem size of the host.
+      // Rebuild only when that size changes, preserving interaction state on
+      // ordinary container resizes such as a sidebar toggle.
+      if (layoutScale() !== renderedScale) render()
+    })
     resizeObserver.observe(target)
 
     // data-theme changes only on light/dark flips (useTheme), unlike `class`,

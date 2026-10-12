@@ -194,7 +194,7 @@ onMounted(() => void loadStats())
 
     <StatTileGrid class="mb-6" :tiles="statCards" :columns="4" />
 
-    <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_380px]">
+    <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_23.75rem]">
       <TopupPanel
         v-model:payment-method="paymentMethod"
         :balance-quota="stats?.quota ?? null"

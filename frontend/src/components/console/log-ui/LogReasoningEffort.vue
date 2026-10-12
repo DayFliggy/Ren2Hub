@@ -42,7 +42,7 @@ function effortToneFor(value: string) {
   <span
     data-log-reasoning-effort
     class="inline-flex min-w-0 max-w-full items-center"
-    :class="mobile ? 'text-xs' : 'text-[11px]'"
+    :class="mobile ? 'text-xs' : 'text-[0.6875rem]'"
     :title="effort"
   >
     <StatusChip v-if="effortKnown(effort)" :tone="effortToneFor(effort)">

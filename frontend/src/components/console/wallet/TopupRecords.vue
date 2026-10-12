@@ -85,7 +85,7 @@ onMounted(load)
           <p class="text-sm font-bold text-[var(--text-primary)]">
             {{ formatAdminOrderAmount(row.amount, row.currency) }}
           </p>
-          <p class="text-[11px] text-[var(--text-tertiary)]">
+          <p class="text-[0.6875rem] text-[var(--text-tertiary)]">
             {{
               BigInt(row.quota) > 0n
                 ? formatQuota(row.quota)

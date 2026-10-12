@@ -464,7 +464,8 @@ test('every model management section uses the wide admin layout', async ({
     theme: 'light',
     mobile: false,
   })
-  // At 1920px the default 1200px content cap would bind; admin lists use 1400px.
+  // At 1920px ordinary pages cap at 1440px; admin lists must use the wider
+  // responsive layout, within its 1688px cap and the available sidebar space.
   await page.setViewportSize({ width: 1920, height: 1000 })
   const pricing = { ModelPrice: '0.2' }
   await page.route('**/api/option/model_pricing**', (route) =>
@@ -496,7 +497,8 @@ test('every model management section uses the wide admin layout', async ({
     await expect(page.locator('#model-management-panel')).toBeVisible()
     await expect
       .poll(async () => Math.round((await content.boundingBox())?.width ?? 0))
-      .toBe(1400)
+      .toBeGreaterThan(1500)
+    expect((await content.boundingBox())!.width).toBeLessThanOrEqual(1688)
     await assertNoHorizontalOverflow(page)
   }
   expect(failures).toEqual([])

@@ -140,7 +140,7 @@ const availabilityLabel = computed(() =>
             <span
               v-for="match in labMatches"
               :key="match.slug"
-              class="max-w-full truncate rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent-text)]"
+              class="max-w-full truncate rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--accent-text)]"
             >
               {{ match.name }}
             </span>

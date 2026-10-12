@@ -27,7 +27,7 @@ const { t } = useI18n()
     data-handdrawn="surface"
   >
     <span
-      class="inline-flex items-center rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-bold uppercase text-[var(--accent-text)]"
+      class="inline-flex items-center rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[0.6875rem] font-bold uppercase text-[var(--accent-text)]"
     >
       {{ t('invite.affiliateTag') }}
     </span>

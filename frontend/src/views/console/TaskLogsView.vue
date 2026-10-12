@@ -145,7 +145,7 @@ function formatDuration(row: RelayTaskLogItem): string {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1276px]">
+  <div class="mx-auto max-w-[var(--console-list-width)]">
     <PageBreadcrumb
       :crumbs="[t('logs.breadcrumb.0'), t('relayLogs.tasksBreadcrumb')]"
     >
@@ -246,7 +246,7 @@ function formatDuration(row: RelayTaskLogItem): string {
           <button
             v-if="(row as RelayTaskLogItem).fail_reason"
             type="button"
-            class="block max-w-[280px] truncate text-left text-xs text-[var(--status-danger-text)] underline-offset-2 hover:underline"
+            class="block max-w-[17.5rem] truncate text-left text-xs text-[var(--status-danger-text)] underline-offset-2 hover:underline"
             :title="t('relayLogs.viewDetails')"
             @click="failureRow = row as RelayTaskLogItem"
           >

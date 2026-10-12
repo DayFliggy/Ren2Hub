@@ -113,7 +113,7 @@ const bubbleClass = computed(() =>
   >
     <span class="h-px flex-1 bg-[var(--dec-gold-line)]" />
     <span
-      class="text-center text-[11px] uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
+      class="text-center text-[0.6875rem] uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
     >
       {{ message.content }} · {{ relativeTime(message.created, locale) }}
     </span>

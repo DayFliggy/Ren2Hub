@@ -80,7 +80,7 @@ onClickOutside(modelsDropdownRef, () => {
       <span
         v-for="tag in listing.tags"
         :key="tag"
-        class="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)]"
+        class="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[0.6875rem] text-[var(--text-tertiary)]"
       >
         {{ tag }}
       </span>
@@ -109,7 +109,7 @@ onClickOutside(modelsDropdownRef, () => {
     <!-- footer: listed date + rating + price + actions -->
     <div class="mt-auto pt-3">
       <div
-        class="flex items-center justify-between text-[11px] text-[var(--text-tertiary)]"
+        class="flex items-center justify-between text-[0.6875rem] text-[var(--text-tertiary)]"
       >
         <span>{{
           t('market.listedAt', { date: formatDate(listing.listedAt) })
@@ -178,7 +178,7 @@ onClickOutside(modelsDropdownRef, () => {
         <span
           v-for="m in listing.supportedModels.slice(0, 2)"
           :key="m"
-          class="truncate rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]"
+          class="truncate rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[var(--text-secondary)]"
           style="max-width: 9rem"
           >{{ m }}</span
         >
@@ -187,7 +187,7 @@ onClickOutside(modelsDropdownRef, () => {
           type="button"
           :aria-label="t('market.previewModels')"
           :aria-expanded="modelsDropdownOpen"
-          class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
+          class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.625rem] font-semibold text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
           @click.stop="modelsDropdownOpen = !modelsDropdownOpen"
         >
           +{{ listing.supportedModels.length - 2 }}
@@ -208,7 +208,7 @@ onClickOutside(modelsDropdownRef, () => {
               v-for="m in listing.supportedModels"
               :key="m"
               role="option"
-              class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]"
+              class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[var(--text-secondary)]"
               >{{ m }}</span
             >
           </div>
@@ -219,7 +219,7 @@ onClickOutside(modelsDropdownRef, () => {
     <!-- qc -->
     <div class="hidden w-16 shrink-0 text-right md:block">
       <p
-        class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]"
+        class="text-[0.625rem] uppercase tracking-wide text-[var(--text-tertiary)]"
       >
         {{ t('market.colQc') }}
       </p>
@@ -233,7 +233,7 @@ onClickOutside(modelsDropdownRef, () => {
       <span
         v-for="tag in listing.tags.slice(0, 2)"
         :key="tag"
-        class="truncate rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]"
+        class="truncate rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.625rem] text-[var(--text-tertiary)]"
       >
         {{ tag }}
       </span>
@@ -244,7 +244,7 @@ onClickOutside(modelsDropdownRef, () => {
       <p class="font-mono text-sm font-bold text-[var(--accent-text)]">
         {{ formatPrice(listing.priceUSD) }}
       </p>
-      <p class="text-[10px] text-[var(--text-tertiary)]">{{ priceUnit }}</p>
+      <p class="text-[0.625rem] text-[var(--text-tertiary)]">{{ priceUnit }}</p>
     </div>
 
     <!-- actions -->

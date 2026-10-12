@@ -212,7 +212,7 @@ const rpmCaption = computed(() => {
 
           <div
             v-if="cell.key === 'rpm'"
-            class="mt-2 flex h-[30px] min-w-0 items-center gap-2 overflow-hidden"
+            class="mt-2 flex h-[1.875rem] min-w-0 items-center gap-2 overflow-hidden"
           >
             <RpmRing
               v-if="limits"
@@ -228,7 +228,7 @@ const rpmCaption = computed(() => {
           </div>
           <div
             v-else
-            class="mt-2 flex h-[30px] min-w-0 items-center overflow-hidden"
+            class="mt-2 flex h-[1.875rem] min-w-0 items-center overflow-hidden"
           >
             <MiniSparkline
               v-if="!loading && cell.series && cell.series.length > 1"
@@ -236,7 +236,7 @@ const rpmCaption = computed(() => {
               :color="cell.color"
               :height="30"
             />
-            <div v-else class="h-[30px]" />
+            <div v-else class="h-[1.875rem]" />
           </div>
         </div>
       </component>

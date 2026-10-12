@@ -334,7 +334,7 @@ onMounted(() => load())
 <style scoped>
 .settings-domain-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 13.75rem minmax(0, 1fr);
   gap: 1.75rem;
   align-items: start;
 }

@@ -83,7 +83,7 @@ const ariaLabel = computed(() => {
 
     <p
       v-if="hasInviter"
-      class="truncate text-[11px] text-[var(--text-tertiary)]"
+      class="truncate text-[0.6875rem] text-[var(--text-tertiary)]"
       :class="{ 'mt-1': hasInvitees }"
       aria-hidden="true"
     >

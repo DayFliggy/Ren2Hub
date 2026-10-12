@@ -372,7 +372,7 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
         v-if="open"
         :id="panelId"
         ref="panelRef"
-        class="absolute left-1/2 z-50 w-[calc(100vw-2rem)] max-w-[560px] -translate-x-1/2 overflow-hidden rounded-2xl border bg-[var(--surface-overlay)] shadow-[var(--overlay-shadow)] sm:left-auto sm:right-0 sm:w-[560px] sm:translate-x-0"
+        class="absolute left-1/2 z-50 w-[calc(100vw-2rem)] max-w-[35rem] -translate-x-1/2 overflow-hidden rounded-2xl border bg-[var(--surface-overlay)] shadow-[var(--overlay-shadow)] sm:left-auto sm:right-0 sm:w-[35rem] sm:translate-x-0"
         :class="direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
         style="border-color: var(--overlay-border)"
         role="dialog"
@@ -461,7 +461,7 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
               >
                 <!-- weekday header -->
                 <div
-                  class="mb-1 grid grid-cols-7 text-center text-[11px] font-medium text-[var(--text-tertiary)]"
+                  class="mb-1 grid grid-cols-7 text-center text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
                 >
                   <span v-for="w in weekDays" :key="w" class="py-1">{{
                     w
@@ -477,7 +477,7 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
                     :data-date-key="c.key"
                     :data-in-month="c.inMonth ? 'true' : 'false'"
                     :tabindex="focusKey === c.key && c.inMonth ? 0 : -1"
-                    class="relative flex h-11 items-center justify-center text-[13px] transition-colors focus-ring sm:h-9"
+                    class="relative flex h-11 items-center justify-center text-[0.8125rem] transition-colors focus-ring sm:h-9"
                     :class="[
                       !c.inMonth
                         ? 'text-[var(--text-tertiary)] opacity-45'

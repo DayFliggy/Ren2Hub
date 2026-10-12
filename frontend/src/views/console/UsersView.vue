@@ -622,7 +622,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
               </div>
               <span
                 v-if="isSelf(row as AdminUser)"
-                class="shrink-0 text-[10px] text-[var(--text-tertiary)]"
+                class="shrink-0 text-[0.625rem] text-[var(--text-tertiary)]"
               >
                 {{ t('users.selfHint') }}
               </span>

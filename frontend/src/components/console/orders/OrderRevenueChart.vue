@@ -44,10 +44,16 @@ const axisLabels = computed(() =>
 
 useEChart(
   el,
-  (p) => {
+  (p, scale = 1) => {
     const mood = lineMood(p)
     return {
-      grid: { left: 8, right: 8, top: 40, bottom: 24, containLabel: true },
+      grid: {
+        left: 8 * scale,
+        right: 8 * scale,
+        top: 40 * scale,
+        bottom: 24 * scale,
+        containLabel: true,
+      },
       /**
        * Units live in the legend rather than in `yAxis.name`. An axis name
        * defaults to nameLocation:'end', which puts it in the same top strip the
@@ -55,12 +61,12 @@ useEChart(
        * one overprints it. Carrying the unit here states it once, unambiguously.
        */
       legend: {
-        top: 4,
+        top: 4 * scale,
         right: 0,
-        itemWidth: 18,
-        itemHeight: 10,
+        itemWidth: 18 * scale,
+        itemHeight: 10 * scale,
         icon: p.isDark ? 'roundRect' : 'rect',
-        textStyle: { color: p.textSecondary, fontSize: 11 },
+        textStyle: { color: p.textSecondary, fontSize: 11 * scale },
         data: [t('orders.chart.revenue'), t('orders.chart.orders')],
         formatter: (name: string) =>
           name === t('orders.chart.revenue')
@@ -71,7 +77,7 @@ useEChart(
         trigger: 'axis',
         backgroundColor: p.surfaceSolid,
         borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 },
+        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
         axisPointer: { type: 'line', lineStyle: { color: p.borderSubtle } },
       },
       xAxis: {
@@ -82,7 +88,7 @@ useEChart(
         axisTick: { show: false },
         axisLabel: {
           color: p.textTertiary,
-          fontSize: 10,
+          fontSize: 10 * scale,
           interval: labelInterval.value,
         },
       },
@@ -96,7 +102,7 @@ useEChart(
           splitLine: mood.splitLine,
           axisLabel: {
             color: p.textTertiary,
-            fontSize: 10,
+            fontSize: 10 * scale,
             formatter: (v: number) =>
               v >= 1000 ? `${Math.round(v / 100) / 10}K` : String(v),
           },
@@ -104,7 +110,7 @@ useEChart(
         {
           type: 'value',
           splitLine: { show: false },
-          axisLabel: { color: p.textTertiary, fontSize: 10 },
+          axisLabel: { color: p.textTertiary, fontSize: 10 * scale },
           minInterval: 1,
         },
       ],
@@ -115,13 +121,17 @@ useEChart(
           smooth: mood.line.smooth,
           showSymbol: !p.isDark,
           symbol: mood.line.symbol,
-          symbolSize: mood.line.symbolSize,
+          symbolSize: mood.line.symbolSize * scale,
           data: points.value.map((point) => point.revenue),
-          lineStyle: { color: p.accent, ...mood.line.lineStyle },
+          lineStyle: {
+            color: p.accent,
+            ...mood.line.lineStyle,
+            width: mood.line.lineStyle.width * scale,
+          },
           itemStyle: {
             color: p.accent,
             borderColor: p.surfaceSolid,
-            borderWidth: 2,
+            borderWidth: 2 * scale,
           },
           tooltip: {
             valueFormatter: (v: number) => formatAdminOrderAmount(v, 'CNY'),
@@ -144,13 +154,17 @@ useEChart(
           smooth: mood.line.smooth,
           showSymbol: !p.isDark,
           symbol: mood.line.symbol,
-          symbolSize: mood.line.symbolSize,
+          symbolSize: mood.line.symbolSize * scale,
           data: points.value.map((point) => point.orders),
-          lineStyle: { color: p.signalStrong, ...mood.line.lineStyle },
+          lineStyle: {
+            color: p.signalStrong,
+            ...mood.line.lineStyle,
+            width: mood.line.lineStyle.width * scale,
+          },
           itemStyle: {
             color: p.signalStrong,
             borderColor: p.surfaceSolid,
-            borderWidth: 2,
+            borderWidth: 2 * scale,
           },
         },
       ],

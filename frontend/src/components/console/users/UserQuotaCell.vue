@@ -100,7 +100,7 @@ const ariaLabel = computed(() =>
       <p class="display-number font-mono text-xs text-[var(--text-primary)]">
         {{ formatQuota(user.available_quota) }}
       </p>
-      <p class="truncate text-[11px]" :style="{ color: noteColor }">
+      <p class="truncate text-[0.6875rem]" :style="{ color: noteColor }">
         {{ note }}
       </p>
     </div>

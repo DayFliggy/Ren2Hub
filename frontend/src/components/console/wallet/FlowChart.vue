@@ -21,16 +21,21 @@ const series = computed(() => flow.value.map((f) => quotaForChart(f.consume)))
 
 useEChart(
   el,
-  (p) => {
+  (p, scale = 1) => {
     const mood = lineMood(p)
     const lineColor = p.signalStrong
     return {
-      grid: { left: 56, right: 16, top: 18, bottom: 28 },
+      grid: {
+        left: 56 * scale,
+        right: 16 * scale,
+        top: 18 * scale,
+        bottom: 28 * scale,
+      },
       tooltip: {
         trigger: 'axis',
         backgroundColor: p.surfaceSolid,
         borderColor: p.borderSubtle,
-        textStyle: { color: p.textPrimary, fontSize: 12 },
+        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
         valueFormatter: (v: number) => formatMoney(v),
       },
       xAxis: {
@@ -38,14 +43,14 @@ useEChart(
         data: categories.value,
         axisLine: { lineStyle: { color: p.borderSubtle } },
         axisTick: { show: false },
-        axisLabel: { color: p.textTertiary, fontSize: 10, interval: 4 },
+        axisLabel: { color: p.textTertiary, fontSize: 10 * scale, interval: 4 },
       },
       yAxis: {
         type: 'value',
         splitLine: mood.splitLine,
         axisLabel: {
           color: p.textTertiary,
-          fontSize: 10,
+          fontSize: 10 * scale,
           formatter: (v: number) =>
             v >= 1_000_000
               ? `${v / 1_000_000}M`
@@ -59,14 +64,18 @@ useEChart(
           type: 'line',
           smooth: mood.line.smooth,
           symbol: mood.line.symbol,
-          symbolSize: mood.line.symbolSize,
+          symbolSize: mood.line.symbolSize * scale,
           showSymbol: !p.isDark,
           data: series.value,
-          lineStyle: { color: lineColor, ...mood.line.lineStyle, width: 3 },
+          lineStyle: {
+            color: lineColor,
+            ...mood.line.lineStyle,
+            width: 3 * scale,
+          },
           itemStyle: {
             color: lineColor,
             borderColor: p.surfaceSolid,
-            borderWidth: 2,
+            borderWidth: 2 * scale,
           },
           areaStyle: {
             color: {

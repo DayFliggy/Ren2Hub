@@ -69,14 +69,14 @@ const stageColor = computed(() => (stage: FarmPlot['stage']) => {
           {{ plot.seed ?? t('farm.plot.empty') }}
         </span>
         <span
-          class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+          class="rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold"
           :style="stageColor(plot.stage)"
         >
           {{ t(`farm.plot.${plot.stage}`) }}
         </span>
         <span
           v-if="plot.stage === 'growing'"
-          class="text-[10px] text-[var(--text-tertiary)]"
+          class="text-[0.625rem] text-[var(--text-tertiary)]"
         >
           {{ t('farm.plot.timeLeft', { t: timeLeft(plot.harvest_at) }) }}
         </span>

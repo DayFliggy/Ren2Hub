@@ -468,7 +468,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div data-log-page class="mx-auto max-w-[1276px]">
+  <div data-log-page class="mx-auto max-w-[var(--console-list-width)]">
     <PageBreadcrumb :crumbs="[t('logs.breadcrumb.0'), t('logs.breadcrumb.1')]">
       <template #action>
         <LogsNavTabs active="consume" />
@@ -555,7 +555,7 @@ onBeforeUnmount(() => {
             >
               <p
                 :id="colSettingsTitleId"
-                class="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]"
+                class="px-3 pb-1 pt-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]"
               >
                 {{ t('logs.colSettings') }}
               </p>

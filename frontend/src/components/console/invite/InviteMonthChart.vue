@@ -29,13 +29,18 @@ const totalNew = computed(() =>
 
 useEChart(
   el,
-  (p) => ({
-    grid: { left: 32, right: 12, top: 16, bottom: 26 },
+  (p, scale = 1) => ({
+    grid: {
+      left: 32 * scale,
+      right: 12 * scale,
+      top: 16 * scale,
+      bottom: 26 * scale,
+    },
     tooltip: {
       trigger: 'axis',
       backgroundColor: p.surfaceSolid,
       borderColor: p.borderSubtle,
-      textStyle: { color: p.textPrimary, fontSize: 12 },
+      textStyle: { color: p.textPrimary, fontSize: 12 * scale },
       formatter: (params: { name: string; value: number }[]) => {
         const item = params[0]
         if (!item) return ''
@@ -51,25 +56,28 @@ useEChart(
       data: categories.value,
       axisLine: { lineStyle: { color: p.borderSubtle } },
       axisTick: { show: false },
-      axisLabel: { color: p.textTertiary, fontSize: 11 },
+      axisLabel: { color: p.textTertiary, fontSize: 11 * scale },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
       splitLine: lineMood(p).splitLine,
-      axisLabel: { color: p.textTertiary, fontSize: 10 },
+      axisLabel: { color: p.textTertiary, fontSize: 10 * scale },
     },
     series: [
       {
         type: 'bar',
         data: values.value,
-        barMaxWidth: 40,
-        itemStyle: { color: p.accent, borderRadius: lineMood(p).barRadius },
+        barMaxWidth: 40 * scale,
+        itemStyle: {
+          color: p.accent,
+          borderRadius: lineMood(p).barRadius.map((radius) => radius * scale),
+        },
         label: {
           show: true,
           position: 'top',
           color: p.textSecondary,
-          fontSize: 11,
+          fontSize: 11 * scale,
           formatter: (o: { value: number }) =>
             o.value > 0 ? String(o.value) : '',
         },

@@ -52,6 +52,7 @@ const dashOffset = computed(
     <svg
       :width="size"
       :height="size"
+      :style="{ width: `${size / 16}rem`, height: `${size / 16}rem` }"
       :viewBox="`0 0 ${size} ${size}`"
       aria-hidden="true"
     >
