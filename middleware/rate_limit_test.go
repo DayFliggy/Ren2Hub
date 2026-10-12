@@ -293,9 +293,58 @@ func TestGlobalWebRateLimitCountsFrontendFilesInStaticBucket(t *testing.T) {
 
 func TestSessionRefreshDoesNotSpendTheLoginBudget(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	useRateLimitMiniRedis(t)
 	previousEnabled := common.CriticalRateLimitEnable
+	previousRedis := common.RedisEnabled
 	common.CriticalRateLimitEnable = true
+	t.Cleanup(func() {
+		common.CriticalRateLimitEnable = previousEnabled
+		common.RedisEnabled = previousRedis
+	})
+
+	for _, storage := range []string{"redis", "memory"} {
+		t.Run(storage, func(t *testing.T) {
+			common.RedisEnabled = storage == "redis"
+			if common.RedisEnabled {
+				useRateLimitMiniRedis(t)
+			} else {
+				t.Cleanup(func() {
+					// Expire this fixture's buckets without replacing the shared
+					// limiter or racing its background eviction worker.
+					for _, key := range []string{"SR192.0.2.60", "CT192.0.2.60", "SR198.51.100.60"} {
+						inMemoryRateLimiter.Request(key, 0, 0)
+					}
+				})
+			}
+			router := gin.New()
+			require.NoError(t, router.SetTrustedProxies(nil))
+			router.GET("/refresh", SessionRefreshRateLimit(), func(c *gin.Context) {
+				c.Status(http.StatusNoContent)
+			})
+			router.GET("/login", CriticalRateLimit(), func(c *gin.Context) {
+				c.Status(http.StatusNoContent)
+			})
+
+			remoteAddr := "192.0.2.60:12345"
+			for i := 0; i < common.SessionRefreshRateLimitNum; i++ {
+				require.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/refresh", remoteAddr).Code, "refresh %d", i+1)
+			}
+			limited := performRateLimitRequest(router, "/refresh", remoteAddr)
+			assert.Equal(t, http.StatusTooManyRequests, limited.Code)
+			assert.Equal(t, "60", limited.Header().Get("Retry-After"))
+
+			for i := 0; i < common.CriticalRateLimitNum; i++ {
+				require.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/login", remoteAddr).Code, "login %d", i+1)
+			}
+			assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router, "/login", remoteAddr).Code)
+			assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/refresh", "198.51.100.60:12345").Code, "another IP has its own refresh budget")
+		})
+	}
+}
+
+func TestSessionRefreshRateLimitHonorsCriticalDisableSwitch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousEnabled := common.CriticalRateLimitEnable
+	common.CriticalRateLimitEnable = false
 	t.Cleanup(func() { common.CriticalRateLimitEnable = previousEnabled })
 
 	router := gin.New()
@@ -303,20 +352,7 @@ func TestSessionRefreshDoesNotSpendTheLoginBudget(t *testing.T) {
 	router.GET("/refresh", SessionRefreshRateLimit(), func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
-	router.GET("/login", CriticalRateLimit(), func(c *gin.Context) {
-		c.Status(http.StatusNoContent)
-	})
-
-	remoteAddr := "192.0.2.30:12345"
-	for i := 0; i < common.SessionRefreshRateLimitNum; i++ {
-		require.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/refresh", remoteAddr).Code, "refresh %d", i+1)
+	for i := 0; i <= common.SessionRefreshRateLimitNum; i++ {
+		require.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/refresh", "192.0.2.61:12345").Code)
 	}
-	limited := performRateLimitRequest(router, "/refresh", remoteAddr)
-	assert.Equal(t, http.StatusTooManyRequests, limited.Code)
-	assert.Equal(t, "60", limited.Header().Get("Retry-After"))
-
-	for i := 0; i < common.CriticalRateLimitNum; i++ {
-		require.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/login", remoteAddr).Code, "login %d", i+1)
-	}
-	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router, "/login", remoteAddr).Code)
 }

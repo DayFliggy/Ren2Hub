@@ -27,7 +27,7 @@ func Init() {
 }
 
 func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens int64) {
-	if info == nil {
+	if info == nil || !perf_metrics_setting.GetSetting().Enabled {
 		return
 	}
 	now := time.Now()

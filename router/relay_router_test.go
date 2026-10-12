@@ -5,12 +5,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -95,6 +98,14 @@ func TestListModelsSupportsOpenAIAndGeminiAuthentication(t *testing.T) {
 func setupRelayRouterTestDB(t *testing.T) {
 	t.Helper()
 	t.Setenv("CRYPTO_SECRET", "router-billing-evidence-fixture-secret")
+	// Relay fixtures replace Redis and database globals between cases. Metrics
+	// have their own suite; do not enqueue unrelated samples past fixture cleanup.
+	metricsEnabled := perf_metrics_setting.GetSetting().Enabled
+	metricsConfig := config.GlobalConfig.Get("perf_metrics_setting")
+	require.NoError(t, config.UpdateConfigFromMap(metricsConfig, map[string]string{"enabled": "false"}))
+	t.Cleanup(func() {
+		require.NoError(t, config.UpdateConfigFromMap(metricsConfig, map[string]string{"enabled": strconv.FormatBool(metricsEnabled)}))
+	})
 
 	gin.SetMode(gin.TestMode)
 	originalIsMasterNode := common.IsMasterNode
