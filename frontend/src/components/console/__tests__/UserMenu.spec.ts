@@ -10,6 +10,7 @@ vi.mock('vue-router', () => ({
 
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import UserMenu from '@/components/console/UserMenu.vue'
 
 beforeAll(async () => {
@@ -64,5 +65,24 @@ describe('UserMenu', () => {
 
     // 断言直接跳转到 security 路由，而不再弹出旧弹窗
     expect(routerPush).toHaveBeenCalledWith({ name: 'security' })
+  })
+
+  it('confirms the sign-out with a result message, not the button label', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'logout').mockResolvedValue()
+    const toast = useToast()
+    toast.toasts.splice(0)
+
+    const wrapper = mount(UserMenu, { global: { plugins: [i18n] } })
+    await wrapper.get('button[aria-haspopup="menu"]').trigger('click')
+    const logout = wrapper
+      .findAll('[data-user-menu-item]')
+      .find((item) => item.text() === '退出登录')
+    await logout!.trigger('click')
+    await flushPromises()
+
+    expect(auth.logout).toHaveBeenCalledOnce()
+    expect(toast.toasts.map((item) => item.message)).toEqual(['已退出登录'])
+    expect(routerPush).toHaveBeenCalledWith({ name: 'sign-in' })
   })
 })

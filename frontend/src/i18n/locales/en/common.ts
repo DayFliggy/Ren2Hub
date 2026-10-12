@@ -57,6 +57,7 @@ export default {
     increaseValue: 'Increase {item}',
     imagePreview: 'Image preview',
     logout: 'Sign out',
+    signedOut: 'Signed out',
     success: 'Success',
     failed: 'Failed',
     pending: 'Pending',

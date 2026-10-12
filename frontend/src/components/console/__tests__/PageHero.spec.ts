@@ -14,7 +14,7 @@ describe('PageHero accent rendering', () => {
 
     expect(heading.text()).toContain('&')
     expect(heading.classes()).toContain('gesture-mark')
-    const accent = heading.get('span')
+    const accent = heading.get('.brush-highlight')
     expect(accent.classes()).toContain('brush-highlight')
     expect(accent.classes()).not.toContain('brush-highlight--underline')
   })
@@ -37,7 +37,7 @@ describe('PageHero accent rendering', () => {
     expect(heading.classes()).not.toContain('gesture-mark')
     expect(heading.attributes('data-accent-variant')).toBe('underline')
 
-    const accent = heading.get('span')
+    const accent = heading.get('.brush-highlight')
     expect(accent.classes()).toContain('brush-highlight--underline')
     // The painted mark covers only the name: no separator, no period.
     expect(accent.text()).toBe('白日飞猪')
@@ -55,7 +55,7 @@ describe('PageHero accent rendering', () => {
     })
     const heading = wrapper.get('h1')
 
-    expect(heading.get('span').classes()).toContain(
+    expect(heading.get('.brush-highlight').classes()).toContain(
       'brush-highlight--underline'
     )
   })

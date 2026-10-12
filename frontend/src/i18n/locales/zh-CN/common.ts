@@ -55,6 +55,7 @@ export default {
     increaseValue: '增加 {item}',
     imagePreview: '图片预览',
     logout: '退出登录',
+    signedOut: '已退出登录',
     success: '成功',
     failed: '失败',
     pending: '处理中',

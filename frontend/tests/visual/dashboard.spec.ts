@@ -180,7 +180,7 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(desktopCell).toEqual({ width: 42, height: 22 })
+  expect(desktopCell).toEqual({ width: 42, height: 24 })
 
   await page.setViewportSize({ width: 390, height: 844 })
   const mobileCell = await card
@@ -190,7 +190,7 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(mobileCell).toEqual({ width: 32, height: 22 })
+  expect(mobileCell).toEqual({ width: 32, height: 24 })
   await assertNoHorizontalOverflow(page)
 })
 

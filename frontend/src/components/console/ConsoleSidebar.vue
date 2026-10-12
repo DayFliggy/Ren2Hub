@@ -143,7 +143,7 @@ defineExpose({ collapsed })
                   ? { name: item.route }
                   : undefined
               "
-              :href="!item.disabled && item.href ? item.href : undefined"
+              v-bind="!item.disabled && item.href ? { href: item.href } : {}"
               :type="
                 item.disabled || (!item.route && !item.href)
                   ? 'button'

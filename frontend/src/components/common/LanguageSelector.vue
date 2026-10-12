@@ -6,7 +6,7 @@
       class="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
       :class="
         variant === 'console'
-          ? 'flex h-11 w-11 items-center justify-center gap-1.5 rounded-full font-medium hover:bg-[var(--state-hover-layer)] sm:w-auto sm:px-3.5'
+          ? 'flex h-11 w-11 min-w-11 items-center justify-center gap-1.5 rounded-full font-medium hover:bg-[var(--state-hover-layer)] sm:w-auto sm:px-3.5'
           : 'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] hover:border-[var(--border-strong)] md:h-auto md:w-auto md:gap-1.5 md:px-3 md:py-1.5'
       "
       :aria-expanded="open"
@@ -45,6 +45,7 @@
       </svg>
       <span
         :class="variant === 'console' ? 'hidden sm:inline' : 'hidden md:inline'"
+        data-language-label
       >
         {{ currentLabel }}
       </span>

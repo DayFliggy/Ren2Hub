@@ -10,6 +10,7 @@ import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 
 import CommandPaletteModal from './CommandPaletteModal.vue'
+import ConsoleNavScroller from './ConsoleNavScroller.vue'
 import TopNavMenu from './TopNavMenu.vue'
 import UserMenu from './UserMenu.vue'
 
@@ -55,7 +56,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
     data-handdrawn="navigation-top"
   >
     <nav
-      class="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-1.5 px-3 sm:gap-3 sm:px-6 lg:px-8"
+      class="topbar-nav mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-1.5 px-3 sm:gap-3 sm:px-6 lg:h-16 lg:px-8"
     >
       <!-- brand (mobile only) -->
       <div class="flex min-w-0 items-center gap-2.5 lg:hidden">
@@ -90,7 +91,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
         <!-- search: underline-style hand-drawn feel -->
         <button
           type="button"
-          class="pencil-control search-trigger flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)] focus-ring md:w-auto md:justify-start md:pl-3.5"
+          class="pencil-control search-trigger topbar-search flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)] focus-ring md:w-auto md:justify-start md:pl-3.5"
           data-handdrawn="control"
           :aria-label="t('nav.search')"
           @click="searchOpen = true"
@@ -109,17 +110,19 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
           </svg>
-          <span class="hidden md:inline">{{ t('nav.search') }}</span>
+          <span class="topbar-control-label hidden md:inline">{{
+            t('nav.search')
+          }}</span>
           <kbd
-            class="hidden rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[10px] font-medium md:inline"
+            class="topbar-control-label hidden rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[10px] font-medium md:inline"
           >
             {{ searchShortcut }}
           </kbd>
         </button>
-        <LanguageSelector variant="console" />
+        <LanguageSelector variant="console" class="topbar-language" />
         <ThemeSwitcher variant="console" />
         <div
-          class="hidden h-6 w-px bg-[var(--border-default)] sm:mx-1 sm:block"
+          class="topbar-divider hidden h-6 w-px bg-[var(--border-default)] sm:mx-1 sm:block"
         />
         <UserMenu />
       </div>
@@ -127,36 +130,41 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
 
     <!-- Mobile nav strip: the active outline carries the hand-drawn tilt. -->
     <div
-      class="flex gap-1 overflow-x-auto border-t border-[var(--border-subtle)] px-3 py-2 lg:hidden"
+      class="border-t border-[var(--border-subtle)] lg:hidden"
       data-handdrawn="navigation-strip"
-      data-top-nav="mobile"
     >
-      <template v-for="item in mobileItems" :key="item.name">
-        <button
-          v-if="item.disabled"
-          type="button"
-          class="mobile-pill flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1.5 px-3.5 text-xs font-medium text-[var(--text-tertiary)] opacity-60"
-          :title="t('nav.comingSoon')"
-          disabled
-        >
-          {{ t(item.labelKey) }}
-          <span class="text-[10px]">{{ t('nav.comingSoon') }}</span>
-        </button>
-        <RouterLink
-          v-else-if="item.route"
-          :to="{ name: item.route }"
-          class="mobile-pill flex min-h-11 shrink-0 items-center px-3.5 text-xs font-medium transition-all"
-          :class="activeName === item.name ? 'active' : ''"
-          :style="
-            activeName === item.name
-              ? 'background:var(--accent);color:var(--accent-contrast)'
-              : 'color:var(--text-secondary)'
-          "
-          :aria-current="activeName === item.name ? 'page' : undefined"
-        >
-          {{ t(item.labelKey) }}
-        </RouterLink>
-      </template>
+      <ConsoleNavScroller
+        :active-key="activeName"
+        fade-surface="var(--surface-raised)"
+        data-top-nav="mobile"
+      >
+        <template v-for="item in mobileItems" :key="item.name">
+          <button
+            v-if="item.disabled"
+            type="button"
+            class="mobile-pill flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1.5 px-3.5 text-xs font-medium text-[var(--text-tertiary)] opacity-60"
+            :title="t('nav.comingSoon')"
+            disabled
+          >
+            {{ t(item.labelKey) }}
+            <span class="text-[10px]">{{ t('nav.comingSoon') }}</span>
+          </button>
+          <RouterLink
+            v-else-if="item.route"
+            :to="{ name: item.route }"
+            class="mobile-pill flex min-h-11 shrink-0 items-center px-3.5 text-xs font-medium transition-all"
+            :class="activeName === item.name ? 'active' : ''"
+            :style="
+              activeName === item.name
+                ? 'background:var(--accent);color:var(--accent-contrast)'
+                : 'color:var(--text-secondary)'
+            "
+            :aria-current="activeName === item.name ? 'page' : undefined"
+          >
+            {{ t(item.labelKey) }}
+          </RouterLink>
+        </template>
+      </ConsoleNavScroller>
     </div>
 
     <CommandPaletteModal :open="searchOpen" @close="searchOpen = false" />
@@ -169,6 +177,34 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
   border-bottom: 1px solid transparent;
   background-clip: padding-box;
   box-shadow: 0 1px 0 var(--dec-gold-line);
+  /* The bar's width already excludes the sidebar, expanded or collapsed. */
+  container: console-topbar / inline-size;
+}
+
+/*
+ * The desktop menu labels never wrap. Below 1120px of bar width the widest
+ * menu (English, administrator) needs the room of the search and language
+ * labels; below 920px it also takes part of the bar's side padding, and
+ * TopNavMenu tightens its pills at the same width. Below lg the menu is
+ * hidden, so the controls keep their labels.
+ */
+@media (min-width: 1024px) {
+  @container console-topbar (max-width: 1119px) {
+    .topbar-control-label,
+    .topbar-divider,
+    .topbar-language :deep([data-language-label]) {
+      display: none;
+    }
+    .topbar-search {
+      justify-content: center;
+      padding-inline: 0;
+    }
+  }
+  @container console-topbar (max-width: 919px) {
+    .topbar-nav {
+      padding-inline: 1rem;
+    }
+  }
 }
 
 /* Active mobile pill keeps its hit geometry fixed. */

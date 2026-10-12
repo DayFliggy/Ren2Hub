@@ -422,13 +422,15 @@ onMounted(() => void alignLatest())
  * Height contract. Below sm every period stacks the heatmap above the same
  * analytics block, so the root reserves the six-week month calendar height and
  * dense periods centre inside it. From sm the card stage owns the height (see
- * UsageDistributionCard) and the root shrinks to its content.
+ * UsageDistributionCard) and the root shrinks to its content. Day cells are
+ * 24px tall, the WCAG 2.2 minimum target size; the 2px row gap keeps the six
+ * weeks (169px with the weekday header) within the 170px stage.
  */
 .usage-heatmap {
   --usage-calendar-width: 32px;
-  --usage-calendar-height: 22px;
+  --usage-calendar-height: 24px;
   --usage-calendar-column-gap: 3px;
-  --usage-calendar-row-gap: 3px;
+  --usage-calendar-row-gap: 2px;
   --usage-calendar-header: 15px;
   display: flex;
   min-height: calc(

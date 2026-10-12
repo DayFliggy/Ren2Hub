@@ -470,3 +470,68 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     }
   })
 }
+
+// Production reports the commit hash as its version, and the success rate
+// stays empty until the last hour holds enough relay requests.
+for (const locale of ['zh-CN', 'en']) {
+  test(`a commit-hash version and an empty success rate fit the card (${locale})`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme: 'dark', authenticated: true })
+    await page.addInitScript(
+      (value) => localStorage.setItem('ren2hub_locale', value),
+      locale
+    )
+    await page.route(
+      /\/api\/next\/dashboard\/system-status(?:\?.*)?$/,
+      (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            message: '',
+            data: {
+              cpu_percent: 24.9,
+              cpu_cores: 4,
+              memory_used_gb: 1.9,
+              memory_total_gb: 15.6,
+              disk_used_gb: 16.3,
+              disk_total_gb: 197,
+              api_success_rate: null,
+            },
+          },
+        })
+    )
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+
+    const card = page.locator('[data-system-status-card]')
+    await expect(card.locator('[data-success-rate-empty]')).toHaveText(
+      locale === 'en' ? 'No data' : '暂无数据'
+    )
+    const version = card.locator('[data-system-version]')
+    await version.evaluate((node) => {
+      node.textContent = 'c7b249bb216d82d13e7cb33946172c9644896d4a'
+    })
+
+    for (const width of [320, 390, 1024, 1280, 1366, 2560]) {
+      await page.setViewportSize({ width, height: 900 })
+      const footer = await version.evaluate((node) => {
+        const label = node.previousElementSibling!.getBoundingClientRect()
+        const value = node.getBoundingClientRect()
+        const row = node.parentElement!.getBoundingClientRect()
+        return {
+          labelHeight: label.height,
+          valueHeight: value.height,
+          valueInside: value.left >= label.right && value.right <= row.right,
+        }
+      })
+      const context = `${width}px: ${JSON.stringify(footer)}`
+      // One 11px line each: the label never breaks, the hash truncates.
+      expect(footer.labelHeight, context).toBeLessThan(20)
+      expect(footer.valueHeight, context).toBeLessThan(20)
+      expect(footer.valueInside, context).toBe(true)
+      await expectHeaderFits(card)
+    }
+    await assertNoHorizontalOverflow(page)
+  })
+}
