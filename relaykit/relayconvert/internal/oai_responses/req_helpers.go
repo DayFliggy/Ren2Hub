@@ -63,7 +63,8 @@ func InputItems(raw []byte) ([]map[string]any, error) {
 }
 
 // keepToolOutputsAdjacent moves each tool output up to the run of calls that
-// requested it. Responses lets a client put a message between a call and its
+// requested it; reasoning items interleaved with the calls stay in the run.
+// Responses lets a client put a message between a call and its
 // output; Chat, Claude and Gemini reject a tool result that does not directly
 // follow its call. An output for a later call stays where the client put it.
 func keepToolOutputsAdjacent(items []map[string]any) []map[string]any {
@@ -79,10 +80,18 @@ func keepToolOutputsAdjacent(items []map[string]any) []map[string]any {
 			i++
 			continue
 		}
+		// A reasoning item between two calls belongs to the same parallel
+		// batch; reasoning after the last call stays with what follows it.
+		end := i
+		for j := i; j < len(items) && (isResponsesToolCall(items[j]) || isResponsesReasoning(items[j])); j++ {
+			if isResponsesToolCall(items[j]) {
+				end = j + 1
+			}
+		}
 		pending := make(map[string]bool)
-		for ; i < len(items) && isResponsesToolCall(items[i]); i++ {
+		for ; i < end; i++ {
 			ordered = append(ordered, items[i])
-			if callID := responsesCallID(items[i]); callID != "" {
+			if callID := responsesCallID(items[i]); isResponsesToolCall(items[i]) && callID != "" {
 				pending[callID] = true
 			}
 		}
@@ -102,6 +111,10 @@ func keepToolOutputsAdjacent(items []map[string]any) []map[string]any {
 func isResponsesToolCall(item map[string]any) bool {
 	itemType := strings.TrimSpace(kitutil.Interface2String(item["type"]))
 	return itemType == responsesInputTypeFunctionCall || itemType == responsesInputTypeCustomToolCall
+}
+
+func isResponsesReasoning(item map[string]any) bool {
+	return strings.TrimSpace(kitutil.Interface2String(item["type"])) == responsesInputTypeReasoning
 }
 
 func isResponsesToolOutput(item map[string]any) bool {

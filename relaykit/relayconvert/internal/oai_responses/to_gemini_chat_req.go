@@ -82,32 +82,8 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 		geminiRequest.SafetySettings = safetySettings
 	}
 
-	functions, err := RequestFunctionDeclarations(req.Tools)
-	if err != nil {
-		return nil, err
-	}
-	for i := range functions {
-		if params, ok := functions[i].Parameters.(map[string]any); ok {
-			if props, hasProps := params["properties"].(map[string]any); hasProps && len(props) == 0 {
-				functions[i].Parameters = nil
-				continue
-			}
-		}
-		functions[i].Parameters = sharedgemini.CleanFunctionParameters(functions[i].Parameters)
-	}
-	if len(functions) > 0 {
-		geminiRequest.SetTools([]dto.GeminiChatTool{
-			{FunctionDeclarations: functions},
-		})
-	}
-
-	toolChoice, err := RequestToolChoiceToChat(req.ToolChoice)
-	if err != nil {
-		return nil, err
-	}
-	if toolChoice != nil {
-		geminiRequest.ToolConfig = sharedgemini.OpenAIToolChoiceToConfig(toolChoice)
-	}
+	// Tools and tool_choice are declared by toolconv.AttachRequest, which
+	// decides between parameters and parametersJsonSchema for the model.
 
 	systemTexts := make([]string, 0)
 	if RawJSONPresent(req.Instructions) {

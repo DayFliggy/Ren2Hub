@@ -198,7 +198,6 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 		"invoices":              "disabled",
 		"invites":               "live",
 		"activity":              "live",
-		"lab":                   "disabled",
 		"farm":                  "disabled",
 		"bigame":                "disabled",
 	}

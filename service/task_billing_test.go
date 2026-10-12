@@ -541,6 +541,87 @@ func TestEmptyTaskCompletionPricesFrozenSubmitFacts(t *testing.T) {
 	}
 }
 
+// dropAttemptEstimate removes the attempt's persisted estimate, the state of an
+// attempt whose submit facts and estimate were never frozen.
+func dropAttemptEstimate(t *testing.T, task *model.Task) {
+	t.Helper()
+	require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Where("id = ?", task.PrivateData.BillingContext.AttemptID).
+		Updates(map[string]any{"estimate_usage": "", "estimate_charge": ""}).Error)
+}
+
+// Without frozen submit facts a priced fact the completion omits is unknown,
+// not its default: the task must not settle at the 720p silent price, and with
+// no estimate to fall back to the result is held for recovery.
+func TestTaskWithoutFrozenEstimateDoesNotPriceOmittedFacts(t *testing.T) {
+	schema := &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+		"resolution": {Type: "string", Enum: []string{"720p", "1080p"}, Source: billingexpr.UsageCompletionFact},
+		"audio":      {Type: "boolean", Source: billingexpr.UsageCompletionFact},
+		"watermark":  {Type: "boolean", Source: billingexpr.UsageCompletionFact},
+	}}
+	quote := taskExpressionTestQuote(t, `(u("resolution") == "1080p" ? 0.5 : 0.2) * (u("audio") == true ? 2 : 1)`, schema)
+	submitted := map[string]any{"resolution": "1080p", "audio": true}
+	for _, test := range []struct {
+		name    string
+		facts   map[string]any
+		omitted string
+	}{
+		{"no completion facts", nil, "[audio resolution]"},
+		{"empty completion facts", map[string]any{}, "[audio resolution]"},
+		{"partial completion facts", map[string]any{"resolution": "1080p"}, "[audio]"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			task := acceptedUsageTask(t, quote, submitted, 500000)
+			dropAttemptEstimate(t, task)
+			_, reason, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
+			require.Error(t, err)
+			assert.Nil(t, reason)
+			assert.ErrorIs(t, err, model.ErrBillingEstimateMissing)
+			assert.True(t, model.IsBillingEvidenceUnverifiable(err), "the result is held instead of settled or released")
+			assert.ErrorContains(t, err, test.omitted)
+			assert.Nil(t, task.PrivateData.BillingContext.Charge)
+		})
+	}
+
+	t.Run("held for recovery", func(t *testing.T) {
+		task := acceptedUsageTask(t, quote, submitted, 500000)
+		dropAttemptEstimate(t, task)
+		require.NoError(t, CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess}))
+		var persisted model.Task
+		require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+		assert.NotEqual(t, model.TaskStatusSuccess, persisted.Status)
+		assert.Equal(t, model.TaskSettlementBlockedEvidence, persisted.SettlementBlock)
+		var recovery model.BillingRecovery
+		require.NoError(t, model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error)
+		assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+		assert.Equal(t, 100000000, getUserQuota(t, task.UserId)+int(task.Quota), "only the reservation is held")
+	})
+
+	// A completion that reports every priced fact settles exactly; a declared
+	// fact the expression never reads stays optional.
+	for _, test := range []struct {
+		name  string
+		facts map[string]any
+		quota common.Quota
+	}{
+		{"every priced fact reported", map[string]any{"resolution": "720p", "audio": false}, 100000},
+		{"unpriced optional fact omitted", map[string]any{"resolution": "1080p", "audio": true}, 500000},
+		{"unpriced optional fact reported", map[string]any{"resolution": "1080p", "audio": false, "watermark": true}, 250000},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			task := acceptedUsageTask(t, quote, submitted, 500000)
+			dropAttemptEstimate(t, task)
+			quota, reason, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
+			require.NoError(t, err)
+			assert.Equal(t, test.quota, quota)
+			assert.Equal(t, common.NewMessage("Settled at the frozen quote"), reason)
+			usage := task.PrivateData.BillingContext.Usage
+			assert.Equal(t, "task_completed", usage.Source)
+			assert.Empty(t, usage.EstimatedFacts)
+			assert.Equal(t, test.facts, usage.ActualFacts)
+		})
+	}
+}
+
 // Submit facts are trusted only through the attempt estimate's own evidence.
 // Altered facts stop settlement explicitly: the task holds the result and its
 // reservation instead of settling at an estimate derived from the same row.

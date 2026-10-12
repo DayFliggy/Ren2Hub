@@ -62,7 +62,7 @@ export const meta = {
     en: "MiniMax Hailuo video generation (text-to-video, image-to-video, and MiniMax-H3 multimodal reference)",
     zh: "MiniMax 海螺视频生成（文生视频、图生视频、MiniMax-H3 多模态参考生视频）",
   },
-  version: "1.2.1+ren2hub.1",
+  version: "1.2.1+ren2hub.2",
   author: { name: "QuantumNous" },
   channelTypes: [35],
   models: [
@@ -574,7 +574,53 @@ export function parseTaskResult(ctx, body) {
   }
   const progress = status === "SUCCESS" || status === "FAILURE" ? "100%" : body.status === "Processing" ? "50%" : "30%";
   const reason = status === "FAILURE" ? "task failed" : "";
-  return { code: base.status_code || 0, status: status, progress: progress, reason: reason };
+  const result = { code: base.status_code || 0, status: status, progress: progress, reason: reason };
+  const fileID = trimmed(body.file_id);
+  if (status === "SUCCESS" && fileID) {
+    // Content requests reuse the signed link resolved here until it expires.
+    // A failed lookup only leaves content requests to resolve it themselves;
+    // it must not turn a finished, billed task into a failed poll.
+    try {
+      result.state = { download: { fileId: fileID, url: retrieveDownloadURL(ctx, fileID) } };
+    } catch (error) {
+      console.log("hailuo download link not cached at completion: " + error.message);
+    }
+  }
+  return result;
+}
+
+// Seconds before expiry at which a stored signed link is no longer handed
+// out, so a client starting the download still finds it valid.
+const DOWNLOAD_URL_MARGIN_SECONDS = 600;
+
+// MiniMax serves v1 videos only through the signed download_url that
+// /v1/files/retrieve returns.
+function retrieveDownloadURL(ctx, fileID) {
+  const response = utils.fetch({
+    url: ctx.baseUrl + "/v1/files/retrieve?file_id=" + encodeURIComponent(fileID),
+    headers: { Accept: "application/json", Authorization: "Bearer " + ctx.apiKey },
+  });
+  if (!response.body || typeof response.body !== "object") {
+    throw new Error("MiniMax file retrieve returned an unexpected response: HTTP " + response.status);
+  }
+  const base = response.body.base_resp || {};
+  if (response.status !== 200 || base.status_code) {
+    throw new Error("MiniMax file retrieve failed: " + (base.status_msg || "HTTP " + response.status));
+  }
+  const url = trimmed(response.body.file && response.body.file.download_url);
+  if (!url) throw new Error("artifact_not_found");
+  return url;
+}
+
+// The stored signed link of fileID while its Expires query parameter (Unix
+// seconds, as OSS signs it) leaves the margin; links without one are never reused.
+function storedDownloadURL(ctx, fileID) {
+  const download = ctx.state && ctx.state.download;
+  if (!download || download.fileId !== fileID) return "";
+  const url = trimmed(download.url);
+  const match = /[?&]Expires=(\d+)(?:&|$)/.exec(url);
+  if (!match || Number(match[1]) - utils.unixNow() < DOWNLOAD_URL_MARGIN_SECONDS) return "";
+  return url;
 }
 
 function artifactData(ctx) {
@@ -606,22 +652,10 @@ export function buildContentRequest(ctx) {
     if (!url) throw new Error("artifact_not_found");
     return { url: url, method: ctx.clientRequest.method, credentialless: true };
   }
-  // MiniMax serves v1 videos only through the signed download_url that
-  // /v1/files/retrieve returns. The link is signed for GET, so a HEAD client
-  // is served with GET as well; the host sends that client the headers only.
-  const response = utils.fetch({
-    url: ctx.baseUrl + "/v1/files/retrieve?file_id=" + encodeURIComponent(fileID),
-    headers: { Accept: "application/json", Authorization: "Bearer " + ctx.apiKey },
-  });
-  if (!response.body || typeof response.body !== "object") {
-    throw new Error("MiniMax file retrieve returned an unexpected response: HTTP " + response.status);
-  }
-  const base = response.body.base_resp || {};
-  if (response.status !== 200 || base.status_code) {
-    throw new Error("MiniMax file retrieve failed: " + (base.status_msg || "HTTP " + response.status));
-  }
-  const url = trimmed(response.body.file && response.body.file.download_url);
-  if (!url) throw new Error("artifact_not_found");
+  // The link is signed for GET, so a HEAD client is served with GET as well;
+  // the host sends that client the headers only. A link stored at completion
+  // is reused while valid, so client requests do not each query MiniMax.
+  const url = storedDownloadURL(ctx, fileID) || retrieveDownloadURL(ctx, fileID);
   return { url: url, method: "GET", credentialless: true };
 }
 

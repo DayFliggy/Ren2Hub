@@ -253,7 +253,15 @@ func applyModelControls(req dto.Request, parsed parsedModelModifiers) error {
 			// The shared Claude renderer still needs native controls after the
 			// suffix replaces the modeled reasoning settings.
 			if thinking := request.Thinking; thinking != nil && (len(thinking.BlockBinding) > 0 || len(thinking.Extra) > 0) {
-				request.Thinking = &dto.Thinking{BlockBinding: thinking.BlockBinding, Extra: thinking.Extra}
+				residual := &dto.Thinking{BlockBinding: thinking.BlockBinding, Extra: thinking.Extra}
+				// The renderer reads an empty type as enabled when it compares
+				// the request with the suffix. Keep a client's disable so a
+				// disabling suffix is not reported as overriding it. The
+				// rendered thinking replaces this type for every suffix.
+				if thinking.Type == "disabled" {
+					residual.Type = thinking.Type
+				}
+				request.Thinking = residual
 			} else {
 				request.Thinking = nil
 			}

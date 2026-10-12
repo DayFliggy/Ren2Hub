@@ -48,9 +48,8 @@ export const topNavItems: readonly TopNavItem[] = [
   },
   // Direct link into the workspace layout; its sub-nav lives in the sidebar.
   { name: 'console', labelKey: 'nav.console', route: consoleEntryRoute },
-  // Placeholder with no pages behind it, so it stays disabled even if the
-  // lab capability is reported live.
-  { name: 'alchemy', labelKey: 'nav.alchemy', feature: 'lab', disabled: true },
+  // Permanent placeholder with no pages or capability behind it.
+  { name: 'alchemy', labelKey: 'nav.alchemy', disabled: true },
   {
     name: 'community',
     labelKey: 'nav.community',

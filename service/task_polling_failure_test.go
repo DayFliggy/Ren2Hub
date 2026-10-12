@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/assert"
@@ -148,6 +149,36 @@ func TestPollCancellationDoesNotCountAsProviderFailure(t *testing.T) {
 	stored := reloadTask(t, task.ID)
 	assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
 	assert.Equal(t, 2, stored.PrivateData.PollFailures)
+}
+
+// saturatedPollAdaptor answers the poll but its result hook cannot resume on
+// a saturated plugin engine.
+type saturatedPollAdaptor struct{ scriptedPollAdaptor }
+
+func (a *saturatedPollAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) {
+	return nil, fmt.Errorf("plugin call could not resume after utils.fetch: %w", jsplugin.ErrCallAdmissionTimeout)
+}
+
+// Engine saturation is local capacity: the provider may already have billed
+// the job, so the poll is retried later without counting toward the cutoff
+// that fails and releases the task.
+func TestPollPluginEngineSaturationDoesNotCountAsFailure(t *testing.T) {
+	truncate(t)
+	previous := constant.TaskPollMaxFailures
+	constant.TaskPollMaxFailures = 1
+	t.Cleanup(func() { constant.TaskPollMaxFailures = previous })
+	task := seedFailurePollTask(t, 508, 508)
+	adaptor := &saturatedPollAdaptor{scriptedPollAdaptor{status: http.StatusOK, body: `{"status":"SUCCESS"}`}}
+
+	for range 3 {
+		err := pollOnce(t, adaptor, task)
+		require.ErrorIs(t, err, jsplugin.ErrCallAdmissionTimeout)
+		assert.ErrorContains(t, err, "poll deferred")
+	}
+	stored := reloadTask(t, task.ID)
+	assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
+	assert.Zero(t, stored.PrivateData.PollFailures)
+	assert.Equal(t, task.Quota, stored.Quota)
 }
 
 // A running immediate result is accepted as an asynchronous task: the

@@ -1,12 +1,14 @@
 package plugins_test
 
 import (
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -162,6 +164,49 @@ func TestHailuoArtifactContentProxy(t *testing.T) {
 			assert.Equal(t, &channel.TaskContentRequest{URL: signedURL, Method: http.MethodGet, Credentialless: true}, descriptor)
 		})
 	}
+}
+
+// The completion poll resolves the signed link once and stores it in plugin
+// state; content requests reuse it until shortly before its Expires time
+// instead of querying MiniMax with the channel key on every GET or HEAD.
+func TestHailuoArtifactContentReusesCompletionLink(t *testing.T) {
+	service.InitHttpClient()
+	retrieves := 0
+	expires := time.Now().Add(time.Hour).Unix()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/files/retrieve", r.URL.Path)
+		retrieves++
+		url := fmt.Sprintf("https://bucket.example/video.mp4?Expires=%d&Signature=sig%d", expires, retrieves)
+		_, _ = w.Write([]byte(`{"file":{"download_url":"` + url + `"},"base_resp":{"status_code":0}}`))
+	}))
+	defer upstream.Close()
+	adaptor := taskplugin.New(loadHailuoPlugin(t))
+	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ApiKey: "test-ak", ChannelBaseUrl: upstream.URL}})
+
+	body := []byte(`{"task_id":"up-1","status":"Success","file_id":"f1","base_resp":{"status_code":0}}`)
+	task := &model.Task{TaskID: "task-public", Status: model.TaskStatusInProgress, Data: body}
+	info, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK}, body)
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusSuccess, info.Status)
+	require.Equal(t, 1, retrieves)
+	task.Status, task.PrivateData.PluginState = model.TaskStatusSuccess, info.PluginState
+
+	stored := fmt.Sprintf("https://bucket.example/video.mp4?Expires=%d&Signature=sig1", expires)
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		descriptor, err := adaptor.BuildContentRequest(t.Context(), task, "video", channel.TaskArtifactClientRequest{Method: method})
+		require.NoError(t, err)
+		assert.Equal(t, &channel.TaskContentRequest{URL: stored, Method: http.MethodGet, Credentialless: true}, descriptor)
+	}
+	assert.Equal(t, 1, retrieves, "a valid stored link needs no retrieve call")
+
+	// A link that is expired or about to expire is resolved again.
+	expired, err := common.Marshal(map[string]any{"download": map[string]any{"fileId": "f1", "url": "https://bucket.example/video.mp4?Expires=1&Signature=old"}})
+	require.NoError(t, err)
+	task.PrivateData.PluginState = expired
+	descriptor, err := adaptor.BuildContentRequest(t.Context(), task, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
+	require.NoError(t, err)
+	assert.Equal(t, 2, retrieves)
+	assert.Contains(t, descriptor.URL, "Signature=sig2")
 }
 
 func loadHailuoPlugin(t *testing.T) *jsplugin.LoadedPlugin {

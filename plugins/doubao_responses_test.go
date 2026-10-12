@@ -393,6 +393,11 @@ func TestDoubaoSeedanceUsageFacts(t *testing.T) {
 			{"1.5 pro", pro15, map[string]any{
 				"model": pro15, "prompt": "a cat", "metadata": map[string]any{"duration": -1, "resolution": "720p"},
 			}, float64(-1), "259200"},
+			// Frame metadata must not lower the -1 reservation below the
+			// longest duration Ark can bill (241 frames would be 10 s).
+			{"2.0 with frames", v20, map[string]any{
+				"model": v20, "prompt": "a cat", "seconds": -1, "metadata": map[string]any{"frames": 241, "resolution": "720p"},
+			}, float64(-1), "324000"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				info := &relaycommon.RelayInfo{
@@ -417,6 +422,29 @@ func TestDoubaoSeedanceUsageFacts(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.wantTokens, facts["tokens"])
 			})
+		}
+
+		// Seedance 1.0 cannot pick its own length: -1 is a local 400, not
+		// a request forwarded to Ark.
+		for _, model := range []string{pro10, "doubao-seedance-1-0-lite-t2v", "doubao-seedance-1-0-lite-i2v"} {
+			info := &relaycommon.RelayInfo{
+				ChannelMeta:     &relaycommon.ChannelMeta{ChannelBaseUrl: doubaoBaseURL, UpstreamModelName: model},
+				OriginModelName: model,
+				TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public", Action: "text_to_video"},
+			}
+			adaptor := taskplugin.New(plugin)
+			adaptor.Init(info)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+			c.Set("task_request", map[string]any{"model": model, "prompt": "a cat", "metadata": map[string]any{"duration": -1}})
+			taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+			if taskErr == nil {
+				_, err := adaptor.BuildRequestBody(c, info)
+				require.ErrorContains(t, err, model+" does not accept duration -1")
+				continue
+			}
+			assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode, model)
+			assert.Contains(t, taskErr.Message, model+" does not accept duration -1")
 		}
 
 		decode := func(body map[string]any) (any, error) {

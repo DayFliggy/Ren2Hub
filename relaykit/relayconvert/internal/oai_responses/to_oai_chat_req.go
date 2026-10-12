@@ -20,6 +20,7 @@ const (
 	responsesInputTypeFunctionCallOutput = "function_call_output"
 	responsesInputTypeCustomToolCall     = "custom_tool_call"
 	responsesInputTypeCustomToolOutput   = "custom_tool_call_output"
+	responsesInputTypeReasoning          = "reasoning"
 )
 
 const (
@@ -206,6 +207,11 @@ func responsesInputItemToChatMessages(item map[string]any, messages []dto.Messag
 		return nil, nil, errors.New("compaction_trigger requires native Responses")
 	case "compaction":
 		return nil, nil, errors.New("compaction item requires native Responses")
+	case responsesInputTypeReasoning:
+		// Chat has no input slot for prior reasoning, and the Claude and Gemini
+		// converters skip it as well. An empty user turn here would split the
+		// surrounding tool-call batch.
+		return messages, nil, nil
 	case responsesInputTypeFunctionCall:
 		toolCall, err := responsesFunctionCallItemToChatToolCall(item)
 		if err != nil {

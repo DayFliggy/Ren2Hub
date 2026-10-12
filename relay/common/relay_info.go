@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -659,6 +660,12 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	return info
 }
 
+// AnthropicBetaHeaderValue is the normalized anthropic-beta list that Claude,
+// Bedrock and Vertex send upstream and that billing header() reads.
+func AnthropicBetaHeaderValue(header http.Header) string {
+	return strings.Join(common.NormalizeHeaderListValues(header.Values("anthropic-beta")), ",")
+}
+
 func cloneRequestHeaders(c *gin.Context) map[string]string {
 	if c == nil || c.Request == nil {
 		return nil
@@ -667,8 +674,19 @@ func cloneRequestHeaders(c *gin.Context) map[string]string {
 		return nil
 	}
 	headers := make(map[string]string, len(c.Request.Header))
-	for key := range c.Request.Header {
-		value := strings.TrimSpace(c.Request.Header.Get(key))
+	for key, values := range c.Request.Header {
+		// Repeated lines are one field value (RFC 9110 section 5.3); keeping
+		// only the first line would hide later lines from billing header().
+		var value string
+		switch http.CanonicalHeaderKey(key) {
+		case "Anthropic-Beta":
+			// Billing must price the same beta list that is sent upstream.
+			value = AnthropicBetaHeaderValue(http.Header{"Anthropic-Beta": values})
+		case "Cookie":
+			value = strings.TrimSpace(strings.Join(values, "; "))
+		default:
+			value = strings.TrimSpace(strings.Join(values, ","))
+		}
 		if value == "" {
 			continue
 		}

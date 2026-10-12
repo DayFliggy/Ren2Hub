@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -38,12 +37,7 @@ func formatRequest(requestBody io.Reader, requestHeader http.Header) (*AwsClaude
 	awsClaudeRequest.AnthropicVersion = "bedrock-2023-05-31"
 
 	// check header anthropic-beta
-	var betas []string
-	for beta := range strings.SplitSeq(requestHeader.Get("anthropic-beta"), ",") {
-		if beta = strings.TrimSpace(beta); beta != "" {
-			betas = append(betas, beta)
-		}
-	}
+	betas := common.NormalizeHeaderListValues(requestHeader.Values("anthropic-beta"))
 	if len(betas) > 0 {
 		betaJSON, err := common.Marshal(betas)
 		if err != nil {

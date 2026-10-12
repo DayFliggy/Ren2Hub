@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -188,9 +189,24 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 		facts, err := model.FrozenTaskUsageFacts(task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
 		// Facts that fail verification keep the task for the next attempt
 		// instead of settling at the estimate derived from those same facts.
-		// An attempt that never persisted an estimate merges from nothing.
 		if err != nil && !errors.Is(err, model.ErrBillingEstimateMissing) {
 			return 0, nil, nil, err
+		}
+		// Without a persisted estimate the submit facts are unknown, so a
+		// priced fact the completion omits would read as missing and silently
+		// take the expression's else branch. Neither an exact price nor an
+		// estimate exists then: the result is held for recovery.
+		if err != nil {
+			var omitted []string
+			for key := range billingexpr.UsedUsageKeys(snapshot.Quote.PriceVersion.Expression) {
+				if _, reported := result.UsageFacts[key]; !reported {
+					omitted = append(omitted, key)
+				}
+			}
+			if len(omitted) > 0 {
+				slices.Sort(omitted)
+				return 0, nil, nil, fmt.Errorf("%w: task %s has no frozen submit facts and its completion omits priced usage %v: %w", billing.ErrEvaluationEvidence, task.TaskID, omitted, err)
+			}
 		}
 		submitted = facts
 	}

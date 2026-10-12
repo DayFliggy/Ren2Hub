@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -97,7 +96,7 @@ func shouldAppendClaudeBetaQuery(info *relaycommon.RelayInfo) bool {
 
 func CommonClaudeHeadersOperation(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) {
 	// common headers operation
-	anthropicBeta := strings.Join(c.Request.Header.Values("anthropic-beta"), ",")
+	anthropicBeta := relaycommon.AnthropicBetaHeaderValue(c.Request.Header)
 	if anthropicBeta != "" {
 		req.Set("anthropic-beta", anthropicBeta)
 	}

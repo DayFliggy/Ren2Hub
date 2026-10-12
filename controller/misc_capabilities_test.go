@@ -24,7 +24,6 @@ func TestFrontendCapabilitiesAreFlatStatuses(t *testing.T) {
 	for _, feature := range []string{
 		"marketplace",
 		"invoices",
-		"lab",
 		"farm",
 		"bigame",
 	} {

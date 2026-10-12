@@ -123,3 +123,19 @@ func TestGeminiJSONSchemaUpstreamReceivesResponsesOutputSchemaUnchanged(t *testi
 	_, err = ConvertRequest(context.Background(), geminiSchemaMeta(types.ConversionLossPolicyStrict, false), types.RelayFormatGemini, request)
 	require.ErrorContains(t, err, "text.format.schema: Gemini response schema cannot carry")
 }
+
+// Responses function tools take the same parametersJsonSchema decision as
+// Chat tools: the Responses converter itself declares no tools.
+func TestGeminiJSONSchemaUpstreamReceivesResponsesToolSchemaUnchanged(t *testing.T) {
+	const parameters = `{"type":"object","properties":{"mode":{"const":"fast"}}}`
+	request := &dto.OpenAIResponsesRequest{}
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"gemini-3.7-flash","input":"hi","tools":[{"type":"function","name":"set_mode","parameters":`+parameters+`}]}`), request))
+
+	result, err := ConvertRequest(context.Background(), geminiSchemaMeta(types.ConversionLossPolicySafe, true), types.RelayFormatGemini, request)
+	require.NoError(t, err)
+	encoded := marshaledField(t, result.Value)
+	declarations := gjson.Get(encoded, "tools.#.functionDeclarations|@flatten")
+	require.Len(t, declarations.Array(), 1)
+	assert.JSONEq(t, parameters, declarations.Get("0.parametersJsonSchema").Raw)
+	assert.False(t, declarations.Get("0.parameters").Exists())
+}

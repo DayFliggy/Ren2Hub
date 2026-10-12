@@ -7,6 +7,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import { dateInputValue } from '@/utils/format'
 import { decimalToQuota } from '@/utils/quota'
 import type { AdminRedemptionCreateInput } from '@/types/console'
 
@@ -69,9 +70,18 @@ const canSubmit = computed(() => {
     return false
   }
   if (value <= 0n) return false
-  if (expiryOption.value === 'custom' && !customDate.value) return false
+  if (expiryOption.value === 'custom' && !Number.isFinite(customExpiry()))
+    return false
   return true
 })
+
+// The picked date is a local calendar day the code stays valid through, so
+// it expires at the end of that local day. This keeps "today" (the picker's
+// minimum) usable; a bare YYYY-MM-DD would parse as UTC midnight.
+function customExpiry(): number {
+  if (!customDate.value) return NaN
+  return new Date(`${customDate.value}T23:59:59`).getTime()
+}
 
 function computeExpiredTime(): number {
   switch (expiryOption.value) {
@@ -83,10 +93,8 @@ function computeExpiredTime(): number {
       return Math.floor(Date.now() / 1000) + 3 * 86_400
     case '7d':
       return Math.floor(Date.now() / 1000) + 7 * 86_400
-    case 'custom': {
-      const timestamp = new Date(customDate.value).getTime()
-      return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : -1
-    }
+    case 'custom':
+      return Math.floor(customExpiry() / 1000)
   }
 }
 
@@ -138,7 +146,7 @@ function submit() {
           v-model="customDate"
           type="date"
           class="mt-2 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
-          :min="new Date().toISOString().slice(0, 10)"
+          :min="dateInputValue()"
         />
       </FormField>
 

@@ -86,10 +86,7 @@ describe('top navigation', () => {
   })
 
   it('renders the desktop menu by role and marks the ops route active', async () => {
-    const admin = mount(
-      TopNavMenu,
-      await setup(10, { admin: 'live', lab: 'live' })
-    )
+    const admin = mount(TopNavMenu, await setup(10, { admin: 'live' }))
     await flushPromises()
     const buttons = admin.findAll('button')
     expect(buttons.slice(0, 5).map((button) => button.text())).toEqual([
@@ -99,7 +96,7 @@ describe('top navigation', () => {
       '控制台',
       '炼金室',
     ])
-    // The alchemy placeholder has no pages, so a live capability cannot enable it.
+    // The alchemy placeholder has no pages, so it is always disabled.
     expect(buttons[4]!.attributes()).toHaveProperty('disabled')
     expect(admin.get('[aria-current="page"]').text()).toBe('运维监控')
 
@@ -109,7 +106,7 @@ describe('top navigation', () => {
   })
 
   it('renders the mobile strip from the same definition', async () => {
-    const options = await setup(10, { admin: 'live', lab: 'live' })
+    const options = await setup(10, { admin: 'live' })
     const topbar = mount(ConsoleTopbar, {
       global: {
         ...options.global,

@@ -1,6 +1,7 @@
 // Seedance capabilities from the Ark model list, not prices: the output
 // resolutions each model offers, the longest output duration in seconds
-// (duration -1 lets Seedance 1.5 pro and 2.x pick a length up to it), whether
+// (autoDuration: duration -1 lets Seedance 1.5 pro and 2.x pick a length up
+// to it; Seedance 1.0 rejects -1), whether
 // it accepts reference video input (Seedance 2.x prices video-to-video tokens
 // separately) and whether audio output is priced separately (Seedance 1.5 pro;
 // generate_audio defaults to true). Seedance 1.0 lite is no longer listed and
@@ -9,16 +10,17 @@ const VIDEO_MODELS = {
   "doubao-seedance-1-0-pro-250528": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12 },
   "doubao-seedance-1-0-lite-t2v": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12 },
   "doubao-seedance-1-0-lite-i2v": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12 },
-  "doubao-seedance-1-5-pro-251215": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12, audio: true },
-  "doubao-seedance-2-0-260128": { resolutions: ["480p", "720p", "1080p", "4k"], maxDuration: 15, videoInput: true },
-  "doubao-seedance-2-0-fast-260128": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true },
-  "doubao-seedance-2-0-mini-260615": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true },
-  "doubao-seedance-2-5-260628": { resolutions: ["480p", "720p", "1080p"], maxDuration: 30, videoInput: true },
+  "doubao-seedance-1-5-pro-251215": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12, audio: true, autoDuration: true },
+  "doubao-seedance-2-0-260128": { resolutions: ["480p", "720p", "1080p", "4k"], maxDuration: 15, videoInput: true, autoDuration: true },
+  "doubao-seedance-2-0-fast-260128": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true, autoDuration: true },
+  "doubao-seedance-2-0-mini-260615": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true, autoDuration: true },
+  "doubao-seedance-2-5-260628": { resolutions: ["480p", "720p", "1080p"], maxDuration: 30, videoInput: true, autoDuration: true },
 };
 // Every Ark resolution tier; an endpoint ID reached through channel mapping
-// without a declared profile keeps them all and the longest Seedance duration.
+// without a declared profile keeps them all, the longest Seedance duration and
+// duration -1.
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
-const DEFAULT_VIDEO_PROFILE = { resolutions: SEEDANCE_RESOLUTIONS, maxDuration: 30, videoInput: true };
+const DEFAULT_VIDEO_PROFILE = { resolutions: SEEDANCE_RESOLUTIONS, maxDuration: 30, videoInput: true, autoDuration: true };
 
 // Protocol capabilities from the Ark image generation API reference, not prices.
 // presets: accepted `size` resolution tiers; minPixels/maxPixels bound `WxH` sizes.
@@ -311,7 +313,7 @@ export const meta = {
     en: "Volcengine Doubao Seedance video generation and Seedream image generation",
     zh: "火山引擎豆包 Seedance 视频生成与 Seedream 图片生成",
   },
-  version: "1.3.0+ren2hub.1",
+  version: "1.3.0+ren2hub.2",
   author: { name: "QuantumNous" },
   channelTypes: [54, 45], // VolcEngine-type channels serve Ark video models with the same wire format
   models: Object.keys(VIDEO_MODELS).concat(Object.keys(IMAGE_MODELS)),
@@ -454,6 +456,24 @@ function frameDuration(frames) {
   const bounded = utils.decimal.bounded(frames, 1, 86400, true);
   const seconds = Number.parseInt(utils.decimal.divide(bounded, 24), 10);
   return seconds > 0 ? seconds : 5;
+}
+
+// Seconds the reservation is estimated at. -1 asks Ark to pick the length and
+// is rejected for models that cannot; it and a missing duration reserve the
+// longest output, so the reservation never falls below what Ark can bill.
+// Frame metadata only sizes a request without a duration.
+function reservedSeconds(ctx) {
+  const req = ctx.requestBody || {};
+  const metadata = req.metadata || {};
+  const profile = videoProfile(ctx);
+  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
+  if (raw !== undefined && Number(raw) === -1) {
+    if (!profile.autoDuration) throw new Error(trimmed(ctx.upstreamModel || ctx.model) + " does not accept duration -1");
+    return profile.maxDuration;
+  }
+  if (raw !== undefined) return utils.decimal.bounded(raw, 0, 3600, false);
+  if (metadata.frames !== undefined) return frameDuration(metadata.frames);
+  return profile.maxDuration;
 }
 
 function videoInputRatio(model, resolution, content) {
@@ -823,8 +843,10 @@ export function buildSubmitRequest(ctx) {
   }
   const req = ctx.requestBody;
   const metadata = req.metadata || {};
-  // Reject output tiers the model does not offer before any quota is reserved.
+  // Reject output tiers and durations the model does not offer before any
+  // quota is reserved.
   videoResolution(ctx);
+  reservedSeconds(ctx);
   const body = Object.assign({ model: req.model || "", content: [] }, metadata);
   const imageContent = [];
   const images = Array.isArray(req.images) ? req.images : [];
@@ -881,13 +903,7 @@ export function extractUsage(ctx) {
     return ratio === 1 ? null : { video_input_ratio: ratio };
   }
   const profile = videoProfile(ctx);
-  // A missing duration or -1 (the model picks the length; Seedance 2.5
-  // defaults to it) reserves the longest duration the model can produce.
-  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
-  let seconds;
-  if (raw !== undefined && Number(raw) !== -1) seconds = utils.decimal.bounded(raw, 0, 3600, false);
-  else if (metadata.frames !== undefined) seconds = frameDuration(metadata.frames);
-  else seconds = profile.maxDuration;
+  const seconds = reservedSeconds(ctx);
   const resolution = videoResolution(ctx);
   const facts = { tokens: utils.decimal.number(estimateTokens(seconds, resolution)), resolution: resolution };
   // Every model reports video_input, including those whose profile omits it:

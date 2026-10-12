@@ -17,6 +17,7 @@ import (
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 
@@ -851,6 +852,15 @@ func failTaskPolls(ctx context.Context, tasks []*model.Task, class string, statu
 	// next owner can retry it normally.
 	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
+	}
+	// A plugin call that could not get an execution slot back (for example
+	// after utils.fetch on a saturated engine) is local capacity, not a
+	// provider answer: the provider may already have finished and billed the
+	// job, so it must not count toward giving the task up and releasing it.
+	// The task stays as stored and the next pass polls it again.
+	if errors.Is(cause, jsplugin.ErrCallAdmissionTimeout) {
+		logger.LogWarn(ctx, common.LogText("Task poll deferred, plugin engine saturated: %d tasks", len(tasks)))
+		return fmt.Errorf("poll deferred: plugin engine saturated: %w", cause)
 	}
 	reason := constant.TaskFailReasonPollGaveUp
 	if class == pollClassNotFound {

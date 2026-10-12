@@ -492,7 +492,6 @@ export async function configureStablePage(
           audit: 'live',
           marketplace: 'disabled',
           invoices: 'disabled',
-          lab: 'disabled',
           farm: 'disabled',
           bigame: 'disabled',
         },
