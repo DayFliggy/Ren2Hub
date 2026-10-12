@@ -65,14 +65,15 @@ const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
   { key: 'type', label: t('keys.colType'), width: '110px' },
   { key: 'key', label: t('keys.colKey') },
-  { key: 'status', label: t('keys.colStatus') },
-  { key: 'usage', label: t('keys.colUsage'), align: 'right' },
-  { key: 'expired_time', label: t('keys.colExpired') },
+  { key: 'status', label: t('keys.colStatus'), width: '100px' },
+  { key: 'usage', label: t('keys.colUsage'), align: 'right', width: '150px' },
+  { key: 'expired_time', label: t('keys.colExpired'), width: '120px' },
+  // Five 32px actions, their gaps and the cell padding.
   {
     key: 'actions',
     label: t('keys.colActions'),
     align: 'right',
-    width: '180px',
+    width: '200px',
   },
 ])
 
@@ -222,7 +223,7 @@ onBeforeUnmount(() => {
         <KeyEndpointStrip />
       </template>
     </PageBreadcrumb>
-    <ConsoleCard :padded="false">
+    <ConsoleCard class="key-list" :padded="false">
       <!-- toolbar -->
       <div class="flex flex-wrap items-center gap-3 p-4">
         <SearchInput
@@ -259,7 +260,7 @@ onBeforeUnmount(() => {
 
       <DataTable
         v-model:selected="selected"
-        class="hidden md:block"
+        class="key-list-table"
         :columns="columns"
         :rows="rows"
         row-key="id"
@@ -297,6 +298,7 @@ onBeforeUnmount(() => {
               {{ (row as TokenSummary).key_preview }}
             </span>
             <IconButton
+              class="shrink-0"
               :label="t('common.copy')"
               @click="copyKey(row as TokenSummary)"
             >
@@ -323,7 +325,7 @@ onBeforeUnmount(() => {
         <template #cell-status="{ row }">
           <button
             type="button"
-            class="rounded transition-opacity hover:opacity-70 focus-ring"
+            class="inline-flex min-h-6 items-center rounded transition-opacity hover:opacity-70 focus-ring"
             :disabled="togglingIds.has((row as TokenSummary).id)"
             :aria-label="t('keys.toggleKey')"
             @click.stop="toggleStatus(row as TokenSummary)"
@@ -343,7 +345,7 @@ onBeforeUnmount(() => {
         <template #cell-usage="{ row }">
           <button
             type="button"
-            class="text-xs text-right focus-ring"
+            class="text-xs text-right break-keep focus-ring"
             @click.stop="billingToken = row as TokenSummary"
           >
             {{ t('billing.used') }}
@@ -483,7 +485,7 @@ onBeforeUnmount(() => {
         </template>
       </DataTable>
 
-      <div class="md:hidden">
+      <div class="key-list-cards">
         <div
           v-if="loading"
           data-key-mobile-loading
@@ -579,3 +581,23 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
+
+<style scoped>
+/* The card width, not the viewport, decides whether the table fits: the
+   sidebar takes 0-220px of the same viewport. Below 60rem the table's columns
+   wrap into tall rows, so the card list is used instead. */
+.key-list {
+  container-type: inline-size;
+}
+.key-list-table {
+  display: none;
+}
+@container (min-width: 60rem) {
+  .key-list-table {
+    display: block;
+  }
+  .key-list-cards {
+    display: none;
+  }
+}
+</style>

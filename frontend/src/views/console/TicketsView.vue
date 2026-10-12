@@ -49,12 +49,14 @@ const statusOptions = computed(() => [
   { value: 'closed', label: t('tickets.status.closed') },
 ])
 
+// Fixed columns fit their longest values ("2026-10-12", "Account") so the
+// title keeps about 200px when the table is at its 720px minimum width.
 const columns = computed<TableColumn[]>(() => [
   { key: 'title', label: t('tickets.colTitle') },
-  { key: 'category', label: t('tickets.colCategory'), width: '110px' },
-  { key: 'created', label: t('tickets.colCreated'), width: '150px' },
-  { key: 'updated', label: t('tickets.colUpdated'), width: '150px' },
-  { key: 'status', label: t('tickets.colStatus'), width: '110px' },
+  { key: 'category', label: t('tickets.colCategory'), width: '100px' },
+  { key: 'created', label: t('tickets.colCreated'), width: '120px' },
+  { key: 'updated', label: t('tickets.colUpdated'), width: '120px' },
+  { key: 'status', label: t('tickets.colStatus'), width: '100px' },
   { key: 'actions', label: '', width: '80px', align: 'right' },
 ])
 
@@ -183,7 +185,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
         <template #cell-title="{ row }">
           <button
             type="button"
-            class="display-title max-w-xs truncate text-left font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--accent-text)]"
+            class="display-title -my-0.5 min-h-6 max-w-full truncate text-left font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--accent-text)]"
+            :title="(row as TicketRow).title"
             @click="openDetail((row as TicketRow).id)"
           >
             {{ (row as TicketRow).title }}

@@ -254,28 +254,19 @@ const accountStats = computed(() => [
                 >{{ tier.progress }}%</strong
               >
             </span>
+            <!-- While the benefits page is deferred this is a status note, not
+                 a control, so it is not focusable or announced as a button. -->
+            <span v-if="farmDisabled" class="px-1 text-[var(--text-tertiary)]">
+              {{ t('nav.comingSoon') }}
+            </span>
             <button
+              v-else
               type="button"
-              class="inline-flex items-center gap-1 rounded-md px-1 text-[var(--accent-text)] transition-opacity focus-ring"
-              :class="
-                farmDisabled
-                  ? 'cursor-not-allowed opacity-50'
-                  : 'hover:opacity-70'
-              "
-              :disabled="farmDisabled"
-              :title="farmDisabled ? t('nav.comingSoon') : undefined"
+              class="-my-1 inline-flex min-h-6 items-center gap-1 rounded-md px-1 text-[var(--accent-text)] transition-opacity hover:opacity-70 focus-ring"
               @click="router.push({ name: 'farm' })"
             >
-              {{
-                farmDisabled
-                  ? t('nav.comingSoon')
-                  : t('profile.viewTierBenefits')
-              }}
-              <ArrowUpRight
-                v-if="!farmDisabled"
-                :size="13"
-                aria-hidden="true"
-              />
+              {{ t('profile.viewTierBenefits') }}
+              <ArrowUpRight :size="13" aria-hidden="true" />
             </button>
           </div>
         </div>
