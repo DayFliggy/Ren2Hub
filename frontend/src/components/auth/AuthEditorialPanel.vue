@@ -95,10 +95,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="auth-panel relative hidden min-h-full flex-col justify-center overflow-hidden px-10 py-12 lg:flex xl:px-16"
+    class="auth-panel relative hidden flex-col overflow-hidden px-10 py-12 lg:flex xl:px-16"
   >
-    <!-- 点阵地球：右下角落沉入，纸面上的静谧星球。收到角落后不再压信任清单，
-         也不再被 overflow-hidden 裁掉半个球。 -->
+    <!-- 点阵地球随叙事区收放，沉入右下角，避开左侧信任清单。 -->
     <canvas
       ref="globeEl"
       class="pointer-events-none absolute -bottom-[16%] -right-[8%] h-[58%] w-[72%] opacity-0 transition-opacity duration-1000"
@@ -112,7 +111,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 中部：标语 + 诗意大标题 + 信任要点 -->
-    <div class="panel-measure panel-gap relative z-10">
+    <div class="panel-measure relative z-10">
       <p
         class="panel-kicker flex items-center gap-3 text-xs tracking-[0.3em] text-[var(--text-tertiary)]"
       >
@@ -197,10 +196,8 @@ onBeforeUnmount(() => {
       </ul>
     </div>
 
-    <!-- 底部：SUPPORT 标注 + 真实运行数据。三个内容块在整栏高度内垂直居中，
-         与表单卡同轴；高屏不再把脚注钉在视口底部、中间留出一大片空白。
-         面板本身仍撑满整栏，点阵地球继续沉入视口右下角。 -->
-    <div class="panel-measure panel-gap relative z-10">
+    <!-- 底部：运行数据与上方叙事分区，超高屏下仍留在有界的内容区内。 -->
+    <div class="panel-measure relative z-10">
       <div class="h-px w-full bg-[var(--border-default)]" />
       <p
         class="panel-status mt-5 flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]"
@@ -229,6 +226,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* 恢复流程、主叙事、状态三段层次。高度有上限，避免高屏把脚注推至屏幕底部；
+   只有最小高度，矮屏和长文案可自然撑开，不裁切内容。 */
+.auth-panel {
+  align-self: center;
+  min-height: min(calc(100svh - var(--auth-header-height)), 70rem);
+  justify-content: space-between;
+  gap: clamp(1.5rem, 3.5vh, 4rem);
+}
+
 .auth-huiwen-title,
 .auth-huiwen-title span {
   font-family: 'Ren2AuthHuiwen', var(--font-display);
@@ -244,12 +250,6 @@ onBeforeUnmount(() => {
   max-width: 34rem;
 }
 
-/* 块间距随视口高度收放：矮屏（英文四行标题的压力位）收紧到 24px 不多撑滚动，
-   高屏放开到 4rem 的编辑级呼吸。定值 margin 在 1024×820 + 英文下会多溢出 40px。 */
-.panel-gap {
-  margin-top: clamp(1.5rem, 3.5vh, 4rem);
-}
-
 @media (min-width: 1280px) {
   .panel-measure {
     max-width: 38rem;
@@ -258,16 +258,12 @@ onBeforeUnmount(() => {
 
 @media (min-width: 1441px) {
   .panel-measure {
-    max-width: none;
+    max-width: 64rem;
   }
 
   .auth-huiwen-title span {
     font-size: clamp(3.75rem, min(3.4vw, 8vh), 6rem);
     text-wrap: balance;
-  }
-
-  .panel-gap {
-    margin-top: clamp(2rem, min(2.5vw, 4.2vh), 4.5rem);
   }
 
   .panel-kicker,

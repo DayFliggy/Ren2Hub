@@ -47,7 +47,7 @@ const app = useAppStore()
       </div>
     </header>
 
-    <!-- 主体：左叙事 + 右表单卡，两栏内容都在剩余高度内垂直居中 -->
+    <!-- 主体：左侧分区叙事，右侧表单卡垂直居中。 -->
     <div
       class="auth-body auth-container mx-auto grid w-full max-w-[1440px] flex-1 lg:grid-cols-[1fr_minmax(420px,480px)] lg:gap-10 lg:px-8 xl:gap-16 xl:px-12"
     >
@@ -67,6 +67,14 @@ const app = useAppStore()
 </template>
 
 <style scoped>
+.auth-layout {
+  --auth-header-height: 4rem;
+}
+
+.auth-header {
+  height: var(--auth-header-height);
+}
+
 /* Sketch radius + elevation come from the theme fork: hand-drawn card by day,
    Material card by night. */
 .auth-card {
@@ -78,6 +86,7 @@ const app = useAppStore()
    spacing also depend on height so an ultrawide, short display stays usable. */
 @media (min-width: 1441px) {
   .auth-layout {
+    --auth-header-height: clamp(4rem, min(3.3vw, 7vh), 6rem);
     --auth-body-size: clamp(0.875rem, min(0.66vw, 1.6vh), 1.125rem);
     --auth-caption-size: clamp(0.75rem, min(0.55vw, 1.4vh), 0.9375rem);
     --auth-control-size: clamp(3rem, min(2.1vw, 5vh), 3.75rem);
@@ -87,10 +96,6 @@ const app = useAppStore()
   .auth-container {
     max-width: clamp(90rem, calc(70vw + 27rem), 160rem);
     padding-inline: clamp(3rem, calc(1.43vw + 1.71rem), 5rem);
-  }
-
-  .auth-header {
-    height: clamp(4rem, min(3.3vw, 7vh), 6rem);
   }
 
   .auth-brand-mark {
