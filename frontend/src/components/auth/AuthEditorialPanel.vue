@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
     <!-- 中部：标语 + 诗意大标题 + 信任要点 -->
     <div class="panel-measure panel-gap relative z-10">
       <p
-        class="flex items-center gap-3 text-xs tracking-[0.3em] text-[var(--text-tertiary)]"
+        class="panel-kicker flex items-center gap-3 text-xs tracking-[0.3em] text-[var(--text-tertiary)]"
       >
         <span>{{ t('auth.editorial.word1') }}</span>
         <span class="text-[var(--accent)]">·</span>
@@ -137,7 +137,9 @@ onBeforeUnmount(() => {
 
       <div class="mt-10 h-px w-full bg-[var(--border-default)]" />
 
-      <ul class="mt-8 space-y-4 text-sm text-[var(--text-secondary)]">
+      <ul
+        class="panel-promises mt-8 space-y-4 text-sm text-[var(--text-secondary)]"
+      >
         <li class="flex items-center gap-3.5">
           <svg
             width="16"
@@ -201,14 +203,14 @@ onBeforeUnmount(() => {
     <div class="panel-measure panel-gap relative z-10">
       <div class="h-px w-full bg-[var(--border-default)]" />
       <p
-        class="mt-5 flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]"
+        class="panel-status mt-5 flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]"
       >
         <span
           class="inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
         />
         {{ t('auth.editorial.statusLabel') }}
       </p>
-      <div class="mt-3 flex flex-wrap gap-x-8 gap-y-1.5">
+      <div class="panel-stats mt-3 flex flex-wrap gap-x-8 gap-y-1.5">
         <p
           v-for="s in stats"
           :key="s.label"
@@ -251,6 +253,41 @@ onBeforeUnmount(() => {
 @media (min-width: 1280px) {
   .panel-measure {
     max-width: 38rem;
+  }
+}
+
+@media (min-width: 1441px) {
+  .panel-measure {
+    max-width: none;
+  }
+
+  .auth-huiwen-title span {
+    font-size: clamp(3.75rem, min(3.4vw, 8vh), 6rem);
+    text-wrap: balance;
+  }
+
+  .panel-gap {
+    margin-top: clamp(2rem, min(2.5vw, 4.2vh), 4.5rem);
+  }
+
+  .panel-kicker,
+  .panel-status {
+    font-size: var(--auth-caption-size);
+  }
+
+  .panel-promises,
+  .panel-stats p {
+    font-size: var(--auth-body-size);
+    line-height: 1.6;
+  }
+
+  .panel-promises > li + li {
+    margin-top: var(--auth-field-gap);
+  }
+
+  .panel-promises svg {
+    width: 1.15em;
+    height: 1.15em;
   }
 }
 </style>

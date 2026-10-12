@@ -10,8 +10,11 @@ import {
 } from './fixtures'
 
 const heroViewports = [
-  { name: 'ultra-wide', width: 2560, height: 1264, titleSize: 64 },
-  { name: 'wide-desktop', width: 1920, height: 1080, titleSize: 64 },
+  { name: '4k', width: 3840, height: 2160, titleSize: 102.2 },
+  { name: 'ultrawide-monitor', width: 3440, height: 1440, titleSize: 102.2 },
+  { name: 'ultra-wide', width: 2560, height: 1264, titleSize: 102.2 },
+  { name: 'short-ultra-wide', width: 2560, height: 768, titleSize: 58.4 },
+  { name: 'wide-desktop', width: 1920, height: 1080, titleSize: 77.87 },
   { name: 'desktop', width: 1440, height: 900, titleSize: 58.4 },
   { name: 'short-desktop', width: 1366, height: 768, titleSize: 58.4 },
   { name: 'small-desktop', width: 1024, height: 768, titleSize: 54.4 },
@@ -233,9 +236,17 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
           geometry.hero.bottom + 1
         )
       }
-      if (viewport.width >= 1280) {
+      if (viewport.width >= 1280 && viewport.width <= 1440) {
         expect(geometry.navMaxWidth).toBeCloseTo(1280, 0)
         expect(geometry.navWidth).toBeCloseTo(1280, 0)
+      } else if (viewport.width > 1440) {
+        // Large displays retain the standard desktop proportions; the copy
+        // grows with its container, while exceptionally wide screens are capped.
+        expect(geometry.navWidth).toBeGreaterThanOrEqual(
+          Math.min(viewport.width * 0.85, 2560)
+        )
+        expect(geometry.navWidth).toBeLessThanOrEqual(2560)
+        expect(geometry.copy.width).toBeGreaterThan(800)
       }
       if (viewport.width >= 1024) {
         // One container: the brand, the signal rail and the Hero copy share
@@ -806,3 +817,37 @@ test('runtime motion starts only when motion is allowed', async ({ page }) => {
     )
     .toBe(true)
 })
+
+for (const theme of ['light', 'dark'] as VisualTheme[]) {
+  test(`${theme} English wide Hero preserves the two-column composition`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme, authenticated: true })
+    await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+    await page.goto('/')
+    await waitForStablePage(page)
+    for (const viewport of [
+      { width: 1920, height: 1080 },
+      { width: 2560, height: 768 },
+      { width: 2560, height: 1264 },
+      { width: 3840, height: 2160 },
+    ]) {
+      await page.setViewportSize(viewport)
+      await waitForStablePage(page)
+      await freezeAndInspectHomeCanvas(page)
+      const geometry = await inspectHeroGeometry(page)
+      expect(geometry.hero.height).toBeCloseTo(viewport.height, 0)
+      expect(overlapArea(geometry.focus, geometry.copy)).toBe(0)
+      const lead = page.locator('.hero-title > span').first()
+      const glyphs = await lead.evaluate((element) => {
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        return range.getBoundingClientRect().toJSON()
+      })
+      expect(glyphs.left).toBeGreaterThanOrEqual(geometry.copy.left - 1)
+      expect(glyphs.right).toBeLessThanOrEqual(geometry.copy.right + 1)
+      await assertInteractiveCentersVisible(page)
+      await assertNoHorizontalOverflow(page)
+    }
+  })
+}

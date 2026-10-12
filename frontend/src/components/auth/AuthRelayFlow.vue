@@ -562,6 +562,54 @@ html.dark .relay__seal {
   line-height: 1.5;
 }
 
+/* The diagram expands with the editorial column: increase its nodes and
+   labels as well as the track length, without scaling the surrounding UI. */
+@media (min-width: 1441px) {
+  .relay {
+    --relay-stage-height: clamp(90px, min(4.7vw, 11vh), 140px);
+    --relay-hub-size: clamp(30px, min(1.6vw, 4vh), 48px);
+    grid-template-columns:
+      minmax(0, 1fr) calc(var(--relay-hub-size) + 6px)
+      clamp(88px, 4.6vw, 144px) max-content;
+    grid-template-rows: var(--relay-stage-height) auto;
+    column-gap: clamp(10px, 0.65vw, 20px);
+  }
+
+  .relay__fan,
+  .relay__upstream {
+    height: var(--relay-stage-height);
+  }
+
+  .relay__hub-chip,
+  .relay__hub-ring {
+    width: var(--relay-hub-size);
+    height: var(--relay-hub-size);
+  }
+
+  .relay__hub-brand {
+    width: calc(var(--relay-hub-size) * 2 / 3);
+    height: calc(var(--relay-hub-size) * 2 / 3);
+  }
+
+  .relay__node,
+  .relay__chip {
+    height: calc(var(--relay-stage-height) * 22 / 90);
+  }
+
+  .relay__chip {
+    width: calc(var(--relay-stage-height) * 17 / 90);
+  }
+
+  .relay__name,
+  .relay__label {
+    font-size: var(--auth-caption-size);
+  }
+
+  .relay__label--hub {
+    font-size: calc(var(--auth-caption-size) * 0.85);
+  }
+}
+
 /* reduced-motion：关掉所有动画，定格在分支途中构图（三条支线各有接驳车） */
 @media (prefers-reduced-motion: reduce) {
   .relay {

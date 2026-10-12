@@ -1279,7 +1279,7 @@ export async function freezeAndInspectHomeCanvas(page: Page): Promise<void> {
     const target = element as HTMLCanvasElement
     const context = target.getContext('2d')
     if (!context || target.width === 0 || target.height === 0) {
-      return { distinct: 0, changed: 0, samples: 0 }
+      return { distinct: 0, changed: 0, samples: 0, area: 0 }
     }
 
     const image = context.getImageData(0, 0, target.width, target.height)
@@ -1306,11 +1306,23 @@ export async function freezeAndInspectHomeCanvas(page: Page): Promise<void> {
       }
     }
 
-    return { distinct: colors.size, changed, samples }
+    const rect = target.getBoundingClientRect()
+    return {
+      distinct: colors.size,
+      changed,
+      samples,
+      area: rect.width * rect.height,
+    }
   })
 
   expect(pixels.distinct).toBeGreaterThan(24)
-  expect(pixels.changed).toBeGreaterThan(pixels.samples * 0.01)
+  // Fixed-size map landmarks occupy a smaller fraction of a 4K canvas. Keep
+  // the required painted area at the 2560px reference, rather than requiring
+  // additional decoration merely because the background has more empty pixels.
+  const referenceArea = Math.min(pixels.area, 2560 * 1440)
+  expect((pixels.changed / pixels.samples) * pixels.area).toBeGreaterThan(
+    referenceArea * 0.01
+  )
 
   const frameChecksum = () =>
     canvas.evaluate((element) => {
