@@ -190,17 +190,19 @@ for (const theme of ['light', 'dark'] as const) {
       ).toHaveCount(1)
       await expect(countdowns).toHaveText('距结束 3250 天 00:00:00')
       await assertNoHorizontalOverflow(page)
+      await expect
+        .poll(() =>
+          page
+            .locator('img')
+            .evaluateAll((images) =>
+              images.every((img) => img.complete && img.naturalWidth > 0)
+            )
+        )
+        .toBe(true)
       await page.screenshot({
         path: testInfo.outputPath('activity-clock.png'),
         fullPage: true,
       })
-      expect(
-        await page
-          .locator('img')
-          .evaluateAll((images) =>
-            images.every((img) => img.complete && img.naturalWidth > 0)
-          )
-      ).toBe(true)
       expect(failures).toEqual([])
     })
   }
