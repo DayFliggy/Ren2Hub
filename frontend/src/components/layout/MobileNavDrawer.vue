@@ -12,7 +12,7 @@
       >
         <button
           type="button"
-          class="mobile-nav-drawer__backdrop absolute inset-0 cursor-default backdrop-blur-sm"
+          class="mobile-nav-drawer__backdrop absolute inset-0 cursor-default backdrop-blur-[4px]"
           style="background: var(--drawer-backdrop)"
           data-hero-canvas-boundary
           tabindex="-1"
@@ -22,7 +22,7 @@
 
         <aside
           ref="panel"
-          class="mobile-nav-drawer__panel relative flex h-full w-[min(86vw,22rem)] flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] shadow-[var(--overlay-shadow)] backdrop-blur-2xl"
+          class="mobile-nav-drawer__panel relative flex h-full w-[min(86vw,22rem)] flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-2xl"
           data-hero-canvas-boundary
           data-handdrawn="navigation-drawer"
           role="dialog"
@@ -66,7 +66,7 @@
           </div>
 
           <nav class="mt-10" :aria-label="t('nav.navigation')">
-            <ul class="space-y-2">
+            <ul class="sibling-space-y-2">
               <li>
                 <div
                   class="flex min-h-14 items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 text-[var(--text-secondary)]"

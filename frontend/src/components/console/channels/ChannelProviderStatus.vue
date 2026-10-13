@@ -54,7 +54,7 @@ onBeforeUnmount(() => controller?.abort())
 </script>
 <template>
   <section
-    class="mt-4 space-y-3 border-t border-[var(--border-subtle)] pt-4 text-sm"
+    class="mt-4 sibling-space-y-3 border-t border-[var(--border-subtle)] pt-4 text-sm"
     :aria-busy="busy"
   >
     <header class="flex flex-wrap items-center justify-between gap-3">
@@ -122,7 +122,7 @@ onBeforeUnmount(() => controller?.abort())
         <summary>
           {{ t('channels.providerMetrics') }} ({{ data.metrics.length }})
         </summary>
-        <dl class="mt-2 space-y-2">
+        <dl class="mt-2 sibling-space-y-2">
           <div
             v-for="(metric, index) in data.metrics"
             :key="index"

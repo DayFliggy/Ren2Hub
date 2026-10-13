@@ -6,7 +6,7 @@ It is an engineering compliance artifact and should be kept with Docker images, 
 Scope: direct dependencies from `go.mod`, `frontend/package.json`, and `electron/package.json`.
 Transitive dependencies should be audited before a final external release.
 
-Inventory basis: Go rows list the direct `require` entries of `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod` at the versions the root module builds with; npm versions are resolved by `frontend/bun.lock` and `electron/package-lock.json`. Frontend license identifiers were checked against installed package metadata; Electron identifiers come from its lockfile. Go license identifiers were checked against each module's `LICENSE`, `LICENCE` or `COPYING` file in the local module cache. A Go module imported only by tests is listed with the test scope.
+Inventory basis: Go rows list the direct `require` entries of `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod` at the versions the root module builds with; npm versions are resolved by `frontend/bun.lock` and `electron/bun.lock`. npm versions and license identifiers are checked against installed package metadata after frozen-lockfile installation. Go license identifiers were checked against each module's `LICENSE`, `LICENCE` or `COPYING` file in the local module cache. A Go module imported only by tests is listed with the test scope.
 
 The local `github.com/QuantumNous/new-api/relaykit` and `github.com/QuantumNous/new-api/tokenkit` replacements are first-party source and are excluded from the third-party inventory. They use direct third-party modules already listed below. Development and test tools are listed separately from production dependencies. The inventory does not replace package-specific license texts and notices; retain those supplied with each distributed dependency.
 
@@ -54,7 +54,7 @@ The local `github.com/QuantumNous/new-api/relaykit` and `github.com/QuantumNous/
 | backend  | production  | Go        | `github.com/jinzhu/copier`                              | `v0.4.0`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/joho/godotenv`                              | `v1.5.1`                             | MIT                                          |
 | backend  | test        | Go        | `github.com/json-iterator/go`                           | `v1.1.12`                            | MIT                                          |
-| backend  | production  | Go        | `github.com/klauspost/compress`                         | `v1.18.0`                            | BSD-3-Clause; bundled files: Apache-2.0, MIT |
+| backend  | production  | Go        | `github.com/klauspost/compress`                         | `v1.18.7`                            | BSD-3-Clause; bundled files: Apache-2.0, MIT |
 | backend  | production  | Go        | `github.com/mewkiz/flac`                                | `v1.0.13`                            | Unlicense                                    |
 | backend  | production  | Go        | `github.com/nicksnyder/go-i18n/v2`                      | `v2.6.1`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/pkg/errors`                                 | `v0.9.1`                             | BSD-2-Clause                                 |
@@ -86,37 +86,37 @@ The local `github.com/QuantumNous/new-api/relaykit` and `github.com/QuantumNous/
 | backend  | production  | Go        | `gorm.io/driver/mysql`                                  | `v1.5.7`                             | MIT                                          |
 | backend  | production  | Go        | `gorm.io/driver/postgres`                               | `v1.5.9`                             | MIT                                          |
 | backend  | production  | Go        | `gorm.io/gorm`                                          | `v1.25.12`                           | MIT                                          |
-| frontend | production  | npm       | `@vueuse/core`                                          | `14.3.0`                             | MIT                                          |
-| frontend | production  | npm       | `axios`                                                 | `1.18.1`                             | MIT                                          |
-| frontend | production  | npm       | `echarts`                                               | `6.1.0`                              | Apache-2.0                                   |
-| frontend | production  | npm       | `lucide-vue-next`                                       | `1.0.0`                              | ISC                                          |
-| frontend | production  | npm       | `marked`                                                | `18.0.5`                             | MIT                                          |
-| frontend | production  | npm       | `pinia`                                                 | `4.0.2`                              | MIT                                          |
-| frontend | production  | npm       | `vue`                                                   | `3.5.40`                             | MIT                                          |
-| frontend | production  | npm       | `vue-i18n`                                              | `11.4.8`                             | MIT                                          |
-| frontend | production  | npm       | `vue-router`                                            | `5.2.0`                              | MIT                                          |
-| frontend | development | npm       | `@eslint/js`                                            | `10.0.1`                             | MIT                                          |
-| frontend | development | npm       | `@playwright/test`                                      | `1.62.0`                             | Apache-2.0                                   |
-| frontend | development | npm       | `@types/node`                                           | `26.1.1`                             | MIT                                          |
-| frontend | development | npm       | `@vitejs/plugin-vue`                                    | `6.0.8`                              | MIT                                          |
-| frontend | development | npm       | `@vue/test-utils`                                       | `2.4.11`                             | MIT                                          |
-| frontend | development | npm       | `autoprefixer`                                          | `10.5.4`                             | MIT                                          |
-| frontend | development | npm       | `eslint`                                                | `10.8.0`                             | MIT                                          |
-| frontend | development | npm       | `eslint-config-prettier`                                | `10.1.8`                             | MIT                                          |
-| frontend | development | npm       | `eslint-plugin-vue`                                     | `10.10.0`                            | MIT                                          |
-| frontend | development | npm       | `globals`                                               | `17.8.0`                             | MIT                                          |
-| frontend | development | npm       | `jsdom`                                                 | `27.4.0`                             | MIT                                          |
-| frontend | development | npm       | `postcss`                                               | `8.5.25`                             | MIT                                          |
-| frontend | development | npm       | `prettier`                                              | `3.9.6`                              | MIT                                          |
-| frontend | development | npm       | `tailwindcss`                                           | `3.4.19`                             | MIT                                          |
-| frontend | development | npm       | `typescript`                                            | `5.9.3`                              | Apache-2.0                                   |
-| frontend | development | npm       | `typescript-eslint`                                     | `8.65.0`                             | MIT                                          |
-| frontend | development | npm       | `vite`                                                  | `8.1.5`                              | MIT                                          |
-| frontend | development | npm       | `vitest`                                                | `4.1.10`                             | MIT                                          |
-| frontend | development | npm       | `vue-tsc`                                               | `3.3.8`                              | MIT                                          |
-| electron | development | npm       | `cross-env`                                             | `7.0.3`                              | MIT                                          |
-| electron | development | npm       | `electron`                                              | `39.8.10`                            | MIT                                          |
-| electron | development | npm       | `electron-builder`                                      | `26.15.3`                            | MIT                                          |
+| frontend | production  | npm       | `@vueuse/core`                                           | `14.3.0`                               | MIT                                          |
+| frontend | production  | npm       | `axios`                                                  | `1.20.0`                               | MIT                                          |
+| frontend | production  | npm       | `echarts`                                                | `6.1.0`                                | Apache-2.0                                   |
+| frontend | production  | npm       | `lucide-vue-next`                                        | `1.0.0`                                | ISC                                          |
+| frontend | production  | npm       | `marked`                                                 | `18.0.5`                               | MIT                                          |
+| frontend | production  | npm       | `pinia`                                                  | `4.0.2`                                | MIT                                          |
+| frontend | production  | npm       | `vue`                                                    | `3.5.43`                               | MIT                                          |
+| frontend | production  | npm       | `vue-i18n`                                               | `11.4.8`                               | MIT                                          |
+| frontend | production  | npm       | `vue-router`                                             | `5.2.0`                                | MIT                                          |
+| frontend | production  | npm       | `yaml`                                                   | `2.9.0`                                | ISC                                          |
+| frontend | development | npm       | `@eslint/js`                                             | `10.0.1`                               | MIT                                          |
+| frontend | development | npm       | `@playwright/test`                                       | `1.62.0`                               | Apache-2.0                                   |
+| frontend | development | npm       | `@tailwindcss/vite`                                      | `4.3.3`                                | MIT                                          |
+| frontend | development | npm       | `@types/node`                                            | `26.1.1`                               | MIT                                          |
+| frontend | development | npm       | `@vitejs/plugin-vue`                                     | `6.0.8`                                | MIT                                          |
+| frontend | development | npm       | `@vue/test-utils`                                        | `2.4.11`                               | MIT                                          |
+| frontend | development | npm       | `eslint`                                                 | `10.8.0`                               | MIT                                          |
+| frontend | development | npm       | `eslint-config-prettier`                                 | `10.1.8`                               | MIT                                          |
+| frontend | development | npm       | `eslint-plugin-vue`                                      | `10.10.0`                              | MIT                                          |
+| frontend | development | npm       | `globals`                                                | `17.8.0`                               | MIT                                          |
+| frontend | development | npm       | `jsdom`                                                  | `27.4.0`                               | MIT                                          |
+| frontend | development | npm       | `prettier`                                               | `3.9.6`                                | MIT                                          |
+| frontend | development | npm       | `tailwindcss`                                            | `4.3.3`                                | MIT                                          |
+| frontend | development | npm       | `typescript`                                             | `5.9.3`                                | Apache-2.0                                   |
+| frontend | development | npm       | `typescript-eslint`                                      | `8.65.0`                               | MIT                                          |
+| frontend | development | npm       | `vite`                                                   | `8.1.5`                                | MIT                                          |
+| frontend | development | npm       | `vitest`                                                 | `4.1.11`                               | MIT                                          |
+| frontend | development | npm       | `vue-tsc`                                                | `3.3.8`                                | MIT                                          |
+| electron | development | npm       | `cross-env`                                              | `7.0.3`                                | MIT                                          |
+| electron | development | npm       | `electron`                                               | `41.10.6`                              | MIT                                          |
+| electron | development | npm       | `electron-builder`                                       | `26.15.3`                              | MIT                                          |
 
 ## License Texts
 

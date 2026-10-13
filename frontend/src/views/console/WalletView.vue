@@ -207,7 +207,7 @@ onMounted(() => void loadStats())
       />
     </div>
 
-    <div class="space-y-6">
+    <div class="sibling-space-y-6">
       <FlowChart :flow="flow" />
       <TopupRecords :refresh-key="refreshKey" />
     </div>

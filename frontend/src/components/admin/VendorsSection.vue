@@ -311,7 +311,7 @@ defineExpose({ openCreate, reload: load })
           <template #cell-model_count="{ row }">
             <RouterLink
               :to="modelsLink(row as VendorRow)"
-              class="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--accent-text)] transition-colors hover:bg-[var(--accent-soft)]/80 focus-ring"
+              class="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--accent-text)] transition-colors focus-ring"
             >
               {{ linkedCount(row as VendorRow) }}
             </RouterLink>
@@ -355,10 +355,10 @@ defineExpose({ openCreate, reload: load })
         <div class="md:hidden">
           <div
             v-if="loading"
-            class="divide-y divide-[var(--border-subtle)]"
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
             aria-hidden="true"
           >
-            <div v-for="i in 5" :key="i" class="space-y-3 p-4">
+            <div v-for="i in 5" :key="i" class="sibling-space-y-3 p-4">
               <SkeletonBlock rounded="md" class="h-4 w-1/2" />
               <SkeletonBlock rounded="md" class="h-10" />
             </div>
@@ -370,7 +370,7 @@ defineExpose({ openCreate, reload: load })
             illustration="empty-search"
           />
           <template v-else>
-            <div class="space-y-2.5 p-3">
+            <div class="sibling-space-y-2.5 p-3">
               <div
                 v-for="vendor in rows"
                 :key="vendor.id"

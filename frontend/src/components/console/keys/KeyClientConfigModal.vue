@@ -88,7 +88,7 @@ function download() {
     size="lg"
     @close="emit('close')"
   >
-    <div class="space-y-4">
+    <div class="sibling-space-y-4">
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="text-sm text-[var(--text-secondary)]"
           >{{ t('client') }}
@@ -126,7 +126,7 @@ function download() {
       <div
         v-if="error"
         role="alert"
-        class="space-y-2 text-sm text-[var(--status-danger-text)]"
+        class="sibling-space-y-2 text-sm text-[var(--status-danger-text)]"
       >
         <p>{{ error }}</p>
         <ConsoleButton variant="secondary" @click="load">{{
@@ -146,7 +146,7 @@ function download() {
           class="text-xs text-[var(--text-secondary)]"
         >
           <p class="font-medium">{{ t('diagnostics') }}</p>
-          <ul class="mt-2 list-inside list-disc space-y-1">
+          <ul class="mt-2 list-inside list-disc sibling-space-y-1">
             <li v-for="(item, index) in configuration.diagnostics" :key="index">
               {{ item.model ? `${item.model}: ` : ''
               }}{{ te(item.code) ? t(item.code) : item.code }}

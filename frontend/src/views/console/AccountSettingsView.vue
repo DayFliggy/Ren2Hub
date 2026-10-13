@@ -20,7 +20,7 @@ const auth = useAuthStore()
 </script>
 
 <template>
-  <div class="space-y-6" data-handdrawn-page="settings">
+  <div class="sibling-space-y-6" data-handdrawn-page="settings">
     <PageHero
       v-if="!props.embedded"
       :title="t('settings.title')"

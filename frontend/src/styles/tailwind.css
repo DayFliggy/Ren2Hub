@@ -1,0 +1,160 @@
+/* Keep Preflight and utilities unlayered, like the previous generated CSS.
+   Vue scoped styles and the semantic theme retain their existing priority. */
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/preflight.css';
+@import './tailwind-defaults.css';
+@import 'tailwindcss/utilities.css' source(none);
+
+@source '../';
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant hover (&:hover);
+
+@theme inline {
+  --color-white: rgb(var(--palette-white));
+  --color-black: rgb(var(--palette-black));
+  --color-brand-50: rgb(var(--palette-brand-50));
+  --color-brand-100: rgb(var(--palette-brand-100));
+  --color-brand-200: rgb(var(--palette-brand-200));
+  --color-brand-300: rgb(var(--palette-brand-300));
+  --color-brand-400: rgb(var(--palette-brand-400));
+  --color-brand-500: rgb(var(--palette-brand-500));
+  --color-brand-600: rgb(var(--palette-brand-600));
+  --color-brand-700: rgb(var(--palette-brand-700));
+  --color-brand-800: rgb(var(--palette-brand-800));
+  --color-brand-900: rgb(var(--palette-brand-900));
+  --color-honey-50: rgb(var(--palette-accent-50));
+  --color-honey-100: rgb(var(--palette-accent-100));
+  --color-honey-200: rgb(var(--palette-accent-200));
+  --color-honey-300: rgb(var(--palette-accent-300));
+  --color-honey-400: rgb(var(--palette-accent-400));
+  --color-honey-500: rgb(var(--palette-accent-500));
+  --color-honey-600: rgb(var(--palette-accent-600));
+  --color-honey-700: rgb(var(--palette-accent-700));
+  --color-honey-800: rgb(var(--palette-accent-800));
+  --color-honey-900: rgb(var(--palette-accent-900));
+  --font-sans:
+    'Ren2Inter', 'Ren2NotoSansSC', 'Inter', system-ui, -apple-system,
+    'Segoe UI', 'Roboto', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    sans-serif;
+  --font-mono:
+    'Ren2JetBrainsMono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace,
+    'SFMono-Regular', 'Menlo', monospace;
+  --font-serif:
+    'Ren2NotoSerifSC', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --ease-spring-snappy: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@theme {
+  /* v3 used fixed line boxes below 5xl; nested arbitrary sizes inherit them. */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+  --default-ring-width: 3px;
+  --default-ring-color: #3b82f6;
+  --blur-xs: 2px;
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl:
+    0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in: fadeIn 0.6s ease-out both;
+  --animate-rise-in: riseIn 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+  --animate-scale-in: scaleIn 0.24s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* Cancel independent utilities as v3 transform animations did. CSS-wide
+     initial survives production minification, unlike redundant none values. */
+  @keyframes riseIn {
+    from {
+      opacity: 0;
+      translate: initial;
+      rotate: initial;
+      scale: initial;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      translate: initial;
+      rotate: initial;
+      scale: initial;
+      transform: translateY(0);
+    }
+  }
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      translate: initial;
+      rotate: initial;
+      scale: initial;
+      transform: scale(0.96) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      translate: initial;
+      rotate: initial;
+      scale: initial;
+      transform: scale(1) translateY(0);
+    }
+  }
+}
+
+/* A responsive font size reset its line height in v3. Do not let v4's
+   --tw-leading carry a base leading utility across that reset; a leading
+   utility at the same breakpoint still follows the font-size utility. */
+@utility text-* {
+  font-size: --value(--text-*);
+  line-height: --value(--text-* --line-height);
+}
+
+/* Preserve sibling spacing and hidden-node handling from the existing views.
+   v4's built-in space/divide utilities target a different child. */
+@utility sibling-space-y-* {
+  & > :not([hidden]) ~ :not([hidden]) {
+    margin-top: calc(var(--spacing) * --value(number));
+    margin-bottom: 0;
+  }
+}
+
+@utility sibling-divide-y {
+  & > :not([hidden]) ~ :not([hidden]) {
+    border-top-width: 1px;
+    border-bottom-width: 0;
+  }
+}
+
+@utility sibling-divide-x {
+  & > :not([hidden]) ~ :not([hidden]) {
+    border-right-width: 0;
+    border-left-width: 1px;
+  }
+}
+
+@utility sibling-divide-* {
+  & > :not([hidden]) ~ :not([hidden]) {
+    border-color: --value(--color-*, [*]);
+  }
+}
+
+/* The existing hero titles use the original two-part filter shadow. */
+@utility drop-shadow-title {
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.1))
+    drop-shadow(0 1px 1px rgb(0 0 0 / 0.06));
+}

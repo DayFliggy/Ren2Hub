@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useResizeObserver } from '@vueuse/core'
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useTableScrollFade } from '@/composables/useTableScrollFade'
 
@@ -29,6 +29,24 @@ function centerActiveItem() {
     active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2
 }
 
+let unmounted = false
+let manuallyScrolled = false
+function preserveManualPosition() {
+  manuallyScrolled = true
+}
+
+onMounted(() => {
+  // Measuring starts the font request; the first center may use fallback
+  // widths. The container's width does not change when glyph widths settle.
+  centerActiveItem()
+  void document.fonts.ready.then(() => {
+    if (!unmounted && !manuallyScrolled) centerActiveItem()
+  })
+})
+onBeforeUnmount(() => {
+  unmounted = true
+})
+
 // The strip mounts hidden on desktop. Reveal its current item when the mobile
 // layout becomes visible, without undoing manual scrolling on later resizes.
 let wasVisible = false
@@ -47,6 +65,9 @@ watch(() => props.activeKey, centerActiveItem, { flush: 'post' })
       ref="scroller"
       v-bind="$attrs"
       class="nav-scroller relative flex gap-1 overflow-x-auto px-3 py-1"
+      @pointerdown="preserveManualPosition"
+      @wheel="preserveManualPosition"
+      @keydown="preserveManualPosition"
     >
       <slot />
     </div>

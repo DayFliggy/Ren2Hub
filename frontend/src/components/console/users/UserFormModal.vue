@@ -132,7 +132,7 @@ async function submit() {
     size="lg"
     @close="close"
   >
-    <div class="space-y-5 text-left">
+    <div class="sibling-space-y-5 text-left">
       <FormField :label="t('users.username')" :hint="t('users.usernameHint')">
         <TextInput
           v-model="form.username"
@@ -208,7 +208,7 @@ async function submit() {
             class="sketch-sm h-9 text-sm font-medium transition-colors focus-ring"
             :class="
               form.status === option.value
-                ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
+                ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
                 : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
             "
             @click="form.status = option.value"

@@ -66,7 +66,7 @@ onMounted(load)
 
 <template>
   <ConsoleCard :title="t('wallet.records')" :padded="false">
-    <ul class="divide-y divide-[var(--border-subtle)] px-5">
+    <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)] px-5">
       <li
         v-for="row in rows"
         :key="row.id"

@@ -55,7 +55,7 @@ async function importUrl() {
 </script>
 
 <template>
-  <div class="space-y-1.5">
+  <div class="sibling-space-y-1.5">
     <label
       for="task-plugin-url"
       class="block text-sm font-medium text-[var(--text-secondary)]"

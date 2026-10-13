@@ -175,7 +175,7 @@ function channelSummary(plugin: TaskPluginListItem) {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="sibling-space-y-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <SearchInput
         v-model="filter"
@@ -363,7 +363,7 @@ function channelSummary(plugin: TaskPluginListItem) {
         </p>
         <ul
           v-if="blockedUsage.channels.length"
-          class="list-disc space-y-1 pl-5"
+          class="list-disc sibling-space-y-1 pl-5"
         >
           <li v-for="channel in blockedUsage.channels" :key="channel.id">
             #{{ channel.id }} {{ channel.name }}

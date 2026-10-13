@@ -27,7 +27,10 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div v-if="loading" class="divide-y divide-[var(--border-subtle)]">
+  <div
+    v-if="loading"
+    class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+  >
     <div v-for="i in 5" :key="i" class="px-4 py-4" :aria-hidden="true">
       <div class="h-24 animate-pulse rounded-xl bg-[var(--surface-muted)]" />
     </div>
@@ -44,7 +47,7 @@ const { t } = useI18n()
     />
   </div>
 
-  <div v-else class="divide-y divide-[var(--border-subtle)]">
+  <div v-else class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
     <article
       v-for="order in orders"
       :key="order.id"

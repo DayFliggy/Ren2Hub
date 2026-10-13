@@ -22,7 +22,7 @@ const toneVar: Record<ToastType, string> = {
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        class="pencil-surface pointer-events-auto flex items-start gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-3.5 shadow-[var(--card-shadow)]"
+        class="pencil-surface pointer-events-auto flex items-start gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-3.5"
         data-handdrawn="toast"
         :role="toast.type === 'error' ? 'alert' : 'status'"
       >
@@ -35,7 +35,7 @@ const toneVar: Record<ToastType, string> = {
         </p>
         <button
           type="button"
-          class="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring sm:h-6 sm:w-6"
+          class="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring sm:h-6 sm:w-6"
           :aria-label="t('common.close')"
           @click="dismiss(toast.id)"
         >

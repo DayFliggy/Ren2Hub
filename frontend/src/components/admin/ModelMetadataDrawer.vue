@@ -257,11 +257,11 @@ onBeforeUnmount(() => controller.abort())
     :close-disabled="saving"
     @close="requestClose"
   >
-    <div v-if="loading" role="status" class="space-y-4">
+    <div v-if="loading" role="status" class="sibling-space-y-4">
       <span class="sr-only">{{ t('loading') }}</span>
       <SkeletonBlock v-for="i in 6" :key="i" rounded="lg" class="h-12" />
     </div>
-    <div v-else-if="loadFailed" role="alert" class="space-y-3">
+    <div v-else-if="loadFailed" role="alert" class="sibling-space-y-3">
       <p class="text-sm text-[var(--status-danger-text)]">{{ error }}</p>
       <ConsoleButton variant="secondary" @click="load"
         ><RefreshCw :size="15" aria-hidden="true" />{{
@@ -287,7 +287,7 @@ onBeforeUnmount(() => controller.abort())
           id="model-metadata-form"
           @submit.prevent="save"
         >
-          <fieldset :disabled="saving" class="min-w-0 space-y-6">
+          <fieldset :disabled="saving" class="min-w-0 sibling-space-y-6">
             <section class="drawer-section">
               <h3 class="drawer-section-title">
                 {{ t('basicInformation') }}
@@ -328,7 +328,7 @@ onBeforeUnmount(() => controller.abort())
                       v-model="form.description"
                       rows="3"
                       :placeholder="t('descriptionPlaceholder')"
-                      class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--accent)] focus-ring"
+                      class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-hidden focus:border-[var(--accent)] focus-ring"
                     />
                   </FormField>
                 </div>
@@ -348,7 +348,7 @@ onBeforeUnmount(() => controller.abort())
                   >
                     {{ t('icon') }}
                   </legend>
-                  <div class="space-y-3">
+                  <div class="sibling-space-y-3">
                     <SegmentedToggle
                       :model-value="iconMode"
                       :options="[
@@ -463,7 +463,7 @@ onBeforeUnmount(() => controller.abort())
             </section>
             <section class="drawer-section">
               <h3 class="drawer-section-title">{{ t('matchingRules') }}</h3>
-              <fieldset class="space-y-2">
+              <fieldset class="sibling-space-y-2">
                 <legend class="mb-2 text-sm text-[var(--text-secondary)]">
                   {{ t('nameRule') }}
                 </legend>
@@ -503,7 +503,7 @@ onBeforeUnmount(() => controller.abort())
                   <select
                     id="template-select"
                     v-model="template"
-                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus-ring sm:h-8"
+                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-xs text-[var(--text-primary)] outline-hidden focus:border-[var(--accent)] focus-ring sm:h-8"
                     @change="loadTemplate"
                   >
                     <option value="">{{ t('loadTemplate') }}</option>
@@ -532,7 +532,7 @@ onBeforeUnmount(() => controller.abort())
             </section>
             <section class="drawer-section">
               <h3 class="drawer-section-title">{{ t('statusSync') }}</h3>
-              <div class="space-y-4">
+              <div class="sibling-space-y-4">
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <p class="text-sm text-[var(--text-primary)]">
@@ -565,7 +565,11 @@ onBeforeUnmount(() => controller.abort())
             </section>
           </fieldset>
         </form>
-        <div v-if="detail" v-show="tab === 'connections'" class="space-y-6">
+        <div
+          v-if="detail"
+          v-show="tab === 'connections'"
+          class="sibling-space-y-6"
+        >
           <p class="text-sm text-[var(--text-secondary)]">
             {{ t('connectionsHint') }}
           </p>

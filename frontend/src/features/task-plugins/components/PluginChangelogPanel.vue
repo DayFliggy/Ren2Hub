@@ -73,7 +73,7 @@ function render(node: ChangelogInline): VNode | string {
   if (node.type === 'code')
     return h(
       'code',
-      { class: 'rounded bg-[var(--surface-muted)] px-1 font-mono text-xs' },
+      { class: 'rounded-sm bg-[var(--surface-muted)] px-1 font-mono text-xs' },
       node.text
     )
   if (node.type === 'link')
@@ -108,7 +108,7 @@ Inline.props = ['nodes']
     <History :size="20" aria-hidden="true" />
     {{ t('taskPlugins.changelogEmpty') }}
   </div>
-  <div v-else class="min-w-0 space-y-4">
+  <div v-else class="min-w-0 sibling-space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <span class="font-mono text-xs text-[var(--text-tertiary)]"
         >v{{ changelog.version }}</span
@@ -133,12 +133,15 @@ Inline.props = ['nodes']
     <section
       v-for="section in changelog.sections"
       :key="section.category"
-      class="space-y-2"
+      class="sibling-space-y-2"
     >
       <h3 class="font-medium">
         {{ t(`taskPlugins.changelogCategories.${section.category}`) }}
       </h3>
-      <ul :lang="changelog.locale" class="list-disc space-y-1 pl-5 text-sm">
+      <ul
+        :lang="changelog.locale"
+        class="list-disc sibling-space-y-1 pl-5 text-sm"
+      >
         <li
           v-for="(entry, index) in changelogEntries(section.markdown)"
           :key="index"

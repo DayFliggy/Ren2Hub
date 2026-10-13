@@ -132,7 +132,10 @@ const accountStats = computed(() => [
 </script>
 
 <template>
-  <div class="space-y-8 lg:space-y-10" data-handdrawn-page="profile">
+  <div
+    class="sibling-space-y-8 lg:sibling-space-y-10"
+    data-handdrawn-page="profile"
+  >
     <PageHero
       :title="t('profile.title')"
       :crumbs="[t('profile.breadcrumb.0'), t('profile.breadcrumb.1')]"
@@ -144,14 +147,14 @@ const accountStats = computed(() => [
     </PageHero>
 
     <section
-      class="profile-identity pencil-surface-strong relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6 shadow-[var(--card-shadow)] sm:p-8"
+      class="profile-identity pencil-surface-strong relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6 sm:p-8"
       data-handdrawn="surface-strong"
     >
       <div
         class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-5 md:grid-cols-[auto_minmax(0,1fr)_auto] md:gap-6"
       >
         <div
-          class="flex size-16 shrink-0 items-center justify-center rounded-xl text-2xl font-bold shadow-[var(--card-shadow)]"
+          class="flex size-16 shrink-0 items-center justify-center rounded-xl text-2xl font-bold"
           style="background: var(--accent); color: var(--accent-contrast)"
           aria-hidden="true"
         >
@@ -291,7 +294,7 @@ const accountStats = computed(() => [
         :key="stat.key"
         :data-testid="`profile-stat-${stat.key}`"
         type="button"
-        class="pencil-surface group min-h-32 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-5 py-5 text-left shadow-[var(--card-shadow)] transition-all hover:border-[var(--border-strong)] hover:shadow-[var(--card-shadow-hover)] focus-ring sm:px-6"
+        class="pencil-surface group min-h-32 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-5 py-5 text-left transition-all hover:border-[var(--border-strong)] focus-ring sm:px-6"
         data-handdrawn="surface"
         @click="router.push({ name: stat.route })"
       >
@@ -317,7 +320,7 @@ const accountStats = computed(() => [
       </button>
     </section>
 
-    <section class="space-y-7 pt-2" data-testid="profile-settings">
+    <section class="sibling-space-y-7 pt-2" data-testid="profile-settings">
       <header class="profile-settings-heading" data-handdrawn="section-heading">
         <div class="min-w-0">
           <p

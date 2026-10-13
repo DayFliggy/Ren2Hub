@@ -153,7 +153,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
 
     <!-- filter toolbar -->
     <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)]"
+      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
     >
       <SearchInput
         v-model="taskId"
@@ -282,7 +282,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
 
     <!-- mobile cards -->
     <section class="lg:hidden" :aria-label="t('relayLogs.drawingBreadcrumb')">
-      <div v-if="loading" class="space-y-3" aria-busy="true">
+      <div v-if="loading" class="sibling-space-y-3" aria-busy="true">
         <SkeletonBlock
           v-for="index in Math.min(pageSize, 5)"
           :key="index"
@@ -292,7 +292,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
         />
       </div>
 
-      <div v-else-if="rows.length" class="space-y-3">
+      <div v-else-if="rows.length" class="sibling-space-y-3">
         <article
           v-for="row in rows"
           :key="row.id"
@@ -378,7 +378,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
       size="md"
       @close="detailRow = null"
     >
-      <div v-if="detailRow" class="space-y-4">
+      <div v-if="detailRow" class="sibling-space-y-4">
         <div>
           <p class="mb-1 text-xs font-semibold text-[var(--text-tertiary)]">
             {{ t('relayLogs.colPrompt') }}

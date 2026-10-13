@@ -46,7 +46,7 @@ async function submit() {
       {{ t('auth.resetSubtitle') }}
     </p>
 
-    <form class="mt-8 space-y-4" @submit.prevent="submit">
+    <form class="mt-8 sibling-space-y-4" @submit.prevent="submit">
       <FormField :label="t('auth.email')">
         <TextInput
           v-model="email"

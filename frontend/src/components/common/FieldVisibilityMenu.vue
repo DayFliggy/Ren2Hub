@@ -100,7 +100,7 @@ onClickOutside(root, () => closeMenu())
         role="dialog"
         aria-modal="false"
         :aria-labelledby="titleId"
-        class="subtle-scroll absolute right-0 top-full z-50 mt-2 max-h-[min(24rem,calc(100dvh-8rem))] w-64 overflow-y-auto rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5 shadow-[var(--overlay-shadow)]"
+        class="subtle-scroll absolute right-0 top-full z-50 mt-2 max-h-[min(24rem,calc(100dvh-8rem))] w-64 overflow-y-auto rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5"
         data-handdrawn="menu"
       >
         <div class="flex items-center justify-between gap-2 px-3 py-1.5">
@@ -134,7 +134,7 @@ onClickOutside(root, () => closeMenu())
           @click="toggleField(field)"
         >
           <span
-            class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border"
             :class="
               isVisible(field)
                 ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'

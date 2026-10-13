@@ -55,7 +55,9 @@ watch(() => [props.requestId, props.admin], load, { immediate: true })
 </script>
 
 <template>
-  <section class="mt-5 space-y-3 border-t border-[var(--border-subtle)] pt-5">
+  <section
+    class="mt-5 sibling-space-y-3 border-t border-[var(--border-subtle)] pt-5"
+  >
     <h3 class="font-medium">{{ t('title') }}</h3>
     <p class="text-xs text-[var(--text-secondary)]">{{ t('hint') }}</p>
     <p v-if="loading" role="status" class="text-sm">{{ t('loading') }}</p>

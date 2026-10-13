@@ -147,14 +147,14 @@ onBeforeUnmount(() => {
         :aria-describedby="subtitle ? subtitleId : undefined"
       >
         <div
-          class="absolute inset-0 backdrop-blur-sm sm:backdrop-blur-md"
+          class="absolute inset-0 backdrop-blur-[4px] sm:backdrop-blur-md"
           :style="{ background: 'var(--drawer-backdrop)' }"
           @click="requestClose"
         />
         <div
           ref="panel"
           tabindex="-1"
-          class="pencil-surface-strong relative flex max-h-[calc(100dvh-2rem)] w-full flex-col border border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper animate-scale-in focus:outline-none"
+          class="pencil-surface-strong relative flex max-h-[calc(100dvh-2rem)] w-full flex-col border border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper animate-scale-in focus:outline-hidden"
           data-handdrawn="modal"
           style="
             border-radius: var(--shape-overlay);

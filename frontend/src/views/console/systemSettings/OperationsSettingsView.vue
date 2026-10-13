@@ -221,7 +221,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- System Behavior -->
     <SysSettingsFormCard
       :title="t('systemSettings.operations.behavior')"
@@ -229,7 +229,7 @@ onMounted(async () => {
       :dirty="behaviorDirty"
       @save="saveBehavior"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="behavior.DefaultCollapseSidebar"
           :label="t('systemSettings.operations.defaultCollapseSidebar')"
@@ -354,7 +354,7 @@ onMounted(async () => {
       :dirty="monitoringDirty"
       @save="saveMonitoring"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="monitoring.LogConsumeEnabled"
           :label="t('systemSettings.operations.logConsumeEnabled')"
@@ -402,7 +402,7 @@ onMounted(async () => {
       :dirty="perfDirty"
       @save="savePerf"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="perf['performance_setting.disk_cache_enabled']"
           :label="t('systemSettings.operations.diskCacheEnabled')"
@@ -446,7 +446,7 @@ onMounted(async () => {
       </div>
 
       <div class="mt-6 border-t border-[var(--border-subtle)] pt-4">
-        <div class="divide-y divide-[var(--border-subtle)]">
+        <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
           <SysToggleRow
             v-model="perf['performance_setting.monitor_enabled']"
             :label="t('systemSettings.operations.monitorEnabled')"

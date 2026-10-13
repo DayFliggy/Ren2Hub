@@ -111,7 +111,7 @@ onMounted(load)
       <summary class="cursor-pointer focus-ring">
         {{ t('models.partialPricing', { count: pricingIssues.length }) }}
       </summary>
-      <ul class="mt-2 space-y-1">
+      <ul class="mt-2 sibling-space-y-1">
         <li
           v-for="(issue, index) in pricingIssues"
           :key="index"
@@ -201,7 +201,7 @@ onMounted(load)
       size="lg"
       @close="detailModel = null"
     >
-      <div v-if="detailModel" class="space-y-5">
+      <div v-if="detailModel" class="sibling-space-y-5">
         <!-- header meta -->
         <div class="flex items-center gap-3">
           <VendorLogo :vendor="vendorLabel(detailModel.vendor)" :size="44" />

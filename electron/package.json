@@ -2,6 +2,9 @@
   "name": "new-api-electron",
   "version": "1.0.0",
   "packageManager": "bun@1.4.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "trustedDependencies": ["electron"],
   "description": "New API - AI Model Gateway Desktop Application",
   "main": "main.js",
@@ -29,6 +32,9 @@
     "cross-env": "^7.0.3",
     "electron": "41.10.6",
     "electron-builder": "^26.15.3"
+  },
+  "overrides": {
+    "global-agent": "4.1.3"
   },
   "build": {
     "appId": "com.newapi.desktop",

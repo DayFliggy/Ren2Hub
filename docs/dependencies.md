@@ -10,18 +10,25 @@
 
 主模块使用 `compress 1.18.7`，RelayKit 独立选择 `x/text 0.41.0`，主模块仍选择其原有 `x/text 0.42.0`。压缩库由请求 Zstd 解压、ClickHouse 日志传输和 profiling 使用；文本库通过 RelayKit 的 `samber/lo` 实际引入，不能移除。Go 安全补丁和来源见[同步账本](upstream/SYNC_LEDGER.md#依赖与构建)。
 
-Vue 的直接依赖用于页面、状态、路由、国际化、图表、HTTP、Markdown 和 YAML；其开发依赖用于编译、CSS、类型、格式与测试。Electron 41.10.6、electron-builder 和 cross-env 分别用于桌面运行时、打包与跨平台开发脚本。当前用途审计未发现可删的现用框架包；root `go.sum` 中两行旧 moejs alpha.5 校验和已由 tidy 清理，现用 alpha.6 保留。这属于锁记录清理，不代表运行依赖数量减少。
+Vue 的直接依赖用于页面、状态、路由、国际化、图表、HTTP、Markdown 和 YAML；其开发依赖用于编译、CSS、类型、格式与测试。Electron 41.10.6、electron-builder 26.15.3 与 cross-env 分别用于桌面运行时、打包和开发模式的跨平台环境变量设置。root `go.sum` 中两行旧 moejs alpha.5 校验和已由 tidy 清理，现用 alpha.6 保留。
 
-## 未消除的告警
+## Vue 与 Electron 工具链修复
 
-| 包与位置 | 当前边界 | 后续处置 |
-| --- | --- | --- |
-| Vue 工具链 `braces 3.0.3` | 高危，暂无兼容修复；与已修复的 brace-expansion 不同 | 跟踪已发布修复，见同步队列 SYNC1013-06 |
-| Tailwind 3 → postcss-nested 6 → `postcss-selector-parser 6.1.4` | 中危；另一个 7 分支已升至 7.1.6 | 等待兼容更新，不能未经验收强制跨主版本覆盖 |
-| Electron 打包下载链 `sprintf-js 1.1.3` | 中危，暂无已发布修复 | 跟踪 roarr/global-agent/@electron/get/electron-builder 的兼容更新 |
-| `x/crypto/openpgp` | 模块级告警，无修复；当前源码未导入该包，crypto 的认证用途仍必需 | 不引入该包；不能称整个模块已无告警 |
+Vue 使用 Tailwind CSS 4.3.3 与同版本 `@tailwindcss/vite`，采用[官方 Vite 集成](https://tailwindcss.com/docs/installation/using-vite)，参考 AxonHub 的 Vite 插件接入方式。NewAPI 的 React/Rsbuild/shadcn 构建与当前 Vue 架构不同，其 Tailwind 4 配置仍有其他包引入 braces；Sub2API 的 Tailwind 3 也没有解决这条链，不能复制参考项目的全部依赖。
 
-这些边界不能写成依赖审计全部通过。实际扫描时间、输出、工具版本和发布验收由所属工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)记录。
+删除不再使用的直接 `autoprefixer`、`postcss`、旧 `tailwind.config.js` 和 `postcss.config.js`。PostCSS 仍由 Vue/Vite 所需传递依赖正常安装，不删除其必要用途。移除已可由正常解析满足的 `brace-expansion`、`postcss`、`source-map-js` 强制覆盖；锁文件保留实际安全版本。
+
+Tailwind 3 的 micromatch/fast-glob/chokidar 路径均不再存在，`braces 3.0.3` 高危与 `postcss-nested` 所需 `postcss-selector-parser 6.1.4` 中危随旧链退出。ESLint/Vue 所需 parser 7.1.6 保留。主题 RGB 通道与 v4 主题变量分开存放；保留原有字体、暗色、动画、圆角、阴影、Preflight 和兄弟间距语义。表单控件只继承旧版规定的字体字段，避免新版 `font: inherit` 意外继承暗色账本的数字变体。命名字号保持固定行高及断点重置规则，站点容器在 utilities 前展开，既有 transform 覆盖边界同步处理独立旋转、缩放、平移属性；独立变换取消使用生产压缩后仍保留的初始值；旧版无效而新版开始生效的样式类按原实际外观清理，具体配置见[前端说明](../frontend/README.md)。
+
+Tailwind 4 将支持下限明确为 Safari 16.4、Chrome 111、Firefox 128；低于这些版本的浏览器不在当前支持范围，见[官方升级指南](https://tailwindcss.com/docs/upgrade-guide)。Chromium 自动检查不能替代 Safari/Firefox 或移动真机验收。
+
+Electron 保留两代 `@electron/get` 与平台可选包，定向使用官方 `global-agent 4.1.3`。其 [v4.1.0 发布](https://github.com/gajus/global-agent/releases/tag/v4.1.0)移除了 roarr，从而移除 roarr → sprintf-js 旧链；这是经过下载代理合同验证的正式主版本更新，不能由漏洞忽略项、伪包或全局省略 optional 包替代。HTTP、HTTPS CONNECT、NO_PROXY、三平台文件名和校验和失败路径都需验证。删除没有脚本或 CI 调用、引用未声明 canvas 的图标占位脚本，保留实际分发的 PNG 图标。固定 Bun 1.4.0 的 Bun Shell 在父环境 NODE_ENV=production 时未通过 Electron 开发入口合同，因此保留实际有用的 cross-env，不依据文档猜测可删。代理覆盖的 API 与复验边界见[桌面说明](../electron/README.md)。
+
+Vue 和 Electron 的 Bun 审计分别记录；JS 工具链三项旧告警关闭后的证据在[同步账本](upstream/SYNC_LEDGER.md#依赖与构建)及所属工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)。
+
+## 保留的 Go 模块告警
+
+`golang.org/x/crypto v0.57.0` 的 [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) 指向没有修复的 OpenPGP 包。当前源码没有导入该包，也没有可达漏洞符号；同一模块的 bcrypt/HKDF 仍用于认证和证据密钥派生，不能删除整个模块。主模块仍须报告该模块级告警，不称全部语言依赖告警清零。Go 源码与模块图本轮未变，复用上一批固定 Go 1.26.9 的独立模块扫描；引入 OpenPGP 前重新审计。
 
 ## 复验
 

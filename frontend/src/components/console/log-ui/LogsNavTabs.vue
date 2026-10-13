@@ -33,7 +33,7 @@ const tabs = [
 <template>
   <div class="subtle-scroll max-w-full overflow-x-auto sm:ml-auto">
     <nav
-      class="flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1 shadow-[var(--card-shadow)]"
+      class="flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1"
       :aria-label="t('relayLogs.tabsLabel')"
     >
       <RouterLink
@@ -45,7 +45,7 @@ const tabs = [
         class="flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-ring sm:min-h-8"
         :class="
           active === tab.key
-            ? 'bg-[var(--accent-soft)] text-[var(--accent-text)] font-semibold shadow-xs'
+            ? 'bg-[var(--accent-soft)] text-[var(--accent-text)] font-semibold shadow-none'
             : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
         "
         :aria-current="active === tab.key ? 'page' : undefined"

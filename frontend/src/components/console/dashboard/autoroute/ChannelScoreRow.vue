@@ -96,7 +96,7 @@ const segments = computed(() => {
       <span class="sr-only">{{ inactiveLabel }}</span>
     </span>
 
-    <div class="min-w-0 flex-1" :class="{ 'space-y-2': !compact }">
+    <div class="min-w-0 flex-1" :class="{ 'sibling-space-y-2': !compact }">
       <div class="flex min-w-0 items-center justify-between gap-2">
         <div class="min-w-0">
           <p

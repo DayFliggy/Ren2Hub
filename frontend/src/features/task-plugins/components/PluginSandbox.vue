@@ -69,7 +69,7 @@ async function run() {
         rows="12"
         spellcheck="false"
         :aria-label="t('taskPlugins.argumentsJson')"
-        class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus-ring"
+        class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 font-mono text-xs text-[var(--text-primary)] outline-hidden focus:border-[var(--accent)] focus-ring"
       />
     </FormField>
     <ConsoleButton :loading="running" @click="run">
@@ -78,7 +78,7 @@ async function run() {
         running ? t('taskPlugins.runningDryRun') : t('taskPlugins.runDryRun')
       }}
     </ConsoleButton>
-    <section v-if="output" class="space-y-2">
+    <section v-if="output" class="sibling-space-y-2">
       <h3 class="text-sm font-medium">{{ t('taskPlugins.dryRunResult') }}</h3>
       <pre
         class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs"

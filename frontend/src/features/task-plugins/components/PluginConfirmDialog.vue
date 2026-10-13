@@ -30,7 +30,9 @@ const { t } = useI18n()
     :close-disabled="loading"
     @close="emit('cancel')"
   >
-    <div class="space-y-3 break-words text-sm text-[var(--text-secondary)]">
+    <div
+      class="sibling-space-y-3 break-words text-sm text-[var(--text-secondary)]"
+    >
       <p v-if="message">{{ message }}</p>
       <slot />
     </div>

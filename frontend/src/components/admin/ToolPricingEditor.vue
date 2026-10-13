@@ -161,7 +161,7 @@ function save() {
                   <span class="sr-only">{{ t('toolName') }}</span>
                   <input
                     v-model="row.key"
-                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none sm:h-8"
+                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-hidden sm:h-8"
                     :placeholder="t('toolName')"
                   />
                 </label>
@@ -172,7 +172,7 @@ function save() {
                   <input
                     v-model="row.price"
                     inputmode="decimal"
-                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none sm:h-8"
+                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-hidden sm:h-8"
                     :placeholder="t('zeroHint')"
                   />
                 </label>
@@ -202,7 +202,7 @@ function save() {
       </div>
     </div>
 
-    <label v-else class="block space-y-1.5">
+    <label v-else class="block sibling-space-y-1.5">
       <span class="text-xs font-medium text-[var(--text-secondary)]"
         >{{ t('tools') }} (JSON)</span
       >
@@ -210,7 +210,7 @@ function save() {
         v-model="json"
         rows="14"
         spellcheck="false"
-        class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none"
+        class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-hidden"
       />
     </label>
 

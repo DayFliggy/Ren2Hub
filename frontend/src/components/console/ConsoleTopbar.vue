@@ -114,7 +114,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             t('nav.search')
           }}</span>
           <kbd
-            class="topbar-control-label hidden rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[0.625rem] font-medium md:inline"
+            class="topbar-control-label hidden rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-1.5 py-px text-[0.625rem] font-medium md:inline"
           >
             {{ searchShortcut }}
           </kbd>

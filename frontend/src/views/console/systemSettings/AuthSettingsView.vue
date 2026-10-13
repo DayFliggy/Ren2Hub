@@ -224,7 +224,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- Basic Auth -->
     <SysSettingsFormCard
       :title="t('systemSettings.auth.basicAuth')"
@@ -232,7 +232,7 @@ onMounted(async () => {
       :dirty="basicDirty"
       @save="saveBasic"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="basic.PasswordLoginEnabled"
           :label="t('systemSettings.auth.passwordLogin')"
@@ -284,7 +284,7 @@ onMounted(async () => {
       :dirty="githubDirty"
       @save="saveGithub"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="github.GitHubOAuthEnabled"
           :label="t('systemSettings.auth.githubEnabled')"
@@ -312,7 +312,7 @@ onMounted(async () => {
       :dirty="discordDirty"
       @save="saveDiscord"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="discord['discord.enabled']"
           :label="t('systemSettings.auth.discordEnabled')"
@@ -340,7 +340,7 @@ onMounted(async () => {
       :dirty="telegramDirty"
       @save="saveTelegram"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="telegram.TelegramOAuthEnabled"
           :label="t('systemSettings.auth.telegramEnabled')"
@@ -369,7 +369,7 @@ onMounted(async () => {
       :dirty="turnstileDirty"
       @save="saveTurnstile"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="turnstile.TurnstileCheckEnabled"
           :label="t('systemSettings.auth.turnstileEnabled')"

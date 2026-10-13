@@ -75,7 +75,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <PageHero
       v-model:tab="tab"
       :title="t('farm.title')"
@@ -102,7 +102,7 @@ onMounted(load)
 
       <template v-else>
         <!-- Tab: My Farm -->
-        <div v-show="tab === 'farm'" class="space-y-5">
+        <div v-show="tab === 'farm'" class="sibling-space-y-5">
           <FarmHero v-if="farmState && mine" :state="farmState" :mine="mine" />
           <div class="grid gap-5 lg:grid-cols-2">
             <PlotGrid

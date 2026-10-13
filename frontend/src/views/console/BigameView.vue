@@ -49,7 +49,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <PageHero
       :title="t('bigame.title')"
       :crumbs="[$t('bigame.breadcrumb.0'), $t('bigame.breadcrumb.1')]"

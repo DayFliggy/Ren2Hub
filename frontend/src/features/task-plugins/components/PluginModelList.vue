@@ -33,7 +33,7 @@ const chip =
       />
     </summary>
     <ul
-      class="mt-1.5 max-h-64 space-y-1 overflow-y-auto font-mono text-xs"
+      class="mt-1.5 max-h-64 sibling-space-y-1 overflow-y-auto font-mono text-xs"
       :aria-label="collapsedLabel"
     >
       <li v-for="model in models" :key="model" class="break-all">
@@ -41,7 +41,7 @@ const chip =
       </li>
     </ul>
   </details>
-  <div v-else class="min-w-0 space-y-2">
+  <div v-else class="min-w-0 sibling-space-y-2">
     <div v-if="visible.length" class="flex flex-wrap gap-1.5">
       <span v-for="model in visible" :key="model" :class="chip">{{
         model

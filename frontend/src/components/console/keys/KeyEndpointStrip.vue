@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
       </span>
       <span
         v-if="endpoint.isDefault"
-        class="shrink-0 rounded bg-[var(--status-success-soft)] px-1 py-px text-[0.5625rem] font-medium text-[var(--status-success-text)]"
+        class="shrink-0 rounded-sm bg-[var(--status-success-soft)] px-1 py-px text-[0.5625rem] font-medium text-[var(--status-success-text)]"
       >
         {{ t('keys.endpoints.defaultBadge') }}
       </span>
@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
       </span>
       <button
         type="button"
-        class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] focus-ring sm:h-5 sm:w-5"
+        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] focus-ring sm:h-5 sm:w-5"
         :aria-label="t('keys.endpoints.copy', { name: endpoint.label })"
         :title="t('keys.endpoints.copy', { name: endpoint.label })"
         @click="copyEndpoint(endpoint.url)"
@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)] focus-ring disabled:cursor-wait disabled:opacity-50 sm:h-5 sm:w-5"
+        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)] focus-ring disabled:cursor-wait disabled:opacity-50 sm:h-5 sm:w-5"
         :disabled="results[endpoint.id].status === 'testing'"
         :aria-label="t('keys.endpoints.test', { name: endpoint.label })"
         :title="t('keys.endpoints.test', { name: endpoint.label })"

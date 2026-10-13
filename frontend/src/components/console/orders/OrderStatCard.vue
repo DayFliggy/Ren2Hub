@@ -48,7 +48,7 @@ const plate = computed(() => {
       <p class="truncate text-xs text-[var(--text-tertiary)]">{{ label }}</p>
       <p
         v-if="loading"
-        class="mt-1.5 h-7 w-24 animate-pulse rounded bg-[var(--surface-muted)]"
+        class="mt-1.5 h-7 w-24 animate-pulse rounded-sm bg-[var(--surface-muted)]"
       />
       <p
         v-else

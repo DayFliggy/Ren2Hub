@@ -65,13 +65,13 @@ watch([page, pageSize, () => props.tokenId, () => props.refreshKey], load, {
     >
       {{ t('billing.empty') }}
     </p>
-    <ul v-else class="divide-y divide-[var(--border-subtle)]">
+    <ul v-else class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
       <li
         v-for="row in rows"
         :key="row.event_id"
         class="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_auto]"
       >
-        <div class="min-w-0 space-y-1">
+        <div class="min-w-0 sibling-space-y-1">
           <p class="break-all font-mono text-xs text-[var(--text-primary)]">
             {{ row.event_id }}
           </p>
@@ -85,7 +85,7 @@ watch([page, pageSize, () => props.tokenId, () => props.refreshKey], load, {
             {{ row.reason }}
           </p>
         </div>
-        <dl class="space-y-1 text-xs">
+        <dl class="sibling-space-y-1 text-xs">
           <div class="flex justify-between gap-4">
             <dt>{{ t('billing.availableChange') }}</dt>
             <dd class="font-mono">

@@ -681,7 +681,7 @@ async function submit() {
     size="lg"
     @close="close"
   >
-    <div class="space-y-4 text-left">
+    <div class="sibling-space-y-4 text-left">
       <p
         v-if="settingsError"
         role="alert"
@@ -771,7 +771,7 @@ async function submit() {
                     <input
                       v-model="typeSearch"
                       type="text"
-                      class="h-9 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm focus-ring outline-none placeholder:text-[var(--text-tertiary)]"
+                      class="h-9 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm focus-ring outline-hidden placeholder:text-[var(--text-tertiary)]"
                       :placeholder="t('channels.typeFilter') + '...'"
                       autofocus
                       @click.stop
@@ -965,7 +965,7 @@ async function submit() {
                   class="rounded-md px-3 py-1 text-xs font-medium transition-colors"
                   :class="
                     form.addMode === mode.value
-                      ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
+                      ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
                       : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
                   "
                   @click="
@@ -1088,7 +1088,7 @@ async function submit() {
                 <button
                   type="button"
                   :aria-label="`Remove ${tag}`"
-                  class="ml-0.5 rounded-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  class="ml-0.5 rounded-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                   @click="removeModelTag(tag)"
                 >
                   <X :size="11" />
@@ -1097,7 +1097,7 @@ async function submit() {
               <input
                 v-model="modelInput"
                 type="text"
-                class="min-w-[140px] flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-tertiary)]"
+                class="min-w-[140px] flex-1 bg-transparent text-sm outline-hidden placeholder:text-[var(--text-tertiary)]"
                 :placeholder="
                   modelTags.length ? '' : t('channels.modelsSearchPlaceholder')
                 "
@@ -1224,7 +1224,7 @@ async function submit() {
                   class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
                   :class="
                     modelMappingTab === 'visual'
-                      ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
+                      ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
                       : 'text-[var(--text-tertiary)]'
                   "
                   @click="onSwitchToVisual"
@@ -1236,7 +1236,7 @@ async function submit() {
                   class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
                   :class="
                     modelMappingTab === 'json'
-                      ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
+                      ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
                       : 'text-[var(--text-tertiary)]'
                   "
                   @click="onSwitchToJson"
@@ -1254,7 +1254,7 @@ async function submit() {
               >
                 {{ t('channels.modelMappingEmpty') }}
               </div>
-              <div v-else class="space-y-2">
+              <div v-else class="sibling-space-y-2">
                 <div
                   v-for="(row, index) in mappingRows"
                   :key="index"
@@ -1340,7 +1340,10 @@ async function submit() {
           />
         </button>
 
-        <div v-show="advancedOpen" class="channel-form-section-body space-y-4">
+        <div
+          v-show="advancedOpen"
+          class="channel-form-section-body sibling-space-y-4"
+        >
           <FormField
             v-for="field in visibleFieldSettings"
             :key="field.key"

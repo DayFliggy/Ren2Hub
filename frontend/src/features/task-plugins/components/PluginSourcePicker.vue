@@ -52,7 +52,7 @@ function onChange(event: Event) {
       class="text-[var(--text-tertiary)]"
       aria-hidden="true"
     />
-    <div class="space-y-0.5">
+    <div class="sibling-space-y-0.5">
       <p class="break-all text-sm font-medium">
         {{ fileName || t('taskPlugins.dropFile') }}
       </p>

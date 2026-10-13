@@ -59,7 +59,7 @@ const { t: clientText } = useI18n({
       {{ t('common.selectAll') }}
     </label>
 
-    <div class="divide-y divide-[var(--border-subtle)]">
+    <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
       <article
         v-for="token in tokens"
         :key="token.id"

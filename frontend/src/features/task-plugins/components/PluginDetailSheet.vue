@@ -156,7 +156,7 @@ const compareOptions = computed(() =>
         {{ t('common.close') }}
       </ConsoleButton>
     </div>
-    <div class="mb-4 space-y-2">
+    <div class="mb-4 sibling-space-y-2">
       <div class="flex min-w-0 items-center gap-2">
         <PluginIcon
           :plugin="{
@@ -200,7 +200,11 @@ const compareOptions = computed(() =>
       class="min-w-0"
     >
       <template v-if="tab !== 'versions' && tab !== 'sandbox'">
-        <div v-if="!detail && !detailError" role="status" class="space-y-3">
+        <div
+          v-if="!detail && !detailError"
+          role="status"
+          class="sibling-space-y-3"
+        >
           <SkeletonBlock v-for="i in 4" :key="i" rounded="lg" class="h-12" />
         </div>
         <ErrorBanner
@@ -211,10 +215,10 @@ const compareOptions = computed(() =>
       </template>
       <template v-if="detail">
         <PluginMetadataCard v-if="tab === 'overview'" :meta="detail.meta" />
-        <div v-else-if="tab === 'billing'" class="space-y-6">
+        <div v-else-if="tab === 'billing'" class="sibling-space-y-6">
           <section
             v-if="showDefaultUsage && detail.meta.usageSchema"
-            class="space-y-3"
+            class="sibling-space-y-3"
             :aria-label="t('taskPlugins.default')"
           >
             <template v-if="usageProfiles.length">
@@ -228,7 +232,7 @@ const compareOptions = computed(() =>
           <section
             v-for="profile in usageProfiles"
             :key="profile.models[0]"
-            class="space-y-3"
+            class="sibling-space-y-3"
             :aria-label="profile.models.join(', ')"
           >
             <PluginModelList :models="profile.models" />
@@ -248,7 +252,7 @@ const compareOptions = computed(() =>
           />
           <EmptyState v-else :title="t('taskPlugins.noSource')" />
         </template>
-        <div v-else-if="tab === 'diff'" class="space-y-3">
+        <div v-else-if="tab === 'diff'" class="sibling-space-y-3">
           <ErrorBanner
             v-if="versionsError"
             :message="versionsError"
@@ -308,7 +312,9 @@ const compareOptions = computed(() =>
                 </th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-[var(--border-subtle)]">
+            <tbody
+              class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+            >
               <tr v-for="version in versions" :key="version.id">
                 <td class="py-2 pr-3 font-mono text-xs">
                   {{ version.version }}

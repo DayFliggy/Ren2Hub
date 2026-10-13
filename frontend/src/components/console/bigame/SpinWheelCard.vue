@@ -87,7 +87,7 @@ onBeforeUnmount(() => {
 
 <template>
   <article
-    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <!-- header -->
@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
 
         <!-- spinning disc -->
         <div
-          class="size-44 overflow-hidden rounded-full border-4 border-[var(--border-strong)] shadow-[var(--card-shadow)]"
+          class="size-44 overflow-hidden rounded-full border-4 border-[var(--border-strong)]"
           :style="{
             transform: `rotate(${rotation}deg)`,
             transition: isAnimating
@@ -158,7 +158,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- prize labels legend -->
-      <div class="w-full space-y-1">
+      <div class="w-full sibling-space-y-1">
         <div
           v-for="prize in prizes"
           :key="prize.id"

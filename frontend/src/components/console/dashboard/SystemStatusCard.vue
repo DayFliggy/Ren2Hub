@@ -626,7 +626,7 @@ const successTone = computed(() => rateTone(successRate.value))
               <span
                 v-for="index in 10"
                 :key="index"
-                class="memory-segment min-w-0 rounded-sm transition-[background,box-shadow] duration-500"
+                class="memory-segment min-w-0 rounded-xs transition-[background,box-shadow] duration-500"
                 :style="
                   memorySegmentStyle(tile.percent, index - 1, tile.tone.fill)
                 "

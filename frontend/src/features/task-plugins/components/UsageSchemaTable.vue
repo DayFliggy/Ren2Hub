@@ -68,7 +68,7 @@ function enumValues(definition: BillingUsageFieldSchema) {
           </th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-[var(--border-subtle)]">
+      <tbody class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <tr v-for="[name, definition] in entries" :key="name">
           <td class="max-w-64 break-words px-3 py-2 font-mono text-xs">
             {{ name }}

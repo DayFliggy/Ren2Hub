@@ -373,7 +373,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="sibling-space-y-4">
     <!-- Top Breadcrumb & Status summary -->
     <PageBreadcrumb
       :crumbs="[t('tickets.breadcrumb.0'), t('tickets.admin.title')]"
@@ -399,7 +399,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
     </PageBreadcrumb>
 
     <div
-      class="flex h-[calc(100dvh-13.5rem)] min-h-0 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)] lg:min-h-[580px]"
+      class="flex h-[calc(100dvh-13.5rem)] min-h-0 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:min-h-[580px]"
       data-handdrawn="surface"
     >
       <aside
@@ -431,7 +431,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
               class="min-w-0 rounded-lg px-2 py-1.5 text-xs font-medium transition-all focus-ring"
               :class="
                 status === tab.value
-                  ? 'bg-[var(--surface-solid)] text-[var(--accent-text)] font-semibold shadow-xs'
+                  ? 'bg-[var(--surface-solid)] text-[var(--accent-text)] font-semibold shadow-none'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               "
               @click="status = tab.value"
@@ -470,7 +470,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
         </header>
 
         <div class="subtle-scroll min-h-0 flex-1 overflow-y-auto">
-          <div v-if="queueLoading" class="space-y-1 p-2">
+          <div v-if="queueLoading" class="sibling-space-y-1 p-2">
             <SkeletonBlock
               v-for="index in 7"
               :key="index"
@@ -506,7 +506,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
               class="relative w-full border-b border-[var(--border-subtle)] px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] focus-ring"
               :class="
                 item.id === selectedID
-                  ? 'bg-[var(--accent-soft)]/60 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-[var(--accent)]'
+                  ? 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-[var(--accent)]'
                   : ''
               "
               @click="selectTicket(item.id)"
@@ -637,7 +637,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
           <div class="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
             <div class="flex min-h-0 flex-col">
               <div
-                class="subtle-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6"
+                class="subtle-scroll min-h-0 flex-1 sibling-space-y-5 overflow-y-auto px-4 py-5 sm:px-6"
               >
                 <TicketThreadMessage
                   v-for="message in messages"
@@ -662,7 +662,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
             </div>
 
             <aside
-              class="subtle-scroll overflow-y-auto border-t border-[var(--border-subtle)] bg-[var(--surface-muted)]/50 p-4 lg:border-l lg:border-t-0"
+              class="subtle-scroll overflow-y-auto border-t border-[var(--border-subtle)] p-4 lg:border-l lg:border-t-0"
             >
               <section class="border-b border-[var(--border-subtle)] pb-4">
                 <h3
@@ -723,7 +723,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
                 >
                   {{ t('tickets.admin.details') }}
                 </h3>
-                <dl class="space-y-2">
+                <dl class="sibling-space-y-2">
                   <div class="flex justify-between gap-3">
                     <dt class="text-[var(--text-tertiary)]">
                       {{ t('tickets.create.categoryLabel') }}

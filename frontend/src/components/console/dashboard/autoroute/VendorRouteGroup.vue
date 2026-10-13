@@ -178,7 +178,10 @@ const availabilityLabel = computed(() =>
 
       <RouteHealthTimeline class="mt-4" :checks="monitor.checks" />
 
-      <div v-if="expanded" class="mt-3 divide-y divide-[var(--border-subtle)]">
+      <div
+        v-if="expanded"
+        class="mt-3 sibling-divide-y sibling-divide-[var(--border-subtle)]"
+      >
         <ChannelScoreRow
           v-for="channel in topChannels"
           :key="channel.id"
@@ -190,7 +193,7 @@ const availabilityLabel = computed(() =>
           v-if="extraChannels.length"
           v-show="showExtra"
           :id="extraRowsId"
-          class="divide-y divide-[var(--border-subtle)] pt-2"
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)] pt-2"
           data-route-extra-channels
         >
           <ChannelScoreRow

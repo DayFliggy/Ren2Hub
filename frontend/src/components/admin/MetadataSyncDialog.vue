@@ -656,7 +656,7 @@ function display(field: string, value: string | number) {
               <th class="px-3 py-2 font-medium">{{ t('fields') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-[var(--border-subtle)]">
+          <tbody class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
             <tr v-for="item in overwrite" :key="item.model_name">
               <td
                 class="break-all px-3 py-2 font-mono text-[var(--text-primary)]"

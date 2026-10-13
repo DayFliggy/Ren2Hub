@@ -30,7 +30,7 @@ const tones = {
     <span v-if="$slots.icon" class="mt-0.5 shrink-0" aria-hidden="true">
       <slot name="icon" />
     </span>
-    <div class="min-w-0 flex-1 space-y-1">
+    <div class="min-w-0 flex-1 sibling-space-y-1">
       <p v-if="title" class="font-medium break-words">{{ title }}</p>
       <div
         v-if="$slots.default"

@@ -49,7 +49,7 @@ async function confirm() {
       :message="error || t('auth.resetInvalid')"
       @retry="confirm"
     />
-    <div v-if="password" class="mt-6 space-y-4">
+    <div v-if="password" class="mt-6 sibling-space-y-4">
       <p>{{ t('auth.resetCompleted') }}</p>
       <FormField :label="t('auth.newPassword')"
         ><TextInput v-model="password" readonly

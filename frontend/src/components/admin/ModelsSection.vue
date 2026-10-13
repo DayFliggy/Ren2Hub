@@ -377,7 +377,7 @@ defineExpose({ reload: load })
     <ul
       v-if="failures.length"
       role="alert"
-      class="space-y-1 border-b border-[var(--border-subtle)] px-4 py-2.5 text-xs text-[var(--status-danger-text)]"
+      class="sibling-space-y-1 border-b border-[var(--border-subtle)] px-4 py-2.5 text-xs text-[var(--status-danger-text)]"
     >
       <li v-for="failure in failures" :key="failure.name">
         <span class="font-mono">{{ failure.name }}</span
@@ -477,10 +477,10 @@ defineExpose({ reload: load })
       <div class="md:hidden">
         <div
           v-if="loading && !rows.length"
-          class="divide-y divide-[var(--border-subtle)]"
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
           aria-hidden="true"
         >
-          <div v-for="i in 5" :key="i" class="space-y-3 p-4">
+          <div v-for="i in 5" :key="i" class="sibling-space-y-3 p-4">
             <SkeletonBlock rounded="md" class="h-4 w-1/2" />
             <SkeletonBlock rounded="md" class="h-10" />
           </div>
@@ -495,7 +495,7 @@ defineExpose({ reload: load })
           <article
             v-for="row in rows"
             :key="row.id"
-            class="space-y-3 border-b border-[var(--border-subtle)] px-4 py-3"
+            class="sibling-space-y-3 border-b border-[var(--border-subtle)] px-4 py-3"
           >
             <div class="flex items-start gap-3">
               <label

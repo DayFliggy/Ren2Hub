@@ -207,9 +207,7 @@ onMounted(loadStats)
       v-if="kind === 'channel-affinity' && affinityStats"
       class="my-4 grid grid-cols-2 gap-3 sm:grid-cols-3"
     >
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.cacheEntries') }}
         </div>
@@ -219,9 +217,7 @@ onMounted(loadStats)
           {{ affinityStats.total }}
         </div>
       </div>
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.unknownEntries') }}
         </div>
@@ -231,9 +227,7 @@ onMounted(loadStats)
           {{ affinityStats.unknown }}
         </div>
       </div>
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.cacheAlgorithm') }}
         </div>
@@ -249,9 +243,7 @@ onMounted(loadStats)
       v-else-if="performanceStats"
       class="my-4 grid grid-cols-2 gap-3 sm:grid-cols-4"
     >
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.diskCache') }}
         </div>
@@ -261,9 +253,7 @@ onMounted(loadStats)
           {{ formatBytes(performanceStats.disk_cache_info.total_size) }}
         </div>
       </div>
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.memory') }}
         </div>
@@ -273,9 +263,7 @@ onMounted(loadStats)
           {{ formatBytes(performanceStats.memory_stats.alloc) }}
         </div>
       </div>
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           Goroutine
         </div>
@@ -285,9 +273,7 @@ onMounted(loadStats)
           {{ performanceStats.memory_stats.num_goroutine }}
         </div>
       </div>
-      <div
-        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/60 p-3.5"
-      >
+      <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.logSize') }}
         </div>
@@ -331,7 +317,7 @@ onMounted(loadStats)
         </ConsoleButton>
       </div>
       <div
-        class="mt-4 flex flex-wrap items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-table-header)]/30 p-3"
+        class="mt-4 flex flex-wrap items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] p-3"
       >
         <span class="text-xs font-medium text-[var(--text-secondary)]">{{
           t('systemSettings.maintenance.logCleanup')

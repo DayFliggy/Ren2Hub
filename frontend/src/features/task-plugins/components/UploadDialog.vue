@@ -210,7 +210,7 @@ function close() {
     :close-disabled="activating"
     @close="close"
   >
-    <div class="space-y-3">
+    <div class="sibling-space-y-3">
       <PluginAlert
         role="status"
         :tone="needsActivation ? 'warning' : 'success'"
@@ -279,7 +279,7 @@ function close() {
     :close-disabled="uploading"
     @close="close"
   >
-    <div class="space-y-4">
+    <div class="sibling-space-y-4">
       <PluginAlert tone="danger" :title="t('taskPlugins.riskTitle')">
         <template #icon><AlertTriangle :size="16" /></template>
         {{ t('taskPlugins.riskDesc') }}
@@ -292,7 +292,7 @@ function close() {
         @error="importError = $event"
         @fetched="onFetched"
       />
-      <div class="space-y-1.5">
+      <div class="sibling-space-y-1.5">
         <div class="flex items-center justify-between gap-2">
           <label
             for="task-plugin-source"
@@ -309,7 +309,7 @@ function close() {
           rows="14"
           spellcheck="false"
           :placeholder="t('taskPlugins.pastePlaceholder')"
-          class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 font-mono text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)] focus-ring"
+          class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 font-mono text-xs text-[var(--text-primary)] outline-hidden placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)] focus-ring"
           @input="setSource(($event.target as HTMLTextAreaElement).value)"
         />
       </div>
@@ -318,7 +318,7 @@ function close() {
         :preview="preview"
         @retry="loadPreview(source)"
       />
-      <div class="space-y-1.5">
+      <div class="sibling-space-y-1.5">
         <label
           for="task-plugin-icon"
           class="block text-sm font-medium text-[var(--text-secondary)]"
@@ -372,7 +372,7 @@ function close() {
           {{ iconError }}
         </p>
       </div>
-      <div class="space-y-1.5">
+      <div class="sibling-space-y-1.5">
         <label
           for="task-plugin-remark"
           class="block text-sm font-medium text-[var(--text-secondary)]"

@@ -236,7 +236,7 @@ function changeTheme(value: string): void {
         :title="t('settings.notificationSettings')"
       />
       <div
-        class="space-y-6 border-t border-[var(--border-subtle)] px-5 py-5 sm:px-6"
+        class="sibling-space-y-6 border-t border-[var(--border-subtle)] px-5 py-5 sm:px-6"
       >
         <div>
           <p class="settings-field-label">
@@ -428,7 +428,7 @@ function changeTheme(value: string): void {
         :title="t('settings.appearanceInterface')"
       />
       <div
-        class="divide-y divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
+        class="sibling-divide-y sibling-divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
       >
         <div class="settings-preference-row">
           <div class="flex min-w-0 items-center gap-3">
@@ -497,7 +497,7 @@ function changeTheme(value: string): void {
         :title="t('settings.behaviorPreferences')"
       />
       <div
-        class="divide-y divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
+        class="sibling-divide-y sibling-divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
       >
         <div v-if="isAdmin" class="settings-toggle-row">
           <div>

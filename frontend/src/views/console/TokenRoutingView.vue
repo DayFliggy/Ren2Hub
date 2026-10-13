@@ -504,7 +504,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <div class="space-y-6" data-handdrawn-page="token-routing">
+  <div class="sibling-space-y-6" data-handdrawn-page="token-routing">
     <PageBreadcrumb :crumbs="[t('keys.breadcrumb.0'), t('routing.title')]">
       <template #action>
         <div class="flex gap-2">
@@ -594,7 +594,7 @@ onMounted(() => void load())
             :hint="t('routing.noGroupsHint')"
           />
         </div>
-        <div v-else class="space-y-3">
+        <div v-else class="sibling-space-y-3">
           <div
             v-for="group in groups"
             :key="group.id || `new-${group.position}`"
@@ -608,7 +608,7 @@ onMounted(() => void load())
             <div class="flex flex-wrap items-center gap-3">
               <input
                 v-model="group.name"
-                class="min-w-40 flex-1 border-0 border-b bg-transparent px-1 py-2 text-sm font-semibold text-[var(--text-primary)] focus:outline-none"
+                class="min-w-40 flex-1 border-0 border-b bg-transparent px-1 py-2 text-sm font-semibold text-[var(--text-primary)] focus:outline-hidden"
                 style="border-color: var(--border-default)"
                 :aria-label="t('routing.groupName')"
                 :disabled="!canEdit"
@@ -647,7 +647,7 @@ onMounted(() => void load())
               </button>
             </div>
 
-            <div v-if="activeGroup === group" class="mt-4 space-y-4">
+            <div v-if="activeGroup === group" class="mt-4 sibling-space-y-4">
               <div
                 class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
               >
@@ -693,7 +693,7 @@ onMounted(() => void load())
                   >
                     {{ t('routing.noEntries') }}
                   </div>
-                  <div v-else class="space-y-2">
+                  <div v-else class="sibling-space-y-2">
                     <div
                       v-for="entry in group.entries"
                       :key="entry.id || `new-entry-${entry.channel_id}`"
@@ -797,7 +797,7 @@ onMounted(() => void load())
                   </div>
                 </div>
 
-                <div class="space-y-3">
+                <div class="sibling-space-y-3">
                   <p
                     class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
                   >
@@ -859,7 +859,10 @@ onMounted(() => void load())
       </ConsoleCard>
 
       <ConsoleCard :title="t('routing.previewTitle')">
-        <div v-if="!profileView && groups.length" class="mb-4 space-y-4">
+        <div
+          v-if="!profileView && groups.length"
+          class="mb-4 sibling-space-y-4"
+        >
           <p class="text-sm text-[var(--text-tertiary)]">
             {{ t('routing.createHint') }}
           </p>
@@ -886,7 +889,7 @@ onMounted(() => void load())
               data-testid="route-preview-request"
               rows="4"
               spellcheck="false"
-              class="w-full resize-y border bg-transparent p-3 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+              class="w-full resize-y border bg-transparent p-3 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-hidden"
               style="border-color: var(--border-default)"
             />
           </FormField>
@@ -903,7 +906,7 @@ onMounted(() => void load())
 
           <div
             v-if="preview"
-            class="mt-6 space-y-4 border-t pt-4"
+            class="mt-6 sibling-space-y-4 border-t pt-4"
             style="border-color: var(--border-subtle)"
           >
             <div class="flex flex-wrap items-center gap-2 text-sm">
@@ -1090,7 +1093,7 @@ onMounted(() => void load())
                   </p>
                   <ol
                     v-if="entry.conversion_plan.steps.length"
-                    class="mt-2 space-y-1 text-[var(--text-tertiary)]"
+                    class="mt-2 sibling-space-y-1 text-[var(--text-tertiary)]"
                   >
                     <li
                       v-for="(step, index) in entry.conversion_plan.steps"
@@ -1109,7 +1112,7 @@ onMounted(() => void load())
                 </div>
                 <ul
                   v-if="entry.diagnostics.length"
-                  class="mt-3 space-y-2 text-xs"
+                  class="mt-3 sibling-space-y-2 text-xs"
                   data-testid="route-preview-diagnostics"
                 >
                   <li

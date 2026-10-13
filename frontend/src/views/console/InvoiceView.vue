@@ -88,7 +88,7 @@ onMounted(() => {
     <div class="grid gap-6 lg:grid-cols-5">
       <!-- ── Left: application form (3 / 5) ── -->
       <ConsoleCard :title="t('invoice.formTitle')" class="lg:col-span-3">
-        <form class="space-y-5" @submit.prevent>
+        <form class="sibling-space-y-5" @submit.prevent>
           <!-- 发票抬头 * -->
           <FormField :label="`${t('invoice.titleLabel')} *`">
             <TextInput
@@ -206,13 +206,13 @@ onMounted(() => {
               v-model="form.note"
               rows="3"
               :placeholder="t('invoice.notePlaceholder')"
-              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none transition focus:border-[var(--border-strong)] focus-ring"
+              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-hidden transition focus:border-[var(--border-strong)] focus-ring"
             />
           </FormField>
 
           <!-- Submit: online submission stays fail-closed until the backend
                ships /api/invoice/apply; the reason must stay visible here. -->
-          <div class="space-y-3">
+          <div class="sibling-space-y-3">
             <p
               id="invoice-submit-note"
               class="flex items-start gap-2 text-xs leading-5 text-[var(--status-info-text)]"
@@ -272,7 +272,7 @@ onMounted(() => {
           </template>
 
           <!-- Loading skeleton -->
-          <div v-if="loading" class="space-y-3 p-5">
+          <div v-if="loading" class="sibling-space-y-3 p-5">
             <SkeletonBlock v-for="i in 3" :key="i" rounded="xl" class="h-16" />
           </div>
 
@@ -285,7 +285,10 @@ onMounted(() => {
           />
 
           <!-- Record rows -->
-          <div v-else class="divide-y divide-[var(--border-subtle)]">
+          <div
+            v-else
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+          >
             <div
               v-for="inv in invoices"
               :key="inv.id"

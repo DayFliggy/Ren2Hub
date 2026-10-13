@@ -53,7 +53,7 @@ const chip =
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="sibling-space-y-3">
     <h3 class="text-sm font-semibold text-[var(--text-primary)]">
       {{ title || t('taskPlugins.endpoints') }}
     </h3>
@@ -78,7 +78,7 @@ const chip =
     <div
       v-for="claim in claims"
       :key="claim.name"
-      class="space-y-1.5 rounded-lg bg-[var(--surface-muted)] p-3"
+      class="sibling-space-y-1.5 rounded-lg bg-[var(--surface-muted)] p-3"
     >
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
@@ -97,14 +97,14 @@ const chip =
           >
         </template>
       </div>
-      <ul class="divide-y divide-[var(--border-subtle)]">
+      <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <li
           v-for="endpoint in claim.endpoints"
           :key="`${endpoint.method} ${endpoint.path}`"
           class="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-2 py-2"
         >
           <span :class="method">{{ endpoint.method }}</span>
-          <div class="min-w-0 space-y-1.5 pt-1">
+          <div class="min-w-0 sibling-space-y-1.5 pt-1">
             <span
               class="block max-w-full overflow-x-auto whitespace-nowrap font-mono text-xs"
               :title="endpoint.path"
@@ -134,19 +134,19 @@ const chip =
     <slot name="routesNote" />
     <div
       v-if="routes.length"
-      class="space-y-1.5 rounded-lg bg-[var(--surface-muted)] p-3"
+      class="sibling-space-y-1.5 rounded-lg bg-[var(--surface-muted)] p-3"
     >
       <p class="text-xs text-[var(--text-tertiary)]">
         {{ t('taskPlugins.pluginRoutes') }}
       </p>
-      <ul class="divide-y divide-[var(--border-subtle)]">
+      <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <li
           v-for="route in routes"
           :key="`${route.method} ${route.path}`"
           class="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-2 py-2"
         >
           <span :class="method">{{ route.method }}</span>
-          <div class="min-w-0 space-y-1.5 pt-1">
+          <div class="min-w-0 sibling-space-y-1.5 pt-1">
             <span
               class="block max-w-full overflow-x-auto whitespace-nowrap font-mono text-xs"
               :title="route.path"

@@ -19,6 +19,9 @@ From the repository root, run `make build-web` followed by `go build -o new-api 
 its production assets into `frontend/embed-dist` before Go embeds them.
 
 ### 2. Electron Dependencies
+Use Bun 1.4.0 and Node.js 22.12.0 or newer; the dependency and download checks
+were run with Node.js 24.21.0.
+
 ```bash
 cd electron
 bun install --frozen-lockfile
@@ -26,7 +29,27 @@ bun install --frozen-lockfile
 
 前端与 Electron 统一使用 Bun 1.4.0，各自维护 bun.lock；构建不自动发布。
 
-2026-10-13 更新至 Electron 41.10.6，并定向吸收兼容的安全补丁。`bun audit --json` 仍报告构建下载工具链的 sprintf-js 1.1.3 中危，暂无已发布修复；实际依赖链与复评条件见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。入口语法、运行时版本和 Linux 目录打包检查不能替代目标桌面系统的图形启动、托盘及安装包验证。
+2026-10-13 更新至 Electron 41.10.6，并定向吸收兼容的安全补丁。Electron Builder 26.15.3 的 `@electron/get` 3.1.0 通过可选 `global-agent` 引入 `roarr → sprintf-js`；本项目将 `global-agent` 固定覆盖为官方 4.1.3。[官方发布记录](https://github.com/gajus/global-agent/releases)说明 4.1.0 已移除 `roarr`，4.1.3 修正了发布产物。4.1.3 保留旧下载器调用的 CommonJS `bootstrap()` API 和代理环境变量，实际代理下载及校验失败检查通过。锁文件和正常安装依赖中不再包含 `roarr` 或 `sprintf-js`，`bun audit --json` 无已知漏洞。不禁用 optional 依赖，保留 Electron 下载代理和跨平台打包工具。
+
+此次下载验证包含 HTTP 代理、HTTPS CONNECT、代理绕过和校验失败。Linux 目录打包只能检查打包流程与资源完整性；Windows/macOS 安装包和任一桌面系统的图形启动与托盘操作尚未验证。后续升级 Builder 时应重新核对下载器依赖与代理检查，移除不再需要的覆盖。完整同步状态见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。
+
+### Download proxies
+
+构建时有两个下载器：Electron 41 使用 `@electron/get` 5，Builder 26 使用 3。需要代理时，设置 `ELECTRON_GET_USE_PROXY=1`，同时配置标准代理变量和旧下载器的命名空间：
+
+```bash
+export ELECTRON_GET_USE_PROXY=1
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY="$HTTP_PROXY"
+export NO_PROXY=localhost,127.0.0.1
+export GLOBAL_AGENT_HTTP_PROXY="$HTTP_PROXY"
+export GLOBAL_AGENT_HTTPS_PROXY="$HTTPS_PROXY"
+export GLOBAL_AGENT_NO_PROXY="$NO_PROXY"
+bun install --frozen-lockfile
+bun run build -- --publish never
+```
+
+这些变量用于开发和构建过程的下载。普通直连构建无需设置。代理启用方式见 [get 3 文档](https://github.com/electron/get/blob/v3.1.0/README.md#proxies)和 [get 5 发布说明](https://github.com/electron/get/releases/tag/v5.0.0)。现有托盘图标是版本控制中的 PNG 文件，打包不需要 `canvas` 或图标生成脚本。
 
 ## Development
 
@@ -43,6 +66,8 @@ bun run dev-app
 ```
 
 Development mode does not start the Go process or choose a database path. Start `go run .` (or the dev Docker backend) separately, then start Vite with `make dev-web`; Electron checks `http://127.0.0.1:5175/` and loads it. The backend therefore uses the database path configured by that separately started process. Electron opens a window with DevTools enabled and creates a system tray icon (menu bar on macOS).
+
+`bun run dev-app` 使用 `cross-env` 设置 `NODE_ENV=development`，主进程依赖该值选择开发模式。曾检查直接使用 Bun 的内联环境变量赋值；Bun 1.4.0 在 Linux 上强制 Bun Shell、继承 `NODE_ENV=production` 时未覆盖该值，因此保留 `cross-env` 和原开发命令。恢复后的入口在默认 Shell 与 Bun Shell 下均通过变量覆盖检查。这是开发入口检查，Windows/macOS 桌面启动仍未验收。
 
 ## Building for Production
 

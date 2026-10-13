@@ -74,7 +74,7 @@
     >
       <RouterLink
         :to="isAuthenticated ? { name: 'dashboard' } : { name: 'sign-in' }"
-        class="hero-cta-primary group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-7 py-3.5 text-base font-semibold text-[var(--accent-contrast)] shadow-[var(--button-shadow)] transition-all [text-shadow:none] hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] hover:shadow-[var(--button-shadow-hover)] active:scale-[0.98] lg:w-auto"
+        class="hero-cta-primary group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-7 py-3.5 text-base font-semibold text-[var(--accent-contrast)] transition-all [text-shadow:none] hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] active:scale-[0.98] lg:w-auto"
       >
         <span class="cta-sheen" />
         <span class="relative">{{

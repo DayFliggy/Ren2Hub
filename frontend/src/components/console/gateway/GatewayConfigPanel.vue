@@ -193,7 +193,7 @@ watch(
 </script>
 
 <template>
-  <section class="min-w-0 space-y-5" data-testid="gateway-config-panel">
+  <section class="min-w-0 sibling-space-y-5" data-testid="gateway-config-panel">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-[var(--text-primary)]">
         {{ t(channelId ? 'gateway.providerLimits' : 'gateway.title') }}
@@ -223,8 +223,11 @@ watch(
     >
       {{ error }}
     </p>
-    <form v-if="draft" class="space-y-5" @submit.prevent="save">
-      <fieldset :disabled="saving || conflict" class="min-w-0 space-y-5">
+    <form v-if="draft" class="sibling-space-y-5" @submit.prevent="save">
+      <fieldset
+        :disabled="saving || conflict"
+        class="min-w-0 sibling-space-y-5"
+      >
         <template v-if="!channelId">
           <label class="flex items-center gap-2 text-sm">
             <input v-model="draft.retry_budget_enabled" type="checkbox" />
@@ -240,7 +243,9 @@ watch(
               :min="'min' in field ? field.min : 0"
             />
           </div>
-          <div class="space-y-4 border-t border-[var(--border-subtle)] pt-4">
+          <div
+            class="sibling-space-y-4 border-t border-[var(--border-subtle)] pt-4"
+          >
             <h4 class="text-sm font-semibold text-[var(--text-primary)]">
               {{ t('gateway.groups') }}
             </h4>
@@ -291,7 +296,9 @@ watch(
             </div>
           </div>
         </template>
-        <div class="space-y-4 border-t border-[var(--border-subtle)] pt-4">
+        <div
+          class="sibling-space-y-4 border-t border-[var(--border-subtle)] pt-4"
+        >
           <h4
             v-if="!channelId"
             class="text-sm font-semibold text-[var(--text-primary)]"

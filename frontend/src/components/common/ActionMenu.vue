@@ -138,7 +138,7 @@ useEventListener(window, 'scroll', dismiss, { capture: true, passive: true })
         ref="panel"
         role="menu"
         :aria-label="label"
-        class="fixed z-[300] min-w-44 rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5 shadow-[var(--overlay-shadow)]"
+        class="fixed z-[300] min-w-44 rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5"
         :style="{ top: `${position.top}px`, left: `${position.left}px` }"
         data-handdrawn="menu"
         @keydown="onKeydown"

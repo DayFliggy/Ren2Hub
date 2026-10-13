@@ -115,7 +115,7 @@ async function save() {
     size="lg"
     @close="emit('close')"
   >
-    <div class="space-y-4 text-left">
+    <div class="sibling-space-y-4 text-left">
       <FormField :label="t('market.form.nameLabel')">
         <TextInput
           v-model="form.title"

@@ -19,7 +19,7 @@ const { t } = useI18n()
     </p>
     <RouterLink
       :to="{ name: 'home' }"
-      class="pencil-control inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-contrast)] shadow-[var(--button-shadow)] transition-all focus-ring hover:bg-[var(--accent-hover)] hover:shadow-[var(--button-shadow-hover)] active:bg-[var(--accent-active)] sm:h-10"
+      class="pencil-control inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-contrast)] transition-all focus-ring hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)] sm:h-10"
       data-handdrawn="control"
     >
       {{ t('notFound.backHome') }}

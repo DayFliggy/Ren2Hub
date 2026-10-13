@@ -155,7 +155,7 @@ async function copyName(name: string) {
         v-else
         class="overflow-hidden rounded-lg border border-[var(--border-subtle)]"
       >
-        <ul class="divide-y divide-[var(--border-subtle)]">
+        <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
           <li
             v-for="name in visible"
             :key="name"

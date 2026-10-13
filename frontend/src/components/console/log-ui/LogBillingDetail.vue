@@ -34,7 +34,7 @@ const upstreamModel = computed(() => observation.value.upstream)
 </script>
 
 <template>
-  <div class="space-y-4 text-left" data-log-billing-detail>
+  <div class="sibling-space-y-4 text-left" data-log-billing-detail>
     <dl class="grid grid-cols-[auto_1fr] gap-2 text-sm">
       <dt>{{ t('billing.clientModel') }}</dt>
       <dd class="break-all font-mono">{{ log.model }}</dd>
@@ -123,7 +123,7 @@ const upstreamModel = computed(() => observation.value.upstream)
           </tbody>
         </table>
       </div>
-      <div v-if="charge.trace" class="space-y-2 text-xs">
+      <div v-if="charge.trace" class="sibling-space-y-2 text-xs">
         <p v-if="charge.trace.image_count !== undefined">
           {{ t('billing.quantities.images') }}: {{ charge.trace.image_count }}
         </p>
@@ -133,7 +133,7 @@ const upstreamModel = computed(() => observation.value.upstream)
         <p
           v-for="(rule, index) in charge.trace.request_rules"
           :key="index"
-          class="break-words rounded p-2"
+          class="break-words rounded-sm p-2"
           :class="
             rule.matched
               ? 'bg-[var(--accent-soft)]'

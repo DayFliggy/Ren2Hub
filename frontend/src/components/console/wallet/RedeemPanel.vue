@@ -81,7 +81,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="mt-5 space-y-3">
+    <div class="mt-5 sibling-space-y-3">
       <TextInput
         id="redeem-input"
         v-model="code"

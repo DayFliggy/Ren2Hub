@@ -417,7 +417,7 @@ onMounted(() => void alignLatest())
     <div
       v-if="tooltip"
       :id="tooltipId"
-      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-[0.6875rem] text-[var(--text-primary)] shadow-[var(--overlay-shadow)]"
+      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-[0.6875rem] text-[var(--text-primary)]"
       :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }"
       role="tooltip"
     >

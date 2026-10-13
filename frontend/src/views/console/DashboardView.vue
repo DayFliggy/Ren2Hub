@@ -166,7 +166,10 @@ const rangeOptions = computed(() => [
       <!-- ══════════════════════════════════════════
          Tab: Overview
     ══════════════════════════════════════════ -->
-      <div v-if="activeTab === 'overview'" class="space-y-4 sm:space-y-5">
+      <div
+        v-if="activeTab === 'overview'"
+        class="sibling-space-y-4 sm:sibling-space-y-5"
+      >
         <!-- KPI strip — 4 clickable chips, jumps to Stats tab -->
         <OverviewKpiStrip
           :stats="stats"
@@ -225,7 +228,10 @@ const rangeOptions = computed(() => [
       <!-- ══════════════════════════════════════════
          Tab: Statistics
     ══════════════════════════════════════════ -->
-      <div v-else-if="activeTab === 'stats'" class="space-y-4 sm:space-y-5">
+      <div
+        v-else-if="activeTab === 'stats'"
+        class="sibling-space-y-4 sm:sibling-space-y-5"
+      >
         <!-- Range picker — same segmented control as the trend card's mode toggle -->
         <div class="flex flex-wrap items-center gap-3">
           <SegmentedToggle

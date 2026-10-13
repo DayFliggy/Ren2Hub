@@ -147,7 +147,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- Rate Limiting -->
     <SysSettingsFormCard
       :title="t('systemSettings.security.rateLimit')"
@@ -155,7 +155,7 @@ onMounted(async () => {
       :dirty="rateDirty"
       @save="saveRate"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="rate.ModelRequestRateLimitEnabled"
           :label="t('systemSettings.security.rateLimitEnabled')"
@@ -190,7 +190,7 @@ onMounted(async () => {
       :dirty="sensitiveDirty"
       @save="saveSensitive"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="sensitive.CheckSensitiveEnabled"
           :label="t('systemSettings.security.sensitiveWordsEnabled')"
@@ -222,7 +222,7 @@ onMounted(async () => {
       :dirty="ssrfDirty"
       @save="saveSsrf"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="ssrf['fetch_setting.enable_ssrf_protection']"
           :label="t('systemSettings.security.ssrfEnabled')"

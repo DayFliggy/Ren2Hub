@@ -113,20 +113,20 @@ const indexChip =
 </script>
 
 <template>
-  <div class="min-w-0 space-y-5">
+  <div class="min-w-0 sibling-space-y-5">
     <ErrorBanner
       v-if="preview && preview.status !== 'parsed'"
       :message="`${t('taskPlugins.previewPartialTitle')}: ${t('taskPlugins.previewPartialDesc')}`"
       @retry="emit('retry')"
     />
     <section
-      class="min-w-0 space-y-3"
+      class="min-w-0 sibling-space-y-3"
       :aria-label="t('taskPlugins.supportedModels')"
     >
       <h3 class="text-sm font-medium">
         {{ t('taskPlugins.supportedModels') }}
       </h3>
-      <div class="min-w-0 space-y-1.5">
+      <div class="min-w-0 sibling-space-y-1.5">
         <PluginModelList
           v-if="fields.models.state === 'value' && fields.models.value.length"
           :models="fields.models.value"
@@ -181,7 +181,7 @@ const indexChip =
       </PluginEndpoints>
     </section>
     <section
-      class="space-y-3"
+      class="sibling-space-y-3"
       :aria-label="t('taskPlugins.connectionSettings')"
     >
       <h3 class="text-sm font-medium">
@@ -193,13 +193,13 @@ const indexChip =
         <div
           v-for="(connection, index) in connections"
           :key="connection.title"
-          class="min-w-0 space-y-1.5"
+          class="min-w-0 sibling-space-y-1.5"
           :class="index >= 2 ? 'sm:col-span-2' : ''"
         >
           <dt class="text-xs text-[var(--text-tertiary)]">
             {{ connection.title }}
           </dt>
-          <dd class="space-y-1.5">
+          <dd class="sibling-space-y-1.5">
             <p class="break-all text-xs leading-relaxed">
               {{ connection.value }}
             </p>

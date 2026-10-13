@@ -64,7 +64,7 @@
         <ThemeSwitcher class="hidden md:block" />
         <RouterLink
           :to="isAuthenticated ? { name: 'dashboard' } : { name: 'sign-in' }"
-          class="home-nav-cta inline-flex h-11 w-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[var(--accent)] px-0 text-sm font-semibold text-[var(--accent-contrast)] transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--button-shadow-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] min-[420px]:w-auto min-[420px]:px-3 md:h-auto md:w-auto md:px-4 md:py-1.5"
+          class="home-nav-cta inline-flex h-11 w-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[var(--accent)] px-0 text-sm font-semibold text-[var(--accent-contrast)] transition-all hover:bg-[var(--accent-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] min-[420px]:w-auto min-[420px]:px-3 md:h-auto md:w-auto md:px-4 md:py-1.5"
           :aria-label="isAuthenticated ? t('nav.console') : t('nav.login')"
         >
           <span class="sr-only min-[420px]:not-sr-only">{{

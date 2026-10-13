@@ -168,7 +168,7 @@ onMounted(load)
            scrolls. On mobile (no lg:) it's static and fully expands. -->
       <div class="lg:relative">
         <section
-          class="flex flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)] lg:absolute lg:inset-0"
+          class="flex flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:absolute lg:inset-0"
         >
           <div
             class="flex shrink-0 items-center justify-between gap-3 px-5 pt-4"
@@ -194,7 +194,7 @@ onMounted(load)
           </div>
 
           <ul
-            class="subtle-scroll mt-2 divide-y divide-[var(--border-subtle)] px-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+            class="subtle-scroll mt-2 sibling-divide-y sibling-divide-[var(--border-subtle)] px-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
           >
             <li
               v-for="record in sortedRecords"
@@ -291,7 +291,7 @@ onMounted(load)
       <h3 class="mb-4 text-lg font-bold text-[var(--text-primary)]">
         {{ t('invite.faqTitle') }}
       </h3>
-      <div class="space-y-3">
+      <div class="sibling-space-y-3">
         <details
           v-for="n in faqs"
           :key="n"
@@ -333,7 +333,7 @@ onMounted(load)
       size="sm"
       @close="transferOpen = false"
     >
-      <div class="space-y-3">
+      <div class="sibling-space-y-3">
         <input
           v-model="transferDollars"
           inputmode="decimal"

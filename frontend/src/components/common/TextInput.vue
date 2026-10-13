@@ -51,7 +51,7 @@ const inputAttrs = computed(() => {
       :autocomplete="autocomplete"
       :readonly="readonly"
       v-bind="inputAttrs"
-      class="h-11 w-full border-0 border-b-[1.5px] bg-transparent pr-4 text-base leading-[1.375rem] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-none focus:border-[var(--accent)] sm:text-[0.9375rem]"
+      class="h-11 w-full border-0 border-b-[1.5px] bg-transparent pr-4 text-base leading-[1.375rem] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-hidden focus:border-[var(--accent)] sm:text-[0.9375rem]"
       style="border-color: var(--border-default)"
       :class="[
         $slots.icon ? 'pl-10' : 'pl-4',

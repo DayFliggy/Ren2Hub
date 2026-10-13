@@ -61,7 +61,10 @@ const state = computed(() => {
 </script>
 
 <template>
-  <section class="space-y-1" :aria-label="t('taskPlugins.fileVerification')">
+  <section
+    class="sibling-space-y-1"
+    :aria-label="t('taskPlugins.fileVerification')"
+  >
     <PluginAlert
       :tone="state.status === 'failed' ? 'danger' : 'neutral'"
       :role="state.status === 'failed' ? 'alert' : 'status'"

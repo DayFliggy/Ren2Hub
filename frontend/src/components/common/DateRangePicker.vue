@@ -374,7 +374,7 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
         v-if="open"
         :id="panelId"
         ref="panelRef"
-        class="rounded-2xl border bg-[var(--surface-overlay)] shadow-[var(--overlay-shadow)]"
+        class="rounded-2xl border bg-[var(--surface-overlay)]"
         :class="
           presentation === 'inline'
             ? 'relative mt-2 w-full'
@@ -564,11 +564,13 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
 .drp-pop-leave-active {
   transition:
     opacity 0.18s ease,
-    transform 0.18s cubic-bezier(0.2, 0.6, 0.2, 1);
+    transform 0.18s cubic-bezier(0.2, 0.6, 0.2, 1),
+    translate 0.18s cubic-bezier(0.2, 0.6, 0.2, 1);
 }
 .drp-pop-enter-from,
 .drp-pop-leave-to {
   opacity: 0;
+  translate: initial;
   transform: translateY(-4px);
 }
 </style>

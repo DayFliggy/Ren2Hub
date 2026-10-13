@@ -41,7 +41,7 @@ function send() {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="sibling-space-y-3">
     <textarea
       v-model="content"
       rows="3"

@@ -76,7 +76,7 @@ watch(
 
 <template>
   <section
-    class="min-w-0 space-y-4 border-t border-[var(--border-subtle)] py-4"
+    class="min-w-0 sibling-space-y-4 border-t border-[var(--border-subtle)] py-4"
     data-testid="gateway-channel-panel"
   >
     <div class="flex items-center justify-between gap-3">
@@ -101,7 +101,7 @@ watch(
     <p v-if="loading" class="text-sm text-[var(--text-tertiary)]">
       {{ t('common.loading') }}
     </p>
-    <div v-if="runtime" class="space-y-3">
+    <div v-if="runtime" class="sibling-space-y-3">
       <GatewayRuntimeDetails :runtime="runtime" />
       <div class="flex flex-wrap gap-5 text-sm">
         <span

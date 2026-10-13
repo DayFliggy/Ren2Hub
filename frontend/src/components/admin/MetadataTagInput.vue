@@ -51,7 +51,7 @@ defineExpose({ commit, isDirty: () => Boolean(draft.value.trim()) })
       {{ tag }}
       <button
         type="button"
-        class="rounded p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus-ring disabled:opacity-40"
+        class="rounded-sm p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus-ring disabled:opacity-40"
         :aria-label="`${removeLabel} ${tag}`"
         :disabled="disabled"
         @click="remove(index)"
@@ -61,7 +61,7 @@ defineExpose({ commit, isDirty: () => Boolean(draft.value.trim()) })
     </span>
     <input
       v-model="draft"
-      class="min-w-24 flex-1 border-0 bg-transparent px-1 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+      class="min-w-24 flex-1 border-0 bg-transparent px-1 text-sm text-[var(--text-primary)] outline-hidden placeholder:text-[var(--text-tertiary)]"
       :aria-label="label"
       :placeholder="model.length ? '' : placeholder"
       :disabled="disabled"

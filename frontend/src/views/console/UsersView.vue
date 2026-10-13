@@ -774,10 +774,10 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
         <div class="md:hidden">
           <div
             v-if="loading"
-            class="divide-y divide-[var(--border-subtle)]"
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
             aria-hidden="true"
           >
-            <div v-for="index in 5" :key="index" class="space-y-4 p-4">
+            <div v-for="index in 5" :key="index" class="sibling-space-y-4 p-4">
               <SkeletonBlock rounded="md" class="h-5 w-2/3" />
               <div class="grid grid-cols-2 gap-3">
                 <SkeletonBlock rounded="md" class="h-14" />

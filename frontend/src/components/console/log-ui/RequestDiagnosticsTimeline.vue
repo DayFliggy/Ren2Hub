@@ -24,7 +24,7 @@ const time = (value?: number) =>
 </script>
 
 <template>
-  <section data-request-diagnostics class="space-y-4 text-left">
+  <section data-request-diagnostics class="sibling-space-y-4 text-left">
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
       <dt>{{ t('request') }}</dt>
       <dd class="break-all font-mono">{{ diagnostic.request_id }}</dd>
@@ -100,7 +100,10 @@ const time = (value?: number) =>
     >
       {{ t('noAttempts') }}
     </p>
-    <ol v-else class="space-y-3 border-l-2 border-[var(--border-subtle)] pl-3">
+    <ol
+      v-else
+      class="sibling-space-y-3 border-l-2 border-[var(--border-subtle)] pl-3"
+    >
       <li
         v-for="attempt in diagnostic.attempts"
         :key="attempt.attempt_id"

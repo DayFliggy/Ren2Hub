@@ -51,7 +51,7 @@ const typeLabelKey: Record<LogType, string> = {
   <article
     data-log-mobile-card
     :data-log-type="log.type"
-    class="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)]"
+    class="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
     :aria-label="t('logs.mobileCardLabel', { model: log.model })"
   >
     <header class="flex min-w-0 items-start justify-between gap-3">

@@ -44,7 +44,7 @@ const canTransfer = computed(
       {{ formatQuota(transferable) }}
     </p>
 
-    <dl class="mt-4 space-y-2.5 text-sm">
+    <dl class="mt-4 sibling-space-y-2.5 text-sm">
       <div class="flex items-center justify-between">
         <dt class="text-[var(--text-tertiary)]">
           {{ t('invite.currentBalance') }}

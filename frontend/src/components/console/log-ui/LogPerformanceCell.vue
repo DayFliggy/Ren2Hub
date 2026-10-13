@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
       data-log-performance-details
       :aria-label="t('logs.hideTimingDetails')"
       :aria-expanded="true"
-      class="flex max-w-full flex-wrap items-center gap-2 text-left focus-visible:outline-none"
+      class="flex max-w-full flex-wrap items-center gap-2 text-left focus-visible:outline-hidden"
       @click="toggleDetails"
     >
       <span
@@ -321,7 +321,7 @@ onBeforeUnmount(() => {
         :data-metric="tooltip.metric"
         :data-tone="tooltipTone"
         role="tooltip"
-        class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-full items-center gap-2 rounded-md border border-[var(--overlay-border)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-xs shadow-[var(--overlay-shadow)] backdrop-blur-xl"
+        class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-full items-center gap-2 rounded-md border border-[var(--overlay-border)] bg-[var(--surface-overlay)] px-2.5 py-1.5 text-xs backdrop-blur-xl"
         :style="tooltipStyle"
       >
         <span

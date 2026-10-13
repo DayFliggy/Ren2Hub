@@ -199,11 +199,11 @@ watch(
         class="h-52 animate-pulse rounded-full bg-[var(--surface-muted)] lg:h-60"
         data-model-distribution-chart
       />
-      <div class="self-center space-y-2.5">
+      <div class="self-center sibling-space-y-2.5">
         <div
           v-for="i in 8"
           :key="i"
-          class="h-7 animate-pulse rounded bg-[var(--surface-muted)]"
+          class="h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
         />
       </div>
     </div>
@@ -306,7 +306,7 @@ watch(
                 <td class="px-2 py-2 sm:px-2.5">
                   <span class="flex min-w-0 items-center gap-2">
                     <span
-                      class="h-2 w-2 shrink-0 rounded-full ring-2 ring-[var(--surface-solid)] shadow-sm transition-transform group-hover:scale-125"
+                      class="h-2 w-2 shrink-0 rounded-full ring-2 ring-[var(--surface-solid)] shadow-xs transition-transform group-hover:scale-125"
                       :style="{ background: swatchColor(i) }"
                     />
                     <span

@@ -223,7 +223,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- Global Config -->
     <SysSettingsFormCard
       :title="t('systemSettings.models.globalConfig')"
@@ -231,7 +231,7 @@ onMounted(async () => {
       :dirty="globalDirty"
       @save="saveGlobal"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="global['global.pass_through_request_enabled']"
           :label="t('systemSettings.models.passThroughRequest')"
@@ -281,7 +281,7 @@ onMounted(async () => {
           "
         />
       </div>
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="routing.AutomaticDisableChannelEnabled"
           :label="t('systemSettings.models.autoDisableChannel')"
@@ -323,7 +323,7 @@ onMounted(async () => {
       :dirty="affinityDirty"
       @save="saveAffinity"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="affinity['channel_affinity_setting.enabled']"
           :label="t('systemSettings.models.channelAffinityEnabled')"
@@ -359,7 +359,7 @@ onMounted(async () => {
       :dirty="claudeDirty"
       @save="saveClaude"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="claude['claude.thinking_adapter_enabled']"
           :label="t('systemSettings.models.claudeThinkingAdapter')"

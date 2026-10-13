@@ -325,7 +325,7 @@ onBeforeUnmount(() => {
         <template #cell-status="{ row }">
           <button
             type="button"
-            class="inline-flex min-h-6 items-center rounded transition-opacity hover:opacity-70 focus-ring"
+            class="inline-flex min-h-6 items-center rounded-sm transition-opacity hover:opacity-70 focus-ring"
             :disabled="togglingIds.has((row as TokenSummary).id)"
             :aria-label="t('keys.toggleKey')"
             @click.stop="toggleStatus(row as TokenSummary)"
@@ -489,14 +489,14 @@ onBeforeUnmount(() => {
         <div
           v-if="loading"
           data-key-mobile-loading
-          class="divide-y divide-[var(--border-subtle)]"
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
           aria-hidden="true"
         >
           <div
             v-for="index in pageSize"
             :key="index"
             data-key-mobile-skeleton-row
-            class="space-y-4 p-4"
+            class="sibling-space-y-4 p-4"
           >
             <SkeletonBlock rounded="md" class="h-5 w-2/3" />
             <div class="grid grid-cols-2 gap-3">

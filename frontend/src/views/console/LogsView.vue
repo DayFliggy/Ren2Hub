@@ -450,7 +450,7 @@ onBeforeUnmount(() => {
 
     <!-- filter toolbar -->
     <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)]"
+      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
     >
       <SearchInput
         v-model="keyword"
@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
               v-if="colSettingsOpen"
               :id="colSettingsPanelId"
               ref="colSettingsPanelRef"
-              class="subtle-scroll absolute right-0 top-full z-50 mt-2 w-44 overflow-y-auto rounded-xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5 shadow-[var(--overlay-shadow)]"
+              class="subtle-scroll absolute right-0 top-full z-50 mt-2 w-44 overflow-y-auto rounded-xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5"
               :style="colSettingsPanelStyle"
               role="dialog"
               aria-modal="false"
@@ -551,7 +551,7 @@ onBeforeUnmount(() => {
                 @click="toggleCol(key)"
               >
                 <span
-                  class="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
+                  class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors"
                   :class="
                     visibleCols.has(key)
                       ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
@@ -695,7 +695,7 @@ onBeforeUnmount(() => {
     </ConsoleCard>
 
     <section class="lg:hidden" :aria-label="t('logs.breadcrumb.1')">
-      <div v-if="loading" class="space-y-3" aria-busy="true">
+      <div v-if="loading" class="sibling-space-y-3" aria-busy="true">
         <SkeletonBlock
           v-for="index in Math.min(pageSize, 5)"
           :key="index"
@@ -705,7 +705,7 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <div v-else-if="rows.length" class="space-y-3">
+      <div v-else-if="rows.length" class="sibling-space-y-3">
         <LogMobileCard
           v-for="row in rows"
           :key="row.id"

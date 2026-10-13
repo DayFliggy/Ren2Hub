@@ -45,7 +45,7 @@ const section = 'rounded-xl border border-[var(--border-subtle)] p-4'
 </script>
 
 <template>
-  <div class="min-w-0 space-y-4">
+  <div class="min-w-0 sibling-space-y-4">
     <section :class="section" :aria-label="t('taskPlugins.pluginMetadata')">
       <h3 class="mb-4 text-sm font-semibold">
         {{ t('taskPlugins.pluginMetadata') }}
@@ -54,14 +54,14 @@ const section = 'rounded-xl border border-[var(--border-subtle)] p-4'
         <div
           v-for="field in fields"
           :key="field.label"
-          class="min-w-0 space-y-1"
+          class="min-w-0 sibling-space-y-1"
         >
           <dt class="text-xs text-[var(--text-tertiary)]">{{ field.label }}</dt>
           <dd class="break-words text-sm">
             {{ field.value || t('taskPlugins.notDeclared') }}
           </dd>
         </div>
-        <div class="min-w-0 space-y-1">
+        <div class="min-w-0 sibling-space-y-1">
           <dt class="text-xs text-[var(--text-tertiary)]">
             {{ t('taskPlugins.pluginWebsite') }}
           </dt>
@@ -75,7 +75,7 @@ const section = 'rounded-xl border border-[var(--border-subtle)] p-4'
             }}</span>
           </dd>
         </div>
-        <div class="min-w-0 space-y-1 sm:col-span-2">
+        <div class="min-w-0 sibling-space-y-1 sm:col-span-2">
           <dt class="text-xs text-[var(--text-tertiary)]">
             {{ t('taskPlugins.defaultBaseUrl') }}
           </dt>

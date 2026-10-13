@@ -34,7 +34,7 @@ const energyStyle = computed(() => {
 
 <template>
   <article
-    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <h3 class="mb-4 text-sm font-semibold text-[var(--text-primary)]">
@@ -50,7 +50,7 @@ const energyStyle = computed(() => {
         {{ petEmoji[pet.type] ?? '🐾' }}
       </div>
 
-      <div class="flex-1 space-y-2">
+      <div class="flex-1 sibling-space-y-2">
         <div class="flex items-center gap-2">
           <span class="font-bold text-[var(--text-primary)]">{{
             pet.name

@@ -134,7 +134,7 @@ defineExpose({ collapsed })
           </span>
         </div>
 
-        <ul class="space-y-0.5">
+        <ul class="sibling-space-y-0.5">
           <li v-for="item in group.items" :key="item.name">
             <component
               :is="navComponent(item)"
@@ -224,7 +224,7 @@ defineExpose({ collapsed })
 
               <span
                 v-if="!collapsed && item.disabled"
-                class="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
+                class="shrink-0 rounded-sm bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
               >
                 {{ t('nav.comingSoon') }}
               </span>
@@ -237,7 +237,7 @@ defineExpose({ collapsed })
     <!-- bottom tools: ink-brush divider by day, gold hairline by night -->
     <div class="shrink-0 px-3 py-3">
       <div class="ink-divider mb-3 -mx-3" aria-hidden="true" />
-      <ul class="space-y-0.5">
+      <ul class="sibling-space-y-0.5">
         <li v-for="item in consoleNavTools" :key="item.name">
           <component
             :is="navComponent(item)"

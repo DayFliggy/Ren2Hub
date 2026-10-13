@@ -628,10 +628,10 @@ function exportCsv() {
         <div class="md:hidden">
           <div
             v-if="loading"
-            class="divide-y divide-[var(--border-subtle)]"
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
             aria-hidden="true"
           >
-            <div v-for="i in 5" :key="i" class="space-y-3 p-4">
+            <div v-for="i in 5" :key="i" class="sibling-space-y-3 p-4">
               <SkeletonBlock rounded="md" class="h-4 w-1/2" />
               <SkeletonBlock rounded="md" class="h-10" />
             </div>

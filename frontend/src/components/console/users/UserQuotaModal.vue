@@ -97,7 +97,7 @@ async function submit() {
     size="sm"
     @close="close"
   >
-    <div class="space-y-5 text-left">
+    <div class="sibling-space-y-5 text-left">
       <div
         class="sketch-md grid grid-cols-2 gap-1 bg-[var(--surface-muted)] p-1"
         role="radiogroup"
@@ -115,7 +115,7 @@ async function submit() {
           class="sketch-sm h-9 text-sm font-medium transition-colors focus-ring"
           :class="
             mode === option.value
-              ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
+              ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
               : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
           "
           @click="mode = option.value"
@@ -151,7 +151,7 @@ async function submit() {
         />
       </FormField>
       <dl
-        class="sketch-md space-y-1.5 border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs"
+        class="sketch-md sibling-space-y-1.5 border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs"
       >
         <div class="flex items-center justify-between gap-3">
           <dt class="text-[var(--text-tertiary)]">

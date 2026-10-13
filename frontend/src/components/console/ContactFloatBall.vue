@@ -71,7 +71,7 @@ const options = computed<ContactOption[]>(() => [
         >
           <!-- Tooltip label (appears to the left on hover) -->
           <span
-            class="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold opacity-0 shadow-[var(--card-shadow)] transition-opacity duration-150 group-hover:opacity-100"
+            class="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100"
             style="
               background: var(--surface-overlay);
               color: var(--text-primary);
@@ -92,7 +92,7 @@ const options = computed<ContactOption[]>(() => [
                   }
                 : { type: 'button' }
             "
-            class="flex h-12 w-12 items-center justify-center rounded-full shadow-[var(--card-shadow)] outline-none ring-2 ring-transparent transition-transform duration-150 hover:scale-110 focus-visible:ring-[var(--accent)]"
+            class="flex h-12 w-12 items-center justify-center rounded-full outline-hidden ring-2 ring-transparent transition-transform duration-150 hover:scale-110 focus-visible:ring-[var(--accent)]"
             :style="{
               background: opt.bg,
               color: opt.fg,
@@ -193,7 +193,7 @@ const options = computed<ContactOption[]>(() => [
     <!-- Main FAB trigger button -->
     <button
       type="button"
-      class="contact-float-trigger flex items-center justify-center rounded-full shadow-[0_8px_24px_var(--shadow-color)] outline-none ring-2 ring-transparent transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-[var(--accent)]"
+      class="contact-float-trigger flex items-center justify-center rounded-full shadow-[0_8px_24px_var(--shadow-color)] outline-hidden ring-2 ring-transparent transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-[var(--accent)]"
       style="background: var(--accent); color: var(--accent-contrast)"
       :aria-label="open ? t('contact.close') : t('contact.open')"
       :aria-expanded="open"

@@ -393,7 +393,7 @@ onBeforeUnmount(() => {
     </PageBreadcrumb>
 
     <div
-      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)]"
+      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
     >
       <SearchInput
         v-model="keyword"
@@ -566,7 +566,7 @@ onBeforeUnmount(() => {
       class="lg:hidden"
       :aria-label="t('auditLogs.breadcrumb')"
     >
-      <div v-if="loading" class="space-y-3" aria-busy="true">
+      <div v-if="loading" class="sibling-space-y-3" aria-busy="true">
         <SkeletonBlock
           v-for="index in Math.min(pageSize, 5)"
           :key="index"
@@ -575,11 +575,11 @@ onBeforeUnmount(() => {
           class="h-48"
         />
       </div>
-      <div v-else-if="rows.length" class="space-y-3">
+      <div v-else-if="rows.length" class="sibling-space-y-3">
         <article
           v-for="row in rows"
           :key="row.event_id"
-          class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)]"
+          class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
           :aria-label="
             t('auditLogs.mobileCardLabel', {
               action: auditLogSummary(row, t),
@@ -648,7 +648,7 @@ onBeforeUnmount(() => {
       size="lg"
       @close="detailLog = null"
     >
-      <div v-if="detailLog" class="space-y-6" data-audit-log-detail>
+      <div v-if="detailLog" class="sibling-space-y-6" data-audit-log-detail>
         <section>
           <h3 class="text-sm font-semibold text-[var(--text-primary)]">
             {{ t('auditLogs.sections.actor') }}
@@ -725,7 +725,7 @@ onBeforeUnmount(() => {
           <h3 class="text-sm font-semibold text-[var(--text-primary)]">
             {{ t('auditLogs.sections.source') }}
           </h3>
-          <dl class="mt-3 space-y-3">
+          <dl class="mt-3 sibling-space-y-3">
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
                 {{ t('auditLogs.fields.ip') }}

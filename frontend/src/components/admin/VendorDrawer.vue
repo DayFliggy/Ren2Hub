@@ -186,11 +186,11 @@ const timeLabel = (value: number | null) => (value ? formatTime(value) : '—')
       <form
         v-if="section === 'details'"
         id="vendor-drawer-form"
-        class="space-y-6"
+        class="sibling-space-y-6"
         novalidate
         @submit.prevent="save"
       >
-        <fieldset class="min-w-0 space-y-6" :disabled="saving">
+        <fieldset class="min-w-0 sibling-space-y-6" :disabled="saving">
           <FormField :label="t('vendorName')">
             <TextInput
               v-model="form.name"
@@ -204,7 +204,7 @@ const timeLabel = (value: number | null) => (value ? formatTime(value) : '—')
               v-model="form.description"
               name="vendor-description"
               rows="4"
-              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus-ring"
+              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] outline-hidden transition focus:border-[var(--accent)] focus-ring"
             />
           </FormField>
           <FormField :label="t('icon')">
@@ -225,7 +225,7 @@ const timeLabel = (value: number | null) => (value ? formatTime(value) : '—')
         </fieldset>
         <div
           v-if="vendor"
-          class="space-y-1 border-t border-[var(--border-subtle)] pt-3 text-xs text-[var(--text-tertiary)]"
+          class="sibling-space-y-1 border-t border-[var(--border-subtle)] pt-3 text-xs text-[var(--text-tertiary)]"
         >
           <p>{{ t('createdAt') }}: {{ timeLabel(vendor.created_time) }}</p>
           <p>{{ t('updatedAt') }}: {{ timeLabel(vendor.updated_time) }}</p>
@@ -238,7 +238,7 @@ const timeLabel = (value: number | null) => (value ? formatTime(value) : '—')
           {{ saveError }}
         </p>
       </form>
-      <div v-else-if="vendor" class="space-y-3">
+      <div v-else-if="vendor" class="sibling-space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-sm text-[var(--text-secondary)]">
             {{ t('linkedRecords', { count: linkedCount }) }}

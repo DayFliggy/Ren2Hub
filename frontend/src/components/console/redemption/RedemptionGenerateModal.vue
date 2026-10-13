@@ -116,7 +116,7 @@ function submit() {
     :title="t('redemption.generateTitle')"
     @close="emit('close')"
   >
-    <div class="space-y-4">
+    <div class="sibling-space-y-4">
       <FormField
         :label="t('redemption.fieldAmount')"
         :hint="t('redemption.amountHint')"
@@ -130,7 +130,7 @@ function submit() {
             v-for="option in expiryOptions"
             :key="option"
             type="button"
-            class="rounded-xl border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            class="rounded-xl border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             :class="
               expiryOption === option
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
@@ -145,7 +145,7 @@ function submit() {
           v-if="expiryOption === 'custom'"
           v-model="customDate"
           type="date"
-          class="mt-2 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
+          class="mt-2 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-hidden focus:ring-2 focus:ring-[var(--accent-soft)]"
           :min="dateInputValue()"
         />
       </FormField>

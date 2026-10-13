@@ -142,7 +142,7 @@ function closePreview(): void {
           :artifact="artifact"
         />
       </div>
-      <div v-else-if="clips.length" class="space-y-3">
+      <div v-else-if="clips.length" class="sibling-space-y-3">
         <TaskAudioClipCard
           v-for="(clip, index) in clips"
           :key="clip.clip_id || clip.id || index"

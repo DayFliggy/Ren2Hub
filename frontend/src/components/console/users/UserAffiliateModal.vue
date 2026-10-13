@@ -155,13 +155,13 @@ async function resetCode() {
     size="lg"
     @close="close"
   >
-    <div v-if="loading || !detail" class="space-y-4" aria-hidden="true">
-      <div class="h-20 animate-pulse rounded bg-[var(--surface-muted)]" />
-      <div class="h-11 animate-pulse rounded bg-[var(--surface-muted)]" />
-      <div class="h-28 animate-pulse rounded bg-[var(--surface-muted)]" />
+    <div v-if="loading || !detail" class="sibling-space-y-4" aria-hidden="true">
+      <div class="h-20 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
+      <div class="h-11 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
+      <div class="h-28 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
     </div>
 
-    <div v-else class="space-y-5 text-left">
+    <div v-else class="sibling-space-y-5 text-left">
       <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="border-b border-[var(--border-subtle)] pb-2">
           <dt class="text-xs text-[var(--text-tertiary)]">
@@ -245,7 +245,7 @@ async function resetCode() {
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <div class="space-y-3">
+        <div class="sibling-space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div>
               <p class="text-sm font-medium text-[var(--text-secondary)]">
@@ -272,7 +272,7 @@ async function resetCode() {
           />
         </div>
 
-        <div class="space-y-3">
+        <div class="sibling-space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div>
               <p class="text-sm font-medium text-[var(--text-secondary)]">

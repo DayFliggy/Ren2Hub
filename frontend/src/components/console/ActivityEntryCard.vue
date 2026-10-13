@@ -21,12 +21,8 @@ const imageOk = ref(true)
 <template>
   <button
     type="button"
-    class="activity-entry pencil-surface group relative flex h-44 w-full overflow-hidden rounded-2xl border border-[var(--border-subtle)] text-left shadow-[var(--card-shadow)] transition-all focus-ring"
-    :class="
-      disabled
-        ? 'cursor-not-allowed opacity-75'
-        : 'hover:shadow-[var(--card-shadow-hover)]'
-    "
+    class="activity-entry pencil-surface group relative flex h-44 w-full overflow-hidden rounded-2xl border border-[var(--border-subtle)] text-left transition-all focus-ring"
+    :class="disabled ? 'cursor-not-allowed opacity-75' : ''"
     data-handdrawn="surface-clipped"
     :disabled="disabled"
     :title="disabled ? cta : undefined"
@@ -52,12 +48,12 @@ const imageOk = ref(true)
     <div class="relative z-10 flex flex-col justify-between p-5">
       <div>
         <span
-          class="activity-entry__tag inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm"
+          class="activity-entry__tag inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-[4px]"
         >
           {{ emoji }} {{ tag }}
         </span>
         <h3
-          class="activity-entry__title mt-2.5 text-xl font-bold tracking-tight text-white drop-shadow"
+          class="activity-entry__title mt-2.5 text-xl font-bold tracking-tight text-white drop-shadow-title"
         >
           {{ title }}
         </h3>

@@ -70,7 +70,7 @@ onScopeDispose(() => controller?.abort())
       v-if="loading"
       role="status"
       :aria-label="t('publicPage.loading')"
-      class="space-y-4"
+      class="sibling-space-y-4"
     >
       <SkeletonBlock class="h-10 w-48" /><SkeletonBlock class="h-64 w-full" />
     </div>

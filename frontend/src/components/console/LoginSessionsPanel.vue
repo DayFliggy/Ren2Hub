@@ -184,7 +184,7 @@ onMounted(() => void loadSessions())
       </ConsoleButton>
     </header>
 
-    <div v-if="loading" class="space-y-3 px-5 py-5 sm:px-6">
+    <div v-if="loading" class="sibling-space-y-3 px-5 py-5 sm:px-6">
       <div
         v-for="n in 2"
         :key="n"
@@ -216,7 +216,10 @@ onMounted(() => void loadSessions())
         {{ t('settings.noActiveSessions') }}
       </p>
     </div>
-    <div v-else class="divide-y divide-[var(--border-subtle)] px-5 sm:px-6">
+    <div
+      v-else
+      class="sibling-divide-y sibling-divide-[var(--border-subtle)] px-5 sm:px-6"
+    >
       <div
         v-for="session in sessions"
         :key="session.sid"

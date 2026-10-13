@@ -24,7 +24,7 @@ const expPercent = computed(() =>
 
 <template>
   <section
-    class="farm-hero pencil-surface relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] p-5 shadow-[var(--card-shadow)]"
+    class="farm-hero pencil-surface relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] p-5"
     data-handdrawn="surface-clipped"
   >
     <!-- generated banner art -->
@@ -58,7 +58,7 @@ const expPercent = computed(() =>
               {{ t('farm.level', { n: state.level }) }}
             </p>
             <p
-              class="farm-hero__title text-lg font-bold text-white drop-shadow"
+              class="farm-hero__title text-lg font-bold text-white drop-shadow-title"
             >
               {{ t('farm.exp', { cur: state.exp, max: state.exp_next }) }}
             </p>

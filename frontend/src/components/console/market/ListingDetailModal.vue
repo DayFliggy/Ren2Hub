@@ -56,7 +56,7 @@ const priceUnit = computed(() =>
     size="lg"
     @close="emit('close')"
   >
-    <div v-if="listing" class="space-y-5">
+    <div v-if="listing" class="sibling-space-y-5">
       <!-- header: type + rating + price -->
       <div class="flex items-start justify-between gap-3">
         <div class="flex items-center gap-2">

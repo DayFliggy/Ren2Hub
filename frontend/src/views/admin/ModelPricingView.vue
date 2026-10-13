@@ -446,14 +446,14 @@ onBeforeUnmount(() => {
       <div
         v-if="error"
         role="alert"
-        class="mb-3 flex items-center gap-2 rounded-xl border border-[var(--status-danger)]/20 bg-[var(--status-danger-soft)] px-3.5 py-2.5 text-xs text-[var(--status-danger-text)]"
+        class="mb-3 flex items-center gap-2 rounded-xl border bg-[var(--status-danger-soft)] px-3.5 py-2.5 text-xs text-[var(--status-danger-text)]"
       >
         <span>{{ error }}</span>
       </div>
       <div
         v-if="message"
         role="status"
-        class="mb-3 flex items-center gap-2 rounded-xl border border-[var(--status-success)]/20 bg-[var(--status-success-soft)] px-3.5 py-2.5 text-xs text-[var(--status-success-text)]"
+        class="mb-3 flex items-center gap-2 rounded-xl border bg-[var(--status-success-soft)] px-3.5 py-2.5 text-xs text-[var(--status-success-text)]"
       >
         <span class="text-[var(--text-secondary)]">{{ message }}</span>
       </div>
@@ -524,7 +524,7 @@ onBeforeUnmount(() => {
                   v-model="json[key]"
                   rows="7"
                   spellcheck="false"
-                  class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none"
+                  class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-hidden"
                 />
               </label>
             </div>

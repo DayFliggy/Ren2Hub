@@ -96,7 +96,7 @@ function remove(index: number) {
 </script>
 
 <template>
-  <div class="min-w-0 space-y-3">
+  <div class="min-w-0 sibling-space-y-3">
     <div class="flex flex-wrap gap-2">
       <ConsoleButton
         variant="secondary"
@@ -123,7 +123,7 @@ function remove(index: number) {
       <article
         v-for="(route, index) in routes"
         :key="index"
-        class="space-y-3 rounded-xl border border-[var(--border-subtle)] p-3"
+        class="sibling-space-y-3 rounded-xl border border-[var(--border-subtle)] p-3"
       >
         <div class="grid min-w-0 gap-3 sm:grid-cols-2">
           <FormField :label="t('channels.incomingPath')"

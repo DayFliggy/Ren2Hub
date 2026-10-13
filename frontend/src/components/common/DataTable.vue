@@ -676,12 +676,12 @@ onBeforeUnmount(() => {
           >
             <td v-if="selectable" class="px-3 py-3">
               <div
-                class="h-[22px] w-4 animate-pulse rounded bg-[var(--surface-muted)]"
+                class="h-[22px] w-4 animate-pulse rounded-sm bg-[var(--surface-muted)]"
               />
             </td>
             <td v-for="col in columns" :key="col.key" class="px-3 py-3">
               <div
-                class="h-[22px] animate-pulse rounded bg-[var(--surface-muted)]"
+                class="h-[22px] animate-pulse rounded-sm bg-[var(--surface-muted)]"
               />
             </td>
           </tr>

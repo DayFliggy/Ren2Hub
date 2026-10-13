@@ -30,7 +30,23 @@ bun run build
 
 Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Playwright 页面审计，覆盖桌面/移动端、明暗主题和相关错误状态；它不替代真实后端与生产产物的验证，具体边界见[路由约定](ROUTING.md)。
 
-依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已定向更新兼容安全补丁；构建工具链仍有 braces 3.0.3 高危和 Tailwind 3 所需 postcss-selector-parser 6.1.4 中危，详细链路与复评条件见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。这些依赖需要按实际构建用途判断，不能仅因没有业务代码 import 而删除，也不能以忽略告警宣称审计通过。
+依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已迁移到 Tailwind CSS 4.3.3 的官方 `@tailwindcss/vite` 集成，移除 Tailwind 3 引入的 braces 和 postcss-selector-parser 6.x 依赖链。`autoprefixer`、直接 `postcss` 依赖、旧 JavaScript Tailwind/PostCSS 配置及三项不再必要的 override 已删除；Vue/Vite 自身使用的 PostCSS 和 ESLint Vue 插件使用的安全版 selector parser 仍保留，详见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。
+
+## 样式构建
+
+`vite.config.ts` 注册 `@tailwindcss/vite`；`src/styles/tailwind.css` 使用 CSS 主题、源扫描和自定义 utility，`tokens.css` 继续维护明暗主题的语义令牌。RGB 通道调色板使用内部 `--palette-*`，通过 `@theme inline` 提供 `brand`、`honey`、`white` 与 `black` 工具类，使透明度颜色在主题切换后仍从当前令牌解析。
+
+样式保持原有层级优先级、字体、阴影、边框默认色、按钮指针、键盘焦点和 reduced-motion。`sibling-space-y-*` 与 `sibling-divide-*` 保留既有兄弟元素及隐藏节点的间距/分隔线行为；旧版无效的 `shadow-xs` 已改为无阴影，旧版有效的 `shadow-sm` 对应新版 `shadow-xs`。旧版无法生成有效阴影的 `shadow-[var(...)]` 类已删除，保留 `sketch-card` 等 CSS 自身的既有阴影，避免升级后额外产生阴影。全局规则和 Vue scoped CSS 不因引入 CSS 层而改变优先级。
+
+公共页面容器在 utilities 前按旧版 components 展开后的顺序输出，保留居中与内边距。字号工具类保留旧版固定行高、任意字号的嵌套继承及响应字号对行高的重置；同断点的显式 `leading-*` 仍优先，避免徽标、表格、标题和首页内容因升级改变布局。
+
+表单控件保留旧版逐字段的字体继承：先恢复浏览器默认字体边界，再继承 family、feature/variation、size、weight 和 line-height，避免新版 `font: inherit` 额外继承祖先字体变体而改变金额字宽。显式 `italic`、`tabular-nums` 等 utility 仍可覆盖；文件上传按钮保留原浏览器字间距。
+
+带 transform 的入场动画、按钮按压和深色签到取消旧 transform 时，同时取消新版独立 translate/rotate/scale；取消值使用 CSS-wide `initial`，避免生产压缩删除 `none` 后重新叠加 utility。旧版未生成规则的变量阴影及颜色透明度类已删除，不借迁移新增外观。
+
+日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；用户已经手动滚动时保留其位置，切换页面或从桌面隐藏状态重新显示时仍定位当前项。`tests/visual/style-compatibility.spec.ts` 保护容器、字号、交互状态和延迟字体行为，导航字体生命周期另有组件行为测试。
+
+Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；不提供低于这些版本的兼容构建。升级与浏览器要求依据[官方升级指南](https://tailwindcss.com/docs/upgrade-guide)，构建方式依据[官方 Vite 集成说明](https://tailwindcss.com/docs/installation/using-vite)。
 
 ## 路由
 
@@ -67,7 +83,7 @@ src/
   i18n/         en/zh-CN 分域消息
   router/       路由、守卫和兼容重定向
   stores/       公开状态、会话、初始化与工单队列
-  styles/       tokens/base/home/console
+  styles/       tokens/tailwind/base/home/console
   types/        领域 contracts
   utils/        格式化与 URL 安全
   views/        路由页面

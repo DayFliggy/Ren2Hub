@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
     <button
       ref="anchor"
       type="button"
-      class="rounded focus-ring"
+      class="rounded-sm focus-ring"
       :aria-label="t('channels.disabledReason')"
       :aria-expanded="shown"
       :aria-describedby="shown ? id : undefined"

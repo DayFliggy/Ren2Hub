@@ -79,7 +79,7 @@ onBeforeUnmount(() => {
         :aria-label="t('common.imagePreview')"
       >
         <div
-          class="absolute inset-0 backdrop-blur-sm"
+          class="absolute inset-0 backdrop-blur-[4px]"
           style="background: var(--drawer-backdrop)"
           @click="emit('close')"
         />
@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
         <button
           ref="closeButton"
           type="button"
-          class="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--surface-solid)] text-[var(--text-secondary)] shadow transition-colors hover:text-[var(--text-primary)] focus-ring"
+          class="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--surface-solid)] text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)] focus-ring"
           :aria-label="t('common.close')"
           @click="emit('close')"
         >

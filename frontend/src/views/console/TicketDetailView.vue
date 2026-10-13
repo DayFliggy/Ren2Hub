@@ -186,7 +186,7 @@ watch(ticketId, (id) => void load(id), { immediate: true })
     </button>
 
     <!-- loading -->
-    <div v-if="loading" class="space-y-4">
+    <div v-if="loading" class="sibling-space-y-4">
       <SkeletonBlock class="sketch-lg h-28" />
       <SkeletonBlock class="sketch-lg h-48" />
     </div>
@@ -285,7 +285,7 @@ watch(ticketId, (id) => void load(id), { immediate: true })
 
       <!-- thread -->
       <ConsoleCard class="mb-5">
-        <div class="space-y-5">
+        <div class="sibling-space-y-5">
           <TicketThreadMessage
             v-for="msg in messages"
             :key="msg.id"

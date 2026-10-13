@@ -196,7 +196,7 @@ onMounted(loadVendors)
     <div
       v-if="vendorRequest.error.value && section !== 'pricing'"
       role="alert"
-      class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--status-danger)]/20 bg-[var(--status-danger-soft)] px-4 py-2.5 text-sm text-[var(--status-danger-text)]"
+      class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-[var(--status-danger-soft)] px-4 py-2.5 text-sm text-[var(--status-danger-text)]"
     >
       <span class="mr-auto font-medium">{{ vendorRequest.error.value }}</span>
       <ConsoleButton

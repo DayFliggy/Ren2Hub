@@ -160,7 +160,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- Quota Settings -->
     <SysSettingsFormCard
       :title="t('systemSettings.billing.quotaSettings')"
@@ -204,7 +204,7 @@ onMounted(async () => {
       :dirty="affiliateDirty"
       @save="saveAffiliate"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="affiliate.AffiliateEnabled"
           :disabled="affiliate.AffiliateActivatedAt > 0"
@@ -274,7 +274,7 @@ onMounted(async () => {
       :dirty="checkinDirty"
       @save="saveCheckin"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="checkin['checkin_setting.enabled']"
           :label="t('systemSettings.billing.checkinEnabled')"

@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
       <div class="mt-10 h-px w-full bg-[var(--border-default)]" />
 
       <ul
-        class="panel-promises mt-8 space-y-4 text-sm text-[var(--text-secondary)]"
+        class="panel-promises mt-8 sibling-space-y-4 text-sm text-[var(--text-secondary)]"
       >
         <li class="flex items-center gap-3.5">
           <svg

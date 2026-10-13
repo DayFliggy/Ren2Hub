@@ -145,7 +145,7 @@ const rpmCaption = computed(() => {
 
 <template>
   <section
-    class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)]"
+    class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
     data-handdrawn="surface-clipped"
     data-overview-kpi
   >
@@ -198,7 +198,7 @@ const rpmCaption = computed(() => {
 
             <p
               v-if="loading"
-              class="mt-1.5 h-7 animate-pulse rounded bg-[var(--surface-muted)]"
+              class="mt-1.5 h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
               :class="cell.skeleton"
             />
             <p

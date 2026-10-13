@@ -73,7 +73,7 @@ async function save() {
     :close-disabled="saving"
     @close="emit('close')"
   >
-    <div class="space-y-3">
+    <div class="sibling-space-y-3">
       <p v-if="!draft.length" class="text-sm text-[var(--text-tertiary)]">
         {{ t('taskPlugins.noSources') }}
       </p>
@@ -91,7 +91,7 @@ async function save() {
       <div
         v-for="(row, index) in draft"
         :key="row.rowId"
-        class="space-y-2 rounded-xl border border-[var(--border-subtle)] p-3"
+        class="sibling-space-y-2 rounded-xl border border-[var(--border-subtle)] p-3"
       >
         <div class="flex items-center justify-between gap-2">
           <label

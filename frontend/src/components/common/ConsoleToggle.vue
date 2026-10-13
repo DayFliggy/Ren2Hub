@@ -41,7 +41,7 @@ function toggle(event: MouseEvent) {
     data-handdrawn="toggle"
     :data-state="model ? 'checked' : 'unchecked'"
     :data-size="size"
-    class="console-toggle relative inline-flex shrink-0 items-center select-none transition-all focus-visible:outline-none"
+    class="console-toggle relative inline-flex shrink-0 items-center select-none transition-all focus-visible:outline-hidden"
     :class="[
       size === 'sm' ? 'h-5 w-9' : 'h-6 w-11',
       model ? 'is-checked' : 'is-unchecked',

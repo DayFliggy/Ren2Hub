@@ -148,7 +148,7 @@ onClickOutside(modelsDropdownRef, () => {
   <!-- ============ LIST ============ -->
   <article
     v-else
-    class="group flex items-center gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 transition duration-200 ease-out hover:border-[var(--accent)] hover:shadow-[var(--card-shadow-hover)] focus-within:border-[var(--accent)]"
+    class="group flex items-center gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 transition duration-200 ease-out hover:border-[var(--accent)] focus-within:border-[var(--accent)]"
   >
     <!-- name + source -->
     <div class="min-w-0 flex-1">
@@ -178,7 +178,7 @@ onClickOutside(modelsDropdownRef, () => {
         <span
           v-for="m in listing.supportedModels.slice(0, 2)"
           :key="m"
-          class="truncate rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[var(--text-secondary)]"
+          class="truncate rounded-sm bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[var(--text-secondary)]"
           style="max-width: 9rem"
           >{{ m }}</span
         >
@@ -187,7 +187,7 @@ onClickOutside(modelsDropdownRef, () => {
           type="button"
           :aria-label="t('market.previewModels')"
           :aria-expanded="modelsDropdownOpen"
-          class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.625rem] font-semibold text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
+          class="rounded-sm bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.625rem] font-semibold text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
           @click.stop="modelsDropdownOpen = !modelsDropdownOpen"
         >
           +{{ listing.supportedModels.length - 2 }}
@@ -198,7 +198,7 @@ onClickOutside(modelsDropdownRef, () => {
         <div
           v-if="modelsDropdownOpen"
           ref="modelsDropdownRef"
-          class="absolute left-0 top-full z-40 mt-1.5 w-56 rounded-xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-2.5 shadow-[var(--overlay-shadow)]"
+          class="absolute left-0 top-full z-40 mt-1.5 w-56 rounded-xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-2.5"
           role="listbox"
           :aria-label="t('market.colModels')"
           @keydown.escape.stop="modelsDropdownOpen = false"
@@ -208,7 +208,7 @@ onClickOutside(modelsDropdownRef, () => {
               v-for="m in listing.supportedModels"
               :key="m"
               role="option"
-              class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[var(--text-secondary)]"
+              class="rounded-sm bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[0.625rem] text-[var(--text-secondary)]"
               >{{ m }}</span
             >
           </div>
@@ -233,7 +233,7 @@ onClickOutside(modelsDropdownRef, () => {
       <span
         v-for="tag in listing.tags.slice(0, 2)"
         :key="tag"
-        class="truncate rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.625rem] text-[var(--text-tertiary)]"
+        class="truncate rounded-sm bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.625rem] text-[var(--text-tertiary)]"
       >
         {{ tag }}
       </span>

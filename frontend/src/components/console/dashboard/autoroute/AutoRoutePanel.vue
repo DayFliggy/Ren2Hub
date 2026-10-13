@@ -15,7 +15,7 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <div class="space-y-3 sm:space-y-4" data-auto-route-panel>
+  <div class="sibling-space-y-3 sm:sibling-space-y-4" data-auto-route-panel>
     <!-- Header card: explains the per-lab optimum and hosts refresh. -->
     <div
       class="relative overflow-hidden rounded-xl border border-[var(--accent-soft)] bg-[var(--accent-soft)] px-4 py-3 sm:rounded-2xl"
@@ -55,7 +55,7 @@ onMounted(() => void load())
     </div>
 
     <!-- skeleton -->
-    <div v-if="loading" class="space-y-4">
+    <div v-if="loading" class="sibling-space-y-4">
       <div
         v-for="i in 4"
         :key="i"

@@ -135,7 +135,7 @@ const overrides = computed(() =>
                 id="task-plugin-help"
                 role="dialog"
                 :aria-label="t('taskPlugins.behaviorHelp')"
-                class="absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 text-sm shadow-lg"
+                class="absolute right-0 top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] sibling-space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 text-sm shadow-lg"
               >
                 <p class="font-medium">
                   {{ t('taskPlugins.enableTaskPlugins') }}

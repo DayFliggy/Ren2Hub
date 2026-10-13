@@ -66,7 +66,7 @@ function clear() {
 </script>
 
 <template>
-  <section data-model-capabilities class="space-y-3">
+  <section data-model-capabilities class="sibling-space-y-3">
     <h3 class="text-sm font-semibold text-[var(--text-primary)]">
       {{ t('title') }}
     </h3>

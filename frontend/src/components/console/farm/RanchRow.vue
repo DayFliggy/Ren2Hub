@@ -34,13 +34,13 @@ function moodColor(mood: number): string {
 
 <template>
   <article
-    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <h3 class="mb-4 text-sm font-semibold text-[var(--text-primary)]">
       🐄 {{ t('farm.ranch.title') }}
     </h3>
-    <div class="space-y-3">
+    <div class="sibling-space-y-3">
       <div
         v-for="animal in animals"
         :key="animal.id"

@@ -30,7 +30,7 @@ onMounted(() => load())
 </script>
 
 <template>
-  <div data-handdrawn-page="system-settings" class="space-y-6">
+  <div data-handdrawn-page="system-settings" class="sibling-space-y-6">
     <!-- Breadcrumb with compact right-aligned domain switcher -->
     <PageBreadcrumb
       :crumbs="[
@@ -41,7 +41,7 @@ onMounted(() => load())
       <template #action>
         <div class="subtle-scroll max-w-full overflow-x-auto sm:ml-auto">
           <nav
-            class="flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1 shadow-[var(--card-shadow)]"
+            class="flex w-max items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-1"
             role="tablist"
             :aria-label="t('systemSettings.title')"
           >
@@ -54,7 +54,7 @@ onMounted(() => load())
               class="flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-all focus-ring sm:min-h-8 sm:text-sm"
               :class="
                 activeTab === tab.key
-                  ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)] shadow-xs'
+                  ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)] shadow-none'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
               "
             >

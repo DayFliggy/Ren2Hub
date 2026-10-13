@@ -104,7 +104,7 @@ function onBlur(e: Event) {
       :max="max"
       :placeholder="placeholder"
       v-bind="inputAttrs"
-      class="h-11 w-full border-0 border-b-[1.5px] bg-transparent pr-4 font-mono text-[0.9375rem] font-semibold leading-[1.375rem] text-[var(--text-primary)] placeholder:font-normal placeholder:font-sans placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-none focus:border-[var(--accent)]"
+      class="h-11 w-full border-0 border-b-[1.5px] bg-transparent pr-4 font-mono text-[0.9375rem] font-semibold leading-[1.375rem] text-[var(--text-primary)] placeholder:font-normal placeholder:font-sans placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-hidden focus:border-[var(--accent)]"
       :class="prefix ? 'pl-10' : 'pl-4'"
       style="border-color: var(--border-default)"
       @input="onInput"

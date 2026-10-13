@@ -38,7 +38,7 @@ const badgeTone = computed(() => {
 
 <template>
   <article
-    class="pencil-surface flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <header class="flex items-start justify-between gap-3">

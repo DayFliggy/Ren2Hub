@@ -116,7 +116,7 @@ if (props.initialFilter) void load()
     size="xl"
     @close="emit('close')"
   >
-    <div class="space-y-4">
+    <div class="sibling-space-y-4">
       <form class="grid gap-3 sm:grid-cols-2" @submit.prevent="search">
         <label class="text-sm"
           >{{ t('token')
@@ -186,7 +186,7 @@ if (props.initialFilter) void load()
       </p>
       <ul
         v-if="rows.length"
-        class="divide-y divide-[var(--border-subtle)] rounded-lg border border-[var(--border-subtle)]"
+        class="sibling-divide-y sibling-divide-[var(--border-subtle)] rounded-lg border border-[var(--border-subtle)]"
       >
         <li
           v-for="row in rows"

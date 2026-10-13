@@ -34,7 +34,7 @@ const classes = computed(() => {
   const variants = {
     // Solid CTA: accent background, hand-drawn irregular radius + pencil-pressure shadow
     primary:
-      'sketch-sm bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)] shadow-[var(--button-shadow)] hover:shadow-[var(--button-shadow-hover)]',
+      'sketch-sm bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)] ',
     // Outlined: 1.5px border, hand-drawn radius, paper-surface fill
     secondary:
       'sketch-sm border-[length:var(--sketch-border-width)] border-[var(--border-default)] bg-[var(--surface-solid)] text-[var(--text-primary)] hover:bg-[var(--state-hover-layer)] active:bg-[var(--state-press-layer)] hover:border-[var(--border-strong)]',
@@ -46,7 +46,7 @@ const classes = computed(() => {
       'sketch-sm text-[var(--text-secondary)] hover:bg-[var(--state-hover-layer)] active:bg-[var(--state-press-layer)] hover:text-[var(--text-primary)]',
     // Stamp: vermilion-ink seal style for special actions. Geometry stays fixed.
     stamp:
-      'rounded-[4px_6px_5px_5px/5px_4px_6px_4px] bg-[var(--status-danger)] text-[var(--text-inverse)] hover:opacity-95 active:scale-[0.97] active:-rotate-1 active:opacity-90 shadow-[var(--stamp-shadow)] active:shadow-none transition-transform duration-100',
+      'rounded-[4px_6px_5px_5px/5px_4px_6px_4px] bg-[var(--status-danger)] text-[var(--text-inverse)] hover:opacity-95 active:scale-[0.97] active:-rotate-1 active:opacity-90 active:shadow-none transition-transform duration-100',
   }
 
   return [

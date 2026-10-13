@@ -66,7 +66,7 @@ const { t, locale } = useI18n()
       {{ t('users.selectPage') }}
     </label>
 
-    <div class="divide-y divide-[var(--border-subtle)]">
+    <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
       <article
         v-for="user in users"
         :key="user.id"

@@ -195,7 +195,7 @@ onClickOutside(root, closeMenu)
         v-if="open"
         :id="listboxId"
         ref="listRef"
-        class="subtle-scroll absolute left-0 z-40 max-h-72 w-full min-w-[180px] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1 shadow-[var(--card-shadow)]"
+        class="subtle-scroll absolute left-0 z-40 max-h-72 w-full min-w-[180px] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
         :class="direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
         role="listbox"
         data-handdrawn="menu"
@@ -221,7 +221,7 @@ onClickOutside(root, closeMenu)
             @mousemove="activeIndex = i"
           >
             <span
-              class="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
+              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors"
               :class="
                 isChecked(opt.value)
                   ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'

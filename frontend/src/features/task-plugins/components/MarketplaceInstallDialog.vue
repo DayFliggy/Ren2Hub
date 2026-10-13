@@ -286,13 +286,13 @@ async function install() {
     :close-disabled="installing"
     @close="emit('close')"
   >
-    <div class="space-y-3">
+    <div class="sibling-space-y-3">
       <div class="flex min-w-0 items-center gap-3">
         <PluginIcon
           :plugin="{ ...plugin, iconSrc: fetched?.icon ?? undefined }"
           :size="36"
         />
-        <div class="min-w-0 flex-1 space-y-1">
+        <div class="min-w-0 flex-1 sibling-space-y-1">
           <FilterSelect
             v-model="selectedVersion"
             :options="versionOptions"
@@ -326,7 +326,7 @@ async function install() {
         id="marketplace-install-panel"
         role="tabpanel"
         :aria-labelledby="`marketplace-install-panel-tab-${reviewTab}`"
-        class="min-w-0 space-y-2"
+        class="min-w-0 sibling-space-y-2"
       >
         <template v-if="reviewTab !== 'changelog'">
           <div
@@ -414,7 +414,7 @@ async function install() {
           })
         }}
       </PluginAlert>
-      <div v-if="installError" role="alert" class="space-y-1">
+      <div v-if="installError" role="alert" class="sibling-space-y-1">
         <p class="text-sm font-medium text-[var(--status-danger-text)]">
           {{ t('taskPlugins.installFailed') }}
         </p>

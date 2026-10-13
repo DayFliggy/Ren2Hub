@@ -108,7 +108,7 @@ watch(
 
 <template>
   <section
-    class="min-w-0 space-y-4 border-t border-[var(--border-subtle)] py-4"
+    class="min-w-0 sibling-space-y-4 border-t border-[var(--border-subtle)] py-4"
     data-testid="gateway-user-panel"
   >
     <div class="flex items-center justify-between gap-3">

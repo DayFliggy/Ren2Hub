@@ -193,7 +193,7 @@ async function runBatch() {
     size="sm"
     @close="emit('close')"
   >
-    <div class="space-y-5 text-left">
+    <div class="sibling-space-y-5 text-left">
       <p class="text-sm leading-6 text-[var(--text-tertiary)]">
         {{ t('channels.pickChannelDesc', { supplier }) }}
       </p>

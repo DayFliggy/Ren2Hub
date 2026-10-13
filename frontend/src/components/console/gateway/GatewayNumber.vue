@@ -14,7 +14,7 @@ const id = useId()
 </script>
 
 <template>
-  <div class="min-w-0 space-y-1.5">
+  <div class="min-w-0 sibling-space-y-1.5">
     <label
       :for="id"
       class="block text-sm font-medium text-[var(--text-secondary)]"

@@ -78,7 +78,7 @@ onScopeDispose(() => controller?.abort())
       v-if="loading"
       role="status"
       :aria-label="t('publicPage.loading')"
-      class="space-y-4"
+      class="sibling-space-y-4"
     >
       <SkeletonBlock class="h-80 w-full" /><SkeletonBlock class="h-48 w-full" />
     </div>
@@ -87,7 +87,7 @@ onScopeDispose(() => controller?.abort())
       v-else-if="!snapshot?.models.length"
       :title="t('publicPage.noActivity')"
     />
-    <div v-else class="space-y-10">
+    <div v-else class="sibling-space-y-10">
       <section>
         <h2 class="mb-5 text-lg font-semibold">{{ t('publicPage.models') }}</h2>
         <div
@@ -209,7 +209,10 @@ onScopeDispose(() => controller?.abort())
             v-if="!change.rows.length"
             :title="t('publicPage.empty')"
           />
-          <ul v-else class="divide-y divide-[var(--border-subtle)]">
+          <ul
+            v-else
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+          >
             <li
               v-for="model in change.rows"
               :key="model.model_name"

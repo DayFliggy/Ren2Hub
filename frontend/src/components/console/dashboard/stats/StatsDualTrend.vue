@@ -263,7 +263,7 @@ useEChart(
           <div class="mt-1 flex min-w-0 items-center gap-1.5 sm:gap-2">
             <span
               v-if="loading"
-              class="inline-block h-7 w-24 animate-pulse rounded bg-[var(--surface-muted)]"
+              class="inline-block h-7 w-24 animate-pulse rounded-sm bg-[var(--surface-muted)]"
             />
             <strong
               v-else
@@ -278,7 +278,7 @@ useEChart(
                 comparison?.quotaDelta !== undefined &&
                 !loading
               "
-              class="shrink-0 rounded px-1 py-0.5 text-[0.625rem] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
+              class="shrink-0 rounded-sm px-1 py-0.5 text-[0.625rem] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
               :style="deltaStyle(comparison.quotaDelta)"
               data-trend-spend-delta
             >
@@ -296,7 +296,7 @@ useEChart(
           <div class="mt-1 flex min-w-0 items-center gap-1.5 sm:gap-2">
             <span
               v-if="loading"
-              class="inline-block h-7 w-20 animate-pulse rounded bg-[var(--surface-muted)]"
+              class="inline-block h-7 w-20 animate-pulse rounded-sm bg-[var(--surface-muted)]"
             />
             <strong
               v-else
@@ -311,7 +311,7 @@ useEChart(
                 comparison?.requestsDelta !== undefined &&
                 !loading
               "
-              class="shrink-0 rounded px-1 py-0.5 text-[0.625rem] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
+              class="shrink-0 rounded-sm px-1 py-0.5 text-[0.625rem] font-semibold tabular-nums sm:px-1.5 sm:text-xs"
               :style="deltaStyle(comparison.requestsDelta)"
               data-trend-requests-delta
             >
@@ -332,7 +332,7 @@ useEChart(
           class="rounded-lg px-3 py-1.5 font-medium transition-all focus-ring"
           :class="
             mode === option.key
-              ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
+              ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
               : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
           "
           :aria-pressed="mode === option.key"

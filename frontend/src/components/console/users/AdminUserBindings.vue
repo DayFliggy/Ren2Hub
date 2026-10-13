@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
     >
       {{ error }}
     </p>
-    <ul class="space-y-3">
+    <ul class="sibling-space-y-3">
       <li
         v-for="binding in rows"
         :key="binding.key"

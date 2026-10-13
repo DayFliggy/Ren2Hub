@@ -164,7 +164,7 @@ onMounted(async () => {
       </p>
     </div>
 
-    <form class="mt-8 space-y-4" @submit.prevent="submit">
+    <form class="mt-8 sibling-space-y-4" @submit.prevent="submit">
       <FormField :label="t('auth.username')">
         <TextInput
           v-model="username"

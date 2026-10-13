@@ -302,7 +302,7 @@ function close() {
 
 <template>
   <ConsoleModal :open="open" :title="modalTitle" size="xl" @close="close">
-    <div class="space-y-5 text-left">
+    <div class="sibling-space-y-5 text-left">
       <!-- ══ 测试配置 ══════════════════════════════════════════════════ -->
       <section class="channel-test-config">
         <div :inert="testingAll" class="mb-4">

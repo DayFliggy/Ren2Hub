@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
         role="dialog"
         aria-modal="false"
         :aria-labelledby="popoverTitleId"
-        class="fixed z-[100] w-64 rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-3 shadow-[var(--overlay-shadow)] backdrop-blur-xl"
+        class="fixed z-[100] w-64 rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] p-3 backdrop-blur-xl"
         :class="
           popoverPosition.placement === 'above' ? '-translate-y-full' : ''
         "
@@ -249,7 +249,7 @@ onBeforeUnmount(() => {
           {{ t('logs.usageDetails') }}
         </h4>
 
-        <dl class="mt-2.5 space-y-2 text-xs">
+        <dl class="mt-2.5 sibling-space-y-2 text-xs">
           <div class="flex items-center justify-between gap-4">
             <dt class="flex items-center gap-1.5 text-[var(--text-tertiary)]">
               <ArrowDown
@@ -291,7 +291,7 @@ onBeforeUnmount(() => {
               {{ formatTokenValue(usage.cacheWriteTokens) }}
               <span
                 v-if="usage.cacheTtl"
-                class="rounded border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-1 py-0.5 text-[0.625rem] font-medium leading-none text-[var(--status-warning-text)]"
+                class="rounded-sm border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-1 py-0.5 text-[0.625rem] font-medium leading-none text-[var(--status-warning-text)]"
               >
                 {{ usage.cacheTtl }}
               </span>

@@ -455,7 +455,9 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <div class="mt-5 space-y-2 border-t border-[var(--border-subtle)] pt-4">
+      <div
+        class="mt-5 sibling-space-y-2 border-t border-[var(--border-subtle)] pt-4"
+      >
         <div class="flex items-center justify-between text-sm">
           <span class="text-[var(--text-secondary)]">{{
             t(

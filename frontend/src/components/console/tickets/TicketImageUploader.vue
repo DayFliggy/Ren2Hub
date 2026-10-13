@@ -76,7 +76,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="sibling-space-y-3">
     <!-- Preview grid -->
     <div v-if="images.length" class="grid grid-cols-4 gap-2.5">
       <div
@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
         </div>
         <button
           type="button"
-          class="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-solid)] text-[var(--text-secondary)] opacity-100 shadow transition-opacity hover:text-[var(--status-danger-text)] focus-visible:opacity-100 group-focus-within:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+          class="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-solid)] text-[var(--text-secondary)] opacity-100 shadow-sm transition-opacity hover:text-[var(--status-danger-text)] focus-visible:opacity-100 group-focus-within:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
           :aria-label="t('tickets.upload.remove')"
           @click="remove(img.id)"
         >

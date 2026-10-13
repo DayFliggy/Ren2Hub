@@ -202,7 +202,7 @@ watch(
 
     <div
       v-if="layout === 'ranked'"
-      class="mt-1 space-y-0.5"
+      class="mt-1 sibling-space-y-0.5"
       :class="{ 'sm:hidden': compact }"
       data-usage-segment-details
     >
@@ -212,7 +212,7 @@ watch(
         class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[0.5625rem]"
       >
         <span
-          class="size-1.5 rounded-sm"
+          class="size-1.5 rounded-xs"
           :style="{
             background: `color-mix(in srgb, ${color} ${segment.intensity}%, var(--surface-solid))`,
           }"
@@ -232,7 +232,7 @@ watch(
         aria-hidden="true"
         data-usage-segment-placeholder
       >
-        <span class="size-1.5 rounded-sm bg-[var(--surface-muted)]" />
+        <span class="size-1.5 rounded-xs bg-[var(--surface-muted)]" />
         <span>--</span>
       </div>
     </div>
@@ -253,7 +253,7 @@ watch(
     <div
       v-if="tooltip"
       :id="tooltipId"
-      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2 py-1 text-[0.625rem] text-[var(--text-primary)] shadow-[var(--overlay-shadow)]"
+      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2 py-1 text-[0.625rem] text-[var(--text-primary)]"
       :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }"
       role="tooltip"
     >

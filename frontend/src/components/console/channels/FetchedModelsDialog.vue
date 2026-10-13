@@ -59,7 +59,7 @@ function toggle(models: string[], checked: boolean) {
     <p class="my-3 text-sm text-[var(--text-secondary)]">
       {{ t('channels.fetchedSelectionHint', { count: selected.length }) }}
     </p>
-    <div class="space-y-4">
+    <div class="sibling-space-y-4">
       <fieldset
         v-for="[provider, groupModels] in groups"
         :key="provider"

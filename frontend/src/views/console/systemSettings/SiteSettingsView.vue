@@ -89,7 +89,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- System Information -->
     <SysSettingsFormCard
       :title="t('systemSettings.site.systemInfo')"

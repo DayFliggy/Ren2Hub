@@ -130,7 +130,7 @@ function onInstalled() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="sibling-space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-[var(--text-secondary)]">
         {{ t('taskPlugins.marketHint') }}
@@ -166,7 +166,7 @@ function onInstalled() {
     </p>
     <div
       v-if="sources !== null && !sources.length"
-      class="space-y-3 text-center"
+      class="sibling-space-y-3 text-center"
     >
       <EmptyState
         :title="t('taskPlugins.noSources')"
@@ -188,7 +188,7 @@ function onInstalled() {
         @update:model-value="selectedUrl = $event"
       />
     </div>
-    <section v-if="selected" class="space-y-3" data-marketplace-source>
+    <section v-if="selected" class="sibling-space-y-3" data-marketplace-source>
       <div class="flex flex-wrap items-center gap-2">
         <h3 class="text-sm font-semibold">
           {{

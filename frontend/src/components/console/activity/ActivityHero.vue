@@ -14,7 +14,7 @@ const activityBanner = useThemedAsset(activityDayBanner, activityNightBanner)
 
 <template>
   <section
-    class="activity-hero pencil-surface relative overflow-hidden rounded-2xl shadow-[var(--card-shadow)]"
+    class="activity-hero pencil-surface relative overflow-hidden rounded-2xl"
     data-handdrawn="surface-clipped"
   >
     <!-- generated banner art -->
@@ -30,12 +30,12 @@ const activityBanner = useThemedAsset(activityDayBanner, activityNightBanner)
     <!-- content -->
     <div class="relative z-10 px-8 py-8 sm:py-10">
       <span
-        class="activity-hero__pill inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm"
+        class="activity-hero__pill inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-[4px]"
       >
         {{ pill }}
       </span>
       <h1
-        class="activity-hero__title mt-3 text-3xl font-bold tracking-tight text-white drop-shadow sm:text-4xl"
+        class="activity-hero__title mt-3 text-3xl font-bold tracking-tight text-white drop-shadow-title sm:text-4xl"
       >
         {{ title }}
       </h1>

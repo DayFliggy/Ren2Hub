@@ -79,7 +79,7 @@ const label = 'select-none text-[11px] font-medium text-[var(--text-tertiary)]'
     >
       {{ description }}
     </p>
-    <div v-if="models.length" class="space-y-1.5">
+    <div v-if="models.length" class="sibling-space-y-1.5">
       <div :class="label">{{ t('taskPlugins.models') }}</div>
       <div class="flex flex-wrap gap-1">
         <span

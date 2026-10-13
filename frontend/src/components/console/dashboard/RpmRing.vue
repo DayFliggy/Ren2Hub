@@ -129,10 +129,10 @@ const summary = computed(() =>
       v-if="open"
       :id="popoverId"
       role="tooltip"
-      class="pointer-events-none fixed z-[100] w-max -translate-x-1/2 -translate-y-full rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] px-3 py-2 text-xs shadow-[var(--overlay-shadow)] backdrop-blur-xl"
+      class="pointer-events-none fixed z-[100] w-max -translate-x-1/2 -translate-y-full rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] px-3 py-2 text-xs backdrop-blur-xl"
       :style="popoverStyle"
     >
-      <dl class="space-y-1">
+      <dl class="sibling-space-y-1">
         <div class="flex items-center justify-between gap-4">
           <dt class="text-[var(--text-tertiary)]">
             {{ t('dashboard.rpm.current') }}

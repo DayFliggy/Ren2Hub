@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
 
       <div
         v-if="group.children && openGroup === group.name"
-        class="absolute left-1/2 top-12 z-40 w-52 -translate-x-1/2 rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5 shadow-[var(--overlay-shadow)] animate-scale-in"
+        class="absolute left-1/2 top-12 z-40 w-52 -translate-x-1/2 rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5 animate-scale-in"
         data-handdrawn="menu"
       >
         <button
@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
           <span class="min-w-0 flex-1 truncate">{{ t(child.labelKey) }}</span>
           <span
             v-if="child.disabled"
-            class="rounded bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
+            class="rounded-sm bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
           >
             {{ t('nav.comingSoon') }}
           </span>

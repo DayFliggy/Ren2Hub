@@ -120,7 +120,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="sibling-space-y-6">
     <!-- Data Dashboard -->
     <SysSettingsFormCard
       :title="t('systemSettings.content.dashboard')"
@@ -128,7 +128,7 @@ onMounted(async () => {
       :dirty="dashboardDirty"
       @save="saveDashboard"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-model="dashboard.DataExportEnabled"
           :label="t('systemSettings.content.dataExportEnabled')"
@@ -154,7 +154,7 @@ onMounted(async () => {
       :dirty="drawingDirty"
       @save="saveDrawing"
     >
-      <div class="divide-y divide-[var(--border-subtle)]">
+      <div class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <SysToggleRow
           v-for="sw in drawingSwitches"
           :key="sw.key"

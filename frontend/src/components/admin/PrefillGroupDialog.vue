@@ -366,11 +366,11 @@ watch(
       </DataTable>
 
       <div class="md:hidden">
-        <div v-if="loading" class="space-y-3" aria-hidden="true">
+        <div v-if="loading" class="sibling-space-y-3" aria-hidden="true">
           <div
             v-for="i in 3"
             :key="i"
-            class="space-y-3 rounded-xl border border-[var(--border-subtle)] p-4"
+            class="sibling-space-y-3 rounded-xl border border-[var(--border-subtle)] p-4"
           >
             <SkeletonBlock rounded="md" class="h-4 w-1/2" />
             <SkeletonBlock rounded="md" class="h-10" />
@@ -382,14 +382,14 @@ watch(
           :hint="t('noGroupsHint')"
           illustration="empty-search"
         />
-        <div v-else class="space-y-3">
+        <div v-else class="sibling-space-y-3">
           <article
             v-for="row in rows"
             :key="row.id"
             class="rounded-xl border border-[var(--border-subtle)] p-4"
           >
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 space-y-1.5">
+              <div class="min-w-0 sibling-space-y-1.5">
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-mono text-sm text-[var(--text-primary)]">{{
                     row.group.name
@@ -464,12 +464,12 @@ watch(
   >
     <form
       id="prefill-group-form"
-      class="space-y-6"
+      class="sibling-space-y-6"
       novalidate
       @submit.prevent="save"
     >
-      <fieldset class="min-w-0 space-y-6" :disabled="saving">
-        <section class="space-y-4">
+      <fieldset class="min-w-0 sibling-space-y-6" :disabled="saving">
+        <section class="sibling-space-y-4">
           <div>
             <h3 class="text-sm font-semibold text-[var(--text-secondary)]">
               {{ t('groupDetails') }}
@@ -497,12 +497,14 @@ watch(
               rows="3"
               maxlength="255"
               :placeholder="t('groupDescriptionPlaceholder')"
-              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none transition focus:border-[var(--accent)] focus-ring"
+              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-hidden transition focus:border-[var(--accent)] focus-ring"
             />
           </FormField>
         </section>
 
-        <section class="space-y-4 border-t border-[var(--border-subtle)] pt-6">
+        <section
+          class="sibling-space-y-4 border-t border-[var(--border-subtle)] pt-6"
+        >
           <div>
             <h3 class="text-sm font-semibold text-[var(--text-secondary)]">
               {{ t('configuration') }}
@@ -531,7 +533,9 @@ watch(
               {{ t('groupTypeHint') }}
             </p>
           </div>
-          <div class="space-y-3 border-y border-[var(--border-subtle)] py-4">
+          <div
+            class="sibling-space-y-3 border-y border-[var(--border-subtle)] py-4"
+          >
             <div class="flex flex-wrap items-center gap-2">
               <h4 class="text-sm font-medium text-[var(--text-primary)]">
                 {{ t('items') }}
@@ -555,7 +559,7 @@ watch(
                 rows="12"
                 spellcheck="false"
                 :aria-label="t('items')"
-                class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 font-mono text-xs text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus-ring"
+                class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 font-mono text-xs text-[var(--text-primary)] outline-hidden transition focus:border-[var(--accent)] focus-ring"
               />
               <p class="text-xs text-[var(--text-tertiary)]">
                 {{ t('endpointItemsHint') }}

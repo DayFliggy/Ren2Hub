@@ -6,12 +6,34 @@
 
 - `src/styles/fonts.css`：本地自托管 WOFF2 字体声明。
 - `src/styles/tokens.css`：颜色、阴影、状态、品牌和 Canvas 共享令牌。
-- `src/styles/base.css`：Tailwind 层、文档默认值、焦点和选区规则。
+- `src/styles/tailwind.css`：Tailwind 4 入口、CSS 主题映射和保持现有布局的兼容 utility。
+- `src/styles/tailwind-defaults.css`：恢复 Tailwind 3 生产 CSS 的边框、占位文字、控件字体继承、按钮光标和对话框默认值，并在 utilities 前输出公共页面容器。
+- `src/styles/base.css`：文档默认值、焦点和选区规则。
 - `src/styles/home.css`：首页专属视觉，选择器限制在 `.landing-shell`；仅首页滚动状态允许作用于 `html.hero-scrollbar-hidden`。
 - `src/styles/console.css`：Console 的滚动区域，由懒加载的 Console 布局引入。
-- `src/styles/index.css`：全局汇总入口，只引入字体、令牌、基础规则和首页样式，不定义新的业务令牌。
+- `src/styles/index.css`：全局汇总入口，依次引入字体、令牌、Tailwind、基础规则和首页样式，不定义新的业务令牌。
 
 组件必须使用 `--page-background`、`--surface-container-*`、`--text-*`、`--outline-*`、`--accent`、`--signal`、`--support` 和 `--status-*` 等语义变量，不得在业务组件中复制主题色板。旧的 `--surface-*`、`--card-shadow` 和 `--sketch-*` 仅作为兼容别名。
+
+## Tailwind 构建与兼容约定
+
+Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建，配置位于 `tailwind.css`，不再使用 JavaScript 配置或独立 PostCSS 配置。项目已移除直接声明的 `autoprefixer` 和 `postcss`；Vue 与 Vite 所需的间接 PostCSS 依赖仍由各自维护。
+
+`tokens.css` 的 `--palette-white`、`--palette-black`、`--palette-brand-*` 和 `--palette-accent-*` 保存原有 RGB 通道值；`tailwind.css` 用 `@theme inline` 将它们包装为完整颜色，映射到 Tailwind 的 `--color-*` 命名空间。业务组件继续使用语义变量，浅色与深色仍由现有主题令牌切换。不要把裸 RGB 通道写入 Tailwind 的 `--color-*` 变量。
+
+主题声明保留 `theme` 层，Preflight、默认值兼容规则和 utilities 则按顺序保持在层外，以延续原生产 CSS 与 Vue scoped 样式的优先级。`tailwind-defaults.css` 保留旧版的灰色边框、占位文字、按钮 `pointer`、禁用控件 `default` 光标，以及对话框居中；它位于 utilities 之前，显式的语义颜色和 `disabled:cursor-*` 仍优先。
+
+`button/input/select/textarea/optgroup` 先用 `font: revert` 恢复浏览器字体默认值，再按旧版逐项继承 family、feature/variation、size、weight 和 line-height；其他字体字段保留原浏览器边界，避免暗色账本的 `tabular-nums` 意外传到控件。文件上传按钮保留原生字间距。兼容规则位于 utilities 前，显式的斜体、字体变体与字重类继续优先。验证应设置祖先字体变体、斜体、字宽和 kerning/optical 等附属字段，不能只比较普通字号；字体 shorthand 的字段关系见 [CSS Fonts 规范](https://www.w3.org/TR/css-fonts-4/#font-prop)。
+
+公共页面 `.site-container` 按旧版展开 components 层后的顺序输出到层外，保留居中、左右安全内边距和 utility 覆盖顺序。不要把现有组件规则放回原生 `components` 层，否则层外 Preflight 的 margin/padding 重置会覆盖它。字号 utility 保留旧版固定行高及断点重置规则：任意字号继承父元素的实际行高，响应字号重置较小断点的 `leading-*`，同断点显式 `leading-*` 仍优先；这同时保护状态徽标、表格文字、控制台标题和首页副标题的布局。
+
+`sibling-space-y-*` 和 `sibling-divide-*` 保留旧版对隐藏节点的过滤及后续兄弟节点规则；圆角、模糊、轮廓和阴影类按旧生产值迁移。旧版未产生可见阴影的未指定类型 `shadow-[var(--…)]` 类已删除，避免升级后意外增加高程；原有 CSS 定义的语义阴影继续按组件规范使用。兼容规则以升级前的实际生产 CSS 为基线，不以新版同名类的默认值替代既有外观。
+
+浏览器最低版本及迁移后的类名说明见[前端说明](../README.md#样式构建)。主题修改仍须覆盖浅色、深色和减少动画三种条件。
+
+独立 transform 属性的兼容取消使用 CSS-wide `initial`。原入场动画覆盖所有 transform utility，深色签到不旋转，`touch-snappy` 按压统一缩放 0.98、减少动态效果时不缩放；不要改回会被生产压缩视作冗余而删除的 `none`。旧版无效的变量阴影、变量颜色透明度及冗余尺寸类已移除，避免迁移新增背景、边框或阴影。
+
+日期浮层的入离场状态取消独立 `translate`，并使它与 `transform` 使用相同过渡时间和缓动，保留旧版动画对水平居中位移的覆盖及插值路径；终态定位不变。减少动态效果时沿用全局关闭过渡的规则。验证必须包含实际压缩后的生产 CSS，开发服务器不能证明这些兼容声明在压缩后仍然存在。
 
 ## 夜间视觉规范
 

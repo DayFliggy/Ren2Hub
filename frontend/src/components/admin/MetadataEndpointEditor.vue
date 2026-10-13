@@ -84,7 +84,7 @@ function validate(): string {
 defineExpose({ validate, isDirty })
 </script>
 <template>
-  <div class="space-y-3">
+  <div class="sibling-space-y-3">
     <SegmentedToggle
       :model-value="mode"
       :options="[
@@ -104,7 +104,7 @@ defineExpose({ validate, isDirty })
         class="endpoint-source"
       />
     </label>
-    <div v-else class="space-y-2">
+    <div v-else class="sibling-space-y-2">
       <p
         v-if="!rows.length"
         class="rounded-xl border border-dashed border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary)]"

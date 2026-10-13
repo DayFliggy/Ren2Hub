@@ -63,7 +63,7 @@ const weekLabel = computed(() => {
 
 <template>
   <article
-    class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)]"
+    class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
     data-handdrawn="surface-clipped"
   >
     <!-- ─── header ─── -->
@@ -125,7 +125,7 @@ const weekLabel = computed(() => {
 
     <!-- ─── two-panel body ─── -->
     <div
-      class="flex flex-col sm:flex-row sm:divide-x sm:divide-[var(--border-subtle)]"
+      class="flex flex-col sm:flex-row sm:sibling-divide-x sm:sibling-divide-[var(--border-subtle)]"
     >
       <!-- LEFT: today's receipt -->
       <div
@@ -196,7 +196,7 @@ const weekLabel = computed(() => {
           </p>
         </div>
 
-        <div class="space-y-1">
+        <div class="sibling-space-y-1">
           <div
             v-for="entry in activity.checkin.week_entries"
             :key="entry.date"
@@ -325,6 +325,7 @@ const weekLabel = computed(() => {
 
 <style scoped>
 html.dark .checkin-stamp {
+  rotate: initial;
   transform: none;
 }
 

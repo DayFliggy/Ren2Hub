@@ -202,7 +202,7 @@ async function signInOAuth(provider: string) {
 
     <form
       v-if="passwordEnabled || twoFactorFlowToken"
-      class="mt-8 space-y-4"
+      class="mt-8 sibling-space-y-4"
       @submit.prevent="submit"
     >
       <template v-if="!twoFactorFlowToken">
@@ -302,7 +302,7 @@ async function signInOAuth(provider: string) {
       </button>
     </form>
 
-    <div class="mt-4 space-y-3">
+    <div class="mt-4 sibling-space-y-3">
       <FormField
         v-if="passkeyEnabled && (app.status.passkey_rp_ids?.length ?? 0) > 1"
         :label="t('security.passkeyDomain')"

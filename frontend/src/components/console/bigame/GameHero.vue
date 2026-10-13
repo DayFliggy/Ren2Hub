@@ -13,7 +13,7 @@ const bigameBanner = useThemedAsset(bigameDayBanner, bigameNightBanner)
 
 <template>
   <section
-    class="game-hero pencil-surface relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] p-5 shadow-[var(--card-shadow)]"
+    class="game-hero pencil-surface relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] p-5"
     data-handdrawn="surface-clipped"
   >
     <!-- generated banner art -->
@@ -35,7 +35,7 @@ const bigameBanner = useThemedAsset(bigameDayBanner, bigameNightBanner)
           🎮 {{ t('bigame.title') }}
         </span>
         <h1
-          class="game-hero__title mt-3 text-2xl font-bold tracking-tight text-white drop-shadow"
+          class="game-hero__title mt-3 text-2xl font-bold tracking-tight text-white drop-shadow-title"
         >
           {{ t('bigame.earnTitle') }}
         </h1>

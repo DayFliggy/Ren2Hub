@@ -6,7 +6,7 @@ defineProps<{ charge: BillingCharge }>()
 const { t } = useI18n()
 </script>
 <template>
-  <dl class="space-y-2 text-xs" data-billing-adjustments>
+  <dl class="sibling-space-y-2 text-xs" data-billing-adjustments>
     <div class="flex flex-wrap justify-between gap-2">
       <dt>{{ t('billing.baseCharge') }}</dt>
       <dd class="font-mono">{{ formatDecimal(charge.base_usd) }} USD</dd>

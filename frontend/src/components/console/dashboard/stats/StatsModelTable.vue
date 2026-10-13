@@ -36,7 +36,7 @@ watch(
     </template>
 
     <!-- skeleton -->
-    <div v-if="loading" class="space-y-3">
+    <div v-if="loading" class="sibling-space-y-3">
       <div
         v-for="i in 4"
         :key="i"
@@ -113,7 +113,7 @@ watch(
               <td class="px-3 py-2.5">
                 <span class="flex min-w-0 items-center gap-2.5">
                   <span
-                    class="h-2 w-2 shrink-0 rounded-full ring-2 ring-[var(--surface-solid)] shadow-sm transition-transform group-hover:scale-125"
+                    class="h-2 w-2 shrink-0 rounded-full ring-2 ring-[var(--surface-solid)] shadow-xs transition-transform group-hover:scale-125"
                     :style="{ background: colors[i % colors.length] }"
                   />
                   <span

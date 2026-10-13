@@ -264,7 +264,10 @@ onBeforeUnmount(() => {
     >
       {{ t('pat.empty') }}
     </p>
-    <ul v-else class="mt-4 divide-y divide-[var(--border-subtle)]">
+    <ul
+      v-else
+      class="mt-4 sibling-divide-y sibling-divide-[var(--border-subtle)]"
+    >
       <li v-for="item in items" :key="item.id" class="min-w-0 py-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="min-w-0">
@@ -323,7 +326,7 @@ onBeforeUnmount(() => {
       :close-disabled="busy"
       @close="editor = null"
     >
-      <form class="space-y-4" @submit.prevent="save">
+      <form class="sibling-space-y-4" @submit.prevent="save">
         <h3 class="text-lg font-semibold">
           {{ editor === 'create' ? t('pat.create') : t('pat.edit') }}
         </h3>
@@ -390,7 +393,7 @@ onBeforeUnmount(() => {
       :open="Boolean(secret)"
       :aria-label="t('pat.oneTime')"
       @close="secret = ''"
-      ><div class="space-y-4">
+      ><div class="sibling-space-y-4">
         <h3 class="text-lg font-semibold">{{ t('pat.oneTime') }}</h3>
         <code
           class="block select-all break-all rounded-lg bg-[var(--surface-muted)] p-4 text-sm"

@@ -135,7 +135,7 @@ defineExpose({ request })
     :close-disabled="busy"
     @close="cancel"
   >
-    <form class="space-y-4" @submit.prevent="verify">
+    <form class="sibling-space-y-4" @submit.prevent="verify">
       <p class="text-sm text-[var(--text-secondary)]">
         {{ t('security.verifyHint') }}
       </p>

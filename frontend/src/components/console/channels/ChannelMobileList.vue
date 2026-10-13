@@ -166,7 +166,7 @@ function responseDisplay(channel: AdminChannel): {
       />
       {{ t('channels.selectPage') }}
     </label>
-    <div class="divide-y divide-[var(--border-default)]">
+    <div class="sibling-divide-y sibling-divide-[var(--border-default)]">
       <section v-for="group in groups" :key="group.supplier">
         <div
           data-channel-mobile-group
@@ -293,7 +293,7 @@ function responseDisplay(channel: AdminChannel): {
 
         <div
           v-if="!isSupplierCollapsed(group.supplier)"
-          class="divide-y divide-[var(--border-subtle)]"
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
         >
           <article
             v-for="channel in group.channels"

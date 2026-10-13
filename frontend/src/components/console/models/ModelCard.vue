@@ -79,7 +79,7 @@ async function copyName() {
         <div class="min-w-0 flex-1">
           <button
             type="button"
-            class="focus-ring flex max-w-full items-center gap-2 rounded text-left font-mono text-base font-bold text-[var(--text-primary)] transition-colors hover:text-[var(--accent-text)] group-hover:text-[var(--accent-text)]"
+            class="focus-ring flex max-w-full items-center gap-2 rounded-sm text-left font-mono text-base font-bold text-[var(--text-primary)] transition-colors hover:text-[var(--accent-text)] group-hover:text-[var(--accent-text)]"
             :title="t('models.copyHint', { name: model.name })"
             @click="copyName"
           >
@@ -161,7 +161,7 @@ async function copyName() {
             data-model-price-panel
           >
             <div
-              class="grid min-h-12 grid-cols-2 gap-3 divide-x divide-[var(--border-default)]"
+              class="grid min-h-12 grid-cols-2 gap-3 sibling-divide-x sibling-divide-[var(--border-default)]"
             >
               <div class="pr-2">
                 <div class="text-[0.6875rem] text-[var(--text-tertiary)]">

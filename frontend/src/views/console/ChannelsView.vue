@@ -1265,7 +1265,7 @@ async function runBulkStatus(
             />
           </template>
           <template #cell-usage="{ row }">
-            <div class="space-y-0.5 text-xs">
+            <div class="sibling-space-y-0.5 text-xs">
               <p class="font-semibold tabular-nums">
                 {{
                   formatQuota(
@@ -1286,7 +1286,7 @@ async function runBulkStatus(
           </template>
           <template #cell-upstream="{ row }">
             <div class="flex items-center justify-between gap-1">
-              <div class="min-w-0 space-y-0.5 text-xs">
+              <div class="min-w-0 sibling-space-y-0.5 text-xs">
                 <p class="font-semibold tabular-nums">
                   {{
                     formatMoney(
@@ -1500,10 +1500,10 @@ async function runBulkStatus(
         <div class="md:hidden">
           <div
             v-if="loading"
-            class="divide-y divide-[var(--border-subtle)]"
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
             aria-hidden="true"
           >
-            <div v-for="index in 5" :key="index" class="space-y-4 p-4">
+            <div v-for="index in 5" :key="index" class="sibling-space-y-4 p-4">
               <SkeletonBlock rounded="md" class="h-5 w-2/3" />
               <div class="grid grid-cols-2 gap-3">
                 <SkeletonBlock rounded="md" class="h-14" />

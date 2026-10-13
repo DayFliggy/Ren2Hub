@@ -767,7 +767,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-y-6" data-handdrawn-page="security">
+  <div class="sibling-space-y-6" data-handdrawn-page="security">
     <PageHero
       :title="t('nav.securityAccess')"
       :crumbs="[t('nav.profile'), t('nav.securityAccess')]"
@@ -787,7 +787,7 @@ onBeforeUnmount(() => {
       class="grid items-start gap-8 xl:grid-cols-[minmax(0,1.75fr)_minmax(21.25rem,1.15fr)] 2xl:gap-10"
     >
       <!-- 主栏：凭据、认证、会话与凭证 -->
-      <div class="min-w-0 space-y-8">
+      <div class="min-w-0 sibling-space-y-8">
         <!-- 01 登录与凭据 + 认证来源 -->
         <ConsoleCard :padded="false" class="overflow-hidden">
           <header
@@ -824,7 +824,7 @@ onBeforeUnmount(() => {
               :title="t('settings.accountProfile')"
             />
             <div
-              class="divide-y divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
+              class="sibling-divide-y sibling-divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
             >
               <div class="settings-ledger-row">
                 <span class="settings-ledger-label">{{
@@ -1021,7 +1021,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 右侧栏：粘性常驻的安全验证与隐私看板 -->
-      <aside class="min-w-0 space-y-6 xl:sticky xl:top-6">
+      <aside class="min-w-0 sibling-space-y-6 xl:sticky xl:top-6">
         <!-- 安全验证卡片：Passkey + 2FA -->
         <ConsoleCard :padded="false" class="overflow-hidden">
           <header
@@ -1205,7 +1205,7 @@ onBeforeUnmount(() => {
       size="sm"
       @close="passwordOpen = false"
     >
-      <div class="space-y-4">
+      <div class="sibling-space-y-4">
         <FormField
           v-if="auth.user?.has_password"
           :label="t('settings.oldPassword')"
@@ -1361,7 +1361,7 @@ onBeforeUnmount(() => {
       size="sm"
       @close="bindTarget = null"
     >
-      <div v-if="bindTarget === 'email'" class="space-y-4">
+      <div v-if="bindTarget === 'email'" class="sibling-space-y-4">
         <FormField :label="t('settings.email')">
           <TextInput
             v-model="bindingEmail"
@@ -1437,7 +1437,7 @@ onBeforeUnmount(() => {
       size="sm"
       @close="deleteOpen = false"
     >
-      <div class="space-y-4">
+      <div class="sibling-space-y-4">
         <p class="text-sm text-[var(--status-danger-text)]">
           {{ t('settings.deleteAccountConfirm') }}
         </p>

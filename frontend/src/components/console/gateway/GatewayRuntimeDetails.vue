@@ -11,7 +11,7 @@ const startedAt = computed(() =>
 </script>
 
 <template>
-  <div class="space-y-2 text-xs text-[var(--text-tertiary)]">
+  <div class="sibling-space-y-2 text-xs text-[var(--text-tertiary)]">
     <p
       v-if="runtime.draining"
       role="status"

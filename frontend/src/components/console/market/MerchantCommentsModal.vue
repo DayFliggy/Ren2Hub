@@ -25,7 +25,7 @@ const { t } = useI18n()
     size="md"
     @close="emit('close')"
   >
-    <div v-if="merchant" class="space-y-4">
+    <div v-if="merchant" class="sibling-space-y-4">
       <div class="flex items-center gap-3">
         <VendorLogo :vendor="merchant.name" :size="36" />
         <div>
@@ -45,7 +45,7 @@ const { t } = useI18n()
         {{ t('market.noComments') }}
       </p>
 
-      <ul v-else class="space-y-3">
+      <ul v-else class="sibling-space-y-3">
         <li
           v-for="c in merchant.comments"
           :key="c.id"

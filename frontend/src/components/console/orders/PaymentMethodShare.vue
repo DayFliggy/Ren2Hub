@@ -36,13 +36,13 @@ function share(amount: number): number {
 
 <template>
   <ConsoleCard :title="t('orders.paymentShare')">
-    <ul v-if="loading" class="space-y-4" aria-hidden="true">
+    <ul v-if="loading" class="sibling-space-y-4" aria-hidden="true">
       <li v-for="i in 3" :key="i">
-        <div class="h-5 animate-pulse rounded bg-[var(--surface-muted)]" />
+        <div class="h-5 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
         <div class="mt-2 h-1 rounded-full bg-[var(--surface-muted)]" />
       </li>
     </ul>
-    <ul v-else-if="items.length > 0" class="space-y-4">
+    <ul v-else-if="items.length > 0" class="sibling-space-y-4">
       <li v-for="(item, index) in items" :key="item.method">
         <div class="flex items-center justify-between gap-3 text-sm">
           <span class="flex min-w-0 items-center gap-2.5">

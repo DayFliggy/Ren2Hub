@@ -160,7 +160,7 @@ async function save() {
     size="lg"
     @close="emit('close')"
   >
-    <div class="space-y-4 text-left">
+    <div class="sibling-space-y-4 text-left">
       <!-- Token type is fixed after creation. -->
       <fieldset class="min-w-0">
         <legend class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
@@ -346,7 +346,7 @@ async function save() {
         <div
           v-if="advancedOpen"
           :id="advancedSectionId"
-          class="space-y-4 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-4"
+          class="sibling-space-y-4 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-4"
         >
           <FormField :label="t('keys.modelsLabel')">
             <ChipPicker

@@ -27,7 +27,7 @@ function rankBadge(rank: number) {
 
 <template>
   <article
-    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <div class="mb-4 flex items-center justify-between gap-3">
@@ -56,11 +56,11 @@ function rankBadge(rank: number) {
     </div>
 
     <!-- loading skeleton -->
-    <div v-if="loading" class="space-y-2">
+    <div v-if="loading" class="sibling-space-y-2">
       <SkeletonBlock v-for="i in 5" :key="i" class="h-10" rounded="xl" />
     </div>
 
-    <div v-else-if="entries.length" class="space-y-1.5">
+    <div v-else-if="entries.length" class="sibling-space-y-1.5">
       <div
         v-for="entry in entries"
         :key="entry.uid"

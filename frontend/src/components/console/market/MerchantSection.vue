@@ -74,7 +74,7 @@ const latestComment = computed(() => merchant.value.comments[0] ?? null)
         >
           <button
             type="button"
-            class="inline-flex min-w-0 items-center gap-1 rounded transition-colors hover:text-[var(--accent-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+            class="inline-flex min-w-0 items-center gap-1 rounded-sm transition-colors hover:text-[var(--accent-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
             @click="emit('comments', merchant)"
           >
             <span v-if="latestComment" class="max-w-[16rem] truncate"

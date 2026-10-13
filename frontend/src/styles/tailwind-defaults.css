@@ -1,0 +1,59 @@
+/* Preserve v3 production defaults before utilities, so explicit semantic
+   colors and cursor utilities retain priority over the compatibility rules. */
+*,
+::before,
+::after,
+::backdrop,
+::file-selector-button {
+  border-color: #e5e7eb;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  /* v3 inherited these fields individually, leaving other font properties
+     at their browser defaults. Undo v4's broader font: inherit first. */
+  font: revert;
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  font-size: 100%;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+::file-selector-button {
+  /* v3 inherited the font, but kept the upload button's native spacing. */
+  letter-spacing: revert;
+}
+
+button,
+[role='button'] {
+  cursor: pointer;
+}
+
+:disabled {
+  cursor: default;
+}
+
+dialog {
+  /* Preserve the centered user-agent margin that v3 Preflight left intact. */
+  margin: auto;
+}
+
+/* v3 flattened its components layer before utilities. Keep this container
+   outside native layers so Preflight's margin/padding reset cannot win. */
+.site-container {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}

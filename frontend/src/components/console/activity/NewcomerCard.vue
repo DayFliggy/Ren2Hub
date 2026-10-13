@@ -38,7 +38,7 @@ function confirmClaim() {
 
 <template>
   <article
-    class="pencil-surface flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface flex flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <header class="flex items-start justify-between gap-3">
@@ -75,7 +75,7 @@ function confirmClaim() {
       </StatusChip>
     </header>
 
-    <div class="mt-5 space-y-2.5">
+    <div class="mt-5 sibling-space-y-2.5">
       <div
         v-for="task in activity.newcomer.tasks"
         :key="task.id"

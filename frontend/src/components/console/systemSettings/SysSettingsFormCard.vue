@@ -24,13 +24,11 @@ const { t } = useI18n()
 
 <template>
   <section
-    class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)]"
+    class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
     data-handdrawn="surface"
   >
     <!-- Header -->
-    <header
-      class="border-b border-[var(--border-subtle)] bg-[var(--surface-table-header)]/40 px-6 py-5"
-    >
+    <header class="border-b border-[var(--border-subtle)] px-6 py-5">
       <h3 class="display-title text-base font-bold text-[var(--text-primary)]">
         {{ title }}
       </h3>
@@ -46,7 +44,7 @@ const { t } = useI18n()
 
     <!-- Sticky Save bar -->
     <footer
-      class="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-[var(--surface-table-header)]/90 px-6 py-3.5 backdrop-blur-md"
+      class="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] px-6 py-3.5 backdrop-blur-md"
     >
       <div class="flex items-center gap-2">
         <span

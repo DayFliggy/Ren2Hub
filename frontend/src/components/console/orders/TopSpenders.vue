@@ -22,14 +22,14 @@ const { t } = useI18n()
 
 <template>
   <ConsoleCard :title="t('orders.topSpenders')">
-    <ul v-if="loading" class="space-y-3.5" aria-hidden="true">
+    <ul v-if="loading" class="sibling-space-y-3.5" aria-hidden="true">
       <li
         v-for="i in 5"
         :key="i"
-        class="h-9 animate-pulse rounded bg-[var(--surface-muted)]"
+        class="h-9 animate-pulse rounded-sm bg-[var(--surface-muted)]"
       />
     </ul>
-    <ol v-else-if="items.length > 0" class="space-y-3.5">
+    <ol v-else-if="items.length > 0" class="sibling-space-y-3.5">
       <li
         v-for="(item, index) in items"
         :key="item.user_id"

@@ -78,7 +78,7 @@ function confirmRemove() {
         <span
           v-for="m in asChannel(row).supportedModels.slice(0, 3)"
           :key="m"
-          class="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-secondary)]"
+          class="rounded-sm bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-secondary)]"
         >
           {{ m }}
         </span>

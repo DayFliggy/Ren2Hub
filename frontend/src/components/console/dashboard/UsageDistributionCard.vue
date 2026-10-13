@@ -232,7 +232,7 @@ const topDaySummary = computed(() => {
           <span
             v-for="level in [0, 1, 2, 3, 4, 5] as const"
             :key="level"
-            class="size-2.5 rounded-sm border"
+            class="size-2.5 rounded-xs border"
             :style="usageHeatStyle(level, metricColor)"
           />
           <span>{{ t('dashboard.distribution.more') }}</span>

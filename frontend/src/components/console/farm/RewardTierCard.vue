@@ -35,14 +35,14 @@ const progressPercent = computed(() => {
 
 <template>
   <article
-    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)]"
+    class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
     data-handdrawn="surface"
   >
     <h3 class="mb-4 text-sm font-semibold text-[var(--text-primary)]">
       💰 {{ t('farm.rebate.title') }}
     </h3>
 
-    <div v-if="loading" class="space-y-3">
+    <div v-if="loading" class="sibling-space-y-3">
       <div
         v-for="i in 3"
         :key="i"
@@ -155,7 +155,7 @@ const progressPercent = computed(() => {
         >
           {{ t('farm.rebate.emptyHistory') }}
         </div>
-        <div v-else class="space-y-1">
+        <div v-else class="sibling-space-y-1">
           <div
             v-for="row in state.history"
             :key="row.date"

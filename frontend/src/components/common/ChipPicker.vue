@@ -75,7 +75,7 @@ onBeforeUnmount(() => {
 
     <div
       v-if="open && filtered.length > 0"
-      class="subtle-scroll absolute z-20 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1 shadow-[var(--card-shadow)]"
+      class="subtle-scroll absolute z-20 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
       data-handdrawn="menu"
     >
       <button
@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
         {{ option }}
         <button
           type="button"
-          class="absolute -right-1.5 -top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--surface-solid)]"
+          class="absolute -right-1.5 -top-1.5 flex items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--surface-solid)]"
           style="height: 18px; width: 18px"
           :aria-label="t('common.removeItem', { item: option })"
           @click="remove(option)"

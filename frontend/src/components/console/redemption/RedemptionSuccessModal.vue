@@ -85,7 +85,7 @@ function download() {
     <div
       class="max-h-48 overflow-y-auto rounded-xl bg-[var(--surface-muted)] p-4"
     >
-      <ul class="space-y-1">
+      <ul class="sibling-space-y-1">
         <li
           v-for="code in codes"
           :key="code"

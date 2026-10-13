@@ -28,7 +28,7 @@
 
 标签与主干分别锁定；三份官方 release 元数据均为 `draft=false`、`prerelease=false`，不据此或 rc/beta 名称推定生产稳定性。“已吸收（既有）”表示现有合同覆盖，不能统计成本轮新功能。同一提交的已吸收与未采用部分拆行登记。此前等待上游（用户决定）的项目未在本窗口修复，全部保留。
 
-本节登记实现与复评边界；候选验收与实际部署结果见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。依赖审计仍报告前端构建工具链的 `braces` 高危、Tailwind 所需旧版 `postcss-selector-parser` 中危，以及 Electron 构建工具链的 `sprintf-js` 中危，不能写成依赖审计全部通过。独立副本、回环供应商及本地测试不能替代真实供应商认证、物理输入法或桌面平台兼容性证据。
+本节登记实现与复评边界；候选验收与实际部署结果见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。随后按用户要求修复 Vue 重构工具链，移除 Tailwind 3 与 Electron 旧代理链，关闭三项 JS 告警；未导入的 x/crypto/openpgp 模块级告警仍保留，见依赖与构建。独立副本、回环供应商及本地测试不能替代真实供应商认证、物理输入法或桌面平台兼容性证据。
 
 ### NewAPI
 
@@ -39,7 +39,7 @@
 | `633b4c5b190dc1af99a2814391354d86948e7943` | 日志 / P2 | 已吸收（Vue 改写） | 用量日志专用 NDJSON 导出、普通用户开关和默认 365 天共享范围；普通用户列表、统计、图表与两种专用导出使用同一范围规则，超限明确拒绝；管理员全局列表不受普通用户查询范围限制。保留用户 DTO 隔离、精确金额、PAT 权限和每用户单进程互斥；前端校验成功终态及计数，取消中止下载。见[日志合同](../console/LOGS.md)。 |
 | `dd59854050f26f4f67bb3dac5274af5e17013462` | 依赖 / P1 | 已吸收 | Electron 的 node-gyp 分支 undici 6.29.0；Electron 41 所需 @electron/get 5 分支使用 7.30.0，不强制跨分支统一主版本。 |
 | `93cf4ba6fb92e3f755fdeb6af9a9484bfa748816` | 记录 / P3 | 不适用 | 完整提交窗口中的空提交，无文件变化；保留计数，不记为新增能力。 |
-| `3c9fb2a0de168d88ce5bffbf44acecdc1cdcdd39` | 依赖 / P1 | 已吸收 | brace-expansion 安全补丁按 Electron 实际主版本分支更新到 1.1.21、2.1.7、5.0.12；Vue 同包 override 同步至 5.0.12，仍按其自身锁文件验证。 |
+| `3c9fb2a0de168d88ce5bffbf44acecdc1cdcdd39` | 依赖 / P1 | 已吸收 | brace-expansion 安全补丁按 Electron 实际主版本分支更新到 1.1.21、2.1.7、5.0.12；Vue 同包正常解析为 5.0.12，已移除冗余 override，仍按其自身锁文件验证。 |
 | `9f048107edbba2156691718126de7c4577614533` | 依赖 / P3 | 不适用 | React web 的 ai 7.0.136；Vue 控制台没有该依赖。引入同类 SDK 时复评。 |
 | `3fe394cdba280c00bc566de493b5fc8399b0a7d1` | 依赖 / P1 | 已吸收（既有） | Go 已使用 gorilla/websocket v1.5.3，无需重复改动。 |
 | `1c58f3d161fa32755b372d9449f2d5e077d50a5d` | 依赖 / P1 | 已吸收 | fast-uri 安全补丁；本地在相同兼容范围解析到 3.1.8。 |
@@ -312,19 +312,23 @@
 
 ## 依赖与构建
 
+2026-10-13 11:27:00 UTC 重新采集三个官方 HEAD 与 release，均未变化。采集器仍报告 `incomplete`：live 参考目录已在上一批原样迁出；另行核对保留副本的完整 HEAD、干净状态及官方对象，不能改写原始报告为成功。此次采用 Tailwind 官方指南、AxonHub 的 Vite 插件接入与官方 global-agent 发布方案；NewAPI/Sub2API 未提供可直接复制且能关闭这些旧链的 Vue 方案。未将参考项目的 React、Rsbuild、shadcn 或账号池框架重新引入。
+
 | 来源 | 状态 | 当前行为与本地合同 | 本地位置 | 守护测试 | 复评条件 |
 | --- | --- | --- | --- | --- | --- |
 | 本地安全升级（Go 与 x 系列依赖） | 本地偏离保留 | 构建镜像为 `golang:1.26.9-alpine`；`golang.org/x/net` v0.60.0、`x/text` v0.42.0、`x/image` v0.45.0、`gorilla/websocket` v1.5.3，x 系列保持本地安全升级、gorilla/websocket 已与本轮上游对齐；relaykit 保持上游 `go 1.25.1`。前批次 govulncheck 可达漏洞为 0，本轮证据另按候选门槛记录 | `Dockerfile`、`go.mod` | `govulncheck ./...`、`go mod verify` | 合并上游 `go.mod` 时保留本地版本；NewAPI 升级到同等或更高版本后回归 |
 | NewAPI `192802ee0` | 已吸收 | Dockerfile、release 与 Electron 构建以 moejs 的 `default.pgo` 编译 | `Dockerfile`、`.github/workflows/release.yml`、`.github/workflows/electron-build.yml` | — | 构建时间与运行收益未测 |
-| Sub2API `0f9d460d` | 已吸收 | Vue 使用 3.5.43 系列，`source-map-js` 覆盖为 1.2.2 | `frontend/package.json` | — | — |
+| Sub2API `0f9d460d` | 已吸收 | Vue 使用 3.5.43 系列；原 `source-map-js` 覆盖已删除，正常解析仍为安全版 1.2.2 | `frontend/package.json`、`frontend/bun.lock` | frozen 安装与类型/构建 | 锁变化后检查实际解析版本 |
 | NewAPI `7e25797d14681e4e16c2b46831450e7d6a5ccc74`、`ba29f06453942d9b5c0b32330340b8a000692c4f`、`3c9fb2a0de168d88ce5bffbf44acecdc1cdcdd39`、`1c58f3d161fa32755b372d9449f2d5e077d50a5d`、`7f51a97226c43bc082a065bdc8b40b719c4bdcce`、`dd59854050f26f4f67bb3dac5274af5e17013462` | 已吸收 | Electron 41.10.6；xmldom 0.8.15、brace-expansion 各主版本安全补丁、fast-uri 3.1.8、js-yaml 4.3.2、undici 6.29.0/7.30.0。保留 electron-builder 26.15.3，定向改锁而非整锁升级 | `electron/package.json`、`electron/bun.lock` | frozen-lockfile 安装、Node 入口语法检查、Electron 运行时版本与 Linux --dir 打包；包内 Go 二进制哈希与同次 Vue/Go 构建一致，目标系统图形启动、托盘和安装包仍待验收 | 桌面候选验证绑定真实 Vue/Go 构建与目标平台，见 SYNC1013-05 |
 | 本地依赖审计 [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | 已吸收 | electron-builder 的下载工具链中 http-cache-semantics 4.2.0 高危采用兼容修复 4.3.0；不改变服务端缓存策略 | `electron/bun.lock` | `bun audit --json` | 后续锁变化重新检查真实依赖链 |
-| 本地依赖审计 [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c) | 等待上游 | sprintf-js 1.1.3 中危没有已发布修复；链路为 electron-builder→app-builder-lib→@electron/get 3→可选 global-agent→roarr→sprintf-js，属于桌面构建下载工具链。不能称为审计全部通过，不用忽略规则或强制跨主版本覆盖隐藏问题 | `electron/bun.lock` | `bun audit --json` 当前仍报告该中危 | sprintf-js/roarr/global-agent/@electron/get/electron-builder 提供兼容修复后定向更新，见 SYNC1013-04 |
-| 本地前端工具链审计 | 已吸收 | 保持现有主版本，Vitest/mocker 更新至 4.1.11、baseline-browser-mapping 2.11.28、browserslist 4.29.3、nanoid 3.3.20、postcss-selector-parser 7 分支 7.1.6；不整体升级框架或强行统一传递依赖主版本 | `frontend/package.json`、`frontend/bun.lock` | frozen-lockfile、全量 Vitest、typecheck/lint/format/build 与受影响浏览器检查 | 后续锁文件变化重新核对审计和真实依赖链 |
-| 本地依赖用途审计（用户要求清理） | 已清理 | root go.sum 移除两行未使用的 moejs alpha.5 历史校验和，保留现用 alpha.6。root、RelayKit、TokenKit 的现用 require 项都有源码/测试或 go mod why 路径；Vue 与 Electron 的直接依赖均由源码、配置或脚本使用，锁文件没有 React/Redux/AntD/Semi。没有确认可删的现用框架包，不把传递依赖或构建工具误删 | `go.sum`、三模块 `go.mod`、两套 `package.json`/`bun.lock` | 三模块独立 GOWORK=off mod verify/build/tidy 检查；两套 frozen 安装与实际引用审计；三模块 govulncheck 无可达漏洞 | 删除或替换业务/构建入口后重新清理，不仅按业务 import 字面匹配判断 |
+| 本地依赖审计 [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)、[global-agent v4.1.0](https://github.com/gajus/global-agent/releases/tag/v4.1.0) | 已修复 | 保留 electron-builder 26.15.3、get 3/5 两分支及各平台 optional 包，定向使用官方 global-agent 4.1.3；保留 CJS bootstrap 与原代理环境变量合同。正式代理库移除 roarr→sprintf-js 链，不忽略漏洞或伪造包 | `electron/package.json`、`electron/bun.lock` | frozen 安装与 audit；两代实际 downloadArtifact 的 HTTP/HTTPS CONNECT、NO_PROXY、三平台文件名及损坏 SHA256 拒绝共 12 项；同次 Vue/Go 产物 Linux --dir 打包 | 原 SYNC1013-04 关闭；get 或代理库升级后重新跑下载合同，目标平台安装与 GUI 仍按 SYNC1013-05 验证 |
+| AxonHub `3cb7e3335cadd463fe7748c47dd003802125e3dd`（Vite 集成）、[Tailwind 官方升级指南](https://tailwindcss.com/docs/upgrade-guide) | 已吸收（Vue 适配） | Tailwind/@tailwindcss/vite 4.3.3，Vite 原生插件与 CSS 主题；分离 RGB 通道与主题变量，保留深浅色、固定字号行高与断点重置、容器层级、动画/按压 transform 覆盖、阴影/圆角和 v3 兄弟间距/Preflight 语义（含控件字体继承字段）；清理旧无效而新版开始生效的类。删除旧 PostCSS/autoprefixer 构建入口。支持下限 Safari 16.4、Chrome 111、Firefox 128 | `frontend/vite.config.ts`、`frontend/src/styles/`、`frontend/README.md` | 旧生产 CSS/页面基线；嵌套/断点字号与普通/减少动画合同；完整 Vitest、类型/lint/格式/生产构建、浏览器全量及桌面/手机明暗页面复查 | 新增主题或工具类时保持单一 CSS 主题来源；Chromium 不代表 Safari/Firefox/真机运行证据 |
+| 本地 Vue 生产页面回归 | 已修复 | 手机导航初次按后备字体居中后，真实字体变宽而容器不变，旧 ResizeObserver 不再触发。沿用同一居中入口，在字体就绪且组件仍挂载、用户尚未操作时重算；路由切换与桌面隐藏后再显现逻辑保留 | `frontend/src/components/console/ConsoleNavScroller.vue` | 6 项字体/手动操作/卸载/路由单测；迟字体与手动滚动浏览器合同；原手机导航和隐藏再显现用例 | 修改字体加载、导航结构或居中逻辑后重验；用户手动位置不能由异步字体完成事件覆盖 |
+| 本地前端工具链审计 | 已吸收 | Vitest/mocker 4.1.11、parser 7.1.6 等安全版本保留；Vue/Vite 正常解析 PostCSS 8.5.30、brace-expansion 5.0.12、source-map-js 1.2.2 后删除无必要 override。Tailwind 4 的样式与最低浏览器版本按下方合同独立验收 | `frontend/package.json`、`frontend/bun.lock` | frozen-lockfile、全量 Vitest、typecheck/lint/format/build 与完整浏览器清单 | 锁变化后重新核对审计、许可和真实依赖链 |
+| 本地依赖用途审计（用户要求清理） | 已清理 | 除此前两行旧 moejs alpha.5 校验和，本次删除直接 autoprefixer/PostCSS、旧 Tailwind/PostCSS JS 配置、三项不必要 override，以及无调用 canvas 图标占位脚本。Electron dev-app 的 NODE_ENV 确有运行模式用途；Bun 1.4.0 的 Bun Shell 未通过父环境 production 的赋值合同，保留 cross-env。现用 Go 模块与 Vue 页面库保留，锁文件没有 React/Redux/AntD/Semi | `go.sum`、`frontend/`、`electron/` | 实际引用/环境消费路径核对、开发入口环境语义与两套 frozen 安装；受影响构建和页面验收 | 入口删除或替换后重新清理，不能仅按 import 字面匹配或包脚本引用判断用途 |
 | 本地 Go 漏洞审计 | 已修复有兼容补丁的条目 | compress 1.18.7 修复 [GO-2026-5841](https://pkg.go.dev/vuln/GO-2026-5841)；独立 RelayKit 的 x/text 0.41.0 修复 [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) 和 [GO-2026-6629](https://pkg.go.dev/vuln/GO-2026-6629)，保持 go 1.25.1。root 原有 x/text 0.42.0 不变。x/crypto 的 [OpenPGP 模块告警](https://pkg.go.dev/vuln/GO-2026-5932) 无修复，但当前代码未导入该包；不能称全部模块告警清零。ClickHouse Zstd 和 profiling 的实际运行尚未验证 | `go.mod`、`go.sum`、`relaykit/go.mod`、`relaykit/go.sum` | 补丁后独立模块构建/验证、RelayKit 全量测试、主模块全量/vet/govulncheck；`TestZstdRequestDecompressionContract` 覆盖正常解码、无效帧、解压后限额及 body 释放 | 锁变化后重新查实际包图和官方漏洞；引入 OpenPGP 前重新设计依赖 |
-| 本地依赖审计 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | 等待上游 | braces 3.0.3 高危暂无已发布修复；属于匹配模式的构建工具链，与已修复的 brace-expansion 是不同包，不能以删除必需依赖或忽略告警制造通过 | `frontend/bun.lock` | `bun audit --json` 仍报告高危 | 发布兼容修复后定向更新，见 SYNC1013-06 |
-| 本地依赖审计 [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) | 等待兼容修复 | 7 分支已更新至 7.1.6；Tailwind 3 的 postcss-nested 6 仍依赖 6.1.4，中危。修复版本属于下一主版本，不能直接跨主版本覆盖解析器或附带迁移 Tailwind | `frontend/bun.lock` | `bun audit --json` 仍报告旧分支中危 | Tailwind/postcss-nested 提供兼容更新或单独授权框架迁移，见 SYNC1013-07 |
+| 本地依赖审计 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | 已修复 | Tailwind 3 的 micromatch、fast-glob、chokidar 均随真实构建迁移退出；braces 3.0.3 不再被任意锁路径引入。没有等待不存在的 braces 补丁，也没有删除现用 CSS 能力 | `frontend/bun.lock` | 锁与已安装包图核对，bun audit={}，完整浏览器/构建检查 | 原 SYNC1013-06 关闭；新增 glob 工具或锁变化后复查所有路径 |
+| 本地依赖审计 [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) | 已修复 | 旧 postcss-nested→parser 6 链随 Tailwind 3 退出；Vue ESLint 所需 parser 7.1.6 保留。按已授权的 Vue 工具链迁移修复，没有强制覆盖旧解析器主版本 | `frontend/bun.lock` | frozen 安装、实际依赖图、bun audit={} 与完整前端检查 | 原 SYNC1013-07 关闭；CSS/ESLint 工具升级后复查 |
 
 ## 鉴权、管理与目录
 

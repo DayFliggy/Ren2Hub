@@ -65,7 +65,7 @@ async function submit(previewOnly: boolean) {
 </script>
 
 <template>
-  <ConsoleCard class="space-y-4">
+  <ConsoleCard class="sibling-space-y-4">
     <h3 class="font-semibold">{{ t('security.domainsTitle') }}</h3>
     <FormField label="RP ID"><TextInput v-model="rpID" /></FormField>
     <FormField :label="t('security.legacyDomains')"
@@ -76,7 +76,7 @@ async function submit(previewOnly: boolean) {
     /></FormField>
     <div
       v-if="preview?.confirmation_required"
-      class="space-y-2 rounded-lg border border-[var(--border-subtle)] p-3 text-sm"
+      class="sibling-space-y-2 rounded-lg border border-[var(--border-subtle)] p-3 text-sm"
     >
       <p>{{ t('security.domainsRemoved') }}</p>
       <p>

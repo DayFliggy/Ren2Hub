@@ -80,8 +80,8 @@
         class="absolute right-0 z-[90] overflow-hidden rounded-xl border bg-[var(--surface-overlay)] backdrop-blur-xl"
         :class="
           variant === 'console'
-            ? 'top-12 w-36 border-[var(--overlay-border)] py-1 shadow-[var(--overlay-shadow)] animate-scale-in'
-            : 'mt-2 w-40 border-[var(--border-subtle)] p-1 shadow-[var(--menu-shadow)]'
+            ? 'top-12 w-36 border-[var(--overlay-border)] py-1 animate-scale-in'
+            : 'mt-2 w-40 border-[var(--border-subtle)] p-1 '
         "
         :aria-label="t('nav.language')"
         @keydown="onMenuKeydown"
