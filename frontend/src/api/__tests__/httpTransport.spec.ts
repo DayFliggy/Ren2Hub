@@ -62,6 +62,56 @@ function conflict(code: string) {
 beforeEach(clearAuthBundle)
 
 describe('HTTP authentication transport', () => {
+  it('refreshes a log download while preserving its timeout and cancellation', async () => {
+    setAuthBundle(bundle)
+    const data = new Blob(['{"success":true,"data":{"count":0}}'])
+    const signal = new AbortController().signal
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(unauthorized())
+      .mockResolvedValueOnce({
+        data: { success: true, data: { ...bundle, access_token: 'new-token' } },
+      })
+      .mockResolvedValueOnce({ data })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+
+    await expect(
+      transport.getBlob!('/api/log/self/export', { signal, timeoutMs: 120_000 })
+    ).resolves.toBe(data)
+    expect(request).toHaveBeenCalledTimes(3)
+    expect(request.mock.calls[2]?.[0]).toMatchObject({
+      headers: { Authorization: 'Bearer new-token' },
+      signal,
+      timeout: 120_000,
+      responseType: 'blob',
+    })
+  })
+
+  it('refuses a downloaded log file after the current session changes', async () => {
+    setAuthBundle(bundle)
+    const request = vi.fn().mockImplementation(async () => {
+      setAuthBundle({
+        ...bundle,
+        session: { ...bundle.session, sid: 'session-2' },
+        user: { ...bundle.user, id: 2 },
+      })
+      return { data: new Blob(['private export']) }
+    })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+
+    await expect(
+      transport.getBlob!('/api/log/self/export')
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'AUTH_SESSION_CHANGED',
+    })
+    expect(request).toHaveBeenCalledOnce()
+  })
+
   it('sends the bearer token and session-bound logout header', async () => {
     setAuthBundle(bundle)
     const request = vi.fn().mockResolvedValue({

@@ -1768,6 +1768,27 @@ export default {
   },
 
   logs: {
+    exportRangeHint:
+      'Uses the current filters. Maximum {days} days; leaving dates empty exports the last {days} days.',
+    exportHeaders: {
+      time: 'Time',
+      token: 'Token',
+      type: 'Type',
+      model: 'Model',
+      channel: 'Channel',
+      reasoning_effort: 'Reasoning effort',
+      request_mode: 'Request mode',
+      first_token_latency: 'First token latency (s)',
+      prompt_tokens: 'Input tokens',
+      completion_tokens: 'Output tokens',
+      cache_read_tokens: 'Cache read tokens',
+      cache_write_tokens: 'Cache write tokens',
+      cache_ttl: 'Cache TTL',
+      latency: 'Latency (s)',
+      tps: 'Tokens per second',
+      quota: 'Quota (integer units)',
+      content: 'Content',
+    },
     groupLabel: 'Log group',
     groupPlaceholder: 'Search or enter a group',
     title: 'Logs',
@@ -3134,6 +3155,10 @@ export default {
       defaultCollapseSidebar: 'Collapse sidebar by default',
       demoSite: 'Demo site mode',
       selfUseMode: 'Self-use mode',
+      logUserExport: 'Allow users to export logs',
+      logMaxRangeDays: 'Maximum log time range (days)',
+      logMaxRangeDaysHint:
+        'Limits user log and dashboard queries, and every log export.',
       logConsume: 'Log quota consumption',
       smtpServer: 'SMTP server',
       smtpPort: 'SMTP port',

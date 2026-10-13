@@ -398,40 +398,56 @@ func BuildConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) 
 	}, nil
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB
-	} else {
-		tx = LOG_DB.Where("logs.type = ?", logType)
+// LogFilter is shared by list and export queries; user scope is applied separately.
+type LogFilter struct {
+	Type                                         int
+	StartTimestamp, EndTimestamp                 int64
+	ModelName, Username, TokenName               string
+	Channel                                      int
+	Group, RequestId, UpstreamRequestId, Keyword string
+}
+
+func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
+	var err error
+	if f.Type != LogTypeUnknown {
+		tx = tx.Where("logs.type = ?", f.Type)
 	}
 
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", f.ModelName); err != nil {
+		return nil, err
+	}
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", f.Username); err != nil {
+		return nil, err
+	}
+	if f.TokenName != "" {
+		tx = tx.Where("logs.token_name = ?", f.TokenName)
+	}
+	if f.RequestId != "" {
+		tx = tx.Where("logs.request_id = ?", f.RequestId)
+	}
+	if f.UpstreamRequestId != "" {
+		tx = tx.Where("logs.upstream_request_id = ?", f.UpstreamRequestId)
+	}
+	if f.StartTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", f.StartTimestamp)
+	}
+	if f.EndTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", f.EndTimestamp)
+	}
+	if f.Channel != 0 {
+		tx = tx.Where("logs.channel_id = ?", f.Channel)
+	}
+	if f.Group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", f.Group)
+	}
+	return tx, nil
+}
+
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+	filter := LogFilter{Type: logType, StartTimestamp: startTimestamp, EndTimestamp: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, Channel: channel, Group: group, RequestId: requestId, UpstreamRequestId: upstreamRequestId}
+	tx, err := filter.apply(LOG_DB)
+	if err != nil {
 		return nil, 0, err
-	}
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", username); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if channel != 0 {
-		tx = tx.Where("logs.channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
 	err = tx.Model(&Log{}).Count(&total).Error
 	if err != nil {
@@ -494,37 +510,32 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, keyword string) (logs []*Log, total int64, err error) {
-	logTypes := resolveSelfServiceLogTypes(logType)
-	if len(logTypes) == 0 {
-		return []*Log{}, 0, nil
+func (f LogFilter) forUser(tx *gorm.DB, userId int) (*gorm.DB, error) {
+	types := resolveSelfServiceLogTypes(f.Type)
+	tx = tx.Where("logs.user_id = ? AND logs.type IN ?", userId, types)
+	f.Type, f.Username, f.Channel = LogTypeUnknown, "", 0
+	tx, err := f.apply(tx)
+	if err != nil {
+		return nil, err
 	}
-	tx := LOG_DB.Where("logs.user_id = ? AND logs.type IN ?", userId, logTypes)
-
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if keyword != "" {
+	if f.Keyword != "" {
 		condition, pattern, filterErr := buildLogLikeCondition(
 			"logs.model_name",
-			"%"+keyword+"%",
+			"%"+f.Keyword+"%",
 		)
 		if filterErr != nil {
-			return nil, 0, filterErr
+			return nil, filterErr
 		}
 		tokenCondition, tokenPattern, filterErr := buildLogLikeCondition(
 			"logs.token_name",
-			"%"+keyword+"%",
+			"%"+f.Keyword+"%",
 		)
 		if filterErr != nil {
-			return nil, 0, filterErr
+			return nil, filterErr
 		}
-		channelIds, filterErr := findChannelIdsByKeyword(keyword)
+		channelIds, filterErr := findChannelIdsByKeyword(f.Keyword)
 		if filterErr != nil {
-			return nil, 0, filterErr
+			return nil, filterErr
 		}
 		keywordCondition := "(" + condition + " OR " + tokenCondition
 		args := []interface{}{pattern, tokenPattern}
@@ -534,20 +545,14 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		}
 		tx = tx.Where(keywordCondition+")", args...)
 	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
+	return tx, nil
+}
+
+func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, keyword string) (logs []*Log, total int64, err error) {
+	filter := LogFilter{Type: logType, StartTimestamp: startTimestamp, EndTimestamp: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestId: requestId, UpstreamRequestId: upstreamRequestId, Keyword: keyword}
+	tx, err := filter.forUser(LOG_DB, userId)
+	if err != nil {
+		return nil, 0, err
 	}
 	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
 	if err != nil {

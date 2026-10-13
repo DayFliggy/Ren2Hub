@@ -108,6 +108,9 @@ func TestClassifyRouteErrorRecognizesProviderKeyAndModelFailures(t *testing.T) {
 		{"echoed key phrase mid message", 400, `{"error":"Unsupported tier 'incorrect api key provided'"}`, RouteErrorInput},
 		// Same as NewAPI: Gemini reports a bad key as 400 INVALID_ARGUMENT.
 		{"gemini bad key", 400, `{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}`, RouteErrorInput},
+		{"gemini missing cached content", 403, `{"error":{"code":403,"message":"CachedContent not found (or permission denied)","status":"PERMISSION_DENIED"}}`, RouteErrorInput},
+		{"gemini project permission", 403, `{"error":{"code":403,"message":"Permission denied: Consumer has been suspended.","status":"PERMISSION_DENIED"}}`, RouteErrorPermission},
+		{"gemini cache phrase in another error", 403, `{"error":{"code":403,"message":"Permission denied for resource: CachedContent not found (or permission denied)","status":"PERMISSION_DENIED"}}`, RouteErrorPermission},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -117,6 +120,8 @@ func TestClassifyRouteErrorRecognizesProviderKeyAndModelFailures(t *testing.T) {
 			assert.Equal(t, tc.want, classification.Class)
 			assert.Equal(t, tc.want == RouteErrorKey, classification.MarkKey)
 			assert.Equal(t, tc.want == RouteErrorModel, classification.MarkCapability)
+			assert.False(t, classification.MarkChannelModel)
+			assert.Equal(t, tc.want == RouteErrorKey, classification.Retryable)
 			assert.Equal(t, tc.want == RouteErrorKey || tc.want == RouteErrorModel, classification.Failoverable)
 		})
 	}

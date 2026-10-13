@@ -70,7 +70,7 @@ Vue 登录入口依据服务端能力分别显示密码、Passkey 和已配置 O
 
 并发使用同一个 Refresh Token 时，服务端通过确定性轮换恢复同一个后继 Token，多个浏览器标签页不会因丢失“胜者”响应而被迫退出。最近一代 Refresh Token 在短暂容错窗口结束后再次出现会撤销对应会话；无法识别的更早代或随机 Token 只会被拒绝，不会允许攻击者凭猜测踢掉会话。
 
-前端使用 Web Locks 串行化同一浏览器配置文件中的刷新，并通过 BroadcastChannel（不支持时回退到 `storage` 事件）仅同步会话标识和登录/退出事件；Access Token 与 Refresh Token 都不会通过跨标签页消息传递或持久化到 Web Storage。
+前端在同一标签页复用刷新中的 Promise，并用会话版本防止迟到响应覆盖新身份；跨标签页的并发刷新由服务端确定性轮换和 409 会话不匹配恢复处理。BroadcastChannel（不支持时回退到 `storage` 事件）仅同步会话标识和登录/退出事件；Access Token 与 Refresh Token 都不会通过跨标签页消息传递或持久化到 Web Storage。
 
 前端将冷启动状态与登录状态分开管理。网络或服务端临时故障允许后续导航重试 refresh；服务端确认 Refresh Cookie 无效时才进入已完成的匿名状态。内存 SID 与 Cookie SID 不一致时，客户端清除旧内存身份并在不携带旧 SID 的情况下重试一次。
 
@@ -160,7 +160,7 @@ OAuth state、2FA pending、Passkey ceremony、Telegram bind 等临时状态存�
 
 标准 OAuth 绑定回调由 popup 通过同源 `postMessage` 交给 opener；只有 opener 使用自身内存中的 Bearer 调用后端绑定接口。Telegram 绑定先由已登录前端创建绑定 AuthFlow，再让 widget 回调携带路径中的 `flow_token`，回调时会重新确认原登录会话仍有效。Telegram 的已签名 widget assertion 也会登记为一次性凭据，重复回放会被拒绝。
 
-敏感操作使用 `GET /api/verify/methods` 获取当前可用因子，通过对应验证流程取得有效期 5 分钟的 `X-Security-Proof`。作用域包括渠道密钥读取、PAT 生成/撤销、Passkey 注册/删除、2FA 设置/禁用/恢复码更新、账户绑定/解绑、设置/修改密码和账户删除。
+敏感操作使用 `GET /api/verify/methods` 获取当前可用因子，通过对应验证流程取得有效期 1 分钟的 `X-Security-Proof`。作用域包括渠道密钥读取、PAT 生成/撤销、Passkey 注册/删除、2FA 设置/禁用/恢复码更新、账户绑定/解绑、设置/修改密码和账户删除。
 
 Proof 绑定用户、认证身份（浏览器 Session 或 PAT）、用户鉴权版本、身份版本、操作及严格规范化的上下文。数据库一次性消费 Proof，随后各业务事务重新核对授权状态。消费后撤销认证身份会使业务写入失败；业务失败不会恢复 Proof。注册 Passkey 与 2FA 的 begin、finish 使用绑定的流程状态，不能因尚无第二因子而绕过验证。
 

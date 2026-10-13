@@ -12,6 +12,8 @@ import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
+import { exportUserLogs } from '@/api/logExport'
+import { useAppStore } from '@/stores/app'
 import { parseLogPage } from '@/api/liveContracts'
 import { ApiError, type PageResult } from '@/api/types'
 import type { LogItem, LogType } from '@/types/console'
@@ -63,6 +65,11 @@ const { t: diagnosticText } = useI18n({
   messages: requestDiagnosticsMessages,
 })
 const auth = useAuthStore()
+const app = useAppStore()
+const canExport = computed(
+  () => auth.isAdmin || app.status.log_export_enabled !== false
+)
+const maxRangeDays = computed(() => app.status.log_max_range_days ?? 365)
 const toast = useToast()
 
 const rows = ref<LogItem[]>([])
@@ -78,6 +85,17 @@ const startDate = ref('')
 const endDate = ref('')
 const exportOpen = ref(false)
 const exportType = ref('csv')
+const exportStartDate = ref('')
+const exportEndDate = ref('')
+function openExport() {
+  exportStartDate.value = startDate.value
+  exportEndDate.value = endDate.value
+  exportOpen.value = true
+}
+function closeExport() {
+  exportController?.abort()
+  exportOpen.value = false
+}
 const detailLog = ref<LogItem | null>(null)
 const diagnosticsOpen = ref(false)
 const diagnosticFilter = ref<RequestDiagnosticFilter>()
@@ -272,30 +290,26 @@ const typeLabelKey: Record<LogType, string> = {
 
 // ---------- data fetching ----------
 
-function currentParams() {
+function currentParams(start = startDate.value, end = endDate.value) {
   const typeMap: Record<string, number> = {
     topup: 1,
     consume: 2,
     error: 5,
     refund: 6,
   }
-  const requestedStart = startDate.value
-    ? Math.floor(new Date(startDate.value).getTime() / 1000)
+  const requestedStart = start
+    ? Math.floor(new Date(`${start}T00:00:00`).getTime() / 1000)
     : 0
-  const endTimestamp = endDate.value
-    ? Math.floor(new Date(endDate.value).getTime() / 1000) + 86_399
+  const endTimestamp = end
+    ? Math.floor(new Date(`${end}T23:59:59`).getTime() / 1000)
     : 0
-  const startTimestamp =
-    requestedStart && endTimestamp
-      ? Math.max(requestedStart, endTimestamp - 30 * 86_400)
-      : requestedStart
   return {
     p: page.value,
     page_size: pageSize.value,
     keyword: keyword.value,
     group: group.value,
     type: type.value ? (typeMap[type.value] ?? 0) : 0,
-    start_timestamp: startTimestamp,
+    start_timestamp: requestedStart,
     end_timestamp: endTimestamp,
   }
 }
@@ -341,48 +355,6 @@ watch(page, load)
 const exporting = ref(false)
 let exportController: AbortController | null = null
 
-const EXPORT_PAGE_SIZE = 100
-/**
- * Hard ceiling on an export. Without it a filter matching the whole ledger
- * fans out into thousands of sequential requests and hangs the tab; the user is
- * told plainly when the file is truncated rather than silently getting part of
- * the data.
- */
-const EXPORT_MAX_ROWS = 10_000
-
-async function fetchAllLogs(
-  signal: AbortSignal
-): Promise<{ items: LogItem[]; truncated: boolean }> {
-  // page/page_size come from the export loop, not from the table's paging.
-  const { p: _p, page_size: _pageSize, ...filters } = currentParams()
-
-  const firstRaw = await api.get<PageResult<LogItem>>(
-    '/api/log/self',
-    { ...filters, p: 1, page_size: EXPORT_PAGE_SIZE },
-    { signal }
-  )
-
-  const first = parseLogPage(firstRaw as unknown)
-  const items = [...first.items]
-  const reachable = Math.min(first.total, EXPORT_MAX_ROWS)
-  const pages = Math.ceil(reachable / EXPORT_PAGE_SIZE)
-
-  for (let p = 2; p <= pages; p++) {
-    const nextRaw = await api.get<PageResult<LogItem>>(
-      '/api/log/self',
-      { ...filters, p, page_size: EXPORT_PAGE_SIZE },
-      { signal }
-    )
-    const next = parseLogPage(nextRaw as unknown)
-    items.push(...next.items)
-  }
-
-  return {
-    items: items.slice(0, EXPORT_MAX_ROWS),
-    truncated: first.total > EXPORT_MAX_ROWS,
-  }
-}
-
 function download(content: string, mime: string, ext: string) {
   const blob = new Blob([content], { type: mime })
   const url = URL.createObjectURL(blob)
@@ -399,7 +371,15 @@ async function doExport() {
   exportController = controller
   exporting.value = true
   try {
-    const { items, truncated } = await fetchAllLogs(controller.signal)
+    const {
+      p: _p,
+      page_size: _pageSize,
+      ...filters
+    } = currentParams(exportStartDate.value, exportEndDate.value)
+    const items = await exportUserLogs(filters, controller.signal)
+    const headers = LOG_EXPORT_HEADERS.map((key) =>
+      t(`logs.exportHeaders.${key}`)
+    )
     if (exportType.value === 'json') {
       download(
         JSON.stringify(items, null, 2),
@@ -409,7 +389,7 @@ async function doExport() {
     } else if (exportType.value === 'excel') {
       download(
         ...serializeSpreadsheet(
-          LOG_EXPORT_HEADERS,
+          headers,
           items.map((log) => getLogExportValues(log, getLocale())),
           'excel'
         )
@@ -417,30 +397,23 @@ async function doExport() {
     } else {
       download(
         ...serializeSpreadsheet(
-          LOG_EXPORT_HEADERS,
+          headers,
           items.map((log) => getLogExportValues(log, getLocale())),
           'csv'
         )
       )
     }
     exportOpen.value = false
-    if (truncated) {
-      toast.warning(
-        t('logs.exportTruncated', {
-          count: items.length,
-          limit: EXPORT_MAX_ROWS,
-        })
-      )
-    } else {
-      toast.success(t('logs.exported', { count: items.length }))
-    }
+    toast.success(t('logs.exported', { count: items.length }))
   } catch (error) {
     // An unmount mid-export is a cancellation, not a failure to report.
     if (controller.signal.aborted) return
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    if (exportController === controller) exportController = null
-    exporting.value = false
+    if (exportController === controller) {
+      exportController = null
+      exporting.value = false
+    }
   }
 }
 
@@ -606,7 +579,7 @@ onBeforeUnmount(() => {
           </Transition>
         </div>
 
-        <ConsoleButton variant="secondary" @click="exportOpen = true">
+        <ConsoleButton v-if="canExport" variant="secondary" @click="openExport">
           <svg
             width="15"
             height="15"
@@ -797,9 +770,20 @@ onBeforeUnmount(() => {
       :open="exportOpen"
       :title="t('logs.exportTitle')"
       :subtitle="t('logs.exportSubtitle')"
-      size="sm"
-      @close="exportOpen = false"
+      size="lg"
+      @close="closeExport"
     >
+      <FormField :label="t('logs.dateRange')">
+        <DateRangePicker
+          v-model:start="exportStartDate"
+          v-model:end="exportEndDate"
+          presentation="inline"
+          class="w-full"
+        />
+        <p class="mt-2 text-sm text-[var(--text-secondary)]">
+          {{ t('logs.exportRangeHint', { days: maxRangeDays }) }}
+        </p>
+      </FormField>
       <FormField :label="t('logs.docType')">
         <FilterSelect
           v-model="exportType"

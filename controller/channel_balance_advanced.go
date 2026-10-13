@@ -103,7 +103,9 @@ func fetchAdvancedCustomBalance(ctx context.Context, channel *model.Channel) (ch
 				balance >= 0 &&
 				!math.IsNaN(balance) &&
 				!math.IsInf(balance, 0) {
-				channel.UpdateBalance(balance)
+				if err := channel.UpdateBalance(balance); err != nil {
+					return channelBalanceResult{}, err
+				}
 				return channelBalanceResult{Balance: balance}, nil
 			}
 		}

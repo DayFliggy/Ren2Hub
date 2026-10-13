@@ -293,6 +293,7 @@ export function createHttpTransport(client: AxiosInstance): ApiTransport {
             signal: options.signal,
             headers,
             responseType: 'blob',
+            timeout: options.timeoutMs,
           })
           if (!isAuthSessionIdentityCurrent(snapshot)) throw staleSessionError()
           return response.data

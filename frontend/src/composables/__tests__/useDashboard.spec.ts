@@ -183,31 +183,23 @@ describe('useDashboard', () => {
       .map(([, params]) => params)
     expect(selfUsageRanges).toContainEqual({
       start_timestamp: monthStartTimestamp,
-      end_timestamp: monthStartTimestamp + 30 * 86_400 - 1,
-    })
-    expect(selfUsageRanges).toContainEqual({
-      start_timestamp: monthStartTimestamp + 30 * 86_400,
       end_timestamp: endTimestamp,
     })
     expect(state.stats.value?.month_quota).toBe('500000')
     wrapper.unmount()
   })
 
-  it('splits self-usage queries at the backend thirty-day limit', async () => {
-    const startTimestamp = 1_700_000_000
-    const maxRange = 30 * 86_400
-    const get = vi.spyOn(api, 'get').mockResolvedValue([] as never)
-
-    await fetchSelfUsage(startTimestamp, startTimestamp + maxRange)
-
-    expect(get).toHaveBeenCalledTimes(2)
-    expect(get.mock.calls[0]?.[1]).toEqual({
-      start_timestamp: startTimestamp,
-      end_timestamp: startTimestamp + maxRange - 1,
-    })
-    expect(get.mock.calls[1]?.[1]).toEqual({
-      start_timestamp: startTimestamp + maxRange,
-      end_timestamp: startTimestamp + maxRange,
-    })
+  it('preserves the requested range and surfaces the shared server limit', async () => {
+    const failure = new Error('The time range cannot exceed 7 days')
+    const get = vi.spyOn(api, 'get').mockRejectedValue(failure)
+    const signal = new AbortController().signal
+    await expect(fetchSelfUsage(100, 100 + 31 * 86400, signal)).rejects.toBe(
+      failure
+    )
+    expect(get).toHaveBeenCalledExactlyOnceWith(
+      '/api/data/self',
+      { start_timestamp: 100, end_timestamp: 100 + 31 * 86400 },
+      { signal }
+    )
   })
 })

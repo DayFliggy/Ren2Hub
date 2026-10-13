@@ -72,7 +72,6 @@ export interface FlowPoint {
 }
 
 const DAY_SECONDS = 86_400
-const MAX_SELF_USAGE_RANGE_SECONDS = 30 * DAY_SECONDS
 
 function localDateKey(date: Date): string {
   const year = date.getFullYear()
@@ -102,44 +101,18 @@ export function getLocalMonthStartTimestamp(now = new Date()): number {
   )
 }
 
-function splitUsageRange(
-  startTimestamp: number,
-  endTimestamp: number
-): Array<{ start_timestamp: number; end_timestamp: number }> {
-  if (endTimestamp < startTimestamp) return []
-
-  const ranges: Array<{
-    start_timestamp: number
-    end_timestamp: number
-  }> = []
-  let nextStart = startTimestamp
-  while (nextStart <= endTimestamp) {
-    const nextEnd = Math.min(
-      endTimestamp,
-      nextStart + MAX_SELF_USAGE_RANGE_SECONDS - 1
-    )
-    ranges.push({ start_timestamp: nextStart, end_timestamp: nextEnd })
-    nextStart = nextEnd + 1
-  }
-  return ranges
-}
-
 export async function fetchSelfUsage(
   startTimestamp: number,
   endTimestamp: number,
   signal?: AbortSignal
 ): Promise<UsageRow[]> {
-  const ranges = splitUsageRange(startTimestamp, endTimestamp)
-  const responses = await Promise.all(
-    ranges.map(({ start_timestamp, end_timestamp }) =>
-      api.get<unknown>(
-        '/api/data/self',
-        { start_timestamp, end_timestamp },
-        signal ? { signal } : undefined
-      )
+  return parseUsageRows(
+    await api.get<unknown>(
+      '/api/data/self',
+      { start_timestamp: startTimestamp, end_timestamp: endTimestamp },
+      signal ? { signal } : undefined
     )
   )
-  return responses.flatMap(parseUsageRows)
 }
 
 /** Balance visibility preference, shared across dashboard & wallet. */

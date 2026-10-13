@@ -59,6 +59,10 @@ go test -race -timeout 60s ./router -run '^TestGatewayResponsesWS(PreviousRespon
 
 SDK 套件与锁定版本见 [SDK 测试说明](../../tests/gateway-sdk/README.md)，每套单独执行，避免把多个 60 秒工作合并成一个总 60 秒命令。Windows 代理环境中为回环请求设置 `NO_PROXY=127.0.0.1,localhost`。禁止关闭 TLS 校验来让 Realtime 测试通过。
 
+## 用量日志与渠道余额
+
+日志专项见[查询与导出](../console/LOGS.md#复验入口)。`TestLogExportFiltersAcrossDatabases` 复用 `TEST_MYSQL_DSN`、`TEST_POSTGRES_DSN`，须逐一确认 SQLite/MySQL/PostgreSQL 子例通过且没有跳过。`TestSub2APIBalanceQueryContract`、`TestSub2APIBalancePersistenceFailure` 和代理/TLS 回归校验余额字段优先级、无限订阅拒绝、持久化失败与旧值保留；执行 `go test -timeout 60s ./controller -run 'TestSub2APIBalance|TestBalanceQuery|TestAdvancedCustomBalance' -count=1`。公开用量、日志字段隔离和 PAT 权限分别由对应控制器、真实路由和 Vue transport 用例验证。
+
 ## 前端
 
 在 `frontend` 按顺序运行：

@@ -747,6 +747,18 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('DemoSiteEnabled', 'demoSite'),
           toggle('SelfUseModeEnabled', 'selfUseMode'),
           toggle('LogConsumeEnabled', 'logConsume', true),
+          toggle('log_setting.user_export_enabled', 'logUserExport', true),
+          {
+            ...number(
+              'log_setting.max_range_days',
+              'logMaxRangeDays',
+              365,
+              'logMaxRangeDaysHint'
+            ),
+            min: 1,
+            max: 36500,
+            integer: true,
+          },
         ],
       },
       {

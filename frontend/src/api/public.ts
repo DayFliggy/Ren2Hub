@@ -3,6 +3,8 @@ import { publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
+  log_export_enabled?: boolean
+  log_max_range_days?: number
   server_address?: string
   api_info_enabled?: boolean
   api_info?: Array<{ url: string; route?: string; description?: string }>
@@ -95,6 +97,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'server_address',
   ] as const
   const booleanKeys = [
+    'log_export_enabled',
     'api_info_enabled',
     'password_login_enabled',
     'password_login_encryption_enabled',
@@ -136,6 +139,16 @@ export function parsePublicStatus(value: unknown): PublicStatus {
         description: entry.description as string | undefined,
       }
     })
+  }
+  if (value.log_max_range_days !== undefined) {
+    if (
+      typeof value.log_max_range_days !== 'number' ||
+      !Number.isInteger(value.log_max_range_days) ||
+      value.log_max_range_days < 1 ||
+      value.log_max_range_days > 36500
+    )
+      invalidResponse('/api/status')
+    result.log_max_range_days = value.log_max_range_days
   }
   if (value.start_time !== undefined) {
     if (

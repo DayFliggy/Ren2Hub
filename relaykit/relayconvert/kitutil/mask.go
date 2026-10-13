@@ -12,6 +12,8 @@ var (
 	maskIPPattern     = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 	// maskApiKeyPattern matches patterns like 'api_key:xxx' or "api_key:xxx" to mask the API key value
 	maskApiKeyPattern = regexp.MustCompile(`(['"]?)api_key:([^\s'"]+)(['"]?)`)
+	// Google credentials also appear as bare values in upstream errors.
+	maskGoogleKeyPattern = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35,}|AQ\.Ab[0-9A-Za-z_-]{40,}`)
 )
 
 // maskHostTail returns the tail parts of a domain/host that should be preserved.
@@ -63,6 +65,8 @@ func maskHostForPlainDomain(domain string) string {
 // www.openai.com -> ***.***.com
 // api.openai.com -> ***.***.com
 func MaskSensitiveInfo(str string) string {
+	// Run before domain masking, which could split the AQ.Ab credential.
+	str = maskGoogleKeyPattern.ReplaceAllString(str, "***")
 	// Mask URLs
 	str = maskURLPattern.ReplaceAllStringFunc(str, func(urlStr string) string {
 		u, err := url.Parse(urlStr)

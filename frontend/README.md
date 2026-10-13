@@ -30,6 +30,8 @@ bun run build
 
 Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Playwright 页面审计，覆盖桌面/移动端、明暗主题和相关错误状态；它不替代真实后端与生产产物的验证，具体边界见[路由约定](ROUTING.md)。
 
+依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已定向更新兼容安全补丁；构建工具链仍有 braces 3.0.3 高危和 Tailwind 3 所需 postcss-selector-parser 6.1.4 中危，详细链路与复评条件见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。这些依赖需要按实际构建用途判断，不能仅因没有业务代码 import 而删除，也不能以忽略告警宣称审计通过。
+
 ## 路由
 
 生产访问前缀为 `/`，下列路径是 Vue Router 内部路径：
@@ -44,6 +46,10 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不转换也不加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
 
 `/api/next/*` 是已有业务 API 门面，保留接口契约；`/api/models` 和 `/api/models/` 的不同语义也保留。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
+
+## 用量日志导出
+
+用量日志使用专用 NDJSON 接口，独立选择导出日期；校验成功终态、记录数量和字段后生成 CSV、Excel 或 JSON。服务端默认限制 365 天查询跨度，前端不再静默裁剪为 30 天或截断为 10000 行。取消会中止请求，普通用户导出可由系统设置关闭；文件中的精确金额字符串、公式防护、浏览器内存和 Excel 导入边界见[用量日志契约](../docs/console/LOGS.md)。审计日志与订单页继续遵守各自的导出限制。
 
 ## 源码结构
 

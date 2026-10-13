@@ -6,6 +6,7 @@ export interface RequestOptions {
   params?: Record<string, unknown>
   data?: unknown
   signal?: AbortSignal
+  timeoutMs?: number
   headers?: Record<string, string>
 }
 

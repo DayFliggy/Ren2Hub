@@ -239,6 +239,11 @@ func IsRetiredBillingOption(key string) bool {
 
 func validateOptionValue(key string, value string) error {
 	switch key {
+	case operation_setting.LogMaxRangeDaysOptionKey:
+		return operation_setting.ValidateLogMaxRangeDays(value)
+	case operation_setting.LogUserExportOptionKey:
+		_, err := strconv.ParseBool(value)
+		return err
 	case "CustomCallbackAddress":
 		if strings.TrimSpace(value) != "" {
 			_, err := common.NormalizePaymentOrigin(value)

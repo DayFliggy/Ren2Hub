@@ -93,5 +93,12 @@
   "Unknown plugin metadata field: {{field}}": "未知的插件元数据字段：{{field}}",
   "User not found": "用户不存在",
   "Username and password are required": "用户名和密码不能为空",
-  "hours must be between {{min}} and {{max}}": "小时数必须在 {{min}} 到 {{max}} 之间"
+  "hours must be between {{min}} and {{max}}": "小时数必须在 {{min}} 到 {{max}} 之间",
+  "Invalid time range": "日期范围无效",
+  "The time range cannot exceed {{days}} days": "日期跨度不能超过 {{days}} 天",
+  "The log time range must be between 1 and 36500 days": "日志查询跨度必须介于 1 到 36500 天",
+  "Log export is disabled": "日志导出已关闭",
+  "Another log export is running. Try again after it finishes.": "已有日志导出正在运行，请等待完成后重试。",
+  "Failed to export logs": "日志导出失败",
+  "Incomplete or invalid log export": "日志导出不完整或格式无效"
 }

@@ -106,6 +106,10 @@ func classifyProviderRouteError(status int, providerCode, providerType, message 
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}
+	case status == http.StatusForbidden && text == "cachedcontent not found (or permission denied)":
+		// Google uses 403 for expired, deleted, and foreign cachedContent
+		// references. This is request state, not channel credentials.
+		return RouteErrorClassification{Class: RouteErrorInput}
 	case status == 403 || strings.Contains(code, "permission"):
 		return RouteErrorClassification{Class: RouteErrorPermission}
 	case status == 408 || status == 409 || status == 425 || status == 429 || status >= 500 || strings.Contains(code, "rate_limit") || strings.Contains(code, "timeout"):

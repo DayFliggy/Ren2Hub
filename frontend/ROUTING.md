@@ -2,16 +2,16 @@
 
 Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`。路由定义以 `src/router/` 为准，控制台侧边栏菜单与访问条件统一维护在 `src/constants/navigation/consoleNav.ts`，顶部导航（含仅 Admin 可见的“运维监控”）维护在 `src/constants/navigation/topNav.ts`；API 路径与鉴权遵循现有 Go 接口。
 
-| 域       | 规范路径                                                                                                                           | 访问约束                                                                                                                |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                                                                                                   |
-| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                                                                                                |
-| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                                                   |
-| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                                                   |
-| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                                    |
-| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                                                |
-| 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Admin，admin capability；其中系统任务与计费健康仅 Root，上游健康需 `channel:read` |
-| 延期模块 | 市场、发票、Farm、Bigame                                                                                                           | 保留源码，capability 未开放时拒绝进入                                                                                   |
+| 域       | 规范路径                                                                                                                           | 访问约束                                                                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                                                                                         |
+| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                                                                                      |
+| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                                         |
+| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                                         |
+| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                          |
+| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                                      |
+| 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Admin，admin capability；其中系统任务仅 Root，上游健康需 `channel:read` |
+| 延期模块 | 市场、发票、Farm、Bigame                                                                                                           | 保留源码，capability 未开放时拒绝进入                                                                         |
 
 顶部导航的“炼金室”是禁用的占位入口，不注册路由也没有页面；`/lab/*` 进入标准 404。
 

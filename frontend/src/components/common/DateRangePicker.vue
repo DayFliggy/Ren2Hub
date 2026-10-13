@@ -21,8 +21,10 @@ const props = withDefaults(
     placeholder?: string
     /** open the panel upward — use when the control sits near the page bottom */
     direction?: 'down' | 'up'
+    /** In scrolling dialogs, reserve space instead of overflowing the body. */
+    presentation?: 'popover' | 'inline'
   }>(),
-  { placeholder: '', direction: 'down' }
+  { placeholder: '', direction: 'down', presentation: 'popover' }
 )
 
 /* ---------- date helpers (all local-time, string-keyed 'YYYY-MM-DD') ---------- */
@@ -126,7 +128,7 @@ function openPanel() {
   hoverKey.value = ''
   focusKey.value = keyOf(seed)
   open.value = true
-  nextTick(() => focusDay(focusKey.value))
+  nextTick(() => focusDay(focusKey.value, props.presentation === 'inline'))
 }
 function closePanel(restoreFocus = false) {
   open.value = false
@@ -251,7 +253,7 @@ function addMonthsClamped(date: Date, delta: number): Date {
   return target
 }
 
-async function focusDay(key: string): Promise<void> {
+async function focusDay(key: string, preventScroll = false): Promise<void> {
   const target = fromKey(key)
   const targetAnchor = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`
   if (targetAnchor !== anchor.value) {
@@ -266,7 +268,7 @@ async function focusDay(key: string): Promise<void> {
     (candidate) =>
       candidate.dataset.dateKey === key && candidate.dataset.inMonth === 'true'
   )
-  button?.focus()
+  button?.focus({ preventScroll })
 }
 
 function onDayKeydown(event: KeyboardEvent, key: string): void {
@@ -297,12 +299,12 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
 </script>
 
 <template>
-  <div ref="root" class="relative h-10" @keydown="onKeydown">
+  <div ref="root" class="relative" @keydown="onKeydown">
     <!-- trigger -->
     <button
       ref="triggerRef"
       type="button"
-      class="pencil-control flex h-full w-full items-center gap-2 rounded-xl border px-3.5 text-left text-sm transition-colors focus-ring"
+      class="pencil-control flex h-10 w-full items-center gap-2 rounded-xl border px-3.5 text-left text-sm transition-colors focus-ring"
       data-handdrawn="control"
       :class="[
         open || hasValue
@@ -349,7 +351,7 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
     <button
       v-if="hasValue"
       type="button"
-      class="absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
+      class="absolute right-2 top-5 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
       :aria-label="t('logs.clear')"
       @click="clear"
     >
@@ -372,8 +374,15 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
         v-if="open"
         :id="panelId"
         ref="panelRef"
-        class="absolute left-1/2 z-50 w-[calc(100vw-2rem)] max-w-[35rem] -translate-x-1/2 overflow-hidden rounded-2xl border bg-[var(--surface-overlay)] shadow-[var(--overlay-shadow)] sm:left-auto sm:right-0 sm:w-[35rem] sm:translate-x-0"
-        :class="direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
+        class="rounded-2xl border bg-[var(--surface-overlay)] shadow-[var(--overlay-shadow)]"
+        :class="
+          presentation === 'inline'
+            ? 'relative mt-2 w-full'
+            : [
+                'absolute left-1/2 z-50 w-[calc(100vw-2rem)] max-w-[35rem] -translate-x-1/2 overflow-hidden sm:left-auto sm:right-0 sm:w-[35rem] sm:translate-x-0',
+                direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2',
+              ]
+        "
         style="border-color: var(--overlay-border)"
         role="dialog"
         aria-modal="false"

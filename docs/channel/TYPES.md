@@ -27,6 +27,12 @@
 
 `GET /api/token/:id/client-config?format=codex|pi` 继续从统一 manifest 生成权限过滤配置。Codex 使用 OpenAI Responses TOML，Pi 使用 Chat Completions JSON；均引用 `REN2HUB_API_KEY`，不导出真实凭据，也不依赖订阅渠道、OAuth 或供应商窗口。参数保留、状态归属、路由、重试和账务继续由标准 OpenAI 路径负责。
 
+## Sub2API 余额刷新
+
+类型 59 的管理员余额刷新使用渠道 `base_url` 下的 `GET /v1/usage`，以渠道 Key 发送 Bearer 认证，并沿用渠道代理与 TLS 设置。优先读取 `remaining`（明确的零不回退），字段缺失时读取 `balance`；缺失、非数值、非有限值、`isValid=false` 或没有任何日/周/月限额的无限订阅均报错，保留已存余额与更新时间。钱包负值是合法的余额，不把它自动解释成无限额度。
+
+余额只有成功写入数据库后才向管理员返回成功；所有渠道共用 `Channel.UpdateBalance` 的错误合同，批量刷新收集失败并返回错误，后台刷新记录失败。这是管理员主动查询的余额信息，不引入供应商额度窗口采集，也不影响本地钱包计费来源。多 Key 渠道继续拒绝余额查询。
+
 ## 将来接入供应商窗口的边界
 
 代码中没有供应商用量窗口或 provider-usage 接口。新增供应商窗口必须单独立项并复用已有合法认证，明确稳定凭据与端点身份、unknown/stale/error 语义、取消与退避、权限交集和脱敏投影。观察结果不能成为资金预留、余额、路由健康或额度自动重置的第二份状态来源。

@@ -26,6 +26,8 @@ bun install --frozen-lockfile
 
 前端与 Electron 统一使用 Bun 1.4.0，各自维护 bun.lock；构建不自动发布。
 
+2026-10-13 更新至 Electron 41.10.6，并定向吸收兼容的安全补丁。`bun audit --json` 仍报告构建下载工具链的 sprintf-js 1.1.3 中危，暂无已发布修复；实际依赖链与复评条件见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。入口语法、运行时版本和 Linux 目录打包检查不能替代目标桌面系统的图形启动、托盘及安装包验证。
+
 ## Development
 
 Start the backend, the frontend, and Electron in separate terminals:

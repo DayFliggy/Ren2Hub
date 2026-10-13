@@ -1,6 +1,6 @@
 # 上游同步账本
 
-本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `767a82b8764778b847462ebecdc231eacd1e282c`（main）、Sub2API `9591136d45cef26453348ed9532a7ebbce7cf99c`（main）、AxonHub `7a0cfbf42b00829dd8811cc87488f6194ed5ae02`（unstable），下一轮从这三个提交向后比较。
+本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `63cecab824bad1a421d19950004c309bb2054c09`（main）、Sub2API `4d9ac3e482106d2da3a39fe3e546d8d6801f1cc1`（main）、AxonHub `3cb7e3335cadd463fe7748c47dd003802125e3dd`（unstable），下一轮从这三个提交向后比较。
 
 逐批的比较窗口、执行过程和验收数据保存在 Git 历史中：在 Ren2Hub 目录运行 `git log -- docs/upstream/SYNC_LEDGER.md` 定位批次，再用 `git show <commit>:docs/upstream/SYNC_LEDGER.md` 读取。接口字段以[网关 API](../routing/GATEWAY_API.md)、[协议支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md)、[插件 API](../plugin-api/v1.md)、[模型定价](../billing/PRICING.md)和[鉴权合同](../authentication.md)为准，本账本只记处置与本地合同。
 
@@ -8,67 +8,115 @@
 | --- | --- | --- |
 | 已吸收 | 本地具有上游行为，包括按本地资金、价格或转换策略合同改写后的形态 | 上游再改同一行为时按新增量比较 |
 | 本地偏离保留 | 与 NewAPI 基线不同，有缺陷证据或结构约束；合并上游时须保留 | 写明上游修复或改变后回归的条件 |
-| 等待上游 | 本地存在已知问题，按用户决定等 NewAPI 修复后按其实现同步 | 风险不变，不提前做本地修复 |
+| 等待上游 | 本地存在已知问题，等待对应来源修复；已登记的用户决定继续保留 | 保留风险及等待条件，不提前替换用户已决定等待的实现 |
+| 待验证 | 尚缺实际供应商或环境证据 | 补齐指定证据后重新判断，不把静态核对当作运行验证 |
 | 延期 | 有价值但未实施 | 写明依赖与进入条件 |
 | 刻意不吸收 | 不符合当前产品或架构边界 | 写明现有替代与复评触发条件 |
 | 不适用 | 本地没有对应代码或产品 | 对应能力重新引入时复评 |
 
-状态沿用[适配矩阵](../../../skills/ren2hub-upstream-sync/references/adaptation-matrix.md)的定义：部分吸收的上游提交拆成多行分别标注；当前没有待验证条目。守护测试列给出测试函数或测试文件，“—”表示没有专门测试。
+状态沿用[适配矩阵](../../../skills/ren2hub-upstream-sync/references/adaptation-matrix.md)的定义：部分吸收的上游提交拆成多行分别标注；百炼实际 `reasoning_effort` 行为仍是待验证项（队列 `SYNC1008-06`）。处置状态描述代码行为，守护测试列指明相关回归，不代表本轮候选验收或部署已完成；“—”表示没有专门测试。
 
-## 2026-10-12 增量处置
+## 2026-10-13 增量处置
 
-本轮于 `2026-10-12T12:33:03Z` 完成官方 HEAD、发布元数据与独立参考副本采集。完整窗口为 NewAPI `c10780e054e6e518c9d0d8a903526663c9b57d75..767a82b8764778b847462ebecdc231eacd1e282c`（13 提交）、Sub2API `3a6fd1c9db07203ca308aaba69e502bc1f35b307..9591136d45cef26453348ed9532a7ebbce7cf99c`（32 提交，其中 16 个 merge 只合并下列 16 项）、AxonHub `b6d184a898df3d3c8278dd7c4a622e615919d675..7a0cfbf42b00829dd8811cc87488f6194ed5ae02`（5 提交）。发布标签分别为 NewAPI `v1.0.0-rc.43`、Sub2API `v0.2.15`、AxonHub `v1.0.0-beta11`；标签与主干分开比较，不以 rc/beta 名称推定稳定性。
+本轮官方 HEAD 与发布元数据采集完成于 `2026-10-13T09:33:55.4938040Z`。完整比较窗口为 NewAPI `767a82b8764778b847462ebecdc231eacd1e282c..63cecab824bad1a421d19950004c309bb2054c09`（16 提交：15 个有文件变化、1 个空提交）、Sub2API `9591136d45cef26453348ed9532a7ebbce7cf99c..4d9ac3e482106d2da3a39fe3e546d8d6801f1cc1`（47 提交：35 普通、12 merge）、AxonHub `7a0cfbf42b00829dd8811cc87488f6194ed5ae02..3cb7e3335cadd463fe7748c47dd003802125e3dd`（1 普通提交）。计数按完整提交图，空提交与无净变化合并也登记，不用路径过滤后的列表冒充完整窗口。
 
-“已吸收（既有）”表示当前合同已等价覆盖，不能当作本轮新功能。以下未采用项在对应产品或合同被明确引入后复评。此前的等待上游项未在该窗口得到修复，状态保留；没有新增未处置的 P0/P1。证据使用独立 checkout、三库、回环供应商及候选容器，不代表真实供应商认证或物理移动设备输入法验证。源码提交与正式部署证据分别记录，实际运行状态见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。
+| 来源 | 官方最新发布 | 标签完整 SHA | 发布时间（UTC） |
+| --- | --- | --- | --- |
+| NewAPI | [v1.0.0-rc.44](https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.44) | `633b4c5b190dc1af99a2814391354d86948e7943` | 2026-10-12 13:42:01 |
+| Sub2API | [v0.2.16](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.16) | `01842576b3d5c1e2545b5a99ad555d36e28ed306` | 2026-10-13 07:20:24 |
+| AxonHub | [v1.0.0-beta11](https://github.com/looplj/axonhub/releases/tag/v1.0.0-beta11) | `b8bb3421e1fe946cfc4f0d86e8412098738f2793` | 2026-10-08 05:43:47 |
+
+标签与主干分别锁定；三份官方 release 元数据均为 `draft=false`、`prerelease=false`，不据此或 rc/beta 名称推定生产稳定性。“已吸收（既有）”表示现有合同覆盖，不能统计成本轮新功能。同一提交的已吸收与未采用部分拆行登记。此前等待上游（用户决定）的项目未在本窗口修复，全部保留。
+
+本节登记实现与复评边界；候选验收与实际部署结果见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。依赖审计仍报告前端构建工具链的 `braces` 高危、Tailwind 所需旧版 `postcss-selector-parser` 中危，以及 Electron 构建工具链的 `sprintf-js` 中危，不能写成依赖审计全部通过。独立副本、回环供应商及本地测试不能替代真实供应商认证、物理输入法或桌面平台兼容性证据。
 
 ### NewAPI
 
-| 提交 | 状态 | 当前行为与复评边界 |
-| --- | --- | --- |
-| `767a82b8764778b847462ebecdc231eacd1e282c` | 已吸收并保留本地诊断合同 | Claude 原生保留 `thinking.block_binding`、未知 thinking 字段与 `input_transformations`；后缀只在 adaptive 保留 binding，未知字段在原生重写仍保留；多值 beta 请求头经 `relaycommon.AnthropicBetaHeaderValue` 合并、去空白/空项并保序去重，Claude 直连、Vertex、Bedrock 与计费 `header()` 读取同一值（`cloneRequestHeaders` 合并重复行，Cookie 用 `; `）；`TestBillingHeadersMatchUpstreamAnthropicBeta`、`TestCloneRequestHeadersCombinesRepeatedLines`。后缀改写保留客户端 disabled，`-none` 不误报 `suffix_overrode_request`。跨协议损失遵守 safe/strict/allow，见[支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md#文本入口)及 `claude_thinking_binding_test.go`。共享重写覆盖 Claude/AWS/Vertex，不在单一 adaptor 补第二份逻辑 |
-| `2b85a8fc67bdb6d8d41a25f60f734dd3b9917618` | 不适用 | 上游登录条款同意提示；Vue 登录没有该同意流程，新增流程时复评 |
-| `2ed058795bf0ce968134aa8db18b0dd86b54c30e` | 已吸收 | CI 固定 `github.sha`，Bun 每周依赖检查；删除账户回归同时断言旧会话失效和无活跃会话。SQLite 单写连接与 immediate 事务已有 `TestSQLiteConnectionWritePolicy`，不退回较弱配置 |
-| `9948b1ef14ea17fb23539386c0cb09018671c955` | 已吸收 | 定价转换接受端点数组/map，规范化空白、拒绝非法数组，图片按次表达式保留 `image_count`；`model_pricing_conversion_endpoints_test.go` |
-| `4bfcf2812198913156a3e88a43e746b61a7b6ef5` | 不适用 | React lobehub 图标包更新不适用于 Vue 图标系统 |
-| `fc08b76f0fb3f95e7cb81667e7bf350200147fb3` | 已吸收（既有） | 历史阶梯读取冻结 `charge_result.trace.matched_tier`，不按当前配置重算；`LogBillingDetail.vue` |
-| `ba0e478e061ee0c824922d89c05620de878103cf` | 已吸收（既有） | Responses 转 Chat 的工具调用轮次保留同时出现的 assistant 正文；`to_oai_chat_req.go` |
-| `34b19421237fc4695e919cdd799c1b7813023085` | 已吸收 | 模型广场关闭时有效 Root 仍可读 pricing；会话过期/撤销、禁用/降权、PAT 权限边界不放宽；`header_nav_test.go` |
-| `b22a43b6e89e5349d8cdbddc88d570b16e15fb1f` | 已吸收 | 任务实际/估算结算与失败释放日志补 `is_task:true`；`service/task_billing_test.go` |
-| `bbf60b49f6a4cab709e49e57d45f7911fc7dccae` | 不适用 | 上游移动账单区分钱包/订阅资金来源，本地钱包是唯一来源 |
-| `3f926c3ef49745be273cd8f753fb691abdd7b836` | 已吸收（既有） | 本地已完成流的成功记录不因随后 context 取消而改失败，不存在上游该分支 |
-| `3827fd83076b9cbaa3f1d9f9d2957ae653573ed7` | 已吸收（既有） | 表达式卡显示完整原式，不采用丢失 cache-read 子式的 primary/secondary 投影 |
-| `42e694eb60fe3191795c00d416571ced716eb9c4` | 已吸收 | `meta/`、`muse-` 归类 Meta，独立 `spark-` 仍是讯飞；`modelProvider.spec.ts` |
+| 提交 | 分类 / 优先级 | 状态 | 当前行为与复评边界 |
+| --- | --- | --- | --- |
+| `63cecab824bad1a421d19950004c309bb2054c09` | 渠道 / P2 | 已吸收 | type 59 余额查询使用 `/v1/usage`，保留明确的 `remaining:0`、传输设置、管理权限及旧余额失败边界；不是本地订阅或钱包产品。详见下方渠道余额合同。 |
+| `b4be2a7847c4db4a956c3e71ae4bc1f31bc71b60` | 界面 / P3 | 不适用 | React GroupRatio 编辑器新增分组置顶。本地已退役分组计费编辑器；充值组倍率 JSON 不是该组件，不为此补丁恢复旧产品。 |
+| `633b4c5b190dc1af99a2814391354d86948e7943` | 日志 / P2 | 已吸收（Vue 改写） | 用量日志专用 NDJSON 导出、普通用户开关和默认 365 天共享范围；普通用户列表、统计、图表与两种专用导出使用同一范围规则，超限明确拒绝；管理员全局列表不受普通用户查询范围限制。保留用户 DTO 隔离、精确金额、PAT 权限和每用户单进程互斥；前端校验成功终态及计数，取消中止下载。见[日志合同](../console/LOGS.md)。 |
+| `dd59854050f26f4f67bb3dac5274af5e17013462` | 依赖 / P1 | 已吸收 | Electron 的 node-gyp 分支 undici 6.29.0；Electron 41 所需 @electron/get 5 分支使用 7.30.0，不强制跨分支统一主版本。 |
+| `93cf4ba6fb92e3f755fdeb6af9a9484bfa748816` | 记录 / P3 | 不适用 | 完整提交窗口中的空提交，无文件变化；保留计数，不记为新增能力。 |
+| `3c9fb2a0de168d88ce5bffbf44acecdc1cdcdd39` | 依赖 / P1 | 已吸收 | brace-expansion 安全补丁按 Electron 实际主版本分支更新到 1.1.21、2.1.7、5.0.12；Vue 同包 override 同步至 5.0.12，仍按其自身锁文件验证。 |
+| `9f048107edbba2156691718126de7c4577614533` | 依赖 / P3 | 不适用 | React web 的 ai 7.0.136；Vue 控制台没有该依赖。引入同类 SDK 时复评。 |
+| `3fe394cdba280c00bc566de493b5fc8399b0a7d1` | 依赖 / P1 | 已吸收（既有） | Go 已使用 gorilla/websocket v1.5.3，无需重复改动。 |
+| `1c58f3d161fa32755b372d9449f2d5e077d50a5d` | 依赖 / P1 | 已吸收 | fast-uri 安全补丁；本地在相同兼容范围解析到 3.1.8。 |
+| `7f51a97226c43bc082a065bdc8b40b719c4bdcce` | 依赖 / P1 | 已吸收 | Electron 传递依赖 js-yaml 4.3.2。 |
+| `7e25797d14681e4e16c2b46831450e7d6a5ccc74` | 桌面 / P1 | 已吸收 | Electron 39.8.10 升至 41.10.6，保留 electron-builder 26.15.3 和现有打包结构。锁文件升级不证明桌面打包、系统托盘与各平台启动兼容。 |
+| `bf4e1ebfb88579930d75d852d2d2bca74cbd5f62` | 依赖 / P3 | 不适用 | 上游 oxfmt；本地 Vue 使用现有 ESLint/Prettier。 |
+| `82306b3c35945bc0ed2c567688afe28d8a281300` | 依赖 / P3 | 不适用 | 上游 @tanstack/router-plugin；本地使用 Vue Router。 |
+| `c730add954e1b565656a9320444cac5fee12cfe4` | 依赖 / P3 | 不适用 | 上游 stream-markdown-parser；本地没有该依赖。 |
+| `b8c2dc12660dceb2a905008a672f8bc0260c98c8` | 依赖 / P3 | 不适用 | 上游 yace；本地没有该依赖。 |
+| `ba29f06453942d9b5c0b32330340b8a000692c4f` | 依赖 / P1 | 已吸收 | Electron 传递依赖 @xmldom/xmldom 0.8.15。 |
 
 ### Sub2API
 
-| 提交 | 状态 | 当前行为与复评边界 |
+普通提交按能力逐项处置；合并提交只核对净差异与冲突修正，不额外计一份功能。
+
+| 提交 | 分类 / 优先级 | 状态 | 当前行为与复评边界 |
+| --- | --- | --- | --- |
+| `983cf297da59e3be23b5e3f2c4eded945b53f408` | 协议 / P2 | 刻意不吸收 | Responses 结构化输入被 400 拒绝后退回 Chat；本地在发送前统一选择目标协议，不新增由 HTTP 错误触发的隐式协议重试。 |
+| `5a25507dcbb33fc40e3ef0659af210f206229a31` | 账号池 / P2 | 刻意不吸收 | 临时不可调度规则 scope；本地已有渠道/模型/密钥健康作用域，不新增账号池规则引擎。 |
+| `a46249aac5611fca71fb0d955ad19be7602aca71` | 账号池 / P2 | 刻意不吸收 | 上条 scope 测试随账号池能力复评，不移植不对应本地合同的测试。 |
+| `c15d858eca81b269c41ba3bc161f923b179a860c` | 协议 / P2 | 刻意不吸收 | Responses→Chat fallback 保留模型与耗时；无运行时 fallback 路径。未来协议探测需绑定 attempt、预算、重新报价与完整错误体。 |
+| `f7f1112cdab09e9bee982d77ae253d5d20a56e73` | 依赖 / P1 | 已吸收（既有） | 本地 Vue 3.5.43、source-map-js 1.2.2 已覆盖上游补丁。 |
+| `63800c50d462efc6436e96b9dd46ae8f98a054bc` | 协议 / P2 | 已吸收（既有） | 取消、客户端提交或副作用发生后不重放的安全边界已在统一尝试生命周期实现；不同时引入其隐式协议 fallback。 |
+| `daa79157491f25939b502f5c040eb11768a46e30` | 依赖 / P1 | 不适用 | SheetJS 安全升级；本地无 xlsx 依赖，当前 Excel 导出不使用 SheetJS。 |
+| `d56f5e787976c8b2a7bd471b9a3c30b0ccee50c1` | 协议 / P2 | 已吸收 | 固定模型目录增加 claude-haiku-5-5；adaptive、medium 默认与 effort 能力由既有共享 renderer 覆盖。 |
+| `d56f5e787976c8b2a7bd471b9a3c30b0ccee50c1` | 定价/身份 / P2 | 刻意不吸收 | 不预置 Haiku 阶梯售价或模拟 OAuth 身份；管理员保存 model_pricing 后价格才生效。 |
+| `9a51333101a849bb948abf94c5ed53682e373edd` | 界面 / P3 | 延期 | 分组显示名/描述多语言需要独立展示元数据，不能修改作为路由、权限、价格标识的组名；见 SYNC1013-03。 |
+| `ce6242fca1ef84da4855a92cd80117028b3a99c0` | 账号池 / P3 | 不适用 | 国际 Coding endpoint 的订阅用量 probe allowlist；本地没有账号池用量探测。 |
+| `3bfd40f5afd820ff7fae32f3f26c75fe3e0dd504` | 健康 / P2 | 已吸收 | Google cachedContent 不存在的准确 403 消息归 input，不重试、换渠道或记健康失败；普通 403 保持 permission。 |
+| `d5a802f84a6ae3405bee2a6e0160675785abf237` | 缓存产品 / P2 | 延期 | 显式缓存 CRUD、TTL 存储计费新增持久状态和资金路径；先定义 ownership、冻结报价、预留/结算/释放及三库恢复。 |
+| `3abd64658297f5ec47ad09120a0a26d6081d42de` | 健康 / P2 | 已吸收（既有） | 本地转换/解析失败已由 AttemptOriginLocalConvert/LocalParse 归 input，不计供应商健康故障。 |
+| `64331a97921bd5a43e7b54ba6a517476c985e8e5` | 界面 / P3 | 不适用 | 账号 UI 中 Vertex 改名 Agent Platform；本地无该账号 UI，渠道仍按 Google Vertex AI 合同命名。 |
+| `81e6ec5346c645fa03d794495198e32e4b910598` | 身份 / P2 | 已吸收（既有） | Vertex adaptor 已支持 API Key；Claude/Gemini 与开源模型域的认证支持范围保持现有合同。 |
+| `2588675ce7c0fa13189379489cc4edabe48f6fcd` | 配额 / P2 | 不适用 | 本地没有 AI Studio 模拟日配额或第三方账号等级，执行显式 Provider RPM/TPM。 |
+| `1c68f9996df8e0bd7933d94d4ca826bc3dc570c7` | 脱敏 / P1 | 已吸收 | 共享 MaskSensitiveInfo 在域名规则前屏蔽裸 AQ.Ab（40+）与 AIza（35+）凭据；认证路径原本无旧 Key 前缀限制。 |
+| `6f9b02f12c3d414ed324460a0e82d7793a471f72` | 目录 / P3 | 延期 | Vertex 服务账号原生模型列表；先复用现有认证、代理/TLS、分页、错误脱敏与 manifest 可见性合同。 |
+| `c9e4b267b6fac1f00060eab983e606f7a2b2d4fc` | 界面 / P3 | 已吸收（既有） | Vue ChannelModelSyncDialog detect/apply 已显示 API 层投影的后端错误原因；保持取消和旧响应守卫，失败不关闭弹窗。 |
+| `05d7946af84228589e5a6a8d8b6bc08d686ba778` | 缓存产品 / P2 | 延期 | 缓存错误透传范围及延长沿用创建时报价，随显式缓存产品统一设计，不能绕过当前错误与冻结报价合同。 |
+| `f0ee427f0ad2f7eab6ab8f095ba05041af3a48f8` | 定价 / P2 | 刻意不吸收 | 显式缓存内置官方价/模型族兜底价不成为本地有效售价；缓存产品本身仍延期。 |
+| `4426593e9d7dc38a009f28da038ac2906a57c17e` | 定价 / P3 | 刻意不吸收 | Gemini 3.6 Flash 内置优惠兜底价；仅管理员选取外部草案并保存后生效，不新增自动价格 fallback。 |
+| `daebb7a80c720763a01e5cef8799c030aed0b058` | 目录 / P3 | 延期 | Vertex 模型列表/详情随原生发现能力复评；供应商全目录不能直接向普通用户开放。 |
+| `26b31a83e4190a3b38bce112fc597defbfb9515b` | 缓存产品 / P2 | 延期 | 缓存修改串行化、回滚与 Key/订阅预留不能复制为第二套资金机制；复用唯一资金事件与幂等恢复。 |
+| `fc82e831026a15eaf609cc1f7cd4d4a3690e5cad` | 账号池 / P2 | 刻意不吸收 | 模型级 401 自定义规则；保留本地 401 凭据分类，不新增订阅账号池规则。 |
+| `8b74741efe35a42c67bbb35b821af9a12aca2c24` | 界面 / P3 | 延期 | 分组译文语言规范化与 Vary 保留 Origin，随独立展示元数据/cache 合同复评。 |
+| `ba2a71733272b75e948c28a6fb41ffa506a40edc` | 协议 / P2 | 已吸收（既有） | Claude 工具图片转 Gemini 已保留调用 ID、原顺序、inline/url 媒体及能力/损失策略，不增加 base64 专用转换支线。 |
+| `492c63059980ea5797cc2c34ba642ffee9a56aee` | 协议 / P2 | 已吸收（既有） | 上条测试 lint 修正无新增能力；本地工具媒体守护覆盖相同合同。 |
+| `2023c290e1bbfa63e3f05bdddeeae1f264b8e637` | 账号池 / P2 | 刻意不吸收 | 计数、Bedrock 与重试耗尽入口把模型交给账号规则；本地 attempt 已持有实际映射模型，不接入账号池错误处理器。 |
+| `43a3c197cb7663582ad1b6b21c761b84776193c9` | 缓存产品 / P2 | 延期 | 区分账号已删除/暂不支持缓存/必已过期的恢复意图，需先定义缓存 ownership 与三库恢复状态机。 |
+| `cfbbfd6b3b41bbdeee748e25d8aa3de866b811c7` | 账号池 / P2 | 不适用 | 无 Antigravity 账号池或专属图像限流产品。 |
+| `26f70c6a873bbeed126f1944068a7eb183c89f16` | 协议 / P2 | 已吸收（既有） | Haiku 5.5 Responses→Claude 的 adaptive、effort、强制工具已由唯一 renderer 覆盖。 |
+| `26f70c6a873bbeed126f1944068a7eb183c89f16` | 协议 / P2 | 刻意不吸收 | 不把 Claude 签名封装成 Responses 私有 encrypted_content；保留跨协议 provider_state_dropped 与 ownership 合同。 |
+| `c4bdc484753acc95f9a775854af303146389286c` | 协议 / P2 | 本地偏离保留 | 跨协议采样移除记 warning，strict 拒绝；无 modifier 的原生 Claude 请求继续透传，不照搬订阅网关的原生参数校验。 |
+| `b669dc6daf1a9909b02ecf1f9cb692d88875e086` | 构建 / P3 | 不适用 | 参考项目 Makefile 的模型白名单前端入口不对应本地 Bun/Vite 构建体系。 |
+| `4d9ac3e482106d2da3a39fe3e546d8d6801f1cc1` | 版本 / P3 | 不适用 | 只记录 Sub2API VERSION 0.2.16，不覆盖 Ren2Hub 项目版本。 |
+
+| 合并提交 | 状态 | 合并内容与边界 |
 | --- | --- | --- |
-| `f48866958b1ddcda57dab6844b6a3ade7783bc2d` | 刻意不吸收 | Codex image_generation 自动桥接仅对 OpenAI 账号开启；Ren2Hub 不按 User-Agent 自动注入托管图像工具，type 57 已退役。保留显式工具与插件协议合同。 |
-| `a56720855cf0c3ca38aea6da2a24c73e57ec1342` | 已吸收 | 活动共享倒计时恢复可见立即校时，按绝对截止时间计算，最后实例卸载移除监听；`CountdownPill.spec.ts`。运维轮询已有可见时重取。 |
-| `27de27ac6496e647c59866d9ba57de61ac356771` | 刻意不吸收 | 上游删除数据库 group 时事务清理内容审核 group_ids，并锁活跃组避免保存/删除竞态。本地敏感词全局匹配，无审核分组或订阅账号池，不存在该关联。不能移植 PostgreSQL JSONB 更新到三库合同。 |
-| `c4224045dc5cbf16f40c7b31aeb639aa0e211101` | 刻意不吸收 | 支付 QR 页面从每秒减一改为绝对 deadline。本地充值提交后跳外部 GMPay/Epay 收银台，没有自有 QR 倒计时；活动倒计时已按绝对时间。 |
-| `69d6d106fd365d8ed23b5a1c82eb3a968acc1454` | 刻意不吸收 | 上游 Monitor V2 静态平台配置缺少新增入口；本地 /ops 按运行时和渠道健康数据投影，没有该配置列表或平台白名单。 |
-| `ba280b3d5ea4d71e2f15fdb56ce60c4a05f422c1` | 刻意不吸收 | 上游请求详情从全量账号列表缓存解析 account_id 名称。本地无账号池；诊断通过真实 attempt 记录 channel_id/credential_id，并按 channels:read 和 ChannelRead 控制内部字段。不可新建全量账号缓存真相源。 |
-| `2bfc49477c0860058d2ff27d8ca40b0c3a1ca31c` | 已吸收（既有） | 上游 datetime-local 不能使用 UTC toISOString 默认值。本地日期选择使用 getFullYear/getMonth/getDate；PAT/日志清理输入留空，提交按本地 Date 解析。兑换码自定义到期日原用 UTC 的 `toISOString` 作最小日期并把 `YYYY-MM-DD` 按 UTC 午夜解析，已改为本地今天起选、到期于所选本地日 23:59:59，解析失败不再回落为永不过期；`RedemptionGenerateModal.spec.ts`。 |
-| `d01628975d9f4d2d3ac9f9792df1bc5946a87061` | 已吸收 | 共享弹窗、命令面板、渠道模型输入/类型搜索及工单回复在 `isComposing` 时不截获组合键；已有 MetadataTagInput guard 保留。4 个交互组件测试及浏览器回归保护正常提交和关闭；合成事件不等同物理输入法验证。 |
-| `bd2f53b855b79c6c20f9dee2187c78fa4ab7158c` | 刻意不吸收 | 上游 per-user group rate multiplier 必须有限且 >0。本地无同页；充值比例后端严格 >0；模型/用户组价格明确允许零，禁止照搬 >0 改掉免费语义。 |
-| `8e3d75b57b59b6bf8e9e695af27dab70ac360109` | 已吸收（既有） | 上游自动刷新只刷新基础数据不更新展开详情。本地 usePolledFeed 每个区域持有独立 feed，无永不失效的详情 cache；可见时重取且 abort/身份防旧响应覆盖。 |
-| `5753552b958084a7695fec7dfd923e30304ee108` | 刻意不吸收 | Gemini OAuth 获取供应商授权 URL 保留后端错误。本地 Gemini 是 API/Vertex 身份接入，未提供 Gemini 订阅 OAuth 账号池；站点 OAuth 走 ApiError 通道。 |
-| `29b2d721f46bddf5dc2555aad4adc063e0181d3b` | 已吸收（既有） | 上游嵌入静态文件测试修 logo.png 为实际存在 logo.svg。本地有真实 manifest 资源图和部署 smoke，不引用该上游 logo.png。 |
-| `66b7ce08e710ec5f9c5206c292ffcf3972fbe8cc` | 刻意不吸收 | 账号池分组多行名称不截断；本地无 AccountGroupsCell，普通用户组不等同订阅账号组。 |
-| `0f189af8de8374cca7ddd4095a39135fe4725814` | 已吸收（既有） | 上游 RPM 覆盖模态切组/关闭后丢弃旧请求。本地无对应页面，已统一 useLatestRequest；钱包报价有 quoteSequence/AbortController/卸载 guard。 |
-| `07185812655ec2e0740ca76882879c0b9ae5ee0a` | 刻意不吸收 | Codex/Work 远程目录缺 metadata 时 GPT-6.1 Sol 默认 500k。本地 Codex 静态 TOML 只导出管理员明确保存的 capability.ContextLimit，缺失保持未知，无私有远程目录和硬编码默认。 |
-| `43768680d38ccdbd8fffc2cb91d3c1fc778a61c6` | 刻意不吸收 | GPT-6.1 Sol OAuth/Setup Token 订阅取消长上下文附加费，API Key 仍按 API 价卡。本地 type 57 退役，没有订阅收费；唯一 model_pricing+冻结报价，不得套订阅豁免改官方 API 收费。 |
+| `07d51a6aeff41824730aa8276afef150e3d03a03` | 已核对（合并记录） | 安全依赖合并，处置见 Vue/SheetJS 行；行为处置见上表，不新增独立适配。 |
+| `b68684271670b4b301abb9ca61a8fd41750c9448` | 已核对（合并记录） | 路由合并，未放宽 Responses fallback 安全边界；行为处置见上表，不新增独立适配。 |
+| `ab80abc6d1f929a6864c8804fd077b509d21fda2` | 已核对（合并记录） | 分组多语言 PR #7960；行为处置见上表，不新增独立适配。 |
+| `7c5afa4c361b7b69afeb9aaf5b47c0bbe9af0180` | 已核对（合并记录） | Haiku 5.5 PR #7957；行为处置见上表，不新增独立适配。 |
+| `53c21fed252cec522035cfc2d4dd890a8c47140b` | 已核对（合并记录） | 显式缓存 PR #8006；行为处置见上表，不新增独立适配。 |
+| `9d5e63a598c827dde2d8b864ac7719125615bd82` | 已核对（合并记录） | main 合并与 PR #7828 测试冲突修正；行为处置见上表，不新增独立适配。 |
+| `bba85923b96c277b9cbe4a2d21c661ff741c7e29` | 已核对（合并记录） | Antigravity 图像限流 PR #8046；行为处置见上表，不新增独立适配。 |
+| `8d7d3185e987f0241f4cd99c2bc2b220378b4860` | 已核对（合并记录） | 工具图片 PR #8038；行为处置见上表，不新增独立适配。 |
+| `49b2122dc623f7f2face4a2f89dbd6bceffb781a` | 已核对（合并记录） | 国际 Coding 用量 PR #7991；行为处置见上表，不新增独立适配。 |
+| `01842576b3d5c1e2545b5a99ad555d36e28ed306` | 已核对（合并记录） | Responses fallback PR #7810，同时为发布标签提交；行为处置见上表，不新增独立适配。 |
+| `49dc6e236380a7198e0658054b0d7c595b597387` | 已核对（合并记录） | scope PR #7828，无净文件变化；行为处置见上表，不新增独立适配。 |
+| `df3c38e10f80deb226f61c9fd3cc0c818b185bb4` | 已核对（合并记录） | 分支对齐，无净文件变化；行为处置见上表，不新增独立适配。 |
 
 ### AxonHub
 
-| 提交 | 状态 | 当前行为与复评边界 |
-| --- | --- | --- |
-| `18cc192eb529a9413a23d0de0108f9109012be63` | 刻意不吸收 | 上游仅修复 S3 HTTPS PutObject 的 aws-chunked trailing checksum；Ren2Hub 不具有 S3 对象存储，TaskArtifactStore 返回 disabled，AWS SDK 用于 Bedrock。 |
-| `abd5bd73fe9b644e8495e060b1267dddc092b219` | 刻意不吸收 | 窗口修改模型开发商 JSON 数据，没有价格 API 结构变更。本地公开来源仅生成管理员可选择的草稿，不能自动改售价、授权或渠道能力。 |
-| `931fafff819a9202f48645839a0c47d3ccfe70fa` | 刻意不吸收 | 上游 Codex 私有 transformer 不再默认复制客户端 UA，清理 Http-Referer/X-Title/X-Platform/X-Zcode-/X-Os-。本地 type 57 已退役，通用请求只默认复制 Content-Type/Accept，显式管理员 header override 保留；标准 OpenAI Codex 模型能力继续存在。 |
-| `8262e95a5326c22718c22c2068dc75889dc4472e` | 已吸收 | 本地每次尝试已直读渠道 DB、重选可用 key、排除已尝试/不健康 key，发送前再核验身份。本批补齐渠道已删除时将所有该渠道候选标为 channel_disabled 并继续后续候选；真实数据库错误显式中止，不复制上游 transient lookup fallback。 |
-| `7a0cfbf42b00829dd8811cc87488f6194ed5ae02` | 刻意不吸收 | 上游为 React ModelsAssociationDialog 外层添加 overflow-hidden，修复该组件双滚动条。Ren2Hub 为独立 Vue 控制台，没有该 React 组件。 |
+| 提交 | 分类 / 优先级 | 状态 | 当前行为与复评边界 |
+| --- | --- | --- | --- |
+| `3cb7e3335cadd463fe7748c47dd003802125e3dd` | 原生图像 / P2 | 已吸收（既有） | 标准 OpenAI 图像按入口原生请求 generations/edits；校验后原始字节复制保留 generation_id、safety_identifier、usage 与显式 reasoning_tokens=0。JSON 编辑 images/mask 的 URL/file_id 按原生合同透传，不强制 multipart。字段完整透传来自字节复制代码核对，不宣称已获真实供应商响应验证。 |
+| `3cb7e3335cadd463fe7748c47dd003802125e3dd` | 订阅目录 / P2 | 不适用 | Codex 订阅原生图像及自动 gpt-image-2 目录不对应已退役的 type 57；授权渠道 manifest 仍是模型目录来源。重新批准订阅能力后复评。 |
+| `3cb7e3335cadd463fe7748c47dd003802125e3dd` | 原生图像 / P2 | 刻意不吸收 | 不复制上游禁止图像 SSE 的限制；本地保留图像 JSON/SSE 及 JSON 转 SSE 合同。 |
 
 ## 协议转换
 
@@ -82,7 +130,7 @@
 | NewAPI `acb347a19`（重复托管搜索转 Chat） | 已吸收 | Chat 只承载一个托管搜索，转 Chat 时多出的托管搜索定义记 error `duplicate_hosted_web_search`：safe、strict 发送前拒绝（400），allow 保留第一个并丢弃其余。与上游一致，合同见[支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md) | `relaykit/relayconvert/internal/toolconv/encode.go` | `TestDuplicateHostedWebSearchToChatIsAPolicyDecision` | — |
 | Sub2API `normalizeEffortModelID` | 本地偏离保留 | `canonicalClaudeModelID` 去掉 `models/`、命名空间、云区域前缀、`anthropic.` 与日期后缀，并把点号版本名（如 `claude-sonnet-5.5`）映射为连字符名；思考渲染与强制工具降级共用。Bedrock `-v1:0` 等版本后缀保留，前缀匹配不受影响。NewAPI 能力表只认 `claude-` 前缀；不采用 Sub2API 对强制工具返回 400 的做法 | `relaykit/relayconvert/reasoning/claude_model_id.go` | `relaykit/relayconvert/claude_rejected_controls_test.go` | NewAPI 能力表支持带前缀模型名时 |
 | NewAPI `0a03088e0`（Gemini schema） | 已吸收 | Gemini 函数参数的 OpenAPI 子集转 Chat、Claude、Responses 时由共享工具编码改写为 JSON Schema，无等价写法的关键字丢弃并记 warning `gemini_schema_keyword_dropped`（strict 拒绝）；转 Gemini 保持原样 | `relaykit/relayconvert/internal/toolconv/` | `TestGeminiOpenAPISchemaBecomesJSONSchemaForNonGeminiTargets`、`TestStrictToolPolicyRejectsTheDroppedGeminiSchemaKeywords` | `strict:true` 函数工具对联合类型的接受度未在线核实，供应商报错时复评 |
-| NewAPI `0a03088e0`、`78bd5b1c`（Responses 工具媒体转 Gemini） | 已吸收 | 移植上游 `responsesToolOutputToGemini`：图片与文档按调用 ID 和原顺序转 `inlineData`，Gemini 3 及未知版本放入 `functionResponse.parts`，1.x/2.x 放在同轮函数结果之后。无法承载的媒体省略并记 error `unsupported_media_type`，上游两处静默省略路径也改为记该诊断；safe/strict 发送前返回 400，allow 丢弃媒体后发送并扣费。Claude、Chat 来源的工具媒体与非工具媒体在所有策略下拒绝 | `relaykit/relayconvert/internal/oai_responses/to_gemini_chat_req.go`、`relaykit/relayconvert/media_plan.go` | `TestGatewayResponsesToolMediaOnGemini` | 上游改变媒体放置或省略诊断时 |
+| NewAPI `0a03088e0`、`78bd5b1c`（Responses 工具媒体转 Gemini） | 已吸收 | 移植上游 `responsesToolOutputToGemini`：图片与文档按调用 ID 和原顺序转 `inlineData`，Gemini 3 及未知版本放入 `functionResponse.parts`，1.x/2.x 放在同轮函数结果之后。无法承载的媒体省略并记 error `unsupported_media_type`，上游两处静默省略路径也改为记该诊断；safe/strict 发送前返回 400，allow 丢弃媒体后发送并扣费。Claude 工具图片可转 Chat、Responses、Gemini，文档仅可直转 Responses；Chat/Gemini 来源工具媒体、未知媒体块和没有转换路径的其他媒体在所有策略下拒绝 | `relaykit/relayconvert/internal/oai_responses/to_gemini_chat_req.go`、`relaykit/relayconvert/media_plan.go` | `TestGatewayResponsesToolMediaOnGemini` | 上游改变媒体放置或省略诊断时 |
 | 本地响应守卫 | 本地偏离保留 | 跨协议响应中的 Claude `signature`、Gemini `thoughtSignature` 去掉后交付，每个响应或每条流记一次 warning `provider_state_dropped`（safe/allow 放行，strict 拒绝）；strict 下非 Claude 源转 Claude 且渲染为手动扩展思考的请求在发送前以同一代码拒绝；其他组合（如 Claude 自适应思考、Gemini 思考模型的函数调用）只在响应实际带签名时拒绝，此时上游已生成并计费，非流式请求按无有效输出释放预留、不向用户扣费（AUDIT1009B-16 选方案 B 时接受的残余成本）；托管搜索与引用的 `encrypted_content`、`encrypted_index` 在所有策略下拒绝跨协议转换；同协议原生响应保留签名。NewAPI 没有响应守卫 | `relaykit/relayconvert/response_guard.go`、`relaykit/relayconvert/request_registry.go` | `TestCrossProtocolResponseDropsProviderState`、`TestCrossProtocolStreamDropsProviderStateOnce`、`TestStrictRejectsCrossProtocolManualThinkingBeforeSend` | 上游加入同类守卫时比较 |
 | NewAPI Gemini 思考签名绕过 | 已吸收 | `gemini.function_call_thought_signature_enabled` 默认开启，控制台可关闭；其他协议转 Gemini 时为历史中每个模型轮次填入绕过值。网关出站状态复核用 `IsThoughtSignatureBypass` 跳过绕过值，真实签名仍须绑定 | `relaykit/relayconvert/internal/shared/gemini/request.go`、`setting/model_setting/gemini.go`、`service/gateway_state.go` | `TestRelayInfoConvOptionsCarriesGeminiThoughtSignatureSetting` | Google 文档称绕过值是最后手段；Google 改变签名要求时复评 |
 | AxonHub `d6e00c00`（NewAPI `requestOpenAI2Ali` 保持原文） | 本地偏离保留 | `requestOpenAI2Ali` 与上游逐字节一致；`renderAliDisabledThinking` 在宿主解析的 effort 为 none 时发 `enable_thinking:false` 并去掉 `reasoning_effort`，保留客户端显式值，关闭意图与显式 `enable_thinking:true` 冲突时返回客户端错误 | `relay/channel/ali/text.go` | `TestRequestOpenAI2AliDisabledThinking` | 百炼对非 none `reasoning_effort` 的实际处理未在线核实，接入阿里渠道后用真实调用核实；NewAPI 加入同类映射时比较 |
@@ -115,6 +163,10 @@
 | NewAPI `1d4328e97` | 刻意不吸收 | 上游重写英文 relaykit README；本地 `relaykit/README.md` 是按本地合同维护的中文版 | `relaykit/README.md` | — | 上游 README 出现本地未记录的接口时对照补充 |
 | AxonHub `81029467`、`02269f12`、`0ff5b6f8` | 已吸收 | 以其严格工具、终态、流预读、拒答、音频、logprobs、推理案例补共享 DTO 字段和损失诊断；不引入第二个聚合管线 | `relaykit/` | — | — |
 | AxonHub `e863c6fe` | 不适用 | 修复 Codex 私有 `additional_tools` 输入项转发；本地 Codex 订阅渠道已退役 | — | — | 重新引入 Codex 订阅渠道时 |
+| Sub2API `d56f5e787976c8b2a7bd471b9a3c30b0ccee50c1`、`26f70c6a873bbeed126f1944068a7eb183c89f16`、`c4bdc484753acc95f9a775854af303146389286c`（Haiku 5.5） | 已吸收 | 固定目录提供 `claude-haiku-5-5`，共享 renderer 使用 adaptive、medium 默认、模型能力允许的 effort 与强制工具；disabled 的 effort 最高 high。原生无修饰符请求不额外改写；跨协议采样移除记 warning、strict 拒绝 | `relay/channel/claude/constants.go`、`relaykit/relayconvert/reasoning/` | `TestClaudeHaiku55RendersAdaptiveThinkingWithoutSampling`、`TestClaudeEffortIsSentOnlyAtALevelTheModelAccepts` | Anthropic 能力变化后更新唯一能力表；不复制内置售价或私有签名封装 |
+| Sub2API `ba2a71733272b75e948c28a6fb41ffa506a40edc`、`492c63059980ea5797cc2c34ba642ffee9a56aee`（工具图片） | 已吸收（既有） | Claude 工具结果图片转 Gemini 经过现有有序媒体管线，保留调用 ID、inline/url 与能力/损失策略；不新增只接受 base64 的支线 | `relaykit/relayconvert/` | `TestClaudeToolImageReachesGeminiImagePart`、`TestToolMediaRejectsUnsupportedSourcesAndRoutes` | 上游扩展媒体来源或 Gemini 承载位置时比较 |
+| Sub2API `983cf297da59e3be23b5e3f2c4eded945b53f408`、`c15d858eca81b269c41ba3bc161f923b179a860c`（Responses fallback） | 刻意不吸收 | 当前协议在发送前统一规划；不因上游 400 自动切换 Chat。重试继续受取消、客户端提交、有效输出和副作用边界约束 | `service/request_route.go`、`controller/relay_attempt.go` | `TestRelayAttempt*`、`TestRouteSendFence*`、`TestRouteRetryBudgetStop*` | 运行时协议探测独立立项后定义完整错误体、attempt、预算和重新报价 |
+| AxonHub `3cb7e3335cadd463fe7748c47dd003802125e3dd`（原生 Images） | 已吸收（既有） | 原生 generations/edits 及 JSON 编辑原样透传；响应校验后复制原字节保留未知元数据和显式零，保留本地图像 SSE 能力 | `relay/channel/openai/adaptor.go`、`relay/channel/openai/relay_image.go`、`relaykit/dto/openai_image.go` | `TestOpenaiImage*`、`TestImageOutputAndCachedDetailsReachCanonicalUsage`、`TestConvertImageEditRequestMultipart` | OpenAI 图像请求/响应改变时复评；type 57 原生订阅图像不适用 |
 
 ## 计量与 token 估算
 
@@ -150,6 +202,8 @@
 | 本地 AUDIT1009-02b（发送前定价） | 等待上游 | Gemini `enterpriseWebSearch` 与 `/v1/alpha/search` 计费但发送前不要求定价，未定价时结算回落到冻结估算；NewAPI 依靠预置价格 | — | — | NewAPI 修复后按其实现同步 |
 | 本地 AUDIT1009B-13（转换流失败的 prompt 估算） | 等待上游 | 转换流以 `response.failed` 结束且只报告 completion 时，handler 补齐的 prompt 估算没有写入 BillingUsage，结算按 input 0 计；补齐 completion 的一侧正常并标为估算。与 NewAPI `chat_via_responses.go` 同一段代码一致 | `relay/channel/openai/chat_via_responses.go` | — | NewAPI 修复后按其实现同步 |
 | NewAPI `acb347a19`（其余部分） | 延期 | 智谱与百炼 Chat 的 `WebSearchEncoder` 渠道级搜索编码（含强制搜索推断计数）、Advanced Custom 转 Responses、Moonshot Responses 透传未吸收 | — | — | 属于新能力；编码诊断在本地默认 safe 策略下会拒绝请求，需单独设计后立项 |
+| Sub2API `d5a802f84a6ae3405bee2a6e0160675785abf237`、`05d7946af84228589e5a6a8d8b6bc08d686ba778`、`26b31a83e4190a3b38bce112fc597defbfb9515b`、`43a3c197cb7663582ad1b6b21c761b84776193c9`（显式缓存产品） | 延期 | 保留当前 cachedContent 引用 ownership；不新增缓存 CRUD、TTL 存储收费、修改租约及恢复产品，也不复制订阅 Key 预留机制 | — | — | 先定义用户/Token/渠道 namespace、不可变创建/延长报价、预留/结算/释放、幂等与三库恢复；见 SYNC1013-01 |
+| Sub2API `f0ee427f0ad2f7eab6ab8f095ba05041af3a48f8`、`4426593e9d7dc38a009f28da038ac2906a57c17e` | 刻意不吸收 | 不预置 Gemini 缓存价格或 3.6 Flash 模型族优惠 fallback；外部来源只生成管理员可选草案，保存才生效 | `model/model_pricing_config.go` | — | 产品明确需要预置售价且满足本地资金/币种合同后复评 |
 
 ## 插件与异步任务
 
@@ -211,6 +265,8 @@
 | NewAPI `1ca79d57e` | 不适用 | 本地 `/api/perf-metrics/summary` 只返回各模型 24 小时的延迟、成功率与 TPS，没有逐小时状态序列；Vue 模型卡用成功率驱动健康条，不渲染样本，因此没有灰色空档。不增加 `recent_model` 参数与 `recent_success_series` | `pkg/perf_metrics/metrics.go`、`frontend/src/composables/useModelMarket.ts` | — | 模型卡改为展示逐小时样本时按上游补齐查询 |
 | AxonHub `b6d184a8` | 已吸收 | 本地没有空响应检测管线，同一缺陷在流式有效输出判定中：只含 `delta.audio` 的 Chat 流不计有效输出，超过 256 KiB 时在前导缓冲上限处失败，已交付的音频也按无输出释放。`StreamPayloadState` 把带 `data` 或 `transcript` 的音频增量计为有效输出，空音频对象仍不算 | `relay/helper/stream_scanner.go` | `TestChatAudioDeltaIsSemanticOutput` | — |
 | AxonHub `9ca15ea4` | 不适用 | Antigravity 5 小时与每周额度窗口；本地没有 Antigravity 渠道或供应商额度检查 | — | — | 引入该渠道时 |
+| Sub2API `3bfd40f5afd820ff7fae32f3f26c75fe3e0dd504`（缓存引用 403） | 已吸收 | HTTP 403 仅准确匹配 `CachedContent not found (or permission denied)` 时归 input；不重试、换渠道、标记渠道/模型/密钥健康失败。结构化凭据错误仍优先，普通权限 403 及只包含该词组的其他消息继续归 permission | `service/route_health.go` | `TestClassifyRouteErrorRecognizesProviderKeyAndModelFailures` | Google 改变缓存失效错误结构时增加明确识别，不扩大为任意 403 输入错误 |
+| Sub2API `63800c50d462efc6436e96b9dd46ae8f98a054bc`、`3abd64658297f5ec47ad09120a0a26d6081d42de` | 已吸收（既有） | 取消、已提交和副作用不重放；本地转换/解析错误通过唯一尝试分类器归 input，不污染供应商健康 | `controller/relay_attempt.go`、`service/route_outcome.go` | `TestRelayAttempt*`、`TestClassifyAttempt*` | 增加协议探测或新错误来源时复评 |
 
 ## 支付
 
@@ -250,14 +306,25 @@
 | NewAPI `b892a6b2e` | 已吸收（Vue 改写） | 路由页面代码加载失败（Chromium、Firefox、Safari 的模块加载错误与 Vite 的 CSS 预加载错误）时，用 `sessionStorage` 标记后整页加载失败的目标地址一次；再失败显示可访问的重试页，导航成功后清除标记；无法写入标记时不自动加载，避免循环。本地原有逻辑只识别 Chromium 与 Safari 的脚本错误，且加载的是失败前的页面；Vue 错误页本来不显示状态码。可视化测试预置标记后断言重试页，契约不变 | `frontend/src/router/index.ts` | `chunkReload.spec.ts`、`tests/visual/routes.spec.ts`（重试页） | — |
 | NewAPI `0f38a14a5` | 不适用 | Vue 控制台没有字体偏好设置，正文字体固定为内置 Inter、Noto Sans SC 加系统无衬线回退 | `frontend/src/styles/base.css` | — | 加入字体偏好时复评 |
 | NewAPI `1ca79d57e`（前端） | 不适用 | Vue 模型卡只读 `/api/perf-metrics/summary` 的 24 小时汇总 `success_rate`，用 `HealthMeter` 画单个健康度，不读逐小时 `recent_success_series`，没有灰色占位格；解析器忽略新增字段，汇总字段不变时无需改动。后端查询改动由运行时流处理 | `frontend/src/composables/useModelMarket.ts`、`frontend/src/api/liveContracts.ts` | — | 模型卡改为显示逐小时成功率时按上游只渲染有数据的样本 |
+| NewAPI `633b4c5b190dc1af99a2814391354d86948e7943`（日志导出） | 已吸收（Vue 改写） | CSV/Excel/JSON 由一次 NDJSON 请求生成，只有成功终态、计数匹配才下载；取消会 abort。导出字节保留精确金额、字段名随语言、日期独立选择；真实 Excel 打开长数字的精度仍需验证。移除日志旧 30 天静默裁剪及 10,000 行分页截断，仪表盘不再以固定 30 天拆分绕过共享范围 | `frontend/src/views/console/LogsView.vue`、`frontend/src/api/logExport.ts`、`frontend/src/components/console/log-ui/logExport.ts` | `frontend/src/api/__tests__/logExport.spec.ts`、`frontend/tests/visual/log-export.spec.ts` | 前端选格式和后端终态保持对齐，见[日志合同](../console/LOGS.md) |
+| Sub2API `9a51333101a849bb948abf94c5ed53682e373edd`、`8b74741efe35a42c67bbb35b821af9a12aca2c24`（分组多语言） | 延期 | 当前组名同时是路由、权限、价格标识；没有独立展示名/描述元数据，不把翻译值写回稳定标识 | — | — | 先定义展示元数据、语言规范化、权限、缓存键及 Vary 保留 Origin，见 SYNC1013-03 |
+| Sub2API `c9e4b267b6fac1f00060eab983e606f7a2b2d4fc`（同步模型失败） | 已吸收（既有） | detect/apply 已显示 API 层统一错误投影，失败保留弹窗；取消和 sequence 避免迟到结果覆盖 | `frontend/src/components/console/channels/ChannelModelSyncDialog.vue`、`frontend/src/api/client.ts` | 现有 API 错误投影测试；本轮未新增该组件专项 | API 错误 envelope 或同步交互变化时复评 |
 
 ## 依赖与构建
 
 | 来源 | 状态 | 当前行为与本地合同 | 本地位置 | 守护测试 | 复评条件 |
 | --- | --- | --- | --- | --- | --- |
-| 本地安全升级（Go 与 x 系列依赖） | 本地偏离保留 | 构建镜像为 `golang:1.26.9-alpine`；`golang.org/x/net` v0.60.0、`x/text` v0.42.0、`x/image` v0.45.0、`gorilla/websocket` v1.5.3，均高于 NewAPI 基线，govulncheck 可达漏洞为 0；relaykit 保持上游 `go 1.25.1` | `Dockerfile`、`go.mod` | `govulncheck ./...`、`go mod verify` | 合并上游 `go.mod` 时保留本地版本；NewAPI 升级到同等或更高版本后回归 |
+| 本地安全升级（Go 与 x 系列依赖） | 本地偏离保留 | 构建镜像为 `golang:1.26.9-alpine`；`golang.org/x/net` v0.60.0、`x/text` v0.42.0、`x/image` v0.45.0、`gorilla/websocket` v1.5.3，x 系列保持本地安全升级、gorilla/websocket 已与本轮上游对齐；relaykit 保持上游 `go 1.25.1`。前批次 govulncheck 可达漏洞为 0，本轮证据另按候选门槛记录 | `Dockerfile`、`go.mod` | `govulncheck ./...`、`go mod verify` | 合并上游 `go.mod` 时保留本地版本；NewAPI 升级到同等或更高版本后回归 |
 | NewAPI `192802ee0` | 已吸收 | Dockerfile、release 与 Electron 构建以 moejs 的 `default.pgo` 编译 | `Dockerfile`、`.github/workflows/release.yml`、`.github/workflows/electron-build.yml` | — | 构建时间与运行收益未测 |
 | Sub2API `0f9d460d` | 已吸收 | Vue 使用 3.5.43 系列，`source-map-js` 覆盖为 1.2.2 | `frontend/package.json` | — | — |
+| NewAPI `7e25797d14681e4e16c2b46831450e7d6a5ccc74`、`ba29f06453942d9b5c0b32330340b8a000692c4f`、`3c9fb2a0de168d88ce5bffbf44acecdc1cdcdd39`、`1c58f3d161fa32755b372d9449f2d5e077d50a5d`、`7f51a97226c43bc082a065bdc8b40b719c4bdcce`、`dd59854050f26f4f67bb3dac5274af5e17013462` | 已吸收 | Electron 41.10.6；xmldom 0.8.15、brace-expansion 各主版本安全补丁、fast-uri 3.1.8、js-yaml 4.3.2、undici 6.29.0/7.30.0。保留 electron-builder 26.15.3，定向改锁而非整锁升级 | `electron/package.json`、`electron/bun.lock` | frozen-lockfile 安装、Node 入口语法检查、Electron 运行时版本与 Linux --dir 打包；包内 Go 二进制哈希与同次 Vue/Go 构建一致，目标系统图形启动、托盘和安装包仍待验收 | 桌面候选验证绑定真实 Vue/Go 构建与目标平台，见 SYNC1013-05 |
+| 本地依赖审计 [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | 已吸收 | electron-builder 的下载工具链中 http-cache-semantics 4.2.0 高危采用兼容修复 4.3.0；不改变服务端缓存策略 | `electron/bun.lock` | `bun audit --json` | 后续锁变化重新检查真实依赖链 |
+| 本地依赖审计 [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c) | 等待上游 | sprintf-js 1.1.3 中危没有已发布修复；链路为 electron-builder→app-builder-lib→@electron/get 3→可选 global-agent→roarr→sprintf-js，属于桌面构建下载工具链。不能称为审计全部通过，不用忽略规则或强制跨主版本覆盖隐藏问题 | `electron/bun.lock` | `bun audit --json` 当前仍报告该中危 | sprintf-js/roarr/global-agent/@electron/get/electron-builder 提供兼容修复后定向更新，见 SYNC1013-04 |
+| 本地前端工具链审计 | 已吸收 | 保持现有主版本，Vitest/mocker 更新至 4.1.11、baseline-browser-mapping 2.11.28、browserslist 4.29.3、nanoid 3.3.20、postcss-selector-parser 7 分支 7.1.6；不整体升级框架或强行统一传递依赖主版本 | `frontend/package.json`、`frontend/bun.lock` | frozen-lockfile、全量 Vitest、typecheck/lint/format/build 与受影响浏览器检查 | 后续锁文件变化重新核对审计和真实依赖链 |
+| 本地依赖用途审计（用户要求清理） | 已清理 | root go.sum 移除两行未使用的 moejs alpha.5 历史校验和，保留现用 alpha.6。root、RelayKit、TokenKit 的现用 require 项都有源码/测试或 go mod why 路径；Vue 与 Electron 的直接依赖均由源码、配置或脚本使用，锁文件没有 React/Redux/AntD/Semi。没有确认可删的现用框架包，不把传递依赖或构建工具误删 | `go.sum`、三模块 `go.mod`、两套 `package.json`/`bun.lock` | 三模块独立 GOWORK=off mod verify/build/tidy 检查；两套 frozen 安装与实际引用审计；三模块 govulncheck 无可达漏洞 | 删除或替换业务/构建入口后重新清理，不仅按业务 import 字面匹配判断 |
+| 本地 Go 漏洞审计 | 已修复有兼容补丁的条目 | compress 1.18.7 修复 [GO-2026-5841](https://pkg.go.dev/vuln/GO-2026-5841)；独立 RelayKit 的 x/text 0.41.0 修复 [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) 和 [GO-2026-6629](https://pkg.go.dev/vuln/GO-2026-6629)，保持 go 1.25.1。root 原有 x/text 0.42.0 不变。x/crypto 的 [OpenPGP 模块告警](https://pkg.go.dev/vuln/GO-2026-5932) 无修复，但当前代码未导入该包；不能称全部模块告警清零。ClickHouse Zstd 和 profiling 的实际运行尚未验证 | `go.mod`、`go.sum`、`relaykit/go.mod`、`relaykit/go.sum` | 补丁后独立模块构建/验证、RelayKit 全量测试、主模块全量/vet/govulncheck；`TestZstdRequestDecompressionContract` 覆盖正常解码、无效帧、解压后限额及 body 释放 | 锁变化后重新查实际包图和官方漏洞；引入 OpenPGP 前重新设计依赖 |
+| 本地依赖审计 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | 等待上游 | braces 3.0.3 高危暂无已发布修复；属于匹配模式的构建工具链，与已修复的 brace-expansion 是不同包，不能以删除必需依赖或忽略告警制造通过 | `frontend/bun.lock` | `bun audit --json` 仍报告高危 | 发布兼容修复后定向更新，见 SYNC1013-06 |
+| 本地依赖审计 [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) | 等待兼容修复 | 7 分支已更新至 7.1.6；Tailwind 3 的 postcss-nested 6 仍依赖 6.1.4，中危。修复版本属于下一主版本，不能直接跨主版本覆盖解析器或附带迁移 Tailwind | `frontend/bun.lock` | `bun audit --json` 仍报告旧分支中危 | Tailwind/postcss-nested 提供兼容更新或单独授权框架迁移，见 SYNC1013-07 |
 
 ## 鉴权、管理与目录
 
@@ -282,6 +349,10 @@
 | 本地 AUDIT1009B-15（MySQL 分组大小写） | 等待上游 | 用户列表分组统计在 MySQL 默认排序规则下不区分大小写，`vip` 与 `VIP` 合并计数并互相筛中；PostgreSQL、SQLite 分开计数。只影响显示，与 NewAPI 一致 | `model/user.go` | — | NewAPI 修复后按其实现同步 |
 | 本地（通知邮件转义） | 等待上游 | 邮件通知正文不对上游文本做 HTML 转义：渠道停用通知的原因（`{{.Reason}}`）和上游模型更新通知中的模型名原样进入邮件 HTML，`service/user_notify.go` 只转义工单通知；与 NewAPI 一致 | `service/channel.go`、`service/user_notify.go`、`controller/channel_upstream_update.go` | — | NewAPI 修复后按其实现同步 |
 | 本地（兑换失败日志） | 等待上游 | 兑换失败时服务器日志 `failed to redeem key %s for user %d: %s` 写入兑换码明文；与 NewAPI `controller/user.go` 相同 | `controller/user.go` | — | NewAPI 修复后按其实现同步 |
+| NewAPI `633b4c5b190dc1af99a2814391354d86948e7943`（日志权限与范围） | 已吸收 | `/api/log/self/export` 保留用户归属、业务类型与 DTO 字段白名单；`/api/log/export` 保留管理员/PAT 权限。普通用户导出开关默认开启，普通用户查询与两种专用导出的最大范围默认 365 天；管理员全局列表不受该普通用户查询限制。每用户导出锁按单实例进程管理，取消/失败释放，SQL 或流写入失败不伪造成功终态 | `controller/log_export.go`、`model/log_export.go`、`setting/operation_setting/log_setting.go` | `TestLogExportPreservesUserScopeFiltersAndProjection`、`TestLogExportLockDisableAndFailureHaveNoSuccessTerminal`、`TestLogExportCancellationReleasesLock`、`TestLogExportFiltersAcrossDatabases` | 三库与 PAT/鉴权回归按候选门槛验证；扩成多实例前改锁合同，见[日志合同](../console/LOGS.md) |
+| NewAPI `63cecab824bad1a421d19950004c309bb2054c09`（Sub2API 余额） | 已吸收 | type 59 使用 `GET <base_url>/v1/usage` 与 Bearer Key；明确 remaining 优先于 balance（含零），只有缺失 remaining 才读 balance。拒绝无效 Key、缺字段、非法/非有限数值、非 200 与无日/周/月额度的无限订阅；负钱包余额合法。查询/解析失败不刷新旧余额/更新时间，公共 UpdateBalance 返回持久化错误、调用方显式传播并拒绝假成功；保留渠道代理、TLS 与管理权限/no-store envelope；响应 Body 各路径释放 | `controller/channel-billing.go` | `TestSub2APIBalance*`（含持久化失败）、`TestBalanceQueryClosesFailedResponse`、`TestChannelUpstreamQueriesHonorTLSInsecureSkipVerify` | 供应商 usage envelope 改变时复评；不扩展为本地用户订阅资金源 |
+| Sub2API `1c68f9996df8e0bd7933d94d4ca826bc3dc570c7`（Google Key） | 已吸收 | 裸 AQ.Ab（40+）和 AIza（35+）凭据在公共脱敏入口优先屏蔽，避免域名遮掩遗留长尾；普通 AQ. 文本不误伤，认证无需前缀白名单 | `relaykit/relayconvert/kitutil/mask.go` | `TestMaskSensitiveInfoRedactsGoogleCredentialsInUpstreamErrors` | Google 新增凭据格式时补同一入口，不另建脱敏规则源 |
+| Sub2API `6f9b02f12c3d414ed324460a0e82d7793a471f72`、`daebb7a80c720763a01e5cef8799c030aed0b058`（Vertex 模型发现） | 延期 | Vertex 服务账号原生发现/详情未实现；通用模型同步不能当作 Vertex 原生发现已支持 | — | — | 复用认证、代理/TLS、分页、错误脱敏，定义 publisher ID 与授权 manifest 投影后实现，见 SYNC1013-02 |
 
 ## 结构差异
 

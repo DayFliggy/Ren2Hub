@@ -38,7 +38,7 @@ export interface ApiClient {
   ): Promise<T>
   getBlob(
     url: string,
-    options?: Pick<RequestOptions, 'signal' | 'headers'>
+    options?: Pick<RequestOptions, 'signal' | 'headers' | 'timeoutMs'>
   ): Promise<Blob>
 }
 
