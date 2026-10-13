@@ -38,13 +38,15 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 
 样式保持原有层级优先级、字体、阴影、边框默认色、按钮指针、键盘焦点和 reduced-motion。`sibling-space-y-*` 与 `sibling-divide-*` 保留既有兄弟元素及隐藏节点的间距/分隔线行为；旧版无效的 `shadow-xs` 已改为无阴影，旧版有效的 `shadow-sm` 对应新版 `shadow-xs`。旧版无法生成有效阴影的 `shadow-[var(...)]` 类已删除，保留 `sketch-card` 等 CSS 自身的既有阴影，避免升级后额外产生阴影。全局规则和 Vue scoped CSS 不因引入 CSS 层而改变优先级。
 
+所有响应断点统一在 CSS `@theme` 定义为 640/768/1024/1280/1536px，与既有 CSS 和 JavaScript 的像素判断一致；浏览器默认字号改为 20px 时仍按原宽度切换布局，不固定或覆盖用户的根字号。`tests/visual/responsive-breakpoints.spec.ts` 在 16/20px、明暗主题下验证首页导航间距、移动菜单 resize 与控制台侧栏切换。
+
 公共页面容器在 utilities 前按旧版 components 展开后的顺序输出，保留居中与内边距。字号工具类保留旧版固定行高、任意字号的嵌套继承及响应字号对行高的重置；同断点的显式 `leading-*` 仍优先，避免徽标、表格、标题和首页内容因升级改变布局。
 
 表单控件保留旧版逐字段的字体继承：先恢复浏览器默认字体边界，再继承 family、feature/variation、size、weight 和 line-height，避免新版 `font: inherit` 额外继承祖先字体变体而改变金额字宽。显式 `italic`、`tabular-nums` 等 utility 仍可覆盖；文件上传按钮保留原浏览器字间距。
 
 带 transform 的入场动画、按钮按压和深色签到取消旧 transform 时，同时取消新版独立 translate/rotate/scale；取消值使用 CSS-wide `initial`，避免生产压缩删除 `none` 后重新叠加 utility。旧版未生成规则的变量阴影及颜色透明度类已删除，不借迁移新增外观。
 
-日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；用户已经手动滚动时保留其位置，切换页面或从桌面隐藏状态重新显示时仍定位当前项。`tests/visual/style-compatibility.spec.ts` 保护容器、字号、交互状态和延迟字体行为，导航字体生命周期另有组件行为测试。
+日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；只有实际横向位置偏移才保护用户位置，点击、Tab/Enter 或未造成横移的滚轮事件不会禁止字体校正。切换页面清除上个页面的保护状态，选页后的真实横向滚动仍受保护；组件卸载后不再校正，从桌面隐藏状态重新显示时仍定位当前项。`tests/visual/style-compatibility.spec.ts` 保护容器、字号和交互状态；导航生命周期有组件测试，`tests/visual/navigation-fonts.spec.ts` 用实际延迟字体和明暗主题验证点击、键盘选页及手动横移。
 
 Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；不提供低于这些版本的兼容构建。升级与浏览器要求依据[官方升级指南](https://tailwindcss.com/docs/upgrade-guide)，构建方式依据[官方 Vite 集成说明](https://tailwindcss.com/docs/installation/using-vite)。
 

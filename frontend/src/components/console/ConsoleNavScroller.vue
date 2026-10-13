@@ -20,6 +20,9 @@ defineOptions({ inheritAttrs: false })
 
 const scroller = ref<HTMLElement | null>(null)
 const { canScrollLeft, canScrollRight } = useTableScrollFade(scroller)
+let centeredScrollLeft = 0
+let manuallyScrolled = false
+let unmounted = false
 
 function centerActiveItem() {
   const strip = scroller.value
@@ -27,12 +30,14 @@ function centerActiveItem() {
   if (!strip?.clientWidth || !active) return
   strip.scrollLeft =
     active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2
+  // Read back the clamped position so our own scroll event does not lock it.
+  centeredScrollLeft = strip.scrollLeft
 }
 
-let unmounted = false
-let manuallyScrolled = false
 function preserveManualPosition() {
-  manuallyScrolled = true
+  if (scroller.value && scroller.value.scrollLeft !== centeredScrollLeft) {
+    manuallyScrolled = true
+  }
 }
 
 onMounted(() => {
@@ -40,7 +45,10 @@ onMounted(() => {
   // widths. The container's width does not change when glyph widths settle.
   centerActiveItem()
   void document.fonts.ready.then(() => {
-    if (!unmounted && !manuallyScrolled) centerActiveItem()
+    if (unmounted) return
+    // A user's position may change before its scroll event is dispatched.
+    preserveManualPosition()
+    if (!manuallyScrolled) centerActiveItem()
   })
 })
 onBeforeUnmount(() => {
@@ -55,7 +63,14 @@ useResizeObserver(scroller, ([entry]) => {
   if (visible && !wasVisible) centerActiveItem()
   wasVisible = visible
 })
-watch(() => props.activeKey, centerActiveItem, { flush: 'post' })
+watch(
+  () => props.activeKey,
+  () => {
+    manuallyScrolled = false
+    centerActiveItem()
+  },
+  { flush: 'post' }
+)
 </script>
 
 <template>
@@ -65,9 +80,7 @@ watch(() => props.activeKey, centerActiveItem, { flush: 'post' })
       ref="scroller"
       v-bind="$attrs"
       class="nav-scroller relative flex gap-1 overflow-x-auto px-3 py-1"
-      @pointerdown="preserveManualPosition"
-      @wheel="preserveManualPosition"
-      @keydown="preserveManualPosition"
+      @scroll="preserveManualPosition"
     >
       <slot />
     </div>

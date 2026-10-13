@@ -84,15 +84,39 @@ describe('mobile navigation font loading', () => {
     expect(itemLeft + itemWidth - scrollPosition).toBeLessThanOrEqual(375)
   })
 
-  it.each(['pointerdown', 'wheel', 'keydown'])(
-    'preserves the user position after %s while fonts are loading',
-    async (event) => {
-      await wrapper!.get('.nav-scroller').trigger(event)
-      scrollPosition = 20
+  it.each([
+    { event: 'pointerdown', options: {} },
+    { event: 'wheel', options: { deltaY: 100, deltaX: 0 } },
+    { event: 'keydown', options: { key: 'Enter' } },
+    { event: 'keydown', options: { key: 'Tab' } },
+  ])(
+    'still corrects font widths after $event $options without horizontal movement',
+    async ({ event, options }) => {
+      await wrapper!.get('.nav-scroller').trigger(event, options)
       await loadWiderFont()
-      expect(scrollPosition).toBe(20)
+      expect(itemLeft - scrollPosition).toBeGreaterThanOrEqual(0)
+      expect(itemLeft + itemWidth - scrollPosition).toBeLessThanOrEqual(375)
     }
   )
+
+  it('preserves actual horizontal scrolling while fonts are loading', async () => {
+    scrollPosition = 20
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    await loadWiderFont()
+    expect(scrollPosition).toBe(20)
+  })
+
+  it('preserves a changed position before its scroll event is delivered', async () => {
+    scrollPosition = 20
+    await loadWiderFont()
+    expect(scrollPosition).toBe(20)
+  })
+
+  it('does not treat its own centering scroll event as manual scrolling', async () => {
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    await loadWiderFont()
+    expect(itemLeft + itemWidth - scrollPosition).toBeLessThanOrEqual(375)
+  })
 
   it('does not scroll after the component unmounts', async () => {
     wrapper!.unmount()
@@ -102,10 +126,30 @@ describe('mobile navigation font loading', () => {
     expect(writes).toBe(previousWrites)
   })
 
-  it('still centers a newly selected page after a manual interaction', async () => {
-    await wrapper!.get('.nav-scroller').trigger('wheel')
+  it('corrects the newly selected page when fonts finish after an earlier manual scroll', async () => {
+    await wrapper!.get('.nav-scroller').trigger('pointerdown')
+    scrollPosition = 20
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    await wrapper!.setProps({ activeKey: 'users' })
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    await loadWiderFont()
+    expect(scrollPosition).toBe(1075)
+  })
+
+  it('preserves a new manual scroll after selecting another page before fonts finish', async () => {
+    scrollPosition = 20
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    await wrapper!.setProps({ activeKey: 'users' })
+    scrollPosition = 30
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    await loadWiderFont()
+    expect(scrollPosition).toBe(30)
+  })
+
+  it('still centers a newly selected page after fonts have finished', async () => {
     await loadWiderFont()
     scrollPosition = 20
+    await wrapper!.get('.nav-scroller').trigger('scroll')
     await wrapper!.setProps({ activeKey: 'users' })
     expect(scrollPosition).toBe(1075)
   })

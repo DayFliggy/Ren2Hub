@@ -51,6 +51,86 @@ bun run build -- --publish never
 
 这些变量用于开发和构建过程的下载。普通直连构建无需设置。代理启用方式见 [get 3 文档](https://github.com/electron/get/blob/v3.1.0/README.md#proxies)和 [get 5 发布说明](https://github.com/electron/get/releases/tag/v5.0.0)。现有托盘图标是版本控制中的 PNG 文件，打包不需要 `canvas` 或图标生成脚本。
 
+### Download diagnostics
+
+`ROARR_LOG=true` 在 global-agent 4 中已失效。[官方变更](https://github.com/gajus/global-agent/releases/tag/v4.1.0)移除了 roarr，改为显式传入[自定义 logger](https://github.com/gajus/global-agent/blob/v4.1.3/README.md#custom-logger)。get 3 和 Builder 不自动配置该 logger；get 5 使用 Undici，也不消费它。`DEBUG=@electron/get:*` 只提供下载器层日志，并非原代理日志的等价替代；它会输出完整下载 URL 和选项，不适合直接收集含凭据的环境日志。
+
+在 `electron/` 下沿用上面的代理变量执行以下诊断。它通过当前安装的 get 3、get 5 和 Builder 包装入口，各自用临时空缓存下载当前 Electron 的小型 `SHASUMS256.txt`，不打包或启动应用。logger 和代理初始化 debug 只计数，错误只输出固定类别，不打印代理 URL、凭据、下载选项或异常详情；代理模块初始化失败时立即结束，避免继续直连。
+
+```bash
+node <<'NODE'
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { createRequire } = require('node:module');
+
+function failureKind(error) {
+  for (let e = error; e; e = e.cause) {
+    if (['CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN',
+      'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'ERR_TLS_CERT_ALTNAME_INVALID'].includes(e.code)) return 'TLS';
+    if (['ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET'].includes(e.code)) return 'NETWORK';
+    const status = e.response?.statusCode ?? e.response?.status;
+    if (Number.isInteger(status) && status >= 400 && status <= 599) return `HTTP_${status}`;
+  }
+  return 'DOWNLOAD_FAILED';
+}
+
+(async () => {
+  process.env.DEBUG = '';
+  process.env.ELECTRON_GET_NO_PROGRESS = '1';
+  const debug = require('debug');
+  let proxyInitErrors = 0;
+  debug.log = () => { proxyInitErrors++; };
+  debug.enable('@electron/get:proxy');
+  const proxyEvents = { debug: 0, error: 0, info: 0, trace: 0, warn: 0 };
+  const logger = { child() { return this; } };
+  for (const level of Object.keys(proxyEvents)) logger[level] = () => { proxyEvents[level]++; };
+  if (process.env.ELECTRON_GET_USE_PROXY) require('global-agent').bootstrap({ logger });
+  const get3 = createRequire(require.resolve('app-builder-lib/package.json'))('@electron/get');
+  const get5 = await import('@electron/get');
+  const builder = require('app-builder-lib/out/util/electronGet');
+  const builderLog = require('builder-util').log;
+  for (const level of ['debug', 'info', 'warn', 'error']) builderLog[level] = () => {};
+  if (proxyInitErrors) {
+    console.log(JSON.stringify({ result: 'PROXY_INIT_FAILED', proxyInitErrors }));
+    process.exitCode = 1;
+    return;
+  }
+  const version = require('electron/package.json').version;
+  const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-diagnostic-'));
+  try {
+    for (const entry of ['get3', 'get5', 'builder']) {
+      const args = { version, artifactName: 'SHASUMS256.txt', isGeneric: true,
+        force: true, cacheRoot: path.join(cache, entry) };
+      try {
+        const file = entry === 'builder'
+          ? await builder.downloadElectronArtifactZip({ version, artifactName: args.artifactName,
+            platformName: process.platform, arch: process.arch, cacheDir: args.cacheRoot,
+            electronDownload: { isGeneric: true, force: true,
+              downloadOptions: { quiet: true, retry: 0, timeout: { request: 20000 } } } })
+          : await (entry === 'get3' ? get3 : get5).downloadArtifact({ ...args,
+            downloadOptions: entry === 'get3'
+              ? { quiet: true, retry: 0, timeout: { request: 20000 } }
+              : { quiet: true, signal: AbortSignal.timeout(20000) } });
+        const found = fs.readFileSync(file, 'utf8').includes(`electron-v${version}-linux-x64.zip`);
+        console.log(JSON.stringify({ entry, result: found ? 'OK' : 'MANIFEST_ENTRY_MISSING' }));
+        if (!found) process.exitCode = 1;
+      } catch (error) {
+        console.log(JSON.stringify({ entry, result: failureKind(error) }));
+        process.exitCode = 1;
+      }
+    }
+  } finally {
+    fs.rmSync(cache, { recursive: true, force: true });
+  }
+  console.log(JSON.stringify({ proxyRequested: Boolean(process.env.ELECTRON_GET_USE_PROXY),
+    proxyInitErrors, globalAgentEvents: proxyEvents }));
+})().catch(() => { console.error('DIAGNOSTIC_FAILED'); process.exitCode = 1; });
+NODE
+```
+
+三个 `OK` 仅说明清单下载成功并包含当前版本条目；事件计数只属于 get 3/Builder 的 global-agent，不表示 get 5 的代理请求数。确认实际经过代理仍需在自己的代理端核对连接计数。此命令沿用镜像与代理配置，不能验证安装包 SHA256、所有 NO_PROXY 规则、代理认证兼容性、GUI、托盘或各平台安装包。请勿用关闭 TLS 或 checksum 校验来处理失败；在本机根据固定错误类别继续检查配置，分享上述摘要即可。
+
 ## Development
 
 Start the backend, the frontend, and Electron in separate terminals:

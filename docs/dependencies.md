@@ -20,9 +20,11 @@ Vue 使用 Tailwind CSS 4.3.3 与同版本 `@tailwindcss/vite`，采用[官方 V
 
 Tailwind 3 的 micromatch/fast-glob/chokidar 路径均不再存在，`braces 3.0.3` 高危与 `postcss-nested` 所需 `postcss-selector-parser 6.1.4` 中危随旧链退出。ESLint/Vue 所需 parser 7.1.6 保留。主题 RGB 通道与 v4 主题变量分开存放；保留原有字体、暗色、动画、圆角、阴影、Preflight 和兄弟间距语义。表单控件只继承旧版规定的字体字段，避免新版 `font: inherit` 意外继承暗色账本的数字变体。命名字号保持固定行高及断点重置规则，站点容器在 utilities 前展开，既有 transform 覆盖边界同步处理独立旋转、缩放、平移属性；独立变换取消使用生产压缩后仍保留的初始值；旧版无效而新版开始生效的样式类按原实际外观清理，具体配置见[前端说明](../frontend/README.md)。
 
+2026-10-13 依赖影响复审后，响应断点在同一 `@theme` 恢复 640/768/1024/1280/1536px，与既有像素 CSS/JavaScript 合同一致，保留用户默认字号设置。导航字体校正依据实际横向滚动，普通点击与键盘选页不再误锁定；切页后重新允许校正，真实手动横移仍受保护。这次修复不改变依赖清单、锁文件、Go 模块、后端或数据库格式。
+
 Tailwind 4 将支持下限明确为 Safari 16.4、Chrome 111、Firefox 128；低于这些版本的浏览器不在当前支持范围，见[官方升级指南](https://tailwindcss.com/docs/upgrade-guide)。Chromium 自动检查不能替代 Safari/Firefox 或移动真机验收。
 
-Electron 保留两代 `@electron/get` 与平台可选包，定向使用官方 `global-agent 4.1.3`。其 [v4.1.0 发布](https://github.com/gajus/global-agent/releases/tag/v4.1.0)移除了 roarr，从而移除 roarr → sprintf-js 旧链；这是经过下载代理合同验证的正式主版本更新，不能由漏洞忽略项、伪包或全局省略 optional 包替代。HTTP、HTTPS CONNECT、NO_PROXY、三平台文件名和校验和失败路径都需验证。删除没有脚本或 CI 调用、引用未声明 canvas 的图标占位脚本，保留实际分发的 PNG 图标。固定 Bun 1.4.0 的 Bun Shell 在父环境 NODE_ENV=production 时未通过 Electron 开发入口合同，因此保留实际有用的 cross-env，不依据文档猜测可删。代理覆盖的 API 与复验边界见[桌面说明](../electron/README.md)。
+Electron 保留两代 `@electron/get` 与平台可选包，定向使用官方 `global-agent 4.1.3`。其 [v4.1.0 发布](https://github.com/gajus/global-agent/releases/tag/v4.1.0)移除了 roarr，从而移除 roarr → sprintf-js 旧链；这是经过下载代理合同验证的正式主版本更新，不能由漏洞忽略项、伪包或全局省略 optional 包替代。HTTP、HTTPS CONNECT、NO_PROXY、三平台文件名和校验和失败路径都需验证。删除没有脚本或 CI 调用、引用未声明 canvas 的图标占位脚本，保留实际分发的 PNG 图标。固定 Bun 1.4.0 的 Bun Shell 在父环境 NODE_ENV=production 时未通过 Electron 开发入口合同，因此保留实际有用的 cross-env，不依据文档猜测可删。global-agent 4 不再消费 `ROARR_LOG`，get 3/Builder 需要显式 logger，get 5 使用 Undici；不能把下载器的 DEBUG 当作原日志替代。代理覆盖的 API、只输出固定摘要的诊断命令与复验边界见[桌面说明](../electron/README.md#download-diagnostics)。
 
 Vue 和 Electron 的 Bun 审计分别记录；JS 工具链三项旧告警关闭后的证据在[同步账本](upstream/SYNC_LEDGER.md#依赖与构建)及所属工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)。
 

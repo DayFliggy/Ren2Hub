@@ -47,6 +47,14 @@
 }
 
 @theme {
+  /* Match the existing pixel-based layout and JavaScript resize contracts,
+     even when users change their browser's default font size. */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+
   /* v3 used fixed line boxes below 5xl; nested arbitrary sizes inherit them. */
   --text-xs--line-height: 1rem;
   --text-sm--line-height: 1.25rem;
