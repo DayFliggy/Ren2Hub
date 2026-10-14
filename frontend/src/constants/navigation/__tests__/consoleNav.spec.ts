@@ -19,8 +19,8 @@ describe('console navigation', () => {
       'user-management',
       'redemption-management',
       'order-management',
-      'system-settings',
       'task-plugins',
+      'system-settings',
     ])
     expect(adminGroup?.items[0]).toEqual(
       expect.objectContaining({
