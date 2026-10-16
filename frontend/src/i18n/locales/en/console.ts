@@ -635,6 +635,9 @@ export default {
     advancedSummary: 'Model and IP restrictions',
     advancedConfigured: '{count} configured',
     nameLabel: 'Name',
+    allowUserQuotaQuery: 'Allow querying account balance',
+    allowUserQuotaQueryHint:
+      'Anyone holding this key can query your account’s available and used quota.',
     namePlaceholder: 'e.g. Chatbox client',
     modelsLabel: 'Model limits (empty = no limit)',
     modelsPlaceholder: 'Search models…',

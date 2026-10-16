@@ -30,7 +30,7 @@ func GatewayAdmission() gin.HandlerFunc {
 		}
 		_, _, parseErr := getModelRequest(c)
 		if parseErr != nil {
-			abortWithOpenAiMessage(c, http.StatusBadRequest, parseErr.Error())
+			abortInvalidRequest(c, parseErr)
 			return
 		}
 		if !requiresGatewayAdmission(c) {

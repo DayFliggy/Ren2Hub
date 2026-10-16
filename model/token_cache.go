@@ -77,7 +77,7 @@ redis.call('HSET', KEYS[1],
   'CreatedTime', ARGV[5], 'AccessedTime', ARGV[6], 'ExpiredTime', ARGV[7],
   'UnlimitedQuota', ARGV[8], 'ModelLimitsEnabled', ARGV[9], 'ModelLimits', ARGV[10],
   'AllowIps', ARGV[11], 'RemainQuota', ARGV[12], 'UsedQuota', ARGV[13],
-  'ConversionPolicy', ARGV[15])
+  'ConversionPolicy', ARGV[15], 'AllowUserQuotaQuery', ARGV[16])
 redis.call('EXPIRE', KEYS[1], ARGV[14])
 return 1`
 
@@ -90,6 +90,7 @@ return 1`
 		token.ModelLimits, allowIps, int64(token.RemainQuota), int64(token.UsedQuota),
 		tokenCacheTTLSeconds(),
 		conversionPolicy,
+		strconv.FormatBool(token.AllowUserQuotaQuery),
 	).Int()
 }
 

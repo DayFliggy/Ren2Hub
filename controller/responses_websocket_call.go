@@ -28,9 +28,30 @@ import (
 )
 
 func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState, create responsesWSCreateRequest) (apiErr *types.NewAPIError) {
+	c.Set(responsesWSCallStateKey, state)
 	started := time.Now()
 	var info *relaycommon.RelayInfo
+	attemptObserved := false
 	defer func() {
+		state.upstreamAddresses = common.UpstreamAddresses(c)
+		if apiErr != nil {
+			types.ErrOptionWithUpstreamAddresses(state.upstreamAddresses...)(apiErr)
+		}
+		if state.terminal != nil {
+			s.stateMu.Lock()
+			if err := s.writeClient(state.terminal.kind, state.terminal.body); err != nil {
+				state.closeCode = websocket.CloseInternalServerErr
+				if info != nil && info.StreamStatus != nil {
+					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
+				}
+				apiErr = types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
+			} else {
+				state.terminalDelivered.Store(true)
+			}
+		}
+		if state.terminal != nil {
+			s.stateMu.Unlock()
+		}
 		if info != nil {
 			// Same rule as HTTP relay: delivered output is billed, a failed call
 			// without output is released.
@@ -40,7 +61,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			} else if info.Billing != nil {
 				info.Billing.Refund(c)
 			}
-			observeLiveRouteAttempt(c, info, relayAttemptOutcome(c, info, apiErr, started, false))
+			if !attemptObserved {
+				observeLiveRouteAttempt(c, info, relayAttemptOutcome(c, info, apiErr, started, false))
+			}
 		}
 		releaseRouteAttempt(c)
 		finalizeLiveRouteDecision(c, info, apiErr)
@@ -146,6 +169,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		if err := info.ResetAttemptState(); err != nil {
 			return newResponsesWSInvalidRequestError(err)
 		}
+		attemptObserved = false
 		info.InitChannelMeta(c)
 		if err := relay.PlanRequestForChannel(c, info, channel); err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
@@ -250,6 +274,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			return result
 		}
 		observeLiveRouteAttempt(c, info, outcome)
+		attemptObserved = true
 		if !waitForLiveRouteBackoff(c, info.RetryIndex, result.RetryAfter) {
 			return result
 		}
@@ -321,6 +346,7 @@ func dialResponsesWebSocket(c *gin.Context, info *relaycommon.RelayInfo, request
 	if request.Host != "" {
 		headers.Set("Host", request.Host)
 	}
+	common.SetContextKey(c, constant.ContextKeyUpstreamRequestOrigin, endpoint.Scheme+"://"+endpoint.Host)
 	connection, response, err := dialer.DialContext(c.Request.Context(), endpoint.String(), headers)
 	if response != nil && response.Body != nil {
 		_ = response.Body.Close()
@@ -380,6 +406,13 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				continue
 			}
 			info.SetFirstResponseTime()
+			if event.Type == "error" || (event.Response != nil && event.Response.GetOpenAIError() != nil) {
+				masked, err := service.MaskResponsesErrorPayload(incoming.body, common.UpstreamAddresses(c)...)
+				if err != nil {
+					return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
+				}
+				incoming.body = masked
+			}
 			if event.Type == "error" {
 				var rejection responsesWSErrorEvent
 				if err := common.Unmarshal(incoming.body, &rejection); err != nil {
@@ -424,7 +457,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				}
 				controlSent = true
 			}
-			accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
+
 			termination := relayconvert.TerminationFromResponse(&event.ResponsesStreamResponse)
 			if termination.IsTerminal() {
 				c.Set("response_termination", termination)
@@ -433,22 +466,48 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				state.closeCode = websocket.CloseInternalServerErr
 				return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 			}
-			if semantic, _ := helper.StreamPayloadState(string(incoming.body)); semantic && (!termination.IsTerminal() || termination.IsSuccessful()) {
-				info.MarkValidOutput()
+			semantic, _ := helper.StreamPayloadState(string(incoming.body))
+			if termination.IsTerminal() {
+				s.stateMu.Lock()
+			}
+			delivered, writeErr := s.writeClientObserved(incoming.kind, incoming.body)
+			if termination.IsTerminal() {
+				if writeErr == nil {
+					state.terminalDelivered.Store(true)
+				}
+				s.stateMu.Unlock()
+			}
+			if delivered {
+				if semantic && (!termination.IsTerminal() || termination.IsSuccessful()) {
+					info.MarkValidOutput()
+				}
+				if writeErr == nil {
+					accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
+				} else if !termination.IsTerminal() {
+					// A partially delivered frame remains estimated; never trust
+					// an undelivered terminal's authoritative usage snapshot.
+					accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
+				} else if event.Response != nil {
+					accumulator.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: service.ExtractOutputTextFromResponses(event.Response)}, nil)
+				}
+			}
+			if writeErr != nil {
+				state.closeCode = websocket.CloseInternalServerErr
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, writeErr)
+				return types.NewError(writeErr, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
 			if termination.IsTerminal() {
 				s.lastResponseID = responseID
-				state.terminal = &incoming
+				state.terminalDelivered.Store(true)
+				if termination.IsSuccessful() {
+					middleware.MarkRelayRequestDelivered(c)
+				}
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				if !termination.IsSuccessful() {
 					info.StreamStatus.RecordError("upstream generation did not complete successfully")
+					return service.ResponsesAPIError(event.GetOpenAIError(), "upstream generation did not complete successfully")
 				}
 				return nil
-			}
-			if err := s.writeClient(incoming.kind, incoming.body); err != nil {
-				state.closeCode = websocket.CloseInternalServerErr
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
-				return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
 		case pending := <-state.controls:
 			if pending.streamID != "" && pending.streamID != create.StreamID {

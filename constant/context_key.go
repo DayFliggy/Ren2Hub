@@ -3,6 +3,9 @@ package constant
 type ContextKey string
 
 const (
+	// ContextKeyUpstreamRequestOrigin records the actual dial origin for error masking.
+	ContextKeyUpstreamRequestOrigin ContextKey = "upstream_request_origin"
+
 	ContextKeyTokenCountMeta  ContextKey = "token_count_meta"
 	ContextKeyPromptTokens    ContextKey = "prompt_tokens"
 	ContextKeyEstimatedTokens ContextKey = "estimated_tokens"

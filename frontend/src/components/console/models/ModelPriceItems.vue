@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  publicPricingReferences,
+  expressionReferencePrices,
+} from '@/features/pricing/reference'
+import ReferencePrices from './ReferencePrices.vue'
 import { catalogPrices } from '@/api/publicCatalog'
 import type { PricingModelContract } from '@/api/liveContracts'
 import { formatUnitPriceUSD } from '@/utils/decimal'
@@ -11,6 +16,14 @@ const props = withDefaults(
 )
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const lines = computed(() => catalogPrices(props.pricing, props.unit))
+const references = computed(() => publicPricingReferences(props.pricing))
+const referencePlugin = computed(
+  () =>
+    props.pricing.billing_plugin_variants?.find(
+      (variant) =>
+        variant.billing_mode === 'tiered_expr' && variant.billing_expr
+    )?.plugin_name || props.pricing.usage_reference?.plugin_name
+)
 const labels: Record<string, string> = {
   input: 'input',
   output: 'output',
@@ -24,6 +37,16 @@ const labels: Record<string, string> = {
 </script>
 <template>
   <div class="model-price-items">
+    <p v-if="!references.length && referencePlugin">{{ referencePlugin }}</p>
+    <ReferencePrices
+      v-if="
+        pricing.billing_mode === 'tiered_expr' ||
+        pricing.billing_plugin_variants?.length
+      "
+      :prices="references"
+      :unit="unit"
+      :details="true"
+    />
     <p v-if="pricing.billing_mode === 'unconfigured'">
       {{ t('priceUnavailable') }}
     </p>
@@ -31,7 +54,11 @@ const labels: Record<string, string> = {
       ><span>{{ t('expression') }}</span>
       <pre>{{ pricing.billing_expr }}</pre>
     </template>
-    <dl v-else>
+    <dl
+      v-else-if="
+        !pricing.billing_plugin_variants?.length || !pricing.pricing_values
+      "
+    >
       <div
         v-for="line in lines"
         :key="line.key"
@@ -62,7 +89,22 @@ const labels: Record<string, string> = {
       <p v-else-if="variant.billing_mode === 'ratio'">
         {{ t('inheritsModelPrice') }}
       </p>
-      <pre v-else>{{ variant.billing_expr }}</pre>
+      <template v-else
+        ><ReferencePrices
+          :prices="
+            expressionReferencePrices(
+              variant.billing_expr,
+              true,
+              variant.usage_reference,
+              '1',
+              variant.plugin_name
+            )
+          "
+          :unit="unit"
+          :details="true"
+        />
+        <pre>{{ variant.billing_expr }}</pre>
+      </template>
     </details>
   </div>
 </template>

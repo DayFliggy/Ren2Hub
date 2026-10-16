@@ -36,6 +36,11 @@ describe('KeyFormModal', () => {
     const wrapper = mountForm()
     const typeOptions = [...document.body.querySelectorAll('[role="radio"]')]
 
+    expect(
+      document
+        .querySelector('[name="token-allow-user-quota-query"]')
+        ?.getAttribute('aria-checked')
+    ).toBe('true')
     expect(typeOptions).toHaveLength(2)
     expect(typeOptions[0].getAttribute('aria-checked')).toBe('false')
     expect(typeOptions[1].getAttribute('aria-checked')).toBe('true')
@@ -73,6 +78,11 @@ describe('KeyFormModal', () => {
     }
     const wrapper = mountForm(editing)
 
+    expect(
+      document
+        .querySelector('[name="token-allow-user-quota-query"]')
+        ?.getAttribute('aria-checked')
+    ).toBe('false')
     expect(advancedTrigger().getAttribute('aria-expanded')).toBe('true')
     expect(document.querySelector('[name="token-custom-key"]')).toBeNull()
     expect(
@@ -125,6 +135,16 @@ describe('KeyFormModal', () => {
       const changed = put.mock.calls[2][1] as Record<string, unknown>
       expect(changed.name).toBe('renamed')
       expect(changed.operation_id).not.toBe(first.operation_id)
+      expect(changed.allow_user_quota_query).toBe(false)
+      const queryToggle = document.querySelector<HTMLButtonElement>(
+        '[name="token-allow-user-quota-query"]'
+      )!
+      queryToggle.click()
+      await nextTick()
+      await submit()
+      const permissionChanged = put.mock.calls[3][1] as Record<string, unknown>
+      expect(permissionChanged.allow_user_quota_query).toBe(true)
+      expect(permissionChanged.operation_id).not.toBe(changed.operation_id)
     } finally {
       wrapper.unmount()
       put.mockRestore()

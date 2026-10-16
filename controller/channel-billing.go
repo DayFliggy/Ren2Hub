@@ -478,6 +478,8 @@ func updateStandardChannelBalance(channel *model.Channel) (float64, error) {
 		return updateChannelMoonshotBalance(channel)
 	case constant.ChannelTypeSub2API:
 		return updateChannelSub2APIBalance(channel)
+	case constant.ChannelTypeNewAPI:
+		return updateChannelNewAPIBalance(channel)
 	default:
 		return 0, common.NewMessage("Not implemented yet")
 	}

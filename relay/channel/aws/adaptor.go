@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -87,6 +88,9 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	if info.ChannelSetting.AwsAPIType == dto.AwsAPITypeMantle {
+		return mantleRequestURL(info)
+	}
 	// Both credential modes use the SDK for endpoint, authentication and
 	// event-stream decoding. DoRequest does not use the generic HTTP sender.
 	return "", nil
@@ -149,10 +153,23 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
+	if err := info.ChannelSetting.ValidateProviderSettings(); err != nil {
+		return nil, err
+	}
+	if info.ChannelSetting.AwsAPIType == dto.AwsAPITypeMantle {
+		req, err := a.newMantleRequest(c, info, requestBody)
+		if err != nil {
+			return nil, err
+		}
+		return channel.DoRequest(c, req, info)
+	}
 	return doAwsClientRequest(c, info, a, requestBody)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+	if info.ChannelSetting.AwsAPIType == dto.AwsAPITypeMantle {
+		return (&claude.Adaptor{}).DoResponse(c, resp, info)
+	}
 	if a.IsNova {
 		err, usage = handleNovaRequest(c, info, a)
 	} else {

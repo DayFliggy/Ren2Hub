@@ -36,9 +36,9 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	info.ObserveResponseModel(responsesResp.Model)
-	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
+	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil {
 		c.Set("response_termination", relayconvert.TerminationFromResponse(&responsesResp))
-		return relayconvert.UsageFromResponsesUsage(responsesResp.Usage), types.WithOpenAIError(*oaiError, http.StatusBadGateway)
+		return relayconvert.UsageFromResponsesUsage(responsesResp.Usage), service.ResponsesAPIError(oaiError, "upstream response failed")
 	}
 
 	return writeConvertedResponsesResponse(c, info, resp, &responsesResp)
@@ -120,7 +120,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 			if err := relayconvert.ValidateResponseTermination(types.RelayFormatOpenAIResponses, info.RelayFormat, terminal); err != nil && (terminal.Kind == types.ResponseUnknown || terminal.Kind == types.ResponseProviderPause) {
 				streamErr = helper.ResponseConversionError(err)
 			} else {
-				streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+				streamErr = service.ResponsesAPIError(event.GetOpenAIError(), "upstream responses stream failed")
 			}
 		}
 		return true, nil
@@ -271,14 +271,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				sr.Stop(streamErr)
 				return
 			}
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
-					sr.Stop(streamErr)
-					return
-				}
-			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
+			streamErr = service.ResponsesAPIError(streamResp.GetOpenAIError(), fmt.Sprintf("responses stream error: %s", streamResp.Type))
 			sr.Stop(streamErr)
 			return
 		}

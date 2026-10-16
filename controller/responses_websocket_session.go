@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -18,6 +19,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+const responsesWSCallStateKey = "responses_websocket_call_state"
 
 const responsesWSEventTypeResponseCreate = "response.create"
 const responsesWSWriteTimeout = 30 * time.Second
@@ -66,10 +69,12 @@ type responsesWSControl struct {
 // Only the request worker reads or changes billing state. Socket readers pass
 // bounded messages to it; cancellation never performs an independent refund.
 type responsesWSCallState struct {
-	inbox    chan responsesWSMessage
-	controls chan responsesWSControl
-	done     chan struct{}
-	terminal *responsesWSMessage
+	inbox             chan responsesWSMessage
+	controls          chan responsesWSControl
+	done              chan struct{}
+	terminal          *responsesWSMessage
+	terminalDelivered atomic.Bool
+	upstreamAddresses []string
 	// A nonzero closeCode ends the connection after this request.
 	closeCode   int
 	closeReason string
@@ -170,24 +175,17 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 			apiErr = types.NewError(fmt.Errorf("responses websocket request panic: %v", recovered), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			state.closeCode = websocket.CloseInternalServerErr
 		}
-		// Finish the middleware count before publishing the terminal event. Hold
-		// admission while writing it so an immediate next create cannot race
-		// the current request's release. A failing request also shuts down
-		// before that release, so a concurrent upstream close cannot report it
-		// as a normal closure; shutdown itself takes neither lock.
-		outgoing := state.terminal
-		if apiErr != nil && outgoing == nil {
-			if body, err := buildResponsesWSErrorPayload(envelope.EventID, streamID, apiErr); err == nil {
-				outgoing = &responsesWSMessage{kind: websocket.TextMessage, body: body}
-			}
-		}
-		s.clientWriteMu.Lock()
+		// runCall delivers provider terminals before accounting. Errors rejected
+		// by middleware never entered an attempt and are emitted here. Keep
+		// delivery and completion atomic for the reader accepting the next create.
 		s.stateMu.Lock()
-		if outgoing != nil {
-			if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
-				state.closeCode = websocket.CloseInternalServerErr
-			} else if err := s.client.WriteMessage(outgoing.kind, outgoing.body); err != nil {
-				state.closeCode = websocket.CloseInternalServerErr
+		if apiErr != nil && !state.terminalDelivered.Load() {
+			if body, err := buildResponsesWSErrorPayload(envelope.EventID, streamID, apiErr, state.upstreamAddresses...); err == nil {
+				if err := s.writeClient(websocket.TextMessage, body); err != nil {
+					state.closeCode = websocket.CloseInternalServerErr
+				} else {
+					state.terminalDelivered.Store(true)
+				}
 			}
 		}
 		if state.closeCode != 0 {
@@ -196,7 +194,6 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 		s.current = nil
 		close(state.done)
 		s.stateMu.Unlock()
-		s.clientWriteMu.Unlock()
 	}()
 	request := s.request.Clone(s.ctx)
 	request.Body = io.NopCloser(bytes.NewReader(create.Body))
@@ -252,13 +249,24 @@ func (s *responsesWSSession) getCurrent() *responsesWSCallState {
 }
 
 func (s *responsesWSSession) tryReserveCurrent(state *responsesWSCallState) bool {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-	if s.current != nil {
-		return false
+	for {
+		s.stateMu.Lock()
+		previous := s.current
+		if previous == nil {
+			s.current = state
+			s.stateMu.Unlock()
+			return true
+		}
+		s.stateMu.Unlock()
+		if !previous.terminalDelivered.Load() {
+			return false
+		}
+		select {
+		case <-previous.done:
+		case <-s.ctx.Done():
+			return false
+		}
 	}
-	s.current = state
-	return true
 }
 
 func (s *responsesWSSession) getTarget() *websocket.Conn {
@@ -293,12 +301,26 @@ func (s *responsesWSSession) writeTarget(kind int, message []byte) error {
 }
 
 func (s *responsesWSSession) writeClient(kind int, message []byte) error {
+	_, err := s.writeClientObserved(kind, message)
+	return err
+}
+
+func (s *responsesWSSession) writeClientObserved(kind int, message []byte) (bool, error) {
 	s.clientWriteMu.Lock()
 	defer s.clientWriteMu.Unlock()
-	if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
-		return err
+	if err := s.ctx.Err(); err != nil {
+		return false, err
 	}
-	return s.client.WriteMessage(kind, message)
+	if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
+		return false, err
+	}
+	counter, _ := s.client.UnderlyingConn().(*responsesWSDeliveryConn)
+	before := int64(0)
+	if counter != nil {
+		before = counter.written.Load()
+	}
+	err := s.client.WriteMessage(kind, message)
+	return err == nil || (counter != nil && counter.written.Load() > before), err
 }
 
 func (s *responsesWSSession) sendError(eventID, streamID string, apiErr *types.NewAPIError) {
@@ -438,7 +460,7 @@ func buildResponsesWSCreateEvent(jsonData []byte, generate common.RawMessage, st
 	return common.Marshal(event)
 }
 
-func buildResponsesWSErrorPayload(eventID, streamID string, apiErr *types.NewAPIError) ([]byte, error) {
+func buildResponsesWSErrorPayload(eventID, streamID string, apiErr *types.NewAPIError, upstreamURLs ...string) ([]byte, error) {
 	if apiErr == nil {
 		return nil, errors.New("api error is nil")
 	}
@@ -446,7 +468,7 @@ func buildResponsesWSErrorPayload(eventID, streamID string, apiErr *types.NewAPI
 	if status == 0 {
 		status = http.StatusInternalServerError
 	}
-	openaiErr := apiErr.ToOpenAIError()
+	openaiErr := apiErr.ToOpenAIError(upstreamURLs...)
 	return common.Marshal(&responsesWSErrorEvent{
 		Type:     "error",
 		Status:   status,

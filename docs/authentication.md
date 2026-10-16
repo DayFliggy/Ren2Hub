@@ -201,3 +201,13 @@ PATCH 省略字段保留原值；空名称、null/空 scopes、未知字段以�
 - 使用公网负载均衡器、`100.64.0.0/10`、链路本地地址或自定义 CNI 网段的部署须显式配置 `TRUSTED_PROXIES`。
 - 用户级模型限流及网关准入使用当前预留合同，不支持新旧版本混合滚动运行。
 - 自建客户端按 AuthBundle、`flow_token` 和 Security Proof 契约接入；管理脚本使用具有最小 scope 的 PAT。
+
+## API Key 用量与钱包查询
+
+`GET /api/usage/token/` 和 `GET /api/log/token` 使用API Key只读鉴权；IPv4/IPv6 CIDR与推理调用共用限制。过期或预算用尽的Key仍可查询；禁用Key、被封禁用户和不满足IP限制的请求拒绝。查询不发送上游、不预留资金，也不恢复Key的推理权限。
+
+`allow_user_quota_query` 控制是否允许该Key查询所属用户钱包。创建请求省略字段时为true，显式false生效；更新省略保留当前值。旧数据库记录及旧缓存缺字段为false，升级不自动开放。权限更新继续使用现有operation_id、版本冲突与指纹合同，状态专用更新不修改此权限；查询回源当前权限，撤销后旧缓存不能继续授权。
+
+允许时，`/api/usage/token/` 的 `data.user_quota` 返回 `{ "total_available": "…", "total_used": "…" }`。两项为精确十进制额度字符串，available直接取钱包已扣除预留的投影，不能再减reserved；负余额原样保留。关闭权限时省略整个user_quota。Key自身的`total_available`与用户钱包是不同概念；Key无限预算仍返回null，不构造大整数。
+
+NewAPI（type60）渠道余额读取上游这两个概念及`/api/status`的正数quota_per_unit；有限Key取可查询钱包与Key预算较小值，无限Key必须取得钱包额度。计算保留精确数值到现有渠道余额展示边界；缺失/非法单位、查询失败或保存失败返回错误，不能显示为零余额。

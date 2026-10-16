@@ -29,10 +29,10 @@ func pinnedPlugin(t *testing.T, key string) (*jsplugin.LoadedPlugin, string) {
 
 // Every deployed release stores its factory rows permanently, and startup
 // refuses a key and version whose stored source differs. Each pinned-<sha>
-// directory holds the byte copies shipped by one deployed release.
+// directory holds the source versions first pinned for one deployed release.
 func TestReleasedFactorySourcesCompileAndKeepTheirIdentity(t *testing.T) {
 	// Built-in plugins each pinned release shipped.
-	releasedPlugins := map[string]int{"pinned-10ccd9a2f": 10, "pinned-1bb6e849e": 10, "pinned-12435f4d5": 11, "pinned-ce505c9b5": 11}
+	releasedPlugins := map[string]int{"pinned-10ccd9a2f": 10, "pinned-1bb6e849e": 10, "pinned-12435f4d5": 11, "pinned-ce505c9b5": 11, "pinned-59b25959b": 1}
 	releases, err := filepath.Glob("testdata/pinned-*")
 	require.NoError(t, err)
 	require.Len(t, releases, len(releasedPlugins))

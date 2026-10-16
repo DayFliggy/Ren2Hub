@@ -154,7 +154,7 @@ func factoryPriceDatabase(t *testing.T) {
 	t.Cleanup(func() { common.OptionMap = previousOptions; jsplugin.DefaultRegistry = previousRegistry })
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.Option{}, &model.Channel{}, &model.TaskPluginNamespace{}, &model.TaskPlugin{}))
+	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.Option{}, &model.Channel{}, &model.Ability{}, &model.TaskPluginNamespace{}, &model.TaskPlugin{}))
 	previousDB := model.DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	model.DB = db

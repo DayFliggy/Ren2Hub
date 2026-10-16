@@ -18,6 +18,7 @@ export interface TokenItem {
   key: string
   type: TokenType
   conversion_policy?: import('@/types/gateway').ConversionPolicy
+  allow_user_quota_query?: boolean
   status: 1 | 2 // 1 enabled · 2 disabled
   used_quota: string
   available_quota: string | null
@@ -92,6 +93,7 @@ export interface AdminChannel extends Record<string, unknown> {
 }
 
 export interface AdminChannelCreateInput {
+  other?: string
   setting?: string
   settings?: string
   param_override?: string

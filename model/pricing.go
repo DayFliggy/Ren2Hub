@@ -15,6 +15,8 @@ import (
 )
 
 type PricingPluginVariant struct {
+	BillingUsageFacts    map[string]jsplugin.UsageFieldSchema `json:"-"`
+	UsageReference       *types.UsageReference                `json:"usage_reference,omitempty"`
 	PluginKey            string                               `json:"plugin_key"`
 	PluginName           string                               `json:"plugin_name"`
 	Icon                 string                               `json:"icon,omitempty"`
@@ -25,6 +27,11 @@ type PricingPluginVariant struct {
 }
 
 type Pricing struct {
+	BillingUsageFacts      map[string]jsplugin.UsageFieldSchema `json:"-"`
+	PricingValues          PricingValues                        `json:"pricing_values"`
+	UsageReference         *types.UsageReference                `json:"usage_reference,omitempty"`
+	BillingPluginKey       string                               `json:"-"`
+	BillingPluginName      string                               `json:"-"`
 	BillingPluginVariants  []PricingPluginVariant               `json:"billing_plugin_variants,omitempty"`
 	ModelName              string                               `json:"model_name"`
 	Description            string                               `json:"description,omitempty"`
@@ -404,6 +411,14 @@ func updatePricing() {
 		entry := entries[model]
 		values := entry.Effective
 		pricing.PricingVersion = entry.Version
+		pricing.PricingValues = PricingValuesForAPI(values)
+		if pricing.PricingValues == nil {
+			pricing.PricingValues = PricingValues{}
+		}
+		delete(pricing.PricingValues, "billing_setting.plugin_billing_expr")
+		pricing.BillingPluginKey, pricing.BillingPluginName = entry.PluginKey, entry.PluginName
+		pricing.BillingUsageExamples = entry.UsageExamples
+		pricing.BillingUsageFacts = entry.UsageFacts
 		for key, dest := range map[string]*float64{"ModelRatio": &pricing.ModelRatio, "CompletionRatio": &pricing.CompletionRatio, "ModelPrice": &pricing.ModelPrice} {
 			if raw, exists := values[key]; exists {
 				number, err := modelPricingDecimal(raw)
@@ -444,7 +459,7 @@ func updatePricing() {
 			} else if variant.Configured == "" && values["billing_setting.billing_mode"] != "tiered_expr" && ModelPriceConfigured(values) {
 				mode = "ratio"
 			}
-			pricing.BillingPluginVariants = append(pricing.BillingPluginVariants, PricingPluginVariant{PluginKey: variant.PluginKey, PluginName: variant.PluginName, Icon: variant.Icon, BillingExpr: variant.Effective, BillingMode: mode, BillingUsageSchema: variant.UsageSchema, BillingUsageExamples: variant.UsageExamples})
+			pricing.BillingPluginVariants = append(pricing.BillingPluginVariants, PricingPluginVariant{PluginKey: variant.PluginKey, PluginName: variant.PluginName, Icon: variant.Icon, BillingExpr: variant.Effective, BillingMode: mode, BillingUsageSchema: variant.UsageSchema, BillingUsageExamples: variant.UsageExamples, BillingUsageFacts: variant.UsageFacts})
 		}
 
 		pricingMap = append(pricingMap, pricing)

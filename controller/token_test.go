@@ -326,6 +326,7 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 	if err := db.First(&migratedToken, "name = ?", "legacy-token").Error; err != nil {
 		t.Fatalf("failed to load migrated token row: %v", err)
 	}
+	require.False(t, migratedToken.AllowUserQuotaQuery, "upgrading never grants existing keys access to wallet balance")
 	if migratedToken.Key != legacyKey {
 		t.Fatalf("expected migrated token key %q, got %q", legacyKey, migratedToken.Key)
 	}
@@ -334,19 +335,20 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 	}
 
 	inserted := model.Token{
-		UserId:             8,
-		Name:               "long-token",
-		Key:                longKey,
-		Status:             common.TokenStatusEnabled,
-		CreatedTime:        1,
-		AccessedTime:       1,
-		ExpiredTime:        -1,
-		RemainQuota:        200,
-		UnlimitedQuota:     true,
-		ModelLimitsEnabled: false,
-		ModelLimits:        "",
-		AllowIps:           common.GetPointer(""),
-		UsedQuota:          0,
+		UserId:              8,
+		AllowUserQuotaQuery: true,
+		Name:                "long-token",
+		Key:                 longKey,
+		Status:              common.TokenStatusEnabled,
+		CreatedTime:         1,
+		AccessedTime:        1,
+		ExpiredTime:         -1,
+		RemainQuota:         200,
+		UnlimitedQuota:      true,
+		ModelLimitsEnabled:  false,
+		ModelLimits:         "",
+		AllowIps:            common.GetPointer(""),
+		UsedQuota:           0,
 	}
 	if err := db.Create(&inserted).Error; err != nil {
 		t.Fatalf("failed to insert long token after migration: %v", err)
@@ -359,6 +361,16 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 	if fetched.Key != longKey {
 		t.Fatalf("expected long token key %q, got %q", longKey, fetched.Key)
 	}
+	require.True(t, fetched.AllowUserQuotaQuery)
+	migrateTokenControllerTestDB(t, db)
+	var legacyAfterRestart, enabledAfterRestart model.Token
+	require.NoError(t, db.First(&legacyAfterRestart, migratedToken.Id).Error)
+	require.NoError(t, db.First(&enabledAfterRestart, inserted.Id).Error)
+	require.False(t, legacyAfterRestart.AllowUserQuotaQuery)
+	require.True(t, enabledAfterRestart.AllowUserQuotaQuery)
+	var oldReader legacyToken
+	require.NoError(t, db.First(&oldReader, inserted.Id).Error)
+	require.Equal(t, longKey, oldReader.Key, "old applications can read tokens after the additive migration")
 }
 
 func TestTokenAutoMigrateUsesVarchar128KeyColumn(t *testing.T) {

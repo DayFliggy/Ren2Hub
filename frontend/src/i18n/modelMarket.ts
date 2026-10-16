@@ -1,3 +1,4 @@
+import { pricingReferenceMessages } from './pricingReference'
 const zh = {
   title: '模型广场',
   console: '控制台',
@@ -18,12 +19,7 @@ const zh = {
     video: '视频',
     rerank: '重排',
   },
-  sorts: {
-    default: '目录顺序',
-    name: '模型名称',
-    input: '输入价格 · 按量',
-    call: '每次价格 · 按次',
-  },
+  sorts: pricingReferenceMessages['zh-CN'].sorts,
   sort: '模型排序',
   resultCount: '{models} 个模型 · {offers} 项渠道报价',
   benchmark: '平台基准价',
@@ -165,12 +161,7 @@ const en: typeof zh = {
     video: 'Video',
     rerank: 'Rerank',
   },
-  sorts: {
-    default: 'Catalog order',
-    name: 'Model name',
-    input: 'Input price · usage',
-    call: 'Price per request',
-  },
+  sorts: pricingReferenceMessages.en.sorts,
   sort: 'Model ordering',
   resultCount: '{models} models · {offers} channel offers',
   benchmark: 'Platform base price',

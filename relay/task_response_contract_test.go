@@ -49,6 +49,10 @@ func TestTaskResponseAdaptersDeferClientCommit(t *testing.T) {
 				}
 				if key == "vertex" {
 					key = "vertex-ai"
+					// This response-only fixture has no OAuth server. A gateway
+					// channel carries the same operation response with Bearer auth.
+					info.ChannelType = constant.ChannelTypeNewAPI
+					info.ApiKey = "gateway-response-fixture"
 				}
 				if key == "suno" {
 					key = "sunoapi"

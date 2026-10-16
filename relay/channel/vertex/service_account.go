@@ -13,6 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/bytedance/gopkg/cache/asynccache"
@@ -39,7 +40,7 @@ var Cache = asynccache.NewAsyncCache(asynccache.Options{
 	},
 })
 
-func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
+func getAccessToken(ctx context.Context, a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	// A slot can hold another account after key replacement or reordering.
 	// The selected credential, not its mutable position, owns the cached token.
 	credentialDigest := sha256.Sum256([]byte(strings.TrimSpace(info.ApiKey)))
@@ -53,7 +54,7 @@ func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	newToken, err := exchangeJwtForAccessToken(context.Background(), signedJWT, info.ChannelSetting.Proxy)
+	newToken, err := exchangeJwtForAccessToken(ctx, signedJWT, info.ChannelSetting.Proxy)
 	if err != nil {
 		return "", fmt.Errorf("failed to exchange JWT for access token: %w", err)
 	}
@@ -147,7 +148,10 @@ func exchangeJwtForAccessToken(ctx context.Context, signedJWT string, proxy stri
 		return "", err
 	}
 
-	if accessToken, ok := result["access_token"].(string); ok {
+	if resp.StatusCode == http.StatusBadRequest && result["error"] == "invalid_grant" && result["error_description"] == "Invalid grant: account not found" {
+		return "", &types.ProviderCredentialError{Err: errors.New("Vertex service account no longer exists")}
+	}
+	if accessToken, ok := result["access_token"].(string); ok && resp.StatusCode >= 200 && resp.StatusCode < 300 && accessToken != "" {
 		return accessToken, nil
 	}
 	return "", fmt.Errorf("failed to get access token: %v", result)

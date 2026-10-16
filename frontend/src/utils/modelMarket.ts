@@ -1,5 +1,9 @@
 import { catalogPrices, type CatalogPricingInput } from '@/api/publicCatalog'
-import { compareDecimal, multiplyDecimal } from '@/utils/decimal'
+import { multiplyDecimal } from '@/utils/decimal'
+import {
+  expressionReferencePrices,
+  compareReferencePrices,
+} from '@/features/pricing/reference'
 import type {
   MarketBillingMode,
   MarketModel,
@@ -106,6 +110,23 @@ export function projectMarketPricing(
     version: raw.version,
     billingMode,
     priceLines,
+    referencePrices:
+      billingMode === 'dynamic'
+        ? expressionReferencePrices(
+            String(values['billing_setting.billing_expr'] ?? ''),
+            Boolean(
+              raw.plugin_key ||
+              raw.usage_reference ||
+              Object.keys(raw.usage_schema ?? {}).length
+            ),
+            raw.usage_reference,
+            ratio,
+            raw.plugin_name
+          )
+        : priceLines.map((line) => ({
+            ...line,
+            source: 'configured' as const,
+          })),
     expression:
       billingMode === 'dynamic'
         ? String(values['billing_setting.billing_expr'] ?? '')
@@ -176,33 +197,22 @@ export function buildModelMarketCatalog(
   return { models, channels: response.channels, telemetry: response.telemetry }
 }
 
-/** Do not order request, text-token and audio-token prices against each other. */
-function offerPriceKey(
-  offer: MarketOffer,
-  sort: ModelMarketSort
-): [number, string] {
-  const lines = offer.pricing.priceLines
-  if (sort === 'call') {
-    const line = lines.find((item) => item.key === 'request')
-    return line ? [line.unit === 'per_image' ? 1 : 0, line.amount] : [2, '0']
-  }
-  const audio =
-    offer.endpointTypes.length > 0 && offer.endpointTypes.every(isAudioEndpoint)
-  const line = lines.find(
-    (item) => item.key === (audio ? 'audioInput' : 'input')
-  )
-  return line ? [audio ? 1 : 0, line.amount] : [2, '0']
-}
-
 export function compareMarketOffers(
   a: MarketOffer,
   b: MarketOffer,
   sort: ModelMarketSort
 ): number {
-  if (sort === 'input' || sort === 'call') {
-    const [bucketA, priceA] = offerPriceKey(a, sort)
-    const [bucketB, priceB] = offerPriceKey(b, sort)
-    return bucketA - bucketB || compareDecimal(priceA, priceB)
+  if (sort !== 'default' && sort !== 'name') {
+    const audio = (offer: MarketOffer) =>
+      offer.endpointTypes.length > 0 &&
+      offer.endpointTypes.every(isAudioEndpoint)
+    return compareReferencePrices(
+      a.pricing.referencePrices ?? [],
+      b.pricing.referencePrices ?? [],
+      sort,
+      audio(a),
+      audio(b)
+    )
   }
   // API order follows the same configured channel priority as model discovery.
   return (

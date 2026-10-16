@@ -171,7 +171,7 @@ describe('model market price projection', () => {
       { key: 'request', amount: '0.008', unit: 'per_image' },
     ])
     expect(request.pricing.priceLines[0]!.amount).toBe('0.016')
-    expect(compareMarketOffers(image, request, 'call')).toBeGreaterThan(0)
+    expect(compareMarketOffers(image, request, 'call-asc')).toBeGreaterThan(0)
   })
 
   it('compares only matching price dimensions and units while placing unknown prices last', () => {
@@ -186,11 +186,12 @@ describe('model market price projection', () => {
     ]
     expect(
       [...ordered]
-        .sort((a, b) => compareMarketOffers(a, b, 'input'))
+        .sort((a, b) => compareMarketOffers(a, b, 'input-asc'))
         .map((item) => item.modelId)
     ).toEqual(['gpt-4.1', 'audio-preview', 'image-preview', 'unpriced-preview'])
     expect(
-      [...ordered].sort((a, b) => compareMarketOffers(a, b, 'call'))[0]!.modelId
+      [...ordered].sort((a, b) => compareMarketOffers(a, b, 'call-asc'))[0]!
+        .modelId
     ).toBe('image-preview')
     expect(
       compareMarketOffers(

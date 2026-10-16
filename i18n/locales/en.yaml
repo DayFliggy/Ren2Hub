@@ -19,7 +19,7 @@ distributor.token_model_forbidden: "This token has no access to model {{.Model}}
 distributor.model_name_required: "Model name not specified, model name cannot be empty"
 distributor.no_available_task_plugin_channel: "Task model {{.Model}} requires an enabled, eligible plugin channel. Please contact the administrator."
 distributor.invalid_midjourney_request: "Invalid Midjourney request: {{.Error}}"
-distributor.invalid_request_parse_model: "Invalid request, unable to parse model"
+distributor.invalid_request_parse_model: "Unable to parse model"
 
 # Errors returned to AI clients, emails and notifications (from NewAPI 128089fa7)
 auth.client_ip_unresolved: "Unable to resolve the client IP address"

@@ -27,6 +27,10 @@ import {
 import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
 import { ApiError, type PageResult } from './types'
 import { parseConversionPolicy } from './gateway'
+import { parsePricingValues, type PricingValues } from './pricingConfig'
+import { parseUsageReference } from './pricingReference'
+import type { UsageReference } from '@/types/pricingReference'
+import { isDecimal } from '@/utils/decimal'
 
 export interface UsageRow {
   model_name: string
@@ -91,6 +95,9 @@ export function parseUserModels(value: unknown): string[] {
 }
 
 export interface PricingModelContract {
+  pricing_values?: PricingValues
+  pricing_version?: string
+  usage_reference?: UsageReference
   model_name: string
   description: string
   icon: string
@@ -115,6 +122,7 @@ export interface PricingModelContract {
     plugin_name: string
     billing_expr: string
     billing_mode: 'ratio' | 'tiered_expr' | 'unconfigured'
+    usage_reference?: UsageReference
   }>
 }
 export interface PerfModelSummaryContract {
@@ -143,6 +151,21 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
       ),
       quota_type: quotaType,
     }
+    if (item.pricing_values !== undefined) {
+      const values = parsePricingValues(item.pricing_values, endpoint)
+      for (const [key, value] of Object.entries(values)) {
+        if (
+          key === 'billing_setting.billing_mode' ||
+          key === 'billing_setting.billing_expr'
+        )
+          requiredString(value, endpoint)
+        else if (!isDecimal(value)) invalidResponse(endpoint)
+      }
+      result.pricing_values = values
+    }
+    if (item.pricing_version !== undefined)
+      result.pricing_version = requiredString(item.pricing_version, endpoint)
+    result.usage_reference = parseUsageReference(item.usage_reference, endpoint)
     for (const key of [
       'model_ratio',
       'model_price',
@@ -198,6 +221,7 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
             plugin_name: requiredString(raw.plugin_name, endpoint),
             billing_expr: expression,
             billing_mode: mode,
+            usage_reference: parseUsageReference(raw.usage_reference, endpoint),
           }
         }
       )
@@ -295,6 +319,10 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
     key_preview: requiredString(value.key, endpoint),
     type,
     conversion_policy: parseConversionPolicy(value.conversion_policy ?? 'safe'),
+    allow_user_quota_query:
+      value.allow_user_quota_query === undefined
+        ? false
+        : requiredBoolean(value.allow_user_quota_query, endpoint),
     status: requiredInteger(value.status, endpoint) === 1 ? 1 : 2,
     used_quota: requiredQuota(value.used_quota, endpoint),
     reserved_quota: requiredQuota(value.reserved_quota, endpoint),

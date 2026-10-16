@@ -45,6 +45,20 @@ func TestModelMarketPreservesExactBaselinesAndMixedBillingWithoutPublishing(t *t
 	require.Len(t, market.Channels, 1)
 	require.Len(t, market.Offers, 10)
 	assert.Equal(t, "0.123456789012345678", market.Channels[0].Ratio)
+	model.InvalidatePricingCache()
+	t.Cleanup(model.InvalidatePricingCache)
+	public, err := AvailableRoutePrices(context.Background(), userID)
+	require.NoError(t, err)
+	var publicText *model.Pricing
+	for index := range public {
+		if public[index].ModelName == "market-text" {
+			publicText = &public[index]
+		}
+	}
+	require.NotNil(t, publicText)
+	assert.Equal(t, "0.123456789012345678", publicText.PricingValues["ModelRatio"])
+	assert.Equal(t, "0", publicText.PricingValues["CacheRatio"])
+
 	byName := make(map[string]dto.MarketModel)
 	for _, entry := range market.Models {
 		byName[entry.ID] = entry
@@ -179,12 +193,13 @@ func TestModelMarketPreservesCacheAndRequestPricingDetails(t *testing.T) {
 
 func TestModelMarketBindsPluginPricesToTheExecutingEndpoint(t *testing.T) {
 	db, userID, _ := setupModelManifestTest(t)
-	previous := jsplugin.DefaultRegistry
+	previous, secret := jsplugin.DefaultRegistry, common.CryptoSecret
+	common.CryptoSecret = "market-reference-test-secret"
 	jsplugin.DefaultRegistry = jsplugin.NewRegistry()
-	t.Cleanup(func() { jsplugin.DefaultRegistry = previous })
+	t.Cleanup(func() { jsplugin.DefaultRegistry = previous; common.CryptoSecret = secret })
 	const name = "market-shared-executor"
 	for _, key := range []string{"market-first", "market-second"} {
-		source := fmt.Sprintf(`export const meta={apiVersion:1,key:%q,name:%q,version:"1.0.0",author:{name:"Test"},upstreams:["new_api"],models:[%q],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}},protocols:[{name:"openai_responses",supports:["sync","stream","background"]}]};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};export const protocols={openai_responses:{decodeRequest:function(){return {}},renderEvents:function(){return {events:[],done:false}},renderFinal:function(){return {}}}};`, key, key, name)
+		source := fmt.Sprintf(`export const meta={apiVersion:1,key:%q,name:%q,version:"1.0.0",author:{name:"Test"},upstreams:["new_api"],models:[%q],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}},usageExamples:[{label:"first count",facts:{count:2}},{label:"second count",facts:{count:1}}],protocols:[{name:"openai_responses",supports:["sync","stream","background"]}]};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};export const protocols={openai_responses:{decodeRequest:function(){return {}},renderEvents:function(){return {events:[],done:false}},renderFinal:function(){return {}}}};`, key, key, name)
 		_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
 		require.NoError(t, err)
 	}
@@ -222,10 +237,17 @@ func TestModelMarketBindsPluginPricesToTheExecutingEndpoint(t *testing.T) {
 			assert.NotContains(t, price.SupportedEndpointTypes, constant.EndpointTypeOpenAIResponse)
 		case candidates[0].Plugin.Meta.Key:
 			assert.Equal(t, `u("count") * 0.01`, price.Values["billing_setting.billing_expr"])
+			require.NotNil(t, price.UsageReference)
+			assert.Equal(t, "0.02", price.UsageReference.AmountUSD, "reference remains 1x; frontend applies channel ratio once")
 			assert.Contains(t, price.SupportedEndpointTypes, constant.EndpointTypeOpenAIResponse)
 			assert.Contains(t, price.UsageSchema, "count")
+			require.NotNil(t, price.UsageReference)
+			assert.Equal(t, "first count", price.UsageReference.Label)
+			assert.Equal(t, "2", price.UsageReference.Facts["count"])
 		case candidates[1].Plugin.Meta.Key:
 			assert.Equal(t, `u("count") * 0.03`, price.Values["billing_setting.billing_expr"])
+			require.NotNil(t, price.UsageReference)
+			assert.Equal(t, "0.06", price.UsageReference.AmountUSD)
 			assert.NotContains(t, price.SupportedEndpointTypes, constant.EndpointTypeOpenAIResponse, "a cheaper/unselected plugin cannot claim an intercepted endpoint")
 			assert.Contains(t, price.SupportedEndpointTypes, constant.EndpointTypeTaskPlugin)
 		default:
@@ -415,4 +437,40 @@ func TestModelMarketSeparatesNativeTextAndAudioBranches(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestModelMarketKeepsMappedPluginUsageProfilesSeparate(t *testing.T) {
+	db, userID, _ := setupModelManifestTest(t)
+	previous, secret := jsplugin.DefaultRegistry, common.CryptoSecret
+	jsplugin.DefaultRegistry = jsplugin.NewRegistry()
+	common.CryptoSecret = "mapped-profile-reference-test"
+	t.Cleanup(func() { jsplugin.DefaultRegistry = previous; common.CryptoSecret = secret })
+	source := `export const meta={apiVersion:1,key:"profile-driver",name:"Profile driver",version:"1.0.0",author:{name:"Test"},upstreams:["new_api"],models:["profile-public","profile-a","profile-b"],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}},usageExamples:[{label:"default",facts:{count:9}}],usageProfiles:[{models:["profile-a"],schema:{count:{type:"number",unit:"count"}},examples:[{label:"A first",facts:{count:2}}]},{models:["profile-b"],schema:{count:{type:"number",unit:"count"}},examples:[{label:"B first",facts:{count:3}}]}],protocols:[{name:"openai_responses",supports:["sync","stream","background"]}]};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};export const protocols={openai_responses:{decodeRequest:function(){return {}},renderEvents:function(){return {events:[],done:false}},renderFinal:function(){return {}}}};`
+	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+	require.NoError(t, err)
+	for index, actual := range []string{"profile-a", "profile-b"} {
+		mapping := fmt.Sprintf(`{"profile-public":%q}`, actual)
+		settings := `{"task_extend_plugin_keys":["profile-driver"]}`
+		channel := model.Channel{Id: 901 + index, Name: actual, Type: constant.ChannelTypeNewAPI, Status: common.ChannelStatusEnabled, Models: "profile-public", ModelMapping: &mapping, Setting: &settings, ChannelRatio: "0.5", Key: "fixture-key"}
+		require.NoError(t, db.Create(&channel).Error)
+		ability := model.Ability{ChannelId: channel.Id, Model: "profile-public", Enabled: true}
+		require.NoError(t, db.Create(&ability).Error)
+		fingerprint, err := channelCapabilityFingerprint(&channel, []model.Ability{ability})
+		require.NoError(t, err)
+		endpoints, err := common.Marshal([]constant.EndpointType{constant.EndpointTypeOpenAIResponse})
+		require.NoError(t, err)
+		require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channel.Id, model.ChannelCapabilitySnapshotFence{}, fingerprint, modellab.DefaultCatalog().Version, []model.ChannelModelCapability{{RequestModel: "profile-public", ActualModel: actual, LabSlug: "custom", Source: "channel_configuration", Confidence: 1, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeNewAPI, State: model.RouteCapabilityStateEligible}}))
+	}
+	require.NoError(t, db.Create(&model.Option{Key: "billing_setting.billing_mode", Value: `{"profile-public":"tiered_expr"}`}).Error)
+	require.NoError(t, db.Create(&model.Option{Key: "billing_setting.billing_expr", Value: `{"profile-public":"u(\"count\") * 0.1"}`}).Error)
+	market, err := BuildModelMarket(context.Background(), userID)
+	require.NoError(t, err)
+	require.Len(t, market.Models, 1)
+	require.Len(t, market.Models[0].Baselines, 2, "identical prices must not merge different mapped first examples")
+	references := map[string]string{}
+	for _, price := range market.Models[0].Baselines {
+		require.NotNil(t, price.UsageReference)
+		references[price.UsageReference.Label] = price.UsageReference.AmountUSD
+	}
+	assert.Equal(t, map[string]string{"A first": "0.2", "B first": "0.30000000000000004"}, references, "retain the existing Expr VM numeric semantics")
 }

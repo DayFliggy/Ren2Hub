@@ -76,7 +76,7 @@ func AvailableRoutePrices(ctx context.Context, userID int) ([]model.Pricing, err
 	result := make([]model.Pricing, 0)
 	for _, price := range model.GetPricing() {
 		if visible[price.ModelName] {
-			result = append(result, price)
+			result = append(result, publicUsageReferences(price))
 		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ModelName < result[j].ModelName })

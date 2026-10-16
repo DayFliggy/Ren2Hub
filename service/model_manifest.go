@@ -222,6 +222,7 @@ func discoverModelRoutes(ctx context.Context, input ModelManifestRequest) (disco
 }
 
 type modelRoutePrice struct {
+	usageExamples  []jsplugin.UsageExample
 	configured     bool
 	version        string
 	values         model.PricingValues
@@ -273,13 +274,14 @@ func modelRoutePrices(generation *jsplugin.RoutingGeneration, channel *model.Cha
 			continue
 		}
 		schema := plugin.Meta.UsageFactsForModels(actual, requested)
+		_, examples := plugin.Meta.UsageForModels(actual, requested)
 		effective, _, err := model.ResolveTaskPricingValues(plugin.Meta.Key, schema, entry.Effective, prices[actual].Effective)
 		if err != nil {
 			continue
 		}
 		results = append(results, modelRoutePrice{
 			configured: model.ModelPriceConfigured(effective), version: model.ModelPricingVersion(effective), values: effective,
-			pluginKey: plugin.Meta.Key, pluginName: plugin.Meta.Name, usageSchema: schema,
+			pluginKey: plugin.Meta.Key, pluginName: plugin.Meta.Name, usageSchema: schema, usageExamples: examples,
 			cacheWriteMode: entry.CacheWriteMode, billingDetails: model.ResolveLegacyBillingDetails(requested, effective, entry.Configured),
 		})
 	}

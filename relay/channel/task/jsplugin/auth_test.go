@@ -2,9 +2,12 @@ package jsplugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,10 +19,94 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	vertexcore "github.com/QuantumNous/new-api/relay/channel/vertex"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPluginResponseReusesSelectedCredentials(t *testing.T) {
+	previous := acquireAccessToken
+	pluginAuthCache = sync.Map{}
+	t.Cleanup(func() { acquireAccessToken = previous; pluginAuthCache = sync.Map{} })
+	exchanges := 0
+	acquireAccessToken = func(context.Context, vertexcore.Credentials, string) (string, error) {
+		exchanges++
+		if exchanges > 1 {
+			return "", errors.New("token exchange unavailable after submission")
+		}
+		return "attempt-token", nil
+	}
+	const source = `export const meta={apiVersion:1,key:"auth-snapshot",name:"Auth Snapshot",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task",auth:{type:"oauth2_jwt"}};
+export function buildSubmitRequest(ctx){return {url:ctx.baseUrl+"/submit",headers:{Authorization:ctx.authHeader}}}
+export function parseSubmitResponse(ctx){if(ctx.authHeader!=="Bearer attempt-token")throw new Error("credential changed");return {taskId:"accepted"}}
+export function buildQueryRequest(){return {url:"https://aiplatform.googleapis.com"}}
+export function parseTaskResult(){return {status:"SUCCESS"}};`
+	plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	adaptor := New(plugin)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://aiplatform.googleapis.com", ApiKey: `{"project_id":"test-project"}`}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
+	adaptor.Init(info)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	c.Set("task_request", map[string]any{"prompt": "p"})
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	// Simulate expiry of the shared token cache while a provider is processing.
+	pluginAuthCache = sync.Map{}
+	response, taskErr := adaptor.ParseResponse(c, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`))}, info)
+	require.Nil(t, taskErr)
+	require.NotNil(t, response)
+	assert.Equal(t, "accepted", response.UpstreamTaskID)
+	assert.Equal(t, 1, exchanges)
+}
+
+func TestPluginCredentialFailurePrecedesHookAndReservation(t *testing.T) {
+	previous := acquireAccessToken
+	t.Cleanup(func() { acquireAccessToken = previous; pluginAuthCache = sync.Map{} })
+	for _, tc := range []struct {
+		name       string
+		failure    error
+		invalidKey bool
+	}{
+		{"deleted service account", &types.ProviderCredentialError{Err: errors.New("Vertex service account no longer exists")}, true},
+		{"rate limited exchange", errors.New("Google token exchange returned HTTP 429"), false},
+		{"request cancelled", context.Canceled, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pluginAuthCache = sync.Map{}
+			acquireAccessToken = func(context.Context, vertexcore.Credentials, string) (string, error) { return "", tc.failure }
+			const source = `export const meta={apiVersion:1,key:"auth-failure",name:"Auth Failure",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task",auth:{type:"oauth2_jwt"}};
+export function buildSubmitRequest(){throw new Error("hook must not run after credential failure")}
+export function parseSubmitResponse(){return {taskId:"unused"}}
+export function buildQueryRequest(){return {url:"https://aiplatform.googleapis.com"}}
+export function parseTaskResult(){return {status:"SUCCESS"}};`
+			plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+			require.NoError(t, err)
+			adaptor := New(plugin)
+			reservations := 0
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://aiplatform.googleapis.com", ApiKey: `{"project_id":"test-project","client_email":"test@example.test","private_key":"local-loader-fixture"}`}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
+			info.BeforeSend = func(io.Reader) error { reservations++; return nil }
+			adaptor.Init(info)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+			c.Set("task_request", map[string]any{"prompt": "p"})
+			failure := adaptor.ValidateRequestAndSetAction(c, info)
+			require.NotNil(t, failure)
+			assert.ErrorIs(t, failure.Error, tc.failure)
+			assert.NotContains(t, failure.Message, "hook must not run")
+			assert.False(t, info.UpstreamSent)
+			assert.Zero(t, reservations)
+			apiErr := service.APIErrorFromTaskError(failure)
+			if tc.invalidKey {
+				assert.Equal(t, types.ErrorCodeChannelInvalidKey, apiErr.GetErrorCode())
+				assert.Equal(t, http.StatusUnauthorized, apiErr.StatusCode)
+			} else {
+				assert.NotEqual(t, types.ErrorCodeChannelInvalidKey, apiErr.GetErrorCode())
+			}
+		})
+	}
+}
 
 func TestOAuth2JWTAuthCachesAndRefreshes(t *testing.T) {
 	pluginAuthCache = sync.Map{}
@@ -128,7 +215,8 @@ export function buildContentRequest(ctx){return {url:ctx.baseUrl+"/content/"+ctx
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 			task := &model.Task{PrivateData: model.TaskPrivateData{UpstreamTaskID: "t1"}}
 
-			submit := adaptor.submitContext(c, info)
+			submit, err := adaptor.submitContext(c, info)
+			require.NoError(t, err)
 			query, err := adaptor.queryContext(task, tc.key, base, "")
 			require.NoError(t, err)
 			batch, err := adaptor.batchQueryContext(tc.key, base, "", nil)

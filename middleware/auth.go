@@ -9,7 +9,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -288,9 +287,7 @@ func TokenOrUserAuth() func(c *gin.Context) {
 }
 
 // TokenAuthReadOnly 宽松版本的令牌认证中间件，用于只读查询接口。
-// 只验证令牌 key 是否存在，不检查令牌状态、过期时间和额度。
-// 即使令牌已过期、已耗尽或已禁用，也允许访问。
-// 仍然检查用户是否被封禁。
+// 已过期或耗尽的令牌仍可查询；禁用、IP 限制与用户封禁继续生效。
 func TokenAuthReadOnly() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		key := c.Request.Header.Get("Authorization")
@@ -306,7 +303,9 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		parts := strings.Split(key, "-")
 		key = parts[0]
 
-		token, err := model.GetTokenByKey(key, false)
+		// Read-only queries expose account data, so authorization must not use
+		// stale metadata after a cache invalidation failure.
+		token, err := model.GetTokenByKey(key, true)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenInvalid)))
@@ -322,6 +321,11 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		// data, such as token usage logs; only explicitly disabled tokens are denied.
 		if token.Status == common.TokenStatusDisabled {
 			common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenStatusUnavailable)))
+			c.Abort()
+			return
+		}
+		if err := tokenIPRestrictionError(c, token); err != nil {
+			common.ApiErrorStatus(c, http.StatusForbidden, err)
 			c.Abort()
 			return
 		}
@@ -419,20 +423,9 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		allowIps := token.GetIpLimits()
-		if len(allowIps) > 0 {
-			clientIp := c.ClientIP()
-			logger.LogDebug(c, "Token has IP restrictions, checking client IP %s", clientIp)
-			ip := net.ParseIP(clientIp)
-			if ip == nil {
-				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthClientIPUnresolved))
-				return
-			}
-			if common.IsIpInCIDRList(ip, allowIps) == false {
-				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenIPNotAllowed), types.ErrorCodeAccessDenied)
-				return
-			}
-			logger.LogDebug(c, "Client IP %s passed the token IP restrictions check", clientIp)
+		if err := tokenIPRestrictionError(c, token); err != nil {
+			abortWithOpenAiMessage(c, http.StatusForbidden, err.Error(), types.ErrorCodeAccessDenied)
+			return
 		}
 
 		userCache, err := model.GetUserCache(token.UserId)
@@ -456,6 +449,21 @@ func TokenAuth() func(c *gin.Context) {
 		}
 		c.Next()
 	}
+}
+
+func tokenIPRestrictionError(c *gin.Context, token *model.Token) error {
+	allowIPs := token.GetIpLimits()
+	if len(allowIPs) == 0 {
+		return nil
+	}
+	ip := net.ParseIP(c.ClientIP())
+	if ip == nil {
+		return errors.New(i18n.T(c, i18n.MsgAuthClientIPUnresolved))
+	}
+	if !common.IsIpInCIDRList(ip, allowIPs) {
+		return errors.New(i18n.T(c, i18n.MsgAuthTokenIPNotAllowed))
+	}
+	return nil
 }
 
 func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) error {

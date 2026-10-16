@@ -10,6 +10,7 @@ import {
   getAccessibleConsoleNavGroups,
 } from '@/constants/navigation/consoleNav'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -17,12 +18,15 @@ const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const app = useAppStore()
 
 // Routes, labels, icons and access rules stay aligned with the sidebar.
 const entries = computed(() =>
   [
     ...getAccessibleConsoleNavGroups({
       isAdmin: auth.isAdmin,
+      isRoot: auth.isRoot,
+      featureStatus: (feature) => app.featureStatus(feature),
       hasPermission: auth.hasPermission,
     }).flatMap((group) => group.items),
     ...consoleNavTools,
@@ -84,7 +88,7 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-watch(query, () => {
+watch(filtered, () => {
   activeIndex.value = 0
 })
 

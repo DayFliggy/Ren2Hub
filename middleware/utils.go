@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
@@ -34,4 +36,16 @@ func abortWithMidjourneyMessage(c *gin.Context, statusCode int, code int, descri
 	})
 	c.Abort()
 	logger.LogError(c.Request.Context(), description)
+}
+
+// abortInvalidRequest preserves body-read classification and wraps the cause only at the HTTP boundary.
+func abortInvalidRequest(c *gin.Context, err error) {
+	abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+}
+
+func invalidRequestStatus(err error) int {
+	if common.IsRequestBodyTooLargeError(err) {
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusBadRequest
 }

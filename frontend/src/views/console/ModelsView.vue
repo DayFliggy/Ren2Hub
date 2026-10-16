@@ -17,6 +17,7 @@ import ModelPriceMatrix from '@/components/console/models/ModelPriceMatrix.vue'
 import ModelMarketDetails from '@/components/console/models/ModelMarketDetails.vue'
 import { useModelMarket } from '@/composables/useModelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
+import { PRICE_SORTS } from '@/types/pricingReference'
 import type { MarketModelType } from '@/types/modelMarket'
 
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
@@ -60,7 +61,7 @@ const billingOptions = computed(() => [
   ),
 ])
 const sortOptions = computed(() =>
-  (['default', 'name', 'input', 'call'] as const).map((value) => ({
+  PRICE_SORTS.map((value) => ({
     value,
     label: t(`sorts.${value}`),
   }))

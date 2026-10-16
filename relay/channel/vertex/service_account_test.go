@@ -1,6 +1,7 @@
 package vertex
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -42,7 +43,7 @@ func TestServiceAccountTokenExchangeVerifiesDespiteChannelTLSSkip(t *testing.T) 
 		ChannelSetting: dto.ChannelSettings{TLSInsecureSkipVerify: true},
 	}}
 
-	_, err = getAccessToken(adaptor, info)
+	_, err = getAccessToken(context.Background(), adaptor, info)
 	var verifyErr *tls.CertificateVerificationError
 	require.ErrorAs(t, err, &verifyErr, "the credential exchange must keep verifying the token endpoint")
 	assert.Zero(t, exchanges.Load())

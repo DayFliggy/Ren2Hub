@@ -37,6 +37,10 @@ type ModelPricingChange struct {
 }
 
 type ModelPricingEntry struct {
+	UsageFacts    map[string]jsplugin.UsageFieldSchema `json:"-"`
+	UsageExamples []jsplugin.UsageExample              `json:"usage_examples,omitempty"`
+	PluginKey     string                               `json:"-"`
+	PluginName    string                               `json:"-"`
 	ModelPricingDescription
 	PluginVariants []ModelPricingPluginVariant          `json:"plugin_variants,omitempty"`
 	ModelName      string                               `json:"model_name"`
@@ -46,6 +50,7 @@ type ModelPricingEntry struct {
 }
 
 type ModelPricingPluginVariant struct {
+	UsageFacts    map[string]jsplugin.UsageFieldSchema `json:"-"`
 	PluginKey     string                               `json:"plugin_key"`
 	PluginName    string                               `json:"plugin_name"`
 	Icon          string                               `json:"icon,omitempty"`
@@ -325,10 +330,14 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 		entry.CacheWriteMode = ResolveCacheWriteMode(name, configured)
 		entry.BillingDetails = ResolveLegacyBillingDetails(name, entry.Effective, configured)
 		if plugin, ok := generation.GetByModel(name); ok {
-			entry.UsageSchema, _ = plugin.Meta.UsageForModel(name)
+			entry.UsageSchema, entry.UsageExamples = plugin.Meta.UsageForModel(name)
+			entry.UsageFacts = plugin.Meta.UsageFactsForModels(name)
+			entry.PluginKey, entry.PluginName = plugin.Meta.Key, plugin.Meta.Name
 		} else if target, ok := ResolveTaskModelAlias(generation, name); ok {
 			if plugin, ok := generation.Get(target.PluginKey); ok {
-				entry.UsageSchema, _ = plugin.Meta.UsageForModel(target.Declared)
+				entry.UsageSchema, entry.UsageExamples = plugin.Meta.UsageForModel(target.Declared)
+				entry.UsageFacts = plugin.Meta.UsageFactsForModels(target.Declared)
+				entry.PluginKey, entry.PluginName = plugin.Meta.Key, plugin.Meta.Name
 			}
 		}
 		plugins := generation.PluginsByModel(name)
@@ -366,7 +375,7 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 				}
 				entry.PluginVariants = append(entry.PluginVariants, ModelPricingPluginVariant{
 					PluginKey: plugin.Meta.Key, PluginName: plugin.Meta.Name, Icon: plugin.Meta.Icon,
-					UsageSchema: schema, UsageExamples: examples, Configured: configuredExpr, Effective: expression,
+					UsageSchema: schema, UsageExamples: examples, UsageFacts: plugin.Meta.UsageFactsForModels(name), Configured: configuredExpr, Effective: expression,
 					Compatible: billing_setting.TaskExprCompatible(expression, plugin.Meta.UsageFactsForModels(name)),
 				})
 			}

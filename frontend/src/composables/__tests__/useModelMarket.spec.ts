@@ -60,7 +60,7 @@ describe('model market state and request lifecycle', () => {
     market.channel.value = 11
     market.keyword.value = 'OpenAI'
     market.billing.value = 'token'
-    market.sort.value = 'input'
+    market.sort.value = 'input-asc'
     const ids = market.filtered.value.map((model) => model.id)
     expect(ids).toEqual(['gpt-4.1', 'audio-preview'])
     for (const view of ['channels', 'comparison', 'models'] as const) {

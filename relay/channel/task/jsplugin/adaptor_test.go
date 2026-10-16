@@ -1267,7 +1267,8 @@ func TestSubmitContextExposesOriginTasks(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 
-	ctx := adaptor.submitContext(c, info)
+	ctx, err := adaptor.submitContext(c, info)
+	require.NoError(t, err)
 
 	originTasks, ok := ctx["originTasks"].([]map[string]any)
 	require.True(t, ok)
@@ -1291,7 +1292,8 @@ func TestSubmitContextOmitsOriginTasksWhenEmpty(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 
-	ctx := adaptor.submitContext(c, info)
+	ctx, err := adaptor.submitContext(c, info)
+	require.NoError(t, err)
 
 	_, ok := ctx["originTasks"]
 	assert.False(t, ok)
@@ -1317,7 +1319,8 @@ func TestSubmitContextOriginTasksNilDataOnInvalidJSON(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 
-	ctx := adaptor.submitContext(c, info)
+	ctx, err := adaptor.submitContext(c, info)
+	require.NoError(t, err)
 
 	originTasks, ok := ctx["originTasks"].([]map[string]any)
 	require.True(t, ok)
@@ -1336,13 +1339,17 @@ func TestSubmitContextNormalizesRequestBodyOnEveryCall(t *testing.T) {
 	c.Set("task_request", map[string]any{"prompt": string([]byte{0xff}), "count": int64(math.MaxInt64)})
 
 	normalized := map[string]any{"prompt": "�", "count": float64(math.MaxInt64)}
-	assert.Equal(t, normalized, adaptor.submitContext(c, info)["requestBody"])
-	assert.Equal(t, normalized, adaptor.submitContext(c, info)["requestBody"])
-	assert.Equal(t, normalized, adaptor.submitContext(nil, info)["requestBody"])
+	for _, requestContext := range []*gin.Context{c, c, nil} {
+		ctx, err := adaptor.submitContext(requestContext, info)
+		require.NoError(t, err)
+		assert.Equal(t, normalized, ctx["requestBody"])
+	}
 
 	replaced := map[string]any{"prompt": "second", "count": int64(2)}
 	c.Set("task_request", replaced)
-	assert.Equal(t, replaced, adaptor.submitContext(c, info)["requestBody"])
+	ctx, err := adaptor.submitContext(c, info)
+	require.NoError(t, err)
+	assert.Equal(t, replaced, ctx["requestBody"])
 }
 
 func TestTaskAdaptorRejectsRequestHostOverride(t *testing.T) {

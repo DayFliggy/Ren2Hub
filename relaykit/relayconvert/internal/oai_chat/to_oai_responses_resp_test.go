@@ -1,6 +1,7 @@
 package oaichat
 
 import (
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -211,6 +212,10 @@ func TestChatCompletionsStreamToResponsesEmitsReasoningSummaryPartLifecycle(t *t
 		responsesEventOutputItemDone,
 		responsesEventCompleted,
 	}, types)
+
+	initial, err := kitutil.Marshal(events[1].Payload)
+	require.NoError(t, err)
+	require.Contains(t, string(initial), `"summary":[]`)
 
 	partAdded := events[2].Payload
 	assert.Equal(t, "resp_1_reasoning_0", partAdded.ItemID)

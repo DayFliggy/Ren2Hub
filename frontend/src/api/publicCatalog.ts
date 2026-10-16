@@ -197,10 +197,9 @@ function parseMovers(value: unknown): RankingMover[] {
 }
 
 /** Shared display projection accepts exact decimals from authenticated catalogs. */
-export type CatalogPricingInput = Pick<
-  CatalogModel,
-  'quota_type' | 'billing_mode'
-> &
+export type CatalogPricingInput = {
+  pricing_values?: import('./pricingConfig').PricingValues
+} & Pick<CatalogModel, 'quota_type' | 'billing_mode'> &
   Partial<
     Record<
       | 'model_price'
@@ -219,6 +218,20 @@ export function catalogPrices(
   model: CatalogPricingInput,
   unit: 'M' | 'K'
 ): CatalogPrice[] {
+  if (model.pricing_values) {
+    const values = model.pricing_values
+    model = {
+      ...model,
+      model_price: values.ModelPrice,
+      model_ratio: values.ModelRatio,
+      completion_ratio: values.CompletionRatio,
+      cache_ratio: values.CacheRatio,
+      create_cache_ratio: values.CreateCacheRatio,
+      image_ratio: values.ImageRatio,
+      audio_ratio: values.AudioRatio,
+      audio_completion_ratio: values.AudioCompletionRatio,
+    }
+  }
   if (
     model.billing_mode === 'tiered_expr' ||
     model.billing_mode === 'unconfigured'

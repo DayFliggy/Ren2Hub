@@ -4,6 +4,13 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { publicCatalogApi, type PricingCatalog } from '@/api/publicCatalog'
 import { modelPricingMessages } from '@/i18n/modelPricing'
+import {
+  compareReferencePrices,
+  publicPricingReferences,
+} from '@/features/pricing/reference'
+import { isAudioEndpoint } from '@/utils/modelMarket'
+import { PRICE_SORTS, type PriceSort } from '@/types/pricingReference'
+import { pricingReferenceMessages } from '@/i18n/pricingReference'
 import PublicPage from '@/components/public/PublicPage.vue'
 import ModelPriceItems from '@/components/console/models/ModelPriceItems.vue'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
@@ -13,7 +20,14 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages }),
+const messages = {
+  'zh-CN': {
+    ...modelPricingMessages['zh-CN'],
+    reference: pricingReferenceMessages['zh-CN'],
+  },
+  en: { ...modelPricingMessages.en, reference: pricingReferenceMessages.en },
+}
+const { t } = useI18n({ useScope: 'local', messages }),
   route = useRoute()
 const catalog = ref<PricingCatalog | null>(null),
   loading = ref(false),
@@ -22,6 +36,7 @@ const search = ref(typeof route.query.q === 'string' ? route.query.q : ''),
   vendor = ref(''),
   mode = ref(''),
   unit = ref<'M' | 'K'>(route.query.tokenUnit === 'K' ? 'K' : 'M'),
+  sort = ref<PriceSort>('default'),
   page = ref(1),
   pageSize = ref(20)
 let controller: AbortController | undefined
@@ -29,7 +44,7 @@ const detailId = computed(() => String(route.params.modelId ?? ''))
 const detail = computed(() =>
   catalog.value?.models.find((model) => model.model_name === detailId.value)
 )
-const models = computed(() =>
+const filteredModels = computed(() =>
   (catalog.value?.models ?? []).filter(
     (model) =>
       (!search.value ||
@@ -47,6 +62,44 @@ const models = computed(() =>
               : 'token') === mode.value)
   )
 )
+const referencePrices = computed(
+  () =>
+    new Map(
+      (catalog.value?.models ?? []).map((model) => [
+        model.model_name,
+        publicPricingReferences(model),
+      ])
+    )
+)
+const models = computed(() => {
+  const rows = [...filteredModels.value]
+  if (sort.value === 'name')
+    return rows.sort((a, b) => a.model_name.localeCompare(b.model_name))
+  if (sort.value === 'default') return rows
+  const audio = (model: PricingCatalog['models'][number]) =>
+    model.supported_endpoint_types.length > 0 &&
+    model.supported_endpoint_types.every(isAudioEndpoint)
+  return rows.sort((a, b) =>
+    compareReferencePrices(
+      referencePrices.value.get(a.model_name) ?? [],
+      referencePrices.value.get(b.model_name) ?? [],
+      sort.value,
+      audio(a),
+      audio(b)
+    )
+  )
+})
+const sortOptions = computed(() =>
+  PRICE_SORTS.map((value) => ({ value, label: t(`reference.sorts.${value}`) }))
+)
+const sortModel = computed({
+  get: () => sort.value,
+  set: (value: string) => {
+    sort.value = PRICE_SORTS.includes(value as PriceSort)
+      ? (value as PriceSort)
+      : 'default'
+  },
+})
 const vendorOptions = computed(() =>
   (catalog.value?.vendors ?? []).map((item) => ({
     value: String(item.id),
@@ -76,7 +129,7 @@ const visible = computed(() =>
     page.value * pageSize.value
   )
 )
-watch([search, vendor, mode, pageSize], () => {
+watch([search, vendor, mode, sort, pageSize], () => {
   page.value = 1
 })
 async function load() {
@@ -172,6 +225,12 @@ onBeforeUnmount(() => controller?.abort())
           :label="t('billingMode')"
           :prefix-label="t('billingMode')"
           :placeholder="t('filterAll')"
+        />
+        <FilterSelect
+          v-model="sortModel"
+          :options="sortOptions"
+          :label="t('reference.sort')"
+          :prefix-label="t('reference.sort')"
         />
         <FilterSelect
           v-model="unitModel"

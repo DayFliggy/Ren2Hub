@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import ReferencePrices from './ReferencePrices.vue'
 import { useI18n } from 'vue-i18n'
 import type { MarketPricing, MarketPriceLine } from '@/types/modelMarket'
 import { formatUnitPriceUSD } from '@/utils/decimal'
@@ -63,7 +64,10 @@ function label(line: MarketPriceLine) {
       >{{ t('unconfigured') }}</span
     >
     <template v-else-if="pricing.billingMode === 'dynamic'">
-      <span class="market-expression-label">{{ t('expressionPrice') }}</span>
+      <ReferencePrices
+        :prices="pricing.referencePrices ?? []"
+        :details="mode === 'full'"
+      />
       <pre v-if="mode === 'full'" class="market-expression">{{
         pricing.expression
       }}</pre>

@@ -35,6 +35,7 @@ const toast = useToast()
 const form = reactive({
   type: 'auto' as TokenType,
   conversion_policy: 'safe' as ConversionPolicy,
+  allow_user_quota_query: true,
   name: '',
   model_limits: [] as string[],
   quotaDollars: '',
@@ -60,6 +61,7 @@ watch(
     const e = props.editing
     form.type = e?.type ?? 'auto'
     form.conversion_policy = e?.conversion_policy ?? 'safe'
+    form.allow_user_quota_query = e ? (e.allow_user_quota_query ?? false) : true
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
     form.quotaDollars =
@@ -105,6 +107,7 @@ async function save() {
     const payload: Record<string, unknown> = {
       name: form.name,
       conversion_policy: form.conversion_policy,
+      allow_user_quota_query: form.allow_user_quota_query,
       model_limits: form.model_limits,
       unlimited: form.unlimited,
       available_quota: form.unlimited
@@ -278,6 +281,25 @@ async function save() {
             />
           </div>
         </div>
+      </div>
+
+      <div
+        class="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3"
+      >
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-[var(--text-secondary)]">
+            {{ t('keys.allowUserQuotaQuery') }}
+          </p>
+          <p class="mt-1 text-xs leading-relaxed text-[var(--text-tertiary)]">
+            {{ t('keys.allowUserQuotaQueryHint') }}
+          </p>
+        </div>
+        <ConsoleToggle
+          v-model="form.allow_user_quota_query"
+          name="token-allow-user-quota-query"
+          :label="t('keys.allowUserQuotaQuery')"
+          :disabled="saving"
+        />
       </div>
 
       <section

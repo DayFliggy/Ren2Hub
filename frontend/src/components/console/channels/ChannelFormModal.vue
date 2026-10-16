@@ -34,6 +34,7 @@ import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
 import AdvancedChannelEditor from './AdvancedChannelEditor.vue'
+import ProviderChannelSettings from './ProviderChannelSettings.vue'
 import FetchedModelsDialog from './FetchedModelsDialog.vue'
 import {
   advancedChannelPreset,
@@ -80,6 +81,10 @@ const advancedOpen = ref(false)
 const originalSetting = ref<Record<string, unknown>>({})
 const originalOtherSettings = ref<Record<string, unknown>>({})
 const settingsError = ref('')
+const awsApiType = ref('invoke_model')
+const vertexKeyType = ref('json')
+const vertexProjectId = ref('')
+const vertexRegion = ref('')
 const responsesWebSocket = ref(false)
 const passThroughBody = ref(false)
 const tlsInsecureSkipVerify = ref(false)
@@ -519,6 +524,19 @@ watch(
       const setting = parseChannelObject(ch?.setting)
       originalSetting.value = setting
       originalOtherSettings.value = parseChannelObject(ch?.settings)
+      awsApiType.value =
+        typeof setting.aws_api_type === 'string' && setting.aws_api_type
+          ? setting.aws_api_type
+          : 'invoke_model'
+      vertexProjectId.value =
+        typeof setting.vertex_project_id === 'string'
+          ? setting.vertex_project_id
+          : ''
+      vertexKeyType.value =
+        originalOtherSettings.value.vertex_key_type === 'api_key'
+          ? 'api_key'
+          : 'json'
+      vertexRegion.value = typeof ch?.other === 'string' ? ch.other : ''
       for (const field of CHANNEL_SETTING_FIELDS)
         fieldSettings[field.key] =
           originalOtherSettings.value[field.key] === true
@@ -591,6 +609,21 @@ async function submit() {
       channel_ratio: form.channelRatio,
     }
     const settings = { ...originalSetting.value }
+    if (canSensitiveWrite.value) {
+      if (
+        form.type === 33 &&
+        awsApiType.value !== (settings.aws_api_type || 'invoke_model')
+      )
+        settings.aws_api_type = awsApiType.value
+      if (form.type === 41) {
+        const projectId =
+          vertexKeyType.value === 'api_key' ? vertexProjectId.value.trim() : ''
+        if (projectId !== (settings.vertex_project_id ?? ''))
+          settings.vertex_project_id = projectId
+        if (vertexRegion.value.trim() !== (props.editing?.other ?? ''))
+          base.other = vertexRegion.value.trim()
+      }
+    }
     if (
       canSensitiveWrite.value &&
       passThroughBody.value !== (settings.pass_through_body_enabled === true)
@@ -630,6 +663,11 @@ async function submit() {
     }
     if (canSensitiveWrite.value) {
       const otherSettings = { ...originalOtherSettings.value }
+      if (
+        form.type === 41 &&
+        vertexKeyType.value !== (otherSettings.vertex_key_type || 'json')
+      )
+        otherSettings.vertex_key_type = vertexKeyType.value
       for (const field of visibleFieldSettings.value) {
         const value = fieldSettings[field.key] === true
         if (value !== (originalOtherSettings.value[field.key] === true))
@@ -860,6 +898,14 @@ async function submit() {
         </div>
 
         <div class="channel-form-section-body">
+          <ProviderChannelSettings
+            v-model:aws-api-type="awsApiType"
+            v-model:vertex-key-type="vertexKeyType"
+            v-model:vertex-project-id="vertexProjectId"
+            v-model:vertex-region="vertexRegion"
+            :channel-type="form.type"
+            :disabled="!canSensitiveWrite"
+          />
           <!-- API address -->
           <FormField
             :label="

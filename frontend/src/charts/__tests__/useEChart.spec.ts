@@ -155,3 +155,58 @@ describe('useEChart', () => {
     wrapper.unmount()
   })
 })
+
+it('rebuilds chart labels, tooltip and active colors on theme changes and stops after disposal', async () => {
+  const root = document.documentElement
+  const oldTheme = root.dataset.theme
+  const oldColor = root.style.getPropertyValue('--text-primary')
+  root.style.setProperty('--text-primary', '#112233')
+  root.dataset.theme = 'light'
+  const wrapper = mount(Host, {
+    props: {
+      optionBuilder: (palette) => ({
+        textStyle: { color: palette.textPrimary },
+        tooltip: { textStyle: { color: palette.textPrimary } },
+        series: [
+          {
+            type: 'line',
+            data: [1, 2],
+            emphasis: { label: { color: palette.textPrimary } },
+          },
+        ],
+      }),
+    },
+  })
+  try {
+    await flushPromises()
+    const chart = echartsMock.instances[0]!
+    expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
+      textStyle: { color: '#112233' },
+    })
+    root.style.setProperty('--text-primary', '#ddeeff')
+    root.dataset.theme = 'dark'
+    await flushPromises()
+    expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
+      textStyle: { color: '#ddeeff' },
+      tooltip: { textStyle: { color: '#ddeeff' } },
+      series: [{ emphasis: { label: { color: '#ddeeff' } } }],
+    })
+    root.style.setProperty('--text-primary', '#112233')
+    root.dataset.theme = 'light'
+    await flushPromises()
+    expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
+      textStyle: { color: '#112233' },
+    })
+    wrapper.unmount()
+    const calls = chart.setOption.mock.calls.length
+    root.dataset.theme = 'dark'
+    await flushPromises()
+    expect(chart.setOption).toHaveBeenCalledTimes(calls)
+  } finally {
+    if (oldTheme === undefined) delete root.dataset.theme
+    else root.dataset.theme = oldTheme
+    if (oldColor) root.style.setProperty('--text-primary', oldColor)
+    else root.style.removeProperty('--text-primary')
+    if (wrapper.exists()) wrapper.unmount()
+  }
+})

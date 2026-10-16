@@ -436,6 +436,7 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 		return outcome
 	}
 	if info != nil && info.UpstreamSent {
+		types.ErrOptionWithUpstreamAddresses(common.UpstreamAddresses(c)...)(apiErr)
 		c.Set("gateway_last_upstream_error", apiErr)
 	}
 	outcome.StatusCode, outcome.ProviderCode, outcome.Message, outcome.RetryAfter = apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), apiErr.RetryAfter
@@ -568,7 +569,7 @@ func writeRelayStreamFailure(c *gin.Context, format types.RelayFormat, apiErr *t
 	if format == types.RelayFormatOpenAIRealtime {
 		return
 	}
-	errorValue := map[string]any{"message": apiErr.MaskSensitiveError(), "type": "upstream_error", "code": "stream_interrupted"}
+	errorValue := map[string]any{"message": apiErr.MaskSensitiveError(common.UpstreamAddresses(c)...), "type": "upstream_error", "code": "stream_interrupted"}
 	payload := map[string]any{"error": errorValue}
 	event := ""
 	if format == types.RelayFormatClaude {
@@ -577,9 +578,9 @@ func writeRelayStreamFailure(c *gin.Context, format types.RelayFormat, apiErr *t
 	} else if format == types.RelayFormatOpenAIResponses {
 		// OpenAI Responses error events always carry param, null when no request field is at fault.
 		event, payload["type"], payload["param"] = "error", "error", nil
-		payload["message"], payload["code"], payload["sequence_number"] = apiErr.MaskSensitiveError(), "stream_interrupted", c.GetInt("gateway_stream_sequence")+1
+		payload["message"], payload["code"], payload["sequence_number"] = apiErr.MaskSensitiveError(common.UpstreamAddresses(c)...), "stream_interrupted", c.GetInt("gateway_stream_sequence")+1
 	} else if format == types.RelayFormatGemini {
-		payload["error"] = map[string]any{"code": http.StatusBadGateway, "message": apiErr.MaskSensitiveError(), "status": "INTERNAL"}
+		payload["error"] = map[string]any{"code": http.StatusBadGateway, "message": apiErr.MaskSensitiveError(common.UpstreamAddresses(c)...), "status": "INTERNAL"}
 	}
 	encoded, err := common.Marshal(payload)
 	if err != nil {

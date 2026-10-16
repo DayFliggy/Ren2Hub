@@ -46,7 +46,10 @@ func usageRequestValue(value any) (any, error) {
 }
 
 func (a *TaskAdaptor) submitUsageContext(c *gin.Context, info *relaycommon.RelayInfo) (map[string]any, error) {
-	ctx := a.submitContext(c, info)
+	ctx, err := a.submitContext(c, info)
+	if err != nil {
+		return nil, err
+	}
 	// Account preferences are protocol settings, not metering evidence.
 	delete(ctx, "userSetting")
 	if a.routeRequest != nil {

@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 func decodeModelPriceRequest(c *gin.Context, request any) error {
@@ -201,15 +200,7 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 			taskUsage = true
 		}
 	}
-	version, err := billing.NewModelPriceVersion(request.ModelName, billing.PricingValues(effective), taskUsage)
-	if err != nil {
-		return nil, err
-	}
-	version.UsageSchema = schema
-	quote, err := billing.NewQuote(version, "1", nil, instant)
-	if err != nil {
-		return nil, err
-	}
+
 	input := billingexpr.RequestInput{Headers: request.Request.Headers, Evaluation: billingexpr.NewEvaluation()}
 	input.Evaluation.Now = func() time.Time { return instant }
 	if request.Request.Params != nil {
@@ -244,13 +235,7 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 			return nil, err
 		}
 	}
-	cipher, err := billing.NewEvidenceCipher([]byte(common.CryptoSecret))
-	if err != nil {
-		return nil, common.NewMessage("simulation encryption is not configured")
-	}
-	identity := uuid.NewString()
-	_, charge, err := cipher.Evaluate(quote, usage, input, billing.EvidenceBinding{RequestID: identity, AttemptID: identity, ConfigHash: billing.PricingConfigHash(quote), Phase: "preview"})
-	return charge, err
+	return service.EvaluatePricingPreview(request.ModelName, effective, taskUsage, schema, usage, input, instant)
 }
 
 func applySimulationUsage(values map[string]any, usage *billing.Usage, input *billingexpr.RequestInput) error {

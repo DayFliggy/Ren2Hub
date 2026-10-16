@@ -47,18 +47,18 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if value, ok := c.Get("task_plugin_origin_tasks"); ok {
 		tasks, valid := value.([]*model.Task)
 		if !valid || len(tasks) == 0 {
-			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "origin_task_invalid", http.StatusBadRequest)
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "origin_task_invalid", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}
 		channel, err := model.GetChannelById(tasks[0].ChannelId, true)
 		if err != nil {
-			return service.TaskErrorWrapperLocal(err, "origin_channel_unavailable", http.StatusServiceUnavailable)
+			return service.TaskErrorWrapperLocal(err, "origin_channel_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 		}
 		for _, task := range tasks {
 			if task.UserId != info.UserId || task.PrivateData.TokenId != info.TokenId || task.ChannelId != channel.Id {
-				return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "origin_task_invalid", http.StatusNotFound)
+				return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "origin_task_invalid", http.StatusNotFound, common.UpstreamAddresses(c)...)
 			}
 			if _, _, err := model.ResolveTaskCredential(c.Request.Context(), channel, task); err != nil {
-				return service.TaskErrorWrapperLocal(err, "origin_task_unavailable", http.StatusServiceUnavailable)
+				return service.TaskErrorWrapperLocal(err, "origin_task_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 			}
 			info.OriginTasks = append(info.OriginTasks, relaycommon.OriginTaskRef{TaskID: task.TaskID, UpstreamTaskID: task.GetUpstreamTaskID(), Action: task.Action, Status: string(task.Status), Data: task.Data})
 		}
@@ -75,7 +75,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if info.Action == constant.TaskActionRemix {
 		videoID := c.Param("video_id")
 		if strings.TrimSpace(videoID) == "" {
-			return service.TaskErrorWrapperLocal(fmt.Errorf("video_id is required"), "invalid_request", http.StatusBadRequest)
+			return service.TaskErrorWrapperLocal(fmt.Errorf("video_id is required"), "invalid_request", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}
 		info.OriginTaskID = videoID
 	}
@@ -87,13 +87,13 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// 查找原始任务
 	originTask, exist, err := model.GetByTaskId(info.UserId, info.OriginTaskID)
 	if err != nil {
-		return service.TaskErrorWrapper(err, "get_origin_task_failed", http.StatusInternalServerError)
+		return service.TaskErrorWrapper(err, "get_origin_task_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 	}
 	if !exist || !originTask.ResultRetrievable() || (c.GetInt("token_id") > 0 && originTask.PrivateData.TokenId != c.GetInt("token_id")) {
-		return service.TaskErrorWrapperLocal(errors.New("task_origin_not_exist"), "task_not_exist", http.StatusBadRequest)
+		return service.TaskErrorWrapperLocal(errors.New("task_origin_not_exist"), "task_not_exist", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 	if originTask.PrivateData.TokenId > 0 && originTask.PrivateData.TokenId != info.TokenId {
-		return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "task_not_exist", http.StatusBadRequest)
+		return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "task_not_exist", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 
 	// 从原始任务推导模型名称
@@ -114,10 +114,10 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	// Selection still rechecks token/model permission, then pins the task owner.
 	ch, err := model.GetChannelById(originTask.ChannelId, true)
 	if err != nil {
-		return service.TaskErrorWrapperLocal(err, "channel_not_found", http.StatusBadRequest)
+		return service.TaskErrorWrapperLocal(err, "channel_not_found", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 	if ch.Status != common.ChannelStatusEnabled {
-		return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+		return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 	}
 	info.LockedChannel = ch
 	c.Set("gateway_origin_task", originTask)
@@ -126,7 +126,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if info.Action == constant.TaskActionRemix {
 		snapshot := originTask.PrivateData.BillingContext
 		if snapshot == nil || snapshot.Quote == nil {
-			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_billing_evidence_unavailable", http.StatusServiceUnavailable)
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_billing_evidence_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 		}
 		attributes := map[string]interface{}{}
 		for _, name := range []string{"duration", "resolution", "quantity", "quality"} {
@@ -150,9 +150,10 @@ func ApplyOriginTaskAffinity(c *gin.Context, info *relaycommon.RelayInfo) *dto.T
 // 控制器负责 defer Refund 和成功后 Settle。
 func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitResult, *dto.TaskError) {
 	info.InitChannelMeta(c)
+	c.Set("pluginAllowedHosts", []string(nil))
 	selectedChannel, channelErr := model.GetChannelById(info.ChannelId, true)
 	if channelErr != nil || selectedChannel.GetBaseURL() != info.ChannelBaseUrl {
-		return nil, service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+		return nil, service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 	}
 	endpointID := selectedChannel.GatewayEndpointID()
 
@@ -176,15 +177,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if value, ok := c.Get(pluginruntime.ContextKeyPinnedPlugin); ok {
 		if pinned, valid := value.(pluginruntime.PinnedPlugin); valid && pinned.Plugin != nil {
 			adaptor = taskplugin.New(pinned.Plugin)
+			c.Set("pluginAllowedHosts", append([]string(nil), pinned.Plugin.Meta.AllowedHosts...))
 			platform = constant.TaskPlatform(pinned.Plugin.Meta.Key)
 			info.TaskPluginRef = &model.TaskPluginRef{Key: pinned.Plugin.Meta.Key, Version: pinned.Plugin.Meta.Version, SourceHash: pinned.Plugin.SourceHash}
 			if !service.TaskPluginChannelEligible(selectedChannel, pinned.Plugin.Meta.Key) {
-				return nil, service.TaskErrorWrapperLocal(errors.New("channel is not bound to the pinned plugin"), "plugin_channel_unavailable", http.StatusServiceUnavailable)
+				return nil, service.TaskErrorWrapperLocal(errors.New("channel is not bound to the pinned plugin"), "plugin_channel_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 			}
 		}
 	}
 	if adaptor == nil {
-		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
+		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 	// Resolve the final upstream identity before a plugin builds its descriptor.
 	modelName := info.OriginModelName
@@ -196,7 +198,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	info.OriginModelName = modelName
 	info.UpstreamModelName = modelName
 	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
@@ -210,14 +212,14 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	requestBody, err := adaptor.BuildRequestBody(c, info)
 	if err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "build_request_failed", http.StatusBadRequest)
+		return nil, service.TaskErrorWrapperLocal(err, "build_request_failed", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 
 	// Admission precedes billing; retries reserve any price increase.
 	helper.HandleChannelRatio(c, info)
 	if info.BeforeUpstream != nil {
 		if err := info.BeforeUpstream(); err != nil {
-			return nil, service.TaskErrorWrapperLocal(err, service.GatewayAdmissionErrorCode(err), service.GatewayAdmissionHTTPStatus(err))
+			return nil, service.TaskErrorWrapperLocal(err, service.GatewayAdmissionErrorCode(err), service.GatewayAdmissionHTTPStatus(err), common.UpstreamAddresses(c)...)
 		}
 	}
 	info.ForcePreConsume = true
@@ -284,14 +286,14 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		if !info.UpstreamSent {
 			var apiErr *types.NewAPIError
 			if errors.As(err, &apiErr) {
-				return nil, service.TaskErrorFromAPIError(apiErr)
+				return nil, service.TaskErrorFromAPIError(apiErr, common.UpstreamAddresses(c)...)
 			}
-			return nil, service.TaskErrorWrapperLocal(err, "request_preparation_failed", http.StatusServiceUnavailable)
+			return nil, service.TaskErrorWrapperLocal(err, "request_preparation_failed", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 		}
-		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 	}
 	if resp == nil {
-		return nil, service.TaskErrorWrapper(errors.New("empty upstream response"), "invalid_response", http.StatusBadGateway)
+		return nil, service.TaskErrorWrapper(errors.New("empty upstream response"), "invalid_response", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 	}
 	defer resp.Body.Close()
 	info.UpstreamAccepted = resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
@@ -299,7 +301,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		responseBody, _ := io.ReadAll(resp.Body)
 		apiErr := types.NewErrorWithStatusCode(errors.New(string(responseBody)), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 		apiErr.RetryAfter, _ = service.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-		return nil, service.TaskErrorWrapper(apiErr, "fail_to_fetch_task", resp.StatusCode)
+		return nil, service.TaskErrorWrapper(apiErr, "fail_to_fetch_task", resp.StatusCode, common.UpstreamAddresses(c)...)
 	}
 
 	// 11. 解析响应
@@ -320,7 +322,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		return nil, taskErr
 	}
 	if parsed == nil || strings.TrimSpace(parsed.UpstreamTaskID) == "" || (parsed.ClientResponse == nil && info.TaskPluginRef == nil) {
-		return nil, service.TaskErrorWrapper(errors.New("accepted task response is incomplete"), "invalid_response", http.StatusBadGateway)
+		return nil, service.TaskErrorWrapper(errors.New("accepted task response is incomplete"), "invalid_response", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 	}
 	info.UpstreamTaskAccepted = true
 
@@ -345,7 +347,7 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
 	if !ok {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
+		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		return
 	}
 
@@ -360,7 +362,7 @@ func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	c.Writer.Header().Set("Content-Type", "application/json")
 	_, err := io.Copy(c.Writer, bytes.NewBuffer(respBody))
 	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError)
+		taskResp = service.TaskErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 		return
 	}
 	return
@@ -379,20 +381,20 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 
 	originTask, exist, err := model.GetByTaskId(userId, taskId)
 	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
+		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 		return
 	}
 	if !exist {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		return
 	}
 
 	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
 	if !originTask.ResultRetrievable() || (c.GetInt("token_id") > 0 && originTask.PrivateData.TokenId != c.GetInt("token_id")) {
-		return nil, service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusNotFound)
+		return nil, service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusNotFound, common.UpstreamAddresses(c)...)
 	}
 	if err := service.TokenModelPermissionError(c, taskModelName(originTask)); err != nil {
-		return nil, service.TaskErrorFromAPIError(err)
+		return nil, service.TaskErrorFromAPIError(err, common.UpstreamAddresses(c)...)
 	}
 
 	// OpenAI Video API 格式: 走各 adaptor 的 ConvertToOpenAIVideo
@@ -402,23 +404,23 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 			var resolveErr error
 			adaptor, resolveErr = GetTaskAdaptorForTask(originTask)
 			if resolveErr != nil {
-				return nil, service.TaskErrorWrapperLocal(resolveErr, "plugin_unavailable", http.StatusServiceUnavailable)
+				return nil, service.TaskErrorWrapperLocal(resolveErr, "plugin_unavailable", http.StatusServiceUnavailable, common.UpstreamAddresses(c)...)
 			}
 		}
 		if adaptor == nil {
-			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 			return
 		}
 		if converter, ok := adaptor.(channel.OpenAIVideoConverter); ok {
 			openAIVideoData, err := converter.ConvertToOpenAIVideo(originTask)
 			if err != nil {
-				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
+				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 				return
 			}
 			respBody = openAIVideoData
 			return
 		}
-		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
+		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented, common.UpstreamAddresses(c)...)
 		return
 	}
 
@@ -428,7 +430,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		Data: TaskModel2Dto(originTask),
 	})
 	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError, common.UpstreamAddresses(c)...)
 	}
 	return
 }

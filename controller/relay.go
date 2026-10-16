@@ -99,7 +99,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		var err error
 		ws, err = upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			helper.WssError(c, ws, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry()).ToOpenAIError())
+			helper.WssError(c, ws, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry()).ToOpenAIError(common.UpstreamAddresses(c)...))
 			return
 		}
 		defer ws.Close()
@@ -116,19 +116,19 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			writeRelayStreamFailure(c, relayFormat, newAPIError)
 		}
 		if newAPIError != nil && !relayResponseCommitted(c, relayInfo) && !requestContextDone(c) {
-			logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
+			logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(newAPIError.MaskSensitiveError(common.UpstreamAddresses(c)...))))
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
-				helper.WssError(c, ws, newAPIError.ToOpenAIError())
+				helper.WssError(c, ws, newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...))
 			case types.RelayFormatClaude:
 				c.JSON(newAPIError.StatusCode, gin.H{
 					"type":  "error",
-					"error": newAPIError.ToClaudeError(),
+					"error": newAPIError.ToClaudeError(common.UpstreamAddresses(c)...),
 				})
 			default:
 				c.JSON(newAPIError.StatusCode, gin.H{
-					"error": newAPIError.ToOpenAIError(),
+					"error": newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...),
 				})
 			}
 		}
@@ -465,6 +465,13 @@ func addUsedChannel(c *gin.Context, channelId int) {
 // first SSE frame can be observed before its payload is parsed, so
 // FirstResponseTime alone is not evidence that a valid response was sent.
 func relayResponseCommitted(c *gin.Context, info *relaycommon.RelayInfo) bool {
+	if c != nil {
+		if value, ok := c.Get(responsesWSCallStateKey); ok {
+			if state, ok := value.(*responsesWSCallState); ok && state.terminalDelivered.Load() {
+				return true
+			}
+		}
+	}
 	if c != nil && c.Writer != nil && c.Writer.Written() {
 		return true
 	}
@@ -1160,12 +1167,13 @@ func channelID(channel *model.Channel) int {
 }
 
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, info *relaycommon.RelayInfo) {
-	logger.LogError(c, common.LogText("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
+	logger.LogError(c, common.LogText("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.MaskSensitiveError(common.UpstreamAddresses(c)...))))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
+	maskedReason := err.MaskSensitiveErrorWithStatusCode(common.UpstreamAddresses(c)...)
 	if service.ShouldDisableChannel(err) && channelError.AutoBan {
 		gopool.Go(func() {
-			service.DisableChannel(channelError, err.ErrorWithStatusCode())
+			service.DisableChannel(channelError, maskedReason)
 		})
 	}
 
@@ -1202,7 +1210,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(common.UpstreamAddresses(c)...), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
 }

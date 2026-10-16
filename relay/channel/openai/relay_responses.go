@@ -29,9 +29,9 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	}
 	info.ObserveResponseModel(responsesResponse.Model)
 	info.ObserveActualServiceTier(responsesResponse.ServiceTier)
-	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
+	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil {
 		c.Set("response_termination", relayconvert.TerminationFromResponse(&responsesResponse))
-		return relayconvert.UsageFromResponsesUsage(responsesResponse.Usage), types.WithOpenAIError(*oaiError, http.StatusBadGateway)
+		return relayconvert.UsageFromResponsesUsage(responsesResponse.Usage), service.ResponsesAPIError(oaiError, "upstream response failed")
 	}
 
 	terminal := relayconvert.TerminationFromResponse(&responsesResponse)
@@ -83,6 +83,14 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			c.Set("response_termination", terminal)
 		}
 		failed := terminal.Kind == types.ResponseFailed || terminal.Kind == types.ResponseCancelled || event.Type == "error"
+		if failed {
+			masked, err := service.MaskResponsesErrorPayload(common.StringToByteSlice(data), common.UpstreamAddresses(c)...)
+			if err != nil {
+				sr.Stop(err)
+				return
+			}
+			data = string(masked)
+		}
 		if !failed || c.Writer.Written() {
 			// Parsing has succeeded, and native Responses forwards this semantic
 			// event immediately. Image bytes must not consume the prelude budget.
@@ -98,7 +106,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 		if failed {
-			streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream ended: %s", event.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
+			streamErr = service.ResponsesAPIError(event.GetOpenAIError(), fmt.Sprintf("upstream responses stream ended: %s", event.Type))
 			sr.Stop(streamErr)
 		} else if terminal.IsTerminal() {
 			sr.Done()

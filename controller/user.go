@@ -258,15 +258,16 @@ func Register(c *gin.Context) {
 		}
 		// 生成默认令牌
 		token := model.Token{
-			UserId:             cleanUser.Id,
-			Name:               i18n.T(c, i18n.MsgUserDefaultTokenName, map[string]any{"Username": cleanUser.Username}),
-			Key:                key,
-			CreatedTime:        common.GetTimestamp(),
-			AccessedTime:       common.GetTimestamp(),
-			ExpiredTime:        -1,     // 永不过期
-			RemainQuota:        500000, // 示例额度
-			UnlimitedQuota:     true,
-			ModelLimitsEnabled: false,
+			UserId:              cleanUser.Id,
+			Name:                i18n.T(c, i18n.MsgUserDefaultTokenName, map[string]any{"Username": cleanUser.Username}),
+			Key:                 key,
+			CreatedTime:         common.GetTimestamp(),
+			AccessedTime:        common.GetTimestamp(),
+			ExpiredTime:         -1,     // 永不过期
+			RemainQuota:         500000, // 示例额度
+			UnlimitedQuota:      true,
+			AllowUserQuotaQuery: true,
+			ModelLimitsEnabled:  false,
 		}
 		if err := token.Insert(); err != nil {
 			common.ApiErrorT(c, "Failed to create default token")

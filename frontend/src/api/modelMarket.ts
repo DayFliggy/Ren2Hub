@@ -1,3 +1,4 @@
+import { parseUsageReference } from './pricingReference'
 import { api } from './client'
 import {
   invalidResponse,
@@ -98,6 +99,7 @@ function parsePricing(raw: Record<string, unknown>): MarketPricingContract {
     version: requiredString(raw.version, endpoint, false),
     configured,
     values,
+    usage_reference: parseUsageReference(raw.usage_reference, endpoint),
     supported_endpoint_types: parseStringArray(
       raw.supported_endpoint_types,
       endpoint

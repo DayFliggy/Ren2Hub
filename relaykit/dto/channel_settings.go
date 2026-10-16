@@ -11,15 +11,24 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
+type AwsAPIType string
+
+const (
+	AwsAPITypeInvokeModel AwsAPIType = "invoke_model"
+	AwsAPITypeMantle      AwsAPIType = "mantle"
+)
+
 type ChannelSettings struct {
-	TaskPluginKey             string `json:"task_plugin_key,omitempty"`
-	ForceFormat               bool   `json:"force_format,omitempty"`
-	ThinkingToContent         bool   `json:"thinking_to_content,omitempty"`
-	Proxy                     string `json:"proxy"`
-	PassThroughBodyEnabled    bool   `json:"pass_through_body_enabled,omitempty"`
-	ResponsesWebSocketEnabled bool   `json:"responses_websocket_enabled,omitempty"`
-	SystemPrompt              string `json:"system_prompt,omitempty"`
-	SystemPromptOverride      bool   `json:"system_prompt_override,omitempty"`
+	AwsAPIType                AwsAPIType `json:"aws_api_type,omitempty"`
+	VertexProjectID           string     `json:"vertex_project_id,omitempty"`
+	TaskPluginKey             string     `json:"task_plugin_key,omitempty"`
+	ForceFormat               bool       `json:"force_format,omitempty"`
+	ThinkingToContent         bool       `json:"thinking_to_content,omitempty"`
+	Proxy                     string     `json:"proxy"`
+	PassThroughBodyEnabled    bool       `json:"pass_through_body_enabled,omitempty"`
+	ResponsesWebSocketEnabled bool       `json:"responses_websocket_enabled,omitempty"`
+	SystemPrompt              string     `json:"system_prompt,omitempty"`
+	SystemPromptOverride      bool       `json:"system_prompt_override,omitempty"`
 	// TaskExtendPluginKeys lists the task plugins a New API channel (type 60)
 	// is extended with. The upstream gateway may host many plugins, so the
 	// channel serves every listed plugin's models while the request still pins
@@ -67,6 +76,27 @@ const (
 	HTTPProtocolHTTP1        = "http1"
 	MaxHTTP2ConnectionShards = 8
 )
+
+// ValidateProviderSettings rejects unknown modes and project path injection.
+func (s *ChannelSettings) ValidateProviderSettings() error {
+	if s == nil {
+		return nil
+	}
+	switch s.AwsAPIType {
+	case "", AwsAPITypeInvokeModel, AwsAPITypeMantle:
+	default:
+		return fmt.Errorf("invalid aws_api_type")
+	}
+	if s.VertexProjectID == "." || s.VertexProjectID == ".." {
+		return fmt.Errorf("invalid vertex_project_id")
+	}
+	for _, ch := range s.VertexProjectID {
+		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_' || ch == '.' || ch == ':') {
+			return fmt.Errorf("invalid vertex_project_id")
+		}
+	}
+	return nil
+}
 
 // ValidateHTTPTransport validates save-time HTTP transport channel settings.
 func (s *ChannelSettings) ValidateHTTPTransport() error {

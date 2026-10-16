@@ -2,6 +2,7 @@ package dto
 
 import (
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/types"
 )
 
 // ModelMarket is a read-only view of the authenticated user's current supply.
@@ -31,6 +32,7 @@ type MarketModel struct {
 }
 
 type MarketPricing struct {
+	UsageReference         *types.UsageReference   `json:"usage_reference,omitempty"`
 	ID                     string                  `json:"id"`
 	Version                string                  `json:"version"`
 	Configured             bool                    `json:"configured"`

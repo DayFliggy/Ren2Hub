@@ -185,6 +185,7 @@ describe('live API contracts', () => {
 
     expect(page.items[0]).toMatchObject({
       type: 'manual',
+      allow_user_quota_query: false,
       model_limits: ['gpt-4o', 'claude-3-7-sonnet'],
       ip_limits: ['127.0.0.1', '10.0.0.1'],
     })
@@ -194,6 +195,38 @@ describe('live API contracts', () => {
     expectInvalidResponse(() =>
       parseTokenPage({ page: 1, page_size: 20, total: 1, items: [{}] })
     )
+  })
+
+  it('requires explicit boolean wallet-query permission and treats old responses as disabled', () => {
+    const token = {
+      id: 1,
+      name: 'wallet-query',
+      key: 'sk-****',
+      type: 'auto',
+      status: 1,
+      used_quota: '0',
+      available_quota: null,
+      reserved_quota: '0',
+      quota_version: 1,
+      unlimited_quota: true,
+      expired_time: -1,
+      created_time: 1,
+    }
+    const parse = (item: Record<string, unknown>) =>
+      parseTokenPage({ page: 1, page_size: 20, total: 1, items: [item] })
+        .items[0]
+    expect(parse(token).allow_user_quota_query).toBe(false)
+    for (const value of [true, false]) {
+      expect(
+        parse({ ...token, allow_user_quota_query: value })
+          .allow_user_quota_query
+      ).toBe(value)
+    }
+    for (const value of [null, 'false', 1]) {
+      expectInvalidResponse(() =>
+        parse({ ...token, allow_user_quota_query: value })
+      )
+    }
   })
 
   it('parses usage rows and rejects missing required fields', () => {

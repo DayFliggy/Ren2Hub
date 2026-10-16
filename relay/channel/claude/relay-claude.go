@@ -188,10 +188,10 @@ func recordClaudeServerToolUse(info *relaycommon.RelayInfo, serverToolUse *dto.C
 }
 
 func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo) *types.NewAPIError {
-	if claudeInfo.Usage.PromptTokens == 0 {
-		//上游出错
-	}
-	if (claudeInfo.Usage.CompletionTokens == 0 || !claudeInfo.Done) && claudeInfo.ResponseText.Len() > 0 {
+	// Claude reports cache separately. Only a zero total input needs an estimate.
+	missingInput := buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage).PromptTokens == 0
+	missingOutput := claudeInfo.Usage.CompletionTokens == 0 && claudeInfo.ResponseText.Len() > 0
+	if missingInput || missingOutput || !claudeInfo.Done {
 		if common.DebugEnabled {
 			common.SysLog("claude response usage is not complete, maybe upstream error")
 		}
@@ -200,13 +200,14 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		// Each tool_use block costs about 40 output tokens beyond its name and JSON
 		// input (measured on Claude Haiku 4.5 and Sonnet 5 agent turns).
 		fallback.CompletionTokens += claudeInfo.ToolUseCount * 40
-		if claudeInfo.Usage.CompletionTokens == 0 ||
+		if missingOutput ||
 			(!claudeInfo.Done && fallback.CompletionTokens > claudeInfo.Usage.CompletionTokens) {
 			claudeInfo.Usage.CompletionTokens = fallback.CompletionTokens
 			claudeInfo.Usage.UsageSource = "estimated_partial"
 		}
-		if claudeInfo.Usage.PromptTokens == 0 {
+		if missingInput {
 			claudeInfo.Usage.PromptTokens = fallback.PromptTokens
+			claudeInfo.Usage.UsageSource = "estimated_partial"
 		}
 		claudeInfo.Usage.TotalTokens = claudeInfo.Usage.PromptTokens + claudeInfo.Usage.CompletionTokens
 	}

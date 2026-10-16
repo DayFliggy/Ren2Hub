@@ -448,6 +448,16 @@ func (r ResponsesOutput) MarshalJSON() ([]byte, error) {
 			Error:             r.ItemError,
 			ApprovalRequestID: r.ApprovalRequestID,
 		})
+	case "reasoning":
+		// The protocol requires summary even before its first text delta.
+		type responsesOutputAlias ResponsesOutput
+		if len(r.Summary) > 0 {
+			return kitutil.Marshal(responsesOutputAlias(r))
+		}
+		return kitutil.Marshal(struct {
+			responsesOutputAlias
+			Summary []ResponsesReasoningSummaryPart `json:"summary"`
+		}{responsesOutputAlias(r), []ResponsesReasoningSummaryPart{}})
 	default:
 		type responsesOutputAlias ResponsesOutput
 		return kitutil.Marshal(responsesOutputAlias(r))
@@ -579,6 +589,7 @@ const (
 
 // ResponsesStreamResponse 用于处理 /v1/responses 流式响应
 type ResponsesStreamResponse struct {
+	Error           any                      `json:"error,omitempty"`
 	Type            string                   `json:"type"`
 	Response        *OpenAIResponsesResponse `json:"response,omitempty"`
 	Code            string                   `json:"code,omitempty"`
@@ -604,6 +615,22 @@ type ResponsesStreamResponse struct {
 	SummaryIndex *int                           `json:"summary_index,omitempty"`
 	ItemID       string                         `json:"item_id,omitempty"`
 	Part         *ResponsesReasoningSummaryPart `json:"part,omitempty"`
+}
+
+// GetOpenAIError preserves structured failures in both native Responses envelopes.
+func (s *ResponsesStreamResponse) GetOpenAIError() *types.OpenAIError {
+	if s.Response != nil {
+		if err := s.Response.GetOpenAIError(); err != nil {
+			return err
+		}
+	}
+	if err := GetOpenAIError(s.Error); err != nil {
+		return err
+	}
+	if s.Code != "" || s.Message != "" {
+		return &types.OpenAIError{Code: s.Code, Message: s.Message, Param: s.Param}
+	}
+	return nil
 }
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构

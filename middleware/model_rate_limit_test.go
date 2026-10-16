@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
@@ -75,4 +77,60 @@ func TestModelRateLimitWithoutRedisExplainsRejection(t *testing.T) {
 	}})
 	assert.NoError(t, err)
 	assert.JSONEq(t, string(want), response.Body.String())
+}
+
+func TestModelRateLimitUsesUserGroupAndSharesTokenRoutingGroups(t *testing.T) {
+	_, client := useRateLimitMiniRedis(t)
+	oldRedis, oldClient := common.RedisEnabled, common.RDB
+	oldEnabled, oldTotal, oldSuccess, oldDuration, oldGroup := setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes, setting.ModelRequestRateLimitGroup
+	common.RedisEnabled, common.RDB = true, client
+	setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes = true, 100, 100, 1
+	setting.ModelRequestRateLimitGroup = map[string][2]int{"user-class": {2, 2}, "route-a": {100, 100}, "route-b": {100, 100}}
+	t.Cleanup(func() {
+		common.RedisEnabled, common.RDB = oldRedis, oldClient
+		setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes, setting.ModelRequestRateLimitGroup = oldEnabled, oldTotal, oldSuccess, oldDuration, oldGroup
+	})
+	router := gin.New()
+	count := 0
+	router.POST("/request", func(c *gin.Context) {
+		count++
+		c.Set("id", 84)
+		c.Set(common.RequestIdKey, fmt.Sprint(count))
+		common.SetContextKey(c, constant.ContextKeyUserGroup, "user-class")
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, c.GetHeader("X-Route"))
+		common.SetContextKey(c, constant.ContextKeyTokenId, count)
+	}, ModelRequestRateLimit(), func(c *gin.Context) { c.Status(http.StatusOK) })
+	for index, group := range []string{"route-a", "route-b", "route-a"} {
+		r := httptest.NewRequest("POST", "/request", nil)
+		r.Header.Set("X-Route", group)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		want := 200
+		if index == 2 {
+			want = 429
+		}
+		assert.Equal(t, want, w.Code, w.Body.String())
+	}
+	assert.Equal(t, int64(2), client.ZCard(t.Context(), service.GatewayLogicalRateKey(84)+":total").Val())
+	assert.Equal(t, int64(2), client.ZCard(t.Context(), service.GatewayLogicalRateKey(84)+":success").Val())
+}
+
+func TestModelRateLimitKeepsDeliveredSuccessAfterCancellation(t *testing.T) {
+	_, client := useRateLimitMiniRedis(t)
+	oldRedis, oldClient, oldEnabled := common.RedisEnabled, common.RDB, setting.ModelRequestRateLimitEnabled
+	oldTotal, oldSuccess, oldDuration := setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes
+	common.RedisEnabled, common.RDB, setting.ModelRequestRateLimitEnabled = true, client, true
+	setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes = 10, 10, 1
+	t.Cleanup(func() {
+		common.RedisEnabled, common.RDB, setting.ModelRequestRateLimitEnabled = oldRedis, oldClient, oldEnabled
+		setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes = oldTotal, oldSuccess, oldDuration
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	router := gin.New()
+	router.POST("/request", func(c *gin.Context) { c.Set("id", 85); c.Set(common.RequestIdKey, "delivered-before-cancel") }, ModelRequestRateLimit(), func(c *gin.Context) { MarkRelayRequestDelivered(c); cancel(); c.Status(200) })
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest("POST", "/request", nil).WithContext(ctx))
+	assert.EqualValues(t, 1, client.ZCard(t.Context(), service.GatewayLogicalRateKey(85)+":success").Val())
+	assert.Zero(t, client.ZCard(t.Context(), service.GatewayLogicalRateKey(85)+":pending").Val())
 }

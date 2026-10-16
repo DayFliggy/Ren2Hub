@@ -66,7 +66,7 @@ func ModelRequestRateLimit() gin.HandlerFunc {
 		defer func() {
 			renewal.Stop()
 			<-renewal.Done
-			success := completed && ctx.Err() == nil && c.Writer.Status() < http.StatusBadRequest && !c.GetBool(relayRequestFailedKey) && renewal.Failure() == nil
+			success := completed && (ctx.Err() == nil || c.GetBool(relayRequestDeliveredKey)) && c.Writer.Status() < http.StatusBadRequest && !c.GetBool(relayRequestFailedKey) && renewal.Failure() == nil
 			cancel()
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 			defer cleanupCancel()

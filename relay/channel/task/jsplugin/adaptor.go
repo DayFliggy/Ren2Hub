@@ -30,6 +30,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
@@ -111,6 +112,9 @@ type TaskAdaptor struct {
 	routeRequest   *pluginruntime.RouteRequestContext
 	requestHeaders map[string]string
 	files          []map[string]any
+	// Keep the selected credentials for all hooks of this attempt. A long
+	// response must not require a fresh OAuth exchange just to parse its result.
+	submitCredentials map[string]any
 	// hookRequestBody is hookRequestSource as hooks receive it.
 	hookRequestSource map[string]any
 	hookRequestBody   any
@@ -127,6 +131,7 @@ func (a *TaskAdaptor) callContext() context.Context {
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	c.Set("pluginAllowedHosts", append([]string(nil), a.plugin.Meta.AllowedHosts...))
 	a.SetTaskContext(c.Request.Context())
 	if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedEndpoint); exists {
 		if pinned, ok := pinnedValue.(pluginruntime.PinnedEndpoint); ok && pinned.Plugin == a.plugin {
@@ -136,10 +141,10 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 					resolved, resolvedOK := resolvedValue.(map[string]any)
 					resolvedModel, modelOK := resolved["model"].(string)
 					if callErr != nil || !resolvedOK || !modelOK || resolvedModel != pinned.Model {
-						return service.TaskErrorWrapperLocal(fmt.Errorf("final task plugin decoder rejected the pinned model"), "plugin_request_invalid", http.StatusBadRequest)
+						return service.TaskErrorWrapperLocal(fmt.Errorf("final task plugin decoder rejected the pinned model"), "plugin_request_invalid", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 					}
 					if _, forbidden := resolved["renderer"]; forbidden {
-						return service.TaskErrorWrapperLocal(fmt.Errorf("decoder must not return renderer"), "plugin_request_invalid", http.StatusBadRequest)
+						return service.TaskErrorWrapperLocal(fmt.Errorf("decoder must not return renderer"), "plugin_request_invalid", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 					}
 					if body, present := resolved["requestBody"]; present {
 						c.Set("task_request", body)
@@ -165,18 +170,22 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	hasUsageProfiles := len(a.plugin.Meta.UsageProfiles) > 0
 	if hasRequest && !hasUsageProfiles {
 		if err := a.validateResolvedUsageRequest(request); err != nil {
-			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
+			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}
 	}
 	if _, err := a.buildSubmit(c, info); err != nil {
-		return service.TaskErrorWrapperLocal(err, "plugin_request_invalid", http.StatusBadRequest)
+		var credentialErr *types.ProviderCredentialError
+		if errors.As(err, &credentialErr) {
+			return service.TaskErrorFromAPIError(types.NewErrorWithStatusCode(err, types.ErrorCodeChannelInvalidKey, http.StatusUnauthorized), common.UpstreamAddresses(c)...)
+		}
+		return service.TaskErrorWrapperLocal(err, "plugin_request_invalid", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 	}
 	// The descriptor may rewrite the model. Validate profiled requests against
 	// that final model before any quota calculation or upstream submission; an
 	// upstream endpoint ID without a profile keeps the client model's profile.
 	if hasRequest && hasUsageProfiles {
 		if err := a.validateResolvedUsageRequest(request, info.UpstreamModelName, info.OriginModelName); err != nil {
-			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
+			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}
 	}
 	return nil
@@ -452,6 +461,7 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, bod
 }
 
 func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (_ *channel.TaskSubmitResponse, taskErr *dto.TaskError) {
+	c.Set("pluginAllowedHosts", append([]string(nil), a.plugin.Meta.AllowedHosts...))
 	started := time.Now()
 	var responseBody any
 	var completionInput any
@@ -466,13 +476,17 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 		}
 	}()
 	if !streaming && acceptedStream {
-		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("unexpected SSE response for a JSON submission"), "plugin_submit_response_invalid", http.StatusBadGateway)
+		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("unexpected SSE response for a JSON submission"), "plugin_submit_response_invalid", http.StatusBadGateway, common.UpstreamAddresses(c)...)
+	}
+	submitContext, err := a.submitContext(c, info)
+	if err != nil {
+		return nil, service.TaskErrorWrapper(err, "plugin_submit_response_failed", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 	}
 	if streaming {
 		// Every failure after accepting this stream is non-retryable: the
 		// upstream may already have performed billable work.
 		defer resp.Body.Close()
-		responseBody, err = a.readSubmitEvents(c.Request.Context(), resp, a.submitContext(c, info))
+		responseBody, err = a.readSubmitEvents(c.Request.Context(), resp, submitContext)
 		completionInput, completionInputErr = pluginruntime.ExactUsageValue(responseBody)
 	} else {
 		var body []byte
@@ -488,13 +502,13 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 		}
 	}
 	if err != nil {
-		failure := service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusBadGateway)
+		failure := service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 		failure.NoRetry = streaming
 		return nil, failure
 	}
 	headers := make(map[string][]string, len(resp.Header))
 	maps.Copy(headers, resp.Header)
-	value, err := a.plugin.Engine.Call(c.Request.Context(), "parseSubmitResponse", a.submitContext(c, info), map[string]any{"statusCode": resp.StatusCode, "headers": headers, "body": responseBody})
+	value, err := a.plugin.Engine.Call(c.Request.Context(), "parseSubmitResponse", submitContext, map[string]any{"statusCode": resp.StatusCode, "headers": headers, "body": responseBody})
 	if err != nil {
 		logger.LogDebug(
 			c,
@@ -503,11 +517,11 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 			resp.StatusCode,
 			time.Since(started).Milliseconds(),
 		)
-		return nil, service.TaskErrorWrapper(err, "plugin_submit_response_failed", http.StatusBadGateway)
+		return nil, service.TaskErrorWrapper(err, "plugin_submit_response_failed", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 	}
 	if object, ok := value.(map[string]any); ok {
 		if _, forbidden := object["clientResponse"]; forbidden {
-			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("parseSubmitResponse must not return clientResponse"), "plugin_submit_response_invalid", http.StatusBadGateway)
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("parseSubmitResponse must not return clientResponse"), "plugin_submit_response_invalid", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 		}
 	}
 	var parsed submitResponse
@@ -522,7 +536,7 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 			resp.StatusCode,
 			time.Since(started).Milliseconds(),
 		)
-		return nil, service.TaskErrorWrapper(err, "plugin_submit_response_invalid", http.StatusBadGateway)
+		return nil, service.TaskErrorWrapper(err, "plugin_submit_response_invalid", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 	}
 	var taskData []byte
 	if parsed.TaskData != nil {
@@ -531,12 +545,12 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 			if err == nil {
 				err = fmt.Errorf("task data exceeds size limit")
 			}
-			return nil, service.TaskErrorWrapper(err, "plugin_submit_response_invalid", http.StatusBadGateway)
+			return nil, service.TaskErrorWrapper(err, "plugin_submit_response_invalid", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 		}
 	}
 	pluginState, _ := encodeReturnedPluginState(value)
 	if len(pluginState) > maxTaskPluginPersistedJSONBytes {
-		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("plugin returned oversized submit state"), "plugin_submit_response_invalid", http.StatusBadGateway)
+		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("plugin returned oversized submit state"), "plugin_submit_response_invalid", http.StatusBadGateway, common.UpstreamAddresses(c)...)
 	}
 	response := &channel.TaskSubmitResponse{
 		UpstreamTaskID: parsed.TaskID,
@@ -594,7 +608,8 @@ func (a *TaskAdaptor) GetModelList() []string { return append([]string(nil), a.p
 func (a *TaskAdaptor) GetChannelName() string { return a.plugin.Meta.Name }
 func (a *TaskAdaptor) FetchMode() string      { return a.plugin.Meta.FetchMode }
 
-func (a *TaskAdaptor) FetchBatchTasks(baseURL, key string, tasks []*model.Task, proxy string) (*http.Response, error) {
+func (a *TaskAdaptor) FetchBatchTasks(baseURL, key string, tasks []*model.Task, proxy string) (_ *http.Response, resultErr error) {
+	defer func() { resultErr = a.maskUpstreamError(resultErr, baseURL, proxy) }()
 	taskContexts := make([]map[string]any, 0, len(tasks))
 	for _, task := range tasks {
 		taskCtx, err := a.queryContext(task, key, baseURL, proxy)
@@ -614,7 +629,8 @@ func (a *TaskAdaptor) FetchBatchTasks(baseURL, key string, tasks []*model.Task, 
 	return a.doFetchDescriptor(baseURL, proxy, descriptor)
 }
 
-func (a *TaskAdaptor) FetchTaskForTask(baseURL, key string, task *model.Task, proxy string) (*http.Response, error) {
+func (a *TaskAdaptor) FetchTaskForTask(baseURL, key string, task *model.Task, proxy string) (_ *http.Response, resultErr error) {
+	defer func() { resultErr = a.maskUpstreamError(resultErr, baseURL, proxy) }()
 	if a.FetchMode() == "batch" {
 		return a.FetchBatchTasks(baseURL, key, []*model.Task{task}, proxy)
 	}
@@ -744,7 +760,8 @@ func (a *TaskAdaptor) doFetchDescriptor(baseURL, proxy string, descriptor reques
 	return resp, nil
 }
 
-func (a *TaskAdaptor) ParseBatchResult(tasks []*model.Task, resp *http.Response, body []byte) (map[string]*service.BatchTaskResult, error) {
+func (a *TaskAdaptor) ParseBatchResult(tasks []*model.Task, resp *http.Response, body []byte) (_ map[string]*service.BatchTaskResult, resultErr error) {
+	defer func() { resultErr = a.maskUpstreamError(resultErr) }()
 	started := time.Now()
 	input := any(string(body))
 	var decoded any
@@ -850,7 +867,8 @@ func (a *TaskAdaptor) ParseBatchResult(tasks []*model.Task, resp *http.Response,
 	return results, nil
 }
 
-func (a *TaskAdaptor) ParseTaskResultForTask(task *model.Task, resp *http.Response, body []byte) (*relaycommon.TaskInfo, error) {
+func (a *TaskAdaptor) ParseTaskResultForTask(task *model.Task, resp *http.Response, body []byte) (_ *relaycommon.TaskInfo, resultErr error) {
+	defer func() { resultErr = a.maskUpstreamError(resultErr) }()
 	started := time.Now()
 	input := any(string(body))
 	var decoded any
@@ -931,7 +949,8 @@ func (a *TaskAdaptor) applyCompletionUsageFacts(result *relaycommon.TaskInfo, fa
 	return nil
 }
 
-func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
+func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) (_ []byte, resultErr error) {
+	defer func() { resultErr = a.maskUpstreamError(resultErr) }()
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
 	}
@@ -993,7 +1012,8 @@ func (a *TaskAdaptor) ListArtifacts(task *model.Task) ([]channel.TaskArtifact, e
 	return validateTaskArtifacts(value)
 }
 
-func (a *TaskAdaptor) BuildContentRequest(ctx context.Context, task *model.Task, artifactKey string, clientRequest channel.TaskArtifactClientRequest) (*channel.TaskContentRequest, error) {
+func (a *TaskAdaptor) BuildContentRequest(ctx context.Context, task *model.Task, artifactKey string, clientRequest channel.TaskArtifactClientRequest) (_ *channel.TaskContentRequest, resultErr error) {
+	defer func() { resultErr = a.maskUpstreamError(resultErr) }()
 	if !a.hasHook(context.Background(), "buildContentRequest") {
 		return nil, nil
 	}
@@ -1274,6 +1294,7 @@ func validateTaskArtifacts(value any) ([]channel.TaskArtifact, error) {
 }
 
 func (a *TaskAdaptor) buildSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*requestDescriptor, error) {
+	c.Set("pluginAllowedHosts", append([]string(nil), a.plugin.Meta.AllowedHosts...))
 	if a.submit != nil {
 		return a.submit, nil
 	}
@@ -1284,8 +1305,12 @@ func (a *TaskAdaptor) buildSubmit(c *gin.Context, info *relaycommon.RelayInfo) (
 	if info.HasChannelMeta() {
 		fetchContext = pluginruntime.WithFetcher(fetchContext, a.hookFetcher(info.ChannelBaseUrl, info.ChannelSetting.Proxy))
 	}
+	submitContext, err := a.submitContext(c, info)
+	if err != nil {
+		return nil, err
+	}
 	var descriptor requestDescriptor
-	err := a.plugin.Engine.CallInto(fetchContext, &descriptor, "buildSubmitRequest", a.submitContext(c, info))
+	err = a.plugin.Engine.CallInto(fetchContext, &descriptor, "buildSubmitRequest", submitContext)
 	if err != nil {
 		reason := "hook_failed"
 		var invalid *pluginruntime.ResultError
@@ -1359,7 +1384,7 @@ func (a *TaskAdaptor) buildSubmit(c *gin.Context, info *relaycommon.RelayInfo) (
 	return a.submit, nil
 }
 
-func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo) map[string]any {
+func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo) (map[string]any, error) {
 	routeRequest := pluginruntime.RouteRequestContext{
 		Params:      map[string]string{},
 		Query:       map[string][]string{},
@@ -1466,10 +1491,15 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 	ctx["upstreamModel"] = info.UpstreamModelName
 	ctx["baseUrl"] = info.ChannelBaseUrl
 	ctx["userSetting"] = info.UserSetting
-	if err := a.applyUpstreamCredentials(ctx, info.ChannelType, info.ApiKey, info.ChannelSetting.Proxy); err != nil {
-		ctx["authError"] = err.Error()
+	if a.submitCredentials == nil {
+		credentials := make(map[string]any)
+		if err := a.applyUpstreamCredentials(credentials, info.ChannelType, info.ApiKey, info.ChannelSetting.Proxy); err != nil {
+			return nil, err
+		}
+		a.submitCredentials = credentials
 	}
-	return ctx
+	maps.Copy(ctx, a.submitCredentials)
+	return ctx, nil
 }
 
 func (a *TaskAdaptor) validateResolvedUsageRequest(request any, models ...string) error {

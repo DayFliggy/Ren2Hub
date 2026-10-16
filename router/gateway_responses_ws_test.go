@@ -74,11 +74,12 @@ func TestGatewayResponsesWSFinalQuoteAndPersistentConnection(t *testing.T) {
 		assert.JSONEq(t, terminal, string(result))
 	}
 	assert.EqualValues(t, 1, handshakes.Load())
+	// The terminal is delivered before settlement and permit release.
+	awaitGatewayPermitsReleased(t)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
 	assert.EqualValues(t, 42, user.UsedQuota, "each create freezes the currently published price")
 	assert.Zero(t, user.ReservedQuota)
-	awaitGatewayPermitsReleased(t)
 	var logs []model.Log
 	require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 	require.Len(t, logs, 2)

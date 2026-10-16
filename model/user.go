@@ -1566,6 +1566,14 @@ func GetUserUsedQuota(id int) (common.Quota, error) {
 	return user.UsedQuota, err
 }
 
+// GetUserQuotaSummary reads both wallet projections from the same SQL snapshot.
+// Available quota already excludes reservations and may represent debt.
+func GetUserQuotaSummary(id int) (available, used common.Quota, err error) {
+	var user User
+	err = DB.Select("id", "available_quota", "used_quota").First(&user, id).Error
+	return user.Quota, user.UsedQuota, err
+}
+
 func GetUserEmail(id int) (email string, err error) {
 	err = DB.Model(&User{}).Where("id = ?", id).Select("email").Find(&email).Error
 	return email, err

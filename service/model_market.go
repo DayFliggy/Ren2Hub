@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/types"
 )
 
 // BuildModelMarket projects the same eligible routes as model discovery. It
@@ -82,7 +83,7 @@ func BuildModelMarket(ctx context.Context, userID int) (dto.ModelMarket, error) 
 		// endpoints, but per-request on text endpoints and per-task for plugins.
 		// Native audio/realtime also excludes text-only cache/image dimensions.
 		// Keep its endpoint scope separate even when all amounts are equal.
-		pricingID, err := billing.Hash([]any{route.model, price.pluginKey, price.version, details, marketNativeAudioRoute(route)})
+		pricingID, err := billing.Hash([]any{route.model, price.pluginKey, price.version, price.usageSchema, price.usageExamples, details, marketNativeAudioRoute(route)})
 		if err != nil {
 			return result, err
 		}
@@ -102,8 +103,12 @@ func BuildModelMarket(ctx context.Context, userID int) (dto.ModelMarket, error) 
 			for name, field := range price.usageSchema {
 				usageSchema[name] = field
 			}
+			var reference *types.UsageReference
+			if price.pluginKey != "" && values["billing_setting.billing_mode"] == "tiered_expr" {
+				reference = taskUsageReference(route.model, price.pluginKey, price.pluginName, price.values, price.usageSchema, price.usageExamples)
+			}
 			entry.Baselines = append(entry.Baselines, dto.MarketPricing{
-				ID: pricingID, Version: price.version, Configured: price.configured, Values: values,
+				ID: pricingID, Version: price.version, Configured: price.configured, Values: values, UsageReference: reference,
 				PluginKey: price.pluginKey, PluginName: price.pluginName, UsageSchema: usageSchema,
 				CacheWriteMode: string(price.cacheWriteMode), BillingDetails: details,
 			})

@@ -18,8 +18,9 @@ import (
 )
 
 type tokenRequest struct {
-	OperationID     string `json:"operation_id"`
-	ExpectedVersion *int64 `json:"expected_version"`
+	OperationID         string `json:"operation_id"`
+	ExpectedVersion     *int64 `json:"expected_version"`
+	AllowUserQuotaQuery *bool  `json:"allow_user_quota_query"`
 	model.Token
 	Type string `json:"type"`
 }
@@ -225,7 +226,7 @@ func GetTokenUsage(c *gin.Context) {
 	}
 	tokenKey := parts[1]
 
-	token, err := model.GetTokenByKey(strings.TrimPrefix(tokenKey, "sk-"), false)
+	token, err := model.GetTokenByKey(strings.TrimPrefix(tokenKey, "sk-"), true)
 	if err != nil {
 		common.SysError(common.LogText("failed to get token by key: %s", err.Error()))
 		common.ApiErrorI18n(c, i18n.MsgTokenGetInfoFailed)
@@ -243,32 +244,59 @@ func GetTokenUsage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    true,
-		"message": "ok",
-		"data": gin.H{
-			"object":               "token_usage",
-			"name":                 token.Name,
-			"total_granted":        total,
-			"reserved_quota":       token.ReservedQuota,
-			"total_used":           token.UsedQuota,
-			"total_available":      available,
-			"unlimited_quota":      token.UnlimitedQuota,
-			"model_limits":         token.GetModelLimitsMap(),
-			"model_limits_enabled": token.ModelLimitsEnabled,
-			"expires_at":           expiredAt,
-		},
-	})
+	data := gin.H{
+		"object":               "token_usage",
+		"name":                 token.Name,
+		"total_granted":        total,
+		"reserved_quota":       token.ReservedQuota,
+		"total_used":           token.UsedQuota,
+		"total_available":      available,
+		"unlimited_quota":      token.UnlimitedQuota,
+		"model_limits":         token.GetModelLimitsMap(),
+		"model_limits_enabled": token.ModelLimitsEnabled,
+		"expires_at":           expiredAt,
+	}
+	if token.AllowUserQuotaQuery {
+		userAvailable, userUsed, err := model.GetUserQuotaSummary(token.UserId)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		data["user_quota"] = gin.H{"total_available": userAvailable, "total_used": userUsed}
+	}
+	c.JSON(http.StatusOK, gin.H{"code": true, "message": "ok", "data": data})
+}
+
+// Decode once through the shared JSON wrapper while retaining field presence.
+func bindTokenRequest(c *gin.Context) (tokenRequest, map[string]json.RawMessage, error) {
+	var request tokenRequest
+	var fields map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&fields); err != nil {
+		return request, nil, err
+	}
+	encoded, err := common.Marshal(fields)
+	if err == nil {
+		err = common.Unmarshal(encoded, &request)
+	}
+	return request, fields, err
 }
 
 func AddToken(c *gin.Context) {
-	request := tokenRequest{}
-	err := c.ShouldBindJSON(&request)
+	request, fields, err := bindTokenRequest(c)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	if request.AllowUserQuotaQuery == nil {
+		for field := range fields {
+			if strings.EqualFold(field, "allow_user_quota_query") {
+				common.ApiErrorStatus(c, http.StatusBadRequest, errors.New("allow_user_quota_query must be a boolean"))
+				return
+			}
+		}
+	}
 	token := request.Token
+	token.AllowUserQuotaQuery = request.AllowUserQuotaQuery == nil || *request.AllowUserQuotaQuery
 	setTokenAuditParams(c, model.AuditFields{"name": token.Name, "unlimited_quota": token.UnlimitedQuota, "available_quota": token.RemainQuota})
 	if token.ConversionPolicy == "" {
 		token.ConversionPolicy = string(types.ConversionLossPolicySafe)
@@ -295,18 +323,19 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	cleanToken := model.Token{
-		UserId:             c.GetInt("id"),
-		Name:               token.Name,
-		Key:                key,
-		CreatedTime:        common.GetTimestamp(),
-		AccessedTime:       common.GetTimestamp(),
-		ExpiredTime:        token.ExpiredTime,
-		RemainQuota:        token.RemainQuota,
-		UnlimitedQuota:     token.UnlimitedQuota,
-		ModelLimitsEnabled: token.ModelLimitsEnabled,
-		ModelLimits:        token.ModelLimits,
-		AllowIps:           token.AllowIps,
-		ConversionPolicy:   token.ConversionPolicy,
+		UserId:              c.GetInt("id"),
+		Name:                token.Name,
+		Key:                 key,
+		CreatedTime:         common.GetTimestamp(),
+		AccessedTime:        common.GetTimestamp(),
+		ExpiredTime:         token.ExpiredTime,
+		RemainQuota:         token.RemainQuota,
+		UnlimitedQuota:      token.UnlimitedQuota,
+		AllowUserQuotaQuery: token.AllowUserQuotaQuery,
+		ModelLimitsEnabled:  token.ModelLimitsEnabled,
+		ModelLimits:         token.ModelLimits,
+		AllowIps:            token.AllowIps,
+		ConversionPolicy:    token.ConversionPolicy,
 	}
 	mode := model.RouteModeAutoLab
 	if request.Type == "manual" {
@@ -358,20 +387,12 @@ func DeleteToken(c *gin.Context) {
 func UpdateToken(c *gin.Context) {
 	userId := c.GetInt("id")
 	statusOnly := c.Query("status_only")
-	var fields map[string]json.RawMessage
-	if err := c.ShouldBindJSON(&fields); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	request := tokenRequest{}
-	encoded, err := common.Marshal(fields)
-	if err == nil {
-		err = common.Unmarshal(encoded, &request)
-	}
+	request, fields, err := bindTokenRequest(c)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+
 	present := make(map[string]bool, len(fields))
 	for field := range fields {
 		if known := tokenRequestFieldCase(field); known != "" && known != field {
@@ -383,6 +404,12 @@ func UpdateToken(c *gin.Context) {
 		present[field] = true
 	}
 	token := request.Token
+	if request.AllowUserQuotaQuery != nil {
+		token.AllowUserQuotaQuery = *request.AllowUserQuotaQuery
+	} else if present["allow_user_quota_query"] && statusOnly == "" {
+		common.ApiErrorStatus(c, http.StatusBadRequest, errors.New("allow_user_quota_query must be a boolean"))
+		return
+	}
 	setTokenAuditParams(c, model.AuditFields{"id": token.Id, "name": token.Name, "status": token.Status, "operation_id": request.OperationID, "expected_version": request.ExpectedVersion})
 	if len(token.Name) > 50 {
 		common.ApiErrorT(c, "Token name is too long")
@@ -393,6 +420,15 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	token.UserId = userId
+	var previousQuotaQuery *bool
+	if statusOnly == "" && request.AllowUserQuotaQuery != nil {
+		previous, readErr := model.GetTokenByIds(token.Id, userId)
+		if readErr != nil {
+			common.ApiError(c, readErr)
+			return
+		}
+		previousQuotaQuery = &previous.AllowUserQuotaQuery
+	}
 	err = token.UpdateFromRequest(request.OperationID, request.ExpectedVersion, statusOnly != "", present)
 	if err != nil {
 		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
@@ -401,6 +437,9 @@ func UpdateToken(c *gin.Context) {
 		}
 		common.ApiError(c, err)
 		return
+	}
+	if previousQuotaQuery != nil && *previousQuotaQuery != token.AllowUserQuotaQuery {
+		setTokenAuditParams(c, model.AuditFields{"changed_fields": []string{"allow_user_quota_query"}})
 	}
 	common.SetContextKey(c, "token_audit_succeeded", true)
 	writeTokenResponse(c, &token)

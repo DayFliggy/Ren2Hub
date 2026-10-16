@@ -19,7 +19,7 @@ distributor.token_model_forbidden: "该令牌无权访问模型 {{.Model}}"
 distributor.model_name_required: "未指定模型名称，模型名称不能为空"
 distributor.no_available_task_plugin_channel: "任务模型 {{.Model}} 需要已启用且符合条件的插件渠道，请联系管理员配置。"
 distributor.invalid_midjourney_request: "无效的midjourney请求，{{.Error}}"
-distributor.invalid_request_parse_model: "无效的请求，无法解析模型"
+distributor.invalid_request_parse_model: "无法解析模型"
 
 # Errors returned to AI clients, emails and notifications (from NewAPI 128089fa7)
 auth.client_ip_unresolved: "无法解析客户端 IP 地址"

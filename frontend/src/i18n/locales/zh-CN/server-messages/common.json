@@ -9,5 +9,6 @@
   "Payment, redemption, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.": "支付、兑换码和邀请返利功能已禁用。管理员需先确认合规声明后方可启用。",
   "User does not exist": "用户不存在",
   "User has been banned": "用户已被封禁",
-  "Verification code is incorrect or has expired": "验证码错误或已过期"
+  "Verification code is incorrect or has expired": "验证码错误或已过期",
+  "The upstream key has unlimited quota. Turn on \"Allow querying user quota\" for this key on the upstream to see the real balance.": "上游密钥未设置额度上限。请在上游为该密钥开启“允许查询用户额度”，以查询实际余额。"
 }

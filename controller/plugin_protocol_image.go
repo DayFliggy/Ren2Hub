@@ -107,7 +107,7 @@ func serveTaskPluginImageProtocol(c *gin.Context, pinned pluginruntime.PinnedEnd
 		if reason == "" {
 			reason = "image generation failed"
 		}
-		respondTaskPluginImageError(c, service.TaskErrorWrapperLocal(errors.New(reason), "image_generation_failed", http.StatusBadRequest))
+		respondTaskPluginImageError(c, service.TaskErrorWrapperLocal(errors.New(reason), "image_generation_failed", http.StatusBadRequest, common.UpstreamAddresses(c)...))
 		return
 	}
 	view, err := service.BuildTaskPluginView(task)
@@ -186,7 +186,7 @@ func waitTaskPluginImageTask(c *gin.Context, task *model.Task, deps pluginProtoc
 		case <-timer.C:
 		}
 		if err := deps.pollTask(ctx, task); err != nil {
-			logger.LogWarn(c, fmt.Sprintf("task protocol image poll failed for task %s: %s", task.TaskID, common.MaskSensitiveInfo(err.Error())))
+			logger.LogWarn(c, fmt.Sprintf("task protocol image poll failed for task %s: %s", task.TaskID, common.MaskSensitiveInfo(err.Error(), common.UpstreamAddresses(c)...)))
 			continue
 		}
 		if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {

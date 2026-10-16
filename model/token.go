@@ -12,24 +12,25 @@ import (
 )
 
 type Token struct {
-	Id                 int            `json:"id"`
-	UserId             int            `json:"user_id" gorm:"index;index:idx_token_user_created,priority:1"`
-	Key                string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
-	Status             int            `json:"status" gorm:"default:1"`
-	Name               string         `json:"name" gorm:"index" `
-	CreatedTime        int64          `json:"created_time" gorm:"bigint;index:idx_token_user_created,priority:2"`
-	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
-	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
-	RemainQuota        common.Quota   `json:"available_quota" gorm:"column:available_quota;type:bigint;default:0"`
-	ReservedQuota      common.Quota   `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
-	QuotaVersion       int64          `json:"quota_version" gorm:"type:bigint;not null;default:0"`
-	UnlimitedQuota     bool           `json:"unlimited_quota"`
-	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
-	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
-	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
-	UsedQuota          common.Quota   `json:"used_quota" gorm:"type:bigint;default:0"` // used quota
-	DeletedAt          gorm.DeletedAt `gorm:"index"`
-	ConversionPolicy   string         `json:"conversion_policy" gorm:"type:varchar(16);default:'safe'"`
+	Id                  int            `json:"id"`
+	UserId              int            `json:"user_id" gorm:"index;index:idx_token_user_created,priority:1"`
+	Key                 string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
+	Status              int            `json:"status" gorm:"default:1"`
+	Name                string         `json:"name" gorm:"index" `
+	CreatedTime         int64          `json:"created_time" gorm:"bigint;index:idx_token_user_created,priority:2"`
+	AccessedTime        int64          `json:"accessed_time" gorm:"bigint"`
+	ExpiredTime         int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
+	RemainQuota         common.Quota   `json:"available_quota" gorm:"column:available_quota;type:bigint;default:0"`
+	ReservedQuota       common.Quota   `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
+	QuotaVersion        int64          `json:"quota_version" gorm:"type:bigint;not null;default:0"`
+	UnlimitedQuota      bool           `json:"unlimited_quota"`
+	AllowUserQuotaQuery bool           `json:"allow_user_quota_query"`
+	ModelLimitsEnabled  bool           `json:"model_limits_enabled"`
+	ModelLimits         string         `json:"model_limits" gorm:"type:text"`
+	AllowIps            *string        `json:"allow_ips" gorm:"default:''"`
+	UsedQuota           common.Quota   `json:"used_quota" gorm:"type:bigint;default:0"` // used quota
+	DeletedAt           gorm.DeletedAt `gorm:"index"`
+	ConversionPolicy    string         `json:"conversion_policy" gorm:"type:varchar(16);default:'safe'"`
 }
 
 func (token *Token) Clean() {
@@ -252,10 +253,11 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		token, err := cacheGetTokenByKey(key)
 		if err == nil {
 			var balances Token
-			if err := DB.Select("id", "available_quota", "reserved_quota", "used_quota", "quota_version", "unlimited_quota").First(&balances, token.Id).Error; err != nil {
+			if err := DB.Select("id", "available_quota", "reserved_quota", "used_quota", "quota_version", "unlimited_quota", "allow_user_quota_query").First(&balances, token.Id).Error; err != nil {
 				return nil, err
 			}
 			token.RemainQuota, token.ReservedQuota, token.UsedQuota, token.QuotaVersion, token.UnlimitedQuota = balances.RemainQuota, balances.ReservedQuota, balances.UsedQuota, balances.QuotaVersion, balances.UnlimitedQuota
+			token.AllowUserQuotaQuery = balances.AllowUserQuotaQuery
 			return token, nil
 		}
 		// Don't return error - fall through to DB
@@ -370,6 +372,7 @@ func (token *Token) updateWithBudget(operationID string, expectedVersion *int64,
 		"name": token.Name, "status": token.Status, "expired_time": token.ExpiredTime,
 		"model_limits_enabled": token.ModelLimitsEnabled, "model_limits": token.ModelLimits,
 		"allow_ips": token.AllowIps, "conversion_policy": token.ConversionPolicy,
+		"allow_user_quota_query": token.AllowUserQuotaQuery,
 	}
 	// Nil budget targets mean "keep the stored value"; a pointer marshals like
 	// its value, so fingerprints of full requests are unchanged.

@@ -99,7 +99,8 @@ type NewAPIError struct {
 	Metadata       json.RawMessage
 	// RetryAfter is parsed from the upstream response header and is only used
 	// by the guarded live retry policy. It is not part of the client payload.
-	RetryAfter time.Duration
+	RetryAfter        time.Duration
+	upstreamAddresses []string
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -149,7 +150,7 @@ func (e *NewAPIError) ErrorWithStatusCode() string {
 	return fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg)
 }
 
-func (e *NewAPIError) MaskSensitiveError() string {
+func (e *NewAPIError) MaskSensitiveError(upstreamURLs ...string) string {
 	if e == nil {
 		return ""
 	}
@@ -160,14 +161,14 @@ func (e *NewAPIError) MaskSensitiveError() string {
 	if e.errorCode == ErrorCodeCountTokenFailed {
 		return errStr
 	}
-	return kitutil.MaskSensitiveInfo(errStr)
+	return kitutil.MaskSensitiveInfo(errStr, e.maskingAddresses(upstreamURLs)...)
 }
 
-func (e *NewAPIError) MaskSensitiveErrorWithStatusCode() string {
+func (e *NewAPIError) MaskSensitiveErrorWithStatusCode(upstreamURLs ...string) string {
 	if e == nil {
 		return ""
 	}
-	msg := e.MaskSensitiveError()
+	msg := e.MaskSensitiveError(upstreamURLs...)
 	if e.StatusCode == 0 {
 		return msg
 	}
@@ -181,7 +182,7 @@ func (e *NewAPIError) SetMessage(message string) {
 	e.Err = errors.New(message)
 }
 
-func (e *NewAPIError) ToOpenAIError() OpenAIError {
+func (e *NewAPIError) ToOpenAIError(upstreamURLs ...string) OpenAIError {
 	var result OpenAIError
 	switch e.errorType {
 	case ErrorTypeOpenAIError:
@@ -206,7 +207,7 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 		}
 	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
-		result.Message = kitutil.MaskSensitiveInfo(result.Message)
+		result.Message = kitutil.MaskSensitiveInfo(result.Message, e.maskingAddresses(upstreamURLs)...)
 	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)
@@ -214,7 +215,7 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 	return result
 }
 
-func (e *NewAPIError) ToClaudeError() ClaudeError {
+func (e *NewAPIError) ToClaudeError(upstreamURLs ...string) ClaudeError {
 	var result ClaudeError
 	switch e.errorType {
 	case ErrorTypeOpenAIError:
@@ -235,7 +236,7 @@ func (e *NewAPIError) ToClaudeError() ClaudeError {
 		}
 	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
-		result.Message = kitutil.MaskSensitiveInfo(result.Message)
+		result.Message = kitutil.MaskSensitiveInfo(result.Message, e.maskingAddresses(upstreamURLs)...)
 	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)
@@ -402,10 +403,7 @@ func ErrOptionWithStatusCode(statusCode int) NewAPIErrorOptions {
 
 func ErrOptionWithHideErrMsg(replaceStr string) NewAPIErrorOptions {
 	return func(e *NewAPIError) {
-		if kitutil.Debug.Load() {
-			fmt.Printf("ErrOptionWithHideErrMsg: %s, origin error: %s", replaceStr, e.Err)
-		}
-		e.Err = errors.New(replaceStr)
+		e.Err = &hiddenErrorMessage{message: replaceStr, cause: e.Err}
 	}
 }
 
@@ -419,3 +417,28 @@ func IsRecordErrorLog(e *NewAPIError) bool {
 	}
 	return *e.recordErrorLog
 }
+
+// ErrOptionWithUpstreamAddresses binds masking to the attempt that produced the error.
+func ErrOptionWithUpstreamAddresses(addresses ...string) NewAPIErrorOptions {
+	return func(e *NewAPIError) {
+		if len(e.upstreamAddresses) == 0 {
+			e.upstreamAddresses = append([]string(nil), addresses...)
+		}
+	}
+}
+
+func (e *NewAPIError) maskingAddresses(fallback []string) []string {
+	if len(e.upstreamAddresses) > 0 {
+		return e.upstreamAddresses
+	}
+	return fallback
+}
+
+// Hidden display text must not erase transport cancellation or typed causes.
+type hiddenErrorMessage struct {
+	message string
+	cause   error
+}
+
+func (e *hiddenErrorMessage) Error() string { return e.message }
+func (e *hiddenErrorMessage) Unwrap() error { return e.cause }

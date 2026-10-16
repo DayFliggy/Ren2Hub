@@ -223,6 +223,20 @@ manifest 每项包含 `id`、`visible`、`supported_endpoint_types`、可选 `ca
 
 价格资格在实际端点、协议绑定和渠道执行器确定后计算。原生端点使用空插件作用域；插件端点复用该插件的用量 schema 和报价解析器，不能拿其他插件表达式代替。显式不兼容插件表达式拒绝该端点，不能退回原生价格掩盖。现有报价器允许的全局按次价格后备及显式允许未配置价格模型的设置保留；不额外引入另一套定价规则。协议声明的模型子集与别名使用请求中间件的同一索引。
 
+`GET /api/user/model-market` 继续使用同一权限过滤的模型集合。模型基准的 `values` 是唯一 `model_pricing` 配置的精确字符串投影；任务表达式基准可附 `usage_reference`。相同模型、执行插件、表达式但实际映射 profile 的用量 schema 或样例不同，分别生成基准，避免错用其他 profile 的首例。渠道报价只引用基准并提供已有售价系数，不新增持久化售价。
+
+公开 `GET /api/pricing` 的每个模型新增 `pricing_values` 对象（数值项为十进制字符串，缺项保持缺失），原倍率/按次数值字段保持兼容；任务表达式行及 `billing_plugin_variants[]` 可附同一 `usage_reference`：
+
+| 字段 | 合同 |
+| --- | --- |
+| `status` | `available` 或 `unavailable` |
+| `amount_usd` | 仅可用时存在的非负十进制字符串；现有计价器对首个 usage 样例的 USD 结果，倍率为 1，未转 quota |
+| `label`、`facts` | 首例标签与事实；数值事实保持字符串，布尔事实保持布尔值 |
+| `plugin_key`、`plugin_name`、`matched_tier` | 可选执行插件身份与命中档位 |
+| `reason` | 仅不可用时存在：`missing_example`、`invalid_example`、`dynamic_context`、`unsupported_expression`、`calculation_failed` |
+
+后端参考求值复用管理员模拟的现有计算器，仅用于不依赖动态请求/时间上下文的首例，不读取当前请求头、参数或真实账务数据。非法首例不尝试后续样例。Token 表达式由前端展示解析器静态提取首档原始字面量，不执行任意表达式。公开价目和市场的输入/输出/按次六向排序使用共同的精确比较规则：渠道倍率一次，同单位分组，缺值始终置后；首档/样例/条件/插件及单位必须标明。独立请求条件倍率仅提示未计入，不将基准首档参考称为实际单价。任务变体没有输入/输出单价合同，公开卡片采用首个已配置兼容插件的样例总额，各插件详情保留自身样例；不计算跨插件 Token 最低价。完整展示与多插件选取规则见[模型定价](../billing/PRICING.md#公开展示与审计)。这些参考字段不改变 manifest 资格、实际选路、冻结报价或 Expr VM 求值精度。
+
 `GET /api/token/:id/client-config?format=codex|pi` 使用该 Token 的同一 manifest。Codex 导出 Responses TOML，可用 `model` 查询参数选择已授权模型；Pi 导出 Chat Completions JSON。响应包含 `filename`、`media_type`、`content`、`models` 和稳定诊断 `diagnostics`。Token 页提供预览、复制、下载。连接地址仅来自保存的 `ServerAddress`，不使用请求 Host 或转发头；密钥只使用 `REN2HUB_API_KEY` 环境变量引用。未知能力省略，不能移植的能力有诊断，价格一律省略并返回 `prices_omitted`，不虚构零价。PAT 分别要求 `profile:read`、`tokens:read`。
 
 Codex 客户端导出使用标准 OpenAI Responses 协议，不依赖 ChatGPT 订阅渠道、OAuth 或供应商用量窗口；Pi 继续使用标准 Chat Completions。导出只能包含当前 Token 有权使用且可路由的模型，退役 type 57 不会贡献可用端点。

@@ -1,15 +1,21 @@
+import type {
+  PriceSort,
+  ReferencePrice,
+  UsageReference,
+} from './pricingReference'
 import type { ModelCapabilities } from '@/api/modelManifest'
 import type { PricingValues } from '@/api/pricingConfig'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 
 export type ModelMarketViewMode = 'models' | 'channels' | 'comparison'
-export type ModelMarketSort = 'default' | 'name' | 'input' | 'call'
+export type ModelMarketSort = PriceSort
 export type MarketBillingMode =
   'token' | 'per_call' | 'dynamic' | 'unconfigured'
 export type MarketModelType =
   'chat' | 'image' | 'embedding' | 'audio' | 'video' | 'rerank'
 
 export interface MarketPricingContract {
+  usage_reference?: UsageReference
   id: string
   version: string
   configured: boolean
@@ -63,6 +69,7 @@ export interface MarketPriceLine {
 }
 
 export interface MarketPricing {
+  referencePrices?: ReferencePrice[]
   id: string
   version: string
   billingMode: MarketBillingMode

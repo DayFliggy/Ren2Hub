@@ -37,6 +37,8 @@ export type TokenTier = {
   imageCount?: boolean
   billingUnit?: 'token' | 'request'
   fixedPrice?: number
+  fixedPriceNode?: ExpressionNode
+  priceNodes?: Partial<Record<TokenVariable, ExpressionNode>>
   label: string
   conditions: TokenTierCondition[]
   prices: Partial<Record<TokenVariable, number>>
@@ -112,6 +114,7 @@ function tokenTier(
     return null
   }
   const prices: TokenTier['prices'] = {}
+  const priceNodes: Partial<Record<TokenVariable, ExpressionNode>> = {}
   const body = node.args[1]
   if (
     body.kind === 'call' &&
@@ -125,6 +128,7 @@ function tokenTier(
       prices,
       billingUnit: 'request',
       fixedPrice: body.args[0].value,
+      fixedPriceNode: body.args[0],
     }
   }
   for (const term of flattenBinary(node.args[1], '+')) {
@@ -132,9 +136,11 @@ function tokenTier(
       return null
     }
     let input = term.left
-    let price = nonnegativePriceLiteral(term.right)
+    let priceNode = term.right
+    let price = nonnegativePriceLiteral(priceNode)
     if (price === null) {
-      price = nonnegativePriceLiteral(term.left)
+      priceNode = term.left
+      price = nonnegativePriceLiteral(priceNode)
       if (price === null) return null
       input = term.right
     }
@@ -176,9 +182,10 @@ function tokenTier(
     }
     if (Object.hasOwn(prices, variable)) return null
     prices[variable] = price
+    priceNodes[variable] = priceNode
   }
   if (Object.keys(prices).length === 0) return null
-  return { label: node.args[0].value, conditions, prices }
+  return { label: node.args[0].value, conditions, prices, priceNodes }
 }
 
 /** Legacy token summary contract: ordered linear chain, never a minimum or partial price extraction. */

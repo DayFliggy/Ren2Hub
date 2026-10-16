@@ -611,6 +611,9 @@ export default {
     advancedSummary: '模型限制与 IP 限制',
     advancedConfigured: '已配置 {count} 项',
     nameLabel: '名称',
+    allowUserQuotaQuery: '允许查询账户额度',
+    allowUserQuotaQueryHint:
+      '持有此密钥的人可以查询您账户的可用额度和已用额度。',
     namePlaceholder: '例如：Chatbox 客户端',
     modelsLabel: '模型限制（留空不限制）',
     modelsPlaceholder: '搜索模型…',

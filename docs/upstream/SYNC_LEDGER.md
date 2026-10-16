@@ -1,6 +1,6 @@
 # 上游同步账本
 
-本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `63cecab824bad1a421d19950004c309bb2054c09`（main）、Sub2API `4d9ac3e482106d2da3a39fe3e546d8d6801f1cc1`（main）、AxonHub `3cb7e3335cadd463fe7748c47dd003802125e3dd`（unstable），下一轮从这三个提交向后比较。
+本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `d032204733db31208f10bac118b6e683aab3bf29`（main）、Sub2API `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`（main）、AxonHub `a946fca495c52344ed073abb6c3562b9ff728b12`（unstable），下一轮从这三个提交向后比较。
 
 逐批的比较窗口、执行过程和验收数据保存在 Git 历史中：在 Ren2Hub 目录运行 `git log -- docs/upstream/SYNC_LEDGER.md` 定位批次，再用 `git show <commit>:docs/upstream/SYNC_LEDGER.md` 读取。接口字段以[网关 API](../routing/GATEWAY_API.md)、[协议支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md)、[插件 API](../plugin-api/v1.md)、[模型定价](../billing/PRICING.md)和[鉴权合同](../authentication.md)为准，本账本只记处置与本地合同。
 
@@ -15,6 +15,128 @@
 | 不适用 | 本地没有对应代码或产品 | 对应能力重新引入时复评 |
 
 状态沿用[适配矩阵](../../../skills/ren2hub-upstream-sync/references/adaptation-matrix.md)的定义：部分吸收的上游提交拆成多行分别标注；百炼实际 `reasoning_effort` 行为仍是待验证项（队列 `SYNC1008-06`）。处置状态描述代码行为，守护测试列指明相关回归，不代表本轮候选验收或部署已完成；“—”表示没有专门测试。
+
+## 2026-10-16 增量处置
+
+本轮以 Ren2Hub `59b25959bcb596ac7831411d11dab8ed7c7ca7f9` 实施。标准采集于 `2026-10-16T12:09:47.3558667Z` 完整通过；来源冻结为 NewAPI `63cecab824bad1a421d19950004c309bb2054c09..d032204733db31208f10bac118b6e683aab3bf29`（19）、Sub2API `4d9ac3e482106d2da3a39fe3e546d8d6801f1cc1..b0a02a3304a0a78cdd003ddda1dd23ba02c03084`（30 普通、18 merge）、AxonHub `3cb7e3335cadd463fe7748c47dd003802125e3dd..a946fca495c52344ed073abb6c3562b9ff728b12`（15）。Sub2API 路径过滤比较器列出42项；另以完整提交图补登记6个无独立补丁的merge，不能把42当完整窗口。
+
+发布标签分别为 NewAPI [v1.0.0-rc.44](https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.44)、Sub2API [v0.2.17](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.17)、AxonHub [v1.0.0-beta11](https://github.com/looplj/axonhub/releases/tag/v1.0.0-beta11)。主干与发布版独立锁定。此前所有用户决定等待NewAPI的事项继续保留，本轮不替换这些决定。
+
+用户在实现复核中确认：多插件继续展示各自任务样例总额，公开卡片稳定选择首个已配置兼容作用域；现有任务schema没有token输入/输出方向，不能推导“多插件token首档最低价”。原生token首档、六方向排序和明确未计入请求条件倍率的基准参考保留。
+
+实施与证据目录为 `/home/work/upstream-sync-20261016T120344Z`。提交前 `candidate_sha=null`；代码行为登记不代表源码发布、候选或正式部署通过。集成验收与发布身份在本节验收记录及服务器档案分别登记。
+
+### NewAPI
+
+| 提交 | 状态 | 适配或保留边界 |
+| --- | --- | --- |
+| `d10eafb57e289e971453eb68e882addaa29f8cc9` | 已吸收 | 请求体读取/解析错误保留真实原因，统一413/400和单次前缀；失败在准入/资金预留/上游发送前退出。 |
+| `ef60ef27f36e418143fa4abf0c9025ba6f17fba7` | 已吸收 | 请求级缓存首次读取失败，后续读取不重复消费Body；与d10eafb57共用错误分类。 |
+| `7de10f2c602b50122017556e8a09cb7c488c273c` | 已吸收 | Key增加allow_user_quota_query：新建缺省true、旧记录/旧缓存false、更新缺省保留；权限回源即时撤销。查询复用CIDR与用户状态；钱包与Key预算分开、精确字符串、无限null、负余额保留。type60余额精确取预算/钱包较小值并校验单位及保存结果。 |
+| `4013729f6a2a14b9b5988d3c1a529ea97d2b2d8d` | 已吸收 | 敏感词过滤及prompt过滤缺省关闭、默认词表为空；持久化管理员设置继续覆盖缺省。 |
+| `a0bf6a8a412764bc296a8e27cf8c4aaa3f3f0ed9` | 已吸收 | Vertex API Key使用setting.vertex_project_id；空项目维持express，服务账号使用凭据项目；与718a4e7f9和AxonHub ae491d69共用唯一端点/身份路径。 |
+| `c9f7b6208131089bcf3c36ac554432967b57156d` | 已吸收 | Vue增加输入/输出/按次六方向排序；唯一model_pricing投影精确首档或匹配profile首例参考价，缺失置后、稳定并列、倍率一次；不改路由顺序或计算精度。 |
+| `1b63c28dcc999c4445c70f21ec90103ab49e8be5` | 已吸收 | 复用已有纯缓存计费及权威usage；输入缺失检查含缓存读写，中断输出取报告与估算较大值，保留来源。 |
+| `76cd5114eae2fd933ea0da08f41984f1ff52cd85` | 已吸收 | moejs升级alpha.7；运行时池、清理、取消、fetch、只读usage回归及race通过；使用alpha.7的default.pgo完成实际构建，旧alpha.6隔离执行新插件亦通过。 |
+| `150ab3cd439441e246be7bca9a1ab25e339e1865` | 已吸收 | 许可清单按103项本地Go/Vue/Electron直接依赖刷新并补MPL全文；Linux客户端5份许可资源与源文件哈希相同，正式镜像携带校验是后续候选门槛。 |
+| `bfdad293cdd4fd93c4c80b46ce1baa7a3a593e92` | 已吸收 | Vidu最终发送与usage共用有效模型/时长/分辨率，metadata不能覆盖实际生成参数。 |
+| `f196934ce6908623cb0ee302cd4ec9a6e11f0228` | 已吸收 | Hailuo1.3.0+ren2hub.1；Vidu/Google/Vertex1.1.0+ren2hub.1绑定type60；Bearer网关Key、网关任务ID和产物路由，历史源码固定版本继续恢复。 |
+| `718a4e7f9751c5bf1958747cd0c2c895e2b937d4` | 已吸收 | Vertex统一global/us/eu/普通区域/自定义地址，保留SSE参数；目标变化进入最终身份验证。 |
+| `19d435e7fdfdaa2b9a734a76393f112cf980b815` | 已吸收 | 共享脱敏器绑定真实失败尝试地址快照，覆盖JSON/SSE/WS/任务/日志/通知；Google Key、URL凭据/IP仍遮盖，官方地址和文档链接可读。 |
+| `908f94d65d4f60729db3d8870f505ca3fba943c5` | 已吸收 | 控制台搜索与侧栏共用完整权限、root身份和功能开关上下文。 |
+| `c9179d38b780c1d6635bcbc50f77b5074f8b49bb` | 不适用 | Playground已经退役，不恢复聊天产品；保留退役路由回归。 |
+| `6549a17eda83eaa270fd8cbb0c03623836b351d6` | 已吸收（既有） | ECharts使用主题文字颜色，补明暗主题浏览器回归。 |
+| `45fbb149f0c89ff48d805335f22419be392d0350` | 本地偏离保留 | 保留用户级跨Key/跨路由组共享逻辑限频，内部重试不重复计数；WS按逻辑请求计次。上游Token分组独立配额不符合本地合同。 |
+| `ca2cae676db87333a583b6e104d0f1f7366f3258` | 已吸收 | 共享DTO仅reasoning item保证summary:[]，覆盖真实JSON/SSE编码，不改其他item。 |
+| `d032204733db31208f10bac118b6e683aab3bf29` | 已吸收 | setting.aws_api_type=invoke_model|mantle，缺省invoke_model；Mantle Messages支持API Key/SigV4，bedrock-mantle签最终字节，接现有身份/发送/代理/TLS/超时/预留生命周期，Nova发送前拒绝。 |
+
+### Sub2API
+
+| 提交 | 状态 | 适配或保留边界 |
+| --- | --- | --- |
+| `89ad4c2caa0a2c9f5a393f9d1c9c7e3c73f7c3b3` | 已吸收（既有） | Vertex共享容量429归瞬态、不污染凭据健康；不引入连续睡眠同号重试。 |
+| `9c2cca9e627291bc719bada3d57de23b625a4180` | 不适用 | 赞助记录，无本地功能变化。 |
+| `20c4bf5ae59e4cb94669165436bb57ee16c41cb3` | 已吸收 | 确定的SA已删除令牌交换错误只归当前凭据失效；其他时钟/签名/TLS/超时/取消独立分类。 |
+| `14cd5871752dabfc38069e9a7d87f282da0c9eda` | 已吸收（既有） | 真实尝试只观察一次健康结果、归还一次预留；保留本地统一attempt生命周期。 |
+| `c6c9935ae37035ba69555701e2fb103ab4993f5e` | 部分吸收 | 精确增加Argon目录和能力；不导入内置售价，仍要求管理员配置model_pricing。 |
+| `867563ae76f3ff99ed20dfed93ee216a7939ce3f` | 已吸收（既有） | Anthropic协议base URL复用最终端点身份，不另造fallback。 |
+| `26e55cf332e73ae25ae0e17f1e0ef90bcbf03e54` | 延期 | Web search模拟需要工具成本和报价合同；未引入。 |
+| `7de15113c77cf6d3c431b1840c6997d561cc634d` | 不适用 | OAuth账号排除web-search模拟；本地无该账号产品，模拟能力仍延期。 |
+| `16611a8ee0b459ee002d50efb5a90d9d06d92ff0` | 不适用 | Codex订阅账号workspace导入隔离不对应本地渠道产品。 |
+| `373d43533a0fa06e1993af1eedd61154db8ebfb0` | 部分吸收 | 吸收精确gemini-4-argon目录/能力，Antigravity账号和自动上游目录不吸收。 |
+| `2a8cb088af205586b514a27f6a63e9bcf7adb4e6` | 刻意不吸收 | 不静默提高用户max_tokens；继续按共享预算/协议能力校验。引入最小输出策略需独立产品合同。 |
+| `feab6d80dc09fa2d64894d20cdca64fb4e460931` | 已吸收（既有） | 工具图片、原生functionCall/thoughtSignature及协议路由复用共享转换器和损失诊断；不增加Antigravity/composite账号产品。 |
+| `92c9433d40db69b00f8e158fc573e2b796c4a678` | 不适用 | 赞助记录，无本地功能变化。 |
+| `1774b79dcbf9ba25a007772c015d29758b7fdbc2` | 不适用 | GLM Coding Plan账号用量窗口，本地无订阅账号产品。 |
+| `d19265ddb218c79e951011e6dec54fe17a215223` | 不适用 | OAuth composite账号歧义路由；本地按协议/凭据最终身份拒绝覆盖，不引入该产品。 |
+| `3856a02856ca788cc1714362b1dc8a5a4d06b131` | 来源登记 | 合并提交：Merge pull request #8106 from Wei-Shaw/fix/composite-oauth-ambiguous-misroute；父提交功能已分别处置，不重复计数。 |
+| `fdc7f1fa011a912afb9f7948cb9dc46059c98ddd` | 来源登记 | 合并提交：Merge pull request #8087 from coder-zhw/fix/zhipu-credit-limit-window-classification；父提交功能已分别处置，不重复计数。 |
+| `3b83e045ed5ddc8246ebe8b3c4045a1c7ff5968b` | 来源登记 | 合并提交：Merge pull request #8060 from feeeei/fix/gemini-vertex-shared-capacity-429；父提交功能已分别处置，不重复计数。 |
+| `abdc82725f1c6f1530d2a5835b0af653d352994e` | 来源登记 | 合并提交：Merge pull request #8076 from feeeei/fix/gemini-vertex-sa-and-error-policy；父提交功能已分别处置，不重复计数。 |
+| `dcde68aa5881ba7eea569ff1d98a860fba1d8b8c` | 来源登记 | 合并提交：Merge pull request #8078 from feeeei/feat/gemini-4-argon-pricing；父提交功能已分别处置，不重复计数。 |
+| `8afd2abd979fa4bf657a73cbf0900bcebd95e812` | 来源登记 | 合并提交：Merge remote-tracking branch 'origin/main' into contrib/gemini-4-argon-support；父提交功能已分别处置，不重复计数。 |
+| `9d3cc4507ff773e8f52e7340f20a5ffcfe8df22f` | 不适用 | Antigravity legacy passthrough和内置Claude tier售价；保留本地共享转换策略和唯一售价。 |
+| `857a76d4a0e7b2389926c340555a2f8f5b24a0ae` | 来源登记 | 合并提交：Merge pull request #8093 from baryon/contrib/gemini-4-argon-support；父提交功能已分别处置，不重复计数。 |
+| `64211de8defd7144c1e99f72770278adeae3c2a5` | 已吸收 | Argon明确支持low/medium/high默认medium，不静默升档；保留includeThoughts=false、工具流和损失诊断。 |
+| `58b5e858c82dcf14a637762ee1e6c37ec9f86aad` | 来源登记 | 合并提交：Merge pull request #8094 from wucm667/feat/issue-8092-configurable-min-output；父提交功能已分别处置，不重复计数。 |
+| `ddef05527eca7f369b107fd87c4811d696284f38` | 来源登记 | 合并提交：Merge pull request #8079 from wucm667/fix/issue-8074-anthropic-base-url；父提交功能已分别处置，不重复计数。 |
+| `698d142468ab15374bc22bd5247759e5b7352006` | 来源登记 | 合并提交：Merge pull request #8088 from wucm667/fix/issue-8077-workspace-aware-import；父提交功能已分别处置，不重复计数。 |
+| `c2cca510f2dc46f400bd8f9dcc4a5de55859cf51` | 不适用 | 恢复账号页面inline filters，本地无该页面。 |
+| `26aab6dc076059efb919d8b88ce33b2b27fde246` | 不适用 | ChatGPT订阅端GPT-5.5退役策略不影响本地官方API渠道。 |
+| `1b2243a4f50621508e79aef4b498a2937a6238ee` | 来源登记 | 合并提交：Merge pull request #8120 from Wei-Shaw/revert/inline-account-filters；父提交功能已分别处置，不重复计数。 |
+| `7c6f70680d76faf2b8e0a2df3669b8966c410f97` | 刻意不吸收 | 订单类型/待退款扣减属于新支付退款合同，不移植。 |
+| `f996b0bfaae10d0894aaf7edced956805ad4229f` | 刻意不吸收 | Stripe订单快照client secret属于参考项目支付流程，不移植。 |
+| `44e35fbf844059c9937c8d910f3da5fdfe0810dc` | 刻意不吸收 | 待退款失败原子终结，随独立退款产品复评。 |
+| `83337a0c6547037fbd122a6dcf0f6cc71679db08` | 刻意不吸收 | Alipay退款查询和订单关闭，随独立支付产品复评。 |
+| `f37b69b77934ab2479b41178ef65ea337cc18041` | 刻意不吸收 | Alipay退款查询不确定性，随独立支付产品复评。 |
+| `86f844304591800be66bafa4454c4a5bc8e02514` | 不适用 | ChatGPT订阅别名投影后判退役，无该产品。 |
+| `52b3ca960960cc755bcb73172a99e7394f0e50dc` | 来源登记 | 合并提交：Merge pull request #8122 from Wei-Shaw/fix/payment-order-type-refund-hold；父提交功能已分别处置，不重复计数。 |
+| `1b92038eaf60674e622dcd90d13d79642c422a6f` | 刻意不吸收 | EasyPay订单查询/通知确认，随独立支付产品复评。 |
+| `b8cfb7884084393e08f0e2c4027afc3755357b98` | 来源登记 | 合并提交：Merge pull request #8133 from Wei-Shaw/fix/easypay-query-confirm；父提交功能已分别处置，不重复计数。 |
+| `a431e53f9e3da9097b1b9defc1f118553bd5b4fa` | 来源登记 | 合并提交：Merge remote-tracking branch 'origin/main' into pr-8114；父提交功能已分别处置，不重复计数。 |
+| `455d317d6a87d8519a52c8769a0727824c403171` | 来源登记 | 合并提交：Merge pull request #8114 from feeeei/feat/gemini-compat-thinking；父提交功能已分别处置，不重复计数。 |
+| `bdfe215cbb06f5089112873b14c34c538fc37118` | 本地偏离保留 | 按已确认NewAPI行为，不对原生Responses缺created_at做通用补齐。 |
+| `f2e5b55f3e8069df1c02a9a27af537b5fdefa64e` | 不适用 | created_at补齐配套测试；本地保留原生行为，不复制对应实现。 |
+| `71e6b6a9717064b61826d7e5bc480a5f4b50d9cf` | 不适用 | 重复created_at测试补丁，不重复计算能力。 |
+| `43157c478ec29cb765043e2f0cba4f69728dd2f2` | 来源登记 | 合并提交：Merge pull request #8121 from Larry-Labs/fix/gpt55-subscription-retirement；父提交功能已分别处置，不重复计数。 |
+| `b14f316ca2def2fbf379a7413c3f4309cc70acdd` | 来源登记 | 合并提交：Merge pull request #8080 from SipengXie2024/fix/openai-messages-web-search-emulation；父提交功能已分别处置，不重复计数。 |
+| `060d0160417782cd962a0c7f460f6cd4565d4916` | 来源登记 | 合并提交：Merge pull request #8140 from Wei-Shaw/fix/issue-8118-responses-created-at；父提交功能已分别处置，不重复计数。 |
+| `b0a02a3304a0a78cdd003ddda1dd23ba02c03084` | 不适用 | VERSION同步0.2.17，保留来源，不覆盖Ren2Hub发布身份。 |
+
+### AxonHub
+
+| 提交 | 状态 | 适配或保留边界 |
+| --- | --- | --- |
+| `36364049d5ca89bf74ba66ca5957987d5648540d` | 已吸收 | Responses失败保留code/type/message/param；仅400–599合法HTTP状态，其余用网关错误状态；重试服从未交付/无输出/无副作用/未取消边界，失败usage隔离。 |
+| `94cd05b12c648c6664815e4f94afb97d60bc598e` | 部分吸收（既有） | 既有HTTP/WS入口和模型能力规划保留；跨HTTP/WS续接状态重建延期，需独立资源/恢复合同。 |
+| `cc1c7e5dce208eefc81e848847495642ba1ffbf0` | 刻意不吸收 | 无有效渠道模型售价时拒绝收费调用，不用模型库兜底。 |
+| `ca3059fe6d99b71bbc17a4e4367229025693c260` | 不适用 | PAT兼容Codex订阅provider与当前API渠道产品不符。 |
+| `c7573e4c2e05bb00cc2d363ad5e8047ec2e08b2c` | 不适用 | Vertex项目绑定初版，被490d91bd完整撤销；按ae491d69最终实现适配，不重复移植。 |
+| `490d91bd64cc3a9d20788a2c538513453b633b66` | 不适用 | 撤销c7573e4c，保留来源，净变化不计能力。 |
+| `f7e602325f0ec413031b60b89e547b04781f85d3` | 已吸收（既有） | WebSocket专用HTTP/1.1传输配置，验证TLS+代理+ALPN。 |
+| `aec4eff67ce15302d285c380f97e1932a30f97c2` | 不适用 | Codex订阅用量指南布局，无本地对应页面。 |
+| `1c695ac32a9aceb32dd0364d2dd7b4076586d0b6` | 已吸收（既有） | 陈旧WS向客户端返回失败；已接受请求不自动重放。 |
+| `ae491d69807bb3c766c0ab085223c13076391bed` | 已吸收 | Vertex API Key项目/区域与NewAPI两修复共用同一配置与端点路径。 |
+| `3dcfa3ce0465025039eb9ed7c06ccdbe6bd49f17` | 部分吸收 | WS区分上游终态、客户端实际交付、最终结算；终态写出回到调用生命周期。取消后后台读取/续接重建不吸收。 |
+| `de5f903934e14dd6883aebffd62f1e0c44d975f4` | 不适用 | Codex第三方账号凭据与目录保留；本地无该provider，不扩产品。 |
+| `afb92c0530749e4121a4eedc20ed090719ede0d9` | 已吸收 | 成功写出终态的事实不能被后续取消抹掉。 |
+| `1dd950d09ce747c8126a455cb2219c4cecd50e97` | 已吸收 | 交付依据实际WS负载字节，含大帧部分写失败；无输出/部分输出/完整终态分开结算。 |
+| `a946fca495c52344ed073abb6c3562b9ff728b12` | 已吸收 | 交付追踪穿过传输包装，结算和释放许可前确定结果；不只看WriteMessage成功返回。 |
+
+### 本地合同与验收记录
+
+账务 schema 5、价格合同4、计算版本、唯一钱包、唯一model_pricing、冻结报价和部署密钥保持原合同。后端单组测试60秒，主模块分批全量，RelayKit独立GOWORK=off；并发路径追加race。供应商均使用本地模拟服务，实际供应商认证/生产调用不能由模拟通过代替。
+
+本地验证证据位于上述目录的 `evidence/`：
+
+- Go：`go-full-final.log` 为主模块完整分批检查；`go-vet-final.log`、`go-pgo-final.log`、`embedded-assets-final.log` 为静态检查、真实PGO构建及生产资源图。RelayKit独立完整测试/构建见 `relaykit-full.log`、`relaykit-build-final.log`；TokenKit未改动。
+- 数据库12组及SDK6组全部通过，见 `database-validation-summary.json`、`sdk-validation-summary.json`。覆盖三库新增字段/重复启动/旧结构读取、资金/恢复/路由，以及Python/Node官方SDK回环。
+- WS/权限并发回归见 `core-race-ws-local-error-final.log`，运行时池/取消/fetch/只读用量race见 `plugin-runtime-race-final.log`。完整测试发现的本地WS错误终态与下一create竞态已修复；失败日志保留，不能当通过证据。
+- Vue全量210文件、1238项通过；typecheck/lint/format/build通过。Key、渠道和参考价均完成桌面/手机×明暗主题；图表7项浏览器回归通过，截图留档。详见 `pricing-verification.md`、`providers-completion.md` 及对应最终日志。
+- 插件及历史源码见 `plugins-completion.md`、`plugins-source-provenance.json`，alpha.7及隔离alpha.6执行通过。Linux Electron目录构建和6个资源哈希见 `electron-linux-final.log`、`electron-resources-final.json`；Windows/macOS安装包及图形启动仍是既有待验证项。
+- `smoke-final.log` 为空库最小冒烟：3次本地模拟调用、单次结算、预留归零及权限/退役路由通过。根发布驱动75项中74通过；1项因隔离宿主无Nginx跳过，正式HTTPS仍须独立验收。
+
+本提交登记源码与本地验收，不代表镜像候选或正式切换已通过。后续不可变镜像、五组候选、跨版本任务恢复/回退和正式只读证据绑定本提交、账本及上游快照哈希，最终状态在根服务器档案登记。
 
 ## 2026-10-13 增量处置
 

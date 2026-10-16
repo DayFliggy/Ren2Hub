@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
@@ -208,7 +209,7 @@ func PrepareGatewayStateOutput(c *gin.Context, info *relaycommon.RelayInfo, chan
 	}
 	// Bedrock signs with the selected SDK credential; its transport does not
 	// apply arbitrary HTTP header overrides. HTTP adaptors bind the final request.
-	if channel.Type == constant.ChannelTypeAws {
+	if channel.Type == constant.ChannelTypeAws && info.ChannelSetting.AwsAPIType != dto.AwsAPITypeMantle {
 		state.owner.TransportID = model.GatewayDigest("bedrock:" + state.owner.EndpointID)
 	}
 	c.Set("gateway_state_output", state)

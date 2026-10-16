@@ -148,3 +148,14 @@ SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic
 TTS 发送前读取最终 `input`、MiniMax `text` 或火山 `request.text`，按已有字符/token 规则预扣；音频输出仍无可靠有界预算，不开放 TPM。MiniMax/火山仅开放 speech，Cloudflare 仅开放非流式 transcriptions；预览和执行读取相同路径/流式登记。火山二进制输出中断会中止 HTTP 传输，已交付部分按估算结算并保存 `usage_source` 和终止状态。官方 Realtime SDK 使用 Python 类型化迭代器和 TypeScript 事件接口，未将测试汇总逻辑称为 SDK 内置累积器。
 
 基础文本矩阵不扩张专项验收的结论：供应商专有搜索、签名及自定义引用域按已列明的具体路径验证，基础 SDK 成功不代表未测特性也已通过。已明确拒绝的协议或特性不记作待实现支持。音频、图像、Embedding、Rerank、Realtime、异步任务不计入上述 400 个文本请求场景，应使用各自专项证据。本矩阵描述本地隔离合同验收，不是生产兼容认证。
+
+
+## AWS、Vertex 与 Gemini（2026-10-16 同步）
+
+AWS 渠道的 `setting.aws_api_type` 可选 `invoke_model`（空值仍为默认）或 `mantle`。Mantle 使用 `/anthropic/v1/messages`、原生 Claude JSON/SSE、`anthropic-version: 2023-06-01`，支持 `APIKey|Region` 和 `AccessKey|SecretAccessKey|Region`；后者以 `bedrock-mantle` 服务签署最终请求。顶层 `cache_control`、块级缓存与缓存读写用量按 Claude 合同处理，Nova 留在 InvokeModel。发送前校验覆盖头后的凭据身份，剥离 hop-by-hop 头后签名，实际请求体经过冻结报价、状态归属与发送保护；不会在鉴权失败或 429 后私自切换接口或跟随重定向。Mantle 的续接状态绑定最终 HTTP 端点与租户头，不能复用 InvokeModel 状态。回归入口：`relay/channel/aws/mantle_test.go`、`service/gateway_mantle_state_test.go`。
+
+Vertex API Key 模式可用 `setting.vertex_project_id` 选择标准项目路径，留空继续 Express 路径；服务账号仍使用其 JSON 中的项目。`other` 的区域值支持 `global`、`us`、`eu` 和现有区域/按模型 JSON 映射；`us`/`eu` 分别使用 `aiplatform.us.rep.googleapis.com` / `aiplatform.eu.rep.googleapis.com`。只有 Google OAuth 400 的 `invalid_grant` 加准确描述 `Invalid grant: account not found` 归为发送前选定凭据失效，其他签名、时钟、429、TLS 和取消错误不归入该类型。共享容量 429 使用现有瞬态失败与重试预算，不冷却密钥，也不添加适配器内重试。回归入口：`relay/channel/vertex/upstream_sync_test.go`、`service_account_test.go`。
+
+`gemini-4-argon` 进入 Gemini/Vertex 目录，共用现有思考渲染与响应流。精确能力行为为 low/medium/high，默认 medium；medium 不升级为 high，无法表达的强度按既有诊断规则映射。新增能力只匹配该模型，未知 Gemini 4/5 型号继续给出未知能力诊断。原生思考配置沿用原样保留规则；跨协议配置由共享渲染器处理。Argon 仅支持隐式缓存；本轮不新增显式缓存、Interactions 或 long decode 自动续请求。回归入口：`relaykit/relayconvert/reasoning/gemini_argon_test.go`、`relaykit/relayconvert/gemini_argon_test.go`。
+
+官方依据：[AWS Messages](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-messages-api.html)、[Mantle SigV4 服务名](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-managed-agents-openai-api-reference.html)、[Argon 模型能力](https://ai.google.dev/gemini-api/docs/models/gemini-4-argon)、[Argon 默认强度与区域](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-argon)。

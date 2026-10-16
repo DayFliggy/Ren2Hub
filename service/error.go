@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/gin-gonic/gin"
 )
 
 func MidjourneyErrorWrapper(code int, desc string) *taskdto.MidjourneyResponse {
@@ -86,6 +87,15 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 }
 
 func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
+	var addresses []string
+	if c, ok := ctx.(*gin.Context); ok {
+		addresses = common.UpstreamAddresses(c)
+	}
+	defer func() {
+		if newApiErr != nil {
+			types.ErrOptionWithUpstreamAddresses(addresses...)(newApiErr)
+		}
+	}()
 	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 	retryAfter, hasRetryAfter := ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 	if hasRetryAfter {
@@ -99,7 +109,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	CloseResponseBodyGracefully(resp)
 	var errResponse dto.GeneralErrorResponse
 	responseBodyText := string(responseBody)
-	responseBodyPreview := common.LocalLogPreview(responseBodyText)
+	responseBodyPreview := common.LocalLogPreview(common.MaskSensitiveInfo(responseBodyText, addresses...))
 	buildErrWithBody := func(message string) error {
 		if message == "" {
 			return fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, responseBodyText)
@@ -202,20 +212,14 @@ func parseStatusCodeMappingValue(value any) (int, bool) {
 	}
 }
 
-func TaskErrorWrapperLocal(err error, code string, statusCode int) *taskdto.TaskError {
-	openaiErr := TaskErrorWrapper(err, code, statusCode)
+func TaskErrorWrapperLocal(err error, code string, statusCode int, upstreamURLs ...string) *taskdto.TaskError {
+	openaiErr := TaskErrorWrapper(err, code, statusCode, upstreamURLs...)
 	openaiErr.LocalError = true
 	return openaiErr
 }
 
-func TaskErrorWrapper(err error, code string, statusCode int) *taskdto.TaskError {
-	text := err.Error()
-	lowerText := strings.ToLower(text)
-	if strings.Contains(lowerText, "post") || strings.Contains(lowerText, "dial") || strings.Contains(lowerText, "http") {
-		common.SysLog(common.LogText("error: %s", text))
-		//text = "请求上游地址失败"
-		text = common.MaskSensitiveInfo(text)
-	}
+func TaskErrorWrapper(err error, code string, statusCode int, upstreamURLs ...string) *taskdto.TaskError {
+	text := common.MaskSensitiveInfo(err.Error(), upstreamURLs...)
 	//避免暴露内部错误
 	taskError := &taskdto.TaskError{
 		Code:       code,
@@ -228,13 +232,13 @@ func TaskErrorWrapper(err error, code string, statusCode int) *taskdto.TaskError
 }
 
 // TaskErrorFromAPIError preserves admission/permission errors across the task API.
-func TaskErrorFromAPIError(apiErr *types.NewAPIError) *taskdto.TaskError {
+func TaskErrorFromAPIError(apiErr *types.NewAPIError, upstreamURLs ...string) *taskdto.TaskError {
 	if apiErr == nil {
 		return nil
 	}
 	return &taskdto.TaskError{
 		Code:       string(apiErr.GetErrorCode()),
-		Message:    apiErr.MaskSensitiveError(),
+		Message:    apiErr.MaskSensitiveError(upstreamURLs...),
 		StatusCode: apiErr.StatusCode,
 		LocalError: true,
 		Error:      apiErr,
@@ -260,4 +264,50 @@ func APIErrorFromTaskError(taskErr *taskdto.TaskError) *types.NewAPIError {
 		types.ErrOptionWithSkipRetry()(apiErr)
 	}
 	return apiErr
+}
+
+// ResponsesAPIError preserves provider failure fields across JSON, SSE and WS.
+// A symbolic code is not an HTTP status; only numeric 400..599 codes select it.
+func ResponsesAPIError(provider *types.OpenAIError, fallback string) *types.NewAPIError {
+	if provider == nil {
+		return types.NewOpenAIError(errors.New(fallback), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
+	status := http.StatusBadGateway
+	if parsed, err := strconv.Atoi(fmt.Sprint(provider.Code)); err == nil && parsed >= 400 && parsed <= 599 {
+		status = parsed
+	}
+	return types.WithOpenAIError(*provider, status)
+}
+
+// MaskResponsesErrorPayload preserves unknown envelope fields while masking
+// the error message at either Responses error location.
+func MaskResponsesErrorPayload(body []byte, addresses ...string) ([]byte, error) {
+	var envelope map[string]common.RawMessage
+	if err := common.Unmarshal(body, &envelope); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"message", "error"} {
+		raw, ok := envelope[key]
+		if !ok {
+			continue
+		}
+		var message string
+		if common.Unmarshal(raw, &message) == nil {
+			masked, err := common.Marshal(common.MaskSensitiveInfo(message, addresses...))
+			if err != nil {
+				return nil, err
+			}
+			envelope[key] = masked
+		}
+	}
+	for _, key := range []string{"error", "response"} {
+		if raw := envelope[key]; len(raw) > 0 && common.GetJsonType(raw) == "object" {
+			masked, err := MaskResponsesErrorPayload(raw, addresses...)
+			if err != nil {
+				return nil, err
+			}
+			envelope[key] = masked
+		}
+	}
+	return common.Marshal(envelope)
 }

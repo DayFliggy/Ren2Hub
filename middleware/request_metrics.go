@@ -10,6 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const relayRequestDeliveredKey = "relay_request_delivery_completed"
+
+// MarkRelayRequestDelivered records a successful terminal write before a later
+// disconnect can cancel the request context during settlement.
+func MarkRelayRequestDelivered(c *gin.Context) { c.Set(relayRequestDeliveredKey, true) }
+
 const relayRequestFailedKey = "relay_request_metrics_failed"
 
 // MarkRelayRequestFailed overrides response-based inference when the relay
