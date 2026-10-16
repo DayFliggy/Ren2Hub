@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { MarketModel } from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
+import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelIdentity from './ModelIdentity.vue'
 import ModelCapabilities from './ModelCapabilities.vue'
@@ -12,6 +13,9 @@ import ModelStatistics from './ModelStatistics.vue'
 const props = defineProps<{ model: MarketModel }>()
 const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
+const cardId = useId()
+const benchmarkId = `${cardId}-benchmark`
+const quoteId = `${cardId}-quote`
 const representative = computed(() => props.model.offers[0])
 const reference = computed(
   () => representative.value?.baseline ?? props.model.baselines[0]
@@ -31,6 +35,7 @@ const channelCount = computed(
       class="market-card-hit focus-ring"
       type="button"
       :aria-label="t('openDetail', { name: model.name })"
+      :aria-describedby="`${benchmarkId} ${quoteId}`"
       @click="emit('detail', model.id, representative?.id)"
     />
     <div class="market-card-heading">
@@ -45,13 +50,15 @@ const channelCount = computed(
     </div>
     <div class="market-card-quotes">
       <div
+        :id="benchmarkId"
         class="market-quote-lane market-benchmark"
         data-platform-reference
         data-market-baseline
       >
         <div class="market-quote-heading">
           <span
-            >{{ t('benchmark') }} <span class="market-ratio">1.0×</span></span
+            >{{ t('benchmark') }}
+            <span class="market-ratio">{{ formatMarketRatio('1') }}</span></span
           >
           <span class="market-reference-label">{{ t('reference') }}</span>
         </div>
@@ -63,13 +70,20 @@ const channelCount = computed(
         >
           {{ pricingVariantLabel(reference, t('defaultVariant')) }}
         </p>
-        <ModelPriceDisplay :pricing="reference" />
+        <ModelPriceDisplay :id="`${benchmarkId}-price`" :pricing="reference" />
       </div>
-      <div v-if="representative" class="market-quote-lane" data-channel-quote>
+      <div
+        v-if="representative"
+        :id="quoteId"
+        class="market-quote-lane"
+        data-channel-quote
+      >
         <div class="market-quote-heading">
           <span class="market-channel-name"
             >{{ representative.channelName }}
-            <span class="market-ratio">{{ representative.ratio }}×</span></span
+            <span class="market-ratio">{{
+              formatMarketRatio(representative.ratio)
+            }}</span></span
           >
           <span class="market-billing-label">{{
             t(`billingModes.${representative.pricing.billingMode}`)
@@ -81,15 +95,23 @@ const channelCount = computed(
         >
           {{ pricingVariantLabel(representative.pricing, t('defaultVariant')) }}
         </p>
-        <ModelPriceDisplay :pricing="representative.pricing" />
+        <ModelPriceDisplay
+          :id="`${quoteId}-price`"
+          :pricing="representative.pricing"
+        />
         <ModelStatistics compact />
       </div>
-      <div v-else class="market-quote-lane market-no-offers">
+      <div v-else :id="quoteId" class="market-quote-lane market-no-offers">
         {{ t('noSupply') }}
       </div>
     </div>
     <div class="market-card-footer">
-      <span>{{ t('offerCount', { count: channelCount }) }}</span>
+      <span>
+        {{ t('offerCount', { count: channelCount }) }}
+        <template v-if="model.baselines.length > 1">
+          · {{ t('variantCount', { count: model.baselines.length }) }}
+        </template>
+      </span>
       <span class="market-card-details"
         >{{ t('allQuotes')
         }}<svg

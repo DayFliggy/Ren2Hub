@@ -84,7 +84,7 @@ describe('ModelsView authenticated market integration', () => {
       popup.querySelector('[data-market-telemetry]')!.textContent
     ).toContain('统计')
     popup
-      .querySelector<HTMLButtonElement>('button[data-market-baseline]')!
+      .querySelector<HTMLButtonElement>('[data-market-baseline] button')!
       .click()
     await flushPromises()
     expect(
@@ -132,6 +132,58 @@ describe('ModelsView authenticated market integration', () => {
         '.market-detail-price-panel [data-price-dimension="request"]'
       )!.textContent
     ).toContain('$0.016')
+  })
+
+  it('describes real prices and billing modes on A/B/C and detail actions', async () => {
+    const fixture = createModelMarketFixture()
+    fixture.offers[0]!.id = 'opaque offer ID with spaces'
+    vi.mocked(api.get).mockResolvedValueOnce(fixture)
+    const wrapper = render()
+    await flushPromises()
+    const description = (button: Element) =>
+      (button.getAttribute('aria-describedby') ?? '')
+        .split(/\s+/)
+        .map((id) => {
+          const content = document.getElementById(id)
+          expect(content, `missing description ${id}`).not.toBeNull()
+          return content!.textContent
+        })
+        .join(' ')
+    const cardButton = wrapper.get(
+      '[data-model-name="gpt-4.1"] button[aria-label*="模型详情"]'
+    )
+    expect(description(cardButton.element)).toContain('$2.500')
+    expect(description(cardButton.element)).toContain('$0.500')
+    for (const mode of ['渠道货架', '比价矩阵']) {
+      await wrapper.get(`[role="radio"][aria-label="${mode}"]`).trigger('click')
+      const button = wrapper.get(
+        'button[aria-label="查看 gpt-4.1 在 雾桥中转 的报价"]'
+      )
+      const text = description(button.element)
+      expect(text).toContain('0.2×')
+      expect(text).toContain('按量')
+      expect(text).toContain('$0.500')
+      expect(text).toContain('/ 1M tokens')
+      expect(wrapper.findAll('button dl')).toHaveLength(0)
+    }
+    await wrapper
+      .get('button[aria-label="查看 gpt-4.1 在 雾桥中转 的报价"]')
+      .trigger('click')
+    await flushPromises()
+    const button = dialog().querySelector('button[data-offer-id]')!
+    expect(description(button)).toContain('$0.500')
+    expect(description(button)).toContain('统计暂未提供')
+    expect(dialog().querySelectorAll('button dl')).toHaveLength(0)
+    const baseline = dialog().querySelector<HTMLButtonElement>(
+      '[data-market-baseline] button'
+    )!
+    expect(description(baseline)).not.toContain('统计')
+    baseline.click()
+    await flushPromises()
+    expect(baseline.getAttribute('aria-pressed')).toBe('true')
+    expect(
+      dialog().querySelector('[aria-live="polite"]')!.textContent
+    ).toContain('平台基准价')
   })
 
   it('distinguishes an empty supply catalog from a search with no matches', async () => {

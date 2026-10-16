@@ -54,6 +54,21 @@ describe('model aggregation card', () => {
     wrapper.unmount()
   })
 
+  it('shows variant discovery only for models with multiple billing variants', () => {
+    const wrapper = mount(ModelCard, {
+      props: { model: model('video-preview') },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.get('.market-card-footer').text()).toContain('2 个计费变体')
+    wrapper.unmount()
+    const single = mount(ModelCard, {
+      props: { model: model() },
+      global: { plugins: [i18n] },
+    })
+    expect(single.get('.market-card-footer').text()).not.toContain('计费变体')
+    single.unmount()
+  })
+
   it('marks unconfigured supply instead of rendering a free price', () => {
     const wrapper = mount(ModelCard, {
       props: { model: model('unpriced-preview') },

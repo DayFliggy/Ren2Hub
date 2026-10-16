@@ -489,4 +489,10 @@ onMounted(load)
     font-size: 0.625rem;
   }
 }
+@container model-market (max-width: 340px) {
+  .market-sort-filter,
+  .market-view-switch {
+    grid-column: 1 / -1;
+  }
+}
 </style>

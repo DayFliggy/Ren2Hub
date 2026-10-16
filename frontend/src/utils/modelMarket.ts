@@ -16,6 +16,12 @@ import type {
 
 export const PLATFORM_VENDOR = '__platform__'
 
+/** Display validated decimal ratios without converting to floating point. */
+export function formatMarketRatio(value: string): string {
+  const [integer, fraction = ''] = value.split('.')
+  return `${integer}.${fraction.replace(/0+$/, '') || '0'}×`
+}
+
 export function isAudioEndpoint(endpoint: string): boolean {
   return endpoint === 'realtime' || endpoint.includes('audio')
 }

@@ -10,8 +10,9 @@ const props = withDefaults(
   defineProps<{
     pricing?: MarketPricing
     mode?: 'summary' | 'comparison' | 'full'
+    layout?: 'inline' | 'rows'
   }>(),
-  { mode: 'summary', pricing: undefined }
+  { mode: 'summary', layout: 'inline', pricing: undefined }
 )
 const { t, te } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 const summaryKeys = computed(() => {
@@ -53,7 +54,7 @@ function label(line: MarketPriceLine) {
 <template>
   <div
     class="market-price"
-    :class="[`market-price--${mode}`]"
+    :class="[`market-price--${mode}`, `market-price--${layout}`]"
     data-market-prices
   >
     <span
@@ -93,7 +94,7 @@ function label(line: MarketPriceLine) {
         >
           <dt>{{ label(line) }}</dt>
           <dd>
-            {{ formatUnitPriceUSD(line.amount) }}
+            <strong>{{ formatUnitPriceUSD(line.amount) }}</strong>
             <span>{{ t(`units.${line.unit}`) }}</span>
           </dd>
         </div>
@@ -142,6 +143,10 @@ function label(line: MarketPriceLine) {
   color: var(--text-tertiary);
   font-size: 0.625rem;
 }
+.market-price--summary.market-price--rows .market-price-lines {
+  display: grid;
+  gap: 0.3rem;
+}
 .market-price--comparison .market-price-lines {
   display: grid;
   gap: 0.3rem;
@@ -166,9 +171,9 @@ function label(line: MarketPriceLine) {
   flex-wrap: wrap;
   gap: 0.25rem;
 }
-.market-price-extra dd {
+.market-price-extra dd strong {
   font-size: 0.6875rem;
-  font-family: var(--font-mono);
+  font-weight: 400;
 }
 .market-price--full .market-price-lines {
   display: grid;

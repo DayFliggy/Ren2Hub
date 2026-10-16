@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { MarketChannelShelf } from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
+import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelIdentity from './ModelIdentity.vue'
 import ModelCapabilities from './ModelCapabilities.vue'
@@ -11,6 +13,10 @@ import ModelStatistics from './ModelStatistics.vue'
 defineProps<{ shelves: MarketChannelShelf[] }>()
 const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
+const shelvesId = useId()
+function offerDomId(kind: 'meta' | 'price', offerId: string) {
+  return `${shelvesId}-${kind}-${encodeURIComponent(offerId)}`
+}
 </script>
 
 <template>
@@ -29,7 +35,11 @@ const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
           <div>
             <h2 class="display-title">
               {{ shelf.channel.name }}
-              <span class="market-shelf-ratio">{{ shelf.channel.ratio }}×</span>
+              <span
+                :id="`${shelvesId}-ratio-${shelf.channel.id}`"
+                class="market-shelf-ratio"
+                >{{ formatMarketRatio(shelf.channel.ratio) }}</span
+              >
             </h2>
             <p>
               {{
@@ -67,31 +77,41 @@ const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
             class="market-shelf-capabilities"
           />
           <div class="market-shelf-offers">
-            <button
+            <div
               v-for="offer in item.offers"
               :key="offer.id"
-              type="button"
-              class="market-shelf-offer focus-ring"
-              :data-offer-id="offer.id"
-              :aria-label="
-                t('openOffer', {
-                  name: item.model.name,
-                  channel: shelf.channel.name,
-                })
-              "
-              @click="emit('detail', item.model.id, offer.id)"
+              class="market-shelf-offer"
             >
-              <span class="market-shelf-offer-heading"
-                ><span>{{
-                  pricingVariantLabel(offer.pricing, t('defaultVariant'))
-                }}</span
-                ><span>{{
-                  t(`billingModes.${offer.pricing.billingMode}`)
-                }}</span></span
+              <button
+                type="button"
+                class="market-shelf-offer-hit focus-ring"
+                :data-offer-id="offer.id"
+                :aria-label="
+                  t('openOffer', {
+                    name: item.model.name,
+                    channel: shelf.channel.name,
+                  })
+                "
+                :aria-describedby="`${shelvesId}-ratio-${shelf.channel.id} ${offerDomId('meta', offer.id)} ${offerDomId('price', offer.id)}`"
+                @click="emit('detail', item.model.id, offer.id)"
+              />
+              <div
+                :id="offerDomId('meta', offer.id)"
+                class="market-shelf-offer-heading"
               >
-              <ModelPriceDisplay :pricing="offer.pricing" />
-            </button>
-            <ModelStatistics compact />
+                <span>{{
+                  pricingVariantLabel(offer.pricing, t('defaultVariant'))
+                }}</span>
+                <span>{{
+                  t(`billingModes.${offer.pricing.billingMode}`)
+                }}</span>
+              </div>
+              <ModelPriceDisplay
+                :id="offerDomId('price', offer.id)"
+                :pricing="offer.pricing"
+              />
+            </div>
+            <ModelStatistics compact class="market-shelf-item-stats" />
           </div>
         </article>
       </div>
@@ -184,9 +204,12 @@ const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
   margin: 0.7rem 0 0.8rem;
 }
 .market-shelf-offers {
-  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 .market-shelf-offer {
+  position: relative;
   display: block;
   width: 100%;
   min-width: 0;
@@ -200,6 +223,17 @@ const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 .market-shelf-offer:hover {
   background: var(--state-hover-layer);
 }
+.market-shelf-offer-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.market-shelf-offer-hit:focus-visible {
+  outline-offset: -2px;
+}
 .market-shelf-offer-heading {
   display: flex;
   justify-content: space-between;
@@ -209,9 +243,29 @@ const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
   color: var(--text-tertiary);
   font-size: 0.6875rem;
 }
-@container model-market (max-width: 1100px) {
+.market-shelf-offer-heading,
+.market-shelf-offer :deep(.market-price) {
+  position: relative;
+  pointer-events: none;
+}
+.market-shelf-item-stats {
+  margin-top: auto;
+}
+@container model-market (width > 1100px) {
+  .market-shelf-item:nth-child(3n + 1):nth-last-child(-n + 3),
+  .market-shelf-item:nth-child(3n + 1):nth-last-child(-n + 3)
+    ~ .market-shelf-item {
+    border-bottom: 0;
+  }
+}
+@container model-market (width > 720px) and (width <= 1100px) {
   .market-shelf-items {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .market-shelf-item:nth-child(2n + 1):nth-last-child(-n + 2),
+  .market-shelf-item:nth-child(2n + 1):nth-last-child(-n + 2)
+    ~ .market-shelf-item {
+    border-bottom: 0;
   }
 }
 @container model-market (max-width: 720px) {

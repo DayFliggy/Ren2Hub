@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { MarketModel } from '@/types/modelMarket'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
+import { formatMarketRatio } from '@/utils/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelCapabilities from './ModelCapabilities.vue'
@@ -17,6 +18,61 @@ const { t, locale } = useI18n({
   useScope: 'local',
   messages: modelMarketMessages,
 })
+const descriptionPrefix = useId()
+const descriptionId = (kind: string, id: string) =>
+  `${descriptionPrefix}-${kind}-${encodeURIComponent(id)}`
+const titleElement = ref<HTMLElement | null>(null)
+const titleClipped = ref(false)
+const pricingHeading = ref<HTMLElement | null>(null)
+const selectionAnnouncement = ref('')
+watch(
+  [titleElement, () => props.model?.name],
+  ([title], _previous, onCleanup) => {
+    titleClipped.value = false
+    selectionAnnouncement.value = ''
+    if (!title || !props.model) return
+    let active = true
+    const measure = () => {
+      if (active)
+        titleClipped.value = title.scrollHeight > title.clientHeight + 1
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(title)
+    void nextTick(measure)
+    onCleanup(() => {
+      active = false
+      observer.disconnect()
+    })
+  },
+  { flush: 'post' }
+)
+function viewPricingDetails() {
+  pricingHeading.value?.focus({ preventScroll: true })
+  pricingHeading.value?.scrollIntoView({ block: 'start', behavior: 'auto' })
+}
+const quoteRows = computed(() => [
+  ...(props.model?.baselines ?? []).map((pricing) => ({
+    kind: 'baseline' as const,
+    id: pricing.id,
+    name: t('benchmark'),
+    ratio: '1',
+    pricing,
+  })),
+  ...(props.model?.offers ?? []).map((offer) => ({
+    kind: 'offer' as const,
+    id: offer.id,
+    name: offer.channelName,
+    ratio: offer.ratio,
+    pricing: offer.pricing,
+  })),
+])
+function selectQuote(quote: (typeof quoteRows.value)[number]) {
+  selection.value = { kind: quote.kind, id: quote.id }
+  selectionAnnouncement.value = t('selectionUpdated', {
+    channel: quote.name,
+    variant: pricingVariantLabel(quote.pricing, t('defaultVariant')),
+  })
+}
 const selection = ref<{ kind: 'offer' | 'baseline'; id: string } | null>(null)
 watch(
   [() => props.model, () => props.offerId],
@@ -124,7 +180,7 @@ const usageFields = computed(() =>
           :size="42"
         />
         <div class="market-detail-title">
-          <h2 :id="titleId">{{ model.name }}</h2>
+          <h2 :id="titleId" ref="titleElement">{{ model.name }}</h2>
           <p>
             {{
               !model.vendor || model.vendor === '__platform__'
@@ -157,6 +213,12 @@ const usageFields = computed(() =>
       </div>
     </template>
     <div v-if="model" class="market-detail" data-market-detail>
+      <details v-if="titleClipped" :key="model.id" class="market-full-id">
+        <summary class="focus-ring" tabindex="0">
+          {{ t('fullModelId') }}
+        </summary>
+        <code>{{ model.name }}</code>
+      </details>
       <ModelCapabilities :capabilities="model.capabilities" expanded />
       <section class="market-detail-quotes">
         <div class="market-detail-section-heading">
@@ -169,82 +231,101 @@ const usageFields = computed(() =>
             ><span>{{ t('detailPrice') }}</span
             ><span>{{ t('detailStats') }}</span>
           </div>
-          <button
-            v-for="baseline in model.baselines"
-            :key="baseline.id"
-            type="button"
-            class="market-detail-offer market-detail-reference focus-ring"
-            data-market-baseline
+          <div
+            v-for="quote in quoteRows"
+            :key="`${quote.kind}:${quote.id}`"
+            class="market-detail-offer"
+            :data-market-baseline="quote.kind === 'baseline' ? '' : undefined"
             :class="{
               selected:
-                selection?.kind === 'baseline' && selection.id === baseline.id,
+                selection?.kind === quote.kind && selection.id === quote.id,
+              'market-detail-reference': quote.kind === 'baseline',
             }"
-            :aria-pressed="
-              selection?.kind === 'baseline' && selection.id === baseline.id
-            "
-            :aria-label="`${t('viewBenchmark')} · ${pricingVariantLabel(baseline, t('defaultVariant'))}`"
-            @click="selection = { kind: 'baseline', id: baseline.id }"
           >
-            <span class="market-detail-channel"
-              ><span class="market-detail-channel-name"
-                >{{ t('benchmark') }}
-                <span class="market-detail-ratio">1.0×</span></span
-              ><span class="market-detail-offer-meta"
-                >{{ pricingVariantLabel(baseline, t('defaultVariant')) }} ·
-                {{ t(`billingModes.${baseline.billingMode}`) }}</span
-              ></span
+            <button
+              type="button"
+              class="market-detail-select"
+              :data-offer-id="quote.kind === 'offer' ? quote.id : undefined"
+              :aria-pressed="
+                selection?.kind === quote.kind && selection.id === quote.id
+              "
+              :aria-label="`${quote.kind === 'baseline' ? t('viewBenchmark') : t('openOffer', { name: model.name, channel: quote.name })} · ${pricingVariantLabel(quote.pricing, t('defaultVariant'))}`"
+              :aria-describedby="`${descriptionId(quote.kind, quote.id)}-meta ${descriptionId(quote.kind, quote.id)}-price ${descriptionId(quote.kind, quote.id)}-note`"
+              @click="selectQuote(quote)"
+            />
+            <span
+              :id="`${descriptionId(quote.kind, quote.id)}-meta`"
+              class="market-detail-channel"
             >
-            <ModelPriceDisplay :pricing="baseline" />
-            <span class="market-detail-reference-note">{{
-              t('reference')
-            }}</span>
-          </button>
-          <button
-            v-for="offer in model.offers"
-            :key="offer.id"
-            type="button"
-            class="market-detail-offer focus-ring"
-            :data-offer-id="offer.id"
-            :class="{
-              selected:
-                selection?.kind === 'offer' && selection.id === offer.id,
-            }"
-            :aria-pressed="
-              selection?.kind === 'offer' && selection.id === offer.id
-            "
-            :aria-label="`${t('openOffer', { name: model.name, channel: offer.channelName })} · ${pricingVariantLabel(offer.pricing, t('defaultVariant'))}`"
-            @click="selection = { kind: 'offer', id: offer.id }"
-          >
-            <span class="market-detail-channel"
-              ><span class="market-detail-channel-name"
-                >{{ offer.channelName }}
-                <span class="market-detail-ratio"
-                  >{{ offer.ratio }}×</span
-                ></span
-              ><span class="market-detail-offer-meta"
-                >{{ pricingVariantLabel(offer.pricing, t('defaultVariant')) }} ·
-                {{ t(`billingModes.${offer.pricing.billingMode}`) }}</span
-              ></span
+              <span class="market-detail-channel-name"
+                >{{ quote.name }}
+                <span class="market-detail-ratio">{{
+                  formatMarketRatio(quote.ratio)
+                }}</span>
+              </span>
+              <span class="market-detail-offer-meta"
+                >{{ pricingVariantLabel(quote.pricing, t('defaultVariant')) }} ·
+                {{ t(`billingModes.${quote.pricing.billingMode}`) }}</span
+              >
+              <span
+                class="market-detail-selected"
+                :class="{
+                  'is-hidden':
+                    selection?.kind !== quote.kind || selection.id !== quote.id,
+                }"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+                {{ t('selected') }}
+              </span>
+            </span>
+            <ModelPriceDisplay
+              :id="`${descriptionId(quote.kind, quote.id)}-price`"
+              :pricing="quote.pricing"
+              layout="rows"
+            />
+            <span
+              :id="`${descriptionId(quote.kind, quote.id)}-note`"
+              :class="
+                quote.kind === 'baseline'
+                  ? 'market-detail-reference-note'
+                  : 'market-detail-statistics-note'
+              "
             >
-            <ModelPriceDisplay :pricing="offer.pricing" />
-            <span class="market-detail-statistics-note">{{
-              t('noStatistics')
-            }}</span>
-          </button>
+              {{ t(quote.kind === 'baseline' ? 'reference' : 'noStatistics') }}
+            </span>
+          </div>
           <p v-if="!model.offers.length" class="market-detail-no-offers">
             {{ t('noSupply') }}
           </p>
         </div>
+        <div v-if="selectedPricing" class="market-detail-jump">
+          <button type="button" class="focus-ring" @click="viewPricingDetails">
+            {{ t('viewPricingDetails') }}
+          </button>
+        </div>
+        <p class="sr-only" aria-live="polite" aria-atomic="true">
+          {{ selectionAnnouncement }}
+        </p>
       </section>
       <section v-if="selectedPricing" class="market-detail-price-panel">
-        <h3>
+        <h3 ref="pricingHeading" tabindex="-1">
           {{ selectedName }} ·
           {{ t(selectedOffer ? 'pricingDetails' : 'pricingReference') }}
         </h3>
         <p class="market-detail-formula">
           {{
             selectedOffer
-              ? `${t(selectedPricing.billingMode === 'dynamic' ? 'dynamicFormula' : 'formula')} · ${selectedOffer.ratio}×`
+              ? `${t(selectedPricing.billingMode === 'dynamic' ? 'dynamicFormula' : 'formula')} · ${formatMarketRatio(selectedOffer.ratio)}`
               : t('benchmarkNote')
           }}
         </p>
@@ -280,12 +361,14 @@ const usageFields = computed(() =>
               <dt>
                 <code>{{ rule.condition }}</code>
               </dt>
-              <dd>{{ rule.multiplier }}×</dd>
+              <dd>{{ formatMarketRatio(rule.multiplier) }}</dd>
             </div>
           </dl>
         </div>
         <details v-if="usageFields.length" class="market-detail-extra-rules">
-          <summary class="focus-ring">{{ t('usageFields') }}</summary>
+          <summary class="focus-ring" tabindex="0">
+            {{ t('usageFields') }}
+          </summary>
           <dl>
             <div v-for="field in usageFields" :key="field.name">
               <dt>
@@ -349,6 +432,10 @@ const usageFields = computed(() =>
   color: var(--text-primary);
   font: 600 1rem/1.5 var(--font-mono);
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 .market-detail-title p {
   color: var(--text-tertiary);
@@ -404,7 +491,7 @@ const usageFields = computed(() =>
 .market-detail-offer-head,
 .market-detail-offer {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.65fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.4fr) minmax(0, 0.6fr);
   gap: 0.7rem;
   align-items: center;
   padding: 0.85rem 1rem;
@@ -415,6 +502,7 @@ const usageFields = computed(() =>
   font-size: 0.625rem;
 }
 .market-detail-offer {
+  position: relative;
   width: 100%;
   text-align: left;
   border-top: 1px dashed var(--border-subtle);
@@ -425,10 +513,56 @@ const usageFields = computed(() =>
 }
 .market-detail-offer.selected {
   background: var(--accent-soft);
-  box-shadow: inset 2px 0 var(--accent);
+  box-shadow: inset 3px 0 var(--accent-text);
 }
-.market-detail-offer:focus-visible {
-  outline-offset: -3px;
+.market-detail-select {
+  position: absolute;
+  inset: 3px;
+  z-index: 1;
+  cursor: pointer;
+  border-radius: var(--shape-control);
+}
+.market-detail-select:focus-visible,
+.market-detail-jump button:focus-visible,
+.market-detail-price-panel h3:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -1px;
+}
+.market-detail-selected {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  color: var(--accent-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.market-detail-selected.is-hidden {
+  visibility: hidden;
+}
+.market-detail-jump {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.4rem;
+}
+.market-detail-jump button {
+  min-height: 44px;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--accent-text);
+}
+.market-full-id {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+.market-full-id summary {
+  cursor: pointer;
+}
+.market-full-id code {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 .market-detail-channel {
   display: block;

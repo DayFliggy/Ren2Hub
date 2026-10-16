@@ -75,7 +75,7 @@ for (const theme of ['light', 'dark'] as const) {
         await matrix.locator('th[data-channel-id="11"]').hover()
         await expect(
           matrix.locator('[data-channel-id="11"].col-hover')
-        ).toHaveCount(8)
+        ).toHaveCount(9)
         await expect(
           matrix.locator('.benchmark-column.col-hover,.model-column.col-hover')
         ).toHaveCount(0)
@@ -117,6 +117,7 @@ for (const theme of ['light', 'dark'] as const) {
         dialog.locator('[data-price-dimension="cacheWrite"]').last()
       ).toContainText('$0.625')
       await expect(dialog).toContainText('/v1/chat/completions')
+      await page.screenshot({ path: testInfo.outputPath('details.png') })
       for (let tab = 0; tab < 14; tab++) {
         await page.keyboard.press('Tab')
         expect(
@@ -126,7 +127,6 @@ for (const theme of ['light', 'dark'] as const) {
         ).toBe(true)
       }
       await assertNoHorizontalOverflow(page)
-      await page.screenshot({ path: testInfo.outputPath('details.png') })
       await page.keyboard.press('Escape')
       await expect(dialog).toHaveCount(0)
       await expect(trigger).toBeFocused()
@@ -230,7 +230,7 @@ test('comparison keeps model and platform columns fixed while scrolling and supp
   const offer = matrix.locator('td[data-channel-id="14"] button').first()
   await offer.focus()
   await expect(matrix.locator('[data-channel-id="14"].col-hover')).toHaveCount(
-    8
+    9
   )
   await expect(
     matrix.locator('.benchmark-column.col-hover,.model-column.col-hover')
@@ -281,6 +281,10 @@ for (const theme of ['light', 'dark'] as const) {
       for (const name of ['Channel shelves', 'Price comparison', 'Models']) {
         await page.getByRole('radio', { name, exact: true }).click()
         await assertNoHorizontalOverflow(page)
+        await page.screenshot({
+          path: testInfo.outputPath(`${name}.png`),
+          fullPage: true,
+        })
       }
       await page
         .getByRole('button', {

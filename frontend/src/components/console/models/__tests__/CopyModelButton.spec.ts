@@ -59,13 +59,15 @@ describe('model ID clipboard feedback', () => {
         })
     )
     const wrapper = render(writeText)
+    const longId = `provider/${'long-model-name-without-break'.repeat(6)}`
+    await wrapper.setProps({ name: longId })
     await wrapper.get('button').trigger('click')
-    expect(writeText).toHaveBeenCalledExactlyOnceWith('provider/model-preview')
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(longId)
     expect(toast.toasts).toHaveLength(0)
     accept()
     await flushPromises()
     expect(toast.toasts).toMatchObject([
-      { type: 'success', message: '已复制 provider/model-preview' },
+      { type: 'success', message: '已复制模型 ID' },
     ])
   })
 

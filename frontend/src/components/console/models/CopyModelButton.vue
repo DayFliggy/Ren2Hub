@@ -9,7 +9,7 @@ const toast = useToast()
 async function copyName() {
   try {
     await navigator.clipboard.writeText(props.name)
-    toast.success(t('copied', { name: props.name }))
+    toast.success(t('copied'))
   } catch {
     toast.error(t('copyFailed'))
   }

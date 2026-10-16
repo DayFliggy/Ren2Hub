@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildModelMarketCatalog,
   compareMarketOffers,
+  formatMarketRatio,
   normalizeMarketView,
   projectMarketPricing,
 } from '@/utils/modelMarket'
@@ -204,6 +205,22 @@ describe('model market price projection', () => {
     'migrates old/invalid view %s to the model view',
     (value) => {
       expect(normalizeMarketView(value)).toBe('models')
+    }
+  )
+})
+
+describe('market ratio labels', () => {
+  it.each([
+    ['1', '1.0×'],
+    ['1.0000', '1.0×'],
+    ['0', '0.0×'],
+    ['0.2000', '0.2×'],
+    ['0.1234567890123456789', '0.1234567890123456789×'],
+    ['9007199254740993.001', '9007199254740993.001×'],
+  ])(
+    'formats %s without rounding or floating point conversion',
+    (value, label) => {
+      expect(formatMarketRatio(value)).toBe(label)
     }
   )
 })

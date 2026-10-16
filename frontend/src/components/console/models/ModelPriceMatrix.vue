@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { MarketChannel, MarketModel } from '@/types/modelMarket'
+import { formatMarketRatio } from '@/utils/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelIdentity from './ModelIdentity.vue'
@@ -14,6 +15,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
+const descriptionPrefix = useId()
+const quoteId = (id: string, mobile = false) =>
+  `${descriptionPrefix}-${mobile ? 'mobile' : 'table'}-${encodeURIComponent(id)}`
 const hoveredChannel = ref<number | null>(null)
 const focusedChannel = ref<number | null>(null)
 const activeChannel = computed(
@@ -22,6 +26,7 @@ const activeChannel = computed(
 const rows = computed(() =>
   props.models.map((model) => ({
     model,
+    variants: model.baselines.length ? model.baselines : [undefined],
     columns: props.channels.map((channel) => ({
       channel,
       offers: model.offers.filter((offer) => offer.channelId === channel.id),
@@ -41,6 +46,19 @@ function onFocus(event: FocusEvent) {
     '[data-channel-id]'
   )
   focusedChannel.value = column ? Number(column.dataset.channelId) : null
+  if (!column) return
+  const scroller = event.currentTarget as HTMLElement
+  const target = event.target as HTMLElement
+  const left = scroller
+    .querySelector('.model-column')!
+    .getBoundingClientRect().right
+  const right = scroller
+    .querySelector('.benchmark-column')!
+    .getBoundingClientRect().left
+  const bounds = target.getBoundingClientRect()
+  // Native focus scrolling does not account for the two sticky columns.
+  if (bounds.left < left) scroller.scrollLeft += bounds.left - left
+  else if (bounds.right > right) scroller.scrollLeft += bounds.right - right
 }
 function onFocusOut(event: FocusEvent) {
   if (
@@ -115,20 +133,26 @@ function onFocusOut(event: FocusEvent) {
             >
               <span class="matrix-channel-title"
                 >{{ channel.name
-                }}<span class="matrix-ratio">{{ channel.ratio }}×</span></span
+                }}<span class="matrix-ratio">{{
+                  formatMarketRatio(channel.ratio)
+                }}</span></span
               >
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody v-for="(row, rowIndex) in rows" :key="row.model.id">
           <tr
-            v-for="row in rows"
-            :key="row.model.id"
+            v-for="(baseline, variantIndex) in row.variants"
+            :key="baseline?.id ?? row.model.id"
             :data-model-name="row.model.name"
+            :data-baseline-id="baseline?.id"
           >
             <th
+              v-if="variantIndex === 0"
               class="model-column"
-              scope="row"
+              scope="rowgroup"
+              :rowspan="row.variants.length"
+              :class="{ 'last-model': rowIndex === rows.length - 1 }"
               @mouseenter="hoveredChannel = null"
             >
               <ModelIdentity
@@ -152,30 +176,50 @@ function onFocusOut(event: FocusEvent) {
               :class="{ 'col-hover': activeChannel === column.channel.id }"
               @mouseenter="hoveredChannel = column.channel.id"
             >
-              <button
-                v-for="offer in column.offers"
+              <div
+                v-for="offer in column.offers.filter(
+                  (item) => item.baseline.id === baseline?.id
+                )"
                 :key="offer.id"
-                type="button"
-                class="matrix-offer focus-ring"
-                :data-offer-id="offer.id"
-                :aria-label="
-                  t('openOffer', {
-                    name: row.model.name,
-                    channel: column.channel.name,
-                  })
-                "
-                @click="emit('detail', row.model.id, offer.id)"
+                class="matrix-offer"
               >
-                <span class="matrix-variant"
-                  >{{ pricingVariantLabel(offer.pricing, t('defaultVariant')) }}
-                  <span>{{
-                    t(`billingModes.${offer.pricing.billingMode}`)
-                  }}</span></span
-                >
-                <ModelPriceDisplay :pricing="offer.pricing" mode="comparison" />
-              </button>
+                <button
+                  type="button"
+                  class="matrix-offer-action"
+                  :data-offer-id="offer.id"
+                  :aria-label="
+                    t('openOffer', {
+                      name: row.model.name,
+                      channel: column.channel.name,
+                    })
+                  "
+                  :aria-describedby="quoteId(offer.id)"
+                  @click="emit('detail', row.model.id, offer.id)"
+                />
+                <div :id="quoteId(offer.id)">
+                  <span class="sr-only">{{
+                    formatMarketRatio(offer.ratio)
+                  }}</span>
+                  <span class="matrix-variant"
+                    >{{
+                      pricingVariantLabel(offer.pricing, t('defaultVariant'))
+                    }}
+                    <span>{{
+                      t(`billingModes.${offer.pricing.billingMode}`)
+                    }}</span></span
+                  >
+                  <ModelPriceDisplay
+                    :pricing="offer.pricing"
+                    mode="comparison"
+                  />
+                </div>
+              </div>
               <span
-                v-if="!column.offers.length"
+                v-if="
+                  !column.offers.some(
+                    (item) => item.baseline.id === baseline?.id
+                  )
+                "
                 class="matrix-no-supply"
                 :aria-label="t('noSupply')"
                 >—</span
@@ -186,11 +230,7 @@ function onFocusOut(event: FocusEvent) {
               data-market-baseline
               @mouseenter="hoveredChannel = null"
             >
-              <div
-                v-for="baseline in row.model.baselines"
-                :key="baseline.id"
-                class="matrix-baseline-prices"
-              >
+              <div v-if="baseline" class="matrix-baseline-prices">
                 <span class="matrix-variant"
                   >{{ pricingVariantLabel(baseline, t('defaultVariant')) }}
                   <span>{{
@@ -199,7 +239,7 @@ function onFocusOut(event: FocusEvent) {
                 >
                 <ModelPriceDisplay :pricing="baseline" mode="comparison" />
               </div>
-              <ModelPriceDisplay v-if="!row.model.baselines.length" />
+              <ModelPriceDisplay v-else />
             </td>
           </tr>
         </tbody>
@@ -247,32 +287,40 @@ function onFocusOut(event: FocusEvent) {
         </section>
         <div class="matrix-mobile-quotes">
           <template v-for="column in row.columns" :key="column.channel.id">
-            <button
+            <div
               v-for="offer in column.offers"
               :key="offer.id"
-              type="button"
-              class="matrix-mobile-offer focus-ring"
-              :data-offer-id="offer.id"
-              :aria-label="
-                t('openOffer', {
-                  name: row.model.name,
-                  channel: column.channel.name,
-                })
-              "
-              @click="emit('detail', row.model.id, offer.id)"
+              class="matrix-mobile-offer"
             >
-              <span class="matrix-channel-title"
-                >{{ column.channel.name
-                }}<span class="matrix-ratio">{{ offer.ratio }}×</span></span
-              >
-              <span class="matrix-variant"
-                >{{ pricingVariantLabel(offer.pricing, t('defaultVariant')) }}
-                <span>{{
-                  t(`billingModes.${offer.pricing.billingMode}`)
-                }}</span></span
-              >
-              <ModelPriceDisplay :pricing="offer.pricing" mode="comparison" />
-            </button>
+              <button
+                type="button"
+                class="matrix-offer-action"
+                :data-offer-id="offer.id"
+                :aria-label="
+                  t('openOffer', {
+                    name: row.model.name,
+                    channel: column.channel.name,
+                  })
+                "
+                :aria-describedby="quoteId(offer.id, true)"
+                @click="emit('detail', row.model.id, offer.id)"
+              />
+              <div :id="quoteId(offer.id, true)">
+                <span class="matrix-channel-title"
+                  >{{ column.channel.name }}
+                  <span class="matrix-ratio">{{
+                    formatMarketRatio(offer.ratio)
+                  }}</span></span
+                >
+                <span class="matrix-variant"
+                  >{{ pricingVariantLabel(offer.pricing, t('defaultVariant')) }}
+                  <span>{{
+                    t(`billingModes.${offer.pricing.billingMode}`)
+                  }}</span></span
+                >
+                <ModelPriceDisplay :pricing="offer.pricing" mode="comparison" />
+              </div>
+            </div>
           </template>
           <p v-if="!row.model.offers.length" class="matrix-mobile-empty">
             {{ t('noSupply') }}
@@ -287,6 +335,7 @@ function onFocusOut(event: FocusEvent) {
 <style scoped>
 .market-matrix-scroll {
   overflow: auto;
+  scroll-padding-inline: 230px 205px;
   isolation: isolate;
   border: 1px solid var(--border-subtle);
   border-radius: var(--shape-card);
@@ -303,7 +352,7 @@ function onFocusOut(event: FocusEvent) {
 .market-matrix th,
 .market-matrix td {
   vertical-align: top;
-  border-bottom: 1px dashed var(--border-default);
+  border-bottom: 1px var(--row-divider-style) var(--border-default);
   border-right: 1px solid var(--border-subtle);
 }
 .market-matrix th {
@@ -311,8 +360,9 @@ function onFocusOut(event: FocusEvent) {
   padding: 0.8rem 0.9rem;
   background: var(--surface-table-header);
 }
-.market-matrix tbody tr:last-child th,
-.market-matrix tbody tr:last-child td {
+.market-matrix .model-column.last-model,
+.market-matrix tbody:last-of-type tr:last-child th,
+.market-matrix tbody:last-of-type tr:last-child td {
   border-bottom: 0;
 }
 .market-matrix .model-column {
@@ -323,7 +373,7 @@ function onFocusOut(event: FocusEvent) {
   min-width: 230px;
   max-width: 230px;
   background: var(--surface-solid);
-  box-shadow: 3px 0 8px color-mix(in srgb, var(--text-primary) 5%, transparent);
+  box-shadow: 3px 0 8px var(--shadow-color);
 }
 .market-matrix thead .model-column {
   background: var(--surface-table-header);
@@ -339,8 +389,7 @@ function onFocusOut(event: FocusEvent) {
   background: var(--surface-table-header);
   border-left: 2px solid var(--border-strong);
   border-right: 0;
-  box-shadow: -3px 0 10px
-    color-mix(in srgb, var(--text-primary) 7%, transparent);
+  box-shadow: -3px 0 10px var(--shadow-color);
 }
 .matrix-model-capabilities {
   margin-top: 0.75rem;
@@ -405,23 +454,31 @@ function onFocusOut(event: FocusEvent) {
 .market-matrix td.col-hover {
   background: color-mix(in srgb, var(--accent) 6%, var(--surface-solid));
 }
+.matrix-offer,
+.matrix-mobile-offer {
+  position: relative;
+}
 .matrix-offer {
   display: block;
   width: 100%;
   text-align: left;
   padding: 0.8rem 0.9rem;
   min-height: 6rem;
-  border-bottom: 1px dashed var(--border-subtle);
-}
-.matrix-offer:last-child {
-  border-bottom: 0;
 }
 .matrix-offer:hover,
-.matrix-offer:focus-visible {
+.matrix-offer:has(:focus-visible) {
   background: var(--state-press-layer);
 }
-.matrix-offer:focus-visible {
-  outline-offset: -3px;
+.matrix-offer-action {
+  position: absolute;
+  inset: 2px;
+  z-index: 1;
+  border-radius: var(--shape-control);
+  cursor: pointer;
+}
+.matrix-offer-action:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
 }
 .matrix-variant {
   display: flex;
@@ -507,7 +564,7 @@ function onFocusOut(event: FocusEvent) {
   .matrix-mobile-offer:last-child {
     border-bottom: 0;
   }
-  .matrix-mobile-offer > .matrix-channel-title {
+  .matrix-mobile-offer .matrix-channel-title {
     margin-bottom: 0.4rem;
   }
   .matrix-mobile-empty {
