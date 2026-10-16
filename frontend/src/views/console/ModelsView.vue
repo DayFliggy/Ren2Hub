@@ -1,286 +1,492 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useClipboard } from '@vueuse/core'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-
-import type { MarketModel } from '@/types/console'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
-import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import ConsoleModal from '@/components/common/ConsoleModal.vue'
+import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import FilterSelect from '@/components/common/FilterSelect.vue'
-import HealthMeter from '@/components/common/HealthMeter.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import SegmentedToggle, {
   type SegmentOption,
 } from '@/components/common/SegmentedToggle.vue'
-import StatusChip from '@/components/common/StatusChip.vue'
-import VendorLogo from '@/components/console/models/VendorLogo.vue'
-import VendorSection from '@/components/console/models/VendorSection.vue'
+import ModelCard from '@/components/console/models/ModelCard.vue'
+import ModelChannelShelves from '@/components/console/models/ModelChannelShelves.vue'
+import ModelPriceMatrix from '@/components/console/models/ModelPriceMatrix.vue'
+import ModelMarketDetails from '@/components/console/models/ModelMarketDetails.vue'
 import { useModelMarket } from '@/composables/useModelMarket'
-import { useToast } from '@/composables/useToast'
-import { formatContext, formatLatency } from '@/utils/format'
-import ModelPriceItems from '@/components/console/models/ModelPriceItems.vue'
+import { modelMarketMessages } from '@/i18n/modelMarket'
+import type { MarketModelType } from '@/types/modelMarket'
 
-const { t } = useI18n()
-const toast = useToast()
-const { copy } = useClipboard()
-
+const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 const {
   loading,
+  error,
+  catalog,
   keyword,
-  vendor,
+  channel,
+  billing,
   type,
   sort,
   view,
-  groups,
+  filtered,
+  shelves,
+  visibleChannels,
   resultCount,
+  offerCount,
   hasResults,
   pricingIssues,
-  vendorOptions,
-  vendorLabel,
   load,
+  resetFilters,
 } = useModelMarket()
-
-const detailModel = ref<MarketModel | null>(null)
-
-const typeOptions = computed(() => [
-  { value: '', label: t('common.all') },
-  { value: 'chat', label: t('models.type.chat') },
-  { value: 'image', label: t('models.type.image') },
-  { value: 'embedding', label: t('models.type.embedding') },
-  { value: 'audio', label: t('models.type.audio') },
-  { value: 'video', label: t('models.type.video') },
-  { value: 'rerank', label: t('models.type.rerank') },
-])
-
-const vendorSelectOptions = computed(() => [
-  { value: '', label: t('models.allVendors') },
-  ...vendorOptions.value.map((v) => ({ value: v, label: vendorLabel(v) })),
-])
-
-const sortOptions = computed(() => [
-  { value: 'default', label: t('models.sortDefault') },
-  { value: 'health', label: t('models.sortHealth') },
-  { value: 'latency', label: t('models.sortLatency') },
-  { value: 'tps', label: t('models.sortTps') },
-  { value: 'price', label: t('models.sortPrice') },
-])
-
-const viewOptions = computed<SegmentOption[]>(() => [
-  {
-    value: 'grid',
-    ariaLabel: t('models.viewGrid'),
-    icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+const channelValue = computed({
+  get: () => (channel.value === '' ? '' : String(channel.value)),
+  set: (value: string) => {
+    channel.value = value === '' ? '' : Number(value)
   },
-  {
-    value: 'list',
-    ariaLabel: t('models.viewList'),
-    icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
-  },
+})
+const channelOptions = computed(() => [
+  { value: '', label: t('allChannels') },
+  ...(catalog.value?.channels ?? []).map((item) => ({
+    value: String(item.id),
+    label: item.name,
+  })),
 ])
-
-const detailTypeLabel = computed(() =>
-  detailModel.value ? t(`models.type.${detailModel.value.type}`) : ''
+const billingOptions = computed(() => [
+  { value: '', label: t('allBilling') },
+  ...(['token', 'per_call', 'dynamic', 'unconfigured'] as const).map(
+    (value) => ({ value, label: t(`billingModes.${value}`) })
+  ),
+])
+const sortOptions = computed(() =>
+  (['default', 'name', 'input', 'call'] as const).map((value) => ({
+    value,
+    label: t(`sorts.${value}`),
+  }))
 )
-const detailBillingLabel = computed(() =>
-  detailModel.value ? t(`models.billing.${detailModel.value.billing}`) : ''
-)
-
-async function copyName(name: string) {
-  await copy(name)
-  toast.success(t('models.copied', { name }))
+const modelTypes: MarketModelType[] = [
+  'chat',
+  'image',
+  'embedding',
+  'audio',
+  'video',
+  'rerank',
+]
+const viewPaths = {
+  models:
+    'M5 7.5h9.5a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2ZM7.5 7.5V5a2 2 0 0 1 2-2H19a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2h-2.5M6.5 13h6.5M6.5 16.5h4.5',
+  channels:
+    'M4.5 4h15A1.5 1.5 0 0 1 21 5.5V9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 9V5.5A1.5 1.5 0 0 1 4.5 4ZM8.5 4v6.5M12 7.25h5.5M4.5 13.5h15A1.5 1.5 0 0 1 21 15v3.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V15a1.5 1.5 0 0 1 1.5-1.5ZM8.5 13.5V20M12 16.75h5.5',
+  comparison:
+    'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9h18M9 4v16M15 9v11M9 14.5h12M18 16v2.5',
 }
-
+const viewOptions = computed<SegmentOption[]>(() =>
+  (['models', 'channels', 'comparison'] as const).map((value) => ({
+    value,
+    ariaLabel: t(`views.${value}`),
+    icon: viewPaths[value],
+  }))
+)
+const hasCatalogSupply = computed(() =>
+  (catalog.value?.models ?? []).some((model) => model.offers.length > 0)
+)
+const detailId = ref<string | null>(null)
+const detailOfferId = ref<string>()
+const detailModel = computed(
+  () =>
+    catalog.value?.models.find((model) => model.id === detailId.value) ?? null
+)
+watch(catalog, (value) => {
+  if (
+    detailId.value &&
+    !value?.models.some((model) => model.id === detailId.value)
+  )
+    detailId.value = null
+})
+function openDetails(modelId: string, offerId?: string) {
+  detailOfferId.value = offerId
+  detailId.value = modelId
+}
 onMounted(load)
 </script>
 
 <template>
-  <div>
-    <PageBreadcrumb
-      :crumbs="[t('models.breadcrumb.0'), t('models.breadcrumb.1')]"
-    />
+  <div class="model-market" data-model-market>
+    <PageBreadcrumb :crumbs="[t('console'), t('title')]">
+      <template #action>
+        <span class="market-view-label"
+          ><svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path :d="viewPaths[view]" /></svg
+          >{{ t(`views.${view}`) }}</span
+        >
+      </template>
+    </PageBreadcrumb>
 
+    <ConsoleCard :padded="false" class="market-filter-card">
+      <div class="market-toolbar">
+        <SearchInput
+          v-model="keyword"
+          :placeholder="t('search')"
+          :aria-label="t('search')"
+          name="model-search"
+          class="market-search"
+        />
+        <FilterSelect
+          v-model="channelValue"
+          :options="channelOptions"
+          :label="t('channel')"
+          class="market-channel-filter"
+        />
+        <FilterSelect
+          v-model="billing"
+          :options="billingOptions"
+          :label="t('billing')"
+          class="market-billing-filter"
+        />
+        <FilterSelect
+          v-model="sort"
+          :options="sortOptions"
+          :label="t('sort')"
+          class="market-sort-filter"
+        />
+        <SegmentedToggle
+          v-model="view"
+          :options="viewOptions"
+          :label="t('viewLabel')"
+          size="sm"
+          class="market-view-switch"
+        />
+      </div>
+      <div class="market-type-tabs" role="group" :aria-label="t('typeLabel')">
+        <button
+          type="button"
+          class="market-type-tab focus-ring"
+          :class="{ active: type === '' }"
+          :aria-pressed="type === ''"
+          @click="type = ''"
+        >
+          {{ t('allTypes') }}
+        </button>
+        <button
+          v-for="modelType in modelTypes"
+          :key="modelType"
+          type="button"
+          class="market-type-tab focus-ring"
+          :class="{ active: type === modelType }"
+          :aria-pressed="type === modelType"
+          @click="type = modelType"
+        >
+          {{ t(`types.${modelType}`) }}
+        </button>
+      </div>
+    </ConsoleCard>
+
+    <div class="market-result-meta" aria-live="polite">
+      <p>{{ t('resultCount', { models: resultCount, offers: offerCount }) }}</p>
+      <span>{{ t('quotaNotice') }}</span>
+    </div>
     <details
       v-if="pricingIssues.length"
-      class="mb-4 rounded-lg border border-[var(--border-subtle)] p-3 text-sm"
+      class="market-pricing-issues"
       data-pricing-issues
     >
-      <summary class="cursor-pointer focus-ring">
-        {{ t('models.partialPricing', { count: pricingIssues.length }) }}
+      <summary class="focus-ring">
+        {{ t('partialPrices', { count: pricingIssues.length }) }}
       </summary>
-      <ul class="mt-2 sibling-space-y-1">
-        <li
-          v-for="(issue, index) in pricingIssues"
-          :key="index"
-          class="break-all"
-        >
-          {{ issue.model_name || t('models.unknownModel') }} ·
-          {{ t(`models.pricingIssues.${issue.reason}`) }}
+      <ul>
+        <li v-for="name in pricingIssues" :key="name">
+          {{ name }} · {{ t('unconfigured') }}
         </li>
       </ul>
     </details>
 
-    <!-- filter toolbar -->
-    <ConsoleCard :padded="false">
-      <div class="flex flex-wrap items-center gap-3 p-4">
-        <SearchInput
-          v-model="keyword"
-          :placeholder="t('models.searchPlaceholder')"
-          :aria-label="t('models.searchPlaceholder')"
-          name="model-search"
-          class="w-full sm:w-64"
-        />
-        <div class="flex flex-1 flex-wrap items-center gap-3">
-          <FilterSelect
-            v-model="vendor"
-            :options="vendorSelectOptions"
-            :label="t('models.vendorFilter')"
-            class="min-w-[130px] flex-1 sm:flex-none sm:w-36"
-          />
-          <FilterSelect
-            v-model="type"
-            :options="typeOptions"
-            :label="t('models.typeFilter')"
-            class="min-w-[110px] flex-1 sm:flex-none sm:w-32"
-          />
-          <FilterSelect
-            v-model="sort"
-            :options="sortOptions"
-            :label="t('models.sortFilter')"
-            class="min-w-[130px] flex-1 sm:flex-none sm:w-36"
-          />
-        </div>
-        <!-- view toggle -->
-        <SegmentedToggle
-          v-model="view"
-          :options="viewOptions"
-          :label="t('models.viewToggle', '视图切换')"
-          size="sm"
-          class="shrink-0"
-        />
+    <div v-if="loading" class="market-model-grid" aria-busy="true">
+      <SkeletonBlock v-for="index in 6" :key="index" bordered class="h-72" />
+    </div>
+    <ConsoleCard v-else-if="error">
+      <div class="market-load-error" role="alert">
+        <h2>{{ t('loadError') }}</h2>
+        <p>{{ error || t('loadErrorHint') }}</p>
+        <ConsoleButton variant="secondary" @click="load">{{
+          t('retry')
+        }}</ConsoleButton>
       </div>
     </ConsoleCard>
-
-    <!-- result meta -->
-    <p class="mb-4 mt-5 text-sm text-[var(--text-tertiary)]">
-      {{ t('models.resultCount', { count: resultCount }) }}
-    </p>
-
-    <!-- loading skeleton -->
-    <div v-if="loading" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      <SkeletonBlock v-for="i in 6" :key="i" bordered class="h-56" />
-    </div>
-
-    <!-- empty -->
-    <ConsoleCard v-else-if="!hasResults">
-      <EmptyState
-        :title="t('models.emptyTitle')"
-        :hint="t('models.emptyHint')"
+    <ConsoleCard v-else-if="!hasResults"
+      ><EmptyState
+        :title="t(hasCatalogSupply ? 'emptyTitle' : 'noCatalogTitle')"
+        :hint="t(hasCatalogSupply ? 'emptyHint' : 'noCatalogHint')"
         illustration="empty-models"
       />
-    </ConsoleCard>
-
-    <!-- vendor groups -->
-    <template v-else>
-      <VendorSection
-        v-for="g in groups"
-        :key="g.vendor"
-        :group="g"
-        :view="view"
-        @detail="detailModel = $event"
-      />
-    </template>
-
-    <!-- detail modal -->
-    <ConsoleModal
-      :open="detailModel != null"
-      :title="detailModel?.name ?? ''"
-      size="lg"
-      @close="detailModel = null"
+      <div v-if="hasCatalogSupply" class="market-reset">
+        <ConsoleButton variant="secondary" @click="resetFilters">{{
+          t('resetFilters')
+        }}</ConsoleButton>
+      </div></ConsoleCard
     >
-      <div v-if="detailModel" class="sibling-space-y-5">
-        <!-- header meta -->
-        <div class="flex items-center gap-3">
-          <VendorLogo :vendor="vendorLabel(detailModel.vendor)" :size="44" />
-          <div class="flex-1">
-            <div class="flex items-center gap-2">
-              <StatusChip tone="info">{{ detailTypeLabel }}</StatusChip>
-              <StatusChip tone="accent">{{ detailBillingLabel }}</StatusChip>
-            </div>
-            <p class="mt-1 text-sm text-[var(--text-tertiary)]">
-              {{ vendorLabel(detailModel.vendor) }}
-            </p>
-          </div>
-          <ConsoleButton
-            variant="secondary"
-            size="sm"
-            @click="copyName(detailModel.name)"
-          >
-            {{ t('common.copy') }}
-          </ConsoleButton>
-        </div>
+    <div
+      v-else-if="view === 'models'"
+      class="market-model-grid"
+      data-market-models
+    >
+      <ModelCard
+        v-for="model in filtered"
+        :key="model.id"
+        :model="model"
+        @detail="openDetails"
+      />
+    </div>
+    <ModelChannelShelves
+      v-else-if="view === 'channels'"
+      :shelves="shelves"
+      @detail="openDetails"
+    />
+    <ModelPriceMatrix
+      v-else
+      :models="filtered"
+      :channels="visibleChannels"
+      @detail="openDetails"
+    />
 
-        <p class="text-sm leading-relaxed text-[var(--text-secondary)]">
-          {{ detailModel.tagline }}
-        </p>
-
-        <!-- metric grid -->
-        <div class="grid grid-cols-3 gap-3">
-          <div class="rounded-xl bg-[var(--surface-muted)] p-3 text-center">
-            <p class="text-xs text-[var(--text-tertiary)]">
-              {{ t('models.latency') }}
-            </p>
-            <p class="mt-1 text-lg font-bold text-[var(--text-primary)]">
-              {{ formatLatency(detailModel.latency) }}
-            </p>
-          </div>
-          <div class="rounded-xl bg-[var(--surface-muted)] p-3 text-center">
-            <p class="text-xs text-[var(--text-tertiary)]">TPS</p>
-            <p class="mt-1 text-lg font-bold text-[var(--text-primary)]">
-              {{ detailModel.tps > 0 ? detailModel.tps.toFixed(1) : '—' }}
-            </p>
-          </div>
-          <div class="rounded-xl bg-[var(--surface-muted)] p-3 text-center">
-            <p class="text-xs text-[var(--text-tertiary)]">
-              {{ t('models.contextWindow') }}
-            </p>
-            <p class="mt-1 text-lg font-bold text-[var(--text-primary)]">
-              {{ formatContext(detailModel.context) }}
-            </p>
-          </div>
-        </div>
-
-        <!-- health -->
-        <div
-          class="flex items-center justify-between rounded-xl bg-[var(--surface-muted)] px-4 py-3"
-        >
-          <span class="text-sm text-[var(--text-secondary)]">{{
-            t('models.status')
-          }}</span>
-          <div class="flex items-center gap-3">
-            <span class="text-sm font-semibold text-[var(--text-primary)]"
-              >{{ detailModel.health }}%</span
-            >
-            <HealthMeter :value="detailModel.health" :bars="16" />
-          </div>
-        </div>
-
-        <!-- full price table -->
-        <div>
-          <h3 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">
-            {{ t('models.priceTitle') }}
-          </h3>
-          <ModelPriceItems
-            v-if="detailModel.pricing"
-            :pricing="detailModel.pricing"
-            class="rounded-xl border border-[var(--border-subtle)] p-4"
-          />
-          <p v-else class="text-sm text-[var(--text-tertiary)]">—</p>
-        </div>
-      </div>
-    </ConsoleModal>
+    <footer v-if="!loading && !error && hasResults" class="market-page-note">
+      <p>{{ t(view === 'comparison' ? 'comparisonNote' : 'catalogNote') }}</p>
+      <p>{{ t('supplyNote') }}</p>
+    </footer>
+    <ModelMarketDetails
+      :model="detailModel"
+      :offer-id="detailOfferId"
+      @close="detailId = null"
+    />
   </div>
 </template>
+
+<style scoped>
+.model-market {
+  container: model-market / inline-size;
+  min-width: 0;
+}
+.market-view-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  font-size: 0.6875rem;
+}
+.market-view-label svg {
+  color: var(--accent-text);
+}
+.market-filter-card {
+  position: relative;
+  z-index: 5;
+}
+.market-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+}
+.market-search {
+  flex: 1 1 16rem;
+  min-width: 10rem;
+  max-width: 22rem;
+}
+.market-channel-filter {
+  flex: 0 1 10rem;
+  min-width: 7.5rem;
+}
+.market-billing-filter {
+  flex: 0 1 9rem;
+  min-width: 7rem;
+}
+.market-sort-filter {
+  flex: 0 1 12rem;
+  min-width: 9rem;
+}
+.market-view-switch {
+  flex: none;
+  margin-left: auto;
+}
+.market-type-tabs {
+  display: flex;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  padding: 0.35rem 1.1rem 0;
+  border-top: 1px dashed var(--border-subtle);
+}
+.market-type-tab {
+  position: relative;
+  padding: 0.6rem 0 0.7rem;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  min-height: 2.75rem;
+}
+.market-type-tab:hover {
+  color: var(--text-primary);
+}
+.market-type-tab.active {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.market-type-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.market-result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin: 1.2rem 0 0.85rem;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+.market-result-meta > span {
+  font-size: 0.6875rem;
+}
+.market-model-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.market-page-note {
+  margin-top: 1.2rem;
+  color: var(--text-tertiary);
+  font-size: 0.6875rem;
+  line-height: 1.9;
+}
+.market-page-note p + p {
+  margin-top: 0.2rem;
+}
+.market-pricing-issues {
+  border: 1px solid var(--border-default);
+  border-radius: var(--shape-control);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+.market-pricing-issues summary {
+  cursor: pointer;
+}
+.market-pricing-issues ul {
+  margin-top: 0.5rem;
+  padding-left: 1rem;
+  overflow-wrap: anywhere;
+}
+.market-load-error {
+  display: grid;
+  justify-items: start;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+.market-load-error h2 {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+.market-load-error p {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.market-reset {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 1.5rem;
+}
+@container model-market (max-width: 1100px) {
+  .market-model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .market-toolbar {
+    flex-wrap: wrap;
+  }
+  .market-search {
+    flex-basis: calc(100% - 12rem);
+    max-width: none;
+  }
+  .market-view-switch {
+    order: 1;
+  }
+  .market-channel-filter {
+    order: 2;
+    flex: 1;
+  }
+  .market-billing-filter {
+    order: 3;
+    flex: 1;
+  }
+  .market-sort-filter {
+    order: 4;
+    flex: 1.5;
+  }
+}
+@container model-market (max-width: 720px) {
+  .market-model-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+  }
+  .market-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.7rem;
+    padding: 0.9rem 0.9rem 0.75rem;
+  }
+  .market-search {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    order: 0;
+  }
+  .market-channel-filter {
+    order: 1;
+    min-width: 0;
+  }
+  .market-billing-filter {
+    order: 2;
+    min-width: 0;
+  }
+  .market-sort-filter {
+    order: 3;
+    min-width: 0;
+  }
+  .market-view-switch {
+    order: 4;
+    min-width: 0;
+    justify-self: end;
+    margin-left: 0;
+  }
+  .market-type-tabs {
+    gap: 0 1rem;
+    padding-inline: 0.9rem;
+  }
+  .market-result-meta {
+    margin-top: 1rem;
+  }
+  .market-result-meta > span {
+    font-size: 0.625rem;
+  }
+}
+</style>

@@ -161,7 +161,7 @@ const router = createRouter({
           path: '/models',
           name: 'models',
           component: () => import('@/views/console/ModelsView.vue'),
-          meta: { feature: 'user_models' },
+          meta: { feature: 'user_models', wide: true },
         },
         {
           path: '/market',

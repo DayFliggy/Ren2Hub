@@ -13,6 +13,8 @@ import {
   opsTaskSummary,
 } from './opsFixtures'
 
+import { createModelMarketFixture } from '../fixtures/modelMarket'
+
 export type VisualTheme = 'light' | 'dark'
 
 const FIXED_NOW = new Date('2026-07-27T12:00:00+08:00').getTime()
@@ -367,6 +369,7 @@ export async function configureStablePage(
   )
 
   const responses = new Map<string, unknown>([
+    ['/api/user/model-market', createModelMarketFixture()],
     ['/api/models/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/vendors/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/prefill_group/', []],

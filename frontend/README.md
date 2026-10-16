@@ -58,6 +58,7 @@ Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；
 - `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`：认证与密码重置
 - `/oauth/:provider`：OAuth 登录、绑定与二次验证的弹窗回调
 - `/dashboard`、`/keys`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
+- `/models`：模型广场，提供模型聚合、渠道货架和比价矩阵；使用用户作用域的真实渠道与平台基准价格，见[模型广场契约](../docs/console/MODELS.md)
 - `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
 - `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；空安装无价格，只有保存后生效，见[计费界面契约](docs/BILLING.md)
 

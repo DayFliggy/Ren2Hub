@@ -196,8 +196,27 @@ function parseMovers(value: unknown): RankingMover[] {
   }))
 }
 
+/** Shared display projection accepts exact decimals from authenticated catalogs. */
+export type CatalogPricingInput = Pick<
+  CatalogModel,
+  'quota_type' | 'billing_mode'
+> &
+  Partial<
+    Record<
+      | 'model_price'
+      | 'model_ratio'
+      | 'completion_ratio'
+      | 'cache_ratio'
+      | 'create_cache_ratio'
+      | 'image_ratio'
+      | 'audio_ratio'
+      | 'audio_completion_ratio',
+      string | number
+    >
+  >
+
 export function catalogPrices(
-  model: CatalogModel,
+  model: CatalogPricingInput,
   unit: 'M' | 'K'
 ): CatalogPrice[] {
   if (
@@ -225,23 +244,35 @@ export function catalogPrices(
     ['cache_ratio', 'cacheRead'],
     ['create_cache_ratio', 'cacheWrite'],
     ['image_ratio', 'image'],
-    ['audio_ratio', 'audioInput'],
-    ['audio_completion_ratio', 'audioOutput'],
   ] as const) {
     const ratio = model[field]
     if (ratio === undefined) continue
-    const base =
-      field === 'audio_completion_ratio'
-        ? model.audio_ratio === undefined
-          ? undefined
-          : multiplyDecimal(input, decimalText(model.audio_ratio))
-        : input
-    if (base !== undefined)
-      prices.push({
-        key,
-        value: multiplyDecimal(base, decimalText(ratio)),
+    prices.push({
+      key,
+      value: multiplyDecimal(input, decimalText(ratio)),
+      unit: 'per_million_tokens',
+    })
+  }
+  if (
+    model.audio_ratio !== undefined ||
+    model.audio_completion_ratio !== undefined
+  ) {
+    // The billing engine defaults either missing audio factor to one.
+    const audioInput = multiplyDecimal(
+      input,
+      decimalText(model.audio_ratio ?? '1')
+    )
+    prices.push(
+      { key: 'audioInput', value: audioInput, unit: 'per_million_tokens' },
+      {
+        key: 'audioOutput',
+        value: multiplyDecimal(
+          audioInput,
+          decimalText(model.audio_completion_ratio ?? '1')
+        ),
         unit: 'per_million_tokens',
-      })
+      }
+    )
   }
   return prices.map((price) => ({
     ...price,

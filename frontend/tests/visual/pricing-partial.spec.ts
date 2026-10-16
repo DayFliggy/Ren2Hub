@@ -10,39 +10,6 @@ for (const theme of ['light', 'dark'] as const)
       await page.addInitScript(() =>
         localStorage.setItem('ren2hub_locale', 'en')
       )
-      await page.route('**/api/user/model-manifest', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              schema_version: 1,
-              models: [
-                {
-                  id: 'priced-model',
-                  visible: true,
-                  supported_endpoint_types: ['openai'],
-                  price_configured: true,
-                  price_version: 'visual-v1',
-                },
-                {
-                  id: 'expression-model',
-                  visible: true,
-                  supported_endpoint_types: ['openai'],
-                  price_configured: true,
-                  price_version: 'visual-v1',
-                },
-                {
-                  id: 'invalid-model',
-                  visible: true,
-                  supported_endpoint_types: ['openai'],
-                  price_configured: true,
-                  price_version: 'visual-v1',
-                },
-              ],
-            },
-          },
-        })
-      )
       await page.route('**/api/pricing', (route) =>
         route.fulfill({
           json: {
@@ -76,22 +43,20 @@ for (const theme of ['light', 'dark'] as const)
       )
       const errors: string[] = []
       page.on('pageerror', (error) => errors.push(error.message))
-      for (const path of ['/pricing', '/models']) {
-        await page.goto(path)
-        await expect(
-          page.getByText('priced-model', { exact: true }).first()
-        ).toBeVisible()
-        await expect(
-          page.getByText('$2.000 / 1M tokens', { exact: true }).first()
-        ).toBeVisible()
-        await expect(
-          page
-            .locator('pre')
-            .filter({ hasText: 'tier("base", p * 0.000123456789)' })
-            .first()
-        ).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-      }
+      await page.goto('/pricing')
+      await expect(
+        page.getByText('priced-model', { exact: true }).first()
+      ).toBeVisible()
+      await expect(
+        page.getByText('$2.000 / 1M tokens', { exact: true }).first()
+      ).toBeVisible()
+      await expect(
+        page
+          .locator('pre')
+          .filter({ hasText: 'tier("base", p * 0.000123456789)' })
+          .first()
+      ).toBeVisible()
+      await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('public-prices.png'),
         fullPage: true,

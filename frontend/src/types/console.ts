@@ -514,39 +514,6 @@ export interface TaskArtifactsResult {
 export type MarketModelType =
   'chat' | 'image' | 'embedding' | 'rerank' | 'audio' | 'video'
 
-export type MarketBilling =
-  'token' | 'per_call' | 'tiered' | 'free' | 'unit_price' | 'unconfigured'
-
-export interface MarketPriceTier {
-  label: string
-  input: string
-  output: string
-}
-
-export interface MarketModelPrice {
-  input?: string // $ / 1M tokens
-  output?: string // $ / 1M tokens
-  cache_read?: string // $ / 1M tokens
-  cache_write?: string // $ / 1M tokens
-  per_call?: string // $ / call
-  tiers?: MarketPriceTier[] // tiered billing breakdown
-}
-
-export interface MarketModel {
-  id: number
-  name: string
-  vendor: string
-  type: MarketModelType
-  billing: MarketBilling
-  price: MarketModelPrice
-  pricing?: import('@/api/liveContracts').PricingModelContract
-  context: number // context window in tokens (0 = n/a)
-  tagline: string
-  latency: number // seconds, snapshot
-  tps: number // tokens/s, snapshot (0 = n/a)
-  health: number // 0-100 → drives the health meter + tone
-}
-
 export interface InviteRecord {
   id: number
   invitee: string

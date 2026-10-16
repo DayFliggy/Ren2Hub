@@ -14,6 +14,7 @@
 | Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[主题](../frontend/docs/THEMES.md)、[计费界面](../frontend/docs/BILLING.md)、[移动端待办](../frontend/docs/MOBILE.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
 | 登录与会话 | [认证契约](authentication.md) | 浏览器登录、刷新会话、绑定、安全验证、Origin 与代理规则 |
 | 用量日志 | [查询与导出](console/LOGS.md) | 共享时间跨度、用户字段隔离、NDJSON 成功终态、精确金额与浏览器取消 |
+| 模型广场 | [视图与数据合同](console/MODELS.md) | 三视图、用户渠道供给、平台基准价及统计缺失边界 |
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移、Responses WebSocket、Claude effort 计价、请求诊断 |
 | 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[TokenKit](../tokenkit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、token 计数与估算、供应商入口和边界 |
 | 任务插件 | [插件 API](plugin-api/README.md)、[v1 合同](plugin-api/v1.md) | 插件 ABI、不可变执行版本、用量事实与冻结报价、产物访问 |

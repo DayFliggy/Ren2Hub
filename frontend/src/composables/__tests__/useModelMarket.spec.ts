@@ -1,183 +1,198 @@
-import { describe, expect, it } from 'vitest'
-import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
 import {
-  buildLiveModelCatalog,
-  PLATFORM_VENDOR,
-  useModelMarket,
-} from '@/composables/useModelMarket'
-import { parsePricingModels } from '@/api/liveContracts'
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
+import { defineComponent, nextTick } from 'vue'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { api } from '@/api/client'
+import { useModelMarket } from '@/composables/useModelMarket'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-describe('live model market adapter', () => {
-  it('uses manifest capabilities and endpoints instead of broader pricing metadata', () => {
-    const catalog = buildLiveModelCatalog(
-      ['allowed'],
-      [],
-      [],
-      [
-        {
-          id: 'allowed',
-          visible: true,
-          supported_endpoint_types: ['embeddings'],
-          price_configured: true,
-          price_version: 'v1',
-          capabilities: {
-            reasoning_efforts: null,
-            input_modalities: null,
-            output_modalities: null,
-            context_limit: 32000,
-            output_limit: null,
-            tool_call: false,
-            source: null,
-            updated_at: 0,
-          },
-        },
-      ]
-    )
-    expect(catalog.models[0]).toMatchObject({
-      name: 'allowed',
-      type: 'embedding',
-      context: 32000,
-    })
-  })
-  it('keeps unconfigured and missing model prices out of token billing', () => {
-    const catalog = buildLiveModelCatalog(
-      ['unpriced', 'missing'],
-      parsePricingModels([
-        {
-          model_name: 'unpriced',
-          quota_type: 0,
-          billing_mode: 'unconfigured',
-          model_ratio: 0,
-          completion_ratio: 0,
-        },
-      ]),
-      []
-    )
-    expect(catalog.models.map((model) => model.billing)).toEqual([
-      'unconfigured',
-      'unconfigured',
-    ])
-    expect(catalog.models.map((model) => model.price)).toEqual([{}, {}])
-  })
-  it('combines pricing and performance while preserving unpriced models', () => {
-    const catalog = buildLiveModelCatalog(
-      ['chat', 'audio', 'missing'],
-      parsePricingModels([
-        {
-          model_name: 'chat',
-          quota_type: 0,
-          model_ratio: 0.5,
-          completion_ratio: 1.2,
-          cache_ratio: 0.25,
-          create_cache_ratio: 0,
-          owner_by: 'OpenAI',
-        },
-        {
-          model_name: 'audio',
-          quota_type: 1,
-          model_price: 0.0001,
-          supported_endpoint_types: ['audio'],
-        },
-      ]),
-      [
-        {
-          model_name: 'chat',
-          avg_latency_ms: 800,
-          success_rate: 98,
-          avg_tps: 40,
-        },
-      ]
-    )
-    expect(catalog.models[0]).toMatchObject({
-      billing: 'token',
-      price: {
-        input: '1',
-        output: '1.2',
-        cache_read: '0.25',
-        cache_write: '0',
+import { createModelMarketFixture } from '../../../tests/fixtures/modelMarket'
+
+const wrappers: VueWrapper[] = []
+function harness() {
+  let market!: ReturnType<typeof useModelMarket>
+  const wrapper = mount(
+    defineComponent({
+      setup() {
+        market = useModelMarket()
+        return () => null
       },
-      latency: 0.8,
-      tps: 40,
-      health: 98,
-    })
-    expect(catalog.models[1]).toMatchObject({
-      billing: 'per_call',
-      price: { per_call: '0.0001' },
-      health: 0,
-    })
-    expect(catalog.models[2]?.price).toEqual({})
+    }),
+    { global: { plugins: [i18n] } }
+  )
+  wrappers.push(wrapper)
+  return { market, wrapper }
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
   })
-  it('preserves model IDs and vendor names without inventing expression unit prices', () => {
-    const names = ['provider/model-openai-compact', 'model-preview']
-    const catalog = buildLiveModelCatalog(
-      names,
-      parsePricingModels(
-        names.map((model_name) => ({
-          model_name,
-          owner_by: 'Moonshot AI',
-          quota_type: 0,
-          billing_mode: 'tiered_expr',
-          billing_expr: 'len > 100 ? tier("long",p * 4) : tier("short",p * 2)',
-        }))
-      ),
-      []
-    )
-    expect(catalog.models.map((model) => model.name)).toEqual(names)
-    expect(catalog.vendors).toEqual(['Moonshot AI'])
-    expect(catalog.models[0]?.price).toEqual({})
-    expect(catalog.models[0]?.pricing?.billing_expr).toContain('len > 100')
-  })
+  return { promise, resolve }
+}
+
+beforeAll(async () => {
+  await loadMessageDomain('console')
+  await setLocale('zh-CN')
+})
+beforeEach(() => {
+  vi.spyOn(api, 'get').mockResolvedValue(createModelMarketFixture())
+})
+afterEach(() => {
+  wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+  vi.restoreAllMocks()
 })
 
-describe('model market vendor groups', () => {
-  it('keeps ownerless models in one group whose name follows the language', async () => {
-    await loadMessageDomain('console')
-    await setLocale('en')
-    let market!: ReturnType<typeof useModelMarket>
-    const wrapper = mount(
-      defineComponent({
-        setup() {
-          market = useModelMarket()
-          return () => null
-        },
-      }),
-      { global: { plugins: [i18n] } }
-    )
-    market.catalog.value = buildLiveModelCatalog(
-      ['house-a', 'kimi-k2', 'house-b'],
-      parsePricingModels([
-        {
-          model_name: 'kimi-k2',
-          owner_by: 'Moonshot AI',
-          quota_type: 0,
-          billing_mode: 'unconfigured',
-          model_ratio: 0,
-          completion_ratio: 0,
-        },
-      ]),
-      []
-    )
+describe('model market state and request lifecycle', () => {
+  it('loads one authenticated catalog and keeps supply filters when switching all views', async () => {
+    const { market } = harness()
+    await market.load()
+    expect(api.get).toHaveBeenCalledTimes(1)
+    expect(api.get).toHaveBeenCalledWith('/api/user/model-market', undefined, {
+      signal: expect.any(AbortSignal),
+    })
+    market.channel.value = 11
+    market.keyword.value = 'OpenAI'
+    market.billing.value = 'token'
+    market.sort.value = 'input'
+    const ids = market.filtered.value.map((model) => model.id)
+    expect(ids).toEqual(['gpt-4.1', 'audio-preview'])
+    for (const view of ['channels', 'comparison', 'models'] as const) {
+      market.view.value = view
+      await nextTick()
+      expect(market.filtered.value.map((model) => model.id)).toEqual(ids)
+      expect(
+        market.filtered.value.every((model) =>
+          model.offers.every((offer) => offer.channelId === 11)
+        )
+      ).toBe(true)
+      expect(market.visibleChannels.value.map((channel) => channel.id)).toEqual(
+        [11]
+      )
+    }
+    expect(api.get).toHaveBeenCalledTimes(1)
+  })
 
+  it('searches channel names and keeps mixed billing within the same shelf', async () => {
+    const { market } = harness()
+    await market.load()
+    market.keyword.value = '雾桥'
+    expect(market.visibleChannels.value.map((channel) => channel.id)).toEqual([
+      11,
+    ])
+    const modes = new Set(
+      market.shelves.value[0]!.items.flatMap((item) =>
+        item.offers.map((offer) => offer.pricing.billingMode)
+      )
+    )
+    expect(modes).toEqual(
+      new Set(['token', 'per_call', 'dynamic', 'unconfigured'])
+    )
+    market.billing.value = 'dynamic'
+    expect(market.filtered.value.map((model) => model.id)).toEqual([
+      'video-preview',
+    ])
+    expect(market.filtered.value[0]!.offers).toHaveLength(1)
     expect(
-      market.groups.value.map((group) => [group.label, group.models.length])
-    ).toEqual([
-      ['Platform', 2],
-      ['Moonshot AI', 1],
+      market.filtered.value[0]!.baselines.map((price) => price.id)
+    ).toEqual(['video-preview:seconds'])
+    const originalVideo = market.catalog.value!.models.find(
+      (model) => model.id === 'video-preview'
+    )!
+    expect(originalVideo.baselines.map((price) => price.id)).toEqual([
+      'video-preview:seconds',
+      'video-preview:fixed',
     ])
-    expect(market.groups.value[1]?.tagline).toBe(
-      'Kimi long-context and agent capabilities'
-    )
-    market.keyword.value = 'platform'
-    expect(market.filtered.value.map((model) => model.name)).toEqual([
-      'house-a',
-      'house-b',
-    ])
+    expect(originalVideo.offers).toHaveLength(4)
+    market.view.value = 'comparison'
+    market.resetFilters()
+    expect(market.resultCount.value).toBe(7)
+    expect(
+      market.filtered.value
+        .find((model) => model.id === 'video-preview')!
+        .baselines.map((price) => price.id)
+    ).toEqual(['video-preview:seconds', 'video-preview:fixed'])
+    expect(
+      market.catalog.value!.models.find((model) => model.id === 'video-preview')
+    ).toBe(originalVideo)
+    expect(market.view.value).toBe('comparison')
+  })
 
-    market.keyword.value = ''
-    market.vendor.value = PLATFORM_VENDOR
-    await setLocale('zh-CN')
-    expect(market.groups.value.map((group) => group.label)).toEqual(['平台'])
+  it.each(['grid', 'list'])(
+    'migrates persisted %s without storing permission-scoped prices',
+    async (oldView) => {
+      localStorage.setItem('ren2hub_models_view', oldView)
+      const { market } = harness()
+      expect(market.view.value).toBe('models')
+      await market.load()
+      await flushPromises()
+      expect(localStorage.getItem('ren2hub_models_view')).toBe('models')
+      expect(Object.values(localStorage).join(' ')).not.toMatch(
+        /gpt-4\.1|雾桥|ModelRatio/
+      )
+    }
+  )
+
+  it('reports failed refreshes, discards stale authorized data, and retries successfully', async () => {
+    const { market } = harness()
+    await market.load()
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'))
+    await market.load()
+    expect(market.error.value).not.toBe('')
+    expect(market.loading.value).toBe(false)
+    expect(market.catalog.value).toBeNull()
+    expect(market.hasResults.value).toBe(false)
+    await market.load()
+    expect(market.error.value).toBe('')
+    expect(market.resultCount.value).toBe(7)
+  })
+
+  it('aborts older loads and prevents a late response restoring superseded supply', async () => {
+    const first = deferred<ReturnType<typeof createModelMarketFixture>>()
+    const second = deferred<ReturnType<typeof createModelMarketFixture>>()
+    vi.mocked(api.get)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    const { market } = harness()
+    const oldLoad = market.load()
+    const firstSignal = vi.mocked(api.get).mock.calls[0]![2]!.signal!
+    const currentLoad = market.load()
+    expect(firstSignal.aborted).toBe(true)
+    const restricted = createModelMarketFixture()
+    restricted.offers = restricted.offers.filter(
+      (offer) => offer.channel_id === 13
+    )
+    restricted.channels = restricted.channels.filter(
+      (channel) => channel.id === 13
+    )
+    second.resolve(restricted)
+    await currentLoad
+    expect(market.visibleChannels.value.map((channel) => channel.id)).toEqual([
+      13,
+    ])
+    first.resolve(createModelMarketFixture())
+    await oldLoad
+    expect(market.visibleChannels.value.map((channel) => channel.id)).toEqual([
+      13,
+    ])
+  })
+
+  it('aborts an in-flight request when the view unmounts', async () => {
+    const pending = deferred<ReturnType<typeof createModelMarketFixture>>()
+    vi.mocked(api.get).mockReturnValueOnce(pending.promise)
+    const { market, wrapper } = harness()
+    const load = market.load()
+    const signal = vi.mocked(api.get).mock.calls[0]![2]!.signal!
     wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    pending.resolve(createModelMarketFixture())
+    await load
+    expect(market.catalog.value).toBeNull()
   })
 })

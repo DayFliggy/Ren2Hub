@@ -63,6 +63,76 @@ describe('public catalog contracts', () => {
     ])
     expect(catalogPrices(parsed.models[0]!, 'K')[0]?.value).toBe('0.004')
   })
+  it('keeps exact decimals and normalizes audio output from audio input', () => {
+    const prices = catalogPrices(
+      {
+        quota_type: 0,
+        billing_mode: 'ratio',
+        model_ratio: '0.1234567890123456789',
+        completion_ratio: '2',
+        audio_ratio: '8',
+        audio_completion_ratio: '2',
+      },
+      'M'
+    )
+    expect(prices).toEqual([
+      {
+        key: 'input',
+        value: '0.2469135780246913578',
+        unit: 'per_million_tokens',
+      },
+      {
+        key: 'output',
+        value: '0.4938271560493827156',
+        unit: 'per_million_tokens',
+      },
+      {
+        key: 'audioInput',
+        value: '1.9753086241975308624',
+        unit: 'per_million_tokens',
+      },
+      {
+        key: 'audioOutput',
+        value: '3.9506172483950617248',
+        unit: 'per_million_tokens',
+      },
+    ])
+  })
+  it.each([
+    {
+      label: 'missing output factor',
+      audio_ratio: '3',
+      audio_completion_ratio: undefined,
+      input: '12',
+      output: '12',
+    },
+    {
+      label: 'missing input factor',
+      audio_ratio: undefined,
+      audio_completion_ratio: '3',
+      input: '4',
+      output: '12',
+    },
+  ])(
+    'uses the billing default for $label',
+    ({ audio_ratio, audio_completion_ratio, input, output }) => {
+      const prices = catalogPrices(
+        {
+          quota_type: 0,
+          billing_mode: 'ratio',
+          model_ratio: '2',
+          audio_ratio,
+          audio_completion_ratio,
+        },
+        'M'
+      )
+      expect(prices.filter((price) => price.key.startsWith('audio'))).toEqual([
+        { key: 'audioInput', value: input, unit: 'per_million_tokens' },
+        { key: 'audioOutput', value: output, unit: 'per_million_tokens' },
+      ])
+    }
+  )
+
   it('rejects malformed ranking shares and accepts valid history', () => {
     const parsed = parseRankings({
       models: [

@@ -1,430 +1,235 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useClipboard } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import type { MarketModel } from '@/types/modelMarket'
+import { modelMarketMessages } from '@/i18n/modelMarket'
+import { pricingVariantLabel } from './pricingVariantLabel'
+import ModelIdentity from './ModelIdentity.vue'
+import ModelCapabilities from './ModelCapabilities.vue'
+import ModelPriceDisplay from './ModelPriceDisplay.vue'
+import ModelStatistics from './ModelStatistics.vue'
 
-import type {
-  MarketBilling,
-  MarketModel,
-  MarketModelType,
-} from '@/types/console'
-import HealthMeter from '@/components/common/HealthMeter.vue'
-import StatusChip from '@/components/common/StatusChip.vue'
-import { useToast } from '@/composables/useToast'
-import { formatLatency, formatTokenPrice } from '@/utils/format'
-import ModelPriceItems from './ModelPriceItems.vue'
-
-const props = withDefaults(
-  defineProps<{
-    model: MarketModel
-    layout?: 'grid' | 'list'
-  }>(),
-  { layout: 'grid' }
+const props = defineProps<{ model: MarketModel }>()
+const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
+const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
+const representative = computed(() => props.model.offers[0])
+const reference = computed(
+  () => representative.value?.baseline ?? props.model.baselines[0]
 )
-
-const emit = defineEmits<{
-  detail: [model: MarketModel]
-}>()
-
-const { t } = useI18n()
-const toast = useToast()
-const { copy } = useClipboard()
-
-const billingTone: Record<MarketBilling, 'accent' | 'warning' | 'info'> = {
-  token: 'accent',
-  tiered: 'warning',
-  per_call: 'info',
-  free: 'info',
-  unit_price: 'accent',
-  unconfigured: 'warning',
-}
-
-const typeTone: Record<MarketModelType, 'info' | 'success' | 'neutral'> = {
-  chat: 'info',
-  image: 'success',
-  video: 'success',
-  embedding: 'neutral',
-  rerank: 'neutral',
-  audio: 'neutral',
-}
-
-const detailedPricing = computed(() => props.model.pricing ?? null)
-const billingLabel = computed(() => t(`models.billing.${props.model.billing}`))
-const typeLabel = computed(() => t(`models.type.${props.model.type}`))
-const tierCount = computed(() => props.model.price.tiers?.length ?? 0)
-
-async function copyName() {
-  await copy(props.model.name)
-  toast.success(t('models.copied', { name: props.model.name }))
-}
+const channelCount = computed(
+  () => new Set(props.model.offers.map((offer) => offer.channelId)).size
+)
 </script>
 
 <template>
-  <!-- ============ GRID ============ -->
   <article
-    v-if="layout === 'grid'"
-    class="model-card group relative flex min-h-64 flex-col justify-between overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 transition duration-200 ease-out hover:border-[var(--accent)] focus-within:border-[var(--accent)] motion-safe:hover:-translate-y-1"
+    class="market-model-card"
     data-model-card
     :data-model-name="model.name"
   >
-    <!-- A solid semantic accent keeps the paper-card cue legible in both themes. -->
-    <span
-      class="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-[var(--accent)] opacity-70 transition-opacity duration-300 group-hover:opacity-100"
-      aria-hidden="true"
+    <button
+      class="market-card-hit focus-ring"
+      type="button"
+      :aria-label="t('openDetail', { name: model.name })"
+      @click="emit('detail', model.id, representative?.id)"
     />
-
-    <!-- Header: Model Name on left, Actions on right -->
-    <div>
-      <div class="flex items-center justify-between gap-2.5">
-        <div class="min-w-0 flex-1">
-          <button
-            type="button"
-            class="focus-ring flex max-w-full items-center gap-2 rounded-sm text-left font-mono text-base font-bold text-[var(--text-primary)] transition-colors hover:text-[var(--accent-text)] group-hover:text-[var(--accent-text)]"
-            :title="t('models.copyHint', { name: model.name })"
-            @click="copyName"
-          >
-            <span
-              class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] transition-transform duration-300 group-hover:scale-125"
-              aria-hidden="true"
-            />
-            <span class="truncate">{{ model.name }}</span>
-          </button>
-        </div>
-
-        <div class="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            :aria-label="t('common.copy')"
-            :title="t('common.copy')"
-            class="focus-ring inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
-            @click.stop="copyName"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <rect x="9" y="9" width="11" height="11" rx="2" />
-              <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            :aria-label="t('models.detail')"
-            :title="t('models.detail')"
-            class="focus-ring inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
-            @click.stop="emit('detail', model)"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-            >
-              <path d="m9 6 6 6-6 6" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <!-- Pricing magnetic tiles: 2-column strip -->
-      <div class="mt-3">
-        <ModelPriceItems
-          v-if="detailedPricing"
-          :pricing="model.pricing!"
-          class="rounded-md border border-[var(--border-default)] bg-[var(--surface-table-header)] p-3"
-          data-model-price-panel
-        />
-        <template v-else-if="model.billing === 'per_call'">
-          <div
-            class="flex items-center justify-between rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)] px-3.5 py-2.5"
-            data-model-price-panel
-          >
-            <span class="text-xs text-[var(--text-tertiary)]">{{
-              t('models.perCall')
-            }}</span>
-            <span
-              class="font-mono text-base font-bold text-[var(--text-primary)]"
-            >
-              {{ formatTokenPrice(model.price.per_call) }}
-            </span>
-          </div>
-        </template>
-        <template v-else>
-          <div
-            class="rounded-md border border-[var(--border-default)] bg-[var(--surface-table-header)] p-3"
-            data-model-price-panel
-          >
-            <div
-              class="grid min-h-12 grid-cols-2 gap-3 sibling-divide-x sibling-divide-[var(--border-default)]"
-            >
-              <div class="pr-2">
-                <div class="text-[0.6875rem] text-[var(--text-tertiary)]">
-                  {{ t('models.priceInput') }}
-                </div>
-                <div class="mt-0.5 flex items-baseline gap-1">
-                  <span
-                    class="font-mono text-sm font-bold text-[var(--text-primary)]"
-                  >
-                    {{ formatTokenPrice(model.price.input) }}
-                  </span>
-                  <span
-                    class="font-sans text-[0.625rem] text-[var(--text-tertiary)]"
-                    >/ 1M</span
-                  >
-                </div>
-              </div>
-              <div v-if="model.price.output != null" class="pl-3">
-                <div class="text-[0.6875rem] text-[var(--text-tertiary)]">
-                  {{ t('models.priceOutput') }}
-                </div>
-                <div class="mt-0.5 flex items-baseline gap-1">
-                  <span
-                    class="font-mono text-sm font-bold text-[var(--text-primary)]"
-                  >
-                    {{ formatTokenPrice(model.price.output) }}
-                  </span>
-                  <span
-                    class="font-sans text-[0.625rem] text-[var(--text-tertiary)]"
-                    >/ 1M</span
-                  >
-                </div>
-              </div>
-            </div>
-            <div
-              v-if="
-                model.price.cache_read != null ||
-                model.price.cache_write != null
-              "
-              class="mt-2 grid gap-3 border-t border-[var(--border-default)] pt-2"
-              :class="
-                model.price.cache_read != null &&
-                model.price.cache_write != null
-                  ? 'grid-cols-2'
-                  : 'grid-cols-1'
-              "
-              data-model-cache-prices
-            >
-              <div
-                v-if="model.price.cache_read != null"
-                class="min-w-0 text-[0.6875rem] text-[var(--text-tertiary)]"
-                data-model-cache-read
-              >
-                <div>{{ t('models.priceCache') }}</div>
-                <div
-                  class="mt-0.5 truncate font-mono font-medium text-[var(--text-secondary)]"
-                >
-                  {{ formatTokenPrice(model.price.cache_read) }}
-                  <span
-                    class="font-sans text-[0.625rem] font-normal text-[var(--text-tertiary)]"
-                    >/ 1M</span
-                  >
-                </div>
-              </div>
-              <div
-                v-if="model.price.cache_write != null"
-                class="min-w-0 text-[0.6875rem] text-[var(--text-tertiary)]"
-                data-model-cache-write
-              >
-                <div>{{ t('models.priceCacheWrite') }}</div>
-                <div
-                  class="mt-0.5 truncate font-mono font-medium text-[var(--text-secondary)]"
-                >
-                  {{ formatTokenPrice(model.price.cache_write) }}
-                  <span
-                    class="font-sans text-[0.625rem] font-normal text-[var(--text-tertiary)]"
-                    >/ 1M</span
-                  >
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      <!-- Tagline / Description -->
-      <p
-        v-if="model.tagline"
-        class="mt-2.5 line-clamp-1 text-xs leading-relaxed text-[var(--text-tertiary)]"
-        :title="model.tagline"
-      >
-        {{ model.tagline }}
-      </p>
+    <div class="market-card-heading">
+      <ModelIdentity
+        :name="model.name"
+        :vendor="model.vendor"
+        :type-label="t(`types.${model.type}`)"
+      />
     </div>
-
-    <!-- Bottom Unified Single Row: Type & Billing chips on left, Metrics on right -->
-    <div
-      class="mt-3.5 flex items-center justify-between border-t border-[var(--border-default)] pt-3"
-      data-model-divider
-    >
-      <div class="flex items-center gap-1.5">
-        <StatusChip :tone="typeTone[model.type]">{{ typeLabel }}</StatusChip>
-        <StatusChip :tone="billingTone[model.billing]" data-model-billing>
-          {{ billingLabel }}
-        </StatusChip>
-        <span
-          v-if="tierCount"
-          class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
-          data-model-tier-count
+    <div class="market-card-capabilities">
+      <ModelCapabilities :capabilities="model.capabilities" />
+    </div>
+    <div class="market-card-quotes">
+      <div
+        class="market-quote-lane market-benchmark"
+        data-platform-reference
+        data-market-baseline
+      >
+        <div class="market-quote-heading">
+          <span
+            >{{ t('benchmark') }} <span class="market-ratio">1.0×</span></span
+          >
+          <span class="market-reference-label">{{ t('reference') }}</span>
+        </div>
+        <p
+          v-if="
+            reference && (model.baselines.length > 1 || reference.pluginName)
+          "
+          class="market-variant-label"
         >
-          {{ t('models.tierCount', { count: tierCount }) }}
-        </span>
+          {{ pricingVariantLabel(reference, t('defaultVariant')) }}
+        </p>
+        <ModelPriceDisplay :pricing="reference" />
       </div>
-
-      <div class="flex items-center gap-3 text-right">
-        <div v-if="model.latency > 0" class="flex items-center gap-1 text-xs">
-          <span class="text-[0.625rem] text-[var(--text-tertiary)]">{{
-            t('models.latency')
+      <div v-if="representative" class="market-quote-lane" data-channel-quote>
+        <div class="market-quote-heading">
+          <span class="market-channel-name"
+            >{{ representative.channelName }}
+            <span class="market-ratio">{{ representative.ratio }}×</span></span
+          >
+          <span class="market-billing-label">{{
+            t(`billingModes.${representative.pricing.billingMode}`)
           }}</span>
-          <span class="font-mono font-semibold text-[var(--text-secondary)]">
-            {{ formatLatency(model.latency) }}
-          </span>
         </div>
-        <div
-          v-if="model.tps > 0"
-          class="hidden items-center gap-1 text-xs sm:flex"
+        <p
+          v-if="model.baselines.length > 1 || representative.pricing.pluginName"
+          class="market-variant-label"
         >
-          <span class="text-[0.625rem] text-[var(--text-tertiary)]">TPS</span>
-          <span class="font-mono font-semibold text-[var(--text-secondary)]">
-            {{ model.tps.toFixed(1) }}
-          </span>
-        </div>
-        <div class="flex items-center">
-          <HealthMeter :value="model.health" :bars="5" compact />
-        </div>
+          {{ pricingVariantLabel(representative.pricing, t('defaultVariant')) }}
+        </p>
+        <ModelPriceDisplay :pricing="representative.pricing" />
+        <ModelStatistics compact />
+      </div>
+      <div v-else class="market-quote-lane market-no-offers">
+        {{ t('noSupply') }}
       </div>
     </div>
-  </article>
-
-  <!-- ============ LIST ============ -->
-  <article
-    v-else
-    class="model-card group flex items-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 transition duration-200 ease-out hover:border-[var(--accent)] focus-within:border-[var(--accent)] motion-safe:hover:-translate-y-0.5"
-    data-model-card
-    :data-model-name="model.name"
-  >
-    <!-- name + description -->
-    <div class="min-w-0 flex-1">
-      <button
-        type="button"
-        class="flex max-w-full items-center gap-1.5 text-left font-mono text-base font-bold text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-text)] hover:text-[var(--accent-text)]"
-        :title="t('models.copyHint', { name: model.name })"
-        @click="copyName"
-      >
-        <span class="truncate">{{ model.name }}</span>
-      </button>
-      <p class="truncate text-xs text-[var(--text-tertiary)]">
-        {{ model.tagline }}
-      </p>
-    </div>
-    <!-- billing + type chips -->
-    <div class="hidden shrink-0 items-center gap-2 md:flex">
-      <StatusChip :tone="typeTone[model.type]">{{ typeLabel }}</StatusChip>
-      <div class="flex items-center gap-1.5">
-        <StatusChip :tone="billingTone[model.billing]" data-model-billing>{{
-          billingLabel
-        }}</StatusChip>
-        <span
-          v-if="tierCount"
-          class="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
-          data-model-tier-count
-        >
-          {{ t('models.tierCount', { count: tierCount }) }}
-        </span>
-      </div>
-    </div>
-    <!-- price (input/output) -->
-    <div class="hidden w-32 shrink-0 text-right lg:block">
-      <ModelPriceItems v-if="detailedPricing" :pricing="model.pricing!" />
-      <p
-        v-else-if="model.billing === 'per_call'"
-        class="font-mono text-xs font-semibold text-[var(--text-primary)]"
-      >
-        {{ formatTokenPrice(model.price.per_call) }}
-        <span class="font-sans text-[var(--text-tertiary)]"
-          >/ {{ t('models.perCallShort') }}</span
-        >
-      </p>
-      <template v-else>
-        <p class="font-mono text-xs font-semibold text-[var(--text-primary)]">
-          {{ formatTokenPrice(model.price.input) }}
-        </p>
-        <p class="font-mono text-[0.6875rem] text-[var(--text-tertiary)]">
-          {{ formatTokenPrice(model.price.output) }} / 1M
-        </p>
-      </template>
-    </div>
-    <!-- latency + health -->
-    <div class="hidden w-16 shrink-0 text-right sm:block">
-      <p class="text-[0.625rem] uppercase text-[var(--text-tertiary)]">
-        {{ t('models.latency') }}
-      </p>
-      <p class="text-xs font-semibold text-[var(--text-primary)]">
-        {{ formatLatency(model.latency) }}
-      </p>
-    </div>
-    <div class="hidden shrink-0 sm:block">
-      <HealthMeter :value="model.health" compact />
-    </div>
-    <!-- actions -->
-    <div class="flex shrink-0 items-center gap-1">
-      <button
-        type="button"
-        :aria-label="t('common.copy')"
-        :title="t('common.copy')"
-        class="focus-ring inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
-        @click.stop="copyName"
-      >
-        <svg
-          width="14"
-          height="14"
+    <div class="market-card-footer">
+      <span>{{ t('offerCount', { count: channelCount }) }}</span>
+      <span class="market-card-details"
+        >{{ t('allQuotes')
+        }}<svg
+          width="13"
+          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          stroke-width="1.8"
+          aria-hidden="true"
         >
-          <rect x="9" y="9" width="11" height="11" rx="2" />
-          <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        :aria-label="t('models.detail')"
-        :title="t('models.detail')"
-        class="focus-ring inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
-        @click.stop="emit('detail', model)"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <path d="m9 6 6 6-6 6" />
-        </svg>
-      </button>
+          <path d="M5 12h14m-5-5 5 5-5 5" /></svg
+      ></span>
     </div>
   </article>
 </template>
 
 <style scoped>
-.model-card {
+.market-model-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-card);
+  overflow: hidden;
   box-shadow: var(--card-shadow);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
 }
-
-.model-card:hover {
+.market-model-card:hover {
+  border-color: var(--border-strong);
   box-shadow: var(--card-shadow-hover);
+  transform: translateY(-2px);
 }
-
-html.dark .model-card,
-html.dark .model-card:hover {
-  box-shadow: none;
+.market-card-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.market-card-hit:focus-visible {
+  outline-offset: -3px;
+}
+.market-card-heading {
+  padding: 1.1rem 1rem 0;
+}
+.market-card-capabilities {
+  padding: 0.7rem 1rem 0.8rem;
+}
+.market-card-quotes {
+  padding: 0 1rem;
+  flex: 1;
+}
+.market-quote-lane {
+  border-top: 1px dashed var(--border-default);
+  padding: 0.7rem 0;
+  min-width: 0;
+}
+.market-benchmark {
+  padding: 0.6rem 0;
+}
+.market-quote-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.45rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+.market-quote-heading > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.market-ratio {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.2rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  font: 0.6875rem/1.5 var(--font-mono);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.market-reference-label,
+.market-billing-label {
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+}
+.market-variant-label {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  margin-bottom: 0.3rem;
+}
+.market-no-offers {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  padding-block: 1rem;
+}
+.market-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  margin-top: 0.2rem;
+  background: var(--surface-muted);
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+.market-card-details {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+}
+.market-card-heading,
+.market-card-capabilities,
+.market-card-quotes,
+.market-card-footer {
+  pointer-events: none;
+}
+.market-card-heading :deep(.market-copy) {
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .market-model-card {
+    transition: none;
+  }
+  .market-model-card:hover {
+    transform: none;
+  }
 }
 </style>

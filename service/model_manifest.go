@@ -26,19 +26,44 @@ type ModelManifestRequest struct {
 // BuildModelManifest shares the channel authorization and capability filter
 // used by routing. Unknown descriptive capabilities never deny a valid route.
 func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.ModelManifest, error) {
-	manifest := dto.ModelManifest{SchemaVersion: 1, Models: []dto.ModelManifestEntry{}}
+	catalog, err := discoverModelRoutes(ctx, input)
+	return catalog.manifest, err
+}
+
+type discoveredModelRoute struct {
+	model    string
+	channel  *model.Channel
+	endpoint constant.EndpointType
+	price    modelRoutePrice
+}
+
+type discoveredModelCatalog struct {
+	manifest dto.ModelManifest
+	routes   []discoveredModelRoute
+	metadata map[string]model.Model
+}
+
+// discoverModelRoutes is shared by protocol model discovery and the console.
+// It applies authorization, executable endpoint bindings and price eligibility
+// before either caller projects any model or channel information.
+func discoverModelRoutes(ctx context.Context, input ModelManifestRequest) (discoveredModelCatalog, error) {
+	catalog := discoveredModelCatalog{
+		manifest: dto.ModelManifest{SchemaVersion: 1, Models: []dto.ModelManifestEntry{}},
+		metadata: make(map[string]model.Model),
+	}
+	manifest := &catalog.manifest
 	query, err := availableRouteAbilities(ctx, input.UserID, input.TokenID)
 	if err != nil {
-		return manifest, err
+		return catalog, err
 	}
 	var token model.Token
 	if input.TokenID > 0 {
 		if err := model.DB.WithContext(ctx).Select("id", "user_id", "status", "expired_time", "model_limits_enabled", "model_limits").
 			Where("id = ? AND user_id = ?", input.TokenID, input.UserID).First(&token).Error; err != nil {
-			return manifest, err
+			return catalog, err
 		}
 		if token.Status != common.TokenStatusEnabled || (token.ExpiredTime != -1 && token.ExpiredTime < common.GetTimestamp()) {
-			return manifest, model.ErrTokenInvalid
+			return catalog, model.ErrTokenInvalid
 		}
 	}
 	tokenLimits := token.GetModelLimitsMap()
@@ -50,7 +75,7 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 	}
 	if err := query.Select("abilities.model, abilities.channel_id, channels.type AS channel_type, channels.status").
 		Order("COALESCE(abilities.priority, 0) DESC, abilities.weight DESC, abilities.channel_id ASC").Scan(&abilities).Error; err != nil {
-		return manifest, err
+		return catalog, err
 	}
 	channelIDs := make([]int, 0, len(abilities))
 	for _, ability := range abilities {
@@ -59,11 +84,11 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 	sort.Ints(channelIDs)
 	channelIDs = slices.Compact(channelIDs)
 	if err := EnsureChannelCapabilities(ctx, channelIDs); err != nil {
-		return manifest, err
+		return catalog, err
 	}
 	capabilities, err := model.FindActiveChannelCapabilities(ctx, channelIDs, "", "")
 	if err != nil {
-		return manifest, err
+		return catalog, err
 	}
 	type routeKey struct {
 		channelID int
@@ -74,11 +99,11 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 		byRoute[routeKey{capability.ChannelID, capability.RequestModel}] = capability
 	}
 	if len(capabilities) == 0 {
-		return manifest, nil
+		return catalog, nil
 	}
 	var channels []model.Channel
-	if err := model.DB.WithContext(ctx).Select("id", "type", "setting").Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
-		return manifest, err
+	if err := model.DB.WithContext(ctx).Select("id", "name", "type", "setting", "channel_ratio").Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
+		return catalog, err
 	}
 	channelByID := make(map[int]*model.Channel, len(channels))
 	for index := range channels {
@@ -94,7 +119,7 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 	sort.Strings(priceNames)
 	priceSnapshot, err := model.GetModelPricingSnapshot(slices.Compact(priceNames))
 	if err != nil {
-		return manifest, err
+		return catalog, err
 	}
 	prices := make(map[string]model.ModelPricingEntry, len(priceSnapshot.Entries))
 	for _, price := range priceSnapshot.Entries {
@@ -104,7 +129,7 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 	if !acceptUnpriced && input.UserID > 0 {
 		settings, err := model.GetUserSetting(input.UserID, false)
 		if err != nil {
-			return manifest, err
+			return catalog, err
 		}
 		acceptUnpriced = settings.AcceptUnsetRatioModel
 	}
@@ -120,7 +145,7 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 		}
 		var endpoints []constant.EndpointType
 		if err := common.UnmarshalJsonStr(capability.EndpointTypes, &endpoints); err != nil {
-			return manifest, fmt.Errorf("invalid route capability endpoints: %w", err)
+			return catalog, fmt.Errorf("invalid route capability endpoints: %w", err)
 		}
 		for _, endpoint := range endpoints {
 			path := ""
@@ -138,26 +163,30 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 			if filtered.Reason != "" {
 				continue
 			}
-			price := modelManifestRoutePrice(generation, channelByID[ability.ChannelID], ability.Model, capability.ActualModel, endpoint, prices)
-			if !price.executable || (!acceptUnpriced && !price.configured) {
-				continue
-			}
-			entry := byModel[ability.Model]
-			if entry == nil {
-				entry = &dto.ModelManifestEntry{ID: ability.Model, Visible: true, OwnerChannelType: ability.ChannelType,
-					PriceConfigured: price.configured, PriceVersion: price.version}
-				byModel[ability.Model] = entry
-			}
-			if price.configured && !entry.PriceConfigured {
-				entry.PriceConfigured, entry.PriceVersion = true, price.version
-			}
-			if !slices.Contains(entry.SupportedEndpointTypes, endpoint) {
-				entry.SupportedEndpointTypes = append(entry.SupportedEndpointTypes, endpoint)
+			for _, price := range modelRoutePrices(generation, channelByID[ability.ChannelID], ability.Model, capability.ActualModel, endpoint, prices) {
+				if !acceptUnpriced && !price.configured {
+					continue
+				}
+				entry := byModel[ability.Model]
+				if entry == nil {
+					entry = &dto.ModelManifestEntry{ID: ability.Model, Visible: true, OwnerChannelType: ability.ChannelType,
+						PriceConfigured: price.configured, PriceVersion: price.version}
+					byModel[ability.Model] = entry
+				}
+				if price.configured && !entry.PriceConfigured {
+					entry.PriceConfigured, entry.PriceVersion = true, price.version
+				}
+				if !slices.Contains(entry.SupportedEndpointTypes, endpoint) {
+					entry.SupportedEndpointTypes = append(entry.SupportedEndpointTypes, endpoint)
+				}
+				catalog.routes = append(catalog.routes, discoveredModelRoute{
+					model: ability.Model, channel: channelByID[ability.ChannelID], endpoint: endpoint, price: price,
+				})
 			}
 		}
 	}
 	if len(byModel) == 0 {
-		return manifest, nil
+		return catalog, nil
 	}
 	names := make([]string, 0, len(byModel))
 	for name := range byModel {
@@ -168,7 +197,7 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 	// accidentally claim the same context limit for all model generations.
 	var metadata []model.Model
 	if err := model.DB.WithContext(ctx).Where("model_name IN ? AND name_rule = ?", names, model.NameRuleExact).Find(&metadata).Error; err != nil {
-		return manifest, err
+		return catalog, err
 	}
 	disabled := make(map[string]bool)
 	for _, meta := range metadata {
@@ -178,6 +207,7 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 			// still require the exact configured public model identifier.
 			continue
 		}
+		catalog.metadata[meta.ModelName] = meta
 		entry.Capabilities = (*dto.ModelCapabilities)(meta.Capabilities)
 		disabled[meta.ModelName] = meta.Status != 1
 	}
@@ -188,20 +218,24 @@ func BuildModelManifest(ctx context.Context, input ModelManifestRequest) (dto.Mo
 		}
 		manifest.Models = append(manifest.Models, *entry)
 	}
-	return manifest, nil
+	return catalog, nil
 }
 
-type manifestPrice struct {
-	executable bool
-	configured bool
-	version    string
+type modelRoutePrice struct {
+	configured     bool
+	version        string
+	values         model.PricingValues
+	pluginKey      string
+	pluginName     string
+	usageSchema    map[string]jsplugin.UsageFieldSchema
+	cacheWriteMode model.CacheWriteMode
+	billingDetails model.LegacyBillingDetails
 }
 
 // A plugin price belongs only to its executable endpoint. Native endpoints use
 // the same empty-plugin pricing scope as native request quoting.
-func modelManifestRoutePrice(generation *jsplugin.RoutingGeneration, channel *model.Channel, requested, actual string, endpoint constant.EndpointType, prices map[string]model.ModelPricingEntry) manifestPrice {
+func modelRoutePrices(generation *jsplugin.RoutingGeneration, channel *model.Channel, requested, actual string, endpoint constant.EndpointType, prices map[string]model.ModelPricingEntry) []modelRoutePrice {
 	entry := prices[requested]
-	result := manifestPrice{version: entry.Version}
 	var plugins []*jsplugin.LoadedPlugin
 	if endpoint == constant.EndpointTypeTaskPlugin {
 		plugins = generation.PluginsByModel(actual)
@@ -209,8 +243,7 @@ func modelManifestRoutePrice(generation *jsplugin.RoutingGeneration, channel *mo
 			plugins = generation.PluginsByModel(requested)
 		}
 	} else if info, known := common.GetDefaultEndpointInfo(endpoint); known {
-		// Endpoint interception is shared with the request middleware, including
-		// protocol model subsets. Merely declaring a model is not a binding.
+		// Endpoint interception shares execution's model subsets and binding order.
 		lookupModel := requested
 		if declared, ok := generation.CanonicalModel(requested); ok {
 			lookupModel = declared
@@ -222,16 +255,19 @@ func modelManifestRoutePrice(generation *jsplugin.RoutingGeneration, channel *mo
 		if len(bindings) > 0 {
 			selected := SelectTaskPluginEndpointCandidate(channel, bindings)
 			if selected == nil {
-				return result
+				return nil
 			}
 			plugins = []*jsplugin.LoadedPlugin{selected.Plugin}
 		}
 	}
 	if len(plugins) == 0 {
-		result.executable = endpoint != constant.EndpointTypeTaskPlugin && TaskPluginChannelEligible(channel, "")
-		result.configured = model.ModelPriceConfigured(entry.Effective)
-		return result
+		if endpoint == constant.EndpointTypeTaskPlugin || !TaskPluginChannelEligible(channel, "") {
+			return nil
+		}
+		return []modelRoutePrice{{configured: model.ModelPriceConfigured(entry.Effective), version: entry.Version, values: entry.Effective,
+			cacheWriteMode: entry.CacheWriteMode, billingDetails: entry.BillingDetails}}
 	}
+	results := make([]modelRoutePrice, 0, len(plugins))
 	for _, plugin := range plugins {
 		if !TaskPluginChannelEligible(channel, plugin.Meta.Key) {
 			continue
@@ -241,10 +277,11 @@ func modelManifestRoutePrice(generation *jsplugin.RoutingGeneration, channel *mo
 		if err != nil {
 			continue
 		}
-		result.executable = true
-		if model.ModelPriceConfigured(effective) {
-			return manifestPrice{executable: true, configured: true, version: model.ModelPricingVersion(effective)}
-		}
+		results = append(results, modelRoutePrice{
+			configured: model.ModelPriceConfigured(effective), version: model.ModelPricingVersion(effective), values: effective,
+			pluginKey: plugin.Meta.Key, pluginName: plugin.Meta.Name, usageSchema: schema,
+			cacheWriteMode: entry.CacheWriteMode, billingDetails: model.ResolveLegacyBillingDetails(requested, effective, entry.Configured),
+		})
 	}
-	return result
+	return results
 }

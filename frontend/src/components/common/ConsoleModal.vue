@@ -180,25 +180,32 @@ onBeforeUnmount(() => {
             aria-hidden="true"
           />
           <header
-            v-if="title || subtitle"
+            v-if="title || subtitle || $slots.header"
             class="shrink-0 px-6 pt-5"
             :class="
               presentation === 'drawer' ? 'pb-5 text-left' : 'text-center'
             "
           >
-            <h2
-              :id="titleId"
-              class="display-title text-xl font-bold text-[var(--text-primary)]"
+            <slot
+              name="header"
+              :title-id="titleId"
+              :subtitle-id="subtitleId"
+              :close="requestClose"
             >
-              {{ title }}
-            </h2>
-            <p
-              v-if="subtitle"
-              :id="subtitleId"
-              class="mt-1.5 text-sm text-[var(--text-tertiary)]"
-            >
-              {{ subtitle }}
-            </p>
+              <h2
+                :id="titleId"
+                class="display-title text-xl font-bold text-[var(--text-primary)]"
+              >
+                {{ title }}
+              </h2>
+              <p
+                v-if="subtitle"
+                :id="subtitleId"
+                class="mt-1.5 text-sm text-[var(--text-tertiary)]"
+              >
+                {{ subtitle }}
+              </p>
+            </slot>
           </header>
           <div
             class="subtle-scroll min-h-0 overflow-y-auto px-6 py-5"

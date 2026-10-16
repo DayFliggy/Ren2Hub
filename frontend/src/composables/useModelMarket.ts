@@ -1,288 +1,162 @@
-import { catalogPrices } from '@/api/publicCatalog'
-import { compareDecimal } from '@/utils/decimal'
 import { computed, ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-
-import { api } from '@/api/console'
-import {
-  parsePerfMetricsSummary,
-  parsePricingModelsPartial,
-  type PerfModelSummaryContract,
-  type PricingModelContract,
-  type PricingCatalogIssue,
-} from '@/api/liveContracts'
-import { ApiError } from '@/api/types'
-import type { MarketModel } from '@/types/console'
-import { vendorTaglineKeys } from '@/constants/console'
-import { useToast } from '@/composables/useToast'
+import { getModelMarket } from '@/api/modelMarket'
 import { useLatestRequest } from '@/composables/useLatestRequest'
-import { getModelManifest, type ModelManifestEntry } from '@/api/modelManifest'
+import { ApiError } from '@/api/types'
+import {
+  buildModelMarketCatalog,
+  compareMarketOffers,
+  normalizeMarketView,
+  PLATFORM_VENDOR,
+} from '@/utils/modelMarket'
+import type {
+  MarketBillingMode,
+  MarketChannelShelf,
+  MarketModelType,
+  ModelMarketCatalog,
+  ModelMarketSort,
+  ModelMarketViewMode,
+} from '@/types/modelMarket'
 
-// Prefixed to stay distinct from useMarketplace's same-named exports — the two
-// composables cover different catalogs (models vs merchant listings).
-export type ModelMarketViewMode = 'grid' | 'list'
-export type ModelMarketSort = 'default' | 'latency' | 'tps' | 'price' | 'health'
-
-export interface ModelMarketCatalog {
-  models: MarketModel[]
-  vendors: string[]
-}
-
-/** Vendor key for models the pricing catalog gives no owner; labelled at display time. */
-export const PLATFORM_VENDOR = '__platform__'
-
-export interface VendorGroup {
-  vendor: string
-  label: string
-  tagline: string
-  models: MarketModel[]
-  healthy: number // health >= 95
-  degraded: number // 80..94
-  down: number // < 80
-}
-
-function modelType(endpoints: string[]): MarketModel['type'] {
-  if (endpoints.includes('image-generation')) return 'image'
-  if (endpoints.includes('embeddings')) return 'embedding'
-  if (endpoints.includes('jina-rerank')) return 'rerank'
-  if (endpoints.includes('openai-video')) return 'video'
-  if (endpoints.some((endpoint) => endpoint.includes('audio'))) return 'audio'
-  return 'chat'
-}
-
-function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
-  const result: MarketModel['price'] = {}
-  const names: Record<
-    string,
-    'input' | 'output' | 'cache_read' | 'cache_write' | 'per_call'
-  > = {
-    input: 'input',
-    output: 'output',
-    cacheRead: 'cache_read',
-    cacheWrite: 'cache_write',
-    request: 'per_call',
-  }
-  for (const line of catalogPrices(pricing, 'M')) {
-    const key = names[line.key]
-    if (key) result[key] = line.value
-  }
-  return result
-}
-
-export function buildLiveModelCatalog(
-  names: string[],
-  pricing: PricingModelContract[],
-  performance: PerfModelSummaryContract[],
-  capabilities: ModelManifestEntry[] = []
-): ModelMarketCatalog {
-  const pricingByName = new Map(pricing.map((item) => [item.model_name, item]))
-  const performanceByName = new Map(
-    performance.map((item) => [item.model_name, item])
-  )
-  const manifestByName = new Map(capabilities.map((entry) => [entry.id, entry]))
-  const models = names.map((name, index) => {
-    const manifest = manifestByName.get(name)
-    const price = pricingByName.get(name)
-    const metrics = performanceByName.get(name)
-    const vendor = price?.owner_by.trim() || PLATFORM_VENDOR
-    return {
-      id: index + 1,
-      name,
-      vendor,
-      type: modelType(
-        manifest?.supported_endpoint_types ??
-          price?.supported_endpoint_types ??
-          []
-      ),
-      billing:
-        !price || price.billing_mode === 'unconfigured'
-          ? ('unconfigured' as const)
-          : price.billing_mode === 'tiered_expr'
-            ? ('tiered' as const)
-            : price?.quota_type === 1
-              ? ('per_call' as const)
-              : ('token' as const),
-      price: price ? modelPrice(price) : {},
-      pricing: price,
-      context: manifest?.capabilities?.context_limit ?? 0,
-      tagline: price?.description ?? '',
-      latency: metrics ? Math.max(0, metrics.avg_latency_ms / 1000) : 0,
-      tps: metrics ? Math.max(0, metrics.avg_tps) : 0,
-      health: metrics ? Math.min(100, Math.max(0, metrics.success_rate)) : 0,
-    }
-  })
-  return {
-    models,
-    vendors: [...new Set(models.map((model) => model.vendor))],
-  }
-}
-
-/**
- * Sort key for the price ordering. `input` ($/1M tokens) and `per_call`
- * ($/call) are different units and must not be compared directly, so per-call
- * models are grouped after all token-priced ones (bucket 0 vs 1) and only
- * compared within their own unit.
- */
-function priceKey(m: MarketModel): [number, string] {
-  const p = m.price
-  const tokenPrice = p.input ?? p.tiers?.[0]?.input
-  if (tokenPrice != null) return [0, tokenPrice]
-  if (p.per_call != null) return [1, p.per_call]
-  return [2, '0']
-}
-
-/** Compare two [bucket, price] keys: bucket first, then price within bucket. */
-function comparePrice(a: MarketModel, b: MarketModel): number {
-  const [ba, pa] = priceKey(a)
-  const [bb, pb] = priceKey(b)
-  return ba !== bb ? ba - bb : compareDecimal(pa, pb)
-}
+export { PLATFORM_VENDOR } from '@/utils/modelMarket'
+export type { ModelMarketViewMode, ModelMarketSort } from '@/types/modelMarket'
 
 export function useModelMarket() {
   const { t } = useI18n()
-  const toast = useToast()
   const loading = ref(true)
+  const error = ref('')
   const catalog = ref<ModelMarketCatalog | null>(null)
-  const pricingIssues = ref<PricingCatalogIssue[]>([])
-
   const keyword = ref('')
-  const vendor = ref('')
-  const type = ref('')
+  const channel = ref<number | ''>('')
+  const billing = ref<MarketBillingMode | ''>('')
+  const type = ref<MarketModelType | ''>('')
   const sort = ref<ModelMarketSort>('default')
-  const view = useLocalStorage<ModelMarketViewMode>(
-    'ren2hub_models_view',
-    'grid'
-  )
+  const savedView = useLocalStorage<string>('ren2hub_models_view', 'models')
+  savedView.value = normalizeMarketView(savedView.value)
+  const view = computed<ModelMarketViewMode>({
+    get: () => normalizeMarketView(savedView.value),
+    set: (value) => {
+      savedView.value = normalizeMarketView(value)
+    },
+  })
   const request = useLatestRequest()
 
-  function vendorLabel(name: string): string {
-    return name === PLATFORM_VENDOR ? t('models.platformVendor') : name
+  function vendorLabel(vendor: string): string {
+    return vendor === PLATFORM_VENDOR ? t('models.platformVendor') : vendor
   }
 
   async function load() {
     loading.value = true
-    const result = await request.run(async (signal) => {
-      const manifest = await getModelManifest(signal)
-      const [pricingResult, performanceResult] = await Promise.allSettled([
-        api
-          .get<unknown>('/api/pricing', undefined, { signal })
-          .then(parsePricingModelsPartial),
-        api
-          .get<unknown>('/api/perf-metrics/summary', undefined, { signal })
-          .then(parsePerfMetricsSummary),
-      ])
-      return { manifest, pricingResult, performanceResult }
-    })
+    error.value = ''
+    const result = await request.run(getModelMarket)
     if (result.stale) return
     loading.value = false
-    if (result.ok) {
-      const { manifest, pricingResult, performanceResult } = result.value
-      if (
-        pricingResult.status === 'rejected' ||
-        performanceResult.status === 'rejected'
-      ) {
-        toast.warning(t('models.metadataUnavailable'))
-      }
-      pricingIssues.value =
-        pricingResult.status === 'fulfilled' ? pricingResult.value.issues : []
-      catalog.value = buildLiveModelCatalog(
-        manifest.models
-          .filter((entry) => entry.visible)
-          .map((entry) => entry.id),
-        pricingResult.status === 'fulfilled' ? pricingResult.value.models : [],
-        performanceResult.status === 'fulfilled' ? performanceResult.value : [],
-        manifest.models
-      )
-    } else {
-      toast.error(
+    if (result.ok) catalog.value = buildModelMarketCatalog(result.value)
+    else {
+      // Discard old permission-scoped data after a failed refresh.
+      catalog.value = null
+      error.value =
         result.error instanceof ApiError
           ? result.error.message
           : t('common.failed')
-      )
     }
   }
 
   const filtered = computed(() => {
-    const all = catalog.value?.models ?? []
-    const kw = keyword.value.trim().toLowerCase()
-    const list = all.filter((m) => {
-      if (
-        kw &&
-        !m.name.toLowerCase().includes(kw) &&
-        !vendorLabel(m.vendor).toLowerCase().includes(kw)
-      )
-        return false
-      if (vendor.value && m.vendor !== vendor.value) return false
-      if (type.value && m.type !== type.value) return false
-      return true
-    })
-    if (sort.value === 'default') return list
-    const sorted = [...list]
-    switch (sort.value) {
-      case 'latency':
-        sorted.sort((a, b) => a.latency - b.latency)
-        break
-      case 'tps':
-        sorted.sort((a, b) => b.tps - a.tps)
-        break
-      case 'price':
-        sorted.sort(comparePrice)
-        break
-      case 'health':
-        sorted.sort((a, b) => b.health - a.health)
-        break
-    }
-    return sorted
-  })
-
-  /** Group filtered models by vendor, preserving catalog vendor order. */
-  const groups = computed<VendorGroup[]>(() => {
-    const order = catalog.value?.vendors ?? []
-    const byVendor = new Map<string, MarketModel[]>()
-    for (const m of filtered.value) {
-      const bucket = byVendor.get(m.vendor)
-      if (bucket) bucket.push(m)
-      else byVendor.set(m.vendor, [m])
-    }
-    return order
-      .filter((v) => byVendor.has(v))
-      .map((v) => {
-        const models = byVendor.get(v)!
-        const taglineKey = vendorTaglineKeys[v]
+    const query = keyword.value.trim().toLowerCase()
+    const rows = (catalog.value?.models ?? [])
+      .filter((model) => !type.value || model.type === type.value)
+      .map((model) => {
+        const offers = model.offers
+          .filter(
+            (offer) =>
+              (!channel.value || offer.channelId === Number(channel.value)) &&
+              (!billing.value || offer.pricing.billingMode === billing.value) &&
+              (!query ||
+                `${model.name} ${vendorLabel(model.vendor)} ${offer.channelName}`
+                  .toLowerCase()
+                  .includes(query))
+          )
+          .sort((a, b) => compareMarketOffers(a, b, sort.value))
+        const priceIds = new Set(offers.map((offer) => offer.baseline.id))
         return {
-          vendor: v,
-          label: vendorLabel(v),
-          tagline: taglineKey ? t(taglineKey) : '',
-          models,
-          healthy: models.filter((m) => m.health >= 95).length,
-          degraded: models.filter((m) => m.health >= 80 && m.health < 95)
-            .length,
-          down: models.filter((m) => m.health > 0 && m.health < 80).length,
+          ...model,
+          offers,
+          baselines: model.baselines.filter((price) => priceIds.has(price.id)),
         }
       })
+      .filter((model) => model.offers.length)
+    if (sort.value === 'name') rows.sort((a, b) => a.name.localeCompare(b.name))
+    else if (sort.value !== 'default')
+      rows.sort((a, b) =>
+        compareMarketOffers(a.offers[0]!, b.offers[0]!, sort.value)
+      )
+    return rows
   })
 
+  const shelves = computed<MarketChannelShelf[]>(() =>
+    (catalog.value?.channels ?? [])
+      .map((item) => {
+        const items = filtered.value
+          .map((model) => ({
+            model,
+            offers: model.offers.filter((offer) => offer.channelId === item.id),
+          }))
+          .filter((row) => row.offers.length)
+        if (sort.value !== 'name')
+          items.sort((a, b) =>
+            compareMarketOffers(a.offers[0]!, b.offers[0]!, sort.value)
+          )
+        return { channel: item, items }
+      })
+      .filter((shelf) => shelf.items.length)
+  )
+
+  function resetFilters() {
+    keyword.value = ''
+    channel.value = ''
+    billing.value = ''
+    type.value = ''
+    sort.value = 'default'
+  }
+
+  const visibleChannels = computed(() =>
+    shelves.value.map((shelf) => shelf.channel)
+  )
   const resultCount = computed(() => filtered.value.length)
+  const offerCount = computed(() =>
+    filtered.value.reduce((sum, model) => sum + model.offers.length, 0)
+  )
   const hasResults = computed(() => resultCount.value > 0)
-
-  const vendorOptions = computed(() => catalog.value?.vendors ?? [])
-
+  const pricingIssues = computed(() =>
+    (catalog.value?.models ?? [])
+      .filter((model) =>
+        model.offers.some(
+          (offer) => offer.pricing.billingMode === 'unconfigured'
+        )
+      )
+      .map((model) => model.id)
+  )
   return {
     loading,
+    error,
     catalog,
-    pricingIssues,
     keyword,
-    vendor,
+    channel,
+    billing,
     type,
     sort,
     view,
     filtered,
-    groups,
+    shelves,
+    visibleChannels,
     resultCount,
+    offerCount,
     hasResults,
-    vendorOptions,
+    pricingIssues,
     vendorLabel,
     load,
+    resetFilters,
   }
 }
