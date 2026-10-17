@@ -7,6 +7,47 @@ import {
 } from '@/api/publicCatalog'
 
 describe('public catalog contracts', () => {
+  it('preserves native built-in negative vendor IDs and their model association', () => {
+    const catalog = parsePricingCatalog({
+      success: true,
+      supported_endpoint: {},
+      vendors: [
+        { id: -1012, name: 'OpenAI', description: 'Built-in vendor' },
+        { id: 1, name: 'Custom vendor' },
+      ],
+      data: [
+        {
+          model_name: 'gpt-4.1',
+          vendor_id: -1012,
+          quota_type: 0,
+          model_ratio: 1,
+          completion_ratio: 4,
+        },
+      ],
+    })
+    expect(catalog.issues).toEqual([])
+    expect(catalog.vendors.map((vendor) => vendor.id)).toEqual([-1012, 1])
+    expect(
+      catalog.vendors.find(
+        (vendor) => vendor.id === catalog.models[0]?.vendor_id
+      )?.name
+    ).toBe('OpenAI')
+  })
+
+  it.each([-1.5, '-1012', null, undefined, NaN, Infinity])(
+    'rejects an invalid vendor ID %s',
+    (id) => {
+      expect(() =>
+        parsePricingCatalog({
+          success: true,
+          supported_endpoint: {},
+          vendors: [{ id, name: 'Invalid vendor' }],
+          data: [],
+        })
+      ).toThrow('Invalid API response: /api/pricing')
+    }
+  )
+
   it('distinguishes an unconfigured backend zero from an explicitly free price', () => {
     const catalog = parsePricingCatalog({
       success: true,

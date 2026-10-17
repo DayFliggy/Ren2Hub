@@ -120,7 +120,7 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
       ).map(([key, name]) => [key, requiredString(name, endpoint)])
     ),
     vendors: records(value.vendors ?? [], endpoint).map((vendor) => ({
-      id: count(vendor.id, endpoint),
+      id: requiredStrictInteger(vendor.id, endpoint),
       name: requiredString(vendor.name, endpoint, false),
       description: requiredString(vendor.description ?? '', endpoint),
     })),
