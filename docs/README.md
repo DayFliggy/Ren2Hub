@@ -1,6 +1,6 @@
 # Ren2Hub 文档入口
 
-上游适配的当前基线、未采用能力和等待项统一在[同步账本](upstream/SYNC_LEDGER.md)。CI 按事件的 `github.sha` 检出同一提交；Vue Bun 依赖由 Dependabot 每周检查，提交到本地服务端不会自动触发 GitHub 工作流。
+NewAPI（`QuantumNous/new-api`）是 Ren2Hub 的唯一上游；Sub2API 和 AxonHub 仅为按需研究的参考项目，不要求同步追平。上游适配基线、参考追踪点、未采用能力和等待项统一在[同步账本](upstream/SYNC_LEDGER.md)。CI 按事件的 `github.sha` 检出同一提交；Vue Bun 依赖由 Dependabot 每周检查，提交到本地服务端不会自动触发 GitHub 工作流。
 
 本文索引当前源码的开发、接口和运维契约。主项目是 Go/Gin/GORM 网关、Vue 控制台与独立的 RelayKit、TokenKit 模块；当前仅允许一个网关进程承接业务流量。钱包是唯一资金来源，Token 是附加消费限额。
 
@@ -18,7 +18,7 @@
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移、Responses WebSocket、Claude effort 计价、请求诊断 |
 | 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[TokenKit](../tokenkit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、token 计数与估算、供应商入口和边界 |
 | 任务插件 | [插件 API](plugin-api/README.md)、[v1 合同](plugin-api/v1.md) | 插件 ABI、不可变执行版本、用量事实与冻结报价、产物访问 |
-| 上游同步 | [同步账本](upstream/SYNC_LEDGER.md) | NewAPI、Sub2API、AxonHub 当前基线，按领域列出的吸收状态、本地偏离与复评条件 |
+| 上游同步 | [同步账本](upstream/SYNC_LEDGER.md) | NewAPI 唯一上游适配基线、Sub2API/AxonHub 参考追踪点，按领域列出的吸收状态、本地偏离与复评条件 |
 | 账务架构 | [实现边界](billing/IMPLEMENTATION.md)、[账务 API](billing/API.md)、[结算兜底与恢复](billing/RECOVERY.md) | 冻结报价、持久化预留、事件、原子结算与先计费兜底 |
 | 定价 | [模型定价与价格获取](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | NewAPI 配置、五源草稿、三模式计算、空默认与加密重放 |
 | 易支付充值 | [支付契约](billing/EPAY.md) | 报价、订单快照、商户版本、通知重试与管理员补单 |

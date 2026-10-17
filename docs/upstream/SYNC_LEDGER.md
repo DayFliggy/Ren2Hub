@@ -1,6 +1,8 @@
 # 上游同步账本
 
-本账本按领域记录 Ren2Hub 当前代码对 NewAPI、Sub2API、AxonHub 改动的处置：已吸收的行为、合并上游时必须保留的本地偏离、等待上游或延期的问题，以及刻意不吸收的项目和复评条件。当前同步基线为 NewAPI `d032204733db31208f10bac118b6e683aab3bf29`（main）、Sub2API `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`（main）、AxonHub `a946fca495c52344ed073abb6c3562b9ff728b12`（unstable），下一轮从这三个提交向后比较。
+NewAPI（`QuantumNous/new-api`）是 Ren2Hub 的唯一上游。Sub2API（`Wei-Shaw/sub2api`）和 AxonHub（`looplj/axonhub`）仅为参考项目，按具体问题研究并经本地合同验证后选择吸收，不作为并列上游或必须追平的同步目标。此关系于 2026-10-17 按用户指示明确，既有参考来源归属和等待 NewAPI 的决定继续保留。
+
+本账本记录唯一上游的适配、参考能力的选择性吸收、本地偏离与复评条件。NewAPI 已适配基线为 `d032204733db31208f10bac118b6e683aab3bf29`（main）；Sub2API `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`（main）与 AxonHub `a946fca495c52344ed073abb6c3562b9ff728b12`（unstable）只作为既有研究/吸收的参考追踪点。新提交的审阅状态与已适配基线分开记录。
 
 逐批的比较窗口、执行过程和验收数据保存在 Git 历史中：在 Ren2Hub 目录运行 `git log -- docs/upstream/SYNC_LEDGER.md` 定位批次，再用 `git show <commit>:docs/upstream/SYNC_LEDGER.md` 读取。接口字段以[网关 API](../routing/GATEWAY_API.md)、[协议支持矩阵](../routing/GATEWAY_SUPPORT_MATRIX.md)、[插件 API](../plugin-api/v1.md)、[模型定价](../billing/PRICING.md)和[鉴权合同](../authentication.md)为准，本账本只记处置与本地合同。
 
@@ -15,6 +17,18 @@
 | 不适用 | 本地没有对应代码或产品 | 对应能力重新引入时复评 |
 
 状态沿用[适配矩阵](../../../skills/ren2hub-upstream-sync/references/adaptation-matrix.md)的定义：部分吸收的上游提交拆成多行分别标注；百炼实际 `reasoning_effort` 行为仍是待验证项（队列 `SYNC1008-06`）。处置状态描述代码行为，守护测试列指明相关回归，不代表本轮候选验收或部署已完成；“—”表示没有专门测试。
+
+## 2026-10-17 NewAPI 更新审阅（未适配）
+
+2026-10-17 02:43 UTC 通过官方 Git refs、commit/compare/release API 核对：main 为 `09109ec315a5086366f94bcce00f177ec831dbe1`；从已适配基线 `d032204733db31208f10bac118b6e683aab3bf29` 向后仅 1 个提交，祖先关系与完整提交列表一致。最新发布仍为 [v1.0.0-rc.44](https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.44)，标签提交 `633b4c5b190dc1af99a2814391354d86948e7943`，发布于 2026-10-12 13:42:01 UTC；官方 API 标记 prerelease=false，不将 rc 名称自动视为稳定版。两个参考项目本轮不作版本更新检查。
+
+| 来源 / 跟踪项 | 状态 | 更新内容 | 本地落点与下一步 |
+| --- | --- | --- | --- |
+| NewAPI [`09109ec315a5086366f94bcce00f177ec831dbe1`](https://github.com/QuantumNous/new-api/commit/09109ec315a5086366f94bcce00f177ec831dbe1) / SYNC1017-01 | 待验证，优先适配；本批未实现 | 容器 cgroup v1/v2 CPU 配额/使用量、可调度核数约束及内存工作集；不可用时回退宿主。CPU/内存/磁盘均连续 3 次超阈值才熔断，回落恢复；超过 30 秒的采样不拒绝请求，热配置复核阈值，保留 503 和错误码 | `common/system_monitor.go` 与 `middleware/performance.go` 仍使用宿主口径和单次判断，relay、视频、任务插件路由仍挂载；`service/ops_monitor*.go` 的健康检查与控制台资源展示也依赖同一采样。后续须一起适配采样语义与展示，保留 Availability、宿主负载/核心数语义、磁盘缓存路径、后台任务取消及关闭清零合同。 |
+
+本次读取全部 4 个变更文件及新增测试（556 行新增、45 行删除），只做静态核对，未运行该上游补丁或本地应用测试，未证明正式环境发生过误拒。后续回归需覆盖 cgroup v1/v2、首次 CPU 样本、无配额/文件不可读回退、非活跃缓存与下溢、瞬时尖峰/连续超限/恢复、陈旧采样、热配置及运维检查与展示一致性。已适配基线保持 `d0322047`；参考追踪点与已有等待项均不推进。
+
+02:46 UTC 标准来源采集与本地对象比较均为 complete，完整窗口为 1 个提交、无截断、未 fetch 参考仓库。来源 JSON 与原始补丁保存在 `/home/work/newapi-audit-20261017T024224Z/evidence/`；这份审阅不代表应用补丁已吸收、候选通过或完成部署。
 
 ## 2026-10-16 增量处置
 
@@ -262,7 +276,7 @@
 | NewAPI `c2b7a9a9e` | 已吸收 | Claude 消息级 `output_config` 原生保留；本地按当前 user 回合解析 effort 计价，跨协议出现消息级配置记 `claude_message_output_config_not_portable`（safe/strict 拒绝）。合同见[网关 API](../routing/GATEWAY_API.md#claude-消息级-effort-与计价) | `relaykit/dto/`、`relay/common/override.go`、`relay/helper/billing_expr_request.go` | `TestGatewayClaudeEffortProtocolAndIncomingParamBilling`、`TestGatewayClaudeMessageOutputConfigConversionBeforeBilling` | — |
 | Sub2API `97bdde31` | 已吸收 | Claude 普通工具 `content_block_start.input` 作为后备参数；有 `input_json_delta` 时使用累计值，不拼接两份 JSON | Claude 流式转换 | `TestClaudeStreamFirstFramePreservesParallelTools` | — |
 | Sub2API apicompat（拒答转 Chat） | 本地偏离保留 | Responses 拒答在非流式、流式、缓冲三条路径转为 Chat `refusal` 字段，增量与终态快照只交付一次 | `relaykit/relayconvert/internal/oai_responses/` | `TestResponsesRefusalReachesChatRefusalField` | NewAPI 提供拒答映射时比较 |
-| 本地（拒答转 Claude） | 本地偏离保留 | 拒答转为 Claude text 块并设 `stop_reason: "refusal"`，优先于 tool_use、end_turn 与长度截断；记 warning `responses_refusal_reduced`（safe/allow 放行，strict 拒绝）；只交付一次。AxonHub 静默丢弃，三个上游都没有该映射 | `relaykit/relayconvert/` | `TestResponsesRefusalReachesClaudeUnderConversionPolicy` | 上游提供映射时比较 |
+| 本地（拒答转 Claude） | 本地偏离保留 | 拒答转为 Claude text 块并设 `stop_reason: "refusal"`，优先于 tool_use、end_turn 与长度截断；记 warning `responses_refusal_reduced`（safe/allow 放行，strict 拒绝）；只交付一次。AxonHub 静默丢弃，NewAPI 与两个参考项目都没有该映射 | `relaykit/relayconvert/` | `TestResponsesRefusalReachesClaudeUnderConversionPolicy` | 上游提供映射时比较 |
 | 本地 AUDIT1009-02a（拒答转 Gemini） | 等待上游 | Responses 拒答转 Gemini（请求历史与响应两个方向）被丢弃，三个项目都没有映射 | — | — | NewAPI 修复后按其实现同步 |
 | 本地 AUDIT1009B-09（Haiku 5.5 能力行） | 已吸收 | 按 NewAPI `036ba376d` 补齐：Haiku 5.5 只用 adaptive、默认开启思考、五档 effort、默认 effort `medium`，转换请求不再发 `budget_tokens`（记 `claude_budget_to_adaptive`），并去掉 `temperature`、`top_p`、`top_k`；`disabled` 时 effort 最高 `high`。点号名与云前缀名经 `canonicalClaudeModelID` 命中同一行 | `relaykit/relayconvert/reasoning/claude.go`、`relaykit/relayconvert/reasoning/suffix.go` | `TestClaudeHaiku55RendersAdaptiveThinkingWithoutSampling` | Anthropic 或上游改变 Haiku 5.5 能力时 |
 | 本地 AUDIT1009B-10（Bedrock Sonnet 5 强制工具） | 等待上游 | Bedrock 上 Sonnet 5 配强制 `tool_choice` 时 Anthropic 要求显式 `thinking:disabled`，转换不发送 thinking，模型按默认开启思考运行；与 NewAPI 一致 | `relaykit/relayconvert/reasoning/claude.go` | — | NewAPI 修复后按其实现同步 |
