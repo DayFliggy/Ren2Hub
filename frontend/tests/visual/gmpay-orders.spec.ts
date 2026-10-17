@@ -51,7 +51,9 @@ for (const theme of ['light', 'dark'] as const) {
         })
       })
       await page.goto('/orders')
-      const row = page.getByRole('row').filter({ hasText: 'GP-native' })
+      const row = page
+        .locator('[data-order-row]')
+        .filter({ hasText: 'GP-native', visible: true })
       await expect(row).toContainText('Pending')
       await expect(row).toContainText('gmpay / gmpay:usdt.tron')
       await row.getByRole('button', { name: 'Complete manually' }).click()

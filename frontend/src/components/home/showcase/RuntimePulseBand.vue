@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Activity } from 'lucide-vue-next'
+import { Activity, Zap } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import type { HomeRuntime } from '@/types/homeShowcase'
@@ -97,7 +97,7 @@ onBeforeUnmount(() => {
       {{ t('showcase.runtime.title') }}
     </h2>
 
-    <div class="runtime-ledger-sheet" style="grid-template-columns: 1fr">
+    <div class="runtime-ledger-sheet">
       <!-- 左栏：运行时长翻牌 -->
       <div class="runtime-ledger-panel runtime-ledger-panel--uptime">
         <header class="runtime-ledger-heading">
@@ -185,6 +185,24 @@ onBeforeUnmount(() => {
           </span>
           <strong>{{ uptimeLabel }}</strong>
           <span>/ {{ t('showcase.runtime.recentAvailability') }}</span>
+        </div>
+      </div>
+      <div class="runtime-ledger-panel runtime-ledger-panel--requests">
+        <header class="runtime-ledger-heading">
+          <Zap :size="19" aria-hidden="true" />
+          <strong>{{ t('showcase.runtime.stableCalls') }}</strong>
+          <span aria-hidden="true">·</span>
+          <em>{{ t('showcase.runtime.servedTag') }}</em>
+        </header>
+        <strong class="runtime-request-total" data-home-request-total
+          >--</strong
+        >
+        <p class="runtime-request-caption">
+          {{ t('showcase.runtime.metricsUnavailable') }}
+        </p>
+        <div class="runtime-trend">
+          <span class="runtime-trend-placeholder" aria-hidden="true">--</span>
+          <span>{{ t('showcase.runtime.trend24h') }}</span>
         </div>
       </div>
     </div>

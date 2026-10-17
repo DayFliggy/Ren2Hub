@@ -34,6 +34,11 @@ export interface FlowPoint {
   requests: number
 }
 
+export interface TotalTokenPoint {
+  date: string
+  total: number
+}
+
 const DAY_SECONDS = 86_400
 
 function localDateKey(date: Date): string {
@@ -92,6 +97,7 @@ export function useDashboard() {
   const stats = ref<DashboardStats | null>(null)
   const share = ref<ModelShare[]>([])
   const flow = ref<FlowPoint[]>([])
+  const tokenTrend = ref<TotalTokenPoint[]>([])
   const error = ref<string | null>(null),
     request = useLatestRequest()
 
@@ -142,6 +148,7 @@ export function useDashboard() {
     const dayRows = new Map<string, FlowPoint>(
       dateKeys.map((date) => [date, { date, consume: '0', requests: 0 }])
     )
+    const tokenRows = new Map(dateKeys.map((date) => [date, 0]))
     for (const row of usage) {
       const current = modelRows.get(row.model_name) ?? {
         model: row.model_name,
@@ -160,6 +167,7 @@ export function useDashboard() {
       if (day) {
         day.consume = addQuota(day.consume, row.quota)
         day.requests += row.count
+        tokenRows.set(date, tokenRows.get(date)! + row.token_used)
       }
     }
     share.value = [...modelRows.values()].map((row) => ({
@@ -167,6 +175,10 @@ export function useDashboard() {
       ratio: quotaRatio(row.quota, totalQuota),
     }))
     flow.value = dateKeys.map((date) => dayRows.get(date)!)
+    tokenTrend.value = dateKeys.map((date) => ({
+      date,
+      total: tokenRows.get(date)!,
+    }))
     loading.value = false
   }
 
@@ -175,6 +187,7 @@ export function useDashboard() {
     stats,
     share,
     flow,
+    tokenTrend,
     error,
     load,
   }

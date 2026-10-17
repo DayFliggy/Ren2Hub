@@ -168,7 +168,7 @@ for (const viewport of viewports) {
   })
 }
 
-test('retired module entry points are absent and routes fail closed', async ({
+test('unavailable activity entries stay disabled and retired routes fail closed', async ({
   page,
 }) => {
   test.setTimeout(120_000)
@@ -177,15 +177,15 @@ test('retired module entry points are absent and routes fail closed', async ({
 
   await page.goto('/activity', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
-  await expect(page.getByRole('button', { name: /RT农家乐/ })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /无趣大游戏/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /RT农家乐/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /无趣大游戏/ })).toBeDisabled()
   await expect(
     page.getByRole('button', { name: '炼金室', exact: true })
   ).toBeDisabled()
 
   await page.goto('/profile', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
-  await expect(page.locator('.profile-identity')).toHaveCount(0)
+  await expect(page.locator('.profile-identity')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Native Root' })).toBeVisible()
 
   for (const path of ['/market', '/invoice', '/farm', '/bigame']) {

@@ -58,12 +58,15 @@ const accentClass = computed(() => [
       class="gap-4"
       :class="
         titleSide === 'right'
-          ? 'grid grid-cols-[minmax(0,1fr)_auto] items-start'
+          ? 'grid grid-cols-1 items-start md:grid-cols-[minmax(0,1fr)_auto]'
           : 'flex flex-wrap items-start justify-between'
       "
       :data-title-side="titleSide"
     >
-      <div class="min-w-0" :class="titleSide === 'right' ? 'self-end' : ''">
+      <div
+        class="min-w-0"
+        :class="titleSide === 'right' ? 'order-2 self-end md:order-1' : ''"
+      >
         <h1
           v-if="titleSide === 'left'"
           class="display-title text-4xl font-bold text-[var(--text-primary)] lg:text-5xl leading-tight"
@@ -90,13 +93,13 @@ const accentClass = computed(() => [
         class="flex min-w-0 gap-5"
         :class="
           titleSide === 'right'
-            ? 'items-start justify-end text-right'
+            ? 'order-1 items-start justify-start text-left md:order-2 md:justify-end md:text-right'
             : 'items-center'
         "
       >
         <h1
           v-if="titleSide === 'right'"
-          class="display-title whitespace-nowrap text-right text-4xl font-bold leading-tight text-[var(--text-primary)] lg:text-5xl"
+          class="display-title break-words text-left text-4xl font-bold leading-tight text-[var(--text-primary)] md:whitespace-nowrap md:text-right lg:text-5xl"
           :class="{ 'gesture-mark': accentVariant !== 'underline' }"
           :data-accent-variant="accentVariant"
         >

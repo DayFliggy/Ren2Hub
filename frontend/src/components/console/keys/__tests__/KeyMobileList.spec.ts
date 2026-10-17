@@ -32,6 +32,7 @@ async function mountList() {
     toggleSelected: vi.fn(),
     toggleStatus: vi.fn(),
     viewKey: vi.fn(),
+    clientConfig: vi.fn(),
     editKey: vi.fn(),
     deleteKey: vi.fn(),
   }
@@ -69,6 +70,7 @@ describe('KeyMobileList', () => {
     await row.get('input[type="checkbox"]').trigger('change')
     await row.get('header button[aria-label="启停"]').trigger('click')
     await row.get('button[aria-label="查看完整密钥"]').trigger('click')
+    await row.get('button[aria-label="客户端配置"]').trigger('click')
     await row.get('button[aria-label="编辑令牌"]').trigger('click')
     await row.get('button[aria-label="删除"]').trigger('click')
 
@@ -76,6 +78,7 @@ describe('KeyMobileList', () => {
     expect(actions.toggleSelected).toHaveBeenCalledWith(token)
     expect(actions.toggleStatus).toHaveBeenCalledWith(token)
     expect(actions.viewKey).toHaveBeenCalledWith(token)
+    expect(actions.clientConfig).toHaveBeenCalledWith(token)
     expect(actions.editKey).toHaveBeenCalledWith(token)
     expect(actions.deleteKey).toHaveBeenCalledWith(token)
   })

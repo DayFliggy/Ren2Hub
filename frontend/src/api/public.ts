@@ -21,6 +21,7 @@ export interface PublicStatus {
   version?: string
   system_name?: string
   logo?: string
+  footer_html?: string
   docs_link?: string
   register_enabled?: boolean
   affiliate_registration_required?: boolean
@@ -96,6 +97,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'system_name',
     'logo',
     'docs_link',
+    'footer_html',
     'server_address',
   ] as const
   for (const key of [
@@ -315,6 +317,15 @@ export const publicApi = {
       signal,
     })
     if (typeof value !== 'string') invalidResponse('/api/notice')
+    return value
+  },
+  async homeContent(signal?: AbortSignal) {
+    const value = await publicClient.get<unknown>(
+      '/api/home_page_content',
+      undefined,
+      { signal }
+    )
+    if (typeof value !== 'string') invalidResponse('/api/home_page_content')
     return value
   },
   async pricing(signal?: AbortSignal) {

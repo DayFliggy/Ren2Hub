@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { SERIES_TOKENS } from '@/charts/palette'
@@ -15,6 +15,7 @@ import {
   formatMoney,
 } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
+import { restoredConsoleMessages } from '@/i18n/restoredConsole'
 
 /** Slices the donut plots individually; everything past this folds into one. */
 const TOP_N = 10
@@ -24,7 +25,11 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'global' })
+const { t: r } = useI18n({
+  useScope: 'local',
+  messages: restoredConsoleMessages,
+})
 const el = ref<HTMLElement | null>(null)
 // CSS-var strings so legend swatches re-resolve on theme switch.
 const colors = SERIES_TOKENS
@@ -169,7 +174,12 @@ function highlight(rowIndex: number, on: boolean) {
 }
 
 const tableScrollEl = ref<HTMLElement | null>(null)
-const { canScrollRight, updateScrollFade } = useTableScrollFade(tableScrollEl)
+const { canScrollLeft, canScrollRight, updateScrollFade } =
+  useTableScrollFade(tableScrollEl)
+const scrollHintId = useId()
+const hasHorizontalScroll = computed(
+  () => canScrollLeft.value || canScrollRight.value
+)
 
 watch(
   () => props.items,
@@ -237,6 +247,7 @@ watch(
           role="region"
           tabindex="0"
           :aria-label="t('dashboard.modelDist.title')"
+          :aria-describedby="hasHorizontalScroll ? scrollHintId : undefined"
           data-model-distribution-table
           data-model-distribution-scroll
         >
@@ -364,5 +375,13 @@ watch(
         />
       </div>
     </div>
+    <p
+      v-if="hasHorizontalScroll"
+      :id="scrollHintId"
+      class="mt-3 text-xs leading-5 text-[var(--text-tertiary)]"
+      data-model-distribution-scroll-hint
+    >
+      {{ r('restored.modelTableScrollHint') }}
+    </p>
   </ConsoleCard>
 </template>

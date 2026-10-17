@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   Eye,
+  FileCode2,
   LoaderCircle,
   Pencil,
   Power,
@@ -16,6 +17,7 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import type { TokenSummary } from '@/types/console'
 import { formatDate, formatQuota } from '@/utils/format'
 import { tokenStatusLabel } from '@/utils/tokenStatus'
+import { clientConfigMessages } from '@/i18n/clientConfig'
 
 withDefaults(
   defineProps<{
@@ -27,14 +29,19 @@ withDefaults(
     isToggling: (token: TokenSummary) => boolean
     toggleStatus: (token: TokenSummary) => void | Promise<void>
     viewKey: (token: TokenSummary) => void
+    clientConfig?: (token: TokenSummary) => void
     editKey: (token: TokenSummary) => void
     deleteKey: (token: TokenSummary) => void
     routingEnabled?: boolean
   }>(),
-  { routingEnabled: false }
+  { routingEnabled: false, clientConfig: undefined }
 )
 
 const { t } = useI18n()
+const { t: configT } = useI18n({
+  useScope: 'local',
+  messages: clientConfigMessages,
+})
 </script>
 
 <template>
@@ -156,6 +163,13 @@ const { t } = useI18n()
           </RouterLink>
           <IconButton :label="t('keys.viewKey')" @click="viewKey(token)">
             <Eye :size="16" />
+          </IconButton>
+          <IconButton
+            v-if="clientConfig"
+            :label="configT('title')"
+            @click="clientConfig(token)"
+          >
+            <FileCode2 :size="16" />
           </IconButton>
           <IconButton :label="t('keys.editKey')" @click="editKey(token)">
             <Pencil :size="16" />

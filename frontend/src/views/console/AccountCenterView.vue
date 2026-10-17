@@ -1,34 +1,288 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import { Activity, ArrowUpRight, BarChart3, WalletCards } from 'lucide-vue-next'
+
+import { restoredConsoleMessages } from '@/i18n/restoredConsole'
 import PageHero from '@/components/console/PageHero.vue'
-import StatTileGrid from '@/components/common/StatTileGrid.vue'
-import AccountSettingsView from './AccountSettingsView.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
+import { adminUserRoleTone } from '@/constants/adminUsers'
 import { useAuthStore } from '@/stores/auth'
-import { formatQuota, formatNumber } from '@/utils/format'
-const { t } = useI18n(),
-  auth = useAuthStore()
-const stats = computed(() => [
-  { label: t('profile.balance'), value: formatQuota(auth.user?.quota ?? 0) },
+import { formatCompact, formatQuota } from '@/utils/format'
+import AccountSettingsView from '@/views/console/AccountSettingsView.vue'
+
+const { t } = useI18n({ useScope: 'global' })
+const { t: r } = useI18n({
+  useScope: 'local',
+  messages: restoredConsoleMessages,
+})
+const router = useRouter()
+const auth = useAuthStore()
+
+const initial = computed(() =>
+  (auth.user?.display_name || auth.user?.username || 'U')
+    .slice(0, 1)
+    .toUpperCase()
+)
+
+const memberNo = computed(
+  () => `RH-${String(auth.user?.id ?? 0).padStart(7, '0')}`
+)
+
+const roleName = computed(() => {
+  const role = auth.user?.role ?? 0
+  if (role >= 100) return t('profile.roleRoot')
+  if (role >= 10) return t('profile.roleAdmin')
+  return t('profile.roleUser')
+})
+
+const roleChipTone = computed(() => adminUserRoleTone(auth.user?.role ?? 0))
+const accountStatus = computed(() =>
+  auth.user?.status === 1 ? t('profile.normal') : t('profile.disabled')
+)
+const accountStatusTone = computed<'success' | 'danger'>(() =>
+  auth.user?.status === 1 ? 'success' : 'danger'
+)
+const accountStats = computed(() => [
   {
-    label: t('profile.totalUsage'),
-    value: formatQuota(auth.user?.used_quota ?? 0),
+    key: 'balance',
+    label: t('profile.balance'),
+    value: formatQuota(auth.user?.quota ?? 0),
+    destination: t('nav.wallet'),
+    route: 'wallet',
+    icon: WalletCards,
   },
   {
+    key: 'usage',
+    label: t('profile.totalUsage'),
+    value: formatQuota(auth.user?.used_quota ?? 0),
+    destination: t('nav.logs'),
+    route: 'logs',
+    icon: BarChart3,
+  },
+  {
+    key: 'requests',
     label: t('profile.apiRequests'),
-    value: formatNumber(auth.user?.request_count ?? 0),
+    value: formatCompact(auth.user?.request_count ?? 0),
+    destination: t('nav.logs'),
+    route: 'logs',
+    icon: Activity,
   },
 ])
 </script>
+
 <template>
-  <div>
+  <div
+    class="sibling-space-y-8 lg:sibling-space-y-10"
+    data-handdrawn-page="profile"
+  >
     <PageHero
-      :title="auth.user?.display_name || auth.user?.username || ''"
-      :crumbs="[t('nav.profile')]"
-    /><StatTileGrid
-      :tiles="stats"
-      :columns="3"
-      class="mb-6"
-    /><AccountSettingsView embedded />
+      :title="t('profile.title')"
+      :crumbs="[t('profile.breadcrumb.0'), t('profile.breadcrumb.1')]"
+      title-side="right"
+    >
+      <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-tertiary)]">
+        {{ t('profile.subtitle') }}
+      </p>
+    </PageHero>
+
+    <section
+      class="profile-identity pencil-surface-strong relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6 sm:p-8"
+      data-handdrawn="surface-strong"
+    >
+      <div
+        class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-5 md:grid-cols-[auto_minmax(0,1fr)_auto] md:gap-6"
+      >
+        <div
+          class="flex size-16 shrink-0 items-center justify-center rounded-xl text-2xl font-bold"
+          style="background: var(--accent); color: var(--accent-contrast)"
+          aria-hidden="true"
+        >
+          {{ initial }}
+        </div>
+
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h2
+              class="min-w-0 break-words text-xl font-bold text-[var(--text-primary)] sm:text-2xl"
+            >
+              {{ auth.user?.display_name || auth.user?.username }}
+            </h2>
+            <StatusChip :tone="roleChipTone">{{ roleName }}</StatusChip>
+          </div>
+          <p
+            class="mt-1.5 flex flex-wrap items-center gap-x-2 font-mono text-sm text-[var(--text-tertiary)]"
+          >
+            <span>@{{ auth.user?.username }}</span>
+            <span aria-hidden="true" class="opacity-40">&middot;</span>
+            <span class="whitespace-nowrap">{{ memberNo }}</span>
+          </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <StatusChip
+              data-testid="profile-account-status"
+              :tone="accountStatusTone"
+            >
+              {{ t('profile.accountStatus') }} &middot;
+              {{ accountStatus }}
+            </StatusChip>
+          </div>
+        </div>
+
+        <dl
+          class="col-span-2 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-[var(--border-subtle)] pt-5 text-left sm:grid-cols-4 md:col-span-1 md:grid-cols-2 md:border-l md:border-t-0 md:pl-8 md:pt-0 md:text-right"
+        >
+          <div>
+            <dt class="text-[0.6875rem] text-[var(--text-tertiary)]">
+              {{ t('profile.joinDate') }}
+            </dt>
+            <dd
+              class="mt-1 text-sm font-semibold text-[var(--text-primary)]"
+              data-testid="profile-join-date"
+            >
+              {{ r('restored.unavailable') }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-[0.6875rem] text-[var(--text-tertiary)]">
+              {{ t('profile.memberDuration') }}
+            </dt>
+            <dd
+              class="mt-1 text-sm font-semibold text-[var(--text-primary)]"
+              data-testid="profile-member-duration"
+            >
+              {{ r('restored.unavailable') }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-[0.6875rem] text-[var(--text-tertiary)]">
+              {{ t('profile.totalCalls') }}
+            </dt>
+            <dd
+              class="mt-1 text-sm font-semibold text-[var(--text-primary)]"
+              data-testid="profile-total-calls"
+            >
+              {{ formatCompact(auth.user?.request_count ?? 0) }}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div
+        class="mt-6 border-t border-[var(--border-subtle)] pt-5 text-sm text-[var(--text-tertiary)]"
+      >
+        <p>{{ r('restored.identityHistory') }}</p>
+        <p class="mt-2">{{ r('restored.membershipUnavailable') }}</p>
+      </div>
+    </section>
+
+    <section
+      class="grid gap-5 sm:grid-cols-3"
+      :aria-label="t('profile.accountStats')"
+    >
+      <button
+        v-for="stat in accountStats"
+        :key="stat.key"
+        :data-testid="`profile-stat-${stat.key}`"
+        type="button"
+        class="pencil-surface group min-h-32 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-5 py-5 text-left transition-all hover:border-[var(--border-strong)] focus-ring sm:px-6"
+        data-handdrawn="surface"
+        @click="router.push({ name: stat.route })"
+      >
+        <span class="flex items-start justify-between gap-4">
+          <span class="text-xs text-[var(--text-tertiary)]">{{
+            stat.label
+          }}</span>
+          <span
+            class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--accent-text)]"
+          >
+            <component :is="stat.icon" :size="16" aria-hidden="true" />
+          </span>
+        </span>
+        <strong class="mt-3 block text-2xl text-[var(--text-primary)]">{{
+          stat.value
+        }}</strong>
+        <span
+          class="mt-2 inline-flex items-center gap-1 text-[0.6875rem] text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--accent-text)]"
+        >
+          {{ stat.destination }}
+          <ArrowUpRight :size="12" aria-hidden="true" />
+        </span>
+      </button>
+    </section>
+
+    <section class="sibling-space-y-7 pt-2" data-testid="profile-settings">
+      <header class="profile-settings-heading" data-handdrawn="section-heading">
+        <div class="min-w-0">
+          <p
+            class="font-mono text-[0.625rem] font-semibold text-[var(--accent-text)]"
+          >
+            {{ t('profile.settingsSectionEyebrow') }}
+          </p>
+          <h2
+            class="gesture-mark mt-2 text-2xl font-bold text-[var(--text-primary)] sm:text-3xl"
+          >
+            {{ t('profile.settingsSectionTitle') }}
+          </h2>
+          <p
+            class="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-tertiary)]"
+          >
+            {{ t('profile.settingsSectionSubtitle') }}
+          </p>
+        </div>
+        <span class="profile-settings-stroke" aria-hidden="true" />
+      </header>
+
+      <AccountSettingsView embedded />
+    </section>
   </div>
 </template>
+
+<style scoped>
+/* Hand-drawn tilt and brush shadows are day-only per THEMES.md; night keeps
+   the same boxes as straight hairlines so no layout shifts on theme switch. */
+.profile-identity::before {
+  position: absolute;
+  top: 0.75rem;
+  right: 8%;
+  left: 4%;
+  height: 1px;
+  background: var(--border-subtle);
+  content: '';
+  opacity: 0.65;
+}
+
+html.light .profile-identity::before {
+  transform: rotate(-0.18deg);
+}
+
+.profile-settings-heading {
+  display: grid;
+  grid-template-columns: minmax(16rem, auto) minmax(3rem, 1fr);
+  align-items: end;
+  gap: 2rem;
+}
+
+.profile-settings-stroke {
+  height: 2px;
+  margin-bottom: 0.45rem;
+  background: var(--border-strong);
+}
+
+html.light .profile-settings-stroke {
+  box-shadow: 0 5px 0 -4px var(--accent);
+  opacity: 0.75;
+  transform: rotate(-0.22deg);
+}
+
+@media (max-width: 640px) {
+  .profile-settings-heading {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .profile-settings-stroke {
+    margin-bottom: 0;
+  }
+}
+</style>

@@ -740,21 +740,28 @@ test('statistics trend supports the single-series modes', async ({ page }) => {
   await assertInteractiveCentersVisible(page)
 })
 
-test('native dashboard omits retired rate-limit and discount projections', async ({
+test('restored dashboard marks missing rates and discount data as unavailable', async ({
   page,
 }) => {
-  await expect(
-    page.locator('[data-kpi-cell="rpm"], [data-discount-card]')
-  ).toHaveCount(0)
+  for (const key of ['rpm', 'tpm']) {
+    const cell = page.locator(`[data-kpi-cell="${key}"]`)
+    await expect(cell.locator('.display-number')).toHaveText('—')
+    await expect(cell).toContainText('实时速率与限额暂不可用')
+    await expect(cell.getByRole('button')).toHaveCount(0)
+  }
+  await expect(page.locator('[data-unavailable-panel]')).toHaveCount(2)
+  await expect(page.locator('[data-unavailable-panel]').last()).toContainText(
+    '暂不可用'
+  )
   await expect(page.locator('[data-handdrawn="page-hero"]')).toBeVisible()
   await expect(page.getByText('今日请求', { exact: true })).toBeVisible()
 })
 
-test('native KPI tiles preserve readable three-value layout in both themes', async ({
+test('restored KPI tiles preserve readable five-value layout in both themes', async ({
   page,
 }) => {
-  const tiles = page.locator('#dashboard-tab-panel > div > .grid').first()
-  await expect(tiles.locator('.display-number')).toHaveCount(3)
+  const tiles = page.locator('[data-overview-kpi]')
+  await expect(tiles.locator('.display-number')).toHaveCount(5)
   for (const theme of ['dark', 'light']) {
     await page.evaluate((theme) => {
       document.documentElement.classList.remove('dark', 'light')
@@ -783,8 +790,12 @@ test('native dashboard panels remain contained at compact width', async ({
       (element) => element.scrollWidth - element.clientWidth
     )
   ).toBeGreaterThan(0)
+  await page.getByRole('tab', { name: '自动路由', exact: true }).click()
   await expect(
-    page.getByRole('tab', { name: '自动路由', exact: true })
+    page.locator('#dashboard-tab-panel a[href="/keys"]')
+  ).toBeVisible()
+  await expect(
+    page.locator('#dashboard-tab-panel').getByRole('button')
   ).toHaveCount(0)
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)

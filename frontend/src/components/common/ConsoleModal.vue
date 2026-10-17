@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
             v-if="title || subtitle || $slots.header"
             class="shrink-0 px-6 pt-5"
             :class="
-              presentation === 'drawer' ? 'pb-5 text-left' : 'text-center'
+              presentation === 'drawer' ? 'pb-5 text-left' : 'pb-4 text-center'
             "
           >
             <slot
@@ -217,6 +217,7 @@ onBeforeUnmount(() => {
             v-if="$slots.footer"
             class="shrink-0 px-6 pb-6"
             :class="{
+              'pt-4': presentation === 'modal',
               'border-t border-[var(--border-subtle)] pt-5':
                 presentation === 'drawer',
             }"

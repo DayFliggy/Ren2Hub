@@ -75,7 +75,10 @@ export const useAppStore = defineStore('app', () => {
   const logo = computed(
     () => safeImageUrl(status.value.logo) || BRAND_LOGO_PATH
   )
-  const docsLink = computed(() => safeExternalUrl(status.value.docs_link) || '')
+  const docsLink = computed(
+    () =>
+      safeExternalUrl(status.value.docs_link, ['https://docs.newapi.pro']) || ''
+  )
   const version = computed(() => status.value.version?.trim() || '')
   const startTime = computed(() => status.value.start_time ?? null)
   const headerModules = computed(() =>

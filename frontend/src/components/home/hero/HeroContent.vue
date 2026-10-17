@@ -16,6 +16,7 @@
          typedLine 的 clientWidth 随当前词变化 → 逐词缩放基准跟着内容漂移。
          w-full 后测量基准 = HeroContent 容器宽（与内容无关），缩放只随视口变化。 -->
     <h1
+      :lang="locale"
       class="hero-title mt-3 w-full font-extrabold leading-[1.08] tracking-normal text-[var(--text-primary)] sm:mt-4 sm:leading-[1.15]"
     >
       <span
@@ -161,7 +162,7 @@ const props = defineProps<{
   averageLatencyMs?: number
 }>()
 
-const { t, tm } = useI18n()
+const { t, tm, locale } = useI18n()
 const { docsLink, showDocs, modelCountLabel, uptimeLabel, uptimePercent } =
   storeToRefs(useAppStore())
 const { isAuthenticated } = storeToRefs(useAuthStore())

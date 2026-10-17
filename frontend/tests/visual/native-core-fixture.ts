@@ -60,6 +60,7 @@ export async function nativeCoreFixture(
   const locale = options.locale ?? 'en'
   await page.addInitScript(
     ({ theme, locale }) => {
+      if (window.top !== window) return
       localStorage.setItem('ren2hub_theme_mode', theme)
       localStorage.setItem('ren2hub_locale', locale)
     },
@@ -261,12 +262,13 @@ export async function nativeCoreFixture(
               quota_type: 0,
               model_ratio: 1,
               completion_ratio: 2,
-              supported_endpoint_types: ['chat'],
+              supported_endpoint_types: ['openai', 'openai-response'],
             },
           ],
           vendors: [],
           supported_endpoint: {
-            chat: { path: '/v1/chat/completions', method: 'POST' },
+            openai: { path: '/v1/chat/completions', method: 'POST' },
+            'openai-response': { path: '/v1/responses', method: 'POST' },
           },
           group_ratio: { default: 1 },
           usable_group: { default: 'Default' },
@@ -495,7 +497,13 @@ export async function nativeCoreFixture(
       })
     if (path === '/api/performance/stats')
       return ok({
-        memory_stats: { heap_alloc: 1024 },
+        memory_stats: {
+          alloc: 1024,
+          total_alloc: 2048,
+          sys: 4096,
+          num_gc: 2,
+          num_goroutine: 7,
+        },
         cache_stats: {},
         disk_cache_info: {},
         disk_space_info: {},

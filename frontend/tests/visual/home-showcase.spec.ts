@@ -296,8 +296,8 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
 
       const runtime = page.locator('#home-runtime')
       await runtime.scrollIntoViewIfNeeded()
-      await expect(page.locator('[data-home-request-total]')).toHaveCount(0)
-      await expect(page.locator('.runtime-trend')).toHaveCount(0)
+      await expect(page.locator('[data-home-request-total]')).toHaveText('--')
+      await expect(page.locator('.runtime-trend')).toContainText('--')
       const runtimeBounds = await runtime.evaluate((section) => {
         const bounds = (selector: string) => {
           const element = section.querySelector<HTMLElement>(selector)
@@ -398,8 +398,8 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       const showcase = page.locator('.home-showcase')
       await showcase.scrollIntoViewIfNeeded()
       await expect(showcase).toBeVisible()
-      await expect(page.locator('[data-home-request-total]')).toHaveCount(0)
-      await expect(page.locator('.runtime-trend')).toHaveCount(0)
+      await expect(page.locator('[data-home-request-total]')).toHaveText('--')
+      await expect(page.locator('.runtime-trend')).toContainText('--')
       await assertNoHorizontalOverflow(page)
       await expect(page.locator('.scroll-activity-indicator')).toHaveCount(0)
       await expect(page.locator('[data-home-progress-dots]')).toHaveCount(1)
@@ -477,7 +477,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
           .evaluate((element) => getComputedStyle(element).fontFamily)
       ).toContain(expectedFonts.hand)
       if (theme === 'dark') {
-        await expect(page.locator('.runtime-ledger-panel')).toHaveCount(1)
+        await expect(page.locator('.runtime-ledger-panel')).toHaveCount(2)
         await expect(page.locator('.runtime-ledger-panel').first()).toHaveCSS(
           'border-radius',
           '16px'
@@ -513,8 +513,8 @@ test('home runtime workbench remains self-contained', async ({ page }) => {
     '99.95%'
   )
   await page.locator('#home-runtime').scrollIntoViewIfNeeded()
-  await expect(page.locator('[data-home-request-total]')).toHaveCount(0)
-  await expect(page.locator('.runtime-trend')).toHaveCount(0)
+  await expect(page.locator('[data-home-request-total]')).toHaveText('--')
+  await expect(page.locator('.runtime-trend')).toContainText('--')
   await expect(page.locator('[data-home-channel-exchange]')).toHaveCount(0)
   await expect(page.locator('[data-home-token-routing]')).toHaveCount(0)
   await expect(page.getByText('渠道供应，也能自由买卖')).toHaveCount(0)
@@ -570,10 +570,12 @@ test('retired public request aggregate is neither queried nor synthesized', asyn
   await configureStablePage(page, { theme: 'light' })
   await page.goto('/')
   await waitForStablePage(page)
+  await expect(page.locator('[data-home-request-total]')).toHaveText('--')
+  await expect(page.locator('.runtime-request-caption')).toContainText(
+    '请求指标暂不可用'
+  )
   await expect(
-    page.locator(
-      '[data-home-request-total], .runtime-trend, [data-zero-trend-wave]'
-    )
+    page.locator('.runtime-trend svg, [data-zero-trend-wave]')
   ).toHaveCount(0)
   expect(requested).toEqual([])
 })
@@ -594,7 +596,7 @@ test('home showcase remains intact at narrow mobile width', async ({
     .locator('.runtime-clock')
     .evaluate((element) => element.scrollWidth - element.clientWidth)
   expect(clockOverflow).toBeLessThanOrEqual(1)
-  await expect(page.locator('.runtime-trend')).toHaveCount(0)
+  await expect(page.locator('.runtime-trend')).toContainText('--')
 })
 
 test('home progress dots navigate and track page position', async ({

@@ -12,6 +12,7 @@ it('renders runtime and only reported availability', () => {
   })
   expect(wrapper.get('[role="timer"]').text()).toContain('001')
   expect(wrapper.find('.runtime-availability').exists()).toBe(false)
-  expect(wrapper.find('[data-home-request-total]').exists()).toBe(false)
+  expect(wrapper.get('[data-home-request-total]').text()).toBe('--')
+  expect(wrapper.find('.runtime-trend svg').exists()).toBe(false)
   wrapper.unmount()
 })

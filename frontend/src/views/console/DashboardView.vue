@@ -2,6 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import UnavailablePanel from '@/components/console/dashboard/UnavailablePanel.vue'
+import TokenTrendCard from '@/components/console/dashboard/TokenTrendCard.vue'
+import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import { restoredConsoleMessages } from '@/i18n/restoredConsole'
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
 import BalanceCard from '@/components/console/dashboard/BalanceCard.vue'
 import UsageDistributionCard from '@/components/console/dashboard/UsageDistributionCard.vue'
@@ -23,13 +27,18 @@ import { useAuthStore } from '@/stores/auth'
 import { dateInputValue } from '@/utils/format'
 import { greetingBucketForHour } from '@/utils/greeting'
 
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'global' })
+const { t: r } = useI18n({
+  useScope: 'local',
+  messages: restoredConsoleMessages,
+})
 const auth = useAuthStore()
 const {
   loading,
   stats,
   share,
   flow,
+  tokenTrend,
   error: dashboardError,
   load,
 } = useDashboard()
@@ -72,6 +81,7 @@ const tabs = computed(() => {
   const items = [
     { key: 'overview', label: t('dashboard.tabOverview') },
     { key: 'stats', label: t('dashboard.tabStats') },
+    { key: 'autoroute', label: r('restored.routing') },
   ]
 
   return items
@@ -152,8 +162,14 @@ const rangeOptions = computed(() => [
         v-if="activeTab === 'overview'"
         class="sibling-space-y-4 sm:sibling-space-y-5"
       >
-        <!-- KPI strip — 4 clickable chips, jumps to Stats tab -->
-        <OverviewKpiStrip :stats="stats" :loading="loading" />
+        <!-- Usage metrics open Statistics; unavailable live rates stay read-only. -->
+        <OverviewKpiStrip
+          :stats="stats"
+          :flow="flow"
+          :token-trend="tokenTrend"
+          :loading="loading"
+          @switch-tab="activeTab = $event"
+        />
 
         <!-- Error State -->
         <EmptyState
@@ -164,7 +180,7 @@ const rangeOptions = computed(() => [
         />
 
         <div v-else class="grid gap-4 sm:gap-5 xl:grid-cols-3">
-          <!-- 总额度（限速已并入 KPI 条的 RPM 格） -->
+          <!-- 原生可用额度与消费 -->
           <BalanceCard
             class="min-w-0"
             :quota="stats?.quota ?? null"
@@ -180,6 +196,19 @@ const rangeOptions = computed(() => [
             :loading="distribution.loading.value"
           />
 
+          <UnavailablePanel
+            :title="r('restored.system')"
+            :hint="r('restored.systemHint')"
+          />
+          <TokenTrendCard
+            class="min-w-0 xl:col-span-2"
+            :points="tokenTrend"
+            :loading="loading"
+          />
+          <UnavailablePanel
+            :title="r('restored.discounts')"
+            :hint="r('restored.discountsHint')"
+          />
           <!-- 模型消费分布 -->
           <ModelDistributionCard
             class="min-w-0 xl:col-span-2"
@@ -246,6 +275,20 @@ const rangeOptions = computed(() => [
           />
         </div>
       </div>
+      <ConsoleCard
+        v-else-if="activeTab === 'autoroute'"
+        :title="r('restored.routingTitle')"
+      >
+        <p class="text-sm leading-6">{{ r('restored.routingHint') }}</p>
+        <p class="mt-3 text-sm text-[var(--text-tertiary)]">
+          {{ r('restored.routingReadOnly') }}
+        </p>
+        <RouterLink
+          to="/keys"
+          class="mt-5 inline-flex text-sm text-[var(--accent-text)] focus-ring"
+          >{{ r('restored.routingLink') }}</RouterLink
+        >
+      </ConsoleCard>
     </div>
 
     <ContactFloatBall />

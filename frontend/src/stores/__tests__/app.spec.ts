@@ -25,6 +25,19 @@ beforeEach(() => {
 })
 
 describe('public application state', () => {
+  it('keeps the official upstream documentation visible without allowing arbitrary external origins', async () => {
+    publicApi.status.mockResolvedValueOnce({
+      docs_link: 'https://docs.newapi.pro/en/docs',
+    })
+    const store = useAppStore()
+    await store.initialize()
+    expect(store.docsLink).toBe('https://docs.newapi.pro/en/docs')
+    expect(store.showDocs).toBe(true)
+    store.status.docs_link = 'https://untrusted.example.test/docs'
+    expect(store.showDocs).toBe(false)
+    store.status.docs_link = 'javascript:alert(1)'
+    expect(store.showDocs).toBe(false)
+  })
   it('uses the landing reference brand before status is available', () => {
     expect(useAppStore().systemName).toBe('Ren2Hub')
   })

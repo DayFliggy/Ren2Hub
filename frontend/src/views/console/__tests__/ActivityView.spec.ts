@@ -48,6 +48,9 @@ function setup() {
       ],
       stubs: {
         PageHero: true,
+        ActivityHero: true,
+        ActivityEntryCard: true,
+        RouterLink: true,
         TurnstileWidget: true,
         ErrorBanner: {
           props: ['message'],
@@ -78,7 +81,7 @@ it('loads the native status when enabled and preserves the reward action', async
     { month: expect.stringMatching(/^\d{4}-\d{2}$/) },
     { signal: expect.any(AbortSignal) }
   )
-  await wrapper.get('button').trigger('click')
+  await wrapper.get('[data-checkin-action]').trigger('click')
   await flushPromises()
   expect(mocks.post).toHaveBeenCalledWith(
     '/api/user/checkin',
@@ -108,7 +111,7 @@ it('cancels an old status response after the site disables check-in', async () =
   expect(wrapper.text()).toContain(
     'Daily check-in is not enabled on this site.'
   )
-  expect(wrapper.find('button').exists()).toBe(false)
+  expect(wrapper.find('[data-checkin-action]').exists()).toBe(false)
   wrapper.unmount()
 })
 it('keeps real enabled-feature request failures visible', async () => {

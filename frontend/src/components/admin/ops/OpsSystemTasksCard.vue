@@ -360,3 +360,63 @@ async function cleanLogs() {
     </p>
   </ConfirmDialog>
 </template>
+
+<style scoped>
+.ops-menu {
+  position: relative;
+}
+.ops-menu summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-radius: 0.5rem;
+  list-style: none;
+}
+.ops-menu summary::-webkit-details-marker {
+  display: none;
+}
+.ops-menu summary:hover {
+  color: var(--text-primary);
+  background: var(--state-hover-layer);
+}
+.ops-menu summary:focus-visible,
+.ops-menu button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ops-menu-content {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.375rem);
+  z-index: 20;
+  min-width: 10rem;
+  padding: 0.25rem;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  box-shadow: var(--overlay-shadow);
+}
+.ops-menu-content button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  color: var(--status-danger-text);
+  font-size: 0.8125rem;
+  text-align: start;
+}
+.ops-menu-content button:hover {
+  background: var(--status-danger-soft);
+}
+@media (min-width: 640px) {
+  .ops-menu summary {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+</style>

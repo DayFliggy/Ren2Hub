@@ -118,7 +118,9 @@ for (const theme of ['light', 'dark'] as const) {
       // or client-side balance mutation is treated as payment confirmation.
       completed = true
       await page.goto('/wallet')
-      const row = page.getByRole('row').filter({ hasText: 'epay-native' })
+      const row = page
+        .locator('[data-order-row]')
+        .filter({ hasText: 'epay-native', visible: true })
       await expect(row).toContainText('Completed')
       await expect(row).toContainText('73')
       await expect(

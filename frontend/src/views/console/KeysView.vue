@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
+import { FileCode2 } from 'lucide-vue-next'
 
 import { api } from '@/api/console'
 import { parseTokenPage, parseUserModels } from '@/api/liveContracts'
@@ -11,6 +12,8 @@ import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
 import KeyMobileList from '@/components/console/keys/KeyMobileList.vue'
 import KeyRevealModal from '@/components/console/keys/KeyRevealModal.vue'
+import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
+import { clientConfigMessages } from '@/i18n/clientConfig'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -29,6 +32,10 @@ import { formatDate, formatQuota } from '@/utils/format'
 import { tokenStatusLabel } from '@/utils/tokenStatus'
 
 const { t } = useI18n()
+const { t: configT } = useI18n({
+  useScope: 'local',
+  messages: clientConfigMessages,
+})
 const toast = useToast()
 const app = useAppStore()
 const routingEnabled = computed(() =>
@@ -51,6 +58,7 @@ const deleting = ref<TokenSummary | null>(null)
 const batchDeleting = ref(false)
 const deleteLoading = ref(false)
 const revealTokenId = ref<number | null>(null)
+const clientConfigTokenId = ref<number | null>(null)
 
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
@@ -330,10 +338,7 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-usage="{ row }">
-          <button
-            type="button"
-            class="text-xs text-right break-keep focus-ring"
-          >
+          <div class="text-xs text-right break-keep">
             {{ t('billing.used') }}
             {{ formatQuota((row as TokenSummary).used_quota, 3) }}<br />{{
               t('billing.available')
@@ -345,7 +350,7 @@ onBeforeUnmount(() => {
                   : formatQuota((row as TokenSummary).remain_quota, 3)
               }}
             </span>
-          </button>
+          </div>
         </template>
 
         <template #cell-expired_time="{ row }">
@@ -391,6 +396,12 @@ onBeforeUnmount(() => {
                 <path d="M8 5h3a4 4 0 0 1 4 4v6a4 4 0 0 0 4 4" />
               </svg>
             </RouterLink>
+            <IconButton
+              :label="configT('title')"
+              @click="clientConfigTokenId = (row as TokenSummary).id"
+            >
+              <FileCode2 :size="16" />
+            </IconButton>
             <IconButton
               :label="t('keys.editKey')"
               @click="openEdit(row as TokenSummary)"
@@ -487,6 +498,7 @@ onBeforeUnmount(() => {
           :is-toggling="(row) => togglingIds.has(row.id)"
           :toggle-status="toggleStatus"
           :view-key="copyKey"
+          :client-config="(row) => (clientConfigTokenId = row.id)"
           :edit-key="openEdit"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"
@@ -514,6 +526,12 @@ onBeforeUnmount(() => {
       :open="revealTokenId !== null"
       :token-id="revealTokenId"
       @close="revealTokenId = null"
+    />
+
+    <KeyClientConfigModal
+      v-if="clientConfigTokenId !== null"
+      :token-id="clientConfigTokenId"
+      @close="clientConfigTokenId = null"
     />
 
     <!-- delete confirm -->
