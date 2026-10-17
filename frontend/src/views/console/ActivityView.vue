@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHero from '@/components/console/PageHero.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -12,12 +12,9 @@ import { formatQuota } from '@/utils/format'
 import { nativeAccountMessages } from '@/i18n/nativeAccount'
 const { t } = useI18n({ messages: nativeAccountMessages }),
   app = useAppStore()
-const { month, status, loading, claiming, loadError, load, checkin } =
-  useActivity()
+const { month, status, loading, claiming, loadError, checkin } = useActivity()
 const turnstile = ref(''),
   widget = ref<InstanceType<typeof TurnstileWidget> | null>(null)
-onMounted(load)
-watch(month, load)
 async function submit() {
   await checkin(turnstile.value)
   turnstile.value = ''
@@ -31,7 +28,10 @@ async function submit() {
       :crumbs="[t('nativeAccount.checkin')]"
     />
     <ErrorBanner v-if="loadError" :message="loadError" />
-    <ConsoleCard :title="t('nativeAccount.checkin')"
+    <ConsoleCard v-if="!app.checkinEnabled" :title="t('nativeAccount.checkin')">
+      <p role="status">{{ t('nativeAccount.checkinDisabled') }}</p>
+    </ConsoleCard>
+    <ConsoleCard v-else :title="t('nativeAccount.checkin')"
       ><p>{{ t('nativeAccount.checkinHint') }}</p>
       <label class="my-4 block"
         >{{ t('nativeAccount.month') }}

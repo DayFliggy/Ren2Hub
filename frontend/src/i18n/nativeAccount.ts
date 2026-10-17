@@ -2,6 +2,7 @@ export const nativeAccountMessages = {
   'zh-CN': {
     nativeAccount: {
       checkin: '每日签到',
+      checkinDisabled: '本站尚未开启每日签到。',
       checkinHint: '按站点设置领取每日随机额度，记录使用服务器日期。',
       month: '查询月份',
       checkinNow: '签到',
@@ -29,6 +30,7 @@ export const nativeAccountMessages = {
   en: {
     nativeAccount: {
       checkin: 'Daily check-in',
+      checkinDisabled: 'Daily check-in is not enabled on this site.',
       checkinHint:
         'Claim a random daily reward configured by the site. Dates follow the server clock.',
       month: 'Month',

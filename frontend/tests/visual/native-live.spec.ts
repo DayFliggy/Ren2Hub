@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
 test.describe('native isolated backend', () => {
@@ -63,7 +63,8 @@ test.describe('native isolated backend', () => {
         localStorage.setItem('ren2hub_theme_mode', theme)
       }, theme)
       const errors: string[] = [],
-        failures: string[] = []
+        failures: string[] = [],
+        visited: Array<{ path: string; actual_path: string }> = []
       page.on('pageerror', (error) => errors.push(error.message))
       await page.goto('/sign-in')
       await page
@@ -83,8 +84,12 @@ test.describe('native isolated backend', () => {
       })
       for (const path of paths) {
         await page.goto(path, { waitUntil: 'networkidle' })
+        const expectedPath =
+          path === '/system-settings/security'
+            ? '/system-settings/security/rate-limit'
+            : path
         await expect(page).toHaveURL(
-          new RegExp(`${path.replaceAll('/', '\\/')}(?:[?#].*)?$`)
+          new RegExp(`${expectedPath.replaceAll('/', '\\/')}(?:[?#].*)?$`)
         )
         await expect(page.locator('main')).toBeVisible()
         await expect(page.locator('[role=alert]')).toHaveCount(0)
@@ -96,6 +101,7 @@ test.describe('native isolated backend', () => {
         ).toBe(true)
         expect(errors, path).toEqual([])
         expect(failures, path).toEqual([])
+        visited.push({ path, actual_path: new URL(page.url()).pathname })
       }
       await page.goto('/wallet', { waitUntil: 'networkidle' })
       await page.screenshot({
@@ -110,6 +116,15 @@ test.describe('native isolated backend', () => {
       await expect(attribution).toBeVisible()
       expect(errors).toEqual([])
       expect(failures).toEqual([])
+      const routesPath = testInfo.outputPath('verified-routes.json')
+      writeFileSync(
+        routesPath,
+        JSON.stringify({ theme, width, routes: visited })
+      )
+      await testInfo.attach('verified-routes.json', {
+        path: routesPath,
+        contentType: 'application/json',
+      })
     })
   }
 })

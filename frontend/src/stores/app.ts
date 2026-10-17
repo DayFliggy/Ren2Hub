@@ -105,6 +105,7 @@ export const useAppStore = defineStore('app', () => {
   const registerEnabled = computed(() =>
     parseBoolean(status.value.register_enabled, true)
   )
+  const checkinEnabled = computed(() => status.value.checkin_enabled === true)
   // The backend serves /api/uptime/status whenever groups are configured, so
   // the administrator's panel switch is enforced here. A missing field keeps
   // the backend default (enabled).
@@ -276,6 +277,7 @@ export const useAppStore = defineStore('app', () => {
     showDocs,
     showAbout,
     registerEnabled,
+    checkinEnabled,
     affiliateRegistrationRequired,
     turnstileEnabled,
     turnstileSiteKey,

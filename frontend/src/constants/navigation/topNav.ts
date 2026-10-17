@@ -32,6 +32,7 @@ export interface TopNavItem {
 
 export interface TopNavAccessContext {
   isAdmin: boolean
+  checkinEnabled?: boolean
   isRoot?: boolean
   surface: 'desktop' | 'mobile'
   featureStatus: (feature: string) => FeatureStatus
@@ -73,6 +74,7 @@ export function getVisibleTopNavItems(
       ...item,
       disabled:
         item.disabled ||
+        (item.name === 'activities' && context.checkinEnabled === false) ||
         (item.feature !== undefined &&
           context.featureStatus(item.feature) === 'disabled'),
     }))

@@ -1,7 +1,8 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { api } from '@/api/console'
 import { useLatestRequest } from './useLatestRequest'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 export interface CheckinStatus {
   enabled: boolean
   min_quota: number
@@ -24,8 +25,16 @@ export function useActivity() {
     claiming = ref(false),
     loadError = ref<string | null>(null)
   const request = useLatestRequest(),
-    auth = useAuthStore()
+    auth = useAuthStore(),
+    app = useAppStore()
   async function load() {
+    if (!app.checkinEnabled) {
+      request.cancel()
+      status.value = null
+      loading.value = false
+      loadError.value = null
+      return
+    }
     loading.value = true
     loadError.value = null
     const result = await request.run((signal) =>
@@ -45,6 +54,7 @@ export function useActivity() {
           : String(result.error)
   }
   async function checkin(turnstileToken?: string) {
+    if (!app.checkinEnabled || !status.value?.enabled || claiming.value) return
     claiming.value = true
     loadError.value = null
     try {
@@ -62,5 +72,6 @@ export function useActivity() {
       claiming.value = false
     }
   }
+  watch([() => app.checkinEnabled, month], load, { immediate: true })
   return { month, status, loading, claiming, loadError, load, checkin }
 }

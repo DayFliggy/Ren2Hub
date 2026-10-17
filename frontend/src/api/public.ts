@@ -3,6 +3,7 @@ import { publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
+  checkin_enabled?: boolean
   quota_display_type?: string
   quota_per_unit?: number
   usd_exchange_rate?: number
@@ -113,6 +114,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     }
   }
   const booleanKeys = [
+    'checkin_enabled',
     'email_verification',
     'log_export_enabled',
     'api_info_enabled',

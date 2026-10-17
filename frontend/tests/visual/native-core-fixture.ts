@@ -153,6 +153,7 @@ export async function nativeCoreFixture(
         version: 'native-test',
         system_name: 'Ren2Hub',
         register_enabled: true,
+        checkin_enabled: true,
         quota_display_type: display,
         quota_per_unit: 500000,
         usd_exchange_rate: 7.3,
@@ -387,7 +388,6 @@ export async function nativeCoreFixture(
         disk_space_info: {},
         config: {},
       })
-    if (path === '/api/system-task/summary') return ok({ types: [] })
     if (path === '/api/system-task/list')
       return route.fulfill({ json: { success: true, data: [], total: 0 } })
     if (path === '/api/option/')

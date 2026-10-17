@@ -66,8 +66,8 @@ onMounted(() => load())
     </PageBreadcrumb>
 
     <!-- Content -->
-    <main class="min-w-0">
+    <section class="min-w-0" :aria-label="t('systemSettings.title')">
       <RouterView />
-    </main>
+    </section>
   </div>
 </template>

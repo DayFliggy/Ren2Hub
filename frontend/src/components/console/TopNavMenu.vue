@@ -19,6 +19,7 @@ const auth = useAuthStore()
 
 const navGroups = computed<NavGroup[]>(() =>
   getVisibleTopNavItems({
+    checkinEnabled: app.checkinEnabled,
     isAdmin: auth.isAdmin,
     isRoot: auth.isRoot,
     surface: 'desktop',

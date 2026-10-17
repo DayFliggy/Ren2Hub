@@ -18,7 +18,10 @@ async function setup(role: number, capabilities: Record<string, string>) {
   const pinia = createPinia()
   setActivePinia(pinia)
   useAuthStore().persist({ role } as never)
-  useAppStore().status = { frontend_capabilities: capabilities } as never
+  useAppStore().status = {
+    frontend_capabilities: capabilities,
+    checkin_enabled: true,
+  } as never
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -44,6 +47,32 @@ beforeEach(async () => {
 })
 
 describe('top navigation', () => {
+  it('disables the shared desktop and mobile check-in entry from native status', async () => {
+    const options = await setup(100, { admin: 'live', activity: 'live' })
+    useAppStore().status.checkin_enabled = false
+    const desktop = mount(TopNavMenu, options)
+    await flushPromises()
+    expect(desktop.findAll('button')[0]!.attributes()).toHaveProperty(
+      'disabled'
+    )
+    for (const surface of ['desktop', 'mobile'] as const) {
+      expect(
+        getVisibleTopNavItems({
+          isAdmin: true,
+          isRoot: true,
+          surface,
+          checkinEnabled: useAppStore().checkinEnabled,
+          featureStatus: live,
+        }).find((item) => item.name === 'activities')?.disabled
+      ).toBe(true)
+    }
+    useAppStore().status.checkin_enabled = true
+    await flushPromises()
+    expect(desktop.findAll('button')[0]!.attributes()).not.toHaveProperty(
+      'disabled'
+    )
+    desktop.unmount()
+  })
   it('places the root-only ops monitor between dashboard and console', () => {
     const admin = getVisibleTopNavItems({
       isAdmin: true,
