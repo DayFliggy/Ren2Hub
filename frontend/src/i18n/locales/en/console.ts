@@ -3076,9 +3076,6 @@ export default {
       epayMethods: 'EPay payment methods',
       epayMethodsHint:
         'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list disables EPay orders and payment notifications.',
-      gmpaySettlement: 'Enable crypto settlement',
-      gmpaySettlementHint:
-        'Allow crypto gateway callbacks to credit existing orders. The callback verifies the token and fiat amount but cannot prove the final payment network. Failed notifications depend on the gateway retry configuration, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of Epay and of new payment methods.',
       checkinEnabled: 'Enable daily check-in',
       checkinMinQuota: 'Minimum reward',
       checkinMaxQuota: 'Maximum reward',
@@ -3345,6 +3342,9 @@ export default {
       'Settings could not be loaded. Editing and saving are disabled until a successful reload.',
     retryLoad: 'Reload settings',
     gmpayPanel: {
+      enableNewOrders: 'Accept new orders',
+      enableNewOrdersHint:
+        'Disabling this stops new GMPay orders. Valid payment notifications for existing orders still credit the wallet using the merchant credentials saved with each order.',
       selectedAssets: 'Enabled assets (JSON)',
       title: 'GMPay crypto payments',
       description:
@@ -3377,8 +3377,6 @@ export default {
       addressRequired: 'Enter the gateway address first.',
       credentialsRequired: 'Enter the gateway address and merchant ID.',
       secretRequired: 'Enter the merchant secret.',
-      noSelectedAssets:
-        'Saving with no selected assets stops new crypto orders. Existing orders can still settle when crypto settlement is enabled.',
       invalidAmounts:
         'The price must be positive. Minimum purchases must be positive whole USD amounts.',
       invalidGroupRatios:
@@ -3396,6 +3394,10 @@ export default {
     title: 'System Settings',
     breadcrumb: ['Admin', 'System Settings'],
     saved: 'Saved',
+    partialSaveFailed:
+      '{count} settings were saved before an error: {error}. The remaining changes are kept for retry; saved settings were not rolled back.',
+    oidcDiscoveryInvalid:
+      'OIDC discovery must return valid HTTP or HTTPS authorization, token and user info endpoints. No settings were saved.',
     saveFailed: 'Save failed',
     loading: 'Loading…',
     saveChanges: 'Save changes',

@@ -321,7 +321,11 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 			}
 		}
 		if HasPrivateTokenRoute(c) {
-			group, allowed := privatePinnedGroup(c, channel.Id, modelName, retry.TokenGroup)
+			group, allowed, err := privatePinnedGroup(c, channel.Id, modelName, retry.TokenGroup)
+			if err != nil {
+				logger.LogError(c, common.LogText("token routing eligibility lookup failed: %s", err.Error()))
+				return nil, "", &ChannelSelectError{StatusCode: http.StatusInternalServerError, Code: types.ErrorCodeGetChannelFailed, Message: "Unable to check token routing"}
+			}
 			if !allowed {
 				return nil, "", &ChannelSelectError{StatusCode: http.StatusForbidden, Code: types.ErrorCodeAccessDenied, Message: "The pinned channel is not allowed for this token's group and model"}
 			}

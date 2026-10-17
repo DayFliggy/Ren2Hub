@@ -33,15 +33,15 @@ for (const theme of ['light', 'dark'] as const) {
                   channel_name: 'fixture-channel',
                   prompt_tokens: 12,
                   completion_tokens: 5,
-                  quota: '100',
-                  use_time: 1000,
+                  quota: 100,
+                  use_time: 1,
                   is_stream: false,
                   content: 'Response evidence fixture',
                   created_at: 1785123000,
-                  other: {
+                  other: JSON.stringify({
                     upstream_model_name: 'expected-provider-model',
                     response_model_name: 'unexpected-actual-model',
-                  },
+                  }),
                 },
               ],
               total: 1,
@@ -63,13 +63,12 @@ for (const theme of ['light', 'dark'] as const) {
         .getByRole('button', { name: '查看日志详情', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
-      await expect(
-        dialog.getByText('unexpected-actual-model', { exact: true })
-      ).toBeVisible()
-      await expect(
-        dialog.getByText('expected-provider-model', { exact: true })
-      ).toBeVisible()
-      await expect(dialog.locator('[data-log-model-mismatch]')).toBeVisible()
+      const evidence = dialog.locator('pre')
+      await expect(evidence).toBeVisible()
+      expect(JSON.parse(await evidence.innerText())).toEqual({
+        upstream_model_name: 'expected-provider-model',
+        response_model_name: 'unexpected-actual-model',
+      })
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('response-model.png'),

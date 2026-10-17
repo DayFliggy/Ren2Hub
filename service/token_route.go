@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -42,14 +43,33 @@ func TokenRouteChannels(ctx context.Context, userID, tokenID int) ([]TokenRouteC
 	}
 	models := make(map[int]map[string]bool)
 	limit := token.GetModelLimitsMap()
+	// Index concrete allowed requests in the same direction as dispatch:
+	// request -> exact/normalized ability. Normalizing both sides would also
+	// admit a different concrete model in the same family.
+	requestsByAbility := make(map[string][]string)
+	if token.ModelLimitsEnabled {
+		for name := range limit {
+			requestsByAbility[name] = append(requestsByAbility[name], name)
+			if normalized := ratio_setting.RoutingMatchModelName(name); normalized != name {
+				requestsByAbility[normalized] = append(requestsByAbility[normalized], name)
+			}
+		}
+	}
 	for _, ability := range abilities {
-		if token.ModelLimitsEnabled && !TokenModelLimitAllows(limit, ability.Model) {
-			continue
+		names := []string{ability.Model}
+		if token.ModelLimitsEnabled {
+			names = requestsByAbility[ability.Model]
+			if TokenModelLimitAllows(limit, ability.Model) {
+				// A declared wildcard may authorize the ability name itself.
+				names = append(slices.Clone(names), ability.Model)
+			}
 		}
 		if models[ability.ChannelId] == nil {
 			models[ability.ChannelId] = map[string]bool{}
 		}
-		models[ability.ChannelId][ability.Model] = true
+		for _, name := range names {
+			models[ability.ChannelId][name] = true
+		}
 	}
 	result := []TokenRouteChannel{}
 	for _, channel := range channels {
@@ -192,7 +212,7 @@ func tokenRouteAttemptFilters(c *gin.Context, filters []dto.ChannelFilter) []dto
 	return result
 }
 
-func CheckLockedTokenRoute(c *gin.Context, channelID int) error {
+func CheckLockedTokenRoute(c *gin.Context, channelID int, modelName, lockedGroup string) error {
 	if err := LoadTokenRouteConstraints(c); err != nil {
 		return err
 	}
@@ -200,21 +220,36 @@ func CheckLockedTokenRoute(c *gin.Context, channelID int) error {
 		if filter.Kind != dto.FilterTokenRoute {
 			continue
 		}
-		for _, id := range filter.ChannelIDs {
-			if id == channelID {
-				return nil
-			}
+		if !slices.Contains(filter.ChannelIDs, channelID) {
+			return fmt.Errorf("the connection channel is no longer in the token's private route; reconnect required: %w", model.ErrTokenRouteForbidden)
 		}
-		return errors.New("the connection channel is no longer in the token's private route; reconnect required")
+		group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+		if group == "auto" {
+			if !slices.Contains(GetRequestAutoGroups(c, common.GetContextKeyString(c, constant.ContextKeyUserGroup)), lockedGroup) {
+				return fmt.Errorf("the connection group is no longer allowed: %w", model.ErrTokenRouteForbidden)
+			}
+			group = lockedGroup
+		}
+		_, allowed, err := privatePinnedGroup(c, channelID, modelName, group)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return fmt.Errorf("the connection channel is no longer allowed for this group and model: %w", model.ErrTokenRouteForbidden)
+		}
+		if common.GetContextKeyString(c, constant.ContextKeyUsingGroup) == "auto" {
+			common.SetContextKey(c, constant.ContextKeyAutoGroup, group)
+		}
+		return nil
 	}
 	return nil
 }
 
-func privatePinnedGroup(c *gin.Context, channelID int, modelName, group string) (string, bool) {
+func privatePinnedGroup(c *gin.Context, channelID int, modelName, group string) (string, bool, error) {
 	if common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
 		limits, ok := common.GetContextKeyType[map[string]bool](c, constant.ContextKeyTokenModelLimit)
 		if !ok || !TokenModelLimitAllows(limits, modelName) {
-			return "", false
+			return "", false, nil
 		}
 	}
 	groups := []string{group}
@@ -222,9 +257,13 @@ func privatePinnedGroup(c *gin.Context, channelID int, modelName, group string) 
 		groups = GetRequestAutoGroups(c, common.GetContextKeyString(c, constant.ContextKeyUserGroup))
 	}
 	for _, candidate := range groups {
-		if model.IsChannelEnabledForGroupModel(candidate, modelName, channelID) {
-			return candidate, true
+		enabled, err := model.CheckChannelEnabledForGroupModel(candidate, modelName, channelID)
+		if err != nil {
+			return "", false, err
+		}
+		if enabled {
+			return candidate, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }

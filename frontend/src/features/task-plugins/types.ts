@@ -1,7 +1,6 @@
 // Mirrors upstream NewAPI web/src/features/task-plugins/types.ts. Ren2Hub
 // differences: usage channels carry `type` (the cascade explains a New API
-// unbind), version rows carry `factory`, and the server-side preview replaces
-// the client-side metadata parser.
+// unbind), and version rows carry `factory`.
 import type {
   BillingUsageExample,
   BillingUsageSchema,
@@ -111,13 +110,6 @@ export type TaskPluginOption = {
   models: string[] | null
   channelTypes?: number[] | null
   upstreams?: string[] | null
-}
-
-/** POST /api/plugin/task/preview: literal metadata, never evaluated. */
-export type TaskPluginPreview = {
-  meta: Record<string, unknown>
-  unresolved: string[]
-  source_hash: string
 }
 
 export type TaskPluginDryRunRequest = {

@@ -271,6 +271,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 
 	if s.lockedChannelID != 0 {
 		if apiErr = s.restoreConnectionContext(c, modelName); apiErr != nil {
+			if apiErr.StatusCode >= http.StatusInternalServerError {
+				state.closeCode = websocket.CloseInternalServerErr
+			}
 			return apiErr
 		}
 		info = relaycommon.GenRelayInfoResponses(c, &create.Request)
@@ -295,6 +298,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			var channel *appmodel.Channel
 			channel, apiErr = selectResponsesWSChannel(c, modelName, retry)
 			if apiErr != nil {
+				if apiErr.StatusCode == http.StatusInternalServerError && apiErr.GetErrorCode() == types.ErrorCodeGetChannelFailed {
+					state.closeCode = websocket.CloseInternalServerErr
+				}
 				return apiErr
 			}
 			service.AppendUsedChannel(c, channel.Id)
@@ -545,8 +551,12 @@ func responsesWSErrorEndsRequest(event responsesWSErrorEvent, streamID, response
 }
 
 func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model string) *types.NewAPIError {
-	if err := service.CheckLockedTokenRoute(c, s.lockedChannelID); err != nil {
-		return types.NewErrorWithStatusCode(err, types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+	if err := service.CheckLockedTokenRoute(c, s.lockedChannelID, model, s.lockedGroup); err != nil {
+		if errors.Is(err, appmodel.ErrTokenRouteForbidden) {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+		}
+		common.SysError(common.LogText("unable to load token routing for Responses WebSocket: %s", err.Error()))
+		return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusInternalServerError, types.ErrOptionWithSkipRetry(), types.ErrOptionWithHideErrMsg("Unable to load token routing"))
 	}
 	// The channel type is not rechecked: a locked channel keeps its type, and
 	// the FilterResponsesWebSocket rules were applied when it was selected.

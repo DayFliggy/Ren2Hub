@@ -8,8 +8,15 @@ import (
 )
 
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {
+	enabled, _ := CheckChannelEnabledForGroupModel(group, modelName, channelID)
+	return enabled
+}
+
+// CheckChannelEnabledForGroupModel preserves lookup failures for callers that
+// must distinguish unavailable configuration from a denied channel.
+func CheckChannelEnabledForGroupModel(group string, modelName string, channelID int) (bool, error) {
 	if group == "" || modelName == "" || channelID <= 0 {
-		return false
+		return false, nil
 	}
 	if !common.MemoryCacheEnabled {
 		return isChannelEnabledForGroupModelDB(group, modelName, channelID)
@@ -19,17 +26,17 @@ func IsChannelEnabledForGroupModel(group string, modelName string, channelID int
 	defer channelSyncLock.RUnlock()
 
 	if group2model2channels == nil {
-		return false
+		return false, nil
 	}
 
 	if isChannelIDInList(group2model2channels[group][modelName], channelID) {
-		return true
+		return true, nil
 	}
 	normalized := ratio_setting.RoutingMatchModelName(modelName)
 	if normalized != "" && normalized != modelName {
-		return isChannelIDInList(group2model2channels[group][normalized], channelID)
+		return isChannelIDInList(group2model2channels[group][normalized], channelID), nil
 	}
-	return false
+	return false, nil
 }
 
 func IsChannelEnabledForAnyGroupModel(groups []string, modelName string, channelID int) bool {
@@ -44,23 +51,29 @@ func IsChannelEnabledForAnyGroupModel(groups []string, modelName string, channel
 	return false
 }
 
-func isChannelEnabledForGroupModelDB(group string, modelName string, channelID int) bool {
+func isChannelEnabledForGroupModelDB(group string, modelName string, channelID int) (bool, error) {
 	var count int64
 	err := DB.Model(&Ability{}).
 		Where(map[string]any{"group": group, "model": modelName, "channel_id": channelID, "enabled": true}).
 		Count(&count).Error
-	if err == nil && count > 0 {
-		return true
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
 	}
 	normalized := ratio_setting.RoutingMatchModelName(modelName)
 	if normalized == "" || normalized == modelName {
-		return false
+		return false, nil
 	}
 	count = 0
 	err = DB.Model(&Ability{}).
 		Where(map[string]any{"group": group, "model": normalized, "channel_id": channelID, "enabled": true}).
 		Count(&count).Error
-	return err == nil && count > 0
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func isChannelIDInList(list []int, channelID int) bool {

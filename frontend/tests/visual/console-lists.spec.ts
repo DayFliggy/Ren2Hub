@@ -51,7 +51,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await waitForStablePage(page)
 
     const checkbox = page.getByRole('checkbox', {
-      name: '选择令牌「Production key」',
+      name: '选择令牌「Native Key」',
     })
     const checkboxTarget = page.locator('label').filter({ has: checkbox })
     await expectTarget(checkboxTarget)
@@ -63,7 +63,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     await expectTarget(
       page
         .locator('[data-key-mobile-row]')
-        .getByRole('button', { name: /在途预留/ })
+        .getByRole('button', { name: '编辑令牌', exact: true })
     )
 
     await page.goto('/usage-logs', { waitUntil: 'domcontentloaded' })

@@ -12,17 +12,6 @@ for (const theme of ['light', 'dark'] as const) {
     }) => {
       await page.setViewportSize({ width, height: 900 })
       await configureStablePage(page, { theme, authenticated: true })
-      await page.route('**/api/gateway/channels/101/credentials', (route) =>
-        route.fulfill({ json: { success: true, data: [] } })
-      )
-      await page.route('**/api/gateway/runtime/channels/101', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: { in_flight: 0, capacity: 20, queued: 0, rate: null },
-          },
-        })
-      )
       const advanced = {
         advanced_routes: [
           {
@@ -41,15 +30,12 @@ for (const theme of ['light', 'dark'] as const) {
         id: 101,
         name: 'Advanced Fixture',
         type: 58,
-        supplier: 'Custom',
+        group: 'default',
         status: 1,
         priority: 0,
         weight: 10,
-        capacity_used: 0,
-        capacity_total: 20,
-        channel_ratio: '1',
 
-        used_quota: '0',
+        used_quota: 0,
         balance: 0,
         response_time: 0,
         test_time: 0,
@@ -73,9 +59,9 @@ for (const theme of ['light', 'dark'] as const) {
         null,
         2
       )
-      await page.route('**/api/next/admin/channels/balance/101', (route) =>
+      await page.route('**/api/channel/update_balance/101', (route) =>
         route.fulfill({
-          json: { success: true, data: { raw_response: rawBalance } },
+          json: { success: true, raw_response: rawBalance },
         })
       )
       await page.route('**/api/channel/upstream_updates/detect', (route) =>
@@ -96,7 +82,7 @@ for (const theme of ['light', 'dark'] as const) {
           json: { success: true, data: { models: 'fixture-model,new-model' } },
         })
       })
-      await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) => {
+      await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) => {
         if (route.request().method() === 'POST') {
           created = route.request().postDataJSON()
           return route.fulfill({ json: { success: true, data: { id: 102 } } })
@@ -120,22 +106,15 @@ for (const theme of ['light', 'dark'] as const) {
       })
       await page.goto('/channels')
       await waitForStablePage(page)
-      await page.getByRole('button', { name: '字段显示', exact: true }).click()
-      await page
-        .getByRole('button', { name: '单渠道上游同步操作', exact: true })
-        .click()
-      await page.keyboard.press('Escape')
       await page.locator('[aria-label="同步上游额度"]:visible').first().click()
       const balanceDialog = page.getByRole('dialog', {
-        name: '余额查询原始响应：Advanced Fixture',
+        name: 'Advanced Fixture',
         exact: true,
       })
       await expect(balanceDialog.locator('pre')).toHaveText(rawBalance)
       await expect(balanceDialog.locator('script')).toHaveCount(0)
       await assertNoHorizontalOverflow(page)
-      await balanceDialog
-        .getByRole('button', { name: '关闭', exact: true })
-        .click()
+      await page.keyboard.press('Escape')
       await expect(balanceDialog).toHaveCount(0)
       await page.locator('[aria-label="预览模型更新"]:visible').first().click()
       const syncDialog = page.getByRole('dialog', {
@@ -161,7 +140,7 @@ for (const theme of ['light', 'dark'] as const) {
       })
       await page.locator('[aria-label="编辑渠道"]:visible').first().click()
       const dialog = page.getByRole('dialog', { name: '编辑渠道', exact: true })
-      await page.route('**/api/next/admin/channels/fetch_models*', (route) =>
+      await page.route('**/api/channel/fetch_models', (route) =>
         route.fulfill({
           json: { success: true, data: ['gpt-4.1', 'gpt-4o', 'wan2.6-t2v'] },
         })
@@ -181,12 +160,9 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog
         .getByRole('button', { name: '高级设置', exact: false })
         .click()
-      const ratioInput = dialog.locator('input[name="admin-channel-ratio"]')
-      await ratioInput.fill('1000.000000000000000001')
       await expect(
-        dialog.getByRole('button', { name: '保存渠道' })
-      ).toBeDisabled()
-      await ratioInput.fill('0.123456789012345678')
+        dialog.locator('input[name="admin-channel-ratio"]')
+      ).toHaveCount(0)
       await expect(
         dialog.getByRole('switch', { name: 'Responses WebSocket' })
       ).toHaveAttribute('aria-checked', 'false')
@@ -228,7 +204,7 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog.getByRole('button', { name: '保存渠道' }).click()
       await expect(dialog).toHaveCount(0)
       expect(saved).toBeDefined()
-      expect(saved!.channel_ratio).toBe('0.123456789012345678')
+      expect(saved).not.toHaveProperty('channel_ratio')
       expect(saved).not.toHaveProperty('upstream_ratio')
       expect(saved!.models).toBe('fixture-model,wan2.6-t2v')
       expect(JSON.parse(saved!.setting as string)).toEqual({

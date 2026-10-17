@@ -91,9 +91,7 @@ describe('system settings catalog', () => {
       'MinTopUp',
       'PayMethods',
     ])
-    expect(gmpay.fields.map((field) => field.key)).toEqual([
-      'payment_setting.gmpay_settlement_enabled',
-    ])
+    expect(gmpay.fields).toEqual([])
     expect(gmpay.managedKeys).toEqual([
       'GmpayPayAddress',
       'GmpayId',

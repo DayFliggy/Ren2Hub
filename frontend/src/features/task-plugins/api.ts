@@ -1,6 +1,6 @@
 // Mirrors upstream NewAPI web/src/features/task-plugins/api.ts on Ren2Hub's
-// shared client. Ren2Hub keeps the Root-only server preview and validates the
-// usage payload before a disable can offer cascade or force.
+// shared client. Usage payloads are validated before a disable can offer
+// cascade or force. Source declarations are inspected locally, never executed.
 import { api } from '@/api/client'
 import { ApiError } from '@/api/types'
 
@@ -10,7 +10,6 @@ import type {
   TaskPluginDryRunRequest,
   TaskPluginListItem,
   TaskPluginOption,
-  TaskPluginPreview,
   TaskPluginRecord,
   TaskPluginUsage,
 } from './types'
@@ -118,11 +117,6 @@ export function installMarketplacePlugin(request: {
     remark: request.remark,
     icon: request.icon || undefined,
   })
-}
-
-/** Root-only literal metadata preview; the server never executes the source. */
-export function previewTaskPlugin(source: string, signal?: AbortSignal) {
-  return api.post<TaskPluginPreview>(`${base}/preview`, { source }, { signal })
 }
 
 export async function listMarketplaceSources(signal?: AbortSignal) {

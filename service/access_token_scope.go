@@ -127,16 +127,24 @@ func AccessTokenCatalog(userID, role int) []AccessTokenCatalogGroup {
 		resource.Actions = slices.Clone(resource.Actions)
 		resources[resource.group] = append(resources[resource.group], resource)
 	}
-	if role >= common.RoleAdminUser {
+	if role >= common.RoleCommonUser {
 		for _, definition := range authz.Catalog() {
 			resource := AccessTokenResource{Resource: definition.Resource, LabelKey: definition.LabelKey}
+			group := AccessTokenGroupAdmin
 			for _, action := range definition.Actions {
+				personal := slices.Contains(action.DefaultRoles, authz.BuiltInRoleUser)
+				if !personal && role < common.RoleAdminUser {
+					continue
+				}
 				if authz.Can(userID, role, authz.Permission{Resource: definition.Resource, Action: action.Action}) {
 					resource.Actions = append(resource.Actions, action)
+					if personal {
+						group = AccessTokenGroupPersonal
+					}
 				}
 			}
 			if len(resource.Actions) > 0 {
-				resources[AccessTokenGroupAdmin] = append(resources[AccessTokenGroupAdmin], resource)
+				resources[group] = append(resources[group], resource)
 			}
 		}
 	}

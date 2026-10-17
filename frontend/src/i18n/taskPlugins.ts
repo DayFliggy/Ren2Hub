@@ -229,7 +229,6 @@ export const taskPluginMessages = {
     divergedDesc:
       '当前已安装 v{installed}，但该源未列出此版本。安装将把它替换为 v{target}。',
     installFailed: '插件安装失败',
-    identityMismatch: '源码中的插件 key 或版本与市场索引不一致，已阻止安装。',
     unsupported: '该插件要求更高版本的任务插件 API，已阻止安装。',
     httpsSourceRequired: '市场源必须使用 HTTPS URL。',
     // Ren2Hub: an empty source list would persist as a deliberate empty market
@@ -535,8 +534,6 @@ export const taskPluginMessages = {
     divergedDesc:
       'v{installed} is installed but this source does not list it. Installing replaces it with v{target}.',
     installFailed: 'Plugin installation failed',
-    identityMismatch:
-      'The source plugin key or version does not match the marketplace index. Installation was blocked.',
     unsupported:
       'This plugin requires a newer Task Plugin API version. Installation was blocked.',
     httpsSourceRequired: 'Marketplace sources must use HTTPS URLs.',

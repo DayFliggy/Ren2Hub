@@ -2,7 +2,7 @@
 // Upstream components/upload-dialog.tsx: risk warning, .js picker, URL
 // import, source editor, declaration preview, sidecar icon and remark, then
 // an activation step. Fields sent are exactly those UploadTaskPlugin binds.
-// The declaration preview comes from the server metadata preview.
+// Declaration previews inspect the source locally; upload validation is authoritative.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AlertTriangle, CircleCheck, Power, Upload } from 'lucide-vue-next'
@@ -12,15 +12,12 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 
-import { activateTaskPlugin, previewTaskPlugin, uploadTaskPlugin } from '../api'
+import { activateTaskPlugin, uploadTaskPlugin } from '../api'
 import {
   encodePluginIconFile,
   PluginIconFileError,
 } from '../lib/plugin-icon-file'
-import {
-  previewFromServer,
-  unavailablePreview,
-} from '../lib/plugin-meta-preview'
+import { parsePluginMetaPreview } from '../lib/plugin-meta-preview'
 import {
   MAX_PLUGIN_SOURCE_BYTES,
   pluginSourceByteLength,
@@ -57,11 +54,10 @@ const activating = ref(false)
 const activated = ref(false)
 const activationError = ref('')
 
-// The server re-parses the whole source for every preview; let typing settle.
+// Parse after typing settles; inspecting source never executes plugin code.
 const PREVIEW_DELAY_MS = 300
 const preview = ref<PluginMetaPreview | undefined>()
 let previewTimer: ReturnType<typeof setTimeout> | undefined
-let previewController: AbortController | undefined
 
 const sha256 = computed(() =>
   fetched.value?.source === source.value ? fetched.value.sha256 : ''
@@ -76,32 +72,19 @@ function setSource(value: string) {
   uploadError.value = ''
 }
 
-async function loadPreview(text: string) {
+function loadPreview(text: string) {
   clearTimeout(previewTimer)
-  previewController?.abort()
-  const request = new AbortController()
-  previewController = request
-  try {
-    const serverPreview = await previewTaskPlugin(text, request.signal)
-    if (!request.signal.aborted)
-      preview.value = previewFromServer(serverPreview)
-  } catch {
-    // A source the preview cannot parse shows as unreadable; the gateway
-    // still validates it on upload.
-    if (!request.signal.aborted) preview.value = unavailablePreview()
-  }
+  preview.value = parsePluginMetaPreview(text)
 }
 
 watch(source, (text) => {
   clearTimeout(previewTimer)
-  previewController?.abort()
   preview.value = undefined
   if (!text.trim()) return
-  previewTimer = setTimeout(() => void loadPreview(text), PREVIEW_DELAY_MS)
+  previewTimer = setTimeout(() => loadPreview(text), PREVIEW_DELAY_MS)
 })
 onBeforeUnmount(() => {
   clearTimeout(previewTimer)
-  previewController?.abort()
 })
 
 async function selectFile(file: File) {

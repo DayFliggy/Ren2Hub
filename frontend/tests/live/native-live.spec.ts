@@ -1,11 +1,8 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { loginCandidate } from './session'
 
 test.describe('native isolated backend', () => {
-  test.skip(
-    process.env.NATIVE_LIVE_TEST !== '1',
-    'requires an isolated native candidate and private credentials'
-  )
   const paths = [
     '/dashboard',
     '/models',
@@ -41,22 +38,6 @@ test.describe('native isolated backend', () => {
         !['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname)
       )
         throw new Error('Native live tests require a loopback candidate URL')
-      const credentialsPath = process.env.NATIVE_LIVE_CREDENTIALS
-      if (!credentialsPath)
-        throw new Error(
-          'NATIVE_LIVE_CREDENTIALS must name the private candidate account file'
-        )
-      const value = JSON.parse(readFileSync(credentialsPath, 'utf8')) as {
-        username?: string
-        password?: string
-        root?: { username?: string; password?: string }
-      }
-      const credentials = value.root ?? value
-      if (
-        typeof credentials.username !== 'string' ||
-        typeof credentials.password !== 'string'
-      )
-        throw new Error('Invalid private candidate account file')
       await page.setViewportSize({ width, height: 900 })
       await page.addInitScript((theme) => {
         localStorage.setItem('ren2hub_locale', 'en')
@@ -66,15 +47,7 @@ test.describe('native isolated backend', () => {
         failures: string[] = [],
         visited: Array<{ path: string; actual_path: string }> = []
       page.on('pageerror', (error) => errors.push(error.message))
-      await page.goto('/sign-in')
-      await page
-        .locator('input[autocomplete="username"]')
-        .fill(credentials.username)
-      await page
-        .locator('input[autocomplete="current-password"]')
-        .fill(credentials.password)
-      await page.locator('button[type="submit"]').click()
-      await expect(page).not.toHaveURL(/\/sign-in/)
+      await loginCandidate(page)
       page.on('response', (response) => {
         const url = new URL(response.url())
         if (url.pathname.startsWith('/api/') && response.status() >= 400)

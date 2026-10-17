@@ -330,6 +330,13 @@ func waitPerfCounters(t *testing.T, wantRequests int64) (requests, successes int
 
 func newResponsesWSBillingTest(t *testing.T, expression string, handle func(*websocket.Conn, *http.Request), httpEvents ...string) *responsesWSBillingTest {
 	t.Helper()
+	return newResponsesWSBillingTestWithSetup(t, expression, handle, nil, httpEvents...)
+}
+
+// configure runs before authentication and returns the client Authorization
+// header, allowing tests to exercise the real administrator channel pin.
+func newResponsesWSBillingTestWithSetup(t *testing.T, expression string, handle func(*websocket.Conn, *http.Request), configure func(*responsesWSBillingTest) string, httpEvents ...string) *responsesWSBillingTest {
+	t.Helper()
 	user, token := setupResponsesWSRequestTest(t)
 	previousTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30
@@ -404,6 +411,10 @@ func newResponsesWSBillingTest(t *testing.T, expression string, handle func(*web
 		require.NoError(t, model.DB.Where("channel_id = ?", channel.Id).Delete(&model.Ability{}).Error)
 		require.NoError(t, model.DB.Delete(channel).Error)
 	})
+	authorization := "Bearer sk-" + token.Key
+	if configure != nil {
+		authorization = configure(fixture)
+	}
 	engine := gin.New()
 	engine.GET("/v1/responses", middleware.TokenAuth(), func(c *gin.Context) {
 		defer close(fixture.done)
@@ -418,7 +429,7 @@ func newResponsesWSBillingTest(t *testing.T, expression string, handle func(*web
 	gateway := httptest.NewServer(engine)
 	fixture.gatewayURL = gateway.URL
 	t.Cleanup(gateway.Close)
-	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(gateway.URL, "http")+"/v1/responses", http.Header{"Authorization": []string{"Bearer sk-" + token.Key}})
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(gateway.URL, "http")+"/v1/responses", http.Header{"Authorization": []string{authorization}})
 	require.NoError(t, err)
 	fixture.client = client
 	t.Cleanup(func() { fixture.closeAndWait(t) })

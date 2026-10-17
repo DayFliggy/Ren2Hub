@@ -5,7 +5,6 @@ import {
   assertNoHorizontalOverflow,
   configureStablePage,
   freezeAndInspectHomeCanvas,
-  isExpectedGuestRefreshConsoleMessage,
   waitForStablePage,
 } from './fixtures'
 import { VISUAL_ROUTES } from './routes'
@@ -135,66 +134,41 @@ for (const path of ['/sign-in', '/pricing']) {
 }
 
 for (const viewport of viewports) {
-  test(`all routes smoke at ${viewport.name}`, async ({ page }) => {
+  test(`all routes smoke at ${viewport.name}`, async ({ browser, baseURL }) => {
     test.setTimeout(ROUTE_SMOKE_TIMEOUT)
-    await page.setViewportSize(viewport)
-    await configureStablePage(page, {
-      theme: process.env.PLAYWRIGHT_THEME === 'light' ? 'light' : 'dark',
-      routeAwareAuth: true,
-    })
-
-    const runtimeErrors: string[] = []
-    const routeFailures: string[] = []
-    page.on('pageerror', (error) => runtimeErrors.push(error.message))
-    page.on('console', (message) => {
-      if (isExpectedGuestRefreshConsoleMessage(page, message)) return
-      // Public documents intentionally reject Playwright's injected frame script.
-      if (
-        message.text().startsWith("Blocked script execution in 'about:srcdoc'")
-      )
-        return
-      if (message.type() === 'warning' || message.type() === 'error') {
-        runtimeErrors.push(`${message.type()}: ${message.text()}`)
-      }
-    })
-    page.on('requestfailed', (request) => {
-      const failure = request.failure()?.errorText || 'request failed'
-      if (
-        request.url().startsWith('http://127.0.0.1:') &&
-        !failure.includes('ERR_ABORTED')
-      ) {
-        runtimeErrors.push(`${request.method()} ${request.url()}: ${failure}`)
-      }
-    })
-
     for (const route of VISUAL_ROUTES) {
-      runtimeErrors.length = 0
       await test.step(`${route.name} ${route.path}`, async () => {
-        await page.goto(route.path, { waitUntil: 'domcontentloaded' })
-        await waitForStablePage(page)
-        if (route.path === '/') await freezeAndInspectHomeCanvas(page)
-        if (route.path.includes('manage=')) {
-          await expect(
-            page.locator('[role="dialog"][aria-modal="true"]')
-          ).toBeVisible()
-          await page.getByRole('button', { name: '关闭', exact: true }).click()
-          await expect(
-            page.locator('[role="dialog"][aria-modal="true"]')
-          ).toHaveCount(0)
+        const page = await browser.newPage({
+          baseURL,
+          viewport,
+          locale: 'zh-CN',
+          timezoneId: 'Asia/Shanghai',
+          reducedMotion: 'reduce',
+        })
+        try {
+          const state = await configureStablePage(page, {
+            theme: process.env.PLAYWRIGHT_THEME === 'light' ? 'light' : 'dark',
+            authenticated: !route.guestOnly,
+          })
+          await page.goto(route.path, { waitUntil: 'domcontentloaded' })
+          await waitForStablePage(page)
+          if (route.guestOnly)
+            await expect(page).toHaveURL(new RegExp(`${route.path}$`))
+          if (route.path === '/') await freezeAndInspectHomeCanvas(page)
+          await assertNoHorizontalOverflow(page)
+          await assertInteractiveCentersVisible(page)
+          expect(state.unexpected, route.path).toEqual([])
+          expect(state.errors, route.path).toEqual([])
+          expect(state.missingMessages, route.path).toEqual([])
+        } finally {
+          await page.close()
         }
-        if (runtimeErrors.length > 0) {
-          routeFailures.push(`${route.path}: ${runtimeErrors.join(' | ')}`)
-          return
-        }
-        await assertNoHorizontalOverflow(page)
-        await assertInteractiveCentersVisible(page)
       })
     }
-    expect(routeFailures).toEqual([])
   })
 }
 
-test('deferred module entry points are disabled and routes fail closed', async ({
+test('retired module entry points are absent and routes fail closed', async ({
   page,
 }) => {
   test.setTimeout(120_000)
@@ -203,23 +177,20 @@ test('deferred module entry points are disabled and routes fail closed', async (
 
   await page.goto('/activity', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
-  await expect(page.getByRole('button', { name: /RT农家乐/ })).toBeDisabled()
-  await expect(page.getByRole('button', { name: /无趣大游戏/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /RT农家乐/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /无趣大游戏/ })).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: '炼金室', exact: true })
   ).toBeDisabled()
 
   await page.goto('/profile', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
-  // The deferred tier benefits show a status note, not a dead button.
-  const identity = page.locator('.profile-identity')
-  await expect(identity.getByText('即将上线', { exact: true })).toBeVisible()
-  await expect(
-    identity.getByRole('button', { name: /即将上线|查看等级权益/ })
-  ).toHaveCount(0)
+  await expect(page.locator('.profile-identity')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Native Root' })).toBeVisible()
 
   for (const path of ['/market', '/invoice', '/farm', '/bigame']) {
     await page.goto(path, { waitUntil: 'domcontentloaded' })
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page.getByText('页面不存在', { exact: true })).toBeVisible()
+    await expect(page.locator('.app-sidebar')).toHaveCount(0)
   }
 })

@@ -159,9 +159,20 @@ onMounted(load)
     ><ErrorBanner v-if="error" :message="error" @retry="load" />
     <fieldset :disabled="loading || !ready" class="space-y-4">
       <label class="block"
-        ><input v-model="form.enabled" type="checkbox" />
-        {{ t('common.enable') }}</label
-      ><label class="block"
+        ><input
+          v-model="form.enabled"
+          type="checkbox"
+          aria-describedby="gmpay-new-orders-hint"
+        />
+        {{ t('systemSettings.gmpayPanel.enableNewOrders') }}</label
+      >
+      <p
+        id="gmpay-new-orders-hint"
+        class="text-sm text-[var(--text-secondary)]"
+      >
+        {{ t('systemSettings.gmpayPanel.enableNewOrdersHint') }}
+      </p>
+      <label class="block"
         >{{ t('systemSettings.gmpayPanel.address')
         }}<input
           v-model="form.pay_address"

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -113,6 +114,11 @@ func sendEmailNotify(userEmail string, data dto.Notify) error {
 	// 处理占位符
 	for _, value := range data.Values {
 		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
+	}
+	// Ticket text stays literal in HTML mail; other delivery channels use the
+	// original text, and native notification templates retain their HTML.
+	if data.Type == ticketNotifyType {
+		content = html.EscapeString(content)
 	}
 	return common.SendEmail(data.Title, userEmail, content)
 }

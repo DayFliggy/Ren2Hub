@@ -21,7 +21,6 @@ vi.mock('../api', () => ({
   activateTaskPlugin: vi.fn(),
   getTaskPlugin: vi.fn(),
   installMarketplacePlugin: vi.fn(),
-  previewTaskPlugin: vi.fn(),
 }))
 
 const source = 'export const meta = { key: "fixture", version: "2.0.0" }'
@@ -63,20 +62,11 @@ function target(
 async function open(
   sha256: string,
   installState: InstallState,
-  previewMeta: Record<string, unknown> = {
-    key: 'fixture',
-    version: '2.0.0',
-    models: ['m1'],
-  }
+  sourceText = source
 ) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(
-    async () => new Response(source)
+    async () => new Response(sourceText)
   )
-  vi.mocked(pluginApi.previewTaskPlugin).mockResolvedValue({
-    meta: previewMeta,
-    unresolved: [],
-    source_hash: digest,
-  })
   vi.mocked(pluginApi.getTaskPlugin).mockResolvedValue({
     meta: {
       key: 'fixture',
@@ -172,14 +162,33 @@ describe('marketplace install dialog', () => {
     expect(pluginApi.installMarketplacePlugin).toHaveBeenCalledOnce()
   })
 
-  it('blocks a verified source when its metadata identity differs from the index', async () => {
-    await open(
-      digest,
-      { status: 'not_installed' },
-      { key: 'other-plugin', version: '2.0.0' }
+  it('does not block native installation when declarations are dynamic', async () => {
+    const dynamic = 'export const meta = buildMeta();'
+    await open('', { status: 'not_installed' }, dynamic)
+    expect(wrapper!.text()).toContain(
+      'Some plugin information could not be read'
     )
-    expect(wrapper!.text()).toContain('does not match the marketplace index')
-    expect(button('Install and enable').attributes('disabled')).toBeDefined()
-    expect(pluginApi.installMarketplacePlugin).not.toHaveBeenCalled()
+    expect(button('Install and enable').attributes('disabled')).toBeUndefined()
+    await button('Install and enable').trigger('click')
+    await flushPromises()
+    expect(pluginApi.installMarketplacePlugin).toHaveBeenCalledWith({
+      source: dynamic,
+      sourceSha256: '',
+      remark: 'Fixture source v2.0.0',
+      icon: undefined,
+    })
+    expect(wrapper!.emitted('installed')).toHaveLength(1)
+  })
+
+  it('surfaces authoritative upload errors and keeps source available for review', async () => {
+    await open(digest, { status: 'not_installed' })
+    vi.mocked(pluginApi.installMarketplacePlugin).mockRejectedValueOnce(
+      new Error('Server rejected plugin metadata')
+    )
+    await button('Install and enable').trigger('click')
+    await flushPromises()
+    expect(wrapper!.text()).toContain('Server rejected plugin metadata')
+    expect(wrapper!.emitted('installed')).toBeUndefined()
+    expect(button('Install and enable').attributes('disabled')).toBeUndefined()
   })
 })

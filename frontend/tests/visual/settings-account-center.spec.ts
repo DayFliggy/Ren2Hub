@@ -93,14 +93,14 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await page.goto('/profile', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       await expect(
-        page.getByRole('heading', { name: '会员中心', exact: true })
+        page.getByRole('heading', { name: 'Native Root', exact: true })
       ).toBeVisible()
       await expect(
         page
           .getByRole('navigation', { name: '面包屑导航' })
-          .getByText('会员中心', { exact: true })
+          .getByText('个人中心', { exact: true })
       ).toBeVisible()
-      await expect(page.locator('[data-title-side="right"]')).toHaveCount(1)
+      await expect(page.locator('[data-title-side="left"]')).toHaveCount(1)
       const userMenuTrigger = page.getByRole('button', {
         name: '个人中心',
         exact: true,
@@ -118,20 +118,11 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       ).toBeVisible()
       await expect(
         page.getByRole('heading', { name: '账号设置', exact: true })
-      ).toBeVisible()
-      await expect(page.getByTestId('profile-join-date')).toHaveText(
-        '2026-06-20'
-      )
-      await expect(page.getByTestId('profile-member-duration')).toHaveText(
-        '37 天'
-      )
-      await expect(page.getByTestId('profile-total-calls')).toHaveText('32.1K')
-      await expect(page.getByTestId('profile-account-status')).toContainText(
-        '账户状态 · 正常'
-      )
-      await expect(page.getByTestId('profile-stat-requests')).toContainText(
-        '32.1K'
-      )
+      ).toHaveCount(0)
+      // Native account data exposes quota/usage/request counts; the retired
+      // aggregate join-date/member-duration projection is not synthesized.
+      const stats = page.locator('.console-content .display-number')
+      await expect(stats).toHaveText(['$10.00', '$2.00', '4'])
       await expect(page.locator('[data-security-entry]')).toBeVisible()
       await expect(
         page.getByRole('heading', { name: '通知与偏好', exact: true })

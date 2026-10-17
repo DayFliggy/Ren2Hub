@@ -1,5 +1,4 @@
 import { api } from './client'
-import { ApiError } from './types'
 import { parseModelEndpoints } from '@/utils/modelEndpoints'
 import {
   invalidResponse,
@@ -186,41 +185,70 @@ export function parsePrefillGroup(
   return { ...base, type: row.type, items: parseStringArray(items, endpoint) }
 }
 
+export interface SyncField {
+  field: string
+  local: string | number | null
+  upstream: string | number
+}
+export interface SyncCandidate {
+  model_name: string
+  kind:
+    | 'create'
+    | 'update'
+    | 'unchanged'
+    | 'blocked'
+    | 'missing_upstream'
+    | 'missing_vendor'
+  scope: 'site' | 'catalog'
+  record_version: string
+  fields: SyncField[]
+  vendor_to_create: string
+}
 export interface SyncPreview {
-  /** Upstream catalog version; an apply request must echo it back. */
   version: string
-  missing: string[]
-  conflicts: {
-    model_name: string
-    local_version: string
-    fields: {
-      field: string
-      local: string | number
-      upstream: string | number
-    }[]
-  }[]
+  locale: string
+  candidates: SyncCandidate[]
 }
 export function parseSyncPreview(
   value: unknown,
   endpoint = '/api/models/sync_upstream/preview'
 ): SyncPreview {
   const data = record(value, endpoint)
+  const source = record(data.source, endpoint)
   return {
-    version: requiredString(
-      record(data.source, endpoint).version,
-      endpoint,
-      false
-    ),
-    missing: parseStringArray(data.missing ?? [], endpoint),
-    conflicts: array(data.conflicts ?? [], endpoint, (item) => {
-      const conflict = record(item, endpoint)
+    version: requiredString(source.version, endpoint, false),
+    locale: requiredString(source.locale, endpoint, false),
+    candidates: array(data.candidates, endpoint, (item) => {
+      const candidate = record(item, endpoint)
+      if (
+        ![
+          'create',
+          'update',
+          'unchanged',
+          'blocked',
+          'missing_upstream',
+          'missing_vendor',
+        ].includes(String(candidate.kind)) ||
+        !['site', 'catalog'].includes(String(candidate.scope))
+      )
+        invalidResponse(endpoint)
+      const actionable =
+        candidate.kind === 'create' || candidate.kind === 'update'
       return {
-        model_name: requiredString(conflict.model_name, endpoint, false),
-        local_version: requiredString(conflict.local_version, endpoint, false),
-        fields: array(conflict.fields, endpoint, (item) => {
+        model_name: requiredString(candidate.model_name, endpoint, false),
+        kind: candidate.kind as SyncCandidate['kind'],
+        scope: candidate.scope as SyncCandidate['scope'],
+        record_version: requiredString(
+          candidate.record_version,
+          endpoint,
+          !actionable
+        ),
+        vendor_to_create: optionalText(candidate.vendor_to_create, endpoint),
+        fields: array(candidate.fields, endpoint, (item) => {
           const field = record(item, endpoint)
           if (
-            (typeof field.local !== 'string' &&
+            (field.local !== null &&
+              typeof field.local !== 'string' &&
               typeof field.local !== 'number') ||
             (typeof field.upstream !== 'string' &&
               typeof field.upstream !== 'number')
@@ -228,45 +256,28 @@ export function parseSyncPreview(
             invalidResponse(endpoint)
           return {
             field: requiredString(field.field, endpoint, false),
-            local: field.local,
-            upstream: field.upstream,
+            local: field.local as string | number | null,
+            upstream: field.upstream as string | number,
           }
         }),
       }
     }),
   }
 }
-/** The changes chosen from one preview; the backend applies nothing else. */
+export interface SyncSelection {
+  model_name: string
+  record_version: string
+  create: boolean
+  fields: string[]
+}
 export interface SyncRequest {
   source_version: string
-  create_models: string[]
-  overwrite: {
-    model_name: string
-    fields: string[]
-    local_version: string
-  }[]
+  selections: SyncSelection[]
 }
 export interface SyncResult {
-  created_models: number
-  updated_models: number
-  created_vendors: number
-  skipped_models: string[]
-}
-/** The upstream catalog changed after the preview; the apply wrote nothing. */
-export function isMetadataSourceChanged(cause: unknown): boolean {
-  return (
-    cause instanceof ApiError &&
-    cause.status === 409 &&
-    cause.code === 'METADATA_SOURCE_CHANGED'
-  )
-}
-/** The selected local metadata changed after the preview. */
-export function isMetadataLocalChanged(cause: unknown): boolean {
-  return (
-    cause instanceof ApiError &&
-    cause.status === 409 &&
-    cause.code === 'METADATA_LOCAL_CHANGED'
-  )
+  created_models: string[]
+  updated_models: { model_name: string; fields: string[] }[]
+  created_vendors: string[]
 }
 export const metadataApi = {
   async models(params: Record<string, unknown>, signal?: AbortSignal) {
@@ -343,30 +354,37 @@ export const metadataApi = {
   deleteGroup: (id: number) => api.delete(`/api/prefill_group/${id}`),
   setModelStatus: (id: number, status: number) =>
     api.put('/api/models/?status_only=true', { id, status }),
-  async preview(source: string, locale: string, signal?: AbortSignal) {
+  async preview(locale: string, signal?: AbortSignal) {
     return parseSyncPreview(
-      await api.get(
-        '/api/models/sync_upstream/preview',
-        { source, locale },
-        { signal }
-      )
+      await api.get('/api/models/sync_upstream/preview', { locale }, { signal })
     )
   },
-  async sync(
-    source: string,
-    locale: string,
-    request: SyncRequest
-  ): Promise<SyncResult> {
+  async sync(locale: string, request: SyncRequest): Promise<SyncResult> {
     const endpoint = '/api/models/sync_upstream'
     const data = record(
-      await api.post(endpoint, { source, locale, ...request }),
+      await api.post(endpoint, { locale, ...request }),
       endpoint
     )
     return {
-      created_models: requiredStrictInteger(data.created_models, endpoint),
-      updated_models: requiredStrictInteger(data.updated_models, endpoint),
-      created_vendors: requiredStrictInteger(data.created_vendors, endpoint),
-      skipped_models: parseStringArray(data.skipped_models ?? [], endpoint),
+      created_models: parseStringArray(
+        data.created_models === null ? [] : data.created_models,
+        endpoint
+      ),
+      updated_models: array(
+        data.updated_models === null ? [] : data.updated_models,
+        endpoint,
+        (item) => {
+          const row = record(item, endpoint)
+          return {
+            model_name: requiredString(row.model_name, endpoint, false),
+            fields: parseStringArray(row.fields, endpoint),
+          }
+        }
+      ),
+      created_vendors: parseStringArray(
+        data.created_vendors === null ? [] : data.created_vendors,
+        endpoint
+      ),
     }
   },
 }

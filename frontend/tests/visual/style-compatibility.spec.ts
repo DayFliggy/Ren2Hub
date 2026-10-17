@@ -54,20 +54,16 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
         'line-height',
         width < 1024 ? '45px' : '48px'
       )
-      const badge = page
-        .locator('span:visible')
-        .filter({ hasText: /^即将上线$/ })
-        .first()
+      await page.goto('/keys')
+      await waitForStablePage(page)
+      const badge = page.locator('[data-handdrawn="chip"]:visible').first()
       await expect(badge).toBeVisible()
-      await expect(badge).toHaveCSS(
-        'line-height',
-        width < 640 ? '16px' : '20px'
-      )
+      await expect(badge).toHaveCSS('line-height', '16px')
     }
   })
 
   for (const motion of ['no-preference', 'reduce'] as const) {
-    test(`menu, check-in stamp and pressed controls keep their geometry (${theme}, ${motion})`, async ({
+    test(`menu, native check-in table and pressed controls keep their geometry (${theme}, ${motion})`, async ({
       page,
     }) => {
       await configureStablePage(page, { theme })
@@ -95,23 +91,9 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       )
 
       await page.goto('/activity')
-      await expect(page.locator('.checkin-stamp')).toBeVisible()
-      await page.evaluate(() => document.fonts.ready)
-      const stamp = await page.locator('.checkin-stamp').evaluate((element) => {
-        const rect = element.getBoundingClientRect()
-        return {
-          width: rect.width,
-          height: rect.height,
-          layoutWidth: (element as HTMLElement).offsetWidth,
-          layoutHeight: (element as HTMLElement).offsetHeight,
-        }
-      })
-      if (theme === 'dark') {
-        expect(stamp.width).toBeCloseTo(stamp.layoutWidth, 0)
-        expect(stamp.height).toBeCloseTo(stamp.layoutHeight, 0)
-      } else {
-        expect(stamp.height).toBeGreaterThan(stamp.layoutHeight + 2)
-      }
+      await expect(page.getByRole('table')).toBeVisible()
+      await expect(page.getByRole('cell', { name: '2026-10-17' })).toBeVisible()
+      expect(await page.locator('.checkin-stamp').count()).toBe(0)
 
       const button = page.locator('button.touch-snappy:not(:disabled)').first()
       await expect(button).toBeVisible()

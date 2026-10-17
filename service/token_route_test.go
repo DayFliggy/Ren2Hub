@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,9 +10,11 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestTokenRouteFirstRetryAndNextRequest(t *testing.T) {
@@ -54,8 +57,51 @@ func TestTokenRouteFirstRetryAndNextRequest(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 	common.SetContextKey(c, constant.ContextKeyTokenId, 7)
-	require.ErrorContains(t, CheckLockedTokenRoute(c, 22), "no longer")
-	require.NoError(t, CheckLockedTokenRoute(c, 11))
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+	require.ErrorContains(t, CheckLockedTokenRoute(c, 22, "route-model", "default"), "no longer")
+	require.NoError(t, CheckLockedTokenRoute(c, 11, "route-model", "default"))
+}
+
+func TestPrivateRouteAbilityQueryErrorsAreTechnicalFailures(t *testing.T) {
+	for _, failAt := range []int{1, 2} {
+		t.Run([]string{"exact query", "normalized query"}[failAt-1], func(t *testing.T) {
+			db := setupChannelSelectAutoGroupsTest(t)
+			common.MemoryCacheEnabled = false
+			require.NoError(t, db.AutoMigrate(&model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
+			createChannelSelectAutoGroupsChannel(t, db, 11, "default", "gpt-4-gizmo-*")
+			require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
+			require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
+			newCall := func() *gin.Context {
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+				common.SetContextKey(c, constant.ContextKeyTokenId, 7)
+				common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+				common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+				GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 11, Source: dto.PinSourceToken})
+				return c
+			}
+			failure := errors.New("ability database unavailable")
+			queries := 0
+			require.NoError(t, db.Callback().Query().Before("gorm:query").Register("routing:ability-error", func(tx *gorm.DB) {
+				if tx.Statement.Table == "abilities" {
+					queries++
+					if queries == failAt {
+						tx.AddError(failure)
+					}
+				}
+			}))
+			c := newCall()
+			channel, _, selectErr := SelectChannelForRequest(c, "gpt-4-gizmo-a", &RetryParam{Ctx: c, TokenGroup: "default", ModelName: "gpt-4-gizmo-a"})
+			require.Nil(t, channel)
+			require.NotNil(t, selectErr)
+			require.Equal(t, http.StatusInternalServerError, selectErr.StatusCode)
+			require.Equal(t, types.ErrorCodeGetChannelFailed, selectErr.Code)
+			require.Equal(t, failAt, queries, "a failed exact query must not be hidden by normalization")
+			queries = 0
+			require.ErrorIs(t, CheckLockedTokenRoute(newCall(), 11, "gpt-4-gizmo-a", "default"), failure)
+			require.Equal(t, failAt, queries)
+		})
+	}
 }
 
 func TestTokenRouteKeepsGroupBoundariesAndTaskContinuations(t *testing.T) {
@@ -116,4 +162,40 @@ func TestTokenRouteKeepsGroupBoundariesAndTaskContinuations(t *testing.T) {
 	channel, _, selectionErr = SelectChannelForRequest(c, "route-model", &RetryParam{Ctx: c, TokenGroup: "default"})
 	require.Nil(t, selectionErr)
 	require.Equal(t, 22, channel.Id)
+}
+
+func TestLockedPrivateRouteKeepsOriginalAutoGroup(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	require.NoError(t, db.AutoMigrate(&model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
+	createChannelSelectAutoGroupsChannel(t, db, 11, "default,vip", "route-model")
+	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Group: "default", Model: "route-model", Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Group: "vip", Model: "route-model", Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
+	for _, cache := range []bool{false, true} {
+		common.MemoryCacheEnabled = cache
+		if cache {
+			model.InitChannelCache()
+		}
+		newCall := func(groups []string) *gin.Context {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+			common.SetContextKey(c, constant.ContextKeyTokenId, 7)
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, "auto")
+			common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, groups)
+			GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 11, Source: dto.PinSourceToken})
+			return c
+		}
+		c := newCall([]string{"vip", "default"})
+		require.NoError(t, CheckLockedTokenRoute(c, 11, "route-model", "default"))
+		require.Equal(t, "default", common.GetContextKeyString(c, constant.ContextKeyAutoGroup), "reordering groups cannot move an existing connection's billing group")
+		c = newCall([]string{"vip"})
+		require.ErrorIs(t, CheckLockedTokenRoute(c, 11, "route-model", "default"), model.ErrTokenRouteForbidden)
+		require.Empty(t, common.GetContextKeyString(c, constant.ContextKeyAutoGroup), "a different still-authorized group cannot rescue the locked connection")
+		c = newCall([]string{"default"})
+		common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, true)
+		common.SetContextKey(c, constant.ContextKeyTokenModelLimit, map[string]bool{"different-model": true})
+		require.ErrorIs(t, CheckLockedTokenRoute(c, 11, "route-model", "default"), model.ErrTokenRouteForbidden)
+	}
 }

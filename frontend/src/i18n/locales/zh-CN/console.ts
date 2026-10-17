@@ -2978,9 +2978,6 @@ export default {
       epayMethods: 'EPay 支付方式',
       epayMethodsHint:
         '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停用 EPay 新单及支付回调。',
-      gmpaySettlement: '启用虚拟币结算',
-      gmpaySettlementHint:
-        '允许虚拟币网关回调确认已有订单并入账。回调可核验代币与法币金额，但无法证明最终付款网络。异常通知是否重试取决于网关配置，也可经管理员复查后补单。关闭后暂停回调结算，与易支付与新单支付方式独立控制。',
       checkinEnabled: '启用每日签到',
       checkinMinQuota: '最小奖励',
       checkinMaxQuota: '最大奖励',
@@ -3238,6 +3235,9 @@ export default {
     loadFailed: '系统设置读取失败。重新读取成功前不能编辑或保存。',
     retryLoad: '重新读取设置',
     gmpayPanel: {
+      enableNewOrders: '开放新订单',
+      enableNewOrdersHint:
+        '关闭后停止创建 GMPay 新订单。已有订单仍会使用下单时保存的商户凭据核验付款通知，核验通过后入账。',
       selectedAssets: '启用的资产（JSON）',
       title: 'GMPay 虚拟币支付',
       description: '选择向用户开放的代币与网络，然后保存网关配置。',
@@ -3268,8 +3268,6 @@ export default {
       addressRequired: '请先填写网关地址。',
       credentialsRequired: '请填写网关地址与商户 ID。',
       secretRequired: '请填写商户密钥。',
-      noSelectedAssets:
-        '不选择资产并保存会停止创建新的虚拟币订单；已启用虚拟币结算时，已有订单仍可入账。',
       invalidAmounts: '支付单价必须大于零，最低购买额度必须为正整数 USD。',
       invalidGroupRatios: '请输入 JSON 对象，用户组倍率必须为正数。',
       invalidCatalog: '网关返回的资产目录格式无效。',
@@ -3283,6 +3281,10 @@ export default {
     title: '系统设置',
     breadcrumb: ['管理员', '系统设置'],
     saved: '已保存',
+    partialSaveFailed:
+      '已保存 {count} 项设置，随后发生错误：{error}。剩余更改已保留，可重试；已保存的设置没有回滚。',
+    oidcDiscoveryInvalid:
+      'OIDC 发现结果必须包含有效的 HTTP 或 HTTPS 授权、令牌和用户信息端点。本次没有保存任何设置。',
     saveFailed: '保存失败',
     loading: '加载中…',
     saveChanges: '保存更改',

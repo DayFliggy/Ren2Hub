@@ -49,10 +49,10 @@ const row = {
   token_name: 'export-fixture',
   model_name: 'fixture-model',
   channel_name: 'channel',
-  quota: '9007199254740993',
+  quota: 9007199254740991,
   prompt_tokens: 1,
   completion_tokens: 2,
-  use_time: 1000,
+  use_time: 1,
   is_stream: true,
   content: '=untrusted',
   created_at: 1785123000,
@@ -175,7 +175,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(path).not.toBeNull()
       const csv = await readFile(path!, 'utf8')
       expect(csv).toContain('额度（整数单位）')
-      expect(csv).toContain('9007199254740993')
+      expect(csv).toContain('9007199254740991')
       expect(csv).toContain("'=untrusted")
       await expect(dialog).not.toBeVisible()
       fail = true

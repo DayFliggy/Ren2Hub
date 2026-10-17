@@ -1,12 +1,12 @@
 {
   "upstream_sha": "09109ec315a5086366f94bcce00f177ec831dbe1",
   "implementation_base_sha": "ab9fa349c75b39b53cf8f783c5c8be44e8ca3a9f",
-  "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件；Vue、发布自动化与文档分别审阅。",
+  "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 990,
-    "adapted": 83,
-    "removed": 31,
-    "extension": 41
+    "upstream_equal": 989,
+    "adapted": 84,
+    "extension": 46,
+    "removed": 31
   },
   "files": [
     {
@@ -592,6 +592,12 @@
       "local_sha256": "b14ce57518e3b68218e837d08f06be55b000b5e11d54c3e016d7f0378f7ae008"
     },
     {
+      "path": "controller/access_token_routing_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3c52246f9d56b53b9956522a410267aad53353229f8d2f4d13eb24e5bac099a0"
+    },
+    {
       "path": "controller/admin_user_verification_test.go",
       "status": "upstream_equal",
       "upstream_sha256": "211f8e373aacb6dcfe3e995af72fb49552c015ba5eb0fbbb6a456a7bb09eb9ba",
@@ -782,6 +788,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "44bb0b059537b199cc65526ab18ee8db422991c0cd792935bcc1dfde2efaaad2"
+    },
+    {
+      "path": "controller/gmpay_availability_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e9a9124d1478c3dcfe644db13b26f123bbe02e461fe63cf6ad5a738af29d3d81"
     },
     {
       "path": "controller/gmpay_test.go",
@@ -1096,10 +1108,16 @@
       "local_sha256": "d77dfc84c78ad00b68d0b15663d1945a7e6ce16cdd67574205886ea7261a9c5f"
     },
     {
+      "path": "controller/responses_websocket_private_route_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e9c550b94ed02c61936a2fd20101980256aea412ebf08811f9211745581186b3"
+    },
+    {
       "path": "controller/responses_websocket_test.go",
       "status": "adapted",
       "upstream_sha256": "f9e20c3f9642aa23070ae1bb12397e1a7a4fb95253d47c5bab7af0320d54ca2b",
-      "local_sha256": "cd34013652eb1405e27369d4b1eb0fb90c1fa0351806595732500f7c314ee006"
+      "local_sha256": "035442b98036eed12a568a182b2beeee6286ce62092c2f22de844aaab359c9a8"
     },
     {
       "path": "controller/return_path.go",
@@ -1849,7 +1867,7 @@
       "path": "model/channel_satisfy.go",
       "status": "adapted",
       "upstream_sha256": "1204aba34ab81a8f2ea5d33d9acf1d30932939b0735ed7a5a61b1a176d12c552",
-      "local_sha256": "867c2a7367b16ed0d760b9e2e4367abe682c3f5dfffc9a150aca096eed11b7cc"
+      "local_sha256": "eeb070a7bf88f261a40826708a7d0cc1281b3287c561732df761eca03564b3ea"
     },
     {
       "path": "model/channel_settings_test.go",
@@ -4531,7 +4549,7 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "042b16b72bf783ec971ef8ed97a3dc8fe4be4dab98a1456e032d40c117763947",
-      "local_sha256": "041daa8992ba6b9114fc90b0706e41425800f19f6a8a3e9299e225a03a4542e1"
+      "local_sha256": "90f5f718ebe1bd0b0dc457fd29182360c579a4f338af40086c393958157b1b9f"
     },
     {
       "path": "relay/responses_websocket_test.go",
@@ -4543,7 +4561,7 @@
       "path": "relay/responses_websocket_token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5227aa0dd72b7df45c22762c01e3b632cecbb7f59cfc05f70a545148883c61e3"
+      "local_sha256": "409599727be05d1f948c331285508f7da6824a9826c7f97816105b2b3d46dbca"
     },
     {
       "path": "relay/task_platform_error_test.go",
@@ -5665,7 +5683,7 @@
       "path": "service/access_token_scope.go",
       "status": "adapted",
       "upstream_sha256": "a8bd2cb6379bb5fbfe75d1e337dc3813b010ee4f0b79796778aa3cbb81b643e2",
-      "local_sha256": "ebbfa938d8a6fc3566f2300723b711dd3e0524c441b824540ce4dcd033ad2b60"
+      "local_sha256": "8a53e97894e1db5fb65e1e5fa21aa545bf5bbb601f68238a662b121ea419d5cf"
     },
     {
       "path": "service/account_security.go",
@@ -5851,7 +5869,7 @@
       "path": "service/channel_select.go",
       "status": "adapted",
       "upstream_sha256": "88158a8dd92b833938a70d3ca047bc7380aac31a3ebe2998aa190a72348d8a4d",
-      "local_sha256": "e4ee7292c473ff6094b148cf98ca97a29ab3622cb8c6646116b9094689c050a5"
+      "local_sha256": "d5de66435f7a02058532093fed3eb56674a8c30ab5e9719d1fbcdfadbc55f69d"
     },
     {
       "path": "service/channel_select_auto_groups_test.go",
@@ -6322,6 +6340,12 @@
       "local_sha256": "a750cacc9d7b4067aabaedf81c23ee11c4d5be88218a494e508d223c8ba99b7d"
     },
     {
+      "path": "service/ticket_notify_delivery_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "26a817adc1adfdf8a358a276aae661ac457625c699aea225b2c7d7a9ba3a06e8"
+    },
+    {
       "path": "service/tiered_settle.go",
       "status": "upstream_equal",
       "upstream_sha256": "e8e36aca90717e446ebb44b2853cf11877c1caba18365c543d039e8627e4ac4f",
@@ -6343,7 +6367,13 @@
       "path": "service/token_route.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "dc651774abef3c59a73c976c41b7f40bfd24ab9469db083c2428c4837c4d2a43"
+      "local_sha256": "21d417b11e080e68ee94e803e60ddefd236a9a5a42bcfb72ca210ef0c5630ae4"
+    },
+    {
+      "path": "service/token_route_matching_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "20f519f50d5f8478ec61e9c47ef4a2732b71499922cdee8b3bd99dfec9232c6e"
     },
     {
       "path": "service/token_route_preview.go",
@@ -6355,7 +6385,7 @@
       "path": "service/token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d2986a6d64ad46214481e3a0112e66f87d84b54aaeaf4f0a94b5a4d534820798"
+      "local_sha256": "a7e9aeeda3c0c2a5104e47336a17c5fcb7c7c46841d0e87f1e4ced0cabdf7bbc"
     },
     {
       "path": "service/twofa.go",
@@ -6371,9 +6401,9 @@
     },
     {
       "path": "service/user_notify.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "8cf6db7b690465998cc18fd7ae6510a83f249932c0dcc1ca0bb791fc8fece383",
-      "local_sha256": "8cf6db7b690465998cc18fd7ae6510a83f249932c0dcc1ca0bb791fc8fece383"
+      "local_sha256": "b390af9e76ab9b2382c6de549d9167e398d2595544a40a72f11d9dc041977568"
     },
     {
       "path": "service/violation_fee.go",
@@ -6879,5 +6909,7 @@
       "upstream_sha256": "869f71f2ddda2bc662bdd9486106e9cd93f40a3c844581c66048eb44b83614d7",
       "local_sha256": "869f71f2ddda2bc662bdd9486106e9cd93f40a3c844581c66048eb44b83614d7"
     }
-  ]
+  ],
+  "audit_repair_base_sha": "29a1d1c78ad576feda3e280dd359e37219b49df2",
+  "candidate_sha": null
 }

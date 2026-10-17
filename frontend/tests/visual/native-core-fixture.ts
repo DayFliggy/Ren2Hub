@@ -1,25 +1,27 @@
-import type { Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { PRICING_KEYS } from '../../src/api/pricingKeys'
-export async function nativeCoreFixture(
-  page: Page,
-  theme: string,
-  display = 'USD'
+export interface NativeFixtureOptions {
+  locale?: string
+  authenticated?: boolean
+  setupInitialized?: boolean
+  now?: number
+  user?: Record<string, unknown>
+  status?: Record<string, unknown>
+}
+
+const unexpectedByPage = new WeakMap<Page, string[]>()
+test.afterEach(async ({ page }) => {
+  expect(
+    unexpectedByPage.get(page) ?? [],
+    'Every API request must use an explicit native contract'
+  ).toEqual([])
+})
+
+export function nativeUser(
+  overrides: Record<string, unknown> = {},
+  locale = 'en'
 ) {
-  const unexpected: string[] = [],
-    errors: string[] = [],
-    missingMessages: string[] = [],
-    writes: Array<{ path: string; body: unknown }> = []
-  page.on('pageerror', (error) => errors.push(error.message))
-  page.on('console', (message) => {
-    if (message.text().includes('[intlify] Not found'))
-      missingMessages.push(message.text())
-  })
-  await page.addInitScript((theme) => {
-    localStorage.setItem('ren2hub_theme_mode', theme)
-    localStorage.setItem('ren2hub_locale', 'en')
-  }, theme)
-  const now = Math.floor(Date.now() / 1000)
-  const user = {
+  return {
     id: 1,
     username: 'native.root',
     display_name: 'Native Root',
@@ -33,9 +35,38 @@ export async function nativeCoreFixture(
     aff_quota: 1000000,
     aff_history_quota: 1500000,
     group: 'default',
-    setting: '{"language":"en"}',
+    setting: JSON.stringify({ language: locale }),
     has_password: true,
+    ...overrides,
   }
+}
+
+export async function nativeCoreFixture(
+  page: Page,
+  theme: string,
+  display = 'USD',
+  options: NativeFixtureOptions = {}
+) {
+  const unexpected: string[] = [],
+    errors: string[] = [],
+    missingMessages: string[] = [],
+    writes: Array<{ path: string; body: unknown }> = []
+  unexpectedByPage.set(page, unexpected)
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', (message) => {
+    if (message.text().includes('[intlify] Not found'))
+      missingMessages.push(message.text())
+  })
+  const locale = options.locale ?? 'en'
+  await page.addInitScript(
+    ({ theme, locale }) => {
+      localStorage.setItem('ren2hub_theme_mode', theme)
+      localStorage.setItem('ren2hub_locale', locale)
+    },
+    { theme, locale }
+  )
+  const now = options.now ?? Math.floor(Date.now() / 1000)
+  const user = nativeUser(options.user, locale)
   const session = {
     sid: 'fixture-session',
     current: true,
@@ -64,6 +95,29 @@ export async function nativeCoreFixture(
     allow_user_quota_query: true,
     created_time: now,
     expired_time: -1,
+  }
+  const ticket = {
+    id: 1,
+    title: 'Native billing question',
+    status: 'open',
+    category: 'billing',
+    priority: 'normal',
+    reply_count: 0,
+    message_count: 1,
+    last_reply_role: 'user',
+    model_id: '',
+    request_id: 'native-request',
+    created: now,
+    updated: now,
+    assignee_id: null,
+    assignee_name: '',
+    assigned_at: 0,
+    user: {
+      id: 1,
+      username: 'native.root',
+      display_name: 'Native Root',
+      email: 'root@example.test',
+    },
   }
   let routing = {
     token_id: 7,
@@ -138,7 +192,12 @@ export async function nativeCoreFixture(
         path,
         body: req.postData() ? JSON.parse(req.postData()!) : undefined,
       })
-    if (path === '/api/user/auth/refresh')
+    if (path === '/api/user/auth/refresh') {
+      if (options.authenticated === false)
+        return route.fulfill({
+          status: 401,
+          json: { success: false, message: 'Unauthenticated' },
+        })
       return ok({
         access_token: 'fixture-access',
         token_type: 'Bearer',
@@ -146,8 +205,22 @@ export async function nativeCoreFixture(
         session,
         user,
       })
+    }
     if (path === '/api/setup')
-      return ok({ status: true, root_init: true, database_type: 'sqlite' })
+      return ok({
+        status: options.setupInitialized !== false,
+        root_init: options.setupInitialized !== false,
+        database_type: 'sqlite',
+      })
+    if (path === '/api/rankings' && method === 'GET')
+      return ok({
+        models: [],
+        vendors: [],
+        top_movers: [],
+        top_droppers: [],
+        models_history: { points: [], models: [], buckets: 7 },
+        vendor_share_history: { points: [], vendors: [], buckets: 7 },
+      })
     if (path === '/api/status')
       return ok({
         version: 'native-test',
@@ -164,9 +237,19 @@ export async function nativeCoreFixture(
         HeaderNavModules: { pricing: true },
         password_login_enabled: true,
         password_login_encryption_enabled: false,
+        ...options.status,
       })
-    if (path === '/api/user/self') return ok(user)
-    if (path === '/api/notice') return ok('')
+    if (path === '/api/user/self') {
+      if (method === 'PUT' && req.postDataJSON().language)
+        user.setting = JSON.stringify({ language: req.postDataJSON().language })
+      return ok(user)
+    }
+    if (
+      path === '/api/notice' ||
+      path === '/api/home_page_content' ||
+      path === '/api/about'
+    )
+      return ok('')
     if (path === '/api/pricing')
       return route.fulfill({
         json: {
@@ -205,7 +288,15 @@ export async function nativeCoreFixture(
       })
     if (path === '/api/option/model_pricing/preview')
       return ok({ effective: req.postDataJSON().pricing })
-    if (path === '/api/vendors/search') return ok(emptyPage)
+    if (path === '/api/vendors/search' || path === '/api/models/search')
+      return ok(emptyPage)
+    if (
+      path === '/api/models/missing' ||
+      path === '/api/task_plugin_options' ||
+      path === '/api/prefill_group/'
+    )
+      return ok([])
+    if (path === '/api/channel/') return ok({ ...emptyPage, type_counts: {} })
     if (path === '/api/channel/models_enabled') return ok(['model-a'])
     if (path === '/api/user/models') return ok(['gpt-native'])
     if (path === '/api/user/self/groups')
@@ -273,7 +364,14 @@ export async function nativeCoreFixture(
         ],
       })
     if (path === '/api/user/topup/info') return ok(topup)
-    if (path === '/api/user/amount' || path.endsWith('/amount'))
+    if (
+      [
+        '/api/user/amount',
+        '/api/user/stripe/amount',
+        '/api/user/waffo/amount',
+        '/api/user/waffo-pancake/amount',
+      ].includes(path)
+    )
       return route.fulfill({ json: { message: 'success', data: '73.00' } })
     if (path === '/api/user/gmpay/pay')
       return route.fulfill({
@@ -326,6 +424,21 @@ export async function nativeCoreFixture(
     }
     if (path === '/api/user/aff') return ok('NATIVE-AFF')
     if (path === '/api/user/aff_transfer') return ok(null)
+    if (path === '/api/tickets' || path === '/api/admin/tickets')
+      return ok({ ...emptyPage, total: 1, items: [ticket] })
+    if (path === '/api/tickets/1' || path === '/api/admin/tickets/1')
+      return ok({
+        ticket,
+        messages: [
+          {
+            id: 1,
+            role: 'user',
+            content: 'Please check this native order.',
+            created: now,
+            images: [],
+          },
+        ],
+      })
     if (path === '/api/admin/tickets/summary')
       return ok({ pending: 0, unassigned: 0, mine: 0 })
     if (path === '/api/user/' || path === '/api/user/search')
@@ -427,8 +540,30 @@ export async function nativeCoreFixture(
         max_tokens: 10,
         default_expiry_days: 30,
       })
+    if (path === '/api/log/self')
+      return ok({
+        ...emptyPage,
+        total: 1,
+        items: [
+          {
+            id: 1,
+            type: 2,
+            token_id: 7,
+            token_name: 'Native Key',
+            model_name: 'gpt-native',
+            channel_name: 'Native channel',
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            quota: 140,
+            use_time: 1,
+            is_stream: true,
+            content: '',
+            other: '{}',
+            created_at: now,
+          },
+        ],
+      })
     if (
-      path === '/api/log/self' ||
       path === '/api/task/self' ||
       path === '/api/mj/self' ||
       path === '/api/redemption/'
@@ -440,5 +575,5 @@ export async function nativeCoreFixture(
       json: { success: false, message: `Unmapped native fixture ${path}` },
     })
   })
-  return { unexpected, errors, missingMessages, writes }
+  return { unexpected, errors, missingMessages, writes, user, token }
 }

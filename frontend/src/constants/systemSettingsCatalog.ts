@@ -421,14 +421,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         id: 'gmpay',
         titleKey: 'systemSettings.gmpayPanel.title',
         descriptionKey: 'systemSettings.gmpayPanel.description',
-        fields: [
-          toggle(
-            'payment_setting.gmpay_settlement_enabled',
-            'gmpaySettlement',
-            true,
-            'gmpaySettlementHint'
-          ),
-        ],
+        fields: [],
         managedKeys: [
           'GmpayPayAddress',
           'GmpayId',

@@ -2,6 +2,7 @@ import { ref, readonly } from 'vue'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import i18n from '@/i18n'
 import {
   SYSTEM_SETTINGS_DEFAULTS,
   type AllSystemSettings,
@@ -11,6 +12,32 @@ import {
 
 export type SystemSettingValue = string | boolean | number
 export type SystemSettingsRawOptions = Record<string, string>
+
+const dependentEnableKeys = new Set([
+  'GitHubOAuthEnabled',
+  'LinuxDOOAuthEnabled',
+  'discord.enabled',
+  'TelegramOAuthEnabled',
+  'WeChatAuthEnabled',
+  'oidc.enabled',
+  'TurnstileCheckEnabled',
+  'EmailDomainRestrictionEnabled',
+])
+
+function savePhase(key: string, value: SystemSettingValue): number {
+  if (!dependentEnableKeys.has(key)) return 1
+  if (String(value) === 'false') return 0
+  if (String(value) === 'true') return 2
+  return 1
+}
+
+interface SaveOptionsCallbacks {
+  onApplied?: (
+    key: string,
+    value: SystemSettingValue,
+    sensitive: boolean
+  ) => void
+}
 
 /** Parse a raw string value into boolean / number / string based on the default key type. */
 function castValue(
@@ -164,16 +191,21 @@ export function useSystemSettings() {
 
   /** Native options save independently; retain successful writes if a later key fails. */
   async function saveOptions(
-    patch: Partial<Record<string, SystemSettingValue>>
+    patch: Partial<Record<string, SystemSettingValue>>,
+    callbacks: SaveOptionsCallbacks = {}
   ): Promise<boolean> {
     if (!_loaded.value || _loading.value || _saving.value) return false
-    const entries = Object.entries(patch).filter(
-      ([key, value]) =>
-        !isSensitiveOption(key) || String(value ?? '').trim() !== ''
-    )
+    const entries = Object.entries(patch)
+      .filter(
+        (entry): entry is [string, SystemSettingValue] =>
+          entry[1] !== undefined &&
+          (!isSensitiveOption(entry[0]) || String(entry[1]).trim() !== '')
+      )
+      .sort(([a, av], [b, bv]) => savePhase(a, av) - savePhase(b, bv))
     if (entries.length === 0) return true
     _saving.value = true
     _savePromise = (async () => {
+      let applied = 0
       try {
         for (const [key, value] of entries) {
           await api.put('/api/option/', { key, value: String(value) })
@@ -184,6 +216,8 @@ export function useSystemSettings() {
           } else {
             _rawOptions.value = { ..._rawOptions.value, [key]: String(value) }
           }
+          applied++
+          callbacks.onApplied?.(key, value, isSensitiveOption(key))
         }
         _settings.value = parseOptions(
           Object.entries(_rawOptions.value).map(([key, value]) => ({
@@ -194,7 +228,15 @@ export function useSystemSettings() {
         )
         return true
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : String(err))
+        const error = err instanceof Error ? err.message : String(err)
+        toast.error(
+          applied
+            ? i18n.global.t('systemSettings.partialSaveFailed', {
+                count: applied,
+                error,
+              })
+            : error
+        )
         return false
       } finally {
         _settings.value = parseOptions(

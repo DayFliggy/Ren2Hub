@@ -18,17 +18,14 @@ const channels = [
     id: 101,
     name: 'Anthropic Primary',
     type: 14,
-    supplier: 'Anthropic',
+    group: 'default',
     status: 1,
     priority: 10,
     weight: 100,
-    capacity_used: 24,
-    capacity_total: 100,
-    channel_ratio: '1',
 
     used_quota: 245_000,
     balance: 92.5,
-    response_time: 0.42,
+    response_time: 420,
     test_time: 1_786_742_400,
     base_url: 'https://api.anthropic.com',
     models: models.join(','),
@@ -38,17 +35,14 @@ const channels = [
     id: 102,
     name: 'Anthropic Reserve',
     type: 14,
-    supplier: 'Anthropic',
+    group: 'default',
     status: 1,
     priority: 5,
     weight: 50,
-    capacity_used: 10,
-    capacity_total: 100,
-    channel_ratio: '1',
 
     used_quota: 120_000,
     balance: 48.25,
-    response_time: 0.63,
+    response_time: 630,
     test_time: 1_786_742_400,
     base_url: 'https://api.anthropic.com',
     models: models.slice(0, 8).join(','),
@@ -57,7 +51,7 @@ const channels = [
 ]
 
 async function configureChannels(page: Page): Promise<() => void> {
-  await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -83,7 +77,7 @@ async function configureChannels(page: Page): Promise<() => void> {
     })
   }
 
-  await page.route('**/api/next/admin/channels/test/*', async (route) => {
+  await page.route('**/api/channel/test/*', async (route) => {
     await testGate
     await route.fulfill({
       status: 200,
@@ -91,20 +85,10 @@ async function configureChannels(page: Page): Promise<() => void> {
       body: JSON.stringify({
         success: true,
         message: '',
-        data: { time: 0.123 },
+        time: 0.123,
       }),
     })
   })
-
-  // Group model tests write an audit record before the batch starts; a failed
-  // audit aborts the run, so the fixture must acknowledge it.
-  await page.route('**/api/next/admin/channels/lab-audit', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true, message: '', data: null }),
-    })
-  )
 
   holdTests()
   return () => {
@@ -132,27 +116,6 @@ async function expectInsideViewport(
   expect(rect.top).toBeGreaterThanOrEqual(0)
   expect(rect.right).toBeLessThanOrEqual(rect.viewportWidth)
   expect(rect.bottom).toBeLessThanOrEqual(rect.viewportHeight)
-}
-
-async function expectInsideStatusChip(
-  page: Page,
-  selector: string
-): Promise<void> {
-  const rects = await page
-    .locator(selector)
-    .first()
-    .evaluate((element) => {
-      const chip = element.closest('[data-handdrawn="chip"]')
-      if (!chip) throw new Error('status chip missing')
-      return {
-        child: element.getBoundingClientRect(),
-        parent: chip.getBoundingClientRect(),
-      }
-    })
-  expect(rects.child.left).toBeGreaterThanOrEqual(rects.parent.left)
-  expect(rects.child.top).toBeGreaterThanOrEqual(rects.parent.top)
-  expect(rects.child.right).toBeLessThanOrEqual(rects.parent.right)
-  expect(rects.child.bottom).toBeLessThanOrEqual(rects.parent.bottom)
 }
 
 for (const theme of [
@@ -185,45 +148,6 @@ for (const theme of [
       await expect(
         navigation.locator('[data-console-nav-item="plan-management"]')
       ).toHaveCount(0)
-
-      await page
-        .locator('[aria-label="测试 Anthropic Lab 分组的渠道响应"]:visible')
-        .click()
-      const groupDialog = page.getByRole('dialog', {
-        name: '批量测试渠道响应',
-      })
-      await expect(groupDialog).toBeVisible()
-      await groupDialog
-        .getByRole('combobox', { name: '测试模型', exact: true })
-        .click()
-      await page.getByRole('option', { name: 'model-01', exact: true }).click()
-      await groupDialog
-        .getByRole('combobox', { name: '测试并发（1–32）', exact: true })
-        .click()
-      await page.getByRole('option', { name: '2', exact: true }).click()
-      const groupStart = groupDialog.locator('[data-channel-test-start]')
-      await groupStart.click()
-      await expect(
-        groupDialog.locator('[data-channel-test-spinner]')
-      ).toBeVisible()
-      await expect(groupStart).toContainText('0/2')
-      await expect(
-        groupDialog.locator('[data-channel-test-picker]')
-      ).toHaveAttribute('inert', '')
-      await expect(
-        page.locator('[data-channel-response-spinner]:visible')
-      ).toHaveCount(2)
-      await expectInsideViewport(page, '[data-channel-test-spinner]')
-      await expectInsideStatusChip(
-        page,
-        '[data-channel-response-spinner]:visible'
-      )
-      releaseTests()
-      await expect(
-        groupDialog.locator('[data-channel-test-spinner]')
-      ).toHaveCount(0)
-      await groupDialog.getByRole('button', { name: '取消' }).click()
-      await expect(groupDialog).toHaveCount(0)
 
       await page.locator('[aria-label="测试响应"]:visible').first().click()
       const channelDialog = page.getByRole('dialog', {

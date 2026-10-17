@@ -1,14 +1,31 @@
-// Follows upstream lib/plugin-meta-preview.ts, but Ren2Hub reads metadata on
-// the server (POST /api/plugin/task/preview) instead of parsing JavaScript in
-// the browser. The server returns literal properties and names the ones it
-// could not resolve; this module maps that onto the same field states.
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+// Static inspection follows NewAPI's parser; use its Lezer grammar directly
+// and retain Ren2Hub's existing declaration validators. No plugin code runs.
+import { parser } from '@lezer/javascript'
+import { MAX_PLUGIN_SOURCE_BYTES, pluginSourceByteLength } from './plugin-url'
 import type {
   MarketplaceIndexVersion,
   MarketplacePlugin,
   PluginMetaPreview,
   PluginPreviewField,
   PluginPreviewValues,
-  TaskPluginPreview,
   TaskPluginProtocolClaim,
   TaskPluginRoute,
 } from '../types'
@@ -115,38 +132,344 @@ function unknownFields(): PluginMetaPreview['fields'] {
   ) as PluginMetaPreview['fields']
 }
 
-/** Used when the source cannot be read at all (syntax error, no literal meta). */
-export function unavailablePreview(): PluginMetaPreview {
-  return { status: 'unavailable', fields: unknownFields() }
+type SyntaxNode = ReturnType<typeof parser.parse>['topNode']
+const unresolved = Symbol('unresolved static metadata')
+type StaticValue =
+  | string
+  | number
+  | boolean
+  | null
+  | StaticValue[]
+  | { [key: string]: StaticValue }
+type StaticContext = {
+  constants: Map<string, SyntaxNode>
+  remainingValues: number
 }
 
-/** Maps the server preview onto value / missing / unknown per field. */
-export function previewFromServer(
-  preview: TaskPluginPreview
-): PluginMetaPreview {
-  // "meta" means the whole object is unsafe to read (spread, escape, mutation).
-  if (preview.unresolved.includes('meta')) return unavailablePreview()
-  const fields = unknownFields()
-  let status: PluginMetaPreview['status'] = 'parsed'
-  for (const key of fieldKeys) {
-    if (preview.unresolved.includes(key)) {
-      status = 'partial'
+function readConstInitializer(variable: SyntaxNode): SyntaxNode | null {
+  let next = variable.nextSibling
+  while (next && ['LineComment', 'BlockComment'].includes(next.name)) {
+    next = next.nextSibling
+  }
+  if (next?.name !== 'Equals') return null
+  next = next.nextSibling
+  while (next && ['LineComment', 'BlockComment'].includes(next.name)) {
+    next = next.nextSibling
+  }
+  return next
+}
+
+/** Only local constants whose containers cannot escape or be mutated are previewable. */
+function collectStaticConstants(
+  source: string,
+  root: SyntaxNode,
+  meta: SyntaxNode
+): Map<string, SyntaxNode> {
+  const constants = new Map<string, SyntaxNode>()
+  const definitions = new Map<string, number>()
+  const owners = new Map<number, string>()
+  const dependencies = new Map<string, Set<string>>()
+  const unsafe = new Set<string>()
+  for (const declaration of root.getChildren('VariableDeclaration')) {
+    if (!declaration.getChild('const')) continue
+    for (const variable of declaration.getChildren('VariableDefinition')) {
+      const value = readConstInitializer(variable)
+      if (!value) continue
+      const name = source.slice(variable.from, variable.to)
+      if (constants.has(name)) unsafe.add(name)
+      constants.set(name, value)
+      definitions.set(name, variable.from)
+      owners.set(value.from, name)
+      dependencies.set(name, new Set())
+    }
+  }
+  root.toTree().iterate({
+    enter: (reference) => {
+      if (!['VariableName', 'VariableDefinition'].includes(reference.name)) {
+        return
+      }
+      const name = source.slice(reference.from, reference.to)
+      if (!constants.has(name)) return
+      if (reference.name === 'VariableDefinition') {
+        // Conservatively reject shadowed bindings instead of guessing their scope.
+        if (definitions.get(name) !== reference.from) unsafe.add(name)
+        return
+      }
+      let container = reference.node
+      while (container.parent) {
+        const parent = container.parent
+        if (parent.name === 'ArrayExpression') {
+          container = parent
+        } else if (
+          parent.name === 'Property' &&
+          (parent.getChild(':')?.to ?? Infinity) <= container.from &&
+          parent.parent?.name === 'ObjectExpression'
+        ) {
+          container = parent.parent
+        } else {
+          break
+        }
+      }
+      if (container.from === meta.from && container.to === meta.to) return
+      const owner = owners.get(container.from)
+      if (owner !== undefined) {
+        dependencies.get(owner)?.add(name)
+        return
+      }
+      // These membership checks neither mutate the receiver nor expose its members.
+      const member = reference.node.parent
+      const property = member?.getChild('PropertyName')
+      if (
+        constants.get(name)?.name === 'ArrayExpression' &&
+        member?.name === 'MemberExpression' &&
+        member.firstChild?.from === reference.from &&
+        member.getChild('.') &&
+        property &&
+        ['includes', 'indexOf', 'lastIndexOf'].includes(
+          source.slice(property.from, property.to)
+        ) &&
+        member.parent?.name === 'CallExpression' &&
+        member.parent.firstChild?.from === member.from
+      ) {
+        return
+      }
+      unsafe.add(name)
+    },
+  })
+  // Escaping an alias or containing object also exposes every referenced constant.
+  const pending = [...unsafe]
+  for (let i = 0; i < pending.length; i += 1) {
+    for (const dependency of dependencies.get(pending[i]) ?? []) {
+      if (unsafe.has(dependency)) continue
+      unsafe.add(dependency)
+      pending.push(dependency)
+    }
+  }
+  for (const name of unsafe) constants.delete(name)
+  return constants
+}
+
+/** Decode JavaScript string tokens without evaluating code, including JS-only escapes. */
+function readStaticString(token: string): string | typeof unresolved {
+  const quote = token[0]
+  if (!['"', "'", '`'].includes(quote) || token.at(-1) !== quote) {
+    return unresolved
+  }
+  let result = ''
+  for (let i = 1; i < token.length - 1; i += 1) {
+    const character = token[i]
+    if (character !== '\\') {
+      result += character
       continue
     }
-    if (!Object.hasOwn(preview.meta, key)) {
+    i += 1
+    const escape = token[i]
+    if (escape === undefined) return unresolved
+    const escapes: Record<string, string> = {
+      b: '\b',
+      f: '\f',
+      n: '\n',
+      r: '\r',
+      t: '\t',
+      v: '\v',
+    }
+    if (Object.hasOwn(escapes, escape)) {
+      result += escapes[escape]
+    } else if (escape === '\n' || escape === '\u2028' || escape === '\u2029') {
+      continue
+    } else if (escape === '\r') {
+      if (token[i + 1] === '\n') i += 1
+    } else if (escape === '0' && !/[0-9]/.test(token[i + 1] ?? '')) {
+      result += '\0'
+    } else if (escape === 'u' || escape === 'x') {
+      const braced = escape === 'u' && token[i + 1] === '{'
+      const start = i + (braced ? 2 : 1)
+      const end = braced
+        ? token.indexOf('}', start)
+        : start + (escape === 'x' ? 2 : 4)
+      const digits = token.slice(start, end)
+      if (end < start || !/^[0-9a-f]+$/i.test(digits)) return unresolved
+      const code = Number.parseInt(digits, 16)
+      if (code > 0x10ffff) return unresolved
+      result += String.fromCodePoint(code)
+      i = braced ? end : end - 1
+    } else if (/[0-9]/.test(escape)) {
+      return unresolved
+    } else {
+      result += escape
+    }
+  }
+  return result
+}
+
+/** Dynamic keys/spreads could replace any field, so the entire object is unknown. */
+function staticObjectProperties(
+  source: string,
+  node: SyntaxNode
+): Map<string, SyntaxNode | null> | null {
+  if (node.name !== 'ObjectExpression') return null
+  const fields = new Map<string, SyntaxNode | null>()
+  for (const property of node.getChildren('Property')) {
+    const keyNode = property.firstChild
+    if (
+      !keyNode ||
+      !['PropertyDefinition', 'String', 'Number', 'get', 'set'].includes(
+        keyNode.name
+      )
+    ) {
+      return null
+    }
+    const namedKey = ['get', 'set'].includes(keyNode.name)
+      ? property.getChild('PropertyDefinition')
+      : keyNode
+    if (!namedKey) return null
+    const token = source.slice(namedKey.from, namedKey.to)
+    const key = namedKey.name === 'String' ? readStaticString(token) : token
+    if (key === unresolved || key.includes('\\') || key === '__proto__') {
+      return null
+    }
+    const colon = property.getChild(':')
+    let value = colon?.nextSibling ?? null
+    while (value && ['LineComment', 'BlockComment'].includes(value.name)) {
+      value = value.nextSibling
+    }
+    fields.set(key, fields.has(key) ? null : value)
+  }
+  return fields
+}
+
+function readStaticValue(
+  source: string,
+  node: SyntaxNode,
+  context: StaticContext,
+  depth = 0
+): StaticValue | typeof unresolved {
+  // Shared constants can expand a small source into an exponentially larger value.
+  if (depth > 64 || context.remainingValues-- <= 0) return unresolved
+  const token = source.slice(node.from, node.to)
+  if (node.name === 'VariableName') {
+    const value = context.constants.get(token)
+    // Require initialization before use, which also rules out reference cycles.
+    if (!value || value.to >= node.from) return unresolved
+    return readStaticValue(source, value, context, depth + 1)
+  }
+  if (node.name === 'String') return readStaticString(token)
+  if (node.name === 'TemplateString' && !node.getChild('Interpolation')) {
+    return readStaticString(token)
+  }
+  if (node.name === 'Number') {
+    const number = Number(token.replaceAll('_', ''))
+    return Number.isFinite(number) ? number : unresolved
+  }
+  if (node.name === 'BooleanLiteral') return token === 'true'
+  if (node.name === 'null') return null
+  if (node.name === 'UnaryExpression') {
+    const operand = node.lastChild
+    const operator = node.firstChild
+    if (!operand || !operator || operand.name !== 'Number') return unresolved
+    const sign = source.slice(operator.from, operator.to)
+    if (sign !== '-' && sign !== '+') return unresolved
+    const value = readStaticValue(source, operand, context, depth + 1)
+    if (typeof value !== 'number') return unresolved
+    return sign === '-' ? -value : value
+  }
+  if (node.name === 'ArrayExpression') {
+    const values: StaticValue[] = []
+    let expectsValue = true
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (['[', ']', 'LineComment', 'BlockComment'].includes(child.name)) {
+        continue
+      }
+      if (child.name === ',') {
+        if (expectsValue) return unresolved
+        expectsValue = true
+        continue
+      }
+      if (!expectsValue) return unresolved
+      const value = readStaticValue(source, child, context, depth + 1)
+      if (value === unresolved) return unresolved
+      values.push(value)
+      expectsValue = false
+    }
+    return values
+  }
+  if (node.name === 'ObjectExpression') {
+    const properties = staticObjectProperties(source, node)
+    if (!properties) return unresolved
+    const result: { [key: string]: StaticValue } = Object.create(null)
+    for (const [key, valueNode] of properties) {
+      if (!valueNode) return unresolved
+      const value = readStaticValue(source, valueNode, context, depth + 1)
+      if (value === unresolved) return unresolved
+      result[key] = value
+    }
+    return result
+  }
+  return unresolved
+}
+
+/** Inspect literal declarations and safe local constants. Never compile or run the plugin. */
+export function parsePluginMetaPreview(source: string): PluginMetaPreview {
+  const fields = unknownFields()
+  const result: PluginMetaPreview = { status: 'unavailable', fields }
+  if (pluginSourceByteLength(source) > MAX_PLUGIN_SOURCE_BYTES) return result
+  const tree = parser.parse(source)
+  let invalid = false
+  tree.iterate({
+    enter: (node) => {
+      if (node.type.isError) invalid = true
+    },
+  })
+  if (invalid) return result
+  let meta: SyntaxNode | null = null
+  for (const exported of tree.topNode.getChildren('ExportDeclaration')) {
+    const declaration = exported.getChild('VariableDeclaration')
+    if (!declaration?.getChild('const')) continue
+    for (const variable of declaration.getChildren('VariableDefinition')) {
+      if (source.slice(variable.from, variable.to) !== 'meta') continue
+      if (meta) return result
+      meta = readConstInitializer(variable)
+      if (!meta) return result
+    }
+  }
+  if (!meta) return result
+  // A reference elsewhere may mutate or pass the object to arbitrary code.
+  // Do not present the initial literal as complete when that is possible.
+  tree.iterate({
+    enter: (node) => {
+      if (
+        node.name === 'VariableName' &&
+        source.slice(node.from, node.to) === 'meta'
+      ) {
+        invalid = true
+      }
+    },
+  })
+  if (invalid) return result
+  const properties = staticObjectProperties(source, meta)
+  if (!properties) return result
+  const constants = collectStaticConstants(source, tree.topNode, meta)
+  result.status = 'parsed'
+  for (const key of fieldKeys) {
+    if (!properties.has(key)) {
       fields[key] = { state: 'missing', origin: 'source' }
       continue
     }
-    const value = parsers[key](preview.meta[key])
-    if (value === NO_VALUE) {
-      status = 'partial'
+    const node = properties.get(key)
+    const value = node
+      ? readStaticValue(source, node, { constants, remainingValues: 32_768 })
+      : unresolved
+    const parsed = parsers[key](value)
+    if (parsed === NO_VALUE) {
+      result.status = 'partial'
       continue
     }
+    // Each validator corresponds to the same-named preview field.
     Object.assign(fields, {
-      [key]: { state: 'value', value, origin: 'source' },
+      [key]: { state: 'value', value: parsed, origin: 'source' },
     })
   }
-  return { status, fields }
+  return result
 }
 
 /** Source absence is a fact; only unresolved source fields fall back to index hints. */

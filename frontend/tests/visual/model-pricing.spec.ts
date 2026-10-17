@@ -17,7 +17,7 @@ async function expectInside(part: Locator, container: Locator) {
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {
-    test(`plugin-only task price creates and simulates a conditional draft ${theme} ${width}`, async ({
+    test(`plugin-only task price saves a conditional native draft ${theme} ${width}`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width, height: 900 })
@@ -37,57 +37,53 @@ for (const theme of ['light', 'dark'] as const)
         resolution: { enum: ['720p', '1080p'], description: 'Resolution' },
       }
       const writes: ModelPricingChange[][] = []
-      const simulations: Record<string, unknown>[] = []
       await page.route('**/api/channel/models_enabled', (route) =>
         route.fulfill({ json: { success: true, data: ['task-model'] } })
       )
-      await page.route('**/api/option/model_pricing**', (route) => {
-        const path = new URL(route.request().url()).pathname
-        if (path.endsWith('/simulate')) {
-          simulations.push(route.request().postDataJSON())
+      await page.route(
+        /\/api\/option\/model_pricing(?:\/(?:preview|convert))?(?:\?.*)?$/,
+        (route) => {
+          const path = new URL(route.request().url()).pathname
+          if (path.endsWith('/preview'))
+            return route.fulfill({
+              json: { success: true, data: { effective: pricing } },
+            })
+          if (route.request().method() === 'PATCH') {
+            writes.push(route.request().postDataJSON().changes)
+            return route.fulfill({ json: { success: true } })
+          }
           return route.fulfill({
-            json: { success: true, data: { amount_usd: '2.5' } },
-          })
-        }
-        if (path.endsWith('/preview'))
-          return route.fulfill({
-            json: { success: true, data: { effective: pricing } },
-          })
-        if (route.request().method() === 'PATCH') {
-          writes.push(route.request().postDataJSON().changes)
-          return route.fulfill({ json: { success: true } })
-        }
-        return route.fulfill({
-          json: {
-            success: true,
-            data: {
-              entries: [
-                {
-                  model_name: 'task-model',
-                  version: 'v1',
-                  configured: pricing,
-                  effective: pricing,
-                  usage_schema,
-                  plugin_variants: [
-                    {
-                      plugin_key: 'provider',
-                      plugin_name: 'Task provider',
-                      usage_schema,
-                      configured: 'u("seconds") * 1',
-                      effective: 'u("seconds") * 1',
-                      compatible: true,
-                    },
-                  ],
-                },
-              ],
-              options: Object.fromEntries(
-                PRICING_KEYS.map((key) => [key, '{}'])
-              ),
-              empty_version: 'empty',
+            json: {
+              success: true,
+              data: {
+                entries: [
+                  {
+                    model_name: 'task-model',
+                    version: 'v1',
+                    configured: pricing,
+                    effective: pricing,
+                    usage_schema,
+                    plugin_variants: [
+                      {
+                        plugin_key: 'provider',
+                        plugin_name: 'Task provider',
+                        usage_schema,
+                        configured: 'u("seconds") * 1',
+                        effective: 'u("seconds") * 1',
+                        compatible: true,
+                      },
+                    ],
+                  },
+                ],
+                options: Object.fromEntries(
+                  PRICING_KEYS.map((key) => [key, '{}'])
+                ),
+                empty_version: 'empty',
+              },
             },
-          },
-        })
-      })
+          })
+        }
+      )
       await page.goto('/models/pricing')
       await page
         .getByRole('button', { name: 'task-model', exact: true })
@@ -125,23 +121,12 @@ for (const theme of ['light', 'dark'] as const)
       await expect(
         editor.getByRole('textbox', { name: 'Expression source', exact: true })
       ).toHaveValue(/u\("resolution"\) == "1080p"/)
-      await editor
-        .locator('summary')
-        .filter({ hasText: 'Request simulation' })
-        .click()
-      await editor
-        .getByLabel('Usage JSON', { exact: true })
-        .fill('{"seconds":10,"resolution":"1080p"}')
-      await editor
-        .getByRole('button', { name: 'Calculate draft charge' })
-        .click()
       await expect(
-        editor.getByText('Simulated charge: $2.500', { exact: true })
-      ).toBeVisible()
-      expect(simulations[0]).toMatchObject({
-        plugin_key: 'provider',
-        usage: { seconds: 10, resolution: '1080p' },
-      })
+        editor.getByText('Request simulation', { exact: true })
+      ).toHaveCount(0)
+      await expect(
+        editor.getByRole('button', { name: 'Calculate draft charge' })
+      ).toHaveCount(0)
       await assertNoHorizontalOverflow(page)
       await page.screenshot({ path: testInfo.outputPath('plugin-pricing.png') })
       const editorSave = editor.getByRole('button', {
@@ -182,56 +167,55 @@ for (const theme of ['light', 'dark'] as const)
           json: { success: true, data: ['test-model', 'task-model'] },
         })
       )
-      await page.route('**/api/option/model_pricing**', async (route) => {
-        const path = new URL(route.request().url()).pathname
-        if (path.endsWith('/preview'))
-          return route.fulfill({
-            json: {
-              success: true,
-              data: { effective: route.request().postDataJSON().pricing },
-            },
-          })
-        if (path.endsWith('/convert'))
+      await page.route(
+        /\/api\/option\/model_pricing(?:\/(?:preview|convert))?(?:\?.*)?$/,
+        async (route) => {
+          const path = new URL(route.request().url()).pathname
+          if (path.endsWith('/preview'))
+            return route.fulfill({
+              json: {
+                success: true,
+                data: { effective: route.request().postDataJSON().pricing },
+              },
+            })
+          if (path.endsWith('/convert'))
+            return route.fulfill({
+              json: {
+                success: true,
+                data: {
+                  effective: { ModelPrice: 0.2 },
+                  expression: 'fixed(0.2)',
+                },
+              },
+            })
+          if (route.request().method() === 'PATCH') {
+            const changes = route.request().postDataJSON()
+              .changes as ModelPricingChange[]
+            writes.push(changes)
+            entries = changes
+              .filter((change) => !change.reset)
+              .map((change) => ({
+                model_name: change.model_name,
+                version: 'saved',
+                configured: change.pricing,
+                effective: change.pricing,
+              }))
+            return route.fulfill({ json: { success: true, data: null } })
+          }
           return route.fulfill({
             json: {
               success: true,
               data: {
-                effective: { ModelPrice: '0.2' },
-                expression: 'fixed(0.2)',
+                entries,
+                options: Object.fromEntries(
+                  PRICING_KEYS.map((key) => [key, '{}'])
+                ),
+                empty_version: 'empty',
               },
             },
           })
-        if (path.endsWith('/simulate'))
-          return route.fulfill({
-            json: { success: true, data: { amount_usd: '0.003' } },
-          })
-        if (route.request().method() === 'PATCH') {
-          const changes = route.request().postDataJSON()
-            .changes as ModelPricingChange[]
-          writes.push(changes)
-          entries = changes
-            .filter((change) => !change.reset)
-            .map((change) => ({
-              model_name: change.model_name,
-              version: 'saved',
-              configured: change.pricing,
-              effective: change.pricing,
-            }))
-          return route.fulfill({ json: { success: true, data: null } })
         }
-        return route.fulfill({
-          json: {
-            success: true,
-            data: {
-              entries,
-              options: Object.fromEntries(
-                PRICING_KEYS.map((key) => [key, '{}'])
-              ),
-              empty_version: 'empty',
-            },
-          },
-        })
-      })
+      )
       await page.route('**/api/ratio_sync/fetch', (route) =>
         route.fulfill({
           json: {
@@ -276,7 +260,7 @@ for (const theme of ['light', 'dark'] as const)
                     {
                       model_name: 'second-model',
                       provider: '',
-                      pricing: { ModelPrice: '0.3' },
+                      pricing: { ModelPrice: 0.3 },
                     },
                   ],
                   errors: [],
@@ -403,32 +387,35 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
   await page.route('**/api/channel/models_enabled', (route) =>
     route.fulfill({ json: { success: true, data: [] } })
   )
-  await page.route('**/api/option/model_pricing**', (route) => {
-    if (route.request().method() === 'PATCH') {
-      saves++
+  await page.route(
+    /\/api\/option\/model_pricing(?:\/(?:preview|convert))?(?:\?.*)?$/,
+    (route) => {
+      if (route.request().method() === 'PATCH') {
+        saves++
+        return route.fulfill({
+          status: 409,
+          json: {
+            success: false,
+            message: 'Model changed by another administrator',
+          },
+        })
+      }
       return route.fulfill({
-        status: 409,
         json: {
-          success: false,
-          message: 'Model changed by another administrator',
+          success: true,
+          data: new URL(route.request().url()).pathname.endsWith('/preview')
+            ? { effective: {} }
+            : {
+                entries: [],
+                options: Object.fromEntries(
+                  PRICING_KEYS.map((key) => [key, '{}'])
+                ),
+                empty_version: 'empty',
+              },
         },
       })
     }
-    return route.fulfill({
-      json: {
-        success: true,
-        data: new URL(route.request().url()).pathname.endsWith('/preview')
-          ? { effective: {} }
-          : {
-              entries: [],
-              options: Object.fromEntries(
-                PRICING_KEYS.map((key) => [key, '{}'])
-              ),
-              empty_version: 'empty',
-            },
-      },
-    })
-  })
+  )
   await page.goto('/models/pricing')
   await page
     .getByRole('button', { name: 'Add model', exact: true })
@@ -462,28 +449,30 @@ test('model pricing is a model management section that guards its draft', async 
   await page.setViewportSize({ width: 1024, height: 900 })
   await configureStablePage(page, { theme: 'light' })
   await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-  const pricing = { ModelPrice: '0.2' }
+  const pricing = { ModelPrice: 0.2 }
   await page.route('**/api/channel/models_enabled', (route) =>
     route.fulfill({ json: { success: true, data: ['test-model'] } })
   )
-  await page.route('**/api/option/model_pricing**', (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        data: {
-          entries: [
-            {
-              model_name: 'test-model',
-              version: 'v1',
-              configured: pricing,
-              effective: pricing,
-            },
-          ],
-          options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
-          empty_version: 'empty',
+  await page.route(
+    /\/api\/option\/model_pricing(?:\/(?:preview|convert))?(?:\?.*)?$/,
+    (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            entries: [
+              {
+                model_name: 'test-model',
+                version: 'v1',
+                configured: pricing,
+                effective: pricing,
+              },
+            ],
+            options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
+            empty_version: 'empty',
+          },
         },
-      },
-    })
+      })
   )
   await page.goto('/models/metadata')
   const expectModelsAdminCurrent = async () => {

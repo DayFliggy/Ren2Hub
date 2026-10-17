@@ -23,7 +23,8 @@ beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('en')
 })
-beforeEach(() => {
+beforeEach(async () => {
+  await setLocale('en')
   vi.clearAllMocks()
   api.get.mockResolvedValue(structuredClone(config))
   api.post.mockResolvedValue({})
@@ -37,6 +38,46 @@ function button(wrapper: Awaited<ReturnType<typeof render>>, text: string) {
   return wrapper.findAll('button').find((b) => b.text() === text)!
 }
 describe('native GMPay configuration', () => {
+  it.each([
+    {
+      locale: 'en',
+      label: 'Accept new orders',
+      hint: 'Valid payment notifications for existing orders still credit the wallet',
+      retired: 'Enable crypto settlement',
+      saveLabel: 'Save gateway configuration',
+    },
+    {
+      locale: 'zh-CN',
+      label: '开放新订单',
+      hint: '已有订单仍会使用下单时保存的商户凭据核验付款通知，核验通过后入账。',
+      retired: '启用虚拟币结算',
+      saveLabel: '保存网关配置',
+    },
+  ])(
+    'disables only new orders through the native configuration in $locale',
+    async ({ locale, label, hint, retired, saveLabel }) => {
+      await setLocale(locale)
+      const wrapper = await render()
+      expect(wrapper.text()).toContain(label)
+      expect(wrapper.text()).toContain(hint)
+      expect(wrapper.text()).not.toContain(retired)
+      await wrapper.get('input[type=checkbox]').setValue(false)
+      await button(wrapper, saveLabel).trigger('click')
+      await flushPromises()
+      expect(api.post).toHaveBeenCalledExactlyOnceWith(
+        '/api/option/gmpay/save',
+        {
+          pay_address: config.pay_address,
+          merchant_id: config.merchant_id,
+          secret_key: '',
+          enabled: false,
+          assets: config.assets,
+        },
+        { signal: expect.any(AbortSignal) }
+      )
+      wrapper.unmount()
+    }
+  )
   it('loads the merchant snapshot and preserves secret and asset metadata on save', async () => {
     const wrapper = await render()
     expect(api.get).toHaveBeenCalledWith(

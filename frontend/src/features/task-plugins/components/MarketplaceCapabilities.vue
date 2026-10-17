@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Upstream components/marketplace-capabilities.tsx. `preview` comes from the
-// server-side metadata preview instead of the upstream browser parser.
+// Upstream components/marketplace-capabilities.tsx. Static source declarations
+// and marketplace hints retain their distinct provenance.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 

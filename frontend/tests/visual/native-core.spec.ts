@@ -17,7 +17,7 @@ for (const theme of ['light', 'dark'])
         ['/invite', 'NATIVE-AFF'],
         ['/users', 'Native Member'],
         ['/orders', 'native-order'],
-        ['/usage-logs', 'No data found'],
+        ['/usage-logs', 'gpt-native'],
         ['/redemption-codes', 'Redemption codes'],
         ['/usage-logs/audit', 'Updated user member'],
         ['/ops', 'Go runtime memory'],

@@ -19,7 +19,7 @@ function taskRow(id: number, taskId: string, extra: Record<string, unknown>) {
     progress: '100%',
     fail_reason: '',
     result_url: '',
-    quota: '25000',
+    quota: 25000,
     submit_time: 1785123000 + id,
     finish_time: 1785123060 + id,
     ...extra,
