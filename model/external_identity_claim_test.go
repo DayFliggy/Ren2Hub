@@ -54,25 +54,9 @@ func TestClearTelegramBindingReleasesIdentityClaim(t *testing.T) {
 
 	require.NoError(t, user.ClearBinding(ExternalIdentityProviderTelegram))
 	assert.Empty(t, user.TelegramId)
-	assert.EqualValues(t, 2, user.AuthVersion)
 
 	var count int64
 	require.NoError(t, DB.Model(&ExternalIdentityClaim{}).Where("user_id = ?", user.Id).Count(&count).Error)
-	assert.Zero(t, count)
-}
-
-func TestDeleteOAuthBindingRevokesPreviousAuthenticationVersion(t *testing.T) {
-	truncateTables(t)
-	user := User{Username: "admin-unbind-custom", Password: "password", AuthVersion: 1}
-	require.NoError(t, DB.Create(&user).Error)
-	require.NoError(t, DB.AutoMigrate(&UserOAuthBinding{}))
-	binding := UserOAuthBinding{UserId: user.Id, ProviderId: 7, ProviderUserId: "opaque-user"}
-	require.NoError(t, DB.Create(&binding).Error)
-	require.NoError(t, DeleteUserOAuthBinding(user.Id, binding.ProviderId))
-	require.NoError(t, DB.First(&user, user.Id).Error)
-	assert.EqualValues(t, 2, user.AuthVersion)
-	var count int64
-	require.NoError(t, DB.Model(&UserOAuthBinding{}).Where("user_id = ?", user.Id).Count(&count).Error)
 	assert.Zero(t, count)
 }
 

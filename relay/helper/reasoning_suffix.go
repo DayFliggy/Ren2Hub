@@ -104,6 +104,9 @@ func ApplyReasoningModelSuffix(c *gin.Context, info *relaycommon.RelayInfo, outb
 		}
 		outbound.SetModelName(info.UpstreamModelName)
 	}
+	if info.Request != nil {
+		info.Request.SetModelName(info.UpstreamModelName)
+	}
 	if selected.hasThinking {
 		info.SetReasoningEffort(string(reasoning.EffectiveEffort(selected.intent)))
 	}

@@ -75,6 +75,7 @@ export const authApi = {
       email: string
       password: string
       aff_code?: string
+      verification_code?: string
     },
     turnstileToken?: string
   ) =>
@@ -84,11 +85,6 @@ export const authApi = {
       turnstileToken
         ? { headers: { 'X-Turnstile-Token': turnstileToken } }
         : undefined
-    ),
-  validateAffiliate: (code: string) =>
-    api.post<{ valid: boolean; attribution_days: number }>(
-      '/api/next/invite/validate',
-      { code }
     ),
   resetPassword: (email: string) =>
     api.get<unknown>('/api/reset_password', { email }),

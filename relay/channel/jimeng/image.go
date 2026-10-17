@@ -1,12 +1,11 @@
 package jimeng
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -58,7 +57,7 @@ func jimengImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.R
 	}
 	service.CloseResponseBodyGracefully(resp)
 
-	err = common.Unmarshal(responseBody, &jimengResponse)
+	err = json.Unmarshal(responseBody, &jimengResponse)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
@@ -75,5 +74,17 @@ func jimengImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.R
 
 	// Convert Jimeng response to OpenAI format
 	fullTextResponse := responseJimeng2OpenAIImage(c, &jimengResponse, info)
-	return openai.DeliverConvertedImage(c, info, resp, fullTextResponse, nil)
+	jsonResponse, err := json.Marshal(fullTextResponse)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	_, err = c.Writer.Write(jsonResponse)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+
+	return &dto.Usage{}, nil
 }

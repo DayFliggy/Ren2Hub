@@ -20,14 +20,6 @@ func InspectResponse(from types.RelayFormat, to types.RelayFormat, response any)
 	}
 	var diagnostics []types.ConversionDiagnostic
 	switch value := response.(type) {
-	case *dto.OpenAITextResponse:
-		diagnostics = inspectChatResponse(value)
-	case dto.OpenAITextResponse:
-		diagnostics = inspectChatResponse(&value)
-	case *dto.ChatCompletionsStreamResponse:
-		diagnostics = inspectChatStreamResponse(value)
-	case dto.ChatCompletionsStreamResponse:
-		diagnostics = inspectChatStreamResponse(&value)
 	case *dto.ClaudeResponse:
 		diagnostics = inspectClaudeResponse(value, to)
 	case dto.ClaudeResponse:
@@ -37,9 +29,9 @@ func InspectResponse(from types.RelayFormat, to types.RelayFormat, response any)
 	case dto.OpenAIResponsesResponse:
 		diagnostics = inspectOpenAIResponsesResponse(&value, to)
 	case *dto.ResponsesStreamResponse:
-		diagnostics = inspectOpenAIResponsesStreamResponse(value, to)
+		diagnostics = inspectOpenAIResponsesStreamResponse(value)
 	case dto.ResponsesStreamResponse:
-		diagnostics = inspectOpenAIResponsesStreamResponse(&value, to)
+		diagnostics = inspectOpenAIResponsesStreamResponse(&value)
 	case *dto.GeminiChatResponse:
 		diagnostics = inspectGeminiResponse(value, to)
 	case dto.GeminiChatResponse:
@@ -48,45 +40,6 @@ func InspectResponse(from types.RelayFormat, to types.RelayFormat, response any)
 	for index := range diagnostics {
 		diagnostics[index].From = from
 		diagnostics[index].To = to
-	}
-	return diagnostics
-}
-
-func inspectChatResponse(response *dto.OpenAITextResponse) []types.ConversionDiagnostic {
-	if response == nil {
-		return nil
-	}
-	var diagnostics []types.ConversionDiagnostic
-	for index, choice := range response.Choices {
-		diagnostics = append(diagnostics, inspectChatOutputFields(fmt.Sprintf("choices[%d].message", index), choice.Message.Refusal, choice.Message.Audio)...)
-		if rawJSONPresent(choice.Logprobs) {
-			diagnostics = append(diagnostics, responsePresentationLoss(fmt.Sprintf("choices[%d].logprobs", index), "chat_logprobs_not_portable", "conversion cannot preserve Chat log probabilities"))
-		}
-	}
-	return diagnostics
-}
-
-func inspectChatStreamResponse(response *dto.ChatCompletionsStreamResponse) []types.ConversionDiagnostic {
-	if response == nil {
-		return nil
-	}
-	var diagnostics []types.ConversionDiagnostic
-	for index, choice := range response.Choices {
-		diagnostics = append(diagnostics, inspectChatOutputFields(fmt.Sprintf("choices[%d].delta", index), choice.Delta.Refusal, choice.Delta.Audio)...)
-		if choice.Logprobs != nil && *choice.Logprobs != nil {
-			diagnostics = append(diagnostics, responsePresentationLoss(fmt.Sprintf("choices[%d].logprobs", index), "chat_logprobs_not_portable", "conversion cannot preserve Chat log probabilities"))
-		}
-	}
-	return diagnostics
-}
-
-func inspectChatOutputFields(path string, refusal *string, audio json.RawMessage) []types.ConversionDiagnostic {
-	var diagnostics []types.ConversionDiagnostic
-	if refusal != nil {
-		diagnostics = append(diagnostics, responseSemanticLoss(path+".refusal", "chat_refusal_not_portable", "conversion cannot preserve Chat refusal output"))
-	}
-	if rawJSONPresent(audio) {
-		diagnostics = append(diagnostics, responseSemanticLoss(path+".audio", "chat_audio_not_portable", "conversion cannot preserve Chat audio output"))
 	}
 	return diagnostics
 }
@@ -259,9 +212,13 @@ func inspectClaudeContentBlock(block *dto.ClaudeMediaMessage, path string, to ty
 			}
 		}
 	}
-	// Encrypted redacted_thinking data is a reasoning signature like the
-	// thinking signature: converters never copy it, and the response guard
-	// reports it once as provider_state_dropped.
+	if blockType == "redacted_thinking" && block.Data != "" {
+		diagnostics = append(diagnostics, responseSemanticLoss(
+			path+".data",
+			"continuation_state_lost",
+			"Claude encrypted thinking state cannot be represented by the target response",
+		))
+	}
 	return diagnostics
 }
 
@@ -277,11 +234,6 @@ func inspectOpenAIResponsesResponse(response *dto.OpenAIResponsesResponse, to ty
 		return nil
 	}
 	var diagnostics []types.ConversionDiagnostic
-	if to == types.RelayFormatClaude {
-		for _, path := range responsesRefusalPaths(response.Output) {
-			diagnostics = append(diagnostics, responsesRefusalReduced(path))
-		}
-	}
 	for index := range response.Output {
 		output := &response.Output[index]
 		if !isResponsesHostedOutput(output.Type) {
@@ -374,7 +326,7 @@ func inspectOpenAIResponsesResponse(response *dto.OpenAIResponsesResponse, to ty
 	return diagnostics
 }
 
-func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse, to types.RelayFormat) []types.ConversionDiagnostic {
+func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse) []types.ConversionDiagnostic {
 	if response == nil {
 		return nil
 	}
@@ -398,50 +350,7 @@ func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse,
 			fmt.Sprintf("OpenAI Responses hosted-tool stream event %q has no semantic target-protocol mapping", eventType),
 		)}
 	}
-	if to != types.RelayFormatClaude {
-		return nil
-	}
-	// Deltas, item snapshots and the terminal snapshot repeat one refusal. The
-	// stable path lets stream de-duplication report it once.
-	refusal := eventType == "response.refusal.delta" && response.Delta != "" ||
-		eventType == "response.refusal.done" && response.Refusal != nil && *response.Refusal != ""
-	if response.Item != nil && len(responsesRefusalPaths([]dto.ResponsesOutput{*response.Item})) > 0 {
-		refusal = true
-	}
-	if response.Response != nil && len(responsesRefusalPaths(response.Response.Output)) > 0 {
-		refusal = true
-	}
-	if !refusal {
-		return nil
-	}
-	return []types.ConversionDiagnostic{responsesRefusalReduced("refusal")}
-}
-
-// responsesRefusalPaths locates the non-empty refusal parts of assistant
-// Responses message outputs, which a Claude target can only deliver as text.
-// Other roles are dropped by the converter and carry no refusal to reduce.
-func responsesRefusalPaths(outputs []dto.ResponsesOutput) []string {
-	var paths []string
-	for outputIndex := range outputs {
-		output := &outputs[outputIndex]
-		if output.Type != "message" || output.Role != "" && output.Role != "assistant" {
-			continue
-		}
-		for contentIndex, content := range output.Content {
-			if content.Type == "refusal" && content.Refusal != nil && *content.Refusal != "" {
-				paths = append(paths, fmt.Sprintf("output[%d].content[%d].refusal", outputIndex, contentIndex))
-			}
-		}
-	}
-	return paths
-}
-
-func responsesRefusalReduced(path string) types.ConversionDiagnostic {
-	return responsePresentationLoss(
-		path,
-		"responses_refusal_reduced",
-		"Claude has no refusal content block; the refusal is delivered as a text block with stop_reason refusal",
-	)
+	return nil
 }
 
 func isResponsesHostedOutput(outputType string) bool {

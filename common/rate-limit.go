@@ -68,9 +68,12 @@ type rateLimitEntry struct {
 }
 
 // InMemoryRateLimiter implements a sliding-window limiter with idle-key eviction.
+// Reservations are tracked apart from the LRU so an in-flight request survives
+// its key being evicted while it is still running.
 type InMemoryRateLimiter struct {
 	store              map[string]*rateLimitEntry
 	lru                *list.List
+	reservations       map[string]int
 	mutex              sync.Mutex
 	expirationDuration time.Duration
 }
@@ -86,6 +89,7 @@ func (l *InMemoryRateLimiter) Init(expirationDuration time.Duration) {
 
 	l.store = make(map[string]*rateLimitEntry)
 	l.lru = list.New()
+	l.reservations = make(map[string]int)
 	l.expirationDuration = expirationDuration
 	if expirationDuration > 0 {
 		go l.clearExpiredItems(time.NewTicker(expirationDuration).C)
@@ -159,4 +163,49 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 	}
 
 	return allowed
+}
+
+// RateLimitReservation counts an active request towards admission until its
+// outcome is known. Failed requests release the slot without consuming quota.
+type RateLimitReservation struct {
+	limiter *InMemoryRateLimiter
+	key     string
+	once    sync.Once
+}
+
+// Reserve admits a request when the key's accepted requests plus its in-flight
+// reservations stay below maxRequests. It returns nil when the key is saturated.
+func (l *InMemoryRateLimiter) Reserve(key string, maxRequests int, duration int64) *RateLimitReservation {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	now := time.Now()
+	entry := l.touchEntry(key, now)
+	entry.requests.removeExpired(now.Unix(), duration)
+	if entry.requests.length+l.reservations[key] >= maxRequests {
+		return nil
+	}
+	l.reservations[key]++
+	return &RateLimitReservation{limiter: l, key: key}
+}
+
+// Complete releases the reservation. A successful outcome records the request
+// in the key's sliding window; a failed one only frees the slot.
+func (r *RateLimitReservation) Complete(success bool) {
+	if r == nil {
+		return
+	}
+	r.once.Do(func() {
+		l := r.limiter
+		l.mutex.Lock()
+		defer l.mutex.Unlock()
+		l.reservations[r.key]--
+		if l.reservations[r.key] == 0 {
+			delete(l.reservations, r.key)
+		}
+		if success {
+			now := time.Now()
+			l.touchEntry(r.key, now).requests.append(now.Unix())
+		}
+	})
 }

@@ -5,6 +5,7 @@ import TextInput from '@/components/common/TextInput.vue'
 import { channelProviderMessages } from '@/i18n/channelProviders'
 
 defineProps<{ channelType: number; disabled: boolean }>()
+const awsKeyType = defineModel<string>('awsKeyType', { required: true })
 const awsApiType = defineModel<string>('awsApiType', { required: true })
 const vertexKeyType = defineModel<string>('vertexKeyType', { required: true })
 const vertexProjectId = defineModel<string>('vertexProjectId', {
@@ -27,6 +28,18 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
         >
           <option value="invoke_model">{{ t('invokeModel') }}</option>
           <option value="mantle">{{ t('mantle') }}</option>
+        </select>
+      </FormField>
+      <FormField :label="t('awsKeyType')">
+        <select
+          id="channel-aws-key-type"
+          v-model="awsKeyType"
+          :aria-label="t('awsKeyType')"
+          :disabled="disabled"
+          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm focus-ring"
+        >
+          <option value="ak_sk">{{ t('awsAccessKey') }}</option>
+          <option value="api_key">{{ t('apiKey') }}</option>
         </select>
       </FormField>
       <p class="break-words text-xs text-[var(--text-tertiary)]">

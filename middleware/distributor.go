@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,10 +15,8 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relay/helper"
-	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 
@@ -29,190 +26,183 @@ import (
 
 type ModelRequest struct {
 	Model string `json:"model"`
+	Group string `json:"group,omitempty"`
 }
 
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		request, selectChannel, err := getModelRequest(c)
+		var channel *model.Channel
+		defer func() {
+			if c.Writer.Status() >= 400 {
+				service.RecordRequestPolicyTermination(c, types.NewErrorWithStatusCode(errors.New("request rejected"), types.ErrorCodeInvalidRequest, c.Writer.Status(), types.ErrOptionWithSkipRetry()))
+			}
+		}()
+		constraints := service.GetChannelConstraints(c)
+		constraints.AddFilter(taskdto.ChannelFilter{
+			Kind:        taskdto.FilterRequestPath,
+			RequestPath: c.Request.URL.Path,
+		})
+		service.AppendTaskPluginIdentityFilter(c, c.GetString("expected_task_plugin_key"))
+		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
-			abortInvalidRequest(c, err)
+			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
+		}
+		_, pinned, _ := constraints.ResolvedPin()
+		if !pinned {
+			// Select a channel for the user
+			// check token model mapping
+			modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
+			if modelLimitEnable {
+				s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+				if !ok {
+					// token model limit is empty, all models are not allowed
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
+					return
+				}
+				var tokenModelLimit map[string]bool
+				tokenModelLimit, ok = s.(map[string]bool)
+				if !ok {
+					tokenModelLimit = map[string]bool{}
+				}
+				if !TokenModelLimitAllows(tokenModelLimit, modelRequest.Model) {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
+					return
+				}
+			}
+
+			if shouldSelectChannel {
+				if modelRequest.Model == "" {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
+					return
+				}
+
+			}
+		}
+		if pinned || shouldSelectChannel {
+			usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+			var selectErr *service.ChannelSelectError
+			channel, _, selectErr = service.SelectChannelForRequest(c, modelRequest.Model, &service.RetryParam{
+				Ctx:         c,
+				ModelName:   modelRequest.Model,
+				TokenGroup:  usingGroup,
+				RequestPath: c.Request.URL.Path,
+				Retry:       common.GetPointer(0),
+			})
+			if selectErr != nil {
+				if selectErr.FilterKind == taskdto.FilterTaskPluginIdentity {
+					logTaskPluginChannelDecision(c, selectErr.Channel, modelRequest.Model, "channel_rejected", "identity_mismatch")
+				}
+				message := selectErr.Message
+				if selectErr.NoAvailableChannel {
+					message = noAvailableChannelMessage(c, usingGroup, modelRequest.Model)
+				} else if selectErr.MessageID != "" {
+					message = i18n.T(c, selectErr.MessageID, selectErr.Params)
+				}
+				abortWithOpenAiMessage(c, selectErr.StatusCode, message, selectErr.Code)
+				return
+			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-		if !selectChannel {
-			c.Next()
-			return
-		}
-		if request.Model == "" {
-			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
-			return
-		}
-		if strings.HasPrefix(c.Request.URL.Path, "/pg/") {
-			user, err := model.GetUserCache(c.GetInt("id"))
-			if err != nil {
-				abortWithOpenAiMessage(c, http.StatusInternalServerError, err.Error())
-				return
-			}
-			user.WriteContext(c)
-		}
-		if err := service.TokenModelPermissionError(c, request.Model); err != nil {
-			abortWithOpenAiMessage(c, err.StatusCode, err.Error(), err.GetErrorCode())
-			return
-		}
-		specificChannelID := 0
-		stateOwner, stateErr := service.ResolveGatewayRequestState(c)
-		if stateErr != nil {
-			if !errors.Is(stateErr, model.ErrGatewayStateUnknown) {
-				logger.LogError(c, fmt.Sprintf("gateway state lookup failed: %v", stateErr))
-			}
-			abortWithOpenAiMessage(c, service.GatewayStateHTTPStatus(stateErr), service.GatewayStatePublicMessage(stateErr), "state_unavailable")
-			return
-		}
-		if stateOwner != nil {
-			c.Set(service.GatewayStateContextKey, stateOwner)
-			specificChannelID = stateOwner.ChannelID
-		}
-		if value, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
-			id, err := strconv.Atoi(fmt.Sprint(value))
-			if err != nil || id <= 0 {
-				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
-				return
-			}
-			specificChannelID = id
-		}
-		if stateOwner != nil && specificChannelID != stateOwner.ChannelID {
-			abortWithOpenAiMessage(c, http.StatusBadRequest, model.ErrGatewayStateUnknown.Error(), "state_unavailable")
-			return
-		}
-		requiresNative := relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeResponses &&
-			requestRequiresNativeResponses(c)
-		common.SetContextKey(c, constant.ContextKeyResponsesNativeRequired, requiresNative)
-		_, routeErr := SelectRequestChannel(c, request.Model, specificChannelID)
-		if routeErr != nil {
-			abortWithOpenAiMessage(c, routeErr.StatusCode, routeErr.Error(), routeErr.GetErrorCode())
-			return
-		}
+		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 		c.Next()
-		if c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-			service.RecordChannelAffinity(c, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
+		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
+			service.RecordChannelAffinity(c, channel.Id)
 		}
 	}
 }
 
-// SelectRequestChannel also handles origin-bound task
-// continuations. All callers produce the same decision and admission contract.
-func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID int) (*model.Channel, *types.NewAPIError) {
-	value, _ := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
-	limits, _ := value.(map[string]bool)
-	input := service.LiveRouteRequest{
-		TaskPluginCandidateKeys: service.TaskPluginCandidateKeys(c),
-		Context:                 c.Request.Context(), CapabilityEnabled: true,
-		RequestID:    c.GetString(common.RequestIdKey),
-		UserID:       common.GetContextKeyInt(c, constant.ContextKeyUserId),
-		TokenID:      common.GetContextKeyInt(c, constant.ContextKeyTokenId),
-		RequestModel: modelName, RequestPath: c.Request.URL.Path,
-		SpecificChannelID:          specificChannelID,
-		IsPlayground:               strings.HasPrefix(c.Request.URL.Path, "/pg/"),
-		NativeResponsesRequired:    common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired),
-		ResponsesWebSocketRequired: c.GetBool("responses_websocket_required"),
-		ExpectedTaskPluginKey:      c.GetString("expected_task_plugin_key"),
-		TokenModelLimitEnabled:     common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
-		TokenModelLimit:            limits,
-		ExcludedKeyIndexes:         service.RequestRouteAttemptedKeys(c),
-		ConversionPolicy:           types.ConversionLossPolicy(c.GetString("conversion_policy")),
-	}
-	path := c.Request.URL.Path
-	if input.ExpectedTaskPluginKey == "" && service.SupportsRouteRequestAnalysis(path) {
-		cached, exists := c.Get(service.RouteRequestRequirementsKey)
-		requirements, valid := cached.(relayconvert.RequestRequirements)
-		if !exists || !valid {
-			var err error
-			if c.ContentType() == gin.MIMEMultipartPOSTForm {
-				var request dto.Request
-				if path == "/v1/images/edits" {
-					request, err = helper.GetAndValidOpenAIImageRequest(c, relayconstant.Path2RelayMode(path))
-				} else {
-					request, err = helper.GetAndValidAudioRequest(c, relayconstant.Path2RelayMode(path))
+// noAvailableChannelMessage explains a 503 for a task-plugin-claimed model.
+// The response tells the caller the model is plugin-claimed without naming the
+// plugin; the candidate plugin keys go to the server log under the request id.
+func noAvailableChannelMessage(c *gin.Context, group, modelName string) string {
+	value, exists := c.Get(jsplugin.ContextKeyPinnedPlugin)
+	pinned, ok := value.(jsplugin.PinnedPlugin)
+	if exists && ok && pinned.Plugin != nil {
+		keys := []string{pinned.Plugin.Meta.Key}
+		if value, exists := c.Get(jsplugin.ContextKeyPinnedEndpoint); exists {
+			if endpoint, ok := value.(jsplugin.PinnedEndpoint); ok && len(endpoint.Candidates) > 0 {
+				keys = nil
+				for _, candidate := range endpoint.Candidates {
+					if candidate.Plugin != nil {
+						keys = append(keys, candidate.Plugin.Meta.Key)
+					}
 				}
-				if err == nil {
-					requirements, err = relayconvert.AnalyzeRequest(request)
-				}
-			} else {
-				storage, bodyErr := common.GetBodyStorage(c)
-				if bodyErr != nil {
-					return nil, types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-				}
-				payload, bodyErr := storage.Bytes()
-				if bodyErr != nil {
-					return nil, types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-				}
-				requirements, err = service.AnalyzeRouteRequest(modelName, path, payload)
 			}
-			if err != nil {
-				return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-			}
-			c.Set(service.RouteRequestRequirementsKey, requirements)
 		}
-		input.Requirements = &requirements
+		logger.LogWarn(c, common.LogText("task_plugin subsystem=distribution event=no_available_channel group=%q model=%q plugins=%q reason=no_eligible_channel", group, modelName, strings.Join(keys, ",")))
+		return i18n.T(c, i18n.MsgDistributorNoAvailableChannelTaskPlugin, map[string]any{"Group": group, "Model": modelName})
 	}
-	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName, ""); ok {
-		input.PreferredChannelID = preferred
-	}
-	if limit, enabled, limitErr := service.GatewayMaxChannelRatio(c.Request.Context()); limitErr != nil {
-		logger.LogWarn(c, fmt.Sprintf("gateway price ceiling unavailable: %v", limitErr))
-	} else {
-		input.MaxChannelRatio, input.MaxChannelRatioEnabled = limit, enabled
-	}
-	c.Set(service.RouteLiveSelectionRequiredContextKey, true)
-	selection, err := service.SelectLiveTokenRoute(input)
-	if err != nil {
-		status := http.StatusServiceUnavailable
-		var conversionErr *types.ConversionLossError
-		if errors.As(err, &conversionErr) {
-			return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-		}
-		if errors.Is(err, service.ErrGatewayProviderRateLimit) {
-			status = http.StatusTooManyRequests
-		}
-		if errors.Is(err, service.ErrRouteSelectionUnavailable) && (input.ExpectedTaskPluginKey != "" || len(input.TaskPluginCandidateKeys) > 0) {
-			logger.LogWarn(c, fmt.Sprintf("task plugin channel unavailable: model=%q plugin_key=%q candidate_keys=%q", modelName, input.ExpectedTaskPluginKey, input.TaskPluginCandidateKeys))
-			err = errors.New(i18n.T(c, i18n.MsgDistributorNoAvailableTaskPluginChannel, map[string]any{"Model": modelName}))
-		}
-		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, status, types.ErrOptionWithSkipRetry())
-	}
-	channel, err := model.GetChannelById(selection.Decision.SelectedChannelID, true)
-	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-	}
-	c.Set("route_live_selection", selection)
-	c.Set("route_request_model", modelName)
-	if setupErr := SetupContextForSelectedChannel(c, channel, modelName); setupErr != nil {
-		return nil, setupErr
-	}
-	return channel, nil
+	return i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": group, "Model": modelName})
 }
 
-// requestRequiresNativeResponses inspects only the protocol markers needed for
-// routing. It never rewrites the body; later validation and relay handling read
-// the same replayable storage. Invalid field shapes are left to the normal
-// request validator so this probe cannot change error semantics.
-func requestRequiresNativeResponses(c *gin.Context) bool {
-	if c == nil || c.Request == nil {
+func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, expected string) bool {
+	if channel == nil {
 		return false
 	}
-	storage, err := common.GetBodyStorage(c)
-	if err != nil {
+	if c != nil {
+		if _, matched := pinnedEndpointCandidateForChannel(c, channel, expected); matched {
+			return true
+		}
+	}
+	if expected == "" {
+		return channel.Type != constant.ChannelTypeTaskPlugin
+	}
+	if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI {
+		return channel.GetSetting().BindsTaskPlugin(expected)
+	}
+
+	if c == nil {
 		return false
 	}
-	body, err := storage.Bytes()
-	if err != nil {
+	value, exists := c.Get(jsplugin.ContextKeyPinnedPlugin)
+	pinned, ok := value.(jsplugin.PinnedPlugin)
+	if !exists || !ok || pinned.Generation == nil || pinned.Plugin == nil || pinned.Plugin.Meta.Key != expected {
 		return false
 	}
-	var request dto.OpenAIResponsesRequest
-	if err := common.Unmarshal(body, &request); err != nil {
-		return false
+	plugin, ok := pinned.Generation.GetByChannelType(channel.Type)
+	return ok && plugin == pinned.Plugin
+}
+
+func pinnedEndpointCandidateForChannel(c *gin.Context, channel *model.Channel, expected string) (jsplugin.ProtocolBinding, bool) {
+	if c == nil || channel == nil || expected == "" {
+		return jsplugin.ProtocolBinding{}, false
 	}
-	return request.RequiresNativeResponses()
+	value, exists := c.Get(jsplugin.ContextKeyPinnedEndpoint)
+	pinned, ok := value.(jsplugin.PinnedEndpoint)
+	if !exists || !ok || pinned.Generation == nil || pinned.Plugin == nil {
+		return jsplugin.ProtocolBinding{}, false
+	}
+	candidates := pinned.Candidates
+	if len(candidates) == 0 {
+		candidates = []jsplugin.ProtocolBinding{{Plugin: pinned.Plugin, Protocol: pinned.Protocol, Operation: pinned.Operation, Model: pinned.Model}}
+	}
+	expectedOwned := false
+	selected := jsplugin.ProtocolBinding{}
+	setting := channel.GetSetting()
+	for _, candidate := range candidates {
+		if candidate.Plugin == nil {
+			continue
+		}
+		if candidate.Plugin.Meta.Key == expected {
+			expectedOwned = true
+		}
+		if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI {
+			// A New API channel may bind several candidates. The first bound
+			// candidate in generation order executes, so the billing provider
+			// depends only on the channel and the request, never on which
+			// channels an earlier retry attempt happened to try.
+			if selected.Plugin == nil && setting.BindsTaskPlugin(candidate.Plugin.Meta.Key) {
+				selected = candidate
+			}
+			continue
+		}
+		plugin, indexed := pinned.Generation.GetByChannelType(channel.Type)
+		if indexed && plugin == candidate.Plugin {
+			selected = candidate
+		}
+	}
+	return selected, expectedOwned && selected.Plugin != nil
 }
 
 // getModelFromRequest 从请求中读取模型信息
@@ -221,12 +211,14 @@ func requestRequiresNativeResponses(c *gin.Context) bool {
 // - application/x-www-form-urlencoded
 // - multipart/form-data
 func getModelFromRequest(c *gin.Context) (*ModelRequest, error) {
-	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "application/json") {
-		modelRequest, err := getModelFromJSONBody(c)
-		if err != nil {
-			return nil, err
+	if cached, exists := c.Get(contextKeyTaskPluginEndpointModel); exists {
+		if modelRequest, ok := cached.(ModelRequest); ok {
+			cachedRequest := modelRequest
+			return &cachedRequest, nil
 		}
-		return modelRequest, nil
+	}
+	if strings.HasPrefix(c.Request.Header.Get("Content-Type"), "application/json") {
+		return getModelFromJSONBody(c)
 	}
 
 	var modelRequest ModelRequest
@@ -249,9 +241,16 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	if !gjson.ValidBytes(requestBody) {
 		return nil, errors.New("invalid JSON request body")
 	}
+	if countTopLevelJSONKey(requestBody, "model") > 1 {
+		return nil, errors.New("model must be provided once")
+	}
 
 	values := gjson.GetManyBytes(requestBody, "model", "group")
 	model, err := getJSONStringValue(values[0], "model")
+	if err != nil {
+		return nil, err
+	}
+	group, err := getJSONStringValue(values[1], "group")
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +262,66 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 
 	return &ModelRequest{
 		Model: model,
+		Group: group,
 	}, nil
+}
+
+func countTopLevelJSONKey(data []byte, target string) int {
+	depth := 0
+	inString := false
+	escaped := false
+	stringStart := 0
+	expectingKey := false
+	count := 0
+	for index, current := range data {
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if current == '\\' {
+				escaped = true
+				continue
+			}
+			if current != '"' {
+				continue
+			}
+			inString = false
+			if depth == 1 && expectingKey {
+				key := string(data[stringStart:index])
+				var decodedKey string
+				if common.Unmarshal(data[stringStart-1:index+1], &decodedKey) == nil {
+					key = decodedKey
+				}
+				cursor := index + 1
+				for cursor < len(data) && (data[cursor] == ' ' || data[cursor] == '\t' || data[cursor] == '\r' || data[cursor] == '\n') {
+					cursor++
+				}
+				if cursor < len(data) && data[cursor] == ':' && key == target {
+					count++
+				}
+				expectingKey = false
+			}
+			continue
+		}
+		switch current {
+		case '"':
+			inString = true
+			stringStart = index + 1
+		case '{':
+			depth++
+			if depth == 1 {
+				expectingKey = true
+			}
+		case '}':
+			depth--
+		case ',':
+			if depth == 1 {
+				expectingKey = true
+			}
+		}
+	}
+	return count
 }
 
 func getJSONStringValue(result gjson.Result, field string) (string, error) {
@@ -276,54 +334,13 @@ func getJSONStringValue(result gjson.Result, field string) (string, error) {
 	return result.String(), nil
 }
 
-type parsedGatewayModel struct {
-	model         *ModelRequest
-	selectChannel bool
-	err           error
-}
-
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
-	if name := c.GetString("resolved_task_model"); name != "" && c.GetString("expected_task_plugin_key") != "" {
-		return &ModelRequest{Model: name}, true, nil
-	}
-	if cached, ok := c.Get("gateway_parsed_model"); ok {
-		parsed := cached.(parsedGatewayModel)
-		return parsed.model, parsed.selectChannel, parsed.err
-	}
-	request, selectChannel, err := parseModelRequest(c)
-	c.Set("gateway_parsed_model", parsedGatewayModel{request, selectChannel, err})
-	return request, selectChannel, err
-}
-
-func requiresGatewayAdmission(c *gin.Context) bool {
-	switch c.GetInt("relay_mode") {
-	case relayconstant.RelayModeMidjourneyTaskFetch, relayconstant.RelayModeMidjourneyTaskFetchByCondition,
-		relayconstant.RelayModeMidjourneyNotify, relayconstant.RelayModeMidjourneyTaskImageSeed,
-		relayconstant.RelayModeSunoFetch, relayconstant.RelayModeSunoFetchByID, relayconstant.RelayModeVideoFetchByID:
-		return false
-	}
-	return true
-}
-
-func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/realtime") {
-		c.Set("relay_mode", relayconstant.RelayModeRealtime)
-		return &ModelRequest{Model: c.Query("model")}, true, nil
-	}
-	if c.Request.URL.Path == "/v1/embeddings" || c.FullPath() == "/v1/engines/:model/embeddings" {
-		request, err := helper.GetAndValidateEmbeddingRequest(c, relayconstant.RelayModeEmbeddings)
-		if err != nil {
-			return nil, false, err
-		}
-		// Keep Gin's path model for repeated validation and RequestURI for tracing.
-		c.Request.URL.Path = "/v1/embeddings"
-		c.Request.URL.RawPath = ""
-		return &ModelRequest{Model: request.Model}, true, nil
-	}
 	var modelRequest ModelRequest
 	shouldSelectChannel := true
 	var err error
-	if strings.Contains(c.Request.URL.Path, "/mj/") {
+	if modelName := c.GetString("resolved_task_model"); modelName != "" {
+		modelRequest.Model = modelName
+	} else if strings.Contains(c.Request.URL.Path, "/mj/") {
 		relayMode := relayconstant.Path2RelayModeMidjourney(c.Request.URL.Path)
 		if relayMode == relayconstant.RelayModeMidjourneyTaskFetch ||
 			relayMode == relayconstant.RelayModeMidjourneyTaskFetchByCondition ||
@@ -395,12 +412,6 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			c.Set("relay_mode", relayMode)
 		}
 	} else if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") || strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
-		if strings.HasSuffix(c.Request.URL.Path, ":generateContent") || strings.HasSuffix(c.Request.URL.Path, ":streamGenerateContent") {
-			// Validate local input before state lookup can classify parse errors as unavailable state.
-			if _, err := helper.GetAndValidateGeminiRequest(c); err != nil {
-				return nil, false, err
-			}
-		}
 		// Gemini API 路径处理: /v1beta/models/gemini-2.0-flash:generateContent
 		relayMode := relayconstant.RelayModeGemini
 		modelName := extractModelNameFromGeminiPath(c.Request.URL.Path)
@@ -415,9 +426,18 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		modelRequest.Model = req.Model
 	}
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/realtime") {
+		//wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01
+		modelRequest.Model = c.Query("model")
+	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/moderations") {
 		if modelRequest.Model == "" {
 			modelRequest.Model = "text-moderation-stable"
+		}
+	}
+	if strings.HasSuffix(c.Request.URL.Path, "embeddings") {
+		if modelRequest.Model == "" {
+			modelRequest.Model = c.Param("model")
 		}
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") {
@@ -427,10 +447,7 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		contentType := c.ContentType()
 		if slices.Contains([]string{gin.MIMEPOSTForm, gin.MIMEMultipartPOSTForm}, contentType) {
 			req, err := getModelFromRequest(c)
-			if err != nil {
-				return nil, false, err
-			}
-			if req.Model != "" {
+			if err == nil && req.Model != "" {
 				modelRequest.Model = req.Model
 			}
 		}
@@ -442,22 +459,14 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "tts-1")
 		} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/translations") {
 			// 先尝试从请求读取
-			req, err := getModelFromRequest(c)
-			if err != nil {
-				return nil, false, err
-			}
-			if req.Model != "" {
+			if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
 				modelRequest.Model = req.Model
 			}
 			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "whisper-1")
 			relayMode = relayconstant.RelayModeAudioTranslation
 		} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") {
 			// 先尝试从请求读取
-			req, err := getModelFromRequest(c)
-			if err != nil {
-				return nil, false, err
-			}
-			if req.Model != "" {
+			if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
 				modelRequest.Model = req.Model
 			}
 			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "whisper-1")
@@ -465,16 +474,16 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		c.Set("relay_mode", relayMode)
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
-		// playground chat completions
-		req, err := getModelFromRequest(c)
-		if err != nil {
-			return nil, false, err
-		}
-		modelRequest.Model = req.Model
-	}
 
 	return &modelRequest, shouldSelectChannel, nil
+}
+
+// TokenModelLimitAllows reports whether a token model-limit map authorizes
+// model. Exact name, wildcard-normalized name, and routing-normalized name
+// (modifiers and legacy aliases stripped) are all accepted. The Responses
+// WebSocket relay shares this rule so both transports admit the same names.
+func TokenModelLimitAllows(limit map[string]bool, model string) bool {
+	return service.TokenModelLimitAllows(limit, model)
 }
 
 // 修复 #4834: GET /v1/video/generations/:task_id && /v1/video/:task_id 此前不解析 model，
@@ -488,10 +497,6 @@ func getTaskOriginModelName(c *gin.Context) string {
 
 	taskId := c.Param("task_id")
 	if taskId == "" {
-		// jimeng adapter
-		taskId = c.GetString("task_id")
-	}
-	if taskId == "" {
 		return ""
 	}
 
@@ -503,18 +508,44 @@ func getTaskOriginModelName(c *gin.Context) string {
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {
-	common.SetContextKey(c, constant.ContextKeyUpstreamRequestOrigin, "")
-	if channel != nil {
-		if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
-			return types.NewError(err, types.ErrorCodeGetChannelFailed)
-		}
-	}
 	c.Set("original_model", modelName) // for retry
+	expectedPlugin := c.GetString("expected_task_plugin_key")
 	if channel == nil {
+		logTaskPluginChannelDecision(c, nil, modelName, "channel_rejected", "nil_channel")
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
-	if err := BindTaskPluginEndpointToChannel(c, channel); err != nil {
-		return err
+	if expectedPlugin != "" && !channelMatchesExpectedTaskPlugin(c, channel, expectedPlugin) {
+		logTaskPluginChannelDecision(c, channel, modelName, "channel_rejected", "identity_mismatch")
+		return types.NewError(
+			errors.New("selected channel does not match the pinned task plugin"),
+			types.ErrorCodeGetChannelFailed,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+	if candidate, matched := pinnedEndpointCandidateForChannel(c, channel, expectedPlugin); matched {
+		if value, exists := c.Get(jsplugin.ContextKeyPinnedEndpoint); exists {
+			if pinned, ok := value.(jsplugin.PinnedEndpoint); ok && candidate.Plugin != nil && candidate.Plugin != pinned.Plugin {
+				previousPlugin := pinned.Plugin.Meta.Key
+				pinned.Plugin = candidate.Plugin
+				pinned.Protocol = candidate.Protocol
+				pinned.Operation = candidate.Operation
+				c.Set(jsplugin.ContextKeyPinnedEndpoint, pinned)
+				c.Set(jsplugin.ContextKeyPinnedPlugin, jsplugin.PinnedPlugin{Generation: pinned.Generation, Plugin: candidate.Plugin})
+				c.Set("expected_task_plugin_key", candidate.Plugin.Meta.Key)
+				c.Set("task_plugin_key", candidate.Plugin.Meta.Key)
+				c.Set("platform", candidate.Plugin.Meta.Key)
+				logger.LogDebug(
+					c,
+					"task_plugin subsystem=endpoint event=provider_selected generation=%d previous_plugin=%q plugin=%q model=%q channel_id=%d channel_type=%d",
+					pinned.Generation.Number,
+					previousPlugin,
+					candidate.Plugin.Meta.Key,
+					modelName,
+					channel.Id,
+					channel.Type,
+				)
+			}
+		}
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
@@ -522,6 +553,17 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
 	common.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
 	common.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())
+	switch channel.Type {
+	case constant.ChannelTypeTaskPlugin:
+		c.Set("task_plugin_key", channel.GetSetting().TaskPluginKey)
+	case constant.ChannelTypeNewAPI:
+		// The bound plugin verified above executes; ordinary requests through
+		// the same gateway channel carry no pinned plugin.
+		if executing := c.GetString("expected_task_plugin_key"); executing != "" {
+			c.Set("task_plugin_key", executing)
+		}
+	}
+	logTaskPluginChannelDecision(c, channel, modelName, "channel_selected", "")
 	paramOverride := channel.GetParamOverride()
 	headerOverride := channel.GetHeaderOverride()
 	if mergedParam, applied := service.ApplyChannelAffinityOverrideTemplate(c, paramOverride); applied {
@@ -534,62 +576,11 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelAutoBan, channel.GetAutoBan())
 	common.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
-	_, ratio, settingsErr := channel.RoutingSettings()
-	if settingsErr != nil {
-		return types.NewError(settingsErr, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
-	}
-	c.Set("channel_ratio", ratio)
 	common.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
-	liveRouteActive := liveRouteSelectionActive(c)
-	excludedKeyIndexes := service.GetRouteAttemptedKeyIndexes(c, channel.Id)
-	if liveRouteActive {
-		unavailable, err := service.UnavailableRouteKeyIndexes(c.Request.Context(), channel, modelName, time.Now())
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-		}
-		if len(unavailable) > 0 {
-			if excludedKeyIndexes == nil {
-				excludedKeyIndexes = make(map[int]struct{}, len(unavailable))
-			}
-			for keyIndex := range unavailable {
-				excludedKeyIndexes[keyIndex] = struct{}{}
-			}
-		}
-	}
-	var key string
-	var index int
-	boundKey, boundIndex, stateErr := service.ValidateGatewayStateOwner(c, channel.Id)
-	if stateErr != nil {
-		return types.NewErrorWithStatusCode(stateErr, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
-	}
-	for {
-		if boundKey != "" {
-			if _, unavailable := excludedKeyIndexes[boundIndex]; unavailable {
-				return types.NewErrorWithStatusCode(model.ErrGatewayStateUnavailable, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
-			}
-			key, index = boundKey, boundIndex
-			break
-		}
-		var newAPIError *types.NewAPIError
-		key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
-		if newAPIError != nil {
-			return newAPIError
-		}
-		if !liveRouteActive {
-			break
-		}
-		usable, _, err := service.RouteKeyHealthUsable(c.Request.Context(), channel.Id, modelName, key, time.Now())
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-		}
-		if usable {
-			break
-		}
-		if excludedKeyIndexes == nil {
-			excludedKeyIndexes = make(map[int]struct{})
-		}
-		excludedKeyIndexes[index] = struct{}{}
+	key, index, newAPIError := channel.GetNextEnabledKey()
+	if newAPIError != nil {
+		return newAPIError
 	}
 	if channel.ChannelInfo.IsMultiKey {
 		common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)
@@ -601,7 +592,6 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	// c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", key))
 	common.SetContextKey(c, constant.ContextKeyChannelKey, key)
 	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, channel.GetBaseURL())
-	service.CaptureGatewayChannelIdentity(c, channel)
 
 	common.SetContextKey(c, constant.ContextKeySystemPromptOverride, false)
 
@@ -625,15 +615,6 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
-}
-
-func liveRouteSelectionActive(c *gin.Context) bool {
-	if c == nil {
-		return false
-	}
-	value, exists := c.Get("route_live_selection")
-	selection, valid := value.(service.LiveRouteSelection)
-	return exists && valid && selection.Source != service.RouteSourceUnavailable
 }
 
 // extractModelNameFromGeminiPath 从 Gemini API URL 路径中提取模型名

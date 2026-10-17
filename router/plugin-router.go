@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -51,10 +52,15 @@ type pluginRouteDispatcher struct {
 }
 
 func SetPluginRouter(outer *gin.Engine) gin.HandlerFunc {
+	trustedProxies, _, err := common.ResolveTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	dispatcher := &pluginRouteDispatcher{registry: jsplugin.DefaultRegistry}
-	builder := newPluginGenerationBuilder(outer.Routes(), nil, productionPluginRouteHandlers)
-	if err := jsplugin.DefaultRegistry.SetGenerationPreparer(builder.prepare); err != nil {
-		panic(fmt.Errorf("build initial plugin router: %w", err))
+	if err != nil {
+		common.SysError(common.LogText("configure plugin router trusted proxies: %s", err.Error()))
+		return dispatcher.dispatch
+	}
+	builder := newPluginGenerationBuilder(outer.Routes(), trustedProxies, productionPluginRouteHandlers)
+	if err = jsplugin.DefaultRegistry.SetGenerationPreparer(builder.prepare); err != nil {
+		common.SysError(common.LogText("build initial plugin router: %s", err.Error()))
 	}
 	return dispatcher.dispatch
 }
@@ -69,10 +75,7 @@ func newPluginGenerationBuilder(staticRoutes []gin.RouteInfo, trustedProxies []s
 		engine.Handle(binding.Route.Method, binding.Route.Path, routeHandlers...)
 	}
 	builder.configure = func(engine *gin.Engine) error {
-		if builder.trustedProxies != nil {
-			return engine.SetTrustedProxies(builder.trustedProxies)
-		}
-		return middleware.ConfigureTrustedProxies(engine)
+		return common.ConfigureTrustedProxies(engine, builder.trustedProxies)
 	}
 	return builder
 }
@@ -117,7 +120,6 @@ func productionPluginRouteHandlers(generation *jsplugin.RoutingGeneration, bindi
 		middleware.SystemPerformanceCheck(),
 		middleware.ModelRequestRateLimit(),
 		middleware.PrepareTaskPluginRoute(),
-		middleware.GatewayAdmission(),
 		middleware.Distribute(),
 		controller.RelayTask,
 	}
@@ -329,7 +331,7 @@ func pluginRouteRecovery() gin.HandlerFunc {
 			if recover() == nil {
 				return
 			}
-			common.SysError("panic recovered in plugin route")
+			common.SysError(common.LogText("panic recovered in plugin route"))
 			if pinnedValue, exists := c.Get(jsplugin.ContextKeyPinnedRoute); exists {
 				if pinned, ok := pinnedValue.(jsplugin.PinnedRoute); ok && pinned.Plugin != nil && pinned.Generation != nil {
 					logger.LogDebug(

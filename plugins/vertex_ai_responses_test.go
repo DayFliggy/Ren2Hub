@@ -85,13 +85,12 @@ func TestVertexAIResponsesProtocol(t *testing.T) {
 		assert.Equal(t, "veo-3.1-fast-generate-preview", resolved["model"])
 		assert.Equal(t, "image_to_video", resolved["action"])
 		assert.Equal(t, map[string]any{
-			"model":      "veo-3.1-fast-generate-preview",
-			"prompt":     "animate this frame",
-			"images":     []any{"data:image/png;base64,aGVsbG8="},
-			"duration":   float64(8),
-			"size":       "1920x1080",
-			"metadata":   map[string]any{"durationSeconds": float64(8), "resolution": "1080p"},
-			"resolution": "1080p",
+			"model":    "veo-3.1-fast-generate-preview",
+			"prompt":   "animate this frame",
+			"images":   []any{"data:image/png;base64,aGVsbG8="},
+			"duration": float64(8),
+			"size":     "1920x1080",
+			"metadata": map[string]any{"resolution": "1080P"},
 		}, resolved["requestBody"])
 	})
 

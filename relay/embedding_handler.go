@@ -20,7 +20,7 @@ func EmbeddingHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	info.InitChannelMeta(c)
 
 	embeddingReq, ok := info.Request.(*dto.EmbeddingRequest)
-	if !ok || embeddingReq == nil {
+	if !ok {
 		return types.NewErrorWithStatusCode(fmt.Errorf("invalid request type, expected *dto.EmbeddingRequest, got %T", info.Request), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 
@@ -43,9 +43,6 @@ func EmbeddingHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	convertedRequest, err := adaptor.ConvertEmbeddingRequest(c, info, *request)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-	if convertedRequest == nil {
-		return types.NewError(fmt.Errorf("embedding conversion returned no request"), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 	relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
 	jsonData, err := common.Marshal(convertedRequest)
@@ -74,29 +71,23 @@ func EmbeddingHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
 
-	httpResp, ok := resp.(*http.Response)
-	if !ok || httpResp == nil || httpResp.Body == nil {
-		return types.NewOpenAIError(fmt.Errorf("invalid embedding HTTP response"), types.ErrorCodeBadResponse, http.StatusBadGateway)
-	}
-	if httpResp.StatusCode != http.StatusOK {
-		newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-		// reset status code 重置状态码
-		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-		return newAPIError
+	var httpResp *http.Response
+	if resp != nil {
+		httpResp = resp.(*http.Response)
+		if httpResp.StatusCode != http.StatusOK {
+			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+			// reset status code 重置状态码
+			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+			return newAPIError
+		}
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
-	observed, ok := usage.(*dto.Usage)
-	if ok && helper.ValidateVectorUsage(observed) == nil {
-		info.CaptureResponseUsage(observed, "text", nil)
-	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
-	if !ok || helper.ValidateVectorUsage(observed) != nil {
-		return types.NewOpenAIError(fmt.Errorf("invalid embedding response usage"), types.ErrorCodeBadResponse, http.StatusBadGateway)
-	}
+	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
 }

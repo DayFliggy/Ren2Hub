@@ -332,7 +332,7 @@ func (provider *boundLoginOAuthProvider) FillUserByProviderID(user *model.User, 
 }
 
 func TestSecurityLoginAllPrimaryTransportsRequireAdditionalVerification(t *testing.T) {
-	for _, transport := range []string{"oauth", "wechat", "telegram"} {
+	for _, transport := range []string{"oauth", "custom oauth", "wechat", "telegram"} {
 		t.Run(transport, func(t *testing.T) {
 			var user *model.User
 			var telegram *telegramOAuthFixture

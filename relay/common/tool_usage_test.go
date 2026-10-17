@@ -1,13 +1,12 @@
 package common
 
 import (
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,11 +37,13 @@ func TestCountBillableToolCallWebSearchDefaultsToPreview(t *testing.T) {
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview].CallCount)
 }
 
-func TestCountBillableToolCallFunctionCallRequiresFrozenPrice(t *testing.T) {
+func TestCountBillableToolCallFunctionCallRequiresPrice(t *testing.T) {
+	operation_setting.SetToolPriceForTest("my_priced_fn", 5.0)
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest("my_priced_fn")
+	})
+
 	info := &RelayInfo{OriginModelName: "gpt-5.1"}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-5.1", Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: []billing.UnitPrice{{Quantity: "tool:my_priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
-	require.NoError(t, err)
-	info.PriceData.Quote = quote
 	info.CountBillableToolCall(dto.BuildInCallFunctionCall, "my_priced_fn")
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, "my_priced_fn")
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools["my_priced_fn"].CallCount)
@@ -51,44 +52,32 @@ func TestCountBillableToolCallFunctionCallRequiresFrozenPrice(t *testing.T) {
 	assert.NotContains(t, info.ResponsesUsageInfo.BuiltInTools, "unpriced_fn")
 }
 
-// Hosted-tool price keys bill hosted tools only: a client function or tool_use
-// with the same name is never counted, even when the frozen quote prices that
-// name. The reserved names are NewAPI's built-in price keys plus the
-// Anthropic server tools; an operator price alone reserves nothing.
+// Hosted-tool price keys bill hosted tools only: a client function or
+// tool_use with the same name is never counted, even when the operator prices
+// that name. The reserved set is the built-in price seed plus the hosted
+// tools without a built-in price; an operator price alone reserves nothing.
 func TestCountBillableToolCallFunctionCallSkipsReservedNames(t *testing.T) {
 	wantBilled := map[string]bool{
 		dto.BuildInToolWebSearchPreview: false,
-		dto.BuildInToolWebSearch:        false,
 		dto.BuildInToolFileSearch:       false,
 		dto.BuildInToolGoogleSearch:     false,
-		GoogleSearchGroundedPromptTool:  false,
 		dto.BuildInToolImageGeneration:  false,
-		"web_fetch":                     false,
-		"code_execution":                false,
-		"tool_search":                   false,
-		"bing_web_search":               false,
-		"x_search_posts":                false,
-		"x_search_profiles":             false,
-		"search_std":                    false,
-		"search_pro":                    false,
-		"search_pro_sogou":              false,
-		"search_pro_quark":              false,
-		"search_strategy_turbo":         false,
-		"search_strategy_max":           false,
-		"search_strategy_agent":         false,
-		"search_strategy_agent_max":     false,
-		"lookup_order":                  true,
+		"bing_web_search":               false, // built-in vendor price
+		GoogleSearchGroundedPromptTool:  false, // built-in only for gemini-2.5* and older
+		"web_fetch":                     false, // Anthropic server tool, no built-in price
+		"lookup_order":                  true,  // operator-priced client function
 	}
-	var prices []billing.UnitPrice
 	for name := range wantBilled {
-		prices = append(prices, billing.UnitPrice{Quantity: "tool:" + name, Unit: "per_call", Price: "0.007"})
+		operation_setting.SetToolPriceForTest(name, 7)
 	}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-5.1", Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: prices}, "1", nil, time.Unix(1700000000, 0))
-	require.NoError(t, err)
+	t.Cleanup(func() {
+		for name := range wantBilled {
+			operation_setting.DeleteToolPriceForTest(name)
+		}
+	})
 
 	for name, billed := range wantBilled {
 		info := &RelayInfo{OriginModelName: "gpt-5.1"}
-		info.PriceData.Quote = quote
 		info.CountBillableToolCall(dto.BuildInCallFunctionCall, name)
 		info.CountBillableToolCall(dto.BuildInCallToolUse, name)
 		if billed {
@@ -100,92 +89,67 @@ func TestCountBillableToolCallFunctionCallSkipsReservedNames(t *testing.T) {
 	}
 }
 
-// Upstream-reported counts replace per-item counts for the same key; an
-// explicit zero silences them and a negative report is ignored.
-func TestSetBillableToolCount(t *testing.T) {
+// Upstream-reported counts replace per-item counts for the same key (an
+// explicit zero silences them) and ignore negatives; a count the request
+// itself proved belongs to one channel attempt, and a retry on another
+// channel drops it together with the vendor billing hooks.
+func TestBillableToolCountSources(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 	tests := []struct {
-		name   string
-		record func(info *RelayInfo)
-		want   map[string]int
+		name           string
+		record         func(c *gin.Context, info *RelayInfo)
+		want           map[string]int
+		wantVendorHook bool
+		wantBillingKey string
 	}{
 		{
-			name: "report replaces counted items",
-			record: func(info *RelayInfo) {
-				info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
-				info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
-				info.SetBillableToolCount(dto.BuildInToolWebSearchPreview, 5)
-			},
-			want: map[string]int{dto.BuildInToolWebSearchPreview: 5},
-		},
-		{
-			name: "zero silences counted items",
-			record: func(info *RelayInfo) {
-				info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
-				info.SetBillableToolCount(dto.BuildInToolWebSearchPreview, 0)
-			},
-			want: map[string]int{dto.BuildInToolWebSearchPreview: 0},
-		},
-		{
-			name: "negative report is ignored",
-			record: func(info *RelayInfo) {
+			name: "negative upstream count is ignored",
+			record: func(_ *gin.Context, info *RelayInfo) {
 				info.SetBillableToolCount(dto.BuildInToolWebSearch, 3)
 				info.SetBillableToolCount(dto.BuildInToolWebSearch, -5)
-				info.SetBillableToolCount("web_fetch", -1)
 			},
 			want: map[string]int{dto.BuildInToolWebSearch: 3},
+		},
+		{
+			name: "vendor zero replaces protocol items",
+			record: func(_ *gin.Context, info *RelayInfo) {
+				info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
+				info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
+				info.VendorToolUsage = func([]byte) map[string]int {
+					return map[string]int{"bing_web_search": 5, dto.BuildInToolWebSearchPreview: 0}
+				}
+				info.ApplyVendorToolUsage([]byte(`{}`))
+			},
+			want:           map[string]int{"bing_web_search": 5, dto.BuildInToolWebSearchPreview: 0},
+			wantVendorHook: true,
+		},
+		{
+			name: "channel retry drops the request-inferred call and vendor hooks",
+			record: func(c *gin.Context, info *RelayInfo) {
+				info.SetBillableToolCount(dto.BuildInToolWebSearch, 2)
+				info.RecordRequestInferredToolCall("search_strategy_turbo")
+				info.VendorToolUsage = func([]byte) map[string]int { return nil }
+				info.WebSearchBillingKey = "search_strategy_agent"
+				info.InitChannelMeta(c)
+			},
+			want: map[string]int{dto.BuildInToolWebSearch: 2},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 			info := &RelayInfo{OriginModelName: "gpt-5.1"}
-			tt.record(info)
-			assert.Equal(t, tt.want, builtInToolCounts(info))
+			tt.record(c, info)
+			counts := map[string]int{}
+			for name, tool := range info.ResponsesUsageInfo.BuiltInTools {
+				counts[name] = tool.CallCount
+			}
+			assert.Equal(t, tt.want, counts)
+			assert.Equal(t, tt.wantVendorHook, info.VendorToolUsage != nil)
+			assert.Equal(t, tt.wantBillingKey, info.WebSearchBillingKey)
 		})
 	}
-}
-
-// Vendor counts replace protocol items for the keys the reader names, and the
-// reader belongs to one channel attempt: InitChannelMeta for the next attempt
-// drops the hooks and the keys the reader created, so the declared web_search
-// key steers web_search_call items on the next channel again.
-func TestVendorToolUsageBelongsToOneChannelAttempt(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
-	info := &RelayInfo{OriginModelName: "gpt-5.1", StartTime: time.Now(), ResponsesUsageInfo: &ResponsesUsageInfo{BuiltInTools: map[string]*BuildInToolInfo{
-		dto.BuildInToolWebSearch: {ToolName: dto.BuildInToolWebSearch},
-	}}}
-	info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
-	info.ApplyVendorToolUsage([]byte(`{"tool_usage":{}}`))
-	assert.Equal(t, map[string]int{dto.BuildInToolWebSearch: 1}, builtInToolCounts(info), "no reader, no change")
-
-	info.VendorToolUsage = func([]byte) map[string]int {
-		return map[string]int{"bing_web_search": 5, dto.BuildInToolWebSearch: 0, dto.BuildInToolWebSearchPreview: 0}
-	}
-	info.VendorToolPriceKeys = map[string][]string{dto.BuildInToolWebSearch: {"bing_web_search"}}
-	info.WebSearchBillingKey = "search_strategy_agent"
-	info.ApplyVendorToolUsage([]byte(`{"tool_usage":{}}`))
-	assert.Equal(t, map[string]int{"bing_web_search": 5, dto.BuildInToolWebSearch: 0, dto.BuildInToolWebSearchPreview: 0}, builtInToolCounts(info))
-
-	require.NoError(t, info.ResetAttemptState())
-	info.InitChannelMeta(c)
-	assert.Nil(t, info.VendorToolUsage)
-	assert.Nil(t, info.VendorToolPriceKeys)
-	assert.Empty(t, info.WebSearchBillingKey)
-	assert.Equal(t, map[string]int{dto.BuildInToolWebSearch: 0}, builtInToolCounts(info))
-	info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
-	assert.Equal(t, map[string]int{dto.BuildInToolWebSearch: 1}, builtInToolCounts(info))
-}
-
-func builtInToolCounts(info *RelayInfo) map[string]int {
-	counts := map[string]int{}
-	if info.ResponsesUsageInfo == nil {
-		return counts
-	}
-	for name, tool := range info.ResponsesUsageInfo.BuiltInTools {
-		counts[name] = tool.CallCount
-	}
-	return counts
 }
 
 func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
@@ -340,7 +304,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name: "identical artifacts from distinct outputs",
+			name: "result hash dedup",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx0, idx1 := 0, 1
 				c.Observe(&dto.ResponsesOutput{
@@ -352,7 +316,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 					Result: "same-bytes",
 				}, &idx1)
 			},
-			wantCount: 2,
+			wantCount: 1,
 		},
 		{
 			name: "output_item.done plus completed dedup",
@@ -383,9 +347,6 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			// Upstreams deliver final image results still labelled in_progress
-			// or generating (Sub2API f2ca16577 normalizes them to completed);
-			// the bytes reached the client, so the image bills, as in NewAPI.
 			name: "in_progress with final result counts",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx := 0
@@ -410,13 +371,11 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 	}
 }
 
-// More than MaxImageN completed images bill as MaxImageN, as in NewAPI; the
-// request still settles its actual usage instead of the frozen estimate.
 func TestImageGenerationCallCounterCommitCapsAtMaxImageN(t *testing.T) {
 	t.Parallel()
 
 	counter := &ImageGenerationCallCounter{}
-	for i := 0; i < dto.MaxImageN+3; i++ {
+	for i := range dto.MaxImageN + 3 {
 		idx := i
 		counter.Observe(&dto.ResponsesOutput{
 			Type:   dto.ResponsesOutputTypeImageGenerationCall,
@@ -429,7 +388,6 @@ func TestImageGenerationCallCounterCommitCapsAtMaxImageN(t *testing.T) {
 	info := &RelayInfo{}
 	counter.Commit(info)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
-	assert.False(t, info.BillingToolUsageInvalid)
 	assert.Equal(t, dto.MaxImageN, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
@@ -448,15 +406,4 @@ func TestImageGenerationCallCounterCommitDoesNotBillDeclarationsAlone(t *testing
 	}
 	(&ImageGenerationCallCounter{}).Commit(info)
 	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
-}
-
-func TestIsNonBillableResponsesStatus(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, IsNonBillableResponsesStatus([]byte(`"failed"`)))
-	assert.True(t, IsNonBillableResponsesStatus([]byte(`"incomplete"`)))
-	assert.True(t, IsNonBillableResponsesStatus([]byte(`"cancelled"`)))
-	assert.True(t, IsNonBillableResponsesStatus([]byte(`"canceled"`)))
-	assert.False(t, IsNonBillableResponsesStatus([]byte(`"completed"`)))
-	assert.False(t, IsNonBillableResponsesStatus(nil))
 }

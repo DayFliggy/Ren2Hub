@@ -25,11 +25,11 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       ERROR_LOG_ENABLED: "true"
       BATCH_UPDATE_ENABLED: "true"
-      NODE_NAME: ren2hub-local
+      NODE_TYPE: master
+      TICKET_UPLOAD_DIR: /data/ticket-attachments
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-none}
-      SHUTDOWN_TIMEOUT_SECONDS: "120"
     depends_on:
       redis:
         condition: service_healthy

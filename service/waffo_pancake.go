@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/model"
@@ -211,10 +210,6 @@ func ResolveWaffoPancakeTradeNo(event *WaffoPancakeWebhookEvent) (string, error)
 	if tradeNo == "" {
 		return "", fmt.Errorf("missing webhook orderMerchantExternalId")
 	}
-	// Archived plan orders must never be fulfilled as wallet top-ups.
-	if strings.HasPrefix(tradeNo, "WAFFO_PANCAKE_SUB-") {
-		return "", fmt.Errorf("retired payment order")
-	}
 	topUp := model.GetTopUpByTradeNo(tradeNo)
 	if topUp == nil || topUp.PaymentProvider != model.PaymentProviderWaffoPancake {
 		return "", fmt.Errorf("waffo pancake order not found for tradeNo=%s", tradeNo)
@@ -327,11 +322,11 @@ func CreateWaffoPancakePrimaryPair(ctx context.Context, merchantID, privateKey, 
 // at the end of the configuration flow via model.UpdateOptionsBulk (single
 // DB transaction). A blank privateKey is treated as "keep current"
 // (Stripe-style API-secret UX) and is omitted from the bulk payload.
-func SaveWaffoPancakeConfig(ctx context.Context, merchantID, privateKey, returnURL, storeID, productID string, unitPrice float64, minTopUp int) error {
+func SaveWaffoPancakeConfig(ctx context.Context, merchantID, privateKey, returnURL, storeID, productID string) error {
 	merchantID = strings.TrimSpace(merchantID)
 	storeID = strings.TrimSpace(storeID)
 	productID = strings.TrimSpace(productID)
-	if merchantID == "" || storeID == "" || productID == "" || unitPrice <= 0 || minTopUp <= 0 {
+	if merchantID == "" || storeID == "" || productID == "" {
 		return fmt.Errorf("merchant id, store id, and product id are required to save")
 	}
 	values := map[string]string{
@@ -339,8 +334,6 @@ func SaveWaffoPancakeConfig(ctx context.Context, merchantID, privateKey, returnU
 		"WaffoPancakeReturnURL":  strings.TrimSpace(returnURL),
 		"WaffoPancakeStoreID":    storeID,
 		"WaffoPancakeProductID":  productID,
-		"WaffoPancakeUnitPrice":  strconv.FormatFloat(unitPrice, 'f', -1, 64),
-		"WaffoPancakeMinTopUp":   strconv.Itoa(minTopUp),
 	}
 	if pk := strings.TrimSpace(privateKey); pk != "" {
 		values["WaffoPancakePrivateKey"] = pk

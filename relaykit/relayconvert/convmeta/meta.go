@@ -5,6 +5,8 @@
 package convmeta
 
 import (
+	"strings"
+
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
@@ -40,9 +42,13 @@ type Meta interface {
 	// nil receiver may return a temporary initialized state.
 	EnsureClaudeConvertInfo() *ClaudeConvertInfo
 
-	// ResponsesToolState records the custom tools encoded by the current
-	// attempt. Retries must clear it before selecting another upstream.
+	// ResponsesToolState returns the Responses tool encoding recorded by the
+	// latest request conversion, or nil when none was recorded. Response
+	// converters read it to restore Responses-only tool call shapes.
 	ResponsesToolState() *ResponsesToolState
+	// SetResponsesToolState replaces that record; nil clears it. Request
+	// conversion calls it on every attempt so retries never inherit a record
+	// from another channel.
 	SetResponsesToolState(state *ResponsesToolState)
 
 	// GetSendResponseCount / IncrSendResponseCount expose the shared
@@ -61,16 +67,11 @@ type Meta interface {
 // ClaudeConvertInfo carries mutable state for OpenAI chat → Claude Messages
 // stream conversion. Moved here from relay/common (which keeps an alias).
 type ClaudeConvertInfo struct {
-	CitationTextLength  int
-	CitationBlockOffset int
-	CitationSeen        map[string]struct{}
-	ResponseError       error
-	LastMessagesType    string
-	Index               int
-	Usage               *dto.Usage
-	FinishReason        string
-	Done                bool
-	MessageStarted      bool
+	LastMessagesType string
+	Index            int
+	Usage            *dto.Usage
+	FinishReason     string
+	Done             bool
 
 	ToolCallBaseIndex      int
 	ToolCallMaxIndexOffset int
@@ -90,12 +91,38 @@ type ClaudeStreamToolCall struct {
 	Started          bool
 }
 
+// ResponsesToolState records how Responses-only tool definitions were encoded
+// for the upstream protocol, so the matching response can be restored.
 type ResponsesToolState struct {
+	// CustomToolNames lists Responses custom (freeform) tools that were sent
+	// upstream as function tools taking one string "input" argument. Function
+	// calls with these names are custom tool calls.
 	CustomToolNames map[string]struct{}
+	// Namespaces maps an upstream function name to the Responses tool
+	// namespace it was flattened from; see NamespacedToolName.
+	Namespaces map[string]string
 }
 
+// CustomToolInputArgument is the single function argument that carries a
+// Responses custom tool input through an upstream function call.
 const CustomToolInputArgument = "input"
 
+// DefaultResponsesToolNamespace is the namespace Codex declares its ordinary
+// tools in. OpenAI returns calls to its tools by bare name without a
+// namespace field, so its tools keep their names upstream.
+const DefaultResponsesToolNamespace = "functions"
+
+// NamespacedToolName is the upstream function name of a tool declared in a
+// Responses tool namespace: "<namespace>__<name>", or the bare name for the
+// default namespace.
+func NamespacedToolName(namespace string, name string) string {
+	if namespace == "" || namespace == DefaultResponsesToolNamespace {
+		return name
+	}
+	return namespace + "__" + name
+}
+
+// IsCustomTool reports whether name was encoded from a Responses custom tool.
 func (s *ResponsesToolState) IsCustomTool(name string) bool {
 	if s == nil {
 		return false
@@ -104,17 +131,18 @@ func (s *ResponsesToolState) IsCustomTool(name string) bool {
 	return ok
 }
 
-type GeminiToolCall struct {
-	ID        string
-	Name      string
-	Arguments string
-	Emitted   bool
-}
-
-type GeminiConvertInfo struct {
-	CitationText map[int]string
-	Tools        map[[2]int]*GeminiToolCall
-	Err          error
+// ResponsesToolName restores the Responses namespace and tool name of an
+// upstream function name. Names that were not flattened from a namespace
+// return an empty namespace and the name unchanged.
+func (s *ResponsesToolState) ResponsesToolName(upstreamName string) (string, string) {
+	if s == nil {
+		return "", upstreamName
+	}
+	namespace, ok := s.Namespaces[upstreamName]
+	if !ok {
+		return "", upstreamName
+	}
+	return namespace, strings.TrimPrefix(upstreamName, namespace+"__")
 }
 
 const (
@@ -127,7 +155,6 @@ const (
 // Values is a plain-struct Meta implementation for tests and non-RelayInfo
 // hosts (the relaykit-native entry point).
 type Values struct {
-	GeminiState          *GeminiConvertInfo
 	OriginModelName      string
 	UpstreamModelName    string
 	ChannelMetaAttached  bool
@@ -234,16 +261,6 @@ func (v *Values) SetResponsesToolState(state *ResponsesToolState) {
 	}
 }
 
-func (v *Values) EnsureGeminiConvertInfo() *GeminiConvertInfo {
-	if v == nil {
-		return &GeminiConvertInfo{}
-	}
-	if v.GeminiState == nil {
-		v.GeminiState = &GeminiConvertInfo{}
-	}
-	return v.GeminiState
-}
-
 func (v *Values) GetSendResponseCount() int {
 	if v == nil {
 		return 0
@@ -302,6 +319,7 @@ func OptionsOf(m Meta) *Options {
 	return m.ConvOptions()
 }
 
+// ResponsesToolStateOf is a nil-safe reader for Meta.ResponsesToolState.
 func ResponsesToolStateOf(m Meta) *ResponsesToolState {
 	if m == nil {
 		return nil

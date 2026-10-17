@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +19,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // 上游地址
@@ -28,14 +28,13 @@ const (
 )
 
 func normalizeLocale(locale string) (string, bool) {
-	l := strings.ToLower(strings.TrimSpace(locale))
-	switch l {
-	case "en", "ja":
-		return l, true
-	case "zh", "zh-cn", "zh-hans":
-		return "zh-CN", true
-	case "zh-tw", "zh-hant":
-		return "zh-TW", true
+	switch strings.ToLower(strings.TrimSpace(locale)) {
+	case "", "zh", "zh-cn":
+		return "zh", true
+	case "en":
+		return "en", true
+	case "ja":
+		return "ja", true
 	default:
 		return "", false
 	}
@@ -84,55 +83,6 @@ var (
 	cacheMutex sync.RWMutex
 )
 
-type overwriteField struct {
-	ModelName string   `json:"model_name"`
-	Fields    []string `json:"fields"`
-	// LocalVersion is the fingerprint returned by preview. It prevents a
-	// metadata edit made after preview from being silently overwritten.
-	LocalVersion string `json:"local_version"`
-}
-
-type syncRequest struct {
-	Overwrite []overwriteField `json:"overwrite"`
-	Locale    string           `json:"locale"`
-	// CreateModels lists the previewed missing models to create; others are not created.
-	CreateModels []string `json:"create_models"`
-	// SourceVersion is the upstream catalog version returned by the preview.
-	SourceVersion string `json:"source_version"`
-}
-
-// syncOverwriteFields are the local fields an overwrite request may replace.
-var syncOverwriteFields = map[string]bool{
-	"description": true,
-	"icon":        true,
-	"tags":        true,
-	"vendor":      true,
-	"name_rule":   true,
-	"status":      true,
-}
-
-// validate accepts only requests built from a preview: they carry the previewed
-// catalog version and name known fields for every overwritten model.
-func (req *syncRequest) validate() error {
-	if strings.TrimSpace(req.SourceVersion) == "" {
-		return common.NewMessage("The upstream metadata version is missing. Preview first.")
-	}
-	for _, ow := range req.Overwrite {
-		if strings.TrimSpace(ow.ModelName) == "" || len(ow.Fields) == 0 {
-			return common.NewMessage("Each overwrite item must include a model name and fields")
-		}
-		if strings.TrimSpace(ow.LocalVersion) == "" {
-			return common.NewMessage("An overwrite item is missing the local metadata version. Preview first.")
-		}
-		for _, field := range ow.Fields {
-			if !syncOverwriteFields[field] {
-				return common.NewMessage("Unsupported overwrite field: {{field}}", map[string]any{"field": field})
-			}
-		}
-	}
-	return nil
-}
-
 func newHTTPClient() *http.Client {
 	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 10)
 	dialer := &net.Dialer{Timeout: time.Duration(timeoutSec) * time.Second}
@@ -176,10 +126,7 @@ func getHTTPClient() *http.Client {
 
 func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T]) error {
 	var lastErr error
-	attempts := common.GetEnvOrDefault("SYNC_HTTP_RETRY", 3)
-	if attempts < 1 {
-		attempts = 1
-	}
+	attempts := max(common.GetEnvOrDefault("SYNC_HTTP_RETRY", 3), 1)
 	baseDelay := 200 * time.Millisecond
 	maxMB := common.GetEnvOrDefault("SYNC_HTTP_MAX_MB", 10)
 	maxBytes := int64(maxMB) << 20
@@ -209,10 +156,14 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 			switch resp.StatusCode {
 			case http.StatusOK:
 				// read body into buffer for caching and flexible decode
-				limited := io.LimitReader(resp.Body, maxBytes)
+				limited := io.LimitReader(resp.Body, maxBytes+1)
 				buf, err := io.ReadAll(limited)
 				if err != nil {
 					lastErr = err
+					return
+				}
+				if int64(len(buf)) > maxBytes {
+					lastErr = errors.New("upstream metadata exceeds size limit")
 					return
 				}
 				// cache body and ETag
@@ -224,10 +175,10 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 				cacheMutex.Unlock()
 
 				// Try decode as envelope first
-				if err := json.Unmarshal(buf, out); err != nil {
+				if err := common.Unmarshal(buf, out); err != nil {
 					// Try decode as pure array
 					var arr []T
-					if err2 := json.Unmarshal(buf, &arr); err2 != nil {
+					if err2 := common.Unmarshal(buf, &arr); err2 != nil {
 						lastErr = err
 						return
 					}
@@ -249,9 +200,9 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 					lastErr = errors.New("cache miss for 304 response")
 					return
 				}
-				if err := json.Unmarshal(buf, out); err != nil {
+				if err := common.Unmarshal(buf, out); err != nil {
 					var arr []T
-					if err2 := json.Unmarshal(buf, &arr); err2 != nil {
+					if err2 := common.Unmarshal(buf, &arr); err2 != nil {
 						lastErr = err
 						return
 					}
@@ -278,454 +229,224 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 	return lastErr
 }
 
-// upstreamCatalog is one fetch of the upstream model and vendor metadata.
-// Version fingerprints the locale and fetched data so an apply request can be
-// bound to the catalog its preview showed.
-type upstreamCatalog struct {
-	ModelsURL    string
-	VendorsURL   string
-	Version      string
-	ModelByName  map[string]upstreamModel
-	VendorByName map[string]upstreamVendor
+type metadataSyncSource struct {
+	Locale     string `json:"locale"`
+	ModelsURL  string `json:"models_url"`
+	VendorsURL string `json:"vendors_url"`
+	Version    string `json:"version"`
 }
 
-func fetchUpstreamCatalog(ctx context.Context, locale string) (upstreamCatalog, error) {
-	modelsURL, vendorsURL := getUpstreamURLs(locale)
-	catalog := upstreamCatalog{ModelsURL: modelsURL, VendorsURL: vendorsURL}
-	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 15)
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
-	defer cancel()
+type metadataSyncField struct {
+	Field    string `json:"field"`
+	Local    any    `json:"local"`
+	Upstream any    `json:"upstream"`
+}
 
-	var vendorsEnv upstreamEnvelope[upstreamVendor]
+type metadataSyncCandidate struct {
+	ModelName      string                `json:"model_name"`
+	Kind           string                `json:"kind"`
+	Scope          string                `json:"scope"`
+	RecordVersion  string                `json:"record_version"`
+	Fields         []metadataSyncField   `json:"fields"`
+	Upstream       *model.MetadataValues `json:"upstream,omitempty"`
+	VendorToCreate string                `json:"vendor_to_create,omitempty"`
+}
+
+func fetchMetadataCatalog(c *gin.Context, locale string) (metadataSyncSource, map[string]model.MetadataValues, map[string]model.Vendor, error) {
+	resolved, valid := normalizeLocale(locale)
+	if !valid {
+		return metadataSyncSource{}, nil, nil, errors.New("unsupported metadata language")
+	}
+	modelsURL, vendorsURL := getUpstreamURLs(resolved)
+	source := metadataSyncSource{Locale: resolved, ModelsURL: modelsURL, VendorsURL: vendorsURL}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 15))*time.Second)
+	defer cancel()
 	var modelsEnv upstreamEnvelope[upstreamModel]
+	var vendorsEnv upstreamEnvelope[upstreamVendor]
 	var modelsErr, vendorsErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		vendorsErr = fetchJSON(ctx, vendorsURL, &vendorsEnv)
-	}()
-	go func() {
-		defer wg.Done()
-		modelsErr = fetchJSON(ctx, modelsURL, &modelsEnv)
-	}()
+	go func() { defer wg.Done(); modelsErr = fetchJSON(ctx, modelsURL, &modelsEnv) }()
+	go func() { defer wg.Done(); vendorsErr = fetchJSON(ctx, vendorsURL, &vendorsEnv) }()
 	wg.Wait()
 	if modelsErr != nil {
-		return catalog, common.NewMessage("Failed to fetch upstream models: {{error}}", map[string]any{"error": modelsErr.Error()})
+		return source, nil, nil, fmt.Errorf("fetch models (%s, %s): %w", resolved, modelsURL, modelsErr)
 	}
-	// Vendor rows feed created vendors and the version; a partial catalog would
-	// silently create vendors without upstream details.
 	if vendorsErr != nil {
-		return catalog, common.NewMessage("Failed to fetch upstream vendors: {{error}}", map[string]any{"error": vendorsErr.Error()})
+		return source, nil, nil, fmt.Errorf("fetch vendors (%s, %s): %w", resolved, vendorsURL, vendorsErr)
 	}
-
-	catalog.VendorByName = make(map[string]upstreamVendor)
-	for _, v := range vendorsEnv.Data {
-		if v.Name != "" {
-			catalog.VendorByName[v.Name] = v
-		}
+	if !modelsEnv.Success || !vendorsEnv.Success {
+		return source, nil, nil, errors.New("upstream metadata source reported failure")
 	}
-	catalog.ModelByName = make(map[string]upstreamModel)
-	for _, m := range modelsEnv.Data {
-		if m.ModelName != "" {
-			catalog.ModelByName[m.ModelName] = m
-		}
-	}
-	// Locales that resolve to the same URLs share a version.
-	resolvedLocale, _ := normalizeLocale(locale)
-	encoded, err := common.Marshal([]any{resolvedLocale, catalog.ModelByName, catalog.VendorByName})
-	if err != nil {
-		return catalog, err
-	}
-	catalog.Version = fmt.Sprintf("%x", sha256.Sum256(encoded))
-	return catalog, nil
-}
-
-// ensureVendorID resolves a vendor by name, creating it from upstream data when
-// absent. Failures are returned so the caller skips the model instead of
-// silently detaching it from its vendor.
-func ensureVendorID(vendorName string, vendorByName map[string]upstreamVendor, vendorIDCache map[string]int, createdVendors *int) (int, error) {
-	if vendorName == "" {
-		return 0, nil
-	}
-	if id, ok := vendorIDCache[vendorName]; ok {
-		return id, nil
-	}
-	var existing model.Vendor
-	err := model.DB.Where("name = ?", vendorName).First(&existing).Error
-	if err == nil {
-		vendorIDCache[vendorName] = existing.Id
-		return existing.Id, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, fmt.Errorf("query vendor %s: %w", vendorName, err)
-	}
-	uv := vendorByName[vendorName]
-	v := &model.Vendor{
-		Name:        vendorName,
-		Description: uv.Description,
-		Icon:        coalesce(uv.Icon, ""),
-		Status:      chooseStatus(uv.Status, 1),
-	}
-	if err := v.Insert(); err != nil {
-		return 0, fmt.Errorf("create vendor %s: %w", vendorName, err)
-	}
-	*createdVendors++
-	vendorIDCache[vendorName] = v.Id
-	return v.Id, nil
-}
-
-// SyncUpstreamModels 按预览结果同步上游模型与供应商：
-// - source_version 必须与当前上游目录一致，否则返回 409，需重新预览
-// - 仅创建 create_models 中当前仍缺失且上游存在的模型，新建模型 sync_official = 1
-// - overwrite 仅覆盖所列模型的所列字段（前提：sync_official <> 0）
-// - 创建或覆盖失败的模型进入 skipped_models
-func SyncUpstreamModels(c *gin.Context) {
-	var req syncRequest
-	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid metadata sync request format: {{error}}", map[string]any{"error": err.Error()}))
-		return
-	}
-	if err := req.validate(); err != nil {
-		common.ApiErrorStatus(c, http.StatusBadRequest, err)
-		return
-	}
-
-	// 1) 拉取上游目录并校验版本
-	catalog, err := fetchUpstreamCatalog(c.Request.Context(), req.Locale)
-	if err != nil {
-		common.ApiErrorStatus(c, http.StatusOK, err, gin.H{"locale": req.Locale, "source_urls": gin.H{"models_url": catalog.ModelsURL, "vendors_url": catalog.VendorsURL}})
-		return
-	}
-	if catalog.Version != req.SourceVersion {
-		common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("The upstream metadata has changed. Preview again."), gin.H{"code": "METADATA_SOURCE_CHANGED"})
-		return
-	}
-	vendorByName := catalog.VendorByName
-	modelByName := catalog.ModelByName
-
-	// 2) 获取当前缺失模型列表
-	missing, err := model.GetMissingModels()
-	if err != nil {
-		common.SysError(common.LogText("failed to get missing models: %s", err.Error()))
-		common.ApiErrorT(c, "Failed to get the model list. Please try again later.")
-		return
-	}
-	missingSet := make(map[string]bool, len(missing))
-	for _, name := range missing {
-		missingSet[name] = true
-	}
-
-	// Check every selected local record before creating anything. A conflict
-	// must leave the whole request untouched, including requested creations.
-	for _, ow := range req.Overwrite {
-		if _, ok := modelByName[ow.ModelName]; !ok {
+	models := make(map[string]model.MetadataValues)
+	vendors := make(map[string]model.Vendor)
+	for _, vendor := range vendorsEnv.Data {
+		vendor.Name = strings.TrimSpace(vendor.Name)
+		if vendor.Name == "" {
 			continue
 		}
-		var local model.Model
-		if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				common.ApiError(c, err)
-				return
+		vendors[vendor.Name] = model.Vendor{Name: vendor.Name, Description: vendor.Description, Icon: vendor.Icon, Status: vendor.Status}
+	}
+	for _, item := range modelsEnv.Data {
+		if strings.TrimSpace(item.ModelName) == "" {
+			continue
+		}
+		endpoints := ""
+		if len(item.Endpoints) > 0 && string(item.Endpoints) != "null" {
+			if err := common.Unmarshal(item.Endpoints, &endpoints); err != nil {
+				endpoints = string(item.Endpoints)
 			}
-			continue
 		}
-		if local.SyncOfficial == 0 {
-			continue
+		values := model.MetadataValues{Description: item.Description, Icon: item.Icon, Tags: item.Tags, Vendor: strings.TrimSpace(item.VendorName), Endpoints: endpoints, NameRule: item.NameRule, Status: item.Status}
+		if err := model.ValidateMetadataValues(values); err != nil {
+			return source, nil, nil, fmt.Errorf("model %s: %w", item.ModelName, err)
 		}
-		if got := modelMetadataFingerprint(local); got != ow.LocalVersion {
-			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("The local metadata has changed. Preview again."), gin.H{"code": "METADATA_LOCAL_CHANGED"})
-			return
+		if _, duplicate := models[item.ModelName]; duplicate {
+			return source, nil, nil, fmt.Errorf("duplicate upstream model: %s", item.ModelName)
 		}
+		models[item.ModelName] = values
 	}
-
-	// 3) 创建请求所列、当前仍缺失且上游存在的模型
-	createdModels := 0
-	createdVendors := 0
-	updatedModels := 0
-	skipped := make([]string, 0)
-	createdList := make([]string, 0)
-	updatedList := make([]string, 0)
-
-	// 本地缓存：vendorName -> id
-	vendorIDCache := make(map[string]int)
-
-	for _, name := range req.CreateModels {
-		up, ok := modelByName[name]
-		// 已有记录或已被规则覆盖的名称、上游没有的名称都不创建
-		if !ok || !missingSet[name] {
-			skipped = append(skipped, name)
-			continue
-		}
-
-		vendorID, err := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
-		if err != nil {
-			common.SysError(common.LogText("metadata sync: create model %s: %v", name, err))
-			skipped = append(skipped, name)
-			continue
-		}
-
-		mi := &model.Model{
-			ModelName:    name,
-			Description:  up.Description,
-			Icon:         up.Icon,
-			Tags:         up.Tags,
-			VendorID:     vendorID,
-			Status:       chooseStatus(up.Status, 1),
-			SyncOfficial: 1,
-			NameRule:     up.NameRule,
-		}
-		if err := mi.Insert(); err != nil {
-			common.SysError(common.LogText("metadata sync: create model %s: %v", name, err))
-			skipped = append(skipped, name)
-			continue
-		}
-		delete(missingSet, name)
-		createdModels++
-		createdList = append(createdList, name)
-	}
-
-	// 4) 覆盖请求所列模型的所列字段（vendorIDCache 与创建阶段共用）
-	for _, ow := range req.Overwrite {
-		up, ok := modelByName[ow.ModelName]
-		if !ok {
-			skipped = append(skipped, ow.ModelName)
-			continue
-		}
-		var local model.Model
-		if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				common.SysError(common.LogText("metadata sync: load model %s: %v", ow.ModelName, err))
-			}
-			skipped = append(skipped, ow.ModelName)
-			continue
-		}
-		// 跳过被禁用官方同步的模型
-		if local.SyncOfficial == 0 {
-			skipped = append(skipped, ow.ModelName)
-			continue
-		}
-
-		updates := make(map[string]any, len(ow.Fields))
-		// 只有选择 vendor 字段才解析或创建供应商
-		if containsField(ow.Fields, "vendor") {
-			vendorID, err := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
-			if err != nil {
-				common.SysError(common.LogText("metadata sync: overwrite model %s: %v", ow.ModelName, err))
-				skipped = append(skipped, ow.ModelName)
-				continue
-			}
-			updates["vendor_id"] = vendorID
-		}
-		if containsField(ow.Fields, "description") {
-			updates["description"] = up.Description
-		}
-		if containsField(ow.Fields, "icon") {
-			updates["icon"] = up.Icon
-		}
-		if containsField(ow.Fields, "tags") {
-			updates["tags"] = up.Tags
-		}
-		if containsField(ow.Fields, "name_rule") {
-			updates["name_rule"] = up.NameRule
-		}
-		if containsField(ow.Fields, "status") {
-			updates["status"] = chooseStatus(up.Status, local.Status)
-		}
-		if err := model.DB.Model(&model.Model{}).Where("id = ?", local.Id).Updates(updates).Error; err != nil {
-			common.SysError(common.LogText("metadata sync: overwrite model %s: %v", ow.ModelName, err))
-			skipped = append(skipped, ow.ModelName)
-			continue
-		}
-		updatedModels++
-		updatedList = append(updatedList, ow.ModelName)
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"created_models":  createdModels,
-			"created_vendors": createdVendors,
-			"updated_models":  updatedModels,
-			"skipped_models":  skipped,
-			"created_list":    createdList,
-			"updated_list":    updatedList,
-			"source": gin.H{
-				"locale":      req.Locale,
-				"models_url":  catalog.ModelsURL,
-				"vendors_url": catalog.VendorsURL,
-				"version":     catalog.Version,
-			},
-		},
-	})
-}
-
-func containsField(fields []string, key string) bool {
-	key = strings.ToLower(strings.TrimSpace(key))
-	for _, f := range fields {
-		if strings.ToLower(strings.TrimSpace(f)) == key {
-			return true
-		}
-	}
-	return false
-}
-
-// modelMetadataFingerprint covers every local field that a metadata sync can
-// observe or overwrite. The encoded map is deterministic through the common
-// JSON wrapper, so the value can safely round-trip through the preview UI.
-func modelMetadataFingerprint(mi model.Model) string {
-	encoded, err := common.Marshal([]any{
-		mi.ModelName,
-		mi.Description,
-		mi.Icon,
-		mi.Tags,
-		mi.VendorID,
-		mi.Status,
-		mi.SyncOfficial,
-		mi.NameRule,
-	})
+	encoded, err := common.Marshal([]any{source.Locale, models, vendors})
 	if err != nil {
-		return ""
+		return source, nil, nil, err
 	}
-	return fmt.Sprintf("%x", sha256.Sum256(encoded))
+	source.Version = fmt.Sprintf("%x", sha256.Sum256(encoded))
+	return source, models, vendors, nil
 }
 
-func coalesce(a, b string) string {
-	if strings.TrimSpace(a) != "" {
-		return a
-	}
-	return b
-}
-
-func chooseStatus(primary, fallback int) int {
-	if primary == 0 && fallback != 0 {
-		return fallback
-	}
-	if primary != 0 {
-		return primary
-	}
-	return 1
-}
-
-// SyncUpstreamPreview 预览上游与本地的差异（仅用于弹窗选择）
 func SyncUpstreamPreview(c *gin.Context) {
-	// 1) 拉取上游数据
-	locale := c.Query("locale")
-	catalog, err := fetchUpstreamCatalog(c.Request.Context(), locale)
-	if err != nil {
-		common.ApiErrorStatus(c, http.StatusOK, err, gin.H{"locale": locale, "source_urls": gin.H{"models_url": catalog.ModelsURL, "vendors_url": catalog.VendorsURL}})
-		return
-	}
-	modelByName := catalog.ModelByName
-	upstreamNames := make([]string, 0, len(modelByName))
-	for name := range modelByName {
-		upstreamNames = append(upstreamNames, name)
-	}
-
-	// 2) 本地已有模型
-	var locals []model.Model
-	if len(upstreamNames) > 0 {
-		if err := model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error; err != nil {
-			common.ApiError(c, err)
-			return
-		}
-	}
-
-	// 本地 vendor 名称映射
-	vendorIdSet := make(map[int]struct{})
-	for _, m := range locals {
-		if m.VendorID != 0 {
-			vendorIdSet[m.VendorID] = struct{}{}
-		}
-	}
-	vendorIDs := make([]int, 0, len(vendorIdSet))
-	for id := range vendorIdSet {
-		vendorIDs = append(vendorIDs, id)
-	}
-	idToVendorName := make(map[int]string)
-	if len(vendorIDs) > 0 {
-		var dbVendors []model.Vendor
-		if err := model.DB.Where("id IN ?", vendorIDs).Find(&dbVendors).Error; err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		for _, v := range dbVendors {
-			idToVendorName[v.Id] = v.Name
-		}
-	}
-
-	// 3) 缺失且上游存在的模型
-	missingList, err := model.GetMissingModels()
+	source, upstream, upstreamVendors, err := fetchMetadataCatalog(c, c.Query("locale"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	missing := make([]string, 0)
-	for _, name := range missingList {
-		if _, ok := modelByName[name]; ok {
-			missing = append(missing, name)
+	locals, vendors, err := model.GetMetadataSyncState(model.DB)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	missing, err := model.GetMissingModels()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	siteNames := make(map[string]bool)
+	allNames := make(map[string]bool)
+	for name := range locals {
+		siteNames[name] = true
+		allNames[name] = true
+	}
+	for _, name := range missing {
+		siteNames[name] = true
+		allNames[name] = true
+	}
+	for name := range upstream {
+		allNames[name] = true
+	}
+	names := make([]string, 0, len(allNames))
+	for name := range allNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	vendorByID := make(map[int]*model.Vendor)
+	for _, vendor := range vendors {
+		vendorByID[vendor.Id] = vendor
+	}
+	candidates := make([]metadataSyncCandidate, 0, len(names))
+	for _, name := range names {
+		candidate := metadataSyncCandidate{ModelName: name, Scope: "catalog", Kind: "create", Fields: []metadataSyncField{}}
+		if siteNames[name] {
+			candidate.Scope = "site"
 		}
-	}
-
-	// 4) 计算冲突字段
-	type conflictField struct {
-		Field    string      `json:"field"`
-		Local    interface{} `json:"local"`
-		Upstream interface{} `json:"upstream"`
-	}
-	type conflictItem struct {
-		ModelName    string          `json:"model_name"`
-		LocalVersion string          `json:"local_version"`
-		Fields       []conflictField `json:"fields"`
-	}
-
-	var conflicts []conflictItem
-	for _, local := range locals {
-		up, ok := modelByName[local.ModelName]
-		if !ok {
+		local := locals[name]
+		up, found := upstream[name]
+		if !found {
+			candidate.Kind = "missing_upstream"
+			candidates = append(candidates, candidate)
 			continue
 		}
-		fields := make([]conflictField, 0, 6)
-		if strings.TrimSpace(local.Description) != strings.TrimSpace(up.Description) {
-			fields = append(fields, conflictField{Field: "description", Local: local.Description, Upstream: up.Description})
+		candidate.Upstream = &up
+		var localVendor *model.Vendor
+		if local != nil {
+			localVendor = vendorByID[local.VendorID]
 		}
-		if strings.TrimSpace(local.Icon) != strings.TrimSpace(up.Icon) {
-			fields = append(fields, conflictField{Field: "icon", Local: local.Icon, Upstream: up.Icon})
+		candidate.RecordVersion = model.MetadataRecordVersion(local, localVendor, model.FindMetadataVendor(vendors, up.Vendor))
+		if local != nil && local.SyncOfficial == 0 {
+			candidate.Kind = "blocked"
+			candidates = append(candidates, candidate)
+			continue
 		}
-		if strings.TrimSpace(local.Tags) != strings.TrimSpace(up.Tags) {
-			fields = append(fields, conflictField{Field: "tags", Local: local.Tags, Upstream: up.Tags})
+		if up.Vendor != "" && model.FindMetadataVendor(vendors, up.Vendor) == nil {
+			if _, exists := upstreamVendors[up.Vendor]; !exists {
+				candidate.Kind = "missing_vendor"
+				candidates = append(candidates, candidate)
+				continue
+			}
+			candidate.VendorToCreate = up.Vendor
 		}
-		// vendor 对比使用名称
-		localVendor := idToVendorName[local.VendorID]
-		if strings.TrimSpace(localVendor) != strings.TrimSpace(up.VendorName) {
-			fields = append(fields, conflictField{Field: "vendor", Local: localVendor, Upstream: up.VendorName})
+		localValues := model.MetadataValues{}
+		if local != nil {
+			candidate.Kind = "update"
+			localValues = model.MetadataValues{Description: local.Description, Icon: local.Icon, Tags: local.Tags, Endpoints: local.Endpoints, NameRule: local.NameRule, Status: local.Status}
+			if localVendor != nil {
+				localValues.Vendor = localVendor.Name
+			}
 		}
-		if local.NameRule != up.NameRule {
-			fields = append(fields, conflictField{Field: "name_rule", Local: local.NameRule, Upstream: up.NameRule})
+		localRaw, _ := common.Marshal(localValues)
+		upRaw, _ := common.Marshal(up)
+		var localFields, upFields map[string]any
+		_ = common.Unmarshal(localRaw, &localFields)
+		_ = common.Unmarshal(upRaw, &upFields)
+		for _, field := range model.MetadataSyncFields {
+			if local == nil || localFields[field] != upFields[field] {
+				candidate.Fields = append(candidate.Fields, metadataSyncField{Field: field, Local: localFields[field], Upstream: upFields[field]})
+			}
 		}
-		if local.Status != chooseStatus(up.Status, local.Status) {
-			fields = append(fields, conflictField{Field: "status", Local: local.Status, Upstream: up.Status})
+		if local != nil && len(candidate.Fields) == 0 {
+			candidate.Kind = "unchanged"
 		}
-		if len(fields) > 0 {
-			conflicts = append(conflicts, conflictItem{
-				ModelName:    local.ModelName,
-				LocalVersion: modelMetadataFingerprint(local),
-				Fields:       fields,
-			})
-		}
+		candidates = append(candidates, candidate)
 	}
+	common.ApiSuccess(c, gin.H{"source": source, "candidates": candidates})
+}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"missing":   missing,
-			"conflicts": conflicts,
-			"source": gin.H{
-				"locale":      locale,
-				"models_url":  catalog.ModelsURL,
-				"vendors_url": catalog.VendorsURL,
-				"version":     catalog.Version,
-			},
-		},
-	})
+func SyncUpstreamModels(c *gin.Context) {
+	var request struct {
+		Locale        string                        `json:"locale"`
+		SourceVersion string                        `json:"source_version"`
+		Selections    []model.MetadataSyncSelection `json:"selections"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil || len(request.Selections) == 0 || request.SourceVersion == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Preview and select metadata changes before applying"})
+		return
+	}
+	source, upstream, vendors, err := fetchMetadataCatalog(c, request.Locale)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if source.Version != request.SourceVersion {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Upstream metadata changed; preview again"})
+		return
+	}
+	updates := make([]model.MetadataSyncUpdate, 0, len(request.Selections))
+	for _, selection := range request.Selections {
+		values, exists := upstream[selection.ModelName]
+		if !exists {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Selected upstream model is no longer available"})
+			return
+		}
+		updates = append(updates, model.MetadataSyncUpdate{MetadataSyncSelection: selection, Values: values})
+	}
+	result, err := model.ApplyMetadataSync(updates, vendors)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, model.ErrMetadataSyncConflict) {
+			status = http.StatusConflict
+		}
+		c.JSON(status, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	recordManageAudit(c, "model.metadata.sync", map[string]any{"created_models": result.CreatedModels, "updated_models": result.UpdatedModels, "created_vendors": result.CreatedVendors})
+	common.ApiSuccess(c, result)
 }

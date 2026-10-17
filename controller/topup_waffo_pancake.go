@@ -49,6 +49,7 @@ func RequestWaffoPancakeAmount(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": fmt.Sprintf("%.2f", payMoney)})
 }
 
@@ -106,13 +107,11 @@ func getWaffoPancakeBuyerEmail(user *model.User) string {
 // resolveWaffoPancakeAdminCreds). Only SaveWaffoPancake writes to OptionMap.
 
 type saveWaffoPancakeRequest struct {
-	MerchantID string  `json:"merchant_id"`
-	PrivateKey string  `json:"private_key"`
-	ReturnURL  string  `json:"return_url"`
-	StoreID    string  `json:"store_id"`
-	ProductID  string  `json:"product_id"`
-	UnitPrice  float64 `json:"unit_price"`
-	MinTopUp   int     `json:"min_top_up"`
+	MerchantID string `json:"merchant_id"`
+	PrivateKey string `json:"private_key"`
+	ReturnURL  string `json:"return_url"`
+	StoreID    string `json:"store_id"`
+	ProductID  string `json:"product_id"`
 }
 
 type createWaffoPancakePairRequest struct {
@@ -126,14 +125,8 @@ type createWaffoPancakePairRequest struct {
 func SaveWaffoPancake(c *gin.Context) {
 	var req saveWaffoPancakeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorT(c, "Invalid parameters")
+		paymentError(c, common.NewMessage("Invalid parameters"))
 		return
-	}
-	if req.UnitPrice <= 0 {
-		req.UnitPrice = setting.WaffoPancakeUnitPrice
-	}
-	if req.MinTopUp <= 0 {
-		req.MinTopUp = setting.WaffoPancakeMinTopUp
 	}
 	if err := service.SaveWaffoPancakeConfig(
 		c.Request.Context(),
@@ -142,18 +135,15 @@ func SaveWaffoPancake(c *gin.Context) {
 		req.ReturnURL,
 		req.StoreID,
 		req.ProductID,
-		req.UnitPrice,
-		req.MinTopUp,
 	); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText(
 			"Waffo Pancake failed to save config store_id=%q product_id=%q error=%q",
 			req.StoreID, req.ProductID, err.Error(),
 		))
-		common.ApiErrorT(c, "Failed to save configuration")
+		paymentError(c, common.NewMessage("Failed to save configuration"))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
 		"message": "success",
 		"data": gin.H{
 			"product_id": setting.WaffoPancakeProductID,
@@ -182,13 +172,13 @@ func CreateWaffoPancakePair(c *gin.Context) {
 	var req createWaffoPancakePairRequest
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			common.ApiErrorT(c, "Invalid parameters")
+			paymentError(c, common.NewMessage("Invalid parameters"))
 			return
 		}
 	}
 	merchantID, privateKey := resolveWaffoPancakeAdminCreds(req.MerchantID, req.PrivateKey)
 	if merchantID == "" || privateKey == "" {
-		common.ApiErrorT(c, "Waffo Pancake credentials are not configured")
+		paymentError(c, common.NewMessage("Waffo Pancake credentials are not configured"))
 		return
 	}
 	result, err := service.CreateWaffoPancakePrimaryPair(
@@ -211,11 +201,10 @@ func CreateWaffoPancakePair(c *gin.Context) {
 			data["store_name"] = result.StoreName
 			data["orphan_store"] = true
 		}
-		common.ApiErrorStatus(c, http.StatusOK, common.NewMessage("Failed to create the store and product"), gin.H{"data": data})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": data})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
 		"message": "success",
 		"data": gin.H{
 			"store_id":     result.StoreID,
@@ -236,7 +225,7 @@ func ListWaffoPancakeCatalog(c *gin.Context) {
 		strings.TrimSpace(c.Query("private_key")),
 	)
 	if merchantID == "" || privateKey == "" {
-		common.ApiErrorT(c, "Waffo Pancake credentials are not configured")
+		paymentError(c, common.NewMessage("Waffo Pancake credentials are not configured"))
 		return
 	}
 	catalog, err := service.ListWaffoPancakeCatalog(c.Request.Context(), merchantID, privateKey)
@@ -244,10 +233,10 @@ func ListWaffoPancakeCatalog(c *gin.Context) {
 		logger.LogError(c.Request.Context(), common.LogText(
 			"Waffo Pancake failed to fetch store and product catalog error=%q", err.Error(),
 		))
-		common.ApiErrorT(c, "Failed to fetch the catalog")
+		paymentError(c, common.NewMessage("Failed to fetch the catalog"))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "success", "data": catalog})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": catalog})
 }
 
 func getWaffoPancakeBuyerIdentity(user *model.User) string {
@@ -294,23 +283,17 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
-	affiliateBaseQuota, err := model.SnapshotAffiliateBaseQuota(payMoney, setting.WaffoPancakeUnitPrice)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
 
 	tradeNo := fmt.Sprintf("WAFFO_PANCAKE-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
 	topUp := &model.TopUp{
-		UserId:             id,
-		Amount:             normalizeWaffoPancakeTopUpAmount(req.Amount),
-		Money:              payMoney,
-		TradeNo:            tradeNo,
-		PaymentMethod:      model.PaymentMethodWaffoPancake,
-		PaymentProvider:    model.PaymentProviderWaffoPancake,
-		CreateTime:         time.Now().Unix(),
-		Status:             common.TopUpStatusPending,
-		AffiliateBaseQuota: affiliateBaseQuota,
+		UserId:          id,
+		Amount:          normalizeWaffoPancakeTopUpAmount(req.Amount),
+		Money:           payMoney,
+		TradeNo:         tradeNo,
+		PaymentMethod:   model.PaymentMethodWaffoPancake,
+		PaymentProvider: model.PaymentProviderWaffoPancake,
+		CreateTime:      time.Now().Unix(),
+		Status:          common.TopUpStatusPending,
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake failed to create top-up order user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))
@@ -401,6 +384,14 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	logger.LogInfo(c.Request.Context(), common.LogText("Waffo Pancake webhook signature verified event_type=%s event_id=%s order_id=%s client_ip=%s", event.NormalizedEventType(), event.ID, event.Data.OrderID, c.ClientIP()))
 	if event.NormalizedEventType() != "order.completed" {
 		c.String(http.StatusOK, "OK")
+		return
+	}
+
+	// Dispatch by trade_no prefix. OrderMerchantExternalID = our trade_no;
+	// OrderID is Pancake's internal ORD_* (logs only).
+	rawTradeNo := strings.TrimSpace(event.Data.OrderMerchantExternalID)
+	if strings.HasPrefix(rawTradeNo, "WAFFO_PANCAKE_SUB-") {
+		c.String(http.StatusBadRequest, "unsupported order type")
 		return
 	}
 

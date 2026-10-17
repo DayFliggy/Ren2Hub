@@ -15,7 +15,7 @@ import { api } from '@/api/console'
 import { exportUserLogs } from '@/api/logExport'
 import { useAppStore } from '@/stores/app'
 import { parseLogPage } from '@/api/liveContracts'
-import { ApiError, type PageResult } from '@/api/types'
+import { ApiError } from '@/api/types'
 import type { LogItem, LogType } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -34,11 +34,7 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import LogDetailTrigger from '@/components/console/log-ui/LogDetailTrigger.vue'
 import LogBillingDetail from '@/components/console/log-ui/LogBillingDetail.vue'
-import RequestDiagnosticsPanel from '@/components/console/log-ui/RequestDiagnosticsPanel.vue'
-import RequestDiagnosticsBrowser from '@/components/console/log-ui/RequestDiagnosticsBrowser.vue'
-import type { RequestDiagnosticFilter } from '@/api/requestDiagnostics'
 import { getLocale } from '@/i18n'
-import { requestDiagnosticsMessages } from '@/i18n/requestDiagnostics'
 import { useAuthStore } from '@/stores/auth'
 import LogModelMismatch from '@/components/console/log-ui/LogModelMismatch.vue'
 import LogGroupFilter from '@/components/console/log-ui/LogGroupFilter.vue'
@@ -60,10 +56,6 @@ import { formatQuota, formatTime } from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
-const { t: diagnosticText } = useI18n({
-  useScope: 'local',
-  messages: requestDiagnosticsMessages,
-})
 const auth = useAuthStore()
 const app = useAppStore()
 const canExport = computed(
@@ -97,15 +89,6 @@ function closeExport() {
   exportOpen.value = false
 }
 const detailLog = ref<LogItem | null>(null)
-const diagnosticsOpen = ref(false)
-const diagnosticFilter = ref<RequestDiagnosticFilter>()
-
-function openDiagnostics(filter?: RequestDiagnosticFilter) {
-  detailLog.value = null
-  diagnosticFilter.value = filter
-  diagnosticsOpen.value = true
-}
-
 function openLogDetails(log: LogItem): void {
   detailLog.value = log
 }
@@ -306,7 +289,7 @@ function currentParams(start = startDate.value, end = endDate.value) {
   return {
     p: page.value,
     page_size: pageSize.value,
-    keyword: keyword.value,
+    request_id: keyword.value,
     group: group.value,
     type: type.value ? (typeMap[type.value] ?? 0) : 0,
     start_timestamp: requestedStart,
@@ -318,8 +301,10 @@ const listRequest = useLatestRequest()
 
 async function load() {
   loading.value = true
-  const result = await listRequest.run((signal) =>
-    api.get<PageResult<LogItem>>('/api/log/self', currentParams(), { signal })
+  const result = await listRequest.run(async (signal) =>
+    parseLogPage(
+      await api.get<unknown>('/api/log/self', currentParams(), { signal })
+    )
   )
   if (result.stale) return
   loading.value = false
@@ -331,7 +316,7 @@ async function load() {
     )
     return
   }
-  const pageResult = parseLogPage(result.value as unknown)
+  const pageResult = result.value
   rows.value = pageResult.items
   total.value = pageResult.total
 }
@@ -473,9 +458,6 @@ onBeforeUnmount(() => {
         class="w-full sm:w-64"
       />
       <div class="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
-        <ConsoleButton variant="secondary" @click="openDiagnostics()">{{
-          diagnosticText('title')
-        }}</ConsoleButton>
         <div
           ref="colSettingsRef"
           class="relative hidden lg:block"
@@ -744,10 +726,6 @@ onBeforeUnmount(() => {
     >
       <template v-if="detailLog">
         <LogBillingDetail :log="detailLog" />
-        <RequestDiagnosticsPanel
-          :request-id="detailLog.request_id"
-          @related="openDiagnostics"
-        />
       </template>
       <template #footer>
         <div class="flex justify-end">
@@ -757,13 +735,6 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </ConsoleModal>
-
-    <RequestDiagnosticsBrowser
-      v-if="diagnosticsOpen"
-      :can-read-all="auth.isAdmin"
-      :initial-filter="diagnosticFilter"
-      @close="diagnosticsOpen = false"
-    />
 
     <!-- export modal -->
     <ConsoleModal

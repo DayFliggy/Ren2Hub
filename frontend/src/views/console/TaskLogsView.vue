@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { parseTaskLogPage } from '@/api/liveContracts'
-import { ApiError, type PageResult } from '@/api/types'
+import { ApiError } from '@/api/types'
 import type { RelayTaskLogItem } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -99,10 +99,10 @@ const listRequest = useLatestRequest()
 
 async function load() {
   loading.value = true
-  const result = await listRequest.run((signal) =>
-    api.get<PageResult<RelayTaskLogItem>>('/api/task/self', currentParams(), {
-      signal,
-    })
+  const result = await listRequest.run(async (signal) =>
+    parseTaskLogPage(
+      await api.get<unknown>('/api/task/self', currentParams(), { signal })
+    )
   )
   if (result.stale) return
   loading.value = false
@@ -114,7 +114,7 @@ async function load() {
     )
     return
   }
-  const pageResult = parseTaskLogPage(result.value as unknown)
+  const pageResult = result.value
   rows.value = pageResult.items
   total.value = pageResult.total
 }

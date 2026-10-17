@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Activity, Zap } from 'lucide-vue-next'
+import { Activity } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
-import type { HomeRequestMetrics } from '@/api/public'
 import type { HomeRuntime } from '@/types/homeShowcase'
 
 const props = defineProps<{
   runtime: HomeRuntime
   /** null when no uptime source reports availability; the row is omitted. */
   uptimeLabel: string | null
-  requestMetrics: HomeRequestMetrics | null
 }>()
 
-const { locale, t } = useI18n()
+const { t } = useI18n()
 
 // ===== Split-flap: 记录每个 digit 的前一值，触发翻牌动画 =====
 const prevDigits = ref<Record<string, string>>({})
@@ -75,80 +73,6 @@ function previousDigit(id: string, fallback: string) {
 
 const barHeights = [14, 20, 16, 26, 12, 22, 18]
 const barsVisible = ref(false)
-const displayRequests = ref(0)
-let countRafId: number | null = null
-
-const requestValue = computed(() => {
-  const metrics = props.requestMetrics
-  return metrics?.available && metrics.requests_24h !== null
-    ? metrics.requests_24h
-    : null
-})
-
-const formattedRequestTarget = computed(() =>
-  requestValue.value === null
-    ? '--'
-    : requestValue.value.toLocaleString(locale.value)
-)
-const formattedDisplayRequests = computed(() =>
-  displayRequests.value.toLocaleString(locale.value)
-)
-const isZeroRequestTrend = computed(() => requestValue.value === 0)
-const requestTotalClasses = computed(() => {
-  const length = formattedRequestTarget.value.length
-  return {
-    'runtime-request-total--long': requestValue.value !== null && length >= 9,
-    'runtime-request-total--extra-long':
-      requestValue.value !== null && length >= 14,
-  }
-})
-
-const trendPoints = computed(() => {
-  const values = props.requestMetrics?.hourly_requests ?? []
-  if (
-    values.length !== 24 ||
-    requestValue.value === null ||
-    requestValue.value === 0 ||
-    !values.some((value) => value > 0)
-  ) {
-    return ''
-  }
-  const max = Math.max(...values, 1)
-  return values
-    .map((value, index) => {
-      const x = 2 + (236 * index) / Math.max(values.length - 1, 1)
-      const y = 44 - (value / max) * 35
-      return x.toFixed(1) + ',' + y.toFixed(1)
-    })
-    .join(' ')
-})
-
-function animateRequestTotal(target: number | null) {
-  if (countRafId !== null) cancelAnimationFrame(countRafId)
-  countRafId = null
-  if (target === null) {
-    displayRequests.value = 0
-    return
-  }
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    displayRequests.value = target
-    return
-  }
-  const start = displayRequests.value
-  const startedAt = performance.now()
-  const duration = 700
-  const tick = (now: number) => {
-    const progress = Math.min(1, (now - startedAt) / duration)
-    const eased = 1 - Math.pow(1 - progress, 3)
-    displayRequests.value = Math.round(start + (target - start) * eased)
-    if (progress < 1) countRafId = requestAnimationFrame(tick)
-    else countRafId = null
-  }
-  countRafId = requestAnimationFrame(tick)
-}
-
-watch(requestValue, animateRequestTotal, { immediate: true })
-
 onMounted(() => {
   clockGroups.value.forEach((group) => {
     group.value.split('').forEach((digit, idx) => {
@@ -160,7 +84,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   Object.values(flipTimers).forEach(clearTimeout)
-  if (countRafId !== null) cancelAnimationFrame(countRafId)
 })
 </script>
 
@@ -174,7 +97,7 @@ onBeforeUnmount(() => {
       {{ t('showcase.runtime.title') }}
     </h2>
 
-    <div class="runtime-ledger-sheet">
+    <div class="runtime-ledger-sheet" style="grid-template-columns: 1fr">
       <!-- 左栏：运行时长翻牌 -->
       <div class="runtime-ledger-panel runtime-ledger-panel--uptime">
         <header class="runtime-ledger-heading">
@@ -262,59 +185,6 @@ onBeforeUnmount(() => {
           </span>
           <strong>{{ uptimeLabel }}</strong>
           <span>/ {{ t('showcase.runtime.recentAvailability') }}</span>
-        </div>
-      </div>
-
-      <div class="runtime-ledger-panel runtime-ledger-panel--requests">
-        <header class="runtime-ledger-heading">
-          <Zap :size="19" aria-hidden="true" />
-          <strong>{{ t('showcase.runtime.stableCalls') }}</strong>
-          <span aria-hidden="true">·</span>
-          <em>{{ t('showcase.runtime.servedTag') }}</em>
-        </header>
-
-        <strong
-          class="runtime-request-total"
-          :class="requestTotalClasses"
-          data-home-request-total
-        >
-          {{ requestValue === null ? '--' : formattedDisplayRequests }}
-        </strong>
-        <p class="runtime-request-caption">
-          {{
-            requestValue === null
-              ? t('showcase.runtime.metricsUnavailable')
-              : `${t('showcase.runtime.todaySuccess')} · ${t(
-                  'showcase.runtime.protectedBy'
-                )}`
-          }}
-        </p>
-
-        <div class="runtime-trend">
-          <svg
-            v-if="trendPoints"
-            viewBox="0 0 240 54"
-            role="img"
-            :aria-label="t('showcase.runtime.trend24h')"
-          >
-            <polyline :points="trendPoints" />
-          </svg>
-          <svg
-            v-else-if="isZeroRequestTrend"
-            class="runtime-trend-wave"
-            viewBox="0 0 240 54"
-            role="img"
-            :aria-label="t('showcase.runtime.trend24h')"
-            data-zero-trend-wave
-          >
-            <path
-              d="M2 27 C22 18,42 36,62 27 S102 18,122 27 S162 36,182 27 S222 18,238 27"
-            />
-          </svg>
-          <span v-else class="runtime-trend-placeholder" aria-hidden="true"
-            >--</span
-          >
-          <span>{{ t('showcase.runtime.trend24h') }}</span>
         </div>
       </div>
     </div>

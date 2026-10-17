@@ -62,14 +62,6 @@ func TestAlibabaWan3(t *testing.T) {
 		parameters := requestBody["metadata"].(map[string]any)["parameters"].(map[string]any)
 		assert.Equal(t, "16:9", parameters["ratio"])
 		assert.NotContains(t, parameters, "duration")
-
-		value, callErr = plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_video", "decodeRequest"}, map[string]any{"model": "wan3.0-video", "body": map[string]any{
-			"kind": "multipart", "fields": map[string]any{"model": []any{"wan3.0-video"}, "prompt": []any{"a cat"}, "seconds": []any{"-1"}}, "files": []any{},
-		}})
-		require.NoError(t, callErr)
-		requestBody = roundTrip(t, value)["requestBody"].(map[string]any)
-		assert.Equal(t, true, requestBody["auto_duration"])
-		assert.NotContains(t, requestBody, "seconds")
 	})
 
 	t.Run("auto_duration submits -1 upstream and bills 30 seconds up front", func(t *testing.T) {
@@ -83,6 +75,10 @@ func TestAlibabaWan3(t *testing.T) {
 		require.NoError(t, callErr)
 		assert.Equal(t, map[string]any{"seconds": float64(30), "resolution": "1080P"}, roundTrip(t, value))
 
+		value, callErr = plugin.Engine.Call(t.Context(), "extractUsage", usageCtx("billing_ratios", body))
+		require.NoError(t, callErr)
+		assert.Equal(t, float64(30), roundTrip(t, value)["seconds"])
+
 		_, callErr = plugin.Engine.Call(t.Context(), "buildSubmitRequest", submitCtx("wan2.7-t2v", "wan2.7-t2v", map[string]any{"model": "wan2.7-t2v", "prompt": "a cat", "auto_duration": true}))
 		require.ErrorContains(t, callErr, "only supported by wan3.0")
 	})
@@ -94,7 +90,7 @@ func TestAlibabaWan3(t *testing.T) {
 			"model": "wan3.0-video", "prompt": "a cat", "metadata": map[string]any{"parameters": map[string]any{"duration": -1}},
 		})
 		assert.Equal(t, float64(-1), body["parameters"].(map[string]any)["duration"])
-		assert.Equal(t, "30", facts["seconds"])
+		assert.Equal(t, float64(30), facts["seconds"])
 	})
 
 	t.Run("channel-mapped alias resolves defaults from the upstream model", func(t *testing.T) {
@@ -139,10 +135,10 @@ func TestAlibabaWan3(t *testing.T) {
 	t.Run("completion facts read the wan3.0 usage block", func(t *testing.T) {
 		value, callErr := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{}, map[string]any{}, map[string]any{
 			"output": map[string]any{"task_status": "SUCCEEDED", "video_url": "https://upstream.example/v.mp4"},
-			"usage":  map[string]any{"video_count": 1, "duration": "7.5", "output_video_duration": "7.5", "SR": 720, "ratio": "16:9"},
+			"usage":  map[string]any{"video_count": 1, "duration": 7.5, "output_video_duration": 7.5, "SR": 720, "ratio": "16:9"},
 		})
 		require.NoError(t, callErr)
-		assert.Equal(t, map[string]any{"seconds": "7.5", "resolution": "720P"}, roundTrip(t, value))
+		assert.Equal(t, map[string]any{"seconds": 7.5, "resolution": "720P"}, roundTrip(t, value))
 
 		value, callErr = plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{}, map[string]any{}, map[string]any{
 			"output": map[string]any{"task_status": "SUCCEEDED", "duration": 5, "resolution": "1080p"},

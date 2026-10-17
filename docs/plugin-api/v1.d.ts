@@ -1,7 +1,6 @@
-/** Ren2Hub API v1. Based on upstream d04c118c, adapted to the local immutable execution and billing contract. */
 export type JSONValue = null | boolean | number | string | readonly JSONValue[] | {readonly [key: string]: JSONValue};
 /** json-clone@1 and submit-sse-delta@1 are accepted for earlier hosts; new plugins need neither. */
-export type HostCapability = "json-clone@1" | "submit-sse-delta@1" | "duration-auto@1";
+export type HostCapability = "json-clone@1" | "submit-sse-delta@1" | "json-order@1" | "duration-auto@1";
 /** Kinds of upstream a driver can address: the vendor API itself, or another New API gateway with the same plugin installed. */
 export type UpstreamKind = "vendor" | "new_api";
 /** Host-injected on every driver hook context. With "new_api" the driver uses its own native-route prefix and the host already set Bearer credentials. */
@@ -10,24 +9,7 @@ export type MutableJSON<T> = T extends readonly (infer Item)[] ? MutableJSON<Ite
 export interface HostUtils {
   hasCapability(name: string): boolean;
   /** Independent native JS containers; at most 1 MiB encoded JSON, depth 32 and 32,768 nodes. */
-  json: {
-    clone<T extends JSONValue>(value: T): MutableJSON<T>;
-    /** Ren2Hub extension. JSON.parse for billing sources: safe integers stay numbers, every other number becomes its source decimal text. */
-    parseNumbers(text: string): JSONValue;
-  };
-  /**
-   * Ren2Hub extension: exact decimal arithmetic for usage facts. Operands are decimal text or
-   * numbers accepted by the usage boundary; results are decimal text. bounded throws
-   * "plugin usage is outside declared bounds" instead of clamping or rounding.
-   */
-  decimal: {
-    string(value: DecimalInput): string;
-    bounded(value: DecimalInput, minimum: DecimalInput, maximum: DecimalInput, integer?: boolean): string;
-    add(left: DecimalInput, right: DecimalInput): string;
-    multiply(left: DecimalInput, right: DecimalInput): string;
-    /** Rounded to 36 decimal places; division by zero throws. */
-    divide(left: DecimalInput, right: DecimalInput): string;
-  };
+  json: {clone<T extends JSONValue>(value: T): MutableJSON<T>};
   unixNow(): number;
   uuid(): string;
   hmacSHA256(message: string, secret: string): string;
@@ -35,32 +17,13 @@ export interface HostUtils {
   base64(value: string): string;
   base64URL(value: string): string;
   base64URLDecode(value: string): string;
-  /**
-   * Field names are PascalCase, as the runtime reads them and the jimeng builtin passes them.
-   * Upstream NewAPI declares camelCase names here, but its runtime ignores them, so a camelCase
-   * request fails with "invalid Volcengine signing URL". Region defaults to cn-north-1, Service to cv.
-   */
-  volcSignV4(request: {Method: string; URL: string; Headers?: Record<string, string>; Body?: string; AccessKey: string; SecretKey: string; Region?: string; Service?: string; Timestamp?: number}): Record<string, string>;
-  /**
-   * Synchronous read-only request from buildSubmitRequest, buildQueryRequest, parseTaskResult, buildBatchQueryRequest,
-   * parseBatchResult and buildContentRequest to the channel Base URL host or allowedHosts; every other hook, including
-   * the usage hooks, throws. At most 4 per hook call, 15 s each, 30 s in total, 1 MiB per body; redirects are returned, not followed.
-   */
+  volcSignV4(request: {method: string; url: string; headers?: Record<string, string>; body?: string; accessKey: string; secretKey: string; region?: string; service?: string; timestamp?: number}): Record<string, string>;
+  /** Synchronous read-only request from driver hooks to the channel Base URL host or allowedHosts. At most 4 per hook call, 15 s each, 30 s in total, 1 MiB per body; redirects are returned, not followed. */
   fetch(request: FetchRequest): FetchResponse;
 }
 export interface FetchRequest {url: string; method?: "GET" | "HEAD"; headers?: Record<string, string>; responseType?: "json" | "bytes"}
 /** headers holds the first value of each header under its canonical name; body is parsed JSON when the response parses, otherwise text, and "" for HEAD; with responseType "bytes" it is an ArrayBuffer of the response bytes. */
 export interface FetchResponse {status: number; headers: Record<string, string>; body: JSONValue | string | ArrayBuffer}
-/** Decimal text such as "3.5" or "1e1", or a number accepted by the usage boundary. */
-export type DecimalInput = string | number;
-/**
- * Ren2Hub usage boundary for extractUsage, extractUsageOnSubmit and extractUsageOnComplete.
- * Returned numbers must be safe integers or non-integers whose shortest form has at most 15
- * significant digits (0.1 + 0.2 is rejected); the host never rounds. Return decimal text for
- * other values. Source JSON numbers reach these hooks as numbers only when that boundary returns
- * the same decimal; any other source number arrives as its decimal text.
- */
-export type UsageFactValue = string | number | boolean;
 declare global {const utils: HostUtils;}
 export type FileReference = Readonly<{ref: string; field: string; filename: string; mimeType: string; size: number}>;
 export type FilePlaceholder = Readonly<{__fileRef: string; encoding: "base64" | "dataUrl"; mimeType?: string; maxBytes?: number}>;
@@ -93,21 +56,16 @@ export type UsageFieldSchema =
   | {type: "boolean"; unitLabel?: never; description?: LocalizedText}
   | {enum: readonly string[]; unitLabel?: never; description?: LocalizedText; enumLabels?: Readonly<Record<string, LocalizedText>>};
 export type UsageExample = {label: string; facts: Readonly<Record<string, string | number | boolean>>};
-export type UsageProfile = {models: readonly string[]; schema: Readonly<Record<string, UsageFieldSchema>>; compatibilitySchema?: Readonly<Record<string, UsageFieldSchema>>; examples?: readonly UsageExample[]};
-export type AuthKind = "none" | "api_key" | "oauth2_jwt" | "vertex_oauth";
-export interface Meta {requiredCapabilities?: readonly HostCapability[]; submitResponseTypes?: readonly ("json" | "sse")[]; sortPriority?: number; website?: string; apiVersion: 1; key: string; name: string; icon?: string; description?: LocalizedText; version: string; author: {name: string; url?: string}; baseUrl?: string; channelTypes?: readonly number[]; models: readonly string[]; fetchMode: "per_task" | "batch"; allowedHosts?: readonly string[]; upstreams?: readonly UpstreamKind[]; routes?: readonly NativeRoute[]; protocols?: readonly ProtocolClaim[]; usageSchema?: Readonly<Record<string, UsageFieldSchema>>; usageExamples?: readonly UsageExample[]; usageProfiles?: readonly UsageProfile[]; auth?: AuthKind | {type: AuthKind}}
-/** Public projection: no credential, owner, quota, properties or private task ID. */
-export interface TaskView {task_id: string; platform: string; status: string; progress: string; fail_reason: string; created_at: number; updated_at?: number; finished_at?: number; data?: unknown}
-export interface DriverContext extends NativeDecodeContext {requestBody: unknown; requestHeaders: Readonly<Record<string, string>>; action: string; model: string; upstreamModel: string; baseUrl: string; apiKey?: string; authHeader: string; auth?: unknown; authError?: string; upstream: UpstreamContext; files: readonly FileReference[]; publicTaskId: string; originTaskId: string; userSetting?: unknown; originTasks?: readonly {taskId: string; upstreamTaskId: string; action: string; status: string; data: unknown}[]}
+export type UsageProfile = {models: readonly string[]; schema: Readonly<Record<string, UsageFieldSchema>>; examples?: readonly UsageExample[]};
+export interface Meta {requiredCapabilities?: readonly HostCapability[]; submitResponseTypes?: readonly ("json" | "sse")[]; sortPriority?: number; website?: string; apiVersion: 1; key: string; name: string; icon?: string; description?: LocalizedText; version: string; author: {name: string; url?: string}; baseUrl?: string; channelTypes?: readonly number[]; models: readonly string[]; fetchMode: "per_task" | "batch"; allowedHosts?: readonly string[]; upstreams?: readonly UpstreamKind[]; routes?: readonly NativeRoute[]; protocols?: readonly ProtocolClaim[]; usageSchema?: Readonly<Record<string, UsageFieldSchema>>; usageExamples?: readonly UsageExample[]; usageProfiles?: readonly UsageProfile[]; auth?: "none" | "api_key" | "vertex_oauth" | {type: "none" | "api_key" | "oauth2_jwt"}}
+export interface TaskView {task_id: string; status: string; progress?: string; fail_reason?: string; created_at?: number; updated_at?: number; data?: unknown; properties?: Record<string, unknown>}
+export interface DriverContext {requestBody: unknown; requestHeaders: Readonly<Record<string, string>>; action: string; model: string; upstreamModel: string; baseUrl: string; apiKey?: string; authHeader: string; upstream: UpstreamContext; files: readonly FileReference[]; publicTaskId: string; originTasks?: readonly {taskId: string; upstreamTaskId: string; action: string; status: string; data: unknown}[]}
 export interface TaskQueryContext {taskId: string; publicTaskId: string; action: string; model: string; upstreamModel: string; baseUrl: string; apiKey?: string; authHeader: string; auth?: unknown; upstream: UpstreamContext; data: unknown; state: unknown}
 export interface BatchQueryContext {baseUrl: string; apiKey?: string; authHeader: string; auth?: unknown; upstream: UpstreamContext; tasks: readonly TaskQueryContext[]}
 export type HookHTTPResponse = {readonly status: number; readonly headers: Readonly<Record<string, string>>}
 export interface RequestDescriptor {responseType?: "json" | "sse"; url: string; method?: string; headers?: Record<string, string>; /** JSON body may contain FilePlaceholder objects at any depth; the host replaces each with a Base64 or data-URL string. */ body?: unknown; credentialless?: boolean; action?: string; model?: string; rewriteModel?: string; bodyType?: "json" | "multipart"; parts?: readonly {name: string; value?: unknown; fileRef?: string; filename?: string}[]}
 export interface UpstreamResponse {statusCode: number; headers: Readonly<Record<string, readonly string[]>>; body: unknown}
-/** finishTime is provider completion time in Unix seconds. Token counters must be finite nonnegative integers within the host quota limit. */
-export interface NormalizedTaskResult {code?: number; taskId?: string; status: "NOT_START" | "SUBMITTED" | "QUEUED" | "IN_PROGRESS" | "SUCCESS" | "FAILURE" | "UNKNOWN"; progress?: string; reason?: string; url?: string; remoteUrl?: string; completionTokens?: number; totalTokens?: number; finishTime?: number; state?: JSONValue}
-/** The completion usage hook receives the host TaskInfo projection, with snake_case keys. */
-export interface CompletionHookResult {code: number; task_id: string; status: string; progress?: string; reason?: string; url?: string; remote_url?: string; completion_tokens?: number; total_tokens?: number; finish_time?: number; usage_facts?: Readonly<Record<string, string | number | boolean>>; plugin_state?: JSONValue}
+export interface NormalizedTaskResult {taskId?: string; status: "NOT_START" | "SUBMITTED" | "QUEUED" | "IN_PROGRESS" | "SUCCESS" | "FAILURE" | "UNKNOWN"; progress?: string; reason?: string; url?: string; remoteUrl?: string; completionTokens?: number; totalTokens?: number}
 export interface TaskArtifact {key: string; type: "video" | "audio" | "image" | "file"; mimeType?: string}
 export declare const meta: Meta;
 export declare const native: Record<string, ((ctx: NativeDecodeContext) => TaskIntent) | ((ctx: NativeDecodeContext, task: TaskView | readonly TaskView[]) => unknown)> & {error?: (ctx: NativeDecodeContext, error: {code: string; message: string; httpStatus: number; retryable: boolean}) => unknown};
@@ -124,7 +82,7 @@ export type JSONChange =
   | {op: "set" | "append"; path: JSONPath; value: JSONValue}
   | {op: "appendText"; path: JSONPath; value: string};
 export interface SubmitEventDeltaResult {changes: readonly JSONChange[]; state: JSONValue; done: boolean}
-/** Used when the plugin declares submit-sse-delta@1 or exports it without parseSubmitEvent: state is small control data; changes build the separate response body. */
+/** With submit-sse-delta@1, state is small control data; changes build the separate response body. */
 export declare function parseSubmitEventDelta(ctx: DriverContext, event: SubmitEvent, previousState: JSONValue | null): SubmitEventDeltaResult;
 export declare function parseSubmitEvent(ctx: DriverContext, event: SubmitEvent, previousState: JSONValue | null): {state: JSONValue; done: boolean};
 export declare function parseSubmitResponse(ctx: DriverContext, response: UpstreamResponse): {taskId: string; taskData?: unknown; immediate?: NormalizedTaskResult; state?: unknown};
@@ -132,16 +90,8 @@ export declare function buildQueryRequest(ctx: TaskQueryContext): RequestDescrip
 export declare function buildBatchQueryRequest(ctx: BatchQueryContext, tasks: readonly TaskQueryContext[]): RequestDescriptor;
 export declare function parseTaskResult(ctx: TaskQueryContext, body: unknown, response: HookHTTPResponse): NormalizedTaskResult;
 export declare function parseBatchResult(ctx: BatchQueryContext, body: unknown, response: HookHTTPResponse): readonly (NormalizedTaskResult & {taskId: string; data?: unknown; state?: unknown})[];
-export declare function extractUsage(ctx: DriverContext & {usagePurpose?: "facts" | "billing_ratios"}): Readonly<Record<string, UsageFactValue>> | null;
-export declare function extractUsageOnSubmit(ctx: DriverContext, taskData: unknown): Readonly<Record<string, UsageFactValue>> | null;
-export declare function extractUsageOnComplete(task: TaskQueryContext, result: CompletionHookResult, data: unknown): Readonly<Record<string, UsageFactValue>> | null;
-export interface ArtifactTaskContext {taskId: string; status: string; action: string; data: unknown; state: unknown; producerVersion: string}
-export declare function listArtifacts(task: ArtifactTaskContext): readonly TaskArtifact[];
-export interface ArtifactContentContext extends ArtifactTaskContext {artifactKey: string; upstreamTaskId: string; baseUrl: string; apiKey?: string; authHeader: string; auth?: unknown; upstream: UpstreamContext; clientRequest: {method: "GET" | "HEAD"; headers: Readonly<Record<string, string>>}}
-export declare function buildContentRequest(ctx: ArtifactContentContext): RequestDescriptor;
-
-/** Host-owned persistence types, not writable fields of meta or hook return values. */
-export interface ImmutablePluginReference {key: string; version: string; source_hash: string}
-export interface FrozenUsageField {type: "number" | "string" | "boolean"; source: "completion_fact"; required: boolean; unit?: string; integer?: boolean; minimum?: string; maximum?: string; enum?: readonly string[]}
-/** Included in the complete pricing definition hash; hash may be empty. */
-export interface FrozenUsageSchema {version: 1; fields: Readonly<Record<string, FrozenUsageField>>; hash: string}
+export declare function extractUsage(ctx: DriverContext & {usagePurpose?: "facts" | "billing_ratios"}): Readonly<Record<string, string | number | boolean>> | null;
+export declare function extractUsageOnSubmit(ctx: DriverContext, taskData: unknown): Readonly<Record<string, string | number | boolean>> | null;
+export declare function extractUsageOnComplete(task: TaskQueryContext, result: NormalizedTaskResult, data: unknown): Readonly<Record<string, string | number | boolean>> | null;
+export declare function listArtifacts(task: {taskId: string; status: string; action: string; data: unknown; producerVersion: string}): readonly TaskArtifact[];
+export declare function buildContentRequest(ctx: DriverContext & {artifactKey: string; data: unknown; state?: unknown; upstreamTaskId: string; clientRequest: {method: "GET" | "HEAD"; headers: Readonly<Record<string, string>>}}): RequestDescriptor;

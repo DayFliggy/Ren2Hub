@@ -46,8 +46,6 @@ func (p *LinuxDOProvider) ExchangeToken(ctx context.Context, code string, c *gin
 		return nil, NewOAuthError(common.NewMessage(msgInvalidCode))
 	}
 
-	logger.LogDebug(ctx, "[OAuth-LinuxDO] ExchangeToken: code=%s...", code[:min(len(code), 10)])
-
 	// Get access token using Basic auth
 	tokenEndpoint := common.GetEnvOrDefaultString("LINUX_DO_TOKEN_ENDPOINT", "https://connect.linux.do/oauth2/token")
 	credentials := common.LinuxDOClientId + ":" + common.LinuxDOClientSecret

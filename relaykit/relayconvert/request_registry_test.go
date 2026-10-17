@@ -1,15 +1,97 @@
 package relayconvert
 
 import (
+	"context"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
+	sharedgemini "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/gemini"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestClaudeMessagesToOpenAIChatPreservesAssistantTextWithToolCalls(t *testing.T) {
+	text := "I will look that up."
+	request := dto.ClaudeRequest{
+		Model: "claude-test",
+		Messages: []dto.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []dto.ClaudeMediaMessage{
+					{Type: "text", Text: &text},
+					{
+						Type:  "tool_use",
+						Id:    "call_1",
+						Name:  "lookup",
+						Input: map[string]any{"query": "weather"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ConvertRequest(
+		context.Background(),
+		&convmeta.Values{},
+		types.RelayFormatOpenAI,
+		&request,
+	)
+	require.NoError(t, err)
+
+	converted, ok := result.Value.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, converted.Messages, 1)
+
+	assistant := converted.Messages[0]
+	assert.Equal(t, "assistant", assistant.Role)
+	toolCalls := assistant.ParseToolCalls()
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_1", toolCalls[0].ID)
+	require.Len(t, assistant.ParseContent(), 1)
+	assert.Equal(t, "text", assistant.ParseContent()[0].Type)
+	assert.Equal(t, text, assistant.ParseContent()[0].Text)
+}
+
+func TestClaudeMessagesToOpenAIChatKeepsToolOnlyContentEmpty(t *testing.T) {
+	request := dto.ClaudeRequest{
+		Model: "claude-test",
+		Messages: []dto.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []dto.ClaudeMediaMessage{
+					{
+						Type:  "tool_use",
+						Id:    "call_1",
+						Name:  "lookup",
+						Input: map[string]any{"query": "weather"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ConvertRequest(
+		context.Background(),
+		&convmeta.Values{},
+		types.RelayFormatOpenAI,
+		&request,
+	)
+	require.NoError(t, err)
+
+	converted, ok := result.Value.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, converted.Messages, 1)
+
+	assistant := converted.Messages[0]
+	assert.Empty(t, assistant.ParseContent())
+	toolCalls := assistant.ParseToolCalls()
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_1", toolCalls[0].ID)
+}
 
 func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 	tests := []struct {
@@ -37,10 +119,11 @@ func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 			},
 		},
 		{
-			converter: requestConverterClaudeToResponses,
-			from:      types.RelayFormatClaude,
-			to:        types.RelayFormatOpenAIResponses,
-			quality:   RequestConverterQualityFair,
+			converter:      requestConverterClaudeToResponses,
+			from:           types.RelayFormatClaude,
+			to:             types.RelayFormatOpenAIResponses,
+			quality:        RequestConverterQualityFair,
+			advancedCustom: true,
 		},
 		{
 			converter: requestConverterGeminiToClaude,
@@ -61,6 +144,7 @@ func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 				ConverterGeminiContentToOpenAIChat,
 				ConverterOpenAIChatToOpenAIResponses,
 			},
+			advancedCustom: true,
 		},
 		{
 			converter: requestConverterResponsesToClaude,
@@ -275,41 +359,35 @@ func TestConvertRequestClaudeToResponsesDropsIncompatibleContextManagement(t *te
 		}),
 	}
 
-	_, err := ConvertRequest(nil, nil, types.RelayFormatOpenAIResponses, req)
-	require.ErrorContains(t, err, "provider-owned state")
+	result, err := ConvertRequest(nil, nil, types.RelayFormatOpenAIResponses, req)
+
+	require.NoError(t, err)
+	responsesReq, ok := result.Value.(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Empty(t, responsesReq.ContextManagement)
 }
 
 func TestConvertRequestClaudeAdaptiveThinkingPreservesEffort(t *testing.T) {
-	adaptive := &dto.Thinking{Type: "adaptive", Display: "summarized"}
 	tests := []struct {
 		name         string
-		originModel  string
-		thinking     *dto.Thinking
 		outputConfig []byte
 		wantEffort   string
 	}{
-		{name: "adaptive default", originModel: "gpt-5.6-sol", thinking: adaptive, wantEffort: "high"},
-		{name: "explicit low", originModel: "gpt-5.6-sol", thinking: adaptive, outputConfig: mustRawMessage(t, map[string]any{"effort": "low"}), wantEffort: "low"},
-		{name: "explicit xhigh", originModel: "gpt-5.6-sol", thinking: adaptive, outputConfig: mustRawMessage(t, map[string]any{"effort": "xhigh"}), wantEffort: "xhigh"},
-		// Claude models think by default at their own default effort: medium on
-		// Opus 5.5, high on the others.
-		{name: "opus 5.5 adaptive default", originModel: "claude-opus-5-5", thinking: adaptive, wantEffort: "medium"},
-		{name: "opus 5.5 without thinking", originModel: "claude-opus-5-5", wantEffort: "medium"},
-		{name: "opus 5.5 explicit high", originModel: "claude-opus-5-5", thinking: adaptive, outputConfig: mustRawMessage(t, map[string]any{"effort": "high"}), wantEffort: "high"},
-		{name: "opus 5 adaptive default", originModel: "claude-opus-5", thinking: adaptive, wantEffort: "high"},
-		{name: "opus 5 without thinking", originModel: "claude-opus-5", wantEffort: "high"},
+		{name: "adaptive default", wantEffort: "high"},
+		{name: "explicit low", outputConfig: mustRawMessage(t, map[string]any{"effort": "low"}), wantEffort: "low"},
+		{name: "explicit xhigh", outputConfig: mustRawMessage(t, map[string]any{"effort": "xhigh"}), wantEffort: "xhigh"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &convmeta.Values{
-				OriginModelName: tt.originModel,
+				OriginModelName: "gpt-5.6-sol",
 				ConversionChain: []types.RelayFormat{types.RelayFormatClaude},
 			}
 			req := &dto.ClaudeRequest{
 				Model:        "gpt-5.6-sol",
 				OutputConfig: tt.outputConfig,
-				Thinking:     tt.thinking,
+				Thinking:     &dto.Thinking{Type: "adaptive", Display: "summarized"},
 				Messages: []dto.ClaudeMessage{
 					{Role: "user", Content: "hello"},
 				},
@@ -324,39 +402,6 @@ func TestConvertRequestClaudeAdaptiveThinkingPreservesEffort(t *testing.T) {
 			assert.Equal(t, tt.wantEffort, responsesReq.Reasoning.Effort)
 			assert.Equal(t, "detailed", responsesReq.Reasoning.Summary)
 			assert.Equal(t, tt.wantEffort, info.GetReasoningEffort())
-		})
-	}
-}
-
-func TestApplyClaudeThinkingModelLabelsNativeThinkingWithModelDefaultEffort(t *testing.T) {
-	tests := []struct {
-		name         string
-		model        string
-		thinkingType string
-		outputConfig []byte
-		wantEffort   string
-	}{
-		{name: "opus 5.5 adaptive", model: "claude-opus-5-5", thinkingType: "adaptive", wantEffort: "medium"},
-		{name: "opus 5.5 enabled", model: "claude-opus-5-5", thinkingType: "enabled", wantEffort: "medium"},
-		{name: "opus 5.5 explicit high", model: "claude-opus-5-5", thinkingType: "adaptive", outputConfig: mustRawMessage(t, map[string]any{"effort": "high"}), wantEffort: "high"},
-		{name: "opus 5 adaptive", model: "claude-opus-5", thinkingType: "adaptive", wantEffort: "high"},
-		{name: "sonnet 5.5 adaptive", model: "claude-sonnet-5-5", thinkingType: "adaptive", wantEffort: "high"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			info := &convmeta.Values{OriginModelName: tt.model, UpstreamModelName: tt.model}
-			req := &dto.ClaudeRequest{
-				Model:        tt.model,
-				Thinking:     &dto.Thinking{Type: tt.thinkingType},
-				OutputConfig: tt.outputConfig,
-				Messages:     []dto.ClaudeMessage{{Role: "user", Content: "hello"}},
-			}
-
-			require.NoError(t, ApplyClaudeThinkingModel(req, info))
-			assert.Equal(t, tt.wantEffort, info.GetReasoningEffort())
-			assert.Equal(t, tt.thinkingType, req.Thinking.Type)
-			assert.Equal(t, tt.outputConfig, []byte(req.OutputConfig))
 		})
 	}
 }
@@ -458,74 +503,121 @@ func TestConvertRequestViaExecutesExplicitPath(t *testing.T) {
 	assert.Equal(t, []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses}, info.ConversionChain)
 }
 
-func TestConvertRequestResponsesToGeminiPreservesCustomHistory(t *testing.T) {
-	info := &convmeta.Values{
-		Options:             &convmeta.Options{ConversionPolicy: types.ConversionLossPolicySafe},
-		ConversionChain:     []types.RelayFormat{types.RelayFormatOpenAIResponses},
-		ChannelMetaAttached: true,
-		UpstreamModelName:   "gemini-test",
+// customToolInputs are custom_tool_call inputs that must reach the upstream
+// as the raw string, including ones that happen to look like JSON.
+var customToolInputs = []struct {
+	name  string
+	input string
+}{
+	{"json object", `{"a":1}`},
+	{"json array", `[1,2]`},
+	{"plain text", "*** Begin Patch\n*** End Patch"},
+}
+
+func customToolHistoryRequest(t *testing.T, items ...map[string]any) *dto.OpenAIResponsesRequest {
+	t.Helper()
+	input := append([]map[string]any{{"role": "user", "content": "apply the patch"}}, items...)
+	return &dto.OpenAIResponsesRequest{
+		Model:           "model-test",
+		MaxOutputTokens: lo.ToPtr(uint(64)),
+		Input:           mustRawMessage(t, input),
+		Tools:           mustRawMessage(t, []map[string]any{{"type": "custom", "name": "apply_patch"}}),
 	}
-	req := &dto.OpenAIResponsesRequest{
-		Model: "gemini-test",
-		Input: mustRawMessage(t, []map[string]any{
-			{
-				"role":    "user",
-				"content": "next turn",
-			},
-			{
-				"type":    "custom_tool_call",
-				"call_id": "call_custom",
-				"name":    "apply_patch",
-				"input":   "patch body",
-			},
-			{
-				"type":    "custom_tool_call_output",
-				"call_id": "call_custom",
-				"output":  "ok",
-			},
-			{
-				"type":    "function_call_output",
-				"call_id": "call_custom",
-				"output":  "legacy custom output",
-			},
-		}),
-		Tools: mustRawMessage(t, []map[string]any{
-			{"type": "custom", "name": "apply_patch"},
-		}),
+}
+
+func TestConvertRequestResponsesToClaudeKeepsCustomToolHistory(t *testing.T) {
+	for _, tc := range customToolInputs {
+		t.Run(tc.name, func(t *testing.T) {
+			req := customToolHistoryRequest(t,
+				map[string]any{"type": "custom_tool_call", "call_id": "call_custom", "name": "apply_patch", "input": tc.input},
+				map[string]any{"type": "custom_tool_call_output", "call_id": "call_custom", "output": "ok"},
+			)
+
+			result, err := ConvertRequest(nil, &convmeta.Values{}, types.RelayFormatClaude, req)
+			require.NoError(t, err)
+			claudeReq, ok := result.Value.(*dto.ClaudeRequest)
+			require.True(t, ok)
+			require.Len(t, claudeReq.Messages, 3)
+
+			assert.Equal(t, "assistant", claudeReq.Messages[1].Role)
+			toolUse, err := claudeReq.Messages[1].ParseContent()
+			require.NoError(t, err)
+			assert.Equal(t, []dto.ClaudeMediaMessage{{
+				Type:  "tool_use",
+				Id:    "call_custom",
+				Name:  "apply_patch",
+				Input: map[string]any{"input": tc.input},
+			}}, toolUse)
+
+			assert.Equal(t, "user", claudeReq.Messages[2].Role)
+			toolResult, err := claudeReq.Messages[2].ParseContent()
+			require.NoError(t, err)
+			assert.Equal(t, []dto.ClaudeMediaMessage{{Type: "tool_result", ToolUseId: "call_custom", Content: "ok"}}, toolResult)
+		})
 	}
 
-	result, err := ConvertRequest(nil, info, types.RelayFormatGemini, req)
+	t.Run("missing name", func(t *testing.T) {
+		req := customToolHistoryRequest(t, map[string]any{"type": "custom_tool_call", "call_id": "call_custom", "input": "ls"})
+		_, err := ConvertRequest(nil, &convmeta.Values{}, types.RelayFormatClaude, req)
+		require.ErrorContains(t, err, "custom_tool_call item is missing name")
+	})
+}
 
-	require.NoError(t, err)
-	geminiReq, ok := result.Value.(*dto.GeminiChatRequest)
-	require.True(t, ok)
-	require.Len(t, geminiReq.GetTools(), 1)
-	assert.True(t, info.ResponsesToolState().IsCustomTool("apply_patch"))
-	require.Len(t, geminiReq.Contents, 3)
-	assert.Equal(t, "user", geminiReq.Contents[0].Role)
-	require.Len(t, geminiReq.Contents[0].Parts, 1)
-	assert.Equal(t, "next turn", geminiReq.Contents[0].Parts[0].Text)
-	call := geminiReq.Contents[1].Parts[0].FunctionCall
-	require.NotNil(t, call)
-	assert.Equal(t, "call_custom", call.ID)
-	assert.Equal(t, "apply_patch", call.FunctionName)
-	assert.Equal(t, map[string]any{"input": "patch body"}, call.Arguments)
-	require.Len(t, geminiReq.Contents[2].Parts, 2)
-	for _, part := range geminiReq.Contents[2].Parts {
-		require.NotNil(t, part.FunctionResponse)
-		assert.JSONEq(t, `"call_custom"`, string(part.FunctionResponse.ID))
-		assert.Equal(t, "apply_patch", part.FunctionResponse.Name)
+func TestConvertRequestResponsesToGeminiKeepsCustomToolHistory(t *testing.T) {
+	info := func() *convmeta.Values {
+		return &convmeta.Values{Options: &convmeta.Options{Gemini: convmeta.GeminiOptions{FunctionCallThoughtSignatureEnabled: true}}}
 	}
-	assert.Equal(t, ConverterOpenAIResponsesToGemini, result.Converter)
-	assert.Equal(t, RequestConverterQualityFair, result.Quality)
-	assert.Equal(t, []RequestStep{
-		{
-			Converter: ConverterOpenAIResponsesToGemini,
-			From:      types.RelayFormatOpenAIResponses,
-			To:        types.RelayFormatGemini,
-		},
-	}, result.Steps)
-	assert.Equal(t, []types.RelayFormat{types.RelayFormatOpenAIResponses, types.RelayFormatGemini}, info.ConversionChain)
+	for _, tc := range customToolInputs {
+		t.Run(tc.name, func(t *testing.T) {
+			// Older Codex history may answer a custom call with function_call_output.
+			req := customToolHistoryRequest(t,
+				map[string]any{"type": "custom_tool_call", "call_id": "call_custom", "name": "apply_patch", "input": tc.input},
+				map[string]any{"type": "custom_tool_call_output", "call_id": "call_custom", "output": "ok"},
+				map[string]any{"type": "function_call_output", "call_id": "call_custom", "output": "legacy"},
+			)
+
+			result, err := ConvertRequest(nil, info(), types.RelayFormatGemini, req)
+			require.NoError(t, err)
+			geminiReq, ok := result.Value.(*dto.GeminiChatRequest)
+			require.True(t, ok)
+			tools := geminiReq.GetTools()
+			require.Len(t, tools, 1)
+			functions, err := kitutil.Any2Type[[]dto.FunctionRequest](tools[0].FunctionDeclarations)
+			require.NoError(t, err)
+			require.Len(t, functions, 1)
+			assert.Equal(t, "apply_patch", functions[0].Name)
+			require.Len(t, geminiReq.Contents, 3)
+
+			model := geminiReq.Contents[1]
+			assert.Equal(t, "model", model.Role)
+			require.Len(t, model.Parts, 1)
+			assert.Equal(t, &dto.FunctionCall{
+				ID:           "call_custom",
+				FunctionName: "apply_patch",
+				Arguments:    map[string]any{"input": tc.input},
+			}, model.Parts[0].FunctionCall)
+			var thoughtSignature string
+			require.NoError(t, kitutil.Unmarshal(model.Parts[0].ThoughtSignature, &thoughtSignature))
+			assert.Equal(t, sharedgemini.ThoughtSignatureBypassValue, thoughtSignature)
+
+			user := geminiReq.Contents[2]
+			assert.Equal(t, "user", user.Role)
+			require.Len(t, user.Parts, 2)
+			for index, output := range []string{"ok", "legacy"} {
+				assert.Equal(t, &dto.GeminiFunctionResponse{
+					Name:     "apply_patch",
+					Response: map[string]any{"content": output},
+					ID:       []byte(`"call_custom"`),
+				}, user.Parts[index].FunctionResponse)
+			}
+		})
+	}
+
+	t.Run("missing name", func(t *testing.T) {
+		req := customToolHistoryRequest(t, map[string]any{"type": "custom_tool_call", "call_id": "call_custom", "input": "ls"})
+		_, err := ConvertRequest(nil, info(), types.RelayFormatGemini, req)
+		require.ErrorContains(t, err, "custom_tool_call item is missing name")
+	})
 }
 
 func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
@@ -596,7 +688,6 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 		}),
 	}
 
-	info.Options = &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow, Gemini: convmeta.GeminiOptions{FunctionCallThoughtSignatureEnabled: true}}
 	result, err := ConvertRequest(nil, info, types.RelayFormatGemini, req)
 
 	require.NoError(t, err)
@@ -648,7 +739,9 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 	require.NotNil(t, functionCall)
 	assert.Equal(t, "lookup", functionCall.FunctionName)
 	assert.Equal(t, map[string]any{"q": "x"}, functionCall.Arguments)
-	assert.Equal(t, thoughtSignatureBypassJSON, string(geminiReq.Contents[0].Parts[0].ThoughtSignature))
+	var thoughtSignature string
+	require.NoError(t, kitutil.Unmarshal(geminiReq.Contents[0].Parts[0].ThoughtSignature, &thoughtSignature))
+	assert.Equal(t, sharedgemini.ThoughtSignatureBypassValue, thoughtSignature)
 	assert.Equal(t, "I will call.", geminiReq.Contents[0].Parts[1].Text)
 
 	assert.Equal(t, "user", geminiReq.Contents[1].Role)
@@ -693,7 +786,7 @@ func TestConvertRequestResponsesToGeminiSkipsThoughtSignatureWhenDisabled(t *tes
 	assert.Empty(t, geminiReq.Contents[0].Parts[0].ThoughtSignature)
 }
 
-func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureBypass(t *testing.T) {
+func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureForAdvancedCustom(t *testing.T) {
 	assistantMessage := dto.Message{Role: "assistant", Content: ""}
 	assistantMessage.SetToolCalls([]dto.ToolCallRequest{
 		{
@@ -739,7 +832,9 @@ func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureBypass(t *testing.T
 	assert.Equal(t, "model", geminiReq.Contents[1].Role)
 	require.Len(t, geminiReq.Contents[1].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[1].Parts[0].FunctionCall)
-	assert.Equal(t, thoughtSignatureBypassJSON, string(geminiReq.Contents[1].Parts[0].ThoughtSignature))
+	var thoughtSignature string
+	require.NoError(t, kitutil.Unmarshal(geminiReq.Contents[1].Parts[0].ThoughtSignature, &thoughtSignature))
+	assert.Equal(t, sharedgemini.ThoughtSignatureBypassValue, thoughtSignature)
 }
 
 func TestConvertRequestViaResponsesToGeminiStillUsesDirectSteps(t *testing.T) {
@@ -876,6 +971,37 @@ func inputContentText(t *testing.T, item map[string]any) string {
 	return text
 }
 
-// thoughtSignatureBypassJSON is the bypass value the Gemini thought-signature
-// option attaches to converted history, as encoded on the wire.
-const thoughtSignatureBypassJSON = `"context_engineering_is_the_way_to_go"`
+func TestConvertRequestRecordsResponsesCustomToolsForEachTarget(t *testing.T) {
+	codexRequest := func(tools ...map[string]any) *dto.OpenAIResponsesRequest {
+		return &dto.OpenAIResponsesRequest{
+			Model:           "model-test",
+			MaxOutputTokens: lo.ToPtr(uint(64)),
+			Input:           mustMarshalRequestJSON(t, "hello"),
+			Tools:           mustMarshalRequestJSON(t, tools),
+		}
+	}
+	execTool := map[string]any{"type": "custom", "name": "exec", "description": "Run code", "format": map[string]any{"type": "text"}}
+	waitTool := map[string]any{"type": "function", "name": "wait", "parameters": map[string]any{"type": "object"}}
+
+	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatGemini} {
+		t.Run(string(target), func(t *testing.T) {
+			info := &convmeta.Values{}
+			_, err := ConvertRequest(nil, info, target, codexRequest(execTool, waitTool))
+			require.NoError(t, err)
+			require.NotNil(t, info.ResponsesTools)
+			assert.True(t, info.ResponsesTools.IsCustomTool("exec"))
+			assert.False(t, info.ResponsesTools.IsCustomTool("wait"))
+
+			_, err = ConvertRequest(nil, info, target, codexRequest(waitTool))
+			require.NoError(t, err)
+			assert.Nil(t, info.ResponsesTools, "a retry without custom tools must not keep the previous record")
+		})
+	}
+}
+
+func mustMarshalRequestJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	raw, err := kitutil.Marshal(value)
+	require.NoError(t, err)
+	return raw
+}

@@ -95,63 +95,6 @@ func TestResponsesToClaudeStreamDoesNotRepeatBlocksFromDoneAndCompletedEvents(t 
 	assert.Empty(t, repeated)
 }
 
-func TestResponsesToClaudeStreamDeliversRefusalOnceWithRefusalStopReason(t *testing.T) {
-	refusal := "I can't help with that."
-	arguments := `{"q":"x"}`
-	argumentRaw, err := kitutil.Marshal(arguments)
-	require.NoError(t, err)
-	messageItem := dto.ResponsesOutput{
-		Type:    responsesOutputTypeMessage,
-		ID:      "msg_1",
-		Role:    "assistant",
-		Content: []dto.ResponsesOutputContent{{Type: "refusal", Refusal: &refusal}},
-	}
-	toolItem := dto.ResponsesOutput{Type: responsesOutputTypeFunctionCall, ID: "fc_1", CallId: "call_1", Name: "lookup", Arguments: argumentRaw}
-	completed := &dto.ResponsesStreamResponse{
-		Type:     responsesEventCompleted,
-		Response: &dto.OpenAIResponsesResponse{ID: "resp_1", Status: []byte(`"completed"`), Output: []dto.ResponsesOutput{messageItem, toolItem}},
-	}
-
-	for _, sentDeltas := range []bool{true, false} {
-		name := "terminal snapshot only"
-		if sentDeltas {
-			name = "deltas, item snapshots and terminal snapshot"
-		}
-		t.Run(name, func(t *testing.T) {
-			state := NewResponsesToClaudeStreamState("", "")
-			events := []*dto.ResponsesStreamResponse{{Type: responsesEventCreated, Response: &dto.OpenAIResponsesResponse{ID: "resp_1"}}}
-			if sentDeltas {
-				events = append(events,
-					&dto.ResponsesStreamResponse{Type: responsesEventOutputItemAdded, OutputIndex: kitutil.GetPointer(0), ItemID: messageItem.ID, Item: &dto.ResponsesOutput{Type: messageItem.Type, ID: messageItem.ID, Role: "assistant"}},
-					&dto.ResponsesStreamResponse{Type: responsesEventRefusalDelta, OutputIndex: kitutil.GetPointer(0), ItemID: messageItem.ID, Delta: "I can't "},
-					&dto.ResponsesStreamResponse{Type: responsesEventRefusalDelta, OutputIndex: kitutil.GetPointer(0), ItemID: messageItem.ID, Delta: "help with that."},
-					&dto.ResponsesStreamResponse{Type: responsesEventRefusalDone, OutputIndex: kitutil.GetPointer(0), ItemID: messageItem.ID, Refusal: &refusal},
-					&dto.ResponsesStreamResponse{Type: responsesEventOutputItemDone, OutputIndex: kitutil.GetPointer(0), ItemID: messageItem.ID, Item: &messageItem},
-					&dto.ResponsesStreamResponse{Type: responsesEventOutputItemDone, OutputIndex: kitutil.GetPointer(1), ItemID: toolItem.ID, Item: &toolItem},
-				)
-			}
-			events = append(events, completed)
-
-			var output []*dto.ClaudeResponse
-			for _, event := range events {
-				converted, _, err := state.ConvertChunk(event, 9)
-				require.NoError(t, err)
-				output = append(output, converted...)
-			}
-
-			starts := responsesOfType(output, "content_block_start")
-			require.Len(t, starts, 2)
-			assert.Equal(t, []string{"text", "tool_use"}, []string{starts[0].ContentBlock.Type, starts[1].ContentBlock.Type})
-			assert.Equal(t, refusal, joinedClaudeDeltas(output, "text_delta"), "the refusal must be delivered exactly once")
-			assert.Equal(t, arguments, joinedClaudeDeltas(output, "input_json_delta"))
-			messageDeltas := responsesOfType(output, "message_delta")
-			require.Len(t, messageDeltas, 1)
-			require.NotNil(t, messageDeltas[0].Delta.StopReason)
-			assert.Equal(t, "refusal", *messageDeltas[0].Delta.StopReason)
-		})
-	}
-}
-
 func responsesOfType(responses []*dto.ClaudeResponse, responseType string) []*dto.ClaudeResponse {
 	filtered := make([]*dto.ClaudeResponse, 0)
 	for _, response := range responses {

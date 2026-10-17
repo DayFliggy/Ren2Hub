@@ -69,17 +69,17 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 
 	env := map[string]any{
 		"image_count": float64(imageCount),
-		"p":           float64(params.P),
-		"c":           float64(params.C),
-		"len":         float64(params.Len),
-		"cr":          float64(params.CR),
-		"cc":          float64(params.CC),
-		"cc1h":        float64(params.CC1h),
-		"img":         float64(params.Img),
-		"img_cr":      float64(params.ImgCR),
-		"img_o":       float64(params.ImgO),
-		"ai":          float64(params.AI),
-		"ao":          float64(params.AO),
+		"p":           params.P,
+		"c":           params.C,
+		"len":         params.Len,
+		"cr":          params.CR,
+		"cc":          params.CC,
+		"cc1h":        params.CC1h,
+		"img":         params.Img,
+		"img_cr":      params.ImgCR,
+		"img_o":       params.ImgO,
+		"ai":          params.AI,
+		"ao":          params.AO,
 		"tier": func(name string, value float64) float64 {
 			trace.MatchedTier = name
 			trace.Cost = value
@@ -146,7 +146,6 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 		"floor":   math.Floor,
 	}
 
-	bindEnvironment(env, request.Evaluation)
 	out, err := expr.Run(prog, env)
 	if err != nil {
 		return 0, trace, fmt.Errorf("expr run error: %w", err)
@@ -154,12 +153,6 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 	f, ok := out.(float64)
 	if !ok {
 		return 0, trace, fmt.Errorf("expr result is %T, want float64", out)
-	}
-	if err := request.Evaluation.Complete(); err != nil {
-		return 0, trace, err
-	}
-	if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
-		return 0, trace, fmt.Errorf("invalid billing expression result")
 	}
 	return f, trace, nil
 }

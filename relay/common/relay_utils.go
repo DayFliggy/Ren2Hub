@@ -147,11 +147,8 @@ const MaxTaskDurationSeconds = 3600
 
 func validateTaskDurationBounds(req TaskSubmitReq) *dto.TaskError {
 	seconds := req.Duration
-	if req.Seconds != "" {
-		parsed, err := strconv.Atoi(req.Seconds)
-		if err != nil || parsed < 1 || parsed > MaxTaskDurationSeconds {
-			return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
-		}
+	if seconds == 0 && req.Seconds != "" {
+		seconds, _ = strconv.Atoi(req.Seconds)
 	}
 	if seconds < 0 || seconds > MaxTaskDurationSeconds {
 		return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
@@ -172,11 +169,13 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 		Mode:     formData.Get("mode"),
 		Image:    formData.Get("image"),
 		Size:     formData.Get("size"),
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 	}
 
 	if durationStr := formData.Get("seconds"); durationStr != "" {
-		req.Seconds = durationStr
+		if duration, err := strconv.Atoi(durationStr); err == nil {
+			req.Duration = duration
+		}
 	}
 
 	if images := formData["images"]; len(images) > 0 {
@@ -239,9 +238,9 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 		return taskErr
 	}
 
-	action := constant.TaskActionTextGenerate
+	action := constant.TaskActionTextToVideo
 	if hasInputReference {
-		action = constant.TaskActionGenerate
+		action = constant.TaskActionImageToVideo
 	}
 	if strings.HasPrefix(model, "sora-2") {
 
@@ -259,6 +258,7 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 		if model == "sora-2-pro" && !lo.Contains([]string{"720x1280", "1280x720", "1792x1024", "1024x1792"}, size) {
 			return createTaskError(fmt.Errorf("sora-2 size is invalid"), "invalid_size", http.StatusBadRequest, true)
 		}
+		// OtherRatios 已移到 Sora adaptor 的 EstimateBilling 中设置
 	}
 
 	storeTaskRequest(c, info, action, req)
@@ -275,7 +275,6 @@ func isKnownTaskField(field string) bool {
 		"images":          true,
 		"size":            true,
 		"duration":        true,
-		"seconds":         true,
 		"input_reference": true, // Sora 特有字段
 	}
 	return knownFields[field]

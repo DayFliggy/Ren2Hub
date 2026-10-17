@@ -2,129 +2,12 @@ package model
 
 import (
 	"fmt"
-	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 const prefillGroupNameIndex = "uk_prefill_name"
-
-// MySQL does not implement partial indexes. NULL in a generated column gives
-// deleted rows the same name-reuse semantics as PostgreSQL and SQLite.
-const prefillGroupActiveNameIndex = "uk_prefill_active_name"
-
-func migratePrefillGroups(db *gorm.DB) error {
-	if db == nil {
-		return fmt.Errorf("migrate prefill groups: database is nil")
-	}
-	if db.Migrator().HasTable(&PrefillGroup{}) {
-		if db.Dialector.Name() == "mysql" {
-			if err := migrateMySQLPrefillGroupUniqueness(db); err != nil {
-				return err
-			}
-		} else if err := migratePrefillGroupUniqueness(db); err != nil {
-			return err
-		}
-	}
-	if err := db.AutoMigrate(&PrefillGroup{}); err != nil {
-		return err
-	}
-	if db.Dialector.Name() == "mysql" {
-		return migrateMySQLPrefillGroupUniqueness(db)
-	}
-	if err := createPrefillGroupNameIndex(db); err != nil {
-		return err
-	}
-	if db.Dialector.Name() == "postgres" {
-		state, err := inspectPrefillGroupNameIndex(db, db.NamingStrategy.TableName("PrefillGroup"))
-		if err != nil {
-			return err
-		}
-		if !state.valid {
-			return fmt.Errorf("prefill group index %q has an unexpected definition", prefillGroupNameIndex)
-		}
-	}
-	return nil
-}
-
-func createPrefillGroupNameIndex(db *gorm.DB) error {
-	if db.Migrator().HasIndex(&PrefillGroup{}, prefillGroupNameIndex) {
-		return nil
-	}
-	return db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS ? ON ? (?) WHERE deleted_at IS NULL",
-		clause.Column{Name: prefillGroupNameIndex},
-		clause.Table{Name: db.NamingStrategy.TableName("PrefillGroup")}, clause.Column{Name: "name"}).Error
-}
-
-func migrateMySQLPrefillGroupUniqueness(db *gorm.DB) error {
-	migrator := db.Migrator()
-	if !migrator.HasColumn(&PrefillGroup{}, "DeletedAt") {
-		if err := migrator.AddColumn(&PrefillGroup{}, "DeletedAt"); err != nil {
-			return err
-		}
-	}
-	table := db.NamingStrategy.TableName("PrefillGroup")
-	var columns []struct {
-		DataType   string
-		Length     int64
-		Expression string
-	}
-	if err := db.Raw(`SELECT DATA_TYPE AS data_type, CHARACTER_MAXIMUM_LENGTH AS length,
-GENERATION_EXPRESSION AS expression FROM information_schema.columns
-WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'active_name'`, table).Scan(&columns).Error; err != nil {
-		return err
-	}
-	if len(columns) == 0 {
-		if err := db.Exec("ALTER TABLE ? ADD COLUMN active_name VARCHAR(64) GENERATED ALWAYS AS (IF(deleted_at IS NULL, name, NULL)) VIRTUAL",
-			clause.Table{Name: table}).Error; err != nil {
-			return fmt.Errorf("add prefill group active name: %w", err)
-		}
-	} else {
-		expression := strings.NewReplacer("`", "", " ", "", "(", "", ")", "", "\n", "", "\t", "").Replace(strings.ToLower(columns[0].Expression))
-		// MySQL 5.7 serializes IS NULL as isnull(column) in metadata.
-		validExpression := expression == "ifdeleted_atisnull,name,null" || expression == "ifisnulldeleted_at,name,null"
-		if columns[0].DataType != "varchar" || columns[0].Length != 64 || !validExpression {
-			return fmt.Errorf("prefill group active_name has an unexpected generated definition")
-		}
-	}
-	var indexes []struct {
-		Name      string
-		Columns   string `gorm:"column:column_names"`
-		NonUnique int
-		Prefixed  int
-	}
-	if err := db.Raw(`SELECT INDEX_NAME AS name, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS column_names,
-MAX(NON_UNIQUE) AS non_unique, MAX(SUB_PART IS NOT NULL) AS prefixed
-FROM information_schema.statistics WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-GROUP BY INDEX_NAME`, table).Scan(&indexes).Error; err != nil {
-		return err
-	}
-	found := false
-	for _, index := range indexes {
-		if index.Name == prefillGroupActiveNameIndex {
-			if index.Columns != "active_name" || index.NonUnique != 0 || index.Prefixed != 0 {
-				return fmt.Errorf("prefill group index %q has an unexpected definition", prefillGroupActiveNameIndex)
-			}
-			found = true
-		}
-	}
-	if !found {
-		if err := db.Exec("CREATE UNIQUE INDEX ? ON ? (active_name)", clause.Column{Name: prefillGroupActiveNameIndex}, clause.Table{Name: table}).Error; err != nil {
-			return err
-		}
-	}
-	// Install the replacement before dropping global uniqueness. MySQL DDL
-	// commits implicitly, so a failure must never leave active names unprotected.
-	for _, index := range indexes {
-		if index.Name != "PRIMARY" && index.NonUnique == 0 && index.Columns == "name" && index.Prefixed == 0 {
-			if err := migrator.DropIndex(&PrefillGroup{}, index.Name); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
 
 type conflictingPrefillGroupUniqueness struct {
 	constraints []string
@@ -285,7 +168,7 @@ func migratePrefillGroupUniqueness(db *gorm.DB) error {
 			return err
 		}
 		if !targetIndex.exists {
-			if err := createPrefillGroupNameIndex(tx); err != nil {
+			if err := migrator.CreateIndex(&PrefillGroup{}, prefillGroupNameIndex); err != nil {
 				return fmt.Errorf("create prefill group partial unique index: %w", err)
 			}
 			targetIndex, err = inspectPrefillGroupNameIndex(tx, tableName)

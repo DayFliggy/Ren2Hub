@@ -1,6 +1,6 @@
 package perfmetrics
 
-import "sync"
+import "sync/atomic"
 
 type Store interface {
 	Record(sample Sample)
@@ -22,6 +22,16 @@ type QueryParams struct {
 	Model string
 	Group string
 	Hours int
+	// AllowedGroups restricts both the per-group results and the model summary;
+	// nil allows every group.
+	AllowedGroups []string
+}
+
+// Summary is the request-weighted aggregate over every bucket in the window.
+type Summary struct {
+	AvgLatencyMs int64   `json:"avg_latency_ms"`
+	SuccessRate  float64 `json:"success_rate"`
+	AvgTps       float64 `json:"avg_tps"`
 }
 
 type BucketPoint struct {
@@ -44,20 +54,35 @@ type GroupResult struct {
 type QueryResult struct {
 	ModelName    string        `json:"model_name"`
 	SeriesSchema string        `json:"series_schema"`
+	Summary      *Summary      `json:"summary"`
+	Series       []BucketPoint `json:"series"`
+	WindowStart  int64         `json:"window_start"`
+	WindowEnd    int64         `json:"window_end"`
 	Groups       []GroupResult `json:"groups"`
 }
 
+type SuccessRatePoint struct {
+	Ts          int64   `json:"ts"`
+	SuccessRate float64 `json:"success_rate"`
+}
+
 type ModelSummary struct {
-	ModelName          string    `json:"model_name"`
-	AvgLatencyMs       int64     `json:"avg_latency_ms"`
-	SuccessRate        float64   `json:"success_rate"`
-	AvgTps             float64   `json:"avg_tps"`
-	RecentSuccessRates []float64 `json:"recent_success_rates,omitempty"`
-	RequestCount       int64     `json:"-"`
+	ModelName           string             `json:"model_name"`
+	AvgLatencyMs        int64              `json:"avg_latency_ms"`
+	SuccessRate         float64            `json:"success_rate"`
+	AvgTps              float64            `json:"avg_tps"`
+	RecentSuccessSeries []SuccessRatePoint `json:"recent_success_series,omitempty"`
+	RequestCount        int64              `json:"-"`
 }
 
 type SummaryAllResult struct {
-	Models []ModelSummary `json:"models"`
+	Summary     *Summary       `json:"summary"`
+	WindowStart int64          `json:"window_start"`
+	WindowEnd   int64          `json:"window_end"`
+	Models      []ModelSummary `json:"models"`
+	// RecentSuccessSeries contains up to 24 nonempty hours from the last 7 days,
+	// including requested models with no traffic in the summary window.
+	RecentSuccessSeries map[string][]SuccessRatePoint `json:"recent_success_series,omitempty"`
 }
 
 type bucketKey struct {
@@ -76,50 +101,78 @@ type counters struct {
 	generationMs   int64
 }
 
-func (c *counters) add(value counters) {
-	c.requestCount += value.requestCount
-	c.successCount += value.successCount
-	c.totalLatencyMs += value.totalLatencyMs
-	c.ttftSumMs += value.ttftSumMs
-	c.ttftCount += value.ttftCount
-	c.outputTokens += value.outputTokens
-	c.generationMs += value.generationMs
-}
-
-// A request count and its latency/tokens move together across each flush.
 type atomicBucket struct {
-	mu    sync.Mutex
-	value counters
+	requestCount   atomic.Int64
+	successCount   atomic.Int64
+	totalLatencyMs atomic.Int64
+	ttftSumMs      atomic.Int64
+	ttftCount      atomic.Int64
+	outputTokens   atomic.Int64
+	generationMs   atomic.Int64
 }
 
 func (b *atomicBucket) add(sample Sample) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.value.requestCount++
+	b.requestCount.Add(1)
 	if sample.Success {
-		b.value.successCount++
+		b.successCount.Add(1)
 	}
 	if sample.LatencyMs > 0 {
-		b.value.totalLatencyMs += sample.LatencyMs
+		b.totalLatencyMs.Add(sample.LatencyMs)
 	}
 	if sample.HasTtft && sample.TtftMs >= 0 {
-		b.value.ttftSumMs += sample.TtftMs
-		b.value.ttftCount++
+		b.ttftSumMs.Add(sample.TtftMs)
+		b.ttftCount.Add(1)
 	}
 	if sample.OutputTokens > 0 && sample.GenerationMs > 0 {
-		b.value.outputTokens += sample.OutputTokens
-		b.value.generationMs += sample.GenerationMs
+		b.outputTokens.Add(sample.OutputTokens)
+		b.generationMs.Add(sample.GenerationMs)
 	}
 }
+
 func (b *atomicBucket) snapshot() counters {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.value
+	return counters{
+		requestCount:   b.requestCount.Load(),
+		successCount:   b.successCount.Load(),
+		totalLatencyMs: b.totalLatencyMs.Load(),
+		ttftSumMs:      b.ttftSumMs.Load(),
+		ttftCount:      b.ttftCount.Load(),
+		outputTokens:   b.outputTokens.Load(),
+		generationMs:   b.generationMs.Load(),
+	}
 }
+
 func (b *atomicBucket) drain() counters {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	result := b.value
-	b.value = counters{}
-	return result
+	return counters{
+		requestCount:   b.requestCount.Swap(0),
+		successCount:   b.successCount.Swap(0),
+		totalLatencyMs: b.totalLatencyMs.Swap(0),
+		ttftSumMs:      b.ttftSumMs.Swap(0),
+		ttftCount:      b.ttftCount.Swap(0),
+		outputTokens:   b.outputTokens.Swap(0),
+		generationMs:   b.generationMs.Swap(0),
+	}
+}
+
+func (b *atomicBucket) addCounters(c counters) {
+	if c.requestCount != 0 {
+		b.requestCount.Add(c.requestCount)
+	}
+	if c.successCount != 0 {
+		b.successCount.Add(c.successCount)
+	}
+	if c.totalLatencyMs != 0 {
+		b.totalLatencyMs.Add(c.totalLatencyMs)
+	}
+	if c.ttftSumMs != 0 {
+		b.ttftSumMs.Add(c.ttftSumMs)
+	}
+	if c.ttftCount != 0 {
+		b.ttftCount.Add(c.ttftCount)
+	}
+	if c.outputTokens != 0 {
+		b.outputTokens.Add(c.outputTokens)
+	}
+	if c.generationMs != 0 {
+		b.generationMs.Add(c.generationMs)
+	}
 }

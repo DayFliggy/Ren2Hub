@@ -19,14 +19,76 @@ import (
 //   - "tool_name"              → default price for all models
 //   - "tool_name:model_prefix*" → override for models matching the prefix
 //
-// Only explicitly saved values are indexed. Longest model prefixes take
-// precedence over the tool default, including explicitly saved zero.
+// Effective index: hardcoded defaults → hardcoded model overrides → valid
+// operator values. Lookup uses the longest model prefix before the tool
+// default, and a matched numeric zero is terminal.
+//
+// Built-in keys are written in the vendor's list currency.
 // ---------------------------------------------------------------------------
 
 const ToolPriceOptionKey = "tool_price_setting.prices"
 
+const (
+	defaultWebSearchToolPrice        = 10.0
+	defaultWebSearchPreviewToolPrice = 10.0
+	defaultFileSearchToolPrice       = 2.5
+	defaultGoogleSearchToolPrice     = 14.0
+	defaultImageGenerationToolPrice  = 150.0
+	defaultSearchPreviewModelPrice   = 25.0
+)
+
+// seedHardcodedToolPrices injects compile-time built-in fallbacks (tool
+// defaults and model-prefix overrides) into the destination. The source is
+// constants, not a mutable package map or operator configuration.
+func seedHardcodedToolPrices(prices map[string]float64) {
+	prices["web_search"] = defaultWebSearchToolPrice
+	prices["web_search_preview"] = defaultWebSearchPreviewToolPrice
+	prices["file_search"] = defaultFileSearchToolPrice
+	prices["google_search"] = defaultGoogleSearchToolPrice
+	prices["image_generation"] = defaultImageGenerationToolPrice
+	prices["web_search_preview:gpt-4o*"] = defaultSearchPreviewModelPrice
+	prices["web_search_preview:gpt-4.1*"] = defaultSearchPreviewModelPrice
+	prices["web_search_preview:gpt-4o-mini*"] = defaultSearchPreviewModelPrice
+	prices["web_search_preview:gpt-4.1-mini*"] = defaultSearchPreviewModelPrice
+
+	// Google Search grounding (USD per 1K, ai.google.dev/gemini-api/docs/pricing
+	// and cloud.google.com/vertex-ai/generative-ai/pricing): Gemini 3 bills each
+	// search query at $14 (the google_search default); Gemini 2.5 and older bill
+	// $35 per grounded prompt, so their query count is free and the grounded
+	// prompt carries the price.
+	prices["google_search:gemini-2.5*"] = 0
+	prices["google_search:gemini-2.0*"] = 0
+	prices["google_search:gemini-1.5*"] = 0
+	prices["google_search_grounded_prompt:gemini-2.5*"] = 35
+	prices["google_search_grounded_prompt:gemini-2.0*"] = 35
+	prices["google_search_grounded_prompt:gemini-1.5*"] = 35
+
+	// Vendor search tiers, verbatim in the vendor's list currency per 1K
+	// calls. CNY: Zhipu search engines, 0.01/0.03/0.05 CNY per call
+	// (https://docs.bigmodel.cn/cn/guide/tools/web-search), and Alibaba Model
+	// Studio search strategies at Beijing prices
+	// (https://help.aliyun.com/zh/model-studio/web-search); the Singapore
+	// agent price (73.392381 CNY) is set by the operator. USD: Azure
+	// Responses web search, billed as Bing transactions at $14 per 1,000
+	// (https://www.microsoft.com/en-us/bing/apis), and xAI web search $5 per
+	// 1K calls, x_search $5 per 1K posts and $10 per 1K profiles
+	// (https://docs.x.ai/developers/pricing).
+	prices["search_std"] = 10
+	prices["search_pro"] = 30
+	prices["search_pro_sogou"] = 50
+	prices["search_pro_quark"] = 50
+	prices["search_strategy_turbo"] = 3
+	prices["search_strategy_max"] = 4
+	prices["search_strategy_agent"] = 4
+	prices["search_strategy_agent_max"] = 4
+	prices["bing_web_search"] = 14
+	prices["web_search:grok*"] = 5
+	prices["x_search_posts"] = 5
+	prices["x_search_profiles"] = 10
+}
+
 // ToolPriceSetting is managed by config.GlobalConfig.Register.
-// Prices starts empty; missing prices remain unconfigured.
+// Prices holds operator overrides only; hardcoded fallbacks live in the index.
 type ToolPriceSetting struct {
 	Prices map[string]float64 `json:"prices"`
 }
@@ -35,36 +97,24 @@ var toolPriceSetting = ToolPriceSetting{
 	Prices: make(map[string]float64),
 }
 
-// builtInToolNames are the hosted-tool price keys NewAPI's built-in price
-// seed covers. Ren2Hub seeds no prices, so the set is a static list of the
-// same names, never derived from operator configuration.
-var builtInToolNames = map[string]struct{}{
-	"web_search":                    {},
-	"web_search_preview":            {},
-	"file_search":                   {},
-	"google_search":                 {},
-	"google_search_grounded_prompt": {},
-	"image_generation":              {},
-	"search_std":                    {},
-	"search_pro":                    {},
-	"search_pro_sogou":              {},
-	"search_pro_quark":              {},
-	"search_strategy_turbo":         {},
-	"search_strategy_max":           {},
-	"search_strategy_agent":         {},
-	"search_strategy_agent_max":     {},
-	"bing_web_search":               {},
-	"x_search_posts":                {},
-	"x_search_profiles":             {},
-}
+// builtInToolNames are the tool names (the part before ":") that
+// seedHardcodedToolPrices prices, built once from the constant seed and never
+// from operator configuration.
+var builtInToolNames = make(map[string]struct{})
 
 func init() {
 	config.GlobalConfig.Register("tool_price_setting", &toolPriceSetting)
+	seed := make(map[string]float64)
+	seedHardcodedToolPrices(seed)
+	for key := range seed {
+		name, _, _ := strings.Cut(key, ":")
+		builtInToolNames[name] = struct{}{}
+	}
 	RebuildToolPriceIndex()
 }
 
-// IsBuiltInToolPriceKey reports whether name is a built-in hosted-tool price
-// key. Operator prices never count.
+// IsBuiltInToolPriceKey reports whether the built-in price seed prices the
+// tool name, as a default or for a model prefix. Operator prices never count.
 func IsBuiltInToolPriceKey(name string) bool {
 	_, ok := builtInToolNames[name]
 	return ok
@@ -90,7 +140,7 @@ func isValidToolPrice(price float64) bool {
 	return price >= 0 && !math.IsNaN(price) && !math.IsInf(price, 0)
 }
 
-func decodeToolPricesJSON(value string) (map[string]float64, error) {
+func decodeToolPricesJSON(value string, ignoreInvalidEntries bool) (map[string]float64, error) {
 	rawValue := json.RawMessage(strings.TrimSpace(value))
 	if common.GetJsonType(rawValue) != "object" {
 		return nil, common.NewMessage("Tool prices must be a JSON object")
@@ -120,7 +170,10 @@ func decodeToolPricesJSON(value string) (map[string]float64, error) {
 		if entryErr == nil {
 			continue
 		}
-		return nil, entryErr
+		if !ignoreInvalidEntries {
+			return nil, entryErr
+		}
+		common.SysError(entryErr.Error())
 	}
 	return prices, nil
 }
@@ -128,24 +181,28 @@ func decodeToolPricesJSON(value string) (map[string]float64, error) {
 // ValidateToolPricesJSON validates an operator-supplied complete price map.
 // A numeric zero is valid and intentionally disables the matching rule.
 func ValidateToolPricesJSON(value string) error {
-	_, err := decodeToolPricesJSON(value)
+	_, err := decodeToolPricesJSON(value, false)
 	return err
 }
 
-func LoadToolPricesFromJSONString(value string) error {
-	prices, err := decodeToolPricesJSON(value)
+// LoadToolPricesFromJSONString replaces the complete operator price map.
+// Invalid legacy entries are ignored individually so valid sibling overrides
+// survive, while missing built-in keys continue to use hardcoded fallbacks.
+func LoadToolPricesFromJSONString(value string) {
+	prices, err := decodeToolPricesJSON(value, true)
 	if err != nil {
-		return err
+		common.SysError(common.LogText("failed to load tool prices, using hardcoded fallbacks: %s", err.Error()))
+		prices = make(map[string]float64)
 	}
 	toolPriceSetting.Prices = prices
 	RebuildToolPriceIndex()
-	return nil
 }
 
 // RebuildToolPriceIndex rebuilds the lookup index from the current config.
 // Called on init and after config updates. Not on the billing hot path.
 func RebuildToolPriceIndex() {
-	merged := make(map[string]float64, len(toolPriceSetting.Prices))
+	merged := make(map[string]float64, 9+len(toolPriceSetting.Prices))
+	seedHardcodedToolPrices(merged)
 	for k, v := range toolPriceSetting.Prices {
 		if !isValidToolPrice(v) {
 			continue
@@ -184,23 +241,83 @@ func RebuildToolPriceIndex() {
 	currentIndex.Store(idx)
 }
 
-// ModelToolPrices returns only explicitly configured prices in USD/1K calls.
-func ModelToolPrices(modelName string) map[string]float64 {
+// GetToolPriceForModel returns the price ($/1K calls) for a tool given a model name.
+// Lookup: longest prefix match → tool default → 0.
+func GetToolPriceForModel(toolName, modelName string) float64 {
 	idx := currentIndex.Load()
-	prices := map[string]float64{}
 	if idx == nil {
-		return prices
+		RebuildToolPriceIndex()
+		idx = currentIndex.Load()
+		if idx == nil {
+			return 0
+		}
 	}
-	for name, price := range idx.defaults {
-		prices[name] = price
-	}
-	for name, entries := range idx.prefixes {
-		for _, entry := range entries {
-			if strings.HasPrefix(modelName, entry.prefix) {
-				prices[name] = entry.price
-				break
+
+	if entries, ok := idx.prefixes[toolName]; ok && modelName != "" {
+		for _, e := range entries {
+			if strings.HasPrefix(modelName, e.prefix) {
+				return e.price
 			}
 		}
 	}
-	return prices
+
+	if p, ok := idx.defaults[toolName]; ok {
+		return p
+	}
+	return 0
+}
+
+// GetToolPrice is a convenience wrapper when no model name is needed.
+func GetToolPrice(toolName string) float64 {
+	return GetToolPriceForModel(toolName, "")
+}
+
+// SetToolPriceForTest injects a tool price and rebuilds the lookup index. Tests only.
+func SetToolPriceForTest(name string, price float64) {
+	if toolPriceSetting.Prices == nil {
+		toolPriceSetting.Prices = make(map[string]float64)
+	}
+	toolPriceSetting.Prices[name] = price
+	RebuildToolPriceIndex()
+}
+
+// DeleteToolPriceForTest removes an injected tool price and rebuilds the index. Tests only.
+func DeleteToolPriceForTest(name string) {
+	delete(toolPriceSetting.Prices, name)
+	RebuildToolPriceIndex()
+}
+
+// ---------------------------------------------------------------------------
+// Gemini audio input pricing (per-million tokens, model-specific)
+// ---------------------------------------------------------------------------
+
+const (
+	Gemini25FlashPreviewInputAudioPrice     = 1.00
+	Gemini25FlashProductionInputAudioPrice  = 1.00
+	Gemini25FlashLitePreviewInputAudioPrice = 0.50
+	Gemini25FlashNativeAudioInputAudioPrice = 3.00
+	Gemini20FlashInputAudioPrice            = 0.70
+	GeminiRoboticsER15InputAudioPrice       = 1.00
+)
+
+func GetGeminiInputAudioPricePerMillionTokens(modelName string) float64 {
+	if strings.HasPrefix(modelName, "gemini-2.5-flash-preview-native-audio") {
+		return Gemini25FlashNativeAudioInputAudioPrice
+	}
+	if strings.HasPrefix(modelName, "gemini-2.5-flash-preview-lite") {
+		return Gemini25FlashLitePreviewInputAudioPrice
+	}
+	if strings.HasPrefix(modelName, "gemini-2.5-flash-preview") {
+		return Gemini25FlashPreviewInputAudioPrice
+	}
+	if strings.HasPrefix(modelName, "gemini-2.5-flash") {
+		return Gemini25FlashProductionInputAudioPrice
+	}
+	if strings.HasPrefix(modelName, "gemini-2.0-flash") {
+		return Gemini20FlashInputAudioPrice
+	}
+	if strings.HasPrefix(modelName, "gemini-robotics-er-1.5") {
+		return GeminiRoboticsER15InputAudioPrice
+	}
+	return 0
 }

@@ -15,10 +15,16 @@ func resetPricingEndpointTestTables(t *testing.T) {
 	t.Helper()
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = true
-	modelPricingConfigDB(t)
+	require.NoError(t, DB.AutoMigrate(&Channel{}, &Ability{}, &Model{}, &Vendor{}))
+	for _, table := range []string{"abilities", "channels", "models", "vendors"} {
+		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
+	}
 	InitChannelCache()
 	InvalidatePricingCache()
 	t.Cleanup(func() {
+		for _, table := range []string{"abilities", "channels", "models", "vendors"} {
+			require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
+		}
 		InitChannelCache()
 		InvalidatePricingCache()
 		common.MemoryCacheEnabled = originalMemoryCacheEnabled
@@ -173,55 +179,15 @@ func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
 	insertPricingEndpointChannel(t, 201, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 202, constant.ChannelTypeGemini, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 203, constant.ChannelTypeAnthropic, dto.ChannelOtherSettings{})
-	insertPricingEndpointChannel(t, 204, constant.ChannelTypeOpenRouter, dto.ChannelOtherSettings{})
 	insertPricingEndpointAbility(t, 201, "gpt-4o")
-	insertPricingEndpointAbility(t, 201, "gpt-4o-openai-compact")
 	insertPricingEndpointAbility(t, 202, "gemini-2.5-flash")
 	insertPricingEndpointAbility(t, 203, "claude-3-5-sonnet")
-	insertPricingEndpointAbility(t, 204, "legacy-openrouter-openai-compact")
 
 	byModel := pricingEndpointTypesByModel(t)
 
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAI,
-		constant.EndpointTypeOpenAIResponse,
-		constant.EndpointTypeOpenAIResponseCompact,
-	}, byModel["gpt-4o"])
-	assert.Equal(t, byModel["gpt-4o"], byModel["gpt-4o-openai-compact"])
+	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["gpt-4o"])
 	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeGemini, constant.EndpointTypeOpenAI}, byModel["gemini-2.5-flash"])
 	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeAnthropic, constant.EndpointTypeOpenAI}, byModel["claude-3-5-sonnet"])
-	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["legacy-openrouter-openai-compact"])
-}
-
-func TestPricingDoesNotCreateVirtualCompactModel(t *testing.T) {
-	resetPricingEndpointTestTables(t)
-	require.NoError(t, UpdateModelPricing([]ModelPricingChange{{ModelName: "gpt-pricing-base", ExpectedVersion: ModelPricingVersion(PricingValues{}), Pricing: PricingValues{"ModelPrice": "0.1"}}}))
-	require.NoError(t, DB.Create(&Model{ModelName: "gpt-pricing-base", Description: "base description", Status: 1, NameRule: NameRuleExact}).Error)
-	insertPricingEndpointChannel(t, 205, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	insertPricingEndpointAbility(t, 205, "gpt-pricing-base")
-	InitChannelCache()
-	byName := pricingByName(GetPricing())
-	require.Contains(t, byName, "gpt-pricing-base")
-	require.NotContains(t, byName, "gpt-pricing-base-openai-compact")
-	base := byName["gpt-pricing-base"]
-	require.Contains(t, base.SupportedEndpointTypes, constant.EndpointTypeOpenAIResponseCompact)
-	require.NotEmpty(t, base.PricingVersion)
-	require.Equal(t, 1, base.QuotaType)
-	require.Equal(t, 0.1, base.ModelPrice)
-}
-
-func TestPricingCacheUsesOneModelPriceAcrossChannels(t *testing.T) {
-	resetPricingEndpointTestTables(t)
-	insertPricingEndpointChannel(t, 206, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	insertPricingEndpointAbility(t, 206, "channel-priced-model")
-	insertPricingEndpointChannel(t, 207, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	insertPricingEndpointAbility(t, 207, "channel-priced-model")
-	require.NoError(t, UpdateModelPricing([]ModelPricingChange{{ModelName: "channel-priced-model", ExpectedVersion: ModelPricingVersion(PricingValues{}), Pricing: PricingValues{"ModelRatio": "1", "CompletionRatio": "2"}}}))
-	InitChannelCache()
-	prices := GetPricing()
-	require.Len(t, prices, 1)
-	require.Equal(t, 1.0, prices[0].ModelRatio)
-	require.Equal(t, 2.0, prices[0].CompletionRatio)
 }
 
 func TestInitChannelCacheInvalidatesPricingCache(t *testing.T) {

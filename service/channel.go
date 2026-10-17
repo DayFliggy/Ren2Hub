@@ -16,9 +16,17 @@ func formatNotifyType(channelId int, status int) string {
 	return fmt.Sprintf("%s_%d_%d", dto.NotifyTypeChannelUpdate, channelId, status)
 }
 
+func shouldCloseActiveWebSocketsAfterDisable(channelId int) bool {
+	channel, err := model.GetChannelById(channelId, true)
+	if err != nil {
+		common.SysLog(common.LogText("failed to check channel status before closing active websockets: channel_id=%d, error=%v", channelId, err))
+		return true
+	}
+	return channel.Status != common.ChannelStatusEnabled
+}
+
 // RootUserLanguage returns the saved language of the root user, who receives
-// channel notices; it is empty when the root user saved none, which
-// i18n.Translate reads as DEFAULT_LANGUAGE.
+// channel notices; it is empty when the root user saved none.
 func RootUserLanguage() string {
 	root := model.GetRootUser()
 	if root == nil {
@@ -39,6 +47,9 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 
 	success := model.UpdateChannelStatus(channelError.ChannelId, channelError.UsingKey, common.ChannelStatusAutoDisabled, reason)
 	if success {
+		if shouldCloseActiveWebSocketsAfterDisable(channelError.ChannelId) {
+			CloseActiveWebSocketsForChannel(channelError.ChannelId, ChannelDisabledCloseReason)
+		}
 		lang := RootUserLanguage()
 		params := map[string]any{"Name": channelError.ChannelName, "Id": channelError.ChannelId, "Reason": reason}
 		subject := i18n.Translate(lang, i18n.MsgChannelNotifyDisabledSubject, params)

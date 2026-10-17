@@ -205,6 +205,6 @@ func FinalizeResponsesToChatStream(state *ResponsesToChatStreamState) []dto.Chat
 	return oairesponses.FinalizeResponsesToChatStream(state)
 }
 
-func NewResponsesBufferedAccumulator(limits ...int64) *ResponsesBufferedAccumulator {
-	return oairesponses.NewResponsesBufferedAccumulator(limits...)
+func NewResponsesBufferedAccumulator() *ResponsesBufferedAccumulator {
+	return oairesponses.NewResponsesBufferedAccumulator()
 }

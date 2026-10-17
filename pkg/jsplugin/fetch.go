@@ -272,17 +272,13 @@ func (c *runtimeCall) yieldSlot() {
 	c.holdsSlot = false
 }
 
-// slotReclaimTimeout bounds how long a call waits to resume after utils.fetch.
-// Running out of it is engine saturation, reported as ErrCallAdmissionTimeout.
-var slotReclaimTimeout = fetchTimeout
-
 // reclaimSlot takes an execution slot back for the call's JavaScript, waiting
-// no longer than the caller and slotReclaimTimeout allow.
+// no longer than the caller and fetchTimeout allow.
 func (c *runtimeCall) reclaimSlot() bool {
 	if c.holdsSlot {
 		return true
 	}
-	timer := time.NewTimer(slotReclaimTimeout)
+	timer := time.NewTimer(fetchTimeout)
 	defer timer.Stop()
 	select {
 	case c.engine.semaphore <- struct{}{}:

@@ -9,8 +9,7 @@
       "choices": [
         {
           "delta": {
-            "content": "Hello",
-            "role": "assistant"
+            "content": "Hello"
           },
           "logprobs": null,
           "finish_reason": null,

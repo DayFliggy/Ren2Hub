@@ -14,7 +14,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -729,14 +728,9 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 	previousDB := model.DB
 	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, database.AutoMigrate(&model.Task{}, &model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}))
+	require.NoError(t, database.AutoMigrate(&model.Task{}))
 	model.DB = database
 	t.Cleanup(func() { model.DB = previousDB })
-	require.NoError(t, controller.InitTaskPlugins())
-	kling, found := jsplugin.DefaultRegistry.Get("kling")
-	require.True(t, found)
-	version, err := model.GetTaskPluginVersion("kling", kling.Meta.Version)
-	require.NoError(t, err)
 	require.NoError(t, database.Create(&model.Task{
 		TaskID:    "task_native_router",
 		Platform:  constant.TaskPlatform("kling"),
@@ -745,13 +739,13 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 		Progress:  "100%",
 		ChannelId: 17,
 		PrivateData: model.TaskPrivateData{
-			TokenId:        92,
-			PluginRef:      &model.TaskPluginRef{Key: version.Key, Version: version.Version, SourceHash: version.SourceHash},
 			UpstreamTaskID: "private_upstream_id",
 			ResultURL:      "https://secret.example/video.mp4",
 		},
 	}).Error)
 
+	kling, found := jsplugin.DefaultRegistry.Get("kling")
+	require.True(t, found)
 	authenticatedProductionHandlers := func(
 		generation *jsplugin.RoutingGeneration,
 		binding jsplugin.RouteBinding,
@@ -761,9 +755,8 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 			production[0],
 			func(c *gin.Context) {
 				common.SetContextKey(c, constant.ContextKeyUserId, 91)
-				common.SetContextKey(c, constant.ContextKeyTokenId, 92)
 				common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-				c.Set("token_group", "default")
+				common.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
 				c.Next()
 			},
 			production[2],
@@ -895,7 +888,7 @@ func performPluginRequest(handler http.Handler, method, path string) *httptest.R
 
 func TestWebFallbackDoesNotCacheMissingAPIOrAssets(t *testing.T) {
 	outer := gin.New()
-	SetWebRouter(outer, testWebAssets("dashboard"))
+	SetWebRouter(outer, WebAssets{IndexPage: []byte("dashboard")}, func(c *gin.Context) { c.Next() })
 	for _, path := range []string{"/api/user/token/status", "/api/audit/self?p=1", "/v1/missing", "/assets/missing.js"} {
 		t.Run(path, func(t *testing.T) {
 			response := performPluginRequest(outer, http.MethodGet, path)
@@ -911,18 +904,10 @@ func TestWebFallbackDoesNotCacheMissingAPIOrAssets(t *testing.T) {
 	assert.Equal(t, "no-cache", page.Header().Get("Cache-Control"))
 }
 
-func TestRetiredOperationLogRouteIsGone(t *testing.T) {
-	outer := gin.New()
-	SetApiRouter(outer)
-	// Audit events are read only through /api/audit(/self).
-	response := performPluginRequest(outer, http.MethodGet, "/api/next/admin/operation-logs")
-	assert.Equal(t, http.StatusNotFound, response.Code)
-}
-
 func TestSecurityRoutesDisableCachingBeforeAuthentication(t *testing.T) {
 	outer := gin.New()
 	SetApiRouter(outer)
-	for _, path := range []string{"/api/user/personal-access-tokens", "/api/audit/self", "/api/audit"} {
+	for _, path := range []string{"/api/user/access_tokens", "/api/user/access_tokens/catalog", "/api/user/access_tokens/scopes", "/api/audit/self", "/api/audit"} {
 		t.Run(path, func(t *testing.T) {
 			response := performPluginRequest(outer, http.MethodGet, path)
 			assert.Equal(t, http.StatusUnauthorized, response.Code)

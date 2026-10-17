@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -44,14 +42,7 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if info.UpstreamModelName == "" {
-		return "", errors.New("palm model is required")
-	}
-	modelName := info.UpstreamModelName
-	if modelName == "PaLM-2" {
-		modelName = "chat-bison-001"
-	}
-	return fmt.Sprintf("%s/v1beta2/models/%s:generateMessage", info.ChannelBaseUrl, url.PathEscape(modelName)), nil
+	return fmt.Sprintf("%s/v1beta2/models/chat-bison-001:generateMessage", info.ChannelBaseUrl), nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {
@@ -64,14 +55,7 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if err := service.ValidateRequestProjection(info, constant.APITypePaLM, request); err != nil {
-		return nil, err
-	}
-	converted := &PaLMChatRequest{Temperature: request.Temperature, TopP: request.TopP, TopK: request.TopK}
-	for _, message := range request.Messages {
-		converted.Prompt.Messages = append(converted.Prompt.Messages, PaLMChatMessage{Author: message.Role, Content: message.StringContent()})
-	}
-	return converted, nil
+	return request, nil
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
@@ -95,7 +79,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	if info.IsStream {
 		var responseText string
-		err, responseText = palmStreamHandler(c, info, resp)
+		err, responseText = palmStreamHandler(c, resp)
 		usage = service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens())
 	} else {
 		usage, err = palmHandler(c, info, resp)

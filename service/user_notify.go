@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -109,30 +108,21 @@ func NotifyUser(userId int, userEmail string, userSetting dto.UserSetting, data 
 }
 
 func sendEmailNotify(userEmail string, data dto.Notify) error {
-	content := renderEmailNotifyContent(data)
+	// make email content
+	content := data.Content
+	// 处理占位符
+	for _, value := range data.Values {
+		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
+	}
 	return common.SendEmail(data.Title, userEmail, content)
 }
 
-// fillNotifyValues replaces each {{value}} placeholder of the content, in
-// order, with the next value. Every sender renders content through it.
-func fillNotifyValues(data dto.Notify) string {
+func sendBarkNotify(barkURL string, data dto.Notify) error {
+	// 处理占位符
 	content := data.Content
 	for _, value := range data.Values {
 		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
 	}
-	return content
-}
-
-func renderEmailNotifyContent(data dto.Notify) string {
-	content := fillNotifyValues(data)
-	if data.Type == dto.NotifyTypeTicketUpdate {
-		return html.EscapeString(content)
-	}
-	return content
-}
-
-func sendBarkNotify(barkURL string, data dto.Notify) error {
-	content := fillNotifyValues(data)
 
 	// 替换模板变量
 	finalURL := strings.ReplaceAll(barkURL, "{{title}}", url.QueryEscape(data.Title))
@@ -197,7 +187,11 @@ func sendBarkNotify(barkURL string, data dto.Notify) error {
 }
 
 func sendGotifyNotify(gotifyUrl string, gotifyToken string, priority int, data dto.Notify) error {
-	content := fillNotifyValues(data)
+	// 处理占位符
+	content := data.Content
+	for _, value := range data.Values {
+		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
+	}
 
 	// 构建完整的 Gotify API URL
 	// 确保 URL 以 /message 结尾

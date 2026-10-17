@@ -6,7 +6,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -46,6 +45,15 @@ type zhipuImageData struct {
 	B64Image string `json:"b64_image,omitempty"`
 }
 
+type openAIImagePayload struct {
+	Created int64             `json:"created"`
+	Data    []openAIImageData `json:"data"`
+}
+
+type openAIImageData struct {
+	B64Json string `json:"b64_json"`
+}
+
 func zhipu4vImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -66,7 +74,7 @@ func zhipu4vImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		}, resp.StatusCode)
 	}
 
-	payload := dto.ImageResponse{}
+	payload := openAIImagePayload{}
 	if zhipuResp.Created != nil && *zhipuResp.Created != 0 {
 		payload.Created = *zhipuResp.Created
 	} else {
@@ -78,7 +86,7 @@ func zhipu4vImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 			url = data.ImageUrl
 		}
 		if url == "" {
-			logger.LogWarn(c, "zhipu_image_missing_url")
+			logger.LogWarn(c, common.LogText("zhipu_image_missing_url"))
 			continue
 		}
 
@@ -91,22 +99,29 @@ func zhipu4vImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		default:
 			_, downloaded, err := service.GetImageFromUrl(url)
 			if err != nil {
-				logger.LogError(c, "zhipu_image_get_b64_failed: "+err.Error())
+				logger.LogError(c, common.LogText("zhipu_image_get_b64_failed: %s", err.Error()))
 				continue
 			}
 			b64 = downloaded
 		}
 
 		if b64 == "" {
-			logger.LogWarn(c, "zhipu_image_empty_b64")
+			logger.LogWarn(c, common.LogText("zhipu_image_empty_b64"))
 			continue
 		}
 
-		imageData := dto.ImageData{
+		imageData := openAIImageData{
 			B64Json: b64,
 		}
 		payload.Data = append(payload.Data, imageData)
 	}
 
-	return openai.DeliverConvertedImage(c, info, resp, &payload, zhipuResp.Usage)
+	jsonResp, err := common.Marshal(payload)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+
+	service.IOCopyBytesGracefully(c, resp, jsonResp)
+
+	return &dto.Usage{}, nil
 }

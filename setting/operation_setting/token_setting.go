@@ -4,14 +4,12 @@ import "github.com/QuantumNous/new-api/setting/config"
 
 // TokenSetting 令牌相关配置
 type TokenSetting struct {
-	MaxUserTokens          int `json:"max_user_tokens"`            // 每用户最大令牌数量
-	MaxTokenCreatesPerHour int `json:"max_token_creates_per_hour"` // 0 表示不限制创建频率
+	MaxUserTokens int `json:"max_user_tokens"` // 每用户最大令牌数量
 }
 
 // 默认配置
 var tokenSetting = TokenSetting{
-	MaxUserTokens:          1000, // 默认每用户最多 1000 个令牌
-	MaxTokenCreatesPerHour: 60,
+	MaxUserTokens: 1000, // 默认每用户最多 1000 个令牌
 }
 
 func init() {

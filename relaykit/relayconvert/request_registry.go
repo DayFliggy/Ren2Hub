@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 
@@ -69,9 +68,9 @@ var (
 
 const (
 	requestConverterClaudeToGemini    = "claude_messages_to_gemini_generate_content"
-	requestConverterClaudeToResponses = "claude_messages_to_openai_responses"
+	requestConverterClaudeToResponses = ConverterClaudeMessagesToOpenAIResponses
 	requestConverterGeminiToClaude    = "gemini_generate_content_to_claude_messages"
-	requestConverterGeminiToResponses = "gemini_generate_content_to_openai_responses"
+	requestConverterGeminiToResponses = ConverterGeminiContentToOpenAIResponses
 	requestConverterResponsesToClaude = ConverterOpenAIResponsesToClaudeMessages
 )
 
@@ -85,6 +84,8 @@ const (
 	ConverterOpenAIResponsesToGemini         = "openai_responses_to_gemini_generate_content"
 	ConverterGeminiContentToOpenAIChat       = "gemini_generate_content_to_openai_chat_completions"
 	ConverterOpenAIChatToGeminiContent       = "openai_chat_completions_to_gemini_generate_content"
+	ConverterClaudeMessagesToOpenAIResponses = "claude_messages_to_openai_responses"
+	ConverterGeminiContentToOpenAIResponses  = "gemini_generate_content_to_openai_responses"
 )
 
 func registerBuiltinRequestConverter(spec RequestConverterSpec) {
@@ -154,9 +155,6 @@ func LookupRequestConverter(converter string) (RequestConverterSpec, bool) {
 }
 
 func ConvertRequest(c context.Context, info convmeta.Meta, target types.RelayFormat, request any) (*RequestResult, error) {
-	if info != nil {
-		info.SetResponsesToolState(nil)
-	}
 	from, err := inferRequestRelayFormat(request)
 	if err != nil {
 		return nil, err
@@ -180,9 +178,6 @@ func ConvertRequest(c context.Context, info convmeta.Meta, target types.RelayFor
 }
 
 func ConvertRequestVia(c context.Context, info convmeta.Meta, request any, path ...types.RelayFormat) (*RequestResult, error) {
-	if info != nil {
-		info.SetResponsesToolState(nil)
-	}
 	from, err := inferRequestRelayFormat(request)
 	if err != nil {
 		return nil, err
@@ -223,9 +218,6 @@ func ConvertRequestVia(c context.Context, info convmeta.Meta, request any, path 
 }
 
 func ConvertRequestByID(c context.Context, info convmeta.Meta, converter string, request any) (*RequestResult, error) {
-	if info != nil {
-		info.SetResponsesToolState(nil)
-	}
 	from, err := inferRequestRelayFormat(request)
 	if err != nil {
 		return nil, err
@@ -250,34 +242,8 @@ func executeRequestSpec(c context.Context, info convmeta.Meta, from types.RelayF
 }
 
 func executeRequestSteps(c context.Context, info convmeta.Meta, from types.RelayFormat, target types.RelayFormat, request any, converter string, quality RequestConverterQuality, specs []RequestConverterSpec) (*RequestResult, error) {
-	requirements, err := AnalyzeRequest(request)
-	if err != nil {
-		return nil, err
-	}
-	plan, err := PlanConversionFor(requirements, target, convmeta.OptionsOf(info).EffectiveConversionPolicy(), UpstreamCapabilitiesOf(info))
-	if err != nil {
-		return &RequestResult{From: from, To: target, Diagnostics: plan.Diagnostics}, err
-	}
-	if plan.Native {
-		// A round trip still loses source semantics at its first protocol boundary.
-		for _, spec := range specs {
-			if spec.To == from {
-				continue
-			}
-			outbound, outboundErr := PlanConversion(requirements, spec.To, plan.Policy)
-			for _, diagnostic := range outbound.Diagnostics {
-				if !slices.Contains(plan.Diagnostics, diagnostic) {
-					plan.Diagnostics = append(plan.Diagnostics, diagnostic)
-				}
-			}
-			if outboundErr != nil {
-				return &RequestResult{From: from, To: target, Diagnostics: plan.Diagnostics}, outboundErr
-			}
-			break
-		}
-	}
 	c, diagnosticCollector := convdiag.WithCollector(c)
-	current, tools, err := toolconv.ExtractRequest(from, target, request)
+	current, tools, err := toolconv.ExtractRequest(from, request)
 	if err != nil {
 		return nil, err
 	}
@@ -293,23 +259,7 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 
 	tools.Model = convmeta.UpstreamModelName(info)
 	current, toolDiagnostics, err := toolconv.AttachRequest(target, current, tools, convmeta.OptionsOf(info))
-	diagnostics := append(plan.Diagnostics, diagnosticCollector.Diagnostics()...)
-	diagnostics = append(diagnostics, toolDiagnostics...)
-	policy := convmeta.OptionsOf(info).EffectiveConversionPolicy()
-	if claudeRequest, ok := current.(*dto.ClaudeRequest); ok && policy == types.ConversionLossPolicyStrict &&
-		from != types.RelayFormatClaude && claudeRequest.Thinking != nil && claudeRequest.Thinking.Type == "enabled" {
-		// Manual extended thinking always returns signed thinking blocks, and
-		// the response guard drops those signatures as provider_state_dropped.
-		// Strict would reject that response only after the upstream billed it,
-		// so reject the request before send. Safe and allow keep reporting the
-		// loss from the response when signatures actually arrive.
-		diagnostics = append(diagnostics, types.ConversionDiagnostic{
-			Code:     "provider_state_dropped",
-			Path:     "thinking",
-			Message:  "manual extended thinking returns Claude reasoning signatures that cannot cross protocols",
-			Severity: types.ConversionDiagnosticWarning,
-		})
-	}
+	diagnostics := append(diagnosticCollector.Diagnostics(), toolDiagnostics...)
 	for i := range diagnostics {
 		if diagnostics[i].From == "" {
 			diagnostics[i].From = from
@@ -317,9 +267,6 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		if diagnostics[i].To == "" {
 			diagnostics[i].To = target
 		}
-	}
-	if err == nil {
-		err = types.RejectConversionLoss(policy, diagnostics)
 	}
 	if err != nil {
 		return &RequestResult{
@@ -335,10 +282,8 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		for _, step := range steps {
 			info.AppendRequestConversion(step.To)
 		}
-		if from == types.RelayFormatOpenAIResponses && target != from {
-			if names := toolconv.ResponsesCustomToolNames(tools); len(names) > 0 {
-				info.SetResponsesToolState(&convmeta.ResponsesToolState{CustomToolNames: names})
-			}
+		if from == types.RelayFormatOpenAIResponses {
+			info.SetResponsesToolState(responsesToolState(tools))
 		}
 	}
 
@@ -358,6 +303,19 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		Steps:       steps,
 		Diagnostics: diagnostics,
 	}, nil
+}
+
+// responsesToolState records which Responses custom tools were sent upstream
+// as functions and which tool names were flattened from namespaces, so the
+// response side can restore their calls. It returns nil when there is nothing
+// to restore so a retry never reuses another attempt's record.
+func responsesToolState(tools toolconv.Set) *convmeta.ResponsesToolState {
+	names := toolconv.ResponsesCustomToolNames(tools)
+	namespaces := toolconv.ResponsesToolNamespaces(tools)
+	if len(names) == 0 && len(namespaces) == 0 {
+		return nil
+	}
+	return &convmeta.ResponsesToolState{CustomToolNames: names, Namespaces: namespaces}
 }
 
 func expandRequestConverterSteps(spec RequestConverterSpec) ([]RequestConverterSpec, error) {
@@ -555,7 +513,6 @@ func convertOpenAIResponsesRequestToGeminiChat(c context.Context, info convmeta.
 	if err != nil {
 		return nil, err
 	}
-
 	return oairesponses.OpenAIResponsesRequestToGeminiChat(c, responsesRequest, info)
 }
 

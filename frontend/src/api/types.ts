@@ -1,4 +1,4 @@
-/** Backend business envelope: every /api response uses this shape. */
+/** Standard backend business envelope; hosted payment endpoints have their own response contract. */
 export interface ApiResponse<T> {
   success: boolean
   /** English text, kept for API callers that do not translate. */

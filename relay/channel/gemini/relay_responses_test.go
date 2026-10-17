@@ -20,28 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGeminiResponsesMalformedStreamPreservesUsageWithoutSuccess(t *testing.T) {
-	for _, prefix := range []string{"", `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":3,"totalTokenCount":5}}` + "\n\n"} {
-		t.Run(map[bool]string{true: "after output", false: "before output"}[prefix != ""], func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(recorder)
-			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-			info := newGeminiResponsesRelayInfo(true)
-			usage, apiErr := GeminiResponsesStreamHandler(c, info, &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(prefix + "data: broken\n\n"))})
-			require.NotNil(t, apiErr)
-			assert.NotContains(t, recorder.Body.String(), "response.completed")
-			if prefix == "" {
-				assert.Empty(t, recorder.Body.String())
-				assert.False(t, c.Writer.Written())
-			} else {
-				require.NotNil(t, usage)
-				assert.Equal(t, 5, usage.TotalTokens)
-				assert.Contains(t, recorder.Body.String(), "response.failed")
-			}
-		})
-	}
-}
-
 func TestGeminiResponsesHandlerReturnsOpenAIResponsesJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -53,7 +31,6 @@ func TestGeminiResponsesHandlerReturnsOpenAIResponsesJSON(t *testing.T) {
 	payload := dto.GeminiChatResponse{
 		Candidates: []dto.GeminiChatCandidate{
 			{
-				FinishReason: common.GetPointer("STOP"),
 				Content: dto.GeminiChatContent{
 					Role: "model",
 					Parts: []dto.GeminiPart{

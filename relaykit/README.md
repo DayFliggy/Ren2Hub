@@ -1,82 +1,73 @@
 # RelayKit
 
-RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出的独立 Go 模块，提供常用大模型文本协议的 DTO、请求转换、响应转换和流式事件转换。
+RelayKit 是一个 Go 模块，在 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini `generateContent` 四种协议之间转换请求、非流式响应和流式事件。
 
-它只负责协议层的数据建模与语义转换，不包含 HTTP 服务、上游请求发送、渠道调度、鉴权、计费或数据库逻辑。因此可以脱离 new-api 主模块，嵌入其他 Go 网关或代理服务。
-
-## 能力
-
-`Thinking` 原生保留 `BlockBinding` 与 `Extra` 扩展字段；跨协议的损失必须经转换策略判断。完整诊断、宿主后缀及请求头合同见[协议支持矩阵](../docs/routing/GATEWAY_SUPPORT_MATRIX.md#文本入口)。
-
-- 在 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini `generateContent` 之间转换
-- 同时支持请求、非流式响应和增量流式响应
-- 自动根据 DTO 类型识别源协议，并选择内置的直接或多跳转换路径
-- 返回转换器 ID、质量等级、实际转换步骤和统一 usage，方便审计与调试
-- 支持常用的文本、多模态内容、工具调用、推理内容和 usage 映射
-- 作为独立 Go module 构建，不依赖 new-api 主模块、Gin、数据库或全局设置
+它从 [new-api](https://github.com/QuantumNous/new-api) 中拆出，模块路径是 `github.com/QuantumNous/new-api/relaykit`，运行时依赖是 uuid、lo、gjson 和 sjson 四个包。它做协议数据的建模和转换，HTTP 收发、SSE 读写、渠道选择、鉴权和计费由宿主程序完成，所以可以嵌进其他 Go 网关或代理。
 
 ## 支持矩阵
 
-以下四种文本协议登记了双向转换路径；登记表示基础文本转换可用，具体请求与响应仍须通过语义资格和损失策略检查：
+四种协议两两之间都能转换，请求、非流式响应和流式响应覆盖同一张表：
 
 | 源格式 \ 目标格式 | OpenAI Chat | OpenAI Responses | Claude Messages | Gemini |
 |---|---:|---:|---:|---:|
-| OpenAI Chat | — | Good | Fair | Fair |
-| OpenAI Responses | Good | — | Fair | Fair |
-| Claude Messages | Fair | Fair | — | Discouraged |
-| Gemini | Fair | Fair | Discouraged | — |
+| OpenAI Chat | | `good` | `fair` | `fair` |
+| OpenAI Responses | `good` | | `fair` | `fair` |
+| Claude Messages | `fair` | `fair` | | `discouraged` |
+| Gemini | `fair` | `fair` | `discouraged` | |
 
-质量等级表示协议之间的语义匹配程度：
+`good` 表示两种协议结构接近，字段基本一一对应。`fair` 表示主要内容都能转，协议独有的字段以诊断报告。其中 Gemini 转 Responses 的请求和响应、Claude 转 Responses 的响应、Responses 转 Gemini 的响应经 OpenAI Chat 中转。`discouraged` 表示 Claude 和 Gemini 之间请求和响应都经 OpenAI Chat 中转两跳，丢字段的机会更多。实际走的路径在转换结果的 `Steps` 里，等级在 `Quality` 里。
 
-- `Good`：两种协议的核心结构较接近
-- `Fair`：主要能力可转换，但部分协议特性可能需要适配或无法完整保留
-- `Discouraged`：目前需要经过中间协议转换，语义损失风险更高
+## 功能
 
-请求、非流式响应和流式响应均覆盖上述矩阵。实际采用的路径可从转换结果的 `Steps` 和 `Quality` 字段中读取。
+### 自动选路
 
-| 专项能力 | 当前边界 |
-|---|---|
-| 工具结果图片 | Claude ↔ Responses 保留结构化文本、图片顺序和调用 ID；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本留在工具结果中；Claude 转 Gemini 经 Chat 路径；Responses 直转 Gemini 将图片与文档按顺序转为 `inlineData`（Gemini 3 及未知模型放入 `functionResponse.parts`，只接受 PNG、JPEG、WebP、PDF 与纯文本；1.x／2.x 放在同轮函数结果之后，接受 Gemini 支持的类型，含音视频）；这条路径由知道模型版本的转换器判断，规划阶段不记 `media_conversion_unavailable`；无法承载的类型、来源或形态省略并给 error 诊断 `unsupported_media_type`，含媒体的结果里的未知内容块逐块省略并给同一诊断，文本和可承载媒体保留；由损失策略决定：safe／strict 拒绝，allow 只丢弃这些部分，媒体不写入文本；供应商自有来源在所有策略下拒绝 |
-| 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态明确拒绝；除 Responses 直转 Gemini 外，未知内容块明确拒绝；非默认图片 detail 转 Gemini 时只产生诊断；除转 Gemini 内联数据经宿主媒体解析器加载外，不下载或上传媒体 |
-| 工具文档与来源 | Claude 工具文档直转 Responses 保留 URL `file_url` 或内联 `file_data`，转 Chat／Gemini 拒绝；Responses 工具文档可直转 Gemini 内联数据；工具媒体均检查类型、来源和目标能力，包含未知块的混合结果不能退化为文本；除 Responses 直转 Gemini 按上行由策略决定外，`allow` 不能绕过 |
-| 无工具时的工具控制 | 目标请求没有函数工具时不发送 `tool_choice`／`parallel_tool_calls`，给 warning `tool_choice_without_tools`；strict 拒绝 |
-| 引用 | 保留可表达的 URL、标题、范围和顺序；Claude 加密引用／搜索结果需原生路径。普通 URL 注释不能凭生成答案补造来源摘录或加密引用 |
-| 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；转 Chat 时多出的托管搜索定义给 error 诊断 `duplicate_hosted_web_search`，allow 只保留第一个；不能把托管工具伪造成客户端函数 |
-| Claude 消息级配置 | 原生保留 `messages[].output_config`；跨协议 safe/strict 拒绝，allow 返回 `claude_message_output_config_not_portable`，不近似映射成全局 effort |
-| 多候选 | Chat／Gemini 逐候选判断终态；不能把多份答案合并为 Responses／Claude 单份答案 |
-| 暂停与未知终态 | 原生保留；跨协议不能表达时失败，不伪造完成、不自动续跑 |
-| 流式状态 | 必须观察到生成终态才能正常结束；重复终态不重复输出，冲突终态报错 |
-| 内存边界 | `ResponseStreamOptions.MaxInputBytes` 限制累计输入帧；默认 128 MiB，宿主可采用现有响应限制。缓冲 Responses 使用相同原则，超限仍保留已观测 usage |
+`ConvertRequest` 和 `ConvertResponse` 按传入 DTO 的具体类型判断源协议，`NewResponseStreamState` 按参数里的源格式和目标格式，都查表选直接转换器或多跳路径。结果里有源格式、目标格式、转换器 ID、质量等级、实际经过的每一步和诊断列表。要固定路径时用 `ConvertRequestVia`，要按 ID 执行时用 `ConvertRequestByID`、`ConvertResponseByID` 和 `NewResponseStreamStateByID`。
 
-Responses 流式和缓冲共用输出项累计器，部分最终快照按身份合并引用和文本偏移。明确的 incomplete 事件不能借用内嵌 completed 状态；观察到终态后拒绝新的非终态事件。原生引用和续跑状态的硬限制不受 allow 放宽，宿主仍负责其 Token、渠道和凭据归属。
+### 工具调用
 
-生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。宿主支持范围见[协议矩阵](../docs/routing/GATEWAY_SUPPORT_MATRIX.md)，验收判定见[网关验收边界](../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
+function tool 的定义、调用和结果在四种协议之间互转。Responses 的 custom tool 和带 namespace 的工具发往 Chat、Claude、Gemini 上游时改成普通 function tool，编码方式记在 `convmeta.ResponsesToolState` 里，响应转换时按这份记录还原成 Responses 的形状。托管 web search 按目标协议重新编码：Chat 用 `web_search_options`，Responses、Claude 和 Gemini 各用自己协议的 web search 工具定义，宿主可以通过 `Options.WebSearch` 为某个上游改写编码。其他托管工具在目标协议里表达不了的部分，转换照常完成，缺失写进诊断。
 
-`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
+### 推理设置
 
-`ClaudeRequest.ResolveEffectiveEffort() (string, bool, error)` 只读计算当前 user 回合生效的 effort：消息级设置等待其后的 user 激活，尾部未激活设置不覆盖当前值，缺省不推断模型默认值；返回值保留原文，调用方负责其属性规范化。`GetEfforts()` 只读取顶层配置。完整边界见[网关 API](../docs/routing/GATEWAY_API.md#claude-消息级-effort-与计价)。
+reasoning effort、thinking budget 和是否返回思考内容用 `dto.ReasoningConversionState` 在转换步骤之间传递，多跳路径上的每一步都能读到精确的 budget 和 effort。Claude 的 max_tokens 和 budget 超出模型范围时会调整，Gemini 的 thinkingConfig 按模型归一化，这些改动都以诊断返回，例如 `claude_max_tokens_raised` 和 `claude_budget_adjusted`。
+
+### 多模态
+
+图片和文件内容块在协议之间转换。需要下载 URL 或解析 data URL 时，RelayKit 调用宿主用 `SetMediaResolver` 注册的函数，未注册时转换返回错误。
+
+### Usage
+
+每个响应转换都返回统一的 `dto.Usage`，含输入、输出、缓存命中，以及 Claude 缓存写入按 5 分钟和 1 小时的拆分。`Usage.BillingUsage` 同时带着上游原始的 usage 结构和它来自哪个协议，宿主可以按上游的计量规则计费。流式转换把分散在多个事件里的 usage 累加到 `ResponseStreamState`。`dto.MergeUsageNonZero` 一类函数合并两份 usage 时，后到的非零字段覆盖已有值，后到的零值保留已有的计数。
+
+### 流式
+
+每条上游流对应一个 `ResponseStreamState`，跨事件的工具调用拼接、usage 和结束状态都存在这里。上游结束后调用 `FinalizeStreamResponse`，转换器在这一步补发终止事件和最终 usage。目标是 Responses 时，上游中途出错可以调用 `FailResponsesStream` 生成 Responses 协议的错误事件，`ResponseStreamOptions.EmitSequenceNumber` 打开后每个事件带 `sequence_number`。
+
+### 宿主钩子
+
+JSON 编解码默认用 `encoding/json`，宿主可以在启动时用 `kitutil.SetCodec` 换成别的实现，DTO 上自定义的 `MarshalJSON` 和 `UnmarshalJSON` 也走同一个编解码器。数据形状异常的日志通过 `kitutil.SetLogging` 和 `kitutil.SetSystemErrorLogging` 交给宿主，默认写到 stderr。
 
 ## 安装
 
-RelayKit 要求 Go 1.25.1 或更高版本。
+RelayKit 要求 Go 1.25.1 或更高版本。tag 的形式是 `relaykit/vX.Y.Z`，`@latest` 解析到最新的一个。
 
 ```bash
 go get github.com/QuantumNous/new-api/relaykit@latest
 ```
 
-主要包：
-
-| 包 | 用途 |
+| 包 | 内容 |
 |---|---|
-| `relaykit/dto` | 各协议的请求、响应、流式事件和 usage DTO |
-| `relaykit/types` | 协议格式、错误、文件来源及共享类型 |
+| `relaykit/dto` | 四种协议的请求、响应、流式事件和 usage 结构，以及 new-api 宿主共用的渠道、定价和用户设置结构 |
+| `relaykit/types` | 协议格式、错误、诊断、文件来源等共享类型 |
 | `relaykit/relayconvert` | 请求、响应和流式转换入口 |
-| `relaykit/relayconvert/convmeta` | 与宿主实现解耦的转换上下文和选项 |
-| `relaykit/reasonmap` | 不同协议之间的结束原因映射 |
+| `relaykit/relayconvert/convmeta` | 转换上下文接口 `Meta`、默认实现 `Values` 和选项 `Options` |
+| `relaykit/relayconvert/reasoning` | 推理设置的解析、合并和渲染，包括模型名尾缀解析 |
+| `relaykit/relayconvert/kitutil` | JSON 编解码和日志钩子 |
+| `relaykit/reasonmap` | Claude 和 OpenAI 之间的结束原因映射 |
 
 ## 快速开始
 
-下面将 OpenAI Chat Completions 请求转换为 Claude Messages 请求：
+下面把 OpenAI Chat Completions 请求转换成 Claude Messages 请求：
 
 ```go
 package main
@@ -126,11 +117,11 @@ func main() {
 }
 ```
 
-`ConvertRequest` 根据请求的具体 DTO 类型推断源格式。传入原始 JSON、`map[string]any` 或不受支持的 DTO 会返回错误。
+`ConvertRequest` 按请求的具体 DTO 类型推断源格式。传入 nil、原始 JSON、`map[string]any` 或其他类型时返回错误。
 
 ### 非流式响应
 
-响应转换使用相同的目标格式模型：
+响应转换用同一套目标格式参数：
 
 ```go
 result, err := relayconvert.ConvertResponse(
@@ -158,16 +149,17 @@ usage := result.Usage
 
 ### 流式响应
 
-流式转换可能需要跨事件保存工具调用、usage 和结束状态。每条上游流应创建独立的 `ResponseStreamState`，并在上游结束后调用 `FinalizeStreamResponse`：
+每条上游流创建一个 `ResponseStreamState`，上游结束后调用 `FinalizeStreamResponse`：
 
 ```go
 state, err := relayconvert.NewResponseStreamState(
 	types.RelayFormatOpenAI,
 	types.RelayFormatOpenAIResponses,
 	relayconvert.ResponseStreamOptions{
-		ID:           "resp_123",
-		Model:        "gpt-4.1",
-		IncludeUsage: true,
+		ID:                 "resp_123",
+		Model:              "gpt-4.1",
+		IncludeUsage:       true,
+		EmitSequenceNumber: true,
 	},
 )
 if err != nil {
@@ -193,15 +185,16 @@ for _, result := range finalResults {
 }
 
 usage := state.Usage()
+diagnostics := state.Diagnostics()
 ```
 
-RelayKit 不负责 SSE 的读取和写入。宿主需要将每个 SSE 事件解析为对应 DTO，并将转换结果重新编码后发送给下游。不要省略 `FinalizeStreamResponse`，部分转换器会在该阶段补发终止事件或最终 usage。
+SSE 的读取和写入由宿主完成：把每个上游事件解析成对应的 DTO 传进来，再把转换结果编码后发给下游。`FinalizeStreamResponse` 每条流都要调用，部分转换器在这一步才补发终止事件和最终 usage。
 
 ## 转换上下文
 
-大多数基础转换可以传入 `nil` 作为 `convmeta.Meta`。需要模型映射、推理适配、安全设置或流式状态时，应使用 `convmeta.Values`，或在宿主中实现 `convmeta.Meta`。
+大多数基础转换的 `convmeta.Meta` 参数可以传 `nil`。需要模型名、推理设置、工具编码记录或流式状态时，用 `convmeta.Values`，或者在宿主里实现 `convmeta.Meta`。自己实现时，指针类型的每个方法都要能在 nil receiver 上返回零值，接口注释写了原因。
 
-常用选项通过 `convmeta.Options` 按请求传入：
+按请求传入的选项放在 `convmeta.Options`：
 
 ```go
 meta := &convmeta.Values{
@@ -218,15 +211,39 @@ meta := &convmeta.Values{
 }
 ```
 
-需要注意：
+| 选项 | 作用 |
+|---|---|
+| `Claude.DefaultMaxTokens` | 源请求没有 max_tokens 时，转 Claude 用这个函数取值 |
+| `Claude.ThinkingAdapterEnabled`、`Gemini.ThinkingAdapterEnabled` | 模型名尾缀适配开关，见下文 |
+| `Claude.ThinkingAdapterBudgetTokensPercentage`、`Gemini.ThinkingAdapterBudgetTokensPercentage` | 尾缀适配触发时，thinking budget 占 max_tokens 的比例 |
+| `Claude.WebSearchToolVersion` | 转 Claude 时 web search 工具的版本，空值用 `web_search_20250305` |
+| `Gemini.FunctionCallThoughtSignatureEnabled` | 给 function call 部分附加 thoughtSignature |
+| `Gemini.SupportsImagine` | 判断模型是否支持生图，支持时切换响应模态 |
+| `Gemini.SafetySetting` | 按分类返回 safetySettings 的阈值 |
+| `ToolLossPolicy` | 跨协议丢失工具行为时的处理，见下文 |
+| `OpenRouterDialect` | 上游是 OpenRouter 时打开，转换器会输出它额外接受的字段 |
+| `WebSearch` | 为某个上游改写托管 web search 的编码 |
+| `PreserveThinkingSuffix`、`PreserveEffortTail` | 判断哪些模型名要原样保留尾缀 |
 
-- OpenAI Chat 或 OpenAI Responses 转 Claude 时，Claude 请求必须具有 `max_tokens`。源请求未提供时，需要配置 `Claude.DefaultMaxTokens`，否则转换会返回错误。
-- RelayKit 不负责选择渠道或映射模型名。调用转换前，应将请求中的 `Model` 设置为目标上游使用的模型名。
-- 自定义 `convmeta.Meta` 的指针实现必须保证所有方法对 nil receiver 安全，完整约束见 `convmeta.Meta` 的接口注释。
+转 Claude 时请求需要 `max_tokens`。源请求没有时，RelayKit 调用 `Claude.DefaultMaxTokens` 取值，两者都没有时返回错误。
 
-## 多模态内容
+RelayKit 按请求里的 `Model` 生成上游请求，调用前把它设成上游使用的模型名。带 `-thinking`、`-nothinking`、`-thinking-<budget>` 或 `-high` 这类尾缀的 Claude、Gemini 模型名由调用方在转换前解析：调用 `reasoning.ParseClaudeModelSuffix` 或 `reasoning.ParseGeminiModelSuffix`，`allowSuffixAlias` 参数传 `ThinkingAdapterEnabled`，把返回的 `Intent` 用 `reasoning.StateFromIntent` 写进 `Values.ReasoningConversion`，再把裁掉尾缀的模型名放进请求。开关关闭时这两个函数原样返回模型名，推理设置来自请求字段。
 
-某些跨协议的图片转换需要下载 URL 内容或解析 data URL。宿主应在启动时配置媒体解析器：
+## 诊断与损耗策略
+
+每个转换结果都带 `Diagnostics`，每条诊断有代码、字段路径、说明、级别和源目标格式。级别 `warning` 表示展示层面的差异，`error` 表示工具行为或内容发生了变化。常见代码有 `hosted_web_search_omitted`、`trailing_assistant_omitted` 和 `unsupported_media_type`。
+
+`Options.ToolLossPolicy` 决定请求阶段怎么处理诊断：
+
+- `allow` 是默认值，转换完成，所有损耗以诊断返回。
+- `safe` 在请求阶段遇到 `error` 级诊断时返回 `*types.ConversionLossError`。
+- `strict` 在请求阶段遇到任何诊断都返回这个错误。
+
+响应和流式转换在三种策略下都完成转换并返回诊断。流式用 `state.Diagnostics()` 读到目前为止累计的诊断，包括没有产生下游事件的那些。
+
+## 媒体解析
+
+跨协议的图片转换有时需要下载 URL 内容或解析 data URL。宿主在启动时注册解析函数：
 
 ```go
 relayconvert.SetMediaResolver(relayconvert.MediaResolver{
@@ -235,39 +252,38 @@ relayconvert.SetMediaResolver(relayconvert.MediaResolver{
 })
 ```
 
-两个回调的签名由 `relayconvert.MediaResolver` 定义。需要媒体解析而未配置对应回调时，转换会明确返回错误；RelayKit 本身不会发起网络请求。
+两个函数的签名见 `relayconvert.MediaResolver`。需要媒体解析而没有注册时，转换返回错误。网络请求由这两个函数发起。
 
 ## 转换结果
 
-请求转换返回 `relayconvert.RequestResult`，响应转换返回 `relayconvert.ResponseResult`。除 `Value` 外，建议关注：
+请求转换返回 `relayconvert.RequestResult`，响应转换返回 `relayconvert.ResponseResult`，字段有：
 
-- `From` / `To`：源格式和目标格式
-- `Converter`：所选转换器 ID
-- `Quality`：转换质量等级
-- `Steps`：直接转换或多跳转换的实际路径
-- `Usage`：响应转换后的统一 token usage
-- `Stream`：结果是否来自流式转换
-
-如果需要固定转换路径，可使用 `ConvertRequestVia`；如果需要按转换器 ID 执行，可使用 `ConvertRequestByID`、`ConvertResponseByID` 和 `NewResponseStreamStateByID`。
+- `Value`：转换后的 DTO
+- `From`、`To`：源格式和目标格式
+- `Converter`：转换器 ID
+- `Quality`：质量等级
+- `Steps`：实际经过的每一步
+- `Diagnostics`：诊断列表
+- `Usage`、`Stream`：响应结果独有，统一 usage 和是否来自流式转换
 
 ## 开发
 
-RelayKit 必须始终保持独立可构建。修改模块后，在 `relaykit` 目录运行：
+在 `relaykit` 目录运行：
 
 ```bash
-GOWORK=off go test ./... -timeout 60s
 GOWORK=off go build ./...
+GOWORK=off go test ./...
 ```
 
-转换矩阵由 golden tests 覆盖。确认协议输出变化是预期行为后，可更新快照：
+`GOWORK=off` 让模块脱离仓库的 workspace 单独构建，这是 new-api 对 RelayKit 改动的检查项。转换矩阵由 golden test 覆盖，协议输出变化确认是预期行为后更新快照：
 
 ```bash
-GOWORK=off go test ./relayconvert -run TestGolden -update -timeout 60s
+GOWORK=off go test ./relayconvert -run TestGolden -update
 ```
 
-## 版本与兼容性
+## 版本
 
-RelayKit 当前使用 `v0.x` 版本。公开 API 和 DTO 仍可能在小版本中调整，升级前请检查发布说明和实际序列化结果。协议之间并非完全同构，建议对业务实际使用的工具调用、多模态、推理和流式场景增加端到端测试。
+RelayKit 处于 `v0.x`。公开 API 和 DTO 可能在小版本里变化，升级前对照发布说明和序列化结果。每对协议都有对方没有的字段，建议对业务里用到的工具调用、多模态、推理和流式场景加端到端测试。
 
 ## 许可证
 

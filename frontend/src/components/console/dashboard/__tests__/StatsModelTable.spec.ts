@@ -27,7 +27,6 @@ const sampleModels: StatsModelRow[] = [
     quota: '600000',
     requests: 45,
     share: 60,
-    avgLatency: 120,
   },
   {
     model: 'claude-3-5-sonnet',
@@ -35,7 +34,6 @@ const sampleModels: StatsModelRow[] = [
     quota: '400000',
     requests: 30,
     share: 40,
-    avgLatency: 150,
   },
 ]
 

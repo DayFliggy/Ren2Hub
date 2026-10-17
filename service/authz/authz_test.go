@@ -37,11 +37,11 @@ func TestInitSeedsBuiltInRolesAndPoliciesOnce(t *testing.T) {
 	// admin baseline is written as explicit policy rows.
 	var count int64
 	require.NoError(t, db.Model(&model.CasbinRule{}).Count(&count).Error)
-	assert.Equal(t, int64(len(PermissionsForRole(BuiltInRoleAdmin))), count)
+	assert.Equal(t, int64(len(PermissionsForRole(BuiltInRoleAdmin))+len(PermissionsForRole(BuiltInRoleUser))), count)
 
 	var roles []model.AuthzRole
 	require.NoError(t, db.Order("sort asc").Find(&roles).Error)
-	require.Len(t, roles, 2)
+	require.Len(t, roles, 3)
 	assert.Equal(t, BuiltInRoleRoot, roles[0].Key)
 	assert.Equal(t, BuiltInRoleAdmin, roles[1].Key)
 
@@ -50,11 +50,7 @@ func TestInitSeedsBuiltInRolesAndPoliciesOnce(t *testing.T) {
 	assert.True(t, Can(2, common.RoleAdminUser, ChannelOperate))
 	assert.True(t, Can(2, common.RoleAdminUser, ChannelWrite))
 	assert.False(t, Can(2, common.RoleAdminUser, ChannelSensitiveWrite))
-	assert.True(t, Can(2, common.RoleAdminUser, TicketRead))
-	assert.True(t, Can(2, common.RoleAdminUser, TicketReply))
-	assert.True(t, Can(2, common.RoleAdminUser, TicketManage))
 	assert.False(t, Can(3, common.RoleCommonUser, ChannelRead))
-	assert.False(t, Can(3, common.RoleCommonUser, TicketRead))
 }
 
 func TestInitOnSlaveOnlyLoadsPolicies(t *testing.T) {
@@ -81,6 +77,55 @@ func TestInitOnSlaveOnlyLoadsPolicies(t *testing.T) {
 	assert.False(t, Can(2, common.RoleAdminUser, ChannelRead))
 }
 
+func TestLegacyScopedPoliciesDoNotExpandPermissions(t *testing.T) {
+	for _, master := range []bool{true, false} {
+		name := "master"
+		if !master {
+			name = "slave"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := newAuthzTestDB(t)
+			common.IsMasterNode = master
+			rules := []model.CasbinRule{
+				{Ptype: "p", V0: "role:vendor", V1: "channel", V2: "read", V3: "allow", V4: "own"},
+				{Ptype: "p", V0: UserSubject(42), V1: "channel", V2: "read", V3: "allow", V4: "own"},
+				{Ptype: "p", V0: UserSubject(43), V1: "channel", V2: "sensitive_write", V3: "allow", V4: "all"},
+				{Ptype: "p", V0: UserSubject(44), V1: "channel", V2: "secret_view", V3: "deny", V4: "all"},
+				{Ptype: "p", V0: UserSubject(45), V1: "channel", V2: "read"},
+				{Ptype: "p", V0: UserSubject(46), V1: "channel", V2: "read", V3: "allow", V4: "unknown-scope"},
+				{Ptype: "p", V0: UserSubject(47), V1: "channel", V2: "read", V3: "allow", V5: "own"},
+				{Ptype: "p", V0: UserSubject(48), V1: "channel", V2: "read", V3: "allow", V4: "own"},
+				{Ptype: "p", V0: UserSubject(48), V1: "channel", V2: "read", V3: "allow", V4: "all"},
+				{Ptype: "p", V0: RoleSubject(BuiltInRoleAdmin), V1: "channel", V2: "operate", V3: "allow", V4: "own"},
+				{Ptype: "p", V0: UserSubject(50), V1: "channel", V2: "sensitive_write", V3: "allow"},
+				{Ptype: "g", V0: UserSubject(99), V1: RoleSubject(BuiltInRoleAdmin)},
+			}
+			require.NoError(t, db.Create(&rules).Error)
+			ids := make([]uint, len(rules))
+			for i := range rules {
+				ids[i] = rules[i].Id
+			}
+			for range 2 {
+				require.NoError(t, Init(db))
+				require.NoError(t, ReloadPolicy())
+				assert.False(t, Can(42, common.RoleAdminUser, ChannelRead), "own must not fall back to the admin allow baseline")
+				assert.True(t, Can(43, common.RoleAdminUser, ChannelSensitiveWrite))
+				assert.False(t, Can(44, common.RoleAdminUser, ChannelSecretView))
+				assert.True(t, Can(45, common.RoleAdminUser, ChannelRead))
+				for _, userID := range []int{46, 47, 48} {
+					assert.False(t, Can(userID, common.RoleAdminUser, ChannelRead))
+				}
+				assert.False(t, Can(51, common.RoleAdminUser, ChannelOperate), "reseed must not erase a scoped role restriction")
+				assert.True(t, Can(50, common.RoleAdminUser, ChannelSensitiveWrite))
+				assert.False(t, Can(99, common.RoleCommonUser, ChannelRead))
+				var stored []model.CasbinRule
+				require.NoError(t, db.Where("id IN ?", ids).Order("id").Find(&stored).Error)
+				assert.Equal(t, rules, stored, "legacy rows must remain available for administrator review")
+			}
+		})
+	}
+}
+
 func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 	db := newAuthzTestDB(t)
 	require.NoError(t, Init(db))
@@ -102,8 +147,6 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 	assert.True(t, Can(42, common.RoleAdminUser, ChannelSensitiveWrite))
 	assert.False(t, Can(42, common.RoleAdminUser, ChannelWrite))
 	assert.Equal(t, PermissionsMap{
-		ResourceAudit:      {ActionRead: false},
-		ResourceTaskPlugin: {ActionBind: false},
 		ResourceChannel: {
 			ActionRead:           true,
 			ActionOperate:        true,
@@ -111,12 +154,7 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 			ActionSensitiveWrite: true,
 			ActionSecretView:     false,
 		},
-		ResourceTicket: {
-			ActionRead:   true,
-			ActionReply:  true,
-			ActionManage: true,
-		},
-	}, ExplicitUserPermissions(42))
+	}, PermissionsMap{ResourceChannel: ExplicitUserPermissions(42)[ResourceChannel]})
 	assert.Equal(t, PermissionsMap{
 		ResourceChannel: {
 			ActionSensitiveWrite: true,
@@ -137,8 +175,6 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 	}}))
 	assert.False(t, Can(42, common.RoleAdminUser, ChannelSensitiveWrite))
 	assert.Equal(t, PermissionsMap{
-		ResourceAudit:      {ActionRead: false},
-		ResourceTaskPlugin: {ActionBind: false},
 		ResourceChannel: {
 			ActionRead:           true,
 			ActionOperate:        true,
@@ -146,12 +182,7 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 			ActionSensitiveWrite: false,
 			ActionSecretView:     false,
 		},
-		ResourceTicket: {
-			ActionRead:   true,
-			ActionReply:  true,
-			ActionManage: true,
-		},
-	}, ExplicitUserPermissions(42))
+	}, PermissionsMap{ResourceChannel: ExplicitUserPermissions(42)[ResourceChannel]})
 	assert.Empty(t, ExplicitUserOverrides(42))
 }
 
@@ -244,52 +275,40 @@ func TestCapabilitiesUseCatalogShape(t *testing.T) {
 	assert.True(t, capabilities[ResourceChannel][ActionWrite])
 	assert.False(t, capabilities[ResourceChannel][ActionSensitiveWrite])
 	assert.False(t, capabilities[ResourceChannel][ActionSecretView])
+	assert.False(t, capabilities[ResourceTaskPlugin][ActionBind])
 }
-func TestLegacyScopedPoliciesDoNotExpandPermissions(t *testing.T) {
-	for _, master := range []bool{true, false} {
-		name := "master"
-		if !master {
-			name = "slave"
+
+func TestTaskPluginBindIsRootOnlyUntilGranted(t *testing.T) {
+	db := newAuthzTestDB(t)
+	require.NoError(t, Init(db))
+
+	var bindAction *ActionDefinition
+	for _, resource := range Catalog() {
+		if resource.Resource != ResourceTaskPlugin {
+			continue
 		}
-		t.Run(name, func(t *testing.T) {
-			db := newAuthzTestDB(t)
-			common.IsMasterNode = master
-			rules := []model.CasbinRule{
-				{Ptype: "p", V0: "role:vendor", V1: "channel", V2: "read", V3: "allow", V4: "own"},
-				{Ptype: "p", V0: UserSubject(42), V1: "channel", V2: "read", V3: "allow", V4: "own"},
-				{Ptype: "p", V0: UserSubject(43), V1: "channel", V2: "sensitive_write", V3: "allow", V4: "all"},
-				{Ptype: "p", V0: UserSubject(44), V1: "channel", V2: "secret_view", V3: "deny", V4: "all"},
-				{Ptype: "p", V0: UserSubject(45), V1: "channel", V2: "read"},
-				{Ptype: "p", V0: UserSubject(46), V1: "channel", V2: "read", V3: "allow", V4: "unknown-scope"},
-				{Ptype: "p", V0: UserSubject(47), V1: "channel", V2: "read", V3: "allow", V5: "own"},
-				{Ptype: "p", V0: UserSubject(48), V1: "channel", V2: "read", V3: "allow", V4: "own"},
-				{Ptype: "p", V0: UserSubject(48), V1: "channel", V2: "read", V3: "allow", V4: "all"},
-				{Ptype: "p", V0: RoleSubject(BuiltInRoleAdmin), V1: "channel", V2: "operate", V3: "allow", V4: "own"},
-				{Ptype: "p", V0: UserSubject(50), V1: "channel", V2: "sensitive_write", V3: "allow"},
-				{Ptype: "g", V0: UserSubject(99), V1: RoleSubject(BuiltInRoleAdmin)},
+		assert.Equal(t, "Task Plugin", resource.LabelKey)
+		for i := range resource.Actions {
+			if resource.Actions[i].Action == ActionBind {
+				bindAction = &resource.Actions[i]
 			}
-			require.NoError(t, db.Create(&rules).Error)
-			ids := make([]uint, len(rules))
-			for i := range rules {
-				ids[i] = rules[i].Id
-			}
-			for range 2 {
-				require.NoError(t, Init(db))
-				require.NoError(t, ReloadPolicy())
-				assert.False(t, Can(42, common.RoleAdminUser, ChannelRead), "own must not fall back to the admin allow baseline")
-				assert.True(t, Can(43, common.RoleAdminUser, ChannelSensitiveWrite))
-				assert.False(t, Can(44, common.RoleAdminUser, ChannelSecretView))
-				assert.True(t, Can(45, common.RoleAdminUser, ChannelRead))
-				for _, userID := range []int{46, 47, 48} {
-					assert.False(t, Can(userID, common.RoleAdminUser, ChannelRead))
-				}
-				assert.False(t, Can(51, common.RoleAdminUser, ChannelOperate), "reseed must not erase a scoped role restriction")
-				assert.True(t, Can(50, common.RoleAdminUser, ChannelSensitiveWrite))
-				assert.False(t, Can(99, common.RoleCommonUser, ChannelRead))
-				var stored []model.CasbinRule
-				require.NoError(t, db.Where("id IN ?", ids).Order("id").Find(&stored).Error)
-				assert.Equal(t, rules, stored, "legacy rows must remain available for administrator review")
-			}
-		})
+		}
 	}
+	require.NotNil(t, bindAction)
+	assert.Equal(t, "Bind task plugins", bindAction.LabelKey)
+	assert.Equal(t, "List registered task plugins and bind them when creating or editing task plugin channels.", bindAction.DescriptionKey)
+	assert.Empty(t, bindAction.DefaultRoles)
+
+	assert.False(t, Can(2, common.RoleAdminUser, TaskPluginBind))
+	assert.True(t, Can(1, common.RoleRootUser, TaskPluginBind))
+
+	enforcer := currentEnforcer()
+	require.NotNil(t, enforcer)
+	_, err := enforcer.AddPolicy(RoleSubject(BuiltInRoleAdmin), ResourceTaskPlugin, ActionBind, EffectAllow)
+	require.NoError(t, err)
+	assert.True(t, Can(2, common.RoleAdminUser, TaskPluginBind))
+
+	_, err = enforcer.RemovePolicy(RoleSubject(BuiltInRoleAdmin), ResourceTaskPlugin, ActionBind, EffectAllow)
+	require.NoError(t, err)
+	assert.False(t, Can(2, common.RoleAdminUser, TaskPluginBind))
 }

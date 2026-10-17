@@ -7,7 +7,7 @@ export const meta = {
     en: "Shengshu Vidu video generation (text-to-video, image-to-video, first-and-last-frame, and reference-to-video)",
     zh: "生数 Vidu 视频生成（文生视频、图生视频、首尾帧、参考生视频）",
   },
-  version: "1.1.0+ren2hub.1",
+  version: "1.1.0",
   author: { name: "QuantumNous" },
   channelTypes: [52],
   models: ["viduq2", "viduq1", "vidu2.0", "vidu1.5"],
@@ -128,8 +128,9 @@ function normalizeResolution(value, model) {
 }
 
 function outboundDuration(req, model) {
-  if (!req || req.duration === undefined) return defaultDuration(model);
-  return Number(utils.decimal.bounded(req.duration, 1, 3600, true));
+  const n = Number(req && req.duration);
+  if (Number.isFinite(n) && n > 0) return n;
+  return defaultDuration(model);
 }
 
 function outboundResolution(req, model) {
@@ -372,21 +373,14 @@ export function buildContentRequest(ctx) {
   if (ctx.artifactKey !== "video") throw new Error("artifact_not_found");
   const url = artifactVideoURL(ctx);
   if (!url) throw new Error("artifact_not_found");
-  if (viaGateway(ctx)) {
-    const taskID = trimmed(ctx.upstreamTaskId);
-    if (!taskID) throw new Error("upstream task ID is required");
-    return {
-      url: ctx.baseUrl + "/v1/tasks/" + encodeURIComponent(taskID) + "/artifacts/video/content",
-      method: ctx.clientRequest.method,
-      headers: { Authorization: "Bearer " + ctx.apiKey },
-    };
-  }
   return { url: url, method: ctx.clientRequest.method, credentialless: true };
 }
 
 export function extractUsageOnComplete(_task, _taskResult, body) {
-  if (!body || !Object.prototype.hasOwnProperty.call(body, "credits")) return null;
-  return { credits: utils.decimal.bounded(body.credits, 0, 2147483647, false) };
+  if (!body || !Object.prototype.hasOwnProperty.call(body, "credits") || body.credits === undefined || body.credits === null) return null;
+  const credits = Number(body.credits);
+  if (!Number.isFinite(credits)) return null;
+  return { credits: credits };
 }
 
 export const protocols = {
@@ -414,7 +408,7 @@ export const protocols = {
       else if (Object.prototype.hasOwnProperty.call(req, "duration")) requestBody.duration = req.duration;
       if (Object.prototype.hasOwnProperty.call(req, "size")) requestBody.size = req.size;
       if (Object.prototype.hasOwnProperty.call(req, "metadata")) requestBody.metadata = req.metadata;
-      const duration = requestBody.duration === undefined ? undefined : Number(utils.decimal.bounded(requestBody.duration, 0, 3600, true));
+      const duration = requestBody.duration === undefined ? undefined : Number(requestBody.duration);
       validateViduCombo(model, duration, outboundResolution(requestBody, model), images.length > 0);
       return { kind: "submit", model: model, action: actionFor(requestBody), requestBody: requestBody };
     },
@@ -502,12 +496,12 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+      else if (req.duration !== undefined) req.seconds = Number(req.duration);
     }
     const model = ctx.upstreamModel || ctx.model || req.model;
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined) req.duration = Number(utils.decimal.bounded(seconds, 0, 3600, true));
+    if (seconds !== undefined) req.duration = Number(seconds);
     else req.duration = defaultDuration(model);
     if (hasInputReferenceFile) {
       req.images = [{ __fileRef: "request_file:input_reference", encoding: "dataUrl", maxBytes: 15728640 }];

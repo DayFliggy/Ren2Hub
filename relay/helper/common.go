@@ -3,61 +3,16 @@ package helper
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
-
-const streamOutputErrorKey = "relay_stream_output_error"
-
-// ErrStreamClientWrite distinguishes downstream write/flush failures from
-// provider parsing and gateway state-binding failures.
-var ErrStreamClientWrite = errors.New("client stream write failed")
-
-// StreamOutputError preserves failures for legacy callers whose public APIs
-// have no error return, including terminal writes after the scanner returns.
-func StreamOutputError(c *gin.Context) error {
-	if c == nil {
-		return nil
-	}
-	value, _ := c.Get(streamOutputErrorKey)
-	err, _ := value.(error)
-	return err
-}
-
-// ResetStreamOutputError starts a new upstream attempt. A previous attempt's
-// failure must remain visible until the logical request has recorded it.
-func ResetStreamOutputError(c *gin.Context) {
-	if c != nil {
-		c.Set(streamOutputErrorKey, nil)
-	}
-}
-
-func recordStreamOutputError(c *gin.Context, err error) error {
-	if c == nil || err == nil {
-		return err
-	}
-	if first := StreamOutputError(c); first != nil {
-		err = first
-	} else {
-		c.Set(streamOutputErrorKey, err)
-	}
-	// The scanner already observes this failure field after every callback.
-	// This also stops legacy callbacks that ignore an error return.
-	if writer, ok := c.Writer.(*StreamPreludeWriter); ok && writer.err == nil {
-		writer.err = err
-	}
-	return err
-}
 
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
@@ -104,72 +59,52 @@ func SetEventStreamHeaders(c *gin.Context) {
 }
 
 func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
+	if requestContextDone(c) {
+		return nil
+	}
+
 	jsonData, err := common.Marshal(resp)
 	if err != nil {
-		return recordStreamOutputError(c, fmt.Errorf("error marshalling stream response: %w", err))
+		common.SysError(common.LogText("error marshalling stream response: %s", err.Error()))
+	} else {
+		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
+		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
 	}
-	_, err = WriteResponseChunkData(c, dto.ResponsesStreamResponse{Type: resp.Type}, string(jsonData))
-	return err
+	_ = FlushWriter(c)
+	return nil
 }
 
 func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
-	// WriteResponseChunkData records any failure for the scanner and finalizer.
-	_, _ = WriteResponseChunkData(c, dto.ResponsesStreamResponse{Type: resp.Type}, data)
+	if requestContextDone(c) {
+		return
+	}
+
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
+	_ = FlushWriter(c)
 }
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
-	_, err := WriteResponseChunkData(c, resp, data)
-	return err
-}
-
-// WriteResponseChunkData separates a complete event write from a later flush or
-// cancellation failure. Buffered prelude bytes do not count as client delivery.
-func WriteResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) (bool, error) {
-	if c == nil || c.Writer == nil {
-		return false, recordStreamOutputError(c, errors.New("context or writer is nil"))
-	}
-	if err := StreamOutputError(c); err != nil {
-		return false, recordStreamOutputError(c, err)
-	}
 	if requestContextDone(c) {
-		return false, recordStreamOutputError(c, fmt.Errorf("%w: %w", ErrStreamClientWrite, c.Request.Context().Err()))
+		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
-	if strings.ContainsAny(resp.Type, "\r\n") {
-		return false, recordStreamOutputError(c, errors.New("invalid SSE event type"))
-	}
-	if err := service.BindGatewayOutput(c, []byte(data)); err != nil {
-		return false, recordStreamOutputError(c, err)
-	}
-	// Each payload line belongs to the same SSE data field. Prefixing every
-	// line prevents embedded newlines from creating events or terminal frames.
-	data = strings.ReplaceAll(strings.ReplaceAll(data, "\r\n", "\n"), "\r", "\n")
-	frame := "data: " + strings.ReplaceAll(data, "\n", "\ndata: ") + "\n\n"
-	if resp.Type != "" {
-		frame = "event: " + resp.Type + "\n" + frame
-	}
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	prelude, buffered := c.Writer.(*StreamPreludeWriter)
-	buffered = buffered && !prelude.committed
-	n, err := c.Writer.WriteString(frame)
-	delivered := n == len(frame) && c.Writer.Written()
-	if err == nil && n != len(frame) {
-		err = io.ErrShortWrite
-	}
-	if err != nil {
-		if buffered {
-			return delivered, recordStreamOutputError(c, err)
-		}
-		return delivered, recordStreamOutputError(c, fmt.Errorf("%w: %w", ErrStreamClientWrite, err))
-	}
-	if err := FlushWriter(c); err != nil {
-		return delivered, recordStreamOutputError(c, fmt.Errorf("%w: %w", ErrStreamClientWrite, err))
-	}
-	return delivered, nil
+
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
+	return FlushWriter(c)
 }
 
 func StringData(c *gin.Context, str string) error {
-	_, err := WriteResponseChunkData(c, dto.ResponsesStreamResponse{}, str)
-	return err
+	if c == nil || c.Writer == nil {
+		return errors.New("context or writer is nil")
+	}
+
+	if requestContextDone(c) {
+		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+	}
+
+	c.Render(-1, common.CustomEvent{Data: "data: " + str})
+	return FlushWriter(c)
 }
 
 func PingData(c *gin.Context) error {
@@ -187,13 +122,13 @@ func PingData(c *gin.Context) error {
 	return FlushWriter(c)
 }
 
-func ObjectData(c *gin.Context, object interface{}) error {
+func ObjectData(c *gin.Context, object any) error {
 	if object == nil {
-		return recordStreamOutputError(c, errors.New("object is nil"))
+		return errors.New("object is nil")
 	}
 	jsonData, err := common.Marshal(object)
 	if err != nil {
-		return recordStreamOutputError(c, fmt.Errorf("error marshalling object: %w", err))
+		return fmt.Errorf("error marshalling object: %w", err)
 	}
 	return StringData(c, string(jsonData))
 }
@@ -204,20 +139,20 @@ func Done(c *gin.Context) {
 
 func WssString(c *gin.Context, ws *websocket.Conn, str string) error {
 	if ws == nil {
-		logger.LogError(c, "websocket connection is nil")
+		logger.LogError(c, common.LogText("websocket connection is nil"))
 		return errors.New("websocket connection is nil")
 	}
 	//common.LogInfo(c, fmt.Sprintf("sending message: %s", str))
 	return ws.WriteMessage(1, []byte(str))
 }
 
-func WssObject(c *gin.Context, ws *websocket.Conn, object interface{}) error {
+func WssObject(c *gin.Context, ws *websocket.Conn, object any) error {
 	jsonData, err := common.Marshal(object)
 	if err != nil {
 		return fmt.Errorf("error marshalling object: %w", err)
 	}
 	if ws == nil {
-		logger.LogError(c, "websocket connection is nil")
+		logger.LogError(c, common.LogText("websocket connection is nil"))
 		return errors.New("websocket connection is nil")
 	}
 	//common.LogInfo(c, fmt.Sprintf("sending message: %s", jsonData))

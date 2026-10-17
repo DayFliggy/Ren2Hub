@@ -140,7 +140,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(drawer).toHaveCount(0)
 
       let replies = 0
-      await page.route('**/api/next/tickets/1/messages', (route) => {
+      await page.route('**/api/tickets/1/messages', (route) => {
         replies += 1
         return route.fulfill({
           status: 503,

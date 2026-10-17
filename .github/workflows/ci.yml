@@ -76,7 +76,10 @@ jobs:
         run: go build ./...
 
       - name: Test root, relaykit, and tokenkit modules
-        run: make test
+        run: |
+          node scripts/test-go.mjs -count=1
+          (cd relaykit && go test ./... -timeout 60s -count=1)
+          (cd tokenkit && go test ./... -timeout 60s -count=1)
 
   routing-integration:
     name: Routing and GMPay database integration (${{ matrix.database }})
@@ -120,12 +123,12 @@ jobs:
       GOWORK: 'off'
       TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
       TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      BILLING_TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      BILLING_TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      GATEWAY_STARTUP_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      GATEWAY_STARTUP_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      AUDIT_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      AUDIT_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
+      ROUTING_TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
+      ROUTING_TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
+      CORE_STARTUP_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
+      CORE_STARTUP_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
+      REN2HUB_EXTENSION_TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
+      REN2HUB_EXTENSION_TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
       REQUIRE_DATABASE_DIALECT: ${{ matrix.database }}
     steps:
       - name: Checkout
@@ -145,18 +148,19 @@ jobs:
             tokenkit/go.sum
 
       - name: Run routing migration integration
-        run: go test ./model -run '^TestRoutingDatabaseIntegration$' -timeout 60s -count=1
+        run: go test ./model -run '^TestTokenRoutingDatabases$' -timeout 60s -count=1
 
-      - name: Require configured database and verify compatibility
-        run: >-
-          go test ./model -run '^Test(DatabaseIntegrationConfiguration|MigrationSchemaStability|PrefillGroupCompatibilityAcrossDatabases|GatewayStartupMigrations|GatewayStartupRejectsExistingDatabaseWithoutChanges|UserSessionPreviousRefreshHashMigrationConfiguredDatabases|MigrateTokenKeyUniquenessSQLite|MigrateTokenKeyUniquenessMySQL|MigrateTokenKeyUniquenessPostgreSQL)$'
-          -timeout 60s -count=1
+      - name: Run GMPay and ticket concurrent settlement contracts
+        run: go test ./model -run '^TestGmpayAndTicketDatabaseContracts$' -timeout 60s -count=1
 
-      - name: Run GMPay migration and concurrent settlement integration
-        env:
-          GATEWAY_STARTUP_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-          GATEWAY_STARTUP_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-        run: go test ./model -run '^TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases$' -timeout 60s -count=1
+      - name: Initialize fresh core database and reject the old schema
+        run: |
+          # Extensions above share the default database. Startup uses a separate empty database.
+          docker exec -e MYSQL_PWD=root '${{ job.services.mysql.id }}' mysql -uroot -e 'CREATE DATABASE core_startup;'
+          docker exec '${{ job.services.postgres.id }}' psql -U postgres -c 'CREATE DATABASE core_startup;'
+          export CORE_STARTUP_MYSQL_DSN='root:root@tcp(127.0.0.1:3306)/core_startup?parseTime=true'
+          export CORE_STARTUP_POSTGRES_DSN='postgres://postgres:postgres@127.0.0.1:5432/core_startup?sslmode=disable'
+          go test ./model -run '^TestCoreEmptyDatabaseInitialization$' -timeout 60s -count=1
 
   frontend:
     name: Vue frontend test, typecheck, lint, format, and build

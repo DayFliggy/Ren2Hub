@@ -13,9 +13,8 @@ import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { formatDate } from '@/utils/format'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
-import ConversionPolicySelect from '@/components/console/gateway/ConversionPolicySelect.vue'
-import type { ConversionPolicy } from '@/types/gateway'
 
 const props = defineProps<{
   open: boolean
@@ -31,10 +30,47 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
+const groups = ref<Record<string, { ratio: number | 'auto'; desc: string }>>({})
+const autoGroups = ref<string[]>([])
+const maxAutoGroups = ref(0)
+const groupLoading = ref(false)
+const groupRequest = useLatestRequest()
+async function loadGroups() {
+  groupLoading.value = true
+  const result = await groupRequest.run(async (signal) => {
+    const [groups, auto] = await Promise.all([
+      api.get<Record<string, { ratio: number | 'auto'; desc: string }>>(
+        '/api/user/self/groups',
+        undefined,
+        { signal }
+      ),
+      api.get<{ groups: string[]; max_count: number }>(
+        '/api/token/auto-groups',
+        undefined,
+        { signal }
+      ),
+    ])
+    return { groups, auto }
+  })
+  if (result.stale) return
+  groupLoading.value = false
+  if (result.ok) {
+    groups.value = result.value.groups
+    autoGroups.value = result.value.auto.groups
+    maxAutoGroups.value = result.value.auto.max_count
+  } else
+    toast.error(
+      result.error instanceof Error
+        ? result.error.message
+        : String(result.error)
+    )
+}
 
 const form = reactive({
   type: 'auto' as TokenType,
-  conversion_policy: 'safe' as ConversionPolicy,
+  group: '',
+  auto_groups: [] as string[],
+  cross_group_retry: false,
   allow_user_quota_query: true,
   name: '',
   model_limits: [] as string[],
@@ -44,7 +80,6 @@ const form = reactive({
   expireDate: '',
 })
 const saving = ref(false)
-let pendingBudget: { fingerprint: string; id: string } | null = null
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
 
@@ -56,18 +91,20 @@ const vis = reactive({
 watch(
   () => props.open,
   (open) => {
-    if (!open) return
-    pendingBudget = null
+    if (!open) {
+      groupRequest.cancel()
+      return
+    }
+    void loadGroups()
     const e = props.editing
     form.type = e?.type ?? 'auto'
-    form.conversion_policy = e?.conversion_policy ?? 'safe'
+    form.group = e?.group ?? ''
+    form.auto_groups = [...(e?.auto_groups ?? [])]
+    form.cross_group_retry = e?.cross_group_retry ?? false
     form.allow_user_quota_query = e ? (e.allow_user_quota_query ?? false) : true
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
-    form.quotaDollars =
-      e && !e.unlimited && e.available_quota !== null
-        ? quotaToDecimal(e.available_quota)
-        : ''
+    form.quotaDollars = e && !e.unlimited ? quotaToDecimal(e.remain_quota) : ''
     form.unlimited = e?.unlimited ?? true
     form.ipText = e?.ip_limits?.join('\n') ?? ''
     form.expireDate = e && e.expired_time > 0 ? formatDate(e.expired_time) : ''
@@ -104,15 +141,24 @@ async function save() {
   if (saving.value) return
   saving.value = true
   try {
+    const remainQuota = form.unlimited
+      ? 0
+      : Number(decimalToQuota(form.quotaDollars || '0'))
+    if (
+      !Number.isSafeInteger(remainQuota) ||
+      remainQuota < 0 ||
+      groupLoading.value
+    )
+      throw new Error(t('common.invalidInput'))
     const payload: Record<string, unknown> = {
       name: form.name,
-      conversion_policy: form.conversion_policy,
+      group: form.group,
+      auto_groups: form.group === 'auto' ? form.auto_groups : [],
+      cross_group_retry: form.group === 'auto' && form.cross_group_retry,
       allow_user_quota_query: form.allow_user_quota_query,
       model_limits: form.model_limits,
       unlimited: form.unlimited,
-      available_quota: form.unlimited
-        ? '0'
-        : decimalToQuota(form.quotaDollars || '0'),
+      remain_quota: remainQuota,
       ip_limits: form.ipText
         .split('\n')
         .map((s) => s.trim())
@@ -134,11 +180,6 @@ async function save() {
     }
     if (props.editing) {
       payload.id = props.editing.id
-      payload.expected_version = props.editing.quota_version
-      const fingerprint = JSON.stringify(payload)
-      if (pendingBudget?.fingerprint !== fingerprint)
-        pendingBudget = { fingerprint, id: crypto.randomUUID() }
-      payload.operation_id = pendingBudget.id
       await api.put('/api/token/', payload)
       toast.success(t('keys.updated'))
     } else {
@@ -215,10 +256,42 @@ async function save() {
             :placeholder="t('keys.namePlaceholder')"
           />
         </FormField>
-        <ConversionPolicySelect
-          v-model="form.conversion_policy"
-          :disabled="saving"
-        />
+        <FormField :label="t('users.group')"
+          ><select
+            v-model="form.group"
+            :disabled="groupLoading"
+            class="console-input w-full"
+          >
+            <option value="">{{ t('common.default') }}</option>
+            <option
+              v-for="(item, name) in groups"
+              :key="name"
+              :value="String(name)"
+            >
+              {{ name }} · {{ item.ratio }}
+            </option>
+          </select></FormField
+        >
+        <template v-if="form.group === 'auto'"
+          ><FormField :label="t('users.group')"
+            ><label
+              v-for="name in autoGroups"
+              :key="name"
+              class="mr-4 inline-flex gap-2"
+              ><input
+                v-model="form.auto_groups"
+                type="checkbox"
+                :value="name"
+                :disabled="
+                  !form.auto_groups.includes(name) &&
+                  form.auto_groups.length >= maxAutoGroups
+                "
+              />{{ name }}</label
+            ></FormField
+          ><ConsoleToggle
+            v-model="form.cross_group_retry"
+            :label="t('keys.crossGroupRetry')"
+        /></template>
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2 items-start">

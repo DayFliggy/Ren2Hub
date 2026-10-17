@@ -575,6 +575,9 @@ export default {
   },
 
   keys: {
+    statusExpired: '已过期',
+    statusExhausted: '额度耗尽',
+    crossGroupRetry: '跨分组重试',
     title: 'API Key',
     breadcrumb: ['控制台', 'API Key'],
     createKey: '创建令牌',
@@ -842,6 +845,8 @@ export default {
   },
 
   models: {
+    autoPriceHint:
+      '自动模式展示基准价格；最终价格使用上游自动路由选中分组的倍率。',
     viewToggle: '视图切换',
     title: '模型广场',
     breadcrumb: ['控制台', '模型'],
@@ -1087,6 +1092,9 @@ export default {
   },
 
   channels: {
+    permissionDenied: '没有此渠道操作权限。',
+    group: '路由分组',
+    groupHint: '逗号分隔；请求只能使用其授权分组内的渠道。',
     providerStatus: '提供商状态',
     providerVersion: '版本',
     contextWindow: '上下文窗口',
@@ -1174,7 +1182,7 @@ export default {
     refreshList: '刷新列表',
     advancedLegacy: '高级管理（旧版）',
     createChannel: '新建渠道',
-    searchPlaceholder: '搜索名称、ID 或供应商',
+    searchPlaceholder: '搜索名称、ID 或上游地址',
     typeFilter: '渠道类型',
     statusFilter: '渠道状态',
     sortLabel: '排序字段',
@@ -1226,7 +1234,7 @@ export default {
     testSupplier: '测试 {supplier} Lab 分组的渠道响应',
     clearSupplier: '清空 {supplier} Lab 分组渠道',
     batchBalancePage: '同步本页上游',
-    batchBalanceLabel: '同步当前显示的 {count} 条渠道上游额度与倍率',
+    batchBalanceLabel: '同步当前显示的 {count} 条渠道上游额度',
     batchProgress: '{processed}/{total}',
     batchProgressLabel: '正在{action}：{processed}/{total}',
     batchBalanceAction: '同步上游',
@@ -1394,6 +1402,7 @@ export default {
   },
 
   users: {
+    permissions: '权限',
     bindingsTitle: '管理账户绑定',
     bindingsEmpty: '没有已绑定的登录提供商或邮箱。',
     unbind: '解绑',
@@ -1605,6 +1614,7 @@ export default {
   },
 
   orders: {
+    title: '充值订单',
     gmpay: {
       title: 'GMPay 订单证据',
       loading: '正在读取网关证据…',
@@ -1745,7 +1755,7 @@ export default {
     groupPlaceholder: '搜索或输入历史分组',
     title: '使用日志',
     breadcrumb: ['控制台', '日志'],
-    keywordPlaceholder: '按模型名搜索…',
+    keywordPlaceholder: '按完整请求 ID 筛选',
     typeLabel: '类型',
     typeConsume: '消费',
     typeTopup: '充值',
@@ -1878,7 +1888,7 @@ export default {
 
   auditLogs: {
     breadcrumb: '审计日志',
-    keywordPlaceholder: '搜索账号、操作或 IP…',
+    keywordPlaceholder: '按完整请求 ID 筛选',
     categoryLabel: '事件类别',
     scopeLabel: '查看范围',
     resultLabel: '结果',
@@ -3092,6 +3102,7 @@ export default {
       diskThreshold: '磁盘阈值（%）',
     },
     options: {
+      cny: 'CNY',
       guest: '访客用户',
       user: '普通用户',
       admin: '管理员',
@@ -3186,6 +3197,8 @@ export default {
       cleanupLogsByDays: '将删除 {count} 天前的日志文件。',
     },
     waffoPancake: {
+      orphanStore:
+        '店铺 {id} 已创建，但产品创建失败。请先检查网关目录，避免重复创建店铺。',
       label: 'Waffo Pancake 配置',
       merchantId: '商户 ID',
       privateKey: '私钥',
@@ -3228,6 +3241,7 @@ export default {
     loadFailed: '系统设置读取失败。重新读取成功前不能编辑或保存。',
     retryLoad: '重新读取设置',
     gmpayPanel: {
+      selectedAssets: '启用的资产（JSON）',
       title: 'GMPay 虚拟币支付',
       description: '选择向用户开放的代币与网络，然后保存网关配置。',
       address: '网关地址',

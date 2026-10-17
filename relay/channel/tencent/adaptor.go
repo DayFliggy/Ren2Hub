@@ -14,7 +14,6 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -69,9 +68,6 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
-	}
-	if err := service.ValidateRequestProjection(info, constant.APITypeTencent, request); err != nil {
-		return nil, err
 	}
 	apiKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
 	apiKey = strings.TrimPrefix(apiKey, "Bearer ")

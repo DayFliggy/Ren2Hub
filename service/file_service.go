@@ -198,7 +198,7 @@ func loadFromURL(c *gin.Context, url string, reason ...string) (*types.CachedFil
 		diskPath, err := writeToDiskCache(base64Data)
 		if err != nil {
 			// 磁盘缓存失败，回退到内存
-			logger.LogWarn(c, fmt.Sprintf("Failed to write to disk cache, falling back to memory: %v", err))
+			logger.LogWarn(c, common.LogText("Failed to write to disk cache, falling back to memory: %v", err))
 			cachedData = types.NewMemoryCachedData(base64Data, mimeType, int64(len(fileBytes)))
 		} else {
 			cachedData = types.NewDiskCachedData(diskPath, mimeType, int64(len(fileBytes)))
@@ -258,8 +258,8 @@ func smartDetectMimeType(resp *http.Response, url string, fileBytes []byte) stri
 
 	// 2. 尝试从 Content-Disposition header 的 filename 获取
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
-		parts := strings.Split(cd, ";")
-		for _, part := range parts {
+		parts := strings.SplitSeq(cd, ";")
+		for part := range parts {
 			part = strings.TrimSpace(part)
 			if strings.HasPrefix(strings.ToLower(part), "filename=") {
 				name := strings.TrimSpace(strings.TrimPrefix(part, "filename="))
@@ -322,10 +322,10 @@ func loadFromBase64(base64String string, providedMimeType string) (*types.Cached
 
 	// 处理 data: 前缀
 	if strings.HasPrefix(base64String, "data:") {
-		idx := strings.Index(base64String, ",")
-		if idx != -1 {
-			header := base64String[:idx]
-			cleanBase64 = base64String[idx+1:]
+		before, after, ok := strings.Cut(base64String, ",")
+		if ok {
+			header := before
+			cleanBase64 = after
 
 			if strings.Contains(header, ":") && strings.Contains(header, ";") {
 				mimeStart := strings.Index(header, ":") + 1
@@ -512,13 +512,6 @@ func detectHEIF(data []byte) string {
 	}
 }
 
-const (
-	// HEIF metadata is normally only a few levels deep. Keep parsing bounded so
-	// attacker-controlled container nesting cannot exhaust the Go stack or CPU.
-	maxHEIFBoxDepth = 64
-	maxHEIFBoxCount = 1 << 20
-)
-
 // parseHEIFDimensions parses ISOBMFF box tree to find the ispe box
 // and extract image width/height. Returns (width, height, ok).
 func parseHEIFDimensions(data []byte) (int, int, bool) {
@@ -530,8 +523,23 @@ func parseHEIFDimensions(data []byte) (int, int, bool) {
 	// Walk top-level boxes to find "meta"
 	offset := 0
 	for offset+8 <= size {
-		boxSize, headerLen, boxType, ok := readHEIFBox(data, offset)
-		if !ok {
+		boxSize := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+		boxType := string(data[offset+4 : offset+8])
+		headerLen := 8
+
+		if boxSize == 1 {
+			// 64-bit extended size
+			if offset+16 > size {
+				break
+			}
+			boxSize = int(binary.BigEndian.Uint64(data[offset+8 : offset+16]))
+			headerLen = 16
+		} else if boxSize == 0 {
+			// box extends to end of data
+			boxSize = size - offset
+		}
+
+		if boxSize < headerLen || offset+boxSize > size {
 			break
 		}
 
@@ -548,76 +556,34 @@ func parseHEIFDimensions(data []byte) (int, int, bool) {
 	return 0, 0, false
 }
 
-type heifBoxRange struct {
-	data  []byte
-	depth int
-}
-
-// readHEIFBox validates an ISOBMFF box header and returns its bounded size.
-func readHEIFBox(data []byte, offset int) (int, int, string, bool) {
-	if offset < 0 || len(data)-offset < 8 {
-		return 0, 0, "", false
-	}
-
-	boxSize := uint64(binary.BigEndian.Uint32(data[offset : offset+4]))
-	headerLen := 8
-	if boxSize == 1 {
-		if len(data)-offset < 16 {
-			return 0, 0, "", false
-		}
-		boxSize = binary.BigEndian.Uint64(data[offset+8 : offset+16])
-		headerLen = 16
-	} else if boxSize == 0 {
-		boxSize = uint64(len(data) - offset)
-	}
-
-	remaining := uint64(len(data) - offset)
-	if boxSize < uint64(headerLen) || boxSize > remaining {
-		return 0, 0, "", false
-	}
-	return int(boxSize), headerLen, string(data[offset+4 : offset+8]), true
-}
-
-// findISPE iteratively searches for the ispe box within container boxes.
+// findISPE recursively searches for the ispe box within container boxes.
 // Path: meta -> iprp -> ipco -> ispe
 func findISPE(data []byte) (int, int, bool) {
-	stack := []heifBoxRange{{data: data}}
-	boxCount := 0
-	for len(stack) > 0 {
-		last := len(stack) - 1
-		current := stack[last]
-		stack = stack[:last]
-		for offset := 0; offset+8 <= len(current.data); {
-			boxCount++
-			if boxCount > maxHEIFBoxCount {
-				return 0, 0, false
-			}
-			boxSize, headerLen, boxType, ok := readHEIFBox(current.data, offset)
-			if !ok {
-				break
-			}
-			content := current.data[offset+headerLen : offset+boxSize]
-			switch boxType {
-			case "iprp", "ipco":
-				if current.depth >= maxHEIFBoxDepth {
-					return 0, 0, false
-				}
-				stack = append(stack, heifBoxRange{
-					data:  content,
-					depth: current.depth + 1,
-				})
-			case "ispe":
-				// ispe is a full box: 4 bytes version/flags, then 4 bytes width, 4 bytes height
-				if len(content) >= 12 {
-					w := int(binary.BigEndian.Uint32(content[4:8]))
-					h := int(binary.BigEndian.Uint32(content[8:12]))
-					if w > 0 && h > 0 {
-						return w, h, true
-					}
-				}
-			}
-			offset += boxSize
+	offset := 0
+	size := len(data)
+	for offset+8 <= size {
+		boxSize := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+		boxType := string(data[offset+4 : offset+8])
+		if boxSize < 8 || offset+boxSize > size {
+			break
 		}
+		content := data[offset+8 : offset+boxSize]
+		switch boxType {
+		case "iprp", "ipco":
+			if w, h, ok := findISPE(content); ok {
+				return w, h, true
+			}
+		case "ispe":
+			// ispe is a full box: 4 bytes version/flags, then 4 bytes width, 4 bytes height
+			if len(content) >= 12 {
+				w := int(binary.BigEndian.Uint32(content[4:8]))
+				h := int(binary.BigEndian.Uint32(content[8:12]))
+				if w > 0 && h > 0 {
+					return w, h, true
+				}
+			}
+		}
+		offset += boxSize
 	}
 	return 0, 0, false
 }

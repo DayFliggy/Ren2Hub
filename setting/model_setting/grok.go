@@ -4,13 +4,13 @@ import "github.com/QuantumNous/new-api/setting/config"
 
 // GrokSettings defines Grok model configuration.
 type GrokSettings struct {
-	ViolationDeductionEnabled bool   `json:"violation_deduction_enabled"`
-	ViolationDeductionAmount  string `json:"violation_deduction_amount"`
+	ViolationDeductionEnabled bool    `json:"violation_deduction_enabled"`
+	ViolationDeductionAmount  float64 `json:"violation_deduction_amount"`
 }
 
 var defaultGrokSettings = GrokSettings{
 	ViolationDeductionEnabled: true,
-	ViolationDeductionAmount:  "0.05",
+	ViolationDeductionAmount:  0.05,
 }
 
 var grokSettings = defaultGrokSettings

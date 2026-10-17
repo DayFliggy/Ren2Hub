@@ -9,7 +9,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	kitreasoning "github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -137,29 +136,9 @@ func TestApplyReasoningModelSuffixModifierOverridesExplicitConflict(t *testing.T
 	require.NotNil(t, info.ReasoningConversion)
 	assert.Equal(t, "enabled", info.ReasoningConversion.Mode)
 	assert.Nil(t, info.Request.(*dto.ClaudeRequest).Thinking)
-	diagnostics := info.ConversionDiagnostics
+	diagnostics := info.ConversionDiagnostics()
 	require.NotEmpty(t, diagnostics)
 	assert.Equal(t, "model_modifier_overrode_request", diagnostics[0].Code)
-}
-
-func TestApplyReasoningModelSuffixRetainsClaudeNativeControls(t *testing.T) {
-	var request dto.ClaudeRequest
-	require.NoError(t, common.UnmarshalJsonStr(`{"model":"claude-opus-5-5-high","thinking":{"type":"enabled","budget_tokens":2048,"display":"omitted","block_binding":{"prefix_mismatch_behavior":"drop_block"},"future_enabled":false,"future_limit":0,"future_policy":null}}`, &request))
-	info := &relaycommon.RelayInfo{
-		OriginModelName: request.Model,
-		Request:         &request,
-		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: request.Model},
-	}
-	outbound, err := common.DeepCopy(&request)
-	require.NoError(t, err)
-	require.NoError(t, ApplyReasoningModelSuffix(nil, info, outbound))
-	encoded, err := common.Marshal(outbound.Thinking)
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"block_binding":{"prefix_mismatch_behavior":"drop_block"},"future_enabled":false,"future_limit":0,"future_policy":null}`, string(encoded))
-	require.NotNil(t, info.ReasoningConversion)
-	assert.Equal(t, "high", info.ReasoningConversion.Effort)
-	assert.Equal(t, "enabled", request.Thinking.Type, "the original request remains available for retries")
-	assert.Equal(t, 2048, request.Thinking.GetBudgetTokens())
 }
 
 func TestApplyReasoningModelSuffixGeminiNoThinkingWhenAdapterEnabled(t *testing.T) {
@@ -283,7 +262,7 @@ func TestApplyReasoningModelSuffixLeavesVersionedQwenMaxUntouched(t *testing.T) 
 
 	mustApplyReasoningModelSuffix(t, info)
 	assert.Equal(t, "qwen3.8-max", info.UpstreamModelName)
-	assert.Equal(t, info.OriginModelName, info.BillingModelName())
+	assert.Empty(t, info.BillingModelName)
 	assert.Nil(t, info.ReasoningConversion)
 }
 
@@ -318,7 +297,7 @@ func TestApplyReasoningModelSuffixAppliesExplicitModifierChain(t *testing.T) {
 
 	mustApplyReasoningModelSuffix(t, info, request)
 	assert.Equal(t, "qwen3.8-max", info.UpstreamModelName)
-	assert.Equal(t, info.OriginModelName, info.BillingModelName())
+	assert.Empty(t, info.BillingModelName)
 	assert.Equal(t, "qwen3.8-max", request.Model)
 	assert.Equal(t, 0.2, *request.Temperature)
 	assert.Equal(t, 0.8, *request.TopP)
@@ -326,7 +305,7 @@ func TestApplyReasoningModelSuffixAppliesExplicitModifierChain(t *testing.T) {
 	require.NotNil(t, info.ReasoningConversion)
 	assert.Equal(t, "enabled", info.ReasoningConversion.Mode)
 	assert.Equal(t, "high", info.ReasoningConversion.Effort)
-	assert.Contains(t, info.ConversionDiagnostics, types.ConversionDiagnostic{
+	assert.Contains(t, info.ConversionDiagnostics(), types.ConversionDiagnostic{
 		Code:     "model_modifier_overrode_request",
 		Path:     "model.@temperature",
 		Message:  "model temperature modifier overrides request temperature 0.9",
@@ -407,7 +386,7 @@ func TestApplyReasoningModelSuffixThinkingLegacyValuesRejected(t *testing.T) {
 	assert.Equal(t, "qwen3.8-max@thinking:enabled", info.UpstreamModelName)
 	assert.Equal(t, "qwen3.8-max@thinking:enabled", request.Model)
 	assert.Nil(t, info.ReasoningConversion)
-	assert.Empty(t, info.ConversionDiagnostics)
+	assert.Empty(t, info.ConversionDiagnostics())
 }
 
 func TestApplyReasoningModelSuffixDuplicateModifierLastWins(t *testing.T) {
@@ -424,7 +403,7 @@ func TestApplyReasoningModelSuffixDuplicateModifierLastWins(t *testing.T) {
 	assert.Equal(t, "qwen3.8-max", info.UpstreamModelName)
 	require.NotNil(t, info.ReasoningConversion)
 	assert.Equal(t, "disabled", info.ReasoningConversion.Mode)
-	assert.Contains(t, info.ConversionDiagnostics, types.ConversionDiagnostic{
+	assert.Contains(t, info.ConversionDiagnostics(), types.ConversionDiagnostic{
 		Code:     "duplicate_model_modifier",
 		Path:     "model.@thinking",
 		Message:  "model modifier \"thinking\" is repeated; the rightmost value is used",
@@ -452,7 +431,7 @@ func TestApplyReasoningModelSuffixExactExemptionKeepsOpaqueName(t *testing.T) {
 	assert.Equal(t, model, info.UpstreamModelName)
 	assert.Equal(t, model, request.Model)
 	assert.Nil(t, info.ReasoningConversion)
-	assert.Empty(t, info.ConversionDiagnostics)
+	assert.Empty(t, info.ConversionDiagnostics())
 }
 
 func TestApplyReasoningModelSuffixRegexExemptionKeepsOpaqueName(t *testing.T) {
@@ -475,7 +454,7 @@ func TestApplyReasoningModelSuffixRegexExemptionKeepsOpaqueName(t *testing.T) {
 	assert.Equal(t, model, info.UpstreamModelName)
 	assert.Equal(t, model, request.Model)
 	assert.Nil(t, info.ReasoningConversion)
-	assert.Empty(t, info.ConversionDiagnostics)
+	assert.Empty(t, info.ConversionDiagnostics())
 }
 
 func TestApplyReasoningModelSuffixEffortNoneDisables(t *testing.T) {
@@ -521,7 +500,7 @@ func TestApplyReasoningModelSuffixPassThroughKeepsModifierBodyVerbatim(t *testin
 	assert.Equal(t, model, info.UpstreamModelName)
 	assert.Equal(t, model, request.Model)
 	assert.Nil(t, info.ReasoningConversion)
-	assert.Empty(t, info.ConversionDiagnostics)
+	assert.Empty(t, info.ConversionDiagnostics())
 	storage, err := common.GetBodyStorage(c)
 	require.NoError(t, err)
 	got, err := storage.Bytes()
@@ -627,67 +606,4 @@ func TestApplyReasoningModelSuffixPreservesGpt51CodexMax(t *testing.T) {
 	assert.Equal(t, "gpt-5.1-codex-max", info.UpstreamModelName)
 	assert.Nil(t, info.ReasoningConversion)
 	assert.Equal(t, "gpt-5.1-codex-max", hostreasoning.BaseModelName("gpt-5.1-codex-max"))
-}
-
-func TestModelModifierPreparationKeepsOriginalRetryRequest(t *testing.T) {
-	original := &dto.GeneralOpenAIRequest{Model: "gpt-5@effort:high"}
-	outbound := &dto.GeneralOpenAIRequest{Model: original.Model}
-	info := &relaycommon.RelayInfo{OriginModelName: original.Model, Request: original, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: original.Model}}
-	require.NoError(t, ApplyReasoningModelSuffix(nil, info, outbound))
-	assert.Equal(t, "gpt-5@effort:high", original.Model)
-	assert.Equal(t, "gpt-5", outbound.Model)
-	assert.Equal(t, "high", outbound.ReasoningEffort)
-}
-
-// A disabling suffix that agrees with the client's disabled thinking is not a
-// conflict, even when unknown thinking fields keep a residual thinking object.
-func TestApplyReasoningModelSuffixReportsOnlyRealClaudeThinkingConflicts(t *testing.T) {
-	tests := []struct {
-		name         string
-		thinking     string
-		wantConflict bool
-		wantThinking string
-	}{
-		{
-			name:         "client disable agrees with -none",
-			thinking:     `{"type":"disabled","future_x":1}`,
-			wantConflict: false,
-			wantThinking: `{"type":"disabled","future_x":1}`,
-		},
-		{
-			name:         "client enable conflicts with -none",
-			thinking:     `{"type":"enabled","budget_tokens":2048,"future_x":1}`,
-			wantConflict: true,
-			wantThinking: `{"type":"disabled","future_x":1}`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			const model = "claude-opus-4-1-none"
-			var request dto.ClaudeRequest
-			require.NoError(t, common.UnmarshalJsonStr(`{"model":"`+model+`","max_tokens":4096,"thinking":`+tt.thinking+`,"messages":[{"role":"user","content":"hi"}]}`, &request))
-			info := &relaycommon.RelayInfo{
-				OriginModelName: model,
-				Request:         &request,
-				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: model},
-			}
-			outbound, err := common.DeepCopy(&request)
-			require.NoError(t, err)
-			require.NoError(t, ApplyReasoningModelSuffix(nil, info, outbound))
-			require.NoError(t, relayconvert.ApplyClaudeThinkingModel(outbound, info))
-
-			codes := make([]string, 0, len(info.ConversionDiagnostics))
-			for _, diagnostic := range info.ConversionDiagnostics {
-				codes = append(codes, diagnostic.Code)
-			}
-			if tt.wantConflict {
-				assert.Contains(t, codes, "suffix_overrode_request")
-			} else {
-				assert.NotContains(t, codes, "suffix_overrode_request")
-			}
-			encoded, err := common.Marshal(outbound.Thinking)
-			require.NoError(t, err)
-			assert.JSONEq(t, tt.wantThinking, string(encoded))
-		})
-	}
 }

@@ -50,8 +50,8 @@ RUN apt-get update \
     && update-ca-certificates
 
 COPY --from=builder2 /build/new-api /
-# The Go toolchain that built the binary. Billing evidence with recorded time
-# values replays only on the same toolchain; read it with
+# The Go toolchain that built the binary, recorded for release verification:
+# read it with
 # docker run --rm --entrypoint cat <image> /etc/ren2hub/go-version
 COPY --from=builder2 /build/go-version /etc/ren2hub/go-version
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/

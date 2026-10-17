@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -55,11 +54,11 @@ type CreemPayRequest struct {
 }
 
 type CreemProduct struct {
-	ProductId string       `json:"productId"`
-	Name      string       `json:"name"`
-	Price     float64      `json:"price"`
-	Currency  string       `json:"currency"`
-	Quota     common.Quota `json:"quota"`
+	ProductId string  `json:"productId"`
+	Name      string  `json:"name"`
+	Price     float64 `json:"price"`
+	Currency  string  `json:"currency"`
+	Quota     int64   `json:"quota"`
 }
 
 type CreemAdaptor struct {
@@ -100,18 +99,13 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 	}
 
 	id := c.GetInt("id")
-	if rejectInvalidCreditedQuota(c, id, decimal.NewFromInt(int64(selectedProduct.Quota))) {
+	if rejectInvalidCreditedQuota(c, id, decimal.NewFromInt(selectedProduct.Quota)) {
 		return
 	}
 
 	user, err := model.GetUserById(id, false)
 	if err != nil || user == nil {
 		paymentError(c, common.NewMessage("User does not exist"))
-		return
-	}
-	affiliateBaseQuota, err := model.SnapshotAffiliateBaseQuota(selectedProduct.Price, 1)
-	if err != nil {
-		common.ApiError(c, err)
 		return
 	}
 
@@ -121,15 +115,14 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
-		UserId:             id,
-		Amount:             int64(selectedProduct.Quota), // 充值额度
-		Money:              selectedProduct.Price,        // 支付金额
-		TradeNo:            referenceId,
-		PaymentMethod:      model.PaymentMethodCreem,
-		PaymentProvider:    model.PaymentProviderCreem,
-		CreateTime:         time.Now().Unix(),
-		Status:             common.TopUpStatusPending,
-		AffiliateBaseQuota: affiliateBaseQuota,
+		UserId:          id,
+		Amount:          selectedProduct.Quota, // 充值额度
+		Money:           selectedProduct.Price, // 支付金额
+		TradeNo:         referenceId,
+		PaymentMethod:   model.PaymentMethodCreem,
+		PaymentProvider: model.PaymentProviderCreem,
+		CreateTime:      time.Now().Unix(),
+		Status:          common.TopUpStatusPending,
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -164,7 +157,7 @@ func RequestCreemPay(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Creem failed to read payment request error=%q", err.Error()))
-		paymentError(c, common.NewMessage("Failed to read the payment request"))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "read query error"})
 		return
 	}
 
@@ -315,25 +308,16 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 		return
 	}
 
-	// Legacy plan checkouts may also be one-time payments; never credit them
-	// to a wallet even if a TopUp happens to share the archived order number.
-	if strings.HasPrefix(referenceId, "sub_ref_") {
-		logger.LogWarn(c.Request.Context(), common.LogText("Creem ignored retired plan order trade_no=%s", referenceId))
-		c.Status(http.StatusOK)
-		return
-	}
-
+	LockOrder(referenceId)
+	defer UnlockOrder(referenceId)
 	// 验证订单类型，目前只处理一次性付款（充值）
 	if event.Object.Order.Type != "onetime" {
 		logger.LogInfo(c.Request.Context(), common.LogText("Creem order type not supported, ignored request_id=%s creem_order_id=%s order_type=%s", referenceId, event.Object.Order.Id, event.Object.Order.Type))
-		c.Status(http.StatusOK)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	logger.LogInfo(c.Request.Context(), common.LogText("Creem payment completed callback trade_no=%s creem_order_id=%s amount_paid=%d currency=%s product_name=%q customer_email=%q customer_name=%q", referenceId, event.Object.Order.Id, event.Object.Order.AmountPaid, event.Object.Order.Currency, event.Object.Product.Name, event.Object.Customer.Email, event.Object.Customer.Name))
-
-	LockOrder(referenceId)
-	defer UnlockOrder(referenceId)
 
 	// 查询本地订单确认存在
 	topUp := model.GetTopUpByTradeNo(referenceId)

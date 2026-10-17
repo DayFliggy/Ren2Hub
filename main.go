@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,26 +23,24 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	"github.com/QuantumNous/new-api/pkg/wsmanager"
 	"github.com/QuantumNous/new-api/relay"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/router"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	_ "net/http/pprof"
 )
 
-// frontend/embed-dist is the only embedded application served at the web root.
-// Release builds replace the checked-in placeholder with the Vite output.
-//
-// `all:` keeps Vite chunks beginning with `_` (for example the Vue export
-// helper) in the embedded filesystem. The default pattern omits them.
-//
 //go:embed all:frontend/embed-dist
 var frontendBuildFS embed.FS
 
@@ -49,6 +48,9 @@ var frontendBuildFS embed.FS
 var frontendIndexPage []byte
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "plugin" {
+		os.Exit(jsplugin.RunCLI(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	startTime := time.Now()
 	kitutil.SetLogging(common.SysLog, func(message string) {
 		logger.LogError(nil, message)
@@ -57,7 +59,7 @@ func main() {
 
 	err := InitResources()
 	if err != nil {
-		common.FatalLog("failed to initialize resources: " + err.Error())
+		common.FatalLog(common.LogText("failed to initialize resources: %s", err.Error()))
 		return
 	}
 
@@ -66,7 +68,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	if common.DebugEnabled {
-		common.SysLog("running in debug mode")
+		common.SysLog(common.LogText("running in debug mode"))
 	}
 
 	kitutil.Debug.Store(common.DebugEnabled)
@@ -74,7 +76,7 @@ func main() {
 	defer func() {
 		err := model.CloseDB()
 		if err != nil {
-			common.FatalLog("failed to close database: " + err.Error())
+			common.FatalLog(common.LogText("failed to close database: %s", err.Error()))
 		}
 	}()
 
@@ -83,57 +85,49 @@ func main() {
 		common.MemoryCacheEnabled = true
 	}
 	if common.MemoryCacheEnabled {
-		common.SysLog("memory cache enabled")
-		common.SysLog(fmt.Sprintf("sync frequency: %d seconds", common.SyncFrequency))
+		common.SysLog(common.LogText("memory cache enabled"))
+		common.SysLog(common.LogText("sync frequency: %d seconds", common.SyncFrequency))
 
 		// Add panic recovery and retry for InitChannelCache
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					common.SysLog(fmt.Sprintf("InitChannelCache panic: %v, retrying once", r))
+					common.SysLog(common.LogText("InitChannelCache panic: %v, retrying once", r))
 					// Retry once
 					_, _, fixErr := model.FixAbility()
 					if fixErr != nil {
-						common.FatalLog(fmt.Sprintf("InitChannelCache failed: %s", fixErr.Error()))
+						common.FatalLog(common.LogText("InitChannelCache failed: %s", fixErr.Error()))
 					}
 				}
 			}()
 			model.InitChannelCache()
 		}()
 
-		model.SyncChannelCache(common.SyncFrequency)
+		go model.SyncChannelCache(common.SyncFrequency)
 	}
-	if err := controller.InitTaskPlugins(); err != nil {
-		common.FatalLog("failed to initialize task plugins: " + err.Error())
-		return
-	}
-	controller.SyncTaskPlugins()
-	if err := service.InitRouteCapabilityIndex(context.Background()); err != nil {
-		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
-	}
-	service.RegisterRouteCapabilityRefreshHook()
+	wsmanager.StartSubscriber(context.Background())
 
 	// Warm pricing after channel cache initialization so Advanced Custom
 	// endpoint inference can read cached route settings on first request.
 	model.GetPricing()
 
 	// 热更新配置
-	model.SyncOptions(common.SyncFrequency)
+	go model.SyncOptions(common.SyncFrequency)
+	go controller.SyncTaskPlugins()
 
-	// 周期性重载授权策略，保证多节点/多 master 部署下权限变更能传播到每个实例
-	authz.StartPolicySync(common.SyncFrequency)
+	// 周期性重载授权策略，保持原生授权缓存的更新机制。
+	go authz.StartPolicySync(common.SyncFrequency)
+
+	// 数据看板
+	go model.UpdateQuotaData()
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {
-			common.FatalLog("failed to parse CHANNEL_UPDATE_FREQUENCY: " + err.Error())
+			common.FatalLog(common.LogText("failed to parse CHANNEL_UPDATE_FREQUENCY: %s", err.Error()))
 		}
-		controller.AutomaticallyUpdateChannels(frequency)
+		go controller.AutomaticallyUpdateChannels(frequency)
 	}
-
-	// Sample host, gateway and storage health for the admin ops monitor.
-	service.StartOpsMonitor()
-	service.StartRequestDiagnosticsCleanup()
 
 	// Wire task polling adaptor factory (breaks service -> relay import cycle).
 	// Must run before the system task runner starts: the async_task_poll handler
@@ -148,47 +142,39 @@ func main() {
 
 	// Register the periodic channel test, upstream model update, and async task
 	// polling (Midjourney / Suno / video) jobs as scheduled system tasks
-	// (DB-lease dedup across masters + run history), then start the runner that
+	// (database leases and run history), then start the runner that
 	// schedules and executes them. Master-only execution and the UpdateTask
 	// switch are enforced inside the runner and each handler's Enabled().
 	controller.RegisterScheduledSystemTasks()
 	service.StartSystemTaskRunner()
 
+	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
+		common.BatchUpdateEnabled = true
+		common.SysLog(common.LogText("batch update enabled with interval %ss", strconv.Itoa(common.BatchUpdateInterval)))
+		model.InitBatchUpdater()
+	}
+
 	if os.Getenv("ENABLE_PPROF") == "true" {
-		common.BackgroundWorkers.Go(func(ctx context.Context) {
-			pprofServer := &http.Server{Addr: "0.0.0.0:8005", Handler: nil}
-			result := make(chan error, 1)
-			go func() { result <- pprofServer.ListenAndServe() }()
-			select {
-			case err := <-result:
-				if !errors.Is(err, http.ErrServerClosed) {
-					common.SysError("pprof server stopped: " + err.Error())
-				}
-			case <-ctx.Done():
-				_ = pprofServer.Close()
-				<-result
-			}
+		gopool.Go(func() {
+			log.Println(http.ListenAndServe("0.0.0.0:8005", nil))
 		})
-		common.BackgroundWorkers.Go(common.MonitorWithContext)
-		common.SysLog("pprof enabled")
+		go common.Monitor()
+		common.SysLog(common.LogText("pprof enabled"))
 	}
 
 	err = common.StartPyroScope()
 	if err != nil {
-		common.SysError(fmt.Sprintf("start pyroscope error : %v", err))
+		common.SysError(common.LogText("start pyroscope error : %v", err))
 	}
 
 	// Initialize HTTP server
 	server := gin.New()
 	if err := middleware.ConfigureTrustedProxies(server); err != nil {
-		common.FatalLog("failed to configure trusted proxies: " + err.Error())
+		common.FatalLog(common.LogText("failed to configure trusted proxies: %s", err.Error()))
 		return
 	}
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
-		if err == http.ErrAbortHandler {
-			panic(err)
-		}
-		common.SysLog(fmt.Sprintf("panic detected: %v", err))
+		common.SysLog(common.LogText("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": fmt.Sprintf("Panic detected, error: %v. Please submit a issue here: https://github.com/Calcium-Ion/new-api", err),
@@ -222,7 +208,7 @@ func main() {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			common.FatalLog("failed to start HTTP server: " + err.Error())
+			common.FatalLog(common.LogText("failed to start HTTP server: %s", err.Error()))
 		}
 	}()
 
@@ -233,17 +219,20 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
-	common.SysLog(fmt.Sprintf("received signal: %v, shutting down...", sig))
+	common.SysLog(common.LogText("received signal: %v, shutting down...", sig))
 
 	// SSE streams may run for minutes; give them time to finish before forced exit
 	shutdownTimeout := time.Duration(common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	if err := shutdownApplication(ctx, srv); err != nil {
-		common.SysError("server shutdown incomplete: " + err.Error())
-		return
+	if err := srv.Shutdown(ctx); err != nil {
+		common.SysError(common.LogText("server forced to shutdown: %v", err))
 	}
-	common.SysLog("server exited")
+	// 内存中的看板数据保存入库，避免重启丢失未落库数据 (issue #5679)
+	if common.DataExportEnabled {
+		model.SaveQuotaDataCache()
+	}
+	common.SysLog(common.LogText("server exited"))
 }
 
 func InjectUmamiAnalytics() {
@@ -262,7 +251,8 @@ func InjectUmamiAnalytics() {
 	}
 	analyticsInjectBuilder.WriteString("<!--Umami QuantumNous-->\n")
 	analyticsInject := []byte(analyticsInjectBuilder.String())
-	frontendIndexPage = bytes.Replace(frontendIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
+	placeholder := []byte("<!--umami-->\n")
+	frontendIndexPage = bytes.ReplaceAll(frontendIndexPage, placeholder, analyticsInject)
 }
 
 func InjectGoogleAnalytics() {
@@ -284,7 +274,8 @@ func InjectGoogleAnalytics() {
 	}
 	analyticsInjectBuilder.WriteString("<!--Google Analytics QuantumNous-->\n")
 	analyticsInject := []byte(analyticsInjectBuilder.String())
-	frontendIndexPage = bytes.Replace(frontendIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
+	placeholder := []byte("<!--Google Analytics-->\n")
+	frontendIndexPage = bytes.ReplaceAll(frontendIndexPage, placeholder, analyticsInject)
 }
 
 func InitResources() error {
@@ -293,7 +284,7 @@ func InitResources() error {
 	err := godotenv.Load(".env")
 	if err != nil {
 		if common.DebugEnabled {
-			common.SysLog("No .env file found, using default environment variables. If needed, please create a .env file and set the relevant variables.")
+			common.SysLog(common.LogText("No .env file found, using default environment variables. If needed, please create a .env file and set the relevant variables."))
 		}
 	}
 
@@ -302,17 +293,26 @@ func InitResources() error {
 
 	logger.SetupLogger()
 
+	// Initialize model settings
+	ratio_setting.InitRatioSettings()
+
 	service.InitHttpClient()
 
 	// Initialize SQL Database
 	err = model.InitDB()
 	if err != nil {
-		common.FatalLog("failed to initialize database: " + err.Error())
+		common.FatalLog(common.LogText("failed to initialize database: %s", err.Error()))
 		return err
 	}
 	if err = authz.Init(model.DB); err != nil {
-		common.FatalLog("failed to initialize authorization: " + err.Error())
+		common.FatalLog(common.LogText("failed to initialize authorization: %s", err.Error()))
 		return err
+	}
+	if common.PasswordLoginEncryptionEnabled {
+		if err = model.InitPasswordEncryption(); err != nil {
+			common.FatalLog(common.LogText("failed to initialize password encryption: %s", err.Error()))
+			return err
+		}
 	}
 
 	model.CheckSetup()
@@ -320,13 +320,10 @@ func InitResources() error {
 	// Initialize options, should after model.InitDB()
 	if common.IsMasterNode {
 		if err := model.MigrateRetiredFrontendOptions(); err != nil {
-			common.SysError("failed to migrate retired frontend options: " + err.Error())
+			common.SysError(common.LogText("failed to migrate retired frontend options: %s", err.Error()))
 		}
 	}
 	model.InitOptionMap()
-	if err := service.InitGatewayAdmission(context.Background()); err != nil {
-		return fmt.Errorf("initialize local gateway admission: %w", err)
-	}
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()
@@ -351,10 +348,10 @@ func InitResources() error {
 	// Initialize i18n
 	err = i18n.Init()
 	if err != nil {
-		common.SysError("failed to initialize i18n: " + err.Error())
+		common.SysError(common.LogText("failed to initialize i18n: %s", err.Error()))
 		// Don't return error, i18n is not critical
 	} else {
-		common.SysLog("i18n initialized with languages: " + strings.Join(i18n.SupportedLanguages(), ", "))
+		common.SysLog(common.LogText("i18n initialized with languages: %s", strings.Join(i18n.SupportedLanguages(), ", ")))
 	}
 	// Register user language loader for lazy loading
 	i18n.SetUserLangLoader(model.GetUserLanguage)
@@ -362,7 +359,7 @@ func InitResources() error {
 	// Load custom OAuth providers from database
 	err = oauth.LoadCustomProviders()
 	if err != nil {
-		common.SysError("failed to load custom OAuth providers: " + err.Error())
+		common.SysError(common.LogText("failed to load custom OAuth providers: %s", err.Error()))
 		// Don't return error, custom OAuth is not critical
 	}
 

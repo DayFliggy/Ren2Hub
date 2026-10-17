@@ -2,7 +2,6 @@ package model
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -17,8 +16,6 @@ const (
 
 	TicketMessageRoleUser    = "user"
 	TicketMessageRoleSupport = "support"
-
-	ticketMessageRoleMigrationMarker = "ticket.migration.message_role_v1"
 )
 
 var (
@@ -427,52 +424,4 @@ func ListEnabledTicketAgents() ([]User, error) {
 		Order("role DESC, id ASC").
 		Find(&items).Error
 	return items, err
-}
-
-func BackfillTicketMessageRoles() error {
-	var marker Option
-	if err := DB.Where(commonKeyCol+" = ?", ticketMessageRoleMigrationMarker).First(&marker).Error; err == nil {
-		return nil
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	return DB.Transaction(func(tx *gorm.DB) error {
-		var messageCount int64
-		if err := tx.Model(&TicketMessage{}).Count(&messageCount).Error; err != nil {
-			return err
-		}
-
-		var messages []struct {
-			ID           int
-			AuthorID     int
-			Role         string
-			TicketUserID int
-		}
-		if err := tx.Table("ticket_messages AS tm").
-			Select("tm.id, tm.author_id, tm.role, t.user_id AS ticket_user_id").
-			Joins("JOIN tickets AS t ON t.id = tm.ticket_id").
-			Order("tm.id ASC").
-			Scan(&messages).Error; err != nil {
-			return err
-		}
-		if int64(len(messages)) != messageCount {
-			return fmt.Errorf("cannot infer roles for %d ticket messages without a ticket", messageCount-int64(len(messages)))
-		}
-
-		for _, message := range messages {
-			role := TicketMessageRoleUser
-			if message.Role == TicketMessageRoleSupport || message.AuthorID != message.TicketUserID {
-				role = TicketMessageRoleSupport
-			}
-			if message.Role == role {
-				continue
-			}
-			if err := tx.Model(&TicketMessage{}).Where("id = ?", message.ID).Update("role", role).Error; err != nil {
-				return err
-			}
-		}
-
-		return tx.Create(&Option{Key: ticketMessageRoleMigrationMarker, Value: "done"}).Error
-	})
 }

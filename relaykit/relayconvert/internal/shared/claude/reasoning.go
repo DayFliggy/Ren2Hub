@@ -81,9 +81,6 @@ func ApplyReasoning(ctx context.Context, req *dto.ClaudeRequest, info convmeta.M
 			intent.Effort = reasoning.EffortHigh
 		}
 	}
-	if req.MaxTokens != nil && reasoning.ClaudeUsesManualThinking(capabilityModel, intent) && (int64(*req.MaxTokens) <= 1024 || intent.BudgetTokens != nil && int64(*req.MaxTokens) <= int64(*intent.BudgetTokens)) {
-		return fmt.Errorf("max_tokens must exceed the explicit thinking budget")
-	}
 	requestEffort, err := reasoning.ParseEffort(req.GetEfforts())
 	if err != nil {
 		return err
@@ -118,13 +115,9 @@ func ApplyReasoning(ctx context.Context, req *dto.ClaudeRequest, info convmeta.M
 		req.MaxTokens = &minimum
 	}
 
-	requestedMax := req.MaxTokens
 	rendered, err := reasoning.RenderClaude(capabilityModel, intent, req.MaxTokens, opts.Claude.ThinkingAdapterBudgetTokensPercentage)
 	if err != nil {
 		return err
-	}
-	if requestedMax != nil && rendered.MaxTokens != nil && *rendered.MaxTokens > *requestedMax {
-		return fmt.Errorf("max_tokens is too small for requested thinking")
 	}
 	convdiag.Add(ctx, rendered.Diagnostics...)
 	req.Model = baseModel
@@ -132,14 +125,6 @@ func ApplyReasoning(ctx context.Context, req *dto.ClaudeRequest, info convmeta.M
 		req.MaxTokens = rendered.MaxTokens
 	}
 	if rendered.Thinking != nil {
-		if !crossProtocol && req.Thinking != nil {
-			// Suffixes override modeled reasoning settings. Unknown native
-			// controls remain the provider's responsibility in every mode.
-			rendered.Thinking.Extra = req.Thinking.Extra
-			if rendered.Thinking.Type == "adaptive" {
-				rendered.Thinking.BlockBinding = req.Thinking.BlockBinding
-			}
-		}
 		req.Thinking = rendered.Thinking
 	}
 	outputEffort := rendered.OutputEffort

@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -27,7 +26,6 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +38,7 @@ export const meta = {
   author: {name: "Test"},
   channelTypes: [1001], models: ["mock-v1"], fetchMode: "per_task",
   protocols: ["openai_video"],
-  usageSchema: {seconds: {type: "number", unit: "second"}, mode: {enum: ["std", "pro"]}, upstreamUnits:{type:"number",unit:"credit"}},
+  usageSchema: {seconds: {type: "number", unit: "second"}, mode: {enum: ["std", "pro"]}},
 };
 export function buildSubmitRequest(ctx) {
   if (!ctx.requestBody.prompt) throw new Error("prompt required");
@@ -414,6 +412,95 @@ export function buildSubmitRequest(ctx){return {url:ctx.baseUrl+"/submit"}} expo
 	assert.Contains(t, taskErr.Message, "must not return renderer")
 }
 
+func TestTaskAdaptorMasksChannelAddressInBuildFailure(t *testing.T) {
+	source := `
+export const meta = {apiVersion:1,key:"build-fail",name:"Build Fail",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task",allowedHosts:["assets.corp.internal"]};
+export function buildSubmitRequest(ctx){throw new Error("utils.fetch to private.example.com failed: dial tcp: lookup private.example.com: no such host; utils.fetch to assets.corp.internal failed: dial tcp: lookup assets.corp.internal: no such host")}
+export function parseSubmitResponse(){return {taskId:"one"}} export function buildQueryRequest(){return {}} export function parseTaskResult(){return {status:"SUCCESS"}}
+`
+	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+	c.Set("task_request", map[string]any{"model": "m"})
+	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://private.example.com")
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://private.example.com"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}, OriginModelName: "m"}
+	adaptor := New(plugin)
+	adaptor.Init(info)
+
+	taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "plugin_request_invalid", taskErr.Code)
+	assert.True(t, taskErr.LocalError)
+	assert.Contains(t, taskErr.Message, "no such host")
+	assert.NotContains(t, taskErr.Message, "private.example.com")
+	assert.NotContains(t, taskErr.Message, "assets.corp.internal")
+}
+
+const orderedProtocolPlugin = `
+export const meta = {apiVersion:1,key:"ordered",name:"Ordered",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task",requiredCapabilities:["json-order@1"],protocols:[{name:"openai_responses",supports:["sync"]}]};
+export const protocols = {openai_responses:{decodeRequest:function(ctx){const b = ctx.body.value; return {kind:"submit",model:ctx.model,requestBody:{model:b.model,state:b.state,questions:b.questions}};},renderFinal:function(){return {};}}};
+export function buildSubmitRequest(ctx){const b = ctx.requestBody; return {url:ctx.baseUrl+"/submit",body:{model:b.model,state:b.state,questions:b.questions}}}
+export function parseSubmitResponse(){return {taskId:"one"}} export function buildQueryRequest(){return {}} export function parseTaskResult(){return {status:"SUCCESS"}}
+`
+
+// A plugin declaring json-order@1 forwards the members in the order the client
+// sent them, through the final decode, the request body hooks receive and the
+// upstream body, while billing bounds still read the decoded value; other
+// plugins keep the host codec's sorted encoding.
+func TestTaskAdaptorJSONOrderCapability(t *testing.T) {
+	client := `{"model":"m","state":{"zeta":"1","alpha":"2","mid":"&<>"},"questions":{"q2":{"type":"noul"},"q1":{"type":"noul"}}}`
+	undeclared := strings.Replace(orderedProtocolPlugin, `requiredCapabilities:["json-order@1"],`, "", 1)
+	cases := []struct {
+		name   string
+		source string
+		client string
+		want   string
+		status int
+	}{
+		{name: "declared keeps the client's order", source: orderedProtocolPlugin, client: client,
+			want: `{"model":"m","state":{"zeta":"1","alpha":"2","mid":"&<>"},"questions":{"q2":{"type":"noul"},"q1":{"type":"noul"}}}`},
+		{name: "undeclared stays sorted", source: undeclared, client: client,
+			want: `{"model":"m","questions":{"q1":{"type":"noul"},"q2":{"type":"noul"}},"state":{"alpha":"2","mid":"\u0026\u003c\u003e","zeta":"1"}}`},
+		{name: "declared still bounds billing quantities", source: orderedProtocolPlugin,
+			client: `{"model":"m","state":{"duration":3601},"questions":{}}`, status: http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plugin, err := pluginruntime.NewRegistry().Register(tc.source, pluginruntime.Options{})
+			require.NoError(t, err)
+			var value any
+			require.NoError(t, common.Unmarshal([]byte(tc.client), &value))
+			protocolContext := pluginruntime.ProtocolRequestContext{
+				RouteRequestContext: pluginruntime.RouteRequestContext{Body: map[string]any{"kind": "json", "value": value}, BodyText: json.RawMessage(tc.client)},
+				Protocol:            "openai_responses", Model: "m",
+			}
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			c.Set(pluginruntime.ContextKeyPinnedEndpoint, pluginruntime.PinnedEndpoint{Plugin: plugin, Protocol: "openai_responses", Model: "m"})
+			c.Set(pluginruntime.ContextKeyProtocolRequest, protocolContext)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://provider.example"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}, OriginModelName: "m"}
+			adaptor := New(plugin)
+			adaptor.Init(info)
+
+			taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+			if tc.status != 0 {
+				require.NotNil(t, taskErr)
+				assert.Equal(t, tc.status, taskErr.StatusCode)
+				assert.Equal(t, "plugin_usage_invalid", taskErr.Code)
+				return
+			}
+			require.Nil(t, taskErr)
+			body, err := adaptor.BuildRequestBody(c, info)
+			require.NoError(t, err)
+			raw, err := io.ReadAll(body)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(raw))
+		})
+	}
+}
+
 func TestTaskAdaptorBuildContentRequestHookAndMissingFallback(t *testing.T) {
 	source := strings.Replace(mockPlugin, `export function listArtifacts() { return []; }
 export function buildContentRequest() { throw new Error("artifact_not_found"); }`, `export function listArtifacts(task) { return [{key: "video", type: "video", mimeType: "video/mp4"}]; }
@@ -564,90 +651,6 @@ export function buildContentRequest(ctx) {
 	assert.ErrorContains(t, err, "utils.fetch is not available in protocols.openai_video.render")
 }
 
-// The submit, query and result hooks fetch through the channel; usage hooks,
-// whose facts are billed, cannot, so a fetching usage hook is a usage error.
-func TestTaskAdaptorDriverHooksFetchButUsageHooksCannot(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	service.InitHttpClient()
-	var lookups []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if name, found := strings.CutPrefix(r.URL.Path, "/lookup/"); found {
-			lookups = append(lookups, name)
-			_, _ = w.Write([]byte(`{"value":"` + name + `"}`))
-			return
-		}
-		assert.Equal(t, "/tasks/upstream-1", r.URL.Path)
-		assert.Equal(t, "query", r.Header.Get("X-Plugin"))
-		_, _ = w.Write([]byte(`{"id":"upstream-1"}`))
-	}))
-	defer server.Close()
-	source := strings.NewReplacer(
-		`headers: {"X-Plugin": "submit"}`, `headers: {"X-Plugin": utils.fetch({url: ctx.baseUrl + "/lookup/submit"}).body.value}`,
-		`headers: {"X-Plugin": "query"}`, `headers: {"X-Plugin": utils.fetch({url: ctx.baseUrl + "/lookup/query"}).body.value}`,
-		`url: body.url}`, `url: utils.fetch({url: ctx.baseUrl + "/lookup/result"}).body.value}`,
-		`return {upstreamUnits: 23};`, `return {upstreamUnits: utils.fetch({url: task.baseUrl + "/lookup/23"}).body.value};`,
-	).Replace(mockPlugin)
-	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
-	require.NoError(t, err)
-	adaptor := New(plugin)
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: server.URL, ApiKey: "secret"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}}
-	adaptor.Init(info)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
-	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "hello"})
-	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
-	req := httptest.NewRequest(http.MethodPost, server.URL+"/submit", nil)
-	require.NoError(t, adaptor.BuildRequestHeader(c, req, info))
-	assert.Equal(t, "submit", req.Header.Get("X-Plugin"))
-
-	task := &model.Task{Action: info.Action, PrivateData: model.TaskPrivateData{UpstreamTaskID: "upstream-1"}}
-	queryResp, err := adaptor.FetchTaskForTask(server.URL, "secret", task, "")
-	require.NoError(t, err)
-	queryBody, err := io.ReadAll(queryResp.Body)
-	require.NoError(t, err)
-	require.NoError(t, queryResp.Body.Close())
-	result, err := adaptor.ParseTaskResultForTask(task, queryResp, queryBody)
-	require.NoError(t, err)
-	assert.Equal(t, "SUCCESS", result.Status)
-	assert.Equal(t, "result", result.Url)
-	assert.Equal(t, "plugin completion usage hook failed", result.UsageError)
-	assert.Nil(t, result.UsageFacts)
-	assert.Equal(t, []string{"submit", "query", "result"}, lookups)
-
-	lookups = nil
-	batchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if name, found := strings.CutPrefix(r.URL.Path, "/lookup/"); found {
-			lookups = append(lookups, name)
-			_, _ = w.Write([]byte(`{"value":"` + name + `"}`))
-			return
-		}
-		assert.Equal(t, "/batch", r.URL.Path)
-		assert.Equal(t, "batch", r.Header.Get("X-Plugin"))
-		_, _ = w.Write([]byte(`{"items":[{"id":"task-a","status":"SUCCESS","usage":23}]}`))
-	}))
-	defer batchServer.Close()
-	batchSource := strings.NewReplacer(
-		`headers: { "X-Plugin": "batch" }`, `headers: { "X-Plugin": utils.fetch({url: ctx.baseUrl + "/lookup/batch"}).body.value }`,
-		`url: (item.urls || [])[0] || ""`, `url: utils.fetch({url: ctx.baseUrl + "/lookup/" + item.id}).body.value`,
-	).Replace(batchMockPlugin)
-	batchPlugin, err := pluginruntime.NewRegistry().Register(batchSource, pluginruntime.Options{})
-	require.NoError(t, err)
-	batch := New(batchPlugin)
-	batch.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: batchServer.URL, ApiKey: "secret"}})
-	tasks := []*model.Task{{PrivateData: model.TaskPrivateData{UpstreamTaskID: "task-a"}}}
-	batchResp, err := batch.FetchBatchTasks(batchServer.URL, "secret", tasks, "")
-	require.NoError(t, err)
-	batchBody, err := io.ReadAll(batchResp.Body)
-	require.NoError(t, err)
-	require.NoError(t, batchResp.Body.Close())
-	results, err := batch.ParseBatchResult(tasks, batchResp, batchBody)
-	require.NoError(t, err)
-	require.Contains(t, results, "task-a")
-	assert.Equal(t, "task-a", results["task-a"].TaskInfo.Url)
-	assert.Equal(t, "23", results["task-a"].TaskInfo.UsageFacts["upstreamUnits"])
-	assert.Equal(t, []string{"batch", "task-a"}, lookups)
-}
-
 func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service.InitHttpClient()
@@ -685,9 +688,7 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	assert.Equal(t, "mock-upstream", info.UpstreamModelName)
 	assert.Equal(t, []string{"mock-v1"}, adaptor.GetModelList())
 	assert.Equal(t, "Mock Task", adaptor.GetChannelName())
-	facts, factsErr := adaptor.ExtractUsageFactsValidated(c, info)
-	require.NoError(t, factsErr)
-	assert.Equal(t, "5", facts["seconds"])
+	assert.Equal(t, map[string]float64{"seconds": 5}, adaptor.EstimateBilling(c, info))
 
 	requestBody, err := adaptor.BuildRequestBody(c, info)
 	require.NoError(t, err)
@@ -707,8 +708,9 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	assert.JSONEq(t, `{"accepted":true,"status":200}`, string(parsed.TaskData))
 	assert.Nil(t, parsed.ClientResponse)
 	assert.Empty(t, recorder.Body.String(), "response parsing must not write before the durable task barrier")
+	assert.Equal(t, map[string]float64{"seconds": 7}, adaptor.AdjustBillingOnSubmit(info, []byte(`{"seconds":7}`)))
 
-	queryResp, err := adaptor.FetchTaskForTask(server.URL, "secret", &model.Task{
+	queryResp, err := adaptor.FetchTask(server.URL, "secret", &model.Task{
 		Action:      info.Action,
 		PrivateData: model.TaskPrivateData{UpstreamTaskID: parsed.UpstreamTaskID},
 	}, "")
@@ -716,12 +718,12 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	queryBody, err := io.ReadAll(queryResp.Body)
 	require.NoError(t, err)
 	require.NoError(t, queryResp.Body.Close())
-	result, err := adaptor.ParseTaskResultForTask(&model.Task{}, queryResp, queryBody)
+	result, err := adaptor.ParseTaskResult(&model.Task{}, queryResp, queryBody)
 	require.NoError(t, err)
 	assert.Equal(t, "SUCCESS", result.Status)
 	assert.Equal(t, "https://cdn.example/video.mp4", result.Url)
-	assert.Equal(t, "23", result.UsageFacts["upstreamUnits"])
-	assert.Zero(t, result.TotalTokens)
+	assert.Zero(t, adaptor.AdjustBillingOnComplete(&model.Task{}, result))
+	assert.Equal(t, 23, result.TotalTokens)
 
 	rendered, err := adaptor.ConvertToOpenAIVideo(&model.Task{TaskID: "task_public", Status: model.TaskStatusSuccess})
 	require.NoError(t, err)
@@ -980,8 +982,8 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			usage: map[string]any{"custom_ratio": -1.0},
 		},
 		{
-			name:  "undeclared hook field",
-			usage: map[string]any{"custom_ratio": "1"},
+			name:  "non-finite hook ratio",
+			usage: map[string]any{"custom_ratio": math.NaN()},
 		},
 	}
 	for _, testCase := range hookTests {
@@ -992,7 +994,7 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			}
 			adaptor, context, info := newRequest(t, map[string]any{"hookUsageEntries": entries})
 			require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-			ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
+			ratios, err := adaptor.EstimateBillingValidated(context, info)
 			require.Error(t, err)
 			assert.Nil(t, ratios)
 		})
@@ -1009,14 +1011,14 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		assert.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 	})
 
-	t.Run("numeric strings from usage hooks retain exact values", func(t *testing.T) {
+	t.Run("numeric strings from usage hooks are rejected", func(t *testing.T) {
 		adaptor, context, info := newRequest(t, map[string]any{
 			"hookUsageEntries": []any{map[string]any{"name": "duration", "value": "5"}},
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
-		require.NoError(t, err)
-		assert.Equal(t, "5", ratios["duration"])
+		ratios, err := adaptor.EstimateBillingValidated(context, info)
+		require.Error(t, err)
+		assert.Nil(t, ratios)
 	})
 
 	t.Run("duration -1 passes only for plugins that declare duration-auto@1", func(t *testing.T) {
@@ -1034,7 +1036,6 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 				"metadata": map[string]any{"seconds": "-1", "parameters": map[string]any{"durationSeconds": -1}},
 			}, true},
 			{"other negative durations", true, map[string]any{"metadata": map[string]any{"duration": -2}}, false},
-			{"fractions near -1", true, map[string]any{"metadata": map[string]any{"duration": "-1.5"}}, false},
 			{"durations above the host limit", true, map[string]any{"metadata": map[string]any{"duration": relaycommon.MaxTaskDurationSeconds + 1}}, false},
 			{"negative counts", true, map[string]any{"metadata": map[string]any{"count": -1}}, false},
 		} {
@@ -1063,9 +1064,11 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 		_, err = adaptor.ExtractUsageFactsValidated(context, info)
 		assert.Error(t, err, "usage facts stay non-negative")
+		_, err = adaptor.EstimateBillingValidated(context, info)
+		assert.Error(t, err, "billing ratios stay non-negative")
 	})
 
-	t.Run("declared token facts use the token bound instead of duration cap", func(t *testing.T) {
+	t.Run("declared token facts use int32 saturation instead of duration cap", func(t *testing.T) {
 		adaptor, context, info := newRequest(t, map[string]any{
 			"hookUsageEntries": []any{
 				map[string]any{"name": "tokens", "value": float64(500000)},
@@ -1074,14 +1077,14 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 		facts, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, "500000", facts["tokens"])
+		assert.EqualValues(t, 500000, facts["tokens"])
 
-		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
+		ratios, err := adaptor.EstimateBillingValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, "500000", ratios["tokens"])
+		assert.Equal(t, 500000.0, ratios["tokens"])
 	})
 
-	t.Run("declared token facts reject the int32 quota overflow", func(t *testing.T) {
+	t.Run("declared token facts saturate at the int32 quota bound", func(t *testing.T) {
 		adaptor, context, info := newRequest(t, map[string]any{
 			"hookUsageEntries": []any{
 				map[string]any{"name": "tokens", "value": float64(common.MaxQuota) + 1},
@@ -1089,8 +1092,8 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 		facts, err := adaptor.ExtractUsageFactsValidated(context, info)
-		require.Error(t, err)
-		assert.Nil(t, facts)
+		require.NoError(t, err)
+		assert.EqualValues(t, common.MaxQuota, facts["tokens"])
 	})
 
 	t.Run("canonical maxima and enum are accepted", func(t *testing.T) {
@@ -1105,9 +1108,12 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			},
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
+		ratios, err := adaptor.EstimateBillingValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"duration": "3600", "count": "128", "mode": "pro"}, ratios)
+		assert.Equal(t, map[string]float64{
+			"duration": relaycommon.MaxTaskDurationSeconds,
+			"count":    dto.MaxImageN,
+		}, ratios)
 	})
 
 	t.Run("runtime error does not expose plugin-controlled usage key", func(t *testing.T) {
@@ -1120,7 +1126,7 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			},
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		_, err := adaptor.ExtractUsageFactsValidated(context, info)
+		_, err := adaptor.EstimateBillingValidated(context, info)
 		require.Error(t, err)
 		assert.NotContains(t, err.Error(), "private.invalid")
 		assert.NotContains(t, err.Error(), "secret")
@@ -1139,41 +1145,28 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			usage: map[string]any{"count": dto.MaxImageN + 1},
 		},
 		{
-			name:  "malformed completion decimal is discarded",
-			usage: map[string]any{"duration": "NaN"},
-		},
-		{
-			name:  "overflowing upstream units are not settlement evidence",
-			usage: map[string]any{"upstreamUnits": float64(common.MaxQuota) + 1},
-		},
-		{
-			name:  "negative token facts are not settlement evidence",
-			usage: map[string]any{"completionTokens": -1, "totalTokens": 2},
-		},
-		{
-			name:  "fractional token facts are not settlement evidence",
-			usage: map[string]any{"completionTokens": 1.5, "totalTokens": 2},
+			name:  "completion hook numeric string is discarded",
+			usage: map[string]any{"duration": "5"},
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			adaptor, _, _ := newRequest(t, map[string]any{})
 			body, marshalErr := common.Marshal(map[string]any{"completionUsage": testCase.usage})
 			require.NoError(t, marshalErr)
-			result, parseErr := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
+			result, parseErr := adaptor.ParseTaskResult(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 			require.NoError(t, parseErr)
 			assert.Nil(t, result.UsageFacts)
 			assert.Zero(t, result.TotalTokens)
-			assert.NotEmpty(t, result.UsageError)
 		})
 	}
 
-	t.Run("declared completion token unit uses token bounds", func(t *testing.T) {
+	t.Run("declared completion token unit is saturated instead of discarded", func(t *testing.T) {
 		adaptor, _, _ := newRequest(t, map[string]any{})
 		body, err := common.Marshal(map[string]any{"completionUsage": map[string]any{"tokens": 500000}})
 		require.NoError(t, err)
-		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
+		result, err := adaptor.ParseTaskResult(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 		require.NoError(t, err)
-		assert.Equal(t, "500000", result.UsageFacts["tokens"])
+		assert.EqualValues(t, 500000, result.UsageFacts["tokens"])
 	})
 
 	t.Run("declared credit facts keep sub-integer precision", func(t *testing.T) {
@@ -1182,14 +1175,14 @@ export const meta = {
   apiVersion: 1, key: "credit-decimals", name: "Credit Decimals", version: "1.0.0",
   author: {name: "Test"}, models: ["model"], fetchMode: "per_task",
   usageSchema: {units: {type: "number", unit: "credit"}},
-  usageExamples: [{label: "3.5 credits", facts: {units: "3.5"}}],
+  usageExamples: [{label: "3.5 credits", facts: {units: 3.5}}],
 };
 export function buildSubmitRequest(ctx) { return {url: ctx.baseUrl + "/submit"}; }
 export function parseSubmitResponse() { return {taskId: "task"}; }
 export function buildQueryRequest() { return {url: "https://example.com"}; }
 export function parseTaskResult() { return {status: "SUCCESS"}; }
-export function extractUsage() { return {units: "3.5"}; }
-export function extractUsageOnComplete() { return {units: "3.5"}; }
+export function extractUsage() { return {units: 3.5}; }
+export function extractUsageOnComplete() { return {units: 3.5}; }
 `
 		plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
 		require.NoError(t, err)
@@ -1206,26 +1199,68 @@ export function extractUsageOnComplete() { return {units: "3.5"}; }
 
 		facts, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, "3.5", facts["units"])
+		assert.Equal(t, 3.5, facts["units"])
 
 		body, err := common.Marshal(map[string]any{})
 		require.NoError(t, err)
-		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
+		result, err := adaptor.ParseTaskResult(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 		require.NoError(t, err)
-		assert.Equal(t, "3.5", result.UsageFacts["units"])
+		assert.Equal(t, 3.5, result.UsageFacts["units"])
 	})
 
-	t.Run("undeclared legacy token aliases cannot be charged", func(t *testing.T) {
+	t.Run("completion token facts are saturated instead of duration-capped", func(t *testing.T) {
 		adaptor, _, _ := newRequest(t, map[string]any{})
 		body, err := common.Marshal(map[string]any{"completionUsage": map[string]any{"upstreamUnits": 5000}})
 		require.NoError(t, err)
-		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
+		result, err := adaptor.ParseTaskResult(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 		require.NoError(t, err)
-		assert.Zero(t, result.TotalTokens)
-		assert.Nil(t, result.UsageFacts)
-		assert.NotEmpty(t, result.UsageError)
+		assert.Equal(t, 5000, result.TotalTokens)
+		assert.EqualValues(t, 5000, result.UsageFacts["upstreamUnits"])
 	})
 
+	t.Run("invalid post-submit adjustment is discarded before recalculation", func(t *testing.T) {
+		adaptor, _, info := newRequest(t, map[string]any{})
+		ratios := adaptor.AdjustBillingOnSubmit(info, []byte(`{"usage":{"duration":1000000000000000}}`))
+		assert.Nil(t, ratios)
+	})
+}
+
+func TestTaskAdaptorSeparatesExpressionFactsFromLegacyBillingRatios(t *testing.T) {
+	source := `
+export const meta = {
+  apiVersion: 1, key: "usage-purpose", name: "Usage Purpose", version: "1.0.0",
+  author: {name: "Test"}, models: ["usage-model"], fetchMode: "per_task",
+  usageSchema: {seconds: {type: "number", unit: "second"}},
+};
+export function buildSubmitRequest(ctx) { return {url: ctx.baseUrl + "/submit"}; }
+export function parseSubmitResponse() { return {taskId: "task"}; }
+export function buildQueryRequest(ctx) { return {url: ctx.baseUrl + "/query"}; }
+export function parseTaskResult() { return {status: "SUCCESS"}; }
+export function extractUsage(ctx) {
+  return ctx.usagePurpose === "billing_ratios" ? {legacy_multiplier: 2} : {seconds: 5};
+}
+`
+	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	adaptor := New(plugin)
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{ChannelBaseUrl: "https://provider.example"},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	adaptor.Init(info)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/submit", nil)
+	context.Set("task_request", map[string]any{"model": "usage-model"})
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+
+	facts, err := adaptor.ExtractUsageFactsValidated(context, info)
+	require.NoError(t, err)
+	assert.EqualValues(t, 5, facts["seconds"])
+	assert.Len(t, facts, 1)
+
+	ratios, err := adaptor.EstimateBillingValidated(context, info)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]float64{"legacy_multiplier": 2}, ratios)
 }
 
 func TestTaskAdaptorAcceptsNormalizedLegacyTokenCounters(t *testing.T) {
@@ -1240,7 +1275,7 @@ export function parseTaskResult(ctx, body) { return {status: "SUCCESS", completi
 	require.NoError(t, err)
 	adaptor := New(plugin)
 
-	result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, []byte(`{"completion":13,"total":17}`))
+	result, err := adaptor.ParseTaskResult(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, []byte(`{"completion":13,"total":17}`))
 	require.NoError(t, err)
 	assert.Equal(t, 13, result.CompletionTokens)
 	assert.Equal(t, 17, result.TotalTokens)
@@ -1267,8 +1302,7 @@ func TestSubmitContextExposesOriginTasks(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 
-	ctx, err := adaptor.submitContext(c, info)
-	require.NoError(t, err)
+	ctx := adaptor.submitContext(c, info)
 
 	originTasks, ok := ctx["originTasks"].([]map[string]any)
 	require.True(t, ok)
@@ -1292,8 +1326,7 @@ func TestSubmitContextOmitsOriginTasksWhenEmpty(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 
-	ctx, err := adaptor.submitContext(c, info)
-	require.NoError(t, err)
+	ctx := adaptor.submitContext(c, info)
 
 	_, ok := ctx["originTasks"]
 	assert.False(t, ok)
@@ -1319,8 +1352,7 @@ func TestSubmitContextOriginTasksNilDataOnInvalidJSON(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 
-	ctx, err := adaptor.submitContext(c, info)
-	require.NoError(t, err)
+	ctx := adaptor.submitContext(c, info)
 
 	originTasks, ok := ctx["originTasks"].([]map[string]any)
 	require.True(t, ok)
@@ -1339,17 +1371,13 @@ func TestSubmitContextNormalizesRequestBodyOnEveryCall(t *testing.T) {
 	c.Set("task_request", map[string]any{"prompt": string([]byte{0xff}), "count": int64(math.MaxInt64)})
 
 	normalized := map[string]any{"prompt": "�", "count": float64(math.MaxInt64)}
-	for _, requestContext := range []*gin.Context{c, c, nil} {
-		ctx, err := adaptor.submitContext(requestContext, info)
-		require.NoError(t, err)
-		assert.Equal(t, normalized, ctx["requestBody"])
-	}
+	assert.Equal(t, normalized, adaptor.submitContext(c, info)["requestBody"])
+	assert.Equal(t, normalized, adaptor.submitContext(c, info)["requestBody"])
+	assert.Equal(t, normalized, adaptor.submitContext(nil, info)["requestBody"])
 
 	replaced := map[string]any{"prompt": "second", "count": int64(2)}
 	c.Set("task_request", replaced)
-	ctx, err := adaptor.submitContext(c, info)
-	require.NoError(t, err)
-	assert.Equal(t, replaced, ctx["requestBody"])
+	assert.Equal(t, replaced, adaptor.submitContext(c, info)["requestBody"])
 }
 
 func TestTaskAdaptorRejectsRequestHostOverride(t *testing.T) {
@@ -1367,15 +1395,15 @@ func TestTaskAdaptorRejectsRequestHostOverride(t *testing.T) {
 }
 
 const batchMockPlugin = `
-export const meta = { apiVersion: 1, key: "mock-batch", name: "Mock Batch", version: "1.0.0", author: {name: "Test"}, channelTypes: [1002], models: ["batch-v1"], fetchMode: "batch", usageSchema:{upstreamUnits:{type:"number",unit:"credit"}} };
+export const meta = { apiVersion: 1, key: "mock-batch", name: "Mock Batch", version: "1.0.0", author: {name: "Test"}, channelTypes: [1002], models: ["batch-v1"], fetchMode: "batch" };
 export function buildSubmitRequest(ctx) { return { url: ctx.baseUrl + "/submit", method: "POST", body: {} }; }
 export function parseSubmitResponse(ctx, resp) { return { taskId: resp.body.id }; }
 export function buildQueryRequest(ctx) { return { url: ctx.baseUrl + "/tasks/" + ctx.taskId }; }
 export function parseTaskResult(ctx, body) { return { taskId: body.id, status: "SUCCESS" }; }
 export function buildBatchQueryRequest(ctx, tasks) { return { url: ctx.baseUrl + "/batch", method: "POST", headers: { "X-Plugin": "batch" }, body: { ids: (tasks || []).map(function (task) { return task.taskId; }) } }; }
 export function parseBatchResult(ctx, body) {
-  return body.items.map(function (item, index) {
-    return { usagePath:["items",index], taskId: item.id, action: item.action, status: item.status, progress: item.progress, url: (item.urls || [])[0] || "", finishTime: item.finish || 0, data: item };
+  return body.items.map(function (item) {
+    return { taskId: item.id, action: item.action, status: item.status, progress: item.progress, url: (item.urls || [])[0] || "", finishTime: item.finish || 0, data: item };
   });
 }
 export function extractUsageOnComplete(task, result, body) { return {upstreamUnits: body.usage || 0}; }
@@ -1428,8 +1456,8 @@ func TestTaskAdaptorBatchBridge(t *testing.T) {
 	assert.Equal(t, "100%", done.TaskInfo.Progress)
 	assert.Equal(t, "https://cdn.example/a1.mp3", done.TaskInfo.Url)
 	assert.Equal(t, int64(1700000000), done.FinishTime)
-	assert.Equal(t, "23", done.TaskInfo.UsageFacts["upstreamUnits"])
-	assert.Zero(t, done.TaskInfo.TotalTokens)
+	assert.EqualValues(t, 23, done.TaskInfo.UsageFacts["upstreamUnits"])
+	assert.Equal(t, 23, done.TaskInfo.TotalTokens)
 	require.NotNil(t, done.Data)
 
 	pending := results["task-b"]
@@ -1538,7 +1566,7 @@ export function parseTaskResult(){return {status:"SUCCESS"}}
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			resp, fetchErr := adaptor.FetchTaskForTask(server.URL, "secret", testCase.task, "")
+			resp, fetchErr := adaptor.FetchTask(server.URL, "secret", testCase.task, "")
 			require.NoError(t, fetchErr)
 			require.NoError(t, resp.Body.Close())
 			assert.Equal(t, testCase.want, requested)
@@ -1594,7 +1622,7 @@ export function parseTaskResult(ctx, body, response){
 			PluginState:    []byte(`{"req_key":"kept"}`),
 		},
 	}
-	resp, err := adaptor.FetchTaskForTask(server.URL, "secret", task, "")
+	resp, err := adaptor.FetchTask(server.URL, "secret", task, "")
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
@@ -1610,7 +1638,7 @@ export function parseTaskResult(ctx, body, response){
 	require.True(t, ok)
 	assert.NotContains(t, keys, "requestBody")
 
-	result, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusTeapot, Header: make(http.Header)}, []byte(`{"ok":true}`))
+	result, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: http.StatusTeapot, Header: make(http.Header)}, []byte(`{"ok":true}`))
 	require.NoError(t, err)
 	assert.Equal(t, "IN_PROGRESS", result.Status)
 	assert.Equal(t, "418", result.Reason)
@@ -1709,8 +1737,8 @@ export function parseSubmitResponse(){return {taskId:"task"};}
 export function buildQueryRequest(){return {url:"https://provider.example/task"};}
 export function buildBatchQueryRequest(){return {url:"https://provider.example/tasks"};}
 export function parseTaskResult(){return {status:"SUCCESS"};}
-export function parseBatchResult(ctx,body){return body.items.map(function(item,index){return Object.assign({},item,{usagePath:["items",index,"data"]});});}
-export function extractUsage(ctx){return {units:ctx.requestBody.hookUnits,mode:ctx.requestBody.hookMode};}
+export function parseBatchResult(ctx,body){return body.items;}
+export function extractUsage(ctx){return {units:ctx.requestBody.hookUnits,mode:ctx.requestBody.hookMode,legacyRatio:2};}
 export function extractUsageOnSubmit(ctx,body){return body.usage;}
 export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 `
@@ -1757,10 +1785,13 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, map[string]any{"units": strconv.FormatFloat(tc.units, 'f', -1, 64), "mode": tc.mode}, facts)
+			assert.Equal(t, map[string]any{"units": tc.units, "mode": tc.mode, "legacyRatio": 2.0}, facts)
+			ratios, err := adaptor.EstimateBillingValidated(c, info)
+			require.NoError(t, err)
+			assert.Equal(t, map[string]float64{"units": tc.units, "legacyRatio": 2}, ratios)
 			body, err := common.Marshal(map[string]any{"usage": facts})
 			require.NoError(t, err)
-			assert.NotEmpty(t, body)
+			assert.Equal(t, ratios, adaptor.AdjustBillingOnSubmit(info, body))
 		})
 	}
 
@@ -1799,17 +1830,17 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 			task := &model.Task{Properties: model.Properties{OriginModelName: tc.origin, UpstreamModelName: tc.upstream}}
 			body, err := common.Marshal(map[string]any{"usage": map[string]any{"units": tc.units, "mode": tc.mode}})
 			require.NoError(t, err)
-			result, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK}, body)
+			result, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: http.StatusOK}, body)
 			require.NoError(t, err)
 			if tc.accepted {
-				assert.Equal(t, map[string]any{"units": strconv.FormatFloat(tc.units, 'f', -1, 64), "mode": tc.mode}, result.UsageFacts)
+				assert.Equal(t, map[string]any{"units": tc.units, "mode": tc.mode}, result.UsageFacts)
 			} else {
 				assert.Nil(t, result.UsageFacts)
 			}
 		}
 	})
 
-	t.Run("undeclared completion facts cannot drive stored expressions", func(t *testing.T) {
+	t.Run("legacy completion facts remain usable by stored expressions", func(t *testing.T) {
 		updated, err := pluginruntime.NewRegistry().Register(strings.Replace(source,
 			`export function extractUsageOnComplete(ctx,result,body){return body.usage;}`,
 			`export function extractUsageOnComplete(){return {legacyRatio:3};}`, 1), pluginruntime.Options{})
@@ -1817,13 +1848,13 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 		_, _, info := newRequest(t, "public-alias", "image", map[string]any{})
 		adaptor := New(updated)
 		adaptor.Init(info)
-		result, err := adaptor.ParseTaskResultForTask(&model.Task{Properties: model.Properties{UpstreamModelName: "image"}},
+		result, err := adaptor.ParseTaskResult(&model.Task{Properties: model.Properties{UpstreamModelName: "image"}},
 			&http.Response{StatusCode: http.StatusOK}, []byte(`{}`))
 		require.NoError(t, err)
-		_, _, err = billingexpr.RunExprWithRequest(`tier("legacy", u("legacyRatio") * 2)`,
+		cost, _, err := billingexpr.RunExprWithRequest(`tier("legacy", u("legacyRatio") * 2)`,
 			billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: result.UsageFacts})
-		require.Error(t, err)
-		assert.NotEmpty(t, result.UsageError)
+		require.NoError(t, err)
+		assert.Equal(t, 6.0, cost)
 	})
 
 	t.Run("mixed batch selects schema by task rather than adaptor", func(t *testing.T) {
@@ -1844,8 +1875,8 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 		require.NoError(t, err)
 		require.Len(t, results, 4)
 		assert.Nil(t, results["endpoint-image"].TaskInfo.UsageFacts, "endpoint upstream must keep the origin profile's count ceiling")
-		assert.Equal(t, map[string]any{"units": "500000", "mode": "video"}, results["video-task"].TaskInfo.UsageFacts)
-		assert.Equal(t, map[string]any{"units": "2", "mode": "image"}, results["image-task"].TaskInfo.UsageFacts)
+		assert.Equal(t, map[string]any{"units": 500000.0, "mode": "video"}, results["video-task"].TaskInfo.UsageFacts)
+		assert.Equal(t, map[string]any{"units": 2.0, "mode": "image"}, results["image-task"].TaskInfo.UsageFacts)
 		assert.Nil(t, results["invalid-image"].TaskInfo.UsageFacts)
 	})
 }
@@ -1919,10 +1950,10 @@ func TestTaskSubmitStreamContract(t *testing.T) {
 			require.Nil(t, taskErr)
 			require.NotNil(t, parsed.Immediate)
 			if tc.name == "zero actual units" {
-				assert.Equal(t, map[string]any{"units": "0"}, parsed.Immediate.UsageFacts)
+				assert.Equal(t, map[string]any{"units": float64(0)}, parsed.Immediate.UsageFacts)
 				return
 			}
-			assert.Equal(t, map[string]any{"units": "3"}, parsed.Immediate.UsageFacts)
+			assert.Equal(t, map[string]any{"units": float64(3)}, parsed.Immediate.UsageFacts)
 			assert.JSONEq(t, `{"document":"helloworld","units":3,"event":"message","id":"doc-1"}`, string(parsed.TaskData))
 		})
 	}
@@ -2083,7 +2114,7 @@ export function parseTaskResult(){return {status:"SUCCESS"};}
 	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
 	facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"units": "2"}, facts)
+	assert.Equal(t, map[string]any{"units": float64(2)}, facts)
 	body, err := adaptor.BuildRequestBody(c, info)
 	require.NoError(t, err)
 	encoded, err := io.ReadAll(body)
@@ -2091,6 +2122,39 @@ export function parseTaskResult(){return {status:"SUCCESS"};}
 	assert.JSONEq(t, `{"units":3,"nested":{"label":"built"}}`, string(encoded))
 	assert.Equal(t, int64(2), request["units"])
 	assert.Equal(t, "original", request["nested"].(map[string]any)["label"])
+}
+
+func TestTaskUsageValidationLeavesReturnedHostRequestUnchanged(t *testing.T) {
+	// Returning ctx.requestBody hands back the host request map itself, so
+	// normalized facts must be built in a new map.
+	source := `
+export const meta={apiVersion:1,key:"request-usage",name:"Request usage",version:"1.0.0",author:{name:"Test"},models:["usage"],fetchMode:"per_task",usageSchema:{units:{type:"number",unit:"count"}}};
+export function buildSubmitRequest(ctx){return {url:ctx.baseUrl+"/submit",body:ctx.requestBody};}
+export function extractUsage(ctx){return ctx.requestBody;}
+export function parseSubmitResponse(){return {taskId:"usage"};}
+export function buildQueryRequest(ctx){return {url:ctx.baseUrl+"/query"};}
+export function parseTaskResult(){return {status:"SUCCESS"};}
+`
+	plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	request := map[string]any{"units": int64(2)}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/submit", nil)
+	c.Set("task_request", request)
+	info := &relaycommon.RelayInfo{OriginModelName: "usage", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "usage", ChannelBaseUrl: "https://provider.example"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
+	adaptor := New(plugin)
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	facts, err := adaptor.ExtractUsageFactsValidated(c, info)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"units": float64(2)}, facts)
+	assert.Equal(t, int64(2), request["units"])
+	estimateRequest := map[string]any{"units": int64(2)}
+	c.Set("task_request", estimateRequest)
+	ratios, err := adaptor.EstimateBillingValidated(c, info)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]float64{"units": 2}, ratios)
+	assert.Equal(t, int64(2), estimateRequest["units"])
 }
 
 func TestTaskSubmitDeltaStreamContract(t *testing.T) {
@@ -2146,7 +2210,7 @@ export function parseSubmitEventDelta(ctx,event,previous) {
 			require.Nil(t, taskErr)
 			require.NotNil(t, parsed.Immediate)
 			assert.JSONEq(t, `{"document":"helloworld","units":0}`, string(parsed.TaskData))
-			assert.Equal(t, map[string]any{"units": "0"}, parsed.Immediate.UsageFacts)
+			assert.Equal(t, map[string]any{"units": float64(0)}, parsed.Immediate.UsageFacts)
 		})
 	}
 
@@ -2268,17 +2332,16 @@ func TestTaskAdaptorChainsDoubaoThroughNewAPIUpstream(t *testing.T) {
 		Properties:  model.Properties{OriginModelName: modelName, UpstreamModelName: modelName},
 		PrivateData: model.TaskPrivateData{UpstreamTaskID: parsed.UpstreamTaskID},
 	}
-	queryResp, err := adaptor.FetchTaskForTask(gateway.URL, "sk-gateway", task, "")
+	queryResp, err := adaptor.FetchTask(gateway.URL, "sk-gateway", task, "")
 	require.NoError(t, err)
 	queryBody, err := io.ReadAll(queryResp.Body)
 	require.NoError(t, err)
 	require.NoError(t, queryResp.Body.Close())
-	result, err := adaptor.ParseTaskResultForTask(task, queryResp, queryBody)
+	result, err := adaptor.ParseTaskResult(task, queryResp, queryBody)
 	require.NoError(t, err)
 	assert.Equal(t, "SUCCESS", result.Status)
 	assert.Equal(t, "https://cdn.example/v.mp4", result.Url)
-	assert.Equal(t, "1200", result.UsageFacts["tokens"])
-	assert.Zero(t, result.TotalTokens)
+	assert.Equal(t, 1200, result.TotalTokens)
 	assert.Equal(t, []string{
 		"POST /doubao/api/v3/contents/generations/tasks",
 		"GET /doubao/api/v3/contents/generations/tasks/task_up_public",
@@ -2337,37 +2400,4 @@ func TestTaskAdaptorChainsSunoBatchFetchThroughNewAPIUpstream(t *testing.T) {
 	require.Contains(t, results, "task_up_public")
 	assert.Equal(t, "SUCCESS", results["task_up_public"].TaskInfo.Status)
 	assert.Equal(t, []string{"POST /suno/submit/MUSIC", "POST /suno/fetch"}, seen)
-}
-
-// A channel that skips upstream certificate checks reaches a self-signed
-// provider from plugin hooks; a verifying channel keeps rejecting it.
-func TestTaskAdaptorHookFetchFollowsChannelTLSSetting(t *testing.T) {
-	service.InitHttpClient()
-	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"from":"tls"}`))
-	}))
-	defer upstream.Close()
-	source := strings.Replace(mockPlugin, `export function listArtifacts() { return []; }
-export function buildContentRequest() { throw new Error("artifact_not_found"); }`, `export function listArtifacts() { return [{key: "video", type: "video"}]; }
-export function buildContentRequest(ctx) {
-  let from = "";
-  try { from = utils.fetch({url: ctx.baseUrl + "/info"}).body.from; } catch (e) { from = "failed"; }
-  return {url: ctx.baseUrl + "/content", method: "GET", headers: {"X-From": from}};
-}`, 1)
-	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
-	require.NoError(t, err)
-
-	for _, test := range []struct {
-		skip bool
-		want string
-	}{{true, "tls"}, {false, "failed"}} {
-		adaptor := New(plugin)
-		adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelBaseUrl: upstream.URL, ApiKey: "key",
-			ChannelSetting: kitdto.ChannelSettings{TLSInsecureSkipVerify: test.skip},
-		}})
-		descriptor, err := adaptor.BuildContentRequest(t.Context(), &model.Task{TaskID: "task", Data: []byte(`{}`)}, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
-		require.NoError(t, err)
-		assert.Equal(t, test.want, descriptor.Headers["X-From"], "skip=%v", test.skip)
-	}
 }

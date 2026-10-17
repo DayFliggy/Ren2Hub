@@ -259,16 +259,16 @@ func CleanupLogFiles(c *gin.Context) {
 	mode := c.Query("mode")
 	valueStr := c.Query("value")
 	if mode != "by_count" && mode != "by_days" {
-		common.ApiErrorT(c, "invalid mode, must be by_count or by_days")
+		common.ApiErrorMsg(c, "invalid mode, must be by_count or by_days")
 		return
 	}
 	value, err := strconv.Atoi(valueStr)
 	if err != nil || value < 1 {
-		common.ApiErrorT(c, "invalid value, must be a positive integer")
+		common.ApiErrorMsg(c, "invalid value, must be a positive integer")
 		return
 	}
 	if *common.LogDir == "" {
-		common.ApiErrorT(c, "log directory not configured")
+		common.ApiErrorMsg(c, "log directory not configured")
 		return
 	}
 

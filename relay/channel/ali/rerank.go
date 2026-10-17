@@ -5,9 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -42,7 +40,7 @@ func RerankHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	service.CloseResponseBodyGracefully(resp)
 
 	var aliResponse AliRerankResponse
-	err = common.Unmarshal(responseBody, &aliResponse)
+	err = json.Unmarshal(responseBody, &aliResponse)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError), nil
 	}
@@ -55,33 +53,23 @@ func RerankHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 			Code:    aliResponse.Code,
 		}, resp.StatusCode), nil
 	}
-	var raw struct {
-		Output json.RawMessage `json:"output"`
-	}
-	if err := common.Unmarshal(responseBody, &raw); err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
-	}
-	if err := helper.ValidateRerankResponse(raw.Output, len(info.Documents)); err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
-	}
 
 	usage := dto.Usage{
 		PromptTokens:     aliResponse.Usage.TotalTokens,
 		CompletionTokens: 0,
 		TotalTokens:      aliResponse.Usage.TotalTokens,
-		UsageSource:      "provider",
-	}
-	if err := helper.ValidateVectorUsage(&usage); err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
 	}
 	rerankResponse := dto.RerankResponse{
 		Results: aliResponse.Output.Results,
 		Usage:   usage,
 	}
 
-	jsonResponse, err := common.Marshal(rerankResponse)
+	jsonResponse, err := json.Marshal(rerankResponse)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
-	return helper.WriteVectorResponse(c, resp, info, jsonResponse), &usage
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	c.Writer.Write(jsonResponse)
+	return nil, &usage
 }

@@ -11,24 +11,15 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
-type AwsAPIType string
-
-const (
-	AwsAPITypeInvokeModel AwsAPIType = "invoke_model"
-	AwsAPITypeMantle      AwsAPIType = "mantle"
-)
-
 type ChannelSettings struct {
-	AwsAPIType                AwsAPIType `json:"aws_api_type,omitempty"`
-	VertexProjectID           string     `json:"vertex_project_id,omitempty"`
-	TaskPluginKey             string     `json:"task_plugin_key,omitempty"`
-	ForceFormat               bool       `json:"force_format,omitempty"`
-	ThinkingToContent         bool       `json:"thinking_to_content,omitempty"`
-	Proxy                     string     `json:"proxy"`
-	PassThroughBodyEnabled    bool       `json:"pass_through_body_enabled,omitempty"`
-	ResponsesWebSocketEnabled bool       `json:"responses_websocket_enabled,omitempty"`
-	SystemPrompt              string     `json:"system_prompt,omitempty"`
-	SystemPromptOverride      bool       `json:"system_prompt_override,omitempty"`
+	TaskPluginKey             string `json:"task_plugin_key,omitempty"`
+	ForceFormat               bool   `json:"force_format,omitempty"`
+	ThinkingToContent         bool   `json:"thinking_to_content,omitempty"`
+	Proxy                     string `json:"proxy"`
+	PassThroughBodyEnabled    bool   `json:"pass_through_body_enabled,omitempty"`
+	ResponsesWebSocketEnabled bool   `json:"responses_websocket_enabled,omitempty"`
+	SystemPrompt              string `json:"system_prompt,omitempty"`
+	SystemPromptOverride      bool   `json:"system_prompt_override,omitempty"`
 	// TaskExtendPluginKeys lists the task plugins a New API channel (type 60)
 	// is extended with. The upstream gateway may host many plugins, so the
 	// channel serves every listed plugin's models while the request still pins
@@ -77,27 +68,6 @@ const (
 	MaxHTTP2ConnectionShards = 8
 )
 
-// ValidateProviderSettings rejects unknown modes and project path injection.
-func (s *ChannelSettings) ValidateProviderSettings() error {
-	if s == nil {
-		return nil
-	}
-	switch s.AwsAPIType {
-	case "", AwsAPITypeInvokeModel, AwsAPITypeMantle:
-	default:
-		return fmt.Errorf("invalid aws_api_type")
-	}
-	if s.VertexProjectID == "." || s.VertexProjectID == ".." {
-		return fmt.Errorf("invalid vertex_project_id")
-	}
-	for _, ch := range s.VertexProjectID {
-		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_' || ch == '.' || ch == ':') {
-			return fmt.Errorf("invalid vertex_project_id")
-		}
-	}
-	return nil
-}
-
 // ValidateHTTPTransport validates save-time HTTP transport channel settings.
 func (s *ChannelSettings) ValidateHTTPTransport() error {
 	if s == nil {
@@ -132,9 +102,17 @@ const (
 	AwsKeyTypeApiKey AwsKeyType = "api_key"
 )
 
+type AwsApiType string
+
+const (
+	AwsApiTypeInvokeModel AwsApiType = "invoke_model"
+	AwsApiTypeMantle      AwsApiType = "mantle"
+)
+
 type ChannelOtherSettings struct {
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
-	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"` // "json" or "api_key"
+	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"`   // "json" or "api_key"
+	VertexProjectID                       string                `json:"vertex_project_id,omitempty"` // 仅当 vertex_key_type=api_key 时使用；JSON 模式下从 service account 解析
 	OpenRouterEnterprise                  *bool                 `json:"openrouter_enterprise,omitempty"`
 	ClaudeBetaQuery                       bool                  `json:"claude_beta_query,omitempty"`          // Claude 渠道是否强制追加 ?beta=true
 	AllowServiceTier                      bool                  `json:"allow_service_tier,omitempty"`         // 是否允许 service_tier 透传（默认过滤以避免额外计费）
@@ -145,6 +123,7 @@ type ChannelOtherSettings struct {
 	AllowIncludeObfuscation               bool                  `json:"allow_include_obfuscation,omitempty"`  // 是否允许 stream_options.include_obfuscation 透传（默认过滤以避免关闭流混淆保护）
 	DisableTaskPollingSleep               bool                  `json:"disable_task_polling_sleep,omitempty"` // 是否跳过异步任务轮询间隔
 	AwsKeyType                            AwsKeyType            `json:"aws_key_type,omitempty"`
+	AwsApiType                            AwsApiType            `json:"aws_api_type,omitempty"`
 	UpstreamModelUpdateCheckEnabled       bool                  `json:"upstream_model_update_check_enabled,omitempty"`        // 是否检测上游模型更新
 	UpstreamModelUpdateAutoSyncEnabled    bool                  `json:"upstream_model_update_auto_sync_enabled,omitempty"`    // 是否自动同步上游模型更新
 	UpstreamModelUpdateLastCheckTime      int64                 `json:"upstream_model_update_last_check_time,omitempty"`      // 上次检测时间
@@ -193,6 +172,10 @@ const (
 	advancedCustomConverterOpenAIResponsesToGemini     = "openai_responses_to_gemini_generate_content"
 	advancedCustomConverterGeminiContentToOpenAIChat   = "gemini_generate_content_to_openai_chat_completions"
 	advancedCustomConverterOpenAIChatToGeminiContent   = "openai_chat_completions_to_gemini_generate_content"
+	// Same values as relayconvert.ConverterClaudeMessagesToOpenAIResponses and
+	// relayconvert.ConverterGeminiContentToOpenAIResponses.
+	advancedCustomConverterClaudeMessagesToOpenAIResponses = "claude_messages_to_openai_responses"
+	advancedCustomConverterGeminiContentToOpenAIResponses  = "gemini_generate_content_to_openai_responses"
 )
 
 const (
@@ -222,15 +205,6 @@ func (r AdvancedCustomRoute) SupportsPassThroughBody() bool {
 	default:
 		return false
 	}
-}
-
-// BodyPassThroughEnabled resolves the same route for preview and execution.
-func (c *AdvancedCustomConfig) BodyPassThroughEnabled(path, model string) bool {
-	if c == nil {
-		return false
-	}
-	route, matched := c.MatchPathForModel(strings.Split(path, "?")[0], model)
-	return matched && route.PassThroughBodyEnabled && route.SupportsPassThroughBody()
 }
 
 type AdvancedCustomRouteAuth struct {
@@ -338,21 +312,6 @@ func (c *AdvancedCustomConfig) SupportsPath(requestPath string) bool {
 func (c *AdvancedCustomConfig) SupportsPathForModel(requestPath string, model string) bool {
 	_, ok := c.MatchPathForModel(requestPath, model)
 	return ok
-}
-
-// SupportsNativeResponsesForModel reports whether an Advanced Custom route
-// accepts the OpenAI Responses wire format without a protocol converter.
-// Empty converter values are normalized to "none" by the adaptor.
-func (c *AdvancedCustomConfig) SupportsNativeResponsesForModel(model string) bool {
-	if c == nil {
-		return false
-	}
-	route, ok := c.MatchPathForModel(advancedCustomEndpointPathOpenAIResponses, model)
-	if !ok {
-		return false
-	}
-	converter := strings.TrimSpace(route.Converter)
-	return converter == "" || strings.EqualFold(converter, advancedCustomConverterNone)
 }
 
 func (c *AdvancedCustomConfig) SupportedEndpointTypesForModel(model string) []types.EndpointType {
@@ -494,7 +453,9 @@ func IsAdvancedCustomConverterAllowed(converter string) bool {
 		advancedCustomConverterOpenAIResponsesToOpenAIChat,
 		advancedCustomConverterOpenAIResponsesToGemini,
 		advancedCustomConverterGeminiContentToOpenAIChat,
-		advancedCustomConverterOpenAIChatToGeminiContent:
+		advancedCustomConverterOpenAIChatToGeminiContent,
+		advancedCustomConverterClaudeMessagesToOpenAIResponses,
+		advancedCustomConverterGeminiContentToOpenAIResponses:
 		return true
 	default:
 		return false
@@ -689,7 +650,8 @@ func validateAdvancedCustomConverterPath(index int, incomingPath string, convert
 	switch converter {
 	case advancedCustomConverterNone:
 		return nil
-	case advancedCustomConverterClaudeMessagesToOpenAIChat:
+	case advancedCustomConverterClaudeMessagesToOpenAIChat,
+		advancedCustomConverterClaudeMessagesToOpenAIResponses:
 		if incomingPath == "/v1/messages" {
 			return nil
 		}
@@ -707,7 +669,8 @@ func validateAdvancedCustomConverterPath(index int, incomingPath string, convert
 		if incomingPath == "/v1/responses" {
 			return nil
 		}
-	case advancedCustomConverterGeminiContentToOpenAIChat:
+	case advancedCustomConverterGeminiContentToOpenAIChat,
+		advancedCustomConverterGeminiContentToOpenAIResponses:
 		if strings.Contains(incomingPath, ":generateContent") || strings.Contains(incomingPath, ":streamGenerateContent") {
 			return nil
 		}

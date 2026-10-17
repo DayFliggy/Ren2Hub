@@ -1,7 +1,6 @@
 package constant
 
 import (
-	"net/http"
 	"strings"
 )
 
@@ -36,10 +35,6 @@ const (
 	RelayModeAudioTranscription // whisper
 	RelayModeAudioTranslation   // whisper
 
-	RelayModeSunoFetch
-	RelayModeSunoFetchByID
-	RelayModeSunoSubmit
-
 	RelayModeVideoFetchByID
 	RelayModeVideoSubmit
 
@@ -58,7 +53,7 @@ const (
 
 func Path2RelayMode(path string) int {
 	relayMode := RelayModeUnknown
-	if strings.HasPrefix(path, "/v1/chat/completions") || strings.HasPrefix(path, "/pg/chat/completions") {
+	if strings.HasPrefix(path, "/v1/chat/completions") {
 		relayMode = RelayModeChatCompletions
 	} else if strings.HasPrefix(path, "/v1/completions") {
 		relayMode = RelayModeCompletions
@@ -130,25 +125,13 @@ func Path2RelayModeMidjourney(path string) int {
 	} else if strings.HasSuffix(path, "/mj/submit/change") {
 		relayMode = RelayModeMidjourneyChange
 	} else if strings.HasSuffix(path, "/mj/submit/simple-change") {
-		relayMode = RelayModeMidjourneySimpleChange
+		relayMode = RelayModeMidjourneyChange
 	} else if strings.HasSuffix(path, "/fetch") {
 		relayMode = RelayModeMidjourneyTaskFetch
 	} else if strings.HasSuffix(path, "/image-seed") {
 		relayMode = RelayModeMidjourneyTaskImageSeed
 	} else if strings.HasSuffix(path, "/list-by-condition") {
 		relayMode = RelayModeMidjourneyTaskFetchByCondition
-	}
-	return relayMode
-}
-
-func Path2RelaySuno(method, path string) int {
-	relayMode := RelayModeUnknown
-	if method == http.MethodPost && strings.HasSuffix(path, "/fetch") {
-		relayMode = RelayModeSunoFetch
-	} else if method == http.MethodGet && strings.Contains(path, "/fetch/") {
-		relayMode = RelayModeSunoFetchByID
-	} else if strings.Contains(path, "/submit/") {
-		relayMode = RelayModeSunoSubmit
 	}
 	return relayMode
 }

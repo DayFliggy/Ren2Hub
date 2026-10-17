@@ -148,10 +148,10 @@ func TestViduThroughNewAPIGateway(t *testing.T) {
 			if tc.wantStatus != "SUCCESS" {
 				return
 			}
-			assert.Equal(t, map[string]any{"credits": "12"}, call("extractUsageOnComplete", nil, nil, nil, rendered))
-			content := call("buildContentRequest", nil, map[string]any{"artifactKey": "video", "data": rendered, "upstream": gateway, "baseUrl": "https://gateway.example", "apiKey": "sk-gateway", "upstreamTaskId": "task_pub",
+			assert.Equal(t, map[string]any{"credits": float64(12)}, call("extractUsageOnComplete", nil, nil, nil, rendered))
+			content := call("buildContentRequest", nil, map[string]any{"artifactKey": "video", "data": rendered, "upstream": gateway,
 				"clientRequest": map[string]any{"method": "GET", "headers": map[string]any{}}})
-			assert.Equal(t, map[string]any{"url": "https://gateway.example/v1/tasks/task_pub/artifacts/video/content", "method": "GET", "headers": map[string]any{"Authorization": "Bearer sk-gateway"}}, content)
+			assert.Equal(t, map[string]any{"url": video, "method": "GET", "credentialless": true}, content)
 		})
 	}
 }

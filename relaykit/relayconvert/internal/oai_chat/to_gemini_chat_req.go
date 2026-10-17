@@ -156,8 +156,31 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		geminiRequest.SafetySettings = safetySettings
 	}
 
-	// Tools and tool_choice are declared by toolconv.AttachRequest, which
-	// decides between parameters and parametersJsonSchema for the model.
+	if textRequest.Tools != nil {
+		functions := make([]dto.FunctionRequest, 0, len(textRequest.Tools))
+		for _, tool := range textRequest.Tools {
+			if tool.Function.Parameters != nil {
+				if params, ok := tool.Function.Parameters.(map[string]any); ok {
+					if props, hasProps := params["properties"].(map[string]any); hasProps && len(props) == 0 {
+						tool.Function.Parameters = nil
+					}
+				}
+			}
+			tool.Function.Parameters = sharedgemini.CleanFunctionParameters(tool.Function.Parameters)
+			functions = append(functions, tool.Function)
+		}
+		geminiTools := geminiRequest.GetTools()
+		if len(functions) > 0 {
+			geminiTools = append(geminiTools, dto.GeminiChatTool{
+				FunctionDeclarations: functions,
+			})
+		}
+		geminiRequest.SetTools(geminiTools)
+
+		if textRequest.ToolChoice != nil {
+			geminiRequest.ToolConfig = sharedgemini.OpenAIToolChoiceToConfig(textRequest.ToolChoice)
+		}
+	}
 
 	if textRequest.ResponseFormat != nil && (textRequest.ResponseFormat.Type == "json_schema" || textRequest.ResponseFormat.Type == "json_object") {
 		geminiRequest.GenerationConfig.ResponseMimeType = "application/json"

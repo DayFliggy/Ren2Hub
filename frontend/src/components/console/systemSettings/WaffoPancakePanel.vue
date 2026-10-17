@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/api/console'
+import { paymentRequest } from '@/api/topup'
+import { ApiError } from '@/api/types'
+import { isRecord } from '@/api/contracts'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
-import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
@@ -31,7 +32,7 @@ const emit = defineEmits<{ saved: [] }>()
 
 const { t } = useI18n()
 const toast = useToast()
-const { load, rawValue, isSecretConfigured } = useSystemSettings()
+const { load, rawValue, saveOptions } = useSystemSettings()
 const loadingCatalog = ref(false)
 const saving = ref(false)
 const creating = ref(false)
@@ -49,10 +50,6 @@ const form = reactive({
 const selectedStore = computed(() =>
   catalog.value?.stores.find((store) => store.id === form.storeId)
 )
-const privateKeyConfigured = computed(() =>
-  isSecretConfigured('WaffoPancakePrivateKey')
-)
-
 function syncForm() {
   form.merchantId = String(rawValue('WaffoPancakeMerchantID', ''))
   form.returnUrl = String(rawValue('WaffoPancakeReturnURL', ''))
@@ -77,23 +74,24 @@ async function saveConfiguration(loadCatalogAfterSave = false) {
     toast.error(t('systemSettings.waffoPancake.credentialsRequired'))
     return false
   }
-  if (!form.privateKey.trim() && !privateKeyConfigured.value) {
-    toast.error(t('systemSettings.waffoPancake.privateKeyRequired'))
-    return false
-  }
 
   saving.value = true
   try {
-    await api.post('/api/option/waffo-pancake/save', {
+    await paymentRequest('/api/option/waffo-pancake/save', {
       merchant_id: form.merchantId,
       private_key: form.privateKey,
       return_url: form.returnUrl,
       store_id: form.storeId,
       product_id: form.productId,
-      unit_price: form.unitPrice,
-      min_top_up: form.minTopUp,
     })
     form.privateKey = ''
+    if (
+      !(await saveOptions({
+        WaffoPancakeUnitPrice: form.unitPrice,
+        WaffoPancakeMinTopUp: form.minTopUp,
+      }))
+    )
+      return false
     emit('saved')
     toast.success(t('systemSettings.waffoPancake.saved'))
     if (loadCatalogAfterSave) await loadCatalog()
@@ -109,7 +107,14 @@ async function saveConfiguration(loadCatalogAfterSave = false) {
 async function loadCatalog() {
   loadingCatalog.value = true
   try {
-    catalog.value = await api.get<Catalog>('/api/option/waffo-pancake/catalog')
+    catalog.value = (
+      await paymentRequest<Catalog>(
+        '/api/option/waffo-pancake/catalog',
+        undefined,
+        undefined,
+        'GET'
+      )
+    ).data
     ensureProductBelongsToStore()
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
@@ -123,26 +128,45 @@ async function createPair() {
     toast.error(t('systemSettings.waffoPancake.pairCredentialsRequired'))
     return
   }
-  if (!form.privateKey.trim() && !privateKeyConfigured.value) {
+  if (
+    !form.privateKey.trim() &&
+    form.merchantId.trim() !== String(rawValue('WaffoPancakeMerchantID', ''))
+  ) {
     toast.error(t('systemSettings.waffoPancake.pairPrivateKeyRequired'))
     return
   }
 
   creating.value = true
   try {
-    const result = await api.post<{
-      store_id: string
-      product_id: string
-    }>('/api/option/waffo-pancake/pair', {
-      merchant_id: form.merchantId,
-      private_key: form.privateKey,
-      return_url: form.returnUrl,
-    })
+    const result = (
+      await paymentRequest<{
+        store_id: string
+        product_id: string
+      }>('/api/option/waffo-pancake/pair', {
+        ...(form.privateKey.trim()
+          ? { merchant_id: form.merchantId, private_key: form.privateKey }
+          : {}),
+        return_url: form.returnUrl,
+      })
+    ).data
     form.storeId = result.store_id
     form.productId = result.product_id
     toast.success(t('systemSettings.waffoPancake.paired'))
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error))
+    if (
+      error instanceof ApiError &&
+      isRecord(error.data) &&
+      error.data.orphan_store === true &&
+      typeof error.data.store_id === 'string'
+    ) {
+      form.storeId = error.data.store_id
+      form.productId = ''
+      toast.error(
+        t('systemSettings.waffoPancake.orphanStore', {
+          id: error.data.store_id,
+        })
+      )
+    } else toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     creating.value = false
   }
@@ -169,14 +193,9 @@ onMounted(async () => {
           type="password"
           autocomplete="new-password"
         />
-        <div v-if="privateKeyConfigured" class="mt-1 flex items-center gap-1.5">
-          <StatusChip tone="success" class="text-xs">{{
-            t('systemSettings.waffoPancake.configured')
-          }}</StatusChip>
-          <span class="text-xs text-[var(--text-tertiary)]">{{
-            t('systemSettings.waffoPancake.keepPrivateKey')
-          }}</span>
-        </div>
+        <p class="mt-1 text-xs text-[var(--text-tertiary)]">
+          {{ t('systemSettings.waffoPancake.keepPrivateKey') }}
+        </p>
       </FormField>
       <FormField
         :label="t('systemSettings.waffoPancake.returnUrl')"

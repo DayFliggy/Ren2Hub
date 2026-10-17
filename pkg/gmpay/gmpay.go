@@ -236,13 +236,13 @@ func ParseTokenAmount(raw string) (decimal.Decimal, error) {
 	return amount, nil
 }
 
-// FormatFiatAmount renders a positive USD amount with exactly two decimals from
+// FormatFiatAmount renders a positive fiat amount with exactly two decimals from
 // an integer number of cents.
 func FormatFiatAmount(cents int64) string {
 	return decimal.NewFromInt(cents).Div(decimal.NewFromInt(100)).StringFixed(2)
 }
 
-// ParseFiatAmount parses a positive USD amount into whole cents. Trailing
+// ParseFiatAmount parses a positive fiat amount into whole cents. Trailing
 // fractional zeros are harmless; a sub-cent value is rejected rather than
 // rounded, because the settlement comparison must be exact. This is the fiat
 // counterpart to ParseTokenAmount and the two must not be interchanged.

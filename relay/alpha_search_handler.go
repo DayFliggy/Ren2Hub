@@ -103,7 +103,7 @@ func AlphaSearchHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError
 	info.SetBillableToolCount(dto.BuildInToolWebSearchPreview, 1)
 
 	usage := &dto.Usage{}
-	info.CaptureResponseUsage(usage, "text", nil)
+	service.PostTextConsumeQuota(c, info, usage, nil)
 	return nil
 }
 

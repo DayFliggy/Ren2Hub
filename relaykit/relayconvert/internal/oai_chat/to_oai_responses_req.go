@@ -227,30 +227,30 @@ func ChatCompletionsRequestToResponsesRequest(ctx context.Context, req *dto.Gene
 					"text": part.Text,
 				})
 			case dto.ContentTypeImageURL:
-				imagePart := map[string]any{"type": "input_image", "image_url": normalizeChatImageURLToString(part.ImageUrl)}
-				if image := part.GetImageMedia(); image != nil && image.Detail != "" {
-					imagePart["detail"] = image.Detail
-				}
-				contentParts = append(contentParts, imagePart)
+				contentParts = append(contentParts, map[string]any{
+					"type":      "input_image",
+					"image_url": normalizeChatImageURLToString(part.ImageUrl),
+				})
 			case dto.ContentTypeInputAudio:
 				contentParts = append(contentParts, map[string]any{
 					"type":        "input_audio",
 					"input_audio": part.InputAudio,
 				})
 			case dto.ContentTypeFile:
-				filePart := map[string]any{"type": "input_file"}
+				// Responses carries the file fields on the input_file part itself.
+				inputFile := map[string]any{"type": "input_file"}
 				if file := part.GetFile(); file != nil {
-					if file.FileId != "" {
-						filePart["file_id"] = file.FileId
+					if file.FileName != "" {
+						inputFile["filename"] = file.FileName
 					}
 					if file.FileData != "" {
-						filePart["file_data"] = file.FileData
+						inputFile["file_data"] = file.FileData
 					}
-					if file.FileName != "" {
-						filePart["filename"] = file.FileName
+					if file.FileId != "" {
+						inputFile["file_id"] = file.FileId
 					}
 				}
-				contentParts = append(contentParts, filePart)
+				contentParts = append(contentParts, inputFile)
 			case dto.ContentTypeVideoUrl:
 				contentParts = append(contentParts, map[string]any{
 					"type":      "input_video",

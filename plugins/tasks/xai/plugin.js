@@ -77,7 +77,7 @@ export const meta = {
     en: "xAI Grok Imagine video generation (text-to-video, image-to-video, reference-to-video, video editing, and video extension)",
     zh: "xAI Grok Imagine 视频生成（文生视频、图生视频、参考生视频、视频编辑、视频延长）",
   },
-  version: "1.1.0+ren2hub.1",
+  version: "1.1.0",
   author: { name: "QuantumNous" },
   channelTypes: [48], // xAI-type channels serve the video API with the same key
   baseUrl: "https://api.x.ai",
@@ -544,15 +544,9 @@ export function extractUsageOnComplete(task, result, body) {
     facts.input_video_seconds = facts.seconds;
   } else if (action === "video_extension") {
     // The extension length was reserved as seconds; the rest of the output is
-    // the input video. The difference is exact decimal arithmetic: a float
-    // difference such as 16.37 - 6 is not 10.37, and the host rejects it.
+    // the input video.
     const extension = Number(state.extension_seconds);
-    if (extension > 0) {
-      const input = duration - extension;
-      if (input <= 0) facts.input_video_seconds = 0;
-      else if (input >= MAX_EXTENSION_INPUT_SECONDS) facts.input_video_seconds = MAX_EXTENSION_INPUT_SECONDS;
-      else facts.input_video_seconds = utils.decimal.number(utils.decimal.add(duration, -extension));
-    }
+    if (extension > 0) facts.input_video_seconds = Math.min(Math.max(duration - extension, 0), MAX_EXTENSION_INPUT_SECONDS);
   } else {
     facts.seconds = Math.min(duration, MAX_DURATION);
   }

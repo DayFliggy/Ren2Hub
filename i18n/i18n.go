@@ -63,12 +63,6 @@ func Init() error {
 
 // GetLocalizer returns a localizer for the specified language
 func GetLocalizer(lang string) *i18n.Localizer {
-	// The embedded locales load on first use, so translating before main runs
-	// Init (or in a test that never calls it) cannot dereference a nil bundle.
-	// A failure here means the embedded files are broken, a build defect.
-	if err := Init(); err != nil {
-		panic("i18n: embedded locales failed to load: " + err.Error())
-	}
 	lang = normalizeLang(lang)
 
 	mu.RLock()
@@ -208,21 +202,6 @@ func normalizeLang(lang string) string {
 		return LangEn
 	default:
 		return DefaultLang
-	}
-}
-
-// SupportedLang returns the backend language a language code names (en,
-// zh-CN or zh-TW, including aliases such as zhTW, zh_HK and en-US), and false
-// for any other code. Unlike normalizeLang it does not fall back to English,
-// so it validates a language a user saves.
-func SupportedLang(code string) (string, bool) {
-	lang := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(code), "_", "-"))
-	switch {
-	case lang == "en", strings.HasPrefix(lang, "en-"),
-		lang == "zh", lang == "zhcn", lang == "zhtw", strings.HasPrefix(lang, "zh-"):
-		return normalizeLang(lang), true
-	default:
-		return "", false
 	}
 }
 

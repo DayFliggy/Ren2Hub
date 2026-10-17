@@ -2,12 +2,12 @@ package minimax
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 )
 
 type Adaptor struct {
@@ -35,51 +36,43 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 	if info.RelayMode != constant.RelayModeAudioSpeech {
 		return nil, errors.New("unsupported audio relay mode")
 	}
-	if request.Instructions != "" {
-		return nil, errors.New("MiniMax speech instructions are not supported by this adaptor")
-	}
 
 	voiceID := request.Voice
+	speed := lo.FromPtrOr(request.Speed, 0.0)
 	outputFormat := request.ResponseFormat
-	if outputFormat == "" {
-		outputFormat = "mp3"
-	}
-	if outputFormat != "mp3" && outputFormat != "wav" && outputFormat != "flac" && outputFormat != "pcm" {
-		return nil, errors.New("unsupported MiniMax audio format")
-	}
 
 	minimaxRequest := MiniMaxTTSRequest{
-		Model: info.UpstreamModelName,
+		Model: info.OriginModelName,
 		Text:  request.Input,
 		VoiceSetting: VoiceSetting{
 			VoiceID: voiceID,
-			Speed:   request.Speed,
+			Speed:   speed,
 		},
 		AudioSetting: &AudioSetting{
 			Format: outputFormat,
 		},
-		OutputFormat: "hex",
+		OutputFormat: outputFormat,
 	}
 
 	// 同步扩展字段的厂商自定义metadata
 	if len(request.Metadata) > 0 {
-		if err := common.Unmarshal(request.Metadata, &minimaxRequest); err != nil {
+		if err := json.Unmarshal(request.Metadata, &minimaxRequest); err != nil {
 			return nil, fmt.Errorf("error unmarshalling metadata to minimax request: %w", err)
 		}
 	}
 
-	if minimaxRequest.Stream != nil && *minimaxRequest.Stream || minimaxRequest.OutputFormat != "hex" {
-		return nil, errors.New("MiniMax audio metadata requires non-streaming hex output")
-	}
-	minimaxRequest.Model = info.UpstreamModelName
-	if minimaxRequest.AudioSetting == nil || minimaxRequest.AudioSetting.Format != outputFormat {
-		return nil, errors.New("MiniMax metadata cannot change the requested audio format")
-	}
-	jsonData, err := common.Marshal(minimaxRequest)
+	jsonData, err := json.Marshal(minimaxRequest)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling minimax request: %w", err)
 	}
+	if outputFormat != "hex" {
+		outputFormat = "url"
+	}
+
 	c.Set("response_format", outputFormat)
+
+	// Debug: log the request structure
+	// fmt.Printf("MiniMax TTS Request: %s\n", string(jsonData))
 
 	return bytes.NewReader(jsonData), nil
 }

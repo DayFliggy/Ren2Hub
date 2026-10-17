@@ -1,20 +1,15 @@
 package minimax
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
-	"strconv"
+	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -24,7 +19,7 @@ import (
 type MiniMaxTTSRequest struct {
 	Model             string             `json:"model"`
 	Text              string             `json:"text"`
-	Stream            *bool              `json:"stream,omitempty"`
+	Stream            bool               `json:"stream,omitempty"`
 	StreamOptions     *StreamOptions     `json:"stream_options,omitempty"`
 	VoiceSetting      VoiceSetting       `json:"voice_setting"`
 	PronunciationDict *PronunciationDict `json:"pronunciation_dict,omitempty"`
@@ -32,23 +27,23 @@ type MiniMaxTTSRequest struct {
 	TimbreWeights     []TimbreWeight     `json:"timbre_weights,omitempty"`
 	LanguageBoost     string             `json:"language_boost,omitempty"`
 	VoiceModify       *VoiceModify       `json:"voice_modify,omitempty"`
-	SubtitleEnable    *bool              `json:"subtitle_enable,omitempty"`
+	SubtitleEnable    bool               `json:"subtitle_enable,omitempty"`
 	OutputFormat      string             `json:"output_format,omitempty"`
-	AigcWatermark     *bool              `json:"aigc_watermark,omitempty"`
+	AigcWatermark     bool               `json:"aigc_watermark,omitempty"`
 }
 
 type StreamOptions struct {
-	ExcludeAggregatedAudio *bool `json:"exclude_aggregated_audio,omitempty"`
+	ExcludeAggregatedAudio bool `json:"exclude_aggregated_audio,omitempty"`
 }
 
 type VoiceSetting struct {
-	VoiceID           string   `json:"voice_id"`
-	Speed             *float64 `json:"speed,omitempty"`
-	Vol               *float64 `json:"vol,omitempty"`
-	Pitch             *int     `json:"pitch,omitempty"`
-	Emotion           string   `json:"emotion,omitempty"`
-	TextNormalization *bool    `json:"text_normalization,omitempty"`
-	LatexRead         *bool    `json:"latex_read,omitempty"`
+	VoiceID           string  `json:"voice_id"`
+	Speed             float64 `json:"speed,omitempty"`
+	Vol               float64 `json:"vol,omitempty"`
+	Pitch             int     `json:"pitch,omitempty"`
+	Emotion           string  `json:"emotion,omitempty"`
+	TextNormalization bool    `json:"text_normalization,omitempty"`
+	LatexRead         bool    `json:"latex_read,omitempty"`
 }
 
 type PronunciationDict struct {
@@ -56,11 +51,11 @@ type PronunciationDict struct {
 }
 
 type AudioSetting struct {
-	SampleRate *int   `json:"sample_rate,omitempty"`
-	Bitrate    *int   `json:"bitrate,omitempty"`
+	SampleRate int    `json:"sample_rate,omitempty"`
+	Bitrate    int    `json:"bitrate,omitempty"`
 	Format     string `json:"format,omitempty"`
-	Channel    *int   `json:"channel,omitempty"`
-	ForceCbr   *bool  `json:"force_cbr,omitempty"`
+	Channel    int    `json:"channel,omitempty"`
+	ForceCbr   bool   `json:"force_cbr,omitempty"`
 }
 
 type TimbreWeight struct {
@@ -69,9 +64,9 @@ type TimbreWeight struct {
 }
 
 type VoiceModify struct {
-	Pitch        *int   `json:"pitch,omitempty"`
-	Intensity    *int   `json:"intensity,omitempty"`
-	Timbre       *int   `json:"timbre,omitempty"`
+	Pitch        int    `json:"pitch,omitempty"`
+	Intensity    int    `json:"intensity,omitempty"`
+	Timbre       int    `json:"timbre,omitempty"`
 	SoundEffects string `json:"sound_effects,omitempty"`
 }
 
@@ -88,7 +83,7 @@ type MiniMaxTTSData struct {
 }
 
 type MiniMaxExtraInfo struct {
-	UsageCharacters *int64 `json:"usage_characters"`
+	UsageCharacters int64 `json:"usage_characters"`
 }
 
 type MiniMaxBaseResp struct {
@@ -101,6 +96,7 @@ func getContentTypeByFormat(format string) string {
 		"mp3":  "audio/mpeg",
 		"wav":  "audio/wav",
 		"flac": "audio/flac",
+		"aac":  "audio/aac",
 		"pcm":  "audio/pcm",
 	}
 	if ct, ok := contentTypeMap[format]; ok {
@@ -110,26 +106,23 @@ func getContentTypeByFormat(format string) string {
 }
 
 func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
-	if resp == nil || resp.Body == nil {
-		return nil, types.NewOpenAIError(fmt.Errorf("invalid MiniMax audio response"), types.ErrorCodeBadResponse, http.StatusBadGateway)
-	}
-	defer service.CloseResponseBodyGracefully(resp)
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("failed to read minimax response: %w", readErr),
 			types.ErrorCodeReadResponseBodyFailed,
-			http.StatusBadGateway,
+			http.StatusInternalServerError,
 		)
 	}
+	defer resp.Body.Close()
 
 	// Parse response
 	var minimaxResp MiniMaxTTSResponse
-	if unmarshalErr := common.Unmarshal(body, &minimaxResp); unmarshalErr != nil {
+	if unmarshalErr := json.Unmarshal(body, &minimaxResp); unmarshalErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("failed to unmarshal minimax TTS response: %w", unmarshalErr),
 			types.ErrorCodeBadResponseBody,
-			http.StatusBadGateway,
+			http.StatusInternalServerError,
 		)
 	}
 
@@ -138,7 +131,7 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("minimax TTS error: %d - %s", minimaxResp.BaseResp.StatusCode, minimaxResp.BaseResp.StatusMsg),
 			types.ErrorCodeBadResponse,
-			http.StatusBadGateway,
+			http.StatusBadRequest,
 		)
 	}
 
@@ -147,37 +140,36 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("no audio data in minimax TTS response"),
 			types.ErrorCodeBadResponse,
-			http.StatusBadGateway,
+			http.StatusBadRequest,
 		)
 	}
-	if minimaxResp.Data.Status != 2 {
-		return nil, types.NewOpenAIError(fmt.Errorf("MiniMax speech did not complete"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	if strings.HasPrefix(minimaxResp.Data.Audio, "http") {
+		c.Redirect(http.StatusFound, minimaxResp.Data.Audio)
+	} else {
+		// Handle hex-encoded audio data
+		audioData, decodeErr := hex.DecodeString(minimaxResp.Data.Audio)
+		if decodeErr != nil {
+			return nil, types.NewErrorWithStatusCode(
+				fmt.Errorf("failed to decode hex audio data: %w", decodeErr),
+				types.ErrorCodeBadResponse,
+				http.StatusInternalServerError,
+			)
+		}
+
+		// Determine content type - default to mp3
+		contentType := "audio/mpeg"
+
+		c.Data(http.StatusOK, contentType, audioData)
 	}
 
-	characters := minimaxResp.ExtraInfo.UsageCharacters
-	if characters != nil && (*characters < 0 || *characters > math.MaxInt32) {
-		return nil, types.NewOpenAIError(fmt.Errorf("invalid MiniMax character usage"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	usage = &dto.Usage{
+		PromptTokens:     info.GetEstimatePromptTokens(),
+		CompletionTokens: 0,
+		TotalTokens:      int(minimaxResp.ExtraInfo.UsageCharacters),
 	}
-	audioData, decodeErr := hex.DecodeString(minimaxResp.Data.Audio)
-	if decodeErr != nil || len(audioData) == 0 {
-		return nil, types.NewOpenAIError(fmt.Errorf("invalid MiniMax hex audio"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-	}
-	contentType := getContentTypeByFormat(c.GetString("response_format"))
-	if info.IsStream {
-		delta, marshalErr := common.Marshal(map[string]string{"type": "speech.audio.delta", "audio": base64.StdEncoding.EncodeToString(audioData)})
-		if marshalErr != nil {
-			return nil, types.NewOpenAIError(marshalErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-		}
-		audioData = []byte("data: " + string(delta) + "\n\ndata: {\"type\":\"speech.audio.done\"}\n\n")
-		contentType = "text/event-stream"
-	}
-	openai.OpenaiTTSHandler(c, &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {contentType}}, Body: io.NopCloser(bytes.NewReader(audioData))}, info)
-	observed := &dto.Usage{UsageSource: "missing"}
-	if info.HasValidOutput() && characters != nil {
-		observed.UsageSource = "provider_characters"
-		observed.MeasuredQuantities = map[string]string{"characters": strconv.FormatInt(*characters, 10)}
-	}
-	return observed, helper.StreamError(info)
+
+	return usage, nil
 }
 
 func handleChatCompletionResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {

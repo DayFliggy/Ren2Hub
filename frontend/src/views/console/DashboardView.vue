@@ -1,19 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
 import BalanceCard from '@/components/console/dashboard/BalanceCard.vue'
-import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
 import UsageDistributionCard from '@/components/console/dashboard/UsageDistributionCard.vue'
-import TokenTrendCard from '@/components/console/dashboard/TokenTrendCard.vue'
 import ModelDistributionCard from '@/components/console/dashboard/ModelDistributionCard.vue'
-import SystemStatusCard from '@/components/console/dashboard/SystemStatusCard.vue'
 import StatsKpiRow from '@/components/console/dashboard/stats/StatsKpiRow.vue'
 import StatsModelTable from '@/components/console/dashboard/stats/StatsModelTable.vue'
 import StatsHourlyChart from '@/components/console/dashboard/stats/StatsHourlyChart.vue'
 import StatsDualTrend from '@/components/console/dashboard/stats/StatsDualTrend.vue'
-import AutoRoutePanel from '@/components/console/dashboard/autoroute/AutoRoutePanel.vue'
 import ContactFloatBall from '@/components/console/ContactFloatBall.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
@@ -34,27 +30,15 @@ const {
   stats,
   share,
   flow,
-  tokenTrend,
-  system,
-  limits,
-  discounts,
   error: dashboardError,
-  loadSystem,
   load,
 } = useDashboard()
 const statsComposable = useDashboardStats()
 const distribution = useUsageDistribution()
 
-let systemRefreshTimer: ReturnType<typeof setInterval> | undefined
-
 onMounted(() => {
   void load()
   void distribution.load()
-  systemRefreshTimer = setInterval(() => void loadSystem(), 30_000)
-})
-
-onBeforeUnmount(() => {
-  if (systemRefreshTimer) clearInterval(systemRefreshTimer)
 })
 
 /**
@@ -89,9 +73,7 @@ const tabs = computed(() => {
     { key: 'overview', label: t('dashboard.tabOverview') },
     { key: 'stats', label: t('dashboard.tabStats') },
   ]
-  if (auth.isAdmin) {
-    items.push({ key: 'autoroute', label: t('dashboard.autoRoute.tabLabel') })
-  }
+
   return items
 })
 const activeTab = ref('overview')
@@ -171,14 +153,7 @@ const rangeOptions = computed(() => [
         class="sibling-space-y-4 sm:sibling-space-y-5"
       >
         <!-- KPI strip — 4 clickable chips, jumps to Stats tab -->
-        <OverviewKpiStrip
-          :stats="stats"
-          :flow="flow"
-          :token-trend="tokenTrend"
-          :limits="limits"
-          :loading="loading"
-          @switch-tab="activeTab = $event"
-        />
+        <OverviewKpiStrip :stats="stats" :loading="loading" />
 
         <!-- Error State -->
         <EmptyState
@@ -205,17 +180,6 @@ const rangeOptions = computed(() => [
             :loading="distribution.loading.value"
           />
 
-          <!-- 系统状态 -->
-          <SystemStatusCard class="min-w-0" :metrics="system" />
-          <!-- Token 使用趋势 -->
-          <TokenTrendCard
-            class="min-w-0 xl:col-span-2"
-            :points="tokenTrend"
-            :loading="loading"
-          />
-
-          <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
-          <DiscountCard class="min-w-0" :discounts="discounts" />
           <!-- 模型消费分布 -->
           <ModelDistributionCard
             class="min-w-0 xl:col-span-2"
@@ -281,16 +245,6 @@ const rangeOptions = computed(() => [
             :error="statsComposable.error.value"
           />
         </div>
-      </div>
-
-      <!-- ══════════════════════════════════════════
-         Tab: Auto Route
-    ══════════════════════════════════════════ -->
-      <div
-        v-else-if="activeTab === 'autoroute' && auth.isAdmin"
-        class="min-w-0"
-      >
-        <AutoRoutePanel />
       </div>
     </div>
 

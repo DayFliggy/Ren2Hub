@@ -18,8 +18,6 @@ const (
 	responsesEventError                     = "response.error"
 	responsesEventOutputTextDelta           = "response.output_text.delta"
 	responsesEventOutputTextAnnotationAdded = "response.output_text.annotation.added"
-	responsesEventRefusalDelta              = "response.refusal.delta"
-	responsesEventRefusalDone               = "response.refusal.done"
 	responsesEventOutputItemAdded           = "response.output_item.added"
 	responsesEventOutputItemDone            = "response.output_item.done"
 	responsesEventFunctionArgsDelta         = "response.function_call_arguments.delta"
@@ -65,7 +63,6 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 
 	text := ExtractOutputTextFromResponses(resp)
 	reasoning := ExtractReasoningTextFromResponses(resp)
-	refusal := ExtractRefusalFromResponses(resp)
 
 	usage := UsageFromResponsesUsage(resp.Usage)
 
@@ -106,11 +103,6 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	msg := dto.Message{
 		Role:    "assistant",
 		Content: text,
-	}
-	if refusal != "" {
-		// A refusal has no Chat text equivalent; the Chat refusal field is the
-		// public shape, and OpenAI leaves content empty on refusal-only turns.
-		msg.Refusal = kitutil.GetPointer(refusal)
 	}
 	if annotations, err := responsesAnnotationsToChat(resp); err != nil {
 		return nil, nil, err
@@ -203,16 +195,15 @@ func NormalizeResponsesUsage(src *dto.Usage) *dto.Usage {
 func usageFromResponsesUsage(src *dto.Usage, createBillingSnapshot bool) *dto.Usage {
 	usage := &dto.Usage{}
 	if src == nil {
-		usage.UsageSource = "missing"
 		return usage
 	}
 	usage.UsageSemantic = src.UsageSemantic
 	usage.UsageSource = src.UsageSource
-	usage.Observation = src.Observation
-	usage.MeasuredQuantities = src.MeasuredQuantities
 	usage.BillingUsage = dto.CloneBillingUsage(src.BillingUsage)
+	if usage.BillingUsage == nil && createBillingSnapshot {
+		usage.BillingUsage = dto.NewOpenAIResponsesBillingUsage(src)
+	}
 	usage.Cost = src.Cost
-	usage.PromptCacheHitTokens = src.PromptCacheHitTokens
 	if src.InputTokens != 0 {
 		usage.PromptTokens = src.InputTokens
 		usage.InputTokens = src.InputTokens
@@ -227,26 +218,19 @@ func usageFromResponsesUsage(src *dto.Usage, createBillingSnapshot bool) *dto.Us
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 	if src.InputTokensDetails != nil {
-		details := src.InputTokensDetails.Clone()
-		usage.InputTokensDetails = &details
-		usage.PromptTokensDetails = details
+		usage.PromptTokensDetails = src.InputTokensDetails.Clone()
 	}
-	usage.CompletionTokenDetails = src.CompletionTokenDetails
-	if src.OutputTokensDetails != nil {
-		details := *src.OutputTokensDetails
-		usage.OutputTokensDetails = &details
-		usage.CompletionTokenDetails = details
+	if src.CompletionTokenDetails.ReasoningTokens != 0 ||
+		src.CompletionTokenDetails.TextTokens != 0 ||
+		src.CompletionTokenDetails.AudioTokens != 0 ||
+		src.CompletionTokenDetails.ImageTokens != 0 {
+		usage.CompletionTokenDetails.ReasoningTokens = src.CompletionTokenDetails.ReasoningTokens
+		usage.CompletionTokenDetails.TextTokens = src.CompletionTokenDetails.TextTokens
+		usage.CompletionTokenDetails.AudioTokens = src.CompletionTokenDetails.AudioTokens
+		usage.CompletionTokenDetails.ImageTokens = src.CompletionTokenDetails.ImageTokens
 	}
 	usage.ClaudeCacheCreation5mTokens = src.ClaudeCacheCreation5mTokens
 	usage.ClaudeCacheCreation1hTokens = src.ClaudeCacheCreation1hTokens
-	if usage.BillingUsage == nil && createBillingSnapshot {
-		// Keep provider counters while making its modality categories available
-		// to billing consumers of the common usage representation.
-		billing := *src
-		billing.PromptTokensDetails = usage.PromptTokensDetails
-		billing.CompletionTokenDetails = usage.CompletionTokenDetails
-		usage.BillingUsage = dto.NewOpenAIResponsesBillingUsage(&billing)
-	}
 	return usage
 }
 
@@ -303,43 +287,25 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 	return sb.String()
 }
 
-// ExtractRefusalFromResponses returns the concatenated refusal content parts of
-// assistant message outputs. Refusals arrive as type=refusal parts instead of
-// output_text, so text extraction alone loses them.
-func ExtractRefusalFromResponses(resp *dto.OpenAIResponsesResponse) string {
-	if resp == nil || len(resp.Output) == 0 {
-		return ""
-	}
-
-	var sb strings.Builder
-	for _, out := range resp.Output {
-		if out.Type != responsesOutputTypeMessage {
-			continue
-		}
-		if out.Role != "" && out.Role != "assistant" {
-			continue
-		}
-		for _, c := range out.Content {
-			if c.Type == "refusal" && c.Refusal != nil && *c.Refusal != "" {
-				sb.WriteString(*c.Refusal)
-			}
-		}
-	}
-	return sb.String()
-}
-
 func reasoningOutputText(output *dto.ResponsesOutput) string {
 	if output == nil {
 		return ""
 	}
 	var text strings.Builder
-	for _, part := range output.Summary {
-		appendSeparatedText(&text, part.Text)
+	hasContentText := false
+	for _, part := range output.Content {
+		if part.Text != "" {
+			hasContentText = true
+			break
+		}
 	}
-	if text.Len() > 0 {
+	if hasContentText {
+		for _, part := range output.Content {
+			appendSeparatedText(&text, part.Text)
+		}
 		return text.String()
 	}
-	for _, part := range output.Content {
+	for _, part := range output.Summary {
 		appendSeparatedText(&text, part.Text)
 	}
 	return text.String()

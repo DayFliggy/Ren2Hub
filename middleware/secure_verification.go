@@ -18,8 +18,7 @@ func SecureVerificationRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		channelID, err := strconv.Atoi(c.Param("id"))
 		if err != nil || channelID <= 0 {
-			common.ApiErrorStatus(c, http.StatusBadRequest, service.ErrVerificationContextInvalid, gin.H{"code": "SECURITY_CONTEXT_INVALID"})
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "code": "SECURITY_CONTEXT_INVALID", "message": service.ErrVerificationContextInvalid.Error()})
 			return
 		}
 		context, err := common.Marshal(service.ChannelKeyReadContext{ChannelID: channelID})
@@ -36,54 +35,56 @@ func SecureVerificationRequired() gin.HandlerFunc {
 }
 
 // RequireSecurityProof validates a proof against the authenticated dashboard
-// session and writes the shared proof error contract on failure.
+// session or scoped access token and writes the shared proof error contract on
+// failure.
 func RequireSecurityProof(c *gin.Context, operation service.VerificationOperation) *model.AuthFlowAuthorization {
-	identity, ok := GetAuthIdentity(c)
+	identity, ok := GetStepUpIdentity(c)
 	if !ok {
-		identity, ok = GetSessionAuthIdentity(c)
-	}
-	if !ok {
-		securityProofError(c, "SECURITY_PROOF_INVALID", common.NewMessage("Security verification is no longer valid. Please verify again."))
+		securityProofError(c, "SECURITY_PROOF_INVALID", "Security verification is no longer valid. Please verify again.")
 		return nil
 	}
 	raw := strings.TrimSpace(c.GetHeader("X-Security-Proof"))
 	if raw == "" {
-		securityProofError(c, "SECURITY_PROOF_REQUIRED", common.NewMessage("Additional verification required"))
+		securityProofError(c, "SECURITY_PROOF_REQUIRED", "Additional verification required")
 		return nil
 	}
 	authorization, err := service.ConsumeOperationProof(raw, identity, operation)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrAuthTokenExpired):
-			securityProofError(c, "SECURITY_PROOF_EXPIRED", common.NewMessage("Security verification has expired. Please verify again."))
+			securityProofError(c, "SECURITY_PROOF_EXPIRED", "Security verification has expired. Please verify again.")
 		case errors.Is(err, service.ErrProofScope):
-			securityProofError(c, "SECURITY_PROOF_SCOPE_MISMATCH", common.NewMessage("Verification does not match this action."))
+			securityProofError(c, "SECURITY_PROOF_SCOPE_MISMATCH", "Verification does not match this action.")
+		case errors.Is(err, service.ErrVerificationContextInvalid):
+			c.Set("security_error_code", "SECURITY_CONTEXT_INVALID")
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "code": "SECURITY_CONTEXT_INVALID", "message": service.ErrVerificationContextInvalid.Error()})
 		case errors.Is(err, service.ErrVerificationUnavailable):
-			securityProofError(c, "SECURITY_METHOD_UNAVAILABLE", service.ErrVerificationUnavailable)
+			securityProofError(c, "SECURITY_METHOD_UNAVAILABLE", service.ErrVerificationUnavailable.Error())
 		case errors.Is(err, service.ErrProofMethod):
-			securityProofError(c, "SECURITY_PROOF_METHOD_MISMATCH", common.NewMessage("This verification method is not allowed for this action."))
+			securityProofError(c, "SECURITY_PROOF_METHOD_MISMATCH", "This verification method is not allowed for this action.")
 		case errors.Is(err, service.ErrProofConsumed):
-			securityProofError(c, "SECURITY_PROOF_CONSUMED", common.NewMessage("This verification has already been used. Please verify again."))
+			securityProofError(c, "SECURITY_PROOF_CONSUMED", "This verification has already been used. Please verify again.")
 		case errors.Is(err, service.ErrProofContext):
-			securityProofError(c, "SECURITY_PROOF_CONTEXT_MISMATCH", common.NewMessage("Verification does not match this action's details. Please verify again."))
+			securityProofError(c, "SECURITY_PROOF_CONTEXT_MISMATCH", "Verification does not match this action's details. Please verify again.")
 		case errors.Is(err, service.ErrVerificationForbidden):
-			securityProofError(c, "SECURITY_ACTION_FORBIDDEN", service.ErrVerificationForbidden)
+			securityProofError(c, "SECURITY_ACTION_FORBIDDEN", service.ErrVerificationForbidden.Error())
 		case errors.Is(err, service.ErrAuthTokenInvalid), errors.Is(err, service.ErrLoginSessionInvalid), errors.Is(err, service.ErrLoginSessionRevoked), errors.Is(err, model.ErrUserSessionInactive):
-			securityProofError(c, "SECURITY_PROOF_INVALID", common.NewMessage("Security verification is no longer valid. Please verify again."))
+			securityProofError(c, "SECURITY_PROOF_INVALID", "Security verification is no longer valid. Please verify again.")
 		default:
 			_ = c.Error(err)
-			common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("Please try again later."), gin.H{"code": "AUTH_INTERNAL_ERROR"})
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUTH_INTERNAL_ERROR", "message": "Please try again later."})
 		}
 		return nil
 	}
 	return authorization
 }
 
-// securityProofError answers a failed proof check with 403. A *common.Message
-// message also gives the web console its message_key.
-func securityProofError(c *gin.Context, code string, message error) {
+func securityProofError(c *gin.Context, code, message string) {
 	c.Set("security_error_code", code)
-	common.ApiErrorStatus(c, http.StatusForbidden, message, gin.H{"code": code})
+	c.JSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"message": message,
+		"code":    code,
+	})
 	c.Abort()
 }

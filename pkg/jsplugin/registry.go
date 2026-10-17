@@ -2,10 +2,8 @@ package jsplugin
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/shopspring/decimal"
 	"maps"
 	"math"
 	"net"
@@ -126,6 +124,14 @@ func (m Meta) SupportsUpstream(kind string) bool {
 	return kind == UpstreamKindVendor || slices.Contains(m.Upstreams, kind)
 }
 
+// PreservesJSONOrder reports whether the plugin declared json-order@1: its
+// hooks receive JSON request bodies with members in the order the client sent
+// them, and its JSON request bodies go upstream as JSON.stringify writes them.
+// Other plugins keep the cheaper Go-map path, whose members enumerate sorted.
+func (m Meta) PreservesJSONOrder() bool {
+	return slices.Contains(m.RequiredCapabilities, CapabilityJSONOrder)
+}
+
 // AcceptsAutoDuration reports whether the plugin declared duration-auto@1:
 // request validation lets a duration of -1, the vendor's "the model picks the
 // length", through to its hooks. The plugin reserves the longest duration the
@@ -134,12 +140,21 @@ func (m Meta) AcceptsAutoDuration() bool {
 	return slices.Contains(m.RequiredCapabilities, CapabilityDurationAuto)
 }
 
+// JSONTextMember names the member of a hook result (a decoded requestBody, a
+// request descriptor's body) that the host also takes as JSON text, for a
+// plugin that preserves JSON order; it is empty for other plugins.
+func (m Meta) JSONTextMember(member string) string {
+	if !m.PreservesJSONOrder() {
+		return ""
+	}
+	return member
+}
+
 // UsageProfile replaces the plugin's default usage metadata for its models.
 type UsageProfile struct {
-	Models              []string                    `json:"models"`
-	Schema              map[string]UsageFieldSchema `json:"schema"`
-	CompatibilitySchema map[string]UsageFieldSchema `json:"compatibilitySchema,omitempty"`
-	Examples            []UsageExample              `json:"examples,omitempty"`
+	Models   []string                    `json:"models"`
+	Schema   map[string]UsageFieldSchema `json:"schema"`
+	Examples []UsageExample              `json:"examples,omitempty"`
 }
 
 // UsageForModel returns read-only usage metadata for a declared model. Aliases
@@ -155,41 +170,17 @@ func (m Meta) UsageForModel(model string) (map[string]UsageFieldSchema, []UsageE
 // vendor endpoint ID keeps the declared model's profile. When no candidate is
 // profiled, the plugin defaults apply.
 func (m Meta) UsageForModels(models ...string) (map[string]UsageFieldSchema, []UsageExample) {
-	if profile := m.usageProfileForModels(models...); profile != nil {
-		return profile.Schema, profile.Examples
-	}
-	return m.UsageSchema, m.UsageExamples
-}
-
-// UsageFactsForModels is the single execution schema for validation, pricing
-// eligibility and frozen quotes. Explicit compatibility fields keep released
-// facts valid without advertising unsupported capabilities in the editor.
-func (m Meta) UsageFactsForModels(models ...string) map[string]UsageFieldSchema {
-	profile := m.usageProfileForModels(models...)
-	if profile == nil {
-		return m.UsageSchema
-	}
-	if len(profile.CompatibilitySchema) == 0 {
-		return profile.Schema
-	}
-	schema := CloneUsageSchema(profile.Schema)
-	maps.Copy(schema, CloneUsageSchema(profile.CompatibilitySchema))
-	return schema
-}
-
-func (m Meta) usageProfileForModels(models ...string) *UsageProfile {
 	for _, model := range models {
 		folded := asciiFold(model)
-		for index := range m.UsageProfiles {
-			profile := &m.UsageProfiles[index]
+		for _, profile := range m.UsageProfiles {
 			for _, declared := range profile.Models {
 				if asciiFold(declared) == folded {
-					return profile
+					return profile.Schema, profile.Examples
 				}
 			}
 		}
 	}
-	return nil
+	return m.UsageSchema, m.UsageExamples
 }
 
 // ProtocolSupports reports whether the named protocol claim includes mode.
@@ -231,10 +222,8 @@ type UsageFieldSchema struct {
 }
 
 type LoadedPlugin struct {
-	Meta       Meta
-	Engine     *Engine
-	Source     string
-	SourceHash string
+	Meta   Meta
+	Engine *Engine
 }
 
 // UsesSubmitEventDelta reports whether SSE submissions go through
@@ -543,7 +532,7 @@ func CompilePlugin(source string, options Options) (*LoadedPlugin, error) {
 			return nil, fmt.Errorf("plugin %s export %q is no longer supported", meta.Key, removed)
 		}
 	}
-	return &LoadedPlugin{Meta: meta, Engine: engine, Source: source, SourceHash: fmt.Sprintf("%x", sha256.Sum256([]byte(source)))}, nil
+	return &LoadedPlugin{Meta: meta, Engine: engine}, nil
 }
 
 func (r *Registry) Get(platform string) (*LoadedPlugin, bool) {
@@ -637,16 +626,6 @@ func (r *Registry) Unregister(key string) error {
 
 // ReplaceOverrides atomically publishes a complete override layer.
 func (r *Registry) ReplaceOverrides(plugins []*LoadedPlugin) error {
-	return r.replaceOverrides(plugins, true)
-}
-
-// ReplaceOverridesStrict never serves a previous version after publication of
-// a different version fails. Existing executions retain their own code pin.
-func (r *Registry) ReplaceOverridesStrict(plugins []*LoadedPlugin) error {
-	return r.replaceOverrides(plugins, false)
-}
-
-func (r *Registry) replaceOverrides(plugins []*LoadedPlugin, retainIncumbents bool) error {
 	overridePlugins := make(map[string]*LoadedPlugin, len(plugins))
 	for _, plugin := range plugins {
 		if plugin == nil {
@@ -663,10 +642,7 @@ func (r *Registry) replaceOverrides(plugins []*LoadedPlugin, retainIncumbents bo
 	if samePluginMap(r.override, overridePlugins) {
 		return nil
 	}
-	var retainCurrent map[string]struct{}
-	if retainIncumbents {
-		retainCurrent = pluginMapKeys(overridePlugins)
-	}
+	retainCurrent := pluginMapKeys(overridePlugins)
 	generation, routingErrors, err := r.prepareGeneration(filterDisabledFactory(r.factory, r.disabledFactory), overridePlugins, true, retainCurrent)
 	if err != nil {
 		r.recordRebuildFailure(err)
@@ -916,10 +892,6 @@ func cloneMeta(meta Meta) Meta {
 	meta.Routes = append([]Route(nil), meta.Routes...)
 	for index := range meta.Routes {
 		meta.Routes[index].Models = append([]string(nil), meta.Routes[index].Models...)
-		if retain := meta.Routes[index].RetainResult; retain != nil {
-			value := *retain
-			meta.Routes[index].RetainResult = &value
-		}
 	}
 	meta.Protocols = append([]ProtocolClaim(nil), meta.Protocols...)
 	for index := range meta.Protocols {
@@ -936,7 +908,6 @@ func cloneMeta(meta Meta) Meta {
 		profile := &meta.UsageProfiles[index]
 		profile.Models = append([]string(nil), profile.Models...)
 		profile.Schema = CloneUsageSchema(profile.Schema)
-		profile.CompatibilitySchema = CloneUsageSchema(profile.CompatibilitySchema)
 		profile.Examples = CloneUsageExamples(profile.Examples)
 	}
 	return meta
@@ -1486,14 +1457,6 @@ func normalizeV1Meta(meta *Meta) error {
 		if err := validateUsageSchema(profile.Schema); err != nil {
 			return fmt.Errorf("plugin meta usageProfiles[%d]: %w", index, err)
 		}
-		if err := validateUsageSchema(profile.CompatibilitySchema); err != nil {
-			return fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema: %w", index, err)
-		}
-		for name := range profile.CompatibilitySchema {
-			if _, duplicate := profile.Schema[name]; duplicate {
-				return fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema duplicates field %q", index, name)
-			}
-		}
 		if err := validateUsageExamples(profile.Schema, profile.Examples); err != nil {
 			return fmt.Errorf("plugin meta usageProfiles[%d]: %w", index, err)
 		}
@@ -1525,7 +1488,7 @@ func decodeUsageProfiles(value any) ([]UsageProfile, error) {
 			return nil, fmt.Errorf("plugin meta usageProfiles[%d] must be an object", index)
 		}
 		for key := range object {
-			if key != "models" && key != "schema" && key != "compatibilitySchema" && key != "examples" {
+			if key != "models" && key != "schema" && key != "examples" {
 				return nil, fmt.Errorf("plugin meta usageProfiles[%d] has unknown field %q", index, key)
 			}
 		}
@@ -1538,15 +1501,6 @@ func decodeUsageProfiles(value any) ([]UsageProfile, error) {
 			return nil, fmt.Errorf("plugin meta usageProfiles[%d]: %w", index, err)
 		}
 		profile := UsageProfile{Models: models, Schema: schema}
-		if compatibility, exists := object["compatibilitySchema"]; exists {
-			profile.CompatibilitySchema, err = decodeUsageSchema(compatibility)
-			if err != nil {
-				return nil, fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema: %w", index, err)
-			}
-			if profile.CompatibilitySchema == nil {
-				return nil, fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema must be an object", index)
-			}
-		}
 		if examples, exists := object["examples"]; exists {
 			profile.Examples, err = decodeUsageExamples(examples)
 			if err != nil {
@@ -1766,10 +1720,6 @@ func validateUsageExamples(schema map[string]UsageFieldSchema, examples []UsageE
 			if err := validateUsageExampleValue(value, field); err != nil {
 				return fmt.Errorf("plugin meta usageExamples[%d] facts field %q %s", index, key, err.Error())
 			}
-			if field.Type == "number" {
-				number, _ := pluginDecimal(value)
-				examples[index].Facts[key] = number.String()
-			}
 		}
 	}
 	return nil
@@ -1792,20 +1742,36 @@ func validateUsageExampleValue(value any, field UsageFieldSchema) error {
 		}
 		return nil
 	}
-	number, err := pluginDecimal(value)
-	if err != nil || number.IsNegative() {
-		return fmt.Errorf("must be a finite non-negative number with exact decimal text")
+	number, ok := usageExampleNumber(value)
+	if !ok {
+		return fmt.Errorf("must be a finite non-negative number")
 	}
-	limit := int64(relaycommon.MaxTaskDurationSeconds)
+	if math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
+		return fmt.Errorf("must be a finite non-negative number")
+	}
+	limit := float64(relaycommon.MaxTaskDurationSeconds)
 	if field.Unit == "count" {
-		limit = int64(dto.MaxImageN)
+		limit = float64(dto.MaxImageN)
 	} else if field.Unit == "token" || field.Unit == "credit" {
-		limit = int64(common.MaxQuota)
+		limit = float64(common.MaxQuota)
 	}
-	if number.GreaterThan(decimal.NewFromInt(limit)) {
+	if number > limit {
 		return fmt.Errorf("exceeds the host limit")
 	}
 	return nil
+}
+
+func usageExampleNumber(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case int64:
+		return float64(number), true
+	case int:
+		return float64(number), true
+	default:
+		return 0, false
+	}
 }
 
 func decodeRoutes(value any) ([]Route, error) {

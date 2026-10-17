@@ -1,9 +1,9 @@
-// Adapted from new-api 7209b6db95ef; retained under the repository license.
 package oaichat
 
 import (
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 )
@@ -36,6 +36,8 @@ func chatAnnotationsToClaude(raw json.RawMessage, text string) []json.RawMessage
 		}
 		if citedText := kitutil.Interface2String(citation["cited_text"]); citedText != "" {
 			converted["cited_text"] = citedText
+		} else if citedText := citedTextFromAnnotation(text, citation); citedText != "" {
+			converted["cited_text"] = citedText
 		}
 		if encryptedIndex := kitutil.Interface2String(citation["encrypted_index"]); encryptedIndex != "" {
 			converted["encrypted_index"] = encryptedIndex
@@ -51,10 +53,17 @@ func chatAnnotationsToClaude(raw json.RawMessage, text string) []json.RawMessage
 	return citations
 }
 
-func claudeCitationHasSource(citation map[string]any) bool {
-	quote, _ := citation["cited_text"].(string)
-	reference, _ := citation["encrypted_index"].(string)
-	return quote != "" && reference != ""
+func citedTextFromAnnotation(text string, citation map[string]any) string {
+	start, startOK := annotationIndex(citation["start_index"])
+	end, endOK := annotationIndex(citation["end_index"])
+	if !startOK || !endOK || start < 0 || end <= start {
+		return ""
+	}
+	if end > utf8.RuneCountInString(text) {
+		return ""
+	}
+	runes := []rune(text)
+	return string(runes[start:end])
 }
 
 func annotationIndex(value any) (int, bool) {

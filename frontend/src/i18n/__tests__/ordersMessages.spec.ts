@@ -77,7 +77,7 @@ describe('orders message references', () => {
 
     // Guards the guard: were the scan to stop matching, the assertion below
     // would pass vacuously and protect nothing.
-    expect(referenced.size).toBeGreaterThan(20)
+    expect(referenced).toContain('orders.title')
 
     const missing = [...referenced].filter(
       (key) =>

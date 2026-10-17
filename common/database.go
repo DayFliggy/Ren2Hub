@@ -1,11 +1,5 @@
 package common
 
-import (
-	"fmt"
-	"net/url"
-	"strings"
-)
-
 type DatabaseType string
 
 const (
@@ -47,35 +41,24 @@ func UsingLogDatabase(databaseType DatabaseType) bool {
 	return logDatabaseType == databaseType
 }
 
-var SQLitePath = "one-api.db"
-
-// SQLiteDSN applies the same locking policy to default and custom database paths.
-// Keep unrelated driver options, but never allow a supplied DSN to weaken the
-// single-writer transaction or busy-timeout policy.
-func SQLiteDSN(path string) (string, error) {
-	if strings.TrimSpace(path) == "" {
-		return "", fmt.Errorf("SQLite database path is empty")
-	}
-	filename, query, _ := strings.Cut(path, "?")
-	options, err := url.ParseQuery(query)
-	if err != nil {
-		return "", fmt.Errorf("invalid SQLite connection options: %w", err)
-	}
-	pragmas := make([]string, 0, len(options["_pragma"])+2)
-	for _, pragma := range options["_pragma"] {
-		name := strings.ToLower(strings.TrimSpace(pragma))
-		parts := strings.FieldsFunc(name, func(r rune) bool { return r == '(' || r == '=' })
-		if len(parts) == 0 {
-			return "", fmt.Errorf("empty SQLite pragma")
-		}
-		name = strings.TrimSpace(parts[0])
-		if name != "busy_timeout" && name != "journal_mode" {
-			pragmas = append(pragmas, pragma)
-		}
-	}
-	options.Del("_busy_timeout")
-	options.Del("_journal_mode")
-	options.Set("_txlock", "immediate")
-	options["_pragma"] = append(pragmas, "busy_timeout(30000)", "journal_mode(WAL)")
-	return filename + "?" + options.Encode(), nil
-}
+// SQLitePath is the DSN for the default SQLite database. It uses WAL journal
+// mode so readers are never blocked by the single writer, plus a 30s busy
+// timeout for writers to queue.
+//
+// Two details are non-obvious and both are required for concurrent correctness:
+//
+//  1. The busy timeout must be passed as a `_pragma=busy_timeout(30000)` DSN
+//     parameter. The pure-Go driver (modernc.org/sqlite, used through
+//     github.com/glebarez/sqlite) silently ignores the plain `_busy_timeout=`
+//     form, so without this the effective timeout stays at SQLite's 5s default
+//     and concurrent writes surface as "database is locked" (see #6805).
+//
+//  2. `_txlock=immediate` (BEGIN IMMEDIATE) must be enabled. Without it, a
+//     transaction that first SELECTs (establishing a read snapshot) and then
+//     writes can hit SQLITE_BUSY_SNAPSHOT when another connection commits in
+//     between; the busy handler does not cover that case, so the write fails
+//     instantly no matter the timeout. BEGIN IMMEDIATE takes the write lock up
+//     front, so writers serialize through the busy timeout instead of dying on
+//     a stale snapshot. Autocommit SELECTs stay concurrent because WAL keeps
+//     readers unlocked.
+var SQLitePath = "one-api.db?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate"

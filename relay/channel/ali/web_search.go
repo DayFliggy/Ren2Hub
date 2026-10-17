@@ -1,23 +1,86 @@
 package ali
 
 import (
+	"encoding/json"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
+	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/tidwall/gjson"
 )
 
-// aliSearchAgentKey is the DashScope web-search tool-price key. The Responses
-// API "bills web search like the agent strategy"; the Anthropic-compatible
-// endpoint publishes no search price and is billed like agent too.
-const aliSearchAgentKey = "search_strategy_agent"
+// DashScope web-search tool-price keys (search_strategy_* prices in
+// setting/operation_setting/tools.go). The compatible-mode Chat encoder never
+// writes search_strategy, so DashScope runs turbo; the Responses API "bills
+// web search like the agent strategy"; the Anthropic-compatible endpoint
+// publishes no search price and is billed like agent too (owner decision N9).
+const (
+	aliSearchTurboKey = "search_strategy_turbo"
+	aliSearchAgentKey = "search_strategy_agent"
+)
 
-// aliWebSearchToolPriceKeys lists, per declared hosted tool type prefix, the
-// price key DashScope bills for web search on its Responses and
-// Anthropic-compatible endpoints.
-var aliWebSearchToolPriceKeys = map[string][]string{
-	dto.BuildInToolWebSearch: {aliSearchAgentKey},
+// aliMaxAssignedSites is the documented search_options.assigned_site_list
+// limit; the list only applies to the default turbo strategy.
+const aliMaxAssignedSites = 25
+
+// encodeWebSearch maps hosted web search onto the DashScope OpenAI-compatible
+// Chat fields enable_search and search_options
+// (https://help.aliyun.com/zh/model-studio/web-search). search_strategy is
+// never written, so DashScope runs its default turbo strategy, and
+// search_context_size is not mapped to a strategy: a strategy changes the
+// price, not the amount of retrieved context.
+//
+// enable_search only works on the models DashScope lists. Other models answer
+// HTTP 400 "This model does not support enable_search.", and models that only
+// accept search_strategy=agent (qwen3.8-omni-flash) answer 400 as well. The
+// encoder sees no model support matrix and does not gate on model names, so
+// the request is sent as is and the upstream 400 reaches the client.
+func encodeWebSearch(info *relaycommon.RelayInfo) convmeta.WebSearchEncoder {
+	return func(call convmeta.WebSearchCall) (*convmeta.WebSearchEncoding, error) {
+		if call.Chat == nil {
+			return nil, nil
+		}
+		var diagnostics []types.ConversionDiagnostic
+		options := map[string]any{}
+		if call.Forced {
+			options["forced_search"] = true
+			// Compatible-mode Chat responses report no search usage; a forced
+			// search is the only proof that one ran.
+			info.RecordRequestInferredToolCall(aliSearchTurboKey)
+		}
+		spec := call.Spec
+		switch {
+		case len(spec.AllowedDomains) > aliMaxAssignedSites:
+			diagnostics = append(diagnostics, call.SemanticLoss("unsupported_domain_filter", "DashScope assigned_site_list accepts at most 25 sites; the domain filter was dropped"))
+		case len(spec.AllowedDomains) > 0:
+			options["assigned_site_list"] = spec.AllowedDomains
+		}
+		if len(spec.BlockedDomains) > 0 {
+			diagnostics = append(diagnostics, call.SemanticLoss("unsupported_domain_filter", "DashScope web search cannot exclude domains; blocked_domains was dropped"))
+		}
+		if spec.MaxUses != nil {
+			diagnostics = append(diagnostics, call.SemanticLoss("unsupported_search_limit", "DashScope web search cannot preserve max_uses"))
+		}
+		if len(spec.AllowedCallers) > 0 || spec.ExternalWebAccess != nil {
+			diagnostics = append(diagnostics, call.SemanticLoss("unsupported_search_controls", "DashScope web search cannot preserve caller or external-access constraints"))
+		}
+		if spec.SearchContextSize != "" || spec.Location != nil || spec.ResponseInclusion != "" || len(spec.ReturnTokenBudget) > 0 {
+			diagnostics = append(diagnostics, call.PresentationLoss("unsupported_search_tuning", "DashScope web search cannot preserve search context size, location, or result tuning"))
+		}
+		call.Chat.EnableSearch = json.RawMessage(`true`)
+		if len(options) > 0 {
+			encoded, err := common.Marshal(options)
+			if err != nil {
+				return nil, err
+			}
+			call.Chat.SearchOptions = encoded
+		}
+		return &convmeta.WebSearchEncoding{Diagnostics: diagnostics}, nil
+	}
 }
 
 // aliResponsesToolUsage bills Responses web search by the count DashScope

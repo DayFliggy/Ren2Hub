@@ -6,13 +6,11 @@ import (
 	"io"
 	"net/http"
 
-	baseconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,15 +56,6 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 }
 
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
-	if request == nil {
-		return nil, errors.New("request is nil")
-	}
-	if err := service.ValidateRequestProjection(info, baseconstant.APITypeCohere, request); err != nil {
-		return nil, err
-	}
-	if len(request.Messages) == 0 || request.Messages[len(request.Messages)-1].Role != "user" {
-		return nil, errors.New("cohere requires a final user message")
-	}
 	return requestOpenAI2Cohere(*request), nil
 }
 

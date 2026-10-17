@@ -5,16 +5,13 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	hosttypes "github.com/QuantumNous/new-api/types"
 )
 
 type TaskStatus string
@@ -57,9 +54,9 @@ type Task struct {
 	TaskID     string                `json:"task_id" gorm:"type:varchar(191);index"` // 第三方id，不一定有/ song id\ Task id
 	Platform   constant.TaskPlatform `json:"platform" gorm:"type:varchar(30);index"` // 平台
 	UserId     int                   `json:"user_id" gorm:"index"`
-	Group      string                `json:"group" gorm:"type:varchar(50)"` // 兼容历史任务记录；不参与统一路由计费
+	Group      string                `json:"group" gorm:"type:varchar(50)"` // 修正计费用
 	ChannelId  int                   `json:"channel_id" gorm:"index"`
-	Quota      common.Quota          `json:"quota" gorm:"type:bigint"`
+	Quota      int                   `json:"quota"`
 	Action     string                `json:"action" gorm:"type:varchar(40);index"` // 任务类型, song, lyrics, description-mode
 	Status     TaskStatus            `json:"status" gorm:"type:varchar(20);index"` // 任务状态
 	FailReason string                `json:"fail_reason"`
@@ -72,9 +69,6 @@ type Task struct {
 	// 禁止返回给用户，内部可能包含key等隐私信息
 	PrivateData TaskPrivateData `json:"-" gorm:"column:private_data;type:json"`
 	Data        json.RawMessage `json:"data" gorm:"type:json"`
-	// SettlementBlock is empty unless a provider terminal result is held
-	// because its settlement cannot be verified (see task_settlement_block.go).
-	SettlementBlock string `json:"-" gorm:"type:varchar(64);index"`
 }
 
 func (t *Task) SetData(data any) {
@@ -92,70 +86,55 @@ type Properties struct {
 	OriginModelName   string `json:"origin_model_name,omitempty"`
 }
 
-func (m *Properties) Scan(val interface{}) error {
-	*m = Properties{}
-	switch value := val.(type) {
-	case nil:
+func (m *Properties) Scan(val any) error {
+	bytesValue := jsonScanBytes(val)
+	if len(bytesValue) == 0 {
+		*m = Properties{}
 		return nil
-	case []byte:
-		if len(value) == 0 {
-			return nil
-		}
-		return common.Unmarshal(value, m)
-	case string:
-		if value == "" {
-			return nil
-		}
-		return common.UnmarshalJsonStr(value, m)
-	default:
-		return fmt.Errorf("unsupported task properties database value %T", val)
 	}
+	return common.Unmarshal(bytesValue, m)
 }
 
 func (m Properties) Value() (driver.Value, error) {
 	if m == (Properties{}) {
 		return nil, nil
 	}
-	data, err := common.Marshal(m)
-	return string(data), err
+	// 必须返回 string 而非 []byte:PG simple protocol 下 []byte 按 bytea 编码,
+	// 写 json 列会触发 SQLSTATE 22P02。
+	b, err := common.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 type TaskPrivateData struct {
-	// Key remains only to read tasks created before credential references were
-	// introduced. New tasks must resolve credentials from their channel.
-	Key                 string                   `json:"key,omitempty"`
-	ChannelKeyIndex     int                      `json:"channel_key_index,omitempty"`
-	CredentialVersion   int                      `json:"credential_version,omitempty"`
-	CredentialID        string                   `json:"credential_id,omitempty"`
-	EndpointID          string                   `json:"endpoint_id,omitempty"`
-	UpstreamTaskID      string                   `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	SubmissionRequestID string                   `json:"submission_request_id,omitempty"`
-	ResultURL           string                   `json:"result_url,omitempty"` // 任务成功后的结果 URL（视频地址等）
-	PluginRef           *hosttypes.TaskPluginRef `json:"plugin_ref,omitempty"`
-	PluginAttemptID     string                   `json:"plugin_attempt_id,omitempty"`
-	Execution           *TaskExecutionSnapshot   `json:"execution,omitempty"`
-	ResponsesBackground bool                     `json:"responses_background,omitempty"`
-	PluginState         json.RawMessage          `json:"plugin_state,omitempty"`
-	PollFailures        int                      `json:"poll_failures,omitempty"`
-	ResultDiscarded     bool                     `json:"result_discarded,omitempty"`
-	CompletionUsage     *TaskCompletionUsage     `json:"completion_usage,omitempty"`
-	// BlockedResult is the provider terminal result held while settlement is
-	// blocked, in the owning table's shape (TaskBlockedResult for tasks, the
-	// provider update for Midjourney). It is cleared when the task settles.
-	BlockedResult json.RawMessage `json:"blocked_result,omitempty"`
+	Key            string `json:"key,omitempty"`
+	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
+	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	// Execution records safe, immutable request provenance. It lives next to
+	// other private task state so public task DTOs cannot expose it by accident.
+	Execution *TaskExecutionSnapshot `json:"execution,omitempty"`
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
-	BillingSource  string              `json:"billing_source,omitempty"`  // 新任务使用 wallet；保留历史来源供结算时校验
+	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet"
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
 	NodeName       string              `json:"node_name,omitempty"`       // 发起任务的节点名，轮询结算阶段据此归属日志而非最后查询节点
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
-}
-
-// TaskCompletionUsage retains provider evidence even if pricing cannot settle it.
-type TaskCompletionUsage struct {
-	CompletionTokens int            `json:"completion_tokens"`
-	TotalTokens      int            `json:"total_tokens"`
-	Facts            map[string]any `json:"facts,omitempty"`
-	Error            string         `json:"error,omitempty"`
+	// ResponsesBackground records that the openai_responses create request
+	// asked for background:true. Every task is durable and survives client
+	// disconnect regardless; this only echoes the protocol-level request
+	// attribute back on retrieval snapshots.
+	ResponsesBackground bool `json:"responses_background,omitempty"`
+	// PluginState is plugin-owned cross-round data. Unlike Task.Data it is
+	// only replaced when a hook explicitly returns state.
+	PluginState json.RawMessage `json:"plugin_state,omitempty"`
+	// PollFailures counts consecutive unrecognized or transient poll outcomes.
+	PollFailures int `json:"poll_failures,omitempty"`
+	// ResultDiscarded marks an immediate terminal result whose submit route
+	// declared retainResult: false. The upstream snapshot was never written
+	// and every retrieval surface treats the task as not found. The zero
+	// value keeps historical rows retained and retrievable.
+	ResultDiscarded bool `json:"result_discarded,omitempty"`
 }
 
 type TaskExecutionSnapshot struct {
@@ -164,11 +143,12 @@ type TaskExecutionSnapshot struct {
 	TaskPlugin  *TaskPluginSnapshot `json:"task_plugin,omitempty"`
 }
 
+// TaskPluginSnapshot contains credential-free identity only. Plugin source,
+// request/response payloads, and channel secrets must never be added here.
 type TaskPluginSnapshot struct {
 	Key        string                    `json:"key"`
 	Name       string                    `json:"name"`
 	Version    string                    `json:"version"`
-	SourceHash string                    `json:"source_hash"`
 	Author     *TaskPluginAuthorSnapshot `json:"author,omitempty"`
 	APIVersion int                       `json:"api_version"`
 	Generation uint64                    `json:"generation"`
@@ -179,28 +159,21 @@ type TaskPluginAuthorSnapshot struct {
 	URL  string `json:"url,omitempty"`
 }
 
-func (t *Task) ResultRetrievable() bool { return t != nil && !t.PrivateData.ResultDiscarded }
-
-// Clear discarded payloads before every database write, including an INSERT
-// inside an uncommitted terminal transaction. Keep the caller's response and
-// the result hash input intact; removing fields only in a later UPDATE would
-// still put the payload in database journals.
-func taskResultForStorage(data json.RawMessage, privateData TaskPrivateData) (json.RawMessage, TaskPrivateData) {
-	if privateData.ResultDiscarded {
-		data = nil
-		privateData.PluginState = nil
-		privateData.ResultURL = ""
-	}
-	return data, privateData
+// TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
+type TaskBillingContext struct {
+	ModelPrice      float64                      `json:"model_price,omitempty"`       // 模型单价
+	GroupRatio      float64                      `json:"group_ratio,omitempty"`       // 分组倍率
+	ModelRatio      float64                      `json:"model_ratio,omitempty"`       // 模型倍率
+	OtherRatios     map[string]float64           `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
+	OriginModelName string                       `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
+	PerCallBilling  bool                         `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	TieredSnapshot  *billingexpr.BillingSnapshot `json:"tiered_snapshot,omitempty"`
 }
 
-// TaskBillingContext keeps the accepted immutable quote and separate usage/result evidence.
-type TaskBillingContext struct {
-	AttemptID       string                `json:"attempt_id"`
-	Quote           *billing.Quote        `json:"quote"`
-	Usage           *billing.Usage        `json:"usage"`
-	Charge          *billing.ChargeResult `json:"charge,omitempty"`
-	OriginModelName string                `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
+// ResultRetrievable reports whether retrieval surfaces (native query routes,
+// protocol retrieve endpoints, artifact projection) may serve this task.
+func (t *Task) ResultRetrievable() bool {
+	return !t.PrivateData.ResultDiscarded
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -227,32 +200,28 @@ func GenerateTaskID() string {
 	return "task_" + key
 }
 
-func (p *TaskPrivateData) Scan(val interface{}) error {
-	*p = TaskPrivateData{}
-	switch value := val.(type) {
-	case nil:
+func (p *TaskPrivateData) Scan(val any) error {
+	bytesValue := jsonScanBytes(val)
+	if len(bytesValue) == 0 {
 		return nil
-	case []byte:
-		if len(value) == 0 {
-			return nil
-		}
-		return common.Unmarshal(value, p)
-	case string:
-		if value == "" {
-			return nil
-		}
-		return common.UnmarshalJsonStr(value, p)
-	default:
-		return fmt.Errorf("unsupported task private data database value %T", val)
 	}
+	return common.Unmarshal(bytesValue, p)
 }
 
 func (p TaskPrivateData) Value() (driver.Value, error) {
-	data, err := common.Marshal(p)
-	if err == nil && string(data) == "{}" {
+	if p.Key == "" && p.UpstreamTaskID == "" && p.ResultURL == "" &&
+		p.Execution == nil && p.BillingSource == "" &&
+		p.TokenId == 0 && p.NodeName == "" && p.BillingContext == nil &&
+		!p.ResponsesBackground && len(p.PluginState) == 0 && p.PollFailures == 0 &&
+		!p.ResultDiscarded {
 		return nil, nil
 	}
-	return string(data), err
+	// 同 Properties.Value:string 避免 PG simple protocol 的 bytea 编码。
+	b, err := common.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 // SyncTaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
@@ -270,9 +239,15 @@ type SyncTaskQueryParams struct {
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
 	properties := Properties{}
-	privateData := TaskPrivateData{CredentialVersion: 1}
+	privateData := TaskPrivateData{}
 	if relayInfo != nil && relayInfo.ChannelMeta != nil {
-		privateData.ChannelKeyIndex = relayInfo.ChannelMeta.ChannelMultiKeyIndex
+		// A New API channel may rotate between several gateway tokens, so the
+		// task keeps the key that submitted it and polls with the same identity.
+		if relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGemini ||
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi ||
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeNewAPI {
+			privateData.Key = relayInfo.ChannelMeta.ApiKey
+		}
 		if relayInfo.UpstreamModelName != "" {
 			properties.UpstreamModelName = relayInfo.UpstreamModelName
 		}
@@ -304,74 +279,6 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	return t
 }
 
-// BindCredential runs before submission so later channel edits cannot change
-// the owner recorded for an accepted upstream task.
-func (p *TaskPrivateData) BindCredential(ctx context.Context, channel *Channel, key string) error {
-	if channel == nil || !channel.IsServable() {
-		return ErrGatewayStateUnavailable
-	}
-	credential, err := EnsureGatewayCredential(ctx, channel.Id, key)
-	if err != nil {
-		return err
-	}
-	_, index, err := ResolveGatewayCredential(ctx, channel, credential.ID)
-	if err != nil {
-		return err
-	}
-	p.Key = ""
-	p.ChannelKeyIndex = index
-	p.CredentialVersion = 1
-	p.CredentialID = credential.ID
-	p.EndpointID = channel.GatewayEndpointID()
-	return nil
-}
-
-// ResolveTaskCredential keeps pre-binding task records readable while every
-// versioned record fails closed if its original credential or endpoint changed.
-func ResolveTaskCredential(ctx context.Context, channel *Channel, task *Task) (string, int, error) {
-	if channel != nil && constant.IsRetiredChannelType(channel.Type) {
-		return "", 0, constant.ErrRetiredChannelType
-	}
-	if task != nil && (task.PrivateData.CredentialVersion != 0 || task.PrivateData.CredentialID != "" || task.PrivateData.EndpointID != "") {
-		binding := task.PrivateData
-		if channel == nil || task.ChannelId != channel.Id || !channel.IsServable() ||
-			binding.CredentialVersion != 1 || binding.CredentialID == "" || binding.EndpointID != channel.GatewayEndpointID() {
-			return "", 0, ErrGatewayStateUnavailable
-		}
-		key, index, err := ResolveGatewayCredential(ctx, channel, binding.CredentialID)
-		return strings.TrimSpace(key), index, err
-	}
-	if task != nil {
-		if legacyKey := strings.TrimSpace(task.PrivateData.Key); legacyKey != "" {
-			return legacyKey, task.PrivateData.ChannelKeyIndex, nil
-		}
-	}
-	if channel == nil {
-		return "", 0, ErrGatewayStateUnavailable
-	}
-
-	keyIndex := 0
-	if task != nil {
-		keyIndex = task.PrivateData.ChannelKeyIndex
-	}
-	keys := channel.GetKeys()
-	if keyIndex < 0 || keyIndex >= len(keys) {
-		return "", 0, ErrGatewayStateUnavailable
-	}
-	key := strings.TrimSpace(keys[keyIndex])
-	if key == "" {
-		return "", 0, ErrGatewayStateUnavailable
-	}
-	return key, keyIndex, nil
-}
-
-// ResolveTaskChannelKey is the compatibility entry point for task polling and
-// result downloads, where an empty credential already means unavailable.
-func ResolveTaskChannelKey(channel *Channel, task *Task) string {
-	key, _, _ := ResolveTaskCredential(context.Background(), channel, task)
-	return key
-}
-
 func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQueryParams) []*Task {
 	var tasks []*Task
 	var err error
@@ -399,7 +306,9 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
 
-	// Lists never carry the provider snapshot; results are read through artifacts.
+	// 获取数据
+	// Task lists never render the persisted upstream snapshot; the dashboard
+	// loads media through the artifacts endpoint instead.
 	err = query.Omit("channel_id", "data").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
@@ -444,7 +353,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
 
-	// Lists never carry the provider snapshot; results are read through artifacts.
+	// 获取数据
 	err = query.Omit("data").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
@@ -453,15 +362,10 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	return tasks
 }
 
-// Status alone decides whether a task is terminal. A provider may report
-// "100%" while the job is still running; filtering on progress would stop
-// polling and the timeout sweep from ever releasing that reservation.
-// A settlement-blocked task holds a provider result, so it is filtered here
-// rather than skipped later, where it could fill every page of the sweep.
 func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	var tasks []*Task
-	err := DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
-		Where(settlementNotBlocked).
+	err := DB.Where("progress != ?", "100%").
+		Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
 		Where("submit_time < ?", cutoffUnix).
 		Order("submit_time").
 		Limit(limit).
@@ -475,9 +379,8 @@ func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
-	// Settlement-blocked tasks already hold their provider result and are
-	// retried from it (GetSettlementBlockedTasks), never polled again.
-	err = DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).Where(settlementNotBlocked).Limit(limit).Order("id").Find(&tasks).Error
+	// get all tasks progress is not 100%
+	err = DB.Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -491,10 +394,44 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 func HasUnfinishedSyncTasks() bool {
 	var id int64
 	err := DB.Model(&Task{}).
-		Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
+		Where("progress != ?", "100%").
+		Where("status != ?", TaskStatusFailure).
+		Where("status != ?", TaskStatusSuccess).
 		Limit(1).
 		Pluck("id", &id).Error
 	return err == nil && id != 0
+}
+
+func GetByOnlyTaskId(taskId string) (*Task, bool, error) {
+	if taskId == "" {
+		return nil, false, nil
+	}
+	var task *Task
+	var err error
+	err = DB.Where("task_id = ?", taskId).First(&task).Error
+	exist, err := RecordExist(err)
+	if err != nil {
+		return nil, false, err
+	}
+	return task, exist, err
+}
+
+// GetUniqueByOnlyTaskId resolves a public task identifier only when exactly one
+// row owns it. Historical task identifiers were not globally unique, so
+// capability-based reads must fail closed instead of selecting an arbitrary
+// tenant's row.
+func GetUniqueByOnlyTaskId(taskId string) (*Task, bool, error) {
+	if taskId == "" {
+		return nil, false, nil
+	}
+	var tasks []*Task
+	if err := DB.Where("task_id = ?", taskId).Order("id").Limit(2).Find(&tasks).Error; err != nil {
+		return nil, false, err
+	}
+	if len(tasks) != 1 {
+		return nil, false, nil
+	}
+	return tasks[0], true, nil
 }
 
 func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
@@ -512,24 +449,51 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 	return task, exist, err
 }
 
-func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
-	if len(taskIds) == 0 {
+func GetByTaskIdsForPlatforms(userID int, platforms []constant.TaskPlatform, taskIDs []string) ([]*Task, error) {
+	if len(platforms) == 0 || len(taskIDs) == 0 {
 		return nil, nil
 	}
-	var task []*Task
-	var err error
-	err = DB.Where("user_id = ? and task_id in (?)", userId, taskIds).
-		Find(&task).Error
+	var tasks []*Task
+	err := DB.
+		Where("user_id = ? AND platform IN ? AND task_id IN ?", userID, platforms, taskIDs).
+		Find(&tasks).Error
 	if err != nil {
 		return nil, err
 	}
-	return task, nil
+	return tasks, nil
+}
+
+// GetTaskForProtocolObservation reloads one public task through the ownership
+// boundary used by long-lived plugin protocol observers. A missing task,
+// foreign user, and wrong plugin platform are deliberately indistinguishable.
+func GetTaskForProtocolObservation(ctx context.Context, userID int, platform constant.TaskPlatform, taskID string) (*Task, bool, error) {
+	if taskID == "" {
+		return nil, false, nil
+	}
+	var task Task
+	err := DB.WithContext(ctx).
+		Where("user_id = ? AND platform = ? AND task_id = ?", userID, platform, taskID).
+		First(&task).Error
+	exists, err := RecordExist(err)
+	if err != nil || !exists {
+		return nil, exists, err
+	}
+	return &task, true, nil
 }
 
 func (Task *Task) Insert() error {
-	var err error
-	err = DB.Create(Task).Error
-	return err
+	return Task.InsertWithContext(context.Background())
+}
+
+// InsertWithContext creates the row. omitColumns are left out of the INSERT
+// (for example "data" when the submit route discards the upstream snapshot)
+// while the in-memory task keeps its values for presentation.
+func (Task *Task) InsertWithContext(ctx context.Context, omitColumns ...string) error {
+	tx := DB.WithContext(ctx)
+	if len(omitColumns) > 0 {
+		tx = tx.Omit(omitColumns...)
+	}
+	return tx.Create(Task).Error
 }
 
 type taskSnapshot struct {
@@ -551,7 +515,9 @@ func (s taskSnapshot) Equal(other taskSnapshot) bool {
 		s.FinishTime == other.FinishTime &&
 		s.FailReason == other.FailReason &&
 		s.ResultURL == other.ResultURL &&
-		bytes.Equal(s.Data, other.Data) && bytes.Equal(s.PluginState, other.PluginState) && s.PollFailures == other.PollFailures
+		bytes.Equal(s.Data, other.Data) &&
+		bytes.Equal(s.PluginState, other.PluginState) &&
+		s.PollFailures == other.PollFailures
 }
 
 func (t *Task) Snapshot() taskSnapshot {
@@ -574,8 +540,6 @@ func (Task *Task) Update() error {
 	return err
 }
 
-var taskPollColumns = []string{"status", "progress", "submit_time", "start_time", "finish_time", "fail_reason", "data", "private_data", "updated_at"}
-
 func (t *Task) UpdateQuota() error {
 	return DB.Model(t).Update("quota", t.Quota).Error
 }
@@ -586,13 +550,11 @@ func (t *Task) UpdateQuota() error {
 // reports changed rows rather than matched rows, so a same-value no-op update
 // can also return false even when the status predicate still matched.
 //
-// Uses Model().Select(...).Updates() instead of Save() because GORM's Save
+// Uses Model().Select("*").Updates() instead of Save() because GORM's Save
 // falls back to INSERT ON CONFLICT when the WHERE-guarded UPDATE matches
-// zero rows, which silently bypasses the CAS guard. Only the columns polling
-// owns are written, so a stale in-memory copy cannot overwrite quota or
-// ownership columns that billing and submission manage.
+// zero rows, which silently bypasses the CAS guard.
 func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
-	result := DB.Model(t).Where("status = ?", fromStatus).Select(taskPollColumns).Updates(t)
+	result := DB.Model(t).Where("status = ?", fromStatus).Select("*").Updates(t)
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -603,7 +565,7 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 // WARNING: This function has NO CAS (Compare-And-Swap) guard — it will overwrite
 // any concurrent status changes. DO NOT use in billing/quota lifecycle flows
 // (e.g., timeout, success, failure transitions that trigger refunds or settlements).
-// For terminal transitions involving billing, use PersistTaskCompletion instead.
+// For status transitions that involve billing, use Task.UpdateWithStatus() instead.
 func TaskBulkUpdateByID(ids []int64, params map[string]any) error {
 	if len(ids) == 0 {
 		return nil
@@ -611,6 +573,11 @@ func TaskBulkUpdateByID(ids []int64, params map[string]any) error {
 	return DB.Model(&Task{}).
 		Where("id in (?)", ids).
 		Updates(params).Error
+}
+
+type TaskQuotaUsage struct {
+	Mode  string  `json:"mode"`
+	Count float64 `json:"count"`
 }
 
 // TaskCountAllTasks returns total tasks that match the given query params (admin usage)
@@ -681,11 +648,11 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.SetProgressStr(t.Progress)
 	openAIVideo.CreatedAt = t.CreatedAt
 	if t.Status == TaskStatusSuccess {
-		openAIVideo.CompletedAt = t.FinishTime
-		if openAIVideo.CompletedAt == 0 {
+		if t.FinishTime != 0 {
+			openAIVideo.CompletedAt = t.FinishTime
+		} else {
 			openAIVideo.CompletedAt = t.UpdatedAt
 		}
 	}
-	openAIVideo.SetMetadata("url", t.GetResultURL())
 	return openAIVideo
 }

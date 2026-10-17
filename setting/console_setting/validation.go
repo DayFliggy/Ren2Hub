@@ -23,21 +23,57 @@ var (
 	slugRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 )
 
-// The validators below build each message at its call site, because the web
-// console translation check reads message keys only from string literals.
+func parseJSONArray(jsonStr string, formatErrorKey string) ([]map[string]any, error) {
+	var list []map[string]any
+	if err := common.UnmarshalJsonStr(jsonStr, &list); err != nil {
+		return nil, common.NewMessage(formatErrorKey, map[string]any{"error": err.Error()})
+	}
+	return list, nil
+}
 
 func exceedsMaxCharacters(s string, max int) bool {
 	return len(utf16.Encode([]rune(s))) > max
 }
 
-func hasDangerousContent(content string) bool {
+// itemMessages are the keys of the URL and content checks shared by the
+// API info and Uptime Kuma group lists.
+type itemMessages struct {
+	invalidURL    string
+	unparsableURL string
+	unsafeContent string
+}
+
+var (
+	apiInfoMessages = itemMessages{
+		invalidURL:    "API info #{{index}} has an invalid URL format",
+		unparsableURL: "API info #{{index}} has a URL that cannot be parsed: {{error}}",
+		unsafeContent: "API info #{{index}} contains disallowed content",
+	}
+	groupMessages = itemMessages{
+		invalidURL:    "Group #{{index}} has an invalid URL format",
+		unparsableURL: "Group #{{index}} has a URL that cannot be parsed: {{error}}",
+		unsafeContent: "Group #{{index}} contains disallowed content",
+	}
+)
+
+func validateURL(urlStr string, index int, messages itemMessages) error {
+	if !urlRegex.MatchString(urlStr) {
+		return common.NewMessage(messages.invalidURL, map[string]any{"index": index})
+	}
+	if _, err := url.Parse(urlStr); err != nil {
+		return common.NewMessage(messages.unparsableURL, map[string]any{"index": index, "error": err.Error()})
+	}
+	return nil
+}
+
+func checkDangerousContent(content string, index int, messages itemMessages) error {
 	lower := strings.ToLower(content)
 	for _, d := range dangerousChars {
 		if strings.Contains(lower, d) {
-			return true
+			return common.NewMessage(messages.unsafeContent, map[string]any{"index": index})
 		}
 	}
-	return false
+	return nil
 }
 
 func getJSONList(jsonStr string) []map[string]any {
@@ -69,9 +105,9 @@ func ValidateConsoleSettings(settingsStr string, settingType string) error {
 }
 
 func validateApiInfo(apiInfoStr string) error {
-	var apiInfoList []map[string]any
-	if err := common.UnmarshalJsonStr(apiInfoStr, &apiInfoList); err != nil {
-		return common.NewMessage("Invalid API info format: {{error}}", map[string]any{"error": err.Error()})
+	apiInfoList, err := parseJSONArray(apiInfoStr, "Invalid API info format: {{error}}")
+	if err != nil {
+		return err
 	}
 
 	if len(apiInfoList) > 50 {
@@ -96,11 +132,8 @@ func validateApiInfo(apiInfoStr string) error {
 			return common.NewMessage("API info #{{index}} is missing the color field", map[string]any{"index": i + 1})
 		}
 
-		if !urlRegex.MatchString(urlStr) {
-			return common.NewMessage("API info #{{index}} has an invalid URL format", map[string]any{"index": i + 1})
-		}
-		if _, err := url.Parse(urlStr); err != nil {
-			return common.NewMessage("API info #{{index}} has a URL that cannot be parsed: {{error}}", map[string]any{"index": i + 1, "error": err.Error()})
+		if err := validateURL(urlStr, i+1, apiInfoMessages); err != nil {
+			return err
 		}
 
 		if exceedsMaxCharacters(urlStr, 500) {
@@ -117,8 +150,11 @@ func validateApiInfo(apiInfoStr string) error {
 			return common.NewMessage("API info #{{index}} has an invalid color value", map[string]any{"index": i + 1})
 		}
 
-		if hasDangerousContent(description) || hasDangerousContent(route) {
-			return common.NewMessage("API info #{{index}} contains disallowed content", map[string]any{"index": i + 1})
+		if err := checkDangerousContent(description, i+1, apiInfoMessages); err != nil {
+			return err
+		}
+		if err := checkDangerousContent(route, i+1, apiInfoMessages); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -129,9 +165,9 @@ func GetApiInfo() []map[string]any {
 }
 
 func validateAnnouncements(announcementsStr string) error {
-	var list []map[string]any
-	if err := common.UnmarshalJsonStr(announcementsStr, &list); err != nil {
-		return common.NewMessage("Invalid announcements format: {{error}}", map[string]any{"error": err.Error()})
+	list, err := parseJSONArray(announcementsStr, "Invalid announcements format: {{error}}")
+	if err != nil {
+		return err
 	}
 	if len(list) > 100 {
 		return common.NewMessage("Announcements cannot exceed 100 entries")
@@ -175,9 +211,9 @@ func validateAnnouncements(announcementsStr string) error {
 }
 
 func validateFAQ(faqStr string) error {
-	var list []map[string]any
-	if err := common.UnmarshalJsonStr(faqStr, &list); err != nil {
-		return common.NewMessage("Invalid FAQ format: {{error}}", map[string]any{"error": err.Error()})
+	list, err := parseJSONArray(faqStr, "Invalid FAQ format: {{error}}")
+	if err != nil {
+		return err
 	}
 	if len(list) > 100 {
 		return common.NewMessage("FAQ cannot exceed 100 entries")
@@ -225,9 +261,9 @@ func GetFAQ() []map[string]any {
 }
 
 func validateUptimeKumaGroups(groupsStr string) error {
-	var groups []map[string]any
-	if err := common.UnmarshalJsonStr(groupsStr, &groups); err != nil {
-		return common.NewMessage("Invalid Uptime Kuma group settings format: {{error}}", map[string]any{"error": err.Error()})
+	groups, err := parseJSONArray(groupsStr, "Invalid Uptime Kuma group settings format: {{error}}")
+	if err != nil {
+		return err
 	}
 
 	if len(groups) > 20 {
@@ -258,11 +294,8 @@ func validateUptimeKumaGroups(groupsStr string) error {
 			description = ""
 		}
 
-		if !urlRegex.MatchString(urlStr) {
-			return common.NewMessage("Group #{{index}} has an invalid URL format", map[string]any{"index": i + 1})
-		}
-		if _, err := url.Parse(urlStr); err != nil {
-			return common.NewMessage("Group #{{index}} has a URL that cannot be parsed: {{error}}", map[string]any{"index": i + 1, "error": err.Error()})
+		if err := validateURL(urlStr, i+1, groupMessages); err != nil {
+			return err
 		}
 
 		if exceedsMaxCharacters(categoryName, 50) {
@@ -282,8 +315,11 @@ func validateUptimeKumaGroups(groupsStr string) error {
 			return common.NewMessage("Group #{{index}} slug can only contain letters, numbers, underscores and hyphens", map[string]any{"index": i + 1})
 		}
 
-		if hasDangerousContent(description) || hasDangerousContent(categoryName) {
-			return common.NewMessage("Group #{{index}} contains disallowed content", map[string]any{"index": i + 1})
+		if err := checkDangerousContent(description, i+1, groupMessages); err != nil {
+			return err
+		}
+		if err := checkDangerousContent(categoryName, i+1, groupMessages); err != nil {
+			return err
 		}
 	}
 	return nil

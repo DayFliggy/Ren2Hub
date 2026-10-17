@@ -14,7 +14,10 @@ import (
 func CreateLogCleanupSystemTask(c *gin.Context) {
 	targetTimestamp, _ := strconv.ParseInt(c.Query("target_timestamp"), 10, 64)
 	if targetTimestamp == 0 {
-		common.ApiErrorT(c, "target timestamp is required")
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "target timestamp is required",
+		})
 		return
 	}
 
@@ -34,7 +37,10 @@ func CreateLogCleanupSystemTask(c *gin.Context) {
 func GetCurrentSystemTask(c *gin.Context) {
 	taskType := c.Query("type")
 	if taskType == "" {
-		common.ApiErrorT(c, "type is required")
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "type is required",
+		})
 		return
 	}
 
@@ -66,7 +72,7 @@ func ListSystemTasks(c *gin.Context) {
 		Limit  int `form:"limit"`
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("invalid system task filters"))
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid system task filters"})
 		return
 	}
 
@@ -92,7 +98,7 @@ func ListSystemTasks(c *gin.Context) {
 func DeleteSystemTaskHistory(c *gin.Context) {
 	var filter model.SystemTaskFilter
 	if err := c.ShouldBindQuery(&filter); err != nil {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("invalid system task filters"))
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid system task filters"})
 		return
 	}
 	deleted, err := model.DeleteSystemTaskHistory(filter)
@@ -110,7 +116,10 @@ func DeleteSystemTaskHistory(c *gin.Context) {
 func GetSystemTask(c *gin.Context) {
 	taskID := c.Param("task_id")
 	if taskID == "" {
-		common.ApiErrorT(c, "task id is required")
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "task id is required",
+		})
 		return
 	}
 
@@ -120,7 +129,10 @@ func GetSystemTask(c *gin.Context) {
 		return
 	}
 	if task == nil {
-		common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("task not found"))
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "task not found",
+		})
 		return
 	}
 

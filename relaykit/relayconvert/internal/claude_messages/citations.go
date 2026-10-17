@@ -1,4 +1,3 @@
-// Adapted from new-api 7209b6db95ef; retained under the repository license.
 package claudemessages
 
 import (
@@ -20,12 +19,9 @@ func claudeCitationsToChat(raw json.RawMessage, text string, textOffset int) ([]
 	}
 	annotations := make([]any, 0, len(citations))
 	for _, citation := range citations {
-		if reference, _ := citation["encrypted_index"].(string); reference != "" {
-			return nil, fmt.Errorf("native_state_required: encrypted citation reference requires the original protocol")
-		}
 		url := strings.TrimSpace(kitutil.Interface2String(citation["url"]))
 		if url == "" {
-			return nil, fmt.Errorf("citation_source_unrepresentable: native document citation requires its original protocol")
+			continue
 		}
 		converted := map[string]any{
 			"url":   url,
@@ -34,13 +30,11 @@ func claudeCitationsToChat(raw json.RawMessage, text string, textOffset int) ([]
 		citedText := kitutil.Interface2String(citation["cited_text"])
 		if citedText != "" {
 			converted["cited_text"] = citedText
-
-		}
-		// Claude attaches citations to the enclosing output text block; cited_text
-		// is a source quotation, not an offset into the generated answer.
-		if text != "" {
-			converted["start_index"] = textOffset
-			converted["end_index"] = textOffset + utf8.RuneCountInString(text)
+			if before, _, ok := strings.Cut(text, citedText); ok {
+				startIndex := textOffset + utf8.RuneCountInString(before)
+				converted["start_index"] = startIndex
+				converted["end_index"] = startIndex + utf8.RuneCountInString(citedText)
+			}
 		}
 		if encryptedIndex := kitutil.Interface2String(citation["encrypted_index"]); encryptedIndex != "" {
 			converted["encrypted_index"] = encryptedIndex

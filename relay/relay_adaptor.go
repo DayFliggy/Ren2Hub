@@ -1,12 +1,12 @@
 package relay
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
-	"github.com/QuantumNous/new-api/pkg/relaycapability"
+	_ "github.com/QuantumNous/new-api/plugins"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/advancedcustom"
 	"github.com/QuantumNous/new-api/relay/channel/ali"
@@ -35,7 +35,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/siliconflow"
 	"github.com/QuantumNous/new-api/relay/channel/sub2api"
 	"github.com/QuantumNous/new-api/relay/channel/submodel"
-	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
+	jspluginadaptor "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
 	"github.com/QuantumNous/new-api/relay/channel/vertex"
 	"github.com/QuantumNous/new-api/relay/channel/volcengine"
@@ -43,64 +43,90 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/xunfei"
 	"github.com/QuantumNous/new-api/relay/channel/zhipu"
 	"github.com/QuantumNous/new-api/relay/channel/zhipu_4v"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
-type adaptorRegistration struct {
-	new func() channel.Adaptor
-}
-
-var adaptorRegistry = map[int]adaptorRegistration{
-	constant.APITypeAli:            {new: func() channel.Adaptor { return &ali.Adaptor{} }},
-	constant.APITypeAnthropic:      {new: func() channel.Adaptor { return &claude.Adaptor{} }},
-	constant.APITypeBaidu:          {new: func() channel.Adaptor { return &baidu.Adaptor{} }},
-	constant.APITypeGemini:         {new: func() channel.Adaptor { return &gemini.Adaptor{} }},
-	constant.APITypeOpenAI:         {new: func() channel.Adaptor { return &openai.Adaptor{} }},
-	constant.APITypePaLM:           {new: func() channel.Adaptor { return &palm.Adaptor{} }},
-	constant.APITypeTencent:        {new: func() channel.Adaptor { return &tencent.DispatchAdaptor{} }},
-	constant.APITypeXunfei:         {new: func() channel.Adaptor { return &xunfei.Adaptor{} }},
-	constant.APITypeZhipu:          {new: func() channel.Adaptor { return &zhipu.Adaptor{} }},
-	constant.APITypeZhipuV4:        {new: func() channel.Adaptor { return &zhipu_4v.Adaptor{} }},
-	constant.APITypeOllama:         {new: func() channel.Adaptor { return &ollama.Adaptor{} }},
-	constant.APITypePerplexity:     {new: func() channel.Adaptor { return &perplexity.Adaptor{} }},
-	constant.APITypeAws:            {new: func() channel.Adaptor { return &aws.Adaptor{} }},
-	constant.APITypeCohere:         {new: func() channel.Adaptor { return &cohere.Adaptor{} }},
-	constant.APITypeDify:           {new: func() channel.Adaptor { return &dify.Adaptor{} }},
-	constant.APITypeJina:           {new: func() channel.Adaptor { return &jina.Adaptor{} }},
-	constant.APITypeCloudflare:     {new: func() channel.Adaptor { return &cloudflare.Adaptor{} }},
-	constant.APITypeSiliconFlow:    {new: func() channel.Adaptor { return &siliconflow.Adaptor{} }},
-	constant.APITypeVertexAi:       {new: func() channel.Adaptor { return &vertex.Adaptor{} }},
-	constant.APITypeMistral:        {new: func() channel.Adaptor { return &mistral.Adaptor{} }},
-	constant.APITypeDeepSeek:       {new: func() channel.Adaptor { return &deepseek.Adaptor{} }},
-	constant.APITypeMokaAI:         {new: func() channel.Adaptor { return &mokaai.Adaptor{} }},
-	constant.APITypeVolcEngine:     {new: func() channel.Adaptor { return &volcengine.Adaptor{} }},
-	constant.APITypeBaiduV2:        {new: func() channel.Adaptor { return &baidu_v2.Adaptor{} }},
-	constant.APITypeOpenRouter:     {new: func() channel.Adaptor { return &openai.Adaptor{} }},
-	constant.APITypeXinference:     {new: func() channel.Adaptor { return &openai.Adaptor{} }},
-	constant.APITypeXai:            {new: func() channel.Adaptor { return &xai.Adaptor{} }},
-	constant.APITypeCoze:           {new: func() channel.Adaptor { return &coze.Adaptor{} }},
-	constant.APITypeJimeng:         {new: func() channel.Adaptor { return &jimeng.Adaptor{} }},
-	constant.APITypeMoonshot:       {new: func() channel.Adaptor { return &moonshot.Adaptor{} }},
-	constant.APITypeSubmodel:       {new: func() channel.Adaptor { return &submodel.Adaptor{} }},
-	constant.APITypeMiniMax:        {new: func() channel.Adaptor { return &minimax.Adaptor{} }},
-	constant.APITypeReplicate:      {new: func() channel.Adaptor { return &replicate.Adaptor{} }},
-	constant.APITypeAdvancedCustom: {new: func() channel.Adaptor { return &advancedcustom.Adaptor{} }},
-	constant.APITypeSub2API:        {new: func() channel.Adaptor { return &sub2api.Adaptor{} }},
-	constant.APITypeNewAPI:         {new: func() channel.Adaptor { return &newapi.Adaptor{} }},
-}
-
 func GetAdaptor(apiType int) channel.Adaptor {
-	registration, found := adaptorRegistry[apiType]
-	if _, declared := relaycapability.Describe(apiType, ""); !found || !declared {
-		return nil
+	switch apiType {
+	case constant.APITypeAli:
+		return &ali.Adaptor{}
+	case constant.APITypeAnthropic:
+		return &claude.Adaptor{}
+	case constant.APITypeBaidu:
+		return &baidu.Adaptor{}
+	case constant.APITypeGemini:
+		return &gemini.Adaptor{}
+	case constant.APITypeOpenAI:
+		return &openai.Adaptor{}
+	case constant.APITypePaLM:
+		return &palm.Adaptor{}
+	case constant.APITypeTencent:
+		return &tencent.DispatchAdaptor{}
+	case constant.APITypeXunfei:
+		return &xunfei.Adaptor{}
+	case constant.APITypeZhipu:
+		return &zhipu.Adaptor{}
+	case constant.APITypeZhipuV4:
+		return &zhipu_4v.Adaptor{}
+	case constant.APITypeOllama:
+		return &ollama.Adaptor{}
+	case constant.APITypePerplexity:
+		return &perplexity.Adaptor{}
+	case constant.APITypeAws:
+		return &aws.Adaptor{}
+	case constant.APITypeCohere:
+		return &cohere.Adaptor{}
+	case constant.APITypeDify:
+		return &dify.Adaptor{}
+	case constant.APITypeJina:
+		return &jina.Adaptor{}
+	case constant.APITypeCloudflare:
+		return &cloudflare.Adaptor{}
+	case constant.APITypeSiliconFlow:
+		return &siliconflow.Adaptor{}
+	case constant.APITypeVertexAi:
+		return &vertex.Adaptor{}
+	case constant.APITypeMistral:
+		return &mistral.Adaptor{}
+	case constant.APITypeDeepSeek:
+		return &deepseek.Adaptor{}
+	case constant.APITypeMokaAI:
+		return &mokaai.Adaptor{}
+	case constant.APITypeVolcEngine:
+		return &volcengine.Adaptor{}
+	case constant.APITypeBaiduV2:
+		return &baidu_v2.Adaptor{}
+	case constant.APITypeOpenRouter:
+		return &openai.Adaptor{}
+	case constant.APITypeXinference:
+		return &openai.Adaptor{}
+	case constant.APITypeXai:
+		return &xai.Adaptor{}
+	case constant.APITypeCoze:
+		return &coze.Adaptor{}
+	case constant.APITypeJimeng:
+		return &jimeng.Adaptor{}
+	case constant.APITypeMoonshot:
+		return &moonshot.Adaptor{} // Moonshot uses Claude API
+	case constant.APITypeSubmodel:
+		return &submodel.Adaptor{}
+	case constant.APITypeMiniMax:
+		return &minimax.Adaptor{}
+	case constant.APITypeReplicate:
+		return &replicate.Adaptor{}
+	case constant.APITypeAdvancedCustom:
+		return &advancedcustom.Adaptor{}
+	case constant.APITypeSub2API:
+		return &sub2api.Adaptor{}
+	case constant.APITypeNewAPI:
+		return &newapi.Adaptor{}
 	}
-	return registration.new()
+	return nil
 }
 
 func GetTaskPlatform(c *gin.Context) constant.TaskPlatform {
-	if key := c.GetString("expected_task_plugin_key"); key != "" {
-		return constant.TaskPlatform(key)
+	if pluginKey := c.GetString("task_plugin_key"); pluginKey != "" {
+		return constant.TaskPlatform(pluginKey)
 	}
 	channelType := c.GetInt("channel_type")
 	if channelType > 0 {
@@ -109,43 +135,98 @@ func GetTaskPlatform(c *gin.Context) constant.TaskPlatform {
 	return constant.TaskPlatform(c.GetString("platform"))
 }
 
-func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
-	if plugin, ok := pluginruntime.DefaultRegistry.Get(string(platform)); ok {
-		return taskplugin.New(plugin)
-	}
-	if platform == constant.TaskPlatformSuno {
-		if plugin, ok := pluginruntime.DefaultRegistry.Get("sunoapi"); ok {
-			return taskplugin.New(plugin)
-		}
-		return nil
-	}
-	if kind, err := strconv.Atoi(string(platform)); err == nil {
-		if plugin, ok := pluginruntime.DefaultRegistry.GetByChannelType(kind); ok {
-			return taskplugin.New(plugin)
-		}
-		switch kind {
-		case constant.ChannelTypeAli, constant.ChannelTypeKling, constant.ChannelTypeJimeng, constant.ChannelTypeVertexAi, constant.ChannelTypeVidu, constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine, constant.ChannelTypeSora, constant.ChannelTypeOpenAI, constant.ChannelTypeGemini, constant.ChannelTypeMiniMax, constant.ChannelTypeSunoAPI:
-			return nil
-		}
-	}
-	return nil
+var taskPluginKeys = map[constant.TaskPlatform]string{
+	constant.TaskPlatformSuno:                                            "sunoapi",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeAli)):         "alibaba",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeKling)):       "kling",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeJimeng)):      "jimeng",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeVidu)):        "vidu",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeDoubaoVideo)): "doubao",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeVolcEngine)):  "doubao",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeGemini)):      "google",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeMiniMax)):     "hailuo",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeSora)):        "sora",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeOpenAI)):      "sora",
+	constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeVertexAi)):    "vertex-ai",
 }
 
 func ResolveTaskPluginForPlatform(generation *pluginruntime.RoutingGeneration, platform constant.TaskPlatform) (*pluginruntime.LoadedPlugin, bool) {
 	if generation == nil {
 		return nil, false
 	}
+	if key, ok := taskPluginKeys[platform]; ok {
+		if plugin, found := generation.Get(key); found {
+			return plugin, true
+		}
+	}
 	return generation.Get(string(platform))
 }
 
-func GetTaskAdaptorForTask(task *model.Task) (channel.TaskAdaptor, error) {
-	plugin, err := service.LoadTaskPluginForTask(task)
-	if err != nil {
-		return nil, err
+// TaskPlatformUnavailableError explains why no adaptor serves the platform:
+// the task-plugin system is switched off, the resolved plugin is disabled,
+// or the platform simply names nothing. The distinction is user-actionable,
+// so it must survive into the client-facing message.
+func TaskPlatformUnavailableError(platform constant.TaskPlatform) (string, string) {
+	if !pluginruntime.DefaultRegistry.Enabled() {
+		return "task_plugin_system_disabled", "the task plugin system is disabled on this gateway"
 	}
-	return taskplugin.New(plugin), nil
+	key := string(platform)
+	if mapped, ok := taskPluginKeys[platform]; ok {
+		key = mapped
+	}
+	for _, meta := range pluginruntime.DefaultRegistry.Snapshot().Factory {
+		if meta.Key == key {
+			return "task_plugin_disabled", fmt.Sprintf("task plugin %q is disabled on this gateway", key)
+		}
+	}
+	return "invalid_api_platform", fmt.Sprintf("invalid api platform: %s", platform)
 }
 
-func init() {
-	service.GetPinnedTaskAdaptorFunc = func(task *model.Task) (service.TaskPollingAdaptor, error) { return GetTaskAdaptorForTask(task) }
+func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
+	plugin, ok := ResolveTaskPluginForPlatform(pluginruntime.DefaultRegistry.Generation(), platform)
+	if !ok {
+		return nil
+	}
+	return jspluginadaptor.New(plugin)
+}
+
+// getTaskAdaptorForRequest preserves the exact plugin object pinned by the
+// declarative or shared-endpoint router. Legacy task routes are pinned here
+// from one registry generation before the adaptor is returned.
+func getTaskAdaptorForRequest(c *gin.Context, platform constant.TaskPlatform) (constant.TaskPlatform, channel.TaskAdaptor) {
+	if c != nil {
+		if value, exists := c.Get(pluginruntime.ContextKeyPinnedPlugin); exists {
+			if pinned, ok := value.(pluginruntime.PinnedPlugin); ok && pinned.Plugin != nil {
+				platform = constant.TaskPlatform(pinned.Plugin.Meta.Key)
+				return platform, jspluginadaptor.New(pinned.Plugin)
+			}
+			return platform, nil
+		}
+		if value, exists := c.Get(pluginruntime.ContextKeyPinnedEndpoint); exists {
+			if pinned, ok := value.(pluginruntime.PinnedEndpoint); ok && pinned.Plugin != nil {
+				platform = constant.TaskPlatform(pinned.Plugin.Meta.Key)
+				return platform, jspluginadaptor.New(pinned.Plugin)
+			}
+			return platform, nil
+		}
+		if value, exists := c.Get(pluginruntime.ContextKeyPinnedRoute); exists {
+			if pinned, ok := value.(pluginruntime.PinnedRoute); ok && pinned.Plugin != nil {
+				platform = constant.TaskPlatform(pinned.Plugin.Meta.Key)
+				return platform, jspluginadaptor.New(pinned.Plugin)
+			}
+			return platform, nil
+		}
+	}
+	generation := pluginruntime.DefaultRegistry.Generation()
+	plugin, ok := ResolveTaskPluginForPlatform(generation, platform)
+	if !ok {
+		return platform, nil
+	}
+	if c != nil {
+		c.Set(pluginruntime.ContextKeyPinnedPlugin, pluginruntime.PinnedPlugin{
+			Generation: generation,
+			Plugin:     plugin,
+		})
+	}
+	return platform, jspluginadaptor.New(plugin)
 }

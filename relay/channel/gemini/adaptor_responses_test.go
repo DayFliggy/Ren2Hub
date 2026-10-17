@@ -6,7 +6,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -44,6 +43,7 @@ func TestConvertOpenAIResponsesRequestToGeminiFunctionToolAndChoice(t *testing.T
 					},
 				},
 			},
+			{"type": "custom", "name": "freeform"},
 		}),
 		ToolChoice: mustGeminiRawMessage(t, map[string]any{
 			"type": "function",
@@ -93,18 +93,18 @@ func TestConvertOpenAIResponsesRequestToGeminiFunctionCallConversation(t *testin
 	require.Len(t, got.Contents[0].Parts, 2)
 	require.NotNil(t, got.Contents[0].Parts[0].FunctionCall)
 	assert.Equal(t, "lookup", got.Contents[0].Parts[0].FunctionCall.FunctionName)
-	assert.Equal(t, map[string]interface{}{"q": "x"}, got.Contents[0].Parts[0].FunctionCall.Arguments)
+	assert.Equal(t, map[string]any{"q": "x"}, got.Contents[0].Parts[0].FunctionCall.Arguments)
 	assert.Equal(t, "I will call.", got.Contents[0].Parts[1].Text)
 
 	assert.Equal(t, "user", got.Contents[1].Role)
 	require.Len(t, got.Contents[1].Parts, 1)
 	require.NotNil(t, got.Contents[1].Parts[0].FunctionResponse)
 	assert.Equal(t, "lookup", got.Contents[1].Parts[0].FunctionResponse.Name)
-	assert.Equal(t, map[string]interface{}{"ok": true}, got.Contents[1].Parts[0].FunctionResponse.Response)
+	assert.Equal(t, map[string]any{"ok": true}, got.Contents[1].Parts[0].FunctionResponse.Response)
 }
 
-func TestConvertOpenAIResponsesRequestToGeminiPreservesCustomToolsAndRejectsUnknown(t *testing.T) {
-	request := dto.OpenAIResponsesRequest{
+func TestConvertOpenAIResponsesRequestToGeminiKeepsCustomToolCalls(t *testing.T) {
+	got := mustConvertResponsesToGemini(t, dto.OpenAIResponsesRequest{
 		Model: "gemini-test",
 		Input: mustGeminiRawMessage(t, []map[string]any{
 			{
@@ -138,24 +138,36 @@ func TestConvertOpenAIResponsesRequestToGeminiPreservesCustomToolsAndRejectsUnkn
 			{"type": "custom", "name": "apply_patch"},
 			{"type": "unknown", "name": "unknown"},
 		}),
+	})
+
+	// The cleaned schema has no additionalProperties, and the unknown tool is dropped.
+	assert.JSONEq(t, `[{"functionDeclarations":[{
+		"name":"apply_patch",
+		"description":"This tool takes freeform text. Put the complete raw text in the \"input\" argument.",
+		"parameters":{"type":"OBJECT","properties":{"input":{"type":"STRING","description":"Raw input for the tool."}},"required":["input"]}
+	}]}]`, string(got.Tools))
+
+	require.Len(t, got.Contents, 3)
+	assert.Equal(t, "model", got.Contents[0].Role)
+	require.Len(t, got.Contents[0].Parts, 2)
+	require.NotNil(t, got.Contents[0].Parts[0].FunctionCall)
+	assert.Equal(t, "apply_patch", got.Contents[0].Parts[0].FunctionCall.FunctionName)
+	assert.Equal(t, map[string]any{"input": "patch body"}, got.Contents[0].Parts[0].FunctionCall.Arguments)
+	assert.Equal(t, "before custom", got.Contents[0].Parts[1].Text)
+
+	assert.Equal(t, "user", got.Contents[1].Role)
+	require.Len(t, got.Contents[1].Parts, 2)
+	for i, output := range []string{"ok", "legacy custom output"} {
+		response := got.Contents[1].Parts[i].FunctionResponse
+		require.NotNil(t, response)
+		assert.Equal(t, "apply_patch", response.Name)
+		assert.Equal(t, map[string]any{"content": output}, response.Response)
+		assert.JSONEq(t, `"call_custom"`, string(response.ID))
 	}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: request.Model}}
-	converted, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, request)
-	var loss *types.ConversionLossError
-	require.ErrorAs(t, err, &loss)
-	assert.Nil(t, converted)
-	require.NotEmpty(t, info.ConversionDiagnostics)
-	assert.Contains(t, loss.Error(), "opaque tool")
-	request.Tools = mustGeminiRawMessage(t, []map[string]any{{"type": "custom", "name": "apply_patch"}})
-	converted, err = (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, request)
-	require.NoError(t, err)
-	geminiRequest := converted.(*dto.GeminiChatRequest)
-	require.Len(t, geminiRequest.Contents[0].Parts, 2)
-	call := geminiRequest.Contents[0].Parts[0].FunctionCall
-	require.NotNil(t, call)
-	assert.Equal(t, "apply_patch", call.FunctionName)
-	assert.Equal(t, map[string]any{"input": "patch body"}, call.Arguments)
-	assert.True(t, info.ResponsesToolState().IsCustomTool("apply_patch"))
+
+	assert.Equal(t, "user", got.Contents[2].Role)
+	require.Len(t, got.Contents[2].Parts, 1)
+	assert.Equal(t, "next turn", got.Contents[2].Parts[0].Text)
 }
 
 func mustConvertResponsesToGemini(t *testing.T, req dto.OpenAIResponsesRequest) *dto.GeminiChatRequest {

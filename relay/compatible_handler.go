@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
@@ -44,10 +45,6 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	}
 	if err := helper.ApplyReasoningModelSuffix(c, info, request); err != nil {
 		return newConvertRequestFailedError(c, info, err)
-	}
-
-	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 
 	includeUsage := true
@@ -81,17 +78,19 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
-		info.CaptureResponseUsage(usage, "text", nil)
+		applySystemPromptIfNeeded(c, info, request)
+		usage, newApiErr := textRequestViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {
 			return newApiErr
 		}
 
 		var containAudioTokens = usage.CompletionTokenDetails.AudioTokens > 0 || usage.PromptTokensDetails.AudioTokens > 0
-		if containAudioTokens {
-			info.CaptureResponseUsage(usage, "audio", nil)
+		var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
+
+		if containAudioTokens && containsAudioRatios {
+			service.PostAudioConsumeQuota(c, info, usage, nil)
 		} else {
-			info.CaptureResponseUsage(usage, "text", nil)
+			service.PostTextConsumeQuota(c, info, usage, nil)
 		}
 		return nil
 	}
@@ -99,18 +98,26 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	var requestBody io.Reader
 
 	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
-		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
+		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		defer closer.Close()
-		requestBody = body
+		if common.DebugEnabled {
+			if debugBytes, bErr := storage.Bytes(); bErr == nil {
+				logger.LogDebug(c, "requestBody: %s", debugBytes)
+			}
+		}
+		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
 			return newConvertRequestFailedError(c, info, err)
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
+
+		if req, ok := convertedRequest.(*dto.GeneralOpenAIRequest); ok {
+			applySystemPromptIfNeeded(c, info, req)
+		}
 
 		jsonData, err := common.Marshal(convertedRequest)
 		if err != nil {
@@ -162,9 +169,6 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	}
 
 	usage, newApiErr := adaptor.DoResponse(c, httpResp, info)
-	if observed, ok := usage.(*dto.Usage); ok {
-		info.CaptureResponseUsage(observed, "text", nil)
-	}
 	if newApiErr != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
@@ -172,10 +176,12 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	}
 
 	var containAudioTokens = usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0
-	if containAudioTokens {
-		info.CaptureResponseUsage(usage.(*dto.Usage), "audio", nil)
+	var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
+
+	if containAudioTokens && containsAudioRatios {
+		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	} else {
-		info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
+		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	}
 	return nil
 }

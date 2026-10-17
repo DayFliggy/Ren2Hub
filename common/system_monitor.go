@@ -1,8 +1,7 @@
 package common
 
 import (
-	"context"
-	"os"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -10,144 +9,152 @@ import (
 	"github.com/shirou/gopsutil/mem"
 )
 
+// DiskSpaceInfo 磁盘空间信息
 type DiskSpaceInfo struct {
-	Total       uint64  `json:"total"`
-	Free        uint64  `json:"free"`
-	Used        uint64  `json:"used"`
+	// 总空间（字节）
+	Total uint64 `json:"total"`
+	// 可用空间（字节）
+	Free uint64 `json:"free"`
+	// 已用空间（字节）
+	Used uint64 `json:"used"`
+	// 使用百分比
 	UsedPercent float64 `json:"used_percent"`
 }
 
-// DiskSpacePath is the directory whose filesystem the disk metric measures:
-// the request-body disk cache, or the OS temp directory when none is set.
-func DiskSpacePath() string {
-	if path := GetDiskCachePath(); path != "" {
-		return path
-	}
-	return os.TempDir()
-}
-
-// LoadAverage is the kernel load average over 1, 5 and 15 minutes. On Linux it
-// counts runnable tasks and tasks in uninterruptible (usually I/O) sleep, so a
-// stalled disk or network filesystem raises it without busy CPUs.
-type LoadAverage struct {
-	One     float64
-	Five    float64
-	Fifteen float64
-}
-
-// SystemStatus is the latest sampled host state. Availability flags prevent a
-// zero-valued failed sample from being presented as a real measurement.
-// CPU usage, core count and load average are host-wide: /proc/stat,
-// /proc/cpuinfo and /proc/loadavg are not namespaced, so a container reports
-// its host's figures rather than its own cgroup share.
+// SystemStatus 系统状态信息
 type SystemStatus struct {
-	CPUUsage         float64
-	CPUAvailable     bool
-	CPUCores         int
-	LoadAverage      LoadAverage
-	LoadAvailable    bool
-	MemoryUsage      float64
-	MemoryAvailable  bool
-	MemoryUsedBytes  uint64
-	MemoryTotalBytes uint64
-	DiskUsage        float64
-	DiskAvailable    bool
-	DiskUsedBytes    uint64
-	DiskTotalBytes   uint64
-	Network          NetworkBandwidth
+	CPUUsage    float64
+	MemoryUsage float64
+	DiskUsage   float64
+	SampledAt   time.Time
+	// 过载判定带连续性要求：单一采样尖峰不再直接熔断，需连续多次超阈值。
+	CPUOverloaded    bool
+	MemoryOverloaded bool
+	DiskOverloaded   bool
+}
+
+// SystemOverload 是哨兵据以拒绝请求的过载项，Error 文本带当前值与生效阈值。
+type SystemOverload struct {
+	Code      string
+	Resource  string
+	Usage     float64
+	Threshold int
+}
+
+func (o *SystemOverload) Error() string {
+	return fmt.Sprintf("system %s overloaded (current: %.1f%%, threshold: %d%%)", o.Resource, o.Usage, o.Threshold)
 }
 
 var latestSystemStatus atomic.Value
-var latestNetworkBandwidth atomic.Value
+
+const (
+	systemMonitorInterval = 5 * time.Second
+	// 连续 3 次采样（约 15 秒）仍高于阈值才判定过载，
+	// 任一采样回落到阈值以下即恢复，避免瞬时尖峰打满重试。
+	overloadConsecutiveSamples = 3
+	// 采样超过该时长未刷新（监控未运行或被阻塞）时，哨兵不据此熔断。
+	systemStatusMaxAge = 30 * time.Second
+)
 
 func init() {
 	latestSystemStatus.Store(SystemStatus{})
-	latestNetworkBandwidth.Store(NetworkBandwidth{})
 }
 
+// StartSystemMonitor 启动系统监控
 func StartSystemMonitor() {
-	BackgroundWorkers.Go(startHostSystemMonitor)
-	BackgroundWorkers.Go(startNetworkSystemMonitor)
-}
-
-func startHostSystemMonitor(ctx context.Context) {
-	for ctx.Err() == nil {
-		config := GetPerformanceMonitorConfig()
-		if !config.Enabled {
-			latestSystemStatus.Store(SystemStatus{})
-			if !WaitBackgroundInterval(ctx, 30*time.Second) {
-				return
+	go func() {
+		usage := newContainerUsage()
+		var detector overloadDetector
+		for {
+			config := GetPerformanceMonitorConfig()
+			if !config.Enabled {
+				detector = overloadDetector{}
+				latestSystemStatus.Store(SystemStatus{SampledAt: time.Now()})
+				time.Sleep(systemMonitorInterval)
+				continue
 			}
-			continue
-		}
 
-		updateSystemStatus()
-		if !WaitBackgroundInterval(ctx, 5*time.Second) {
-			return
+			status := collectSystemStatus(usage)
+			detector.mark(&status, config)
+			latestSystemStatus.Store(status)
+
+			time.Sleep(systemMonitorInterval)
 		}
-	}
+	}()
 }
 
-func startNetworkSystemMonitor(ctx context.Context) {
-	for ctx.Err() == nil {
-		config := GetPerformanceMonitorConfig()
-		if !config.Enabled {
-			ResetNetworkBandwidthSampler()
-			latestNetworkBandwidth.Store(NetworkBandwidth{})
-			if !WaitBackgroundInterval(ctx, 30*time.Second) {
-				return
-			}
-			continue
-		}
-
-		latestNetworkBandwidth.Store(SampleNetworkBandwidth())
-		if !WaitBackgroundInterval(ctx, 5*time.Second) {
-			return
-		}
-	}
+// overloadDetector 为每项资源累计连续超阈值的采样次数：连续 overloadConsecutiveSamples 次
+// 才标记过载，任一次回落立即清零并重新累计。
+type overloadDetector struct {
+	cpuSamples    int
+	memorySamples int
+	diskSamples   int
 }
 
-func updateSystemStatus() {
-	var status SystemStatus
+func (d *overloadDetector) mark(status *SystemStatus, config PerformanceMonitorConfig) {
+	status.CPUOverloaded = countOverloadSample(&d.cpuSamples, exceedsThreshold(status.CPUUsage, config.CPUThreshold))
+	status.MemoryOverloaded = countOverloadSample(&d.memorySamples, exceedsThreshold(status.MemoryUsage, config.MemoryThreshold))
+	status.DiskOverloaded = countOverloadSample(&d.diskSamples, exceedsThreshold(status.DiskUsage, config.DiskThreshold))
+}
 
-	if percents, err := cpu.Percent(0, false); err == nil && len(percents) > 0 {
+func countOverloadSample(samples *int, over bool) bool {
+	if !over {
+		*samples = 0
+		return false
+	}
+	*samples = min(*samples+1, overloadConsecutiveSamples)
+	return *samples == overloadConsecutiveSamples
+}
+
+// exceedsThreshold 判断采样值是否超过阈值；阈值 <= 0 表示不检查该项。
+func exceedsThreshold(usage float64, threshold int) bool {
+	return threshold > 0 && int(usage) > threshold
+}
+
+func collectSystemStatus(usage *containerUsage) SystemStatus {
+	now := time.Now()
+	status := SystemStatus{SampledAt: now}
+
+	// CPU / 内存优先按容器 cgroup 配额计算；容器口径不可用时回退宿主机口径，
+	// 保持对未限制资源或被挂载为宿主 cgroup 的环境的兼容。
+	if saturation, ok := usage.cpuSaturation(now); ok {
+		status.CPUUsage = saturation
+	} else if percents, err := cpu.Percent(0, false); err == nil && len(percents) > 0 {
 		status.CPUUsage = percents[0]
-		status.CPUAvailable = true
 	}
-	if cores, err := cpu.Counts(true); err == nil && cores > 0 {
-		status.CPUCores = cores
-	}
-	status.LoadAverage, status.LoadAvailable = sampleLoadAverage()
-
-	if memInfo, err := mem.VirtualMemory(); err == nil {
+	if containerMemory, ok := usage.memoryUsage(); ok {
+		status.MemoryUsage = containerMemory
+	} else if memInfo, err := mem.VirtualMemory(); err == nil {
 		status.MemoryUsage = memInfo.UsedPercent
-		status.MemoryUsedBytes = memInfo.Used
-		status.MemoryTotalBytes = memInfo.Total
-		status.MemoryAvailable = memInfo.Total > 0
 	}
 
 	diskInfo := GetDiskSpaceInfo()
 	if diskInfo.Total > 0 {
 		status.DiskUsage = diskInfo.UsedPercent
-		status.DiskAvailable = true
-		status.DiskUsedBytes = diskInfo.Used
-		status.DiskTotalBytes = diskInfo.Total
 	}
-
-	latestSystemStatus.Store(status)
-}
-
-func GetSystemStatus() SystemStatus {
-	if !GetPerformanceMonitorConfig().Enabled {
-		return SystemStatus{}
-	}
-	status := latestSystemStatus.Load().(SystemStatus)
-	status.Network = latestNetworkBandwidth.Load().(NetworkBandwidth)
 	return status
 }
 
-func resetSystemMonitorState() {
-	latestSystemStatus.Store(SystemStatus{})
-	latestNetworkBandwidth.Store(NetworkBandwidth{})
-	ResetNetworkBandwidthSampler()
+// GetSystemStatus 获取当前系统状态
+func GetSystemStatus() SystemStatus {
+	return latestSystemStatus.Load().(SystemStatus)
+}
+
+// CheckSystemOverload 返回哨兵应据以熔断的过载项。监控关闭、采样缺失或已超过
+// systemStatusMaxAge 时返回 nil。过载标记来自连续采样，阈值按当前配置复核，
+// 运行时关闭或调高阈值后立即放行，不必等待下一次采样。
+func CheckSystemOverload(status SystemStatus, config PerformanceMonitorConfig, now time.Time) *SystemOverload {
+	if !config.Enabled || status.SampledAt.IsZero() || now.Sub(status.SampledAt) > systemStatusMaxAge {
+		return nil
+	}
+	if status.CPUOverloaded && exceedsThreshold(status.CPUUsage, config.CPUThreshold) {
+		return &SystemOverload{Code: "system_cpu_overloaded", Resource: "cpu", Usage: status.CPUUsage, Threshold: config.CPUThreshold}
+	}
+	if status.MemoryOverloaded && exceedsThreshold(status.MemoryUsage, config.MemoryThreshold) {
+		return &SystemOverload{Code: "system_memory_overloaded", Resource: "memory", Usage: status.MemoryUsage, Threshold: config.MemoryThreshold}
+	}
+	if status.DiskOverloaded && exceedsThreshold(status.DiskUsage, config.DiskThreshold) {
+		return &SystemOverload{Code: "system_disk_overloaded", Resource: "disk", Usage: status.DiskUsage, Threshold: config.DiskThreshold}
+	}
+	return nil
 }

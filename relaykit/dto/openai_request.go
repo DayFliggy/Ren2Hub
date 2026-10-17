@@ -1,7 +1,6 @@
 package dto
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -94,6 +93,7 @@ type GeneralOpenAIRequest struct {
 	ThinkingBudget         json.RawMessage `json:"thinking_budget,omitempty"`
 	ChatTemplateKwargs     json.RawMessage `json:"chat_template_kwargs,omitempty"`
 	EnableSearch           json.RawMessage `json:"enable_search,omitempty"`
+	SearchOptions          json.RawMessage `json:"search_options,omitempty"`
 	// ollama Params
 	Think json.RawMessage `json:"think,omitempty"`
 	// baidu v2
@@ -203,7 +203,13 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 		texts = append(texts, inputs...)
 	}
 
-	tokenCountMeta.MaxTokens = int(r.GetMaxTokens())
+	maxTokens := lo.FromPtrOr(r.MaxTokens, uint(0))
+	maxCompletionTokens := lo.FromPtrOr(r.MaxCompletionTokens, uint(0))
+	if maxCompletionTokens > maxTokens {
+		tokenCountMeta.MaxTokens = int(maxCompletionTokens)
+	} else {
+		tokenCountMeta.MaxTokens = int(maxTokens)
+	}
 
 	var dynamicTools []ToolCallRequest
 	for _, message := range r.Messages {
@@ -402,14 +408,27 @@ type ToolCallRequest struct {
 	Type     string          `json:"type"`
 	Function FunctionRequest `json:"function"`
 	Custom   json.RawMessage `json:"custom,omitempty"`
+	// Native is a complete vendor tool object sent instead of the fields
+	// above. Function has no omitempty, so a non-function tool would
+	// otherwise carry "function":{"name":""}, which vendor schemas with
+	// additionalProperties:false reject. Never read from client JSON.
+	Native json.RawMessage `json:"-"`
+}
+
+func (t ToolCallRequest) MarshalJSON() ([]byte, error) {
+	if len(t.Native) > 0 {
+		return t.Native, nil
+	}
+	type Alias ToolCallRequest
+	return kitutil.Marshal((*Alias)(&t))
 }
 
 type FunctionRequest struct {
-	Strict      *bool  `json:"strict,omitempty"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name"`
 	Parameters  any    `json:"parameters,omitempty"`
 	Arguments   string `json:"arguments,omitempty"`
+	Strict      *bool  `json:"strict,omitempty"`
 }
 
 type StreamOptions struct {
@@ -423,8 +442,9 @@ type StreamOptions struct {
 }
 
 func (r *GeneralOpenAIRequest) GetMaxTokens() uint {
-	if r.MaxCompletionTokens != nil {
-		return *r.MaxCompletionTokens
+	maxCompletionTokens := lo.FromPtrOr(r.MaxCompletionTokens, uint(0))
+	if maxCompletionTokens != 0 {
+		return maxCompletionTokens
 	}
 	return lo.FromPtrOr(r.MaxTokens, uint(0))
 }
@@ -449,9 +469,6 @@ func (r *GeneralOpenAIRequest) ParseInput() []string {
 }
 
 type Message struct {
-	Annotations      json.RawMessage `json:"annotations,omitempty"`
-	Refusal          *string         `json:"refusal,omitempty"`
-	Audio            json.RawMessage `json:"audio,omitempty"`
 	Role             string          `json:"role"`
 	Content          any             `json:"content"`
 	Name             *string         `json:"name,omitempty"`
@@ -460,15 +477,12 @@ type Message struct {
 	Reasoning        *string         `json:"reasoning,omitempty"`
 	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallId       string          `json:"tool_call_id,omitempty"`
-	// FunctionCall is the legacy assistant call that predates tool_calls. It
-	// has no call identifier; the following role=function message answers it
-	// by name.
-	FunctionCall json.RawMessage `json:"function_call,omitempty"`
 	// Tools carries Kimi K3 dynamic tool loading declarations on a system message.
 	// Same shape as the top-level tools array; passthrough-only for OpenAI-compatible upstreams.
 	Tools json.RawMessage `json:"tools,omitempty"`
 	// Annotations is an official Chat response field. Keeping it on the shared
 	// message type also preserves annotations when clients replay assistant output.
+	Annotations   json.RawMessage `json:"annotations,omitempty"`
 	parsedContent []MediaContent
 	//parsedStringContent *string
 }
@@ -657,16 +671,26 @@ func (m *Message) SetToolCalls(toolCalls any) {
 }
 
 func (m *Message) StringContent() string {
-	if content, ok := m.Content.(string); ok {
-		return content
-	}
-	var text strings.Builder
-	for _, part := range m.ParseContent() {
-		if part.Type == ContentTypeText {
-			text.WriteString(part.Text)
+	switch m.Content.(type) {
+	case string:
+		return m.Content.(string)
+	case []any:
+		var contentStr strings.Builder
+		for _, contentItem := range m.Content.([]any) {
+			contentMap, ok := contentItem.(map[string]any)
+			if !ok {
+				continue
+			}
+			if contentMap["type"] == ContentTypeText {
+				if subStr, ok := contentMap["text"].(string); ok {
+					contentStr.WriteString(subStr)
+				}
+			}
 		}
+		return contentStr.String()
 	}
-	return text.String()
+
+	return ""
 }
 
 func (m *Message) SetNullContent() {
@@ -695,9 +719,6 @@ func (m *Message) IsStringContent() bool {
 func (m *Message) ParseContent() []MediaContent {
 	if m.Content == nil {
 		return nil
-	}
-	if content, ok := m.Content.([]MediaContent); ok {
-		return content
 	}
 	if len(m.parsedContent) > 0 {
 		return m.parsedContent
@@ -1076,50 +1097,6 @@ type OpenAIResponsesRequest struct {
 
 	// Internal conversion state; never serialized to an upstream protocol.
 	ReasoningConversion *ReasoningConversionState `json:"-"`
-}
-
-// HasCompactionTrigger reports whether the Responses input contains the
-// remote-compaction marker used by Codex and the Responses API. The marker is
-// intentionally inspected without normalizing or rewriting the input because
-// native Responses upstreams must receive it unchanged.
-func (r OpenAIResponsesRequest) HasCompactionTrigger() bool {
-	return r.hasInputItemType("compaction_trigger")
-}
-
-// HasCompactionItem reports whether input contains the encrypted compaction
-// state returned by a previous Responses call. It must be forwarded unchanged.
-func (r OpenAIResponsesRequest) HasCompactionItem() bool {
-	return r.hasInputItemType("compaction")
-}
-
-func (r OpenAIResponsesRequest) hasInputItemType(wanted string) bool {
-	if len(r.Input) == 0 || kitutil.GetJsonType(r.Input) != "array" {
-		return false
-	}
-	var items []map[string]json.RawMessage
-	if err := kitutil.Unmarshal(r.Input, &items); err != nil {
-		return false
-	}
-	for _, item := range items {
-		var itemType string
-		if raw, ok := item["type"]; ok && kitutil.Unmarshal(raw, &itemType) == nil &&
-			strings.EqualFold(strings.TrimSpace(itemType), wanted) {
-			return true
-		}
-	}
-	return false
-}
-
-// RequiresNativeResponses reports whether the request uses protocol state
-// that cannot be represented by Chat Completions or other converted APIs.
-func (r OpenAIResponsesRequest) RequiresNativeResponses() bool {
-	return r.HasCompactionTrigger() || r.HasCompactionItem() || rawResponsesJSONPresent(r.ContextManagement) ||
-		strings.TrimSpace(r.PreviousResponseID) != "" || rawResponsesJSONPresent(r.Conversation) || rawResponsesJSONPresent(r.Prompt)
-}
-
-func rawResponsesJSONPresent(raw json.RawMessage) bool {
-	trimmed := bytes.TrimSpace(raw)
-	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null"))
 }
 
 func (r OpenAIResponsesRequest) MarshalJSON() ([]byte, error) {

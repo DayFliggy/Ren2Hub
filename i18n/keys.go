@@ -1,46 +1,51 @@
 package i18n
 
-// Message keys for i18n translations
-// Use these constants instead of hardcoded strings
+// Message keys of i18n/locales/*.yaml, for text the backend translates itself:
+// errors returned to AI clients, emails and notifications. Web console messages
+// are not listed here; the web console translates them (see common.Message).
 
-// Common error messages
+// Errors returned to AI clients
 const (
-	MsgDatabaseError = "common.database_error"
-)
-
-// Auth middleware messages
-const (
-	MsgAuthUserBanned = "auth.user_banned"
-)
-
-// Token related messages
-const (
+	MsgDatabaseError          = "common.database_error"
+	MsgAuthUserBanned         = "auth.user_banned"
 	MsgTokenGetInfoFailed     = "token.get_info_failed"
 	MsgTokenInvalid           = "token.invalid"
 	MsgTokenNotProvided       = "token.not_provided"
 	MsgTokenStatusUnavailable = "token.status_unavailable"
-)
 
-// Distributor related messages
-const (
-	MsgDistributorInvalidRequest               = "distributor.invalid_request"
-	MsgDistributorInvalidChannelId             = "distributor.invalid_channel_id"
-	MsgDistributorTokenModelForbidden          = "distributor.token_model_forbidden"
-	MsgDistributorModelNameRequired            = "distributor.model_name_required"
-	MsgDistributorNoAvailableTaskPluginChannel = "distributor.no_available_task_plugin_channel"
-	MsgDistributorInvalidMidjourney            = "distributor.invalid_midjourney_request"
-	MsgDistributorInvalidParseModel            = "distributor.invalid_request_parse_model"
-)
-
-// Errors returned to AI clients (from NewAPI 128089fa7)
-const (
 	MsgAuthClientIPUnresolved     = "auth.client_ip_unresolved"
 	MsgAuthTokenIPNotAllowed      = "auth.token_ip_not_allowed"
+	MsgAuthTokenGroupForbidden    = "auth.token_group_forbidden"
+	MsgAuthTokenGroupDeprecated   = "auth.token_group_deprecated"
 	MsgAuthChannelSelectForbidden = "auth.channel_select_forbidden"
 
-	MsgRelayModelPriceNotConfigured = "relay.model_price_not_configured"
-	MsgRelayTaskChannelDisabled     = "relay.task_channel_disabled"
-	MsgRelayAccessTokenUnsupported  = "relay.access_token_unsupported"
+	MsgRateLimitReached      = "rate_limit.reached"
+	MsgRateLimitTotalReached = "rate_limit.total_reached"
+
+	MsgDistributorInvalidRequest               = "distributor.invalid_request"
+	MsgDistributorInvalidChannelId             = "distributor.invalid_channel_id"
+	MsgDistributorChannelDisabled              = "distributor.channel_disabled"
+	MsgDistributorTokenNoModelAccess           = "distributor.token_no_model_access"
+	MsgDistributorTokenModelForbidden          = "distributor.token_model_forbidden"
+	MsgDistributorModelNameRequired            = "distributor.model_name_required"
+	MsgDistributorInvalidPlayground            = "distributor.invalid_playground_request"
+	MsgDistributorGroupAccessDenied            = "distributor.group_access_denied"
+	MsgDistributorGetChannelFailed             = "distributor.get_channel_failed"
+	MsgDistributorNoAvailableChannel           = "distributor.no_available_channel"
+	MsgDistributorNoAvailableChannelTaskPlugin = "distributor.no_available_channel_task_plugin"
+	MsgDistributorInvalidParseModel            = "distributor.invalid_request_parse_model"
+
+	MsgQuotaUserInsufficient             = "quota.user_insufficient"
+	MsgQuotaPreConsumeInsufficient       = "quota.pre_consume_insufficient"
+	MsgQuotaSubscriptionInsufficient     = "quota.subscription_insufficient"
+	MsgRelayModelPriceNotConfigured      = "relay.model_price_not_configured"
+	MsgRelayModelPriceNotConfiguredAdmin = "relay.model_price_not_configured_admin"
+	MsgRelayTaskChannelDisabled          = "relay.task_channel_disabled"
+	MsgRelayGroupSaturated               = "relay.group_saturated"
+	MsgRelayGroupUpstreamSaturated       = "relay.group_upstream_saturated"
+	MsgRelayRetryGetChannelFailed        = "relay.retry_get_channel_failed"
+	MsgRelayRetryNoAvailableChannel      = "relay.retry_no_available_channel"
+	MsgRelayAccessTokenUnsupported       = "relay.access_token_unsupported"
 )
 
 // Emails and the name of the token created at registration, in the
@@ -62,25 +67,14 @@ const (
 
 // Low-quota notices, in the recipient's saved language
 const (
-	MsgNotifyQuotaLowTitle  = "notify.quota_low_title"
-	MsgNotifyQuotaLowBark   = "notify.quota_low_bark"
-	MsgNotifyQuotaLowGotify = "notify.quota_low_gotify"
-	MsgNotifyQuotaLowEmail  = "notify.quota_low_email"
+	MsgNotifyQuotaLowTitle             = "notify.quota_low_title"
+	MsgNotifySubscriptionQuotaLowTitle = "notify.subscription_quota_low_title"
+	MsgNotifyQuotaLowBark              = "notify.quota_low_bark"
+	MsgNotifyQuotaLowGotify            = "notify.quota_low_gotify"
+	MsgNotifyQuotaLowEmail             = "notify.quota_low_email"
 )
 
-// Ticket notices, in the recipient's saved language
-const (
-	MsgTicketNotifyNewSubject         = "ticket.notify_new_subject"
-	MsgTicketNotifyNewContent         = "ticket.notify_new_content"
-	MsgTicketNotifyReplyNeededSubject = "ticket.notify_reply_needed_subject"
-	MsgTicketNotifyReplyNeededContent = "ticket.notify_reply_needed_content"
-	MsgTicketNotifyUserReplied        = "ticket.notify_user_replied"
-	MsgTicketNotifySupportReplied     = "ticket.notify_support_replied"
-	MsgTicketNotifyAssigned           = "ticket.notify_assigned"
-)
-
-// Channel notices sent to the root user and model update watchers, in the
-// recipient's saved language
+// Channel notices sent to the root user and model update watchers
 const (
 	MsgChannelNotifyDisabledSubject = "channel.notify_disabled_subject"
 	MsgChannelNotifyDisabledContent = "channel.notify_disabled_content"

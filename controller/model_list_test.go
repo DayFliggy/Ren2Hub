@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,13 +11,11 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/pkg/jsplugin"
-	"github.com/QuantumNous/new-api/service"
-
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -39,22 +36,6 @@ type userModelsResponse struct {
 
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	t.Setenv("CRYPTO_SECRET", "controller-pricing-test-evidence-key")
-	previousDB, previousLogDB := model.DB, model.LOG_DB
-	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
-	previousRedis := common.RedisEnabled
-	common.OptionMapRWMutex.Lock()
-	previousOptions := common.OptionMap
-	common.OptionMap = make(map[string]string)
-	common.OptionMapRWMutex.Unlock()
-	t.Cleanup(func() {
-		model.DB, model.LOG_DB = previousDB, previousLogDB
-		common.SetDatabaseTypes(previousMain, previousLog)
-		common.RedisEnabled = previousRedis
-		common.OptionMapRWMutex.Lock()
-		common.OptionMap = previousOptions
-		common.OptionMapRWMutex.Unlock()
-	})
 
 	initModelListColumnNames(t)
 
@@ -68,8 +49,7 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	model.DB = db
 	model.LOG_DB = db
 
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}, &model.BillingPriceVersion{}, &model.Option{}))
-	require.NoError(t, db.AutoMigrate(&model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.ChannelModelCapability{}, &model.ChannelCapabilitySnapshot{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
 
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
@@ -79,20 +59,6 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	})
 
 	return db
-}
-
-func refreshModelListCapabilities(t *testing.T, db *gorm.DB) {
-	t.Helper()
-	var channels []model.Channel
-	require.NoError(t, db.Find(&channels).Error)
-	for _, channel := range channels {
-		if channel.Models == "" {
-			var names []string
-			require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channel.Id).Pluck("model", &names).Error)
-			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("models", strings.Join(names, ",")).Error)
-		}
-		require.NoError(t, service.RefreshChannelCapabilitiesByID(context.Background(), channel.Id))
-	}
 }
 
 func initModelListColumnNames(t *testing.T) {
@@ -119,16 +85,6 @@ func initModelListColumnNames(t *testing.T) {
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	require.NoError(t, os.Setenv("SQL_DSN", "local"))
 
-	// This fixture owns a disposable database and supplies the release marker.
-	bootstrap, bootstrapErr := gorm.Open(sqlite.Open(common.SQLitePath), &gorm.Config{})
-	require.NoError(t, bootstrapErr)
-	require.NoError(t, bootstrap.AutoMigrate(&model.BillingSchema{}))
-	cipher, err := billing.NewEvidenceCipher([]byte(os.Getenv("CRYPTO_SECRET")))
-	require.NoError(t, err)
-	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion, EvidenceKeyID: cipher.KeyID()}).Error)
-	bootstrapSQL, bootstrapErr := bootstrap.DB()
-	require.NoError(t, bootstrapErr)
-	defer bootstrapSQL.Close()
 	require.NoError(t, model.InitDB())
 	if model.DB != nil {
 		sqlDB, err := model.DB.DB()
@@ -141,17 +97,27 @@ func initModelListColumnNames(t *testing.T) {
 func withTieredBillingConfig(t *testing.T, modes map[string]string, exprs map[string]string) {
 	t.Helper()
 
-	for name, mode := range modes {
-		require.Equal(t, "tiered_expr", mode)
-		snapshot, err := model.GetModelPricingSnapshot([]string{name})
-		require.NoError(t, err)
-		err = model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: snapshot.Entries[0].Version, Pricing: model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": exprs[name]}}})
-		if strings.TrimSpace(exprs[name]) == "" {
-			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		if strings.HasPrefix(key, "billing_setting.") {
+			saved[key] = value
 		}
-	}
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+		model.InvalidatePricingCache()
+	})
+
+	modeBytes, err := common.Marshal(modes)
+	require.NoError(t, err)
+	exprBytes, err := common.Marshal(exprs)
+	require.NoError(t, err)
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.billing_mode": string(modeBytes),
+		"billing_setting.billing_expr": string(exprBytes),
+	}))
 	model.InvalidatePricingCache()
 }
 
@@ -215,10 +181,8 @@ func decodeUserModelsResponse(t *testing.T, recorder *httptest.ResponseRecorder)
 	return payload.Data
 }
 
-func TestGetUserModelsIgnoresRetiredGroupQuery(t *testing.T) {
+func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.Create(&model.Channel{Id: 1, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: "zz-default-only-model,zz-disabled-model"}).Error)
-	require.NoError(t, db.Create(&model.Option{Key: "ModelPrice", Value: `{"zz-default-only-model":"0"}`}).Error)
 	require.NoError(t, db.Create(&model.User{
 		Id:       1002,
 		Username: "playground-model-user",
@@ -248,198 +212,60 @@ func TestGetUserModelsIgnoresRetiredGroupQuery(t *testing.T) {
 
 	GetUserModels(vipContext)
 
-	require.ElementsMatch(t, defaultModels, decodeUserModelsResponse(t, vipRecorder))
+	require.Empty(t, decodeUserModelsResponse(t, vipRecorder))
 }
 
-func TestGetUserModelsDoesNotAddCompactPermissionVariant(t *testing.T) {
-	withSelfUseModeEnabled(t)
+func TestGetUserModelsExpandsAutoGroupsInConfiguredOrder(t *testing.T) {
+	originalAutoGroups := setting.AutoGroups2JsonString()
+	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	originalSpecialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup.ReadAll()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateAutoGroupsByJsonString(originalAutoGroups))
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		specialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup
+		specialGroups.Clear()
+		specialGroups.AddAll(originalSpecialGroups)
+	})
+
+	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["vip","default","unavailable"]`))
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"auto":"自动分组","default":"默认分组","unavailable":"不可用分组"}`))
+	specialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup
+	specialGroups.Clear()
+	specialGroups.Set("default", map[string]string{
+		"+:vip":         "VIP 分组",
+		"-:unavailable": "",
+	})
+
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.User{
-		Id:       1004,
-		Username: "compact-permission-user",
+		Id:       1003,
+		Username: "playground-auto-model-user",
 		Password: "password",
 		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     704,
-		Type:   constant.ChannelTypeOpenAI,
-		Name:   "compact-openai",
-		Status: common.ChannelStatusEnabled,
-		Group:  "default",
-		Models: "gpt-zz-compact-capable,gemini-zz-compact-capable",
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "vip", Model: "zz-vip-model", ChannelId: 1, Enabled: true},
+		{Group: "vip", Model: "zz-shared-model", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "zz-default-model", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "zz-shared-model", ChannelId: 2, Enabled: true},
+		{Group: "unavailable", Model: "zz-unavailable-model", ChannelId: 1, Enabled: true},
 	}).Error)
-	require.NoError(t, db.Create(&model.Ability{
-		Group:     "default",
-		Model:     "gpt-zz-compact-capable",
-		ChannelId: 704,
-		Enabled:   true,
-	}).Error)
-	require.NoError(t, db.Create(&model.Ability{
-		Group:     "default",
-		Model:     "gemini-zz-compact-capable",
-		ChannelId: 704,
-		Enabled:   true,
-	}).Error)
-	model.InvalidatePricingCache()
 
 	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/models?group=default", nil)
-	ctx.Set("id", 1004)
-	GetUserModels(ctx)
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models?group=auto", nil)
+	context.Set("id", 1003)
+
+	GetUserModels(context)
 
 	models := decodeUserModelsResponse(t, recorder)
-	require.ElementsMatch(t, []string{
-		"gpt-zz-compact-capable",
-		"gemini-zz-compact-capable",
-	}, models)
-
-	standardRecorder := httptest.NewRecorder()
-	standardCtx, _ := gin.CreateTestContext(standardRecorder)
-	standardCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	standardCtx.Set("id", 1004)
-	refreshModelListCapabilities(t, db)
-	ListModels(standardCtx, constant.ChannelTypeOpenAI)
-	require.Equal(t, map[string]struct{}{
-		"gpt-zz-compact-capable":    {},
-		"gemini-zz-compact-capable": {},
-	}, decodeListModelsResponse(t, standardRecorder))
-}
-
-func TestListModelsUsesSamePermissionForCompactEndpoint(t *testing.T) {
-	withSelfUseModeEnabled(t)
-	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     705,
-		Type:   constant.ChannelTypeOpenAI,
-		Name:   "compact-token-projection",
-		Status: common.ChannelStatusEnabled,
-		Group:  "default",
-		Models: "gpt-zz-compact-token-model",
-	}).Error)
-	require.NoError(t, db.Create(&model.Ability{
-		Group:     "default",
-		Model:     "gpt-zz-compact-token-model",
-		ChannelId: 705,
-		Enabled:   true,
-	}).Error)
-	model.InitChannelCache()
-	model.InvalidatePricingCache()
-	model.GetPricing()
-
-	tests := []struct {
-		name      string
-		limit     map[string]bool
-		endpoints []constant.EndpointType
-		visible   bool
-	}{
-		{
-			name:  "base only",
-			limit: map[string]bool{"gpt-zz-compact-token-model": true},
-			endpoints: []constant.EndpointType{
-				constant.EndpointTypeOpenAI, constant.EndpointTypeAnthropic, constant.EndpointTypeGemini,
-				constant.EndpointTypeOpenAIResponse, constant.EndpointTypeEmbeddings, constant.EndpointTypeJinaRerank,
-				constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeRealtime,
-				constant.EndpointTypeOpenAIResponseCompact, constant.EndpointTypeOpenAIVideo,
-			},
-			visible: true,
-		},
-		{
-			name:      "compact only",
-			limit:     map[string]bool{"gpt-zz-compact-token-model-openai-compact": true},
-			endpoints: nil,
-			visible:   false,
-		},
-		{
-			name: "base and compact",
-			limit: map[string]bool{
-				"gpt-zz-compact-token-model":                true,
-				"gpt-zz-compact-token-model-openai-compact": true,
-			},
-			endpoints: []constant.EndpointType{
-				constant.EndpointTypeOpenAI, constant.EndpointTypeAnthropic, constant.EndpointTypeGemini,
-				constant.EndpointTypeOpenAIResponse, constant.EndpointTypeEmbeddings, constant.EndpointTypeJinaRerank,
-				constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeRealtime,
-				constant.EndpointTypeOpenAIResponseCompact, constant.EndpointTypeOpenAIVideo,
-			},
-			visible: true,
-		},
-		{name: "no permission", limit: map[string]bool{}, visible: false},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			ctx, _ := gin.CreateTestContext(recorder)
-			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-			common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
-			common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
-			common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, test.limit)
-
-			refreshModelListCapabilities(t, db)
-
-			ListModels(ctx, constant.ChannelTypeOpenAI)
-			payload := decodeListModelsPayload(t, recorder)
-			if !test.visible {
-				require.Empty(t, payload.Data)
-				return
-			}
-			require.Len(t, payload.Data, 1)
-			require.Equal(t, "gpt-zz-compact-token-model", payload.Data[0].Id)
-			require.Equal(t, test.endpoints, payload.Data[0].SupportedEndpointTypes)
-		})
-	}
-}
-
-func TestListModelsDoesNotProjectCompactPermissionIntoAnthropicList(t *testing.T) {
-	withSelfUseModeEnabled(t)
-	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     706,
-		Type:   constant.ChannelTypeOpenAI,
-		Name:   "compact-anthropic-projection",
-		Status: common.ChannelStatusEnabled,
-		Group:  "default",
-		Models: "zz-compact-anthropic-model",
-	}).Error)
-	require.NoError(t, db.Create(&model.Ability{
-		Group:     "default",
-		Model:     "zz-compact-anthropic-model",
-		ChannelId: 706,
-		Enabled:   true,
-	}).Error)
-	model.InitChannelCache()
-	model.InvalidatePricingCache()
-	model.GetPricing()
-
-	list := func(limit map[string]bool) []dto.AnthropicModel {
-		recorder := httptest.NewRecorder()
-		ctx, _ := gin.CreateTestContext(recorder)
-		ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-		common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
-		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
-		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, limit)
-		refreshModelListCapabilities(t, db)
-		ListModels(ctx, constant.ChannelTypeAnthropic)
-
-		var payload struct {
-			Data []dto.AnthropicModel `json:"data"`
-		}
-		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
-		return payload.Data
-	}
-
-	require.Empty(t, list(map[string]bool{
-		"zz-compact-anthropic-model-openai-compact": true,
-	}))
-	models := list(map[string]bool{"zz-compact-anthropic-model": true})
-	require.Len(t, models, 1)
-	require.Equal(t, "zz-compact-anthropic-model", models[0].ID)
+	require.Len(t, models, 3)
+	assert.ElementsMatch(t, []string{"zz-vip-model", "zz-shared-model"}, models[:2])
+	assert.Equal(t, "zz-default-model", models[2])
 }
 
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
 	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{
 		"zz-tiered-visible-model":      "tiered_expr",
@@ -450,6 +276,7 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 		"zz-tiered-empty-expr-model": "   ",
 	})
 
+	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.User{
 		Id:       1001,
 		Username: "model-list-user",
@@ -457,7 +284,6 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
-	require.NoError(t, db.Create(&model.Channel{Id: 1, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI}).Error)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "default", Model: "zz-tiered-visible-model", ChannelId: 1, Enabled: true},
 		{Group: "default", Model: "zz-tiered-empty-expr-model", ChannelId: 1, Enabled: true},
@@ -469,8 +295,6 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	ctx.Set("id", 1001)
-
-	refreshModelListCapabilities(t, db)
 
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 
@@ -488,116 +312,16 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 
 	emptyExprPricing, ok := pricingByName["zz-tiered-empty-expr-model"]
 	require.True(t, ok)
-	require.Equal(t, "unconfigured", emptyExprPricing.BillingMode)
+	require.Empty(t, emptyExprPricing.BillingMode)
 	require.Empty(t, emptyExprPricing.BillingExpr)
 
 	missingExprPricing, ok := pricingByName["zz-tiered-missing-expr-model"]
 	require.True(t, ok)
-	require.Equal(t, "unconfigured", missingExprPricing.BillingMode)
+	require.Empty(t, missingExprPricing.BillingMode)
 	require.Empty(t, missingExprPricing.BillingExpr)
 }
 
-func TestListModelsIncludesPluginPricedTaskModel(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	withSelfUseModeDisabled(t)
-	const name = "zz-plugin-priced-task-model"
-	const alias = "zz-plugin-priced-task-alias"
-	const aliasOnlyModel = "zz-plugin-alias-priced-task-model"
-	const aliasOnly = "zz-plugin-alias-priced-task-alias"
-	const key = "model-list-price-plugin"
-	source := `export const meta={apiVersion:1,key:"model-list-price-plugin",name:"Model List Price",version:"1.0.0",author:{name:"Test"},models:["zz-plugin-priced-task-model","zz-plugin-alias-priced-task-model"],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}}};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};`
-	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(key)) })
-	require.NoError(t, db.Create(&model.User{Id: 1011, Username: "plugin-priced-task-user", Password: "password", Group: "default", Status: common.UserStatusEnabled}).Error)
-	mapping := `{"zz-plugin-priced-task-alias":"zz-plugin-priced-task-model","zz-plugin-alias-priced-task-alias":"zz-plugin-alias-priced-task-model"}`
-	require.NoError(t, db.Create(&model.Channel{Id: 711, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeTaskPlugin, Setting: common.GetPointer(`{"task_plugin_key":"model-list-price-plugin"}`), Models: name + "," + alias + "," + aliasOnly + "," + aliasOnlyModel, ModelMapping: &mapping}).Error)
-	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{
-		{
-			ModelName: name, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}),
-			Pricing: model.PricingValues{billing_setting.PluginBillingExprOption: map[string]any{key: `u("count") * 0.02`}},
-		},
-		{
-			ModelName: aliasOnly, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}),
-			Pricing: model.PricingValues{"billing_setting.billing_mode": billing_setting.BillingModeTieredExpr, "billing_setting.billing_expr": `u("count") * 0.03`},
-		},
-	}))
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "default", Model: name, ChannelId: 711, Enabled: true},
-		{Group: "default", Model: alias, ChannelId: 711, Enabled: true},
-		{Group: "default", Model: aliasOnly, ChannelId: 711, Enabled: true},
-		{Group: "default", Model: aliasOnlyModel, ChannelId: 711, Enabled: true},
-	}).Error)
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	ctx.Set("id", 1011)
-	refreshModelListCapabilities(t, db)
-	ListModels(ctx, constant.ChannelTypeOpenAI)
-	listed := decodeListModelsResponse(t, recorder)
-	require.Contains(t, listed, name)
-	require.Contains(t, listed, alias)
-	require.Contains(t, listed, aliasOnly)
-	require.NotContains(t, listed, aliasOnlyModel)
-}
-
-func TestListModelsHidesTaskPricesIncompatibleWithUpdatedPlugin(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	withSelfUseModeDisabled(t)
-	const baseModel = "zz-task-base-schema-change"
-	const overrideModel = "zz-task-override-schema-change"
-	const freeModel = "zz-task-free-schema-change"
-	const pluginKey = "model-list-schema-change"
-	source := `export const meta={apiVersion:1,key:"model-list-schema-change",name:"Schema Change",version:"1.0.0",author:{name:"Test"},models:["zz-task-base-schema-change","zz-task-override-schema-change","zz-task-free-schema-change"],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}}};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};`
-	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(pluginKey)) })
-	require.NoError(t, db.Create(&model.User{Id: 1012, Username: "task-schema-change-user", Password: "password", Group: "default", Status: common.UserStatusEnabled}).Error)
-	require.NoError(t, db.Create(&model.Channel{Id: 712, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeTaskPlugin, Setting: common.GetPointer(`{"task_plugin_key":"model-list-schema-change"}`), Models: strings.Join([]string{baseModel, overrideModel, freeModel}, ",")}).Error)
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "default", Model: baseModel, ChannelId: 712, Enabled: true},
-		{Group: "default", Model: overrideModel, ChannelId: 712, Enabled: true},
-		{Group: "default", Model: freeModel, ChannelId: 712, Enabled: true},
-	}).Error)
-	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{
-		{ModelName: baseModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: model.PricingValues{
-			"billing_setting.billing_mode": billing_setting.BillingModeTieredExpr,
-			"billing_setting.billing_expr": `u("count") * 0.02`,
-		}},
-		{ModelName: overrideModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: model.PricingValues{
-			"ModelPrice":                            "1",
-			billing_setting.PluginBillingExprOption: map[string]any{pluginKey: `u("count") * 0.02`},
-		}},
-		{ModelName: freeModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: model.PricingValues{"ModelPrice": "0"}},
-	}))
-	for _, updated := range []bool{false, true} {
-		if updated {
-			_, err = jsplugin.DefaultRegistry.Register(strings.Replace(source, "usageSchema:{count:", "usageSchema:{duration:", 1), jsplugin.Options{})
-			require.NoError(t, err)
-		}
-		recorder := httptest.NewRecorder()
-		ctx, _ := gin.CreateTestContext(recorder)
-		ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-		ctx.Set("id", 1012)
-		refreshModelListCapabilities(t, db)
-		ListModels(ctx, constant.ChannelTypeOpenAI)
-		listed := decodeListModelsResponse(t, recorder)
-		assert.Contains(t, listed, freeModel, "an explicit free per-call price does not depend on the usage schema")
-		for _, name := range []string{baseModel, overrideModel} {
-			_, priceErr := model.ResolveModelBillingPrice(ctx.Request.Context(), name, pluginKey)
-			if updated {
-				assert.Error(t, priceErr)
-				assert.NotContains(t, listed, name, "a rejected plugin expression must not expose a callable model")
-			} else {
-				require.NoError(t, priceErr)
-				assert.Contains(t, listed, name)
-			}
-		}
-	}
-}
-
-func TestListModelsUsesAdvancedCustomEndpointTypesFromActiveCapabilities(t *testing.T) {
+func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)
 
@@ -657,8 +381,6 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromActiveCapabilities(t *test
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	ctx.Set("id", 1003)
 
-	refreshModelListCapabilities(t, db)
-
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 
 	payload := decodeListModelsPayload(t, recorder)
@@ -671,7 +393,6 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromActiveCapabilities(t *test
 }
 
 func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
 	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{
 		"zz-token-tiered-visible-model":      "tiered_expr",
@@ -681,7 +402,7 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 		"zz-token-tiered-visible-model":    `tier("base", p * 1 + c * 2)`,
 		"zz-token-tiered-empty-expr-model": "",
 	})
-	require.NoError(t, db.Create(&model.Channel{Id: 1, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI}).Error)
+	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "default", Model: "zz-token-tiered-visible-model", ChannelId: 1, Enabled: true},
 		{Group: "default", Model: "zz-token-tiered-empty-expr-model", ChannelId: 1, Enabled: true},
@@ -701,8 +422,6 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 		"zz-token-unpriced-model":            true,
 	})
 
-	refreshModelListCapabilities(t, db)
-
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 
 	ids := decodeListModelsResponse(t, recorder)
@@ -712,49 +431,71 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-unpriced-model")
 }
 
-func TestCheckUpdatePasswordRequiresCurrentPassword(t *testing.T) {
+func TestListModelsTokenLimitUsesResolvedCustomAutoGroups(t *testing.T) {
+	withSelfUseModeEnabled(t)
+	originalMax := setting.GetMaxTokenAutoGroups()
+	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	originalRatios := ratio_setting.GroupRatio2JSONString()
+	require.NoError(t, setting.UpdateMaxTokenAutoGroups("5"))
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","vip":"VIP"}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":1}`))
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateMaxTokenAutoGroups(fmt.Sprintf("%d", originalMax)))
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(originalRatios))
+	})
+
 	db := setupModelListControllerTestDB(t)
-	hashedPassword, err := common.Password2Hash("CurrentPassword123")
-	require.NoError(t, err)
-	user := &model.User{
-		Username: "password-user",
-		Password: hashedPassword,
-		Status:   common.UserStatusEnabled,
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "vip", Model: "zz-vip-allowed", ChannelId: 1, Enabled: true},
+		{Group: "vip", Model: "zz-vip-denied", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "zz-default-outside-snapshot", ChannelId: 1, Enabled: true},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(ctx, constant.ContextKeyTokenGroup, "auto")
+	common.SetContextKey(ctx, constant.ContextKeyTokenAutoGroups, []string{"vip"})
+	common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
+	common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, map[string]bool{
+		"zz-vip-allowed":              true,
+		"zz-default-outside-snapshot": true,
+		"zz-not-enabled":              true,
+	})
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+	ids := decodeListModelsResponse(t, recorder)
+	require.Equal(t, map[string]struct{}{"zz-vip-allowed": {}}, ids)
+
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default"}`))
+	emptyRecorder := httptest.NewRecorder()
+	emptyCtx, _ := gin.CreateTestContext(emptyRecorder)
+	emptyCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	common.SetContextKey(emptyCtx, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(emptyCtx, constant.ContextKeyTokenGroup, "auto")
+	common.SetContextKey(emptyCtx, constant.ContextKeyTokenAutoGroups, []string{"vip"})
+	common.SetContextKey(emptyCtx, constant.ContextKeyTokenModelLimitEnabled, true)
+	common.SetContextKey(emptyCtx, constant.ContextKeyTokenModelLimit, map[string]bool{"zz-vip-allowed": true})
+
+	require.NotPanics(t, func() {
+		ListModels(emptyCtx, constant.ChannelTypeAnthropic)
+	})
+	var anthropicResponse struct {
+		Data    []dto.AnthropicModel `json:"data"`
+		FirstID string               `json:"first_id"`
+		LastID  string               `json:"last_id"`
 	}
-	require.NoError(t, db.Create(user).Error)
-
-	updatePassword, err := checkUpdatePassword("", "", user.Id)
-	require.NoError(t, err)
-	assert.False(t, updatePassword)
-
-	updatePassword, err = checkUpdatePassword("", "NewPassword123", user.Id)
-	require.Error(t, err)
-	assert.False(t, updatePassword)
-	assert.ErrorIs(t, err, errOriginalPasswordFail)
-
-	updatePassword, err = checkUpdatePassword("CurrentPassword123", "NewPassword123", user.Id)
-	require.NoError(t, err)
-	assert.True(t, updatePassword)
-}
-
-func TestCheckUpdatePasswordRejectsHistoricalEmptyPassword(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	user := &model.User{
-		Username: "legacy-passwordless-user",
-		Password: "",
-		Status:   common.UserStatusEnabled,
-	}
-	require.NoError(t, db.Create(user).Error)
-
-	updatePassword, err := checkUpdatePassword("", "NewPassword123", user.Id)
-	require.Error(t, err)
-	assert.False(t, updatePassword)
-	assert.ErrorIs(t, err, errUserPasswordUnset)
+	require.NoError(t, common.Unmarshal(emptyRecorder.Body.Bytes(), &anthropicResponse))
+	require.Empty(t, anthropicResponse.Data)
+	require.Empty(t, anthropicResponse.FirstID)
+	require.Empty(t, anthropicResponse.LastID)
 }
 
 func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.UserSession{}))
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.AuditLog{}, &model.UserSession{}, &model.TwoFA{}, &model.PasskeyCredential{}))
 
 	hashedPassword, err := common.Password2Hash("CurrentPassword123")
 	require.NoError(t, err)
@@ -770,11 +511,12 @@ func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 	router := gin.New()
 	router.GET("/", func(c *gin.Context) {
 		setupLogin(&model.User{
-			Id:       user.Id,
-			Username: user.Username,
-			Role:     user.Role,
-			Status:   user.Status,
-			Group:    user.Group,
+			Id:          user.Id,
+			AuthVersion: user.AuthVersion,
+			Username:    user.Username,
+			Role:        user.Role,
+			Status:      user.Status,
+			Group:       user.Group,
 		}, nil, c)
 	})
 

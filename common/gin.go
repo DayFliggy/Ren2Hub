@@ -16,9 +16,9 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/http/httpproxy"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/net/http/httpproxy"
 )
 
 const KeyRequestBody = "key_request_body"
@@ -62,7 +62,8 @@ func GetRequestBody(c *gin.Context) (io.Seeker, error) {
 		}
 	}
 
-	// A failed read consumed and closed the body; every reader must retain its cause.
+	// A failed read has consumed and closed the body. Later readers get the
+	// same error instead of "http: invalid Read on closed Body".
 	if readErr, failed := c.Get(keyBodyReadError); failed {
 		return nil, readErr.(error)
 	}
@@ -219,22 +220,11 @@ func UpstreamAddresses(c *gin.Context) []string {
 	if setting, ok := GetContextKeyType[dto.ChannelSettings](c, constant.ContextKeyChannelSetting); ok {
 		candidates = append(candidates, setting.Proxy)
 	}
-	if value, exists := c.Get("pluginAllowedHosts"); exists {
-		if hosts, ok := value.([]string); ok {
-			candidates = append(candidates, hosts...)
-		}
-	}
 	baseURL := strings.TrimSpace(GetContextKeyString(c, constant.ContextKeyChannelBaseUrl))
 	candidates = append(candidates, baseURL)
 	if GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeAdvancedCustom || (baseURL != "" && !isPresetUpstreamHost(baseURL)) {
 		candidates = append(candidates, GetContextKeyString(c, constant.ContextKeyUpstreamRequestOrigin))
 	}
-	return FilterUpstreamAddresses(candidates...)
-}
-
-// FilterUpstreamAddresses keeps private routing addresses for masking while
-// preserving the public endpoints provided by the channel presets.
-func FilterUpstreamAddresses(candidates ...string) []string {
 	addresses := make([]string, 0, len(candidates))
 	for _, address := range candidates {
 		if strings.TrimSpace(address) != "" && !isPresetUpstreamHost(address) {
@@ -320,11 +310,6 @@ func ApiErrorMsg(c *gin.Context, msg string) {
 		"success": false,
 		"message": msg,
 	})
-}
-
-// ApiErrorWithCode is ApiError with a stable error code.
-func ApiErrorWithCode(c *gin.Context, err error, code string) {
-	ApiErrorStatus(c, http.StatusOK, err, gin.H{"code": code})
 }
 
 func ApiSuccess(c *gin.Context, data any) {
@@ -498,18 +483,4 @@ func multipartMemoryLimit() int64 {
 		limitMB = 32
 	}
 	return int64(limitMB) << 20
-}
-
-func GetContextKeyQuota(c *gin.Context, key constant.ContextKey) Quota {
-	value, _ := c.Get(string(key))
-	switch q := value.(type) {
-	case Quota:
-		return q
-	case int64:
-		return Quota(q)
-	case int:
-		return Quota(q)
-	default:
-		return 0
-	}
 }

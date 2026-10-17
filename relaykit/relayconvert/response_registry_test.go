@@ -352,9 +352,6 @@ func TestConvertResponseProviderToOAIChatUsage(t *testing.T) {
 			},
 		},
 	}
-	for i := range gemini.Candidates {
-		gemini.Candidates[i].FinishReason = respPtr("STOP")
-	}
 	toChat, err = ConvertResponse(nil, &convmeta.Values{ChannelMetaAttached: true, UpstreamModelName: "gemini-test"}, types.RelayFormatOpenAI, gemini)
 	require.NoError(t, err)
 	assert.Equal(t, ConverterGeminiContentToOpenAIChat, toChat.Converter)
@@ -499,8 +496,6 @@ func TestConvertStreamResponseStatefulDirectConverters(t *testing.T) {
 	assert.Equal(t, []ResponseStep{{Converter: ConverterOpenAIChatToOpenAIResponses, From: types.RelayFormatOpenAI, To: types.RelayFormatOpenAIResponses}}, chatResults[0].Steps)
 	assert.Equal(t, 5, chatState.Usage().TotalTokens)
 
-	_, err = ConvertStreamResponseChunk(nil, nil, chatState, &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{FinishReason: respPtr("stop")}}})
-	require.NoError(t, err)
 	finalResults, err := FinalizeStreamResponse(nil, nil, chatState)
 	require.NoError(t, err)
 	require.NotEmpty(t, finalResults)
@@ -560,8 +555,6 @@ func TestConvertStreamResponseStatefulDirectResponsesToClaude(t *testing.T) {
 	assert.True(t, sawTextDelta)
 
 	state.SetUsage(&dto.Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5})
-	_, err = ConvertStreamResponseChunk(nil, info, state, &dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`)}})
-	require.NoError(t, err)
 	_, err = FinalizeStreamResponse(nil, info, state)
 	require.NoError(t, err)
 	assert.Equal(t, 5, state.Usage().TotalTokens)

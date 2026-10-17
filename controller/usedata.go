@@ -13,16 +13,16 @@ import (
 func parseFlowQuotaTimeRange(c *gin.Context) (int64, int64, bool) {
 	startTimestamp, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	if err != nil || startTimestamp <= 0 {
-		common.ApiErrorT(c, "invalid start_timestamp")
+		common.ApiErrorMsg(c, "invalid start_timestamp")
 		return 0, 0, false
 	}
 	endTimestamp, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	if err != nil || endTimestamp <= 0 {
-		common.ApiErrorT(c, "invalid end_timestamp")
+		common.ApiErrorMsg(c, "invalid end_timestamp")
 		return 0, 0, false
 	}
 	if endTimestamp < startTimestamp {
-		common.ApiErrorT(c, "invalid time range")
+		common.ApiErrorMsg(c, "invalid time range")
 		return 0, 0, false
 	}
 	return startTimestamp, endTimestamp, true
@@ -64,13 +64,10 @@ func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	if c.GetInt("role") < common.RoleAdminUser {
-		var err error
-		startTimestamp, err = limitLogTimeRange(startTimestamp, endTimestamp)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
+	startTimestamp, err := limitLogTimeRange(startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	dates, err := model.GetQuotaDataByUserId(userId, startTimestamp, endTimestamp)
 	if err != nil {
@@ -110,13 +107,9 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if c.GetInt("role") < common.RoleAdminUser {
-		var err error
-		startTimestamp, err = limitLogTimeRange(startTimestamp, endTimestamp)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
+	if _, err := limitLogTimeRange(startTimestamp, endTimestamp); err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser)
 	if err != nil {

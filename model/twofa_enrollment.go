@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrTwoFASetupInvalid = common.NewMessage("The two-factor setup has expired or changed. Start setup again.")
-var ErrTwoFACodeInvalid = common.NewMessage("The authenticator code is incorrect.")
+var ErrTwoFASetupInvalid = errors.New("The two-factor setup has expired or changed. Start setup again.")
+var ErrTwoFACodeInvalid = errors.New("The authenticator code is incorrect.")
 
 type twoFAEnrollmentPayload struct {
 	TwoFAID       int                    `json:"twofa_id"`

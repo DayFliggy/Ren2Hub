@@ -7,19 +7,14 @@ import "github.com/QuantumNous/new-api/relaykit/types"
 type EndpointType = types.EndpointType
 
 const (
-	EndpointTypeOpenAI                             = types.EndpointTypeOpenAI
-	EndpointTypeOpenAIResponse                     = types.EndpointTypeOpenAIResponse
-	EndpointTypeOpenAIResponseCompact              = types.EndpointTypeOpenAIResponseCompact
-	EndpointTypeOpenAIAlphaSearch                  = types.EndpointTypeOpenAIAlphaSearch
-	EndpointTypeAnthropic                          = types.EndpointTypeAnthropic
-	EndpointTypeGemini                             = types.EndpointTypeGemini
-	EndpointTypeJinaRerank                         = types.EndpointTypeJinaRerank
-	EndpointTypeImageGeneration                    = types.EndpointTypeImageGeneration
-	EndpointTypeEmbeddings                         = types.EndpointTypeEmbeddings
-	EndpointTypeOpenAIVideo                        = types.EndpointTypeOpenAIVideo
-	EndpointTypeAudio                 EndpointType = "audio"
-	EndpointTypeRealtime              EndpointType = "realtime"
-	EndpointTypeMidjourney            EndpointType = "midjourney"
-	EndpointTypeSuno                  EndpointType = "suno"
-	EndpointTypeTaskPlugin            EndpointType = "task_plugin"
+	EndpointTypeOpenAI                = types.EndpointTypeOpenAI
+	EndpointTypeOpenAIResponse        = types.EndpointTypeOpenAIResponse
+	EndpointTypeOpenAIResponseCompact = types.EndpointTypeOpenAIResponseCompact
+	EndpointTypeOpenAIAlphaSearch     = types.EndpointTypeOpenAIAlphaSearch
+	EndpointTypeAnthropic             = types.EndpointTypeAnthropic
+	EndpointTypeGemini                = types.EndpointTypeGemini
+	EndpointTypeJinaRerank            = types.EndpointTypeJinaRerank
+	EndpointTypeImageGeneration       = types.EndpointTypeImageGeneration
+	EndpointTypeEmbeddings            = types.EndpointTypeEmbeddings
+	EndpointTypeOpenAIVideo           = types.EndpointTypeOpenAIVideo
 )

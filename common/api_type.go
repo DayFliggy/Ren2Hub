@@ -3,15 +3,9 @@ package common
 import "github.com/QuantumNous/new-api/constant"
 
 func ChannelType2APIType(channelType int) (int, bool) {
-	if constant.IsRetiredChannelType(channelType) {
-		return -1, false
-	}
 	apiType := -1
 	switch channelType {
-	case constant.ChannelTypeOpenAI, constant.ChannelTypeAzure, constant.ChannelTypeOpenAIMax,
-		constant.ChannelTypeOhMyGPT, constant.ChannelTypeCustom, constant.ChannelTypeAILS,
-		constant.ChannelTypeAIProxy, constant.ChannelTypeAPI2GPT, constant.ChannelTypeAIGC2D,
-		constant.ChannelType360, constant.ChannelTypeFastGPT, constant.ChannelTypeLingYiWanWu:
+	case constant.ChannelTypeOpenAI:
 		apiType = constant.APITypeOpenAI
 	case constant.ChannelTypeAnthropic:
 		apiType = constant.APITypeAnthropic
@@ -89,7 +83,7 @@ func ChannelType2APIType(channelType int) (int, bool) {
 	if apiType == -1 {
 		// Task plugin channels are served by the task relay and must never
 		// fall back to the OpenAI adaptor.
-		if channelType == constant.ChannelTypeTaskPlugin {
+		if channelType == constant.ChannelTypeTaskPlugin || channelType == constant.ChannelTypeCodex {
 			return -1, false
 		}
 		return constant.APITypeOpenAI, false
@@ -97,9 +91,9 @@ func ChannelType2APIType(channelType int) (int, bool) {
 	return apiType, true
 }
 
-func IsResponsesCompactAPIType(apiType int) bool {
+func SupportsResponsesCompact(channelType, apiType int) bool {
 	switch apiType {
-	case constant.APITypeOllama, constant.APITypeOpenAI,
+	case constant.APITypeOpenAI,
 		constant.APITypeAdvancedCustom,
 		constant.APITypeSub2API,
 		constant.APITypeNewAPI:

@@ -11,6 +11,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 
 	"github.com/QuantumNous/new-api/relay/constant"
 
@@ -50,7 +51,6 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 	if info.RelayMode == constant.RelayModeResponses {
 		info.VendorToolUsage = xaiResponsesToolUsage
-		info.VendorToolPriceKeys = xaiResponsesToolPriceKeys
 	}
 }
 
@@ -82,10 +82,11 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 			request.MaxCompletionTokens = request.MaxTokens
 			request.MaxTokens = nil
 		}
-		if strings.HasSuffix(request.Model, "-high") {
+		preserveSuffix := model_setting.ShouldPreserveThinkingSuffix(info.OriginModelName) || model_setting.ShouldPreserveThinkingSuffix(request.Model)
+		if !preserveSuffix && strings.HasSuffix(request.Model, "-high") {
 			request.ReasoningEffort = "high"
 			request.Model = strings.TrimSuffix(request.Model, "-high")
-		} else if strings.HasSuffix(request.Model, "-low") {
+		} else if !preserveSuffix && strings.HasSuffix(request.Model, "-low") {
 			request.ReasoningEffort = "low"
 			request.Model = strings.TrimSuffix(request.Model, "-low")
 		}
@@ -118,11 +119,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	switch info.RelayMode {
 	case constant.RelayModeImagesGenerations, constant.RelayModeImagesEdits:
-		if info.IsStream {
-			usage, err = openai.OpenaiImageStreamHandler(c, info, resp)
-		} else {
-			usage, err = openai.OpenaiImageHandler(c, info, resp)
-		}
+		usage, err = openai.OpenaiImageHandler(c, info, resp)
 	case constant.RelayModeResponses:
 		if info.IsStream {
 			usage, err = openai.OaiResponsesStreamHandler(c, info, resp)

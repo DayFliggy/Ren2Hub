@@ -599,6 +599,9 @@ export default {
   },
 
   keys: {
+    statusExpired: 'Expired',
+    statusExhausted: 'Quota exhausted',
+    crossGroupRetry: 'Retry across groups',
     title: 'API Keys',
     breadcrumb: ['Console', 'API Keys'],
     createKey: 'Create key',
@@ -874,6 +877,8 @@ export default {
   },
 
   models: {
+    autoPriceHint:
+      'Automatic mode shows base prices. The final price uses the group selected by upstream automatic routing.',
     viewToggle: 'View mode',
     title: 'Model Plaza',
     breadcrumb: ['Console', 'Models'],
@@ -1119,6 +1124,10 @@ export default {
   },
 
   channels: {
+    permissionDenied: 'You do not have permission for this channel action.',
+    group: 'Routing groups',
+    groupHint:
+      'Comma-separated. Requests can use channels only in their authorized groups.',
     providerStatus: 'Provider status',
     providerVersion: 'Version',
     contextWindow: 'Context window',
@@ -1212,7 +1221,7 @@ export default {
     refreshList: 'Refresh list',
     advancedLegacy: 'Advanced (legacy)',
     createChannel: 'New channel',
-    searchPlaceholder: 'Search by name, ID or supplier',
+    searchPlaceholder: 'Search name, ID or upstream URL',
     typeFilter: 'Channel type',
     statusFilter: 'Channel status',
     sortLabel: 'Sort by',
@@ -1441,6 +1450,7 @@ export default {
   },
 
   users: {
+    permissions: 'Permissions',
     bindingsTitle: 'Manage account bindings',
     bindingsEmpty: 'No bound sign-in providers or email.',
     unbind: 'Unbind',
@@ -1655,6 +1665,7 @@ export default {
   },
 
   orders: {
+    title: 'Top-up orders',
     gmpay: {
       title: 'GMPay order evidence',
       loading: 'Loading gateway evidence…',
@@ -1796,7 +1807,7 @@ export default {
     groupPlaceholder: 'Search or enter a group',
     title: 'Logs',
     breadcrumb: ['Console', 'Logs'],
-    keywordPlaceholder: 'Search by model…',
+    keywordPlaceholder: 'Filter by exact request ID',
     typeLabel: 'Type',
     typeConsume: 'Consume',
     typeTopup: 'Top-up',
@@ -1930,7 +1941,7 @@ export default {
 
   auditLogs: {
     breadcrumb: 'Audit logs',
-    keywordPlaceholder: 'Search account, operation, or IP…',
+    keywordPlaceholder: 'Filter by exact request ID',
     categoryLabel: 'Event category',
     scopeLabel: 'Scope',
     resultLabel: 'Result',
@@ -3190,6 +3201,7 @@ export default {
       diskThreshold: 'Disk threshold (%)',
     },
     options: {
+      cny: 'CNY',
       guest: 'Guest',
       user: 'User',
       admin: 'Administrator',
@@ -3286,6 +3298,8 @@ export default {
       cleanupLogsByDays: 'Log files older than {count} days will be deleted.',
     },
     waffoPancake: {
+      orphanStore:
+        'Store {id} was created, but product creation failed. Check the gateway catalog before creating another pair.',
       label: 'Waffo Pancake configuration',
       merchantId: 'Merchant ID',
       privateKey: 'Private key',
@@ -3334,6 +3348,7 @@ export default {
       'Settings could not be loaded. Editing and saving are disabled until a successful reload.',
     retryLoad: 'Reload settings',
     gmpayPanel: {
+      selectedAssets: 'Enabled assets (JSON)',
       title: 'GMPay crypto payments',
       description:
         'Choose the tokens and networks available to customers, then save the gateway configuration.',

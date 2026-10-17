@@ -26,6 +26,7 @@ func (a *gormAdapter) LoadPolicy(m casbinmodel.Model) error {
 	}
 	for _, rule := range rules {
 		if rule.Ptype != "p" {
+			// This model has no role-inheritance or other policy sections.
 			continue
 		}
 		if rule.V0 == "" || rule.V1 == "" || rule.V2 == "" {
@@ -39,9 +40,11 @@ func (a *gormAdapter) LoadPolicy(m casbinmodel.Model) error {
 			return fmt.Errorf("authorization policy %d has an invalid effect", rule.Id)
 		}
 		if rule.V5 != "" || (rule.V4 != "" && rule.V4 != "all") {
-			// Unsupported restrictions cannot fall through to a broader role grant.
+			// The current model cannot enforce legacy own/other scopes. Keep
+			// the stored rule for review and deny this permission in memory.
+			// Skipping a per-user rule would expose the admin role baseline.
 			effect = EffectDeny
-			common.SysLog(fmt.Sprintf("authorization policy %d has an unsupported legacy scope; loaded as deny; review the stored policy before granting access", rule.Id))
+			common.SysLog(common.LogText("authorization policy %d has an unsupported legacy scope; loaded as deny; review the stored policy before granting access", rule.Id))
 		}
 		if err := persist.LoadPolicyArray([]string{rule.Ptype, rule.V0, rule.V1, rule.V2, effect}, m); err != nil {
 			return err
@@ -102,7 +105,7 @@ func (a *gormAdapter) RemoveFilteredPolicy(_ string, ptype string, fieldIndex in
 
 func (a *gormAdapter) ruleQuery(query *gorm.DB, ptype string, rule []string) *gorm.DB {
 	query = query.Where("ptype = ?", ptype)
-	for idx := 0; idx < 6; idx++ {
+	for idx := range 6 {
 		value := ""
 		if idx < len(rule) {
 			value = rule[idx]

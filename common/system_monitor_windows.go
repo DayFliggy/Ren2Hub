@@ -3,18 +3,18 @@
 package common
 
 import (
+	"os"
 	"syscall"
 	"unsafe"
 )
 
-// sampleLoadAverage reports no load average: Windows has no kernel run-queue
-// average, and gopsutil's emulation starts a goroutine that cannot be stopped.
-func sampleLoadAverage() (LoadAverage, bool) {
-	return LoadAverage{}, false
-}
-
 // GetDiskSpaceInfo 获取缓存目录所在磁盘的空间信息 (Windows)
 func GetDiskSpaceInfo() DiskSpaceInfo {
+	cachePath := GetDiskCachePath()
+	if cachePath == "" {
+		cachePath = os.TempDir()
+	}
+
 	info := DiskSpaceInfo{}
 
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
@@ -22,7 +22,7 @@ func GetDiskSpaceInfo() DiskSpaceInfo {
 
 	var freeBytesAvailable, totalBytes, totalFreeBytes uint64
 
-	pathPtr, err := syscall.UTF16PtrFromString(DiskSpacePath())
+	pathPtr, err := syscall.UTF16PtrFromString(cachePath)
 	if err != nil {
 		return info
 	}

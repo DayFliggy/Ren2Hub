@@ -1,68 +1,63 @@
 package helper
 
 import (
-	"encoding/json"
+	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/stretchr/testify/assert"
+	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
-	"testing"
+	"github.com/tidwall/gjson"
 )
 
-func TestBillingInputRetainsProbesButRelaySerializationExcludesThem(t *testing.T) {
-	attrs, err := BillingAttributesFromBody([]byte(`{"service_tier":"priority","messages":[{"content":"private"}],"password":"private","n":3,"size":"1024x1024"}`))
-	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"service_tier": "priority", "quantity": json.Number("3"), "resolution": "1024x1024"}, attrs)
-	input, err := BuildBillingExprRequestInputFromRequest(&dto.GeneralOpenAIRequest{Model: "test", Messages: []dto.Message{{Role: "user", Content: "private"}}}, map[string]string{"Authorization": "private"})
-	require.NoError(t, err)
-	assert.Contains(t, string(input.Body), "private")
-	assert.Equal(t, "private", input.Headers["Authorization"])
-	encoded, err := common.Marshal(&relaycommon.RelayInfo{BillingRequestInput: &input})
-	require.NoError(t, err)
-	assert.NotContains(t, string(encoded), "private")
-}
+func TestResolveIncomingBillingExprRequestInput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Request.Header.Set("Content-Type", "application/json")
 
-func TestBillingAttributesRejectInvalidScalarAndPreferCanonicalFields(t *testing.T) {
-	for _, body := range []string{`{"quantity":-1}`, `{"quantity":1e100}`, `{"quality":{"secret":"x"}}`} {
-		_, err := BillingAttributesFromBody([]byte(body))
-		require.Error(t, err)
+	body := []byte(`{"service_tier":"fast"}`)
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(body))
+	ctx.Set(common.KeyRequestBody, body)
+
+	info := &relaycommon.RelayInfo{
+		RequestHeaders: map[string]string{"Content-Type": "application/json"},
 	}
-	attrs, err := BillingAttributesFromBody([]byte(`{"n":1,"quantity":2,"size":"a","resolution":"b"}`))
+
+	input, err := ResolveIncomingBillingExprRequestInput(ctx, info)
 	require.NoError(t, err)
-	assert.Equal(t, json.Number("2"), attrs["quantity"])
-	assert.Equal(t, "b", attrs["resolution"])
+	require.Equal(t, body, input.Body)
+	require.Equal(t, "application/json", input.Headers["Content-Type"])
 }
 
-func TestBillingAttributesCaptureFinalReasoningAndExplicitZero(t *testing.T) {
-	attrs, err := BillingAttributesFromBody([]byte(`{"temperature":0,"top_p":0,"reasoning":{"effort":"high"}}`))
-	require.NoError(t, err)
-	assert.Equal(t, json.Number("0"), attrs["temperature"])
-	assert.Equal(t, json.Number("0"), attrs["top_p"])
-	assert.Equal(t, "high", attrs["effort"])
-	assert.Equal(t, "on", attrs["thinking"])
-	attrs, err = BillingAttributesFromBody([]byte(`{"generationConfig":{"thinkingConfig":{"thinkingBudget":-1}}}`))
-	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"thinking": "adaptive"}, attrs)
-	attrs, err = BillingAttributesFromBody([]byte(`{"thinking":{"type":"enabled","budget_tokens":1024},"output_config":{"effort":"max"}}`))
-	require.NoError(t, err)
-	assert.Equal(t, json.Number("1024"), attrs["thinking_budget_tokens"])
-	assert.NotContains(t, attrs, "temperature")
-}
-
-func TestFinalServiceTierPreservesAttributeAndWireBody(t *testing.T) {
-	for _, tier := range []string{"priority", "fast", "ultrafast", "flex", " FAST ", "Unknown"} {
-		t.Run(tier, func(t *testing.T) {
-			body, err := common.Marshal(map[string]interface{}{"service_tier": tier})
-			require.NoError(t, err)
-			original := append([]byte(nil), body...)
-			info := &relaycommon.RelayInfo{}
-			require.NoError(t, FreezeOutboundBillingAttributes(info, body))
-			assert.Equal(t, tier, info.BillingRequestInput.Attributes["service_tier"])
-			assert.Equal(t, original, body)
-		})
+func TestBuildBillingExprRequestInputFromRequest(t *testing.T) {
+	request := &dto.GeneralOpenAIRequest{
+		Model:  "gemini-3.1-pro-preview",
+		Stream: lo.ToPtr(true),
+		Messages: []dto.Message{
+			{
+				Role:    "user",
+				Content: "hi",
+			},
+		},
+		MaxTokens: lo.ToPtr(uint(3000)),
 	}
-	attrs, err := BillingAttributesFromBody([]byte(`{}`))
+
+	input, err := BuildBillingExprRequestInputFromRequest(request, map[string]string{
+		"Content-Type": "application/json",
+		"X-Test":       "1",
+	})
 	require.NoError(t, err)
-	assert.NotContains(t, attrs, "service_tier")
+	require.Equal(t, "application/json", input.Headers["Content-Type"])
+	require.Equal(t, "1", input.Headers["X-Test"])
+	require.True(t, gjson.GetBytes(input.Body, "stream").Bool())
+	require.Equal(t, "user", gjson.GetBytes(input.Body, "messages.0.role").String())
+	require.Equal(t, float64(3000), gjson.GetBytes(input.Body, "max_tokens").Float())
 }

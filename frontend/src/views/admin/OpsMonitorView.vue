@@ -1,85 +1,147 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { OPS_WINDOWS, opsMonitorApi, type OpsWindow } from '@/api/opsMonitor'
-import OpsGatewayCard from '@/components/admin/ops/OpsGatewayCard.vue'
-import OpsQualityCard from '@/components/admin/ops/OpsQualityCard.vue'
-import OpsResourcesCard from '@/components/admin/ops/OpsResourcesCard.vue'
-import OpsStatusHeader from '@/components/admin/ops/OpsStatusHeader.vue'
-import OpsStorageCards from '@/components/admin/ops/OpsStorageCards.vue'
+import { api } from '@/api/client'
+import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import OpsSystemTasksCard from '@/components/admin/ops/OpsSystemTasksCard.vue'
-import OpsUpstreamCard from '@/components/admin/ops/OpsUpstreamCard.vue'
-import SectionHeading from '@/components/common/SectionHeading.vue'
-import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
-import { usePolledFeed } from '@/composables/usePolledFeed'
-import { opsMonitorMessages } from '@/i18n/opsMonitor'
-import { useAuthStore } from '@/stores/auth'
-import '@/components/admin/ops/ops.css'
-
-const OVERVIEW_INTERVAL_MS = 30_000
-
-const auth = useAuthStore()
-const { t } = useI18n({ useScope: 'local', messages: opsMonitorMessages })
-const selectedWindow = ref<OpsWindow>('1h')
-const windowOptions = computed(() =>
-  OPS_WINDOWS.map((value) => ({ value, label: t(`window.${value}`) }))
-)
-// The overview feeds the status, runtime and storage sections; the window
-// only changes its trend series.
-const overview = usePolledFeed(
-  (signal) => opsMonitorApi.overview(selectedWindow.value, signal),
-  () => OVERVIEW_INTERVAL_MS
-)
-watch(selectedWindow, () => void overview.refresh())
-const overviewState = computed(() => ({
-  overview: overview.data.value,
-  loading: overview.loading.value,
-  error: overview.error.value,
-  updatedAt: overview.updatedAt.value,
-}))
-// Sections the user may not read are not mounted, so they never request.
-const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
+const { t } = useI18n({
+  messages: {
+    'zh-CN': {
+      runtime: {
+        title: '运行状态',
+        memory: 'Go 运行时内存',
+        cache: '缓存与磁盘',
+        config: '性能配置',
+        refresh: '刷新',
+        gc: '执行垃圾回收',
+        clear: '清理不活跃缓存',
+        reset: '重置统计',
+        confirm: '确认执行此管理操作？',
+      },
+    },
+    en: {
+      runtime: {
+        title: 'Runtime status',
+        memory: 'Go runtime memory',
+        cache: 'Cache and disk',
+        config: 'Performance configuration',
+        refresh: 'Refresh',
+        gc: 'Run garbage collection',
+        clear: 'Clean inactive cache',
+        reset: 'Reset statistics',
+        confirm: 'Run this administration action?',
+      },
+    },
+  },
+})
+interface Stats {
+  memory_stats: Record<string, number>
+  cache_stats: Record<string, unknown>
+  disk_cache_info: Record<string, unknown>
+  disk_space_info: Record<string, unknown>
+  config: Record<string, unknown>
+}
+const data = ref<Stats | null>(null),
+  error = ref(''),
+  loading = ref(false),
+  action = ref<'gc' | 'disk_cache' | 'reset_stats' | null>(null)
+async function load() {
+  loading.value = true
+  error.value = ''
+  try {
+    data.value = await api.get('/api/performance/stats')
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    loading.value = false
+  }
+}
+async function execute() {
+  if (!action.value) return
+  loading.value = true
+  error.value = ''
+  try {
+    const path = `/api/performance/${action.value}`
+    if (action.value === 'disk_cache') await api.delete(path)
+    else await api.post(path)
+    action.value = null
+    await load()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    loading.value = false
+  }
+}
+onMounted(load)
 </script>
-
 <template>
-  <div class="ops-page" data-ops-page>
-    <OpsStatusHeader
-      class="ops-area ops-area--full"
-      v-bind="overviewState"
-      :refresh-interval-seconds="OVERVIEW_INTERVAL_MS / 1000"
-      @refresh="overview.refresh"
+  <div class="space-y-6">
+    <PageBreadcrumb :crumbs="[t('runtime.title')]" /><ErrorBanner
+      v-if="error"
+      :message="error"
     />
-    <OpsQualityCard
-      class="ops-area ops-area--quality"
-      :class="{ 'ops-area--full': !canReadChannels }"
-    />
-    <OpsUpstreamCard
-      v-if="canReadChannels"
-      class="ops-area ops-area--upstream"
-    />
-    <div class="ops-area ops-area--full ops-runtime-heading">
-      <SectionHeading>{{ t('runtime') }}</SectionHeading>
-      <div class="ops-window">
-        <span class="ops-window-note">{{ t('window.note') }}</span>
-        <SegmentedToggle
-          v-model="selectedWindow"
-          :options="windowOptions"
-          :label="t('window.label')"
-          size="sm"
-        />
-      </div>
+    <div class="flex flex-wrap gap-3">
+      <ConsoleButton :disabled="loading" @click="load">{{
+        t('runtime.refresh')
+      }}</ConsoleButton
+      ><ConsoleButton
+        variant="secondary"
+        :disabled="loading"
+        @click="action = 'gc'"
+        >{{ t('runtime.gc') }}</ConsoleButton
+      ><ConsoleButton
+        variant="secondary"
+        :disabled="loading"
+        @click="action = 'disk_cache'"
+        >{{ t('runtime.clear') }}</ConsoleButton
+      ><ConsoleButton
+        variant="secondary"
+        :disabled="loading"
+        @click="action = 'reset_stats'"
+        >{{ t('runtime.reset') }}</ConsoleButton
+      >
     </div>
-    <OpsGatewayCard class="ops-area ops-area--full" v-bind="overviewState" />
-    <OpsResourcesCard
-      class="ops-area ops-area--resources"
-      v-bind="overviewState"
-    />
-    <OpsStorageCards
-      class="ops-area ops-area--storage"
-      v-bind="overviewState"
-    />
-    <div v-if="auth.isRoot" class="ops-area ops-area--full">
-      <OpsSystemTasksCard />
+    <div v-if="data" class="grid gap-6 lg:grid-cols-2">
+      <ConsoleCard :title="t('runtime.memory')"
+        ><dl>
+          <div
+            v-for="(value, key) in data.memory_stats"
+            :key="key"
+            class="flex justify-between gap-4 py-2"
+          >
+            <dt>{{ key }}</dt>
+            <dd>{{ value }}</dd>
+          </div>
+        </dl></ConsoleCard
+      ><ConsoleCard :title="t('runtime.cache')">
+        <pre class="overflow-auto text-xs">{{
+          JSON.stringify(
+            {
+              cache: data.cache_stats,
+              disk: data.disk_space_info,
+              files: data.disk_cache_info,
+            },
+            null,
+            2
+          )
+        }}</pre></ConsoleCard
+      ><ConsoleCard :title="t('runtime.config')">
+        <pre class="overflow-auto text-xs">{{
+          JSON.stringify(data.config, null, 2)
+        }}</pre>
+      </ConsoleCard>
     </div>
+    <OpsSystemTasksCard /><ConfirmDialog
+      :open="!!action"
+      :title="t('runtime.title')"
+      :message="t('runtime.confirm')"
+      :loading="loading"
+      @confirm="execute"
+      @cancel="action = null"
+    />
   </div>
 </template>

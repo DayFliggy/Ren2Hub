@@ -9,12 +9,14 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 )
 
+const ticketNotifyType = "ticket_update"
+
 func NotifyNewTicket(ticket model.Ticket) {
 	gopool.Go(func() {
 		lang := RootUserLanguage()
 		params := map[string]any{"Id": ticket.ID, "Category": ticket.Category, "Title": ticket.Title}
 		NotifyRootUser(
-			dto.NotifyTypeTicketUpdate,
+			ticketNotifyType,
 			i18n.Translate(lang, i18n.MsgTicketNotifyNewSubject, params),
 			i18n.Translate(lang, i18n.MsgTicketNotifyNewContent, params),
 		)
@@ -56,7 +58,7 @@ func notifyRootAboutTicketReply(ticket model.Ticket) {
 	lang := RootUserLanguage()
 	params := map[string]any{"Id": ticket.ID, "Title": ticket.Title}
 	NotifyRootUser(
-		dto.NotifyTypeTicketUpdate,
+		ticketNotifyType,
 		i18n.Translate(lang, i18n.MsgTicketNotifyReplyNeededSubject, params),
 		i18n.Translate(lang, i18n.MsgTicketNotifyReplyNeededContent, params),
 	)
@@ -89,7 +91,7 @@ func notifyTicketUser(userID, ticketID int, subjectKey, title string) {
 func notifyLoadedTicketUser(user *model.User, ticketID int, subjectKey, title string) {
 	setting := user.GetSetting()
 	subject := i18n.Translate(setting.Language, subjectKey, map[string]any{"Id": ticketID})
-	data := dto.NewNotify(dto.NotifyTypeTicketUpdate, subject, title, nil)
+	data := dto.NewNotify(ticketNotifyType, subject, title, nil)
 	if err := NotifyUser(user.Id, user.Email, setting, data); err != nil {
 		common.SysLog(common.LogText("failed to notify user %d for ticket %d: %s", user.Id, ticketID, err.Error()))
 	}

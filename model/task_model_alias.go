@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,10 +92,11 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 	}
 
 	var channels []Channel
-	err := WhereChannelServable(DB.Model(&Channel{}).Select("id", "type", "models", "model_mapping")).
+	err := DB.Select("id", "type", "models", "model_mapping").
+		Where("status = ?", common.ChannelStatusEnabled).
 		Find(&channels).Error
 	if err != nil {
-		common.SysError(fmt.Sprintf("rebuild task alias view: %s", err.Error()))
+		common.SysError(common.LogText("rebuild task alias view: %s", err.Error()))
 		return view
 	}
 
@@ -109,7 +109,7 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 		}
 		modelMap := make(map[string]string)
 		if err := common.UnmarshalJsonStr(mappingJSON, &modelMap); err != nil {
-			common.SysError(fmt.Sprintf("task alias view: channel %d model_mapping: %s", channel.Id, err.Error()))
+			common.SysError(common.LogText("task alias view: channel %d model_mapping: %s", channel.Id, err.Error()))
 			continue
 		}
 		inModels := make(map[string]struct{})
@@ -128,19 +128,17 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 			}
 			tail, cyclic := followChannelModelMapping(modelMap, alias)
 			if cyclic {
-				common.SysError(fmt.Sprintf("task alias mapping cycle dropped: channel=%d key=%q", channel.Id, alias))
+				common.SysError(common.LogText("task alias mapping cycle dropped: channel=%d key=%q", channel.Id, alias))
 				continue
 			}
 			declared, ok := generation.CanonicalModel(tail)
 			if !ok {
 				continue
 			}
-			owners := generation.PluginsByModel(declared)
-			if len(owners) != 1 {
-				common.SysLog(fmt.Sprintf("task alias %q dropped: declared model has %d plugin owners", alias, len(owners)))
+			plugin, ok := generation.GetByModel(declared)
+			if !ok {
 				continue
 			}
-			plugin := owners[0]
 			fold := jsplugin.ASCIIFold(alias)
 			draft := drafts[fold]
 			if draft == nil {
@@ -169,7 +167,7 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 			for key := range draft.byPlugin {
 				pluginKeys = append(pluginKeys, key)
 			}
-			common.SysLog(fmt.Sprintf("task model alias %q dropped: maps to multiple plugins %v", alias, pluginKeys))
+			common.SysLog(common.LogText("task model alias %q dropped: maps to multiple plugins %v", alias, pluginKeys))
 			continue
 		}
 		var pluginKey, declared string

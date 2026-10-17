@@ -32,7 +32,6 @@ type chatToGeminiStreamToolIDKey struct {
 }
 
 type chatToGeminiStreamTool struct {
-	Index     int
 	ID        string
 	Name      string
 	Arguments strings.Builder
@@ -420,7 +419,7 @@ func (s *ChatToGeminiStreamState) appendToolCallDelta(choiceIndex int, toolCall 
 		tool = nil
 	}
 	if tool == nil {
-		tool = &chatToGeminiStreamTool{Index: toolIndex}
+		tool = &chatToGeminiStreamTool{}
 		s.toolsByChoice[choiceIndex] = append(s.toolsByChoice[choiceIndex], tool)
 	}
 	s.toolByIndex[key] = tool
@@ -457,22 +456,15 @@ func (s *ChatToGeminiStreamState) finishChoice(choiceIndex int) ([]dto.GeminiPar
 		}
 	}
 
-	sort.SliceStable(pending, func(i, j int) bool { return pending[i].Index < pending[j].Index })
 	parts := make([]dto.GeminiPart, 0, len(pending))
 	for _, tool := range pending {
 		if tool.Name == "" {
 			return nil, fmt.Errorf("OpenAI chat choice %d has a tool call without a function name", choiceIndex)
 		}
-		args := map[string]any{}
-		if raw := strings.TrimSpace(tool.Arguments.String()); raw != "" {
-			if err := kitutil.Unmarshal([]byte(raw), &args); err != nil || args == nil {
-				return nil, fmt.Errorf("invalid function arguments for choice %d index %d: expected JSON object", choiceIndex, tool.Index)
-			}
-		}
 		parts = append(parts, dto.GeminiPart{FunctionCall: &dto.FunctionCall{
 			ID:           tool.ID,
 			FunctionName: tool.Name,
-			Arguments:    args,
+			Arguments:    geminiFunctionArguments(tool.Arguments.String()),
 		}})
 	}
 	for _, tool := range pending {

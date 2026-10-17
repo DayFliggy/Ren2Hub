@@ -15,9 +15,9 @@ type OllamaChatMessage struct {
 }
 
 type OllamaToolFunction struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	Parameters  interface{} `json:"parameters,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Parameters  any    `json:"parameters,omitempty"`
 }
 
 type OllamaTool struct {
@@ -28,19 +28,19 @@ type OllamaTool struct {
 type OllamaToolCall struct {
 	ID       string `json:"id,omitempty"`
 	Function struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
+		Name      string `json:"name"`
+		Arguments any    `json:"arguments"`
 	} `json:"function"`
 }
 
 type OllamaChatRequest struct {
 	Model     string              `json:"model"`
 	Messages  []OllamaChatMessage `json:"messages"`
-	Tools     interface{}         `json:"tools,omitempty"`
-	Format    interface{}         `json:"format,omitempty"`
+	Tools     any                 `json:"tools,omitempty"`
+	Format    any                 `json:"format,omitempty"`
 	Stream    bool                `json:"stream"`
 	Options   map[string]any      `json:"options,omitempty"`
-	KeepAlive interface{}         `json:"keep_alive,omitempty"`
+	KeepAlive any                 `json:"keep_alive,omitempty"`
 	Think     json.RawMessage     `json:"think,omitempty"`
 }
 
@@ -49,25 +49,25 @@ type OllamaGenerateRequest struct {
 	Prompt    string          `json:"prompt,omitempty"`
 	Suffix    string          `json:"suffix,omitempty"`
 	Images    []string        `json:"images,omitempty"`
-	Format    interface{}     `json:"format,omitempty"`
+	Format    any             `json:"format,omitempty"`
 	Stream    bool            `json:"stream"`
 	Options   map[string]any  `json:"options,omitempty"`
-	KeepAlive interface{}     `json:"keep_alive,omitempty"`
+	KeepAlive any             `json:"keep_alive,omitempty"`
 	Think     json.RawMessage `json:"think,omitempty"`
 }
 
 type OllamaEmbeddingRequest struct {
 	Model      string         `json:"model"`
-	Input      interface{}    `json:"input"`
+	Input      any            `json:"input"`
 	Options    map[string]any `json:"options,omitempty"`
 	Dimensions int            `json:"dimensions,omitempty"`
 }
 
 type OllamaEmbeddingResponse struct {
-	Error           string          `json:"error,omitempty"`
-	Model           string          `json:"model"`
-	Embeddings      [][]float64     `json:"embeddings"`
-	PromptEvalCount json.RawMessage `json:"prompt_eval_count,omitempty"`
+	Error           string      `json:"error,omitempty"`
+	Model           string      `json:"model"`
+	Embeddings      [][]float64 `json:"embeddings"`
+	PromptEvalCount int         `json:"prompt_eval_count,omitempty"`
 }
 
 type OllamaTagsResponse struct {
@@ -79,7 +79,7 @@ type OllamaModel struct {
 	Size       int64             `json:"size"`
 	Digest     string            `json:"digest,omitempty"`
 	ModifiedAt string            `json:"modified_at"`
-	Details    OllamaModelDetail `json:"details,omitempty"`
+	Details    OllamaModelDetail `json:"details"`
 }
 
 type OllamaModelDetail struct {

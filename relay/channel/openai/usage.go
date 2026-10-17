@@ -8,7 +8,7 @@ import (
 )
 
 func applyUsagePostProcessing(info *relaycommon.RelayInfo, usage *dto.Usage, responseBody []byte) {
-	if info == nil || info.ChannelMeta == nil || usage == nil {
+	if info == nil || usage == nil {
 		return
 	}
 

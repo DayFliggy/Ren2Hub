@@ -32,8 +32,6 @@ type DifyData struct {
 }
 
 type DifyChatCompletionResponse struct {
-	Event          string       `json:"event"`
-	Code           string       `json:"code"`
 	ConversationId string       `json:"conversation_id"`
 	Answer         string       `json:"answer"`
 	CreateAt       int64        `json:"create_at"`

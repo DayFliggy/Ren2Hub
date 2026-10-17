@@ -40,27 +40,6 @@ func TestChatCompletionsRequestToResponsesRequestInstructionsAndTools(t *testing
 	assert.Equal(t, "function_call_output", gjson.GetBytes(got.Input, "3.type").String())
 }
 
-// An omitted image detail must stay omitted upstream so the provider applies
-// its own default (auto), while an explicit client detail is forwarded as is.
-func TestChatCompletionsRequestToResponsesRequestImageDetail(t *testing.T) {
-	var req dto.GeneralOpenAIRequest
-	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"gpt-test","messages":[{"role":"user","content":[
-		{"type":"image_url","image_url":{"url":"https://example.test/omitted.png"}},
-		{"type":"image_url","image_url":{"url":"https://example.test/low.png","detail":"low"}}]}]}`), &req))
-
-	got, err := ChatCompletionsRequestToResponsesRequest(context.Background(), &req)
-	require.NoError(t, err)
-	encoded, err := kitutil.Marshal(got)
-	require.NoError(t, err)
-
-	omitted := gjson.GetBytes(encoded, "input.0.content.0")
-	assert.Equal(t, "https://example.test/omitted.png", omitted.Get("image_url").String())
-	assert.False(t, omitted.Get("detail").Exists())
-	explicit := gjson.GetBytes(encoded, "input.0.content.1")
-	assert.Equal(t, "https://example.test/low.png", explicit.Get("image_url").String())
-	assert.Equal(t, "low", explicit.Get("detail").String())
-}
-
 func TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheKey(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
 		key := "session-\"quoted\"\\path\n世界"

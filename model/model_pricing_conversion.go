@@ -11,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/shopspring/decimal"
 )
@@ -26,53 +28,19 @@ type ModelPricingConversion struct {
 // ModelPricingDescription is shared by previews, conversions and snapshot
 // entries. It describes effective prices without adding persisted settings.
 type ModelPricingDescription struct {
-	Effective      PricingValues        `json:"effective"`
+	Effective      PricingValues        `json:"effective,omitempty"`
 	CacheWriteMode CacheWriteMode       `json:"cache_write_mode,omitempty"`
 	BillingDetails LegacyBillingDetails `json:"billing_details"`
 }
 
-func legacyInputPricePerMillion(ratio any) (decimal.Decimal, error) {
+func legacyInputPricePerMillion(ratio float64) (decimal.Decimal, error) {
 	if common.QuotaPerUnit <= 0 || math.IsInf(common.QuotaPerUnit, 0) || math.IsNaN(common.QuotaPerUnit) {
 		return decimal.Zero, errors.New("invalid quota unit")
 	}
-	value, err := modelPricingDecimal(ratio)
-	if err != nil {
-		return decimal.Zero, err
+	if ratio < 0 || math.IsInf(ratio, 0) || math.IsNaN(ratio) {
+		return decimal.Zero, errors.New("input ratio must be finite and non-negative")
 	}
-	return value.Mul(decimal.NewFromInt(1_000_000)).DivRound(decimal.NewFromFloat(common.QuotaPerUnit), 36), nil
-}
-
-func legacyAudioUnitPrices(effective PricingValues) (decimal.Decimal, decimal.Decimal, bool, error) {
-	audio, hasAudio := effective["AudioRatio"]
-	completion, hasCompletion := effective["AudioCompletionRatio"]
-	if !hasAudio && !hasCompletion {
-		return decimal.Zero, decimal.Zero, false, nil
-	}
-	if !hasAudio {
-		audio = float64(1)
-	}
-	if !hasCompletion {
-		completion = float64(1)
-	}
-	base, err := legacyInputPricePerMillion(effective["ModelRatio"])
-	if err != nil {
-		return decimal.Zero, decimal.Zero, false, err
-	}
-	inputRatio, err := modelPricingDecimal(audio)
-	if err != nil {
-		return decimal.Zero, decimal.Zero, false, err
-	}
-	outputRatio, err := modelPricingDecimal(completion)
-	if err != nil {
-		return decimal.Zero, decimal.Zero, false, err
-	}
-	input := base.Mul(inputRatio)
-	return input, input.Mul(outputRatio), true, nil
-}
-
-func pricingIsOne(value any) bool {
-	parsed, err := modelPricingDecimal(value)
-	return err == nil && parsed.Equal(decimal.NewFromInt(1))
+	return decimal.NewFromFloat(ratio).Mul(decimal.NewFromInt(1_000_000)).Div(decimal.NewFromFloat(common.QuotaPerUnit)), nil
 }
 
 type LegacyPricingRule struct {
@@ -102,25 +70,53 @@ func ResolveLegacyBillingDetails(name string, effective, configured PricingValue
 		details.RequestRules = legacyDallePricingRules(name)
 		return details
 	}
-	_, priced := effective["ModelRatio"]
+	ratio, priced := effective["ModelRatio"].(float64)
 	if !priced {
 		return details
 	}
-	input, output, hasAudio, err := legacyAudioUnitPrices(effective)
+	base, err := legacyInputPricePerMillion(ratio)
 	if err != nil {
-		details.InvalidAudioPrice = true
+		return details
+	}
+	if price := operation_setting.GetGeminiInputAudioPricePerMillionTokens(name); price > 0 {
+		details.AudioInputPrice = &price
+		// Native Gemini settles with its dedicated input price; compatible
+		// chat enters the audio-ratio path when those ratios are configured.
+		// Do not silently replace one price with the other during migration.
+		audio, hasInput := effective["AudioRatio"].(float64)
+		output, hasOutput := effective["AudioCompletionRatio"].(float64)
+		if hasInput || hasOutput {
+			if !hasInput {
+				audio = 1
+			}
+			if !hasOutput {
+				output = 1
+			}
+			audioPrice := base.Mul(decimal.NewFromFloat(audio))
+			textOutput := base.Mul(decimal.NewFromFloat(effective["CompletionRatio"].(float64)))
+			details.ConflictingAudioPrices = !audioPrice.Equal(decimal.NewFromFloat(price)) || !audioPrice.Mul(decimal.NewFromFloat(output)).Equal(textOutput)
+		}
+		return details
+	}
+	audioRatio, hasAudio := effective["AudioRatio"].(float64)
+	audioCompletionRatio, hasAudioCompletion := effective["AudioCompletionRatio"].(float64)
+	if !hasAudio && !hasAudioCompletion {
 		return details
 	}
 	if !hasAudio {
-		return details
+		audioRatio = 1
 	}
-	inPrice, outPrice := input.InexactFloat64(), output.InexactFloat64()
+	if !hasAudioCompletion {
+		audioCompletionRatio = 1
+	}
+	input := base.Mul(decimal.NewFromFloat(audioRatio))
+	inPrice, outPrice := input.InexactFloat64(), input.Mul(decimal.NewFromFloat(audioCompletionRatio)).InexactFloat64()
 	if math.IsInf(inPrice, 0) || math.IsInf(outPrice, 0) {
 		details.InvalidAudioPrice = true
 		return details
 	}
 	details.AudioInputPrice, details.AudioOutputPrice = &inPrice, &outPrice
-	details.AudioTextBranches = !pricingIsOne(effective["CacheRatio"]) || !pricingIsOne(effective["ImageRatio"]) || ResolveCacheWriteMode(name, configured) != CacheWriteNone
+	details.AudioTextBranches = effective["CacheRatio"] != float64(1) || effective["ImageRatio"] != float64(1) || ResolveCacheWriteMode(name, configured) != CacheWriteNone
 	return details
 }
 
@@ -145,8 +141,11 @@ func ResolveCacheWriteMode(name string, configured PricingValues) CacheWriteMode
 	return CacheWriteNone
 }
 
-// Model metadata accepts endpoint type arrays and custom path maps. Normalize
-// names before matching so padded image endpoints keep quantity-based pricing.
+// declaredEndpointNames resolves the endpoint types declared by one model
+// metadata row. Model metadata accepts two shapes — the map form (custom paths)
+// and the type-array form (declared protocols) — and conversion must honour
+// both. Reading only the map form made array-form metadata look like a broken
+// routing configuration and blocked an otherwise convertible model.
 func declaredEndpointNames(raw string) ([]string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, nil
@@ -155,33 +154,36 @@ func declaredEndpointNames(raw string) ([]string, error) {
 	if err := common.UnmarshalJsonStr(raw, &value); err != nil {
 		return nil, err
 	}
+	// Normalize whitespace here: the callers match these names against the
+	// endpoint switch, so a padded value such as "image-generation " would
+	// silently fall through and drop the image-count settlement rule.
 	switch endpoints := value.(type) {
 	case []any:
 		names := make([]string, 0, len(endpoints))
 		for _, endpoint := range endpoints {
-			name, ok := endpoint.(string)
+			text, ok := endpoint.(string)
 			if !ok {
 				return nil, errors.New("invalid endpoint type")
 			}
-			name = strings.TrimSpace(name)
-			if name == "" {
+			text = strings.TrimSpace(text)
+			if text == "" {
 				return nil, errors.New("invalid endpoint type")
 			}
-			names = append(names, name)
+			names = append(names, text)
 		}
 		return names, nil
 	case map[string]any:
 		names := make([]string, 0, len(endpoints))
 		for endpoint := range endpoints {
 			endpoint = strings.TrimSpace(endpoint)
-			if endpoint != "" {
-				names = append(names, endpoint)
+			if endpoint == "" {
+				continue
 			}
+			names = append(names, endpoint)
 		}
 		return names, nil
-	default:
-		return nil, errors.New("invalid endpoints")
 	}
+	return nil, errors.New("invalid endpoints")
 }
 
 func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPricingConversion, error) {
@@ -207,9 +209,6 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		return nil, err
 	}
 	_, fixedPrice := effective["ModelPrice"]
-	if _, inputPrice := effective["ModelRatio"]; !fixedPrice && !inputPrice {
-		return &ModelPricingConversion{UnsupportedReason: "Configure an input price before converting this model."}, nil
-	}
 	preview := &ModelPricingConversion{ModelPricingDescription: ModelPricingDescription{Effective: effective, BillingDetails: ResolveLegacyBillingDetails(name, effective, draft)}}
 	if preview.BillingDetails.InvalidAudioPrice {
 		return nil, errors.New("audio prices must be finite")
@@ -243,6 +242,12 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		}
 		if slices.Contains(common.GetEndpointTypesByChannelType(channel.Type, name), constant.EndpointTypeOpenAIVideo) {
 			return &ModelPricingConversion{UnsupportedReason: "Video pricing must be converted manually."}, nil
+		}
+		if channel.Status == common.ChannelStatusEnabled && channel.Type == constant.ChannelTypeOpenRouter && strings.Contains(strings.ToLower(name), "claude") && !fixedPrice {
+			defaultRatio, hasDefault := ratio_setting.GetDefaultModelRatioMap()[name]
+			if hasDefault && effective["ModelRatio"] == defaultRatio && effective["CreateCacheRatio"] != float64(1) {
+				return &ModelPricingConversion{UnsupportedReason: "This OpenRouter Claude price derives cache-write usage from upstream cost and must be converted manually."}, nil
+			}
 		}
 		upstream := name
 		if channel.ModelMapping != nil && *channel.ModelMapping != "" {
@@ -286,18 +291,7 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		return nil, err
 	}
 	for _, entry := range metadata {
-		if entry.Endpoints == "" || !slices.ContainsFunc(names, func(name string) bool {
-			switch entry.NameRule {
-			case NameRuleExact:
-				return name == entry.ModelName
-			case NameRulePrefix:
-				return strings.HasPrefix(name, entry.ModelName)
-			case NameRuleSuffix:
-				return strings.HasSuffix(name, entry.ModelName)
-			default:
-				return strings.Contains(name, entry.ModelName)
-			}
-		}) {
+		if entry.Endpoints == "" || !slices.ContainsFunc(names, entry.MatchesName) {
 			continue
 		}
 		endpoints, err := declaredEndpointNames(entry.Endpoints)
@@ -319,19 +313,16 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 	}
 	var expression string
 	if fixedPrice {
-		price, err := modelPricingDecimal(effective["ModelPrice"])
-		if err != nil {
-			return nil, err
-		}
-		expression = `tier("request", fixed(` + price.String() + `))`
+		price := effective["ModelPrice"].(float64)
+		expression = `tier("request", fixed(` + decimal.NewFromFloat(price).String() + `))`
 		if preview.BillingDetails.ImageCount {
-			expression = `tier("image", fixed(` + price.String() + `)) * image_count`
+			expression = `tier("image", fixed(` + decimal.NewFromFloat(price).String() + `)) * image_count`
 			for _, rule := range preview.BillingDetails.RequestRules {
 				expression += ` * (` + rule.Condition + ` ? ` + decimal.NewFromFloat(rule.Multiplier).String() + ` : 1)`
 			}
 		}
 	} else {
-		ratio, exists := effective["ModelRatio"]
+		ratio, exists := effective["ModelRatio"].(float64)
 		if !exists {
 			return &ModelPricingConversion{UnsupportedReason: "Configure an input price before converting this model."}, nil
 		}
@@ -343,14 +334,11 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		// Cache reads can overlap other separately priced input categories.
 		// Keep cr in that case: clamping the input remainder makes folding it
 		// into p non-equivalent. A zero base price is equivalent either way.
-		audioInput, audioOutput, ordinaryAudio, err := legacyAudioUnitPrices(effective)
-		if err != nil {
-			return nil, err
-		}
+		ordinaryAudio := preview.BillingDetails.AudioOutputPrice != nil
 		if ordinaryAudio && preview.CacheWriteMode != CacheWriteNone {
 			preview.BillingDetails.AudioTextBranches = true
 		}
-		mergeCacheRead := base.IsZero() || preview.CacheWriteMode == CacheWriteNone && pricingIsOne(effective["ImageRatio"]) && (preview.BillingDetails.AudioInputPrice == nil || ordinaryAudio)
+		mergeCacheRead := base.IsZero() || preview.CacheWriteMode == CacheWriteNone && effective["ImageRatio"].(float64) == 1 && (preview.BillingDetails.AudioInputPrice == nil || ordinaryAudio)
 		var expressionBody strings.Builder
 		expressionBody.WriteString(`tier("base", p * `)
 		expressionBody.WriteString(base.String())
@@ -373,41 +361,34 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 				lane.variable == "cc1h" && preview.CacheWriteMode != CacheWriteClaudeTTL {
 				continue
 			}
-			multiplier, err := modelPricingDecimal(effective[lane.key])
-			if err != nil {
-				return nil, err
-			}
+			multiplier := effective[lane.key].(float64)
 			// Same-price input categories stay in p. Keep distinct prices,
 			// including explicit zero, as independently priced terms.
-			if (lane.variable == "img" || lane.variable == "cr" && mergeCacheRead) && multiplier.Equal(decimal.NewFromInt(1)) {
+			if (lane.variable == "img" || lane.variable == "cr" && mergeCacheRead) && multiplier == 1 {
 				continue
 			}
 			expressionBody.WriteString(" + " + lane.variable + " * ")
-			expressionBody.WriteString(base.Mul(multiplier).Mul(decimal.NewFromFloat(lane.multiplier)).String())
+			expressionBody.WriteString(base.Mul(decimal.NewFromFloat(multiplier)).Mul(decimal.NewFromFloat(lane.multiplier)).String())
 		}
 		for _, lane := range []struct {
 			variable string
-			price    decimal.Decimal
+			price    *float64
 		}{
-			{"ai", audioInput},
-			{"ao", audioOutput},
+			{"ai", preview.BillingDetails.AudioInputPrice},
+			{"ao", preview.BillingDetails.AudioOutputPrice},
 		} {
-			if ordinaryAudio && !preview.BillingDetails.AudioTextBranches {
-				expressionBody.WriteString(" + " + lane.variable + " * " + lane.price.String())
+			if lane.price != nil && !preview.BillingDetails.AudioTextBranches {
+				expressionBody.WriteString(" + " + lane.variable + " * " + decimal.NewFromFloat(*lane.price).String())
 			}
 		}
 		expressionBody.WriteString(")")
 		expression = expressionBody.String()
 		if ordinaryAudio && preview.BillingDetails.AudioTextBranches {
-			completionRatio, err := modelPricingDecimal(effective["CompletionRatio"])
-			if err != nil {
-				return nil, err
-			}
-			completion := base.Mul(completionRatio)
+			completion := base.Mul(decimal.NewFromFloat(effective["CompletionRatio"].(float64)))
 			// The audio settlement ignores cache/image ratios. Use the full
 			// input total here because variables in the text-only branch still
 			// participate in AST-based token normalization.
-			expression = `(ai > 0 || ao > 0) ? tier("audio", max(len - ai, 0) * ` + base.String() + ` + c * ` + completion.String() + ` + ai * ` + audioInput.String() + ` + ao * ` + audioOutput.String() + `) : ` + expression
+			expression = `(ai > 0 || ao > 0) ? tier("audio", max(len - ai, 0) * ` + base.String() + ` + c * ` + completion.String() + ` + ai * ` + decimal.NewFromFloat(*preview.BillingDetails.AudioInputPrice).String() + ` + ao * ` + decimal.NewFromFloat(*preview.BillingDetails.AudioOutputPrice).String() + `) : ` + expression
 		}
 	}
 	if err := billing_setting.SmokeTestExpr(expression); err != nil {

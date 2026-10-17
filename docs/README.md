@@ -1,54 +1,22 @@
 # Ren2Hub 文档入口
 
-NewAPI（`QuantumNous/new-api`）是 Ren2Hub 的唯一上游；Sub2API 和 AxonHub 仅为按需研究的参考项目，不要求同步追平。上游适配基线、参考追踪点、未采用能力和等待项统一在[同步账本](upstream/SYNC_LEDGER.md)。CI 按事件的 `github.sha` 检出同一提交；Vue Bun 依赖由 Dependabot 每周检查，提交到本地服务端不会自动触发 GitHub 工作流。
+Ren2Hub / DayFliggy 是采用 NewAPI 核心的单节点 AI 网关，使用 Vue 控制台。唯一上游为 `QuantumNous/new-api`，本轮源码基线是 `09109ec315a5086366f94bcce00f177ec831dbe1`。来源、必要差异和验证状态见[同步账本](upstream/SYNC_LEDGER.md)。本文说明源码合同，不代表当前候选或正式实例已经发布。
 
-本文索引当前源码的开发、接口和运维契约。主项目是 Go/Gin/GORM 网关、Vue 控制台与独立的 RelayKit、TokenKit 模块；当前仅允许一个网关进程承接业务流量。钱包是唯一资金来源，Token 是附加消费限额。
+自动选路、分组倍率、默认价格、预扣、结算、金额 API、协议和权限采用 NewAPI。钱包是唯一资金来源，Token 额度是附加消费限制。最小扩展为工单、每个 Token 的有序私有渠道列表及 GMPay。官方订阅账号、站内订阅套餐、type 57、io.net 部署、Playground、React 和 Electron 已退役；普通 API Key、站点 OAuth 和原生钱包支付仍保留。
 
-## 现行文档
+| 主题 | 入口 |
+| --- | --- |
+| 安装与发布 | [安装](installation/DOCKER.md)、[宝塔](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md) |
+| 登录与权限 | [认证](authentication.md)、[扩展接口](routing/GATEWAY_API.md) |
+| 路由与协议 | [自动及私有路由](routing/UNIFIED_ROUTING.md)、[协议边界](routing/GATEWAY_SUPPORT_MATRIX.md)、[渠道](channel/TYPES.md) |
+| 钱包与定价 | [实现](billing/IMPLEMENTATION.md)、[API](billing/API.md)、[定价](billing/PRICING.md)、[恢复](billing/RECOVERY.md) |
+| 充值 | [原生易支付](billing/EPAY.md)、[GMPay](billing/GMPAY.md)、[支付设置](billing/PAYMENT_SETTINGS.md) |
+| 异步任务 | [插件入口](plugin-api/README.md)、[上游 v1 ABI](plugin-api/v1.md) |
+| Vue | [前端](../frontend/README.md)、[模型](console/MODELS.md)、[日志](console/LOGS.md)、[术语](translation-glossary.md) |
+| 验证 | [网关](routing/GATEWAY_VALIDATION.md)、[资金](billing/VALIDATION.md)、[单节点边界](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[依赖](dependencies.md) |
 
-| 主题 | 入口 | 内容 |
-| --- | --- | --- |
-| 开发与结构 | [项目约定](../AGENTS.md)、[公共常量](../constant/README.md) | 目录边界、独立模块、代码与验证要求 |
-| 依赖维护 | [依赖合同](dependencies.md) | 必要性判定、独立模块与锁文件、安全补丁和未消除告警 |
-| 安装与发布 | [Compose 安装](installation/DOCKER.md)、[宝塔环境](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md) | 空库安装、单实例排空、持久化兼容性 |
-| Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[主题](../frontend/docs/THEMES.md)、[计费界面](../frontend/docs/BILLING.md)、[移动端待办](../frontend/docs/MOBILE.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
-| 登录与会话 | [认证契约](authentication.md) | 浏览器登录、刷新会话、绑定、安全验证、Origin 与代理规则 |
-| 用量日志 | [查询与导出](console/LOGS.md) | 共享时间跨度、用户字段隔离、NDJSON 成功终态、精确金额与浏览器取消 |
-| 模型广场 | [视图与数据合同](console/MODELS.md) | 三视图、用户渠道供给、平台基准价及统计缺失边界 |
-| 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移、Responses WebSocket、Claude effort 计价、请求诊断 |
-| 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[TokenKit](../tokenkit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、token 计数与估算、供应商入口和边界 |
-| 任务插件 | [插件 API](plugin-api/README.md)、[v1 合同](plugin-api/v1.md) | 插件 ABI、不可变执行版本、用量事实与冻结报价、产物访问 |
-| 上游同步 | [同步账本](upstream/SYNC_LEDGER.md) | NewAPI 唯一上游适配基线、Sub2API/AxonHub 参考追踪点，按领域列出的吸收状态、本地偏离与复评条件 |
-| 账务架构 | [实现边界](billing/IMPLEMENTATION.md)、[账务 API](billing/API.md)、[结算兜底与恢复](billing/RECOVERY.md) | 冻结报价、持久化预留、事件、原子结算与先计费兜底 |
-| 定价 | [模型定价与价格获取](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | NewAPI 配置、五源草稿、三模式计算、空默认与加密重放 |
-| 易支付充值 | [支付契约](billing/EPAY.md) | 报价、订单快照、商户版本、通知重试与管理员补单 |
-| GMPay 加密货币充值 | [接入契约](billing/GMPAY.md) | 独立配置、多链资产、USD 报价、到账证据和未证明边界 |
-| 支付系统设置 | [EPay / GMPay 配置清单](billing/PAYMENT_SETTINGS.md) | 控制台入口、默认值、金额单位、保存与启停边界 |
-| 复验方法 | [网关验证](routing/GATEWAY_VALIDATION.md)、[账务复验](billing/VALIDATION.md)、[验收边界](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[SDK 套件](../tests/gateway-sdk/README.md)、[准入基准](../tests/admission-benchmark/README.md) | 隔离依赖、测试入口、测量范围与未证明的边界 |
+启动从 `main.go`、`model/main.go` 阅读；请求沿 `router/` → `middleware/` → `controller/` → `service/` / `model/` 进入 `relay/`。RelayKit 与 TokenKit 是独立 Go 模块。Vue 从 `frontend/src/router/`、`stores/` 和 `api/` 核对入口与真实接口；菜单可见不代替服务端授权。
 
-`openapi/api.json` 与 `openapi/relay.json` 是有限覆盖的历史接口描述，尚未与全部现行路由同步。它们不能证明接口仍开放，也不能替代上表中的 API 契约、`router/` 注册和实际请求校验；不要仅据这些 JSON 生成生产客户端。
+本轮采用全新数据库，不迁移旧用户、渠道、密钥、价格、商户、任务或支付记录。程序在 AutoMigrate 前拒绝包含旧 `billing_schemas` 或 `billing_events` 的数据库。旧库归档、独立新库及 Redis db1 切换需要所属工作区部署流程的单独批准。旧任务、在途支付未归零时阻塞切换，不新增双回调入口。
 
-## 源码阅读顺序
-
-启动看 `main.go`；普通 API 从 `router/` 进入 `controller/`，再跟进 `service/` 与 `model/`。这是职责分层，不要求每个控制器必须经过 Service。
-
-AI 请求按 `router/relay-router.go` → 鉴权/限流 → `middleware/gateway_admission.go` → `middleware/distributor.go` → `service/request_route.go` → `controller/relay.go` 阅读。宿主在 `relay/` 发送请求和处理传输，`relaykit/` 负责协议语义，`tokenkit/` 负责文本与图片的 token 计数和估算（两者都是独立模块，不依赖主模块）；后台作业从 `controller/system_task_handlers.go` 进入系统任务框架。
-
-Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端入口存在不代表当前 UI 开放。当前账务格式为 schema 5，仅接受空库初始化或版本、密钥指纹均匹配的 `billing_schemas` 数据库；价格合同为 4，计算器为 `newapi-c71eefbc-v1`。不能把旧计费数据库直接接给新代码。模型定价只从 `model_pricing` 保存，公开接口返回 NewAPI 模型行；五源价格获取只填入前端草稿。请求求值上下文加密保存供重放，日志和 API 不暴露明文或证据密文。
-
-## 文档与部署状态
-
-运行契约只在对应主题文档维护，复验方法见上表；本目录不保存执行结果，文档整理不算重新测试。主项目源码发布、服务器隔离验收与常驻应用部署是不同状态，部署版本、验收证据、备份和发布结果只由所属工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)记录。
-
-RenAI 工作区的可选 `reference-projects/` 或工作区外独立参考副本只用于研究，不是运行依赖或发布内容。参考仓库当前 HEAD 也不等于历史研究采用的提交。构建产物、测试数据库、未合并补丁和证据须分别识别，不能因为被 Git 忽略就统一删除。
-
-## 历史追溯
-
-阶段报告、审计记录、逐批上游同步记录和旧验收结果不在工作树中，从 Git 历史读取。需要核对某次修复时，在 Ren2Hub 目录使用只读命令定位，不把旧状态当成当前部署结论：
-
-```powershell
-git log --all -- docs/routing docs/billing docs/upstream
-git show <commit>:<repository-relative-path>
-```
-
-历史代码需要执行时使用隔离环境；恢复旧报告或旧代码不授予发布、数据库恢复或重放支付的权限。
+旧架构与执行报告保留在 Git 历史；现行接口以路由注册和源码为准。[API 合同入口](openapi/README.md) 指向当前路由与控制器；旧 OpenAPI JSON 已退役。外部参考仓库只作研究，不是运行依赖。测试证据、源码发布、候选验收和正式部署分别记录，不互相替代。

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"slices"
 	"sort"
 	"time"
@@ -91,7 +90,6 @@ type TaskPlugin struct {
 	Icon      LongText `json:"-"`
 	Enabled   bool     `json:"enabled" gorm:"not null"`
 	Active    bool     `json:"active" gorm:"not null;index"`
-	Factory   bool     `json:"factory" gorm:"not null"`
 	CreatedAt int64    `json:"created_at" gorm:"not null"`
 	Remark    string   `json:"remark" gorm:"type:text"`
 }
@@ -102,26 +100,12 @@ func (plugin TaskPlugin) HasIcon() bool {
 }
 
 func SaveTaskPlugin(plugin *TaskPlugin) error {
-	if plugin == nil || plugin.Key == "" || plugin.Version == "" || len(plugin.Source) == 0 || len(plugin.Source) > 8<<20 {
-		return errors.New("plugin identity and source up to 8 MiB are required")
-	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(plugin.Source)))
-	if plugin.SourceHash != hash {
-		return errors.New("plugin source hash mismatch")
-	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockTaskPluginNamespace(tx, plugin.Key); err != nil {
-			return err
-		}
 		var existing TaskPlugin
 		err := tx.Where(&TaskPlugin{Key: plugin.Key, Version: plugin.Version}).First(&existing).Error
 		if err == nil {
-			if existing.SourceHash != plugin.SourceHash || existing.Source != plugin.Source || existing.Factory != plugin.Factory {
+			if existing.SourceHash != plugin.SourceHash {
 				return errors.New("plugin key and version already exist with different source")
-			}
-			if existing.Factory {
-				*plugin = existing
-				return nil
 			}
 			updates := map[string]any{"enabled": plugin.Enabled, "remark": plugin.Remark}
 			if plugin.Icon != "" {
@@ -144,7 +128,7 @@ func SaveTaskPlugin(plugin *TaskPlugin) error {
 		if err = tx.Model(&TaskPlugin{}).Where(&TaskPlugin{Key: plugin.Key, Active: true}).Count(&count).Error; err != nil {
 			return err
 		}
-		plugin.Active = count == 0 && !plugin.Factory
+		plugin.Active = count == 0
 		return tx.Create(plugin).Error
 	})
 }
@@ -190,9 +174,8 @@ type TaskPluginSyncSnapshot struct {
 	// Plugins are the enabled active overrides with Source and Icon left
 	// empty. Sync compares SourceHash against what it already compiled and
 	// loads source through GetTaskPluginSource only for the rows that changed.
-	Plugins      []TaskPlugin
-	Revision     string
-	DisabledKeys []string
+	Plugins  []TaskPlugin
+	Revision string
 }
 
 // GetTaskPluginSyncSnapshot returns the enabled override set together with a
@@ -202,7 +185,7 @@ type TaskPluginSyncSnapshot struct {
 // 30 seconds, and plugin sources may be several MiB each.
 func GetTaskPluginSyncSnapshot() (TaskPluginSyncSnapshot, error) {
 	var activePlugins []TaskPlugin
-	if err := DB.Omit("source", "icon").Where("active = ? AND factory = ?", true, false).
+	if err := DB.Omit("source", "icon").Where(&TaskPlugin{Active: true}).
 		Order(clause.OrderByColumn{Column: clause.Column{Name: "key"}}).
 		Order(clause.OrderByColumn{Column: clause.Column{Name: "version"}}).
 		Order(clause.OrderByColumn{Column: clause.Column{Name: "id"}}).
@@ -219,7 +202,6 @@ func GetTaskPluginSyncSnapshot() (TaskPluginSyncSnapshot, error) {
 	}
 	entries := make([]revisionEntry, 0, len(activePlugins))
 	enabledPlugins := make([]TaskPlugin, 0, len(activePlugins))
-	disabledKeys := make([]string, 0)
 	for _, plugin := range activePlugins {
 		entries = append(entries, revisionEntry{
 			Key:        plugin.Key,
@@ -230,8 +212,6 @@ func GetTaskPluginSyncSnapshot() (TaskPluginSyncSnapshot, error) {
 		})
 		if plugin.Enabled {
 			enabledPlugins = append(enabledPlugins, plugin)
-		} else {
-			disabledKeys = append(disabledKeys, plugin.Key)
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -246,9 +226,8 @@ func GetTaskPluginSyncSnapshot() (TaskPluginSyncSnapshot, error) {
 	}
 	digest := sha256.Sum256(payload)
 	return TaskPluginSyncSnapshot{
-		Plugins:      enabledPlugins,
-		Revision:     hex.EncodeToString(digest[:]),
-		DisabledKeys: disabledKeys,
+		Plugins:  enabledPlugins,
+		Revision: hex.EncodeToString(digest[:]),
 	}, nil
 }
 
@@ -264,15 +243,9 @@ func GetTaskPluginSource(id int64) (LongText, error) {
 
 func ActivateTaskPlugin(key, version string) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockTaskPluginNamespace(tx, key); err != nil {
-			return err
-		}
 		var target TaskPlugin
 		if err := tx.Where(&TaskPlugin{Key: key, Version: version}).First(&target).Error; err != nil {
 			return err
-		}
-		if target.Factory {
-			return errors.New("factory plugin versions cannot be activated as overrides")
 		}
 		if err := tx.Model(&TaskPlugin{}).Where(&TaskPlugin{Key: key}).Update("active", false).Error; err != nil {
 			return err
@@ -300,32 +273,35 @@ type TaskPluginDeleteResult struct {
 func DeleteTaskPluginVersion(key, version string) (TaskPluginDeleteResult, error) {
 	result := TaskPluginDeleteResult{}
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockTaskPluginNamespace(tx, key); err != nil {
-			return err
-		}
 		var plugin TaskPlugin
 		if err := lockForUpdate(tx).Where(&TaskPlugin{Key: key, Version: version}).First(&plugin).Error; err != nil {
 			return err
 		}
 		result.DeletedActive = plugin.Active
-		if plugin.Factory || plugin.Active {
-			return ErrTaskPluginInUse
-		}
-		// A terminal financial recovery can release an attempt which never
-		// produced a durable task. Tasks and their long-lived artifacts retain
-		// the executable even after settlement.
-		terminal := tx.Model(&BillingRecovery{}).Select("request_id").Where("status IN ?", []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded})
-		if err := tx.Where("plugin_id = ? AND task_id = ? AND request_id IN (?)", plugin.Id, "", terminal).Delete(&TaskPluginExecution{}).Error; err != nil {
+		if err := tx.Delete(&plugin).Error; err != nil {
 			return err
 		}
-		var pins int64
-		if err := tx.Model(&TaskPluginExecution{}).Where("plugin_id = ?", plugin.Id).Count(&pins).Error; err != nil {
+		if !plugin.Active {
+			return nil
+		}
+
+		var promoted TaskPlugin
+		err := lockForUpdate(tx).
+			Where(&TaskPlugin{Key: key}).
+			Order("created_at DESC, id DESC").
+			First(&promoted).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
-		if pins != 0 {
-			return ErrTaskPluginInUse
+		if err = tx.Model(&promoted).Update("active", true).Error; err != nil {
+			return err
 		}
-		return tx.Delete(&plugin).Error
+		promoted.Active = true
+		result.Promoted = &promoted
+		return nil
 	})
 	return result, err
 }

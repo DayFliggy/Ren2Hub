@@ -20,10 +20,18 @@ func GetPerfMetricsSummary(c *gin.Context) {
 		}
 	}
 
-	activeGroups := lo.Keys(ratio_setting.GetGroupRatioCopy())
-	result, err := perfmetrics.QuerySummaryAll(hours, activeGroups)
+	recentModels := c.QueryArray("recent_model")
+	if len(recentModels) > perfmetrics.MaxRecentModels {
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid parameters"))
+		return
+	}
+	activeGroups := append(lo.Keys(ratio_setting.GetGroupRatioCopy()), "auto")
+	result, err := perfmetrics.QuerySummaryAll(hours, activeGroups, recentModels...)
 	if err != nil {
-		common.ApiErrorStatus(c, http.StatusInternalServerError, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
 		return
 	}
 
@@ -36,7 +44,10 @@ func GetPerfMetricsSummary(c *gin.Context) {
 func GetPerfMetrics(c *gin.Context) {
 	modelName := c.Query("model")
 	if modelName == "" {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("model is required"))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "model is required",
+		})
 		return
 	}
 
@@ -48,27 +59,21 @@ func GetPerfMetrics(c *gin.Context) {
 	}
 
 	result, err := perfmetrics.Query(perfmetrics.QueryParams{
-		Model: modelName,
-		Group: c.Query("group"),
-		Hours: hours,
+		Model:         modelName,
+		Group:         c.Query("group"),
+		Hours:         hours,
+		AllowedGroups: append(lo.Keys(ratio_setting.GetGroupRatioCopy()), "auto"),
 	})
 	if err != nil {
-		common.ApiErrorStatus(c, http.StatusInternalServerError, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
 		return
 	}
-
-	result.Groups = filterActiveGroups(result.Groups)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    result,
-	})
-}
-
-func filterActiveGroups(groups []perfmetrics.GroupResult) []perfmetrics.GroupResult {
-	activeRatios := ratio_setting.GetGroupRatioCopy()
-	return lo.Filter(groups, func(g perfmetrics.GroupResult, _ int) bool {
-		_, ok := activeRatios[g.Group]
-		return ok
 	})
 }

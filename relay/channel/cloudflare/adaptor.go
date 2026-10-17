@@ -26,7 +26,8 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 }
 
 func (a *Adaptor) ConvertClaudeRequest(*gin.Context, *relaycommon.RelayInfo, *dto.ClaudeRequest) (any, error) {
-	return nil, errors.New("Claude messages are not supported by the Cloudflare adaptor")
+	//TODO implement me
+	panic("implement me")
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
@@ -72,7 +73,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
-	return nil, errors.New("rerank is not implemented by the Cloudflare adaptor")
+	return request, nil
 }
 
 func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {
@@ -80,16 +81,6 @@ func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.Rela
 }
 
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
-	if info.RelayMode != constant.RelayModeAudioTranscription {
-		return nil, errors.New("unsupported Cloudflare audio relay mode")
-	}
-	if request.IsStream(c.Request) || request.ResponseFormat != "" && request.ResponseFormat != "json" && request.ResponseFormat != "text" {
-		return nil, errors.New("Cloudflare transcription supports only non-streaming json or text output")
-	}
-	if request.Instructions != "" || len(request.Language) > 0 || len(request.Metadata) > 0 || c.PostForm("prompt") != "" || c.PostForm("language") != "" || c.PostForm("temperature") != "" {
-		return nil, errors.New("Cloudflare binary transcription cannot preserve these request parameters")
-	}
-	c.Set("response_format", request.ResponseFormat)
 	// 添加文件字段
 	file, _, err := c.Request.FormFile("file")
 	if err != nil {
@@ -114,7 +105,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	switch info.RelayMode {
 	case constant.RelayModeEmbeddings:
-		return openai.OpenaiHandler(c, info, resp)
+		fallthrough
 	case constant.RelayModeChatCompletions:
 		if info.IsStream {
 			err, usage = cfStreamHandler(c, info, resp)
@@ -127,10 +118,10 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		} else {
 			usage, err = openai.OaiResponsesHandler(c, info, resp)
 		}
+	case constant.RelayModeAudioTranslation:
+		fallthrough
 	case constant.RelayModeAudioTranscription:
 		err, usage = cfSTTHandler(c, info, resp)
-	case constant.RelayModeAudioTranslation, constant.RelayModeAudioSpeech:
-		return nil, types.NewOpenAIError(errors.New("unsupported Cloudflare audio relay mode"), types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 	return
 }

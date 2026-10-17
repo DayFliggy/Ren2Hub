@@ -52,6 +52,7 @@ func BuildAPIBaseURL(baseURL, version, projectID, region string) string {
 	case "global":
 		host = "aiplatform.googleapis.com"
 	case "us", "eu":
+		// The US and EU multi-regions are served from their own hostnames.
 		host = "aiplatform." + region + ".rep.googleapis.com"
 	}
 	if strings.TrimSpace(projectID) == "" {

@@ -1,6 +1,7 @@
 package tencent
 
 import (
+	"bufio"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,7 +15,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/relay/channel/openai"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -74,17 +75,15 @@ func responseTencent2OpenAI(response *TencentChatResponse) *dto.OpenAITextRespon
 
 func streamResponseTencent2OpenAI(TencentResponse *TencentChatResponse) *dto.ChatCompletionsStreamResponse {
 	response := dto.ChatCompletionsStreamResponse{
-		Id:      TencentResponse.Id,
 		Object:  "chat.completion.chunk",
 		Created: common.GetTimestamp(),
 		Model:   "tencent-hunyuan",
 	}
-	for i, source := range TencentResponse.Choices {
+	if len(TencentResponse.Choices) > 0 {
 		var choice dto.ChatCompletionsStreamResponseChoice
-		choice.Index = i
-		choice.Delta.SetContentString(source.Delta.Content)
-		if source.FinishReason != "" {
-			choice.FinishReason = &source.FinishReason
+		choice.Delta.SetContentString(TencentResponse.Choices[0].Delta.Content)
+		if TencentResponse.Choices[0].FinishReason == "stop" {
+			choice.FinishReason = &constant.FinishReasonStop
 		}
 		response.Choices = append(response.Choices, choice)
 	}
@@ -93,65 +92,45 @@ func streamResponseTencent2OpenAI(TencentResponse *TencentChatResponse) *dto.Cha
 
 func tencentStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	var responseText strings.Builder
-	var usage *dto.Usage
-	responseID, created := helper.GetResponseID(c), common.GetTimestamp()
-	startedChoices := make(map[int]bool)
-	helper.StreamScannerHandler(c, resp, info, func(data string, result *helper.StreamResult) {
+	scanner := helper.NewStreamScanner(resp.Body)
+	scanner.Split(bufio.ScanLines)
+
+	helper.SetEventStreamHeaders(c)
+
+	for scanner.Scan() {
+		data := scanner.Text()
+		if len(data) < 5 || !strings.HasPrefix(data, "data:") {
+			continue
+		}
+		data = strings.TrimPrefix(data, "data:")
+
 		var tencentResponse TencentChatResponse
 		err := common.Unmarshal([]byte(data), &tencentResponse)
 		if err != nil {
-			result.Stop(err)
-			return
+			common.SysLog(common.LogText("error unmarshalling stream response: %s", err.Error()))
+			continue
 		}
-		if tencentResponse.Error.Code != 0 {
-			result.Stop(fmt.Errorf("tencent generation failed: %s", tencentResponse.Error.Message))
-			return
-		}
-		observedUsage := &dto.Usage{PromptTokens: tencentResponse.Usage.PromptTokens, CompletionTokens: tencentResponse.Usage.CompletionTokens, TotalTokens: tencentResponse.Usage.TotalTokens}
-		if err := service.NormalizeProviderUsage(observedUsage); err != nil {
-			result.Stop(err)
-			return
-		}
-		if service.ValidUsage(observedUsage) {
-			usage = observedUsage
-			usage.UsageSource = "provider"
-		}
+
 		response := streamResponseTencent2OpenAI(&tencentResponse)
-		response.Id, response.Created, response.Model = responseID, created, info.UpstreamModelName
-		for i := range response.Choices {
-			choice := &response.Choices[i]
-			if !startedChoices[choice.Index] {
-				choice.Delta.Role = "assistant"
-				startedChoices[choice.Index] = true
-			}
+		if len(response.Choices) != 0 {
+			responseText.WriteString(response.Choices[0].Delta.GetContentString())
 		}
-		if err := helper.ObjectData(c, response); err != nil {
-			result.Stop(err)
-			return
+
+		err = helper.ObjectData(c, response)
+		if err != nil {
+			common.SysLog(err.Error())
 		}
-		finished := len(response.Choices) > 0
-		for _, choice := range response.Choices {
-			content := choice.Delta.GetContentString()
-			if content != "" {
-				responseText.WriteString(content)
-				result.MarkValidOutput()
-			}
-			finished = finished && choice.FinishReason != nil
-		}
-		if finished {
-			result.Done()
-		}
-	})
-	if usage == nil {
-		usage = service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 	}
-	if err := helper.StreamError(info); err != nil {
-		return usage, err
+
+	if err := scanner.Err(); err != nil {
+		common.SysLog(common.LogText("error reading stream: %s", err.Error()))
 	}
-	if err := openai.HandleFinalResponse(c, info, "", responseID, created, info.UpstreamModelName, "", usage, false); err != nil {
-		return usage, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
-	}
-	return usage, nil
+
+	helper.Done(c)
+
+	service.CloseResponseBodyGracefully(resp)
+
+	return service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens()), nil
 }
 
 func tencentHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -172,9 +151,6 @@ func tencentHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Resp
 		}, resp.StatusCode)
 	}
 	fullTextResponse := responseTencent2OpenAI(&tencentSb.Response)
-	if err := service.NormalizeProviderUsage(&fullTextResponse.Usage); err != nil {
-		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-	}
 	jsonResponse, err := common.Marshal(fullTextResponse)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)

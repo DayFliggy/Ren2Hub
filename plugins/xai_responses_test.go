@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/gin-gonic/gin"
@@ -80,15 +78,10 @@ func TestXAIResponsesProtocol(t *testing.T) {
 
 // xAI still bills a generation its moderation blocks, and the host refunds
 // every FAILURE task in full, so a blocked video must settle as a charged
-// SUCCESS. The flow runs through the production adaptor, a price saved
-// through model_pricing, the frozen quote, and the settlement evaluator.
-// Ren2Hub settles on the completion facts merged over the frozen submit
-// facts, so the requested resolution prices a result that does not report it.
+// SUCCESS. The flow runs through the production adaptor and settlement
+// evaluator with a price an administrator can save.
 func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
-	factoryPriceDatabase(t)
 	plugin := newXAIPlugin(t)
-	_, err := jsplugin.DefaultRegistry.RegisterFactory(plugin.Source, jsplugin.Options{Key: "xai"})
-	require.NoError(t, err)
 	const videoModel = "grok-imagine-video-1.5"
 	const expression = `u("moderated") == true ? tier("blocked", 0.05 + u("seconds") * 0) : ` +
 		`u("resolution") == "1080p" ? tier("1080p", u("seconds") * 0.25 + u("input_images") * 0.01) : ` +
@@ -96,33 +89,28 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 		`tier("480p", u("seconds") * 0.08 + u("input_images") * 0.01)`
 	schema, _ := plugin.Meta.UsageForModel(videoModel)
 	require.NoError(t, billing_setting.SmokeTestTaskExpr(expression, schema))
-	pricing := model.PricingValues{"billing_setting.billing_mode": billing_setting.BillingModeTieredExpr, "billing_setting.billing_expr": expression}
-	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: videoModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: pricing}}))
 
 	info := &relaycommon.RelayInfo{
-		ChannelMeta:         &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.x.ai", ApiKey: "xai-key", UpstreamModelName: videoModel},
-		OriginModelName:     videoModel,
-		TaskPluginRef:       &model.TaskPluginRef{Key: "xai", Version: plugin.Meta.Version, SourceHash: plugin.SourceHash},
-		TaskRelayInfo:       &relaycommon.TaskRelayInfo{PublicTaskID: "task_public", Action: "image_to_video"},
-		BillingRequestInput: &billingexpr.RequestInput{Attributes: map[string]any{}, FrozenAt: time.Now()},
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.x.ai", ApiKey: "xai-key", UpstreamModelName: videoModel},
+		OriginModelName: videoModel,
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public", Action: "image_to_video"},
 	}
 	adaptor := taskplugin.New(plugin)
 	adaptor.Init(info)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
-	c.Set("channel_ratio", "1")
 	c.Set("task_request", map[string]any{"model": videoModel, "prompt": "a fox", "input_reference": "https://cdn.example/fox.png", "seconds": "8", "size": "1280x720"})
 	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
 	facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"seconds": "8", "resolution": "720p", "input_images": "1", "moderated": false}, facts)
-	prepared, err := helper.ModelPriceHelperWithTaskFacts(c, info, facts)
+	assert.Equal(t, map[string]any{"seconds": float64(8), "resolution": "720p", "input_images": float64(1), "moderated": false}, facts)
+	_, trace, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: facts})
 	require.NoError(t, err)
-	require.NotNil(t, prepared.Charge)
-	require.NotNil(t, prepared.Charge.Trace)
-	assert.Equal(t, "720p", prepared.Charge.Trace.MatchedTier)
-	// 8 seconds at 720p plus one input image reserve 1.13 USD.
-	assert.Equal(t, 565000, prepared.QuotaToPreConsume)
+	assert.Equal(t, "720p", trace.MatchedTier)
+	snapshot := &billingexpr.BillingSnapshot{
+		BillingMode: billing_setting.BillingModeTieredExpr, ModelName: videoModel, ExprString: expression, ExprHash: billingexpr.ExprHashString(expression),
+		GroupRatio: 1, QuotaPerUnit: 500000, ExprVersion: billingexpr.ExprVersion(expression), TaskUsageBilling: true, UsageFacts: facts,
+	}
 
 	for _, tc := range []struct {
 		name         string
@@ -133,26 +121,22 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 		wantReason   string
 		wantFacts    map[string]any
 		wantTier     string
-		wantQuota    common.Quota
+		wantQuota    int
 		wantVideo    bool
 	}{
 		{name: "still rendering", httpStatus: http.StatusAccepted, body: ``, wantStatus: "IN_PROGRESS"},
 		{name: "progress", httpStatus: http.StatusOK, body: `{"status":"pending","progress":42}`, wantStatus: "IN_PROGRESS", wantProgress: "42%"},
 		{
-			// xAI reports no resolution; the requested 720p prices the
-			// delivered 6 seconds plus the input image.
-			name: "delivered video keeps the requested resolution", httpStatus: http.StatusOK,
+			name: "delivered video settles on its length", httpStatus: http.StatusOK,
 			body:       `{"status":"done","progress":100,"model":"grok-imagine-video-1.5","video":{"url":"https://vidgen.x.ai/v.mp4","duration":6,"respect_moderation":true},"usage":{"cost_in_usd_ticks":8500000000}}`,
-			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": "6"}, wantTier: "720p", wantQuota: 425000, wantVideo: true,
+			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": float64(6)}, wantTier: "720p", wantQuota: 425000, wantVideo: true,
 		},
 		{
 			name: "moderated output is charged", httpStatus: http.StatusOK,
 			body:       `{"status":"done","progress":100,"video":{"url":"","duration":8,"respect_moderation":false},"usage":{"cost_in_usd_ticks":11200000000}}`,
-			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": "8", "moderated": true}, wantTier: "blocked", wantQuota: 25000,
+			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": float64(8), "moderated": true}, wantTier: "blocked", wantQuota: 25000,
 		},
 		{
-			// The failure reports no length; the blocked tier reads the
-			// requested seconds and charges the blocked fee only.
 			name: "failure xAI billed is charged", httpStatus: http.StatusOK,
 			body:       `{"status":"failed","error":{"code":"invalid_argument","message":"Content blocked by moderation"},"usage":{"cost_in_usd_ticks":500000000}}`,
 			wantStatus: "SUCCESS", wantFacts: map[string]any{"moderated": true}, wantTier: "blocked", wantQuota: 25000,
@@ -169,7 +153,7 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 				TaskID: "task_public", Action: "image_to_video", Data: []byte(tc.body),
 				Properties: model.Properties{OriginModelName: videoModel, UpstreamModelName: videoModel},
 			}
-			result, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: tc.httpStatus, Header: make(http.Header)}, []byte(tc.body))
+			result, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: tc.httpStatus, Header: make(http.Header)}, []byte(tc.body))
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantStatus, result.Status)
 			assert.Equal(t, tc.wantProgress, result.Progress)
@@ -187,23 +171,18 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 			nativeBody, err := common.Marshal(native)
 			require.NoError(t, err)
 			assert.NotContains(t, string(nativeBody), "cost_in_usd_ticks")
-			downstream, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, nativeBody)
+			downstream, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, nativeBody)
 			require.NoError(t, err)
 			assert.Equal(t, result.Status, downstream.Status)
 			assert.Equal(t, result.UsageFacts, downstream.UsageFacts)
 			if tc.wantStatus != "SUCCESS" {
 				return
 			}
-			assert.Empty(t, result.UsageError)
 			assert.Equal(t, tc.wantFacts, result.UsageFacts)
-			// The host prices the completion facts over the frozen submit facts.
-			merged := maps.Clone(prepared.Usage.EstimatedFacts)
-			maps.Copy(merged, result.UsageFacts)
-			charge, err := evaluateFactoryCharge(t, prepared.Quote, merged)
+			settled, _, err := service.EvaluateTaskCompletionUsage(snapshot, result.UsageFacts)
 			require.NoError(t, err)
-			require.NotNil(t, charge.Trace)
-			assert.Equal(t, tc.wantTier, charge.Trace.MatchedTier)
-			assert.Equal(t, tc.wantQuota, charge.FinalQuota)
+			assert.Equal(t, tc.wantTier, settled.MatchedTier)
+			assert.Equal(t, tc.wantQuota, settled.ActualQuotaAfterGroup)
 
 			task.Status = model.TaskStatusSuccess
 			artifacts, err := adaptor.ListArtifacts(task)
@@ -396,14 +375,10 @@ func TestXAIModeratedTaskPresentation(t *testing.T) {
 
 // An edit or extension keeps its source's resolution, which xAI never
 // reports, so the plugin reserves the 720p cap and reads the output file's
-// MP4 header to settle on the resolution xAI bills. The completion facts are
-// priced over the frozen submit facts.
+// MP4 header to settle on the resolution xAI bills.
 func TestXAIEditSettlesOnOutputResolution(t *testing.T) {
-	factoryPriceDatabase(t)
 	service.InitHttpClient()
 	plugin := newXAIPlugin(t)
-	_, err := jsplugin.DefaultRegistry.RegisterFactory(plugin.Source, jsplugin.Options{Key: "xai"})
-	require.NoError(t, err)
 	const videoModel = "grok-imagine-video"
 	box := func(kind string, payload ...[]byte) []byte {
 		body := bytes.Join(payload, nil)
@@ -449,58 +424,48 @@ func TestXAIEditSettlesOnOutputResolution(t *testing.T) {
 		`tier("480p", u("seconds") * 0.05 + u("input_video_seconds") * 0.01)`
 	schema, _ := plugin.Meta.UsageForModel(videoModel)
 	require.NoError(t, billing_setting.SmokeTestTaskExpr(expression, schema))
-	pricing := model.PricingValues{"billing_setting.billing_mode": billing_setting.BillingModeTieredExpr, "billing_setting.billing_expr": expression}
-	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: videoModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: pricing}}))
 	info := &relaycommon.RelayInfo{
-		ChannelMeta:         &relaycommon.ChannelMeta{ChannelBaseUrl: server.URL, ApiKey: "xai-key", UpstreamModelName: videoModel},
-		OriginModelName:     videoModel,
-		TaskPluginRef:       &model.TaskPluginRef{Key: "xai", Version: plugin.Meta.Version, SourceHash: plugin.SourceHash},
-		TaskRelayInfo:       &relaycommon.TaskRelayInfo{PublicTaskID: "task_public", Action: "video_extension"},
-		BillingRequestInput: &billingexpr.RequestInput{Attributes: map[string]any{}, FrozenAt: time.Now()},
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelBaseUrl: server.URL, ApiKey: "xai-key", UpstreamModelName: videoModel},
+		OriginModelName: videoModel,
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public", Action: "video_extension"},
 	}
 	adaptor := taskplugin.New(plugin)
 	adaptor.Init(info)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/xai/v1/videos/extensions", nil)
-	c.Set("channel_ratio", "1")
 	c.Set("task_request", map[string]any{"model": videoModel, "prompt": "keep walking", "video": map[string]any{"url": "https://cdn.example/in.mp4"}, "duration": 6})
 	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
 	reserved, err := adaptor.ExtractUsageFactsValidated(c, info)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"seconds": "6", "resolution": "720p", "input_images": "0", "input_video_seconds": "15", "moderated": false}, reserved)
-	prepared, err := helper.ModelPriceHelperWithTaskFacts(c, info, reserved)
-	require.NoError(t, err)
-	// 6 seconds at 720p plus the 15-second input cap reserve 0.57 USD.
-	assert.Equal(t, 285000, prepared.QuotaToPreConsume)
+	assert.Equal(t, map[string]any{"seconds": float64(6), "resolution": "720p", "input_images": float64(0), "input_video_seconds": float64(15), "moderated": false}, reserved)
+	snapshot := &billingexpr.BillingSnapshot{
+		BillingMode: billing_setting.BillingModeTieredExpr, ModelName: videoModel, ExprString: expression, ExprHash: billingexpr.ExprHashString(expression),
+		GroupRatio: 1, QuotaPerUnit: 500000, ExprVersion: billingexpr.ExprVersion(expression), TaskUsageBilling: true, UsageFacts: reserved,
+	}
 
 	for _, tc := range []struct {
 		name           string
 		path           string
-		duration       string
-		wantInput      string
 		wantResolution string
 		wantTier       string
-		wantQuota      common.Quota
+		wantQuota      int
 	}{
-		{name: "a file served whole settles on its 720p track", path: "/faststart.mp4", duration: "14", wantInput: "8", wantResolution: "720p", wantTier: "720p", wantQuota: 250000},
-		{name: "a moov after the media is read by Range", path: "/tail.mp4", duration: "14", wantInput: "8", wantResolution: "480p", wantTier: "480p", wantQuota: 190000},
-		{name: "a fractional source length stays exact", path: "/tail.mp4", duration: "16.37", wantInput: "10.37", wantResolution: "480p", wantTier: "480p", wantQuota: 201850},
-		{name: "a file that is not MP4 keeps the reserved cap", path: "/text.mp4", duration: "14", wantInput: "8", wantTier: "720p", wantQuota: 250000},
-		{name: "an unreadable file keeps the reserved cap", path: "/missing.mp4", duration: "14", wantInput: "8", wantTier: "720p", wantQuota: 250000},
+		{name: "a file served whole settles on its 720p track", path: "/faststart.mp4", wantResolution: "720p", wantTier: "720p", wantQuota: 250000},
+		{name: "a moov after the media is read by Range", path: "/tail.mp4", wantResolution: "480p", wantTier: "480p", wantQuota: 190000},
+		{name: "a file that is not MP4 keeps the reserved cap", path: "/text.mp4", wantTier: "720p", wantQuota: 250000},
+		{name: "an unreadable file keeps the reserved cap", path: "/missing.mp4", wantTier: "720p", wantQuota: 250000},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ranges = nil
-			body := `{"status":"done","progress":100,"video":{"url":"` + server.URL + tc.path + `","duration":` + tc.duration + `,"respect_moderation":true}}`
+			body := `{"status":"done","progress":100,"video":{"url":"` + server.URL + tc.path + `","duration":14,"respect_moderation":true}}`
 			task := &model.Task{
 				TaskID: "task_public", Action: "video_extension", Data: []byte(body),
 				Properties:  model.Properties{OriginModelName: videoModel, UpstreamModelName: videoModel},
 				PrivateData: model.TaskPrivateData{PluginState: []byte(`{"extension_seconds":6}`)},
 			}
-			result, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, []byte(body))
+			result, err := adaptor.ParseTaskResult(task, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, []byte(body))
 			require.NoError(t, err)
 			assert.Equal(t, "SUCCESS", result.Status)
-			assert.Empty(t, result.UsageError)
-			wantFacts := map[string]any{"input_video_seconds": tc.wantInput}
+			wantFacts := map[string]any{"input_video_seconds": float64(8)}
 			if tc.wantResolution == "" {
 				assert.Empty(t, result.PluginState)
 			} else {
@@ -508,17 +473,12 @@ func TestXAIEditSettlesOnOutputResolution(t *testing.T) {
 				assert.JSONEq(t, `{"extension_seconds":6,"output_resolution":"`+tc.wantResolution+`"}`, string(result.PluginState))
 			}
 			assert.Equal(t, wantFacts, result.UsageFacts)
-			merged := maps.Clone(prepared.Usage.EstimatedFacts)
-			maps.Copy(merged, result.UsageFacts)
-			charge, err := evaluateFactoryCharge(t, prepared.Quote, merged)
+			settled, _, err := service.EvaluateTaskCompletionUsage(snapshot, result.UsageFacts)
 			require.NoError(t, err)
-			require.NotNil(t, charge.Trace)
-			assert.Equal(t, tc.wantTier, charge.Trace.MatchedTier)
-			assert.Equal(t, tc.wantQuota, charge.FinalQuota)
-			if tc.path == "/tail.mp4" {
-				moov := len(ftyp) + len(mdat)
-				assert.Equal(t, []string{"bytes=0-65535", fmt.Sprintf("bytes=%d-%d", moov, moov+65535)}, ranges, "the file is read in pieces, never whole")
-			}
+			assert.Equal(t, tc.wantTier, settled.MatchedTier)
+			assert.Equal(t, tc.wantQuota, settled.ActualQuotaAfterGroup)
 		})
 	}
+	moov := len(ftyp) + len(mdat)
+	assert.Equal(t, []string{"bytes=0-65535", fmt.Sprintf("bytes=%d-%d", moov, moov+65535)}, ranges, "the file is read in pieces, never whole")
 }

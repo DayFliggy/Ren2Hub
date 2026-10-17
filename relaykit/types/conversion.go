@@ -5,23 +5,6 @@ import (
 	"strings"
 )
 
-type ConversionLossPolicy string
-
-const (
-	ConversionLossPolicySafe   ConversionLossPolicy = "safe"
-	ConversionLossPolicyAllow  ConversionLossPolicy = "allow"
-	ConversionLossPolicyStrict ConversionLossPolicy = "strict"
-)
-
-func (p ConversionLossPolicy) Validate() error {
-	switch p {
-	case "", ConversionLossPolicySafe, ConversionLossPolicyAllow, ConversionLossPolicyStrict:
-		return nil
-	default:
-		return fmt.Errorf("invalid conversion policy %q", p)
-	}
-}
-
 type ConversionDiagnosticSeverity string
 
 const (
@@ -38,32 +21,55 @@ type ConversionDiagnostic struct {
 	To       RelayFormat                  `json:"to"`
 }
 
+type ConversionLossPolicy string
+
+const (
+	// ConversionLossPolicySafe rejects request-phase conversions that would
+	// change tool execution semantics, while returning non-fatal loss as
+	// diagnostics. It is opt-in; the default is ConversionLossPolicyAllow.
+	ConversionLossPolicySafe ConversionLossPolicy = "safe"
+	// ConversionLossPolicyStrict rejects every lossy conversion, including
+	// presentation-only metadata loss.
+	ConversionLossPolicyStrict ConversionLossPolicy = "strict"
+	// ConversionLossPolicyAllow is the default. It permits lossy conversion
+	// and reports every loss through the conversion result.
+	ConversionLossPolicyAllow ConversionLossPolicy = "allow"
+)
+
 type ConversionLossError struct {
 	Diagnostics []ConversionDiagnostic
 }
 
 func (e *ConversionLossError) Error() string {
-	parts := make([]string, 0, len(e.Diagnostics))
-	for _, diagnostic := range e.Diagnostics {
-		parts = append(parts, diagnostic.Path+": "+diagnostic.Message)
+	if e == nil || len(e.Diagnostics) == 0 {
+		return "conversion would lose protocol semantics"
 	}
-	return "conversion cannot preserve request semantics: " + strings.Join(parts, "; ")
+	messages := make([]string, 0, len(e.Diagnostics))
+	for _, diagnostic := range e.Diagnostics {
+		message := diagnostic.Message
+		if message == "" {
+			message = diagnostic.Code
+		}
+		if diagnostic.Path != "" {
+			message = fmt.Sprintf("%s: %s", diagnostic.Path, message)
+		}
+		messages = append(messages, message)
+	}
+	return "conversion would lose protocol semantics: " + strings.Join(messages, "; ")
 }
 
 func RejectConversionLoss(policy ConversionLossPolicy, diagnostics []ConversionDiagnostic) error {
-	if err := policy.Validate(); err != nil {
-		return err
+	if policy == ConversionLossPolicyAllow || len(diagnostics) == 0 {
+		return nil
 	}
-	var rejected []ConversionDiagnostic
+	rejected := make([]ConversionDiagnostic, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
-		// Provider-owned state cannot be made portable by selecting allow.
-		if diagnostic.Code == "native_state_required" || policy == ConversionLossPolicyStrict ||
-			(policy != ConversionLossPolicyAllow && diagnostic.Severity == ConversionDiagnosticError) {
+		if policy == ConversionLossPolicyStrict || diagnostic.Severity == ConversionDiagnosticError {
 			rejected = append(rejected, diagnostic)
 		}
 	}
-	if len(rejected) != 0 {
-		return &ConversionLossError{Diagnostics: rejected}
+	if len(rejected) == 0 {
+		return nil
 	}
-	return nil
+	return &ConversionLossError{Diagnostics: rejected}
 }

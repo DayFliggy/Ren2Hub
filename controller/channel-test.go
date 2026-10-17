@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -27,6 +28,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -38,6 +40,15 @@ type testResult struct {
 	context     *gin.Context
 	localErr    error
 	newAPIError *types.NewAPIError
+}
+
+func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
+	normalized := strings.TrimSpace(endpointType)
+	if normalized != "" {
+		return normalized
+	}
+
+	return normalized
 }
 
 func resolveChannelTestUserID(c *gin.Context) (int, error) {
@@ -57,10 +68,7 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (outcome testResult) {
-	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
-		return testResult{localErr: err}
-	}
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -73,6 +81,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		constant.ChannelTypeJimeng,
 		constant.ChannelTypeDoubaoVideo,
 		constant.ChannelTypeVidu,
+		constant.ChannelTypeTaskPlugin,
 	}
 	if lo.Contains(unsupportedTestChannelTypes, channel.Type) {
 		channelTypeName := constant.GetChannelTypeName(channel.Type)
@@ -98,7 +107,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
-	endpointType = strings.TrimSpace(endpointType)
+	endpointType = normalizeChannelTestEndpoint(channel, endpointType)
 
 	requestPath := "/v1/chat/completions"
 
@@ -139,7 +148,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	if isStream && constant.EndpointType(endpointType) == constant.EndpointTypeGemini {
 		requestPath = strings.Replace(requestPath, ":generateContent", ":streamGenerateContent", 1)
 	}
-
 	c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, requestPath, nil)
 
 	cache, err := model.GetUserCache(testUserID)
@@ -219,16 +227,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	request := buildTestRequest(testModel, endpointType, channel, isStream)
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") {
-		if !service.ChannelSupportsCompactEndpoint(channel, testModel) {
-			err := fmt.Errorf("channel does not support /v1/responses/compact for model %s", testModel)
-			return testResult{
-				context:     c,
-				localErr:    err,
-				newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest),
-			}
-		}
-	}
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
@@ -260,6 +258,13 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			newAPIError: types.NewError(err, types.ErrorCodeChannelModelMappedError),
 		}
 	}
+	if err := helper.ApplyReasoningModelSuffix(c, info, request); err != nil {
+		return testResult{
+			context:     c,
+			localErr:    err,
+			newAPIError: types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry()),
+		}
+	}
 
 	testModel = info.UpstreamModelName
 	// 更新请求中的模型名称
@@ -267,7 +272,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 
 	apiType, _ := common.ChannelType2APIType(channel.Type)
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
-		!common.IsResponsesCompactAPIType(apiType) {
+		!common.SupportsResponsesCompact(channel.Type, apiType) {
 		return testResult{
 			context:     c,
 			localErr:    fmt.Errorf("responses compaction test is not supported for api type %d", apiType),
@@ -288,7 +293,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	//logInfo.ApiKey = ""
 	common.SysLog(common.LogText("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
 
-	_, err = helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
+	priceData, err := helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -425,21 +430,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
-	if err := helper.FreezeOutboundBillingAttributes(info, jsonData); err != nil {
-		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeModelPriceError)}
-	}
-	info.DeferBillingToSend = true
-	finish, err := prepareChannelTestAdmission(c, info)
-	if err != nil {
-		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeGetChannelFailed)}
-	}
-	defer finish()
-	defer func() {
-		observeLiveRouteAttempt(c, info, relayAttemptOutcome(c, info, outcome.newAPIError, tik, false))
-		if info.Billing != nil {
-			info.Billing.Refund(c)
-		}
-	}()
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -454,7 +444,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	if resp != nil {
 		httpResp = resp.(*http.Response)
 		if httpResp.StatusCode != http.StatusOK {
-			info.UpstreamRejected = httpResp.StatusCode >= 400 && httpResp.StatusCode < 500 && httpResp.StatusCode != 408
 			err := service.RelayErrorHandler(c.Request.Context(), httpResp, true)
 			common.SysError(common.LogText(
 				"channel test bad response: channel_id=%d name=%s type=%d model=%s endpoint_type=%s status=%d err=%v",
@@ -472,7 +461,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 				newAPIError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError),
 			}
 		}
-		info.UpstreamAccepted = true
 	}
 	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
 	if respErr != nil {
@@ -507,35 +495,25 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	info.SetEstimatePromptTokens(usage.PromptTokens)
-	info.MarkValidOutput()
-	info.CaptureResponseUsage(usage, "text", nil)
-	quota, settleErr := service.PrepareFinalTextCharge(c, info, usage)
-	if settleErr != nil {
-		// The probe consumed provider work; it is billed like a relayed request
-		// while the pricing failure is still reported to the administrator.
-		service.SettleBillingFallback(c, info, "channel_probe_unpriced", settleErr)
-		return testResult{context: c, localErr: settleErr, newAPIError: types.NewError(settleErr, types.ErrorCodeModelPriceError)}
-	}
+
+	quota, tieredResult := settleTestQuota(info, priceData, usage)
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
-	other := service.GenerateTextOtherInfo(c, info, usage.PromptTokensDetails.CachedTokens)
-	settleErr = service.CompleteBillingConsumption(c, info, model.RecordConsumeLogParams{
+	other := buildTestLogOther(c, info, priceData, usage, tieredResult)
+	model.RecordConsumeLog(c, testUserID, model.RecordConsumeLogParams{
 		ChannelId:        channel.Id,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ModelName:        info.OriginModelName,
 		TokenName:        "Model test",
-		Quota:            common.Quota(quota),
+		Quota:            quota,
 		Content:          []*common.Message{common.NewMessage("Model test")},
 		UseTimeSeconds:   int(consumedTime),
 		IsStream:         info.IsStream,
 		Group:            info.UsingGroup,
 		Other:            other,
-	}, true)
-	if settleErr != nil {
-		return testResult{context: c, localErr: settleErr, newAPIError: types.NewError(settleErr, types.ErrorCodeUpdateDataError)}
-	}
+	})
 	common.SysLog(common.LogText("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
 	return testResult{
 		context:     c,
@@ -557,19 +535,62 @@ func attachTestBillingRequestInput(info *relaycommon.RelayInfo, request dto.Requ
 	return nil
 }
 
+func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult) {
+	if usage != nil && info != nil && info.TieredBillingSnapshot != nil {
+		isClaudeUsageSemantic := usage.UsageSemantic == "anthropic" || info.GetFinalRequestRelayFormat() == types.RelayFormatClaude
+		usedVars := billingexpr.UsedVars(info.TieredBillingSnapshot.ExprString)
+		if ok, quota, result := service.TryTieredSettle(info, service.BuildTieredTokenParams(usage, isClaudeUsageSemantic, usedVars)); ok {
+			return quota, result
+		}
+	}
+
+	quota := 0
+	if !priceData.UsePrice {
+		completionQuota := common.QuotaRound(float64(usage.CompletionTokens) * priceData.CompletionRatio)
+		quota = common.QuotaRound(float64(usage.PromptTokens) + float64(completionQuota))
+		quota = common.QuotaRound(float64(quota) * priceData.ModelRatio)
+		if priceData.ModelRatio != 0 && quota <= 0 {
+			quota = 1
+		}
+		return quota, nil
+	}
+
+	return common.QuotaFromFloat(priceData.ModelPrice * common.QuotaPerUnit), nil
+}
+
+func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) *model.LogOther {
+	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio,
+		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio)
+	if tieredResult != nil {
+		service.InjectTieredBillingInfo(other, info, tieredResult)
+	}
+	return other
+}
+
 func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dto.Usage, error) {
 	switch u := usageAny.(type) {
 	case *dto.Usage:
-		if u == nil {
-			return &dto.Usage{UsageSource: "missing"}, nil
-		}
 		return u, nil
 	case dto.Usage:
 		return &u, nil
 	case nil:
-		return &dto.Usage{UsageSource: "missing"}, nil
+		if !isStream {
+			return nil, errors.New("usage is nil")
+		}
+		usage := &dto.Usage{
+			PromptTokens: estimatePromptTokens,
+		}
+		usage.TotalTokens = usage.PromptTokens
+		return usage, nil
 	default:
-		return nil, fmt.Errorf("invalid usage type: %T", usageAny)
+		if !isStream {
+			return nil, fmt.Errorf("invalid usage type: %T", usageAny)
+		}
+		usage := &dto.Usage{
+			PromptTokens: estimatePromptTokens,
+		}
+		usage.TotalTokens = usage.PromptTokens
+		return usage, nil
 	}
 }
 
@@ -591,7 +612,7 @@ func detectErrorFromTestResponseBody(respBody []byte) error {
 		return fmt.Errorf("upstream error: %s", message)
 	}
 
-	for _, line := range bytes.Split(b, []byte{'\n'}) {
+	for line := range bytes.SplitSeq(b, []byte{'\n'}) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
@@ -617,7 +638,7 @@ func validateStreamTestResponseBody(respBody []byte) error {
 		return errors.New("stream response body is empty")
 	}
 
-	for _, line := range bytes.Split(b, []byte{'\n'}) {
+	for line := range bytes.SplitSeq(b, []byte{'\n'}) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 || !bytes.HasPrefix(line, []byte("data:")) {
 			continue
@@ -830,10 +851,6 @@ func TestChannel(c *gin.Context) {
 			return
 		}
 	}
-	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
-		common.ApiError(c, err)
-		return
-	}
 	//defer func() {
 	//	if channel.ChannelInfo.IsMultiKey {
 	//		go func() { _ = channel.SaveChannelInfo() }()
@@ -878,13 +895,10 @@ func TestChannel(c *gin.Context) {
 		})
 		return
 	}
-	// Keep top-level time for the legacy web UI; the next frontend requires
-	// a data key on every success envelope.
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"time":    consumedTime,
-		"data":    gin.H{"time": consumedTime},
 	})
 }
 
@@ -898,45 +912,121 @@ type channelTestSummary struct {
 	Enabled   int `json:"enabled"`
 }
 
-type completedChannelTest struct {
-	channel      *model.Channel
-	result       testResult
-	milliseconds int64
+func testChannelForHealthCheck(ctx context.Context, channel *model.Channel, testUserID int, allowDisable bool, disableThreshold int64) channelTestSummary {
+	summary := channelTestSummary{}
+	isChannelEnabled := channel.Status == common.ChannelStatusEnabled
+	tik := time.Now()
+	result := testChannel(ctx, channel, testUserID, "", "", false)
+	milliseconds := time.Since(tik).Milliseconds()
+	if ctx.Err() != nil {
+		return summary
+	}
+
+	summary.Tested++
+
+	shouldBanChannel := false
+	newAPIError := result.newAPIError
+	if newAPIError != nil {
+		shouldBanChannel = service.ShouldDisableChannel(result.newAPIError)
+	}
+
+	if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
+		if milliseconds > disableThreshold {
+			// The reason is stored with the channel and sent in the disable
+			// notice; no request states a language here.
+			err := errors.New(i18n.Translate("", i18n.MsgChannelResponseTimeExceeded, map[string]any{
+				"Seconds":   fmt.Sprintf("%.2f", float64(milliseconds)/1000.0),
+				"Threshold": fmt.Sprintf("%.2f", float64(disableThreshold)/1000.0),
+			}))
+			newAPIError = types.NewOpenAIError(err, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
+			shouldBanChannel = true
+		}
+	}
+
+	if newAPIError == nil {
+		summary.Succeeded++
+	} else {
+		summary.Failed++
+	}
+
+	if allowDisable && isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
+		processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, nil)
+		summary.Disabled++
+	}
+
+	if result.localErr == nil && !isChannelEnabled && service.ShouldEnableChannel(newAPIError, channel.Status) {
+		service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
+		summary.Enabled++
+	}
+
+	channel.UpdateResponseTime(milliseconds)
+	return summary
 }
 
-func runChannelTestBatch(ctx context.Context, channels []*model.Channel, concurrency int, interval time.Duration, run func(context.Context, *model.Channel) testResult) <-chan completedChannelTest {
-	completed := make(chan completedChannelTest)
+// runChannelTestWorkers executes independent channel tests with bounded
+// concurrency. Results and progress are reduced by the caller goroutine, so
+// summary counts and the progress reporter remain serialized.
+func runChannelTestWorkers(
+	ctx context.Context,
+	channels []*model.Channel,
+	concurrency int,
+	run func(context.Context, *model.Channel) channelTestSummary,
+	report func(processed, total int),
+) channelTestSummary {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	total := len(channels)
+	if report != nil {
+		report(0, total)
+	}
+	if total == 0 {
+		return channelTestSummary{}
+	}
+
+	workerCount := min(operation_setting.NormalizeChannelTestConcurrency(concurrency), total)
 	jobs := make(chan *model.Channel)
+	results := make(chan channelTestSummary)
+
 	var workers sync.WaitGroup
-	for range min(max(concurrency, 1), 32) {
-		workers.Add(1)
+	workers.Add(workerCount)
+	for range workerCount {
 		go func() {
 			defer workers.Done()
-			for channel := range jobs {
-				if ctx.Err() != nil {
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case channel, ok := <-jobs:
+					if !ok {
+						return
+					}
+					if ctx.Err() != nil {
+						return
+					}
+
+					result := channelTestSummary{}
+					if channel != nil && channel.Status != common.ChannelStatusManuallyDisabled {
+						result = run(ctx, channel)
+					}
+
+					results <- result
+
+					if common.RequestInterval > 0 {
+						select {
+						case <-ctx.Done():
+							return
+						case <-time.After(common.RequestInterval):
+						}
+					}
 				}
-				start := time.Now()
-				result := run(ctx, channel)
-				completed <- completedChannelTest{channel, result, time.Since(start).Milliseconds()}
 			}
 		}()
 	}
+
 	go func() {
 		defer close(jobs)
-		for index, channel := range channels {
-			if ctx.Err() != nil {
-				return
-			}
-			if index > 0 && interval > 0 {
-				timer := time.NewTimer(interval)
-				select {
-				case <-ctx.Done():
-					timer.Stop()
-					return
-				case <-timer.C:
-				}
-			}
+		for _, channel := range channels {
 			select {
 			case <-ctx.Done():
 				return
@@ -944,87 +1034,48 @@ func runChannelTestBatch(ctx context.Context, channels []*model.Channel, concurr
 			}
 		}
 	}()
-	go func() { workers.Wait(); close(completed) }()
-	return completed
-}
 
-// performChannelTests runs the channel test loop synchronously, honoring ctx
-// cancellation so a system-task runner that loses its lease stops promptly. When
-// report is non-nil it is called after each channel with (processed, total) so
-// the system task can surface progress.
-func performChannelTests(ctx context.Context, channels []*model.Channel, testUserID int, allowDisable bool, report func(processed, total int)) channelTestSummary {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	channels = selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll)
+	go func() {
+		workers.Wait()
+		close(results)
+	}()
+
 	summary := channelTestSummary{}
-	var disableThreshold = int64(common.ChannelDisableThreshold * 1000)
-	if disableThreshold == 0 {
-		disableThreshold = 10000000 // a impossible value
-	}
-
-	total := len(channels)
-	if report != nil {
-		report(0, total)
-	}
-	results := runChannelTestBatch(ctx, channels, operation_setting.GetMonitorSetting().ChannelTestConcurrency, common.RequestInterval,
-		func(ctx context.Context, channel *model.Channel) testResult {
-			return testChannel(ctx, channel, testUserID, "", "", false)
-		})
-	for completed := range results {
-		channel, result, milliseconds := completed.channel, completed.result, completed.milliseconds
-		isChannelEnabled := channel.IsServable()
-		if ctx.Err() != nil {
-			continue // Join active probes without treating cancellation as channel failure.
-		}
-
-		summary.Tested++
-
-		shouldBanChannel := false
-		newAPIError := result.newAPIError
-		// request error disables the channel
-		if newAPIError != nil {
-			shouldBanChannel = service.ShouldDisableChannel(result.newAPIError)
-		}
-
-		// 当错误检查通过，才检查响应时间
-		if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
-			if milliseconds > disableThreshold {
-				// The reason is stored with the channel and sent in the disable
-				// notice; no request states a language here.
-				err := errors.New(i18n.Translate("", i18n.MsgChannelResponseTimeExceeded, map[string]any{
-					"Seconds":   fmt.Sprintf("%.2f", float64(milliseconds)/1000.0),
-					"Threshold": fmt.Sprintf("%.2f", float64(disableThreshold)/1000.0),
-				}))
-				newAPIError = types.NewOpenAIError(err, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
-				shouldBanChannel = true
-			}
-		}
-
-		if newAPIError == nil && result.localErr == nil {
-			summary.Succeeded++
-		} else {
-			summary.Failed++
-		}
-
-		// disable channel
-		if allowDisable && isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
-			processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, nil)
-			summary.Disabled++
-		}
-
-		// enable channel
-		if result.localErr == nil && !isChannelEnabled && service.ShouldEnableChannel(newAPIError, channel.Status) {
-			service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
-			summary.Enabled++
-		}
-
-		channel.UpdateResponseTime(milliseconds)
-		if report != nil {
-			report(summary.Tested, total)
+	processed := 0
+	for result := range results {
+		summary.Tested += result.Tested
+		summary.Succeeded += result.Succeeded
+		summary.Failed += result.Failed
+		summary.Disabled += result.Disabled
+		summary.Enabled += result.Enabled
+		processed++
+		if report != nil && ctx.Err() == nil {
+			report(processed, total)
 		}
 	}
 	return summary
+}
+
+// performChannelTests runs channel health checks with the configured bounded
+// concurrency and honors cancellation when a system-task runner loses its
+// lease.
+func performChannelTests(ctx context.Context, channels []*model.Channel, testUserID int, allowDisable bool, concurrency int, report func(processed, total int)) channelTestSummary {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	disableThreshold := int64(common.ChannelDisableThreshold * 1000)
+	if disableThreshold == 0 {
+		disableThreshold = 10000000 // an impossible value
+	}
+	return runChannelTestWorkers(
+		ctx,
+		channels,
+		concurrency,
+		func(ctx context.Context, channel *model.Channel) channelTestSummary {
+			return testChannelForHealthCheck(ctx, channel, testUserID, allowDisable, disableThreshold)
+		},
+		report,
+	)
 }
 
 // runChannelTestTask runs one synchronous channel test cycle for the system task
@@ -1049,7 +1100,8 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	}
 	selected := selectChannelsForAutomaticTest(channels, mode)
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
-	summary := performChannelTests(ctx, selected, testUserID, allowDisable, report)
+	concurrency := operation_setting.GetMonitorSetting().ChannelTestConcurrency
+	summary := performChannelTests(ctx, selected, testUserID, allowDisable, concurrency, report)
 	if notify && (ctx == nil || ctx.Err() == nil) {
 		lang := service.RootUserLanguage()
 		service.NotifyRootUser(dto.NotifyTypeChannelTest, i18n.Translate(lang, i18n.MsgChannelTestCompletedSubject), i18n.Translate(lang, i18n.MsgChannelTestCompletedContent))
@@ -1060,7 +1112,7 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 func selectChannelsForAutomaticTest(channels []*model.Channel, mode string) []*model.Channel {
 	selected := make([]*model.Channel, 0, len(channels))
 	for _, channel := range channels {
-		if !channel.IsServable() && channel.Status != common.ChannelStatusAutoDisabled {
+		if channel.Status == common.ChannelStatusManuallyDisabled {
 			continue
 		}
 		if mode == operation_setting.ChannelTestModeAutoBanOnly && !channel.GetAutoBan() {

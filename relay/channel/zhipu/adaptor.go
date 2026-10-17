@@ -6,12 +6,11 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,8 +60,8 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if err := service.ValidateRequestProjection(info, constant.APITypeZhipu, request); err != nil {
-		return nil, err
+	if lo.FromPtrOr(request.TopP, 0) >= 1 {
+		request.TopP = lo.ToPtr(0.99)
 	}
 	return requestOpenAI2Zhipu(*request), nil
 }

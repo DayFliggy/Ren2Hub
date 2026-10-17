@@ -50,11 +50,7 @@ func injectGlobals(runtime *moejs.Runtime, identity func() string, now func() ti
 			}
 			return moejs.Bool(HasCapability(name)), nil
 		}),
-		// Ren2Hub extension (usage_decimal.go); upstream has no decimal helpers.
-		"decimal": decimalHelpers(runtime),
 		"json": map[string]any{
-			// Ren2Hub extension (usage_decimal.go).
-			"parseNumbers": parseNumbersHelper(runtime),
 			"clone": runtime.Function("clone", 1, func(r *moejs.Realm, _ moejs.Value, args []moejs.Value) (moejs.Value, error) {
 				if moejs.Arg(args, 0).IsUndefined() {
 					return moejs.Undefined(), r.TypeError("json.clone requires a JSON value")

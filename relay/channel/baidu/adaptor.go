@@ -7,13 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	baseconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -123,10 +121,11 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if err := service.ValidateRequestProjection(info, baseconstant.APITypeBaidu, request); err != nil {
-		return nil, err
+	switch info.RelayMode {
+	default:
+		baiduRequest := requestOpenAI2Baidu(*request)
+		return baiduRequest, nil
 	}
-	return requestOpenAI2Baidu(*request), nil
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {

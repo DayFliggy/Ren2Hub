@@ -12,10 +12,6 @@ import {
 export type SystemSettingValue = string | boolean | number
 export type SystemSettingsRawOptions = Record<string, string>
 
-interface SecretStatusResponse {
-  configured?: string[]
-}
-
 /** Parse a raw string value into boolean / number / string based on the default key type. */
 function castValue(
   key: string,
@@ -113,25 +109,14 @@ export function useSystemSettings() {
     _fetchPromise = api
       .get<SystemOption[]>('/api/option/')
       .then(async (data) => {
-        const descriptors = await api.get<SystemOptionDescriptor[]>(
-          '/api/option/catalog'
-        )
-        const secretStatus = await api.get<SecretStatusResponse>(
-          '/api/option/secret-status'
-        )
+        const descriptors: SystemOptionDescriptor[] = []
         if (
           !Array.isArray(data) ||
           data.some(
             (option) =>
               typeof option?.key !== 'string' ||
               typeof option.value !== 'string'
-          ) ||
-          !Array.isArray(descriptors) ||
-          descriptors.some(
-            (descriptor) => !descriptor || typeof descriptor.key !== 'string'
-          ) ||
-          !Array.isArray(secretStatus?.configured) ||
-          secretStatus.configured.some((key) => typeof key !== 'string')
+          )
         )
           throw new Error('Invalid system settings response')
         const raw: SystemSettingsRawOptions = {}
@@ -152,7 +137,7 @@ export function useSystemSettings() {
           SYSTEM_SETTINGS_DEFAULTS,
           descriptors
         )
-        _configuredSecrets.value = secretStatus.configured
+        _configuredSecrets.value = []
         _loaded.value = true
         return true
       })
@@ -177,7 +162,7 @@ export function useSystemSettings() {
     return saveOptions({ [key]: value })
   }
 
-  /** Save a whole patch atomically. Sensitive blank fields must be omitted. */
+  /** Native options save independently; retain successful writes if a later key fails. */
   async function saveOptions(
     patch: Partial<Record<string, SystemSettingValue>>
   ): Promise<boolean> {
@@ -188,37 +173,41 @@ export function useSystemSettings() {
     )
     if (entries.length === 0) return true
     _saving.value = true
-    _savePromise = api
-      .put<null>('/api/option/bulk', { options: Object.fromEntries(entries) })
-      .then(() => {
-        const nextRaw = { ..._rawOptions.value }
-        const configured = new Set(_configuredSecrets.value)
+    _savePromise = (async () => {
+      try {
         for (const [key, value] of entries) {
-          const sensitive = isSensitiveOption(key)
-          if (sensitive) {
-            delete nextRaw[key]
-            configured.add(key)
-          } else nextRaw[key] = String(value)
-          if (
-            Object.prototype.hasOwnProperty.call(SYSTEM_SETTINGS_DEFAULTS, key)
-          ) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ;(_settings.value as any)[key] = sensitive ? '' : value
+          await api.put('/api/option/', { key, value: String(value) })
+          if (isSensitiveOption(key)) {
+            _configuredSecrets.value = [
+              ...new Set([..._configuredSecrets.value, key]),
+            ]
+          } else {
+            _rawOptions.value = { ..._rawOptions.value, [key]: String(value) }
           }
         }
-        _rawOptions.value = nextRaw
-        _configuredSecrets.value = [...configured]
+        _settings.value = parseOptions(
+          Object.entries(_rawOptions.value).map(([key, value]) => ({
+            key,
+            value,
+          })),
+          SYSTEM_SETTINGS_DEFAULTS
+        )
         return true
-      })
-      .catch((err) => {
-        const msg = err instanceof ApiError ? err.message : String(err)
-        toast.error(msg)
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : String(err))
         return false
-      })
-      .finally(() => {
+      } finally {
+        _settings.value = parseOptions(
+          Object.entries(_rawOptions.value).map(([key, value]) => ({
+            key,
+            value,
+          })),
+          SYSTEM_SETTINGS_DEFAULTS
+        )
         _saving.value = false
         _savePromise = null
-      })
+      }
+    })()
     return _savePromise
   }
 

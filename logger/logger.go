@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -27,9 +26,9 @@ const (
 
 const maxLogCount = 1000000
 
-var logCount atomic.Uint64
+var logCount int
 var setupLogLock sync.Mutex
-var setupLogWorking atomic.Bool
+var setupLogWorking bool
 var currentLogPath string
 var currentLogPathMu sync.RWMutex
 var currentLogFile *os.File
@@ -41,6 +40,9 @@ func GetCurrentLogPath() string {
 }
 
 func SetupLogger() {
+	defer func() {
+		setupLogWorking = false
+	}()
 	if *common.LogDir != "" {
 		ok := setupLogLock.TryLock()
 		if !ok {
@@ -75,14 +77,10 @@ func LogInfo(ctx context.Context, msg string) {
 	logHelper(ctx, loggerINFO, msg)
 }
 
-// TryLogInfo is the error-reporting variant used by bounded asynchronous
-// observers whose delivery metrics must distinguish an accepted write from a
-// failed sink operation.
-func TryLogInfo(ctx context.Context, msg string) error {
-	return logHelper(ctx, loggerINFO, msg)
-}
-
-func LogWarn(ctx context.Context, msg string) {
+func LogWarn(ctx context.Context, msg string, args ...any) {
+	if len(args) > 0 {
+		msg = fmt.Sprintf(msg, args...)
+	}
 	logHelper(ctx, loggerWarn, msg)
 }
 
@@ -98,7 +96,7 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 	}
 }
 
-func logHelper(ctx context.Context, level string, msg string) error {
+func logHelper(ctx context.Context, level string, msg string) {
 	var id any = "SYSTEM"
 	if ctx != nil {
 		if requestID := ctx.Value(common.RequestIdKey); requestID != nil {
@@ -111,20 +109,20 @@ func logHelper(ctx context.Context, level string, msg string) error {
 	if level == loggerINFO {
 		writer = gin.DefaultWriter
 	}
-	_, err := fmt.Fprintf(writer, "[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
+	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
 	common.LogWriterMu.RUnlock()
-	if logCount.Add(1) > maxLogCount && setupLogWorking.CompareAndSwap(false, true) {
-		logCount.Store(0)
+	logCount++ // we don't need accurate count, so no lock here
+	if logCount > maxLogCount && !setupLogWorking {
+		logCount = 0
+		setupLogWorking = true
 		gopool.Go(func() {
-			defer setupLogWorking.Store(false)
 			SetupLogger()
 		})
 	}
-	return err
 }
 
 // LogQuota formats a quota for a server log line.
-func LogQuota[T ~int | ~int64](quota T) string {
+func LogQuota(quota int) string {
 	// 新逻辑：根据额度展示类型输出
 	q := float64(quota)
 	switch operation_setting.GetQuotaDisplayType() {
@@ -151,7 +149,7 @@ func LogQuota[T ~int | ~int64](quota T) string {
 	}
 }
 
-func FormatQuota[T ~int | ~int64](quota T) string {
+func FormatQuota(quota int) string {
 	q := float64(quota)
 	switch operation_setting.GetQuotaDisplayType() {
 	case operation_setting.QuotaDisplayTypeCNY:

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestStreamStatus_SetEndReason_FailureOverridesCompletion(t *testing.T) {
+func TestStreamStatus_SetEndReason_FirstWins(t *testing.T) {
 	t.Parallel()
 	s := NewStreamStatus()
 
@@ -16,8 +16,8 @@ func TestStreamStatus_SetEndReason_FailureOverridesCompletion(t *testing.T) {
 	s.SetEndReason(StreamEndReasonTimeout, nil)
 	s.SetEndReason(StreamEndReasonClientGone, fmt.Errorf("context canceled"))
 
-	assert.Equal(t, StreamEndReasonClientGone, s.EndReason)
-	assert.Error(t, s.EndError)
+	assert.Equal(t, StreamEndReasonDone, s.EndReason)
+	assert.Nil(t, s.EndError)
 }
 
 func TestStreamStatus_SetEndReason_WithError(t *testing.T) {
@@ -82,7 +82,7 @@ func TestStreamStatus_RecordError_CapAtMax(t *testing.T) {
 	t.Parallel()
 	s := NewStreamStatus()
 
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		s.RecordError(fmt.Sprintf("error_%d", i))
 	}
 
@@ -101,7 +101,7 @@ func TestStreamStatus_RecordError_Concurrent(t *testing.T) {
 	s := NewStreamStatus()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -135,8 +135,8 @@ func TestStreamStatus_IsNormalEnd(t *testing.T) {
 		normal bool
 	}{
 		{StreamEndReasonDone, true},
-		{StreamEndReasonEOF, false},
-		{StreamEndReasonHandlerStop, false},
+		{StreamEndReasonEOF, true},
+		{StreamEndReasonHandlerStop, true},
 		{StreamEndReasonTimeout, false},
 		{StreamEndReasonClientGone, false},
 		{StreamEndReasonScannerErr, false},

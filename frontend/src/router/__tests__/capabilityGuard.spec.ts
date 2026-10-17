@@ -55,12 +55,9 @@ beforeEach(async () => {
     email: 'user@example.com',
     role: 1,
     status: 1,
-    available_quota: '100',
-    reserved_quota: '0',
-    quota_version: 0,
-    used_quota: '0',
+    quota: 100,
+    used_quota: 0,
     request_count: 0,
-    created_at: 1_700_000_000,
   })
   auth.checked = true
 
@@ -168,7 +165,7 @@ describe('capability route guard', () => {
   it('fails closed for protected routes when status is unreachable', async () => {
     publicApi.status.mockRejectedValue(new Error('status unavailable'))
 
-    await router.push('/console/market')
+    await router.push('/console/models')
 
     expect(router.currentRoute.value.name).toBe('home')
   }, 15000)
@@ -214,12 +211,9 @@ describe('capability route guard', () => {
       email: 'admin@example.com',
       role: 10,
       status: 1,
-      available_quota: '100',
-      reserved_quota: '0',
-      quota_version: 0,
-      used_quota: '0',
+      quota: 100,
+      used_quota: 0,
       request_count: 0,
-      created_at: 1_700_000_000,
     })
     auth.checked = true
 
@@ -239,13 +233,7 @@ describe('capability route guard', () => {
       },
     })
 
-    for (const path of [
-      '/console/market',
-      '/console/invoice',
-      '/console/keys/11/routing',
-      '/console/farm',
-      '/console/bigame',
-    ]) {
+    for (const path of ['/console/keys/11/routing']) {
       await router.push(path)
       expect(router.currentRoute.value.name, path).toBe('dashboard')
     }
@@ -293,17 +281,17 @@ describe('capability route guard', () => {
     }
   })
 
-  it('opens the ops monitor for administrators only', async () => {
+  it('opens the native performance monitor for root only', async () => {
     await router.push('/ops')
     expect(router.currentRoute.value.name).toBe('dashboard')
-    useAuthStore().user!.role = 10
+    useAuthStore().user!.role = 100
     await router.push('/ops')
     expect(router.currentRoute.value.name).toBe('ops-monitor')
     expect(router.currentRoute.value.meta.topNav).toBe('ops')
   }, 15000)
 
   it('sends retired system instance bookmarks to the ops monitor', async () => {
-    useAuthStore().user!.role = 10
+    useAuthStore().user!.role = 100
     for (const path of [
       '/system-info',
       '/console/system-info',

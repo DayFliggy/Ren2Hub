@@ -2,102 +2,243 @@ package service
 
 import (
 	"context"
-	"errors"
+	"encoding/base64"
 	"fmt"
 	"maps"
-	"slices"
+	"math"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
-	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
-func taskConsumptionParams(c *gin.Context, info *relaycommon.RelayInfo) model.RecordConsumeLogParams {
+// LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
+// 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
+func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model.Task) {
 	tokenName := c.GetString("token_name")
 	logContent := []*common.Message{common.NewMessage("Action {{action}}", map[string]any{"action": info.Action})}
-	other := map[string]interface{}{"is_task": true, "request_path": c.Request.URL.Path}
-	InjectBillingPriceInfo(other, info)
-	if info.IsModelMapped {
-		other["is_model_mapped"] = true
-		other["upstream_model_name"] = info.UpstreamModelName
+	// 支持任务仅按次计费
+	if common.StringsContains(constant.TaskPricePatches, info.OriginModelName) {
+		logContent = append(logContent, common.NewMessage("Billed per request"))
+	} else {
+		var contents []string
+		if otherRatios := info.PriceData.OtherRatios(); len(otherRatios) > 0 {
+			for key, ra := range otherRatios {
+				if 1.0 != ra {
+					contents = append(contents, fmt.Sprintf("%s: %.2f", key, ra))
+				}
+			}
+		}
+		if snap := info.TieredBillingSnapshot; snap != nil {
+			for key, value := range snap.UsageFacts {
+				contents = append(contents, fmt.Sprintf("%s: %v", key, value))
+			}
+		}
+		if len(contents) > 0 {
+			logContent = append(logContent, common.NewMessage("Billing parameters: {{params}}", map[string]any{"params": strings.Join(contents, ", ")}))
+		}
 	}
+	other := model.NewLogOther()
+	other.SetPublic("is_task", true)
+	other.SetPublic("request_path", c.Request.URL.Path)
+	if taskDeliveredInline(c, task) {
+		other.SetPublic("task_sync", true)
+	}
+	other.SetPublic("model_price", info.PriceData.ModelPrice)
+	if info.PriceData.ModelRatio > 0 {
+		other.SetPublic("model_ratio", info.PriceData.ModelRatio)
+	}
+	other.SetPublic("group_ratio", info.PriceData.GroupRatioInfo.GroupRatio)
+	if info.PriceData.GroupRatioInfo.HasSpecialRatio {
+		other.SetPublic("user_group_ratio", info.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	}
+	if info.IsModelMapped {
+		other.SetPublic("is_model_mapped", true)
+		other.SetPublic("upstream_model_name", info.UpstreamModelName)
+	}
+	if snap := info.TieredBillingSnapshot; snap != nil {
+		other.SetPublic("billing_mode", "tiered_expr")
+		other.SetPublic("expr_b64", base64.StdEncoding.EncodeToString([]byte(snap.ExprString)))
+		other.SetPublic("matched_tier", snap.EstimatedTier)
+		if len(snap.UsageFacts) > 0 {
+			other.SetPublic("usage_facts", snap.UsageFacts)
+		}
+		setTaskImageCount(other, snap.UsageFacts["image_count"])
+	} else {
+		setTaskImageCount(other, info.PriceData.OtherRatios()["image_count"])
+	}
+	appendTaskLogInfo(task, other)
 	attachQuotaSaturation(c, info, other)
-	return model.RecordConsumeLogParams{
+	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
 		TokenName: tokenName,
-		Quota:     common.Quota(info.PriceData.Quota),
+		Quota:     info.PriceData.Quota,
 		Content:   logContent,
 		TokenId:   info.TokenId,
 		Group:     info.UsingGroup,
 		Other:     other,
-	}
+	})
+	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
+	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
 }
 
-// FinalizeTaskSubmission returns an error only when the accepted job could not
-// be saved. Accounting errors after that point remain in durable recovery.
-func FinalizeTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *model.Task) error {
-	consumption, err := prepareTaskSubmission(c, info, task)
+// ---------------------------------------------------------------------------
+// 异步任务计费辅助函数
+// ---------------------------------------------------------------------------
+
+// resolveTokenKey 通过 TokenId 运行时获取令牌 Key（用于 Redis 缓存操作）。
+// 如果令牌已被删除或查询失败，返回空字符串。
+func resolveTokenKey(ctx context.Context, tokenId int, taskID string) string {
+	token, err := model.GetTokenById(tokenId)
 	if err != nil {
-		return err
+		logger.LogWarn(ctx, common.LogText("failed to get token key (tokenId=%d, task=%s): %s", tokenId, taskID, err.Error()))
+		return ""
 	}
-	if err := model.PersistAcceptedTask(task, info.RequestId, consumption); err != nil {
-		return err
-	}
-	if session, ok := info.Billing.(*BillingSession); ok {
-		session.stopRecoveryHeartbeat()
-	}
-	return nil
+	return token.Key
 }
 
-func prepareTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *model.Task) (model.BillingConsumption, error) {
-	consumption, err := billingConsumptionSnapshot(c, info, taskConsumptionParams(c, info), true)
+// taskAdjustFunding 调整任务的资金来源（钱包），delta > 0 表示扣费，delta < 0 表示退还。
+func taskAdjustFunding(task *model.Task, delta int) error {
+	if delta > 0 {
+		return model.DecreaseUserQuota(task.UserId, delta, false)
+	}
+	return model.IncreaseUserQuota(task.UserId, -delta, false)
+}
+
+// taskAdjustTokenQuota 调整任务的令牌额度，delta > 0 表示扣费，delta < 0 表示退还。
+// 需要通过 resolveTokenKey 运行时获取 key（不从 PrivateData 中读取）。
+func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
+	if task.PrivateData.TokenId <= 0 || delta == 0 {
+		return
+	}
+	tokenKey := resolveTokenKey(ctx, task.PrivateData.TokenId, task.TaskID)
+	if tokenKey == "" {
+		return
+	}
+	var err error
+	if delta > 0 {
+		err = model.DecreaseTokenQuota(task.PrivateData.TokenId, tokenKey, delta)
+	} else {
+		err = model.IncreaseTokenQuota(task.PrivateData.TokenId, tokenKey, -delta)
+	}
 	if err != nil {
-		return model.BillingConsumption{}, err
+		logger.LogWarn(ctx, common.LogText("failed to adjust token quota (delta=%d, task=%s): %s", delta, task.TaskID, err.Error()))
 	}
-	if task.PrivateData.BillingContext == nil {
-		task.PrivateData.BillingContext = &model.TaskBillingContext{}
-	}
-	task.PrivateData.BillingContext.AttemptID = info.BillingAttemptID
-	task.PrivateData.BillingContext.Quote = info.PriceData.Quote
-	task.PrivateData.BillingContext.Usage = info.PriceData.Usage
-	task.PrivateData.SubmissionRequestID = info.RequestId
-	return consumption, nil
 }
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
-func taskBillingOther(task *model.Task) map[string]interface{} {
-	other := map[string]interface{}{"is_task": true}
+func taskBillingOther(task *model.Task) *model.LogOther {
+	other := model.NewLogOther()
+	// 前端列表按 is_task 选择任务档位渲染分支,缺失会把差额/退款日志误判成普通 relay 动态计费
+	other.SetPublic("is_task", true)
 	if bc := task.PrivateData.BillingContext; bc != nil {
-		if bc.Quote != nil {
-			other["price_scope"] = bc.Quote.PriceVersion.ScopeKind
-			other["price_channel_id"] = bc.Quote.PriceVersion.ChannelID
-			other["price_version_id"] = bc.Quote.PriceVersion.ID
-			other["quote_hash"] = bc.Quote.Hash
-			other["price_version_hash"] = bc.Quote.PriceVersion.Hash
-			other["channel_multiplier"] = bc.Quote.ChannelRatio
-			other["billing_mode"] = bc.Quote.PriceVersion.Mode
+		other.SetPublic("model_price", bc.ModelPrice)
+		if bc.ModelRatio > 0 {
+			other.SetPublic("model_ratio", bc.ModelRatio)
 		}
-		other["billing_usage"] = publicBillingUsage(bc.Usage)
-		other["charge_result"] = bc.Charge
-		if task.Status == model.TaskStatusSuccess && bc.Usage != nil && billing.IsFrozenEstimateSource(bc.Usage.Source) {
-			other["admin_info"] = map[string]any{
-				"usage_billing_path":      billing.SettlementFrozenEstimate,
-				"billing_fallback_reason": billingFallbackUnpriced,
+		other.SetPublic("group_ratio", bc.GroupRatio)
+		if priceData := taskBillingContextPriceData(bc); priceData != nil {
+			for k, v := range priceData.OtherRatios() {
+				if !other.SetPublic(k, v) {
+					common.SysError(common.LogText("task billing other ratio key rejected: %s", k))
+				}
 			}
+		}
+		if snap := bc.TieredSnapshot; snap != nil {
+			other.SetPublic("billing_mode", "tiered_expr")
+			other.SetPublic("expr_b64", base64.StdEncoding.EncodeToString([]byte(snap.ExprString)))
+			other.SetPublic("matched_tier", snap.EstimatedTier)
+			if len(snap.UsageFacts) > 0 {
+				other.SetPublic("usage_facts", snap.UsageFacts)
+			}
+			setTaskImageCount(other, snap.UsageFacts["image_count"])
+		} else if priceData := taskBillingContextPriceData(bc); priceData != nil {
+			setTaskImageCount(other, priceData.OtherRatios()["image_count"])
 		}
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {
-		other["is_model_mapped"] = true
-		other["upstream_model_name"] = props.UpstreamModelName
+		other.SetPublic("is_model_mapped", true)
+		other.SetPublic("upstream_model_name", props.UpstreamModelName)
 	}
+	appendTaskLogInfo(task, other)
 	return other
+}
+
+// setTaskImageCount publishes the billed image quantity of an image task as
+// other.image_count, the same field the HTTP image relay writes, so the log
+// detail shows one "billable image count" regardless of the serving path. The
+// value is a host-validated count fact (at most dto.MaxImageN), never a quota.
+func setTaskImageCount(other *model.LogOther, value any) {
+	count, ok := value.(float64)
+	if !ok || count < 0 || count > float64(dto.MaxImageN) {
+		return
+	}
+	other.SetPublic("image_count", common.QuotaRound(count))
+}
+
+// taskDeliveredInline reports whether the submitting HTTP request itself
+// returns the task deliverable: the upstream completed immediately, or the
+// request came through the synchronous OpenAI Images protocol, where the host
+// waits for an asynchronous upstream task before answering. The usage log
+// presents such requests as synchronous instead of as asynchronous jobs.
+func taskDeliveredInline(c *gin.Context, task *model.Task) bool {
+	if task != nil && (task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure) {
+		return true
+	}
+	pinnedValue, exists := c.Get(jsplugin.ContextKeyPinnedEndpoint)
+	if !exists {
+		return false
+	}
+	pinned, ok := pinnedValue.(jsplugin.PinnedEndpoint)
+	return ok && pinned.Protocol == jsplugin.ProtocolOpenAIImage
+}
+
+func appendTaskLogInfo(task *model.Task, other *model.LogOther) {
+	if task == nil || other == nil {
+		return
+	}
+	if task.TaskID != "" {
+		other.SetPublic("task_id", task.TaskID)
+	}
+	if task.PrivateData.ResultDiscarded {
+		// The result was delivered inline and the upstream snapshot was not
+		// persisted, so no artifact can be retrieved for this task.
+		other.SetPublic("result_discarded", true)
+	}
+	if task.PrivateData.Execution != nil {
+		AppendTaskPluginAuditInfo(other, task.PrivateData.Execution.TaskPlugin)
+	}
+	if task.PrivateData.UpstreamTaskID == "" && task.PrivateData.NodeName == "" {
+		return
+	}
+	if task.PrivateData.UpstreamTaskID != "" {
+		other.SetRoot("upstream_task_id", task.PrivateData.UpstreamTaskID)
+	}
+	if task.PrivateData.NodeName != "" {
+		other.SetRoot("node_name", task.PrivateData.NodeName)
+	}
+}
+
+func taskBillingContextPriceData(bc *model.TaskBillingContext) *types.PriceData {
+	if bc == nil || len(bc.OtherRatios) == 0 {
+		return nil
+	}
+	priceData := &types.PriceData{}
+	if !priceData.ReplaceOtherRatios(bc.OtherRatios) {
+		return nil
+	}
+	return priceData
 }
 
 // taskModelName 从 BillingContext 或 Properties 中获取模型名称。
@@ -108,316 +249,196 @@ func taskModelName(task *model.Task) string {
 	return task.Properties.OriginModelName
 }
 
-// completeTaskBilling keeps provider completion separate from recoverable
-// accounting. Once the intent commits, polling must never replay the job.
-// A failed completion transaction leaves the task non-terminal, so the next
-// poll or the timeout sweep finishes it. settlement describes how a completed
-// task was priced; a failed task passes nil and its log carries the fail reason.
-func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, settlement *common.Message, clamps ...*common.QuotaClamp) (bool, error) {
-	consumption, err := taskCompletionConsumption(task, actualQuota, settlement, clamps...)
-	if err != nil {
-		return false, err
+// RefundTaskQuota 统一的任务失败退款逻辑。
+// 当异步任务失败时，退还资金与令牌额度，并回减用户和渠道用量。
+// 返回资金来源是否已成功退还；失败时保留 quota，供显式重试或人工对账。
+func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool {
+	quota := task.Quota
+	if quota == 0 {
+		return true
 	}
-	won, err := model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
-	if err != nil || !won {
-		return won, err
+
+	// 1. 退还资金来源（钱包）
+	if err := taskAdjustFunding(task, -quota); err != nil {
+		logger.LogWarn(ctx, common.LogText("failed to refund the funding source, task %s: %s", task.TaskID, err.Error()))
+		return false
 	}
-	return true, deliverTaskCompletion(ctx, task, actualQuota)
+
+	// 2. 退还令牌额度
+	taskAdjustTokenQuota(ctx, task, -quota)
+
+	// 3. 回减预扣时累计的用户和渠道用量，请求次数保持不变
+	model.UpdateUserUsedQuota(task.UserId, -quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, -quota)
+
+	// 4. 记录日志
+	other := taskBillingOther(task)
+	other.SetPublic("task_id", task.TaskID)
+	other.SetPublic("reason", reason)
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    task.UserId,
+		LogType:   model.LogTypeRefund,
+		ChannelId: task.ChannelId,
+		ModelName: taskModelName(task),
+		Quota:     quota,
+		TokenId:   task.PrivateData.TokenId,
+		Group:     task.Group,
+		Other:     other,
+	})
+
+	// 5. 资金退款完成后再清除持久化标记。
+	// 回写失败必须显式告警，避免漏掉潜在的重复退款风险。
+	task.Quota = 0
+	if err := task.UpdateQuota(); err != nil {
+		logger.LogError(ctx, common.LogText("refund succeeded but clearing the task quota failed, task %s: %s", task.TaskID, err.Error()))
+	}
+	return true
 }
 
-func taskCompletionConsumption(task *model.Task, actualQuota common.Quota, settlement *common.Message, clamps ...*common.QuotaClamp) (model.BillingConsumption, error) {
-	other := taskBillingOther(task)
-	content := task.FailReason
-	if settlement != nil {
-		content = model.SetLogContent(other, []*common.Message{settlement})
+// RecalculateTaskQuota 通用的异步差额结算。
+// actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
+// reason 写入日志内容（例如按 token 重算或 adaptor 调整）。
+// clamps 可选：若计算 actualQuota 时发生额度饱和，将其记入日志 admin_info（仅管理员可见）。
+func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason *common.Message, clamps ...*common.QuotaClamp) {
+	if actualQuota < 0 {
+		return
 	}
-	other["task_id"], other["reason"] = task.TaskID, content
-	other["pre_consumed_quota"], other["actual_quota"] = task.Quota, actualQuota
+	preConsumedQuota := task.Quota
+	quotaDelta := actualQuota - preConsumedQuota
+
+	if quotaDelta == 0 {
+		logger.LogInfo(ctx, common.LogText("task %s pre-consumed quota matches the actual quota (%s, %s)",
+			task.TaskID, logger.LogQuota(actualQuota), reason.Error()))
+		return
+	}
+
+	logger.LogInfo(ctx, common.LogText("task %s settles the difference: delta=%s (actual %s, pre-consumed %s, %s)",
+		task.TaskID,
+		logger.LogQuota(quotaDelta),
+		logger.LogQuota(actualQuota),
+		logger.LogQuota(preConsumedQuota),
+		reason.Error(),
+	))
+
+	// 调整资金来源
+	if err := taskAdjustFunding(task, quotaDelta); err != nil {
+		logger.LogError(ctx, common.LogText("failed to adjust funding for the difference, task %s: %s", task.TaskID, err.Error()))
+		return
+	}
+
+	// 调整令牌额度
+	taskAdjustTokenQuota(ctx, task, quotaDelta)
+
+	task.Quota = actualQuota
+	if err := task.UpdateQuota(); err != nil {
+		logger.LogError(ctx, common.LogText("failed to write back the settled task quota, task %s: %s", task.TaskID, err.Error()))
+	}
+
+	// 提交阶段已经累计过一次请求；结算阶段只调整最终用量。
+	model.UpdateUserUsedQuota(task.UserId, quotaDelta)
+	model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
+
+	var logType int
+	var logQuota int
+	if quotaDelta > 0 {
+		logType = model.LogTypeConsume
+		logQuota = quotaDelta
+	} else {
+		logType = model.LogTypeRefund
+		logQuota = -quotaDelta
+	}
+	other := taskBillingOther(task)
+	other.SetPublic("task_id", task.TaskID)
+	other.SetPublic("pre_consumed_quota", preConsumedQuota)
+	other.SetPublic("actual_quota", actualQuota)
 	for _, clamp := range clamps {
 		attachQuotaSaturationToOther(other, clamp)
 	}
-	encoded, err := common.Marshal(other)
-	if err != nil {
-		return model.BillingConsumption{}, err
-	}
-	username, err := model.GetUsernameById(task.UserId, false)
-	if err != nil {
-		return model.BillingConsumption{}, err
-	}
-	nodeName := task.PrivateData.NodeName
-	if nodeName == "" {
-		nodeName = common.NodeName
-	}
-	consumption := model.BillingConsumption{
-		Log: model.Log{UserId: task.UserId, Username: username, CreatedAt: common.GetTimestamp(),
-			TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId, ModelName: taskModelName(task),
-			Group: task.Group, Content: content, Other: string(encoded)},
-		CountUsage: true, LogEnabled: actualQuota < task.Quota || common.LogConsumeEnabled,
-		ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled, NodeName: nodeName,
-	}
-	if snapshot := task.PrivateData.BillingContext; snapshot != nil {
-		consumption.AttemptID = snapshot.AttemptID
-		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
-	}
-	return consumption, nil
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    task.UserId,
+		LogType:   logType,
+		Content:   []*common.Message{reason},
+		ChannelId: task.ChannelId,
+		ModelName: taskModelName(task),
+		Quota:     logQuota,
+		TokenId:   task.PrivateData.TokenId,
+		Group:     task.Group,
+		Other:     other,
+		NodeName:  task.PrivateData.NodeName,
+	})
 }
 
-func deliverTaskCompletion(ctx context.Context, task *model.Task, actualQuota common.Quota) error {
-	if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
-		logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
+// RecalculateTaskQuotaByTokens 根据实际 token 消耗重新计费（异步差额结算）。
+// 当任务成功且返回了 totalTokens 时，根据模型倍率和分组倍率重新计算实际扣费额度，
+// 与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
+func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) bool {
+	if totalTokens <= 0 {
+		return false
 	}
-	_, err := recoverOneBillingRecovery(ctx, task.PrivateData.SubmissionRequestID)
-	if err != nil {
-		logger.LogError(ctx, fmt.Sprintf("task completion accounting remains pending (task_id=%s): %v", task.TaskID, err))
-		return err
-	}
-	task.Quota = actualQuota
-	return nil
-}
 
-// taskCompletionQuota never accepts an adaptor-computed monetary value. A
-// completed task consumes its accepted quote and its usage facts: the frozen
-// submit facts overwritten key by key by the provider's completion facts.
-// When those facts cannot be priced it consumes its submission estimate.
-func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relaycommon.TaskInfo) (common.Quota, *common.Message, *common.QuotaClamp, error) {
-	if task.Status == model.TaskStatusFailure {
-		return 0, nil, nil, nil
-	}
-	var submitted map[string]any
-	if snapshot := task.PrivateData.BillingContext; snapshot != nil && snapshot.Quote != nil && snapshot.Quote.PriceVersion.TaskUsage &&
-		result != nil && result.UsageError == "" {
-		facts, err := model.FrozenTaskUsageFacts(task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
-		// Facts that fail verification keep the task for the next attempt
-		// instead of settling at the estimate derived from those same facts.
-		if err != nil && !errors.Is(err, model.ErrBillingEstimateMissing) {
-			return 0, nil, nil, err
-		}
-		// Without a persisted estimate the submit facts are unknown, so a
-		// priced fact the completion omits would read as missing and silently
-		// take the expression's else branch. Neither an exact price nor an
-		// estimate exists then: the result is held for recovery.
-		if err != nil {
-			var omitted []string
-			for key := range billingexpr.UsedUsageKeys(snapshot.Quote.PriceVersion.Expression) {
-				if _, reported := result.UsageFacts[key]; !reported {
-					omitted = append(omitted, key)
-				}
-			}
-			if len(omitted) > 0 {
-				slices.Sort(omitted)
-				return 0, nil, nil, fmt.Errorf("%w: task %s has no frozen submit facts and its completion omits priced usage %v: %w", billing.ErrEvaluationEvidence, task.TaskID, omitted, err)
-			}
-		}
-		submitted = facts
-	}
-	quota, err := actualTaskCompletionQuota(task, result, submitted)
-	if err == nil {
-		return quota, common.NewMessage("Settled at the frozen quote"), nil, nil
-	}
-	quota, estimateErr := frozenTaskCompletionQuota(task)
-	if estimateErr != nil {
-		return 0, nil, nil, errors.Join(err, estimateErr)
-	}
-	return quota, common.NewMessage("Completion usage could not be priced, settled at the submission estimate"), nil, nil
-}
+	modelName := taskModelName(task)
 
-func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo, submitted map[string]any) (common.Quota, error) {
-	snapshot := task.PrivateData.BillingContext
-	if snapshot == nil || snapshot.Quote == nil || snapshot.Usage == nil {
-		return 0, fmt.Errorf("task %s has no frozen billing quote", task.TaskID)
+	// 获取模型价格和倍率
+	modelRatio, hasRatioSetting, _ := ratio_setting.GetModelRatio(modelName)
+	// 只有配置了倍率(非固定价格)时才按 token 重新计费
+	if !hasRatioSetting || modelRatio <= 0 {
+		return false
 	}
-	usage := billing.Usage{Source: "task_completed", Terminal: "completed", Complete: true, Quantities: map[string]string{"calls": "1"}}
-	version := snapshot.Quote.PriceVersion
-	if result != nil && result.UsageError != "" {
-		return 0, fmt.Errorf("plugin completion usage unavailable")
-	}
-	if result != nil && (result.TotalTokens < 0 || result.CompletionTokens < 0 || result.CompletionTokens > result.TotalTokens) {
-		return 0, fmt.Errorf("invalid task token usage")
-	}
-	if version.NeedsTokenUsage() {
-		if result == nil || result.TotalTokens == 0 {
-			return 0, fmt.Errorf("task token usage unavailable")
-		}
-		usage.OutputTokens = int64(result.CompletionTokens)
-		usage.InputTokens = int64(result.TotalTokens - result.CompletionTokens)
-		usage.ContextTokens = usage.InputTokens
-	}
-	input := billingexpr.RequestInput{}
-	if version.TaskUsage {
-		if result == nil {
-			return 0, fmt.Errorf("plugin completion usage unavailable")
-		}
-		// As upstream EvaluateTaskCompletionUsage: the frozen submit facts
-		// are the base and every reported completion fact, explicit zero and
-		// false included, replaces its key. An empty completion report
-		// therefore prices exactly the submit facts the estimate priced.
-		merged := make(map[string]any, len(submitted)+len(result.UsageFacts))
-		maps.Copy(merged, submitted)
-		maps.Copy(merged, result.UsageFacts)
-		usage.EstimatedFacts, usage.ActualFacts = submitted, result.UsageFacts
-		var err error
-		input.Usage, err = TaskExpressionUsage(merged, version.UsageSchema)
-		if err != nil {
-			return 0, err
-		}
-	}
-	var charge *billing.ChargeResult
-	var err error
-	if snapshot.Usage.Confirmed() && snapshot.Charge != nil {
-		usage, charge, err = replayIdenticalBillingUsage(snapshot.Quote, *snapshot.Usage, usage, task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
-	} else {
-		usage, charge, err = model.EvaluateBilling(snapshot.Quote, usage, input, task.PrivateData.SubmissionRequestID, snapshot.AttemptID, "settlement")
-	}
-	if err != nil {
-		return 0, err
-	}
-	snapshot.Usage = &usage
-	snapshot.Charge = charge
-	return charge.FinalQuota, nil
-}
 
-func frozenTaskCompletionQuota(task *model.Task) (common.Quota, error) {
-	snapshot := task.PrivateData.BillingContext
-	if snapshot == nil {
-		return 0, model.ErrBillingEstimateMissing
-	}
-	usage, charge, err := model.FrozenTaskBillingEstimate(task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
-	if err != nil {
-		return 0, err
-	}
-	snapshot.Usage, snapshot.Charge = usage, charge
-	return charge.FinalQuota, nil
-}
-
-// settleTaskResult prices a provider terminal result already applied to task
-// and commits it with its accounting intent. When the attempt's billing
-// evidence cannot be verified, the result is held on the still non-terminal
-// task instead: the reservation stays held and neither the frozen estimate nor
-// the timeout sweep ends the task.
-func settleTaskResult(ctx context.Context, task *model.Task, from model.TaskStatus, result *relaycommon.TaskInfo) error {
-	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
-	won := false
-	if err == nil {
-		won, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)
-	}
-	if won || task.Status != model.TaskStatusSuccess || !model.IsBillingEvidenceUnverifiable(err) {
-		return err
-	}
-	newly, holdErr := model.PersistTaskSettlementBlock(ctx, task, from, heldTaskResult(task))
-	if holdErr != nil {
-		return errors.Join(err, holdErr)
-	}
-	if newly {
-		logger.LogError(ctx, fmt.Sprintf("task settlement blocked, result held (task_id=%s, reason=%s): %v", task.TaskID, model.TaskSettlementBlockedEvidence, err))
-	}
-	return nil
-}
-
-func heldTaskResult(task *model.Task) model.TaskBlockedResult {
-	return model.TaskBlockedResult{Status: task.Status, Progress: task.Progress, FailReason: task.FailReason,
-		FinishTime: task.FinishTime, ResultURL: task.PrivateData.ResultURL, Data: task.Data}
-}
-
-// CompleteImmediateTask uses exactly the same durable terminal accounting as
-// polling, including the submission-estimate fallback and the blocked hold.
-func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relaycommon.TaskInfo) error {
-	from := task.Status
-	if err := applyImmediateTaskResult(task, result); err != nil {
-		return err
-	}
-	return settleTaskResult(ctx, task, from, result)
-}
-
-// FinalizeImmediateTaskSubmission atomically saves the accepted terminal job,
-// its completion usage and the verified accounting intent. The bool reports
-// durable ownership even when delivery subsequently fails. A result whose
-// settlement is blocked is saved as an accepted task holding it and reported
-// as model.ErrTaskSettlementBlocked; it must not be delivered inline.
-func FinalizeImmediateTaskSubmission(ctx context.Context, c *gin.Context, info *relaycommon.RelayInfo, task *model.Task, result *relaycommon.TaskInfo) (bool, error) {
-	submission, err := prepareTaskSubmission(c, info, task)
-	if err != nil {
-		return false, err
-	}
-	prior := *task
-	if err := applyImmediateTaskResult(task, result); err != nil {
-		return false, err
-	}
-	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
-	committed := false
-	if err == nil {
-		var completion model.BillingConsumption
-		completion, err = taskCompletionConsumption(task, quota, reason, clamp)
+	// 获取用户和组的倍率信息
+	group := task.Group
+	if group == "" {
+		user, err := model.GetUserById(task.UserId, false)
 		if err == nil {
-			committed, err = model.PersistImmediateTask(ctx, task, prior.Status, quota, submission, completion)
+			group = user.Group
 		}
 	}
-	if !committed && task.Status == model.TaskStatusSuccess && model.IsBillingEvidenceUnverifiable(err) {
-		return holdBlockedImmediateTask(ctx, info, task, prior, submission, err)
+	if group == "" {
+		return false
 	}
-	if err != nil || !committed {
-		return false, err
+
+	groupRatio := ratio_setting.GetGroupRatio(group)
+	userGroupRatio, hasUserGroupRatio := ratio_setting.GetGroupGroupRatio(group, group)
+
+	var finalGroupRatio float64
+	if hasUserGroupRatio {
+		finalGroupRatio = userGroupRatio
+	} else {
+		finalGroupRatio = groupRatio
 	}
-	if session, ok := info.Billing.(*BillingSession); ok {
-		session.stopRecoveryHeartbeat()
+
+	// 计算 OtherRatios 乘积（视频折扣、时长等）
+	otherMultiplier := 1.0
+	if priceData := taskBillingContextPriceData(task.PrivateData.BillingContext); priceData != nil {
+		otherMultiplier = priceData.OtherRatioMultiplier()
 	}
-	return true, deliverTaskCompletion(ctx, task, quota)
+
+	// 计算实际应扣费额度: totalTokens * modelRatio * groupRatio * otherMultiplier（饱和转换，防止溢出成负数）
+	actualQuota, clamp := common.QuotaFromFloatChecked(float64(totalTokens) * modelRatio * finalGroupRatio * otherMultiplier)
+
+	reason := common.NewMessage("Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, group ratio {{group_ratio}}, other multiplier {{other_multiplier}}", map[string]any{
+		"tokens":           totalTokens,
+		"model_ratio":      fmt.Sprintf("%.2f", modelRatio),
+		"group_ratio":      fmt.Sprintf("%.2f", finalGroupRatio),
+		"other_multiplier": fmt.Sprintf("%.4f", otherMultiplier),
+	})
+	RecalculateTaskQuota(ctx, task, actualQuota, reason, clamp)
+	return true
 }
 
-// holdBlockedImmediateTask saves an immediate result whose settlement is
-// blocked as an accepted task in its pre-result state that holds the result.
-// Nothing was delivered inline, so a route that discards results after inline
-// delivery keeps this one for retrieval once settlement succeeds.
-func holdBlockedImmediateTask(ctx context.Context, info *relaycommon.RelayInfo, task *model.Task, prior model.Task, submission model.BillingConsumption, cause error) (bool, error) {
-	held := heldTaskResult(task)
-	task.Status, task.Progress, task.FinishTime, task.FailReason = prior.Status, prior.Progress, prior.FinishTime, prior.FailReason
-	task.Data, task.PrivateData.ResultURL, task.PrivateData.ResultDiscarded = nil, "", false
-	task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = info.PriceData.Usage, nil
-	if err := model.PersistBlockedImmediateTask(ctx, task, submission, held); err != nil {
-		return false, errors.Join(cause, err)
+// EvaluateTaskCompletionUsage evaluates actual facts against the frozen task
+// expression. It neither mutates the snapshot nor moves funds: synchronous
+// submission and polling have different persistence and settlement barriers.
+func EvaluateTaskCompletionUsage(snap *billingexpr.BillingSnapshot, facts map[string]any) (billingexpr.TieredResult, map[string]any, error) {
+	if snap == nil {
+		return billingexpr.TieredResult{}, nil, fmt.Errorf("task billing snapshot is missing")
 	}
-	if session, ok := info.Billing.(*BillingSession); ok {
-		session.stopRecoveryHeartbeat()
+	usage := make(map[string]any, len(snap.UsageFacts)+len(facts))
+	maps.Copy(usage, snap.UsageFacts)
+	maps.Copy(usage, facts)
+	result, err := billingexpr.ComputeTieredQuotaWithRequest(snap, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: usage})
+	if err == nil && (result.ActualQuotaBeforeGroup < 0 || math.IsNaN(result.ActualQuotaBeforeGroup)) {
+		err = fmt.Errorf("task completion expression produced an invalid cost")
 	}
-	logger.LogError(ctx, fmt.Sprintf("task settlement blocked, result held (task_id=%s, reason=%s): %v", task.TaskID, model.TaskSettlementBlockedEvidence, cause))
-	return true, model.ErrTaskSettlementBlocked
-}
-
-// ApplyRunningImmediateResult stores the provider state of an immediate
-// result that is not terminal yet, as upstream does; the task is then
-// accepted asynchronously and polled. An unrecognized status keeps the
-// initial state for polling to resolve.
-func ApplyRunningImmediateResult(task *model.Task, result *relaycommon.TaskInfo) {
-	if result == nil {
-		return
-	}
-	switch model.TaskStatus(result.Status) {
-	case model.TaskStatusSubmitted:
-		task.Status, task.Progress = model.TaskStatusSubmitted, taskcommon.ProgressSubmitted
-	case model.TaskStatusQueued:
-		task.Status, task.Progress = model.TaskStatusQueued, taskcommon.ProgressQueued
-	case model.TaskStatusInProgress:
-		task.Status, task.Progress = model.TaskStatusInProgress, taskcommon.ProgressInProgress
-	}
-	if result.PluginState != nil {
-		task.PrivateData.PluginState = result.PluginState
-	}
-}
-
-func applyImmediateTaskResult(task *model.Task, result *relaycommon.TaskInfo) error {
-	if result == nil || (result.Status != string(model.TaskStatusSuccess) && result.Status != string(model.TaskStatusFailure)) {
-		return fmt.Errorf("immediate task requires an explicit terminal status")
-	}
-	task.Status = model.TaskStatus(result.Status)
-	task.Progress = "100%"
-	task.FinishTime = common.GetTimestamp()
-	task.FailReason = result.Reason
-	task.PrivateData.ResultURL = result.Url
-	task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{CompletionTokens: result.CompletionTokens, TotalTokens: result.TotalTokens, Facts: result.UsageFacts, Error: result.UsageError}
-	if result.FinishTime > 0 {
-		task.FinishTime = result.FinishTime
-	}
-	if result.PluginState != nil {
-		task.PrivateData.PluginState = result.PluginState
-	}
-	return nil
+	return result, usage, err
 }

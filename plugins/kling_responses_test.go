@@ -1,15 +1,6 @@
 package plugins_test
 
-import (
-	"strconv"
-	"testing"
-
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/pkg/jsplugin"
-	builtinplugins "github.com/QuantumNous/new-api/plugins"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
+import "testing"
 
 func TestKlingResponsesProtocol(t *testing.T) {
 	testVideoResponsesProtocol(t, videoResponsesTestCase{
@@ -37,34 +28,4 @@ func TestKlingResponsesProtocol(t *testing.T) {
 		wantUsageKeys:  []string{"units"},
 		wantVendorName: "kling",
 	})
-}
-
-func TestKlingSubmitEstimatePreservesDecimalForSupportedDurations(t *testing.T) {
-	source, err := builtinplugins.Source("kling")
-	require.NoError(t, err)
-	plugin, err := jsplugin.CompilePlugin(source, jsplugin.Options{})
-	require.NoError(t, err)
-	for _, test := range []struct {
-		duration int
-		want     string
-	}{
-		{duration: 3, want: "0.6"},
-		{duration: 6, want: "1.2"},
-		{duration: 7, want: "1.4"},
-		{duration: 12, want: "2.4"},
-	} {
-		t.Run(strconv.Itoa(test.duration)+"s", func(t *testing.T) {
-			value, callErr := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{
-				"model":         "kling-v1",
-				"upstreamModel": "kling-v1",
-				"requestBody":   map[string]any{"model": "kling-v1", "duration": test.duration},
-			})
-			require.NoError(t, callErr)
-			encoded, marshalErr := common.Marshal(value)
-			require.NoError(t, marshalErr)
-			var facts map[string]any
-			require.NoError(t, common.Unmarshal(encoded, &facts))
-			assert.Equal(t, test.want, facts["units"])
-		})
-	}
 }

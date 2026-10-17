@@ -1,16 +1,13 @@
 package model
 
 import (
-	"context"
-	"errors"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/pkg/epay"
-	"github.com/QuantumNous/new-api/pkg/gmpay"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -19,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type Option struct {
@@ -37,15 +33,6 @@ func AllOption() ([]*Option, error) {
 func InitOptionMap() {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
-	for _, key := range modelPricingOptionKeys {
-		common.OptionMap[key] = "{}"
-	}
-	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
-	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
-	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
-	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
-	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()
-	common.OptionMap[setting.TaskPluginDisabledFactoryKeysKey] = "[]"
 
 	// 添加原有的系统配置
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
@@ -68,6 +55,11 @@ func InitOptionMap() {
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
+	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
+	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
+	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()
+	common.OptionMap[setting.TaskPluginDisabledFactoryKeysKey] = "[]"
+	jsplugin.DefaultRegistry.SetDisabledFactoryKeys(nil)
 	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
@@ -89,6 +81,7 @@ func InitOptionMap() {
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["ServerAddress"] = ""
+	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl
 	common.OptionMap["WorkerValidKey"] = system_setting.WorkerValidKey
 	common.OptionMap["WorkerAllowHttpImageRequestEnabled"] = strconv.FormatBool(system_setting.WorkerAllowHttpImageRequestEnabled)
@@ -96,13 +89,6 @@ func InitOptionMap() {
 	common.OptionMap["CustomCallbackAddress"] = ""
 	common.OptionMap["EpayId"] = ""
 	common.OptionMap["EpayKey"] = ""
-	common.OptionMap["GmpayPayAddress"] = setting.GmpayPayAddress
-	common.OptionMap["GmpayId"] = setting.GmpayId
-	common.OptionMap["GmpayKey"] = setting.GmpayKey
-	common.OptionMap["GmpayAssets"] = setting.GmpayAssets
-	common.OptionMap["GmpayPrice"] = strconv.FormatFloat(setting.GmpayPrice, 'f', -1, 64)
-	common.OptionMap["GmpayMinTopUp"] = strconv.Itoa(setting.GmpayMinTopUp)
-	common.OptionMap["GmpayGroupRatio"] = setting.GmpayGroupRatio
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
 	common.OptionMap["USDExchangeRate"] = strconv.FormatFloat(operation_setting.USDExchangeRate, 'f', -1, 64)
 	common.OptionMap["MinTopUp"] = strconv.Itoa(operation_setting.MinTopUp)
@@ -140,6 +126,9 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeProductID"] = setting.WaffoPancakeProductID
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
+	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
+	common.OptionMap["DefaultUseAutoGroup"] = strconv.FormatBool(setting.DefaultUseAutoGroup)
+	common.OptionMap["MaxTokenAutoGroups"] = strconv.Itoa(setting.GetMaxTokenAutoGroups())
 	common.OptionMap["PayMethods"] = operation_setting.PayMethods2JsonString()
 	common.OptionMap["GitHubClientId"] = ""
 	common.OptionMap["GitHubClientSecret"] = ""
@@ -150,25 +139,26 @@ func InitOptionMap() {
 	common.OptionMap["WeChatAccountQRCodeImageURL"] = ""
 	common.OptionMap["TurnstileSiteKey"] = ""
 	common.OptionMap["TurnstileSecretKey"] = ""
-	common.OptionMap["QuotaForNewUser"] = strconv.FormatInt(int64(common.QuotaForNewUser), 10)
-	common.OptionMap["QuotaForInviter"] = strconv.FormatInt(int64(common.QuotaForInviter), 10)
-	common.OptionMap["QuotaForInvitee"] = strconv.FormatInt(int64(common.QuotaForInvitee), 10)
-	common.OptionMap["AffiliateEnabled"] = strconv.FormatBool(common.AffiliateEnabled)
-	common.OptionMap["AffiliateRegistrationRequired"] = strconv.FormatBool(common.AffiliateRegistrationRequired)
-	common.OptionMap["AffiliateRebateRateBps"] = strconv.Itoa(common.AffiliateRebateRateBps)
-	common.OptionMap["AffiliateFreezeHours"] = strconv.Itoa(common.AffiliateFreezeHours)
-	common.OptionMap["AffiliateDurationDays"] = strconv.Itoa(common.AffiliateDurationDays)
-	common.OptionMap["AffiliatePerInviteeCap"] = common.AffiliatePerInviteeCap
-	common.OptionMap["AffiliateActivatedAt"] = strconv.FormatInt(common.AffiliateActivatedAt, 10)
-	common.OptionMap["QuotaRemindThreshold"] = strconv.FormatInt(int64(common.QuotaRemindThreshold), 10)
-	common.OptionMap["PreConsumedQuota"] = strconv.FormatInt(int64(common.PreConsumedQuota), 10)
+	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
+	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
+	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
+	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
 	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)
 	common.OptionMap["ModelRequestRateLimitDurationMinutes"] = strconv.Itoa(setting.ModelRequestRateLimitDurationMinutes)
 	common.OptionMap["ModelRequestRateLimitSuccessCount"] = strconv.Itoa(setting.ModelRequestRateLimitSuccessCount)
 	common.OptionMap["ModelRequestRateLimitGroup"] = setting.ModelRequestRateLimitGroup2JSONString()
-
+	common.OptionMap["ModelRatio"] = ratio_setting.ModelRatio2JSONString()
+	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
+	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
+	common.OptionMap["CreateCacheRatio"] = ratio_setting.CreateCacheRatio2JSONString()
 	common.OptionMap["GroupRatio"] = ratio_setting.GroupRatio2JSONString()
-
+	common.OptionMap["GroupGroupRatio"] = ratio_setting.GroupGroupRatio2JSONString()
+	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
+	common.OptionMap["CompletionRatio"] = ratio_setting.CompletionRatio2JSONString()
+	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
+	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
+	common.OptionMap["AudioCompletionRatio"] = ratio_setting.AudioCompletionRatio2JSONString()
 	common.OptionMap["TopUpLink"] = common.TopUpLink
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
@@ -193,158 +183,98 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableKeywords"] = operation_setting.AutomaticDisableKeywordsToString()
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
+	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
-	for k, v := range modelConfigs {
-		if IsRetiredBillingOption(k) {
-			continue
-		}
-		common.OptionMap[k] = v
-	}
+	maps.Copy(common.OptionMap, modelConfigs)
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
 }
 
 func loadOptionsFromDatabase() {
+	requestPolicyOptionMutex.Lock()
+	defer requestPolicyOptionMutex.Unlock()
+	defer func() {
+		if err := refreshRequestPolicySnapshot(); err != nil {
+			common.SysError(common.LogText("invalid request policy: %s", err.Error()))
+		}
+	}()
+	passkeyOptionMutex.Lock()
+	defer passkeyOptionMutex.Unlock()
 	options, _ := AllOption()
+	passkeyOptions := make(map[string]string)
 	for _, option := range options {
-		if IsRetiredBillingOption(option.Key) {
+		if IsPasskeyDomainOption(option.Key) {
+			passkeyOptions[option.Key] = option.Value
 			continue
 		}
-		if err := updateOptionMap(option.Key, option.Value); err != nil {
-			common.SysLog("failed to update option map: " + err.Error())
+		err := updateOptionMap(option.Key, option.Value)
+		if err != nil {
+			common.SysLog(common.LogText("failed to update option map: %s", err.Error()))
 		}
 	}
-
+	applyPasskeyDomainOptions(passkeyOptions)
 }
 
 func SyncOptions(frequency int) {
-	if frequency <= 0 {
-		return
+	for {
+		time.Sleep(time.Duration(frequency) * time.Second)
+		common.SysLog(common.LogText("syncing options from database"))
+		loadOptionsFromDatabase()
 	}
-	common.BackgroundWorkers.Go(func(ctx context.Context) {
-		for common.WaitBackgroundInterval(ctx, time.Duration(frequency)*time.Second) {
-			common.SysLog("syncing options from database")
-			loadOptionsFromDatabase()
-		}
-	})
-}
-
-// Removed automatic-publication options cannot re-enable the retired scheduler.
-func IsRetiredBillingOption(key string) bool {
-	return strings.HasPrefix(key, "auto_pricing.")
 }
 
 func validateOptionValue(key string, value string) error {
-	switch key {
-	case operation_setting.LogMaxRangeDaysOptionKey:
+	if key == legacyAccessTokenRetireAtKey {
+		return errLegacyRetireAtReadOnly
+	}
+	if err := operation_setting.ValidateQuotaOption(key, value); err != nil {
+		return err
+	}
+	if key == operation_setting.ToolPriceOptionKey {
+		return operation_setting.ValidateToolPricesJSON(value)
+	}
+	if key == operation_setting.ChannelTestConcurrencyOptionKey {
+		return operation_setting.ValidateChannelTestConcurrency(value)
+	}
+	if key == operation_setting.LogMaxRangeDaysOptionKey {
 		return operation_setting.ValidateLogMaxRangeDays(value)
-	case operation_setting.LogUserExportOptionKey:
-		_, err := strconv.ParseBool(value)
-		return err
-	case "CustomCallbackAddress":
-		if strings.TrimSpace(value) != "" {
-			_, err := common.NormalizePaymentOrigin(value)
-			return err
-		}
-	case "Price":
-		_, err := operation_setting.ParseEpayPrice(value)
-		return err
-	case "TopupGroupRatio":
-		_, err := operation_setting.ParseEpayGroupRatios(value)
-		return err
-	case "PayAddress":
-		if strings.TrimSpace(value) != "" {
-			_, err := epay.NormalizeGatewayURL(value)
-			return err
-		}
-	case "EpayId", "EpayKey":
-		if len(value) > 128 || strings.ContainsAny(value, "\x00\r\n") {
-			return errors.New("invalid epay merchant configuration")
-		}
-	case "GmpayPayAddress":
-		if strings.TrimSpace(value) != "" {
-			_, err := gmpay.NormalizeGatewayURL(value)
-			return err
-		}
-	case "GmpayId", "GmpayKey":
-		if len(value) > 128 || strings.ContainsAny(value, "\x00\r\n") {
-			return errors.New("invalid gmpay merchant configuration")
-		}
-	case "GmpayAssets":
-		_, err := operation_setting.ParseGmpayAssets(value)
-		return err
-	case "GmpayPrice":
-		_, err := operation_setting.ParseEpayPrice(value)
-		return err
-	case "GmpayGroupRatio":
-		_, err := operation_setting.ParseEpayGroupRatios(value)
-		return err
-	case "GmpayMinTopUp":
-		minimum, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return errors.New("invalid gmpay minimum")
-		}
-		_, err = operation_setting.GmpayMinimumUSD(minimum, operation_setting.GmpayAsset{})
-		return err
-	case "payment_setting.gmpay_settlement_enabled":
-		if value != "true" && value != "false" {
-			return errors.New("invalid gmpay settlement setting")
-		}
-	case "MinTopUp":
-		minimum, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return errors.New("invalid epay minimum")
-		}
-		_, err = operation_setting.EpayMinimumUSD(minimum, nil)
-		return err
-	case "payment_setting.epay_settlement_enabled":
-		if value != "true" && value != "false" {
-			return errors.New("invalid epay settlement setting")
-		}
 	}
-	if key == "PayMethods" {
-		_, err := operation_setting.ParseEpayMethods(value)
-		return err
-	}
-	if key == "AffiliatePerInviteeCap" {
-		_, err := AffiliateCapQuota(value)
-		return err
-	}
-	if IsRetiredBillingOption(key) {
-		return errors.New("automatic price publication is no longer supported")
-	}
-	if key == "QuotaPerUnit" {
-		return errors.New("quota conversion is fixed at 500000 per USD")
-	}
-	switch key {
-	case "QuotaForNewUser", "QuotaForInviter", "QuotaForInvitee", "QuotaRemindThreshold", "PreConsumedQuota":
-		n, err := strconv.ParseInt(value, 10, 64)
-		if err != nil || n < 0 || strconv.FormatInt(n, 10) != value {
-			return errors.New("quota setting must be a nonnegative integer string")
-		}
-	}
-	if key == "WaffoSubscriptionReturnUrl" {
-		return errors.New("obsolete payment option")
-	}
-	if retiredRoutingOption(key) {
-		return errors.New("obsolete routing option")
+	if key == "MaxTokenAutoGroups" {
+		return setting.ValidateMaxTokenAutoGroups(value)
 	}
 	return nil
 }
 
 func UpdateOption(key string, value string) error {
-	if key == operation_setting.ToolPriceOptionKey {
-		if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
-			return err
-		}
+	if IsRequestPolicyOption(key) {
+		return UpdateRequestPolicyOptions(map[string]string{key: value})
+	}
+	if IsPasskeyDomainOption(key) {
+		_, err := UpdatePasskeyDomainOptions(map[string]string{key: value}, false, "")
+		return err
 	}
 	if IsModelPricingOption(key) {
 		return UpdateModelPricingOptions(map[string]string{key: value})
 	}
-	return UpdateOptionsBulk(map[string]string{key: value})
+	if err := validateOptionValue(key, value); err != nil {
+		return err
+	}
+	// Save to database first
+	option := Option{
+		Key: key,
+	}
+	// https://gorm.io/docs/update.html#Save-All-Fields
+	DB.FirstOrCreate(&option, Option{Key: key})
+	option.Value = value
+	// Save is a combination function.
+	// If save value does not contain primary key, it will execute Create,
+	// otherwise it will execute Update (with all fields).
+	DB.Save(&option)
+	// Update OptionMap
+	return updateOptionMap(key, value)
 }
 
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
@@ -352,30 +282,9 @@ func UpdateOption(key string, value string) error {
 // any DB write fails the whole transaction rolls back and no in-memory state
 // is touched — safe for callers that must commit a set of related options
 // atomically (e.g. payment gateway binding).
-// containsGatewaySecret reports whether a bulk update carries a payment
-// gateway credential. Such a write is applied on a silent session so the value
-// cannot reach the SQL diagnostics log.
-func containsGatewaySecret(values map[string]string) bool {
-	for _, key := range []string{"EpayKey", "GmpayKey"} {
-		if _, present := values[key]; present {
-			return true
-		}
-	}
-	return false
-}
-
 func UpdateOptionsBulk(values map[string]string) error {
-	pricingCount := 0
-	for key := range values {
-		if IsModelPricingOption(key) {
-			pricingCount++
-		}
-	}
-	if pricingCount > 0 {
-		if pricingCount != len(values) {
-			return errors.New("pricing must be saved separately from other settings")
-		}
-		return UpdateModelPricingOptions(values)
+	if len(values) == 0 {
+		return nil
 	}
 	for key := range values {
 		if IsPasskeyDomainOption(key) {
@@ -383,19 +292,32 @@ func UpdateOptionsBulk(values map[string]string) error {
 			return err
 		}
 	}
-	if len(values) == 0 {
-		return nil
-	}
 	for key, value := range values {
 		if err := validateOptionValue(key, value); err != nil {
 			return err
 		}
 	}
-	db := DB
-	if containsGatewaySecret(values) {
-		db = DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
+	var policySnapshot *RequestPolicySnapshot
+	for key := range values {
+		if IsRequestPolicyOption(key) {
+			requestPolicyOptionMutex.Lock()
+			defer requestPolicyOptionMutex.Unlock()
+			options := maps.Clone(CurrentRequestPolicy().Options)
+			for key, value := range values {
+				if IsRequestPolicyOption(key) {
+					options[key] = value
+				}
+			}
+			var err error
+			policySnapshot, err = BuildRequestPolicy(options)
+			if err != nil {
+				return err
+			}
+			break
+		}
 	}
-	err := db.Transaction(func(tx *gorm.DB) error {
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		for k, v := range values {
 			option := Option{Key: k}
 			if err := tx.FirstOrCreate(&option, Option{Key: k}).Error; err != nil {
@@ -411,27 +333,19 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if err != nil {
 		return err
 	}
-	// Keep a copy so a runtime update failure cannot leave OptionMap partially
-	// applied after the database transaction has committed.
-	common.OptionMapRWMutex.RLock()
-	previous := make(map[string]string, len(common.OptionMap))
-	for key, value := range common.OptionMap {
-		previous[key] = value
-	}
-	common.OptionMapRWMutex.RUnlock()
 	for k, v := range values {
 		if err := updateOptionMap(k, v); err != nil {
-			common.OptionMapRWMutex.Lock()
-			common.OptionMap = previous
-			common.OptionMapRWMutex.Unlock()
 			return err
 		}
+	}
+	if policySnapshot != nil {
+		requestPolicySnapshot.Store(policySnapshot)
 	}
 	return nil
 }
 
 func updateOptionMap(key string, value string) (err error) {
-	if IsRetiredBillingOption(key) || key == retiredThemeOptionKey || key == "WaffoSubscriptionReturnUrl" || retiredRoutingOption(key) {
+	if key == retiredThemeOptionKey || key == legacyAccessTokenRetireAtKey {
 		common.OptionMapRWMutex.Lock()
 		delete(common.OptionMap, key)
 		common.OptionMapRWMutex.Unlock()
@@ -439,13 +353,6 @@ func updateOptionMap(key string, value string) (err error) {
 	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
-	if key == operation_setting.ToolPriceOptionKey {
-		if err = operation_setting.LoadToolPricesFromJSONString(value); err != nil {
-			return err
-		}
-		common.OptionMap[key] = value
-		return nil
-	}
 	common.OptionMap[key] = value
 
 	// 检查是否是模型配置 - 使用更规范的方式处理
@@ -467,7 +374,7 @@ func updateOptionMap(key string, value string) (err error) {
 			common.ImageDownloadPermission = intValue
 		}
 	}
-	if strings.HasSuffix(key, "Enabled") || key == "AffiliateRegistrationRequired" || key == "DefaultCollapseSidebar" || key == "SMTPForceAuthLogin" || key == "SMTPInsecureSkipVerify" {
+	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" || key == "SMTPInsecureSkipVerify" {
 		boolValue := value == "true"
 		switch key {
 		case "PasswordRegisterEnabled":
@@ -488,10 +395,6 @@ func updateOptionMap(key string, value string) (err error) {
 			common.TurnstileCheckEnabled = boolValue
 		case "RegisterEnabled":
 			common.RegisterEnabled = boolValue
-		case "AffiliateEnabled":
-			common.AffiliateEnabled = boolValue
-		case "AffiliateRegistrationRequired":
-			common.AffiliateRegistrationRequired = boolValue
 		case "EmailDomainRestrictionEnabled":
 			common.EmailDomainRestrictionEnabled = boolValue
 		case "EmailAliasRestrictionEnabled":
@@ -520,7 +423,6 @@ func updateOptionMap(key string, value string) (err error) {
 			common.TaskEnabled = boolValue
 		case "TaskPluginEnabled":
 			constant.TaskPluginEnabled = boolValue
-			// Apply now; the periodic plugin sync would otherwise delay it up to 30s.
 			jsplugin.DefaultRegistry.SetEnabled(boolValue)
 		case "DataExportEnabled":
 			common.DataExportEnabled = boolValue
@@ -544,8 +446,6 @@ func updateOptionMap(key string, value string) (err error) {
 			operation_setting.SelfUseModeEnabled = boolValue
 		case "CheckSensitiveOnPromptEnabled":
 			setting.CheckSensitiveOnPromptEnabled = boolValue
-		case "ExposeRatioEnabled":
-			ratio_setting.SetExposeRatioEnabled(boolValue)
 		case "ModelRequestRateLimitEnabled":
 			setting.ModelRequestRateLimitEnabled = boolValue
 		case "StopOnSensitiveEnabled":
@@ -560,7 +460,14 @@ func updateOptionMap(key string, value string) (err error) {
 			common.SMTPForceAuthLogin = boolValue
 		case "WorkerAllowHttpImageRequestEnabled":
 			system_setting.WorkerAllowHttpImageRequestEnabled = boolValue
+		case "DefaultUseAutoGroup":
+			setting.DefaultUseAutoGroup = boolValue
+		case "ExposeRatioEnabled":
+			ratio_setting.SetExposeRatioEnabled(boolValue)
 		}
+	}
+	if key == setting.TaskPluginDisabledFactoryKeysKey {
+		jsplugin.DefaultRegistry.SetDisabledFactoryKeys(setting.ParseTaskPluginDisabledFactoryKeys(value))
 	}
 	switch key {
 	case "EmailDomainWhitelist":
@@ -588,6 +495,10 @@ func updateOptionMap(key string, value string) (err error) {
 		operation_setting.PayAddress = value
 	case "Chats":
 		err = setting.UpdateChatsByJsonString(value)
+	case "AutoGroups":
+		err = setting.UpdateAutoGroupsByJsonString(value)
+	case "MaxTokenAutoGroups":
+		err = setting.UpdateMaxTokenAutoGroups(value)
 	case "CustomCallbackAddress":
 		operation_setting.CustomCallbackAddress = value
 	case "EpayId":
@@ -662,20 +573,6 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
-	case "GmpayPayAddress":
-		setting.GmpayPayAddress = value
-	case "GmpayId":
-		setting.GmpayId = value
-	case "GmpayKey":
-		setting.GmpayKey = value
-	case "GmpayAssets":
-		setting.GmpayAssets = value
-	case "GmpayPrice":
-		setting.GmpayPrice, _ = strconv.ParseFloat(value, 64)
-	case "GmpayMinTopUp":
-		setting.GmpayMinTopUp, _ = strconv.Atoi(value)
-	case "GmpayGroupRatio":
-		setting.GmpayGroupRatio = value
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
@@ -709,48 +606,15 @@ func updateOptionMap(key string, value string) (err error) {
 	case "TurnstileSecretKey":
 		common.TurnstileSecretKey = value
 	case "QuotaForNewUser":
-		n, parseErr := strconv.ParseInt(value, 10, 64)
-		if parseErr != nil || n < 0 {
-			return errors.New("invalid quota setting")
-		}
-		common.QuotaForNewUser = common.Quota(n)
+		common.QuotaForNewUser, _ = strconv.Atoi(value)
 	case "QuotaForInviter":
-		n, parseErr := strconv.ParseInt(value, 10, 64)
-		if parseErr != nil || n < 0 {
-			return errors.New("invalid quota setting")
-		}
-		common.QuotaForInviter = common.Quota(n)
+		common.QuotaForInviter, _ = strconv.Atoi(value)
 	case "QuotaForInvitee":
-		n, parseErr := strconv.ParseInt(value, 10, 64)
-		if parseErr != nil || n < 0 {
-			return errors.New("invalid quota setting")
-		}
-		common.QuotaForInvitee = common.Quota(n)
-	case "AffiliateRebateRateBps":
-		common.AffiliateRebateRateBps, _ = strconv.Atoi(value)
-	case "AffiliateFreezeHours":
-		common.AffiliateFreezeHours, _ = strconv.Atoi(value)
-	case "AffiliateDurationDays":
-		common.AffiliateDurationDays, _ = strconv.Atoi(value)
-	case "AffiliatePerInviteeCap":
-		if _, err := AffiliateCapQuota(value); err != nil {
-			return err
-		}
-		common.AffiliatePerInviteeCap = value
-	case "AffiliateActivatedAt":
-		common.AffiliateActivatedAt, _ = strconv.ParseInt(value, 10, 64)
+		common.QuotaForInvitee, _ = strconv.Atoi(value)
 	case "QuotaRemindThreshold":
-		n, parseErr := strconv.ParseInt(value, 10, 64)
-		if parseErr != nil || n < 0 {
-			return errors.New("invalid quota setting")
-		}
-		common.QuotaRemindThreshold = common.Quota(n)
+		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
 	case "PreConsumedQuota":
-		n, parseErr := strconv.ParseInt(value, 10, 64)
-		if parseErr != nil || n < 0 {
-			return errors.New("invalid quota setting")
-		}
-		common.PreConsumedQuota = common.Quota(n)
+		common.PreConsumedQuota, _ = strconv.Atoi(value)
 	case "ModelRequestRateLimitCount":
 		setting.ModelRequestRateLimitCount, _ = strconv.Atoi(value)
 	case "ModelRequestRateLimitDurationMinutes":
@@ -767,10 +631,16 @@ func updateOptionMap(key string, value string) (err error) {
 		common.DataExportDefaultTime = value
 	case "ModelRatio":
 		err = ratio_setting.UpdateModelRatioByJSONString(value)
-	case "ModelPrice":
-		err = ratio_setting.UpdateModelPriceByJSONString(value)
+	case "GroupRatio":
+		err = ratio_setting.UpdateGroupRatioByJSONString(value)
+	case "GroupGroupRatio":
+		err = ratio_setting.UpdateGroupGroupRatioByJSONString(value)
+	case "UserUsableGroups":
+		err = setting.UpdateUserUsableGroupsByJSONString(value)
 	case "CompletionRatio":
 		err = ratio_setting.UpdateCompletionRatioByJSONString(value)
+	case "ModelPrice":
+		err = ratio_setting.UpdateModelPriceByJSONString(value)
 	case "CacheRatio":
 		err = ratio_setting.UpdateCacheRatioByJSONString(value)
 	case "CreateCacheRatio":
@@ -781,8 +651,6 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateAudioRatioByJSONString(value)
 	case "AudioCompletionRatio":
 		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
-	case "GroupRatio":
-		err = ratio_setting.UpdateGroupRatioByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":
@@ -792,7 +660,7 @@ func updateOptionMap(key string, value string) (err error) {
 	case "ChannelDisableThreshold":
 		common.ChannelDisableThreshold, _ = strconv.ParseFloat(value, 64)
 	case "QuotaPerUnit":
-		common.OptionMap[key] = "500000"
+		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "SensitiveWords":
 		setting.SensitiveWordsFromString(value)
 	case "AutomaticDisableKeywords":
@@ -815,6 +683,11 @@ func updateOptionMap(key string, value string) (err error) {
 
 // handleConfigUpdate 处理分层配置更新，返回是否已处理
 func handleConfigUpdate(key, value string) bool {
+	if key == operation_setting.ToolPriceOptionKey {
+		operation_setting.LoadToolPricesFromJSONString(value)
+		return true
+	}
+
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) != 2 {
 		return false // 不是分层配置
@@ -838,7 +711,9 @@ func handleConfigUpdate(key, value string) bool {
 	// 特定配置的后处理
 	if configName == "performance_setting" {
 		performance_setting.UpdateAndSync()
-
+	} else if configName == "billing_setting" {
+		InvalidatePricingCache()
+		ratio_setting.InvalidateExposedDataCache()
 	}
 
 	return true // 已处理

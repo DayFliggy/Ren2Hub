@@ -13,7 +13,6 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,25 +20,13 @@ import (
 type Adaptor struct {
 }
 
-func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
-	return a.convertToChat(c, info, request)
+func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
 	adaptor := claude.Adaptor{}
 	return adaptor.ConvertClaudeRequest(c, info, request)
-}
-
-func (a *Adaptor) convertToChat(c *gin.Context, info *relaycommon.RelayInfo, request any) (any, error) {
-	result, err := service.ConvertRequest(c, info, types.RelayFormatOpenAI, request)
-	if err != nil {
-		return nil, err
-	}
-	chat, ok := result.Value.(*dto.GeneralOpenAIRequest)
-	if !ok {
-		return nil, fmt.Errorf("expected OpenAI chat request, got %T", result.Value)
-	}
-	return a.ConvertOpenAIRequest(c, info, chat)
 }
 
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
@@ -98,12 +85,6 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if info == nil {
-		info = &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
-	}
-	if info.ChannelMeta == nil {
-		info.ChannelMeta = &relaycommon.ChannelMeta{}
-	}
 	switch info.RelayMode {
 	case relayconstant.RelayModeCompletions:
 		return openAIToGenerate(c, request)
@@ -111,17 +92,12 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		if info.ChannelOtherSettings.OllamaOpenAIChat {
 			return (&openai.Adaptor{}).ConvertOpenAIRequest(c, info, request)
 		}
-		diagnostics, err := validateOllamaRequest(request, info.ConversionPolicy)
-		info.RecordConversionDiagnostics(c, diagnostics)
-		if err != nil {
-			return nil, err
-		}
 		return openAIChatToOllamaChat(c, request)
 	}
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
-	return nil, errors.New("ollama adapter does not implement rerank requests")
+	return nil, nil
 }
 
 func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {

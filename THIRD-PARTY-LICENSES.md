@@ -1,10 +1,10 @@
 # Third-Party Licenses
 
-This file records the direct third-party dependencies of Ren2Hub and their supplied license texts. Keep it with `LICENSE` and `NOTICE` in Docker images, standalone binary distributions, frontend distributions, and Electron installers.
+This file records the direct third-party dependencies of Ren2Hub and their supplied license texts. Keep it with `LICENSE` and `NOTICE` in Docker images, standalone binary distributions, and frontend distributions.
 
-Inventory checked on 2026-10-16 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue and Electron versions come from `frontend/bun.lock` and `electron/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately; Electron is declared in `devDependencies` for packaging but its runtime is distributed.
+Inventory checked on 2026-10-17 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
 
-The inventory covers direct dependencies, including additional license files supplied alongside their top-level license. It is not a complete inventory of the transitive dependency graph, operating-system packages, or browser/runtime components. Preserve notices shipped by those components; Electron's `LICENSE` and `LICENSES.chromium.html` are separately included in every desktop package. Independent asset notices are outside this direct-package inventory and must be retained with their assets. No React dependency inventory is used.
+The inventory covers direct dependencies, including additional license files supplied alongside their top-level license. It is not a complete inventory of the transitive dependency graph, operating-system packages, or browser/runtime components. Preserve notices shipped by those components. Independent asset notices are outside this direct-package inventory and must be retained with their assets. No React dependency inventory is used.
 
 Full upstream license texts below preserve their copyright statements and bundled-component terms; only line endings and trailing whitespace are normalized for this document. Identical texts are included once and linked from every applicable row. Upstream `NOTICE` files are reproduced in `NOTICE`; they supplement these licenses.
 
@@ -19,77 +19,77 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | Area | Scope | Ecosystem | Dependency | Version | License | Supplied text |
 | --- | --- | --- | --- | --- | --- | --- |
 | backend | production | Go | `github.com/abema/go-mp4` | `v1.4.1` | MIT | [1](#license-1) |
-| backend | test | Go | `github.com/alicebob/miniredis/v2` | `v2.38.0` | MIT | [2](#license-2) |
-| backend | production | Go | `github.com/andybalholm/brotli` | `v1.1.1` | MIT | [3](#license-3) |
-| backend | production | Go | `github.com/anknown/ahocorasick` | `v0.0.0-20190904063843-d75dbd5169c0` | MIT | [4](#license-4) |
-| backend | production | Go | `github.com/aws/aws-sdk-go-v2` | `v1.41.5` | Apache-2.0 | [5](#license-5) |
-| backend | test | Go | `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream` | `v1.7.8` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/aws/aws-sdk-go-v2/credentials` | `v1.19.10` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` | `v1.50.4` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/aws/smithy-go` | `v1.24.2` | Apache-2.0 | [6](#license-6) |
-| backend | production | Go | `github.com/Azure/go-ntlmssp` | `v0.1.1` | MIT | [7](#license-7) |
-| backend | development | Go | `github.com/BurntSushi/toml` | `v1.6.0` | MIT | [8](#license-8) |
-| backend | production | Go | `github.com/bytedance/gopkg` | `v0.1.3` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/Calcium-Ion/go-epay` | `v0.0.5` | MIT | [9](#license-9) |
-| backend | production | Go | `github.com/Calcium-Ion/moejs` | `v0.1.0-alpha.7` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/casbin/casbin/v2` | `v2.135.0` | Apache-2.0 | [10](#license-10) |
-| backend | production | Go | `github.com/ClickHouse/clickhouse-go/v2` | `v2.32.0` | Apache-2.0 | [11](#license-11) |
-| backend | production | Go | `github.com/coreos/go-oidc/v3` | `v3.21.0` | Apache-2.0 | [10](#license-10) |
-| backend | production | Go | `github.com/expr-lang/expr` | `v1.17.8` | MIT | [12](#license-12) |
-| backend | test | Go | `github.com/fxamacker/cbor/v2` | `v2.9.0` | MIT | [13](#license-13) |
-| backend | production | Go | `github.com/gin-contrib/cors` | `v1.7.2` | MIT | [14](#license-14) |
-| backend | production | Go | `github.com/gin-contrib/gzip` | `v0.0.6` | MIT | [15](#license-15) |
-| backend | production | Go | `github.com/gin-contrib/static` | `v0.0.1` | MIT | [16](#license-16) |
-| backend | production | Go | `github.com/gin-gonic/gin` | `v1.9.1` | MIT | [17](#license-17) |
-| backend | production | Go | `github.com/glebarez/go-sqlite` | `v1.21.2` | BSD-3-Clause | [18](#license-18) |
-| backend | production | Go | `github.com/glebarez/sqlite` | `v1.11.0` | MIT | [19](#license-19) |
-| backend | production | Go | `github.com/go-audio/aiff` | `v1.1.0` | Apache-2.0 | [20](#license-20) |
-| backend | production | Go | `github.com/go-audio/wav` | `v1.1.0` | Apache-2.0 | [20](#license-20) |
-| backend | production | Go | `github.com/go-playground/validator/v10` | `v10.20.0` | MIT | [21](#license-21) |
-| backend | production | Go | `github.com/go-redis/redis/v8` | `v8.11.5` | BSD-2-Clause | [22](#license-22) |
-| backend | production | Go | `github.com/go-sql-driver/mysql` | `v1.7.0` | MPL-2.0 | [23](#license-23) |
-| backend | production | Go | `github.com/go-webauthn/webauthn` | `v0.14.0` | BSD-3-Clause | [24](#license-24) |
-| backend | production | Go | `github.com/golang-jwt/jwt/v5` | `v5.3.0` | MIT | [25](#license-25) |
-| backend | production | Go | `github.com/google/uuid` | `v1.6.0` | BSD-3-Clause | [26](#license-26) |
-| backend | production | Go | `github.com/gorilla/websocket` | `v1.5.3` | BSD-2-Clause | [27](#license-27) |
-| backend | production | Go | `github.com/grafana/pyroscope-go` | `v1.2.7` | Apache-2.0 | [28](#license-28) |
-| backend | production | Go | `github.com/jackc/pgx/v5` | `v5.9.2` | MIT | [29](#license-29) |
-| backend | production | Go | `github.com/jfreymuth/oggvorbis` | `v1.0.5` | MIT | [30](#license-30) |
-| backend | production | Go | `github.com/jinzhu/copier` | `v0.4.0` | MIT | [31](#license-31) |
-| backend | production | Go | `github.com/joho/godotenv` | `v1.5.1` | MIT | [32](#license-32) |
-| backend | test | Go | `github.com/json-iterator/go` | `v1.1.12` | MIT | [33](#license-33) |
-| backend | production | Go | `github.com/klauspost/compress` | `v1.18.7` | BSD-3-Clause; bundled files: Apache-2.0, MIT | [34](#license-34) |
-| backend | production | Go | `github.com/mewkiz/flac` | `v1.0.13` | Unlicense | [35](#license-35) |
-| backend | production | Go | `github.com/nicksnyder/go-i18n/v2` | `v2.6.1` | MIT | [36](#license-36) |
-| backend | production | Go | `github.com/pkg/errors` | `v0.9.1` | BSD-2-Clause | [37](#license-37) |
-| backend | production | Go | `github.com/pquerna/otp` | `v1.5.0` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/prometheus/common` | `v0.62.0` | Apache-2.0 | [5](#license-5) |
-| backend | production | Go | `github.com/samber/hot` | `v0.11.0` | MIT | [38](#license-38) |
-| backend | production | Go | `github.com/samber/lo` | `v1.53.0` | MIT | [39](#license-39) |
-| backend | production | Go | `github.com/shirou/gopsutil` | `v3.21.11+incompatible` | BSD-3-Clause | [40](#license-40) |
-| backend | production | Go | `github.com/shopspring/decimal` | `v1.4.0` | MIT | [41](#license-41) |
-| backend | test | Go | `github.com/stretchr/testify` | `v1.12.1` | MIT | [42](#license-42) |
-| backend | production | Go | `github.com/stripe/stripe-go/v81` | `v81.4.0` | MIT | [43](#license-43) |
-| backend | production | Go | `github.com/tcolgate/mp3` | `v0.0.0-20170426193717-e79c5a46d300` | MIT | [44](#license-44) |
-| backend | production | Go | `github.com/thanhpk/randstr` | `v1.0.6` | MIT | [45](#license-45) |
-| backend | production | Go | `github.com/tidwall/gjson` | `v1.19.0` | MIT | [46](#license-46) |
-| backend | production | Go | `github.com/tidwall/sjson` | `v1.2.5` | MIT | [46](#license-46) |
-| backend | production | Go | `github.com/tiktoken-go/tokenizer` | `v0.8.1` | MIT | [47](#license-47) |
-| backend | production | Go | `github.com/waffo-com/waffo-go` | `v1.3.2` | MIT | [48](#license-48) |
-| backend | production | Go | `github.com/waffo-com/waffo-pancake-sdk-go` | `v0.3.1` | MIT | [49](#license-49) |
-| backend | production | Go | `github.com/yapingcat/gomedia` | `v0.0.0-20240906162731-17feea57090c` | MIT | [50](#license-50) |
-| backend | production | Go | `golang.org/x/crypto` | `v0.57.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `golang.org/x/image` | `v0.45.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `golang.org/x/net` | `v0.60.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `golang.org/x/oauth2` | `v0.36.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `golang.org/x/sync` | `v0.23.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `golang.org/x/sys` | `v0.48.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `golang.org/x/text` | `v0.42.0` | BSD-3-Clause | [51](#license-51) |
-| backend | production | Go | `gopkg.in/yaml.v3` | `v3.0.1` | Apache-2.0 AND MIT | [52](#license-52) |
-| backend | production | Go | `gorm.io/driver/clickhouse` | `v0.6.0` | MIT | [53](#license-53), [19](#license-19) |
-| backend | production | Go | `gorm.io/driver/mysql` | `v1.5.7` | MIT | [19](#license-19) |
-| backend | production | Go | `gorm.io/driver/postgres` | `v1.5.9` | MIT | [19](#license-19) |
-| backend | production | Go | `gorm.io/gorm` | `v1.25.12` | MIT | [19](#license-19) |
+| backend | production | Go | `github.com/andybalholm/brotli` | `v1.2.0` | MIT | [2](#license-2) |
+| backend | production | Go | `github.com/anknown/ahocorasick` | `v0.0.0-20190904063843-d75dbd5169c0` | MIT | [3](#license-3) |
+| backend | production | Go | `github.com/aws/aws-sdk-go-v2` | `v1.41.5` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/aws/aws-sdk-go-v2/credentials` | `v1.19.10` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` | `v1.50.4` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/aws/smithy-go` | `v1.24.2` | Apache-2.0 | [5](#license-5) |
+| backend | production | Go | `github.com/Azure/go-ntlmssp` | `v0.1.1` | MIT | [6](#license-6) |
+| backend | production | Go | `github.com/bytedance/gopkg` | `v0.1.3` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/Calcium-Ion/go-epay` | `v0.0.5` | MIT | [7](#license-7) |
+| backend | production | Go | `github.com/Calcium-Ion/moejs` | `v0.1.0-alpha.7` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/casbin/casbin/v2` | `v2.135.0` | Apache-2.0 | [8](#license-8) |
+| backend | production | Go | `github.com/ClickHouse/clickhouse-go/v2` | `v2.46.0` | Apache-2.0 | [9](#license-9) |
+| backend | production | Go | `github.com/coreos/go-oidc/v3` | `v3.21.0` | Apache-2.0 | [8](#license-8) |
+| backend | production | Go | `github.com/expr-lang/expr` | `v1.17.8` | MIT | [10](#license-10) |
+| backend | production | Go | `github.com/gin-contrib/cors` | `v1.7.2` | MIT | [11](#license-11) |
+| backend | production | Go | `github.com/gin-contrib/gzip` | `v0.0.6` | MIT | [12](#license-12) |
+| backend | production | Go | `github.com/gin-contrib/static` | `v0.0.1` | MIT | [13](#license-13) |
+| backend | production | Go | `github.com/gin-gonic/gin` | `v1.9.1` | MIT | [14](#license-14) |
+| backend | production | Go | `github.com/glebarez/go-sqlite` | `v1.21.2` | BSD-3-Clause | [15](#license-15) |
+| backend | production | Go | `github.com/glebarez/sqlite` | `v1.11.0` | MIT | [16](#license-16) |
+| backend | production | Go | `github.com/go-audio/aiff` | `v1.1.0` | Apache-2.0 | [17](#license-17) |
+| backend | production | Go | `github.com/go-audio/wav` | `v1.1.0` | Apache-2.0 | [17](#license-17) |
+| backend | production | Go | `github.com/go-playground/validator/v10` | `v10.20.0` | MIT | [18](#license-18) |
+| backend | production | Go | `github.com/go-redis/redis/v8` | `v8.11.5` | BSD-2-Clause | [19](#license-19) |
+| backend | production | Go | `github.com/go-sql-driver/mysql` | `v1.7.0` | MPL-2.0 | [20](#license-20) |
+| backend | production | Go | `github.com/go-webauthn/webauthn` | `v0.14.0` | BSD-3-Clause | [21](#license-21) |
+| backend | production | Go | `github.com/golang-jwt/jwt/v5` | `v5.3.0` | MIT | [22](#license-22) |
+| backend | production | Go | `github.com/google/uuid` | `v1.6.0` | BSD-3-Clause | [23](#license-23) |
+| backend | production | Go | `github.com/gorilla/websocket` | `v1.5.3` | BSD-2-Clause | [24](#license-24) |
+| backend | production | Go | `github.com/grafana/pyroscope-go` | `v1.2.7` | Apache-2.0 | [25](#license-25) |
+| backend | production | Go | `github.com/jackc/pgx/v5` | `v5.9.2` | MIT | [26](#license-26) |
+| backend | production | Go | `github.com/jfreymuth/oggvorbis` | `v1.0.5` | MIT | [27](#license-27) |
+| backend | production | Go | `github.com/jinzhu/copier` | `v0.4.0` | MIT | [28](#license-28) |
+| backend | production | Go | `github.com/joho/godotenv` | `v1.5.1` | MIT | [29](#license-29) |
+| backend | production | Go | `github.com/klauspost/compress` | `v1.18.3` | BSD-3-Clause; bundled files: Apache-2.0, MIT | [30](#license-30) |
+| backend | production | Go | `github.com/mewkiz/flac` | `v1.0.13` | Unlicense | [31](#license-31) |
+| backend | production | Go | `github.com/nicksnyder/go-i18n/v2` | `v2.6.1` | MIT | [32](#license-32) |
+| backend | production | Go | `github.com/pkg/errors` | `v0.9.1` | BSD-2-Clause | [33](#license-33) |
+| backend | production | Go | `github.com/pquerna/otp` | `v1.5.0` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/prometheus/common` | `v0.62.0` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/samber/hot` | `v0.11.0` | MIT | [34](#license-34) |
+| backend | production | Go | `github.com/samber/lo` | `v1.53.0` | MIT | [35](#license-35) |
+| backend | production | Go | `github.com/shirou/gopsutil` | `v3.21.11+incompatible` | BSD-3-Clause | [36](#license-36) |
+| backend | production | Go | `github.com/shopspring/decimal` | `v1.4.0` | MIT | [37](#license-37) |
+| backend | production | Go | `github.com/stripe/stripe-go/v81` | `v81.4.0` | MIT | [38](#license-38) |
+| backend | production | Go | `github.com/tcolgate/mp3` | `v0.0.0-20170426193717-e79c5a46d300` | MIT | [39](#license-39) |
+| backend | production | Go | `github.com/thanhpk/randstr` | `v1.0.6` | MIT | [40](#license-40) |
+| backend | production | Go | `github.com/tidwall/gjson` | `v1.19.0` | MIT | [41](#license-41) |
+| backend | production | Go | `github.com/tidwall/sjson` | `v1.2.5` | MIT | [41](#license-41) |
+| backend | production | Go | `github.com/tiktoken-go/tokenizer` | `v0.8.1` | MIT | [42](#license-42) |
+| backend | production | Go | `github.com/waffo-com/waffo-go` | `v1.3.2` | MIT | [43](#license-43) |
+| backend | production | Go | `github.com/waffo-com/waffo-pancake-sdk-go` | `v0.3.1` | MIT | [44](#license-44) |
+| backend | production | Go | `github.com/yapingcat/gomedia` | `v0.0.0-20240906162731-17feea57090c` | MIT | [45](#license-45) |
+| backend | production | Go | `golang.org/x/crypto` | `v0.52.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `golang.org/x/image` | `v0.41.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `golang.org/x/net` | `v0.55.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `golang.org/x/oauth2` | `v0.36.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `golang.org/x/sync` | `v0.20.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `golang.org/x/sys` | `v0.45.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `golang.org/x/text` | `v0.37.0` | BSD-3-Clause | [46](#license-46) |
+| backend | production | Go | `gopkg.in/yaml.v3` | `v3.0.1` | Apache-2.0 AND MIT | [47](#license-47) |
+| backend | production | Go | `gorm.io/driver/clickhouse` | `v0.6.0` | MIT | [48](#license-48), [16](#license-16) |
+| backend | production | Go | `gorm.io/driver/mysql` | `v1.5.7` | MIT | [16](#license-16) |
+| backend | production | Go | `gorm.io/driver/postgres` | `v1.5.9` | MIT | [16](#license-16) |
+| backend | production | Go | `gorm.io/gorm` | `v1.25.12` | MIT | [16](#license-16) |
+| backend | test | Go | `github.com/alicebob/miniredis/v2` | `v2.38.0` | MIT | [49](#license-49) |
+| backend | test | Go | `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream` | `v1.7.8` | Apache-2.0 | [4](#license-4) |
+| backend | test | Go | `github.com/fxamacker/cbor/v2` | `v2.9.0` | MIT | [50](#license-50) |
+| backend | test | Go | `github.com/json-iterator/go` | `v1.1.12` | MIT | [51](#license-51) |
+| backend | test | Go | `github.com/openai/openai-go` | `v1.12.0` | Apache-2.0 | [52](#license-52) |
+| backend | test | Go | `github.com/stretchr/testify` | `v1.12.1` | MIT | [53](#license-53) |
 | frontend | production | npm | `@vueuse/core` | `14.3.0` | MIT | [54](#license-54) |
 | frontend | production | npm | `axios` | `1.20.0` | MIT | [55](#license-55) |
 | frontend | production | npm | `echarts` | `6.1.0` | Apache-2.0; d3 portions: BSD-3-Clause | [56](#license-56), [57](#license-57) |
@@ -118,9 +118,6 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | frontend | development | npm | `vite` | `8.1.5` | MIT | [77](#license-77) |
 | frontend | development | npm | `vitest` | `4.1.11` | MIT | [78](#license-78) |
 | frontend | development | npm | `vue-tsc` | `3.3.8` | MIT | [79](#license-79) |
-| electron | development | npm | `cross-env` | `7.0.3` | MIT | [80](#license-80) |
-| electron | runtime | npm | `electron` | `41.10.6` | MIT | [81](#license-81) |
-| electron | development | npm | `electron-builder` | `26.15.3` | MIT | [82](#license-82) |
 
 ## Supplied license texts
 
@@ -154,35 +151,7 @@ SOFTWARE.
 
 ### License 2
 
-- `github.com/alicebob/miniredis/v2 v2.38.0 — LICENSE`
-
-```text
-The MIT License (MIT)
-
-Copyright (c) 2014 Harmen
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 3
-
-- `github.com/andybalholm/brotli v1.1.1 — LICENSE`
+- `github.com/andybalholm/brotli v1.2.0 — LICENSE`
 
 ```text
 Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
@@ -206,7 +175,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 4
+### License 3
 
 - `github.com/anknown/ahocorasick v0.0.0-20190904063843-d75dbd5169c0 — LICENSE`
 
@@ -234,16 +203,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 5
+### License 4
 
 - `github.com/aws/aws-sdk-go-v2 v1.41.5 — LICENSE.txt`
-- `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 — LICENSE.txt`
 - `github.com/aws/aws-sdk-go-v2/credentials v1.19.10 — LICENSE.txt`
 - `github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4 — LICENSE.txt`
 - `github.com/bytedance/gopkg v0.1.3 — LICENSE`
 - `github.com/Calcium-Ion/moejs v0.1.0-alpha.7 — LICENSE`
 - `github.com/pquerna/otp v1.5.0 — LICENSE`
 - `github.com/prometheus/common v0.62.0 — LICENSE`
+- `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 — LICENSE.txt`
 
 ```text
 Apache License
@@ -449,7 +418,7 @@ Apache License
    limitations under the License.
 ```
 
-### License 6
+### License 5
 
 - `github.com/aws/smithy-go v1.24.2 — LICENSE`
 
@@ -630,7 +599,7 @@ Apache License
       of your accepting any such warranty or additional liability.
 ```
 
-### License 7
+### License 6
 
 - `github.com/Azure/go-ntlmssp v0.1.1 — LICENSE`
 
@@ -658,35 +627,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 8
-
-- `github.com/BurntSushi/toml v1.6.0 — COPYING`
-
-```text
-The MIT License (MIT)
-
-Copyright (c) 2013 TOML authors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
-### License 9
+### License 7
 
 - `github.com/Calcium-Ion/go-epay v0.0.5 — LICENSE`
 
@@ -714,7 +655,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 10
+### License 8
 
 - `github.com/casbin/casbin/v2 v2.135.0 — LICENSE`
 - `github.com/coreos/go-oidc/v3 v3.21.0 — LICENSE`
@@ -923,9 +864,9 @@ Apache License
    limitations under the License.
 ```
 
-### License 11
+### License 9
 
-- `github.com/ClickHouse/clickhouse-go/v2 v2.32.0 — LICENSE`
+- `github.com/ClickHouse/clickhouse-go/v2 v2.46.0 — LICENSE`
 
 ```text
 Copyright 2016-2023 ClickHouse, Inc.
@@ -1133,7 +1074,7 @@ Copyright 2016-2023 ClickHouse, Inc.
    limitations under the License.
 ```
 
-### License 12
+### License 10
 
 - `github.com/expr-lang/expr v1.17.8 — LICENSE`
 
@@ -1161,35 +1102,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 13
-
-- `github.com/fxamacker/cbor/v2 v2.9.0 — LICENSE`
-
-```text
-MIT License
-
-Copyright (c) 2019-present Faye Amacker
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 14
+### License 11
 
 - `github.com/gin-contrib/cors v1.7.2 — LICENSE`
 
@@ -1217,7 +1130,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 15
+### License 12
 
 - `github.com/gin-contrib/gzip v0.0.6 — LICENSE`
 
@@ -1245,7 +1158,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 16
+### License 13
 
 - `github.com/gin-contrib/static v0.0.1 — LICENSE`
 
@@ -1273,7 +1186,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 17
+### License 14
 
 - `github.com/gin-gonic/gin v1.9.1 — LICENSE`
 
@@ -1301,7 +1214,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 18
+### License 15
 
 - `github.com/glebarez/go-sqlite v1.21.2 — LICENSE`
 
@@ -1334,7 +1247,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 19
+### License 16
 
 - `github.com/glebarez/sqlite v1.11.0 — License`
 - `gorm.io/driver/clickhouse v0.6.0 — License`
@@ -1366,7 +1279,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 20
+### License 17
 
 - `github.com/go-audio/aiff v1.1.0 — LICENSE`
 - `github.com/go-audio/wav v1.1.0 — LICENSE`
@@ -1575,7 +1488,7 @@ Apache License
    limitations under the License.
 ```
 
-### License 21
+### License 18
 
 - `github.com/go-playground/validator/v10 v10.20.0 — LICENSE`
 
@@ -1603,7 +1516,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 22
+### License 19
 
 - `github.com/go-redis/redis/v8 v8.11.5 — LICENSE`
 
@@ -1635,7 +1548,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 23
+### License 20
 
 - `github.com/go-sql-driver/mysql v1.7.0 — LICENSE`
 
@@ -2015,7 +1928,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 ```
 
-### License 24
+### License 21
 
 - `github.com/go-webauthn/webauthn v0.14.0 — LICENSE`
 
@@ -2071,7 +1984,7 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWIS
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 25
+### License 22
 
 - `github.com/golang-jwt/jwt/v5 v5.3.0 — LICENSE`
 
@@ -2086,7 +1999,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 26
+### License 23
 
 - `github.com/google/uuid v1.6.0 — LICENSE`
 
@@ -2120,7 +2033,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 27
+### License 24
 
 - `github.com/gorilla/websocket v1.5.3 — LICENSE`
 
@@ -2149,7 +2062,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 28
+### License 25
 
 - `github.com/grafana/pyroscope-go v1.2.7 — LICENSE`
 
@@ -2357,7 +2270,7 @@ Apache License
    limitations under the License.
 ```
 
-### License 29
+### License 26
 
 - `github.com/jackc/pgx/v5 v5.9.2 — LICENSE`
 
@@ -2386,7 +2299,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 30
+### License 27
 
 - `github.com/jfreymuth/oggvorbis v1.0.5 — LICENSE`
 
@@ -2414,7 +2327,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 31
+### License 28
 
 - `github.com/jinzhu/copier v0.4.0 — License`
 
@@ -2441,7 +2354,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 32
+### License 29
 
 - `github.com/joho/godotenv v1.5.1 — LICENCE`
 
@@ -2470,37 +2383,9 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 33
+### License 30
 
-- `github.com/json-iterator/go v1.1.12 — LICENSE`
-
-```text
-MIT License
-
-Copyright (c) 2016 json-iterator
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 34
-
-- `github.com/klauspost/compress v1.18.7 — LICENSE`
+- `github.com/klauspost/compress v1.18.3 — LICENSE`
 
 ```text
 Copyright (c) 2012 The Go Authors. All rights reserved.
@@ -2809,7 +2694,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 35
+### License 31
 
 - `github.com/mewkiz/flac v1.0.13 — LICENSE`
 
@@ -2840,7 +2725,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <http://unlicense.org/>
 ```
 
-### License 36
+### License 32
 
 - `github.com/nicksnyder/go-i18n/v2 v2.6.1 — LICENSE`
 
@@ -2866,7 +2751,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 37
+### License 33
 
 - `github.com/pkg/errors v0.9.1 — LICENSE`
 
@@ -2896,7 +2781,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 38
+### License 34
 
 - `github.com/samber/hot v0.11.0 — LICENSE`
 
@@ -2924,7 +2809,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 39
+### License 35
 
 - `github.com/samber/lo v1.53.0 — LICENSE`
 
@@ -2952,7 +2837,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 40
+### License 36
 
 - `github.com/shirou/gopsutil v3.21.11+incompatible — LICENSE`
 
@@ -3020,7 +2905,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 41
+### License 37
 
 - `github.com/shopspring/decimal v1.4.0 — LICENSE`
 
@@ -3072,35 +2957,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 ```
 
-### License 42
-
-- `github.com/stretchr/testify v1.12.1 — LICENSE`
-
-```text
-MIT License
-
-Copyright (c) 2012-2020 Mat Ryer, Tyler Bunnell and contributors.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 43
+### License 38
 
 - `github.com/stripe/stripe-go/v81 v81.4.0 — LICENSE`
 
@@ -3128,7 +2985,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 44
+### License 39
 
 - `github.com/tcolgate/mp3 v0.0.0-20170426193717-e79c5a46d300 — LICENSE`
 
@@ -3155,7 +3012,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 45
+### License 40
 
 - `github.com/thanhpk/randstr v1.0.6 — LICENSE`
 
@@ -3183,7 +3040,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 46
+### License 41
 
 - `github.com/tidwall/gjson v1.19.0 — LICENSE`
 - `github.com/tidwall/sjson v1.2.5 — LICENSE`
@@ -3211,7 +3068,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 47
+### License 42
 
 - `github.com/tiktoken-go/tokenizer v0.8.1 — LICENSE`
 
@@ -3239,7 +3096,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 48
+### License 43
 
 - `github.com/waffo-com/waffo-go v1.3.2 — LICENSE`
 
@@ -3267,7 +3124,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 49
+### License 44
 
 - `github.com/waffo-com/waffo-pancake-sdk-go v0.3.1 — LICENSE`
 
@@ -3295,7 +3152,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 50
+### License 45
 
 - `github.com/yapingcat/gomedia v0.0.0-20240906162731-17feea57090c — LICENSE`
 
@@ -3323,15 +3180,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 51
+### License 46
 
-- `golang.org/x/crypto v0.57.0 — LICENSE`
-- `golang.org/x/image v0.45.0 — LICENSE`
-- `golang.org/x/net v0.60.0 — LICENSE`
+- `golang.org/x/crypto v0.52.0 — LICENSE`
+- `golang.org/x/image v0.41.0 — LICENSE`
+- `golang.org/x/net v0.55.0 — LICENSE`
 - `golang.org/x/oauth2 v0.36.0 — LICENSE`
-- `golang.org/x/sync v0.23.0 — LICENSE`
-- `golang.org/x/sys v0.48.0 — LICENSE`
-- `golang.org/x/text v0.42.0 — LICENSE`
+- `golang.org/x/sync v0.20.0 — LICENSE`
+- `golang.org/x/sys v0.45.0 — LICENSE`
+- `golang.org/x/text v0.37.0 — LICENSE`
 
 ```text
 Copyright 2009 The Go Authors.
@@ -3363,7 +3220,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 52
+### License 47
 
 - `gopkg.in/yaml.v3 v3.0.1 — LICENSE`
 
@@ -3419,7 +3276,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-### License 53
+### License 48
 
 - `gorm.io/driver/clickhouse v0.6.0 — LICENCE`
 
@@ -3445,6 +3302,326 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+```
+
+### License 49
+
+- `github.com/alicebob/miniredis/v2 v2.38.0 — LICENSE`
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2014 Harmen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### License 50
+
+- `github.com/fxamacker/cbor/v2 v2.9.0 — LICENSE`
+
+```text
+MIT License
+
+Copyright (c) 2019-present Faye Amacker
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### License 51
+
+- `github.com/json-iterator/go v1.1.12 — LICENSE`
+
+```text
+MIT License
+
+Copyright (c) 2016 json-iterator
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### License 52
+
+- `github.com/openai/openai-go v1.12.0 — LICENSE`
+
+```text
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright 2025 OpenAI
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+```
+
+### License 53
+
+- `github.com/stretchr/testify v1.12.1 — LICENSE`
+
+```text
+MIT License
+
+Copyright (c) 2012-2020 Mat Ryer, Tyler Bunnell and contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ### License 54
@@ -7626,89 +7803,6 @@ Repository: git+https://github.com/websockets/ws.git
 MIT License
 
 Copyright (c) 2021-present Johnson Chu
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 80
-
-- `cross-env 7.0.3 — LICENSE`
-
-```text
-The MIT License (MIT)
-Copyright (c) 2017 Kent C. Dodds
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### License 81
-
-- `electron 41.10.6 — LICENSE`
-
-```text
-Copyright (c) Electron contributors
-Copyright (c) 2013-2020 GitHub Inc.
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
-### License 82
-
-- `electron-builder 26.15.3 — LICENSE`
-
-```text
-The MIT License (MIT)
-
-Copyright (c) 2015 Loopline Systems
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

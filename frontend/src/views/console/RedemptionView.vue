@@ -2,8 +2,6 @@
 import { useStorage } from '@vueuse/core'
 import {
   AlertTriangle,
-  ArrowDownNarrowWide,
-  ArrowUpNarrowWide,
   Download,
   LoaderCircle,
   Plus,
@@ -38,7 +36,6 @@ import { useAdminRedemption } from '@/composables/useAdminRedemption'
 import {
   ADMIN_REDEMPTION_DEFAULT_VISIBLE_FIELDS,
   ADMIN_REDEMPTION_OPTIONAL_FIELDS,
-  ADMIN_REDEMPTION_SORT_FIELDS,
   ADMIN_REDEMPTION_VISIBLE_FIELDS_STORAGE_KEY,
   type AdminRedemptionOptionalField,
   adminRedemptionStatusLabelKey,
@@ -49,8 +46,6 @@ import {
 import type {
   AdminRedemptionCode,
   AdminRedemptionCreateInput,
-  AdminRedemptionSortBy,
-  AdminRedemptionSortOrder,
 } from '@/types/console'
 import { formatTime } from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
@@ -60,13 +55,10 @@ const { t } = useI18n()
 const {
   rows,
   total,
-  statusCounts,
   page,
   pageSize,
   keyword,
   statusFilter,
-  sortBy,
-  sortOrder,
   loading,
   refreshing,
   initialError,
@@ -196,37 +188,17 @@ const minTableWidth = computed(() => {
 // Filter options
 const statusOptions = computed<SelectOption[]>(() => [
   { value: '', label: t('redemption.allStatuses') },
-  ...(['unused', 'used', 'expired', 'disabled'] as const)
-    .filter((st) => (statusCounts.value[st] ?? 0) > 0)
-    .map((st): SelectOption => {
+  ...(['unused', 'used', 'expired', 'disabled'] as const).map(
+    (st): SelectOption => {
       const rawTone = adminRedemptionStatusTone(st)
       return {
         value: st,
-        label: `${t(adminRedemptionStatusLabelKey(st))} (${statusCounts.value[st] ?? 0})`,
+        label: t(adminRedemptionStatusLabelKey(st)),
         tone: rawTone === 'neutral' ? undefined : rawTone,
       }
-    }),
+    }
+  ),
 ])
-
-const sortOptions = computed(() =>
-  ADMIN_REDEMPTION_SORT_FIELDS.map((field) => ({
-    value: field,
-    label: t(`redemption.sort.${field}`),
-  }))
-)
-
-const sortModel = computed({
-  get: () => sortBy.value,
-  set: (v: string) => {
-    sortBy.value = v as AdminRedemptionSortBy
-  },
-})
-
-function toggleSortOrder() {
-  sortOrder.value = (
-    sortOrder.value === 'asc' ? 'desc' : 'asc'
-  ) as AdminRedemptionSortOrder
-}
 
 // Actions
 function openGenerate() {
@@ -384,24 +356,6 @@ function exportCsv() {
             class="w-full"
           />
           <div class="flex min-w-0 gap-2">
-            <FilterSelect
-              v-model="sortModel"
-              :options="sortOptions"
-              :label="t('redemption.sortLabel')"
-              class="min-w-0 flex-1"
-            />
-            <IconButton
-              :label="
-                sortOrder === 'asc'
-                  ? t('redemption.sortAscending')
-                  : t('redemption.sortDescending')
-              "
-              class="h-10 w-10 shrink-0 rounded-xl bg-[var(--surface-muted)]"
-              @click="toggleSortOrder"
-            >
-              <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="17" />
-              <ArrowDownNarrowWide v-else :size="17" />
-            </IconButton>
             <FieldVisibilityMenu
               v-model="visibleFields"
               :all-fields="ADMIN_REDEMPTION_OPTIONAL_FIELDS"
@@ -519,10 +473,10 @@ function exportCsv() {
           <template #cell-redeemer="{ row }">
             <span
               class="max-w-[160px] truncate text-xs text-[var(--text-secondary)]"
-              :title="(row as AdminRedemptionCode).redeemer_email"
+              :title="String((row as AdminRedemptionCode).redeemer_id || '')"
             >
               {{
-                (row as AdminRedemptionCode).redeemer_email ||
+                (row as AdminRedemptionCode).redeemer_id ||
                 t('redemption.notRedeemed')
               }}
             </span>

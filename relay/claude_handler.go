@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -48,55 +48,50 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 	adaptor.Init(info)
 
-	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled && !info.ChannelSetting.PassThroughBodyEnabled {
-		if err := relayconvert.ApplyClaudeThinkingModel(request, info); err != nil {
-			return newConvertRequestFailedError(c, info, err)
+	if info.ChannelSetting.SystemPrompt != "" {
+		if request.System == nil {
+			request.SetStringSystem(info.ChannelSetting.SystemPrompt)
+		} else if info.ChannelSetting.SystemPromptOverride {
+			common.SetContextKey(c, constant.ContextKeySystemPromptOverride, true)
+			if request.IsStringSystem() {
+				existing := strings.TrimSpace(request.GetStringSystem())
+				if existing == "" {
+					request.SetStringSystem(info.ChannelSetting.SystemPrompt)
+				} else {
+					request.SetStringSystem(info.ChannelSetting.SystemPrompt + "\n" + existing)
+				}
+			} else {
+				systemContents := request.ParseSystem()
+				newSystem := dto.ClaudeMediaMessage{Type: dto.ContentTypeText}
+				newSystem.SetText(info.ChannelSetting.SystemPrompt)
+				if len(systemContents) == 0 {
+					request.System = []dto.ClaudeMediaMessage{newSystem}
+				} else {
+					request.System = append([]dto.ClaudeMediaMessage{newSystem}, systemContents...)
+				}
+			}
 		}
-		if request.MaxTokens == nil {
-			request.MaxTokens = common.GetPointer(uint(model_setting.GetClaudeSettings().GetDefaultMaxTokens(request.Model)))
-		}
-	}
-
-	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled && !info.ChannelSetting.PassThroughBodyEnabled {
-		if effort := request.GetEfforts(); effort != "" {
-			info.SetReasoningEffort(effort)
-		}
-	}
-
-	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		result, convErr := service.ConvertRequest(c, info, types.RelayFormatOpenAI, request)
-		if convErr != nil {
-			return newConvertRequestFailedError(c, info, convErr)
-		}
-		openAIRequest, ok := result.Value.(*dto.GeneralOpenAIRequest)
-		if !ok {
-			return types.NewError(fmt.Errorf("expected OpenAI chat completions request, got %T", result.Value), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
-		info.CaptureResponseUsage(usage, "text", nil)
+		usage, newApiErr := textRequestViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {
 			return newApiErr
 		}
 
-		info.CaptureResponseUsage(usage, "text", nil)
+		service.PostTextConsumeQuota(c, info, usage, nil)
 		return nil
 	}
 
 	var requestBody io.Reader
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
+		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		defer closer.Close()
-		requestBody = body
+		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {
@@ -151,15 +146,12 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
-	if observed, ok := usage.(*dto.Usage); ok {
-		info.CaptureResponseUsage(observed, "text", nil)
-	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
 
-	info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
+	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
 }

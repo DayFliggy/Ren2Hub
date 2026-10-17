@@ -5,54 +5,60 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"math"
-	"os"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/QuantumNous/new-api/common"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+	"log"
+	"path/filepath"
+	"testing"
 )
 
-func insertGmpaySnapshotTestOrder(t *testing.T, order *TopUp, quota common.Quota, key string) GmpayPayment {
+func useGmpayTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	oldDB, oldLog := DB, LOG_DB
+	oldType, oldLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	oldRedis := common.RedisEnabled
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "payment.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(&User{}, &TopUp{}, &Log{}, &Option{}, &GmpayMerchantVersion{}, &GmpayOrder{}))
+	DB, LOG_DB = db, db
+	common.RedisEnabled = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+	common.SetLogDatabaseType(common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		DB, LOG_DB = oldDB, oldLog
+		common.RedisEnabled = oldRedis
+		common.SetMainDatabaseType(oldType)
+		common.SetLogDatabaseType(oldLogType)
+		sqlDB.Close()
+	})
+	return db
+}
+func insertGmpaySnapshotTestOrder(t *testing.T, order *TopUp, quota int, key string) GmpayPayment {
 	t.Helper()
 	snapshot := GmpayOrder{
-		InputAmount: int64(quota), AmountUnit: "TOKENS", AmountMinor: 1000, Currency: "USD",
-		ExpectedQuota: quota, UnitPrice: "1", GroupRatio: "1", Discount: "1",
-		QuoteFingerprint: "test-quote", Token: "usdt", Network: "tron",
+		AmountMinor: 1000, Currency: "CNY",
+		ExpectedQuota: quota,
+		Token:         "usdt", Network: "tron",
 	}
 	merchant := GmpayMerchantVersion{GatewayURL: "https://payments.example.test", MerchantID: "merchant-1", Key: key}
 	require.NoError(t, CreateGmpayOrder(context.Background(), order, &snapshot, &merchant))
 	return GmpayPayment{
 		OrderNo: order.TradeNo, MerchantID: merchant.MerchantID, MerchantVersionID: merchant.ID,
 		GatewayTradeNo: "receipt-" + order.TradeNo, AmountMinor: snapshot.AmountMinor,
-		Token: snapshot.Token, PaymentMethod: order.PaymentMethod,
+		Token:        snapshot.Token,
 		ActualAmount: "9.99", ReceiveAddress: "final-address", BlockTransactionID: "block-" + order.TradeNo,
 	}
 }
 
-func gmpayPaymentForTest(t *testing.T, order TopUp, method string) GmpayPayment {
-	t.Helper()
-	payment := GmpayPayment{OrderNo: order.TradeNo, PaymentMethod: method}
-	if order.PaymentProvider != PaymentProviderGmpay {
-		return payment
-	}
-	_, snapshot, merchant, err := GetGmpayOrder(context.Background(), order.TradeNo)
-	require.NoError(t, err)
-	payment.MerchantID, payment.MerchantVersionID = merchant.MerchantID, merchant.ID
-	payment.GatewayTradeNo, payment.AmountMinor, payment.Token = "receipt-"+order.TradeNo, snapshot.AmountMinor, snapshot.Token
-	payment.ActualAmount, payment.ReceiveAddress, payment.BlockTransactionID = "9.99", "final-address", "block-"+order.TradeNo
-	return payment
-}
-
 func TestGmpayMerchantVersionReuseRotationAndReceiptUniqueness(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	user := User{Username: "gmpay-versions", AffCode: "gmpay-versions"}
 	require.NoError(t, db.Create(&user).Error)
 	orders := make([]TopUp, 3)
@@ -83,11 +89,11 @@ func TestGmpayMerchantVersionReuseRotationAndReceiptUniqueness(t *testing.T) {
 		assert.Equal(t, common.TopUpStatusPending, GetTopUpByTradeNo(orders[index].TradeNo).Status)
 	}
 	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, common.Quota(750_000), user.Quota)
+	assert.Equal(t, int(750_000), user.Quota)
 }
 
 func TestGmpayMerchantFailureDoesNotLogOrReturnSecrets(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	var output bytes.Buffer
 	db.Logger = gormlogger.New(log.New(&output, "", 0), gormlogger.Config{LogLevel: gormlogger.Info})
 	secret := "private-test-credential"
@@ -100,7 +106,7 @@ func TestGmpayMerchantFailureDoesNotLogOrReturnSecrets(t *testing.T) {
 	err := CreateGmpayOrder(
 		context.Background(),
 		&TopUp{TradeNo: "gmpay-private-order", PaymentProvider: PaymentProviderGmpay},
-		&GmpayOrder{ExpectedQuota: 1, AmountMinor: 1, Currency: "USD", Token: "usdt", Network: "tron"},
+		&GmpayOrder{ExpectedQuota: 1, AmountMinor: 1, Currency: "CNY", Token: "usdt", Network: "tron"},
 		&GmpayMerchantVersion{GatewayURL: "https://payments.example.test", MerchantID: "merchant", Key: secret},
 	)
 	require.ErrorIs(t, err, ErrGmpayMerchantUnavailable)
@@ -109,7 +115,7 @@ func TestGmpayMerchantFailureDoesNotLogOrReturnSecrets(t *testing.T) {
 }
 
 func TestRechargeGmpayRejectsMismatchedReceiptBeforeAndAfterSuccess(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	user := User{Username: "gmpay-receipt-owner", AffCode: "gmpay-receipt-owner"}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "gmpay-receipt-order", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -145,11 +151,11 @@ func TestRechargeGmpayRejectsMismatchedReceiptBeforeAndAfterSuccess(t *testing.T
 	require.NoError(t, err)
 	assert.True(t, already)
 	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, common.Quota(750_000), user.Quota)
+	assert.Equal(t, int(750_000), user.Quota)
 }
 
 func TestGmpaySettlementRequiresSnapshot(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	user := User{Username: "gmpay-missing-snapshot", AffCode: "gmpay-missing-snapshot"}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "gmpay-missing-snapshot", Amount: 10, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -159,17 +165,17 @@ func TestGmpaySettlementRequiresSnapshot(t *testing.T) {
 	require.ErrorIs(t, ManualCompleteTopUp(order.TradeNo, ""), ErrGmpaySnapshotMissing)
 	require.NoError(t, db.First(&order, order.Id).Error)
 	assert.Equal(t, common.TopUpStatusPending, order.Status)
-	assert.Zero(t, order.CreditedQuota)
+
 }
 
 func TestCreateGmpayOrderRejectsIncompleteSnapshot(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	user := User{Username: "gmpay-snapshot-metadata", AffCode: "gmpay-snapshot-metadata"}
 	require.NoError(t, db.Create(&user).Error)
 	base := GmpayOrder{
-		InputAmount: 750_000, AmountUnit: "TOKENS", AmountMinor: 1000, Currency: "USD",
-		ExpectedQuota: 750_000, UnitPrice: "1", GroupRatio: "1", Discount: "1",
-		QuoteFingerprint: "test-quote", Token: "usdt", Network: "tron",
+		AmountMinor: 1000, Currency: "CNY",
+		ExpectedQuota: 750_000,
+		Token:         "usdt", Network: "tron",
 	}
 	merchant := GmpayMerchantVersion{GatewayURL: "https://payments.example.test", MerchantID: "merchant-1", Key: "test-key"}
 	for _, test := range []struct {
@@ -178,7 +184,7 @@ func TestCreateGmpayOrderRejectsIncompleteSnapshot(t *testing.T) {
 	}{
 		{"missing chain", func(s *GmpayOrder) { s.Network = "" }},
 		{"missing token", func(s *GmpayOrder) { s.Token = "" }},
-		{"non-USD currency", func(s *GmpayOrder) { s.Currency = "CNY" }},
+		{"wrong currency", func(s *GmpayOrder) { s.Currency = "USD" }},
 		{"zero frozen quota", func(s *GmpayOrder) { s.ExpectedQuota = 0 }},
 		{"zero payable amount", func(s *GmpayOrder) { s.AmountMinor = 0 }},
 	} {
@@ -196,14 +202,14 @@ func TestCreateGmpayOrderRejectsIncompleteSnapshot(t *testing.T) {
 }
 
 func TestManualCompleteGmpayUsesFrozenQuotaAndAcceptsLaterReceipt(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	user := User{Username: "gmpay-manual-payer", AffCode: "gmpay-manual-payer"}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "gmpay-manual-order", Amount: 1, Money: 1, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
 	payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
 	require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
 	require.NoError(t, db.First(&order, order.Id).Error)
-	assert.Equal(t, common.Quota(750_000), order.CreditedQuota)
+
 	var snapshot GmpayOrder
 	require.NoError(t, db.First(&snapshot, order.Id).Error)
 	assert.Nil(t, snapshot.GatewayTradeNo, "forced completion does not require a gateway receipt")
@@ -225,16 +231,14 @@ func TestManualCompleteGmpayUsesFrozenQuotaAndAcceptsLaterReceipt(t *testing.T) 
 	assert.Equal(t, payment.ReceiveAddress, snapshot.SettledReceiveAddress)
 	assert.Equal(t, payment.BlockTransactionID, snapshot.SettledTransactionID)
 	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, common.Quota(750_000), user.Quota)
+	assert.Equal(t, int(750_000), user.Quota)
 	var count int64
-	require.NoError(t, db.Model(&BillingEvent{}).Count(&count).Error)
-	assert.EqualValues(t, 1, count)
 	require.NoError(t, db.Model(&Log{}).Count(&count).Error)
 	assert.EqualValues(t, 1, count, "repeated manual completion must not create a false zero-amount top-up log")
 }
 
 func TestGmpayCreateResponseBindsReceiptBeforeSettlement(t *testing.T) {
-	db := useWalletIngressDB(t)
+	db := useGmpayTestDB(t)
 	user := User{Username: "gmpay-create-receipt", AffCode: "gmpay-create-receipt"}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "gmpay-create-receipt", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -291,13 +295,13 @@ func TestGmpayCreateResponseBindsReceiptBeforeSettlement(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, already)
 	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, common.Quota(750_000), user.Quota)
+	assert.Equal(t, int(750_000), user.Quota)
 }
 
 func TestGmpayLateCreateResultPreservesCompletedOrder(t *testing.T) {
 	for _, manual := range []bool{false, true} {
 		t.Run(fmt.Sprintf("manual=%t", manual), func(t *testing.T) {
-			db := useWalletIngressDB(t)
+			db := useGmpayTestDB(t)
 			user := User{Username: "gmpay-early-settlement", AffCode: "gmpay-early-settlement"}
 			require.NoError(t, db.Create(&user).Error)
 			order := TopUp{UserId: user.Id, TradeNo: "gmpay-early-settlement", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -341,42 +345,8 @@ func TestGmpayLateCreateResultPreservesCompletedOrder(t *testing.T) {
 			assert.Equal(t, payment.ReceiveAddress, snapshot.SettledReceiveAddress)
 			assert.Equal(t, payment.BlockTransactionID, snapshot.SettledTransactionID)
 			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Equal(t, common.Quota(750_000), user.Quota)
-			var events int64
-			require.NoError(t, db.Model(&BillingEvent{}).Count(&events).Error)
-			assert.EqualValues(t, 1, events)
-		})
-	}
-}
+			assert.Equal(t, int(750_000), user.Quota)
 
-func TestGmpaySettlementPauseRejectsCreditButAllowsForcedCompletion(t *testing.T) {
-	for _, setting := range []string{"false", "invalid"} {
-		t.Run(setting, func(t *testing.T) {
-			db := useWalletIngressDB(t)
-			user := User{Username: "gmpay-paused-payer", AffCode: "gmpay-paused-payer"}
-			require.NoError(t, db.Create(&user).Error)
-			order := TopUp{UserId: user.Id, TradeNo: "gmpay-paused-order", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-			payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
-			require.NoError(t, db.Create(&Option{Key: "payment_setting.gmpay_settlement_enabled", Value: setting}).Error)
-			_, err := RechargeGmpay(payment, "")
-			require.Error(t, err)
-			if setting == "false" {
-				assert.ErrorIs(t, err, ErrGmpaySettlementPaused)
-			}
-			require.NoError(t, db.First(&order, order.Id).Error)
-			assert.Equal(t, common.TopUpStatusPending, order.Status)
-			assert.Zero(t, order.CreditedQuota)
-			var snapshot GmpayOrder
-			require.NoError(t, db.First(&snapshot, order.Id).Error)
-			assert.Nil(t, snapshot.GatewayTradeNo, "a paused settlement must not record the gateway receipt")
-			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Zero(t, user.Quota)
-			var count int64
-			require.NoError(t, db.Model(&BillingEvent{}).Count(&count).Error)
-			assert.Zero(t, count)
-			require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
-			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Equal(t, common.Quota(750_000), user.Quota)
 		})
 	}
 }
@@ -384,7 +354,7 @@ func TestGmpaySettlementPauseRejectsCreditButAllowsForcedCompletion(t *testing.T
 func TestGmpayVerifiedPaymentSettlesFailedAndUnknownCreations(t *testing.T) {
 	for _, status := range []string{GmpayStatusFailed, GmpayStatusUnknown} {
 		t.Run(status, func(t *testing.T) {
-			db := useWalletIngressDB(t)
+			db := useGmpayTestDB(t)
 			user := User{Username: "gmpay-late-proof", AffCode: "gmpay-late-proof"}
 			require.NoError(t, db.Create(&user).Error)
 			order := TopUp{UserId: user.Id, TradeNo: "gmpay-late-proof", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -407,14 +377,14 @@ func TestGmpayVerifiedPaymentSettlesFailedAndUnknownCreations(t *testing.T) {
 			require.NoError(t, err)
 			assert.True(t, already)
 			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Equal(t, common.Quota(750_000), user.Quota)
+			assert.Equal(t, int(750_000), user.Quota)
 		})
 	}
 }
 
 func TestRechargeGmpayKeepsOrderPendingWhenWalletCannotHoldQuota(t *testing.T) {
-	db := useWalletIngressDB(t)
-	user := User{Username: "gmpay-full-wallet", AffCode: "gmpay-full-wallet", Quota: math.MaxInt64}
+	db := useGmpayTestDB(t)
+	user := User{Username: "gmpay-full-wallet", AffCode: "gmpay-full-wallet", Quota: common.MaxWalletQuota}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "gmpay-wallet-limit", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
 	payment := insertGmpaySnapshotTestOrder(t, &order, 500_000, "test-key")
@@ -422,444 +392,20 @@ func TestRechargeGmpayKeepsOrderPendingWhenWalletCannotHoldQuota(t *testing.T) {
 	require.ErrorIs(t, err, ErrTopUpQuotaLimitExceeded)
 	require.NoError(t, db.First(&order, order.Id).Error)
 	assert.Equal(t, common.TopUpStatusPending, order.Status)
-	assert.Zero(t, order.CreditedQuota)
+
 	var snapshot GmpayOrder
 	require.NoError(t, db.First(&snapshot, order.Id).Error)
 	assert.Nil(t, snapshot.GatewayTradeNo, "an unsettled wallet limit must not consume the receipt")
 	assert.Empty(t, snapshot.SettledCryptoAmount)
 	assert.Empty(t, snapshot.SettledReceiveAddress)
 	assert.Empty(t, snapshot.SettledTransactionID)
-	var events int64
-	require.NoError(t, db.Model(&BillingEvent{}).Count(&events).Error)
-	assert.Zero(t, events)
-}
 
-func TestGmpayReceiptAndAffiliateRollbackWithFailedCredit(t *testing.T) {
-	db := useWalletIngressDB(t)
-	enableAffiliatePaymentTest(t)
-	inviter := User{Username: "gmpay-rollback-inviter", AffCode: "gmpay-rollback-inviter", AffCodeEnabled: true}
-	require.NoError(t, db.Create(&inviter).Error)
-	user := User{Username: "gmpay-rollback-payer", AffCode: "gmpay-rollback-payer", InviterId: inviter.Id}
-	require.NoError(t, db.Create(&user).Error)
-	order := TopUp{UserId: user.Id, TradeNo: "gmpay-rollback-order", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending, CreateTime: time.Now().Unix(), AffiliateBaseQuota: 750_000}
-	payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
-	injected := errors.New("affiliate insert failed")
-	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("fail_gmpay_affiliate", func(tx *gorm.DB) {
-		if tx.Statement.Table == "affiliate_ledgers" {
-			tx.AddError(injected)
-		}
-	}))
-	t.Cleanup(func() { db.Callback().Create().Remove("fail_gmpay_affiliate") })
-	_, err := RechargeGmpay(payment, "")
-	require.ErrorIs(t, err, injected)
-	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Zero(t, user.Quota)
-	require.NoError(t, db.First(&inviter, inviter.Id).Error)
-	assert.Zero(t, inviter.AffQuota)
-	require.NoError(t, db.First(&order, order.Id).Error)
-	assert.Equal(t, common.TopUpStatusPending, order.Status)
-	assert.Zero(t, order.CreditedQuota)
-	var snapshot GmpayOrder
-	require.NoError(t, db.First(&snapshot, order.Id).Error)
-	assert.Nil(t, snapshot.GatewayTradeNo)
-	assert.Empty(t, snapshot.SettledCryptoAmount)
-	assert.Empty(t, snapshot.SettledReceiveAddress)
-	assert.Empty(t, snapshot.SettledTransactionID)
-	var count int64
-	require.NoError(t, db.Model(&BillingEvent{}).Count(&count).Error)
-	assert.Zero(t, count)
-	require.NoError(t, db.Model(&AffiliateLedger{}).Count(&count).Error)
-	assert.Zero(t, count)
-}
-
-func TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases(t *testing.T) {
-	for _, backend := range []struct {
-		kind common.DatabaseType
-		env  string
-	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
-		t.Run(string(backend.kind), func(t *testing.T) {
-			dsn := os.Getenv(backend.env)
-			if backend.env != "" && dsn == "" {
-				t.Skip(backend.env + " must target an isolated test database")
-			}
-			db, err := gatewayStartupDatabase(t, backend.kind, dsn)()
-			require.NoError(t, err)
-			previousDB, previousLog := DB, LOG_DB
-			previousKind, previousLogKind := common.MainDatabaseType(), common.LogDatabaseType()
-			DB, LOG_DB = db, db
-			common.SetDatabaseTypes(backend.kind, backend.kind)
-			initCol()
-			connection, err := db.DB()
-			require.NoError(t, err)
-			if backend.kind == common.DatabaseTypeSQLite {
-				connection.SetMaxOpenConns(1)
-			}
-			t.Cleanup(func() {
-				DB, LOG_DB = previousDB, previousLog
-				common.SetDatabaseTypes(previousKind, previousLogKind)
-				initCol()
-				require.NoError(t, connection.Close())
-			})
-			// Upgrade the existing 50-character payment-method column before
-			// storing a GMPay method composed of two 32-character identifiers.
-			legacyTopUp := struct {
-				TopUp
-				PaymentMethod string `gorm:"type:varchar(50)"`
-			}{TopUp: TopUp{TradeNo: "pre-gmpay-payment", Status: common.TopUpStatusSuccess, CreditedQuota: 2_000_000}, PaymentMethod: "alipay"}
-			require.NoError(t, db.Table("top_ups").AutoMigrate(&legacyTopUp))
-			require.NoError(t, db.Table("top_ups").Create(&legacyTopUp).Error)
-			require.NoError(t, db.AutoMigrate(&User{}, &BillingEvent{}, &TopUp{}, &AffiliateLedger{}, &Log{}, &Option{}, &GmpayOrder{}, &GmpayMerchantVersion{}))
-			var migratedTopUp TopUp
-			require.NoError(t, db.First(&migratedTopUp, legacyTopUp.Id).Error)
-			assert.Equal(t, "alipay", migratedTopUp.PaymentMethod)
-			assert.Equal(t, common.TopUpStatusSuccess, migratedTopUp.Status)
-			assert.Equal(t, common.Quota(2_000_000), migratedTopUp.CreditedQuota)
-			enableAffiliatePaymentTest(t)
-			inviter := User{Username: "gmpay-race-inviter", AffCode: "gmpay-race-inviter", AffCodeEnabled: true}
-			require.NoError(t, db.Create(&inviter).Error)
-			user := User{Username: "gmpay-race-payer", AffCode: "gmpay-race-payer", InviterId: inviter.Id}
-			require.NoError(t, db.Create(&user).Error)
-
-			// Repeated migration of an already-settled installation must keep the
-			// frozen snapshot and the settled quota intact.
-			preserved := TopUp{UserId: user.Id, TradeNo: "gmpay-preserved-order", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-			preservedPayment := insertGmpaySnapshotTestOrder(t, &preserved, 750_000, "preserved-key")
-			require.NoError(t, db.AutoMigrate(&GmpayOrder{}, &GmpayMerchantVersion{}))
-			var preservedSnapshot GmpayOrder
-			require.NoError(t, db.First(&preservedSnapshot, preserved.Id).Error)
-			assert.Equal(t, common.Quota(750_000), preservedSnapshot.ExpectedQuota)
-			assert.Equal(t, "tron", preservedSnapshot.Network)
-			_, err = RechargeGmpay(preservedPayment, "")
-			require.NoError(t, err)
-			require.NoError(t, db.First(&preserved, preserved.Id).Error)
-			assert.Equal(t, common.Quota(750_000), preserved.CreditedQuota)
-			require.NoError(t, db.AutoMigrate(&GmpayOrder{}, &GmpayMerchantVersion{}))
-			require.NoError(t, db.First(&preserved, preserved.Id).Error)
-			assert.Equal(t, common.Quota(750_000), preserved.CreditedQuota)
-			assert.Equal(t, common.TopUpStatusSuccess, preserved.Status)
-			require.NoError(t, db.First(&preservedSnapshot, preserved.Id).Error)
-			assert.Equal(t, preservedPayment.ActualAmount, preservedSnapshot.SettledCryptoAmount)
-			assert.Equal(t, preservedPayment.ReceiveAddress, preservedSnapshot.SettledReceiveAddress)
-			assert.Equal(t, preservedPayment.BlockTransactionID, preservedSnapshot.SettledTransactionID)
-
-			for index, manual := range []bool{false, true} {
-				order := TopUp{UserId: user.Id, TradeNo: fmt.Sprintf("gmpay-race-order-%d", index), Amount: 1, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending, CreateTime: time.Now().Unix(), AffiliateBaseQuota: 750_000}
-				payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
-				start := make(chan struct{})
-				var wg sync.WaitGroup
-				var outcomes [3]error
-				wg.Add(3)
-				go func() { defer wg.Done(); <-start; _, outcomes[0] = RechargeGmpay(payment, "") }()
-				go func() {
-					defer wg.Done()
-					<-start
-					if manual {
-						outcomes[1] = ManualCompleteTopUp(order.TradeNo, "")
-					} else {
-						_, outcomes[1] = RechargeGmpay(payment, "")
-					}
-				}()
-				go func() {
-					defer wg.Done()
-					<-start
-					outcomes[2] = MarkGmpayOrderResult(context.Background(), order.Id, GmpayOrderResult{
-						Status: GmpayStatusReady, GatewayTradeNo: payment.GatewayTradeNo, GatewayAmount: "10.00",
-						GatewayCryptoAmount: "9.99", ReceiveAddress: "test-address", ExpirationTime: 1893456000,
-					})
-				}()
-				close(start)
-				wg.Wait()
-				for _, outcome := range outcomes {
-					require.NoError(t, outcome)
-				}
-				require.NoError(t, db.First(&order, order.Id).Error)
-				assert.Equal(t, common.Quota(750_000), order.CreditedQuota)
-				var snapshot GmpayOrder
-				require.NoError(t, db.First(&snapshot, order.Id).Error)
-				require.NotNil(t, snapshot.GatewayTradeNo)
-				assert.Equal(t, payment.GatewayTradeNo, *snapshot.GatewayTradeNo)
-				assert.Equal(t, GmpayStatusSettled, snapshot.Status)
-				assert.Equal(t, "10.00", snapshot.GatewayAmount)
-				assert.Equal(t, payment.ActualAmount, snapshot.SettledCryptoAmount)
-				assert.Equal(t, payment.ReceiveAddress, snapshot.SettledReceiveAddress)
-				assert.Equal(t, payment.BlockTransactionID, snapshot.SettledTransactionID)
-			}
-			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Equal(t, common.Quota(2_250_000), user.Quota)
-			require.NoError(t, db.First(&inviter, inviter.Id).Error)
-			assert.Equal(t, common.Quota(150_000), inviter.AffQuota)
-			var ledgerCount int64
-			require.NoError(t, db.Model(&AffiliateLedger{}).Count(&ledgerCount).Error)
-			assert.EqualValues(t, 2, ledgerCount)
-
-			duplicate := TopUp{UserId: user.Id, TradeNo: "gmpay-duplicate-receipt", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-			duplicatePayment := insertGmpaySnapshotTestOrder(t, &duplicate, 750_000, "rotated-key")
-			duplicatePayment.GatewayTradeNo = "receipt-gmpay-race-order-0"
-			_, err = RechargeGmpay(duplicatePayment, "")
-			require.Error(t, err, "a gateway trade number cannot be claimed by a second local order")
-			require.NoError(t, db.First(&duplicate, duplicate.Id).Error)
-			assert.Equal(t, common.TopUpStatusPending, duplicate.Status)
-			var duplicateSnapshot GmpayOrder
-			require.NoError(t, db.First(&duplicateSnapshot, duplicate.Id).Error)
-			assert.Nil(t, duplicateSnapshot.GatewayTradeNo)
-
-			pausedOrder := TopUp{UserId: user.Id, TradeNo: "gmpay-pause-wins", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-			pausedPayment := insertGmpaySnapshotTestOrder(t, &pausedOrder, 750_000, "test-key")
-			pauseTx := db.Begin()
-			require.NoError(t, pauseTx.Error)
-			defer pauseTx.Rollback()
-			require.NoError(t, pauseTx.Model(&Option{}).Where(&Option{Key: "payment_setting.gmpay_settlement_enabled"}).Update("value", "false").Error)
-			attempted := make(chan struct{}, 1)
-			require.NoError(t, db.Callback().Create().Before("gorm:create").Register("observe_paused_gmpay_settlement", func(tx *gorm.DB) {
-				if tx.Statement.Table == "options" {
-					select {
-					case attempted <- struct{}{}:
-					default:
-					}
-				}
-			}))
-			t.Cleanup(func() { db.Callback().Create().Remove("observe_paused_gmpay_settlement") })
-			settlementResult := make(chan error, 1)
-			go func() { _, err := RechargeGmpay(pausedPayment, ""); settlementResult <- err }()
-			// SQLite's single writer connection itself queues this transaction.
-			// Other databases begin concurrently and contend on the option row.
-			if backend.kind != common.DatabaseTypeSQLite {
-				select {
-				case <-attempted:
-				case <-time.After(5 * time.Second):
-					t.Fatal("settlement did not reach the option lock")
-				}
-			}
-			require.NoError(t, pauseTx.Commit().Error)
-			select {
-			case err := <-settlementResult:
-				require.ErrorIs(t, err, ErrGmpaySettlementPaused)
-			case <-time.After(5 * time.Second):
-				t.Fatal("settlement did not finish after pause committed")
-			}
-			require.NoError(t, db.First(&pausedOrder, pausedOrder.Id).Error)
-			assert.Equal(t, common.TopUpStatusPending, pausedOrder.Status)
-			assert.Zero(t, pausedOrder.CreditedQuota)
-			var pausedSnapshot GmpayOrder
-			require.NoError(t, db.First(&pausedSnapshot, pausedOrder.Id).Error)
-			assert.Nil(t, pausedSnapshot.GatewayTradeNo)
-			require.NoError(t, db.Model(&Option{}).Where(&Option{Key: "payment_setting.gmpay_settlement_enabled"}).Update("value", "true").Error)
-
-			t.Run("maximum asset method", func(t *testing.T) {
-				asset := strings.Repeat("a", 32)
-				order := TopUp{UserId: user.Id, TradeNo: "gmpay-max-method", PaymentMethod: "gmpay:" + asset + "." + asset, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-				snapshot := GmpayOrder{ExpectedQuota: 1, AmountMinor: 1, Currency: "USD", Token: asset, Network: asset}
-				merchant := GmpayMerchantVersion{GatewayURL: "https://payments.example.test", MerchantID: "merchant-1", Key: "test-key"}
-				require.NoError(t, CreateGmpayOrder(context.Background(), &order, &snapshot, &merchant))
-				var restored TopUp
-				require.NoError(t, db.First(&restored, order.Id).Error)
-				assert.Equal(t, order.PaymentMethod, restored.PaymentMethod)
-			})
-			t.Run("creation rollback", func(t *testing.T) { gmpayCreationRollback(t, db) })
-			t.Run("settlement rollback and retry", func(t *testing.T) { gmpaySettlementRollbackAndRetry(t, db) })
-			t.Run("concurrent receipt claims", func(t *testing.T) { gmpayConcurrentReceiptClaims(t, db) })
-			t.Run("manual receipt rollback and retry", func(t *testing.T) { gmpayManualReceiptRollbackAndRetry(t, db) })
-		})
-	}
-}
-
-func gmpayCreationRollback(t *testing.T, db *gorm.DB) {
-	t.Helper()
-	for _, table := range []string{"top_ups", "gmpay_orders"} {
-		t.Run(table, func(t *testing.T) {
-			var ordersBefore, snapshotsBefore, merchantsBefore int64
-			require.NoError(t, db.Model(&TopUp{}).Count(&ordersBefore).Error)
-			require.NoError(t, db.Model(&GmpayOrder{}).Count(&snapshotsBefore).Error)
-			require.NoError(t, db.Model(&GmpayMerchantVersion{}).Count(&merchantsBefore).Error)
-			injected := errors.New("injected create failure")
-			require.NoError(t, db.Callback().Create().Before("gorm:create").Register("gmpay_create_rollback", func(tx *gorm.DB) {
-				if tx.Statement.Table == table {
-					tx.AddError(injected)
-				}
-			}))
-			t.Cleanup(func() { db.Callback().Create().Remove("gmpay_create_rollback") })
-			order := TopUp{TradeNo: "gmpay-create-rollback-" + table, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-			snapshot := GmpayOrder{ExpectedQuota: 1, AmountMinor: 1, Currency: "USD", Token: "usdt", Network: "tron"}
-			merchant := GmpayMerchantVersion{GatewayURL: "https://payments.example.test", MerchantID: "rollback-" + table, Key: "test-key"}
-			require.ErrorIs(t, CreateGmpayOrder(context.Background(), &order, &snapshot, &merchant), injected)
-			var count int64
-			require.NoError(t, db.Model(&TopUp{}).Count(&count).Error)
-			assert.Equal(t, ordersBefore, count)
-			require.NoError(t, db.Model(&GmpayOrder{}).Count(&count).Error)
-			assert.Equal(t, snapshotsBefore, count)
-			require.NoError(t, db.Model(&GmpayMerchantVersion{}).Count(&count).Error)
-			assert.Equal(t, merchantsBefore, count)
-		})
-	}
-}
-
-func gmpaySettlementRollbackAndRetry(t *testing.T, db *gorm.DB) {
-	t.Helper()
-	for _, test := range []struct {
-		name   string
-		table  string
-		manual bool
-	}{
-		{"billing event", "billing_events", false},
-		{"affiliate reward", "affiliate_ledgers", false},
-		{"manual billing event", "billing_events", true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			id := strings.ReplaceAll(test.name, " ", "-")
-			inviter := User{Username: "gmpay-fail-inviter-" + id, AffCode: "fi-" + id, AffCodeEnabled: true}
-			require.NoError(t, db.Create(&inviter).Error)
-			user := User{Username: "gmpay-fail-payer-" + id, AffCode: "fp-" + id, InviterId: inviter.Id}
-			require.NoError(t, db.Create(&user).Error)
-			order := TopUp{UserId: user.Id, TradeNo: "gmpay-failure-" + id, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending, CreateTime: time.Now().Unix(), AffiliateBaseQuota: 750_000}
-			payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
-			injected := errors.New("injected settlement failure")
-			require.NoError(t, db.Callback().Create().Before("gorm:create").Register("gmpay_settlement_rollback", func(tx *gorm.DB) {
-				if tx.Statement.Table == test.table {
-					tx.AddError(injected)
-				}
-			}))
-			t.Cleanup(func() { db.Callback().Create().Remove("gmpay_settlement_rollback") })
-			var err error
-			if test.manual {
-				err = ManualCompleteTopUp(order.TradeNo, "")
-			} else {
-				_, err = RechargeGmpay(payment, "")
-			}
-			require.ErrorIs(t, err, injected)
-			require.NoError(t, db.First(&order, order.Id).Error)
-			assert.Equal(t, common.TopUpStatusPending, order.Status)
-			assert.Zero(t, order.CreditedQuota)
-			assert.Zero(t, order.CompleteTime)
-			var snapshot GmpayOrder
-			require.NoError(t, db.First(&snapshot, order.Id).Error)
-			assert.Equal(t, GmpayStatusCreating, snapshot.Status)
-			assert.Nil(t, snapshot.GatewayTradeNo)
-			assert.Empty(t, snapshot.SettledCryptoAmount)
-			assert.Empty(t, snapshot.SettledReceiveAddress)
-			assert.Empty(t, snapshot.SettledTransactionID)
-			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Zero(t, user.Quota)
-			require.NoError(t, db.First(&inviter, inviter.Id).Error)
-			assert.Zero(t, inviter.AffQuota)
-			var count int64
-			require.NoError(t, db.Model(&BillingEvent{}).Where("user_id = ?", user.Id).Count(&count).Error)
-			assert.Zero(t, count)
-			require.NoError(t, db.Model(&AffiliateLedger{}).Where("invitee_id = ?", user.Id).Count(&count).Error)
-			assert.Zero(t, count)
-
-			require.NoError(t, db.Callback().Create().Remove("gmpay_settlement_rollback"))
-			already, err := RechargeGmpay(payment, "")
-			require.NoError(t, err)
-			assert.False(t, already)
-			already, err = RechargeGmpay(payment, "")
-			require.NoError(t, err)
-			assert.True(t, already)
-			require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
-			require.NoError(t, db.First(&user, user.Id).Error)
-			assert.Equal(t, common.Quota(750_000), user.Quota)
-			require.NoError(t, db.First(&inviter, inviter.Id).Error)
-			assert.Equal(t, common.Quota(75_000), inviter.AffQuota)
-			require.NoError(t, db.Model(&BillingEvent{}).Where("user_id = ?", user.Id).Count(&count).Error)
-			assert.EqualValues(t, 1, count)
-			require.NoError(t, db.Model(&AffiliateLedger{}).Where("invitee_id = ?", user.Id).Count(&count).Error)
-			assert.EqualValues(t, 1, count)
-		})
-	}
-}
-
-func gmpayConcurrentReceiptClaims(t *testing.T, db *gorm.DB) {
-	t.Helper()
-	user := User{Username: "gmpay-claim-payer", AffCode: "gmpay-claim-payer"}
-	require.NoError(t, db.Create(&user).Error)
-	var orders [2]TopUp
-	var payments [2]GmpayPayment
-	for index := range orders {
-		orders[index] = TopUp{UserId: user.Id, TradeNo: fmt.Sprintf("gmpay-claim-%d", index), PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-		payments[index] = insertGmpaySnapshotTestOrder(t, &orders[index], 750_000, "test-key")
-		payments[index].GatewayTradeNo = "gmpay-contested-receipt"
-	}
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	var outcomes [2]error
-	for index := range orders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			outcomes[index] = MarkGmpayOrderResult(context.Background(), orders[index].Id, GmpayOrderResult{
-				Status: GmpayStatusReady, GatewayTradeNo: payments[index].GatewayTradeNo, GatewayAmount: "10.00",
-				GatewayCryptoAmount: "9.99", ReceiveAddress: "test-address", ExpirationTime: 1893456000,
-			})
-		}()
-	}
-	close(start)
-	wg.Wait()
-	accepted := 0
-	for index, err := range outcomes {
-		if err == nil {
-			accepted++
-			_, err = RechargeGmpay(payments[index], "")
-			require.NoError(t, err)
-			continue
-		}
-		var snapshot GmpayOrder
-		require.NoError(t, db.First(&snapshot, orders[index].Id).Error)
-		assert.Equal(t, GmpayStatusCreating, snapshot.Status)
-		assert.Nil(t, snapshot.GatewayTradeNo)
-		_, err = RechargeGmpay(payments[index], "")
-		require.Error(t, err)
-	}
-	assert.Equal(t, 1, accepted, "one receipt must have exactly one owner")
-	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, common.Quota(750_000), user.Quota)
-}
-
-func gmpayManualReceiptRollbackAndRetry(t *testing.T, db *gorm.DB) {
-	t.Helper()
-	user := User{Username: "gmpay-manual-proof", AffCode: "gmpay-manual-proof"}
-	require.NoError(t, db.Create(&user).Error)
-	order := TopUp{UserId: user.Id, TradeNo: "gmpay-manual-proof", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
-	payment := insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
-	require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
-	// A database failure while attaching evidence must not acknowledge a
-	// callback or leave half of its receipt behind on a manually credited order.
-	injected := errors.New("injected receipt write failure")
-	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("gmpay_manual_receipt_failure", func(tx *gorm.DB) {
-		if tx.Statement.Table == "gmpay_orders" {
-			tx.AddError(injected)
-		}
-	}))
-	t.Cleanup(func() { db.Callback().Update().Remove("gmpay_manual_receipt_failure") })
-	_, err := RechargeGmpay(payment, "")
-	require.ErrorIs(t, err, injected)
-	var snapshot GmpayOrder
-	require.NoError(t, db.First(&snapshot, order.Id).Error)
-	assert.Equal(t, GmpayStatusSettled, snapshot.Status)
-	assert.Nil(t, snapshot.GatewayTradeNo)
-	assert.Empty(t, snapshot.SettledCryptoAmount)
-	assert.Empty(t, snapshot.SettledReceiveAddress)
-	assert.Empty(t, snapshot.SettledTransactionID)
-	require.NoError(t, db.Callback().Update().Remove("gmpay_manual_receipt_failure"))
-	already, err := RechargeGmpay(payment, "")
-	require.NoError(t, err)
-	assert.True(t, already)
-	require.NoError(t, db.First(&snapshot, order.Id).Error)
-	require.NotNil(t, snapshot.GatewayTradeNo)
-	assert.Equal(t, payment.GatewayTradeNo, *snapshot.GatewayTradeNo)
-	assert.Equal(t, payment.ActualAmount, snapshot.SettledCryptoAmount)
-	assert.Equal(t, payment.ReceiveAddress, snapshot.SettledReceiveAddress)
-	assert.Equal(t, payment.BlockTransactionID, snapshot.SettledTransactionID)
-	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, common.Quota(750_000), user.Quota)
-	var count int64
-	require.NoError(t, db.Model(&BillingEvent{}).Where("user_id = ?", user.Id).Count(&count).Error)
-	assert.EqualValues(t, 1, count)
 }
 
 func TestGmpayNonPendingOrderDoesNotConsumePaymentEvidence(t *testing.T) {
 	for _, status := range []string{common.TopUpStatusFailed, common.TopUpStatusExpired} {
 		t.Run(status, func(t *testing.T) {
-			db := useWalletIngressDB(t)
+			db := useGmpayTestDB(t)
 			user := User{Username: "gmpay-inactive", AffCode: "gmpay-inactive"}
 			require.NoError(t, db.Create(&user).Error)
 			order := TopUp{UserId: user.Id, TradeNo: "gmpay-inactive", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -877,12 +423,10 @@ func TestGmpayNonPendingOrderDoesNotConsumePaymentEvidence(t *testing.T) {
 			assert.Empty(t, snapshot.SettledTransactionID)
 			require.NoError(t, db.First(&order, order.Id).Error)
 			assert.Equal(t, status, order.Status)
-			assert.Zero(t, order.CreditedQuota)
+
 			require.NoError(t, db.First(&user, user.Id).Error)
 			assert.Zero(t, user.Quota)
-			var events int64
-			require.NoError(t, db.Model(&BillingEvent{}).Count(&events).Error)
-			assert.Zero(t, events)
+
 		})
 	}
 }

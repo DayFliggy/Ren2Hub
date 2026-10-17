@@ -12,9 +12,7 @@ import (
 
 var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.0.0"            // this hard coding will be replaced automatically when building, no need to manually change
-const DefaultSystemName = "Ren2Hub"
-
-var SystemName = DefaultSystemName
+var SystemName = "Ren2Hub"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
@@ -67,6 +65,7 @@ var ItemsPerPage = 10
 var MaxRecentItems = 1000
 
 var PasswordLoginEnabled = true
+var PasswordLoginEncryptionEnabled = false
 var PasswordRegisterEnabled = true
 var EmailVerificationEnabled = false
 var GitHubOAuthEnabled = false
@@ -128,21 +127,17 @@ var TurnstileSecretKey = ""
 var TelegramBotToken = ""
 var TelegramBotName = ""
 
-var QuotaForNewUser Quota = 0
-var QuotaForInviter Quota = 0
-var QuotaForInvitee Quota = 0
-var AffiliateEnabled = false
-var AffiliateRegistrationRequired = false
-var AffiliateRebateRateBps = 1000
-var AffiliateFreezeHours = 168
-var AffiliateDurationDays = 0
-var AffiliatePerInviteeCap = "100"
-var AffiliateActivatedAt int64 = 0
+var QuotaForNewUser = 0
+var QuotaForInviter = 0
+var QuotaForInvitee = 0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
-var QuotaRemindThreshold Quota = 1000
-var PreConsumedQuota Quota = 500
+var QuotaRemindThreshold = 1000
+
+// PreConsumedQuota is retained for old option clients; token reservations now
+// use quota_setting.pre_consume_multiplier and the estimated input cost.
+var PreConsumedQuota = 500
 
 var RetryTimes = 0
 
@@ -176,6 +171,16 @@ var BatchUpdateInterval int
 var RelayTimeout int // unit is second
 
 var RelayIdleConnTimeout int // unit is second
+
+// RelayResponseHeaderTimeout limits how long the relay transport waits for the
+// upstream response headers after the request has been fully written.
+// 0 disables it (previous behaviour: wait forever).
+//
+// Note this is NOT the same as RelayTimeout (http.Client.Timeout), which covers
+// the whole response read and therefore breaks legitimate long streaming calls.
+// ResponseHeaderTimeout only bounds the wait for the response headers; once the
+// headers arrive, streaming is unaffected.
+var RelayResponseHeaderTimeout int // unit is second
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
 
@@ -225,12 +230,6 @@ var (
 	CriticalRateLimitEnable   bool
 	CriticalRateLimitNum            = 20
 	CriticalRateLimitDuration int64 = 20 * 60
-
-	// Every full page load restores the dashboard session through
-	// /api/user/auth/refresh, so it has its own IP budget instead of
-	// consuming the login budget above. Shares CriticalRateLimitEnable.
-	SessionRefreshRateLimitNum            = 60
-	SessionRefreshRateLimitDuration int64 = 60
 
 	UploadRateLimitNum            = 10
 	UploadRateLimitDuration int64 = 60

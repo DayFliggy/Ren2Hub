@@ -1,8 +1,6 @@
 package common
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"strings"
 	"sync"
 	"time"
@@ -11,15 +9,13 @@ import (
 )
 
 type verificationValue struct {
-	digest         [sha256.Size]byte
-	time           time.Time
-	failedAttempts int
+	code string
+	time time.Time
 }
 
 const (
 	EmailVerificationPurpose = "v"
 	PasswordResetPurpose     = "r"
-	verificationAttemptLimit = 5
 )
 
 var verificationMutex sync.Mutex
@@ -40,8 +36,8 @@ func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
 	verificationMap[purpose+key] = verificationValue{
-		digest: sha256.Sum256([]byte(code)),
-		time:   time.Now(),
+		code: code,
+		time: time.Now(),
 	}
 	if len(verificationMap) > verificationMapMaxSize {
 		removeExpiredPairs()
@@ -49,41 +45,14 @@ func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 }
 
 func VerifyCodeWithKey(key string, code string, purpose string) bool {
-	return verifyCodeWithKey(key, code, purpose, false)
-}
-
-// ConsumeVerificationCodeWithKey claims a reset token before any account write.
-// A failed account operation must not restore an already consumed token.
-func ConsumeVerificationCodeWithKey(key string, code string, purpose string) bool {
-	return verifyCodeWithKey(key, code, purpose, true)
-}
-
-func verifyCodeWithKey(key string, code string, purpose string, consume bool) bool {
-	digest := sha256.Sum256([]byte(code))
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
-	entryKey := purpose + key
-	value, okay := verificationMap[entryKey]
-	if !okay {
+	value, okay := verificationMap[purpose+key]
+	now := time.Now()
+	if !okay || int(now.Sub(value.time).Seconds()) >= VerificationValidMinutes*60 {
 		return false
 	}
-	if time.Since(value.time) >= time.Duration(VerificationValidMinutes)*time.Minute || value.failedAttempts >= verificationAttemptLimit {
-		delete(verificationMap, entryKey)
-		return false
-	}
-	if subtle.ConstantTimeCompare(digest[:], value.digest[:]) != 1 {
-		value.failedAttempts++
-		if value.failedAttempts >= verificationAttemptLimit {
-			delete(verificationMap, entryKey)
-		} else {
-			verificationMap[entryKey] = value
-		}
-		return false
-	}
-	if consume {
-		delete(verificationMap, entryKey)
-	}
-	return true
+	return code == value.code
 }
 
 func DeleteKey(key string, purpose string) {

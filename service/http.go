@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +19,7 @@ func CloseResponseBodyGracefully(httpResponse *http.Response) {
 	}
 	err := httpResponse.Body.Close()
 	if err != nil {
-		common.SysError("failed to close response body: " + err.Error())
+		common.SysError(common.LogText("failed to close response body: %s", err.Error()))
 	}
 }
 
@@ -41,20 +42,11 @@ func ShouldCopyUpstreamHeader(c *gin.Context, k string, v []string) bool {
 }
 
 func IOCopyBytesGracefully(c *gin.Context, src *http.Response, data []byte) {
-	if _, err := CopyResponseBytes(c, src, data); err != nil {
-		logger.LogError(c, fmt.Sprintf("failed to copy response body: %s", err.Error()))
-	}
-}
-
-// CopyResponseBytes returns actual delivery and write failures to handlers that
-// must distinguish completed output from a disconnected client for settlement.
-func CopyResponseBytes(c *gin.Context, src *http.Response, data []byte) (int, error) {
 	if c.Writer == nil {
-		return 0, fmt.Errorf("response writer is unavailable")
+		return
 	}
-	if err := BindGatewayOutput(c, data); err != nil {
-		return 0, err
-	}
+
+	body := io.NopCloser(bytes.NewBuffer(data))
 
 	// We shouldn't set the header before we parse the response body, because the parse part may fail.
 	// And then we will have to send an error response, but in this case, the header has already been set.
@@ -62,7 +54,7 @@ func CopyResponseBytes(c *gin.Context, src *http.Response, data []byte) (int, er
 	// For example, Postman will report error, and we cannot check the response at all.
 	if src != nil {
 		for k, v := range src.Header {
-			if len(v) == 0 || !ShouldCopyUpstreamHeader(c, k, v) {
+			if !ShouldCopyUpstreamHeader(c, k, v) {
 				continue
 			}
 			c.Writer.Header().Set(k, v[0])
@@ -79,12 +71,9 @@ func CopyResponseBytes(c *gin.Context, src *http.Response, data []byte) (int, er
 		c.Writer.WriteHeader(http.StatusOK)
 	}
 
-	n, err := c.Writer.Write(data)
-	if err == nil && n != len(data) {
-		err = io.ErrShortWrite
+	_, err := io.Copy(c.Writer, body)
+	if err != nil {
+		logger.LogError(c, common.LogText("failed to copy response body: %s", err.Error()))
 	}
-	if err == nil {
-		c.Writer.Flush()
-	}
-	return n, err
+	c.Writer.Flush()
 }

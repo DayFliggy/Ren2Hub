@@ -119,33 +119,6 @@ func TestResponsesResponseToChatCompletionsPreservesReasoningSummary(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "first summary\n\nsecond summary", chat.Choices[0].Message.GetReasoningContent())
 	assert.Equal(t, "final", chat.Choices[0].Message.StringContent())
-	resp.Output[0].Content = []dto.ResponsesOutputContent{{Type: "summary_text", Text: "legacy summary"}}
-	assert.Equal(t, "first summary\n\nsecond summary", ExtractReasoningTextFromResponses(resp), "summary takes precedence over legacy content")
-	resp.Output[0].Summary = nil
-	assert.Equal(t, "legacy summary", ExtractReasoningTextFromResponses(resp))
-}
-
-func TestResponsesStreamTerminalPreservesReasoningSummaryWithoutRepeatingDeltas(t *testing.T) {
-	for _, sentDelta := range []bool{false, true} {
-		state := newTestResponsesStreamState()
-		var chunks []dto.ChatCompletionsStreamResponse
-		if sentDelta {
-			chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{Type: responsesEventReasoningSummaryDelta, Delta: "public explanation"})...)
-		}
-		chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{
-			Type: responsesEventCompleted,
-			Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Output: []dto.ResponsesOutput{
-				{Type: responsesOutputTypeReasoning, Summary: []dto.ResponsesReasoningSummaryPart{{Type: "summary_text", Text: "public explanation"}}},
-			}},
-		})...)
-		var reasoning string
-		for _, chunk := range chunks {
-			for _, choice := range chunk.Choices {
-				reasoning += choice.Delta.GetReasoningContent()
-			}
-		}
-		assert.Equal(t, "public explanation", reasoning)
-	}
 }
 
 func TestResponsesResponseToChatCompletionsSeparatesInterleavedOutputItems(t *testing.T) {
@@ -451,7 +424,6 @@ func TestResponsesStreamEventToChatChunksFailedEventReturnsError(t *testing.T) {
 func TestResponsesBufferedAccumulatorSupplementsEmptyTerminalOutput(t *testing.T) {
 	acc := NewResponsesBufferedAccumulator()
 	outputIndex := 1
-	acc.ProcessEvent(&dto.ResponsesStreamResponse{Type: responsesEventReasoningSummaryDelta, Delta: "buffered summary"})
 	acc.ProcessEvent(&dto.ResponsesStreamResponse{Type: responsesEventOutputTextDelta, Delta: "buffered text"})
 	acc.ProcessEvent(&dto.ResponsesStreamResponse{
 		Type:        responsesEventOutputItemAdded,
@@ -474,13 +446,10 @@ func TestResponsesBufferedAccumulatorSupplementsEmptyTerminalOutput(t *testing.T
 		Model:  "gpt-test",
 	}
 	acc.SupplementResponseOutput(resp)
-	require.NotEmpty(t, resp.Output)
-	assert.Equal(t, []dto.ResponsesReasoningSummaryPart{{Type: "summary_text", Text: "buffered summary"}}, resp.Output[0].Summary)
 
 	chat, _, err := ResponsesResponseToChatCompletionsResponse(resp, "chatcmpl_1")
 	require.NoError(t, err)
 	assert.Equal(t, "buffered text", chat.Choices[0].Message.StringContent())
-	assert.Equal(t, "buffered summary", chat.Choices[0].Message.GetReasoningContent())
 	toolCalls := chat.Choices[0].Message.ParseToolCalls()
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, `{"q":"x"}`, toolCalls[0].Function.Arguments)
@@ -618,51 +587,4 @@ func mustStreamChunks(t *testing.T, state *ResponsesToChatStreamState, event *dt
 	chunks, err := ResponsesStreamEventToChatChunks(event, state)
 	require.NoError(t, err)
 	return chunks
-}
-
-// A Responses refusal arrives as a type=refusal content part, not as output
-// text. Chat clients must receive it in the refusal field on every transport
-// instead of an empty assistant message with a normal stop.
-func TestResponsesRefusalReachesChatRefusalField(t *testing.T) {
-	refusalText := "I can't help with that."
-	refusalOutput := []dto.ResponsesOutput{{
-		Type: responsesOutputTypeMessage, Role: "assistant",
-		Content: []dto.ResponsesOutputContent{{Type: "refusal", Refusal: &refusalText}},
-	}}
-
-	t.Run("non-streaming", func(t *testing.T) {
-		response, _, err := ResponsesResponseToChatCompletionsResponse(&dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Output: refusalOutput}, "chatcmpl-refusal")
-		require.NoError(t, err)
-		require.Len(t, response.Choices, 1)
-		require.NotNil(t, response.Choices[0].Message.Refusal)
-		assert.Equal(t, refusalText, *response.Choices[0].Message.Refusal)
-	})
-
-	for _, sentDelta := range []bool{true, false} {
-		name := "streaming terminal snapshot only"
-		if sentDelta {
-			name = "streaming deltas"
-		}
-		t.Run(name, func(t *testing.T) {
-			state := newTestResponsesStreamState()
-			var chunks []dto.ChatCompletionsStreamResponse
-			if sentDelta {
-				chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{Type: responsesEventRefusalDelta, Delta: refusalText})...)
-				chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{Type: responsesEventRefusalDone, Refusal: &refusalText})...)
-			}
-			chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{
-				Type:     responsesEventCompleted,
-				Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Output: refusalOutput},
-			})...)
-			var refusal strings.Builder
-			for _, chunk := range chunks {
-				for _, choice := range chunk.Choices {
-					if choice.Delta.Refusal != nil {
-						refusal.WriteString(*choice.Delta.Refusal)
-					}
-				}
-			}
-			assert.Equal(t, refusalText, refusal.String(), "the refusal must be delivered exactly once")
-		})
-	}
 }

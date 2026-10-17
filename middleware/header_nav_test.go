@@ -52,14 +52,15 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 		previousDB, previousRedis := model.DB, common.RedisEnabled
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		require.NoError(t, err)
-		require.NoError(t, db.AutoMigrate(&model.User{}, &model.PersonalAccessToken{}))
+		require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}))
 		model.DB = db
 		common.RedisEnabled = false
+		require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))
 		t.Cleanup(func() {
 			model.DB = previousDB
 			common.RedisEnabled = previousRedis
 		})
-		accessToken = "pat_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+		accessToken = "header-nav-pat"
 		user := model.User{
 			Username:    "tester",
 			Password:    "unused-password-hash",
@@ -68,9 +69,8 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 			Group:       "default",
 			AuthVersion: 1,
 		}
+		user.SetAccessToken(accessToken)
 		require.NoError(t, db.Create(&user).Error)
-		require.NoError(t, db.Create(&model.PersonalAccessToken{UserID: user.Id, Name: "nav", Digest: model.PersonalAccessTokenDigest(accessToken), Scopes: []string{"profile:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
-		DeclarePATRoute("GET", "/api/test", "profile:read")
 	}
 
 	recorder := httptest.NewRecorder()
@@ -99,32 +99,38 @@ func TestHeaderNavModuleAuthRejectsDisabledPricing(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 }
 
-func TestDisabledPricingRequiresCurrentRootAuthentication(t *testing.T) {
+func TestDisabledPricingRequiresRootAuthentication(t *testing.T) {
 	for _, tc := range []struct {
-		name, module, options, credential string
-		role, wantStatus                  int
+		name       string
+		module     string
+		options    string
+		role       int
+		credential string
+		wantStatus int
 	}{
-		{name: "root session", role: common.RoleRootUser, wantStatus: http.StatusOK},
-		{name: "root login required", options: `{"pricing":{"enabled":false,"requireAuth":true}}`, role: common.RoleRootUser, wantStatus: http.StatusOK},
-		{name: "root legacy setting", options: `{"pricing":false}`, role: common.RoleRootUser, wantStatus: http.StatusOK},
+		{name: "root", role: common.RoleRootUser, wantStatus: http.StatusOK},
+		{name: "root with login required", options: `{"pricing":{"enabled":false,"requireAuth":true}}`, role: common.RoleRootUser, wantStatus: http.StatusOK},
+		{name: "root with legacy disabled setting", options: `{"pricing":false}`, role: common.RoleRootUser, wantStatus: http.StatusOK},
 		{name: "ordinary user", role: common.RoleCommonUser, wantStatus: http.StatusForbidden},
-		{name: "administrator", role: common.RoleAdminUser, wantStatus: http.StatusForbidden},
-		{name: "expired session", role: common.RoleRootUser, credential: "expired", wantStatus: http.StatusUnauthorized},
-		{name: "tampered session", role: common.RoleRootUser, credential: "tampered", wantStatus: http.StatusUnauthorized},
-		{name: "revoked session", role: common.RoleRootUser, credential: "revoked", wantStatus: http.StatusUnauthorized},
-		{name: "disabled account", role: common.RoleRootUser, credential: "disabled", wantStatus: http.StatusUnauthorized},
-		{name: "demoted root", role: common.RoleRootUser, credential: "demoted", wantStatus: http.StatusForbidden},
-		{name: "root PAT cannot bypass undeclared route", role: common.RoleRootUser, credential: "pat", wantStatus: http.StatusForbidden},
-		{name: "root cannot bypass other module", module: "rankings", options: `{"rankings":false}`, role: common.RoleRootUser, wantStatus: http.StatusForbidden},
+		{name: "non-root administrator", role: common.RoleAdminUser, wantStatus: http.StatusForbidden},
+		{name: "expired root token", role: common.RoleRootUser, credential: "expired", wantStatus: http.StatusUnauthorized},
+		{name: "tampered root token", role: common.RoleRootUser, credential: "tampered", wantStatus: http.StatusUnauthorized},
+		{name: "revoked root session", role: common.RoleRootUser, credential: "revoked", wantStatus: http.StatusUnauthorized},
+		{name: "disabled root account", role: common.RoleRootUser, credential: "banned", wantStatus: http.StatusUnauthorized},
+		{name: "root cannot bypass disabled rankings", module: "rankings", options: `{"rankings":false}`, role: common.RoleRootUser, wantStatus: http.StatusForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setupDashboardAuthMiddlewareTest(t)
+			gin.SetMode(gin.TestMode)
 			options := tc.options
 			if options == "" {
 				options = `{"pricing":{"enabled":false,"requireAuth":false}}`
 			}
 			withHeaderNavModules(t, options)
-			user := model.User{Username: "pricing-reader", Role: tc.role, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			user := model.User{
+				Username: "pricing-reader", Password: "unused-password-hash", Role: tc.role,
+				Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+			}
 			require.NoError(t, model.DB.Create(&user).Error)
 			bundle, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "header-nav-test")
 			require.NoError(t, err)
@@ -141,14 +147,10 @@ func TestDisabledPricingRequiresCurrentRootAuthentication(t *testing.T) {
 				revoked, err := model.RevokeUserSession(user.Id, bundle.Session.SID, "test")
 				require.NoError(t, err)
 				require.True(t, revoked)
-			case "disabled":
+			case "banned":
 				require.NoError(t, model.DB.Model(&user).Update("status", common.UserStatusDisabled).Error)
-			case "demoted":
-				require.NoError(t, model.DB.Model(&user).Update("role", common.RoleAdminUser).Error)
-			case "pat":
-				token = "pat_pppppppppppppppppppppppppppppppppppppppppppppppp"
-				require.NoError(t, model.DB.Create(&model.PersonalAccessToken{UserID: user.Id, Name: "pricing", Digest: model.PersonalAccessTokenDigest(token), Scopes: []string{"models:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
 			}
+
 			module := tc.module
 			if module == "" {
 				module = "pricing"
@@ -159,19 +161,13 @@ func TestDisabledPricingRequiresCurrentRootAuthentication(t *testing.T) {
 				handled = true
 				assert.Equal(t, user.Id, c.GetInt("id"))
 				assert.Equal(t, common.RoleRootUser, c.GetInt("role"))
-				_, session := GetSessionAuthIdentity(c)
-				assert.True(t, session)
 				c.JSON(http.StatusOK, gin.H{"success": true})
 			})
-			request := httptest.NewRequest(http.MethodGet, "/api/"+module, nil)
-			request.Header.Set("Authorization", "Bearer "+token)
-			response := httptest.NewRecorder()
-			router.ServeHTTP(response, request)
-			assert.Equal(t, tc.wantStatus, response.Code, response.Body.String())
+
+			response := middlewareBearerRequest(router, "/api/"+module, token)
+
+			assert.Equal(t, tc.wantStatus, response.Code)
 			assert.Equal(t, tc.wantStatus == http.StatusOK, handled)
-			if tc.credential == "pat" {
-				assert.Contains(t, response.Body.String(), "PAT_SCOPE_DENIED")
-			}
 		})
 	}
 }

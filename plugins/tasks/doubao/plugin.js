@@ -1,7 +1,6 @@
 // Seedance capabilities from the Ark model list, not prices: the output
 // resolutions each model offers, the longest output duration in seconds
-// (autoDuration: duration -1 lets Seedance 1.5 pro and 2.x pick a length up
-// to it; Seedance 1.0 rejects -1), whether
+// (duration -1 lets Seedance 1.5 pro and 2.x pick a length up to it), whether
 // it accepts reference video input (Seedance 2.x prices video-to-video tokens
 // separately) and whether audio output is priced separately (Seedance 1.5 pro;
 // generate_audio defaults to true). Seedance 1.0 lite is no longer listed and
@@ -10,17 +9,16 @@ const VIDEO_MODELS = {
   "doubao-seedance-1-0-pro-250528": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12 },
   "doubao-seedance-1-0-lite-t2v": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12 },
   "doubao-seedance-1-0-lite-i2v": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12 },
-  "doubao-seedance-1-5-pro-251215": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12, audio: true, autoDuration: true },
-  "doubao-seedance-2-0-260128": { resolutions: ["480p", "720p", "1080p", "4k"], maxDuration: 15, videoInput: true, autoDuration: true },
-  "doubao-seedance-2-0-fast-260128": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true, autoDuration: true },
-  "doubao-seedance-2-0-mini-260615": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true, autoDuration: true },
-  "doubao-seedance-2-5-260628": { resolutions: ["480p", "720p", "1080p"], maxDuration: 30, videoInput: true, autoDuration: true },
+  "doubao-seedance-1-5-pro-251215": { resolutions: ["480p", "720p", "1080p"], maxDuration: 12, audio: true },
+  "doubao-seedance-2-0-260128": { resolutions: ["480p", "720p", "1080p", "4k"], maxDuration: 15, videoInput: true },
+  "doubao-seedance-2-0-fast-260128": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true },
+  "doubao-seedance-2-0-mini-260615": { resolutions: ["480p", "720p"], maxDuration: 15, videoInput: true },
+  "doubao-seedance-2-5-260628": { resolutions: ["480p", "720p", "1080p"], maxDuration: 30, videoInput: true },
 };
 // Every Ark resolution tier; an endpoint ID reached through channel mapping
-// without a declared profile keeps them all, the longest Seedance duration and
-// duration -1.
+// without a declared profile keeps them all and the longest Seedance duration.
 const SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p", "4k"];
-const DEFAULT_VIDEO_PROFILE = { resolutions: SEEDANCE_RESOLUTIONS, maxDuration: 30, videoInput: true, autoDuration: true };
+const DEFAULT_VIDEO_PROFILE = { resolutions: SEEDANCE_RESOLUTIONS, maxDuration: 30, videoInput: true };
 
 // Protocol capabilities from the Ark image generation API reference, not prices.
 // presets: accepted `size` resolution tiers; minPixels/maxPixels bound `WxH` sizes.
@@ -271,7 +269,7 @@ function seedanceUsageExamples(profile) {
   if (profile.videoInput) specs.push({ label: "720p · 5s (+4s 输入视频)", resolution: "720p", seconds: 9, video_input: "video" });
   if (profile.audio) specs.push({ label: "720p · 5s · 无声", resolution: "720p", seconds: 5, generate_audio: false });
   return specs.map((spec) => {
-    const facts = { tokens: utils.decimal.number(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
+    const facts = { tokens: Math.round(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
     if (profile.videoInput) facts.video_input = spec.video_input || "none";
     if (profile.audio) facts.generate_audio = spec.generate_audio !== false;
     return { label: spec.label, facts: facts };
@@ -280,7 +278,7 @@ function seedanceUsageExamples(profile) {
 
 // One usage profile per distinct pricing shape of a capability table: models
 // whose schema and examples are identical share a profile.
-function capabilityUsageProfiles(models, usageSchema, usageExamples, fullSchema) {
+function capabilityUsageProfiles(models, usageSchema, usageExamples) {
   const profiles = [];
   for (const model of Object.keys(models)) {
     const schema = usageSchema(models[model]);
@@ -293,15 +291,7 @@ function capabilityUsageProfiles(models, usageSchema, usageExamples, fullSchema)
     }
     profile.models.push(model);
   }
-  // Facts outside a profile's own schema stay declared for execution as
-  // compatibility fields without being advertised.
-  return profiles.map((profile) => {
-    const compatibilitySchema = {};
-    for (const key of Object.keys(fullSchema)) {
-      if (!Object.prototype.hasOwnProperty.call(profile.schema, key)) compatibilitySchema[key] = fullSchema[key];
-    }
-    return { models: profile.models, schema: profile.schema, compatibilitySchema: compatibilitySchema, examples: profile.examples };
-  });
+  return profiles.map((profile) => ({ models: profile.models, schema: profile.schema, examples: profile.examples }));
 }
 
 export const meta = {
@@ -313,7 +303,7 @@ export const meta = {
     en: "Volcengine Doubao Seedance video generation and Seedream image generation",
     zh: "火山引擎豆包 Seedance 视频生成与 Seedream 图片生成",
   },
-  version: "1.3.0+ren2hub.2",
+  version: "1.3.0",
   author: { name: "QuantumNous" },
   channelTypes: [54, 45], // VolcEngine-type channels serve Ark video models with the same wire format
   models: Object.keys(VIDEO_MODELS).concat(Object.keys(IMAGE_MODELS)),
@@ -322,8 +312,8 @@ export const meta = {
   requiredCapabilities: ["duration-auto@1"],
   usageSchema: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE),
   usageExamples: seedanceUsageExamples(DEFAULT_VIDEO_PROFILE),
-  usageProfiles: capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples, seedanceUsageSchema(DEFAULT_VIDEO_PROFILE)).concat(
-    capabilityUsageProfiles(IMAGE_MODELS, seedreamUsageSchema, seedreamUsageExamples, IMAGE_USAGE_SCHEMA)
+  usageProfiles: capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples).concat(
+    capabilityUsageProfiles(IMAGE_MODELS, seedreamUsageSchema, seedreamUsageExamples)
   ),
   routes: [
     { method: "POST", path: "/doubao/api/v3/contents/generations/tasks", type: "submit", decode: "createTask", render: "taskCreated" },
@@ -445,35 +435,7 @@ function resolutionMaxPixels(resolution) {
 
 function estimateTokens(seconds, resolution) {
   const dims = resolutionMaxPixels(resolution);
-  return utils.decimal.divide(utils.decimal.multiply(utils.decimal.multiply(utils.decimal.multiply(seconds, dims[0]), dims[1]), 24), 1024);
-}
-
-// Ark's optional frame metadata is a source frame count, not a fractional
-// duration. Keep the historical whole-second estimate (and its five-second
-// fallback for fewer than one second) while doing the division from exact
-// decimal text so the billing boundary never rounds the frame count first.
-function frameDuration(frames) {
-  const bounded = utils.decimal.bounded(frames, 1, 86400, true);
-  const seconds = Number.parseInt(utils.decimal.divide(bounded, 24), 10);
-  return seconds > 0 ? seconds : 5;
-}
-
-// Seconds the reservation is estimated at. -1 asks Ark to pick the length and
-// is rejected for models that cannot; it and a missing duration reserve the
-// longest output, so the reservation never falls below what Ark can bill.
-// Frame metadata only sizes a request without a duration.
-function reservedSeconds(ctx) {
-  const req = ctx.requestBody || {};
-  const metadata = req.metadata || {};
-  const profile = videoProfile(ctx);
-  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
-  if (raw !== undefined && Number(raw) === -1) {
-    if (!profile.autoDuration) throw new Error(trimmed(ctx.upstreamModel || ctx.model) + " does not accept duration -1");
-    return profile.maxDuration;
-  }
-  if (raw !== undefined) return utils.decimal.bounded(raw, 0, 3600, false);
-  if (metadata.frames !== undefined) return frameDuration(metadata.frames);
-  return profile.maxDuration;
+  return (seconds * dims[0] * dims[1] * 24) / 1024;
 }
 
 function videoInputRatio(model, resolution, content) {
@@ -697,8 +659,6 @@ function imageUsage(body, profile) {
       facts.images_above_1_5k = higher;
     }
   } else {
-    // Released prices read both tiers; a single-tier model reports zero below 1.5K.
-    facts.images_up_to_1_5k = 0;
     facts.images_above_1_5k = payloads.length;
   }
   if (Number.isInteger(usage.input_images) && usage.input_images >= 0 && usage.input_images <= MAX_REFERENCE_IMAGES) facts.input_images = usage.input_images;
@@ -843,10 +803,8 @@ export function buildSubmitRequest(ctx) {
   }
   const req = ctx.requestBody;
   const metadata = req.metadata || {};
-  // Reject output tiers and durations the model does not offer before any
-  // quota is reserved.
+  // Reject output tiers the model does not offer before any quota is reserved.
   videoResolution(ctx);
-  reservedSeconds(ctx);
   const body = Object.assign({ model: req.model || "", content: [] }, metadata);
   const imageContent = [];
   const images = Array.isArray(req.images) ? req.images : [];
@@ -903,9 +861,17 @@ export function extractUsage(ctx) {
     return ratio === 1 ? null : { video_input_ratio: ratio };
   }
   const profile = videoProfile(ctx);
-  const seconds = reservedSeconds(ctx);
+  // A missing duration or -1 (the model picks the length; Seedance 2.5
+  // defaults to it) reserves the longest duration the model can produce.
+  let seconds = Number(req.seconds || req.duration || metadata.duration || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    const frames = Number(metadata.frames);
+    seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : profile.maxDuration;
+  }
+  if (seconds <= 0) seconds = 5;
+  seconds = Math.min(seconds, 3600);
   const resolution = videoResolution(ctx);
-  const facts = { tokens: utils.decimal.number(estimateTokens(seconds, resolution)), resolution: resolution };
+  const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
   // Every model reports video_input, including those whose profile omits it:
   // expressions saved when all Seedance models declared the field then keep
   // matching their no-video tier.
@@ -936,9 +902,12 @@ export function parseTaskResult(ctx, body) {
   if (body.status === "pending" || body.status === "queued") return { status: "QUEUED", progress: "10%" };
   if (body.status === "processing" || body.status === "running") return { status: "IN_PROGRESS", progress: "50%" };
   if (body.status === "succeeded") {
-    // Ren2Hub: Seedance settles from the declared tokens fact; generic token
-    // counters are not reported for plugin tasks.
     const result = { status: "SUCCESS", progress: "100%", url: body.content && body.content.video_url ? body.content.video_url : "" };
+    const usage = body.usage || {};
+    const completionTokens = Number(usage.completion_tokens || 0);
+    const totalTokens = Number(usage.total_tokens || 0);
+    if (Number.isFinite(completionTokens) && completionTokens > 0) result.completionTokens = completionTokens;
+    if (Number.isFinite(totalTokens) && totalTokens > 0) result.totalTokens = totalTokens;
     return result;
   }
   if (body.status === "failed" || body.status === "expired" || body.status === "cancelled") {
@@ -995,11 +964,9 @@ export function extractUsageOnComplete(task, taskResult, body) {
   if (!body || body.status !== "succeeded") return {};
   const facts = {};
   const usage = body.usage || {};
-  const tokens = usage.completion_tokens !== undefined ? usage.completion_tokens : usage.total_tokens;
-  if (tokens !== undefined) {
-    const bounded = utils.decimal.bounded(tokens, 0, 2147483647, true);
-    facts.tokens = typeof tokens === "number" ? utils.decimal.number(bounded) : bounded;
-  }
+  let tokens = Number(usage.completion_tokens);
+  if (!Number.isFinite(tokens) || tokens <= 0) tokens = Number(usage.total_tokens);
+  if (Number.isFinite(tokens) && tokens > 0) facts.tokens = tokens;
   const content = body.content || {};
   const resolution = trimmed(content.resolution || body.resolution).toLowerCase();
   if (videoProfile(task).resolutions.includes(resolution)) facts.resolution = resolution;
@@ -1193,7 +1160,7 @@ protocols.openai_video = {
       if (!ctx.body.value || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
       const req = ctx.body.value;
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
-      if (seconds !== undefined && Number(seconds) !== -1 && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
+      if (seconds !== undefined && Number(seconds) !== -1 && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
         throw new Error("seconds must be -1 or between 1 and 3600");
       const requestBody = Object.assign({}, req, { model: ctx.model });
       // buildSubmitRequest reads seconds; duration is accepted as its alias.
@@ -1226,10 +1193,10 @@ protocols.openai_video = {
       req.metadata = parsed;
     }
     if ((ctx.body.files || []).length) throw new Error("Doubao requires image and video references to be URLs inside metadata.content");
-    if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, -1, 3600, true));
-    else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, -1, 3600, true));
+    if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+    else if (req.duration !== undefined) req.seconds = Number(req.duration);
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined && Number(seconds) !== -1 && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
+    if (seconds !== undefined && Number(seconds) !== -1 && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
       throw new Error("seconds must be -1 or between 1 and 3600");
     return {
       kind: "submit",

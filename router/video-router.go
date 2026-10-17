@@ -8,7 +8,6 @@ import (
 )
 
 func SetVideoRouter(router *gin.Engine) {
-	setTaskPluginProtocols(router, "openai_video")
 	videoSharedRouter := router.Group("/v1")
 	videoSharedRouter.Use(middleware.RouteTag("relay"))
 	videoSharedRouter.Use(middleware.TokenAuth())
@@ -18,7 +17,7 @@ func SetVideoRouter(router *gin.Engine) {
 		middleware.PinTaskPluginEndpoint(),
 		middleware.TaskPluginEndpointOnly(middleware.ModelRequestRateLimit()),
 		middleware.PrepareTaskPluginEndpoint(),
-		middleware.GatewayAdmission(), middleware.Distribute(),
+		middleware.Distribute(),
 		func(c *gin.Context) {
 			controller.RelayTaskPluginEndpoint(c, controller.RelayTask)
 		},
@@ -26,7 +25,7 @@ func SetVideoRouter(router *gin.Engine) {
 
 	videoV1Router := router.Group("/v1")
 	videoV1Router.Use(middleware.RouteTag("relay"))
-	videoV1Router.Use(middleware.TokenAuth(), middleware.GatewayAdmission(), middleware.Distribute())
+	videoV1Router.Use(middleware.TokenAuth(), middleware.Distribute())
 	{
 		videoV1Router.GET("/video/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos/:video_id/remix", controller.RelayTask)

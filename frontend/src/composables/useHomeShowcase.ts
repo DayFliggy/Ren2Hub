@@ -1,10 +1,5 @@
 import { computed, getCurrentScope, onScopeDispose, ref, type Ref } from 'vue'
-
-import { publicApi, type HomeRequestMetrics } from '@/api/public'
 import type { HomeRuntime } from '@/types/homeShowcase'
-
-const METRICS_REFRESH_INTERVAL_MS = 60_000
-
 export function calculateRuntime(
   now: number,
   launchedAt?: string | number
@@ -26,155 +21,51 @@ export function calculateRuntime(
   }
 }
 
-export interface HomeShowcaseOptions {
-  loadMetrics?: boolean
-  metricsLoader?: (signal?: AbortSignal) => Promise<HomeRequestMetrics>
-  initiallyVisible?: boolean
-}
-
 export function useHomeShowcase(
   startTime?: Readonly<Ref<number | null>>,
-  options: HomeShowcaseOptions = {}
+  options: { initiallyVisible?: boolean } = {}
 ) {
-  const now = ref(Date.now())
-  const sectionVisible = ref(options.initiallyVisible ?? true)
-  const requestMetrics = ref<HomeRequestMetrics | null>(null)
-  const metricsError = ref<unknown>(null)
-  let intervalId: number | null = null
-  let metricsTimerId: number | null = null
-  let metricsAbortController: AbortController | null = null
-  let metricsRequestGeneration = 0
-  let disposed = false
-  const loadMetrics = options.loadMetrics === true
-  const metricsLoader = options.metricsLoader ?? publicApi.homeMetrics
-
+  const now = ref(Date.now()),
+    sectionVisible = ref(options.initiallyVisible ?? true)
+  let timer: number | null = null,
+    disposed = false
   const runtime = computed(() =>
     calculateRuntime(now.value, startTime?.value ?? undefined)
   )
-
-  function stopClock() {
-    if (intervalId !== null) window.clearInterval(intervalId)
-    intervalId = null
+  function stop() {
+    if (timer !== null) window.clearInterval(timer)
+    timer = null
   }
-
-  function stopMetrics() {
-    if (metricsTimerId !== null) window.clearTimeout(metricsTimerId)
-    metricsTimerId = null
-    metricsRequestGeneration += 1
-    metricsAbortController?.abort()
-    metricsAbortController = null
-  }
-
-  function canRefreshMetrics() {
-    return (
-      loadMetrics &&
-      !disposed &&
-      sectionVisible.value &&
-      typeof document !== 'undefined' &&
-      document.visibilityState !== 'hidden'
-    )
-  }
-
-  function scheduleMetricsRefresh() {
-    if (!canRefreshMetrics() || metricsAbortController !== null) return
-    if (metricsTimerId !== null) window.clearTimeout(metricsTimerId)
-    metricsTimerId = window.setTimeout(() => {
-      metricsTimerId = null
-      void refreshMetrics()
-    }, METRICS_REFRESH_INTERVAL_MS)
-  }
-
-  async function refreshMetrics() {
-    if (!canRefreshMetrics() || metricsAbortController !== null) return
-    const controller = new AbortController()
-    const requestGeneration = ++metricsRequestGeneration
-    metricsAbortController = controller
-    metricsError.value = null
-    try {
-      const metrics = await metricsLoader(controller.signal)
-      if (
-        requestGeneration === metricsRequestGeneration &&
-        metricsAbortController === controller &&
-        !controller.signal.aborted &&
-        canRefreshMetrics()
-      ) {
-        requestMetrics.value = metrics
-      }
-    } catch (error: unknown) {
-      if (
-        requestGeneration === metricsRequestGeneration &&
-        metricsAbortController === controller &&
-        !controller.signal.aborted &&
-        canRefreshMetrics()
-      ) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          requestMetrics.value = null
-          metricsError.value = error
-        }
-      }
-    } finally {
-      if (metricsAbortController === controller) {
-        metricsAbortController = null
-        scheduleMetricsRefresh()
-      }
-    }
-  }
-
-  function syncClock() {
+  function sync() {
+    stop()
     if (
       disposed ||
-      typeof window === 'undefined' ||
-      typeof document === 'undefined'
-    ) {
+      !sectionVisible.value ||
+      document.visibilityState === 'hidden'
+    )
       return
-    }
-
-    stopClock()
-    stopMetrics()
-    if (!sectionVisible.value || document.visibilityState === 'hidden') {
-      return
-    }
-
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      intervalId = window.setInterval(() => {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      timer = window.setInterval(() => {
         now.value = Date.now()
-      }, 1_000)
-    }
-    if (loadMetrics) void refreshMetrics()
+      }, 1000)
   }
-
-  function setSectionVisible(next: boolean) {
-    if (sectionVisible.value === next) return
-    sectionVisible.value = next
-    syncClock()
+  function setSectionVisible(value: boolean) {
+    if (value === sectionVisible.value) return
+    sectionVisible.value = value
+    sync()
   }
-
-  function handleVisibilityChange() {
+  function visibility() {
     now.value = Date.now()
-    syncClock()
+    sync()
   }
-
   function dispose() {
     if (disposed) return
     disposed = true
-    stopClock()
-    stopMetrics()
-    if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
+    stop()
+    document.removeEventListener('visibilitychange', visibility)
   }
-
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    syncClock()
-  }
+  document.addEventListener('visibilitychange', visibility)
+  sync()
   if (getCurrentScope()) onScopeDispose(dispose)
-
-  return {
-    runtime,
-    requestMetrics,
-    metricsError,
-    setSectionVisible,
-    dispose,
-  }
+  return { runtime, setSectionVisible, dispose }
 }

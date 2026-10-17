@@ -3,36 +3,22 @@
 package common
 
 import (
-	"fmt"
+	"os"
 
-	"github.com/shirou/gopsutil/load"
 	"golang.org/x/sys/unix"
 )
 
-// sampleLoadAverage reads the kernel load average (/proc/loadavg on Linux).
-// gopsutil v3.21 indexes the file's fields without a length check, so a
-// truncated file panics; the sample is reported unavailable instead of taking
-// down the process from its background worker.
-func sampleLoadAverage() (average LoadAverage, available bool) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			SysError(fmt.Sprintf("load average sample failed: %v", recovered))
-			average, available = LoadAverage{}, false
-		}
-	}()
-	avg, err := load.Avg()
-	if err != nil {
-		return LoadAverage{}, false
-	}
-	return LoadAverage{One: avg.Load1, Five: avg.Load5, Fifteen: avg.Load15}, true
-}
-
 // GetDiskSpaceInfo 获取缓存目录所在磁盘的空间信息 (Unix/Linux/macOS)
 func GetDiskSpaceInfo() DiskSpaceInfo {
+	cachePath := GetDiskCachePath()
+	if cachePath == "" {
+		cachePath = os.TempDir()
+	}
+
 	info := DiskSpaceInfo{}
 
 	var stat unix.Statfs_t
-	err := unix.Statfs(DiskSpacePath(), &stat)
+	err := unix.Statfs(cachePath, &stat)
 	if err != nil {
 		return info
 	}

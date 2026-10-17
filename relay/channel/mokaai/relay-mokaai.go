@@ -1,12 +1,12 @@
 package mokaai
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -39,7 +39,7 @@ func embeddingResponseMoka2OpenAI(response *dto.EmbeddingResponse) *dto.OpenAIEm
 	openAIEmbeddingResponse := dto.OpenAIEmbeddingResponse{
 		Object: "list",
 		Data:   make([]dto.OpenAIEmbeddingResponseItem, 0, len(response.Data)),
-		Model:  response.Model,
+		Model:  "baidu-embedding",
 		Usage:  response.Usage,
 	}
 	for _, item := range response.Data {
@@ -59,21 +59,26 @@ func mokaEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *htt
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
 	service.CloseResponseBodyGracefully(resp)
-	err = common.Unmarshal(responseBody, &baiduResponse)
+	err = json.Unmarshal(responseBody, &baiduResponse)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	if err := helper.ValidateEmbeddingResponse(responseBody, helper.EmbeddingInputCount(info.Request)); err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-	}
-	if err := helper.ValidateVectorUsage(&baiduResponse.Usage); err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-	}
-	baiduResponse.Usage.UsageSource = "provider"
+	// if baiduResponse.ErrorMsg != "" {
+	// 	return &dto.OpenAIErrorWithStatusCode{
+	// 		Error: dto.OpenAIError{
+	// 			Type:    "baidu_error",
+	// 			Param:   "",
+	// 		},
+	// 		StatusCode: resp.StatusCode,
+	// 	}, nil
+	// }
 	fullTextResponse := embeddingResponseMoka2OpenAI(&baiduResponse)
 	jsonResponse, err := common.Marshal(fullTextResponse)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	return &fullTextResponse.Usage, helper.WriteVectorResponse(c, resp, info, jsonResponse)
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	service.IOCopyBytesGracefully(c, resp, jsonResponse)
+	return &fullTextResponse.Usage, nil
 }

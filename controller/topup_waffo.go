@@ -63,7 +63,7 @@ func getWaffoCurrency() string {
 func buildWaffoTopUpGoodsInfo(amount int64) *order.GoodsInfo {
 	appName := strings.TrimSpace(common.SystemName)
 	if appName == "" {
-		appName = common.DefaultSystemName
+		appName = "New API"
 	}
 	return &order.GoodsInfo{
 		GoodsName: fmt.Sprintf("Recharge %d credits", amount),
@@ -139,6 +139,7 @@ func RequestWaffoAmount(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": strconv.FormatFloat(payMoney, 'f', 2, 64)})
 }
 
@@ -208,11 +209,6 @@ func RequestWaffoPay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
-	affiliateBaseQuota, err := model.SnapshotAffiliateBaseQuota(payMoney, setting.WaffoUnitPrice)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
 
 	// 生成唯一订单号，paymentRequestId 与 merchantOrderId 保持一致，简化追踪
 	merchantOrderId := fmt.Sprintf("WAFFO-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
@@ -221,23 +217,19 @@ func RequestWaffoPay(c *gin.Context) {
 	// Token 模式下归一化 Amount（存等价美元/CNY 数量，避免 RechargeWaffo 双重放大）
 	amount := req.Amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		amount = int64(float64(req.Amount) / common.QuotaPerUnit)
-		if amount < 1 {
-			amount = 1
-		}
+		amount = max(int64(float64(req.Amount)/common.QuotaPerUnit), 1)
 	}
 
 	// 创建本地订单
 	topUp := &model.TopUp{
-		UserId:             id,
-		Amount:             amount,
-		Money:              payMoney,
-		TradeNo:            merchantOrderId,
-		PaymentMethod:      model.PaymentMethodWaffo,
-		PaymentProvider:    model.PaymentProviderWaffo,
-		CreateTime:         time.Now().Unix(),
-		Status:             common.TopUpStatusPending,
-		AffiliateBaseQuota: affiliateBaseQuota,
+		UserId:          id,
+		Amount:          amount,
+		Money:           payMoney,
+		TradeNo:         merchantOrderId,
+		PaymentMethod:   model.PaymentMethodWaffo,
+		PaymentProvider: model.PaymentProviderWaffo,
+		CreateTime:      time.Now().Unix(),
+		Status:          common.TopUpStatusPending,
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo failed to create top-up order user_id=%d trade_no=%s amount=%d error=%q", id, merchantOrderId, req.Amount, err.Error()))
@@ -324,7 +316,23 @@ func RequestWaffoPay(c *gin.Context) {
 	})
 }
 
-// WaffoWebhook 处理钱包支付回调通知
+// webhookPayloadWithSubInfo 扩展 PAYMENT_NOTIFICATION，包含 SDK 未定义的 subscriptionInfo 字段
+type webhookPayloadWithSubInfo struct {
+	EventType string `json:"eventType"`
+	Result    struct {
+		core.PaymentNotificationResult
+		SubscriptionInfo *webhookSubscriptionInfo `json:"subscriptionInfo,omitempty"`
+	} `json:"result"`
+}
+
+type webhookSubscriptionInfo struct {
+	Period              string `json:"period,omitempty"`
+	MerchantRequest     string `json:"merchantRequest,omitempty"`
+	SubscriptionID      string `json:"subscriptionId,omitempty"`
+	SubscriptionRequest string `json:"subscriptionRequest,omitempty"`
+}
+
+// WaffoWebhook 处理 Waffo 回调通知（支付/退款/订阅）
 func WaffoWebhook(c *gin.Context) {
 	if !isWaffoWebhookEnabled() {
 		logger.LogWarn(c.Request.Context(), common.LogText("Waffo webhook rejected reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
@@ -367,23 +375,19 @@ func WaffoWebhook(c *gin.Context) {
 
 	switch event.EventType {
 	case core.EventPayment:
-		var payload core.PaymentNotification
+		// 解析为扩展类型，区分普通支付和订阅支付
+		var payload webhookPayloadWithSubInfo
 		if err := common.Unmarshal(bodyBytes, &payload); err != nil {
 			logger.LogError(c.Request.Context(), common.LogText("Waffo failed to parse payment callback payload event_type=%s client_ip=%s error=%q body=%q", event.EventType, c.ClientIP(), err.Error(), bodyStr))
 			sendWaffoWebhookResponse(c, wh, false, "invalid payment payload")
 			return
 		}
-		if payload.Result == nil {
-			sendWaffoWebhookResponse(c, wh, false, "missing payment result")
-			return
-		}
 		if payload.Result.SubscriptionInfo != nil {
-			logger.LogWarn(c.Request.Context(), common.LogText("Waffo rejected non-wallet payment event"))
-			sendWaffoWebhookResponse(c, wh, false, "unsupported payment type")
+			sendWaffoWebhookResponse(c, wh, false, "unsupported order type")
 			return
 		}
 		logger.LogInfo(c.Request.Context(), common.LogText("Waffo webhook verified and parsed event_type=%s merchant_order_id=%s order_status=%s client_ip=%s", event.EventType, payload.Result.MerchantOrderID, payload.Result.OrderStatus, c.ClientIP()))
-		handleWaffoPayment(c, wh, payload.Result)
+		handleWaffoPayment(c, wh, &payload.Result.PaymentNotificationResult)
 	default:
 		logger.LogInfo(c.Request.Context(), common.LogText("Waffo webhook ignored event event_type=%s client_ip=%s", event.EventType, c.ClientIP()))
 		sendWaffoWebhookResponse(c, wh, true, "")

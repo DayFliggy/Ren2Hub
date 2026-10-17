@@ -1,10 +1,10 @@
 package common
 
 import (
+	"embed"
 	"io/fs"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/gin-contrib/static"
 )
@@ -16,19 +16,7 @@ type embedFileSystem struct {
 }
 
 func (e *embedFileSystem) Exists(prefix string, path string) bool {
-	name := path
-	if prefix != "" && prefix != "/" {
-		cleanPrefix := strings.TrimSuffix(prefix, "/")
-		switch {
-		case path == cleanPrefix:
-			name = "/"
-		case strings.HasPrefix(path, cleanPrefix+"/"):
-			name = strings.TrimPrefix(path, cleanPrefix)
-		default:
-			return false
-		}
-	}
-	_, err := e.Open(name)
+	_, err := e.Open(path)
 	if err != nil {
 		return false
 	}
@@ -44,7 +32,7 @@ func (e *embedFileSystem) Open(name string) (http.File, error) {
 	return e.FileSystem.Open(name)
 }
 
-func EmbedFolder(fsEmbed fs.FS, targetPath string) static.ServeFileSystem {
+func EmbedFolder(fsEmbed embed.FS, targetPath string) static.ServeFileSystem {
 	efs, err := fs.Sub(fsEmbed, targetPath)
 	if err != nil {
 		panic(err)

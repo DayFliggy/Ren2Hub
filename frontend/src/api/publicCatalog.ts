@@ -27,6 +27,8 @@ export interface CatalogPrice {
 export interface PricingCatalog {
   models: CatalogModel[]
   issues: PricingCatalogIssue[]
+  groupRatio: Record<string, number>
+  usableGroup: Record<string, string>
   vendors: { id: number; name: string; description: string }[]
   endpoints: Record<string, { path: string; method: string }>
 }
@@ -107,6 +109,16 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
   return {
     models,
     issues,
+    groupRatio: Object.fromEntries(
+      Object.entries(isRecord(value.group_ratio) ? value.group_ratio : {}).map(
+        ([key, ratio]) => [key, nonNegative(ratio, endpoint)]
+      )
+    ),
+    usableGroup: Object.fromEntries(
+      Object.entries(
+        isRecord(value.usable_group) ? value.usable_group : {}
+      ).map(([key, name]) => [key, requiredString(name, endpoint)])
+    ),
     vendors: records(value.vendors ?? [], endpoint).map((vendor) => ({
       id: count(vendor.id, endpoint),
       name: requiredString(vendor.name, endpoint, false),
@@ -196,10 +208,11 @@ function parseMovers(value: unknown): RankingMover[] {
   }))
 }
 
-/** Shared display projection accepts exact decimals from authenticated catalogs. */
-export type CatalogPricingInput = {
-  pricing_values?: import('./pricingConfig').PricingValues
-} & Pick<CatalogModel, 'quota_type' | 'billing_mode'> &
+/** Display the upstream numeric pricing fields; group ratios are applied by the caller. */
+export type CatalogPricingInput = Pick<
+  CatalogModel,
+  'quota_type' | 'billing_mode'
+> &
   Partial<
     Record<
       | 'model_price'
@@ -218,20 +231,6 @@ export function catalogPrices(
   model: CatalogPricingInput,
   unit: 'M' | 'K'
 ): CatalogPrice[] {
-  if (model.pricing_values) {
-    const values = model.pricing_values
-    model = {
-      ...model,
-      model_price: values.ModelPrice,
-      model_ratio: values.ModelRatio,
-      completion_ratio: values.CompletionRatio,
-      cache_ratio: values.CacheRatio,
-      create_cache_ratio: values.CreateCacheRatio,
-      image_ratio: values.ImageRatio,
-      audio_ratio: values.AudioRatio,
-      audio_completion_ratio: values.AudioCompletionRatio,
-    }
-  }
   if (
     model.billing_mode === 'tiered_expr' ||
     model.billing_mode === 'unconfigured'
@@ -266,26 +265,23 @@ export function catalogPrices(
       unit: 'per_million_tokens',
     })
   }
-  if (
-    model.audio_ratio !== undefined ||
-    model.audio_completion_ratio !== undefined
-  ) {
-    // The billing engine defaults either missing audio factor to one.
-    const audioInput = multiplyDecimal(
-      input,
-      decimalText(model.audio_ratio ?? '1')
-    )
-    prices.push(
-      { key: 'audioInput', value: audioInput, unit: 'per_million_tokens' },
-      {
+  if (model.audio_ratio !== undefined) {
+    const audioInput = multiplyDecimal(input, decimalText(model.audio_ratio))
+    prices.push({
+      key: 'audioInput',
+      value: audioInput,
+      unit: 'per_million_tokens',
+    })
+    if (model.audio_completion_ratio !== undefined) {
+      prices.push({
         key: 'audioOutput',
         value: multiplyDecimal(
           audioInput,
-          decimalText(model.audio_completion_ratio ?? '1')
+          decimalText(model.audio_completion_ratio)
         ),
         unit: 'per_million_tokens',
-      }
-    )
+      })
+    }
   }
   return prices.map((price) => ({
     ...price,

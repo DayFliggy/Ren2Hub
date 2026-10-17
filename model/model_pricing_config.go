@@ -1,32 +1,28 @@
 package model
 
 import (
-	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 // PricingValues is one model's configuration, keyed by the existing option
-// names. Supplemental ratios inherit defaults only after a main price exists.
+// names. A missing key inherits the engine's default; an explicit zero is free.
 type PricingValues map[string]any
 
 type ModelPricingChange struct {
@@ -37,10 +33,6 @@ type ModelPricingChange struct {
 }
 
 type ModelPricingEntry struct {
-	UsageFacts    map[string]jsplugin.UsageFieldSchema `json:"-"`
-	UsageExamples []jsplugin.UsageExample              `json:"usage_examples,omitempty"`
-	PluginKey     string                               `json:"-"`
-	PluginName    string                               `json:"-"`
 	ModelPricingDescription
 	PluginVariants []ModelPricingPluginVariant          `json:"plugin_variants,omitempty"`
 	ModelName      string                               `json:"model_name"`
@@ -50,7 +42,6 @@ type ModelPricingEntry struct {
 }
 
 type ModelPricingPluginVariant struct {
-	UsageFacts    map[string]jsplugin.UsageFieldSchema `json:"-"`
 	PluginKey     string                               `json:"plugin_key"`
 	PluginName    string                               `json:"plugin_name"`
 	Icon          string                               `json:"icon,omitempty"`
@@ -94,76 +85,17 @@ func defaultPricingMaps() map[string]map[string]any {
 	for _, key := range modelPricingOptionKeys {
 		result[key] = make(map[string]any)
 	}
-	return result
-}
-
-func modelPricingDecimal(value any) (decimal.Decimal, error) {
-	var text string
-	switch number := value.(type) {
-	case string:
-		text = number
-	case json.Number:
-		text = string(number)
-	case float64:
-		text = fmt.Sprint(number)
-	default:
-		return decimal.Zero, errors.New("price must be a decimal number")
-	}
-	if len(text) == 0 || len(text) > 64 || strings.TrimSpace(text) != text {
-		return decimal.Zero, errors.New("price must be a finite non-negative decimal")
-	}
-	number, err := decimal.NewFromString(text)
-	if err != nil || number.IsNegative() || number.Exponent() < -30 || number.Exponent() > 18 {
-		return decimal.Zero, errors.New("price must be a finite non-negative decimal")
-	}
-	return number, nil
-}
-
-// PricingValuesForAPI keeps exact source decimals editable in JavaScript.
-// Database option maps remain numeric JSON for the upstream setting caches.
-func PricingValuesForAPI(values PricingValues) PricingValues {
-	result := maps.Clone(values)
-	for key, value := range result {
-		if key == "billing_setting.billing_mode" || key == "billing_setting.billing_expr" || key == billing_setting.PluginBillingExprOption {
-			continue
+	for key, values := range ratio_setting.GetDefaultPricingMaps() {
+		for name, value := range values {
+			result[key][name] = value
 		}
-		if number, err := modelPricingDecimal(value); err == nil {
-			result[key] = number.String()
-		}
-	}
-	return result
-}
-
-// ModelPricingUsageSchema is shared by request execution and draft simulation.
-func ModelPricingUsageSchema(schema map[string]jsplugin.UsageFieldSchema) *billingexpr.UsageSchema {
-	result := &billingexpr.UsageSchema{Version: billingexpr.UsageSchemaVersion, Fields: make(map[string]billingexpr.UsageField, len(schema))}
-	for key, field := range schema {
-		kind := field.Type
-		if len(field.Enum) > 0 {
-			kind = "string"
-		}
-		if kind == "" {
-			kind = "number"
-		}
-		frozen := billingexpr.UsageField{Type: kind, Unit: field.Unit, Enum: slices.Clone(field.Enum), Source: billingexpr.UsageCompletionFact}
-		if kind == "number" {
-			limit := relaycommon.MaxTaskDurationSeconds
-			if field.Unit == "count" {
-				limit = dto.MaxImageN
-			}
-			if field.Unit == "token" || field.Unit == "credit" {
-				limit = common.MaxQuota
-			}
-			frozen.Minimum, frozen.Maximum = "0", strconv.Itoa(limit)
-		}
-		result.Fields[key] = frozen
 	}
 	return result
 }
 
 func readModelPricingMaps(db *gorm.DB) (map[string]map[string]any, map[string]bool, []string, error) {
 	var rows []Option
-	if err := db.Order(clause.OrderByColumn{Column: clause.Column{Name: "key"}}).Where(map[string]any{"key": modelPricingOptionKeys}).Find(&rows).Error; err != nil {
+	if err := db.Where(commonKeyCol+" IN ?", modelPricingOptionKeys).Find(&rows).Error; err != nil {
 		return nil, nil, nil, err
 	}
 	values := defaultPricingMaps()
@@ -171,7 +103,7 @@ func readModelPricingMaps(db *gorm.DB) (map[string]map[string]any, map[string]bo
 	counts := make(map[string]int)
 	for _, row := range rows {
 		var entries map[string]any
-		if err := common.DecodeJsonNumbers(bytes.NewBufferString(row.Value), &entries); err != nil {
+		if err := common.UnmarshalJsonStr(row.Value, &entries); err != nil {
 			return nil, nil, nil, fmt.Errorf("%s: %w", row.Key, err)
 		}
 		if entries == nil {
@@ -237,7 +169,7 @@ func replaceModelPricing(values map[string]map[string]any, name string, draft Pr
 
 func effectiveModelPricing(values map[string]map[string]any, name string) PricingValues {
 	result := modelPricingValues(values, name)
-	// Resolve explicitly configured model aliases without installing prices.
+	// Legacy wildcard aliases are resolved by the same normalization as relay.
 	alias := ratio_setting.FormatMatchingModelName(name)
 	for _, key := range []string{"ModelPrice", "ModelRatio", "CompletionRatio", "AudioRatio", "AudioCompletionRatio"} {
 		delete(result, key)
@@ -246,28 +178,35 @@ func effectiveModelPricing(values map[string]map[string]any, name string) Pricin
 		}
 	}
 	mode, _ := result["billing_setting.billing_mode"].(string)
+	if mode == "" {
+		_, hasPrice := result["ModelPrice"]
+		_, hasRatio := result["ModelRatio"]
+		if _, builtin := billing_setting.GetBuiltinBillingExpr(name); builtin && !hasPrice && !hasRatio {
+			mode = "tiered_expr"
+		}
+	}
 	if mode == "tiered_expr" {
+		result["billing_setting.billing_mode"] = mode
+		if _, exists := result["billing_setting.billing_expr"]; !exists {
+			if expression, ok := billing_setting.GetBuiltinBillingExpr(name); ok {
+				result["billing_setting.billing_expr"] = expression
+			}
+		}
 		return result
 	}
 	if _, exists := result["ModelPrice"]; exists {
 		return result
 	}
-	if _, exists := result["ModelRatio"]; !exists {
-		return result
+	if _, exists := result["ModelRatio"]; !exists && operation_setting.SelfUseModeEnabled {
+		result["ModelRatio"] = float64(37.5)
 	}
 	// Completion ratios include engine-enforced model defaults. Expose their
 	// effective value without persisting them into the editable configuration.
 	var configuredCompletion *float64
-	if raw, exists := result["CompletionRatio"]; exists {
-		if ratio, err := modelPricingDecimal(raw); err == nil {
-			value := ratio.InexactFloat64()
-			configuredCompletion = &value
-		}
+	if ratio, exists := result["CompletionRatio"].(float64); exists {
+		configuredCompletion = &ratio
 	}
-	completion := ratio_setting.ResolveCompletionRatio(name, configuredCompletion)
-	if configuredCompletion == nil || completion.Locked {
-		result["CompletionRatio"] = completion.Ratio
-	}
+	result["CompletionRatio"] = ratio_setting.ResolveCompletionRatio(name, configuredCompletion).Ratio
 	for key, fallback := range map[string]float64{
 		"CacheRatio":       ratio_setting.DefaultCacheRatio,
 		"CreateCacheRatio": ratio_setting.DefaultCreateCacheRatio,
@@ -316,6 +255,9 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 				nameSet[name] = true
 			}
 		}
+		for name := range billing_setting.GetBuiltinBillingExprCopy() {
+			nameSet[name] = true
+		}
 		for name := range nameSet {
 			names = append(names, name)
 		}
@@ -330,14 +272,10 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 		entry.CacheWriteMode = ResolveCacheWriteMode(name, configured)
 		entry.BillingDetails = ResolveLegacyBillingDetails(name, entry.Effective, configured)
 		if plugin, ok := generation.GetByModel(name); ok {
-			entry.UsageSchema, entry.UsageExamples = plugin.Meta.UsageForModel(name)
-			entry.UsageFacts = plugin.Meta.UsageFactsForModels(name)
-			entry.PluginKey, entry.PluginName = plugin.Meta.Key, plugin.Meta.Name
+			entry.UsageSchema, _ = plugin.Meta.UsageForModel(name)
 		} else if target, ok := ResolveTaskModelAlias(generation, name); ok {
 			if plugin, ok := generation.Get(target.PluginKey); ok {
-				entry.UsageSchema, entry.UsageExamples = plugin.Meta.UsageForModel(target.Declared)
-				entry.UsageFacts = plugin.Meta.UsageFactsForModels(target.Declared)
-				entry.PluginKey, entry.PluginName = plugin.Meta.Key, plugin.Meta.Name
+				entry.UsageSchema, _ = plugin.Meta.UsageForModel(target.Declared)
 			}
 		}
 		plugins := generation.PluginsByModel(name)
@@ -375,12 +313,26 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 				}
 				entry.PluginVariants = append(entry.PluginVariants, ModelPricingPluginVariant{
 					PluginKey: plugin.Meta.Key, PluginName: plugin.Meta.Name, Icon: plugin.Meta.Icon,
-					UsageSchema: schema, UsageExamples: examples, UsageFacts: plugin.Meta.UsageFactsForModels(name), Configured: configuredExpr, Effective: expression,
-					Compatible: billing_setting.TaskExprCompatible(expression, plugin.Meta.UsageFactsForModels(name)),
+					UsageSchema: schema, UsageExamples: examples, Configured: configuredExpr, Effective: expression,
+					Compatible: billing_setting.TaskExprCompatible(expression, schema),
 				})
 			}
 		}
 		result.Entries = append(result.Entries, entry)
+	}
+	// Preserve the existing settings editor's full-map interface. Built-in
+	// expressions are display defaults only; per-model writes do not persist them.
+	for name, expression := range billing_setting.GetBuiltinBillingExprCopy() {
+		effective := effectiveModelPricing(values, name)
+		if effective["billing_setting.billing_mode"] != "tiered_expr" {
+			continue
+		}
+		if _, ok := values["billing_setting.billing_mode"][name]; !ok {
+			values["billing_setting.billing_mode"][name] = "tiered_expr"
+		}
+		if _, ok := values["billing_setting.billing_expr"][name]; !ok {
+			values["billing_setting.billing_expr"][name] = expression
+		}
 	}
 	for key, entries := range values {
 		encoded, err := common.Marshal(entries)
@@ -409,8 +361,8 @@ func ValidateModelPricing(name string, values PricingValues) error {
 // Writes pass the locked database snapshot here, so allowing an unchanged stale
 // override cannot bypass validation through an out-of-date process-local cache.
 func validateModelPricing(name string, values, previous PricingValues) error {
-	if name == "" || len(name) > 255 || strings.TrimSpace(name) != name || strings.ContainsAny(name, "\x00\r\n") {
-		return errors.New("model name must contain 1 to 255 characters without surrounding whitespace")
+	if strings.TrimSpace(name) == "" {
+		return errors.New("model name is required")
 	}
 	generation := jsplugin.DefaultRegistry.Generation()
 	previousVariants, _ := previous[billing_setting.PluginBillingExprOption].(map[string]any)
@@ -439,9 +391,6 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 				return fmt.Errorf("model %s: plugin %s does not declare this model", name, key)
 			}
 			schema, _ := plugin.Meta.UsageForModel(name)
-			if previousVariants[key] == expression {
-				schema = plugin.Meta.UsageFactsForModels(name)
-			}
 			if err := billing_setting.SmokeTestTaskExpr(expression, schema); err != nil {
 				return fmt.Errorf("model %s: plugin %s: %w", name, key, err)
 			}
@@ -462,7 +411,7 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 		}
 		if key == "billing_setting.billing_expr" {
 			expression, ok := value.(string)
-			if !ok || strings.TrimSpace(expression) == "" || len(expression) > 16384 {
+			if !ok || strings.TrimSpace(expression) == "" {
 				return errors.New("billing expression is required")
 			}
 			// Even a model expression currently shadowed by every provider must
@@ -483,9 +432,6 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 						continue
 					}
 					schema, _ := plugin.Meta.UsageForModel(name)
-					if unchanged {
-						schema = plugin.Meta.UsageFactsForModels(name)
-					}
 					if err = billing_setting.SmokeTestTaskExpr(expression, schema); err != nil {
 						return fmt.Errorf("model %s: plugin %s: %w", name, plugin.Meta.Key, err)
 					}
@@ -494,9 +440,6 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 				if plugin, ok := generation.Get(target.PluginKey); ok {
 					if !unchanged || generation.SharedModel(target.Declared) {
 						schema, _ := plugin.Meta.UsageForModel(target.Declared)
-						if unchanged {
-							schema = plugin.Meta.UsageFactsForModels(target.Declared)
-						}
 						err = billing_setting.SmokeTestTaskExpr(expression, schema)
 					}
 				} else {
@@ -513,15 +456,16 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 			}
 			continue
 		}
-		number, err := modelPricingDecimal(value)
-		if err != nil {
+		number, ok := value.(float64)
+		if !ok || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
 			return fmt.Errorf("%s must be a finite, non-negative number", key)
 		}
-		values[key] = json.Number(number.String())
 	}
 	if values["billing_setting.billing_mode"] == "tiered_expr" {
 		if _, exists := values["billing_setting.billing_expr"]; !exists {
-			return errors.New("billing expression is required")
+			if _, builtin := billing_setting.GetBuiltinBillingExpr(name); !builtin {
+				return errors.New("billing expression is required")
+			}
 		}
 	}
 	return nil
@@ -533,9 +477,6 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 	}
 	seen := make(map[string]bool)
 	for _, change := range changes {
-		if change.Pricing == nil && !change.Reset {
-			return errors.New("pricing draft is required")
-		}
 		if seen[change.ModelName] {
 			return errors.New("duplicate model pricing change")
 		}
@@ -575,7 +516,7 @@ func UpdateModelPricingOptions(updates map[string]string) error {
 				return fmt.Errorf("unsupported pricing field: %s", key)
 			}
 			var entries map[string]any
-			if err := common.DecodeJsonNumbers(bytes.NewBufferString(raw), &entries); err != nil {
+			if err := common.UnmarshalJsonStr(raw, &entries); err != nil {
 				return err
 			}
 			if entries == nil {
@@ -609,20 +550,26 @@ func mutateModelPricingOptions(mutate func(*gorm.DB, map[string]map[string]any) 
 	defer modelPricingMutationMu.Unlock()
 	var committed map[string]map[string]any
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		// Insert in the same order on every connection. A concurrent first writer
-		// may commit while ON CONFLICT waits; only the locked reread is authoritative.
-		for _, key := range modelPricingOptionKeys {
-			row := Option{Key: key, Value: "{}"}
-			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
-				return err
-			}
-		}
-		values, _, duplicated, err := readModelPricingMaps(lockForUpdate(tx))
+		values, existing, duplicated, err := readModelPricingMaps(lockForUpdate(tx))
 		if err != nil {
 			return err
 		}
 		if len(duplicated) > 0 {
-			return errors.New("pricing options contain duplicate keys")
+			common.SysError(common.LogText("options table has duplicate pricing keys [%s]; the table is missing a primary key", strings.Join(duplicated, ", ")))
+		}
+		defaults := defaultPricingMaps()
+		for _, key := range modelPricingOptionKeys {
+			if existing[key] {
+				continue
+			}
+			encoded, err := common.Marshal(defaults[key])
+			if err != nil {
+				return err
+			}
+			row := Option{Key: key, Value: string(encoded)}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+				return err
+			}
 		}
 		if err := mutate(tx, values); err != nil {
 			return err
@@ -632,7 +579,7 @@ func mutateModelPricingOptions(mutate func(*gorm.DB, map[string]map[string]any) 
 			if err != nil {
 				return err
 			}
-			if err := tx.Model(&Option{}).Where(map[string]any{"key": key}).Update("value", string(encoded)).Error; err != nil {
+			if err := tx.Model(&Option{}).Where(commonKeyCol+" = ?", key).Update("value", string(encoded)).Error; err != nil {
 				return err
 			}
 		}

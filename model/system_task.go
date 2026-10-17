@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"errors"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,14 +16,11 @@ const (
 	SystemTaskStatusSucceeded SystemTaskStatus = "succeeded"
 	SystemTaskStatusFailed    SystemTaskStatus = "failed"
 
-	SystemTaskTypeLogCleanup             = "log_cleanup"
-	SystemTaskTypeChannelTest            = "channel_test"
-	SystemTaskTypeModelUpdate            = "model_update"
-	SystemTaskTypeMidjourneyPoll         = "midjourney_poll"
-	SystemTaskTypeAsyncTaskPoll          = "async_task_poll"
-	SystemTaskTypeRouteCapabilityRefresh = "route_capability_refresh"
-	SystemTaskTypeBillingRecovery        = "billing_recovery"
-	SystemTaskTypeGatewayStateCleanup    = "gateway_state_cleanup"
+	SystemTaskTypeLogCleanup     = "log_cleanup"
+	SystemTaskTypeChannelTest    = "channel_test"
+	SystemTaskTypeModelUpdate    = "model_update"
+	SystemTaskTypeMidjourneyPoll = "midjourney_poll"
+	SystemTaskTypeAsyncTaskPoll  = "async_task_poll"
 )
 
 var ErrSystemTaskLockLost = errors.New("system task lock lost")
@@ -394,11 +390,8 @@ func UpdateSystemTaskState(taskID string, lockedBy string, state any) error {
 }
 
 func RenewSystemTaskLock(taskID string, lockedBy string, lockUntil int64) error {
-	return RenewSystemTaskLockContext(context.Background(), taskID, lockedBy, lockUntil)
-}
-func RenewSystemTaskLockContext(ctx context.Context, taskID string, lockedBy string, lockUntil int64) error {
 	now := common.GetTimestamp()
-	result := DB.WithContext(ctx).Model(&SystemTaskLock{}).
+	result := DB.Model(&SystemTaskLock{}).
 		Where("task_id = ? AND locked_by = ? AND locked_until >= ?", taskID, lockedBy, now).
 		Updates(map[string]any{
 			"locked_until": lockUntil,
@@ -500,60 +493,6 @@ func (task *SystemTask) ToResponse() SystemTaskResponse {
 
 func activeSystemTaskStatuses() []string {
 	return []string{string(SystemTaskStatusPending), string(SystemTaskStatusRunning)}
-}
-
-// SystemTaskActivity is the run history that matters for health: the latest
-// success and failure, the latest failure message and whether a run is active.
-type SystemTaskActivity struct {
-	LastSuccessAt int64
-	LastFailureAt int64
-	LastSuccessID int64
-	LastFailureID int64
-	LastError     string
-	Active        bool
-}
-
-func SummarizeSystemTaskActivity(taskTypes []string) (map[string]SystemTaskActivity, error) {
-	activity := map[string]SystemTaskActivity{}
-	if len(taskTypes) == 0 {
-		return activity, nil
-	}
-	var rows []struct {
-		Type   string
-		Status SystemTaskStatus
-		LastAt int64
-		LastID int64
-	}
-	if err := DB.Model(&SystemTask{}).Select("type, status, MAX(updated_at) AS last_at, MAX(id) AS last_id").
-		Where("type IN ?", taskTypes).Group("type, status").Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		item := activity[row.Type]
-		switch row.Status {
-		case SystemTaskStatusSucceeded:
-			item.LastSuccessAt = row.LastAt
-			item.LastSuccessID = row.LastID
-		case SystemTaskStatusFailed:
-			item.LastFailureAt = row.LastAt
-			item.LastFailureID = row.LastID
-		case SystemTaskStatusPending, SystemTaskStatusRunning:
-			item.Active = true
-		}
-		activity[row.Type] = item
-	}
-	var failures []*SystemTask
-	latestFailures := DB.Model(&SystemTask{}).Select("MAX(id)").
-		Where("type IN ? AND status = ?", taskTypes, SystemTaskStatusFailed).Group("type")
-	if err := DB.Select("type", "error").Where("id IN (?)", latestFailures).Find(&failures).Error; err != nil {
-		return nil, err
-	}
-	for _, failure := range failures {
-		item := activity[failure.Type]
-		item.LastError = failure.Error
-		activity[failure.Type] = item
-	}
-	return activity, nil
 }
 
 func marshalSystemTaskJSON(v any) (string, error) {

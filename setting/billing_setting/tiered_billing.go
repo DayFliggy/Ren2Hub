@@ -13,6 +13,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
 )
 
@@ -52,11 +53,33 @@ func GetBillingMode(model string) string {
 	if mode, ok := billingSetting.BillingMode[model]; ok {
 		return mode
 	}
+	if _, ok := builtinBillingExpr[model]; ok {
+		// Existing administrator-configured legacy prices take precedence over
+		// a newly introduced built-in expression unless a mode was explicit.
+		if ratio_setting.HasConfiguredModelRatio(model) {
+			return BillingModeRatio
+		}
+		if _, configured := ratio_setting.GetModelPrice(model, false); configured {
+			return BillingModeRatio
+		}
+		return BillingModeTieredExpr
+	}
 	return BillingModeRatio
 }
 
 func GetBillingExpr(model string) (string, bool) {
-	expression, ok := billingSetting.BillingExpr[model]
+	if expr, ok := billingSetting.BillingExpr[model]; ok {
+		return expr, true
+	}
+	if GetBillingMode(model) == BillingModeTieredExpr {
+		expr, ok := builtinBillingExpr[model]
+		return expr, ok
+	}
+	return "", false
+}
+
+func GetBuiltinBillingExpr(model string) (string, bool) {
+	expression, ok := builtinBillingExpr[model]
 	return expression, ok
 }
 
@@ -121,9 +144,32 @@ func TaskExprCompatible(expression string, schema map[string]jsplugin.UsageField
 	return !billingexpr.UsesFixedPricing(expression)
 }
 
-func GetBillingModeCopy() map[string]string { return maps.Clone(billingSetting.BillingMode) }
+func GetBuiltinBillingExprCopy() map[string]string {
+	return lo.Assign(builtinBillingExpr)
+}
 
-func GetBillingExprCopy() map[string]string { return maps.Clone(billingSetting.BillingExpr) }
+func GetBillingModeCopy() map[string]string {
+	modes := lo.Assign(billingSetting.BillingMode)
+	for model := range builtinBillingExpr {
+		if _, configured := modes[model]; !configured && GetBillingMode(model) == BillingModeTieredExpr {
+			modes[model] = BillingModeTieredExpr
+		}
+	}
+	return modes
+}
+
+func GetBillingExprCopy() map[string]string {
+	expressions := lo.Assign(billingSetting.BillingExpr)
+	for model := range builtinBillingExpr {
+		if _, configured := expressions[model]; configured {
+			continue
+		}
+		if expression, ok := GetBillingExpr(model); ok {
+			expressions[model] = expression
+		}
+	}
+	return expressions
+}
 
 func GetPricingSyncData(base map[string]any) map[string]any {
 	extra := make(map[string]any, 2)
@@ -172,10 +218,10 @@ func smokeTestExpr(exprStr string) error {
 		for _, request := range billingExprSmokeRequests() {
 			result, _, err := billingexpr.RunExprWithRequest(exprStr, v, request)
 			if err != nil {
-				return fmt.Errorf("vector {p=%d, c=%d}: run failed: %w", v.P, v.C, err)
+				return fmt.Errorf("vector {p=%g, c=%g}: run failed: %w", v.P, v.C, err)
 			}
 			if math.IsNaN(result) || math.IsInf(result, 0) || result < 0 {
-				return fmt.Errorf("vector {p=%d, c=%d}: result must be finite and non-negative, got %f", v.P, v.C, result)
+				return fmt.Errorf("vector {p=%g, c=%g}: result must be finite and non-negative, got %f", v.P, v.C, result)
 			}
 		}
 	}

@@ -763,39 +763,6 @@ export function run(fetch) {
 	assert.Empty(t, engine.parked)
 }
 
-// A call that cannot resume after utils.fetch because other calls hold every
-// slot reports engine saturation, which pollers tell apart from a provider
-// failure.
-func TestEngineFetchResumeTimeoutReportsSaturation(t *testing.T) {
-	previous := slotReclaimTimeout
-	slotReclaimTimeout = 10 * time.Millisecond
-	t.Cleanup(func() { slotReclaimTimeout = previous })
-	engine, err := Compile(`export function run() { utils.fetch({url: "https://api.example/slow"}); return "resumed"; }`,
-		Options{Key: "fetch-saturated", Concurrency: 1})
-	require.NoError(t, err)
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	ctx := WithFetcher(t.Context(), func(context.Context, FetchRequest) (FetchResponse, error) {
-		close(entered)
-		<-release
-		return FetchResponse{Status: http.StatusOK}, nil
-	})
-	result := make(chan error, 1)
-	go func() {
-		_, err := engine.Call(ctx, "run")
-		result <- err
-	}()
-	<-entered
-	engine.semaphore <- struct{}{}
-	close(release)
-	err = <-result
-	<-engine.semaphore
-
-	require.ErrorIs(t, err, ErrCallAdmissionTimeout)
-	assert.Empty(t, engine.semaphore)
-	assert.Empty(t, engine.parked)
-}
-
 func TestEnginePreservesMutableExportAndMemberBindings(t *testing.T) {
 	engine, err := Compile(`
 export let run = function(){return 1;};

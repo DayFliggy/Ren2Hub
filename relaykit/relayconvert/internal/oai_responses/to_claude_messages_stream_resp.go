@@ -19,7 +19,6 @@ type ResponsesToClaudeStreamState struct {
 	sentMessageStart bool
 	done             bool
 	sawToolCall      bool
-	sawRefusal       bool
 	nextBlockIndex   int
 	blocks           []*responsesClaudeStreamBlock
 	byOutputIndex    map[int]*responsesClaudeStreamBlock
@@ -116,33 +115,21 @@ func (s *ResponsesToClaudeStreamState) ConvertChunk(event *dto.ResponsesStreamRe
 			block.NeedsReasoningBreak = true
 		}
 		return responses, s.Usage, nil
-	case responsesEventOutputTextDelta, responsesEventRefusalDelta:
-		// A refusal joins its message's text block, the same shape as the
-		// non-stream conversion and the terminal snapshot below.
+	case responsesEventOutputTextDelta:
 		block, err := s.ensureBlock(event, "text")
 		if err != nil {
 			return nil, s.Usage, err
-		}
-		if event.Type == responsesEventRefusalDelta && event.Delta != "" {
-			s.sawRefusal = true
 		}
 		return s.appendDelta(block, event.Delta, estimatedInputTokens), s.Usage, nil
-	case responsesEventOutputTextDone, responsesEventRefusalDone:
+	case responsesEventOutputTextDone:
 		block, err := s.ensureBlock(event, "text")
 		if err != nil {
 			return nil, s.Usage, err
 		}
-		final := event.Text
-		if event.Type == responsesEventRefusalDone {
-			final = event.Refusal
-		}
-		if final == nil {
+		if event.Text == nil {
 			return nil, s.Usage, nil
 		}
-		if event.Type == responsesEventRefusalDone && *final != "" {
-			s.sawRefusal = true
-		}
-		return s.mergeFinalValue(block, *final, estimatedInputTokens), s.Usage, nil
+		return s.mergeFinalValue(block, *event.Text, estimatedInputTokens), s.Usage, nil
 	case responsesEventOutputTextAnnotationAdded:
 		block, err := s.ensureBlock(event, "text")
 		if err != nil {
@@ -167,14 +154,10 @@ func (s *ResponsesToClaudeStreamState) ConvertChunk(event *dto.ResponsesStreamRe
 		if err != nil {
 			return nil, s.Usage, err
 		}
-		final := event.Arguments
-		if event.Type == responsesEventCustomToolInputDone {
-			final = event.Input
-		}
-		if final == nil {
+		if event.Arguments == nil {
 			return nil, s.Usage, nil
 		}
-		return s.mergeFinalValue(block, *final, estimatedInputTokens), s.Usage, nil
+		return s.mergeFinalValue(block, *event.Arguments, estimatedInputTokens), s.Usage, nil
 	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete:
 		responses, err := s.finish(event.Response, estimatedInputTokens)
 		return responses, s.Usage, err
@@ -423,16 +406,11 @@ func (s *ResponsesToClaudeStreamState) applyOutputItem(event *dto.ResponsesStrea
 		var text strings.Builder
 		var annotations []any
 		for _, content := range item.Content {
-			switch content.Type {
-			case "output_text":
-				text.WriteString(content.Text)
-				annotations = append(annotations, content.Annotations...)
-			case "refusal":
-				if content.Refusal != nil && *content.Refusal != "" {
-					text.WriteString(*content.Refusal)
-					s.sawRefusal = true
-				}
+			if content.Type != "output_text" {
+				continue
 			}
+			text.WriteString(content.Text)
+			annotations = append(annotations, content.Annotations...)
 		}
 		responses = append(responses, s.mergeFinalValue(block, text.String(), estimatedInputTokens)...)
 		responses = append(responses, s.appendAnnotations(block, annotations, estimatedInputTokens, true)...)
@@ -497,7 +475,7 @@ func (s *ResponsesToClaudeStreamState) finish(response *dto.OpenAIResponsesRespo
 		responses = append(responses, s.stopBlock(block, estimatedInputTokens)...)
 	}
 	responses = append(responses, s.ensureMessageStart(estimatedInputTokens)...)
-	stopReason := responsesClaudeStopReason(response, s.sawToolCall, s.sawRefusal)
+	stopReason := responsesClaudeStopReason(response, s.sawToolCall)
 	usage := sharedclaude.UsageFromOpenAI(s.Usage)
 	responses = append(responses,
 		&dto.ClaudeResponse{

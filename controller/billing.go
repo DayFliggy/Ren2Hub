@@ -9,19 +9,17 @@ import (
 )
 
 func GetSubscription(c *gin.Context) {
-	var remainQuota common.Quota
-	var usedQuota common.Quota
+	var remainQuota int
+	var usedQuota int
 	var err error
 	var token *model.Token
 	var expiredTime int64
 	if common.DisplayTokenStatEnabled {
 		tokenId := c.GetInt("token_id")
 		token, err = model.GetTokenById(tokenId)
-		if err == nil {
-			expiredTime = token.ExpiredTime
-			remainQuota = token.RemainQuota
-			usedQuota = token.UsedQuota
-		}
+		expiredTime = token.ExpiredTime
+		remainQuota = token.RemainQuota
+		usedQuota = token.UsedQuota
 	} else {
 		userId := c.GetInt("id")
 		remainQuota, err = model.GetUserQuota(userId, false)
@@ -40,7 +38,8 @@ func GetSubscription(c *gin.Context) {
 		})
 		return
 	}
-	amount := float64(remainQuota) + float64(usedQuota)
+	quota := remainQuota + usedQuota
+	amount := float64(quota)
 	// OpenAI 兼容接口中的 *_USD 字段含义保持“额度单位”对应值：
 	// 我们将其解释为以“站点展示类型”为准：
 	// - USD: 直接除以 QuotaPerUnit
@@ -70,15 +69,13 @@ func GetSubscription(c *gin.Context) {
 }
 
 func GetUsage(c *gin.Context) {
-	var quota common.Quota
+	var quota int
 	var err error
 	var token *model.Token
 	if common.DisplayTokenStatEnabled {
 		tokenId := c.GetInt("token_id")
 		token, err = model.GetTokenById(tokenId)
-		if err == nil {
-			quota = token.UsedQuota
-		}
+		quota = token.UsedQuota
 	} else {
 		userId := c.GetInt("id")
 		quota, err = model.GetUserUsedQuota(userId)

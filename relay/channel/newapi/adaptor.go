@@ -4,8 +4,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
@@ -34,20 +32,6 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode == relayconstant.RelayModeAlphaSearch {
 		return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, "/v1/alpha/search", info.ChannelType), nil
-	}
-	if info.RelayFormat == types.RelayFormatGemini {
-		requestURL, err := url.ParseRequestURI(info.RequestURLPath)
-		if err != nil {
-			return "", err
-		}
-		prefix, modelAction, found := strings.Cut(requestURL.Path, "/models/")
-		actionIndex := strings.LastIndexByte(modelAction, ':')
-		if !found || actionIndex < 1 || actionIndex == len(modelAction)-1 || info.UpstreamModelName == "" {
-			return "", errors.New("invalid Gemini model request path")
-		}
-		requestURL.Path = prefix + "/models/" + info.UpstreamModelName + modelAction[actionIndex:]
-		requestURL.RawPath = ""
-		return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, requestURL.String(), info.ChannelType), nil
 	}
 	return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, info.ChannelType), nil
 }
@@ -91,14 +75,14 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	return request, nil
+	return a.claudeAdaptor.ConvertClaudeRequest(c, info, request)
 }
 
 func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	return request, nil
+	return a.geminiAdaptor.ConvertGeminiRequest(c, info, request)
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {

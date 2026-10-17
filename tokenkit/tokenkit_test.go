@@ -4,7 +4,6 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,19 +80,4 @@ func TestCountCutsOnlyLongRuns(t *testing.T) {
 		exact, _ := encoder.Count(text)
 		assert.InEpsilon(t, exact, Count("gpt-5.6-sol", text), 0.005)
 	}
-}
-
-// o200k folds trailing newlines into a symbol piece, so "/\n" repeated is one
-// piece that alternates classes. It must be cut like any other long run:
-// counting 1 MiB of it once took minutes during pre-consume.
-func TestCountCutsSymbolNewlinePieces(t *testing.T) {
-	encoder := codec.NewO200kBase()
-	sample := strings.Repeat("/\n", 4000)
-	exact, _ := encoder.Count(sample)
-	assert.InEpsilon(t, exact, Count("gpt-5.6-sol", sample), 0.005)
-
-	large := strings.Repeat("/\n", 512*1024)
-	start := time.Now()
-	assert.Positive(t, Count("gpt-5.6-sol", large))
-	assert.Less(t, time.Since(start), 5*time.Second, "1 MiB of symbol and newline pieces must count in linear time")
 }

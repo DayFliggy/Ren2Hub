@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"sync"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,9 +17,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := os.Setenv("CRYPTO_SECRET", "billing-test-persistent-key"); err != nil {
-		panic("failed to initialize test encryption key")
-	}
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		panic("failed to open test db: " + err.Error())
@@ -39,11 +38,8 @@ func TestMain(m *testing.M) {
 
 	if err := db.AutoMigrate(
 		&Task{},
-		&TaskResultEvent{},
-		&BillingEvent{}, &BillingRecovery{}, &BillingAttempt{}, &BillingPriceVersion{},
 		&User{},
 		&UserSession{},
-		&PersonalAccessToken{},
 		&AuthFlow{},
 		&ExternalIdentityClaim{},
 		&Token{},
@@ -55,14 +51,11 @@ func TestMain(m *testing.M) {
 		&QuotaData{},
 		&Ability{},
 		&TopUp{},
-		&EpayMerchantVersion{}, &EpayOrder{},
-		&GmpayMerchantVersion{}, &GmpayOrder{},
-		&Option{},
-		&AffiliateLedger{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
 		&SystemTask{},
 		&SystemTaskLock{},
+		&UserAccessToken{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
@@ -74,18 +67,14 @@ func truncateTables(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM tasks")
-		DB.Exec("DELETE FROM task_result_events")
-		DB.Exec("DELETE FROM billing_events")
-		DB.Exec("DELETE FROM billing_recoveries")
-		DB.Exec("DELETE FROM billing_attempts")
 		DB.Exec("DELETE FROM auth_flows")
 		DB.Exec("DELETE FROM external_identity_claims")
 		DB.Exec("DELETE FROM user_sessions")
-		DB.Exec("DELETE FROM personal_access_tokens")
 		DB.Exec("DELETE FROM passkey_credentials")
 		DB.Exec("DELETE FROM two_fa_backup_codes")
 		DB.Exec("DELETE FROM two_fas")
 		DB.Exec("DELETE FROM tokens")
+		DB.Exec("DELETE FROM user_access_tokens")
 		DB.Exec("DELETE FROM user_oauth_bindings")
 		DB.Exec("DELETE FROM users")
 		DB.Exec("DELETE FROM logs")
@@ -93,11 +82,6 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM quota_data")
 		DB.Exec("DELETE FROM abilities")
 		DB.Exec("DELETE FROM top_ups")
-		DB.Exec("DELETE FROM epay_orders")
-		DB.Exec("DELETE FROM epay_merchant_versions")
-		DB.Exec("DELETE FROM gmpay_orders")
-		DB.Exec("DELETE FROM gmpay_merchant_versions")
-		DB.Exec("DELETE FROM affiliate_ledgers")
 		DB.Exec("DELETE FROM perf_metrics")
 		DB.Exec("DELETE FROM system_task_locks")
 		DB.Exec("DELETE FROM system_tasks")
@@ -109,6 +93,40 @@ func insertTask(t *testing.T, task *Task) {
 	task.CreatedAt = time.Now().Unix()
 	task.UpdatedAt = time.Now().Unix()
 	require.NoError(t, DB.Create(task).Error)
+}
+
+func TestGetTaskForProtocolObservationScopesOwnerAndPlatform(t *testing.T) {
+	truncateTables(t)
+	task := &Task{
+		TaskID:   "task_protocol_scope",
+		UserId:   7,
+		Platform: "plugin-a",
+		Status:   TaskStatusInProgress,
+	}
+	insertTask(t, task)
+
+	got, exists, err := GetTaskForProtocolObservation(context.Background(), 7, "plugin-a", task.TaskID)
+	require.NoError(t, err)
+	require.True(t, exists)
+	assert.Equal(t, task.ID, got.ID)
+
+	for _, query := range []struct {
+		userID   int
+		platform string
+	}{
+		{userID: 8, platform: "plugin-a"},
+		{userID: 7, platform: "plugin-b"},
+	} {
+		got, exists, err = GetTaskForProtocolObservation(context.Background(), query.userID, constant.TaskPlatform(query.platform), task.TaskID)
+		require.NoError(t, err)
+		assert.False(t, exists)
+		assert.Nil(t, got)
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err = GetTaskForProtocolObservation(cancelled, 7, "plugin-a", task.TaskID)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +171,29 @@ func TestSnapshotEqual_NilVsEmpty(t *testing.T) {
 	assert.True(t, a.Equal(b))
 }
 
+func TestSnapshotEqual_PluginStateAndPollFailures(t *testing.T) {
+	base := taskSnapshot{
+		Status:       TaskStatusInProgress,
+		PluginState:  json.RawMessage(`{"req_key":"a"}`),
+		PollFailures: 2,
+	}
+	assert.True(t, base.Equal(taskSnapshot{
+		Status:       TaskStatusInProgress,
+		PluginState:  json.RawMessage(`{"req_key":"a"}`),
+		PollFailures: 2,
+	}))
+	assert.False(t, base.Equal(taskSnapshot{
+		Status:       TaskStatusInProgress,
+		PluginState:  json.RawMessage(`{"req_key":"b"}`),
+		PollFailures: 2,
+	}))
+	assert.False(t, base.Equal(taskSnapshot{
+		Status:       TaskStatusInProgress,
+		PluginState:  json.RawMessage(`{"req_key":"a"}`),
+		PollFailures: 3,
+	}))
+}
+
 func TestSnapshot_Roundtrip(t *testing.T) {
 	task := &Task{
 		Status:     TaskStatusInProgress,
@@ -161,7 +202,9 @@ func TestSnapshot_Roundtrip(t *testing.T) {
 		FinishTime: 5678,
 		FailReason: "timeout",
 		PrivateData: TaskPrivateData{
-			ResultURL: "https://example.com/result.mp4",
+			ResultURL:    "https://example.com/result.mp4",
+			PluginState:  json.RawMessage(`{"req_key":"keep"}`),
+			PollFailures: 3,
 		},
 		Data: json.RawMessage(`{"model":"test-model"}`),
 	}
@@ -173,6 +216,8 @@ func TestSnapshot_Roundtrip(t *testing.T) {
 	assert.Equal(t, task.FailReason, snap.FailReason)
 	assert.Equal(t, task.PrivateData.ResultURL, snap.ResultURL)
 	assert.JSONEq(t, string(task.Data), string(snap.Data))
+	assert.Equal(t, task.PrivateData.PluginState, snap.PluginState)
+	assert.Equal(t, task.PrivateData.PollFailures, snap.PollFailures)
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +283,7 @@ func TestUpdateWithStatus_ConcurrentWinner(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
 			t := &Task{}
@@ -269,42 +314,29 @@ func TestUpdateWithStatus_ConcurrentWinner(t *testing.T) {
 	assert.Equal(t, 1, winCount, "exactly one goroutine should win the CAS")
 }
 
-func TestUpdateWithStatus_KeepsBillingAndOwnershipColumns(t *testing.T) {
-	withTaskBillingDatabases(t, func(t *testing.T, _ *gorm.DB) {
-		task := &Task{TaskID: "task_cas_scope", UserId: 7, ChannelId: 3, Quota: 1000, Status: TaskStatusInProgress, Data: json.RawMessage(`{}`)}
-		insertTask(t, task)
-		// Settlement moved quota after this poller loaded its copy.
-		require.NoError(t, DB.Model(&Task{}).Where("id = ?", task.ID).Update("quota", 400).Error)
+func TestUpdateWithStatus_PersistsPluginStateAndPollFailures(t *testing.T) {
+	truncateTables(t)
 
-		stale := *task
-		stale.UserId, stale.ChannelId, stale.Quota = 0, 0, 1000
-		stale.Progress = "60%"
-		won, err := stale.UpdateWithStatus(TaskStatusInProgress)
-		require.NoError(t, err)
-		assert.True(t, won)
+	task := &Task{
+		TaskID: "task_cas_plugin_state",
+		Status: TaskStatusInProgress,
+		Data:   json.RawMessage(`{}`),
+		PrivateData: TaskPrivateData{
+			PluginState:  json.RawMessage(`{"req_key":"old"}`),
+			PollFailures: 1,
+		},
+	}
+	insertTask(t, task)
 
-		var reloaded Task
-		require.NoError(t, DB.First(&reloaded, task.ID).Error)
-		assert.Equal(t, "60%", reloaded.Progress)
-		assert.EqualValues(t, 400, reloaded.Quota)
-		assert.Equal(t, 7, reloaded.UserId)
-		assert.Equal(t, 3, reloaded.ChannelId)
-	})
-}
+	task.PrivateData.PluginState = json.RawMessage(`{"req_key":"new"}`)
+	task.PrivateData.PollFailures = 4
+	won, err := task.UpdateWithStatus(TaskStatusInProgress)
+	require.NoError(t, err)
+	require.True(t, won)
 
-func TestUnfinishedTaskQueries_IgnoreReportedProgress(t *testing.T) {
-	withTaskBillingDatabases(t, func(t *testing.T, _ *gorm.DB) {
-		running := &Task{TaskID: "task_running_full", Status: TaskStatusInProgress, Progress: "100%", SubmitTime: 100, Data: json.RawMessage(`{}`)}
-		done := &Task{TaskID: "task_done", Status: TaskStatusSuccess, Progress: "100%", SubmitTime: 100, Data: json.RawMessage(`{}`)}
-		insertTask(t, running)
-		insertTask(t, done)
-
-		assert.True(t, HasUnfinishedSyncTasks())
-		unfinished := GetAllUnFinishSyncTasks(10)
-		require.Len(t, unfinished, 1)
-		assert.Equal(t, running.TaskID, unfinished[0].TaskID)
-		timedOut := GetTimedOutUnfinishedTasks(200, 10)
-		require.Len(t, timedOut, 1)
-		assert.Equal(t, running.TaskID, timedOut[0].TaskID)
-	})
+	var reloaded Task
+	require.NoError(t, DB.First(&reloaded, task.ID).Error)
+	assert.EqualValues(t, TaskStatusInProgress, reloaded.Status)
+	assert.JSONEq(t, `{"req_key":"new"}`, string(reloaded.PrivateData.PluginState))
+	assert.Equal(t, 4, reloaded.PrivateData.PollFailures)
 }

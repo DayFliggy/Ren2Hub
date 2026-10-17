@@ -22,7 +22,7 @@ import (
 
 func ResponseText2Usage(c *gin.Context, responseText string, modeName string, promptTokens int) *dto.Usage {
 	common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
-	usage := &dto.Usage{UsageSource: "estimated"}
+	usage := &dto.Usage{}
 	usage.PromptTokens = promptTokens
 	usage.CompletionTokens = tokenkit.Estimate(modeName, responseText)
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens

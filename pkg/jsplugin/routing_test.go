@@ -651,20 +651,6 @@ func TestRegistryRetainsIncumbentWhenUpdatedPluginConflicts(t *testing.T) {
 	assert.NotContains(t, registry.RoutingErrors(), "incumbent")
 }
 
-func TestRegistryStrictPublicationDoesNotFallBack(t *testing.T) {
-	registry := NewRegistry()
-	old := mustCompileRoutingPlugin(t, "incumbent", 70, `["model-v1"]`, "", "")
-	owner := mustCompileRoutingPlugin(t, "owner", 71, `["owner-model"]`, "", "")
-	require.NoError(t, registry.ReplaceOverridesStrict([]*LoadedPlugin{old, owner}))
-	broken := mustCompileRoutingPlugin(t, "incumbent", 71, `["model-v2"]`, "", "")
-	require.NoError(t, registry.ReplaceOverridesStrict([]*LoadedPlugin{broken, owner}))
-	active, ok := registry.Get("incumbent")
-	if ok {
-		assert.NotSame(t, old, active, "publication failure must never activate an older executable")
-	}
-	assert.NotContains(t, registry.ActiveOverridePlugins(), "incumbent")
-}
-
 func TestRegistryAdmitsNewConflictsInDeterministicKeyOrder(t *testing.T) {
 	registry := NewRegistry()
 	alpha := mustCompileRoutingPlugin(t, "alpha", 80, `["alpha-model"]`, "", "")

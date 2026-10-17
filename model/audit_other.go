@@ -1,11 +1,9 @@
 package model
 
 import (
-	"bytes"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -62,92 +60,6 @@ func (fields *AuditFields) UnmarshalJSON(data []byte) error {
 	}
 	*fields = decoded
 	return nil
-}
-
-// sanitizeAuditParams removes credential-like keys at any depth. Current
-// writers pass explicit safe fields; this also covers legacy rows written
-// without that guarantee. Values stay encoded, so integers keep their precision.
-func sanitizeAuditParams(params AuditFields) AuditFields {
-	if params == nil {
-		return nil
-	}
-	result := make(AuditFields, len(params))
-	for key, value := range params {
-		if auditSensitiveKey(key) {
-			continue
-		}
-		raw, ok := value.(json.RawMessage)
-		if !ok {
-			encoded, err := common.Marshal(value)
-			if err != nil {
-				continue
-			}
-			raw = encoded
-		}
-		result[key] = sanitizeAuditRaw(raw)
-	}
-	return result
-}
-
-// sanitizeAuditRaw returns raw unchanged unless a nested object has a
-// credential-like key; only then is the affected container re-encoded.
-func sanitizeAuditRaw(raw json.RawMessage) json.RawMessage {
-	var object map[string]json.RawMessage
-	if err := common.Unmarshal(raw, &object); err == nil && object != nil {
-		changed := false
-		for key, value := range object {
-			if auditSensitiveKey(key) {
-				delete(object, key)
-				changed = true
-				continue
-			}
-			if sanitized := sanitizeAuditRaw(value); !bytes.Equal(sanitized, value) {
-				object[key], changed = sanitized, true
-			}
-		}
-		if !changed {
-			return raw
-		}
-		encoded, err := common.Marshal(object)
-		if err != nil {
-			return json.RawMessage("{}")
-		}
-		return encoded
-	}
-	var list []json.RawMessage
-	if err := common.Unmarshal(raw, &list); err == nil {
-		changed := false
-		for i, value := range list {
-			if sanitized := sanitizeAuditRaw(value); !bytes.Equal(sanitized, value) {
-				list[i], changed = sanitized, true
-			}
-		}
-		if !changed {
-			return raw
-		}
-		encoded, err := common.Marshal(list)
-		if err != nil {
-			return json.RawMessage("[]")
-		}
-		return encoded
-	}
-	return raw
-}
-
-func auditSensitiveKey(key string) bool {
-	normalized := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
-	if strings.Contains(normalized, "password") || strings.Contains(normalized, "secret") {
-		return true
-	}
-	if normalized == "token" || strings.HasSuffix(normalized, "_token") {
-		return true
-	}
-	switch normalized {
-	case "api_key", "apikey", "authorization", "cookie", "set_cookie":
-		return true
-	default:
-		return false
-	}
 }
 
 func (other AuditOther) Value() (driver.Value, error) {

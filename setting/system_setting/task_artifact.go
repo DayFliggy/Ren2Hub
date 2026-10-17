@@ -2,8 +2,6 @@ package system_setting
 
 import "github.com/QuantumNous/new-api/common"
 
-var TaskPublicAddress = common.GetEnvOrDefaultString("TASK_PUBLIC_ADDRESS", "")
-
 const (
 	DefaultTaskArtifactInvalidRateLimitPerMinute = 60
 	DefaultTaskArtifactGlobalConcurrency         = 128
@@ -28,7 +26,7 @@ type TaskArtifactAccessLimits struct {
 func positiveTaskArtifactLimit(env string, defaultValue int) int {
 	value := common.GetEnvOrDefault(env, defaultValue)
 	if value <= 0 {
-		common.SysError(env + " must be positive; using default")
+		common.SysError(common.LogText("%s must be positive; using default", env))
 		return defaultValue
 	}
 	return value

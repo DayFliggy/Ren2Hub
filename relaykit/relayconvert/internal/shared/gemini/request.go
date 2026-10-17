@@ -54,24 +54,6 @@ func IsSupportedMimeType(mimeType string) bool {
 	return supportedMimeTypes[mimeType] || strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/")
 }
 
-// functionResponseMimeTypes is the narrower list documented for media inside
-// a multimodal functionResponse (Vertex AI function calling reference).
-var functionResponseMimeTypes = map[string]bool{
-	"image/png":       true,
-	"image/jpeg":      true,
-	"image/jpg":       true,
-	"image/webp":      true,
-	"application/pdf": true,
-	"text/plain":      true,
-}
-
-// IsSupportedToolResultMimeType reports whether Gemini accepts the MIME type
-// as tool-result media. The narrower functionResponse list applies to every
-// placement so planning can decide before the model's version is known.
-func IsSupportedToolResultMimeType(mimeType string) bool {
-	return functionResponseMimeTypes[strings.ToLower(mimeType)]
-}
-
 var SafetySettingCategories = []string{
 	"HARM_CATEGORY_HARASSMENT",
 	"HARM_CATEGORY_HATE_SPEECH",

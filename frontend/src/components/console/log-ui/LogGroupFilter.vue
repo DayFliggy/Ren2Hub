@@ -1,44 +1,34 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/client'
-import { invalidResponse } from '@/api/contracts'
+import { invalidResponse, isRecord } from '@/api/contracts'
 const model = defineModel<string>({ required: true })
 const { t } = useI18n()
 const id = useId()
 const suggestions = ref<string[]>([])
 const error = ref('')
 let controller: AbortController | undefined
-let timer: ReturnType<typeof setTimeout> | undefined
 async function load() {
   controller?.abort()
   const request = new AbortController()
   controller = request
   error.value = ''
   try {
-    const endpoint = '/api/log/self/groups'
-    const data = await api.get<unknown>(
-      endpoint,
-      { search: model.value },
-      { signal: request.signal }
-    )
+    const endpoint = '/api/user/self/groups'
+    const data = await api.get<unknown>(endpoint, undefined, {
+      signal: request.signal,
+    })
     if (request.signal.aborted) return
-    if (!Array.isArray(data) || data.some((value) => typeof value !== 'string'))
-      invalidResponse(endpoint)
-    suggestions.value = data.filter((group: string) => group !== 'auto')
+    if (!isRecord(data)) invalidResponse(endpoint)
+    suggestions.value = Object.keys(data).filter((group) => group !== 'auto')
   } catch (cause) {
     if (!request.signal.aborted)
       error.value = cause instanceof Error ? cause.message : String(cause)
   }
 }
-watch(model, () => {
-  clearTimeout(timer)
-  controller?.abort()
-  timer = setTimeout(load, 300)
-})
 onMounted(load)
 onBeforeUnmount(() => {
-  clearTimeout(timer)
   controller?.abort()
 })
 </script>

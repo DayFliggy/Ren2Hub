@@ -134,18 +134,21 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if geminiEmbeddingOperation(info) {
-		action := "embedContent"
-		if info.IsGeminiBatchEmbedding {
-			action = "batchEmbedContents"
-		}
-		return fmt.Sprintf("%s/%s/models/%s:%s", info.ChannelBaseUrl, model_setting.GetGeminiVersionSetting(info.UpstreamModelName), info.UpstreamModelName, action), nil
-	}
 
 	version := model_setting.GetGeminiVersionSetting(info.UpstreamModelName)
 
 	if strings.HasPrefix(info.UpstreamModelName, "imagen") {
 		return fmt.Sprintf("%s/%s/models/%s:predict", info.ChannelBaseUrl, version, info.UpstreamModelName), nil
+	}
+
+	if strings.HasPrefix(info.UpstreamModelName, "text-embedding") ||
+		strings.HasPrefix(info.UpstreamModelName, "embedding") ||
+		strings.HasPrefix(info.UpstreamModelName, "gemini-embedding") {
+		action := "embedContent"
+		if info.IsGeminiBatchEmbedding {
+			action = "batchEmbedContents"
+		}
+		return fmt.Sprintf("%s/%s/models/%s:%s", info.ChannelBaseUrl, version, info.UpstreamModelName, action), nil
 	}
 
 	action := "generateContent"
@@ -240,12 +243,6 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
-	if geminiEmbeddingOperation(info) {
-		if info.RelayMode == constant.RelayModeGemini {
-			return NativeGeminiEmbeddingHandler(c, resp, info)
-		}
-		return GeminiEmbeddingHandler(c, info, resp)
-	}
 	if info.RelayMode == constant.RelayModeResponses {
 		if info.IsStream {
 			return GeminiResponsesStreamHandler(c, info, resp)
@@ -269,26 +266,19 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		return GeminiImageHandler(c, info, resp)
 	}
 
+	// check if the model is an embedding model
+	if strings.HasPrefix(info.UpstreamModelName, "text-embedding") ||
+		strings.HasPrefix(info.UpstreamModelName, "embedding") ||
+		strings.HasPrefix(info.UpstreamModelName, "gemini-embedding") {
+		return GeminiEmbeddingHandler(c, info, resp)
+	}
+
 	if info.IsStream {
 		return GeminiChatStreamHandler(c, info, resp)
 	} else {
 		return GeminiChatHandler(c, info, resp)
 	}
 
-}
-
-// The operation survives model mapping; deployment names need not contain an
-// embedding prefix. Native Gemini embeds retain their dedicated request DTOs.
-func geminiEmbeddingOperation(info *relaycommon.RelayInfo) bool {
-	if info.RelayMode == constant.RelayModeEmbeddings {
-		return true
-	}
-	switch info.Request.(type) {
-	case *dto.GeminiEmbeddingRequest, *dto.GeminiBatchEmbeddingRequest:
-		return true
-	default:
-		return false
-	}
 }
 
 func (a *Adaptor) GetModelList() []string {

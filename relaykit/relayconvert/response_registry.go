@@ -2,7 +2,6 @@ package relayconvert
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"reflect"
@@ -45,7 +44,6 @@ type ResponseStep struct {
 }
 
 type ResponseResult struct {
-	Termination types.ResponseTermination
 	Value       any
 	Usage       *dto.Usage
 	From        types.RelayFormat
@@ -76,11 +74,10 @@ type responseConverterRoute struct {
 }
 
 type ResponseStreamOptions struct {
-	MaxInputBytes int64
-	ID            string
-	Model         string
-	Created       int64
-	IncludeUsage  bool
+	ID           string
+	Model        string
+	Created      int64
+	IncludeUsage bool
 	// EmitSequenceNumber opts into the current Responses SSE wire contract.
 	// It is explicit so relaykit callers that depend on the historical zero-value
 	// output are not changed merely by upgrading the module.
@@ -96,20 +93,11 @@ type conversionDiagnosticKey struct {
 }
 
 type ResponseStreamState struct {
-	claudeHosted       *claudemessages.ClaudeHostedStreamBridge
-	geminiHosted       *geminichat.GeminiHostedStreamBridge
-	finalized          bool
-	termination        types.ResponseTermination
-	conversionError    error
-	choiceTerminations map[int]types.ResponseTermination
-	maxInputBytes      int64
-	inputBytes         int64
-	terminalSnapshot   string
-	From               types.RelayFormat
-	To                 types.RelayFormat
-	Converter          string
-	Quality            ResponseConverterQuality
-	Steps              []ResponseStep
+	From      types.RelayFormat
+	To        types.RelayFormat
+	Converter string
+	Quality   ResponseConverterQuality
+	Steps     []ResponseStep
 
 	specs              []ResponseConverterSpec
 	stepStates         []any
@@ -250,12 +238,11 @@ func ConvertResponse(c context.Context, info convmeta.Meta, target types.RelayFo
 	}
 	if from == target {
 		return &ResponseResult{
-			Termination: TerminationFromResponse(response),
-			Value:       response,
-			Usage:       canonicalUsageFromResponse(response),
-			From:        from,
-			To:          target,
-			Stream:      false,
+			Value:  response,
+			Usage:  canonicalUsageFromResponse(response),
+			From:   from,
+			To:     target,
+			Stream: false,
 		}, nil
 	}
 
@@ -292,12 +279,11 @@ func ConvertStreamResponse(c context.Context, info convmeta.Meta, target types.R
 	}
 	if from == target {
 		return &ResponseResult{
-			Termination: TerminationFromResponse(response),
-			Value:       response,
-			Usage:       canonicalUsageFromResponse(response),
-			From:        from,
-			To:          target,
-			Stream:      true,
+			Value:  response,
+			Usage:  canonicalUsageFromResponse(response),
+			From:   from,
+			To:     target,
+			Stream: true,
 		}, nil
 	}
 
@@ -317,9 +303,8 @@ func NewResponseStreamState(from types.RelayFormat, target types.RelayFormat, op
 	}
 	if from == target {
 		return &ResponseStreamState{
-			maxInputBytes: responseStreamInputLimit(options),
-			From:          from,
-			To:            target,
+			From: from,
+			To:   target,
 		}, nil
 	}
 
@@ -342,12 +327,6 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 	if state == nil {
 		return nil, errors.New("response stream state is required")
 	}
-	if state.finalized {
-		return nil, errors.New("response stream is already finalized")
-	}
-	if state.conversionError != nil {
-		return nil, state.conversionError
-	}
 	if info == nil {
 		if state.fallbackInfo == nil {
 			state.fallbackInfo = &convmeta.Values{}
@@ -361,34 +340,7 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 	if from != state.From {
 		return nil, fmt.Errorf("response stream converter %q expects %s response, got %s", state.Converter, state.From, from)
 	}
-	terminal := TerminationFromResponse(response)
-	state.observeResponseTermination(response)
-	state.rememberUsage(canonicalUsageFromResponse(response))
-	if err := ValidateResponseTermination(state.From, state.To, terminal); err != nil {
-		state.conversionError = err
-		return nil, err
-	}
-	encoded, err := kitutil.Marshal(response)
-	if err != nil {
-		state.conversionError = err
-		return nil, err
-	}
-	if int64(len(encoded)) > state.maxInputBytes-state.inputBytes {
-		state.conversionError = fmt.Errorf("response_conversion_limit: stream conversion input exceeds configured byte limit")
-		return nil, state.conversionError
-	}
-	state.inputBytes += int64(len(encoded))
-	if duplicate, err := state.checkTerminalSnapshot(response); duplicate || err != nil {
-		if err != nil {
-			state.conversionError = err
-		}
-		return nil, err
-	}
-	diagnostics, err := guardResponseConversion(state.From, state.To, response, info, toolconv.InspectStreamResponse(state.From, state.To, response))
-	if err != nil {
-		state.conversionError = err
-		return nil, err
-	}
+	diagnostics := toolconv.InspectStreamResponse(state.From, state.To, response)
 	state.rememberDiagnostics(diagnostics)
 	if state.From == state.To {
 		usage := canonicalUsageFromResponse(response)
@@ -397,36 +349,8 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 		return responseStreamResults(state, values, usage, state.takeDiagnostics(len(values) > 0)), nil
 	}
 
-	if state.To == types.RelayFormatOpenAIResponses {
-		for _, value := range state.stepStates {
-			out, ok := value.(*ChatToResponsesStreamState)
-			if !ok {
-				continue
-			}
-			if source, ok := response.(*dto.ClaudeResponse); ok {
-				if state.claudeHosted == nil {
-					state.claudeHosted = claudemessages.NewClaudeHostedStreamBridge()
-				}
-				events, consumed, err := state.claudeHosted.Convert(source, out)
-				if err != nil {
-					state.conversionError = err
-					return nil, err
-				}
-				if consumed {
-					return responseStreamResults(state, streamValuesFromAny(events), state.Usage(), state.takeDiagnostics(len(events) > 0)), nil
-				}
-			}
-			if source, ok := response.(*dto.GeminiChatResponse); ok {
-				if state.geminiHosted == nil {
-					state.geminiHosted = geminichat.NewGeminiHostedStreamBridge()
-				}
-				state.geminiHosted.Observe(source)
-			}
-		}
-	}
 	values, usage, err := executeResponseStreamSteps(c, info, state, []any{response}, 0)
 	if err != nil {
-		state.conversionError = err
 		return nil, err
 	}
 	state.rememberUsage(usage)
@@ -434,28 +358,9 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 }
 
 func FinalizeStreamResponse(c context.Context, info convmeta.Meta, state *ResponseStreamState) ([]ResponseResult, error) {
-	return FinalizeStreamResponseWithOutcome(c, info, state, StreamOutcomeCompleted)
-}
-func finalizeStreamResponse(c context.Context, info convmeta.Meta, state *ResponseStreamState) ([]ResponseResult, error) {
 	if state == nil {
 		return nil, errors.New("response stream state is required")
 	}
-	if state.finalized {
-		return nil, nil
-	}
-	var hostedValues []any
-	if state.geminiHosted != nil {
-		for _, value := range state.stepStates {
-			if out, ok := value.(*ChatToResponsesStreamState); ok {
-				events, err := state.geminiHosted.Finalize(out)
-				if err != nil {
-					return nil, err
-				}
-				hostedValues = streamValuesFromAny(events)
-			}
-		}
-	}
-	state.finalized = true
 	if info == nil && state.fallbackInfo != nil {
 		info = state.fallbackInfo
 	}
@@ -494,15 +399,7 @@ func finalizeStreamResponse(c context.Context, info convmeta.Meta, state *Respon
 		}
 		values = append(values, current...)
 	}
-	values = append(hostedValues, values...)
 	return responseStreamResults(state, values, usage, state.takeDiagnostics(len(values) > 0)), nil
-}
-
-func (s *ResponseStreamState) Termination() types.ResponseTermination {
-	if s == nil {
-		return types.ResponseTermination{}
-	}
-	return s.termination
 }
 
 func (s *ResponseStreamState) Usage() *dto.Usage {
@@ -584,22 +481,11 @@ func executeResponseSpec(c context.Context, info convmeta.Meta, from types.Relay
 }
 
 func executeResponseSteps(c context.Context, info convmeta.Meta, from types.RelayFormat, target types.RelayFormat, response any, converter string, quality ResponseConverterQuality, specs []ResponseConverterSpec) (*ResponseResult, error) {
-	termination := TerminationFromResponse(response)
-	if from != target && !termination.IsTerminal() {
-		return nil, ErrResponseTerminalMissing
-	}
-	if err := ValidateResponseTermination(from, target, termination); err != nil {
-		return nil, err
-	}
-	diagnostics, err := guardResponseConversion(from, target, response, info, toolconv.InspectResponse(from, target, response))
-	if err != nil {
-		return nil, err
-	}
+	diagnostics := toolconv.InspectResponse(from, target, response)
 	current, hostedResponse, err := toolconv.ExtractHostedResponse(from, response)
 	if err != nil {
 		return nil, err
 	}
-	regularSource := current
 	var usage *dto.Usage
 	steps := make([]ResponseStep, 0, len(specs))
 	for _, spec := range specs {
@@ -611,29 +497,11 @@ func executeResponseSteps(c context.Context, info convmeta.Meta, from types.Rela
 		}
 		steps = append(steps, step)
 	}
-	if from == types.RelayFormatClaude && target == types.RelayFormatOpenAIResponses && !hostedResponse.Empty() {
-		source, sourceOK := regularSource.(*dto.ClaudeResponse)
-		out, outOK := current.(*dto.OpenAIResponsesResponse)
-		if sourceOK && outOK {
-			out.Output = nil
-			for _, block := range source.Content {
-				chat := ResponseClaude2OpenAI(&dto.ClaudeResponse{Content: []dto.ClaudeMediaMessage{block}, StopReason: "end_turn"})
-				converted, _, err := oaichat.ChatCompletionsResponseToResponsesResponseWithTools(chat, out.ID, convmeta.ResponsesToolStateOf(info))
-				if err != nil {
-					return nil, err
-				}
-				out.Output = append(out.Output, converted.Output...)
-			}
-		}
-	}
 	current, hostedDiagnostics, err := toolconv.AttachHostedResponse(target, current, hostedResponse, convmeta.OptionsOf(info))
 	if err != nil {
 		return nil, err
 	}
 	diagnostics = append(diagnostics, hostedDiagnostics...)
-	if err := types.RejectConversionLoss(convmeta.OptionsOf(info).EffectiveConversionPolicy(), diagnostics); err != nil {
-		return nil, err
-	}
 
 	converters := make([]string, 0, len(steps))
 	for _, step := range steps {
@@ -643,7 +511,6 @@ func executeResponseSteps(c context.Context, info convmeta.Meta, from types.Rela
 		converter = strings.Join(converters, ",")
 	}
 	return &ResponseResult{
-		Termination: termination,
 		Value:       current,
 		Usage:       usage,
 		From:        from,
@@ -661,9 +528,6 @@ func executeResponseStep(c context.Context, info convmeta.Meta, spec ResponseCon
 		return nil, nil, ResponseStep{}, fmt.Errorf("response converter %q has no non-stream implementation", spec.ID)
 	}
 
-	if _, err := guardResponseConversion(spec.From, spec.To, response, info, nil); err != nil {
-		return nil, nil, ResponseStep{}, err
-	}
 	value, usage, err := spec.Convert(c, info, response)
 	if err != nil {
 		return nil, nil, ResponseStep{}, err
@@ -676,14 +540,7 @@ func executeResponseStep(c context.Context, info convmeta.Meta, spec ResponseCon
 }
 
 func executeStatelessStreamResponseSpec(c context.Context, info convmeta.Meta, from types.RelayFormat, target types.RelayFormat, response any, spec ResponseConverterSpec) (*ResponseResult, error) {
-	termination := TerminationFromResponse(response)
-	if err := ValidateResponseTermination(from, target, termination); err != nil {
-		return nil, err
-	}
-	diagnostics, err := guardResponseConversion(from, target, response, info, toolconv.InspectStreamResponse(from, target, response))
-	if err != nil {
-		return nil, err
-	}
+	diagnostics := toolconv.InspectStreamResponse(from, target, response)
 	steps, err := expandResponseConverterSteps(spec)
 	if err != nil {
 		return nil, err
@@ -707,7 +564,6 @@ func executeStatelessStreamResponseSpec(c context.Context, info convmeta.Meta, f
 		})
 	}
 	return &ResponseResult{
-		Termination: termination,
 		Value:       current,
 		Usage:       usage,
 		From:        from,
@@ -738,14 +594,13 @@ func newResponseStreamStateFromSpec(from types.RelayFormat, target types.RelayFo
 		})
 	}
 	return &ResponseStreamState{
-		maxInputBytes: responseStreamInputLimit(options),
-		From:          from,
-		To:            target,
-		Converter:     spec.ID,
-		Quality:       spec.Quality,
-		Steps:         resultSteps,
-		specs:         steps,
-		stepStates:    stepStates,
+		From:       from,
+		To:         target,
+		Converter:  spec.ID,
+		Quality:    spec.Quality,
+		Steps:      resultSteps,
+		specs:      steps,
+		stepStates: stepStates,
 	}, nil
 }
 
@@ -859,7 +714,6 @@ func responseStreamResults(state *ResponseStreamState, values []any, usage *dto.
 			resultDiagnostics = append(resultDiagnostics, diagnostics...)
 		}
 		results = append(results, ResponseResult{
-			Termination: state.termination,
 			Value:       value,
 			Usage:       usage,
 			From:        state.From,
@@ -1044,11 +898,6 @@ func convertOAIChatResponseToOAIResponses(_ context.Context, info convmeta.Meta,
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, choice := range chatResponse.Choices {
-		if len(chatResponse.Choices) > 1 || choice.Index != 0 {
-			return nil, nil, fmt.Errorf("Responses cannot represent multiple choices")
-		}
-	}
 	id := strings.TrimSpace(chatResponse.Id)
 	if id == "" {
 		id = fmt.Sprintf("resp_%s", kitutil.GetUUID())
@@ -1094,11 +943,6 @@ func convertOAIChatStreamResponseToOAIResponses(_ context.Context, info convmeta
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, choice := range chatResponse.Choices {
-		if len(chatResponse.Choices) > 1 || choice.Index != 0 {
-			return nil, nil, fmt.Errorf("Responses cannot represent multiple choices")
-		}
-	}
 	streamState, ok := state.(*ChatToResponsesStreamState)
 	if !ok || streamState == nil {
 		return nil, nil, errors.New("OAI chat to OAI responses stream state is required")
@@ -1119,9 +963,6 @@ func finalizeOAIChatStreamResponseToOAIResponses(_ context.Context, _ convmeta.M
 		return nil, nil, errors.New("OAI chat to OAI responses stream state is required")
 	}
 	events := FinalizeChatCompletionsStreamToResponses(streamState)
-	if err := streamState.ConversionError(); err != nil {
-		return nil, streamState.Usage, err
-	}
 	return streamValuesFromAny(events), streamState.Usage, nil
 }
 
@@ -1214,11 +1055,6 @@ func convertOAIChatResponseToClaudeMessages(_ context.Context, info convmeta.Met
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, choice := range chatResponse.Choices {
-		if choice.Index != 0 || len(chatResponse.Choices) > 1 {
-			return nil, nil, fmt.Errorf("Claude cannot represent multiple choices")
-		}
-	}
 	return ResponseOpenAI2Claude(chatResponse, info), UsageFromChatUsage(&chatResponse.Usage), nil
 }
 
@@ -1226,11 +1062,6 @@ func convertOAIChatStreamResponseToClaudeMessages(_ context.Context, info convme
 	chatResponse, err := asOAIChatStreamResponse(response)
 	if err != nil {
 		return nil, nil, err
-	}
-	for _, choice := range chatResponse.Choices {
-		if choice.Index != 0 || len(chatResponse.Choices) > 1 {
-			return nil, nil, fmt.Errorf("Claude cannot represent multiple choices")
-		}
 	}
 	return StreamResponseOpenAI2Claude(chatResponse, info), canonicalUsageFromResponse(chatResponse), nil
 }
@@ -1256,11 +1087,6 @@ func convertOAIChatStreamResponseToGeminiChat(_ context.Context, info convmeta.M
 	chatResponse, err := asOAIChatStreamResponse(response)
 	if err != nil {
 		return nil, nil, err
-	}
-	for _, choice := range chatResponse.Choices {
-		if len(choice.Delta.ToolCalls) > 0 {
-			return nil, nil, fmt.Errorf("tool streams require per-stream state")
-		}
 	}
 	return StreamResponseOpenAI2Gemini(chatResponse, info), canonicalUsageFromResponse(chatResponse), nil
 }
@@ -1314,9 +1140,6 @@ func convertClaudeMessagesStreamResponseToOAIChat(_ context.Context, _ convmeta.
 	claudeResponse, err := asClaudeResponse(response)
 	if err != nil {
 		return nil, nil, err
-	}
-	if claudeResponse.ContentBlock != nil && claudeResponse.ContentBlock.Type == "tool_use" || claudeResponse.Delta != nil && claudeResponse.Delta.Type == "input_json_delta" {
-		return nil, nil, fmt.Errorf("Claude tool stream requires per-stream state")
 	}
 	openAIResponse := StreamResponseClaude2OpenAI(claudeResponse)
 	usage := usageFromClaudeResponse(claudeResponse)
@@ -1496,43 +1319,4 @@ func asGeminiChatResponse(response any) (*dto.GeminiChatResponse, error) {
 	default:
 		return nil, fmt.Errorf("expected Gemini chat response, got %T", response)
 	}
-}
-
-func responseStreamInputLimit(options ResponseStreamOptions) int64 {
-	if options.MaxInputBytes > 0 {
-		return options.MaxInputBytes
-	}
-	return 128 << 20
-}
-
-func (s *ResponseStreamState) checkTerminalSnapshot(response any) (bool, error) {
-	var event *dto.ResponsesStreamResponse
-	switch value := response.(type) {
-	case *dto.ResponsesStreamResponse:
-		event = value
-	case dto.ResponsesStreamResponse:
-		event = &value
-	default:
-		return false, nil
-	}
-	if !TerminationFromResponse(event).IsTerminal() {
-		if s.terminalSnapshot != "" {
-			return false, fmt.Errorf("response_after_terminal: upstream sent an event after its terminal snapshot")
-		}
-		return false, nil
-	}
-	encoded, err := kitutil.Marshal(event.Response)
-	if err != nil {
-		return false, err
-	}
-	digest := sha256.Sum256(encoded)
-	snapshot := string(digest[:])
-	if s.terminalSnapshot != "" {
-		if s.terminalSnapshot != snapshot {
-			return false, fmt.Errorf("response_terminal_conflict: upstream changed its terminal snapshot")
-		}
-		return true, nil
-	}
-	s.terminalSnapshot = snapshot
-	return false, nil
 }

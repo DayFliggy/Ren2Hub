@@ -114,7 +114,7 @@ func DeleteLoginSession(c *gin.Context) {
 	}
 	sid := strings.TrimSpace(c.Param("sid"))
 	if sid == "" {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Session ID is required"), gin.H{"code": "AUTH_SESSION_ID_REQUIRED"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "AUTH_SESSION_ID_REQUIRED", "message": "session id is required"})
 		return
 	}
 	revoked, err := model.RevokeUserSession(identity.UserID, sid, "user_revoked")
@@ -123,7 +123,7 @@ func DeleteLoginSession(c *gin.Context) {
 		return
 	}
 	if !revoked {
-		common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Session not found"), gin.H{"code": "AUTH_SESSION_NOT_FOUND"})
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "code": "AUTH_SESSION_NOT_FOUND", "message": "session not found"})
 		return
 	}
 	if rawRefreshToken, cookieErr := c.Cookie(service.RefreshCookieName); cookieErr == nil {
@@ -151,7 +151,11 @@ func RevokeOtherLoginSessions(c *gin.Context) {
 func requireBrowserSession(c *gin.Context) (service.AuthIdentity, bool) {
 	identity, ok := middleware.GetSessionAuthIdentity(c)
 	if !ok {
-		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("a dashboard login session is required"), gin.H{"code": "AUTH_SESSION_REQUIRED"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"code":    "AUTH_SESSION_REQUIRED",
+			"message": "a dashboard login session is required",
+		})
 		return service.AuthIdentity{}, false
 	}
 	return identity, true
@@ -175,7 +179,12 @@ func setAuthNoStore(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 }
 
+// authRotationData is empty when the change came through an access token,
+// which has no browser session to rotate.
 func authRotationData(bundle *service.AuthBundle) gin.H {
+	if bundle == nil {
+		return gin.H{}
+	}
 	return gin.H{
 		"access_token":      bundle.AccessToken,
 		"token_type":        bundle.TokenType,

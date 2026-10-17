@@ -1,86 +1,20 @@
 # GMPay 加密货币充值
 
-网关协议依据参考项目 `GMwalletApp/epusdt` 的 `aed4a970` 源码。GMPay 使用原生 HMAC-SHA256 接口，与现有 EPay 的 MD5 表单支付分别配置、分别下单，共同通过钱包账务事件入账。
+GMPay 作为原生钱包的支付入口，复用 NewAPI 充值金额、分组倍率、最低额、折扣和额度上限。法币金额为 CNY，按人民币分精确保存；不是旧 USD 报价产品。`pkg/gmpay/` 实现 HTTPS、HMAC-SHA256、严格参数与有界响应解析，不调用真实供应商完成测试。
 
-## 接口和配置
-
-| 接口 | 权限与用途 |
+| 接口 | 合同 |
 | --- | --- |
-| GET `/api/next/wallet/gmpay/config` | 登录用户；返回可用资产、最低额度和报价设置，不返回商户凭据 |
-| POST `/api/next/wallet/gmpay/quote` | 登录用户；按 USD 或 TOKENS 输入生成报价 |
-| POST `/api/next/wallet/gmpay/topup` | 登录用户；重新计算并核对报价指纹，创建订单和返回收银台链接 |
-| POST `/api/option/gmpay/probe` | Root；读取网关公开资产配置，不创建订单，也不证明密钥正确 |
-| POST `/api/option/gmpay/save` | Root；原子保存配置，空密钥保留已有密钥 |
-| POST `/api/user/gmpay/notify` | 匿名但必须验签；接收网关 JSON 通知 |
-| GET `/api/next/admin/orders/:order_no` | 管理员订单详情；GMPay 订单附带创建状态与最终到账证据 |
+| `GET /api/option/gmpay/config` | Root 浏览器会话；返回地址、商户ID、`has_secret`、资产及启用状态 |
+| `POST /api/option/gmpay/save` | 同上；整体保存配置，空 `secret_key` 保留已存密钥 |
+| `POST /api/option/gmpay/probe` | `{pay_address}`；只探测公开资产目录，不验证商户凭据或创建订单 |
+| `POST /api/user/gmpay/pay` | 用户浏览器会话；`{amount,payment_method:"gmpay:usdt.tron"}` |
+| `GET /api/user/gmpay/orders/:trade_no` | 本人浏览器会话；原生订单与公开支付快照 |
+| `POST /api/user/gmpay/notify` | 公开 JSON 签名回调；成功为纯文本 `success` |
 
-旧式登录用户接口 `/api/user/gmpay/amount` 和 `/api/user/gmpay/pay` 使用同一报价与创建服务。已注册的 GET 通知入口不接受支付通知；协议解析器只接受 POST JSON。
+GET notify 路由存在但当前协议解析器拒绝非 POST；不能将其当作有效验付接口。配置资产为 `{name,token,network,icon?,color?}`。`GET /api/user/topup/info` 增加 `enable_gmpay_topup` 和 `gmpay:token.network` 方式。下单成功返回 `{message:"success",url,data:{trade_no,payment_method,currency:"CNY",pay_amount,expected_quota,token,network}}`；与通用 success envelope 不同。
 
-管理配置字段为 `pay_address`、`merchant_id`、`secret_key`、`assets`、`price`、`min_topup`、`group_ratio`。网关基础地址要求 HTTPS；从基础地址追加 `/payments/gmpay/v1/config` 和 `/payments/gmpay/v1/order/create-transaction`。保存到 `GmpayPayAddress`、`GmpayId`、`GmpayKey`、`GmpayAssets`、`GmpayPrice`、`GmpayMinTopUp`、`GmpayGroupRatio`，读取设置时隐藏密钥。
+在远端创建前，同一事务保存原生订单、应到账整数额度、CNY 分额及不可变商户版本。仅向网关发送一次创建请求，网络或响应不明保存为 `unknown`。回调按订单绑定的商户版本验签，校验订单、交易号、token、精确金额和成功状态。回调不包含网络或法币字段，不能宣称独立确认了最终支付网络；快照记录请求选定的资产。
 
-资产配置示例：
+回调与 `POST /api/user/topup/complete` 共同使用原生钱包事务及订单状态检查，最多入账一次，不添加第二资金账本。商户轮换不改变旧订单验签凭据；已完成订单不会被迟到创建响应重新打开。商户密钥、版本ID及内部凭据字段不进入公开响应或日志。
 
-```json
-[{"name":"USDT / TRON","token":"usdt","network":"tron","min_topup":"1"}]
-```
-
-`group_ratio` 是 JSON 对象字符串，例如 `{"default":1}`。资产列表为空时停止创建新 GMPay 订单；EPay 和已有 GMPay 订单不受影响。`payment_setting.gmpay_settlement_enabled=false` 是独立的回调结算暂停开关，管理员核查后的补单仍遵循原权限。
-
-网关必须实际启用对应链、币种、收款钱包和汇率。探测只读取公开配置；能探测到资产不等于商户密钥或真实收款已验收。回调 Origin 取 `CustomCallbackAddress`，为空取 `ServerAddress`，再追加 `/api/user/gmpay/notify`；网关会要求可访问的公网回调地址。
-
-## 金额与订单
-
-GMPay 报价固定为 USD，默认 `GmpayPrice=1`。本地 USD 购买数量乘单价、用户组倍率和预设折扣后，统一四舍五入至美分；支付金额必须大于 0.01 USD。TOKENS 输入直接表示 quota，固定 500000 quota/USD，报价下限按 USD 购买数量换算。币种不能与 EPay 的 CNY 报价混用。
-
-请求携带 `amount`、`amount_unit`、`payment_method`、`quote_fingerprint`。方式标识支持 `gmpay:usdt.tron` 和裸 `usdt.tron`，报价返回裸标识。指纹覆盖用户、分组、支付资产、金额、费率、商户及回调地址；下单时变化返回 `QUOTE_CHANGED`，前端要求重新确认。
-
-先在事务中保存充值订单、`gmpay_orders` 和不可变的 `gmpay_merchant_versions`，再发起一次网关请求。网络调用不进入资金事务。请求采用 form 编码保留签名中的十进制文本；接收数字 JSON 时按网关 float64 规则规范化，但法币结算仍精确比较整数美分。
-
-创建响应必须匹配本地订单号、法币金额、USD 币种、token 和有效支付状态，并包含有效交易号、加密货币数量、收款地址、到期时间及 HTTPS 收银台地址。网关交易号先绑定本地订单，随后才返回收银台链接。不会自动重试非幂等创建请求，也不会转投 EPay。
-
-| 快照状态 | 含义 |
-| --- | --- |
-| `creating` | 本地快照已创建，尚未记录网关结果 |
-| `ready` | 网关创建响应已校验并保存 |
-| `failed` | 网关明确拒绝，例如金额或参数不合法 |
-| `unknown` | 超时、断连、系统错误、订单已存在或响应无法确认；保留本地订单待核查 |
-| `settled` | 有效通知已入账或管理员已补单 |
-
-快照状态与充值订单的 pending/success 分开保存。失败或未知创建结果不会凭空增加余额；未收到有效通知且未补单时，本地充值订单保持 pending。提前到达的成功通知和管理员补单不会被晚到的创建结果重新打开；晚到的明确失败也不能覆盖已结算状态。
-
-## 回调、证据与幂等
-
-回调限制为 16 KiB、32 个字段，拒绝重复 JSON 字段、非法类型和金额。签名为 HMAC-SHA256，使用订单绑定的旧商户版本验签，并核对 PID、订单号、网关交易号、法币金额、token 和 `status=2`。仅完成结算或确认一致的重复通知时返回 HTTP 200、`success`；其他状态和失败返回 `fail`。
-
-订单、凭据、最终证据、余额事件和返利在同一事务内提交。`actual_amount` 不决定入账 quota；成功支付只入账冻结的 `expected_quota`。当前唯一凭据为 `(receipt_scope="gmpay", gateway_trade_no)`，限制一笔 GMPay 网关交易只能绑定一个本地订单。商户账户标识和版本另外保存并核对。
-
-创建时证据保存在 `gateway_amount`、`gateway_crypto_amount`、`receive_address`、`expiration_time`。最终到账证据另存 `settled_crypto_amount`、`settled_receive_address`、`settled_transaction_id`，不覆盖创建信息。重复通知必须匹配最终证据；管理员补单后首个有效通知可以补齐证据，但不再次入账。事务失败不留下半份凭据或余额。
-
-**当前网关回调不含 network 或 currency，收银台允许切换网络。**本地 `network` 只能表示最初请求网络，不能证明最终到账网络。实现核对本地冻结的 USD 金额和通知 token；同 token 换网络时，不机械比较创建时与到账时的数量和地址。换成另一 token 的通知拒绝自动入账，交由管理员核查。本系统不声称能独立检测网关未报告的链、汇率或少付情况。
-
-epusdt 当前用商户数据库里的现密钥签发旧单通知；Ren2Hub 使用订单冻结密钥验签。因此轮换应新建 PID 接新单，保留旧 PID/密钥处理旧单，不能假定原地替换密钥自动兼容。epusdt 示例 `order_notice_max_retry=0` 表示首次失败后不重试，正式接入需配置合适的重试次数。
-
-异常恢复仍由外部网关重试有效通知或管理员核查后使用现有补单入口完成；不增加用户验付、主动查单或自动退款。
-
-## 验证入口与未证明边界
-
-后端测试必须带 `-timeout 60s`：
-
-```powershell
-go test ./pkg/gmpay -timeout 60s -count=1
-go test ./service ./controller ./model ./router -run 'Gmpay' -timeout 60s -count=1
-go test ./model -run '^TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases$' -v -timeout 60s -count=1
-go test ./controller -run '^TestGmpay(HTTPConfigurationCheckoutAndSettlement|ConfigurationRejectsInvalidOrUncommittedChanges)$' -v -timeout 60s -count=1
-```
-
-回归覆盖协议与固定 HMAC 样例、创建响应绑定、未知结果保留、报价变化、资金幂等、提前回调、晚到结果、暂停与恢复结算、手工补单、最终证据一致性、事务回滚、增量迁移与并发结算。三库测试的 MySQL/PostgreSQL 由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指向隔离测试库，CI 已接入；缺失环境时显式跳过，不能称为该数据库验收通过。`controller/gmpay_integration_test.go` 使用隔离 SQLite、真实本地 HTTP/TLS 服务和模拟网关，覆盖配置保存与密钥隐藏、EPay CNY/GMPay USD 独立报价、创建订单、停止新单后旧单通知、数字 JSON 回调、重复通知及管理员证据读取。前端 Vitest 与 `tests/visual/gmpay-*.spec.ts` 浏览器用例使用模拟 API。
-
-本地测试不涉及区块链或真实支付，以下行为仍需在实际 epusdt 环境验收：
-
-- 小额真实链上支付、到账证据与一次入账核对，以及成功通知失败后的重试。
-- 新旧 PID 并存时的存量订单及密钥轮换流程。
-- 从备份恢复业务服务；归档检查、SQLite 完整性和容器重建不等同于恢复演练。
-
-执行结果和部署版本只由所属工作区服务器档案记录，旧的验证记录从 Git 历史读取。测试 PID、钱包和密钥只能通过服务器私有配置注入，敏感值不写入仓库。
-
-已有 EPay 约定见 [EPAY.md](EPAY.md)，共同账务事件约定见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。
+本轮所有商户重新配置。旧在途支付必须由旧应用处理到终态，再批准切换独立新库；不导入旧单或新造双回调入口。生产支付动作与真实费用仍按工作区授权流程执行。

@@ -2,9 +2,9 @@ package relay
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"strings"
 
@@ -23,6 +23,8 @@ import (
 
 func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
+	info.BillingImageCount = nil
+	info.ImageRequestCount = 0
 
 	imageReq, ok := info.Request.(*dto.ImageRequest)
 	if !ok {
@@ -33,9 +35,6 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if err != nil {
 		return types.NewError(fmt.Errorf("failed to copy request to ImageRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
-	// ImageRequest.MarshalJSON intentionally omits Extra. Preserve these
-	// read-only provider fields for the adaptor that owns their semantics.
-	request.Extra = maps.Clone(imageReq.Extra)
 
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
@@ -47,20 +46,37 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
 	}
 	adaptor.Init(info)
+	imageCount, err := request.ImageCount(false)
+	if err != nil {
+		return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
 
 	var requestBody io.Reader
+	var jsonData []byte
 
-	passThrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled
-	if passThrough && strings.Contains(c.ContentType(), "application/json") {
-		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
+	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
+		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		defer closer.Close()
-		requestBody = body
+		if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
+			requestBody = common.NewReplayableBodyReader(storage)
+		} else {
+			jsonData, err = storage.Bytes()
+			if err != nil {
+				return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertImageRequest(c, info, *request)
 		if err != nil {
+			// An adaptor that already classified its rejection (status code
+			// and retry policy) keeps that classification instead of being
+			// downgraded to a retryable conversion failure.
+			var apiErr *types.NewAPIError
+			if errors.As(err, &apiErr) {
+				return apiErr
+			}
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed)
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
@@ -69,7 +85,7 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		case *bytes.Buffer:
 			requestBody = convertedRequest.(io.Reader)
 		default:
-			jsonData, err := common.Marshal(convertedRequest)
+			jsonData, err = common.Marshal(convertedRequest)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
@@ -82,57 +98,81 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 				}
 			}
 
-			logger.LogDebug(c, "image request body: %s", jsonData)
-			body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
-			if err != nil {
-				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-			}
-			defer closer.Close()
-			jsonData = nil
-			requestBody = body
 		}
+	}
+	if jsonData != nil {
+		// This is a different trust boundary from ingress: channel overrides
+		// and pass-through bodies can change the quantity actually submitted.
+		var outbound struct {
+			N *uint `json:"n"`
+		}
+		if err := common.Unmarshal(jsonData, &outbound); err != nil {
+			return types.NewErrorWithStatusCode(fmt.Errorf("invalid image billing parameters: %w", err), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		quantityRequest := dto.ImageRequest{N: outbound.N}
+		if quantityRequest.N == nil {
+			quantityRequest.N = common.GetPointer(uint(imageCount))
+		}
+		imageCount, err = quantityRequest.ImageCount(false)
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		logger.LogDebug(c, "image request body: %s", jsonData)
+		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		defer closer.Close()
+		requestBody = body
+	}
+	if billingErr := service.PrepareImageBillingForRequest(c, info, imageCount); billingErr != nil {
+		return billingErr
 	}
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
-	info.UpstreamSideEffecting = true
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
-	httpResp, ok := resp.(*http.Response)
-	if !ok || httpResp == nil || httpResp.Body == nil {
-		return types.NewOpenAIError(fmt.Errorf("invalid image upstream response"), types.ErrorCodeBadResponse, http.StatusBadGateway)
-	}
-	info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
-	if httpResp.StatusCode != http.StatusOK {
-		if httpResp.StatusCode == http.StatusCreated && info.ApiType == constant.APITypeReplicate {
-			// Replicate returns 201 Created when using Prefer: wait.
-			httpResp.StatusCode = http.StatusOK
-		} else {
-			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-			return newAPIError
+	var httpResp *http.Response
+	if resp != nil {
+		httpResp = resp.(*http.Response)
+		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+		if httpResp.StatusCode != http.StatusOK {
+			if httpResp.StatusCode == http.StatusCreated && info.ApiType == constant.APITypeReplicate {
+				// replicate channel returns 201 Created when using Prefer: wait, treat it as success.
+				httpResp.StatusCode = http.StatusOK
+			} else {
+				newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+				// reset status code 重置状态码
+				service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+				return newAPIError
+			}
 		}
 	}
 
-	responseUsage, newAPIError := adaptor.DoResponse(c, httpResp, info)
-	usage, ok := responseUsage.(*dto.Usage)
-	if ok && usage != nil {
-		info.CaptureResponseUsage(usage, "text", nil)
-	}
+	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
-	if !ok || usage == nil {
-		return types.NewOpenAIError(fmt.Errorf("invalid image response usage"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	// The log content shows the settled count: the count the handler derived
+	// from the upstream response when it did, otherwise the reserved quantity.
+	imageN := info.RequestedImageCount()
+	if info.BillingImageCount != nil {
+		imageN = *info.BillingImageCount
+	} else if count, ok := info.PriceData.OtherRatios()["n"]; ok && info.PriceData.UsePrice && count >= 1 && count <= dto.MaxImageN {
+		imageN = common.QuotaRound(count)
 	}
 
-	imageN := uint(1)
-	if request.N != nil {
-		imageN = *request.N
+	if usage.(*dto.Usage).TotalTokens == 0 {
+		usage.(*dto.Usage).TotalTokens = 1
+	}
+	if usage.(*dto.Usage).PromptTokens == 0 {
+		usage.(*dto.Usage).PromptTokens = 1
 	}
 
 	quality := request.Quality
@@ -152,6 +192,6 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		logContent = append(logContent, common.NewMessage("Image count {{count}}", map[string]any{"count": imageN}))
 	}
 
-	info.CaptureResponseUsage(usage, "text", logContent)
+	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)
 	return nil
 }

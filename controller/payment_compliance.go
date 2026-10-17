@@ -19,7 +19,7 @@ type PaymentComplianceRequest struct {
 
 func requirePaymentCompliance(c *gin.Context) bool {
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		common.ApiErrorT(c, "Payment, redemption, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
+		common.ApiErrorT(c, "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
 		return false
 	}
 	return true
@@ -27,7 +27,10 @@ func requirePaymentCompliance(c *gin.Context) bool {
 
 func ConfirmPaymentCompliance(c *gin.Context) {
 	if c.GetBool("use_access_token") {
-		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("This operation requires dashboard session authentication. API access token is not allowed."))
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "This operation requires dashboard session authentication. API access token is not allowed.",
+		})
 		return
 	}
 
@@ -53,9 +56,11 @@ func ConfirmPaymentCompliance(c *gin.Context) {
 		"payment_setting.compliance_confirmed_ip":  clientIP,
 	}
 
-	if err := model.UpdateOptionsBulk(updates); err != nil {
-		common.ApiError(c, err)
-		return
+	for key, value := range updates {
+		if err := model.UpdateOption(key, value); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 
 	logger.LogInfo(c.Request.Context(), common.LogText(

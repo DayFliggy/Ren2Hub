@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strconv"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -166,10 +165,14 @@ func (i *ImageRequest) GetTokenCountMeta() *types.TokenCountMeta {
 		imageN = *i.N
 	}
 
+	// Keep n separate from ImagePriceRatio so size/quality and count remain
+	// independent billing dimensions. Fixed-price pre-consume stores this on
+	// PriceData, and image settlement reuses or replaces the same "n" ratio.
 	return &types.TokenCountMeta{
-		CombineText:       i.Prompt,
-		MaxTokens:         1584,
-		BillingQuantities: map[string]string{"n": strconv.FormatUint(uint64(imageN), 10)},
+		CombineText:     i.Prompt,
+		MaxTokens:       1584,
+		ImagePriceRatio: i.legacyDallePriceRatio(),
+		BillingRatios:   map[string]float64{"n": float64(imageN)},
 	}
 }
 

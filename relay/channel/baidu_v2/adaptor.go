@@ -27,16 +27,7 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, req *dto.ClaudeRequest) (any, error) {
 	adaptor := openai.Adaptor{}
-	converted, err := adaptor.ConvertClaudeRequest(c, info, req)
-	if err != nil {
-		return nil, err
-	}
-	chat, ok := converted.(*dto.GeneralOpenAIRequest)
-	if !ok {
-		return nil, fmt.Errorf("expected OpenAI chat request, got %T", converted)
-	}
-	info.RelayMode = constant.RelayModeChatCompletions
-	return a.ConvertOpenAIRequest(c, info, chat)
+	return adaptor.ConvertClaudeRequest(c, info, req)
 }
 
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {

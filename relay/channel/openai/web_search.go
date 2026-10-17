@@ -6,12 +6,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// azureResponsesToolPriceKeys lists, per declared hosted tool type prefix, the
-// price key azureResponsesToolUsage bills in addition to the protocol keys.
-var azureResponsesToolPriceKeys = map[string][]string{
-	dto.BuildInToolWebSearch: {"bing_web_search"},
-}
-
 // azureResponsesToolUsage bills Azure Responses web search by the Bing request
 // count the service reports (tool_usage.web_search.num_requests, $14 per 1,000
 // transactions) under its own key, and silences the web_search_call items:

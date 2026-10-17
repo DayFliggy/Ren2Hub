@@ -2,7 +2,6 @@ package model
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,7 +16,7 @@ type Redemption struct {
 	Key          string         `json:"key" gorm:"type:char(32);uniqueIndex"`
 	Status       int            `json:"status" gorm:"default:1"`
 	Name         string         `json:"name" gorm:"index"`
-	Quota        common.Quota   `json:"quota" gorm:"type:bigint;default:100"`
+	Quota        int            `json:"quota" gorm:"default:100"`
 	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
 	RedeemedTime int64          `json:"redeemed_time" gorm:"bigint"`
 	Count        int            `json:"count" gorm:"-:all"` // only for api request
@@ -134,7 +133,7 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	return &redemption, err
 }
 
-func Redeem(key string, userId int) (quota common.Quota, err error) {
+func Redeem(key string, userId int) (quota int, err error) {
 	if key == "" {
 		return 0, errors.New("redemption code not provided")
 	}
@@ -164,7 +163,7 @@ func Redeem(key string, userId int) (quota common.Quota, err error) {
 		// same code loses here even without a row lock (e.g. on SQLite).
 		result := tx.Model(&Redemption{}).
 			Where("id = ? AND status = ?", redemption.Id, common.RedemptionCodeStatusEnabled).
-			Updates(map[string]interface{}{
+			Updates(map[string]any{
 				"redeemed_time": common.GetTimestamp(),
 				"status":        common.RedemptionCodeStatusUsed,
 				"used_user_id":  userId,
@@ -175,21 +174,24 @@ func Redeem(key string, userId int) (quota common.Quota, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("redemption code already used")
 		}
-		if redemption.Quota <= 0 {
-			return errors.New("invalid redemption quota")
-		}
-		_, err = ApplyWalletAdjustmentTx(tx, WalletAdjustment{EventID: fmt.Sprintf("redemption:%d", redemption.Id), UserID: userId, Delta: redemption.Quota, SourceType: "redemption", SourceID: fmt.Sprint(redemption.Id), Reason: "redemption claimed"})
-		return err
+		return creditTopUpQuota(tx, userId, redemption.Quota, nil)
 	})
 	if err != nil {
 		common.SysError(common.LogText("redemption failed: %s", err.Error()))
 		return 0, ErrRedeemFailed
 	}
+	syncCreditUserQuotaCache(userId, redemption.Quota, common.LogText("redemption"))
 	RecordLog(userId, LogTypeTopup, common.NewMessage("Topped up {{quota}} with a redemption code, code ID {{id}}", map[string]any{"quota": logger.FormatQuota(redemption.Quota), "id": redemption.Id}))
 	return redemption.Quota, nil
 }
 
 func (redemption *Redemption) Insert() error {
+	if redemption.Quota <= 0 {
+		return errors.New("redemption quota must be positive")
+	}
+	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+		return err
+	}
 	var err error
 	err = DB.Create(redemption).Error
 	return err
@@ -202,6 +204,12 @@ func (redemption *Redemption) SelectUpdate() error {
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
+	if redemption.Quota <= 0 {
+		return errors.New("redemption quota must be positive")
+	}
+	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+		return err
+	}
 	var err error
 	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time").Updates(redemption).Error
 	return err
@@ -225,16 +233,22 @@ func DeleteRedemptionById(id int) (err error) {
 	return redemption.Delete()
 }
 
-func BatchDeleteRedemptions(ids []int) (int64, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	result := DB.Where("id IN ?", ids).Delete(&Redemption{})
-	return result.RowsAffected, result.Error
-}
-
 func DeleteInvalidRedemptions() (int64, error) {
 	now := common.GetTimestamp()
 	result := DB.Where("status IN ? OR (status = ? AND expired_time != 0 AND expired_time < ?)", []int{common.RedemptionCodeStatusUsed, common.RedemptionCodeStatusDisabled}, common.RedemptionCodeStatusEnabled, now).Delete(&Redemption{})
+	return result.RowsAffected, result.Error
+}
+
+// BatchDeleteRedemptions soft-deletes the selected codes in one statement.
+func BatchDeleteRedemptions(ids []int) (int64, error) {
+	if len(ids) == 0 || len(ids) > 1000 {
+		return 0, errors.New("select between 1 and 1000 redemption codes")
+	}
+	for _, id := range ids {
+		if id <= 0 {
+			return 0, errors.New("redemption IDs must be positive")
+		}
+	}
+	result := DB.Where("id IN ?", ids).Delete(&Redemption{})
 	return result.RowsAffected, result.Error
 }

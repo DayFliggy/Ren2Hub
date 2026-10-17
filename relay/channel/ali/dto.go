@@ -1,22 +1,12 @@
 package ali
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/gin-gonic/gin"
 )
 
 type AliMessage struct {
 	Content any    `json:"content"`
 	Role    string `json:"role"`
-}
-
-type AliMediaContent struct {
-	Image string `json:"image,omitempty"`
-	Text  string `json:"text,omitempty"`
 }
 
 type AliInput struct {
@@ -35,8 +25,8 @@ type AliParameters struct {
 
 type AliChatRequest struct {
 	Model      string        `json:"model"`
-	Input      AliInput      `json:"input,omitempty"`
-	Parameters AliParameters `json:"parameters,omitempty"`
+	Input      AliInput      `json:"input"`
+	Parameters AliParameters `json:"parameters"`
 }
 
 type AliEmbeddingRequest struct {
@@ -72,145 +62,6 @@ type AliUsage struct {
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
 	TotalTokens  int `json:"total_tokens"`
-	ImageCount   int `json:"image_count,omitempty"`
-}
-
-type TaskResult struct {
-	B64Image string `json:"b64_image,omitempty"`
-	Url      string `json:"url,omitempty"`
-	Code     string `json:"code,omitempty"`
-	Message  string `json:"message,omitempty"`
-}
-
-type AliOutput struct {
-	TaskId       string       `json:"task_id,omitempty"`
-	TaskStatus   string       `json:"task_status,omitempty"`
-	Text         string       `json:"text"`
-	FinishReason string       `json:"finish_reason"`
-	Message      string       `json:"message,omitempty"`
-	Code         string       `json:"code,omitempty"`
-	Results      []TaskResult `json:"results,omitempty"`
-	Choices      []struct {
-		FinishReason string `json:"finish_reason,omitempty"`
-		Message      struct {
-			Role             string            `json:"role,omitempty"`
-			Content          []AliMediaContent `json:"content,omitempty"`
-			ReasoningContent string            `json:"reasoning_content,omitempty"`
-		} `json:"message,omitempty"`
-	} `json:"choices,omitempty"`
-}
-
-func (o *AliOutput) ChoicesToOpenAIImageDate(c *gin.Context, responseFormat string) ([]dto.ImageData, error) {
-	var imageData []dto.ImageData
-	for _, choice := range o.Choices {
-		start := len(imageData)
-		var prompts []string
-		for _, content := range choice.Message.Content {
-			if content.Text != "" {
-				prompts = append(prompts, content.Text)
-			}
-		}
-		for _, content := range choice.Message.Content {
-			if content.Image == "" {
-				continue
-			}
-			data := dto.ImageData{RevisedPrompt: strings.Join(prompts, "\n")}
-			if strings.HasPrefix(content.Image, "https://") || strings.HasPrefix(content.Image, "http://") {
-				data.Url = content.Image
-				if responseFormat == "b64_json" {
-					_, b64, err := service.GetImageFromUrlWithContext(c.Request.Context(), content.Image)
-					if err != nil {
-						return nil, fmt.Errorf("download Ali image: %w", err)
-					}
-					data.B64Json = b64
-				}
-			} else {
-				data.B64Json = content.Image
-			}
-			imageData = append(imageData, data)
-		}
-		if len(imageData) == start {
-			return nil, fmt.Errorf("Ali image choice has no image")
-		}
-	}
-	return imageData, nil
-}
-
-func (o *AliOutput) ResultToOpenAIImageDate(c *gin.Context, responseFormat string) ([]dto.ImageData, error) {
-	var imageData []dto.ImageData
-	for _, data := range o.Results {
-		if data.Code != "" || data.Message != "" {
-			return nil, fmt.Errorf("Ali image result failed: %s %s", data.Code, data.Message)
-		}
-		b64Json := data.B64Image
-		if responseFormat == "b64_json" && b64Json == "" {
-			_, b64, err := service.GetImageFromUrlWithContext(c.Request.Context(), data.Url)
-			if err != nil {
-				return nil, fmt.Errorf("download Ali image: %w", err)
-			}
-			b64Json = b64
-		}
-
-		imageData = append(imageData, dto.ImageData{
-			Url:           data.Url,
-			B64Json:       b64Json,
-			RevisedPrompt: "",
-		})
-	}
-	return imageData, nil
-}
-
-type AliResponse struct {
-	Output AliOutput `json:"output"`
-	Usage  AliUsage  `json:"usage"`
-	AliError
-}
-
-type AliImageRequest struct {
-	Model          string             `json:"model"`
-	Input          any                `json:"input"`
-	Parameters     AliImageParameters `json:"parameters,omitempty"`
-	ResponseFormat string             `json:"response_format,omitempty"`
-}
-
-type AliImageParameters struct {
-	Size             string `json:"size,omitempty"`
-	N                int    `json:"n,omitempty"`
-	Steps            string `json:"steps,omitempty"`
-	Scale            string `json:"scale,omitempty"`
-	Watermark        *bool  `json:"watermark,omitempty"`
-	PromptExtend     *bool  `json:"prompt_extend,omitempty"`
-	ThinkingMode     *bool  `json:"thinking_mode,omitempty"`
-	EnableSequential *bool  `json:"enable_sequential,omitempty"`
-	BboxList         any    `json:"bbox_list,omitempty"`
-	ColorPalette     any    `json:"color_palette,omitempty"`
-	Seed             *int   `json:"seed,omitempty"`
-}
-
-func (p *AliImageParameters) PromptExtendValue() bool {
-	if p != nil && p.PromptExtend != nil {
-		return *p.PromptExtend
-	}
-	return false
-}
-
-type AliImageInput struct {
-	Prompt         string       `json:"prompt,omitempty"`
-	NegativePrompt string       `json:"negative_prompt,omitempty"`
-	Messages       []AliMessage `json:"messages,omitempty"`
-}
-
-type WanImageInput struct {
-	Prompt         string   `json:"prompt"`                    // 必需：文本提示词，描述生成图像中期望包含的元素和视觉特点
-	Images         []string `json:"images"`                    // 必需：图像URL数组，长度不超过2，支持HTTP/HTTPS URL或Base64编码
-	NegativePrompt string   `json:"negative_prompt,omitempty"` // 可选：反向提示词，描述不希望在画面中看到的内容
-}
-
-type WanImageParameters struct {
-	N         int     `json:"n,omitempty"`         // 生成图片数量，取值范围1-4，默认4
-	Watermark *bool   `json:"watermark,omitempty"` // 是否添加水印标识，默认false
-	Seed      int     `json:"seed,omitempty"`      // 随机数种子，取值范围[0, 2147483647]
-	Strength  float64 `json:"strength,omitempty"`  // 修改幅度 0.0-1.0，默认0.5（部分模型支持）
 }
 
 type AliRerankParameters struct {
@@ -226,7 +77,7 @@ type AliRerankInput struct {
 type AliRerankRequest struct {
 	Model      string              `json:"model"`
 	Input      AliRerankInput      `json:"input"`
-	Parameters AliRerankParameters `json:"parameters,omitempty"`
+	Parameters AliRerankParameters `json:"parameters"`
 }
 
 type AliRerankResponse struct {

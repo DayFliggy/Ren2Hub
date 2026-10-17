@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -12,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const BillingSourceWallet = "wallet"
+const (
+	BillingSourceWallet = "wallet"
+)
 
 // PreConsumeBilling 创建钱包 BillingSession 并执行预扣费。
 // 会话存储在 relayInfo.Billing 上，供后续 Settle / Refund 使用。
@@ -41,33 +42,12 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 	return nil
 }
 
-func PrepareBillingForSelectedModel(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
-	if relayInfo == nil {
-		return types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-	}
-	targetQuota := relayInfo.PriceData.QuotaToPreConsume
-	if relayInfo.Billing == nil {
-		if apiErr := PreConsumeBilling(c, targetQuota, relayInfo); apiErr != nil {
-			return apiErr
-		}
-	} else {
-		if err := relayInfo.Billing.Reserve(targetQuota); err != nil {
-			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-		}
-		relayInfo.FinalPreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
-	}
-	if err := prepareBillingDispatch(c, relayInfo); err != nil {
-		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-	}
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // SettleBilling — 后结算辅助函数
 // ---------------------------------------------------------------------------
 
 // SettleBilling 执行计费结算。如果 RelayInfo 上有 BillingSession 则通过 session 结算，
-// 所有请求均要求持久化会话，缺失时拒绝扣款。
+// 否则回退到旧的 PostConsumeQuota 路径（兼容按次计费等场景）。
 func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int) error {
 	if relayInfo.Billing != nil {
 		preConsumed := relayInfo.Billing.GetPreConsumedQuota()
@@ -91,28 +71,21 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 			))
 		}
 
-		var settleErr error
-		for attempt := 0; attempt < 3; attempt++ {
-			settleErr = relayInfo.Billing.Settle(actualQuota)
-			if settleErr == nil {
-				break
-			}
-			if attempt < 2 {
-				time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
-			}
+		if err := relayInfo.Billing.Settle(actualQuota); err != nil {
+			return err
 		}
-		if settleErr != nil {
-			relayInfo.BillingSettlementError = settleErr
-			return settleErr
-		}
-		relayInfo.BillingSettlementError = nil
 
-		// 发送钱包额度通知。
+		// 发送钱包额度通知
 		if actualQuota != 0 {
 			checkAndSendQuotaNotify(relayInfo, actualQuota-preConsumed, preConsumed)
 		}
 		return nil
 	}
 
-	return fmt.Errorf("durable billing session is required")
+	// 回退：无 BillingSession 时使用旧路径
+	quotaDelta := actualQuota - relayInfo.FinalPreConsumedQuota
+	if quotaDelta != 0 {
+		return PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
+	}
+	return nil
 }

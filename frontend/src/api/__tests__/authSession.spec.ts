@@ -37,12 +37,9 @@ const bundle: AuthBundle = {
     email: 'demo@example.com',
     role: 10,
     status: 1,
-    available_quota: '100',
-    reserved_quota: '0',
-    quota_version: 0,
-    used_quota: '5',
+    quota: 100,
+    used_quota: 5,
     request_count: 12,
-    created_at: 1_700_000_000,
   },
 }
 
@@ -61,7 +58,7 @@ describe('authentication response boundary', () => {
     })
   })
 
-  it.each(['status', 'request_count', 'created_at'] as const)(
+  it.each(['status', 'request_count'] as const)(
     'rejects bundles missing required user field %s',
     (field) => {
       expect(

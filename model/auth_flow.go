@@ -80,11 +80,10 @@ type AuthFlowMatch struct {
 
 // AuthSessionIdentity binds an authentication flow to a specific session version.
 type AuthSessionIdentity struct {
-	PersonalAccessTokenID int    `json:"pat_id,omitempty"`
-	UserID                int    `json:"user_id"`
-	SessionID             string `json:"session_id"`
-	UserAuthVersion       int64  `json:"auth_version"`
-	SessionVersion        int64  `json:"session_version"`
+	UserID          int    `json:"user_id"`
+	SessionID       string `json:"session_id"`
+	UserAuthVersion int64  `json:"auth_version"`
+	SessionVersion  int64  `json:"session_version"`
 }
 
 // AuthFlowAuthorization is server-owned state carried into a configuration flow
@@ -97,18 +96,13 @@ type AuthFlowAuthorization struct {
 	Method      string `json:"method"`
 }
 
-// SecurityProofBinding is persisted alongside the opaque proof ID. JWT claims
-// must match this record as well as the current user and session versions.
-type SecurityProofBinding struct {
-	AuthSessionIdentity
-	Scope       string `json:"scope"`
-	ContextHash string `json:"context_hash"`
-	Method      string `json:"method"`
-}
-
 // ValidateAuthSessionWithTx rechecks the authoritative identity while holding the
 // user/session locks until the caller's credential change or flow consumption commits.
+// Token-bound identities (pat:<id>) are checked against user_access_tokens instead.
 func ValidateAuthSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity) error {
+	if tokenID, ok := ParseAccessTokenSessionID(identity.SessionID); ok {
+		return validateAccessTokenIdentityWithTx(tx, tokenID, identity)
+	}
 	if identity.UserID <= 0 || identity.SessionID == "" || identity.UserAuthVersion <= 0 || identity.SessionVersion <= 0 {
 		return ErrUserSessionInactive
 	}
@@ -118,16 +112,6 @@ func ValidateAuthSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity) error 
 	}
 	if user.Status != common.UserStatusEnabled || user.AuthVersion != identity.UserAuthVersion {
 		return ErrUserSessionInactive
-	}
-	if identity.PersonalAccessTokenID > 0 {
-		var token PersonalAccessToken
-		if err := lockForUpdate(tx).Where("id = ? AND user_id = ? AND revoked_at = 0 AND expires_at > ?", identity.PersonalAccessTokenID, identity.UserID, time.Now().Unix()).First(&token).Error; err != nil {
-			return err
-		}
-		if identity.SessionID != fmt.Sprintf("pat:%d", token.ID) || identity.SessionVersion != 1 {
-			return ErrUserSessionInactive
-		}
-		return nil
 	}
 	var session UserSession
 	if err := lockForUpdate(tx).Where("sid = ? AND user_id = ?", identity.SessionID, identity.UserID).First(&session).Error; err != nil {

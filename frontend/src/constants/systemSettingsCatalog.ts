@@ -334,12 +334,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           select(
             'general_setting.quota_display_type',
             'quotaDisplayType',
-            'quota',
+            'USD',
             [
-              option('quota', 'quota'),
+              option('CNY', 'cny'),
               option('USD', 'usd'),
               option('TOKENS', 'tokens'),
-              option('custom', 'customCurrency'),
+              option('CUSTOM', 'customCurrency'),
             ]
           ),
           text(

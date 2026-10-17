@@ -1,0 +1,702 @@
+[
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/abema/go-mp4",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/andybalholm/brotli",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/anknown/ahocorasick",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/aws/aws-sdk-go-v2",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/aws/aws-sdk-go-v2/credentials",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/aws/aws-sdk-go-v2/service/bedrockruntime",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/aws/smithy-go",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/Azure/go-ntlmssp",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/bytedance/gopkg",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/Calcium-Ion/go-epay",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/Calcium-Ion/moejs",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/casbin/casbin/v2",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/ClickHouse/clickhouse-go/v2",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/coreos/go-oidc/v3",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/expr-lang/expr",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/gin-contrib/cors",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/gin-contrib/gzip",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/gin-contrib/static",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/gin-gonic/gin",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/glebarez/go-sqlite",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/glebarez/sqlite",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/go-audio/aiff",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/go-audio/wav",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/go-playground/validator/v10",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/go-redis/redis/v8",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/go-sql-driver/mysql",
+    "license": "MPL-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/go-webauthn/webauthn",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/golang-jwt/jwt/v5",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/google/uuid",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/gorilla/websocket",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/grafana/pyroscope-go",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/jackc/pgx/v5",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/jfreymuth/oggvorbis",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/jinzhu/copier",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/joho/godotenv",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/klauspost/compress",
+    "license": "BSD-3-Clause; bundled files: Apache-2.0, MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/mewkiz/flac",
+    "license": "Unlicense"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/nicksnyder/go-i18n/v2",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/pkg/errors",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/pquerna/otp",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/prometheus/common",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/samber/hot",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/samber/lo",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/shirou/gopsutil",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/shopspring/decimal",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/stripe/stripe-go/v81",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/tcolgate/mp3",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/thanhpk/randstr",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/tidwall/gjson",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/tidwall/sjson",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/tiktoken-go/tokenizer",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/waffo-com/waffo-go",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/waffo-com/waffo-pancake-sdk-go",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/yapingcat/gomedia",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/crypto",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/image",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/net",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/oauth2",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/sync",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/sys",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "golang.org/x/text",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "gopkg.in/yaml.v3",
+    "license": "Apache-2.0 AND MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "gorm.io/driver/clickhouse",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "gorm.io/driver/mysql",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "gorm.io/driver/postgres",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "gorm.io/gorm",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "test",
+    "ecosystem": "Go",
+    "name": "github.com/alicebob/miniredis/v2",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "test",
+    "ecosystem": "Go",
+    "name": "github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "test",
+    "ecosystem": "Go",
+    "name": "github.com/fxamacker/cbor/v2",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "test",
+    "ecosystem": "Go",
+    "name": "github.com/json-iterator/go",
+    "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "test",
+    "ecosystem": "Go",
+    "name": "github.com/openai/openai-go",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "backend",
+    "scope": "test",
+    "ecosystem": "Go",
+    "name": "github.com/stretchr/testify",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "@vueuse/core",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "axios",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "echarts",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "lucide-vue-next",
+    "license": "ISC"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "marked",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "pinia",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "vue",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "vue-i18n",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "vue-router",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "yaml",
+    "license": "ISC"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "@eslint/js",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "@playwright/test",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "@tailwindcss/vite",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "@types/node",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "@vitejs/plugin-vue",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "@vue/test-utils",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "eslint",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "eslint-config-prettier",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "eslint-plugin-vue",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "globals",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "jsdom",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "prettier",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "tailwindcss",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "typescript",
+    "license": "Apache-2.0"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "typescript-eslint",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "vite",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "vitest",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "development",
+    "ecosystem": "npm",
+    "name": "vue-tsc",
+    "license": "MIT"
+  }
+]

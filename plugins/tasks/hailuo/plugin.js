@@ -89,7 +89,7 @@ export const meta = {
     en: "MiniMax Hailuo video generation (text-to-video, image-to-video, and MiniMax-H3 multimodal reference)",
     zh: "MiniMax 海螺视频生成（文生视频、图生视频、MiniMax-H3 多模态参考生视频）",
   },
-  version: "1.3.0+ren2hub.1",
+  version: "1.3.0",
   author: { name: "QuantumNous" },
   channelTypes: [35],
   models: [H3_MODEL].concat(V1_MODELS),
@@ -209,8 +209,9 @@ function resolutionFor(size, model) {
 }
 
 function outboundDuration(req) {
-  if (!req || req.duration === undefined) return 6;
-  return Number(utils.decimal.bounded(req.duration, 1, 3600, true));
+  const n = Number(req && req.duration);
+  if (Number.isFinite(n) && n > 0) return n;
+  return 6;
 }
 
 function outboundResolution(req, model) {
@@ -254,7 +255,7 @@ function isH3(model) {
 function h3Duration(req) {
   const raw = req.duration;
   if (raw === undefined || raw === null || raw === "") return H3_DEFAULT_DURATION;
-  const seconds = Number(utils.decimal.bounded(raw, 0, 3600, false));
+  const seconds = Number(raw);
   if (!Number.isInteger(seconds) || seconds < H3_MIN_DURATION || seconds > H3_MAX_DURATION) {
     throw new Error(H3_MODEL + " duration must be an integer between " + H3_MIN_DURATION + " and " + H3_MAX_DURATION + " seconds");
   }
@@ -628,14 +629,7 @@ export function extractUsage(ctx) {
         : 0,
     };
   }
-  const facts = { seconds: outboundDuration(req) };
-  if (usageSchemaForModel(model).resolution) facts.resolution = outboundResolution(req, model);
-  return facts;
-}
-
-function usageSchemaForModel(model) {
-  const profile = meta.usageProfiles.find(function (entry) { return entry.models.includes(model); });
-  return profile ? profile.schema : meta.usageSchema;
+  return { seconds: outboundDuration(req), resolution: outboundResolution(req, model), input_images: 0, input_video_seconds: 0 };
 }
 
 export function buildQueryRequest(ctx) {
@@ -686,53 +680,7 @@ export function parseTaskResult(ctx, body) {
   }
   const progress = status === "SUCCESS" || status === "FAILURE" ? "100%" : body.status === "Processing" ? "50%" : "30%";
   const reason = status === "FAILURE" ? "task failed" : "";
-  const result = { code: base.status_code || 0, status: status, progress: progress, reason: reason };
-  const fileID = trimmed(body.file_id);
-  if (status === "SUCCESS" && fileID && !viaGateway(ctx)) {
-    // Content requests reuse the signed link resolved here until it expires.
-    // A failed lookup only leaves content requests to resolve it themselves;
-    // it must not turn a finished, billed task into a failed poll.
-    try {
-      result.state = { download: { fileId: fileID, url: retrieveDownloadURL(ctx, fileID) } };
-    } catch (error) {
-      console.log("hailuo download link not cached at completion");
-    }
-  }
-  return result;
-}
-
-// Seconds before expiry at which a stored signed link is no longer handed
-// out, so a client starting the download still finds it valid.
-const DOWNLOAD_URL_MARGIN_SECONDS = 600;
-
-// MiniMax serves v1 videos only through the signed download_url that
-// /v1/files/retrieve returns.
-function retrieveDownloadURL(ctx, fileID) {
-  const response = utils.fetch({
-    url: ctx.baseUrl + "/v1/files/retrieve?file_id=" + encodeURIComponent(fileID),
-    headers: { Accept: "application/json", Authorization: "Bearer " + ctx.apiKey },
-  });
-  if (!response.body || typeof response.body !== "object") {
-    throw new Error("MiniMax file retrieve returned an unexpected response: HTTP " + response.status);
-  }
-  const base = response.body.base_resp || {};
-  if (response.status !== 200 || base.status_code) {
-    throw new Error("MiniMax file retrieve failed: " + (base.status_msg || "HTTP " + response.status));
-  }
-  const url = trimmed(response.body.file && response.body.file.download_url);
-  if (!url) throw new Error("artifact_not_found");
-  return url;
-}
-
-// The stored signed link of fileID while its Expires query parameter (Unix
-// seconds, as OSS signs it) leaves the margin; links without one are never reused.
-function storedDownloadURL(ctx, fileID) {
-  const download = ctx.state && ctx.state.download;
-  if (!download || download.fileId !== fileID) return "";
-  const url = trimmed(download.url);
-  const match = /[?&]Expires=(\d+)(?:&|$)/.exec(url);
-  if (!match || Number(match[1]) - utils.unixNow() < DOWNLOAD_URL_MARGIN_SECONDS) return "";
-  return url;
+  return { code: base.status_code || 0, status: status, progress: progress, reason: reason };
 }
 
 function artifactData(ctx) {
@@ -759,27 +707,40 @@ export function listArtifacts(task) {
 export function buildContentRequest(ctx) {
   if (ctx.artifactKey !== "video") throw new Error("artifact_not_found");
   const fileID = artifactFileID(ctx);
-  const publicURL = fileID ? "" : h3ArtifactURL(ctx);
-  if (!fileID && !publicURL) throw new Error("artifact_not_found");
-  // Both MiniMax generations expose the same video artifact on the gateway.
+  if (!fileID) {
+    const url = h3ArtifactURL(ctx);
+    if (!url) throw new Error("artifact_not_found");
+    return { url: url, method: ctx.clientRequest.method, credentialless: true };
+  }
+  // The gateway resolves its MiniMax file itself and serves the video as the
+  // artifact of its own task.
   if (viaGateway(ctx)) {
-    const taskID = trimmed(ctx.upstreamTaskId);
-    if (!taskID) throw new Error("upstream task ID is required");
     return {
-      url: ctx.baseUrl + "/v1/tasks/" + encodeURIComponent(taskID) + "/artifacts/video/content",
+      url: ctx.baseUrl + "/v1/tasks/" + encodeURIComponent(ctx.upstreamTaskId) + "/artifacts/video/content",
       method: ctx.clientRequest.method,
       headers: { Authorization: "Bearer " + ctx.apiKey },
     };
   }
-  if (publicURL) return { url: publicURL, method: ctx.clientRequest.method, credentialless: true };
-  // The link is signed for GET, so a HEAD client is served with GET as well;
-  // the host sends that client the headers only. A link stored at completion
-  // is reused while valid, so client requests do not each query MiniMax.
-  const url = storedDownloadURL(ctx, fileID) || retrieveDownloadURL(ctx, fileID);
+  // MiniMax serves v1 videos only through the signed download_url that
+  // /v1/files/retrieve returns. The link is signed for GET, so a HEAD client
+  // is served with GET as well; the host sends that client the headers only.
+  const response = utils.fetch({
+    url: ctx.baseUrl + "/v1/files/retrieve?file_id=" + encodeURIComponent(fileID),
+    headers: { Accept: "application/json", Authorization: "Bearer " + ctx.apiKey },
+  });
+  if (!response.body || typeof response.body !== "object") {
+    throw new Error("MiniMax file retrieve returned an unexpected response: HTTP " + response.status);
+  }
+  const base = response.body.base_resp || {};
+  if (response.status !== 200 || base.status_code) {
+    throw new Error("MiniMax file retrieve failed: " + (base.status_msg || "HTTP " + response.status));
+  }
+  const url = trimmed(response.body.file && response.body.file.download_url);
+  if (!url) throw new Error("artifact_not_found");
   return { url: url, method: "GET", credentialless: true };
 }
 
-export function extractUsageOnComplete(task, _taskResult, body) {
+export function extractUsageOnComplete(_task, _taskResult, body) {
   const h3Task = h3QueryTask(body);
   if (h3Task) {
     const resolution = trimmed(h3Task.resolution).toUpperCase();
@@ -791,22 +752,20 @@ export function extractUsageOnComplete(task, _taskResult, body) {
       { key: "input_images", value: usage.input_image_count, minimum: 0, maximum: H3_MAX_REFERENCE_IMAGES, integer: true },
       { key: "input_video_seconds", value: usage.input_seconds, minimum: 0, maximum: H3_MAX_INPUT_VIDEO_SECONDS, integer: false },
     ];
-    // Missing facts remain missing. Invalid facts hold accounting without
-    // converting them into zero or replacing the frozen reservation.
+    // Omit malformed or out-of-contract upstream values so settlement keeps
+    // the bounded submission estimate instead of accepting a new multiplier.
     for (const field of fields) {
-      if (field.value === undefined) continue;
-      facts[field.key] = utils.decimal.bounded(field.value, field.minimum, field.maximum, field.integer);
+      if (field.value === undefined || field.value === null || field.value === "") continue;
+      const value = Number(field.value);
+      if (!Number.isFinite(value) || value < field.minimum || value > field.maximum || (field.integer && !Number.isInteger(value))) continue;
+      facts[field.key] = value;
     }
     return Object.keys(facts).length ? facts : null;
   }
-  const model = (task || {}).upstreamModel || (task || {}).model;
-  if (!usageSchemaForModel(model).resolution) return null;
-  const width = (body || {}).video_width;
-  const height = (body || {}).video_height;
-  if (width === undefined || height === undefined) return null;
-  const w = utils.decimal.bounded(width, 1, 16384, true);
-  const h = utils.decimal.bounded(height, 1, 16384, true);
-  return { resolution: resolutionFor(w + "x" + h, model) };
+  const width = Number((body || {}).video_width || 0);
+  const height = Number((body || {}).video_height || 0);
+  if (!(width > 0) || !(height > 0)) return null;
+  return { resolution: resolutionFor(width + "x" + height, "") };
 }
 
 export const protocols = {
@@ -925,11 +884,11 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+      else if (req.duration !== undefined) req.seconds = Number(req.duration);
     }
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined) req.duration = Number(utils.decimal.bounded(seconds, 0, 3600, true));
+    if (seconds !== undefined) req.duration = Number(seconds);
     if (hasInputReferenceFile) {
       req.metadata = Object.assign({}, req.metadata || {}, {
         first_frame_image: { __fileRef: "request_file:input_reference", encoding: "dataUrl", maxBytes: 20971520 },
@@ -942,7 +901,7 @@ protocols.openai_video = {
       }
     }
     const hasImage = hasHailuoImage(req, hasInputReferenceFile);
-    const duration = req.duration === undefined ? undefined : Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+    const duration = req.duration === undefined ? undefined : Number(req.duration);
     const comboModel = ctx.upstreamModel || ctx.model;
     validateHailuoCombo(comboModel, duration, outboundResolution(req, comboModel), hasImage);
     return {

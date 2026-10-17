@@ -1,16 +1,13 @@
 package controller
 
 import (
-	"fmt"
 	"time"
-	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type Setup struct {
@@ -25,16 +22,6 @@ type SetupRequest struct {
 	ConfirmPassword    string `json:"confirmPassword"`
 	SelfUseModeEnabled bool   `json:"SelfUseModeEnabled"`
 	DemoSiteEnabled    bool   `json:"DemoSiteEnabled"`
-}
-
-func validateSetupCredentials(req SetupRequest) error {
-	if utf8.RuneCountInString(req.Username) > 12 {
-		return common.NewMessage("Username must be {{max}} characters or fewer", map[string]any{"max": 12})
-	}
-	if req.Password != req.ConfirmPassword {
-		return common.NewMessage("Passwords do not match")
-	}
-	return common.ValidateNewAccountPassword(req.Password)
 }
 
 func GetSetup(c *gin.Context) {
@@ -75,8 +62,22 @@ func PostSetup(c *gin.Context) {
 
 	// If root doesn't exist, validate and create admin account
 	if !rootExists {
-		if err := validateSetupCredentials(req); err != nil {
-			common.ApiError(c, err)
+		// Validate username length: max 12 characters to align with model.User validation
+		if len(req.Username) > 12 {
+			common.ApiErrorT(c, "Username must be {{max}} characters or fewer", map[string]any{"max": 12})
+			return
+		}
+		// Validate password
+		if req.Password != req.ConfirmPassword {
+			common.ApiErrorT(c, "Passwords do not match")
+			return
+		}
+
+		if err := common.ValidateNewAccountPassword(req.Password); err != nil {
+			c.JSON(200, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
 			return
 		}
 
@@ -86,30 +87,16 @@ func PostSetup(c *gin.Context) {
 			common.ApiErrorT(c, "System error: {{error}}", map[string]any{"error": err.Error()})
 			return
 		}
-		err = model.DB.Transaction(func(tx *gorm.DB) error {
-			affCode, err := model.GenerateUniqueAffiliateCodeTx(tx)
-			if err != nil {
-				return err
-			}
-			rootUser := model.User{
-				Username:       req.Username,
-				Password:       hashedPassword,
-				Role:           common.RoleRootUser,
-				Status:         common.UserStatusEnabled,
-				DisplayName:    "Root User",
-				AffCode:        affCode,
-				AffCodeEnabled: true,
-			}
-			if err := tx.Create(&rootUser).Error; err != nil {
-				return err
-			}
-			_, err = model.ApplyWalletAdjustmentTx(tx, model.WalletAdjustment{
-				EventID: fmt.Sprintf("bootstrap:%d", rootUser.Id), UserID: rootUser.Id,
-				Delta: 100000000, SourceType: "bootstrap", SourceID: fmt.Sprint(rootUser.Id),
-				Reason: "initial root account grant",
-			})
-			return err
-		})
+		rootUser := model.User{
+			Username:    req.Username,
+			Password:    hashedPassword,
+			Role:        common.RoleRootUser,
+			Status:      common.UserStatusEnabled,
+			DisplayName: "Root User",
+			AccessToken: nil,
+			Quota:       100000000,
+		}
+		err = model.DB.Create(&rootUser).Error
 		if err != nil {
 			common.ApiErrorT(c, "Failed to create the administrator account: {{error}}", map[string]any{"error": err.Error()})
 			return

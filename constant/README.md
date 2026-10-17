@@ -1,21 +1,26 @@
-# constant 包
+# constant 包 (`/constant`)
 
-该包集中维护渠道、协议、任务与上下文标识，以及宿主启动时注入的公共配置变量。它不是业务服务层。`endpoint_type.go` 通过别名复用独立 RelayKit 的协议类型，避免宿主另建一套协议枚举；其余文件不应引入数据库、HTTP handler 或业务服务依赖。
+该目录仅用于放置全局可复用的**常量定义**，不包含任何业务逻辑或依赖关系。
 
-| 文件 | 用途 |
-| --- | --- |
-| `api_type.go` | 适配器 API 类型 |
-| `channel.go` | 渠道类型及名称、默认地址等元数据 |
-| `endpoint_type.go` | RelayKit EndpointType 别名和宿主专用端点常量 |
-| `context_key.go` | 统一请求上下文键 |
-| `cache_key.go` | 缓存命名与 Token 字段标识 |
-| `env.go` | 启动阶段注入的公共配置变量 |
-| `azure.go` | Azure 版本兼容边界 |
-| `finish_reason.go` | 生成结束原因常量 |
-| `midjourney.go` | Midjourney 动作与错误标识 |
-| `task.go` | 异步任务平台、动作与模型映射 |
-| `multi_key_mode.go` | 多凭据选择模式 |
-| `setup.go` | 初始化状态 |
-| `waffo_pay_method.go` | Waffo 支付方式结构与默认展示/参数映射 |
+## 当前文件
 
-新增公共标识时先检查宿主与 RelayKit 是否已有定义。需要外部 I/O、数据库访问或状态协调的行为应放入相应业务包；不要为了共享名称把业务流程放进本包。新增或迁移文件时同步维护本表。
+| 文件                   | 说明                                                                  |
+|----------------------|---------------------------------------------------------------------|
+| `azure.go`           | 定义与 Azure 相关的全局常量，如 `AzureNoRemoveDotTime`（控制删除 `.` 的截止时间）。         |
+| `cache_key.go`       | 缓存键格式字符串及 Token 相关字段常量，统一缓存命名规则。                                    |
+| `channel_setting.go` | Channel 级别的设置键，如 `proxy`、`force_format` 等。                          |
+| `context_key.go`     | 定义 `ContextKey` 类型以及在整个项目中使用的上下文键常量（请求时间、Token/Channel/User 相关信息等）。 |
+| `env.go`             | 环境配置相关的全局变量，在启动阶段根据配置文件或环境变量注入。                                     |
+| `finish_reason.go`   | OpenAI/GPT 请求返回的 `finish_reason` 字符串常量集合。                           |
+| `midjourney.go`      | Midjourney 相关错误码及动作(Action)常量与模型到动作的映射表。                            |
+| `setup.go`           | 标识项目是否已完成初始化安装 (`Setup` 布尔值)。                                       |
+| `task.go`            | 各种任务(Task)平台、动作常量及模型与动作映射表，如 Suno、Midjourney 等。                     |
+| `user_setting.go`    | 用户设置相关键常量以及通知类型(Email/Webhook)等。                                    |
+
+## 使用约定
+
+1. `constant` 包**只能被其他包引用**（import），**禁止在此包中引用项目内的其他自定义包**。如确有需要，仅允许引用 **Go 标准库**。
+2. 不允许在此目录内编写任何与业务流程、数据库操作、第三方服务调用等相关的逻辑代码。
+3. 新增类型时，请保持命名语义清晰，并在本 README 的 **当前文件** 表格中补充说明，确保团队成员能够快速了解其用途。
+
+> ⚠️ 违反以上约定将导致包之间产生不必要的耦合，影响代码可维护性与可测试性。请在提交代码前自行检查。

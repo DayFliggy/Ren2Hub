@@ -16,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/gin-gonic/gin"
@@ -106,7 +105,6 @@ func (a *Adaptor) newMantleRequest(c *gin.Context, info *relaycommon.RelayInfo, 
 	if len(parts) == 2 {
 		req.Header.Set("x-api-key", parts[0])
 	}
-	expectedHeaders := req.Header.Clone()
 	headerOverride, err := channel.ResolveHeaderOverride(info, c)
 	if err != nil {
 		return nil, err
@@ -130,11 +128,6 @@ func (a *Adaptor) newMantleRequest(c *gin.Context, info *relaycommon.RelayInfo, 
 		"Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade",
 	} {
 		req.Header.Del(name)
-	}
-	// Validate after all overrides and header stripping. SigV4 below uses only
-	// the selected credential; its Authorization is not part of state identity.
-	if err := service.ValidateGatewayHTTPIdentity(c, info, req, expectedHeaders, headerOverride); err != nil {
-		return nil, err
 	}
 	if len(parts) == 3 {
 		// Never send an unrelated bearer credential alongside SigV4. The AWS

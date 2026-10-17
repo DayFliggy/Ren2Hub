@@ -105,7 +105,7 @@ func HeaderNavModuleAuth(module string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		access := getHeaderNavAccess(module)
 		if !access.Enabled {
-			// Root still needs pricing for management when the public square is closed.
+			// Keep root pricing management available without reopening the public model square.
 			if module == "pricing" && c.GetHeader("Authorization") != "" {
 				RootAuth()(c)
 				return

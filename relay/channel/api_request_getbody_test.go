@@ -56,7 +56,7 @@ func TestApplyUpstreamBodyMetadataSetsReplayableMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, payload, sent)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rc, err := req.GetBody()
 		require.NoError(t, err)
 		replay, err := io.ReadAll(rc)
@@ -110,7 +110,6 @@ func TestApplyUpstreamBodyMetadataKeepsNativeMetadataForNonReplayableBody(t *tes
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -241,7 +240,7 @@ func TestDoTaskApiRequest_KeepsReplayableGetBody(t *testing.T) {
 	require.NotNil(t, req.GetBody)
 	// Even after the request body has been fully written, GetBody must still
 	// return the complete payload, repeatedly.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rc, err := req.GetBody()
 		require.NoError(t, err)
 		replay, err := io.ReadAll(rc)
@@ -345,19 +344,6 @@ func awaitH2ServerResult(t *testing.T, resultCh <-chan h2ServerResult) h2ServerR
 	}
 }
 
-// closeH2TestConnection performs a graceful TCP shutdown for the raw HTTP/2
-// connections used by these tests. On Windows, closing a TCP connection while
-// unread client frames are still queued can surface as a connection reset to
-// the peer even after all response frames have been written.
-func closeH2TestConnection(conn net.Conn) {
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		_ = tcpConn.CloseWrite()
-	}
-	_ = conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
-	_, _ = io.Copy(io.Discard, conn)
-	_ = conn.Close()
-}
-
 // runResetOnFirstStreamServer speaks just enough raw HTTP/2 to emulate an
 // upstream that accepts the first request, waits until the request body has
 // been fully written, and then resets the stream with REFUSED_STREAM (the
@@ -411,15 +397,9 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 	resCh := make(chan h2ServerResult, 1)
 	go func() {
 		res := h2ServerResult{}
-		var drainingConnections []net.Conn
-		defer func() {
-			for _, conn := range drainingConnections {
-				closeH2TestConnection(conn)
-			}
-			resCh <- res
-		}()
+		defer func() { resCh <- res }()
 
-		for attempt := 0; attempt < 2; attempt++ {
+		for attempt := range 2 {
 			conn, framer, err := acceptH2TestConnection(ln)
 			if err != nil {
 				res.err = err
@@ -435,20 +415,17 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 			res.attemptBodies = append(res.attemptBodies, body)
 
 			if attempt == 0 {
-				if err := framer.WriteGoAway(0, http2.ErrCodeNo, nil); err != nil {
-					conn.Close()
+				err = framer.WriteGoAway(0, http2.ErrCodeNo, nil)
+				conn.Close()
+				if err != nil {
 					res.err = err
 					return
 				}
-				// Keep the connection alive until the client sees GOAWAY and
-				// retries. Closing immediately can turn the control frame into a
-				// TCP reset on Windows before the HTTP/2 reader processes it.
-				drainingConnections = append(drainingConnections, conn)
 				continue
 			}
 
 			err = writeH2TestResponse(framer, streamID)
-			closeH2TestConnection(conn)
+			conn.Close()
 			if err != nil {
 				res.err = err
 			}
@@ -603,12 +580,10 @@ func TestUpstreamGetBody_HTTP2CannotRetryWithoutGetBody(t *testing.T) {
 	assert.Nil(t, req.GetBody)
 
 	resp, err := client.Do(req) //nolint:bodyclose // Do fails, no body to close
-	// The exact transport error is platform-dependent: Go reports its
-	// "cannot retry err" wrapper on Unix, while Windows may surface the raw
-	// wsarecv reset before that wrapper is attached. The invariant is that the
-	// request fails and the transport does not send a second stream.
 	require.Error(t, err)
 	assert.Nil(t, resp)
+	require.ErrorContains(t, err, "cannot retry err")
+	require.ErrorContains(t, err, "Request.Body was written")
 
 	srv := awaitH2ServerResult(t, resCh)
 	require.NoError(t, srv.err)

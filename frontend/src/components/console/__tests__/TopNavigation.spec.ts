@@ -44,9 +44,10 @@ beforeEach(async () => {
 })
 
 describe('top navigation', () => {
-  it('places the admin-only ops monitor between dashboard and console', () => {
+  it('places the root-only ops monitor between dashboard and console', () => {
     const admin = getVisibleTopNavItems({
       isAdmin: true,
+      isRoot: true,
       surface: 'desktop',
       featureStatus: live,
     })
@@ -67,6 +68,7 @@ describe('top navigation', () => {
     expect(
       getVisibleTopNavItems({
         isAdmin: true,
+        isRoot: true,
         surface: 'mobile',
         featureStatus: live,
       }).map((item) => item.name)
@@ -76,6 +78,7 @@ describe('top navigation', () => {
   it('fails closed when the admin capability is disabled', () => {
     const items = getVisibleTopNavItems({
       isAdmin: true,
+      isRoot: true,
       surface: 'desktop',
       featureStatus: (feature) => (feature === 'admin' ? 'disabled' : 'live'),
     })
@@ -86,7 +89,7 @@ describe('top navigation', () => {
   })
 
   it('renders the desktop menu by role and marks the ops route active', async () => {
-    const admin = mount(TopNavMenu, await setup(10, { admin: 'live' }))
+    const admin = mount(TopNavMenu, await setup(100, { admin: 'live' }))
     await flushPromises()
     const buttons = admin.findAll('button')
     expect(buttons.slice(0, 5).map((button) => button.text())).toEqual([
@@ -106,7 +109,7 @@ describe('top navigation', () => {
   })
 
   it('renders the mobile strip from the same definition', async () => {
-    const options = await setup(10, { admin: 'live' })
+    const options = await setup(100, { admin: 'live' })
     const topbar = mount(ConsoleTopbar, {
       global: {
         ...options.global,

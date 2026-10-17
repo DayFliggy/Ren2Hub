@@ -98,23 +98,3 @@ func TestTokenCountMetaCountsAgentLoopContent(t *testing.T) {
 		})
 	}
 }
-
-// A tool result block the media shape cannot decode (search_result carries a
-// string source) and a plain-text document must still reach the prompt text,
-// so the estimate and the sensitive-word check see the whole tool output.
-func TestClaudeToolResultCountsUndecodableAndTextDocumentBlocks(t *testing.T) {
-	raw := `{"model":"claude-sonnet-4-5","max_tokens":16,"messages":[
-		{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"search","input":{}}]},
-		{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[
-			{"type":"text","text":"first visible"},
-			{"type":"search_result","source":"https://docs.example/a","title":"A","content":[{"type":"text","text":"search body"}]},
-			{"type":"document","source":{"type":"text","media_type":"text/plain","data":"document body"}}
-		]}]}]}`
-	var request ClaudeRequest
-	require.NoError(t, kitutil.UnmarshalJsonStr(raw, &request))
-	meta := request.GetTokenCountMeta()
-	for _, want := range []string{"first visible", "search body", "document body"} {
-		assert.Contains(t, meta.CombineText, want)
-	}
-	assert.Empty(t, meta.Files, "a text document is counted as text, not as a fixed-size file")
-}

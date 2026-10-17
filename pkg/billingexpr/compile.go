@@ -2,9 +2,7 @@ package billingexpr
 
 import (
 	"fmt"
-	"maps"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -63,7 +61,7 @@ func (p *requestRulePatcher) Visit(node *ast.Node) {
 	ruleIndex := len(p.requestRules)
 	p.requestRules = append(p.requestRules, RequestRuleTrace{
 		Cond:       conditional.Cond.String(),
-		Multiplier: strconv.FormatFloat(multiplier, 'g', -1, 64),
+		Multiplier: multiplier,
 	})
 
 	traceFunction := requestRuleTraceFunction
@@ -118,7 +116,6 @@ type cachedEntry struct {
 	requestRules  []RequestRuleTrace
 	version       int
 	fixedPricing  bool
-	staticTiers   map[string]bool
 }
 
 var (
@@ -161,9 +158,10 @@ var compileEnvPrototypeV1 = map[string]any{
 }
 
 func getCompileEnv(version int) map[string]any {
-	env := maps.Clone(compileEnvPrototypeV1)
-	bindEnvironment(env, nil)
-	return env
+	switch version {
+	default:
+		return compileEnvPrototypeV1
+	}
 }
 
 // CompileFromCache compiles an expression string, using a cached program when
@@ -187,9 +185,6 @@ func compileFromCacheByHash(exprStr, hash string) (*vm.Program, error) {
 }
 
 func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
-	if hash != ExprHashString(exprStr) {
-		return nil, fmt.Errorf("billing expression hash mismatch")
-	}
 	cacheMu.RLock()
 	if entry, ok := cache[hash]; ok {
 		cacheMu.RUnlock()
@@ -204,12 +199,6 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("expr compile error: %w", err)
 	}
-	if ast.Find(tree.Node, func(node ast.Node) bool {
-		identifier, ok := node.(*ast.IdentifierNode)
-		return ok && identifier.Value == timeMembersFunction
-	}) != nil {
-		return nil, fmt.Errorf("expr compile error: reserved environment identifier")
-	}
 	fixedPricing := ast.Find(tree.Node, func(node ast.Node) bool {
 		identifier, ok := node.(*ast.IdentifierNode)
 		return ok && identifier.Value == "fixed"
@@ -220,25 +209,7 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 		}
 	}
 	patcher := &requestRulePatcher{}
-	staticTiers := map[string]bool{}
-	ast.Find(tree.Node, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallNode)
-		if !ok || len(call.Arguments) < 1 {
-			return false
-		}
-		callee, ok := call.Callee.(*ast.IdentifierNode)
-		if !ok || callee.Value != "tier" {
-			return false
-		}
-		if label, ok := call.Arguments[0].(*ast.StringNode); ok {
-			staticTiers[label.Value] = true
-		}
-		return false
-	})
-	env := getCompileEnv(version)
-	options := []expr.Option{expr.Env(env), expr.Patch(patcher), expr.Patch(&timeMemberPatcher{}), expr.AsFloat64()}
-	options = append(options, replayCompileOptions()...)
-	prog, err := expr.Compile(body, options...)
+	prog, err := expr.Compile(body, expr.Env(getCompileEnv(version)), expr.Patch(patcher), expr.AsFloat64())
 	if patcher.restrictedIdentifier != "" {
 		return nil, fmt.Errorf("expr compile error: identifier %q is reserved for internal use", patcher.restrictedIdentifier)
 	}
@@ -253,7 +224,6 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 		requestRules:  patcher.requestRules,
 		version:       version,
 		fixedPricing:  fixedPricing,
-		staticTiers:   staticTiers,
 	}
 	cacheMu.Lock()
 	if len(cache) >= maxCacheSize {

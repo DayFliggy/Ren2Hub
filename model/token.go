@@ -4,33 +4,58 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
 
 type Token struct {
-	Id                  int            `json:"id"`
-	UserId              int            `json:"user_id" gorm:"index;index:idx_token_user_created,priority:1"`
-	Key                 string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
-	Status              int            `json:"status" gorm:"default:1"`
-	Name                string         `json:"name" gorm:"index" `
-	CreatedTime         int64          `json:"created_time" gorm:"bigint;index:idx_token_user_created,priority:2"`
-	AccessedTime        int64          `json:"accessed_time" gorm:"bigint"`
-	ExpiredTime         int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
-	RemainQuota         common.Quota   `json:"available_quota" gorm:"column:available_quota;type:bigint;default:0"`
-	ReservedQuota       common.Quota   `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
-	QuotaVersion        int64          `json:"quota_version" gorm:"type:bigint;not null;default:0"`
-	UnlimitedQuota      bool           `json:"unlimited_quota"`
-	AllowUserQuotaQuery bool           `json:"allow_user_quota_query"`
-	ModelLimitsEnabled  bool           `json:"model_limits_enabled"`
-	ModelLimits         string         `json:"model_limits" gorm:"type:text"`
-	AllowIps            *string        `json:"allow_ips" gorm:"default:''"`
-	UsedQuota           common.Quota   `json:"used_quota" gorm:"type:bigint;default:0"` // used quota
-	DeletedAt           gorm.DeletedAt `gorm:"index"`
-	ConversionPolicy    string         `json:"conversion_policy" gorm:"type:varchar(16);default:'safe'"`
+	Id                 int            `json:"id"`
+	UserId             int            `json:"user_id" gorm:"index"`
+	Key                string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
+	Status             int            `json:"status" gorm:"default:1"`
+	Name               string         `json:"name" gorm:"index" `
+	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
+	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
+	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
+	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
+	UnlimitedQuota     bool           `json:"unlimited_quota"`
+	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
+	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
+	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
+	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
+	Group              string         `json:"group" gorm:"default:''"`
+	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
+	AutoGroups         string         `json:"-" gorm:"type:text"`
+	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	// 允许用此令牌查询所属用户的额度；新建令牌默认开启，已有令牌升级后保持关闭
+	AllowUserQuotaQuery bool `json:"allow_user_quota_query"`
+}
+
+func (token *Token) GetAutoGroups() ([]string, error) {
+	if token.AutoGroups == "" {
+		return nil, nil
+	}
+	var groups []string
+	if err := common.UnmarshalJsonStr(token.AutoGroups, &groups); err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+func (token *Token) SetAutoGroups(groups []string) error {
+	if len(groups) == 0 {
+		token.AutoGroups = ""
+		return nil
+	}
+	data, err := common.Marshal(groups)
+	if err != nil {
+		return err
+	}
+	token.AutoGroups = string(data)
+	return nil
 }
 
 func (token *Token) Clean() {
@@ -69,8 +94,8 @@ func (token *Token) GetIpLimits() []string {
 	if cleanIps == "" {
 		return ipLimits
 	}
-	ips := strings.Split(cleanIps, "\n")
-	for _, ip := range ips {
+	ips := strings.SplitSeq(cleanIps, "\n")
+	for ip := range ips {
 		ip = strings.TrimSpace(ip)
 		ip = strings.ReplaceAll(ip, ",", "")
 		if ip != "" {
@@ -215,9 +240,16 @@ func ValidateUserToken(key string) (token *Token, err error) {
 			}
 			return token, ErrTokenInvalid
 		}
-		// Budget admission happens after pricing, in the atomic reservation. A zero
-		// available budget can still authorize a request with an explicit free quote.
-
+		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+			if !common.RedisEnabled {
+				token.Status = common.TokenStatusExhausted
+				err := token.SelectUpdate()
+				if err != nil {
+					common.SysLog(common.LogText("failed to update token status%s", err.Error()))
+				}
+			}
+			return token, ErrTokenInvalid
+		}
 		return token, nil
 	}
 	common.SysLog(common.LogText("ValidateUserToken: failed to get token: %s", err.Error()))
@@ -252,12 +284,6 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// Try Redis first
 		token, err := cacheGetTokenByKey(key)
 		if err == nil {
-			var balances Token
-			if err := DB.Select("id", "available_quota", "reserved_quota", "used_quota", "quota_version", "unlimited_quota", "allow_user_quota_query").First(&balances, token.Id).Error; err != nil {
-				return nil, err
-			}
-			token.RemainQuota, token.ReservedQuota, token.UsedQuota, token.QuotaVersion, token.UnlimitedQuota = balances.RemainQuota, balances.ReservedQuota, balances.UsedQuota, balances.QuotaVersion, balances.UnlimitedQuota
-			token.AllowUserQuotaQuery = balances.AllowUserQuotaQuery
 			return token, nil
 		}
 		// Don't return error - fall through to DB
@@ -276,216 +302,21 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 	return token, nil
 }
 
-func (token Token) MarshalJSON() ([]byte, error) {
-	type tokenJSON Token
-	var available *common.Quota
-	if !token.UnlimitedQuota {
-		available = &token.RemainQuota
-	}
-	return common.Marshal(struct {
-		tokenJSON
-		Available *common.Quota `json:"available_quota"`
-	}{tokenJSON: tokenJSON(token), Available: available})
-}
-
 func (token *Token) Insert() error {
-	return DB.Transaction(func(tx *gorm.DB) error { return token.insertWithBudgetEventTx(tx) })
+	var err error
+	err = DB.Create(token).Error
+	return err
 }
 
-func (token *Token) insertWithBudgetEventTx(tx *gorm.DB) error {
-	if token.RemainQuota < 0 || token.ReservedQuota != 0 || token.UsedQuota != 0 {
-		return errors.New("invalid initial token budget")
+// Update Make sure your token's fields is completed, because this will update non-zero values
+func (token *Token) Update() (err error) {
+	// 写库前失效缓存并设置 fence，防止并发读者把过期快照重新写回缓存。
+	if cacheErr := invalidateTokenCacheForMutation(token.Key); cacheErr != nil {
+		common.SysLog(common.LogText("failed to invalidate token cache before update: %s", cacheErr.Error()))
 	}
-	var user User
-	if err := lockForUpdate(tx).First(&user, token.UserId).Error; err != nil {
-		return err
-	}
-	// Count inside the same user lock as creation. Soft-deleted tokens remain
-	// in the rolling-hour count so deleting a key cannot return a creation slot.
-	now := common.GetTimestamp()
-	if err := checkTokenCreationLimits(tx, token.UserId, now); err != nil {
-		return err
-	}
-	token.CreatedTime = now
-	initial := token.RemainQuota
-	token.RemainQuota = 0
-	if token.UnlimitedQuota {
-		initial = 0
-	}
-	if err := tx.Create(token).Error; err != nil {
-		return err
-	}
-	fingerprint, err := billingEventFingerprint(struct {
-		TokenID   int
-		Available common.Quota
-		Unlimited bool
-	}{token.Id, initial, token.UnlimitedQuota})
-	if err != nil {
-		return err
-	}
-	_, err = applyAccountEventTx(tx, &BillingEvent{EventID: fmt.Sprintf("token-create:%d", token.Id), UserID: token.UserId, TokenID: token.Id, Operation: "token_budget", SourceType: "token_create", SourceID: fmt.Sprint(token.Id), Fingerprint: fingerprint, TokenAvailableDelta: initial, ActorID: token.UserId, Reason: "token budget created"}, &user, false)
-	if err != nil {
-		return err
-	}
-	return tx.First(token, token.Id).Error
-}
-
-func (token *Token) InsertWithRouteMode(mode string) error {
-	if mode != RouteModeManual && mode != RouteModeAutoLab {
-		return errors.New("invalid token route mode")
-	}
-	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := token.insertWithBudgetEventTx(tx); err != nil {
-			return err
-		}
-		profile := UserRouteProfile{UserID: token.UserId, TokenID: token.Id, Mode: mode}
-		profile.Normalize(time.Now())
-		return tx.Create(&profile).Error
-	})
-}
-
-// Update changes metadata only. Budget edits require a stable operation and version.
-func (token *Token) Update() error { return token.UpdateWithBudget("", nil) }
-
-func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64) error {
-	return token.updateWithBudget(operationID, expectedVersion, "snapshot", nil)
-}
-
-// UpdateFromRequest fingerprints only fields controlled by the HTTP command.
-// Later changes to untouched metadata or balances cannot invalidate its replay.
-// present names the JSON fields the request carried: an omitted setting or
-// budget field keeps its stored value, and only an explicit value (including
-// "" or null) changes it.
-func (token *Token) UpdateFromRequest(operationID string, expectedVersion *int64, statusOnly bool, present map[string]bool) error {
-	mode := "settings"
-	if statusOnly {
-		mode = "status"
-		if !present["status"] {
-			return errors.New("status is required")
-		}
-	}
-	return token.updateWithBudget(operationID, expectedVersion, mode, present)
-}
-
-func (token *Token) updateWithBudget(operationID string, expectedVersion *int64, mode string, present map[string]bool) error {
-	metadata := map[string]any{
-		"name": token.Name, "status": token.Status, "expired_time": token.ExpiredTime,
-		"model_limits_enabled": token.ModelLimitsEnabled, "model_limits": token.ModelLimits,
-		"allow_ips": token.AllowIps, "conversion_policy": token.ConversionPolicy,
-		"allow_user_quota_query": token.AllowUserQuotaQuery,
-	}
-	// Nil budget targets mean "keep the stored value"; a pointer marshals like
-	// its value, so fingerprints of full requests are unchanged.
-	available, unlimited := &token.RemainQuota, &token.UnlimitedQuota
-	if mode == "settings" {
-		delete(metadata, "status")
-		if token.ConversionPolicy == "" {
-			delete(metadata, "conversion_policy")
-		}
-		for field := range metadata {
-			if !present[field] {
-				delete(metadata, field)
-			}
-		}
-		if !present["available_quota"] {
-			available = nil
-		}
-		if !present["unlimited_quota"] {
-			unlimited = nil
-		}
-	} else if mode == "status" {
-		metadata = map[string]any{"status": token.Status}
-		zeroQuota, noUnlimited := common.Quota(0), false
-		available, unlimited = &zeroQuota, &noUnlimited
-	}
-	err := BillingTransaction(nil, func(tx *gorm.DB) error {
-		var user User
-		if err := lockForUpdate(tx).First(&user, token.UserId).Error; err != nil {
-			return err
-		}
-		var current Token
-		if err := lockForUpdate(tx).First(&current, token.Id).Error; err != nil {
-			return err
-		}
-		if current.UserId != token.UserId {
-			return errors.New("token owner mismatch")
-		}
-		token.Key = current.Key
-		targetAvailable, targetUnlimited := current.RemainQuota, current.UnlimitedQuota
-		if mode != "status" && available != nil {
-			targetAvailable = *available
-		}
-		if mode != "status" && unlimited != nil {
-			targetUnlimited = *unlimited
-		}
-		budgetChanged := current.RemainQuota != targetAvailable || current.UnlimitedQuota != targetUnlimited
-		if operationID != "" {
-			if len(operationID) > 96 || expectedVersion == nil {
-				return errors.New("expected_version is required")
-			}
-			fingerprint, err := billingEventFingerprint(struct {
-				TokenID   int
-				Available *common.Quota
-				Unlimited *bool
-				Version   int64
-				Metadata  map[string]any
-				Mode      string
-			}{token.Id, available, unlimited, *expectedVersion, metadata, mode})
-			if err != nil {
-				return err
-			}
-			eventID := fmt.Sprintf("token-budget:%d:%s", token.Id, operationID)
-			existing, err := findBillingEvent(tx, eventID, fingerprint)
-			if err != nil {
-				return err
-			}
-			if existing != nil {
-				return nil
-			}
-			if current.ReservedQuota > 0 && current.UnlimitedQuota != targetUnlimited {
-				return common.NewMessage("Cannot change the token budget policy while reservations are active")
-			}
-			if current.QuotaVersion != *expectedVersion {
-				return ErrBillingEventConflict
-			}
-			if targetAvailable < 0 && targetAvailable != current.RemainQuota {
-				return errors.New("invalid token budget")
-			}
-			negative, err := common.NegateQuota(current.RemainQuota)
-			if err != nil {
-				return err
-			}
-			delta, err := common.AddQuota(targetAvailable, negative)
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&Token{}).Where("id = ?", token.Id).Update("unlimited_quota", targetUnlimited).Error; err != nil {
-				return err
-			}
-			_, err = applyAccountEventTx(tx, &BillingEvent{EventID: eventID, UserID: token.UserId, TokenID: token.Id, Operation: "token_budget", SourceType: "token_adjustment", SourceID: operationID, Fingerprint: fingerprint, TokenAvailableDelta: delta, ActorID: token.UserId, Reason: "token budget updated"}, &user, false)
-			if err != nil {
-				return err
-			}
-		} else if budgetChanged {
-			return errors.New("budget updates require operation_id and expected_version")
-		}
-		if mode == "status" && token.Status == common.TokenStatusEnabled {
-			if current.ExpiredTime != -1 && current.ExpiredTime <= common.GetTimestamp() {
-				return common.NewMessage("Token has expired and cannot be enabled. Please modify the expiration time or set it to never expire")
-			}
-			if current.Status == common.TokenStatusExhausted && current.RemainQuota <= 0 && !current.UnlimitedQuota {
-				return common.NewMessage("Token quota is exhausted and cannot be enabled. Please modify the remaining quota or set it to unlimited")
-			}
-		}
-		return tx.Model(token).Updates(metadata).Error
-	})
-	if err != nil {
-		return err
-	}
-	if err := invalidateTokenCacheForMutation(token.Key); err != nil {
-		common.SysError(common.LogText("token cache invalidation failed: %s", err.Error()))
-	}
-	return DB.First(token, token.Id).Error
+	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
+		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry", "auto_groups",
+		"allow_user_quota_query").Updates(token).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {
@@ -496,31 +327,16 @@ func (token *Token) SelectUpdate() (err error) {
 	return DB.Model(token).Select("accessed_time", "status").Updates(token).Error
 }
 
-func (token *Token) Delete() error {
-	err := BillingTransaction(nil, func(tx *gorm.DB) error {
-		var owner User
-		if err := lockForUpdate(tx).First(&owner, token.UserId).Error; err != nil {
-			return err
-		}
-		var current Token
-		if err := lockForUpdate(tx).First(&current, token.Id).Error; err != nil {
-			return err
-		}
-		if current.UserId != token.UserId {
-			return errors.New("token owner mismatch")
-		}
-		if current.ReservedQuota != 0 {
-			return common.NewMessage("Token has active reservations")
-		}
-		if err := ensureNoActiveAccountBillingTx(tx, token.UserId, token.Id); err != nil {
-			return err
-		}
-		return tx.Delete(&current).Error
-	})
-	if err != nil {
-		return err
+func (token *Token) Delete() (err error) {
+	if cacheErr := invalidateTokenCacheForMutation(token.Key); cacheErr != nil {
+		common.SysLog(common.LogText("failed to invalidate token cache before delete: %s", cacheErr.Error()))
 	}
-	return invalidateTokenCacheForMutation(token.Key)
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := deleteTokenRouting(tx, []int{token.Id}); err != nil {
+			return err
+		}
+		return tx.Delete(token).Error
+	})
 }
 
 func (token *Token) IsModelLimitsEnabled() bool {
@@ -566,6 +382,66 @@ func DeleteTokenById(id int, userId int) (err error) {
 	return token.Delete()
 }
 
+func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
+	if quota < 0 {
+		return errors.New("quota cannot be negative")
+	}
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			// 守卫式增量：哈希不存在时跳过，由下次读取从数据库水合，
+			// 绝不创建只有配额字段的残缺哈希。
+			if _, err := cacheApplyTokenQuotaDelta(tokenId, key, int64(quota)); err != nil {
+				common.SysLog(common.LogText("failed to increase token quota: %s", err.Error()))
+			}
+		})
+	}
+	if common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeTokenQuota, tokenId, quota)
+		return nil
+	}
+	return increaseTokenQuota(tokenId, quota)
+}
+
+func increaseTokenQuota(id int, quota int) (err error) {
+	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
+		map[string]any{
+			"remain_quota":  gorm.Expr("remain_quota + ?", quota),
+			"used_quota":    gorm.Expr("used_quota - ?", quota),
+			"accessed_time": common.GetTimestamp(),
+		},
+	).Error
+	return err
+}
+
+func DecreaseTokenQuota(id int, key string, quota int) (err error) {
+	if quota < 0 {
+		return errors.New("quota cannot be negative")
+	}
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			if _, err := cacheApplyTokenQuotaDelta(id, key, int64(-quota)); err != nil {
+				common.SysLog(common.LogText("failed to decrease token quota: %s", err.Error()))
+			}
+		})
+	}
+	if common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeTokenQuota, id, -quota)
+		return nil
+	}
+	return decreaseTokenQuota(id, quota)
+}
+
+func decreaseTokenQuota(id int, quota int) (err error) {
+	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
+		map[string]any{
+			"remain_quota":  gorm.Expr("remain_quota - ?", quota),
+			"used_quota":    gorm.Expr("used_quota + ?", quota),
+			"accessed_time": common.GetTimestamp(),
+		},
+	).Error
+	return err
+}
+
 // CountUserTokens returns total number of tokens for the given user, used for pagination
 func CountUserTokens(userId int) (int64, error) {
 	var total int64
@@ -580,32 +456,22 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	}
 
 	tx := DB.Begin()
-	if tx.Error != nil {
-		return 0, tx.Error
-	}
-	var owner User
-	if err := lockForUpdate(tx).First(&owner, userId).Error; err != nil {
-		tx.Rollback()
-		return 0, err
-	}
 
 	var tokens []Token
-	if err := lockForUpdate(tx).Where("user_id = ? AND id IN (?)", userId, ids).Order("id ASC").Find(&tokens).Error; err != nil {
+	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Find(&tokens).Error; err != nil {
 		tx.Rollback()
 		return 0, err
-	}
-	for _, token := range tokens {
-		if err := ensureNoActiveAccountBillingTx(tx, userId, token.Id); err != nil {
-			tx.Rollback()
-			return 0, err
-		}
-		if token.ReservedQuota != 0 {
-			tx.Rollback()
-			return 0, common.NewMessage("Token has active reservations")
-		}
 	}
 	if err := invalidateTokensCache(tokens); err != nil {
 		common.SysLog(common.LogText("failed to invalidate token cache before batch delete: %s", err.Error()))
+	}
+	ownedIDs := make([]int, 0, len(tokens))
+	for _, token := range tokens {
+		ownedIDs = append(ownedIDs, token.Id)
+	}
+	if err := deleteTokenRouting(tx, ownedIDs); err != nil {
+		tx.Rollback()
+		return 0, err
 	}
 
 	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Delete(&Token{}).Error; err != nil {

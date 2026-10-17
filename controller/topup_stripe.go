@@ -105,11 +105,6 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	) {
 		return
 	}
-	affiliateBaseQuota, err := model.SnapshotAffiliateBaseQuota(chargedMoney, setting.StripeUnitPrice)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "ref_" + common.Sha1([]byte(reference))
@@ -122,15 +117,14 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	topUp := &model.TopUp{
-		UserId:             id,
-		Amount:             req.Amount,
-		Money:              chargedMoney,
-		TradeNo:            referenceId,
-		PaymentMethod:      model.PaymentMethodStripe,
-		PaymentProvider:    model.PaymentProviderStripe,
-		CreateTime:         time.Now().Unix(),
-		Status:             common.TopUpStatusPending,
-		AffiliateBaseQuota: affiliateBaseQuota,
+		UserId:          id,
+		Amount:          req.Amount,
+		Money:           chargedMoney,
+		TradeNo:         referenceId,
+		PaymentMethod:   model.PaymentMethodStripe,
+		PaymentProvider: model.PaymentProviderStripe,
+		CreateTime:      time.Now().Unix(),
+		Status:          common.TopUpStatusPending,
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -194,6 +188,10 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
+	if event.GetObjectValue("mode") == "subscription" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
 	callerIp := c.ClientIP()
 	logger.LogInfo(ctx, common.LogText("Stripe webhook signature verified event_type=%s client_ip=%s path=%q", string(event.Type), callerIp, c.Request.RequestURI))
 	switch event.Type {
@@ -243,10 +241,6 @@ func sessionAsyncPaymentSucceeded(ctx context.Context, event stripe.Event, calle
 // sessionAsyncPaymentFailed marks orders as failed when delayed payment methods
 // ultimately fail (e.g. bank transfer not received, SEPA rejected).
 func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp string) {
-	if !isStripeWalletCheckout(ctx, event) {
-		return
-	}
-
 	referenceId := event.GetObjectValue("client_reference_id")
 	logger.LogWarn(ctx, common.LogText("Stripe async payment failed trade_no=%s client_ip=%s", referenceId, callerIp))
 
@@ -282,24 +276,8 @@ func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp
 	logger.LogInfo(ctx, common.LogText("Stripe top-up order marked as failed trade_no=%s client_ip=%s", referenceId, callerIp))
 }
 
-// isStripeWalletCheckout excludes recurring and archived plan payments before
-// any wallet order is credited or its status is changed.
-func isStripeWalletCheckout(ctx context.Context, event stripe.Event) bool {
-	referenceID := event.GetObjectValue("client_reference_id")
-	if event.GetObjectValue("mode") != string(stripe.CheckoutSessionModePayment) ||
-		strings.HasPrefix(referenceID, "sub_ref_") {
-		logger.LogWarn(ctx, common.LogText("Stripe ignored non-wallet payment event event_type=%s trade_no=%s", event.Type, referenceID))
-		return false
-	}
-	return true
-}
-
 // fulfillOrder is the shared logic for crediting quota after payment is confirmed.
 func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, customerId string, callerIp string) {
-	if !isStripeWalletCheckout(ctx, event) {
-		return
-	}
-
 	if len(referenceId) == 0 {
 		logger.LogWarn(ctx, common.LogText("Stripe order completion missing order number client_ip=%s", callerIp))
 		return
@@ -319,10 +297,6 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 }
 
 func sessionExpired(ctx context.Context, event stripe.Event) {
-	if !isStripeWalletCheckout(ctx, event) {
-		return
-	}
-
 	referenceId := event.GetObjectValue("client_reference_id")
 	status := event.GetObjectValue("status")
 	if "expired" != status {
@@ -337,7 +311,6 @@ func sessionExpired(ctx context.Context, event stripe.Event) {
 
 	LockOrder(referenceId)
 	defer UnlockOrder(referenceId)
-
 	err := model.UpdatePendingTopUpStatus(referenceId, model.PaymentProviderStripe, common.TopUpStatusExpired)
 	if errors.Is(err, model.ErrTopUpNotFound) {
 		logger.LogWarn(ctx, common.LogText("Stripe top-up order not found, cannot mark as expired trade_no=%s", referenceId))

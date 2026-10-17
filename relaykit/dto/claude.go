@@ -16,12 +16,6 @@ type ClaudeMetadata struct {
 }
 
 type ClaudeMediaMessage struct {
-	Citations    json.RawMessage      `json:"citations,omitempty"`
-	Citation     json.RawMessage      `json:"citation,omitempty"`
-	Caller       json.RawMessage      `json:"caller,omitempty"`
-	ServerName   string               `json:"server_name,omitempty"`
-	IsError      *bool                `json:"is_error,omitempty"`
-	ErrorCode    string               `json:"error_code,omitempty"`
 	Type         string               `json:"type,omitempty"`
 	Text         *string              `json:"text,omitempty"`
 	Model        string               `json:"model,omitempty"`
@@ -37,10 +31,16 @@ type ClaudeMediaMessage struct {
 	CacheControl json.RawMessage      `json:"cache_control,omitempty"`
 
 	// Text blocks and citations_delta events.
+	Citations json.RawMessage `json:"citations,omitempty"`
+	Citation  json.RawMessage `json:"citation,omitempty"`
 
 	// Server-tool and tool-result blocks.
+	Caller     json.RawMessage `json:"caller,omitempty"`
+	ServerName string          `json:"server_name,omitempty"`
+	IsError    *bool           `json:"is_error,omitempty"`
 	// ErrorCode is a relaykit compatibility extension. Claude places provider
 	// error codes inside nested tool-result error content.
+	ErrorCode string `json:"error_code,omitempty"`
 
 	// Tool-use and tool-result blocks.
 	Id        string `json:"id,omitempty"`
@@ -48,32 +48,6 @@ type ClaudeMediaMessage struct {
 	Input     any    `json:"input,omitempty"`
 	Content   any    `json:"content,omitempty"`
 	ToolUseId string `json:"tool_use_id,omitempty"`
-}
-
-// MarshalJSON keeps the Anthropic thinking-block wire shape: thinking and
-// signature are always present (signature is "" on content_block_start), and
-// strict clients reject a thinking block without the signature key. An empty
-// signature states that no provider signature is known; converters never
-// fabricate one. Every other block type keeps its omitempty encoding.
-func (c ClaudeMediaMessage) MarshalJSON() ([]byte, error) {
-	type claudeMediaMessage ClaudeMediaMessage
-	if c.Type != "thinking" {
-		return kitutil.Marshal(claudeMediaMessage(c))
-	}
-	thinking := ""
-	if c.Thinking != nil {
-		thinking = *c.Thinking
-	}
-	// The overridden fields are cleared in the embedded copy so the result does
-	// not depend on how the installed codec resolves duplicate keys.
-	rest := claudeMediaMessage(c)
-	rest.Type, rest.Thinking, rest.Signature = "", nil, ""
-	return kitutil.Marshal(struct {
-		Type      string `json:"type"`
-		Thinking  string `json:"thinking"`
-		Signature string `json:"signature"`
-		claudeMediaMessage
-	}{Type: c.Type, Thinking: thinking, Signature: c.Signature, claudeMediaMessage: rest})
 }
 
 func (c *ClaudeMediaMessage) SetText(s string) {
@@ -363,7 +337,26 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					texts = append(texts, string(b))
 				}
 			case "tool_result":
-				texts, fileMeta = appendToolResultTokenInput(texts, fileMeta, &media)
+				// Count tool output as the text the model reads; JSON-encoding it
+				// would escape newlines and quotes and count image base64 as text.
+				if media.IsStringContent() {
+					texts = append(texts, media.GetStringContent())
+					break
+				}
+				for _, part := range media.ParseMediaContent() {
+					if source := part.ToFileSource(); source != nil {
+						fileType := types.FileTypeFile
+						if part.Type == "image" {
+							fileType = types.FileTypeImage
+						}
+						fileMeta = append(fileMeta, &types.FileMeta{FileType: fileType, Source: source})
+					} else if part.Type == "text" {
+						texts = append(texts, part.GetText())
+					} else {
+						b, _ := kitutil.Marshal(part)
+						texts = append(texts, string(b))
+					}
+				}
 			}
 		}
 	}
@@ -404,49 +397,6 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	tokenCountMeta.CombineText = strings.Join(texts, "\n")
 	tokenCountMeta.Files = fileMeta
 	return &tokenCountMeta
-}
-
-// appendToolResultTokenInput adds what the model reads from one tool_result
-// to the token-count input; the same text feeds the sensitive-word check.
-// Output is counted as text, not JSON-encoded, which would escape newlines
-// and quotes and count image base64 as text. Ren2Hub-local: blocks are
-// decoded one by one, so a block the media shape cannot hold (e.g.
-// search_result with a string source) is counted as its raw JSON instead of
-// dropping the whole tool result, and a plain-text document counts as text.
-func appendToolResultTokenInput(texts []string, files []*types.FileMeta, result *ClaudeMediaMessage) ([]string, []*types.FileMeta) {
-	if result.IsStringContent() {
-		return append(texts, result.GetStringContent()), files
-	}
-	parts, _ := result.Content.([]any)
-	if parts == nil && result.Content != nil {
-		b, _ := kitutil.Marshal(result.Content)
-		texts = append(texts, string(b))
-	}
-	for _, raw := range parts {
-		part, err := kitutil.Any2Type[ClaudeMediaMessage](raw)
-		if err != nil {
-			b, _ := kitutil.Marshal(raw)
-			texts = append(texts, string(b))
-			continue
-		}
-		if part.Source != nil && part.Source.Type == "text" {
-			texts = append(texts, kitutil.Interface2String(part.Source.Data))
-			continue
-		}
-		if source := part.ToFileSource(); source != nil {
-			fileType := types.FileTypeFile
-			if part.Type == "image" {
-				fileType = types.FileTypeImage
-			}
-			files = append(files, &types.FileMeta{FileType: fileType, Source: source})
-		} else if part.Type == "text" {
-			texts = append(texts, part.GetText())
-		} else {
-			b, _ := kitutil.Marshal(raw)
-			texts = append(texts, string(b))
-		}
-	}
-	return texts, files
 }
 
 func (c *ClaudeRequest) IsStream(ctx *http.Request) bool {
@@ -544,10 +494,15 @@ type Thinking struct {
 	// the visible summary that was default on Opus 4.6; "omitted" (default on
 	// 4.7) suppresses it. Pass-through field from upstream Anthropic API.
 	Display string `json:"display,omitempty"`
-	// BlockBinding carries the client's preserved-thinking controls verbatim.
-	// The gateway never adds a binding policy the client did not provide.
+	// BlockBinding carries the client's preserved-thinking controls, such as
+	// {"prefix_mismatch_behavior":"drop_block"} (beta
+	// thinking-binding-controls-2026-08-01). It is forwarded verbatim and
+	// never added by the gateway.
 	BlockBinding json.RawMessage `json:"block_binding,omitempty"`
-	// Extra retains fields that native Claude forwarding does not model yet.
+
+	// Extra keeps thinking fields this struct does not model yet, so a native
+	// Claude request forwards them instead of silently dropping them. It is
+	// exported so common.DeepCopy copies it; MarshalJSON writes it back.
 	Extra map[string]json.RawMessage `json:"-"`
 }
 

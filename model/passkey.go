@@ -262,24 +262,19 @@ func upsertPasskeyCredentialWithAuthVersion(credential *PasskeyCredential, ident
 	return PublishUserAuthCache(credential.UserID)
 }
 
-func DeletePasskeyByUserIDWithAuthVersion(userID int, authorizations ...AuthSessionIdentity) error {
-	return deletePasskeyWithAuthVersion(userID, nil, authorizations...)
+func DeletePasskeyByUserIDWithAuthVersion(userID int) error {
+	return deletePasskeyWithAuthVersion(userID, nil)
 }
 
 func DeletePasskeyForSession(identity AuthSessionIdentity) error {
 	return deletePasskeyWithAuthVersion(identity.UserID, &identity)
 }
 
-func deletePasskeyWithAuthVersion(userID int, identity *AuthSessionIdentity, authorizations ...AuthSessionIdentity) error {
+func deletePasskeyWithAuthVersion(userID int, identity *AuthSessionIdentity) error {
 	if userID == 0 {
 		return errors.New("failed to delete the Passkey, please try again")
 	}
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		for _, authorization := range authorizations {
-			if err := ValidateManagedUserAuthorizationWithTx(tx, authorization, userID); err != nil {
-				return err
-			}
-		}
 		if identity != nil {
 			if err := ValidateAuthSessionWithTx(tx, *identity); err != nil {
 				return err

@@ -1,14 +1,11 @@
 package plugins_test
 
 import (
-	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -46,14 +43,14 @@ func TestHailuoResponsesProtocol(t *testing.T) {
 			"size":     "1920x1080",
 			"metadata": map[string]any{"first_frame_image": "https://cdn.example/frame.png"},
 		},
-		wantUsageKeys:       []string{"input_images", "input_video_seconds", "resolution", "seconds"},
-		wantSubmitUsageKeys: []string{"resolution", "seconds"},
-		wantVendorName:      "hailuo",
+		wantUsageKeys:  []string{"input_images", "input_video_seconds", "resolution", "seconds"},
+		wantVendorName: "hailuo",
 	})
 }
 
-// Every model reports only the dimensions in its selected usage profile.
-// Existing tasks retain their previously pinned plugin and frozen schema.
+// Every model selects only the dimensions it can actually bill, while
+// submission still reports the union so prices saved against the previous
+// schema keep evaluating.
 func TestHailuoUsageProfilesPerModel(t *testing.T) {
 	plugin := loadHailuoPlugin(t)
 	families := []struct {
@@ -95,7 +92,7 @@ func TestHailuoUsageProfilesPerModel(t *testing.T) {
 	}
 	assert.ElementsMatch(t, plugin.Meta.Models, profiled, "every declared model must select a usage profile")
 
-	t.Run("submission reports only selected profile facts", func(t *testing.T) {
+	t.Run("submission keeps facts outside the selected profile billable", func(t *testing.T) {
 		info := &relaycommon.RelayInfo{
 			ChannelMeta:     &relaycommon.ChannelMeta{ApiKey: "test-ak", ChannelBaseUrl: "https://api.minimax.example", UpstreamModelName: "MiniMax-Hailuo-2.3"},
 			OriginModelName: "MiniMax-Hailuo-2.3",
@@ -111,7 +108,7 @@ func TestHailuoUsageProfilesPerModel(t *testing.T) {
 		facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
-			"seconds": "10", "resolution": "768P",
+			"seconds": float64(10), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0),
 		}, facts)
 	})
 }
@@ -165,49 +162,6 @@ func TestHailuoArtifactContentProxy(t *testing.T) {
 			assert.Equal(t, &channel.TaskContentRequest{URL: signedURL, Method: http.MethodGet, Credentialless: true}, descriptor)
 		})
 	}
-}
-
-// The completion poll resolves the signed link once and stores it in plugin
-// state; content requests reuse it until shortly before its Expires time
-// instead of querying MiniMax with the channel key on every GET or HEAD.
-func TestHailuoArtifactContentReusesCompletionLink(t *testing.T) {
-	service.InitHttpClient()
-	retrieves := 0
-	expires := time.Now().Add(time.Hour).Unix()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/files/retrieve", r.URL.Path)
-		retrieves++
-		url := fmt.Sprintf("https://bucket.example/video.mp4?Expires=%d&Signature=sig%d", expires, retrieves)
-		_, _ = w.Write([]byte(`{"file":{"download_url":"` + url + `"},"base_resp":{"status_code":0}}`))
-	}))
-	defer upstream.Close()
-	adaptor := taskplugin.New(loadHailuoPlugin(t))
-	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ApiKey: "test-ak", ChannelBaseUrl: upstream.URL}})
-
-	body := []byte(`{"task_id":"up-1","status":"Success","file_id":"f1","base_resp":{"status_code":0}}`)
-	task := &model.Task{TaskID: "task-public", Status: model.TaskStatusInProgress, Data: body}
-	info, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK}, body)
-	require.NoError(t, err)
-	assert.Equal(t, model.TaskStatusSuccess, info.Status)
-	require.Equal(t, 1, retrieves)
-	task.Status, task.PrivateData.PluginState = model.TaskStatusSuccess, info.PluginState
-
-	stored := fmt.Sprintf("https://bucket.example/video.mp4?Expires=%d&Signature=sig1", expires)
-	for _, method := range []string{http.MethodGet, http.MethodHead} {
-		descriptor, err := adaptor.BuildContentRequest(t.Context(), task, "video", channel.TaskArtifactClientRequest{Method: method})
-		require.NoError(t, err)
-		assert.Equal(t, &channel.TaskContentRequest{URL: stored, Method: http.MethodGet, Credentialless: true}, descriptor)
-	}
-	assert.Equal(t, 1, retrieves, "a valid stored link needs no retrieve call")
-
-	// A link that is expired or about to expire is resolved again.
-	expired, err := common.Marshal(map[string]any{"download": map[string]any{"fileId": "f1", "url": "https://bucket.example/video.mp4?Expires=1&Signature=old"}})
-	require.NoError(t, err)
-	task.PrivateData.PluginState = expired
-	descriptor, err := adaptor.BuildContentRequest(t.Context(), task, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
-	require.NoError(t, err)
-	assert.Equal(t, 2, retrieves)
-	assert.Contains(t, descriptor.URL, "Signature=sig2")
 }
 
 func loadHailuoPlugin(t *testing.T) *jsplugin.LoadedPlugin {
@@ -354,9 +308,9 @@ func TestHailuoH3RejectsOutOfContractRequests(t *testing.T) {
 		request map[string]any
 		wantErr string
 	}{
-		{"duration below the minimum", map[string]any{"prompt": "p", "duration": 3}, "duration must be an integer between 4 and 15 seconds"},
-		{"duration above the maximum", map[string]any{"prompt": "p", "duration": 16}, "duration must be an integer between 4 and 15 seconds"},
-		{"fractional duration", map[string]any{"prompt": "p", "duration": 5.5}, "duration must be an integer between 4 and 15 seconds"},
+		{"duration below the minimum", map[string]any{"prompt": "p", "duration": 3}, "duration must be an integer between 4 and 15"},
+		{"duration above the maximum", map[string]any{"prompt": "p", "duration": 16}, "duration must be an integer between 4 and 15"},
+		{"fractional duration", map[string]any{"prompt": "p", "duration": 5.5}, "duration must be an integer between 4 and 15"},
 		{"unsupported resolution", map[string]any{"prompt": "p", "size": "1080P"}, "resolution must be 768P or 2K"},
 		{"unknown ratio", map[string]any{"prompt": "p", "metadata": map[string]any{"ratio": "16:10"}}, "ratio must be one of"},
 		{"adaptive ratio without a visual input", map[string]any{"prompt": "p", "metadata": map[string]any{"ratio": "adaptive"}}, "ratio adaptive requires an image or video input"},
@@ -542,7 +496,7 @@ func TestHailuoExtractUsageFacts(t *testing.T) {
 			"seconds": float64(5), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(15),
 		}},
 		{"legacy model", "MiniMax-Hailuo-2.3", map[string]any{"prompt": "p", "duration": 10}, map[string]any{
-			"seconds": float64(10), "resolution": "768P",
+			"seconds": float64(10), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0),
 		}},
 	}
 	for _, testCase := range testCases {
@@ -558,25 +512,24 @@ func TestHailuoExtractUsageFacts(t *testing.T) {
 func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 	plugin := loadHailuoPlugin(t)
 	testCases := []struct {
-		name    string
-		body    string
-		want    map[string]any
-		invalid bool
+		name string
+		body string
+		want map[string]any
 	}{
 		{
 			name: "actual usage replaces submission estimates",
 			body: `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":5,"input_seconds":7.5,"input_image_count":6}}}`,
-			want: map[string]any{"seconds": "5", "resolution": "2K", "input_images": "6", "input_video_seconds": "7.5"},
+			want: map[string]any{"seconds": float64(5), "resolution": "2K", "input_images": float64(6), "input_video_seconds": float64(7.5)},
 		},
 		{
 			name: "zero actual usage is retained for settlement",
 			body: `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":4,"input_seconds":0,"input_image_count":0}}}`,
-			want: map[string]any{"seconds": "4", "resolution": "768P", "input_images": "0", "input_video_seconds": "0"},
+			want: map[string]any{"seconds": float64(4), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0)},
 		},
 		{
-			name:    "zero output cannot erase the submission reservation",
-			body:    `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":0,"input_seconds":0,"input_image_count":0}}}`,
-			invalid: true,
+			name: "zero output cannot erase the submission reservation",
+			body: `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":0,"input_seconds":0,"input_image_count":0}}}`,
+			want: map[string]any{"resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0)},
 		},
 		{
 			name: "missing usage leaves submission estimates untouched",
@@ -584,37 +537,27 @@ func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 			want: map[string]any{"resolution": "768P"},
 		},
 		{
-			name:    "out of contract usage cannot become a billing multiplier",
-			body:    `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":16,"input_seconds":16,"input_image_count":10}}}`,
-			invalid: true,
+			name: "out of contract usage cannot become a billing multiplier",
+			body: `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":16,"input_seconds":16,"input_image_count":10}}}`,
+			want: map[string]any{"resolution": "2K"},
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			var body any
-			require.NoError(t, common.DecodeJsonNumbers(strings.NewReader(testCase.body), &body))
-			value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", nil, nil, body)
-			if testCase.invalid {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			encoded, err := common.Marshal(value)
-			require.NoError(t, err)
-			var facts map[string]any
-			require.NoError(t, common.Unmarshal(encoded, &facts))
-			assert.Equal(t, testCase.want, facts)
+			require.NoError(t, common.UnmarshalJsonStr(testCase.body, &body))
+			assert.Equal(t, testCase.want, callHailuoHook(t, plugin, "extractUsageOnComplete", nil, nil, body))
 		})
 	}
 
 	t.Run("polling adaptor carries actual facts into task settlement", func(t *testing.T) {
 		adaptor := taskplugin.New(plugin)
-		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, []byte(
+		result, err := adaptor.ParseTaskResult(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, []byte(
 			`{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":5,"input_seconds":7.5,"input_image_count":6}}}`,
 		))
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
-			"seconds": "5", "resolution": "2K", "input_images": "6", "input_video_seconds": "7.5",
+			"seconds": float64(5), "resolution": "2K", "input_images": float64(6), "input_video_seconds": float64(7.5),
 		}, result.UsageFacts)
 	})
 }
@@ -829,7 +772,7 @@ func TestHailuoThroughNewAPIGateway(t *testing.T) {
 				"id": "task_pub", "status": "succeeded", "resolution": "2K", "content": map[string]any{"url": "https://cdn.example/h3.mp4"},
 				"usage": map[string]any{"output_seconds": 8, "input_seconds": 7.5, "input_image_count": 0},
 			}}},
-			wantContent: &channel.TaskContentRequest{URL: "https://gateway.example/v1/tasks/task_pub/artifacts/video/content", Method: http.MethodHead, Headers: map[string]string{"Authorization": "Bearer sk-gateway"}},
+			wantContent: &channel.TaskContentRequest{URL: "https://cdn.example/h3.mp4", Method: http.MethodHead, Credentialless: true},
 		},
 		{
 			name: "H3 failed by the gateway poller", presenter: "h3TaskStatus", wantStatus: "FAILURE", wantReason: "task timed out",
@@ -845,7 +788,7 @@ func TestHailuoThroughNewAPIGateway(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.task["task_id"] = "task_pub"
 			rendered := call("native", []string{tc.presenter}, map[string]any{}, tc.task)
-			result := call("parseTaskResult", nil, map[string]any{"upstream": map[string]any{"kind": "new_api"}}, rendered, map[string]any{"status": http.StatusOK})
+			result := call("parseTaskResult", nil, map[string]any{}, rendered, map[string]any{"status": http.StatusOK})
 			assert.Equal(t, tc.wantStatus, result["status"])
 			assert.Equal(t, tc.wantReason, common.Interface2String(result["reason"]))
 			if tc.wantContent == nil {

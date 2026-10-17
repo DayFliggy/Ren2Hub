@@ -1,15 +1,16 @@
 package cloudflare
 
 import (
-	"bytes"
-	"fmt"
+	"bufio"
+	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/relay/channel/openai"
+	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -30,22 +31,74 @@ func convertCf2CompletionsRequest(textRequest dto.GeneralOpenAIRequest) *CfReque
 }
 
 func cfStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*types.NewAPIError, *dto.Usage) {
-	usage, err := openai.OaiStreamHandler(c, info, resp)
-	return err, usage
+	scanner := helper.NewStreamScanner(resp.Body)
+	scanner.Split(bufio.ScanLines)
+
+	helper.SetEventStreamHeaders(c)
+	id := helper.GetResponseID(c)
+	var responseText string
+	isFirst := true
+
+	for scanner.Scan() {
+		data := scanner.Text()
+		if len(data) < len("data: ") {
+			continue
+		}
+		data = strings.TrimPrefix(data, "data: ")
+		data = strings.TrimSuffix(data, "\r")
+
+		if data == "[DONE]" {
+			break
+		}
+
+		var response dto.ChatCompletionsStreamResponse
+		err := json.Unmarshal([]byte(data), &response)
+		if err != nil {
+			logger.LogError(c, common.LogText("error_unmarshalling_stream_response: %s", err.Error()))
+			continue
+		}
+		for _, choice := range response.Choices {
+			choice.Delta.Role = "assistant"
+			responseText += choice.Delta.GetContentString()
+		}
+		response.Id = id
+		response.Model = info.UpstreamModelName
+		err = helper.ObjectData(c, response)
+		if isFirst {
+			isFirst = false
+			info.FirstResponseTime = time.Now()
+		}
+		if err != nil {
+			logger.LogError(c, common.LogText("error_rendering_stream_response: %s", err.Error()))
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		logger.LogError(c, common.LogText("error_scanning_stream_response: %s", err.Error()))
+	}
+	usage := service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens())
+	if info.ShouldIncludeUsage {
+		response := helper.GenerateFinalUsageResponse(id, info.StartTime.Unix(), info.UpstreamModelName, *usage)
+		err := helper.ObjectData(c, response)
+		if err != nil {
+			logger.LogError(c, common.LogText("error_rendering_final_usage_response: %s", err.Error()))
+		}
+	}
+	helper.Done(c)
+
+	service.CloseResponseBodyGracefully(resp)
+
+	return nil, usage
 }
 
 func cfHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*types.NewAPIError, *dto.Usage) {
-	if info.RelayMode == relayconstant.RelayModeChatCompletions {
-		usage, err := openai.OpenaiHandler(c, info, resp)
-		return err, usage
-	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
 	service.CloseResponseBodyGracefully(resp)
 	var response dto.TextResponse
-	err = common.Unmarshal(responseBody, &response)
+	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
@@ -57,7 +110,7 @@ func cfHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response)
 	usage := service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens())
 	response.Usage = *usage
 	response.Id = helper.GetResponseID(c)
-	jsonResponse, err := common.Marshal(response)
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
@@ -68,34 +121,29 @@ func cfHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response)
 }
 
 func cfSTTHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*types.NewAPIError, *dto.Usage) {
-	if resp == nil || resp.Body == nil {
-		return types.NewOpenAIError(fmt.Errorf("invalid Cloudflare transcription response"), types.ErrorCodeBadResponse, http.StatusBadGateway), nil
-	}
-	defer service.CloseResponseBodyGracefully(resp)
 	var cfResp CfAudioResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusBadGateway), nil
+		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
-	err = common.Unmarshal(responseBody, &cfResp)
-	if err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
-	}
-
-	if cfResp.Success != nil && !*cfResp.Success || len(cfResp.Errors) > 0 {
-		return types.NewOpenAIError(fmt.Errorf("Cloudflare transcription failed"), types.ErrorCodeBadResponse, http.StatusBadGateway), nil
-	}
-	if cfResp.Result == nil || cfResp.Result.Text == nil {
-		return types.NewOpenAIError(fmt.Errorf("Cloudflare transcription response is missing text"), types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
-	}
-	jsonResponse, err := common.Marshal(&dto.AudioResponse{Text: *cfResp.Result.Text})
+	service.CloseResponseBodyGracefully(resp)
+	err = json.Unmarshal(responseBody, &cfResp)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
-	format := c.GetString("response_format")
-	contentType := "application/json"
-	if format == "text" {
-		jsonResponse, contentType = []byte(*cfResp.Result.Text), "text/plain"
+
+	audioResp := &dto.AudioResponse{
+		Text: cfResp.Result.Text,
 	}
-	return openai.OpenaiSTTHandler(c, &http.Response{StatusCode: resp.StatusCode, Header: http.Header{"Content-Type": {contentType}}, Body: io.NopCloser(bytes.NewReader(jsonResponse))}, info, format)
+
+	jsonResponse, err := json.Marshal(audioResp)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
+	}
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	_, _ = c.Writer.Write(jsonResponse)
+
+	usage := service.ResponseText2Usage(c, cfResp.Result.Text, info.UpstreamModelName, info.GetEstimatePromptTokens())
+	return nil, usage
 }

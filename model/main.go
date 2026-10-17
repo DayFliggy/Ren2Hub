@@ -27,6 +27,19 @@ var commonFalseVal string
 var logKeyCol string
 var logGroupCol string
 
+// jsonScanBytes 归一化 json 列的驱动返回值:不同驱动/协议模式下同一列可能
+// 以 []byte 或 string 返回,静默丢弃 string 会导致字段被清零而不报错。
+func jsonScanBytes(value any) []byte {
+	switch v := value.(type) {
+	case []byte:
+		return v
+	case string:
+		return []byte(v)
+	default:
+		return nil
+	}
+}
+
 func initCol() {
 	// init common column names
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
@@ -115,15 +128,17 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 		if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 			// Use PostgreSQL
 			common.SysLog(common.LogText("using PostgreSQL as database"))
-			db, err := gorm.Open(postgresMigrationDialector{*postgres.New(postgres.Config{
+			// 同时关闭 pgx 隐式与 GORM 显式预处理语句:命名 prepared statement 与
+			// 事务池代理(PgBouncer/Neon/Supabase)不兼容,会触发 FATAL 08P01/42P05。
+			db, err := gorm.Open(postgresMigrationDialector{postgres.Dialector{Config: &postgres.Config{
 				DSN:                  dsn,
-				PreferSimpleProtocol: true, // disables implicit prepared statement usage
-			}).(*postgres.Dialector)}, newGormConfig(false))
+				PreferSimpleProtocol: true,
+			}}}, newGormConfig(false))
 			return db, common.DatabaseTypePostgreSQL, err
 		}
 		if strings.HasPrefix(dsn, "local") {
 			common.SysLog(common.LogText("SQL_DSN not set, using SQLite as database"))
-			db, err := openSQLiteDatabase(common.SQLitePath)
+			db, err := gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
 			return db, common.DatabaseTypeSQLite, err
 		}
 		// Use MySQL
@@ -136,31 +151,13 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 				dsn += "?parseTime=true"
 			}
 		}
-		db, err := gorm.Open(mysqlMigrationDialector{*mysql.Open(dsn).(*mysql.Dialector)}, newGormConfig(true))
+		db, err := gorm.Open(mysqlMigrationDialector{mysql.Dialector{Config: &mysql.Config{DSN: dsn}}}, newGormConfig(true))
 		return db, common.DatabaseTypeMySQL, err
 	}
 	// Use SQLite
 	common.SysLog(common.LogText("SQL_DSN not set, using SQLite as database"))
-	db, err := openSQLiteDatabase(common.SQLitePath)
+	db, err := gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
 	return db, common.DatabaseTypeSQLite, err
-}
-
-func openSQLiteDatabase(path string) (*gorm.DB, error) {
-	dsn, err := common.SQLiteDSN(path)
-	if err != nil {
-		return nil, err
-	}
-	db, err := gorm.Open(sqlite.Open(dsn), newGormConfig(true))
-	if err != nil {
-		return nil, err
-	}
-	connection, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
-	connection.SetMaxIdleConns(1)
-	connection.SetMaxOpenConns(1)
-	return db, nil
 }
 
 func InitDB() (err error) {
@@ -175,11 +172,17 @@ func InitDB() (err error) {
 			db = db.Debug()
 		}
 		DB = db
+		if err := rejectLegacyBillingDatabase(DB); err != nil {
+			return err
+		}
 		// MySQL charset/collation startup check: ensure Chinese-capable charset
 		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
 			if err := checkMySQLChineseSupport(DB); err != nil {
 				panic(err)
 			}
+		}
+		if err := ensureUserQuotaColumns(DB, common.MainDatabaseType()); err != nil {
+			return err
 		}
 		sqlDB, err := DB.DB()
 		if err != nil {
@@ -187,18 +190,13 @@ func InitDB() (err error) {
 		}
 		sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
 		sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
-		if dbType == common.DatabaseTypeSQLite {
-			sqlDB.SetMaxIdleConns(1)
-			sqlDB.SetMaxOpenConns(1)
-		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
 		if !common.IsMasterNode {
-			if err := requireBillingSchema(DB); err != nil {
-				return err
-			}
-			if common.PasswordLoginEncryptionEnabled {
-				return InitPasswordEncryption()
+			// Only the master node migrates. A node that cannot read the deadline
+			// keeps rejecting legacy access tokens instead of refusing to start.
+			if err := EnsureLegacyAccessTokenRetireAt(common.GetTimestamp()); err != nil {
+				common.SysError(common.LogText("initialize legacy access token deadline: %s", err.Error()))
 			}
 			return nil
 		}
@@ -207,9 +205,6 @@ func InitDB() (err error) {
 		}
 		common.SysLog(common.LogText("database migration started"))
 		err = migrateDB()
-		if err == nil && common.PasswordLoginEncryptionEnabled {
-			err = InitPasswordEncryption()
-		}
 		return err
 	} else {
 		common.FatalLog(err)
@@ -222,13 +217,10 @@ func InitLogDB() (err error) {
 		LOG_DB = DB
 		common.SetLogDatabaseType(common.MainDatabaseType())
 		initCol()
-		if !common.IsMasterNode {
-			return nil
+		if common.IsMasterNode {
+			return MigrateAuditLogs()
 		}
-		if err := MigrateAuditLogs(); err != nil {
-			return err
-		}
-		return BackfillLegacyAuditLogs()
+		return
 	}
 	db, dbType, err := chooseDB("LOG_SQL_DSN", true)
 	if err == nil {
@@ -250,10 +242,6 @@ func InitLogDB() (err error) {
 		}
 		sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
 		sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
-		if dbType == common.DatabaseTypeSQLite {
-			sqlDB.SetMaxIdleConns(1)
-			sqlDB.SetMaxOpenConns(1)
-		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
 		if !common.IsMasterNode {
@@ -268,153 +256,134 @@ func InitLogDB() (err error) {
 	return err
 }
 
+var userQuotaColumns = []string{"quota", "used_quota", "aff_quota", "aff_history"}
+
+// ensureUserQuotaColumns rejects a legacy 32-bit wallet schema before any
+// migrations run. The 64-bit-only build intentionally does not auto-upgrade
+// an existing wallet; operators must migrate it explicitly before starting.
+func ensureUserQuotaColumns(db *gorm.DB, dbType common.DatabaseType) error {
+	if common.GetEnvOrDefaultBool("SKIP_64BIT_QUOTA_SCHEMA_CHECK", false) {
+		common.SysLog(common.LogText("SKIP_64BIT_QUOTA_SCHEMA_CHECK=true; skipping user quota schema check"))
+		return nil
+	}
+	if db == nil || dbType == common.DatabaseTypeSQLite {
+		return nil
+	}
+	if !db.Migrator().HasTable(&User{}) {
+		return nil
+	}
+	columnTypes, err := db.Migrator().ColumnTypes(&User{})
+	if err != nil {
+		return fmt.Errorf("failed to inspect users schema: %w", err)
+	}
+	for _, expected := range userQuotaColumns {
+		for _, actual := range columnTypes {
+			if !strings.EqualFold(actual.Name(), expected) {
+				continue
+			}
+			dataType := actual.DatabaseTypeName()
+			if !is64BitIntegerType(dbType, dataType) {
+				return fmt.Errorf("users.%s uses %s; 32-bit is not supported", expected, dataType)
+			}
+		}
+	}
+	return nil
+}
+
+func is64BitIntegerType(dbType common.DatabaseType, dataType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(dataType))
+	switch dbType {
+	case common.DatabaseTypeMySQL:
+		return normalized == "bigint" || normalized == "unsigned bigint" || normalized == "bigint unsigned"
+	case common.DatabaseTypePostgreSQL:
+		return normalized == "bigint" || normalized == "int8"
+	default:
+		return false
+	}
+}
+
 func migrateDB() error {
-	if err := prepareBillingSchema(DB); err != nil {
+	if err := rejectLegacyBillingDatabase(DB); err != nil {
+		return err
+	}
+	if err := migrateTokenKeyUniqueness(DB); err != nil {
+		return err
+	}
+	if err := migratePrefillGroupUniqueness(DB); err != nil {
 		return err
 	}
 	// Migrate model_limits column from varchar to text for existing tables
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
-	if err := prepareChannelCapabilityMigration(); err != nil {
-		return err
-	}
-	if err := migrateTokenKeyUniqueness(DB); err != nil {
-		return err
-	}
-	if err := migratePrefillGroups(DB); err != nil {
-		return err
+	if err := migrateOptionPrimaryKey(DB); err != nil {
+		common.SysError(common.LogText("failed to migrate options primary key: %s", err.Error()))
 	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
 		&Token{},
 		&User{},
-		&PersonalAccessToken{},
-		&GatewayRequestDiagnostic{},
 		&UserSession{},
 		&AuthFlow{},
 		&ExternalIdentityClaim{},
 		&PasskeyCredential{},
-		&LoginEncryptionKey{},
 		&Option{},
+		&LoginEncryptionKey{},
 		&Redemption{},
 		&Ability{},
 		&Log{},
 		&Midjourney{},
 		&TopUp{},
-		&EpayMerchantVersion{},
-		&EpayOrder{},
-		&GmpayMerchantVersion{},
-		&GmpayOrder{},
 		&QuotaData{},
 		&Task{},
 		&TaskPlugin{},
-		&TaskPluginNamespace{},
-		&TaskPluginExecution{},
-		&TaskResultEvent{},
 		&Model{},
 		&Vendor{},
+		&PrefillGroup{},
 		&Setup{},
 		&TwoFA{},
 		&TwoFABackupCode{},
 		&Checkin{},
-		&AffiliateLedger{},
-		&BillingRecovery{},
-		&BillingAttempt{},
-		&BillingEvent{},
-		&BillingPriceVersion{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
-		&PerfMetricFlushReceipt{},
 		&SystemTask{},
 		&SystemTaskLock{},
 		&CasbinRule{},
 		&AuthzRole{},
+		&UserAccessToken{},
+		&TokenRouteProfile{},
+		&TokenRouteEntry{},
+		&GmpayMerchantVersion{},
+		&GmpayOrder{},
 		&Ticket{},
 		&TicketMessage{},
 		&TicketAttachment{},
-		&ActivityClaim{},
 	)
 	if err != nil {
 		return err
 	}
-	if err := dropRetiredSystemInstances(DB); err != nil {
-		return err
-	}
-	if err := migrateRoutingModels(DB); err != nil {
-		return err
-	}
-	if err := migrateGatewayDefaults(DB); err != nil {
-		return err
-	}
-	if err := migrateChannelCapabilityIndexes(); err != nil {
-		return err
-	}
-	if err := BackfillTicketMessageRoles(); err != nil {
-		return fmt.Errorf("failed to backfill ticket message roles: %v", err)
-	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
 	}
+	if err := EnsureLegacyAccessTokenRetireAt(common.GetTimestamp()); err != nil {
+		return fmt.Errorf("initialize legacy access token deadline: %w", err)
+	}
 	if err := InitializeExternalIdentityClaims(); err != nil {
-		return err
-	}
-	if err := BackfillAffiliateCodeEnabled(); err != nil {
-		return err
-	}
-	if err := InitializeAffiliateLedger(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// The single-instance gateway reads its own state in process, so the
-// multi-node heartbeat registry is retired and its rows are discarded.
-func dropRetiredSystemInstances(db *gorm.DB) error {
-	if !db.Migrator().HasTable("system_instances") {
-		return nil
-	}
-	return db.Migrator().DropTable("system_instances")
-}
-
-func migrateRoutingModels(db *gorm.DB) error {
-	if db == nil {
-		return fmt.Errorf("routing migration database is unavailable")
-	}
-	if err := db.AutoMigrate(
-		&UserRouteProfile{},
-		&UserRouteGroup{},
-		&UserRouteEntry{},
-		&RoutePolicy{},
-		&ChannelModelCapability{},
-		&ChannelCapabilitySnapshot{},
-		&UserChannelEntitlement{},
-		&ChannelHealth{},
-		&GatewayCredential{},
-		&GatewayStateBinding{},
-	); err != nil {
-		return err
-	}
-	return db.Model(&UserRouteProfile{}).Where("mode = ?", "legacy").Updates(map[string]any{
-		"mode": RouteModeAutoLab, "active_group_id": nil,
-		"version": gorm.Expr("version + ?", 1), "updated_at": time.Now().Unix(),
-	}).Error
-}
-
 func migrateLOGDB() error {
-	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
-		if err := migrateClickHouseLogDB(); err != nil {
-			return err
-		}
-	} else if err := LOG_DB.AutoMigrate(&Log{}); err != nil {
-		return err
-	}
 	if err := MigrateAuditLogs(); err != nil {
 		return err
 	}
-	return BackfillLegacyAuditLogs()
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		return migrateClickHouseLogDB()
+	}
+	return LOG_DB.AutoMigrate(&Log{})
 }
 
 func migrateClickHouseLogDB() error {
@@ -459,7 +428,7 @@ CREATE TABLE IF NOT EXISTS logs (
 	username String DEFAULT '',
 	token_name String DEFAULT '',
 	model_name String DEFAULT '',
-	quota Int64 DEFAULT 0,
+	quota Int32 DEFAULT 0,
 	prompt_tokens Int32 DEFAULT 0,
 	completion_tokens Int32 DEFAULT 0,
 	use_time Int32 DEFAULT 0,
@@ -469,7 +438,6 @@ CREATE TABLE IF NOT EXISTS logs (
 	`+"`group`"+` String DEFAULT '',
 	ip String DEFAULT '',
 	request_id String DEFAULT '',
-	billing_event_id Nullable(String),
 	upstream_request_id String DEFAULT '',
 	other String DEFAULT ''
 )
@@ -505,32 +473,6 @@ func clickHouseLogTableHasTTL() (bool, error) {
 func clickHouseCreateTableHasTTL(createTableSQL string) bool {
 	upperSQL := strings.ToUpper(createTableSQL)
 	return strings.Contains(upperSQL, "\nTTL ") || strings.Contains(upperSQL, " TTL ")
-}
-
-func migrateChannelCapabilityIndexes() error {
-	// PR #2 used this index name for a non-versioned uniqueness contract. Drop
-	// it explicitly because AutoMigrate does not remove obsolete indexes on all
-	// supported dialects. The replacement index is created from the struct tags.
-	if DB.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_version") {
-		if err := DB.Migrator().DropIndex(&ChannelModelCapability{}, "channel_model_capability_version"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func prepareChannelCapabilityMigration() error {
-	if !DB.Migrator().HasTable(&ChannelModelCapability{}) ||
-		!DB.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_version") {
-		return nil
-	}
-	if err := DB.Migrator().DropIndex(&ChannelModelCapability{}, "channel_model_capability_version"); err != nil {
-		return err
-	}
-	// Capability rows are a derived cache. PR-2 rows cannot be made active
-	// without a snapshot pointer, so discard them before AutoMigrate creates the
-	// versioned unique index; startup rebuild repopulates the current data.
-	return DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&ChannelModelCapability{}).Error
 }
 
 // migrateTokenModelLimitsToText migrates model_limits column from varchar(1024) to text

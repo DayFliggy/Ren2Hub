@@ -1,42 +1,18 @@
 <script setup lang="ts">
-import { useStorage } from '@vueuse/core'
-import {
-  Activity,
-  Gauge,
-  AlertTriangle,
-  ArrowDownNarrowWide,
-  ArrowUpNarrowWide,
-  ChevronDown,
-  ChevronRight,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  Power,
-  PowerOff,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  X,
-} from 'lucide-vue-next'
+import { Plus, RefreshCw, ArrowDownUp } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import CapacityMeter from '@/components/common/CapacityMeter.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
-import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import FieldVisibilityMenu from '@/components/common/FieldVisibilityMenu.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
-import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
-import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
+import ChannelActions from '@/components/console/channels/ChannelActions.vue'
 import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
 import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSyncDialog.vue'
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
@@ -44,71 +20,23 @@ import ChannelStatusBadge from '@/components/console/channels/ChannelStatusBadge
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
-import ChannelTestPickerDialog from '@/components/console/channels/ChannelTestPickerDialog.vue'
-import VendorLogo from '@/components/console/models/VendorLogo.vue'
-import {
-  type ChannelModelTestResult,
-  useAdminChannels,
-} from '@/composables/useAdminChannels'
+import { useAdminChannels } from '@/composables/useAdminChannels'
 import { useAuthStore } from '@/stores/auth'
 import {
-  ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS,
-  ADMIN_CHANNEL_OPTIONAL_FIELDS,
   ADMIN_CHANNEL_SORT_FIELDS,
-  ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY,
-  type AdminChannelOptionalField,
   adminChannelResponseText,
-  adminChannelResponseTone,
   adminChannelTypeMeta,
   isRetiredChannelType,
-  sanitizeAdminChannelVisibleFields,
 } from '@/constants/adminChannels'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
   AdminChannelCreateOptions,
-  AdminChannelSortBy,
-  AdminChannelSortOrder,
   AdminChannelUpdateInput,
 } from '@/types/console'
-import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
-import { formatDecimal } from '@/utils/decimal'
+import { formatMoney, formatQuota } from '@/utils/format'
 
-interface SupplierGroup {
-  groupSlug: string
-  supplier: string
-  channels: AdminChannel[]
-  labMatches: NonNullable<AdminChannel['lab_matches']>
-}
-
-interface SupplierTableRow extends Record<string, unknown> {
-  key: string | number
-  kind: 'supplier'
-  groupSlug: string
-  supplier: string
-  count: number
-  channels: AdminChannel[]
-  labMatches: NonNullable<AdminChannel['lab_matches']>
-}
-
-interface ChannelTableRow extends Record<string, unknown> {
-  key: number
-  kind: 'channel'
-  channel: AdminChannel
-}
-
-type AdminChannelTableRow = SupplierTableRow | ChannelTableRow
-type DeleteTarget =
-  | { kind: 'channel'; channel: AdminChannel }
-  | {
-      kind: 'supplier'
-      supplier: string
-      groupSlug: string
-      channels: AdminChannel[]
-    }
-  | { kind: 'bulk'; channels: AdminChannel[] }
-
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const auth = useAuthStore()
 const canRead = computed(() => auth.hasPermission('channel', 'read'))
 const canOperate = computed(() => auth.hasPermission('channel', 'operate'))
@@ -133,1515 +61,404 @@ const {
   initialError,
   batchProgress,
   balanceResponse,
-  isBatchBusy,
   isCrudBusy,
   isBulkBusy,
   canMutate,
   canRunBatch,
   load,
-  isBusy,
   isRowBusy,
-  isCrudActionBusy,
-  isBulkActionBusy,
   updateNumber,
   toggleStatus,
   refreshBalance,
   testChannelModel,
-  recordLabAudit,
   removeChannelModels,
   createChannel,
   updateChannelDetails,
   deleteChannel,
-  deleteSupplierChannels,
   fetchUpstreamModels,
   updateChannelsStatus,
   deleteSelectedChannels,
   runVisibleBalance,
-  runSupplierBalance,
 } = useAdminChannels()
-
-const formOpen = ref(false)
-const editing = ref<AdminChannel | null>(null)
-const runtimeChannel = ref<AdminChannel | null>(null)
-watch(canRead, (allowed) => {
-  if (!allowed) runtimeChannel.value = null
-})
-function openRuntime(channel: AdminChannel) {
-  if (isReadOnlyChannel(channel)) return
-  if (canRead.value) runtimeChannel.value = channel
-}
-const deleting = ref<DeleteTarget | null>(null)
-const testing = ref<AdminChannel | null>(null)
-const pickingGroup = ref<SupplierGroup | null>(null)
-/** Per-channel batch-test results shown in the response column until the
-    background reload replaces them with the persisted values. */
-const groupTestOverrides = ref<
-  Record<number, ChannelModelTestResult | 'running'>
->({})
-const selectedIds = ref<number[]>([])
-const collapsedSuppliers = ref<string[]>([])
-const storedVisibleFields = useStorage<string[]>(
-  ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY,
-  [...ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS]
-)
-
-watch(
-  storedVisibleFields,
-  (fields) => {
-    const sanitized = sanitizeAdminChannelVisibleFields(fields)
-    if (
-      sanitized.length !== fields.length ||
-      sanitized.some((field, index) => field !== fields[index])
-    ) {
-      storedVisibleFields.value = sanitized
-    }
-  },
-  { immediate: true }
-)
-
-const visibleFields = computed<AdminChannelOptionalField[]>({
-  get: () => sanitizeAdminChannelVisibleFields(storedVisibleFields.value),
-  set: (fields) => {
-    storedVisibleFields.value = sanitizeAdminChannelVisibleFields(fields)
-  },
-})
-
-function isReadOnlyChannel(channel: AdminChannel): boolean {
-  return isRetiredChannelType(channel.type)
-}
-
-const mutableRows = computed(() =>
-  rows.value.filter((channel) => !isReadOnlyChannel(channel))
-)
+const selectedIds = ref<Array<string | number>>([])
 const selectedChannels = computed(() =>
-  mutableRows.value.filter((channel) => selectedIds.value.includes(channel.id))
+  rows.value.filter((row) => selectedIds.value.includes(row.id))
 )
-const pageChannelIds = computed(() =>
-  mutableRows.value.map((channel) => channel.id)
-)
-const allPageSelected = computed(
-  () =>
-    mutableRows.value.length > 0 &&
-    mutableRows.value.every((channel) => selectedIds.value.includes(channel.id))
-)
-const resettableSelectedCount = computed(
-  () => selectedChannels.value.filter((channel) => channel.status === 3).length
-)
-
-function updateSelected(keys: Array<string | number>) {
-  selectedIds.value = keys.filter(
-    (key): key is number =>
-      typeof key === 'number' &&
-      mutableRows.value.some((channel) => channel.id === key)
-  )
-}
-
-function toggleSelected(channel: AdminChannel) {
-  if (isReadOnlyChannel(channel)) return
-  selectedIds.value = selectedIds.value.includes(channel.id)
-    ? selectedIds.value.filter((id) => id !== channel.id)
-    : [...selectedIds.value, channel.id]
-}
-
-function toggleAllSelected() {
-  selectedIds.value = allPageSelected.value
-    ? []
-    : mutableRows.value.map((channel) => channel.id)
-}
-
-function clearSelection() {
-  selectedIds.value = []
-}
-
-watch(rows, (nextRows) => {
-  const ids = new Set(nextRows.map((channel) => channel.id))
-  selectedIds.value = selectedIds.value.filter((id) => ids.has(id))
-})
-
-function isFieldVisible(field: AdminChannelOptionalField): boolean {
-  return visibleFields.value.includes(field)
-}
-
-/** Field labels for the visibility menu; a few keys don't match 1:1. */
-function fieldLabel(field: AdminChannelOptionalField): string {
-  if (field === 'usage') return t('channels.usageAndRatio')
-  if (field === 'upstream') return t('channels.upstreamAndRatio')
-  if (field === 'rowUpstreamAction') return t('channels.rowUpstreamAction')
-  if (field === 'rowResponseAction') return t('channels.rowResponseAction')
-  return t(`channels.${field}`)
-}
-
-const allColumns = computed<
-  Array<TableColumn & { optional?: AdminChannelOptionalField }>
->(() => [
-  { key: 'id', label: t('channels.id'), width: '72px', optional: 'id' },
-  { key: 'name', label: t('channels.name'), width: '190px' },
-  {
-    key: 'type',
-    label: t('channels.type'),
-    width: '145px',
-    optional: 'type',
-  },
-  {
-    key: 'status',
-    label: t('channels.status'),
-    width: '118px',
-    optional: 'status',
-  },
-  {
-    key: 'priority',
-    label: t('channels.priority'),
-    width: '96px',
-    optional: 'priority',
-  },
-  {
-    key: 'weight',
-    label: t('channels.weight'),
-    width: '96px',
-    optional: 'weight',
-  },
-  {
-    key: 'capacity',
-    label: t('channels.capacity'),
-    width: '130px',
-    optional: 'capacity',
-  },
-  {
-    key: 'usage',
-    label: t('channels.usageAndRatio'),
-    width: '158px',
-    optional: 'usage',
-  },
-  {
-    key: 'upstream',
-    label: t('channels.upstreamAndRatio'),
-    width: '178px',
-    optional: 'upstream',
-  },
-  {
-    key: 'response',
-    label: t('channels.response'),
-    width: '138px',
-    optional: 'response',
-  },
-  {
-    key: 'actions',
-    label: t('channels.actions'),
-    width: '120px',
-    align: 'right',
-  },
+const editing = ref<AdminChannel | null>(null)
+const formOpen = ref(false)
+const testing = ref<AdminChannel | null>(null)
+const syncing = ref<AdminChannel | null>(null)
+const provider = ref<AdminChannel | null>(null)
+const deleting = ref<AdminChannel[]>([])
+const columns = computed<TableColumn[]>(() => [
+  { key: 'name', label: t('channels.name'), width: '210px' },
+  { key: 'type', label: t('channels.type'), width: '135px' },
+  { key: 'group', label: t('channels.group'), width: '120px' },
+  { key: 'status', label: t('channels.status'), width: '110px' },
+  { key: 'priority', label: t('channels.priority'), width: '100px' },
+  { key: 'weight', label: t('channels.weight'), width: '100px' },
+  { key: 'used_quota', label: t('channels.usage'), width: '110px' },
+  { key: 'balance', label: t('channels.upstreamBalance'), width: '110px' },
+  { key: 'response_time', label: t('channels.response'), width: '100px' },
+  { key: 'actions', label: t('channels.actions'), width: '230px' },
 ])
-
-const columns = computed<TableColumn[]>(() =>
-  allColumns.value.filter(
-    (column) => !column.optional || isFieldVisible(column.optional)
-  )
-)
-
-const minTableWidth = computed(() => {
-  const width = columns.value.reduce(
-    (totalWidth, column) =>
-      totalWidth + Number.parseInt(column.width ?? '120', 10),
-    0
-  )
-  return `${Math.max(860, width + 40)}px`
-})
-
-const supplierGroups = computed<SupplierGroup[]>(() => {
-  const groups = new Map<string, SupplierGroup>()
-  rows.value.forEach((channel) => {
-    const groupSlug = channel.lab_group_slug || channel.supplier || 'unknown'
-    const supplier =
-      channel.lab_group_name ||
-      channel.supplier ||
-      'Unknown / Provider-specific'
-    const group = groups.get(groupSlug)
-    if (group) {
-      group.channels.push(channel)
-      for (const match of channel.lab_matches ?? []) {
-        if (
-          !group.labMatches.some((existing) => existing.slug === match.slug)
-        ) {
-          group.labMatches.push(match)
-        }
-      }
-      return
-    }
-    groups.set(groupSlug, {
-      groupSlug,
-      supplier,
-      channels: [channel],
-      labMatches: [...(channel.lab_matches ?? [])],
-    })
-  })
-  return [...groups.values()]
-})
-
-const tableRows = computed<AdminChannelTableRow[]>(() =>
-  supplierGroups.value.flatMap((group) => {
-    const groupRow: SupplierTableRow = {
-      key: `lab:${group.groupSlug}`,
-      kind: 'supplier',
-      groupSlug: group.groupSlug,
-      supplier: group.supplier,
-      count: group.channels.length,
-      channels: group.channels,
-      labMatches: group.labMatches,
-    }
-    if (collapsedSuppliers.value.includes(group.supplier)) return [groupRow]
-    return [
-      groupRow,
-      ...group.channels.map<ChannelTableRow>((channel) => ({
-        key: channel.id,
-        kind: 'channel',
-        channel,
-      })),
-    ]
-  })
-)
-
-const typeOptions = computed(() => {
-  const ids = Object.entries(typeCounts.value)
-    .filter(([, count]) => count > 0)
-    .map(([id]) => Number(id))
-  const selected = Number(type.value)
-  if (type.value && !ids.includes(selected)) ids.push(selected)
-  return [
-    { value: '', label: t('channels.allTypes') },
-    ...ids
-      .sort((left, right) =>
-        adminChannelTypeMeta(left).label.localeCompare(
-          adminChannelTypeMeta(right).label
-        )
-      )
-      .map((id) => ({
-        value: String(id),
-        label: `${adminChannelTypeMeta(id).label} (${typeCounts.value[id] ?? 0})`,
-      })),
-  ]
-})
-
-const statusOptions = computed(() => [
-  { value: '', label: t('channels.allStatuses') },
-  {
-    value: 'enabled',
-    label: t('channels.enabledOnly'),
-    tone: 'success' as const,
-  },
-  {
-    value: 'disabled',
-    label: t('channels.disabledOnly'),
-    tone: 'danger' as const,
-  },
-])
-
-const sortOptions = computed(() =>
-  ADMIN_CHANNEL_SORT_FIELDS.map((field) => ({
-    value: field,
-    label: t(`channels.sort.${field}`),
+const typeOptions = computed(() =>
+  Object.keys(typeCounts.value).map((id) => ({
+    value: id,
+    label: `${adminChannelTypeMeta(Number(id)).label} (${typeCounts.value[id]})`,
   }))
 )
-
-const sortModel = computed({
-  get: () => sortBy.value,
-  set: (value: string) => {
-    sortBy.value = value as AdminChannelSortBy
-  },
-})
-
-function toggleSortOrder() {
-  sortOrder.value = (
-    sortOrder.value === 'asc' ? 'desc' : 'asc'
-  ) as AdminChannelSortOrder
-}
-
-function isSupplierRow(row: AdminChannelTableRow): boolean {
-  return row.kind === 'supplier'
-}
-
-function isSelectableRow(row: AdminChannelTableRow): boolean {
-  return row.kind === 'channel' && !isReadOnlyChannel(row.channel)
-}
-
-function hasMutableChannels(channels: AdminChannel[]): boolean {
-  return channels.some((channel) => !isReadOnlyChannel(channel))
-}
-
-function channelFromRow(row: AdminChannelTableRow): AdminChannel {
-  if (row.kind !== 'channel') throw new Error('Expected a channel table row')
-  return row.channel
-}
-
-function channelRowClass(row: AdminChannelTableRow): string | undefined {
-  if (row.kind !== 'channel') return undefined
-  if (row.channel.status === 1 && !isReadOnlyChannel(row.channel))
-    return undefined
-  return 'opacity-75'
-}
-
-function isSupplierCollapsed(supplier: string): boolean {
-  return collapsedSuppliers.value.includes(supplier)
-}
-
-function toggleSupplier(supplier: string) {
-  collapsedSuppliers.value = collapsedSuppliers.value.includes(supplier)
-    ? collapsedSuppliers.value.filter((item) => item !== supplier)
-    : [...collapsedSuppliers.value, supplier]
-}
-
-function balanceButtonLabel(): string {
-  if (batchProgress.value?.scope === 'page') {
-    return t('channels.batchProgressLabel', {
-      action: t('channels.batchBalanceAction'),
-      processed: batchProgress.value.processed,
-      total: batchProgress.value.total,
-    })
-  }
-  return t('channels.batchBalanceLabel', { count: mutableRows.value.length })
-}
-
-function isPageBalance(): boolean {
-  return batchProgress.value?.scope === 'page'
-}
-
-function isSupplierBalance(supplier: string): boolean {
-  return (
-    batchProgress.value?.scope === 'supplier' &&
-    batchProgress.value.supplier === supplier
-  )
-}
-
-function batchProgressText(): string {
-  const progress = batchProgress.value
-  if (!progress) return ''
-  return `${progress.processed}/${progress.total}`
-}
-
-function supplierBalanceLabel(supplier: string): string {
-  if (isSupplierBalance(supplier) && batchProgress.value) {
-    return t('channels.batchProgressLabel', {
-      action: t('channels.batchBalanceAction'),
-      processed: batchProgress.value.processed,
-      total: batchProgress.value.total,
-    })
-  }
-  return t('channels.syncSupplier', { supplier })
-}
-
-function openTest(channel: AdminChannel) {
-  if (!canOperate.value || isReadOnlyChannel(channel)) return
-  testing.value = channel
-}
-
-function openSupplierTest(group: SupplierGroup) {
-  if (!canOperate.value) return
-  groupTestOverrides.value = {}
-  const channels = group.channels.filter(
-    (channel) => !isReadOnlyChannel(channel)
-  )
-  if (channels.length === 0) return
-  pickingGroup.value = { ...group, channels }
-}
-
-function closeSupplierTest() {
-  pickingGroup.value = null
-  groupTestOverrides.value = {}
-}
-
-function onGroupTestStart(channelId: number) {
-  groupTestOverrides.value = {
-    ...groupTestOverrides.value,
-    [channelId]: 'running',
-  }
-}
-
-function onGroupTestResult(channelId: number, result: ChannelModelTestResult) {
-  groupTestOverrides.value = {
-    ...groupTestOverrides.value,
-    [channelId]: result,
-  }
-}
-
-function onGroupTested() {
-  groupTestOverrides.value = {}
-  void load({ background: true })
-}
-
-/** Response cell content: batch-test override first, persisted value after. */
-function responseCellDisplay(channel: AdminChannel): {
-  tone: 'neutral' | 'success' | 'warning' | 'danger'
-  text: string
-  title: string
-  running: boolean
-} {
-  const override = groupTestOverrides.value[channel.id]
-  if (override === 'running') {
-    return {
-      tone: 'warning',
-      text: t('channels.testStatusRunning'),
-      title: t('channels.testStatusRunning'),
-      running: true,
-    }
-  }
-  if (override) {
-    if (override.ok) {
-      return {
-        tone: 'success',
-        text: adminChannelResponseText(
-          override.timeMs ?? 0,
-          t('channels.notTested')
-        ),
-        title: t('channels.testStatusSuccess'),
-        running: false,
-      }
-    }
-    return {
-      tone: 'danger',
-      text: t('channels.testStatusFailed'),
-      title: override.message ?? t('channels.testStatusFailed'),
-      running: false,
-    }
-  }
-  return {
-    tone: adminChannelResponseTone(channel.response_time),
-    text: adminChannelResponseText(
-      channel.response_time,
-      t('channels.notTested')
+const statusOptions = computed(() => [
+  { value: 'enabled', label: t('channels.enabledOnly') },
+  { value: 'disabled', label: t('channels.disabledOnly') },
+])
+const sortOptions = computed(() =>
+  ADMIN_CHANNEL_SORT_FIELDS.map((value) => ({
+    value,
+    label: t(
+      `channels.${value === 'response_time' ? 'response' : value === 'balance' ? 'upstreamBalance' : value}`
     ),
-    title: channel.test_time
-      ? t('channels.testedAt', {
-          time: relativeTime(channel.test_time, locale.value),
-        })
-      : t('channels.notTested'),
-    running: false,
+  }))
+)
+watch(rows, () => {
+  selectedIds.value = []
+})
+watch([canRead, canOperate, canWrite, canSensitiveWrite], () => {
+  if (!canRead.value) {
+    formOpen.value = false
+    testing.value = null
+    syncing.value = null
+    provider.value = null
+    deleting.value = []
+    selectedIds.value = []
   }
-}
-
-function openCreate() {
-  if (!canMutate.value || !canSensitiveWrite.value) return
-  editing.value = null
-  formOpen.value = true
-}
-
-function openEdit(channel: AdminChannel) {
-  if (!canMutate.value || !canWrite.value || isReadOnlyChannel(channel)) return
+  if (!canOperate.value) {
+    testing.value = null
+    syncing.value = null
+  }
+  if (
+    formOpen.value &&
+    !(editing.value ? canWrite.value : canSensitiveWrite.value)
+  )
+    formOpen.value = false
+  if (!canSensitiveWrite.value) deleting.value = []
+})
+function openForm(channel: AdminChannel | null) {
+  if (!canMutate.value || !(channel ? canWrite.value : canSensitiveWrite.value))
+    return
   editing.value = channel
   formOpen.value = true
 }
-const syncingModels = ref<AdminChannel | null>(null)
-function previewModelSync(channel: AdminChannel) {
-  if (isReadOnlyChannel(channel)) return
-  if (canOperate.value && canMutate.value) syncingModels.value = channel
-}
-
-function closeForm() {
-  formOpen.value = false
-}
-
 function saveForm(
   input: AdminChannelCreateInput | AdminChannelUpdateInput,
   options?: AdminChannelCreateOptions
-): Promise<boolean> {
-  if (editing.value ? !canWrite.value : !canSensitiveWrite.value) {
-    return Promise.resolve(false)
-  }
+) {
   return editing.value
     ? updateChannelDetails(editing.value, input as AdminChannelUpdateInput)
     : createChannel(input as AdminChannelCreateInput, options)
 }
-
-function requestDelete(channel: AdminChannel) {
-  if (!canMutate.value || !canSensitiveWrite.value) return
-  deleting.value = { kind: 'channel', channel }
+function closeTesting() {
+  testing.value = null
+  void load({ background: true })
 }
-
-function requestBulkDelete() {
-  if (
-    !canMutate.value ||
-    !canSensitiveWrite.value ||
-    selectedChannels.value.length === 0
-  )
-    return
-  deleting.value = {
-    kind: 'bulk',
-    channels: selectedChannels.value.map((channel) => ({ ...channel })),
-  }
+function toggleSelected(channel: AdminChannel) {
+  if (!canSelect.value || !canMutate.value) return
+  selectedIds.value = selectedIds.value.includes(channel.id)
+    ? selectedIds.value.filter((id) => id !== channel.id)
+    : [...selectedIds.value, channel.id]
 }
-
-function requestClearSupplier(group: SupplierGroup) {
-  if (!canMutate.value || !canSensitiveWrite.value) return
-  const channels = group.channels.filter(
-    (channel) => !isReadOnlyChannel(channel)
-  )
-  if (channels.length === 0) return
-  deleting.value = {
-    kind: 'supplier',
-    supplier: group.supplier,
-    groupSlug: group.groupSlug,
-    channels: channels.map((channel) => ({ ...channel })),
-  }
-}
-
 async function confirmDelete() {
-  const target = deleting.value
-  if (!target || !canSensitiveWrite.value) return
-  const deleted =
-    target.kind === 'channel'
-      ? await deleteChannel(target.channel)
-      : target.kind === 'supplier'
-        ? await deleteSupplierChannels(
-            target.supplier,
-            target.channels,
-            target.groupSlug
-          )
-        : await deleteSelectedChannels(target.channels)
-  if (deleted) {
-    deleting.value = null
-    clearSelection()
-  }
-}
-
-function cancelDelete() {
-  if (!isCrudActionBusy('delete') && !isBulkActionBusy('delete')) {
-    deleting.value = null
-  }
-}
-
-const deleteDialogTitle = computed(() =>
-  deleting.value?.kind === 'supplier'
-    ? t('channels.clearSupplierTitle')
-    : deleting.value?.kind === 'bulk'
-      ? t('channels.bulkDeleteTitle')
-      : t('channels.deleteTitle')
-)
-
-const deleteDialogMessage = computed(() => {
-  const target = deleting.value
-  if (!target) return ''
-  if (target.kind === 'channel') {
-    return t('channels.deleteMessage', { name: target.channel.name })
-  }
-  if (target.kind === 'bulk') {
-    return t('channels.bulkDeleteMessage', { count: target.channels.length })
-  }
-  return t('channels.clearSupplierMessage', {
-    supplier: target.supplier,
-    count: target.channels.length,
-    ids: channelIdSummary(target.channels),
-  })
-})
-
-function channelIdSummary(channels: AdminChannel[]): string {
-  const ids = channels.map((channel) => channel.id).sort((a, b) => a - b)
-  if (ids.length === 0) return ''
-  if (ids.length === 1) return `#${ids[0]}`
-  return `#${ids[0]} - #${ids[ids.length - 1]}`
-}
-
-async function runBulkStatus(
-  action: 'enable' | 'disable' | 'reset'
-): Promise<void> {
-  if (!canMutate.value || !canOperate.value) return
-  if (await updateChannelsStatus(action, selectedChannels.value)) {
-    clearSelection()
-  }
+  if (!canSensitiveWrite.value || deleting.value.length === 0) return
+  const targets = deleting.value
+  const success =
+    targets.length === 1
+      ? await deleteChannel(targets[0]!)
+      : await deleteSelectedChannels(targets)
+  if (success) deleting.value = []
 }
 </script>
 
 <template>
-  <div>
-    <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('nav.channelManagement')]">
-      <template #action>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            class="hidden text-xs tabular-nums text-[var(--text-tertiary)] sm:inline"
-            aria-live="polite"
-          >
+  <div class="sibling-space-y-6">
+    <PageBreadcrumb :crumbs="[t('channels.title')]" />
+    <template v-if="canRead">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-bold">{{ t('channels.title') }}</h1>
+          <p class="mt-1 text-sm text-[var(--text-tertiary)]">
             {{ t('channels.resultCount', { count: total }) }}
-          </span>
-          <div class="flex items-center gap-2">
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :loading="refreshing"
-              :disabled="isBatchBusy || isCrudBusy || isBulkBusy"
-              @click="load({ background: true })"
-            >
-              <RefreshCw v-if="!refreshing" :size="14" />
-              {{ t('channels.refreshList') }}
-            </ConsoleButton>
-            <ConsoleButton
-              v-if="canSensitiveWrite"
-              size="sm"
-              :disabled="!canMutate"
-              @click="openCreate"
-            >
-              <Plus :size="14" />
-              {{ t('channels.createChannel') }}
-            </ConsoleButton>
-          </div>
+          </p>
         </div>
-      </template>
-    </PageBreadcrumb>
-
-    <ConsoleCard :padded="false">
-      <div
-        class="flex flex-col gap-3 border-b border-[var(--border-subtle)] p-4 xl:flex-row xl:items-center"
-      >
+        <div class="flex flex-wrap gap-2">
+          <ConsoleButton
+            variant="secondary"
+            :loading="refreshing"
+            :disabled="loading"
+            @click="load({ background: true })"
+            ><RefreshCw :size="16" />{{
+              t('channels.refreshList')
+            }}</ConsoleButton
+          >
+          <ConsoleButton
+            v-if="canOperate"
+            variant="secondary"
+            :disabled="!canRunBatch"
+            @click="runVisibleBalance"
+            >{{ t('channels.batchBalancePage') }}</ConsoleButton
+          >
+          <ConsoleButton
+            v-if="canSensitiveWrite"
+            :disabled="!canMutate"
+            @click="openForm(null)"
+            ><Plus :size="16" />{{ t('channels.createChannel') }}</ConsoleButton
+          >
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-3">
         <SearchInput
           v-model="keyword"
           :placeholder="t('channels.searchPlaceholder')"
-          :aria-label="t('channels.searchPlaceholder')"
-          name="admin-channel-search"
-          class="w-full xl:w-72"
+          class="min-w-0 flex-1"
         />
-        <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:flex-1">
-          <FilterSelect
-            v-model="type"
-            :options="typeOptions"
-            :label="t('channels.typeFilter')"
-            class="w-full"
-          />
-          <FilterSelect
-            v-model="status"
-            :options="statusOptions"
-            :label="t('channels.statusFilter')"
-            class="w-full"
-          />
-          <div class="flex min-w-0 gap-2">
-            <FilterSelect
-              v-model="sortModel"
-              :options="sortOptions"
-              :label="t('channels.sortLabel')"
-              class="min-w-0 flex-1"
-            />
-            <IconButton
-              :label="
-                sortOrder === 'asc'
-                  ? t('channels.sortAscending')
-                  : t('channels.sortDescending')
-              "
-              class="h-10 w-10 shrink-0 rounded-xl bg-[var(--surface-muted)]"
-              @click="toggleSortOrder"
-            >
-              <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="17" />
-              <ArrowDownNarrowWide v-else :size="17" />
-            </IconButton>
-            <FieldVisibilityMenu
-              v-model="visibleFields"
-              :all-fields="ADMIN_CHANNEL_OPTIONAL_FIELDS"
-              :default-fields="ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS"
-              :label-for="fieldLabel"
-              :title="t('channels.fieldSettings')"
-              :reset-label="t('channels.resetFields')"
-            />
-          </div>
-        </div>
-        <div v-if="canOperate" class="md:hidden">
-          <ConsoleButton
-            variant="secondary"
-            size="sm"
-            block
-            :disabled="!canRunBatch"
-            :aria-label="balanceButtonLabel()"
-            @click="runVisibleBalance()"
-          >
-            <LoaderCircle
-              v-if="isPageBalance()"
-              :size="14"
-              class="animate-spin"
-            />
-            <RefreshCw v-else :size="14" />
-            <span class="min-w-0 truncate">
-              {{
-                isPageBalance()
-                  ? batchProgressText()
-                  : t('channels.batchBalancePage')
-              }}
-            </span>
-          </ConsoleButton>
-        </div>
+        <FilterSelect
+          v-model="type"
+          :options="typeOptions"
+          :label="t('channels.typeFilter')"
+          :placeholder="t('channels.allTypes')"
+        />
+        <FilterSelect
+          v-model="status"
+          :options="statusOptions"
+          :label="t('channels.statusFilter')"
+          :placeholder="t('channels.allStatuses')"
+        />
+        <FilterSelect
+          v-model="sortBy"
+          :options="sortOptions"
+          :label="t('channels.sortLabel')"
+        />
+        <ConsoleButton
+          variant="secondary"
+          :aria-label="
+            sortOrder === 'asc'
+              ? t('channels.sortDescending')
+              : t('channels.sortAscending')
+          "
+          @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
+          ><ArrowDownUp :size="16" />{{
+            sortOrder === 'asc'
+              ? t('channels.sortAscending')
+              : t('channels.sortDescending')
+          }}</ConsoleButton
+        >
       </div>
-
+      <p v-if="batchProgress" role="status" class="text-sm">
+        {{
+          t('channels.batchProgressLabel', {
+            action: t('channels.batchBalanceAction'),
+            processed: batchProgress.processed,
+            total: batchProgress.total,
+          })
+        }}
+      </p>
       <div
-        v-if="selectedIds.length > 0"
-        data-channel-bulk-actions
-        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+        v-if="selectedChannels.length"
+        class="flex flex-wrap items-center gap-2"
       >
-        <span
-          class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"
-          aria-live="polite"
-        >
-          {{ t('channels.selectedCount', { count: selectedIds.length }) }}
-        </span>
-        <IconButton
+        <span class="text-sm">{{
+          t('channels.selectedCount', { count: selectedChannels.length })
+        }}</span>
+        <ConsoleButton
           v-if="canOperate"
-          :label="t('channels.bulkEnable')"
-          :disabled="
-            !canMutate ||
-            selectedChannels.every((channel) => channel.status === 1)
-          "
-          :class="isBulkActionBusy('enable') ? 'text-[var(--accent)]' : ''"
-          @click="runBulkStatus('enable')"
+          variant="secondary"
+          :disabled="!canMutate"
+          @click="updateChannelsStatus('enable', selectedChannels)"
+          >{{ t('channels.bulkEnable') }}</ConsoleButton
         >
-          <LoaderCircle
-            v-if="isBulkActionBusy('enable')"
-            :size="16"
-            class="animate-spin"
-          />
-          <Power v-else :size="16" />
-        </IconButton>
-        <IconButton
+        <ConsoleButton
           v-if="canOperate"
-          :label="t('channels.bulkDisable')"
-          :disabled="
-            !canMutate ||
-            selectedChannels.every((channel) => channel.status === 2)
-          "
-          :class="isBulkActionBusy('disable') ? 'text-[var(--accent)]' : ''"
-          @click="runBulkStatus('disable')"
+          variant="secondary"
+          :disabled="!canMutate"
+          @click="updateChannelsStatus('disable', selectedChannels)"
+          >{{ t('channels.bulkDisable') }}</ConsoleButton
         >
-          <LoaderCircle
-            v-if="isBulkActionBusy('disable')"
-            :size="16"
-            class="animate-spin"
-          />
-          <PowerOff v-else :size="16" />
-        </IconButton>
-        <IconButton
+        <ConsoleButton
           v-if="canOperate"
-          :label="t('channels.bulkReset')"
-          :disabled="!canMutate || resettableSelectedCount === 0"
-          :class="isBulkActionBusy('reset') ? 'text-[var(--accent)]' : ''"
-          @click="runBulkStatus('reset')"
+          variant="secondary"
+          :disabled="!canMutate"
+          @click="updateChannelsStatus('reset', selectedChannels)"
+          >{{ t('channels.bulkReset') }}</ConsoleButton
         >
-          <LoaderCircle
-            v-if="isBulkActionBusy('reset')"
-            :size="16"
-            class="animate-spin"
-          />
-          <RotateCcw v-else :size="16" />
-        </IconButton>
-        <IconButton
+        <ConsoleButton
           v-if="canSensitiveWrite"
-          :label="t('channels.bulkDelete')"
-          tone="danger"
+          variant="danger"
           :disabled="!canMutate"
-          @click="requestBulkDelete"
+          @click="deleting = selectedChannels"
+          >{{ t('channels.bulkDelete') }}</ConsoleButton
         >
-          <Trash2 :size="16" />
-        </IconButton>
-        <IconButton
-          :label="t('channels.clearSelection')"
-          :disabled="!canMutate"
-          @click="clearSelection"
-        >
-          <X :size="16" />
-        </IconButton>
+        <ConsoleButton variant="ghost" @click="selectedIds = []">{{
+          t('channels.clearSelection')
+        }}</ConsoleButton>
       </div>
-
       <div
         v-if="initialError"
-        class="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center"
         role="alert"
+        class="rounded-xl border border-[var(--status-danger)] p-4"
       >
-        <AlertTriangle :size="28" class="text-[var(--status-danger-text)]" />
-        <p class="mt-3 font-semibold text-[var(--text-primary)]">
-          {{ t('channels.loadFailed') }}
-        </p>
-        <p class="mt-1 max-w-md text-sm text-[var(--text-tertiary)]">
-          {{ initialError }}
-        </p>
-        <ConsoleButton class="mt-5" variant="secondary" @click="load()">
-          {{ t('channels.retry') }}
-        </ConsoleButton>
+        <p>{{ initialError }}</p>
+        <ConsoleButton variant="secondary" @click="load()">{{
+          t('common.retry')
+        }}</ConsoleButton>
       </div>
-
-      <template v-else>
+      <ConsoleCard v-else class="overflow-hidden">
         <DataTable
-          :columns="columns"
-          :rows="tableRows"
-          row-key="key"
-          :selectable="canSelect"
-          checkbox-shape="round"
-          :selected="selectedIds"
-          :selection-keys="pageChannelIds"
-          :selection-disabled="!canMutate"
-          :row-selectable="isSelectableRow"
-          :is-group-row="isSupplierRow"
-          :loading="loading"
-          :skeleton-rows="pageSize"
-          adaptive-scroll
-          :page-size="pageSize"
-          :min-table-width="minTableWidth"
-          :scroll-region-label="t('channels.title')"
-          :empty-title="t('channels.emptyTitle')"
-          :empty-hint="t('channels.emptyHint')"
-          :row-class="channelRowClass"
+          v-model:selected="selectedIds"
           class="hidden md:block"
-          @update:selected="updateSelected"
+          :columns="columns"
+          :rows="rows"
+          row-key="id"
+          :loading="loading"
+          :selectable="canSelect"
+          :selection-disabled="!canMutate"
+          :row-selection-label="
+            (row) => t('channels.selectChannel', { name: row.name })
+          "
+          :page-size="pageSize"
+          adaptive-scroll
+          min-table-width="1300px"
         >
-          <template #group-row="{ row }">
-            <div class="flex min-w-0 items-center justify-between gap-3">
-              <button
-                type="button"
-                class="flex min-w-0 flex-1 items-center gap-2 text-left focus-ring"
-                :aria-label="
-                  isSupplierCollapsed((row as SupplierTableRow).supplier)
-                    ? t('channels.expandSupplier', {
-                        supplier: (row as SupplierTableRow).supplier,
-                      })
-                    : t('channels.collapseSupplier', {
-                        supplier: (row as SupplierTableRow).supplier,
-                      })
-                "
-                :aria-expanded="
-                  !isSupplierCollapsed((row as SupplierTableRow).supplier)
-                "
-                @click="toggleSupplier((row as SupplierTableRow).supplier)"
-              >
-                <ChevronRight
-                  v-if="isSupplierCollapsed((row as SupplierTableRow).supplier)"
-                  :size="15"
-                  class="shrink-0 text-[var(--text-tertiary)]"
-                />
-                <ChevronDown
-                  v-else
-                  :size="15"
-                  class="shrink-0 text-[var(--text-tertiary)]"
-                />
-                <VendorLogo
-                  :vendor="(row as SupplierTableRow).supplier"
-                  :size="24"
-                />
-                <span class="truncate font-semibold">
-                  {{ (row as SupplierTableRow).supplier }}
-                </span>
-                <span
-                  v-if="(row as SupplierTableRow).labMatches.length > 1"
-                  class="flex min-w-0 flex-wrap items-center gap-1"
-                >
-                  <StatusChip
-                    v-for="match in (row as SupplierTableRow).labMatches"
-                    :key="match.slug"
-                    tone="info"
-                    class="text-[0.625rem]"
-                  >
-                    {{ match.name }}
-                  </StatusChip>
-                </span>
-                <span
-                  class="shrink-0 text-xs font-normal text-[var(--text-tertiary)]"
-                >
-                  {{
-                    t('channels.supplierGroupCount', {
-                      count: (row as SupplierTableRow).count,
-                    })
-                  }}
-                </span>
-              </button>
-              <div class="flex shrink-0 items-center gap-0.5">
-                <span
-                  v-if="
-                    batchProgress?.scope === 'supplier' &&
-                    batchProgress.supplier ===
-                      (row as SupplierTableRow).supplier
-                  "
-                  class="mr-1 font-mono text-[0.625rem] tabular-nums text-[var(--text-tertiary)]"
-                >
-                  {{ batchProgressText() }}
-                </span>
-                <IconButton
-                  v-if="
-                    canOperate &&
-                    hasMutableChannels((row as SupplierTableRow).channels)
-                  "
-                  :label="
-                    supplierBalanceLabel((row as SupplierTableRow).supplier)
-                  "
-                  :disabled="!canRunBatch"
-                  @click="
-                    runSupplierBalance(
-                      (row as SupplierTableRow).supplier,
-                      (row as SupplierTableRow).channels,
-                      (row as SupplierTableRow).groupSlug
-                    )
-                  "
-                >
-                  <LoaderCircle
-                    v-if="isSupplierBalance((row as SupplierTableRow).supplier)"
-                    :size="14"
-                    class="animate-spin"
-                  />
-                  <RefreshCw v-else :size="14" />
-                </IconButton>
-                <IconButton
-                  v-if="
-                    canOperate &&
-                    hasMutableChannels((row as SupplierTableRow).channels)
-                  "
-                  :label="
-                    t('channels.testSupplier', {
-                      supplier: (row as SupplierTableRow).supplier,
-                    })
-                  "
-                  @click="
-                    openSupplierTest({
-                      groupSlug: (row as SupplierTableRow).groupSlug,
-                      supplier: (row as SupplierTableRow).supplier,
-                      channels: (row as SupplierTableRow).channels,
-                      labMatches: (row as SupplierTableRow).labMatches,
-                    })
-                  "
-                >
-                  <Activity :size="14" />
-                </IconButton>
-                <IconButton
-                  v-if="
-                    canSensitiveWrite &&
-                    hasMutableChannels((row as SupplierTableRow).channels)
-                  "
-                  :label="
-                    t('channels.clearSupplier', {
-                      supplier: (row as SupplierTableRow).supplier,
-                    })
-                  "
-                  tone="danger"
-                  :disabled="!canMutate"
-                  @click="
-                    requestClearSupplier({
-                      groupSlug: (row as SupplierTableRow).groupSlug,
-                      supplier: (row as SupplierTableRow).supplier,
-                      channels: (row as SupplierTableRow).channels,
-                      labMatches: (row as SupplierTableRow).labMatches,
-                    })
-                  "
-                >
-                  <Trash2 :size="14" />
-                </IconButton>
-              </div>
-            </div>
-          </template>
-
-          <template #header-upstream="{ column }">
-            <div class="flex items-center justify-between gap-1">
-              <span aria-hidden="true">{{ column.label }}</span>
-              <span class="flex shrink-0 items-center gap-0.5">
-                <span
-                  v-if="isPageBalance()"
-                  class="font-mono text-[0.5625rem] tabular-nums text-[var(--text-tertiary)]"
-                >
-                  {{ batchProgressText() }}
-                </span>
-                <IconButton
-                  v-if="canOperate"
-                  :label="balanceButtonLabel()"
-                  :disabled="!canRunBatch"
-                  class="h-6 w-6 rounded-md"
-                  @click="runVisibleBalance()"
-                >
-                  <LoaderCircle
-                    v-if="isPageBalance()"
-                    :size="13"
-                    class="animate-spin"
-                  />
-                  <RefreshCw v-else :size="13" />
-                </IconButton>
-              </span>
-            </div>
-          </template>
-
-          <template #cell-id="{ row }">
-            <span class="font-mono text-xs text-[var(--text-secondary)]">
-              #{{ channelFromRow(row as AdminChannelTableRow).id }}
-            </span>
-          </template>
-          <template #cell-name="{ row }">
-            <span
-              class="block truncate font-semibold"
-              :class="
-                channelFromRow(row as AdminChannelTableRow).status === 1
-                  ? 'text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)]'
-              "
-              :title="channelFromRow(row as AdminChannelTableRow).name"
-            >
-              {{ channelFromRow(row as AdminChannelTableRow).name }}
-            </span>
-            <p
-              v-if="
-                isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
-              "
-              class="mt-1 whitespace-normal text-xs text-[var(--text-tertiary)]"
-            >
-              {{ t('channels.retiredHint') }}
-            </p>
-          </template>
-          <template #cell-type="{ row }">
-            <div class="flex min-w-0 items-center gap-2">
-              <VendorLogo
-                :vendor="channelFromRow(row as AdminChannelTableRow).supplier"
-                :size="28"
-              />
-              <span
-                class="truncate text-xs text-[var(--text-secondary)]"
-                :title="
-                  adminChannelTypeMeta(
-                    channelFromRow(row as AdminChannelTableRow).type
-                  ).label
-                "
-              >
-                {{
-                  adminChannelTypeMeta(
-                    channelFromRow(row as AdminChannelTableRow).type
-                  ).label
-                }}
-              </span>
-            </div>
-          </template>
-          <template #cell-status="{ row }">
-            <ChannelStatusBadge
-              :channel="channelFromRow(row as AdminChannelTableRow)"
-            />
-          </template>
-          <template #cell-priority="{ row }">
-            <ChannelInlineNumber
-              v-if="
-                canWrite &&
-                !isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
-              "
-              :value="channelFromRow(row as AdminChannelTableRow).priority"
-              :label="
-                t('channels.priorityFor', {
-                  name: channelFromRow(row as AdminChannelTableRow).name,
-                })
-              "
-              :busy="isRowBusy(channelFromRow(row as AdminChannelTableRow).id)"
-              :commit="
-                (value) =>
-                  updateNumber(
-                    channelFromRow(row as AdminChannelTableRow),
-                    'priority',
-                    value
-                  )
-              "
-            />
-            <span v-else class="tabular-nums">
-              {{ channelFromRow(row as AdminChannelTableRow).priority }}
-            </span>
-          </template>
-          <template #cell-weight="{ row }">
-            <ChannelInlineNumber
-              v-if="
-                canWrite &&
-                !isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
-              "
-              :value="channelFromRow(row as AdminChannelTableRow).weight"
-              :label="
-                t('channels.weightFor', {
-                  name: channelFromRow(row as AdminChannelTableRow).name,
-                })
-              "
-              :busy="isRowBusy(channelFromRow(row as AdminChannelTableRow).id)"
-              :commit="
-                (value) =>
-                  updateNumber(
-                    channelFromRow(row as AdminChannelTableRow),
-                    'weight',
-                    value
-                  )
-              "
-            />
-            <span v-else class="tabular-nums">
-              {{ channelFromRow(row as AdminChannelTableRow).weight }}
-            </span>
-          </template>
-          <template #cell-capacity="{ row }">
-            <CapacityMeter
-              :used="channelFromRow(row as AdminChannelTableRow).capacity_used"
-              :total="
-                channelFromRow(row as AdminChannelTableRow).capacity_total
-              "
-            />
-          </template>
-          <template #cell-usage="{ row }">
-            <div class="sibling-space-y-0.5 text-xs">
-              <p class="font-semibold tabular-nums">
-                {{
-                  formatQuota(
-                    channelFromRow(row as AdminChannelTableRow).used_quota
-                  )
-                }}
-              </p>
-              <p class="text-[0.6875rem] text-[var(--text-tertiary)]">
-                {{
-                  t('channels.channelRatioValue', {
-                    ratio: formatDecimal(
-                      channelFromRow(row as AdminChannelTableRow).channel_ratio
-                    ),
-                  })
-                }}
-              </p>
-            </div>
-          </template>
-          <template #cell-upstream="{ row }">
-            <div class="flex items-center justify-between gap-1">
-              <div class="min-w-0 sibling-space-y-0.5 text-xs">
-                <p class="font-semibold tabular-nums">
-                  {{
-                    formatMoney(
-                      channelFromRow(row as AdminChannelTableRow).balance
-                    )
-                  }}
-                </p>
-              </div>
-              <IconButton
-                v-if="
-                  canOperate &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  ) &&
-                  isFieldVisible('rowUpstreamAction')
-                "
-                :label="t('channels.refreshBalance')"
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                class="shrink-0"
-                @click="
-                  refreshBalance(channelFromRow(row as AdminChannelTableRow))
-                "
-              >
-                <LoaderCircle
-                  v-if="
-                    isBusy(
-                      channelFromRow(row as AdminChannelTableRow).id,
-                      'balance'
-                    )
-                  "
-                  :size="14"
-                  class="animate-spin"
-                />
-                <RefreshCw v-else :size="14" />
-              </IconButton>
-            </div>
-          </template>
-          <template #cell-response="{ row }">
-            <div
-              v-if="(row as AdminChannelTableRow).kind === 'channel'"
-              class="flex items-center justify-between gap-1"
-            >
-              <StatusChip
-                class="overflow-visible whitespace-nowrap"
-                :tone="
-                  responseCellDisplay(
-                    channelFromRow(row as AdminChannelTableRow)
-                  ).tone
-                "
-                :title="
-                  responseCellDisplay(
-                    channelFromRow(row as AdminChannelTableRow)
-                  ).title
-                "
-              >
-                <LoaderCircle
-                  v-if="
-                    responseCellDisplay(
-                      channelFromRow(row as AdminChannelTableRow)
-                    ).running
-                  "
-                  :size="12"
-                  class="relative z-[1] shrink-0 animate-spin overflow-visible"
-                  data-channel-response-spinner
-                />
-                {{
-                  responseCellDisplay(
-                    channelFromRow(row as AdminChannelTableRow)
-                  ).text
-                }}
-              </StatusChip>
-              <IconButton
-                v-if="
-                  canOperate &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  ) &&
-                  isFieldVisible('rowResponseAction')
-                "
-                :label="t('channels.testChannel')"
-                class="shrink-0"
-                @click="openTest(channelFromRow(row as AdminChannelTableRow))"
-              >
-                <Activity :size="14" />
-              </IconButton>
-            </div>
-          </template>
-          <template #cell-actions="{ row }">
-            <div class="flex items-center justify-end gap-0.5">
-              <IconButton
-                v-if="
-                  canOperate &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="t('channels.syncModelsTitle')"
-                :disabled="!canMutate"
-                @click="
-                  previewModelSync(channelFromRow(row as AdminChannelTableRow))
-                "
-                ><RefreshCw :size="15"
-              /></IconButton>
-              <IconButton
-                v-if="
-                  canRead &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="t('gateway.channelRuntime')"
-                @click="
-                  openRuntime(channelFromRow(row as AdminChannelTableRow))
-                "
-                ><Gauge :size="15"
-              /></IconButton>
-              <IconButton
-                v-if="
-                  canWrite &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="t('channels.editChannel')"
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                @click="openEdit(channelFromRow(row as AdminChannelTableRow))"
-              >
-                <Pencil :size="15" />
-              </IconButton>
-              <IconButton
-                v-if="
-                  canOperate &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
-                  )
-                "
-                :label="
-                  channelFromRow(row as AdminChannelTableRow).status === 1
-                    ? t('channels.disableChannel')
-                    : t('channels.enableChannel')
-                "
-                :tone="
-                  channelFromRow(row as AdminChannelTableRow).status === 1
-                    ? 'danger'
-                    : 'default'
-                "
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                @click="
-                  toggleStatus(channelFromRow(row as AdminChannelTableRow))
-                "
-              >
-                <LoaderCircle
-                  v-if="
-                    isBusy(
-                      channelFromRow(row as AdminChannelTableRow).id,
-                      'status'
-                    )
-                  "
-                  :size="15"
-                  class="animate-spin"
-                />
-                <PowerOff
-                  v-else-if="
-                    channelFromRow(row as AdminChannelTableRow).status === 1
-                  "
-                  :size="15"
-                />
-                <Power v-else :size="15" />
-              </IconButton>
-              <IconButton
-                v-if="canSensitiveWrite"
-                :label="t('channels.deleteChannel')"
-                tone="danger"
-                :disabled="
-                  isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
-                "
-                @click="
-                  requestDelete(channelFromRow(row as AdminChannelTableRow))
-                "
-              >
-                <LoaderCircle
-                  v-if="
-                    isCrudActionBusy(
-                      'delete',
-                      channelFromRow(row as AdminChannelTableRow).id
-                    )
-                  "
-                  :size="15"
-                  class="animate-spin"
-                />
-                <Trash2 v-else :size="15" />
-              </IconButton>
-            </div>
-          </template>
-          <template #footer>
-            <TablePagination
-              v-model:page="page"
-              v-model:page-size="pageSize"
-              :total="total"
-              :page-sizes="[10, 20, 50]"
-            />
-          </template>
-        </DataTable>
-
-        <div class="md:hidden">
-          <div
-            v-if="loading"
-            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
-            aria-hidden="true"
+          <template #cell-name="{ row }"
+            ><span class="font-medium">{{ row.name }}</span
+            ><span class="ml-2 text-xs text-[var(--text-tertiary)]"
+              >#{{ row.id }}</span
+            ></template
           >
-            <div v-for="index in 5" :key="index" class="sibling-space-y-4 p-4">
-              <SkeletonBlock rounded="md" class="h-5 w-2/3" />
-              <div class="grid grid-cols-2 gap-3">
-                <SkeletonBlock rounded="md" class="h-14" />
-                <SkeletonBlock rounded="md" class="h-14" />
-              </div>
-            </div>
-          </div>
-          <EmptyState
-            v-else-if="rows.length === 0"
-            :title="t('channels.emptyTitle')"
-            :hint="t('channels.emptyHint')"
-            illustration="empty-search"
-          />
+          <template #cell-type="{ row }">{{
+            adminChannelTypeMeta(row.type).label
+          }}</template>
+          <template #cell-status="{ row }"
+            ><ChannelStatusBadge :channel="row"
+          /></template>
+          <template #cell-priority="{ row }"
+            ><ChannelInlineNumber
+              :value="row.priority"
+              :label="t('channels.priorityFor', { name: row.name })"
+              :busy="!canWrite || !canMutate || isRetiredChannelType(row.type)"
+              :commit="(value) => updateNumber(row, 'priority', value)"
+          /></template>
+          <template #cell-weight="{ row }"
+            ><ChannelInlineNumber
+              :value="row.weight"
+              :label="t('channels.weightFor', { name: row.name })"
+              :busy="!canWrite || !canMutate || isRetiredChannelType(row.type)"
+              :commit="(value) => updateNumber(row, 'weight', value)"
+          /></template>
+          <template #cell-used_quota="{ row }">{{
+            formatQuota(row.used_quota)
+          }}</template>
+          <template #cell-balance="{ row }">{{
+            formatMoney(row.balance)
+          }}</template>
+          <template #cell-response_time="{ row }">{{
+            adminChannelResponseText(row.response_time, t('channels.notTested'))
+          }}</template>
+          <template #cell-actions="{ row }"
+            ><ChannelActions
+              :channel="row"
+              :can-operate="canOperate"
+              :can-write="canWrite"
+              :can-sensitive-write="canSensitiveWrite"
+              :busy="isRowBusy(row.id) || !canMutate"
+              @test="testing = row"
+              @balance="refreshBalance(row)"
+              @status="toggleStatus(row)"
+              @edit="openForm(row)"
+              @delete="deleting = [row]"
+              @sync="syncing = row"
+              @provider="provider = row"
+          /></template>
+        </DataTable>
+        <div class="md:hidden">
+          <p v-if="loading" role="status" class="p-4">
+            {{ t('common.loading') }}
+          </p>
+          <EmptyState v-else-if="!rows.length" :title="t('common.none')" />
           <ChannelMobileList
             v-else
-            :groups="supplierGroups"
-            :visible-fields="visibleFields"
-            :selected-ids="selectedIds"
-            :all-selected="allPageSelected"
-            :selection-disabled="!canMutate || !canSelect"
-            :toggle-all-selected="toggleAllSelected"
-            :toggle-selected="toggleSelected"
-            :is-supplier-collapsed="isSupplierCollapsed"
-            :toggle-supplier="toggleSupplier"
-            :batch-progress="batchProgress"
-            :group-test-overrides="groupTestOverrides"
-            :can-run-batch="canRunBatch"
-            :can-mutate="canMutate"
-            :can-operate="canOperate"
-            :can-write="canWrite"
-            :can-sensitive-write="canSensitiveWrite"
-            :run-supplier-balance="runSupplierBalance"
-            :pick-supplier-test="openSupplierTest"
-            :clear-supplier="requestClearSupplier"
-            :is-busy="isBusy"
-            :is-row-busy="isRowBusy"
-            :update-number="updateNumber"
-            :toggle-status="toggleStatus"
-            :refresh-balance="refreshBalance"
-            :open-test="openTest"
-            :edit-channel="openEdit"
-            :sync-models="previewModelSync"
-            :show-runtime="openRuntime"
-            :delete-channel="requestDelete"
-          />
-          <TablePagination
-            v-if="!loading"
-            v-model:page="page"
-            v-model:page-size="pageSize"
-            :total="total"
-            :page-sizes="[10, 20, 50]"
-          />
+            :rows="rows"
+            :selected="selectedIds.map(Number)"
+            :selectable="canSelect"
+            :disabled="!canMutate"
+            @select="toggleSelected"
+          >
+            <template #actions="{ channel }"
+              ><ChannelActions
+                :channel="channel"
+                :can-operate="canOperate"
+                :can-write="canWrite"
+                :can-sensitive-write="canSensitiveWrite"
+                :busy="isRowBusy(channel.id) || !canMutate"
+                @test="testing = channel"
+                @balance="refreshBalance(channel)"
+                @status="toggleStatus(channel)"
+                @edit="openForm(channel)"
+                @delete="deleting = [channel]"
+                @sync="syncing = channel"
+                @provider="provider = channel"
+            /></template>
+          </ChannelMobileList>
         </div>
-      </template>
-    </ConsoleCard>
-
-    <ConsoleModal
-      :open="runtimeChannel !== null && canRead"
-      :title="runtimeChannel?.name ?? t('gateway.channelRuntime')"
-      size="lg"
-      @close="runtimeChannel = null"
-    >
-      <GatewayChannelPanel
-        v-if="runtimeChannel && canRead"
-        :key="runtimeChannel.id"
-        :channel-id="runtimeChannel.id"
-      />
-      <ChannelProviderStatus
-        v-if="runtimeChannel && [62, 63].includes(runtimeChannel.type)"
-        :channel="runtimeChannel"
-      />
-    </ConsoleModal>
-    <ConsoleModal
-      :open="balanceResponse !== null"
-      :title="
-        t('channels.balanceRawTitle', {
-          name: balanceResponse?.channelName ?? '',
-        })
-      "
-      size="lg"
-      @close="balanceResponse = null"
-    >
-      <p class="mb-3 text-sm text-[var(--text-secondary)]">
-        {{ t('channels.balanceRawHint') }}
-      </p>
-      <pre
-        class="max-h-[55vh] overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--surface-hover)] p-4 text-xs text-[var(--text-primary)]"
-        >{{ balanceResponse?.rawResponse }}</pre>
-      <template #footer>
-        <ConsoleButton variant="secondary" @click="balanceResponse = null">
-          {{ t('common.close') }}
-        </ConsoleButton>
-      </template>
-    </ConsoleModal>
+        <TablePagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+        />
+      </ConsoleCard>
+    </template>
     <ChannelFormModal
       :open="formOpen"
       :editing="editing"
       :save="saveForm"
       :fetch-models="fetchUpstreamModels"
-      @close="closeForm"
+      @close="formOpen = false"
     />
-    <ChannelModelSyncDialog
-      :channel="syncingModels"
-      :can-write="canWrite"
-      @close="syncingModels = null"
-      @applied="load({ background: true })"
-    />
-
     <ChannelTestModal
       :open="testing !== null"
       :channel="testing"
       :can-write="canWrite"
       :test-model="testChannelModel"
       :remove-models="removeChannelModels"
-      @close="testing = null"
+      @close="closeTesting"
     />
-
-    <ChannelTestPickerDialog
-      :open="pickingGroup !== null"
-      :group-slug="pickingGroup?.groupSlug"
-      :supplier="pickingGroup?.supplier ?? ''"
-      :channels="pickingGroup?.channels ?? []"
-      :test-model="testChannelModel"
-      :record-audit="recordLabAudit"
-      @close="closeSupplierTest"
-      @start="onGroupTestStart"
-      @result="onGroupTestResult"
-      @tested="onGroupTested"
+    <ChannelModelSyncDialog
+      :channel="syncing"
+      :can-write="canWrite"
+      @close="syncing = null"
+      @applied="load({ background: true })"
     />
-
     <ConfirmDialog
-      :open="deleting !== null"
-      :title="deleteDialogTitle"
-      :message="deleteDialogMessage"
-      :confirm-text="t('common.delete')"
-      :loading="isCrudActionBusy('delete') || isBulkActionBusy('delete')"
+      :open="deleting.length > 0"
+      :title="t('channels.deleteChannel')"
+      :message="deleting.map((channel) => channel.name).join(', ')"
+      :loading="isCrudBusy || isBulkBusy"
       @confirm="confirmDelete"
-      @cancel="cancelDelete"
+      @cancel="deleting = []"
     />
+    <ConsoleModal
+      :open="balanceResponse !== null"
+      :title="balanceResponse?.channelName ?? ''"
+      @close="balanceResponse = null"
+    >
+      <pre class="overflow-auto whitespace-pre-wrap break-all text-sm">{{
+        balanceResponse?.rawResponse
+      }}</pre>
+    </ConsoleModal>
+    <ConsoleModal
+      :open="provider !== null"
+      :title="t('channels.providerStatus')"
+      @close="provider = null"
+      ><ChannelProviderStatus v-if="provider" :channel="provider"
+    /></ConsoleModal>
   </div>
 </template>

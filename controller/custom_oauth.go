@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,25 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
-
-func validateCustomOAuthProviderEndpoints(provider *model.CustomOAuthProvider) error {
-	if provider == nil {
-		return fmt.Errorf("missing OAuth provider")
-	}
-	for _, endpoint := range []string{
-		provider.AuthorizationEndpoint,
-		provider.TokenEndpoint,
-		provider.UserInfoEndpoint,
-	} {
-		if err := oauth.ValidateOAuthEndpoint(endpoint); err != nil {
-			return err
-		}
-	}
-	if provider.WellKnown != "" {
-		return oauth.ValidateOAuthEndpoint(provider.WellKnown)
-	}
-	return nil
-}
 
 // CustomOAuthProviderResponse is the response structure for custom OAuth providers
 // It excludes sensitive fields like client_secret
@@ -183,8 +163,8 @@ func FetchCustomOAuthDiscovery(c *gin.Context) {
 	targetURL = strings.TrimSpace(targetURL)
 
 	parsedURL, err := url.Parse(targetURL)
-	if err != nil || parsedURL.Host == "" || oauth.ValidateOAuthEndpoint(targetURL) != nil {
-		common.ApiErrorT(c, "Invalid Discovery URL. It must be a publicly reachable HTTPS address")
+	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		common.ApiErrorT(c, "Invalid Discovery URL. Only http and https are supported")
 		return
 	}
 
@@ -198,32 +178,26 @@ func FetchCustomOAuthDiscovery(c *gin.Context) {
 	}
 	httpReq.Header.Set("Accept", "application/json")
 
-	client := oauth.NewOAuthEndpointHTTPClient(20 * time.Second)
+	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		common.ApiErrorT(c, "Failed to fetch the Discovery configuration")
+		common.ApiErrorT(c, "Failed to fetch the Discovery configuration: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		common.ApiErrorT(c, "Failed to fetch the Discovery configuration")
-		return
-	}
-
-	const maxDiscoveryDocumentBytes = 1 << 20
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryDocumentBytes+1))
-	if err != nil {
-		common.ApiErrorT(c, "Failed to read the Discovery configuration")
-		return
-	}
-	if len(body) > maxDiscoveryDocumentBytes {
-		common.ApiErrorT(c, "The Discovery configuration is too large")
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		message := strings.TrimSpace(string(body))
+		if message == "" {
+			message = resp.Status
+		}
+		common.ApiErrorT(c, "Failed to fetch the Discovery configuration: {{error}}", map[string]any{"error": message})
 		return
 	}
 
 	var discovery map[string]any
-	if err = common.Unmarshal(body, &discovery); err != nil {
+	if err = common.DecodeJson(resp.Body, &discovery); err != nil {
 		common.ApiErrorT(c, "Failed to parse the Discovery configuration: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
@@ -277,10 +251,6 @@ func CreateCustomOAuthProvider(c *gin.Context) {
 		AuthStyle:             req.AuthStyle,
 		AccessPolicy:          req.AccessPolicy,
 		AccessDeniedMessage:   req.AccessDeniedMessage,
-	}
-	if err := validateCustomOAuthProviderEndpoints(provider); err != nil {
-		common.ApiErrorT(c, "Invalid OAuth endpoint. It must be a publicly reachable HTTPS address")
-		return
 	}
 
 	if err := model.CreateCustomOAuthProvider(provider); err != nil {
@@ -407,10 +377,6 @@ func UpdateCustomOAuthProvider(c *gin.Context) {
 	}
 	if req.AccessDeniedMessage != nil {
 		provider.AccessDeniedMessage = *req.AccessDeniedMessage
-	}
-	if err := validateCustomOAuthProviderEndpoints(provider); err != nil {
-		common.ApiErrorT(c, "Invalid OAuth endpoint. It must be a publicly reachable HTTPS address")
-		return
 	}
 
 	if err := model.UpdateCustomOAuthProvider(provider); err != nil {
@@ -546,7 +512,7 @@ func GetUserOAuthBindingsByAdmin(c *gin.Context) {
 
 // UnbindCustomOAuth unbinds a custom OAuth provider from the current user
 func UnbindCustomOAuth(c *gin.Context) {
-	identity, ok := middleware.GetSessionAuthIdentity(c)
+	identity, ok := middleware.GetStepUpIdentity(c)
 	if !ok {
 		writeSecurityOperationError(c, service.ErrAuthTokenInvalid)
 		return
@@ -608,20 +574,26 @@ func UnbindCustomOAuthByAdmin(c *gin.Context) {
 
 	providerIdStr := c.Param("provider_id")
 	providerId, err := strconv.Atoi(providerIdStr)
-	if err != nil {
+	if err != nil || providerId <= 0 {
 		common.ApiErrorT(c, "Invalid provider ID")
 		return
 	}
-
-	if requireAdminUserProof(c, "clear_binding", userId) == nil {
+	authorization := requireAdminUserProof(c, service.VerificationScopeAdminUserBindingClear, service.AdminUserBindingContext{UserID: userId, ProviderID: providerId})
+	if authorization == nil {
 		return
 	}
-	if err := model.DeleteUserOAuthBinding(userId, providerId, adminUserAuthorization(c)...); err != nil {
+
+	if err := model.DeleteUserOAuthBinding(userId, providerId); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	recordManageAuditFor(c, userId, "user.binding_clear", map[string]interface{}{"provider_id": providerId, "username": targetUser.Username})
 
+	recordManageAuditFor(c, userId, "user.binding_clear", map[string]any{
+		"bindingType":         "custom_oauth",
+		"provider_id":         providerId,
+		"username":            targetUser.Username,
+		"verification_method": authorization.Method,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "success",

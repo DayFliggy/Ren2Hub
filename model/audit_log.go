@@ -11,12 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/gin-gonic/gin"
-)
-
-const (
-	auditVisibilityUser = iota
-	auditVisibilityAdmin
-	auditVisibilityRoot
+	"gorm.io/gorm"
 )
 
 const (
@@ -24,8 +19,6 @@ const (
 	AuditCategorySecurity    = "security"
 	AuditCategoryOperation   = "operation"
 	AuditCategoryAccessToken = "access_token"
-	// AuditCategorySystem records system-granted account events such as rewards.
-	AuditCategorySystem = "system"
 )
 
 // AuditLog is retained independently of usage logs and their cleanup/TTL policy.
@@ -60,7 +53,6 @@ type AuditLogFilter struct {
 	TokenRef        string
 	ExcludeTokenRef string
 	RequestId       string
-	Keyword         string // Literal substring of username, action, content or IP.
 	StartTimestamp  int64
 	EndTimestamp    int64
 	Success         *bool
@@ -107,60 +99,41 @@ func RecordAuditLog(c *gin.Context, entry AuditLog) {
 	if entry.EventId == "" {
 		entry.EventId = common.NewRequestId()
 	}
-	if !validAuditActorRole(entry.ActorRole) {
-		logger.LogError(ctx, fmt.Sprintf("audit actor role unavailable (request_id=%s, actor_role=%d)", entry.RequestId, entry.ActorRole))
+	switch entry.ActorRole {
+	case common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser:
+	default:
+		logger.LogError(ctx, common.LogText("audit actor role unavailable (request_id=%s, actor_role=%d)", entry.RequestId, entry.ActorRole))
 		entry.ActorRole = 0 // Unknown actors remain visible to root only.
 	}
 	if entry.Username == "" {
 		entry.Username, _ = GetUsernameById(entry.UserId, false)
 	}
-	entry.UserAgent = truncateAuditText(entry.UserAgent, 512)
-	if err := insertAuditLogs([]AuditLog{entry}); err != nil {
-		logger.LogError(ctx, fmt.Sprintf("audit log write failed (request_id=%s): %v", entry.RequestId, err))
+	ua := []rune(entry.UserAgent)
+	if len(ua) > 512 {
+		entry.UserAgent = string(ua[:512])
 	}
-}
-
-func validAuditActorRole(role int) bool {
-	return role == common.RoleCommonUser || role == common.RoleAdminUser || role == common.RoleRootUser
-}
-
-// truncateAuditText limits a value to the column's character length.
-func truncateAuditText(value string, limit int) string {
-	runes := []rune(value)
-	if len(runes) <= limit {
-		return value
-	}
-	return string(runes[:limit])
-}
-
-// insertAuditLogs is the only audit_logs write path, shared by live events and
-// the legacy backfill.
-func insertAuditLogs(entries []AuditLog) error {
 	if LOG_DB == nil {
-		return errors.New("log database unavailable")
+		logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): log database unavailable", entry.RequestId))
+		return
 	}
-	if len(entries) == 0 {
-		return nil
-	}
-	if !common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
-		return LOG_DB.Table("audit_logs").Create(&entries).Error
-	}
-	// The ClickHouse GORM insert callback passes structs to the native driver
-	// without resolving their Valuer. Bind this column's JSON encoding while
-	// retaining AuditOther in the domain and API models.
-	type clickHouseAuditRow struct {
-		AuditLog     `gorm:"embedded"`
-		EncodedOther string `gorm:"column:other;type:json"`
-	}
-	rows := make([]clickHouseAuditRow, 0, len(entries))
-	for _, entry := range entries {
+	var row any = &entry
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		encoded, err := common.Marshal(entry.Other)
 		if err != nil {
-			return err
+			logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): %v", entry.RequestId, err))
+			return
 		}
-		rows = append(rows, clickHouseAuditRow{AuditLog: entry, EncodedOther: string(encoded)})
+		// The ClickHouse GORM insert callback passes structs to the native
+		// driver without resolving their Valuer. Bind this column's JSON
+		// encoding while retaining AuditOther in the domain and API models.
+		row = &struct {
+			AuditLog     `gorm:"embedded"`
+			EncodedOther string `gorm:"column:other;type:json"`
+		}{AuditLog: entry, EncodedOther: string(encoded)}
 	}
-	return LOG_DB.Table("audit_logs").Create(&rows).Error
+	if err := LOG_DB.Table("audit_logs").Create(row).Error; err != nil {
+		logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): %v", entry.RequestId, err))
+	}
 }
 
 func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*AuditLog, int64, error) {
@@ -194,19 +167,6 @@ func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*Audit
 	if filter.RequestId != "" {
 		query = query.Where("request_id = ?", filter.RequestId)
 	}
-	if filter.Keyword != "" {
-		// Metadata JSON is excluded: it holds projection-stripped fields that
-		// must not become searchable by viewers who cannot read them.
-		columns := []string{"username", "action", "content", "ip"}
-		conditions := make([]string, 0, len(columns))
-		args := make([]any, 0, len(columns))
-		for _, column := range columns {
-			condition, pattern := buildLiteralLogContainsCondition(column, filter.Keyword)
-			conditions = append(conditions, condition)
-			args = append(args, pattern)
-		}
-		query = query.Where("("+strings.Join(conditions, " OR ")+")", args...)
-	}
 	if filter.StartTimestamp > 0 {
 		query = query.Where("created_at >= ?", filter.StartTimestamp)
 	}
@@ -224,25 +184,66 @@ func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*Audit
 	if err := query.Order("created_at DESC").Order("event_id DESC").Offset(start).Limit(limit).Find(&logs).Error; err != nil {
 		return nil, 0, err
 	}
-	visibility := auditVisibilityUser
+	visibility := logOtherVisibilityUser
 	if !filter.SelfView && viewerRole >= common.RoleRootUser {
-		visibility = auditVisibilityRoot
+		visibility = logOtherVisibilityRoot
 	} else if !filter.SelfView && viewerRole >= common.RoleAdminUser {
-		visibility = auditVisibilityAdmin
+		visibility = logOtherVisibilityAdmin
 	}
 	for _, entry := range logs {
-		if entry.Other.Op != nil {
-			entry.Other.Op.Params = sanitizeAuditParams(entry.Other.Op.Params)
-		}
-		if visibility != auditVisibilityRoot {
+		if visibility != logOtherVisibilityRoot {
 			entry.Other.RootInfo = nil
 		}
-		if visibility == auditVisibilityUser {
+		if visibility == logOtherVisibilityUser {
 			entry.Other.AdminInfo = nil
 			entry.Other.AuditInfo = nil
 		}
 	}
 	return logs, total, nil
+}
+
+// UserAccessTokenStatus describes the legacy users.access_token credential.
+//
+// Deprecated: 旧版面板访问令牌，仅在升级后的过渡期内使用；删除 users.access_token 列时一并移除。
+type UserAccessTokenStatus struct {
+	Exists     bool   `json:"exists"`
+	TokenHint  string `json:"token_hint"`
+	TokenRef   string `json:"token_ref"`
+	CreatedAt  *int64 `json:"created_at"`
+	LastUsedAt *int64 `json:"last_used_at"`
+	LastUsedIp string `json:"last_used_ip"`
+}
+
+// GetUserAccessTokenStatus reads last use of the legacy token from the access audit.
+//
+// Deprecated: 旧版面板访问令牌，仅在升级后的过渡期内使用；删除 users.access_token 列时一并移除。
+func GetUserAccessTokenStatus(userId int) (*UserAccessTokenStatus, error) {
+	var user User
+	if err := DB.Select("id", "role", "access_token", "access_token_created_at").First(&user, userId).Error; err != nil {
+		return nil, err
+	}
+	status := &UserAccessTokenStatus{Exists: user.GetAccessToken() != ""}
+	if !status.Exists {
+		return status, nil
+	}
+	status.TokenRef = AccessTokenFingerprint(user.GetAccessToken())
+	status.TokenHint = AccessTokenHint(user.GetAccessToken())
+	status.CreatedAt = user.AccessTokenCreatedAt
+	var latest AuditLog
+	query := LOG_DB.Select("created_at", "ip").Where("user_id = ? AND token_ref = ? AND category = ?", userId, status.TokenRef, AuditCategoryAccessToken)
+	if user.Role < common.RoleRootUser {
+		query = query.Where("actor_role IN ?", []int{common.RoleCommonUser, common.RoleAdminUser})
+	}
+	err := query.Order("created_at DESC").Order("event_id DESC").Take(&latest).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return status, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	status.LastUsedAt = &latest.CreatedAt
+	status.LastUsedIp = latest.Ip
+	return status, nil
 }
 
 // MigrateAuditLogs also supports independently configured ClickHouse log stores.
@@ -262,12 +263,7 @@ func MigrateAuditLogs() error {
 }
 
 func ValidAuditCategory(category string) bool {
-	switch category {
-	case "", AuditCategoryLogin, AuditCategorySecurity, AuditCategoryOperation, AuditCategoryAccessToken, AuditCategorySystem:
-		return true
-	default:
-		return false
-	}
+	return category == "" || category == AuditCategoryLogin || category == AuditCategorySecurity || category == AuditCategoryOperation || category == AuditCategoryAccessToken
 }
 
 func ValidTokenFingerprint(value string) bool {

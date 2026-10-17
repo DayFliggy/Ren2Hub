@@ -1,7 +1,10 @@
 import { defineConfig } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT || 4173)
-const baseURL = `http://127.0.0.1:${port}`
+const live = process.env.NATIVE_LIVE_TEST === '1'
+const baseURL = live ? process.env.NATIVE_LIVE_URL : `http://127.0.0.1:${port}`
+if (live && !baseURL)
+  throw new Error('NATIVE_LIVE_URL is required for isolated native tests')
 const captureScreenshots = process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true'
 
 export default defineConfig({
@@ -25,10 +28,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: captureScreenshots ? 'on' : 'only-on-failure',
   },
-  webServer: {
-    command: `bun run dev -- --host 127.0.0.1 --port ${port} --strictPort --base /`,
-    url: baseURL,
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: live
+    ? undefined
+    : {
+        command: `bun run dev -- --host 127.0.0.1 --port ${port} --strictPort --base /`,
+        url: baseURL,
+        reuseExistingServer: true,
+        timeout: 60_000,
+      },
 })

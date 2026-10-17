@@ -82,7 +82,7 @@ func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.
 	}).Error)
 
 	stale.Status = common.ChannelStatusManuallyDisabled
-	stale.SetOtherInfo(map[string]interface{}{
+	stale.SetOtherInfo(map[string]any{
 		"status_reason": "manual operation",
 		"status_time":   int64(1234),
 	})
@@ -92,7 +92,7 @@ func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.
 	require.NoError(t, DB.First(&stored, channel.Id).Error)
 	assert.Equal(t, common.ChannelStatusManuallyDisabled, stored.Status)
 	assert.Equal(t, "rotated-key", stored.Key)
-	assert.Equal(t, common.Quota(350), stored.UsedQuota)
+	assert.Equal(t, int64(350), stored.UsedQuota)
 	assert.Equal(t, "concurrent-model", stored.Models)
 	assert.Equal(t, concurrentChannelInfo, stored.ChannelInfo)
 

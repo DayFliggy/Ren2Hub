@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
@@ -19,12 +18,9 @@ type ResponsesToChatStreamState struct {
 
 	Usage *dto.Usage
 
-	textOffsets                map[string]int
-	textRuneCount              int
 	sentStart                  bool
 	finalized                  bool
 	hasSentText                bool
-	hasSentRefusal             bool
 	sentAnnotationCount        int
 	sawToolCall                bool
 	hasSentReasoning           bool
@@ -103,52 +99,18 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		}
 		return nil, nil
 	case responsesEventOutputTextDelta:
-		if state.textOffsets == nil {
-			state.textOffsets = make(map[string]int)
-		}
-		key := event.ItemID
-		if key == "" && event.OutputIndex != nil {
-			key = fmt.Sprint(*event.OutputIndex)
-		}
-		if _, ok := state.textOffsets[key]; !ok {
-			state.textOffsets[key] = state.textRuneCount
-		}
-		state.textRuneCount += utf8.RuneCountInString(event.Delta)
 		return state.textDelta(event.Delta), nil
 	case responsesEventOutputTextAnnotationAdded:
-		var annotation map[string]any
-		if err := kitutil.Unmarshal(event.Annotation, &annotation); err != nil {
-			return nil, err
-		}
-		key := event.ItemID
-		if key == "" && event.OutputIndex != nil {
-			key = fmt.Sprint(*event.OutputIndex)
-		}
-		offset := state.textOffsets[key]
-		for _, name := range []string{"start_index", "end_index"} {
-			if n, ok := annotation[name].(float64); ok {
-				annotation[name] = n + float64(offset)
-			}
-		}
-		return state.annotationDelta(annotation)
-	case responsesEventRefusalDelta:
-		if event.Delta == "" {
-			return nil, nil
-		}
-		return state.refusalDelta(event.Delta), nil
-	case responsesEventRefusalDone:
-		// The refusal text already arrived through deltas; the done event only
-		// repeats the accumulated value.
-		return nil, nil
+		return state.annotationRawDelta(event.Annotation)
 	case responsesEventOutputItemAdded, responsesEventOutputItemDone:
 		if event.Item == nil || !isResponsesToolOutputType(event.Item.Type) {
 			return nil, nil
 		}
-		return state.toolItem(event)
+		return state.toolItem(event), nil
 	case responsesEventFunctionArgsDelta, responsesEventCustomToolInputDelta:
 		return state.toolArgumentsDelta(event), nil
 	case responsesEventFunctionArgsDone, responsesEventCustomToolInputDone:
-		return state.flushPendingTool(event)
+		return state.flushPendingTool(event), nil
 	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete:
 		response := event.Response
 		if event.Type == responsesEventIncomplete {
@@ -189,7 +151,7 @@ func (s *ResponsesToChatStreamState) applyResponseMetadata(response *dto.OpenAIR
 		s.Created = int64(response.CreatedAt)
 	}
 	if response.Usage != nil {
-		s.Usage = UsageFromResponsesUsage(response.Usage)
+		s.Usage = dto.MergeUsageNonZero(s.Usage, UsageFromResponsesUsage(response.Usage))
 	}
 }
 
@@ -217,18 +179,6 @@ func (s *ResponsesToChatStreamState) textDelta(delta string) []dto.ChatCompletio
 	return chunks
 }
 
-func (s *ResponsesToChatStreamState) refusalDelta(delta string) []dto.ChatCompletionsStreamResponse {
-	if delta == "" {
-		return nil
-	}
-	s.hasSentRefusal = true
-	chunks := s.ensureStart()
-	chunks = append(chunks, s.makeChunk(dto.ChatCompletionsStreamResponseChoiceDelta{
-		Refusal: &delta,
-	}, nil))
-	return chunks
-}
-
 func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIResponsesResponse) ([]dto.ChatCompletionsStreamResponse, error) {
 	if s == nil || response == nil || len(response.Output) == 0 {
 		return nil, nil
@@ -237,28 +187,18 @@ func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIRe
 	var chunks []dto.ChatCompletionsStreamResponse
 	hadSentText := s.hasSentText
 	hadSentReasoning := s.hasSentReasoning
-	hadSentRefusal := s.hasSentRefusal
 	annotationOffset := 0
 	for i := range response.Output {
 		out := &response.Output[i]
 		switch {
-		case out.Type == responsesOutputTypeMessage && (!hadSentText || !hadSentRefusal):
+		case out.Type == responsesOutputTypeMessage && !hadSentText:
 			var text strings.Builder
-			var refusal strings.Builder
 			for _, c := range out.Content {
 				if c.Type == "output_text" && c.Text != "" {
 					text.WriteString(c.Text)
 				}
-				if c.Type == "refusal" && c.Refusal != nil && *c.Refusal != "" {
-					refusal.WriteString(*c.Refusal)
-				}
 			}
-			if !hadSentText {
-				chunks = append(chunks, s.textDelta(text.String())...)
-			}
-			if !hadSentRefusal {
-				chunks = append(chunks, s.refusalDelta(refusal.String())...)
-			}
+			chunks = append(chunks, s.textDelta(text.String())...)
 			annotationChunks, err := s.remainingAnnotationChunks(out, annotationOffset)
 			if err != nil {
 				return nil, err
@@ -275,11 +215,7 @@ func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIRe
 		case out.Type == responsesOutputTypeReasoning && !hadSentReasoning:
 			chunks = append(chunks, s.reasoningDelta(reasoningOutputText(out))...)
 		case isResponsesToolOutputType(out.Type):
-			toolChunks, err := s.toolItem(&dto.ResponsesStreamResponse{Item: out})
-			if err != nil {
-				return nil, err
-			}
-			chunks = append(chunks, toolChunks...)
+			chunks = append(chunks, s.toolItem(&dto.ResponsesStreamResponse{Item: out})...)
 		}
 	}
 	return chunks, nil
@@ -368,17 +304,16 @@ func (s *ResponsesToChatStreamState) reasoningDelta(delta string) []dto.ChatComp
 	return chunks
 }
 
-func (s *ResponsesToChatStreamState) toolItem(event *dto.ResponsesStreamResponse) ([]dto.ChatCompletionsStreamResponse, error) {
+func (s *ResponsesToChatStreamState) toolItem(event *dto.ResponsesStreamResponse) []dto.ChatCompletionsStreamResponse {
 	tool := s.ensureToolForEvent(event)
 	if tool == nil {
-		return nil, nil
+		return nil
 	}
-	if len(event.Item.Arguments) > 0 || len(event.Item.Input) > 0 {
-		if err := tool.mergeFinalArguments(event.Item.ArgumentsString()); err != nil {
-			return nil, err
-		}
+	args := event.Item.ArgumentsString()
+	if args != "" {
+		tool.Arguments = args
 	}
-	return s.toolDelta(tool, ""), nil
+	return s.toolDelta(tool, "")
 }
 
 func (s *ResponsesToChatStreamState) toolArgumentsDelta(event *dto.ResponsesStreamResponse) []dto.ChatCompletionsStreamResponse {
@@ -398,32 +333,15 @@ func (s *ResponsesToChatStreamState) toolArgumentsDelta(event *dto.ResponsesStre
 	return s.toolDelta(tool, event.Delta)
 }
 
-func (s *ResponsesToChatStreamState) flushPendingTool(event *dto.ResponsesStreamResponse) ([]dto.ChatCompletionsStreamResponse, error) {
+func (s *ResponsesToChatStreamState) flushPendingTool(event *dto.ResponsesStreamResponse) []dto.ChatCompletionsStreamResponse {
 	tool := s.findToolForEvent(event)
 	if tool == nil {
 		tool = s.ensureFallbackToolForEvent(event)
 	}
 	if tool == nil {
-		return nil, nil
+		return nil
 	}
-	final := event.Arguments
-	if event.Type == responsesEventCustomToolInputDone {
-		final = event.Input
-	}
-	if final != nil {
-		if err := tool.mergeFinalArguments(*final); err != nil {
-			return nil, err
-		}
-	}
-	return s.toolDelta(tool, ""), nil
-}
-
-func (tool *responsesStreamTool) mergeFinalArguments(final string) error {
-	if tool.ArgsSentAt > len(tool.Arguments) || tool.ArgsSentAt > len(final) || !strings.HasPrefix(final, tool.Arguments[:tool.ArgsSentAt]) {
-		return fmt.Errorf("tool-call final arguments conflict with emitted deltas")
-	}
-	tool.Arguments = final
-	return nil
+	return s.toolDelta(tool, "")
 }
 
 func (s *ResponsesToChatStreamState) ensureToolForEvent(event *dto.ResponsesStreamResponse) *responsesStreamTool {
@@ -724,21 +642,24 @@ func (s *ResponsesToChatStreamState) keyForEvent(event *dto.ResponsesStreamRespo
 }
 
 type ResponsesBufferedAccumulator struct {
-	items                map[int]*dto.ResponsesOutput
-	itemIndexes          map[string]int
-	unindexedItems       map[string]bool
-	usage                *dto.Usage
-	err                  error
-	inputBytes           int64
-	maxInputBytes        int64
-	text                 strings.Builder
-	refusal              strings.Builder
-	reasoning            strings.Builder
+	items                []*responsesBufferedItem
+	outputIndexToItemIdx map[int]int
+	itemIDToItemIdx      map[string]int
+	lastUnindexedItemIdx int
 	tools                []*responsesBufferedTool
 	outputIndexToToolIdx map[int]int
 	itemIDToToolIdx      map[string]int
 	pendingByOutputIndex map[int]string
 	pendingByItemID      map[string]string
+}
+
+type responsesBufferedItem struct {
+	Type                string
+	ID                  string
+	Text                strings.Builder
+	Annotations         []any
+	ToolIndex           int
+	NeedsReasoningBreak bool
 }
 
 type responsesBufferedTool struct {
@@ -748,13 +669,11 @@ type responsesBufferedTool struct {
 	Arguments strings.Builder
 }
 
-func NewResponsesBufferedAccumulator(limits ...int64) *ResponsesBufferedAccumulator {
-	limit := int64(128 << 20)
-	if len(limits) > 0 && limits[0] > 0 {
-		limit = limits[0]
-	}
+func NewResponsesBufferedAccumulator() *ResponsesBufferedAccumulator {
 	return &ResponsesBufferedAccumulator{
-		items: make(map[int]*dto.ResponsesOutput), itemIndexes: make(map[string]int), unindexedItems: make(map[string]bool), maxInputBytes: limit,
+		outputIndexToItemIdx: make(map[int]int),
+		itemIDToItemIdx:      make(map[string]int),
+		lastUnindexedItemIdx: -1,
 		outputIndexToToolIdx: make(map[int]int),
 		itemIDToToolIdx:      make(map[string]int),
 		pendingByOutputIndex: make(map[int]string),
@@ -763,55 +682,60 @@ func NewResponsesBufferedAccumulator(limits ...int64) *ResponsesBufferedAccumula
 }
 
 func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamResponse) {
-	if a == nil || event == nil || a.err != nil {
-		return
-	}
-	if event.Response != nil && event.Response.Usage != nil {
-		a.usage = event.Response.Usage
-	}
-	raw, err := kitutil.Marshal(event)
-	if err != nil {
-		a.err = err
-		return
-	}
-	if int64(len(raw)) > a.maxInputBytes-a.inputBytes {
-		a.err = fmt.Errorf("response_conversion_limit: buffered response exceeds configured byte limit")
-		return
-	}
-	a.inputBytes += int64(len(raw))
-	if event.Response != nil && len(event.Response.Output) > 0 {
-		// Keep snapshots as another source of item metadata. A later compact
-		// terminal must not discard items present in an earlier snapshot.
-		snapshot := *event.Response
-		snapshot.Output = append([]dto.ResponsesOutput(nil), event.Response.Output...)
-		a.supplementIndexedOutput(&snapshot)
-		if a.err != nil {
-			return
-		}
-	}
-	switch event.Type {
-	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete, responsesEventFailed:
-		// Fail while ProcessEvent is still inside the host's parser boundary,
-		// before it decides that a protocol terminal can be returned as success.
-		for _, item := range a.items {
-			if item.Type == "" {
-				a.err = fmt.Errorf("response output item is missing its type")
-				return
-			}
-		}
-	}
-	if a.rememberIndexedEvent(event) {
+	if a == nil || event == nil {
 		return
 	}
 	switch event.Type {
 	case responsesEventOutputTextDelta:
-		a.text.WriteString(event.Delta)
-	case responsesEventRefusalDelta:
-		a.refusal.WriteString(event.Delta)
+		item := a.ensureItem(event, responsesOutputTypeMessage)
+		item.Text.WriteString(event.Delta)
+	case responsesEventOutputTextAnnotationAdded:
+		item := a.ensureItem(event, responsesOutputTypeMessage)
+		var annotation any
+		if err := kitutil.Unmarshal(event.Annotation, &annotation); err == nil && annotation != nil {
+			item.Annotations = append(item.Annotations, annotation)
+		}
 	case responsesEventReasoningSummaryDelta, responsesEventReasoningTextDelta:
-		a.reasoning.WriteString(event.Delta)
+		item := a.ensureItem(event, responsesOutputTypeReasoning)
+		if item.NeedsReasoningBreak {
+			appendSeparatedText(&item.Text, event.Delta)
+			item.NeedsReasoningBreak = false
+		} else {
+			item.Text.WriteString(event.Delta)
+		}
+	case responsesEventReasoningSummaryDone, responsesEventReasoningTextDone:
+		item := a.ensureItem(event, responsesOutputTypeReasoning)
+		if item.Text.Len() == 0 && event.Text != nil {
+			item.Text.WriteString(*event.Text)
+		}
+		if item.Text.Len() > 0 {
+			item.NeedsReasoningBreak = true
+		}
 	case responsesEventOutputItemAdded, responsesEventOutputItemDone:
-		if event.Item != nil && isResponsesToolOutputType(event.Item.Type) {
+		if event.Item == nil {
+			return
+		}
+		switch {
+		case event.Item.Type == responsesOutputTypeReasoning:
+			item := a.ensureItem(event, event.Item.Type)
+			if item.Text.Len() == 0 {
+				item.Text.WriteString(reasoningOutputText(event.Item))
+			}
+		case event.Item.Type == responsesOutputTypeMessage:
+			item := a.ensureItem(event, event.Item.Type)
+			seedText := item.Text.Len() == 0
+			seedAnnotations := len(item.Annotations) == 0
+			for _, content := range event.Item.Content {
+				if content.Type == "output_text" {
+					if seedText {
+						item.Text.WriteString(content.Text)
+					}
+					if seedAnnotations {
+						item.Annotations = append(item.Annotations, content.Annotations...)
+					}
+				}
+			}
+		case isResponsesToolOutputType(event.Item.Type):
 			tool := a.ensureTool(event)
 			if args := event.Item.ArgumentsString(); args != "" {
 				tool.Arguments.Reset()
@@ -832,14 +756,7 @@ func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamRe
 }
 
 func (a *ResponsesBufferedAccumulator) SupplementResponseOutput(resp *dto.OpenAIResponsesResponse) {
-	if a == nil || resp == nil {
-		return
-	}
-	if resp.Usage == nil {
-		resp.Usage = a.usage
-	}
-	if len(resp.Output) > 0 {
-		a.supplementIndexedOutput(resp)
+	if a == nil || resp == nil || len(resp.Output) > 0 {
 		return
 	}
 	resp.Output = a.BuildOutput()
@@ -849,68 +766,119 @@ func (a *ResponsesBufferedAccumulator) BuildOutput() []dto.ResponsesOutput {
 	if a == nil {
 		return nil
 	}
-	out := make([]dto.ResponsesOutput, 0, 2+len(a.tools))
-	if a.reasoning.Len() > 0 {
-		out = append(out, dto.ResponsesOutput{
-			Type: responsesOutputTypeReasoning,
-			Summary: []dto.ResponsesReasoningSummaryPart{
-				{Type: "summary_text", Text: a.reasoning.String()},
-			},
-		})
-	}
-	if a.text.Len() > 0 || a.refusal.Len() > 0 {
-		content := make([]dto.ResponsesOutputContent, 0, 2)
-		if a.text.Len() > 0 {
-			content = append(content, dto.ResponsesOutputContent{Type: "output_text", Text: a.text.String()})
-		}
-		if a.refusal.Len() > 0 {
-			refusal := a.refusal.String()
-			content = append(content, dto.ResponsesOutputContent{Type: "refusal", Refusal: &refusal})
-		}
-		out = append(out, dto.ResponsesOutput{
-			Type:    responsesOutputTypeMessage,
-			Role:    "assistant",
-			Content: content,
-		})
-	}
-	indexes := make([]int, 0, len(a.items))
-	for index := range a.items {
-		indexes = append(indexes, index)
-	}
-	sort.Ints(indexes)
-	for _, index := range indexes {
-		if a.items[index].Type == "" {
-			a.err = fmt.Errorf("response output item is missing its type")
-			return nil
-		}
-		out = append(out, *a.items[index])
-	}
-	for _, tool := range a.tools {
-		if tool == nil {
+	out := make([]dto.ResponsesOutput, 0, len(a.items))
+	for _, item := range a.items {
+		if item == nil {
 			continue
 		}
-		argsRaw, _ := kitutil.Marshal(tool.Arguments.String())
-		out = append(out, dto.ResponsesOutput{
-			Type:      responsesOutputTypeFunctionCall,
-			ID:        tool.ItemID,
-			CallId:    tool.CallID,
-			Name:      tool.Name,
-			Arguments: argsRaw,
-		})
+		switch item.Type {
+		case responsesOutputTypeReasoning:
+			if item.Text.Len() == 0 {
+				continue
+			}
+			out = append(out, dto.ResponsesOutput{
+				Type: item.Type,
+				ID:   item.ID,
+				Summary: []dto.ResponsesReasoningSummaryPart{
+					{Type: "summary_text", Text: item.Text.String()},
+				},
+			})
+		case responsesOutputTypeMessage:
+			if item.Text.Len() == 0 {
+				continue
+			}
+			out = append(out, dto.ResponsesOutput{
+				Type: item.Type,
+				ID:   item.ID,
+				Role: "assistant",
+				Content: []dto.ResponsesOutputContent{
+					{Type: "output_text", Text: item.Text.String(), Annotations: item.Annotations},
+				},
+			})
+		case responsesOutputTypeFunctionCall, responsesOutputTypeCustomToolCall:
+			if item.ToolIndex < 0 || item.ToolIndex >= len(a.tools) || a.tools[item.ToolIndex] == nil {
+				continue
+			}
+			tool := a.tools[item.ToolIndex]
+			argsRaw, _ := kitutil.Marshal(tool.Arguments.String())
+			out = append(out, dto.ResponsesOutput{
+				Type:      item.Type,
+				ID:        tool.ItemID,
+				CallId:    tool.CallID,
+				Name:      tool.Name,
+				Arguments: argsRaw,
+			})
+		}
 	}
 	return out
+}
+
+func (a *ResponsesBufferedAccumulator) ensureItem(event *dto.ResponsesStreamResponse, itemType string) *responsesBufferedItem {
+	if idx, ok := a.findItemIndex(event); ok {
+		item := a.items[idx]
+		if item.Type == "" {
+			item.Type = itemType
+		}
+		a.applyItemMetadata(idx, item, event)
+		return item
+	}
+	if event != nil && event.OutputIndex == nil && responseStreamEventItemID(event) == "" && a.lastUnindexedItemIdx >= 0 {
+		item := a.items[a.lastUnindexedItemIdx]
+		if item != nil && item.Type == itemType {
+			return item
+		}
+	}
+	item := &responsesBufferedItem{Type: itemType, ToolIndex: -1}
+	idx := len(a.items)
+	a.items = append(a.items, item)
+	a.lastUnindexedItemIdx = idx
+	a.applyItemMetadata(idx, item, event)
+	return item
+}
+
+func (a *ResponsesBufferedAccumulator) applyItemMetadata(idx int, item *responsesBufferedItem, event *dto.ResponsesStreamResponse) {
+	if item == nil || event == nil {
+		return
+	}
+	if event.OutputIndex != nil {
+		a.outputIndexToItemIdx[*event.OutputIndex] = idx
+	}
+	if itemID := responseStreamEventItemID(event); itemID != "" {
+		item.ID = itemID
+		a.itemIDToItemIdx[itemID] = idx
+	}
+}
+
+func (a *ResponsesBufferedAccumulator) findItemIndex(event *dto.ResponsesStreamResponse) (int, bool) {
+	if event == nil {
+		return 0, false
+	}
+	if event.OutputIndex != nil {
+		if idx, ok := a.outputIndexToItemIdx[*event.OutputIndex]; ok {
+			return idx, true
+		}
+	}
+	if itemID := responseStreamEventItemID(event); itemID != "" {
+		idx, ok := a.itemIDToItemIdx[itemID]
+		return idx, ok
+	}
+	return 0, false
 }
 
 func (a *ResponsesBufferedAccumulator) ensureTool(event *dto.ResponsesStreamResponse) *responsesBufferedTool {
 	if idx, ok := a.findToolIndex(event); ok {
 		tool := a.tools[idx]
 		a.applyToolMetadata(tool, event)
+		item := a.ensureItem(event, event.Item.Type)
+		item.ToolIndex = idx
 		return tool
 	}
 	tool := &responsesBufferedTool{}
 	a.applyToolMetadata(tool, event)
 	idx := len(a.tools)
 	a.tools = append(a.tools, tool)
+	item := a.ensureItem(event, event.Item.Type)
+	item.ToolIndex = idx
 	if event.OutputIndex != nil {
 		a.outputIndexToToolIdx[*event.OutputIndex] = idx
 		if pending := a.pendingByOutputIndex[*event.OutputIndex]; pending != "" {

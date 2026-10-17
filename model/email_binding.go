@@ -15,9 +15,9 @@ const (
 )
 
 var (
-	ErrEmailBindingCodeInvalid = common.NewMessage("Email verification code is incorrect.")
-	ErrEmailBindingLocked      = common.NewMessage("Too many incorrect codes. Start email verification again.")
-	ErrEmailBindingResendWait  = common.NewMessage("Please wait before requesting another verification code.")
+	ErrEmailBindingCodeInvalid = errors.New("Email verification code is incorrect.")
+	ErrEmailBindingLocked      = errors.New("Too many incorrect codes. Start email verification again.")
+	ErrEmailBindingResendWait  = errors.New("Please wait before requesting another verification code.")
 )
 
 // EmailBindingState is server-owned payload. It deliberately contains only

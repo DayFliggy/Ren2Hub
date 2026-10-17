@@ -50,7 +50,13 @@ func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *rela
 	if !constant.CountToken {
 		return 0, nil
 	}
+	return CountRequestToken(c, meta, info)
+}
 
+// CountRequestToken counts request tokens regardless of the billing estimation
+// switch. Utility endpoints such as Claude's messages/count_tokens must remain
+// available even when operators disable request-token estimation for relays.
+func CountRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *relaycommon.RelayInfo) (int, error) {
 	if meta == nil {
 		return 0, errors.New("token count meta is nil")
 	}
@@ -145,12 +151,6 @@ func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *rela
 	for i, file := range meta.Files {
 		switch file.FileType {
 		case types.FileTypeImage:
-			// Ren2Hub-local: a URL image is downloaded only under the single
-			// fetch decision above, so a Gemini-native request never fetches.
-			if file.IsURL() && !shouldFetchFiles {
-				tkm += tokenkit.ImageTokens(model, tokenkit.Image{Detail: file.Detail})
-				continue
-			}
 			token, err := getImageToken(c, file, model, info.IsStream)
 			if err != nil {
 				return 0, fmt.Errorf("error counting image token, media index[%d], identifier[%s], err: %v", i, file.GetIdentifier(), err)
@@ -230,7 +230,11 @@ func CountTokenInput(input any, model string) int {
 	case string:
 		return tokenkit.Count(model, v)
 	case []string:
-		return tokenkit.Count(model, strings.Join(v, ""))
+		var text strings.Builder
+		for _, s := range v {
+			text.WriteString(s)
+		}
+		return tokenkit.Count(model, text.String())
 	case []any:
 		var text strings.Builder
 		for _, item := range v {

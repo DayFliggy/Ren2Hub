@@ -1,7 +1,6 @@
 package jsplugin
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -18,22 +17,9 @@ type cachedAuth struct {
 }
 
 var pluginAuthCache sync.Map
-var acquireAccessToken = vertexcore.AcquireAccessTokenWithContext
+var acquireAccessToken = vertexcore.AcquireAccessToken
 
 func resolveAuth(meta pluginruntime.AuthMeta, apiKey, proxy string) (map[string]any, error) {
-	return resolveAuthContext(context.Background(), meta, apiKey, proxy)
-}
-func resolveAuthContext(ctx context.Context, meta pluginruntime.AuthMeta, apiKey, proxy string) (map[string]any, error) {
-	return resolveAuthWithLoader(meta, apiKey, proxy, func() (string, error) {
-		var credentials vertexcore.Credentials
-		if err := common.Unmarshal([]byte(apiKey), &credentials); err != nil {
-			return "", err
-		}
-		return acquireAccessToken(ctx, credentials, proxy)
-	})
-}
-
-func resolveAuthWithLoader(meta pluginruntime.AuthMeta, apiKey, proxy string, load func() (string, error)) (map[string]any, error) {
 	typeName := strings.TrimSpace(meta.Type)
 	if typeName == "" || typeName == "none" || typeName == "api_key" {
 		return map[string]any{"authHeader": apiKey}, nil
@@ -49,7 +35,7 @@ func resolveAuthWithLoader(meta pluginruntime.AuthMeta, apiKey, proxy string, lo
 	if err := common.Unmarshal([]byte(apiKey), &credentials); err != nil {
 		return nil, fmt.Errorf("decode oauth2_jwt credentials: %w", err)
 	}
-	token, err := load()
+	token, err := acquireAccessToken(credentials, proxy)
 	if err != nil {
 		return nil, err
 	}

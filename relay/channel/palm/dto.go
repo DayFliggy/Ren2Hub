@@ -17,10 +17,11 @@ type PaLMPrompt struct {
 }
 
 type PaLMChatRequest struct {
-	Prompt      PaLMPrompt `json:"prompt"`
-	Temperature *float64   `json:"temperature,omitempty"`
-	TopP        *float64   `json:"topP,omitempty"`
-	TopK        *int       `json:"topK,omitempty"`
+	Prompt         PaLMPrompt `json:"prompt"`
+	Temperature    *float64   `json:"temperature,omitempty"`
+	CandidateCount int        `json:"candidateCount,omitempty"`
+	TopP           float64    `json:"topP,omitempty"`
+	TopK           uint       `json:"topK,omitempty"`
 }
 
 type PaLMError struct {

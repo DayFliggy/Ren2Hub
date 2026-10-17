@@ -41,12 +41,6 @@ func Count(model, text string) int {
 	runClass, runStart := runNone, 0
 	for i, r := range text {
 		class := runClassOf(r)
-		// The pre-tokenizer ends a symbol piece with any trailing [\r\n/]*, so
-		// "/\n/\n..." is one piece even though it alternates classes; keep it
-		// one run so it is cut too. Ren2Hub-local guard.
-		if runClass == runSymbol && (r == '\r' || r == '\n') {
-			class = runSymbol
-		}
 		if class != runClass {
 			runClass, runStart = class, i
 			continue

@@ -38,10 +38,7 @@ func getUserAuthVersionKey(userId int) string {
 // recover without an operator repairing Redis.
 func userAuthFenceTTLSeconds() int {
 	cacheTTL := userCacheTTLSeconds()
-	extra := cacheTTL
-	if extra < 60 {
-		extra = 60
-	}
+	extra := max(cacheTTL, 60)
 	return cacheTTL + extra
 }
 
@@ -87,7 +84,7 @@ return 1`
 	result, err := common.RDB.Eval(context.Background(), script,
 		[]string{getUserCacheKey(user.Id), getUserAuthFenceKey(user.Id), getUserAuthVersionKey(user.Id)},
 		user.AuthVersion, user.Id, user.Group, user.Email, user.Status, user.Role,
-		user.Username, user.Setting, user.CacheSchema, includeQuotaArg, int64(user.Quota), ttl,
+		user.Username, user.Setting, user.CacheSchema, includeQuotaArg, user.Quota, ttl,
 	).Int()
 	if err != nil {
 		return err
@@ -186,10 +183,7 @@ func IncrementUserAuthVersionWithTx(tx *gorm.DB, userId int) (int64, error) {
 		if err := lockForUpdate(tx.Unscoped()).Select("id", "auth_version").Where("id = ?", userId).First(&user).Error; err != nil {
 			return 0, err
 		}
-		current := user.AuthVersion
-		if current < 1 {
-			current = 1
-		}
+		current := max(user.AuthVersion, 1)
 		next := current + 1
 		if err := SetUserAuthVersionFence(userId, next); err != nil {
 			return 0, err
@@ -227,7 +221,6 @@ func BumpUserAuthVersion(userId int) (int64, error) {
 // PublishUserAuthCache refreshes the current database state after a successful
 // auth-sensitive transaction without touching the cached quota field.
 func PublishUserAuthCache(userId int) error {
-	NotifyGatewayAdmissionChanged("user", userId)
 	user, err := GetUserById(userId, false)
 	if err != nil {
 		return err
@@ -241,7 +234,7 @@ func InitializeUserAuthVersions() error {
 	return DB.Model(&User{}).Where("auth_version IS NULL OR auth_version < ?", 1).Update("auth_version", 1).Error
 }
 
-func updateUserCacheFieldAtVersion(userId int, field string, value interface{}, authVersion int64) error {
+func updateUserCacheFieldAtVersion(userId int, field string, value any, authVersion int64) error {
 	if !common.RedisEnabled {
 		return nil
 	}

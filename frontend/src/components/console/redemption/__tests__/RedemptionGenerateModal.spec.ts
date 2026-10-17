@@ -37,6 +37,10 @@ describe('RedemptionGenerateModal', () => {
       props: { open: true, loading: false },
     })
     try {
+      const name = document.querySelector<HTMLInputElement>('input')!
+      name.value = 'October'
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
       buttonByText(i18n.global.t('redemption.expiryCustom')).click()
       await nextTick()
       const input =

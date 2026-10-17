@@ -7,48 +7,17 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 
 	"github.com/gin-gonic/gin"
 )
-
-func isNoThinkingRequest(req *dto.GeminiChatRequest) bool {
-	if req.GenerationConfig.ThinkingConfig != nil && req.GenerationConfig.ThinkingConfig.ThinkingBudget != nil {
-		configBudget := req.GenerationConfig.ThinkingConfig.ThinkingBudget
-		if configBudget != nil && *configBudget == 0 {
-			// 如果思考预算为 0，则认为是非思考请求
-			return true
-		}
-	}
-	return false
-}
-
-func trimModelThinking(modelName string) string {
-	// 去除模型名称中的 -nothinking 后缀
-	if strings.HasSuffix(modelName, "-nothinking") {
-		return strings.TrimSuffix(modelName, "-nothinking")
-	}
-	// 去除模型名称中的 -thinking 后缀
-	if strings.HasSuffix(modelName, "-thinking") {
-		return strings.TrimSuffix(modelName, "-thinking")
-	}
-
-	// 去除模型名称中的 -thinking-number
-	if strings.Contains(modelName, "-thinking-") {
-		parts := strings.Split(modelName, "-thinking-")
-		if len(parts) > 1 {
-			return parts[0] + "-thinking"
-		}
-	}
-	return modelName
-}
 
 func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
@@ -72,12 +41,6 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		return newConvertRequestFailedError(c, info, err)
 	}
 
-	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled && !info.ChannelSetting.PassThroughBodyEnabled {
-		if err := relayconvert.ApplyGeminiThinkingConfigChecked(request, info); err != nil {
-			return newConvertRequestFailedError(c, info, err)
-		}
-	}
-
 	adaptor := GetAdaptor(info.ApiType)
 	if adaptor == nil {
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
@@ -85,8 +48,30 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	adaptor.Init(info)
 
-	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	if info.ChannelSetting.SystemPrompt != "" {
+		if request.SystemInstructions == nil {
+			request.SystemInstructions = &dto.GeminiChatContent{
+				Parts: []dto.GeminiPart{
+					{Text: info.ChannelSetting.SystemPrompt},
+				},
+			}
+		} else if len(request.SystemInstructions.Parts) == 0 {
+			request.SystemInstructions.Parts = []dto.GeminiPart{{Text: info.ChannelSetting.SystemPrompt}}
+		} else if info.ChannelSetting.SystemPromptOverride {
+			common.SetContextKey(c, constant.ContextKeySystemPromptOverride, true)
+			merged := false
+			for i := range request.SystemInstructions.Parts {
+				if request.SystemInstructions.Parts[i].Text == "" {
+					continue
+				}
+				request.SystemInstructions.Parts[i].Text = info.ChannelSetting.SystemPrompt + "\n" + request.SystemInstructions.Parts[i].Text
+				merged = true
+				break
+			}
+			if !merged {
+				request.SystemInstructions.Parts = append([]dto.GeminiPart{{Text: info.ChannelSetting.SystemPrompt}}, request.SystemInstructions.Parts...)
+			}
+		}
 	}
 
 	// Clean up empty system instruction
@@ -105,12 +90,11 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	var requestBody io.Reader
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
+		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		defer closer.Close()
-		requestBody = body
+		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
 		// 使用 ConvertGeminiRequest 转换请求格式
 		convertedRequest, err := adaptor.ConvertGeminiRequest(c, info, request)
@@ -144,7 +128,7 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
-		logger.LogError(c, "Do gemini request failed: "+err.Error())
+		logger.LogError(c, common.LogText("Do gemini request failed: %s", err.Error()))
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
 
@@ -162,16 +146,13 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
-	usage, openaiErr := adaptor.DoResponse(c, httpResp, info)
-	if observed, ok := usage.(*dto.Usage); ok {
-		info.CaptureResponseUsage(observed, "text", nil)
-	}
+	usage, openaiErr := adaptor.DoResponse(c, resp.(*http.Response), info)
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
 	}
 
-	info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
+	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
 }
 
@@ -253,7 +234,7 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
-		logger.LogError(c, "Do gemini request failed: "+err.Error())
+		logger.LogError(c, common.LogText("Do gemini request failed: %s", err.Error()))
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
 
@@ -269,14 +250,11 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 	}
 
 	usage, openaiErr := adaptor.DoResponse(c, resp.(*http.Response), info)
-	if observed, ok := usage.(*dto.Usage); ok {
-		info.CaptureResponseUsage(observed, "text", nil)
-	}
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
 	}
 
-	info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
+	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
 }

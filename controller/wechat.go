@@ -57,43 +57,14 @@ func getWeChatIdByCode(code string) (string, error) {
 
 func WeChatAuth(c *gin.Context) {
 	if !common.WeChatAuthEnabled {
-		common.ApiErrorT(c, "WeChat login and registration has not been enabled by administrator")
+		common.ApiErrorT(c, "{{provider}} login and registration has not been enabled by administrator", providerParams("WeChat"))
 		return
 	}
 	code := c.Query("code")
-	state := strings.TrimSpace(c.Query("state"))
-	affiliateCode := ""
-	if state != "" {
-		pendingFlow, err := model.GetAuthFlow(state, model.AuthFlowMatch{
-			Purpose:  model.AuthFlowPurposeOAuth,
-			Provider: "wechat",
-			Intent:   model.AuthFlowIntentLogin,
-		})
-		if err != nil {
-			common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("Login state is invalid or has expired"))
-			return
-		}
-		var payload oauthFlowPayload
-		if err := common.UnmarshalJsonStr(pendingFlow.Payload, &payload); err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		affiliateCode = payload.AffiliateCode
-	}
 	wechatId, err := getWeChatIdByCode(code)
 	if err != nil {
 		common.ApiError(c, err)
 		return
-	}
-	if state != "" {
-		if _, err := model.ConsumeAuthFlow(state, model.AuthFlowMatch{
-			Purpose:  model.AuthFlowPurposeOAuth,
-			Provider: "wechat",
-			Intent:   model.AuthFlowIntentLogin,
-		}); err != nil {
-			common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("Login state is invalid or has expired"))
-			return
-		}
 	}
 	user := model.User{
 		WeChatId: wechatId,
@@ -115,7 +86,7 @@ func WeChatAuth(c *gin.Context) {
 			user.Role = common.RoleCommonUser
 			user.Status = common.UserStatusEnabled
 
-			if _, err := model.CreateUserWithAffiliate(&user, affiliateCode, common.AffiliateRegistrationRequired); err != nil {
+			if err := user.Insert(0); err != nil {
 				common.ApiError(c, err)
 				return
 			}
@@ -137,7 +108,7 @@ type wechatBindRequest struct {
 }
 
 func WeChatBind(c *gin.Context) {
-	identity, ok := middleware.GetSessionAuthIdentity(c)
+	identity, ok := middleware.GetStepUpIdentity(c)
 	if !ok {
 		writeSecurityOperationError(c, service.ErrAuthTokenInvalid)
 		return
@@ -147,7 +118,7 @@ func WeChatBind(c *gin.Context) {
 		recordUserSecurityAudit(c, identity.UserID, "user.binding_bind", map[string]any{"provider": "wechat", "success": succeeded, "notification_failed": notificationFailed})
 	}()
 	if !common.WeChatAuthEnabled {
-		common.ApiErrorT(c, "WeChat login and registration has not been enabled by administrator")
+		common.ApiErrorT(c, "{{provider}} login and registration has not been enabled by administrator", providerParams("WeChat"))
 		return
 	}
 	var req wechatBindRequest
@@ -170,7 +141,7 @@ func WeChatBind(c *gin.Context) {
 		return
 	}
 	if model.IsWeChatIdAlreadyTaken(wechatId) {
-		common.ApiErrorT(c, "This WeChat account has already been bound")
+		common.ApiErrorT(c, "This {{provider}} account has already been bound", providerParams("WeChat"))
 		return
 	}
 	// 只更新绑定列，避免完整用户快照覆盖并发的封禁、降权或分组变更。

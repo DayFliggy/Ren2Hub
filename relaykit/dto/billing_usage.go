@@ -103,7 +103,16 @@ func HasOpenAIUsageTokens(usage *Usage) bool {
 		usage.CompletionTokenDetails.AudioTokens != 0 {
 		return true
 	}
-	return usage.InputTokensDetails != nil || usage.OutputTokensDetails != nil
+	if usage.InputTokensDetails == nil {
+		return false
+	}
+	return usage.InputTokensDetails.CachedTokensDetails.HasTokens() ||
+		usage.InputTokensDetails.CachedTokens != 0 ||
+		usage.InputTokensDetails.CachedCreationTokens != 0 ||
+		usage.InputTokensDetails.CacheWriteTokens != 0 ||
+		usage.InputTokensDetails.TextTokens != 0 ||
+		usage.InputTokensDetails.ImageTokens != 0 ||
+		usage.InputTokensDetails.AudioTokens != 0
 }
 
 func NewGeminiChatBillingUsage(metadata *GeminiUsageMetadata) *BillingUsage {
@@ -382,10 +391,6 @@ func cloneOpenAIUsage(usage *Usage) *Usage {
 	if usage.InputTokensDetails != nil {
 		inputTokensDetails := usage.InputTokensDetails.Clone()
 		clone.InputTokensDetails = &inputTokensDetails
-	}
-	if usage.OutputTokensDetails != nil {
-		outputTokensDetails := *usage.OutputTokensDetails
-		clone.OutputTokensDetails = &outputTokensDetails
 	}
 	return &clone
 }

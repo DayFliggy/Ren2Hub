@@ -2,7 +2,6 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -31,7 +30,7 @@ func DecodeBase64ImageData(base64String string) (image.Config, string, string, e
 	// 将base64字符串解码为字节切片
 	decodedData, err := base64.StdEncoding.DecodeString(base64String)
 	if err != nil {
-		fmt.Println("Error: Failed to decode base64 string")
+		fmt.Println(common.LogText("Error: Failed to decode base64 string"))
 		return image.Config{}, "", "", fmt.Errorf("failed to decode base64 string: %s", err.Error())
 	}
 
@@ -68,11 +67,7 @@ func DecodeBase64FileData(base64String string) (string, string, error) {
 
 // GetImageFromUrl 获取图片的类型和base64编码的数据
 func GetImageFromUrl(url string) (mimeType string, data string, err error) {
-	return GetImageFromUrlWithContext(context.Background(), url)
-}
-
-func GetImageFromUrlWithContext(ctx context.Context, url string) (mimeType string, data string, err error) {
-	resp, err := DoDownloadRequestWithContext(ctx, url)
+	resp, err := DoDownloadRequest(url)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to download image: %w", err)
 	}
@@ -105,9 +100,6 @@ func GetImageFromUrlWithContext(ctx context.Context, url string) (mimeType strin
 	if written >= maxImageSize {
 		return "", "", fmt.Errorf("image size exceeds maximum allowed size of %d bytes", maxImageSize)
 	}
-	if written == 0 {
-		return "", "", fmt.Errorf("downloaded image is empty")
-	}
 
 	data = base64.StdEncoding.EncodeToString(buffer.Bytes())
 	mimeType = contentType
@@ -127,7 +119,7 @@ func GetImageFromUrlWithContext(ctx context.Context, url string) (mimeType strin
 func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {
 	response, err := DoDownloadRequest(imageUrl)
 	if err != nil {
-		common.SysLog(fmt.Sprintf("fail to get image from url: %s", err.Error()))
+		common.SysLog(common.LogText("fail to get image from url: %s", err.Error()))
 		return image.Config{}, "", err
 	}
 	defer response.Body.Close()
@@ -145,7 +137,7 @@ func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {
 
 	var readData []byte
 	for _, limit := range []int64{1024 * 8, 1024 * 24, 1024 * 64} {
-		common.SysLog(fmt.Sprintf("try to decode image config with limit: %d", limit))
+		common.SysLog(common.LogText("try to decode image config with limit: %d", limit))
 
 		// 从response.Body读取更多的数据直到达到当前的限制
 		additionalData := make([]byte, limit-int64(len(readData)))
@@ -178,13 +170,13 @@ func getImageConfig(reader io.Reader) (image.Config, string, error) {
 	if err == nil {
 		return config, format, nil
 	}
-	common.SysLog(fmt.Sprintf("fail to decode image config(gif, jpg, png): %s", err.Error()))
+	common.SysLog(common.LogText("fail to decode image config(gif, jpg, png): %s", err.Error()))
 
 	config, err = webp.DecodeConfig(bytes.NewReader(data))
 	if err == nil {
 		return config, "webp", nil
 	}
-	common.SysLog(fmt.Sprintf("fail to decode image config(webp): %s", err.Error()))
+	common.SysLog(common.LogText("fail to decode image config(webp): %s", err.Error()))
 
 	// Try HEIF/HEIC: parse ISOBMFF ispe box for dimensions
 	if heifMime := detectHEIF(data); heifMime != "" {

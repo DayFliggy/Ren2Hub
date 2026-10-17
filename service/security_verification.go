@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 
@@ -15,36 +16,49 @@ import (
 )
 
 const (
-	VerificationMethodTwoFA           = "2fa"
-	VerificationMethodPasskey         = "passkey"
-	VerificationMethodPassword        = "password"
-	VerificationMethodOAuth           = "oauth"
-	VerificationMethodSession         = "session"
-	VerificationScopeChannelKeyRead   = "channel.key.read"
-	VerificationScopePasskeyRegister  = "passkey.register"
-	VerificationScopePasskeyDelete    = "passkey.delete"
-	VerificationScopeTwoFASetup       = "2fa.setup"
-	VerificationScopeTwoFADisable     = "2fa.disable"
-	VerificationScopeTwoFABackupCodes = "2fa.backup_codes.regenerate"
-	VerificationScopeLogin            = "auth.login"
-	VerificationScopePATCreate        = "pat.create"
-	VerificationScopePATRevoke        = "pat.revoke"
-	VerificationScopePATUpdate        = "pat.update"
-	VerificationScopeAdminUserChange  = "admin.user.change"
-	VerificationScopeAccountBind      = "account.binding.bind"
-	VerificationScopeAccountUnbind    = "account.binding.unbind"
-	VerificationScopePasswordSet      = "account.password.set"
-	VerificationScopePasswordChange   = "account.password.change"
-	VerificationScopeAccountDelete    = "account.delete"
+	VerificationMethodTwoFA              = "2fa"
+	VerificationMethodPasskey            = "passkey"
+	VerificationMethodPassword           = "password"
+	VerificationMethodOAuth              = "oauth"
+	VerificationMethodSession            = "session"
+	VerificationScopeChannelKeyRead      = "channel.key.read"
+	VerificationScopePasskeyRegister     = "passkey.register"
+	VerificationScopePasskeyDelete       = "passkey.delete"
+	VerificationScopeTwoFASetup          = "2fa.setup"
+	VerificationScopeTwoFADisable        = "2fa.disable"
+	VerificationScopeTwoFABackupCodes    = "2fa.backup_codes.regenerate"
+	VerificationScopeLogin               = "auth.login"
+	VerificationScopeAccessTokenGenerate = "access_token.generate"
+	VerificationScopeAccessTokenRevoke   = "access_token.revoke"
+	VerificationScopeAccessTokenUpdate   = "access_token.update"
+	VerificationScopeAccountBind         = "account.binding.bind"
+	VerificationScopeAccountUnbind       = "account.binding.unbind"
+	VerificationScopePasswordSet         = "account.password.set"
+	VerificationScopePasswordChange      = "account.password.change"
+	VerificationScopeAccountDelete       = "account.delete"
+	// Administrative step-up scopes bind the managed user into the proof so a
+	// proof issued for one account cannot be replayed against another.
+	VerificationScopeAdminUserCreate       = "admin.user.create"
+	VerificationScopeAdminUserUpdate       = "admin.user.update"
+	VerificationScopeAdminUserDelete       = "admin.user.delete"
+	VerificationScopeAdminUserManage       = "admin.user.manage"
+	VerificationScopeAdminUserPasskeyReset = "admin.user.passkey.reset"
+	VerificationScopeAdminUserTwoFADisable = "admin.user.2fa.disable"
+	VerificationScopeAdminUserBindingClear = "admin.user.binding.clear"
+	verificationScopeAdminUserPrefix       = "admin.user."
 )
 
+// adminUserManageActions are the ManageUser actions that change a user's
+// status or role. Quota adjustments are not gated and deletion has its own scope.
+var adminUserManageActions = []string{"disable", "enable", "promote", "demote"}
+
 var (
-	ErrVerificationFailed         = common.NewMessage("Verification failed. Please try again.")
-	ErrVerificationUnavailable    = common.NewMessage("This verification method is currently unavailable.")
-	ErrVerificationLocked         = common.NewMessage("Two-factor authentication is temporarily locked.")
-	ErrVerificationFlowRequired   = common.NewMessage("This verification method requires its dedicated verification flow.")
-	ErrVerificationContextInvalid = common.NewMessage("The action details are invalid.")
-	ErrVerificationForbidden      = common.NewMessage("You do not have permission to perform this action.")
+	ErrVerificationFailed         = errors.New("Verification failed. Please try again.")
+	ErrVerificationUnavailable    = errors.New("This verification method is currently unavailable.")
+	ErrVerificationLocked         = errors.New("Two-factor authentication is temporarily locked.")
+	ErrVerificationFlowRequired   = errors.New("This verification method requires its dedicated verification flow.")
+	ErrVerificationContextInvalid = errors.New("The action details are invalid.")
+	ErrVerificationForbidden      = errors.New("You do not have permission to perform this action.")
 )
 
 // VerificationOperation describes the action being authorized, independently of
@@ -58,16 +72,6 @@ type ChannelKeyReadContext struct {
 	ChannelID int `json:"channel_id"`
 }
 
-type PATUpdateContext struct {
-	ID     int      `json:"id"`
-	Scopes []string `json:"scopes"`
-}
-
-type AdminUserChangeContext struct {
-	IDs    []int  `json:"ids"`
-	Action string `json:"action"`
-}
-
 type AccountBindingContext struct {
 	Provider string `json:"provider"`
 	Email    string `json:"email,omitempty"`
@@ -76,6 +80,71 @@ type AccountBindingContext struct {
 
 type AccountUnbindingContext struct {
 	ProviderID int `json:"provider_id"`
+}
+
+type AdminUserContext struct {
+	UserID int `json:"user_id"`
+}
+
+type AdminUserManageContext struct {
+	UserID int    `json:"user_id"`
+	Action string `json:"action"`
+}
+
+// AdminUserBindingContext names exactly one binding: a built-in binding type
+// or a custom OAuth provider ID.
+type AdminUserBindingContext struct {
+	UserID      int    `json:"user_id"`
+	BindingType string `json:"binding_type,omitempty"`
+	ProviderID  int    `json:"provider_id,omitempty"`
+}
+
+type AdminUserCreateContext struct {
+	Role int `json:"role"`
+}
+
+// AccessTokenGenerateContext binds a creation proof to the exact grant. Scopes
+// are compared as a sorted, de-duplicated set.
+type AccessTokenGenerateContext struct {
+	Scopes    []string `json:"scopes"`
+	ExpiresAt int64    `json:"expires_at"`
+}
+
+// AccessTokenUpdateContext binds a grant change to one token and the exact new
+// grant, compared as a sorted, de-duplicated set.
+type AccessTokenUpdateContext struct {
+	TokenID int      `json:"token_id"`
+	Scopes  []string `json:"scopes"`
+}
+
+// AccessTokenRevokeContext names exactly one token: a scoped token ID or the
+// legacy token.
+type AccessTokenRevokeContext struct {
+	TokenID int  `json:"token_id,omitempty"`
+	Legacy  bool `json:"legacy,omitempty"`
+}
+
+const (
+	maxAccessTokenContextScopes   = 128
+	maxAccessTokenContextScopeLen = 64
+)
+
+// NormalizeAccessTokenScopeList trims, de-duplicates and sorts scope keys. It
+// only checks the shape; grantability is checked against the scope catalog.
+func NormalizeAccessTokenScopeList(scopes []string) ([]string, bool) {
+	if len(scopes) == 0 || len(scopes) > maxAccessTokenContextScopes {
+		return nil, false
+	}
+	normalized := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		scope = strings.TrimSpace(scope)
+		if scope == "" || len(scope) > maxAccessTokenContextScopeLen {
+			return nil, false
+		}
+		normalized = append(normalized, scope)
+	}
+	slices.Sort(normalized)
+	return slices.Compact(normalized), true
 }
 
 // VerificationBinding contains no original operation parameters. It can safely
@@ -94,42 +163,6 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 	}
 	var normalized any
 	switch operation.Scope {
-	case VerificationScopeAdminUserChange:
-		var context AdminUserChangeContext
-		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || len(context.IDs) == 0 || len(context.IDs) > 100 {
-			return VerificationBinding{}, ErrVerificationContextInvalid
-		}
-		switch context.Action {
-		case "create_admin", "update", "delete", "enable", "disable", "promote", "demote", "reset_passkey", "disable_2fa", "clear_binding":
-		default:
-			return VerificationBinding{}, ErrVerificationContextInvalid
-		}
-		for _, id := range context.IDs {
-			if id < 0 || (id == 0 && context.Action != "create_admin") {
-				return VerificationBinding{}, ErrVerificationContextInvalid
-			}
-		}
-		sort.Ints(context.IDs)
-		normalized = context
-	case VerificationScopePATUpdate:
-		var context PATUpdateContext
-		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || context.ID <= 0 {
-			return VerificationBinding{}, ErrVerificationContextInvalid
-		}
-		scopes, err := model.NormalizePATScopes(context.Scopes, common.RoleRootUser)
-		if err != nil {
-			return VerificationBinding{}, ErrVerificationContextInvalid
-		}
-		context.Scopes = scopes
-		normalized = context
-	case VerificationScopePATRevoke:
-		var context struct {
-			ID int `json:"id"`
-		}
-		if len(fields) != 1 || common.Unmarshal(operation.Context, &context) != nil || context.ID <= 0 {
-			return VerificationBinding{}, ErrVerificationContextInvalid
-		}
-		normalized = context
 	case VerificationScopeChannelKeyRead:
 		var context ChannelKeyReadContext
 		if len(fields) != 1 || common.Unmarshal(fields["channel_id"], &context.ChannelID) != nil || context.ChannelID <= 0 {
@@ -165,9 +198,69 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 			return VerificationBinding{}, ErrVerificationContextInvalid
 		}
 		normalized = context
+	case VerificationScopeAdminUserUpdate, VerificationScopeAdminUserDelete, VerificationScopeAdminUserPasskeyReset, VerificationScopeAdminUserTwoFADisable:
+		var context AdminUserContext
+		if len(fields) != 1 || common.Unmarshal(fields["user_id"], &context.UserID) != nil || context.UserID <= 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
+	case VerificationScopeAdminUserManage:
+		var context AdminUserManageContext
+		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || context.UserID <= 0 || !slices.Contains(adminUserManageActions, context.Action) {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
+	case VerificationScopeAdminUserBindingClear:
+		var context AdminUserBindingContext
+		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || context.UserID <= 0 || context.ProviderID < 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		context.BindingType = strings.ToLower(strings.TrimSpace(context.BindingType))
+		if (context.BindingType == "") == (context.ProviderID == 0) || len(context.BindingType) > 32 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
+	case VerificationScopeAdminUserCreate:
+		var context AdminUserCreateContext
+		if len(fields) != 1 || common.Unmarshal(fields["role"], &context.Role) != nil || context.Role < common.RoleAdminUser || !common.IsValidateRole(context.Role) {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
+	case VerificationScopeAccessTokenGenerate:
+		var context AccessTokenGenerateContext
+		if len(fields) != 2 || fields["scopes"] == nil || fields["expires_at"] == nil ||
+			common.Unmarshal(operation.Context, &context) != nil || context.ExpiresAt < 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		scopes, ok := NormalizeAccessTokenScopeList(context.Scopes)
+		if !ok {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		context.Scopes = scopes
+		normalized = context
+	case VerificationScopeAccessTokenUpdate:
+		var context AccessTokenUpdateContext
+		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || context.TokenID <= 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		scopes, ok := NormalizeAccessTokenScopeList(context.Scopes)
+		if !ok {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		context.Scopes = scopes
+		normalized = context
+	case VerificationScopeAccessTokenRevoke:
+		var context AccessTokenRevokeContext
+		if len(fields) != 1 || common.Unmarshal(operation.Context, &context) != nil || context.TokenID < 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		// Exactly one target: {"token_id": n} or {"legacy": true}.
+		if (context.TokenID > 0) == context.Legacy {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
 	case VerificationScopePasskeyRegister, VerificationScopePasskeyDelete, VerificationScopeTwoFASetup,
 		VerificationScopeTwoFADisable, VerificationScopeTwoFABackupCodes,
-		VerificationScopePATCreate,
 		VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete:
 		if len(fields) != 0 {
 			return VerificationBinding{}, ErrVerificationContextInvalid
@@ -232,9 +325,12 @@ func securityVerificationPolicy(scope string, state model.UserVerificationState)
 			return nil, model.ErrTwoFANotEnabled
 		}
 	case VerificationScopePasskeyRegister, VerificationScopeTwoFASetup,
-		VerificationScopePATCreate, VerificationScopePATRevoke, VerificationScopePATUpdate, VerificationScopeAdminUserChange,
+		VerificationScopeAccessTokenGenerate, VerificationScopeAccessTokenUpdate, VerificationScopeAccessTokenRevoke,
 		VerificationScopeAccountBind, VerificationScopeAccountUnbind,
-		VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete:
+		VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete,
+		VerificationScopeAdminUserCreate, VerificationScopeAdminUserUpdate, VerificationScopeAdminUserDelete,
+		VerificationScopeAdminUserManage, VerificationScopeAdminUserPasskeyReset,
+		VerificationScopeAdminUserTwoFADisable, VerificationScopeAdminUserBindingClear:
 		if scope == VerificationScopeAccountDelete && state.Role == common.RoleRootUser {
 			return nil, ErrVerificationForbidden
 		}
@@ -272,9 +368,6 @@ func GetVerificationRequirements(identity AuthIdentity, scope string) (*Verifica
 	if scope == VerificationScopeLogin {
 		return nil, ErrProofScope
 	}
-	if identity.PersonalAccessTokenID > 0 && scope != VerificationScopeAdminUserChange && scope != VerificationScopeChannelKeyRead {
-		return nil, ErrVerificationForbidden
-	}
 	state, err := model.GetUserVerificationState(identity.UserID)
 	if err != nil {
 		return nil, err
@@ -285,8 +378,11 @@ func GetVerificationRequirements(identity AuthIdentity, scope string) (*Verifica
 	if scope == VerificationScopeChannelKeyRead && state.Role != common.RoleRootUser {
 		return nil, ErrVerificationForbidden
 	}
-	if scope == VerificationScopeAdminUserChange && state.Role < common.RoleAdminUser {
+	if strings.HasPrefix(scope, verificationScopeAdminUserPrefix) && state.Role < common.RoleAdminUser {
 		return nil, ErrVerificationForbidden
+	}
+	if err := requireAccessTokenVerificationScope(identity, scope); err != nil {
+		return nil, err
 	}
 	methods, err := securityVerificationPolicy(scope, *state)
 	if err != nil {
@@ -296,11 +392,20 @@ func GetVerificationRequirements(identity AuthIdentity, scope string) (*Verifica
 	for i := range methods {
 		if methods[i].Method == VerificationMethodPassword && !common.PasswordLoginEnabled {
 			switch scope {
-			case VerificationScopeAccountBind, VerificationScopeAccountUnbind, VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete:
+			case VerificationScopeAccountBind, VerificationScopeAccountUnbind, VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete,
+				VerificationScopeAdminUserCreate, VerificationScopeAdminUserUpdate, VerificationScopeAdminUserDelete,
+				VerificationScopeAdminUserManage, VerificationScopeAdminUserPasskeyReset,
+				VerificationScopeAdminUserTwoFADisable, VerificationScopeAdminUserBindingClear:
 				methods[i].Available, methods[i].Reason = false, "Password authentication is disabled."
 			}
 		}
 		if methods[i].Method != VerificationMethodOAuth {
+			continue
+		}
+		// OAuth verification completes through a browser popup bound to a login
+		// session, which an access token cannot provide.
+		if _, ok := model.ParseAccessTokenSessionID(identity.SessionID); ok {
+			methods[i].Available, methods[i].Reason = false, "OAuth verification requires a browser sign-in. Enable two-factor authentication or a Passkey to continue."
 			continue
 		}
 		user, err := model.GetUserById(identity.UserID, false)
@@ -384,7 +489,7 @@ func RequireVerificationMethod(identity AuthIdentity, scope, method string) (*Ve
 // CompleteSecurityVerification runs after the concrete authentication ceremony.
 // Recheck the session and policy after potentially slow external authentication.
 func CompleteSecurityVerification(identity AuthIdentity, binding VerificationBinding, method string) (*SecurityProof, error) {
-	if err := ValidateSecurityIdentity(identity); err != nil {
+	if err := ValidateStepUpIdentity(identity); err != nil {
 		return nil, err
 	}
 	if _, err := RequireVerificationMethod(identity, binding.Scope, method); err != nil {
@@ -408,7 +513,7 @@ func ConsumeOperationProof(raw string, identity AuthIdentity, operation Verifica
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateSecurityIdentity(identity); err != nil {
+	if err := ValidateStepUpIdentity(identity); err != nil {
 		return nil, err
 	}
 	if _, err := RequireVerificationMethod(identity, binding.Scope, claims.Method); err != nil {
@@ -416,11 +521,7 @@ func ConsumeOperationProof(raw string, identity AuthIdentity, operation Verifica
 	}
 	flow, err := model.ConsumeAuthFlowWithAction(claims.ID, model.AuthFlowMatch{
 		Purpose: model.AuthFlowPurposeSecurityProof, UserId: identity.UserID, SessionId: identity.SessionID,
-	}, func(tx *gorm.DB, flow *model.AuthFlow) error {
-		var stored model.SecurityProofBinding
-		if common.UnmarshalJsonStr(flow.Payload, &stored) != nil || stored.AuthSessionIdentity != identity || stored.Scope != binding.Scope || stored.ContextHash != binding.ContextHash || stored.Method != claims.Method {
-			return model.ErrAuthFlowInvalid
-		}
+	}, func(tx *gorm.DB, _ *model.AuthFlow) error {
 		return model.ValidateAuthSessionWithTx(tx, identity)
 	})
 	switch {
@@ -452,7 +553,7 @@ func ValidateFlowAuthorization(identity AuthIdentity, operation VerificationOper
 	if authorization.Scope != binding.Scope || !hmac.Equal([]byte(authorization.ContextHash), []byte(binding.ContextHash)) {
 		return model.ErrAuthFlowInvalid
 	}
-	if err := ValidateSecurityIdentity(identity); err != nil {
+	if err := ValidateStepUpIdentity(identity); err != nil {
 		return err
 	}
 	_, err = RequireVerificationMethod(identity, binding.Scope, authorization.Method)

@@ -21,7 +21,7 @@ import {
 } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import GatewayConfigPanel from '@/components/console/gateway/GatewayConfigPanel.vue'
+import RequestPolicyPanel from '@/components/console/systemSettings/RequestPolicyPanel.vue'
 
 const props = defineProps<{ domain: SystemSettingsDomainId }>()
 
@@ -323,10 +323,7 @@ onMounted(() => load())
           kind="performance"
         />
       </SysSettingsFormCard>
-      <GatewayConfigPanel
-        v-if="domain === 'security' && activeSection.id === 'rate-limit'"
-        class="mt-6 border-t border-[var(--border-subtle)] pt-6"
-      />
+      <RequestPolicyPanel v-if="props.domain === 'security'" />
     </div>
   </div>
 </template>

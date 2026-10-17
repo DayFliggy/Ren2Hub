@@ -10,10 +10,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
-	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -63,30 +61,27 @@ func TestResponseModelComparisonAndLog(t *testing.T) {
 			for _, name := range tc.models {
 				info.ObserveResponseModel(name)
 			}
-			other := service.GenerateTextOtherInfo(c, info, 0)
-			stored := info.ResponseModel
+			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
+			var stored struct {
+				ResponseModel *relaycommon.ResponseModel `json:"response_model"`
+			}
+			require.NoError(t, common.UnmarshalJsonStr(other.JSONString(), &stored))
 			if tc.returned == "" {
-				assert.Nil(t, stored)
+				assert.Nil(t, stored.ResponseModel)
 				return
 			}
-			require.NotNil(t, stored)
+			require.NotNil(t, stored.ResponseModel)
 			assert.Equal(t, &relaycommon.ResponseModel{
 				RequestedModel: "requested", UpstreamModel: "mapped", ReturnedModel: tc.returned,
-			}, stored)
-			assert.NotContains(t, other, "mismatch")
-			assert.Equal(t, tc.mismatch, stored.Mismatch())
+			}, stored.ResponseModel)
+			assert.NotContains(t, other.JSONString(), "mismatch")
+			assert.Equal(t, tc.mismatch, stored.ResponseModel.Mismatch())
 			assert.Equal(t, "mapped", info.UpstreamModelName)
 		})
 	}
 }
 
 func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
-	quote, err := billing.NewQuote(billing.PriceVersion{
-		ID: 7, Model: "requested", ScopeKind: billing.PriceScopeGlobal,
-		ContractVersion: billing.ContractVersion, CalculationVersion: billing.CalculationVersion, ResultUnit: billing.ResultUSD,
-		Mode: billing.ModeRatio, Pricing: billing.PricingValues{"ModelRatio": "1"},
-	}, "1", nil, time.Unix(1700000000, 0))
-	require.NoError(t, err)
 	for _, tc := range []struct {
 		name     string
 		upstream string
@@ -108,19 +103,14 @@ func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
 				OriginModelName: "requested",
 				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: tc.upstream, IsModelMapped: tc.mapped},
 			}
-			info.PriceData.Quote = quote
 			info.ObserveResponseModel(tc.returned)
-			other := service.GenerateTextOtherInfo(c, info, 0)
+			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
 			require.NotNil(t, info.ResponseModel)
-			assert.Equal(t, billing.PriceScopeGlobal, other["price_scope"])
-			assert.Equal(t, int64(7), other["price_version_id"])
-			assert.Equal(t, quote.PriceVersion.Hash, other["price_version_hash"])
-			assert.Equal(t, quote.Hash, other["quote_hash"])
+			assert.Equal(t, float64(1), other.Snapshot()["model_ratio"])
 			if tc.record {
-				assert.Equal(t, info.ResponseModel.ReturnedModel, other["response_model_name"])
-				assert.Equal(t, info.ResponseModel.UpstreamModel, other["upstream_model_name"])
+				assert.Equal(t, *info.ResponseModel, other.Snapshot()["response_model"])
 			} else {
-				assert.NotContains(t, other, "response_model_name")
+				assert.NotContains(t, other.Snapshot(), "response_model")
 			}
 		})
 	}
@@ -179,8 +169,6 @@ func TestResponseModelRetryResetsObservation(t *testing.T) {
 	assert.Nil(t, info.ResponseModel)
 	info.ObserveResponseModel("requested")
 	assert.False(t, info.ResponseModel.Mismatch())
-	require.NoError(t, info.ResetAttemptState())
-	assert.Nil(t, info.ResponseModel)
 }
 
 func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
@@ -189,21 +177,13 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 	constant.StreamingTimeout = 30
 	t.Cleanup(func() { constant.StreamingTimeout = previousTimeout })
 	chat := `{"id":"chat_1","model":"returned","choices":[{"index":0,"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`
-	chatStream := "data: " + `{"id":"chat_1","model":"returned","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"},"finish_reason":"stop"}]}` + "\n\ndata: " + `{"id":"chat_1","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}` + "\n\ndata: [DONE]\n\n"
+	chatStream := "data: " + `{"id":"chat_1","model":"returned","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"}}]}` + "\n\ndata: " + `{"id":"chat_1","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}` + "\n\ndata: [DONE]\n\n"
 	responses := `{"id":"resp_1","model":"returned","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}`
-	responsesStream := "data: " + `{"type":"response.created","response":{"id":"resp_1","model":"returned"}}` + "\n\ndata: " + `{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}}` + "\n\n"
+	responsesStream := "data: " + `{"type":"response.created","response":{"id":"resp_1","model":"returned"}}` + "\n\ndata: " + `{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}}` + "\n\n"
 	claudeBody := `{"id":"msg_1","type":"message","model":"returned","role":"assistant","content":[{"type":"text","text":"hello"}],"stop_reason":"end_turn","usage":{"input_tokens":2,"output_tokens":3}}`
-	claudeStream := "data: " + `{"type":"message_start","message":{"id":"msg_1","type":"message","model":"returned","role":"assistant","content":[],"usage":{"input_tokens":2,"output_tokens":0}}}` + "\n\ndata: " + `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}` + "\n\ndata: " + `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}` + "\n\ndata: " + `{"type":"content_block_stop","index":0}` + "\n\ndata: " + `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}` + "\n\ndata: " + `{"type":"message_stop"}` + "\n\n"
+	claudeStream := "data: " + `{"type":"message_start","message":{"id":"msg_1","type":"message","model":"returned","role":"assistant","content":[],"usage":{"input_tokens":2,"output_tokens":0}}}` + "\n\ndata: " + `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}` + "\n\ndata: " + `{"type":"message_stop"}` + "\n\n"
 	geminiBody := `{"modelVersion":"returned","candidates":[{"content":{"role":"model","parts":[{"text":"hello"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":3,"totalTokenCount":5}}`
 	geminiStream := "data: " + geminiBody + "\n\n"
-	ollamaBody := `{"model":"returned","message":{"role":"assistant","content":"hello"},"done":true,"done_reason":"stop","prompt_eval_count":2,"eval_count":3}`
-	ollamaHandler := func(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
-		usage, err := (&ollama.Adaptor{}).DoResponse(c, resp, info)
-		if usage == nil {
-			return nil, err
-		}
-		return usage.(*dto.Usage), err
-	}
 	for _, tc := range []struct {
 		name    string
 		body    string
@@ -212,8 +192,6 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 		handler func(*gin.Context, *relaycommon.RelayInfo, *http.Response) (*dto.Usage, *types.NewAPIError)
 	}{
 		{"chat", chat, types.RelayFormatOpenAI, false, openai.OpenaiHandler},
-		{"ollama", ollamaBody, types.RelayFormatOpenAI, false, ollamaHandler},
-		{"ollama stream", ollamaBody + "\n", types.RelayFormatOpenAI, true, ollamaHandler},
 		{"chat stream", chatStream, types.RelayFormatOpenAI, true, openai.OaiStreamHandler},
 		{"responses", responses, types.RelayFormatOpenAIResponses, false, openai.OaiResponsesHandler},
 		{"responses stream", responsesStream, types.RelayFormatOpenAIResponses, true, openai.OaiResponsesStreamHandler},
@@ -229,7 +207,7 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 			return claude.ClaudeStreamHandler(c, resp, info)
 		}},
 		{"claude to responses stream", claudeStream, types.RelayFormatOpenAIResponses, true, func(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
-			return claude.ClaudeStreamHandler(c, resp, info)
+			return claude.ClaudeResponsesStreamHandler(c, resp, info)
 		}},
 		{"gemini", geminiBody, types.RelayFormatGemini, false, gemini.GeminiTextGenerationHandler},
 		{"gemini stream", geminiStream, types.RelayFormatGemini, true, gemini.GeminiTextGenerationStreamHandler},
@@ -253,10 +231,8 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 			require.NotNil(t, info.ResponseModel)
 			assert.Equal(t, &relaycommon.ResponseModel{RequestedModel: "requested", UpstreamModel: "mapped", ReturnedModel: "returned"}, info.ResponseModel)
 			assert.True(t, info.ResponseModel.Mismatch())
-			assert.Equal(t, "mapped", info.UpstreamModelName, "response diagnostics must not change the sent model")
-			other := service.GenerateTextOtherInfo(c, info, 0)
-			assert.Equal(t, info.ResponseModel.ReturnedModel, other["response_model_name"])
-			assert.Equal(t, info.ResponseModel.UpstreamModel, other["upstream_model_name"])
+			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
+			assert.Equal(t, *info.ResponseModel, other.Snapshot()["response_model"])
 		})
 	}
 }
@@ -284,6 +260,6 @@ func TestResponseModelDoesNotRecordSynthesizedModel(t *testing.T) {
 	_, apiErr := openai.OaiResponsesToChatBufferedStreamHandler(c, info, &http.Response{
 		StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
 	})
-	require.NotNil(t, apiErr)
+	require.Nil(t, apiErr)
 	assert.Nil(t, info.ResponseModel)
 }

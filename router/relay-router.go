@@ -13,7 +13,6 @@ import (
 )
 
 func SetRelayRouter(router *gin.Engine) {
-	SetTaskPluginProtocolRouter(router)
 	router.Use(middleware.CORS())
 	router.Use(middleware.DecompressRequestMiddleware())
 	router.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
@@ -62,37 +61,16 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 	}
 
-	playgroundRouter := router.Group("/pg")
-	playgroundRouter.Use(middleware.RouteTag("relay"))
-	playgroundRouter.Use(middleware.SystemPerformanceCheck())
-	playgroundRouter.Use(middleware.UserAuth(), middleware.ModelRequestRateLimit(), middleware.GatewayAdmission(), middleware.Distribute())
-	{
-		playgroundRouter.POST("/chat/completions", controller.Playground)
-	}
 	relayV1Router := router.Group("/v1")
-	relayV1Router.Use(rejectUnimplementedTokenCount)
 	relayV1Router.Use(middleware.RouteTag("relay"))
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
 	relayV1Router.Use(middleware.TokenAuth())
-	// Legacy text edits are unsupported and must not enter image routing or billing.
-	relayV1Router.POST("/edits", controller.RelayNotImplemented)
-	// not implemented
-	relayV1Router.POST("/images/variations", controller.RelayNotImplemented)
-	relayV1Router.GET("/files", controller.RelayNotImplemented)
-	relayV1Router.POST("/files", controller.RelayNotImplemented)
-	relayV1Router.DELETE("/files/:id", controller.RelayNotImplemented)
-	relayV1Router.GET("/files/:id", controller.RelayNotImplemented)
-	relayV1Router.GET("/files/:id/content", controller.RelayNotImplemented)
-	relayV1Router.POST("/fine-tunes", controller.RelayNotImplemented)
-	relayV1Router.GET("/fine-tunes", controller.RelayNotImplemented)
-	relayV1Router.GET("/fine-tunes/:id", controller.RelayNotImplemented)
-	relayV1Router.POST("/fine-tunes/:id/cancel", controller.RelayNotImplemented)
-	relayV1Router.GET("/fine-tunes/:id/events", controller.RelayNotImplemented)
-	relayV1Router.DELETE("/models/:model", controller.RelayNotImplemented)
-	// The handshake authenticates once; every create owns its own admission.
-	relayV1Router.GET("/responses", controller.ResponsesWebSocket)
+	{
+		// Responses WebSocket route. Channel selection happens after the first
+		// response.create event; each event runs the ordinary request limiter.
+		relayV1Router.GET("/responses", controller.ResponsesWebSocket)
+	}
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
-	relayV1Router.Use(middleware.GatewayAdmission())
 	{
 		// WebSocket 路由（统一到 Relay）
 		wsRouter := relayV1Router.Group("")
@@ -107,6 +85,8 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.Use(middleware.Distribute())
 
 		// claude related routes
+		// TODO: /messages/count_tokens is disabled. The current controller.CountClaudeTokens
+		// httpRouter.POST("/messages/count_tokens", controller.CountClaudeTokens)
 		httpRouter.POST("/messages", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatClaude)
 		})
@@ -129,13 +109,15 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAIAlphaSearch)
 		})
 
-		// image related routes
+		// image related routes. /images/generations and /images/edits are
+		// host protocol endpoints (openai_image) registered by
+		// SetTaskPluginProtocolRouter; unclaimed models fall back to Relay.
+		httpRouter.POST("/edits", func(c *gin.Context) {
+			controller.Relay(c, types.RelayFormatOpenAIImage)
+		})
 
 		// embedding related routes
 		httpRouter.POST("/embeddings", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatEmbedding)
-		})
-		httpRouter.POST("/engines/:model/embeddings", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatEmbedding)
 		})
 
@@ -156,6 +138,9 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 
 		// gemini relay routes
+		httpRouter.POST("/engines/:model/embeddings", func(c *gin.Context) {
+			controller.Relay(c, types.RelayFormatGemini)
+		})
 		httpRouter.POST("/models/*path", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
@@ -165,6 +150,19 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAI)
 		})
 
+		// not implemented
+		httpRouter.POST("/images/variations", controller.RelayNotImplemented)
+		httpRouter.GET("/files", controller.RelayNotImplemented)
+		httpRouter.POST("/files", controller.RelayNotImplemented)
+		httpRouter.DELETE("/files/:id", controller.RelayNotImplemented)
+		httpRouter.GET("/files/:id", controller.RelayNotImplemented)
+		httpRouter.GET("/files/:id/content", controller.RelayNotImplemented)
+		httpRouter.POST("/fine-tunes", controller.RelayNotImplemented)
+		httpRouter.GET("/fine-tunes", controller.RelayNotImplemented)
+		httpRouter.GET("/fine-tunes/:id", controller.RelayNotImplemented)
+		httpRouter.POST("/fine-tunes/:id/cancel", controller.RelayNotImplemented)
+		httpRouter.GET("/fine-tunes/:id/events", controller.RelayNotImplemented)
+		httpRouter.DELETE("/models/:model", controller.RelayNotImplemented)
 	}
 
 	relayMjRouter := router.Group("/mj")
@@ -179,12 +177,19 @@ func SetRelayRouter(router *gin.Engine) {
 	//relayMjRouter.Use()
 
 	relayGeminiRouter := router.Group("/v1beta")
-	relayGeminiRouter.Use(rejectUnimplementedTokenCount)
+	// :countTokens is not implemented. Answer it like an unregistered route
+	// before auth/channel selection instead of silently relaying it as
+	// generateContent (#7283).
+	relayGeminiRouter.Use(func(c *gin.Context) {
+		if strings.HasSuffix(c.Request.URL.Path, ":countTokens") {
+			controller.RelayNotFound(c)
+			c.Abort()
+		}
+	})
 	relayGeminiRouter.Use(middleware.RouteTag("relay"))
 	relayGeminiRouter.Use(middleware.SystemPerformanceCheck())
 	relayGeminiRouter.Use(middleware.TokenAuth())
 	relayGeminiRouter.Use(middleware.ModelRequestRateLimit())
-	relayGeminiRouter.Use(middleware.GatewayAdmission())
 	relayGeminiRouter.Use(middleware.Distribute())
 	{
 		// Gemini API 路径格式: /v1beta/models/{model_name}:{action}
@@ -194,18 +199,9 @@ func SetRelayRouter(router *gin.Engine) {
 	}
 }
 
-// Native token counting has no implementation. Reject wildcard Gemini actions
-// before authentication, channel selection or billing can turn them into generation.
-func rejectUnimplementedTokenCount(c *gin.Context) {
-	if strings.HasSuffix(c.Request.URL.Path, ":countTokens") || c.Request.URL.Path == "/v1/messages/count_tokens" {
-		controller.RelayNotFound(c)
-		c.Abort()
-	}
-}
-
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {
 	relayMjRouter.GET("/image/:id", relay.RelayMidjourneyImage)
-	relayMjRouter.Use(middleware.TokenAuth(), middleware.ModelRequestRateLimit(), middleware.GatewayAdmission(), middleware.Distribute())
+	relayMjRouter.Use(middleware.TokenAuth(), middleware.Distribute())
 	{
 		relayMjRouter.POST("/submit/action", controller.RelayMidjourney)
 		relayMjRouter.POST("/submit/shorten", controller.RelayMidjourney)

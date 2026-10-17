@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -9,6 +9,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
+import { api } from '@/api/client'
 import { authApi } from '@/api/auth'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
@@ -16,7 +17,6 @@ import { useAppStore } from '@/stores/app'
 import {
   clearAffiliateAttribution,
   getAffiliateAttribution,
-  storeAffiliateAttribution,
 } from '@/utils/affiliate'
 
 const { t } = useI18n()
@@ -30,7 +30,8 @@ const email = ref('')
 const password = ref('')
 const confirm = ref('')
 const affiliateCode = ref('')
-const affiliateValidating = ref(false)
+const verificationCode = ref('')
+const verificationSending = ref(false)
 const loading = ref(false)
 const turnstileToken = ref('')
 const turnstileUnavailable = ref(false)
@@ -42,30 +43,21 @@ const errors = reactive({
   confirm: '',
   affiliate: '',
 })
-const affiliateRequired = computed(() => app.affiliateRegistrationRequired)
-
-async function validateAffiliateCode(): Promise<boolean> {
-  errors.affiliate = ''
-  const code = affiliateCode.value.trim()
-  if (!code) {
-    if (affiliateRequired.value) {
-      errors.affiliate = t('auth.inviteCodeRequired')
-      return false
-    }
-    return true
-  }
-  affiliateValidating.value = true
+async function sendVerification() {
+  verificationSending.value = true
   try {
-    await authApi.validateAffiliate(code)
-    affiliateCode.value = code
-    storeAffiliateAttribution(code)
-    return true
+    await api.get(
+      '/api/verification',
+      { email: email.value },
+      turnstileToken.value
+        ? { headers: { 'X-Turnstile-Token': turnstileToken.value } }
+        : undefined
+    )
+    toast.success(t('common.success'))
   } catch (error) {
-    errors.affiliate =
-      error instanceof ApiError ? error.message : t('auth.inviteCodeInvalid')
-    return false
+    toast.error(error instanceof Error ? error.message : String(error))
   } finally {
-    affiliateValidating.value = false
+    verificationSending.value = false
   }
 }
 
@@ -94,15 +86,12 @@ function validate(): boolean {
     errors.confirm = t('auth.mismatch')
     valid = false
   }
-  if (affiliateRequired.value && !affiliateCode.value.trim()) {
-    errors.affiliate = t('auth.inviteCodeRequired')
-    valid = false
-  }
+
   return valid
 }
 
 async function submit() {
-  if (loading.value || !validate() || !(await validateAffiliateCode())) return
+  if (loading.value || !validate()) return
   await app.initialize()
   if (app.turnstileEnabled) {
     if (!app.turnstileSiteKey || turnstileUnavailable.value) {
@@ -122,6 +111,7 @@ async function submit() {
         email: email.value.trim(),
         password: password.value,
         aff_code: affiliateCode.value.trim() || undefined,
+        verification_code: verificationCode.value || undefined,
       },
       turnstileToken.value || undefined
     )
@@ -141,10 +131,6 @@ onMounted(async () => {
   const queryCode = typeof route.query.aff === 'string' ? route.query.aff : ''
   const storedCode = getAffiliateAttribution()
   affiliateCode.value = queryCode.trim() || storedCode
-  if (queryCode.trim() && !(await validateAffiliateCode()) && storedCode) {
-    affiliateCode.value = storedCode
-    errors.affiliate = ''
-  }
 })
 </script>
 
@@ -165,6 +151,20 @@ onMounted(async () => {
     </div>
 
     <form class="mt-8 sibling-space-y-4" @submit.prevent="submit">
+      <FormField
+        v-if="app.status.email_verification"
+        :label="t('auth.verificationCode')"
+        ><TextInput
+          v-model="verificationCode"
+          autocomplete="one-time-code"
+        /><ConsoleButton
+          type="button"
+          variant="secondary"
+          :disabled="verificationSending || !email"
+          @click="sendVerification"
+          >{{ t('auth.sendCode') }}</ConsoleButton
+        ></FormField
+      >
       <FormField :label="t('auth.username')">
         <TextInput
           v-model="username"
@@ -223,17 +223,12 @@ onMounted(async () => {
       </FormField>
       <FormField
         :label="t('auth.inviteCode')"
-        :hint="
-          affiliateRequired
-            ? t('auth.inviteCodeRequiredHint')
-            : t('auth.inviteCodeOptionalHint')
-        "
+        :hint="t('auth.inviteCodeOptionalHint')"
       >
         <TextInput
           v-model="affiliateCode"
           :placeholder="t('auth.inviteCodePlaceholder')"
           autocomplete="off"
-          @blur="validateAffiliateCode"
         />
         <span
           v-if="errors.affiliate"
@@ -255,7 +250,7 @@ onMounted(async () => {
         type="submit"
         size="lg"
         block
-        :loading="loading || affiliateValidating"
+        :loading="loading"
         :disabled="
           app.turnstileEnabled && (!turnstileToken || turnstileUnavailable)
         "

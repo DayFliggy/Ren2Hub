@@ -49,8 +49,9 @@ func invalidateTokenCacheForMutation(key string) error {
 
 // cacheInitToken publishes a database snapshot only when no mutation fence is
 // active and the hash is cold. An existing hash only gets its TTL refreshed:
-// budget fields are display snapshots only; spending and token validation read
-// authoritative database balances. Metadata snapshots never replace a live hash.
+// its RemainQuota may already be ahead of this snapshot because atomic
+// pre-consume decrements Redis first, so a snapshot must never overwrite any
+// field of a live hash.
 // 返回值：0=被 fence 拦截，1=完成初始化，2=哈希已存在，仅刷新 TTL。
 func cacheInitToken(token Token) (int, error) {
 	if !common.RedisEnabled {
@@ -60,25 +61,22 @@ func cacheInitToken(token Token) (int, error) {
 	if token.AllowIps != nil {
 		allowIps = *token.AllowIps
 	}
-	conversionPolicy := token.ConversionPolicy
-	if conversionPolicy == "" {
-		conversionPolicy = "safe"
-	}
 	const script = `
 if redis.call('EXISTS', KEYS[2]) == 1 then
   return 0
 end
 if redis.call('EXISTS', KEYS[1]) == 1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[14])
+  redis.call('EXPIRE', KEYS[1], ARGV[18])
   return 2
 end
 redis.call('HSET', KEYS[1],
   'Id', ARGV[1], 'UserId', ARGV[2], 'Status', ARGV[3], 'Name', ARGV[4],
   'CreatedTime', ARGV[5], 'AccessedTime', ARGV[6], 'ExpiredTime', ARGV[7],
   'UnlimitedQuota', ARGV[8], 'ModelLimitsEnabled', ARGV[9], 'ModelLimits', ARGV[10],
-  'AllowIps', ARGV[11], 'RemainQuota', ARGV[12], 'UsedQuota', ARGV[13],
-  'ConversionPolicy', ARGV[15], 'AllowUserQuotaQuery', ARGV[16])
-redis.call('EXPIRE', KEYS[1], ARGV[14])
+  'AllowIps', ARGV[11], 'Group', ARGV[12], 'CrossGroupRetry', ARGV[13],
+  'AutoGroups', ARGV[14], 'RemainQuota', ARGV[15], 'UsedQuota', ARGV[16],
+  'AllowUserQuotaQuery', ARGV[17])
+redis.call('EXPIRE', KEYS[1], ARGV[18])
 return 1`
 
 	return common.RDB.Eval(context.Background(), script, []string{
@@ -87,10 +85,10 @@ return 1`
 		token.Id, token.UserId, token.Status, token.Name,
 		token.CreatedTime, token.AccessedTime, token.ExpiredTime,
 		strconv.FormatBool(token.UnlimitedQuota), strconv.FormatBool(token.ModelLimitsEnabled),
-		token.ModelLimits, allowIps, int64(token.RemainQuota), int64(token.UsedQuota),
-		tokenCacheTTLSeconds(),
-		conversionPolicy,
+		token.ModelLimits, allowIps, token.Group, strconv.FormatBool(token.CrossGroupRetry),
+		token.AutoGroups, token.RemainQuota, token.UsedQuota,
 		strconv.FormatBool(token.AllowUserQuotaQuery),
+		tokenCacheTTLSeconds(),
 	).Int()
 }
 
@@ -103,7 +101,7 @@ func cacheGetTokenByKey(key string) (*Token, error) {
 	if err := common.RedisHGetObj(getTokenCacheKey(key), &token); err != nil {
 		return nil, err
 	}
-	if token.Id <= 0 || token.ConversionPolicy == "" {
+	if token.Id <= 0 {
 		return nil, fmt.Errorf("token cache is incomplete")
 	}
 	token.Key = key

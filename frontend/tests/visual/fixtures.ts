@@ -13,8 +13,6 @@ import {
   opsTaskSummary,
 } from './opsFixtures'
 
-import { createModelMarketFixture } from '../fixtures/modelMarket'
-
 export type VisualTheme = 'light' | 'dark'
 
 const FIXED_NOW = new Date('2026-07-27T12:00:00+08:00').getTime()
@@ -27,10 +25,8 @@ const VISUAL_USER = {
   email: 'visual-root@ren2hub.dev',
   role: 100,
   status: 1,
-  available_quota: '5201314',
-  reserved_quota: '150000',
-  quota_version: 1,
-  used_quota: '2985211',
+  quota: 5201314,
+  used_quota: 2985211,
   request_count: 32_132,
   created_at: Math.floor((FIXED_NOW - 37 * DAY_MS) / 1000),
   group: 'vip',
@@ -64,7 +60,7 @@ const VISUAL_USAGE_ROWS = VISUAL_DISTRIBUTION.slice(-30).map(
     model_name: index % 2 === 0 ? 'gpt-4.1' : 'claude-sonnet-4',
     created_at: Math.floor((FIXED_NOW - (29 - index) * DAY_MS) / 1000),
     count: point.requests,
-    quota: point.consume,
+    quota: Number(point.consume),
     token_used: point.tokens,
   })
 )
@@ -369,7 +365,6 @@ export async function configureStablePage(
   )
 
   const responses = new Map<string, unknown>([
-    ['/api/user/model-market', createModelMarketFixture()],
     ['/api/models/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/vendors/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/prefill_group/', []],
@@ -880,7 +875,7 @@ export async function configureStablePage(
       },
     ],
     [
-      '/api/next/tickets',
+      '/api/tickets',
       {
         items: [
           {
@@ -904,7 +899,7 @@ export async function configureStablePage(
       },
     ],
     [
-      '/api/next/tickets/1',
+      '/api/tickets/1',
       {
         ticket: {
           id: 1,
@@ -939,9 +934,9 @@ export async function configureStablePage(
         ],
       },
     ],
-    ['/api/next/admin/tickets/summary', { pending: 2, unassigned: 1, mine: 1 }],
+    ['/api/admin/tickets/summary', { pending: 2, unassigned: 1, mine: 1 }],
     [
-      '/api/next/admin/tickets/agents',
+      '/api/admin/tickets/agents',
       {
         items: [
           {
@@ -958,7 +953,7 @@ export async function configureStablePage(
       },
     ],
     [
-      '/api/next/admin/tickets',
+      '/api/admin/tickets',
       {
         items: [
           {
@@ -1009,7 +1004,7 @@ export async function configureStablePage(
       },
     ],
     [
-      '/api/next/admin/tickets/1',
+      '/api/admin/tickets/1',
       {
         ticket: {
           id: 1,

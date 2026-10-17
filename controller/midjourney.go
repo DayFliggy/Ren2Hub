@@ -3,16 +3,12 @@ package controller
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -35,257 +31,251 @@ type midjourneyPollSummary struct {
 // It honors ctx cancellation (the system-task runner cancels it when the lease
 // is lost) and, when report is non-nil, reports progress as (processedChannels,
 // totalChannels) so the system task surfaces a percentage.
-func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, total int)) (midjourneyPollSummary, error) {
+func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, total int)) midjourneyPollSummary {
+	summary := midjourneyPollSummary{}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	tasks, err := model.GetAllUnFinishTasks(ctx)
-	if err != nil {
-		return midjourneyPollSummary{}, err
+
+	tasks := model.GetAllUnFinishTasks()
+	if len(tasks) == 0 {
+		return summary
 	}
-	summary := midjourneyPollSummary{UnfinishedTasks: len(tasks)}
-	var pollErrors []error
-	channels := make(map[int][]*model.Midjourney)
+	summary.UnfinishedTasks = len(tasks)
+
+	logger.LogInfo(ctx, common.LogText("unfinished tasks found: %v", len(tasks)))
+	taskChannelM := make(map[int][]string)
+	taskM := make(map[string]*model.Midjourney)
+	nullTaskIds := make([]int, 0)
 	for _, task := range tasks {
-		ready, err := model.MidjourneySubmissionReady(ctx, task)
-		if err != nil || !ready {
-			if err != nil {
-				pollErrors = append(pollErrors, fmt.Errorf("Midjourney submission accounting (row_id=%d): %w", task.Id, err))
-			}
+		if task.MjId == "" {
+			// 统计失败的未完成任务
+			nullTaskIds = append(nullTaskIds, task.Id)
 			continue
 		}
-		if task.SettlementBlock != "" {
-			// The provider result is held; settle it again instead of polling,
-			// and never release it as unfinished.
-			if err := retryBlockedMidjourney(ctx, task); err != nil {
-				pollErrors = append(pollErrors, fmt.Errorf("settlement-blocked Midjourney task (row_id=%d): %w", task.Id, err))
-			}
-			continue
-		}
-		if reason := midjourneyUnfinishableReason(task); reason != "" {
-			// No result reached the user, so bill-first releases the job.
-			from := task.Status
-			task.Status, task.Progress, task.FailReason = "FAILURE", "100%", reason
-			if task.FinishTime == 0 {
-				task.FinishTime = time.Now().UnixMilli()
-			}
-			if won, err := service.CompleteMidjourneyBilling(ctx, task, from); err != nil {
-				pollErrors = append(pollErrors, fmt.Errorf("release unfinished Midjourney task (row_id=%d): %w", task.Id, err))
-			} else if won {
-				summary.NullTasksFailed++
-			}
-			continue
-		}
-		channels[task.ChannelId] = append(channels[task.ChannelId], task)
+		taskM[task.MjId] = task
+		taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], task.MjId)
 	}
-	var workers sync.WaitGroup
-	results := make(chan error, len(channels))
-	for id, group := range channels {
-		if ctx.Err() != nil {
+	if len(nullTaskIds) > 0 {
+		summary.NullTasksFailed = len(nullTaskIds)
+		err := model.MjBulkUpdateByTaskIds(nullTaskIds, map[string]any{
+			"status":   "FAILURE",
+			"progress": "100%",
+		})
+		if err != nil {
+			logger.LogError(ctx, common.LogText("Fix null mj_id task error: %v", err))
+		} else {
+			logger.LogInfo(ctx, common.LogText("Fix null mj_id task success: %v", nullTaskIds))
+		}
+	}
+	if len(taskChannelM) == 0 {
+		return summary
+	}
+
+	totalChannels := len(taskChannelM)
+	processedChannels := 0
+	for channelId, taskIds := range taskChannelM {
+		if ctx != nil && ctx.Err() != nil {
 			break
 		}
-		workers.Add(1)
-		go func(id int, group []*model.Midjourney) {
-			defer workers.Done()
-			results <- pollMidjourneyChannel(ctx, id, group)
-		}(id, group)
-	}
-	go func() { workers.Wait(); close(results) }()
-	for err := range results {
-		if err != nil {
-			pollErrors = append(pollErrors, err)
-		}
-		summary.ChannelsScanned++
 		if report != nil {
-			report(summary.ChannelsScanned, len(channels))
+			report(processedChannels, totalChannels)
 		}
-	}
-	return summary, errors.Join(append(pollErrors, ctx.Err())...)
-}
-
-// midjourneyUnfinishableReason uses the same timeout as other async tasks.
-// Midjourney submit times are Unix milliseconds.
-func midjourneyUnfinishableReason(task *model.Midjourney) string {
-	if task.MjId == "" {
-		return constant.TaskFailReasonMissingUpstreamID
-	}
-	if constant.TaskTimeoutMinutes > 0 && task.SubmitTime > 0 &&
-		time.Now().UnixMilli()-task.SubmitTime > int64(constant.TaskTimeoutMinutes)*60*1000 {
-		return constant.TaskFailReasonTimedOut
-	}
-	return ""
-}
-
-func pollMidjourneyChannel(ctx context.Context, channelID int, tasks []*model.Midjourney) error {
-	channel, err := model.GetChannelById(channelID, true)
-	if err != nil {
-		return fmt.Errorf("Midjourney channel unavailable (channel_id=%d): %w", channelID, err)
-	}
-	var pollErrors []error
-	groups := make(map[string][]*model.Midjourney)
-	for _, task := range tasks {
-		if _, _, err := model.ResolveMidjourneyCredential(ctx, channel, task); err != nil {
-			pollErrors = append(pollErrors, fmt.Errorf("Midjourney task owner unavailable (row_id=%d): %w", task.Id, err))
+		processedChannels++
+		summary.ChannelsScanned++
+		logger.LogInfo(ctx, common.LogText("channel #%d has %d unfinished tasks", channelId, len(taskIds)))
+		if len(taskIds) == 0 {
 			continue
 		}
-		groups[task.PrivateData.CredentialID] = append(groups[task.PrivateData.CredentialID], task)
-	}
-	for _, group := range groups {
-		if ctx.Err() != nil {
-			return errors.Join(append(pollErrors, ctx.Err())...)
+		midjourneyChannel, err := model.CacheGetChannel(channelId)
+		if err != nil {
+			logger.LogError(ctx, common.LogText("CacheGetChannel: %v", err))
+			err := model.MjBulkUpdate(taskIds, map[string]any{
+				"fail_reason": "Failed to get the channel information. Please contact the administrator",
+				"status":      "FAILURE",
+				"progress":    "100%",
+			})
+			if err != nil {
+				logger.LogInfo(ctx, common.LogText("UpdateMidjourneyTask error: %v", err))
+			}
+			continue
 		}
-		if err := pollMidjourneyCredential(ctx, channelID, group); err != nil {
-			pollErrors = append(pollErrors, fmt.Errorf("Midjourney poll remains pending (channel_id=%d): %w", channelID, err))
-		}
-	}
-	return errors.Join(pollErrors...)
-}
+		requestUrl := fmt.Sprintf("%s/mj/task/list-by-condition", *midjourneyChannel.BaseURL)
 
-func pollMidjourneyCredential(ctx context.Context, channelID int, tasks []*model.Midjourney) error {
-	channel, err := model.GetChannelById(channelID, true)
-	if err != nil {
-		return err
-	}
-	key, _, err := model.ResolveMidjourneyCredential(ctx, channel, tasks[0])
-	if err != nil {
-		return err
-	}
-	ids := make([]string, 0, len(tasks))
-	owners := make(map[string][]*model.Midjourney)
-	for _, task := range tasks {
-		resolved, _, err := model.ResolveMidjourneyCredential(ctx, channel, task)
-		if err != nil || resolved != key {
-			return model.ErrGatewayStateUnavailable
+		body, err := common.Marshal(map[string]any{
+			"ids": taskIds,
+		})
+		if err != nil {
+			logger.LogError(ctx, common.LogText("Get Task marshal body error: %v", err))
+			continue
 		}
-		if len(owners[task.MjId]) == 0 {
-			ids = append(ids, task.MjId)
+		timeout := time.Second * 15
+		requestCtx, cancel := context.WithTimeout(ctx, timeout)
+		req, err := http.NewRequestWithContext(requestCtx, "POST", requestUrl, bytes.NewBuffer(body))
+		if err != nil {
+			cancel()
+			logger.LogError(ctx, common.LogText("Get Task error: %v", err))
+			continue
 		}
-		owners[task.MjId] = append(owners[task.MjId], task)
-	}
-	body, err := common.Marshal(map[string]any{"ids": ids})
-	if err != nil {
-		return err
-	}
-	requestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, strings.TrimRight(channel.GetBaseURL(), "/")+"/mj/task/list-by-condition", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("mj-api-secret", key)
-	channelSetting := channel.GetSetting()
-	client, err := service.GetHttpClientWithProxySettings(channelSetting.Proxy, channelSetting)
-	if err != nil {
-		return err
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return errors.New("Midjourney polling transport failed")
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("Midjourney polling HTTP %d", response.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 16*1024*1024+1))
-	if err != nil {
-		return err
-	}
-	if len(data) > 16*1024*1024 {
-		return errors.New("Midjourney polling response too large")
-	}
-	var updates []dto.MidjourneyDto
-	if err := common.Unmarshal(data, &updates); err != nil {
-		return err
-	}
-	seen := make(map[string]bool)
-	for _, update := range updates {
-		if update.MjId == "" || seen[update.MjId] {
-			return errors.New("ambiguous Midjourney polling response")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("mj-api-secret", midjourneyChannel.Key)
+		resp, err := service.GetHttpClient().Do(req)
+		if err != nil {
+			logger.LogError(ctx, common.LogText("Get Task Do req error: %v", err))
+			cancel()
+			continue
 		}
-		seen[update.MjId] = true
-	}
-	for _, update := range updates {
-		for _, task := range owners[update.MjId] {
-			if err := applyMidjourneyTaskUpdate(ctx, task, update); err != nil {
-				return err
+		if resp.StatusCode != http.StatusOK {
+			logger.LogError(ctx, common.LogText("Get Task status code: %d", resp.StatusCode))
+			resp.Body.Close()
+			cancel()
+			continue
+		}
+		responseBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logger.LogError(ctx, common.LogText("Get Mjp Task parse body error: %v", err))
+			resp.Body.Close()
+			cancel()
+			continue
+		}
+		var responseItems []dto.MidjourneyDto
+		err = common.Unmarshal(responseBody, &responseItems)
+		if err != nil {
+			logger.LogError(ctx, common.LogText("Get Mjp Task parse body error2: %v, body: %s", err, string(responseBody)))
+			resp.Body.Close()
+			cancel()
+			continue
+		}
+		resp.Body.Close()
+		req.Body.Close()
+		cancel()
+
+		for _, responseItem := range responseItems {
+			task := taskM[responseItem.MjId]
+			if task == nil {
+				logger.LogWarn(ctx, common.LogText("Midjourney task response ignored: unknown mj_id=%s", responseItem.MjId))
+				continue
+			}
+
+			useTime := (time.Now().UnixNano() / int64(time.Millisecond)) - task.SubmitTime
+			// 如果时间超过一小时，且进度不是100%，则认为任务失败
+			if useTime > 3600000 && task.Progress != "100%" {
+				responseItem.FailReason = "Upstream task timed out (over 1 hour)"
+				responseItem.Status = "FAILURE"
+			}
+			if !checkMjTaskNeedUpdate(task, responseItem) {
+				continue
+			}
+			preStatus := task.Status
+			task.Code = 1
+			task.Progress = responseItem.Progress
+			task.PromptEn = responseItem.PromptEn
+			task.State = responseItem.State
+			task.SubmitTime = responseItem.SubmitTime
+			task.StartTime = responseItem.StartTime
+			task.FinishTime = responseItem.FinishTime
+			task.ImageUrl = responseItem.ImageUrl
+			task.Status = responseItem.Status
+			task.FailReason = responseItem.FailReason
+			if responseItem.Properties != nil {
+				propertiesStr, _ := common.Marshal(responseItem.Properties)
+				task.Properties = string(propertiesStr)
+			}
+			if responseItem.Buttons != nil {
+				buttonStr, _ := common.Marshal(responseItem.Buttons)
+				task.Buttons = string(buttonStr)
+			}
+			// 映射 VideoUrl
+			task.VideoUrl = responseItem.VideoUrl
+
+			// 映射 VideoUrls - 将数组序列化为 JSON 字符串
+			if responseItem.VideoUrls != nil && len(responseItem.VideoUrls) > 0 {
+				videoUrlsStr, err := common.Marshal(responseItem.VideoUrls)
+				if err != nil {
+					logger.LogError(ctx, common.LogText("failed to serialize VideoUrls: %v", err))
+					task.VideoUrls = "[]" // 失败时设置为空数组
+				} else {
+					task.VideoUrls = string(videoUrlsStr)
+				}
+			} else {
+				task.VideoUrls = "" // 空值时清空字段
+			}
+
+			shouldReturnQuota := false
+			if (task.Progress != "100%" && responseItem.FailReason != "") || (task.Progress == "100%" && task.Status == "FAILURE") {
+				logger.LogInfo(ctx, common.LogText("%s failed: %s", task.MjId, task.FailReason))
+				task.Progress = "100%"
+				if task.Quota != 0 {
+					shouldReturnQuota = true
+				}
+			}
+			won, err := task.UpdateWithStatus(preStatus)
+			if err != nil {
+				logger.LogError(ctx, common.LogText("UpdateMidjourneyTask task error: %s", err.Error()))
+			} else if won && shouldReturnQuota {
+				service.RefundMidjourneyQuota(ctx, task, "Composition failed")
 			}
 		}
 	}
-	return nil
+	if report != nil && (ctx == nil || ctx.Err() == nil) {
+		report(totalChannels, totalChannels)
+	}
+	return summary
 }
 
-func applyMidjourneyTaskUpdate(ctx context.Context, task *model.Midjourney, update dto.MidjourneyDto) error {
-	switch update.Status {
-	case "NOT_START", "SUBMITTED", "IN_PROGRESS", "QUEUED", "SUCCESS", "FAILURE":
-	default:
-		// Polling errors and incomplete envelopes do not prove the job failed.
-		return errors.New("Midjourney response has no recognized task status")
+func checkMjTaskNeedUpdate(oldTask *model.Midjourney, newTask dto.MidjourneyDto) bool {
+	if oldTask.Code != 1 {
+		return true
 	}
-	from := task.Status
-	next := *task
-	next.Code, next.Status, next.Progress = 1, update.Status, update.Progress
-	next.PromptEn, next.State, next.FailReason = update.PromptEn, update.State, update.FailReason
-	if update.SubmitTime > 0 {
-		next.SubmitTime = update.SubmitTime
+	if oldTask.Progress != newTask.Progress {
+		return true
 	}
-	next.StartTime, next.FinishTime = update.StartTime, update.FinishTime
-	next.ImageUrl, next.VideoUrl = update.ImageUrl, update.VideoUrl
-	properties, err := common.Marshal(update.Properties)
-	if err != nil {
-		return err
+	if oldTask.PromptEn != newTask.PromptEn {
+		return true
 	}
-	buttons, err := common.Marshal(update.Buttons)
-	if err != nil {
-		return err
+	if oldTask.State != newTask.State {
+		return true
 	}
-	videos, err := common.Marshal(update.VideoUrls)
-	if err != nil {
-		return err
+	if oldTask.SubmitTime != newTask.SubmitTime {
+		return true
 	}
-	next.Properties, next.Buttons, next.VideoUrls = string(properties), string(buttons), string(videos)
-	if next.Status == "SUCCESS" || next.Status == "FAILURE" {
-		next.Progress = "100%"
-		won, err := service.CompleteMidjourneyBilling(ctx, &next, from)
-		if !won && next.Status == "SUCCESS" && model.IsBillingEvidenceUnverifiable(err) {
-			return holdBlockedMidjourney(ctx, task, from, update, err)
+	if oldTask.StartTime != newTask.StartTime {
+		return true
+	}
+	if oldTask.FinishTime != newTask.FinishTime {
+		return true
+	}
+	if oldTask.ImageUrl != newTask.ImageUrl {
+		return true
+	}
+	if oldTask.Status != newTask.Status {
+		return true
+	}
+	if oldTask.FailReason != newTask.FailReason {
+		return true
+	}
+	if oldTask.FinishTime != newTask.FinishTime {
+		return true
+	}
+	if oldTask.Progress != "100%" && newTask.FailReason != "" {
+		return true
+	}
+	// 检查 VideoUrl 是否需要更新
+	if oldTask.VideoUrl != newTask.VideoUrl {
+		return true
+	}
+	// 检查 VideoUrls 是否需要更新
+	if newTask.VideoUrls != nil && len(newTask.VideoUrls) > 0 {
+		newVideoUrlsStr, _ := common.Marshal(newTask.VideoUrls)
+		if oldTask.VideoUrls != string(newVideoUrlsStr) {
+			return true
 		}
-		return err
+	} else if oldTask.VideoUrls != "" {
+		// 如果新数据没有 VideoUrls 但旧数据有，需要更新（清空）
+		return true
 	}
-	// Status guards the provider update while financial and ownership metadata
-	// remain exclusively managed by their transaction paths.
-	return model.DB.WithContext(ctx).Model(&model.Midjourney{}).Where("id = ? AND status = ?", next.Id, from).
-		Updates(map[string]any{"code": next.Code, "status": next.Status, "progress": next.Progress,
-			"prompt_en": next.PromptEn, "state": next.State, "fail_reason": next.FailReason,
-			"submit_time": next.SubmitTime, "start_time": next.StartTime, "finish_time": next.FinishTime,
-			"image_url": next.ImageUrl, "video_url": next.VideoUrl, "video_urls": next.VideoUrls,
-			"buttons": next.Buttons, "properties": next.Properties}).Error
-}
 
-// holdBlockedMidjourney keeps a successful provider update whose settlement
-// evidence cannot be verified on the job, with its reservation held, so the
-// next polling pass settles it again instead of releasing it as unfinished.
-func holdBlockedMidjourney(ctx context.Context, task *model.Midjourney, from string, update dto.MidjourneyDto, cause error) error {
-	held, err := common.Marshal(update)
-	if err != nil {
-		return errors.Join(cause, err)
-	}
-	newly, err := model.PersistMidjourneySettlementBlock(ctx, task, from, held)
-	if err != nil {
-		return errors.Join(cause, err)
-	}
-	if newly {
-		logger.LogError(ctx, fmt.Sprintf("Midjourney settlement blocked, result held (row_id=%d, reason=%s): %v", task.Id, model.TaskSettlementBlockedEvidence, cause))
-	}
-	return nil
-}
-
-func retryBlockedMidjourney(ctx context.Context, task *model.Midjourney) error {
-	var update dto.MidjourneyDto
-	if err := common.Unmarshal(task.PrivateData.BlockedResult, &update); err != nil {
-		return fmt.Errorf("held Midjourney result is unreadable: %w", err)
-	}
-	return applyMidjourneyTaskUpdate(ctx, task, update)
+	return false
 }
 
 func GetAllMidjourney(c *gin.Context) {
@@ -304,7 +294,7 @@ func GetAllMidjourney(c *gin.Context) {
 
 	if setting.MjForwardUrlEnabled {
 		for i, midjourney := range items {
-			midjourney.ImageUrl = service.BuildMidjourneyTaskImageURL(system_setting.ServerAddress, midjourney.Id)
+			midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
 			items[i] = midjourney
 		}
 	}
@@ -329,7 +319,7 @@ func GetUserMidjourney(c *gin.Context) {
 
 	if setting.MjForwardUrlEnabled {
 		for i, midjourney := range items {
-			midjourney.ImageUrl = service.BuildMidjourneyTaskImageURL(system_setting.ServerAddress, midjourney.Id)
+			midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
 			items[i] = midjourney
 		}
 	}

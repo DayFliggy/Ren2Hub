@@ -71,19 +71,10 @@ func GenerateOAuthCode(c *gin.Context) {
 		}
 		flowPayload.Telegram = telegramFlow
 	}
-	if c.GetBool("use_access_token") && request.Intent != model.AuthFlowIntentVerify {
-		writeSecurityOperationError(c, service.ErrVerificationForbidden)
-		return
-	}
 	if request.Intent == model.AuthFlowIntentBind || request.Intent == model.AuthFlowIntentVerify {
 		identity, ok := middleware.GetSessionAuthIdentity(c)
-		if request.Intent == model.AuthFlowIntentVerify {
-			if patIdentity, exists := middleware.GetAuthIdentity(c); exists {
-				identity, ok = patIdentity, true
-			}
-		}
 		if !ok {
-			common.ApiErrorStatus(c, http.StatusUnauthorized, common.NewMessage("Sign in to bind an account"))
+			writeAccountStatusError(c, http.StatusUnauthorized, "Sign in to bind an account")
 			return
 		}
 		userID = identity.UserID
@@ -104,7 +95,7 @@ func GenerateOAuthCode(c *gin.Context) {
 			flowPayload.SessionIdentity = &identity
 		}
 		if flowPayload.Telegram != nil {
-			if err := service.ValidateSecurityIdentity(identity); err != nil {
+			if _, _, err := service.ValidateLoginSession(identity); err != nil {
 				writeSecurityOperationError(c, err)
 				return
 			}
@@ -155,7 +146,7 @@ func HandleOAuth(c *gin.Context) {
 	providerName := c.Param("provider")
 	provider := oauth.GetProvider(providerName)
 	if provider == nil {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Unknown OAuth provider"))
+		writeAccountStatusError(c, http.StatusBadRequest, "Unknown OAuth provider")
 		return
 	}
 
@@ -166,7 +157,7 @@ func HandleOAuth(c *gin.Context) {
 		Provider: providerName,
 	})
 	if err != nil {
-		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("State parameter is empty or mismatched"))
+		writeAccountStatusError(c, http.StatusForbidden, "State parameter is empty or mismatched")
 		return
 	}
 
@@ -181,21 +172,11 @@ func HandleOAuth(c *gin.Context) {
 			recordUserSecurityAudit(c, pendingFlow.UserId, "user.binding_bind", map[string]any{"provider": providerName, "success": bindSucceeded, "notification_failed": notificationFailed})
 		}()
 	}
-	// Callbacks must use the same identity that started the flow. Account
-	// binding requires a browser session; verification also supports PATs.
-	if c.GetBool("use_access_token") && pendingFlow.Intent != model.AuthFlowIntentVerify {
-		writeSecurityOperationError(c, service.ErrVerificationForbidden)
-		return
-	}
+	// Bind and verification callbacks must use the dashboard session that started them.
 	if pendingFlow.Intent == model.AuthFlowIntentBind || pendingFlow.Intent == model.AuthFlowIntentVerify {
 		identity, ok := middleware.GetSessionAuthIdentity(c)
-		if pendingFlow.Intent == model.AuthFlowIntentVerify {
-			if patIdentity, exists := middleware.GetAuthIdentity(c); exists {
-				identity, ok = patIdentity, true
-			}
-		}
 		if !ok || identity.UserID != pendingFlow.UserId || identity.SessionID != pendingFlow.SessionId {
-			common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("State parameter is empty or mismatched"))
+			writeAccountStatusError(c, http.StatusForbidden, "State parameter is empty or mismatched")
 			return
 		}
 		consumeMatch.UserId = identity.UserID
@@ -233,15 +214,12 @@ func HandleOAuth(c *gin.Context) {
 			return
 		}
 		if pendingFlow.Intent != model.AuthFlowIntentLogin {
-			identity, ok := middleware.GetAuthIdentity(c)
-			if !ok {
-				identity, _ = middleware.GetSessionAuthIdentity(c)
-			}
+			identity, _ := middleware.GetSessionAuthIdentity(c)
 			if telegramPayload.SessionIdentity == nil || *telegramPayload.SessionIdentity != identity {
 				writeSecurityOperationError(c, model.ErrAuthFlowInvalid)
 				return
 			}
-			if err := service.ValidateSecurityIdentity(identity); err != nil {
+			if _, _, err := service.ValidateLoginSession(identity); err != nil {
 				writeSecurityOperationError(c, err)
 				return
 			}
@@ -257,7 +235,7 @@ func HandleOAuth(c *gin.Context) {
 	errorCode := c.Query("error")
 	if errorCode != "" {
 		if _, err := model.ConsumeAuthFlow(state, consumeMatch); err != nil {
-			common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("State parameter is empty or mismatched"))
+			writeAccountStatusError(c, http.StatusForbidden, "State parameter is empty or mismatched")
 			return
 		}
 		errorDescription := c.Query("error_description")
@@ -298,7 +276,7 @@ func HandleOAuth(c *gin.Context) {
 	}
 	flow, err := model.ConsumeAuthFlow(state, consumeMatch)
 	if err != nil {
-		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("State parameter is empty or mismatched"))
+		writeAccountStatusError(c, http.StatusForbidden, "State parameter is empty or mismatched")
 		return
 	}
 
@@ -316,14 +294,7 @@ func handleOAuthVerification(c *gin.Context, provider string, oauthUser *oauth.O
 		writeSecurityOperationError(c, err)
 		return
 	}
-	identity, ok := middleware.GetAuthIdentity(c)
-	if !ok {
-		identity, ok = middleware.GetSessionAuthIdentity(c)
-	}
-	if !ok {
-		writeSecurityOperationError(c, service.ErrAuthTokenInvalid)
-		return
-	}
+	identity, _ := middleware.GetSessionAuthIdentity(c)
 	proof, err := service.FinishOAuthVerification(identity, provider, oauthUser.ProviderUserID, payload.Verification)
 	if err != nil {
 		writeSecurityOperationError(c, err)
@@ -550,7 +521,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		// Custom provider: create user and binding in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
 			// Create user
-			if _, err := model.CreateUserWithAffiliateTx(tx, user, affiliateCode, common.AffiliateRegistrationRequired); err != nil {
+			if err := user.InsertWithTx(tx, inviterId); err != nil {
 				return err
 			}
 
@@ -576,7 +547,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		// Built-in provider: create user and update provider ID in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
 			// Create user
-			if _, err := model.CreateUserWithAffiliateTx(tx, user, affiliateCode, common.AffiliateRegistrationRequired); err != nil {
+			if err := user.InsertWithTx(tx, inviterId); err != nil {
 				return err
 			}
 
@@ -611,7 +582,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 // so the row carries the user's own role instead of the request context.
 func recordLegacyGitHubBindingAudit(c *gin.Context, user *model.User, success bool, params map[string]any) {
 	params["provider"], params["legacy_migration"], params["success"] = "github", true, success
-	model.RecordAccountOperationAuditLog(user.Id, user.Role, auditContentEN("user.binding_bind", params), c.ClientIP(), "user.binding_bind", params, nil, &model.AuditRequestInfo{
+	model.RecordOperationAuditLog(user.Id, user.Role, auditContentEN("user.binding_bind", params), c.ClientIP(), "user.binding_bind", params, nil, &model.AuditRequestInfo{
 		Method: c.Request.Method, Route: c.FullPath(), Path: c.FullPath(), Status: c.Writer.Status(), Success: success,
 	}, c)
 }

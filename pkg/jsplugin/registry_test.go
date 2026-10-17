@@ -194,7 +194,7 @@ func TestRegistryDecodesAndValidatesUsageSchema(t *testing.T) {
 	assert.Equal(t, LocalizedText{"en": "Whether audio is generated."}, plugin.Meta.UsageSchema["generate_audio"].Description)
 	require.Len(t, plugin.Meta.UsageExamples, 1)
 	assert.Equal(t, "std · 1s", plugin.Meta.UsageExamples[0].Label)
-	assert.Equal(t, "1", plugin.Meta.UsageExamples[0].Facts["tokens"])
+	assert.Equal(t, int64(1), plugin.Meta.UsageExamples[0].Facts["tokens"])
 
 	tests := []struct {
 		name          string
@@ -1159,7 +1159,7 @@ usageProfiles: [
 	assert.Equal(t, "HD", schema["resolution"].EnumLabels["720P"]["en"])
 	require.Len(t, examples, 1)
 	assert.Equal(t, "HD video", examples[0].Label)
-	assert.EqualValues(t, "5", examples[0].Facts["seconds"])
+	assert.EqualValues(t, 5, examples[0].Facts["seconds"])
 
 	legacy, err := CompilePlugin(routingTestPluginSource("legacy-usage", 0, `["image"]`,
 		`usageSchema: {seconds: {type: "number", unit: "second"}},`, ""), Options{})
@@ -1189,10 +1189,6 @@ func TestRegistryRejectsInvalidUsageProfiles(t *testing.T) {
 		{"noncanonical field", `[{models:["image"], schema:{" n":{type:"number", unit:"count"}}}]`, "canonical names"},
 		{"tokens need examples", `[{models:["image"], schema:{tokens:{type:"number", unit:"token"}}}]`, "usageExamples is required"},
 		{"examples use own schema", `[{models:["image"], schema:{n:{type:"number", unit:"count"}}, examples:[{label:"wrong", facts:{seconds:1}}]}]`, "usageProfiles[0]"},
-		{"null compatibility", `[{models:["image"],schema:{},compatibilitySchema:null}]`, "must be an object"},
-		{"duplicate compatibility field", `[{models:["image"],schema:{n:{type:"number",unit:"count"}},compatibilitySchema:{n:{type:"number",unit:"count"}}}]`, "duplicates field"},
-		{"invalid compatibility unit", `[{models:["image"],schema:{},compatibilitySchema:{old:{type:"number",unit:"dollar"}}}]`, "unit must be"},
-		{"compatibility is not advertised by examples", `[{models:["image"],schema:{n:{type:"number",unit:"count"}},compatibilitySchema:{old:{type:"number",unit:"count"}},examples:[{label:"old",facts:{old:1}}]}]`, "usageProfiles[0]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source := routingTestPluginSource("invalid-profile", 0, `["image", "video"]`,
@@ -1208,7 +1204,7 @@ usageProfiles: [{models:["image"], schema:{tokens:{type:"number", unit:"token"}}
 	schema, examples := plugin.Meta.UsageForModel("image")
 	assert.Equal(t, "token", schema["tokens"].Unit)
 	require.Len(t, examples, 1)
-	assert.EqualValues(t, "1", examples[0].Facts["tokens"])
+	assert.EqualValues(t, 1, examples[0].Facts["tokens"])
 	plugin.Meta.UsageProfiles[0].Schema = nil
 	require.ErrorContains(t, ValidateV1Meta(plugin.Meta), "schema must be an object")
 }

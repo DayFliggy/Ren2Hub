@@ -1,10 +1,6 @@
 package model
 
-// GetMissingModels returns enabled channel model names that no metadata record
-// covers. A name is covered by an exact record with that name or by any
-// prefix/contains/suffix rule record, whatever the rule's status: creating an
-// exact record for it would take precedence over the rule and could publish a
-// model the rule hides.
+// GetMissingModels returns model names that are referenced in the system
 func GetMissingModels() ([]string, error) {
 	// 1. 获取所有已启用模型（去重）
 	models := GetEnabledModels()
@@ -12,25 +8,21 @@ func GetMissingModels() ([]string, error) {
 		return []string{}, nil
 	}
 
-	// 2. 查询同名记录与全部名称规则记录
-	var records []Model
-	if err := DB.Select("model_name", "name_rule").
-		Where("model_name IN ? OR name_rule <> ?", models, NameRuleExact).
-		Find(&records).Error; err != nil {
+	// 2. 查询已有的元数据模型名
+	var existing []string
+	if err := DB.Model(&Model{}).Where("model_name IN ?", models).Pluck("model_name", &existing).Error; err != nil {
 		return nil, err
 	}
 
-	// 3. 收集未被任何记录覆盖的模型
-	missing := make([]string, 0)
+	existingSet := make(map[string]struct{}, len(existing))
+	for _, e := range existing {
+		existingSet[e] = struct{}{}
+	}
+
+	// 3. 收集缺失模型
+	var missing []string
 	for _, name := range models {
-		covered := false
-		for i := range records {
-			if records[i].MatchesName(name) {
-				covered = true
-				break
-			}
-		}
-		if !covered {
+		if _, ok := existingSet[name]; !ok {
 			missing = append(missing, name)
 		}
 	}

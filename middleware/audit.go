@@ -2,13 +2,12 @@ package middleware
 
 import (
 	"bytes"
-	"github.com/QuantumNous/new-api/service"
-	"net/http"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,11 +20,10 @@ type auditResponseWriter struct {
 	gin.ResponseWriter
 	body    *bytes.Buffer
 	maxSize int
-	onWrite func(int)
 }
 
 func (w *auditResponseWriter) Write(b []byte) (int, error) {
-	if w.body != nil && w.body.Len() < w.maxSize {
+	if w.body.Len() < w.maxSize {
 		remain := w.maxSize - w.body.Len()
 		if remain >= len(b) {
 			w.body.Write(b)
@@ -33,17 +31,7 @@ func (w *auditResponseWriter) Write(b []byte) (int, error) {
 			w.body.Write(b[:remain])
 		}
 	}
-	n, err := w.ResponseWriter.Write(b)
-	if n > 0 {
-		if w.onWrite != nil {
-			w.onWrite(n)
-		}
-	}
-	return n, err
-}
-
-func (w *auditResponseWriter) Unwrap() http.ResponseWriter {
-	return w.ResponseWriter
+	return w.ResponseWriter.Write(b)
 }
 
 func (w *auditResponseWriter) WriteString(s string) (int, error) {
@@ -60,7 +48,6 @@ var auditRouteActions = map[string]string{
 	"DELETE /api/user/:id/oauth/bindings/:provider_id": "user.oauth_unbind",
 
 	// 系统设置（root）
-	"PUT /api/option/bulk":                      "option.bulk_update",
 	"POST /api/option/payment_compliance":       "option.payment_compliance",
 	"POST /api/option/rest_model_ratio":         "option.reset_ratio",
 	"DELETE /api/option/channel_affinity_cache": "option.clear_affinity_cache",
@@ -77,6 +64,7 @@ var auditRouteActions = map[string]string{
 
 	// 兑换码
 	"PUT /api/redemption/":           "redemption.update",
+	"POST /api/redemption/batch":     "redemption.delete_batch",
 	"DELETE /api/redemption/:id":     "redemption.delete",
 	"DELETE /api/redemption/invalid": "redemption.delete_invalid",
 
@@ -95,6 +83,13 @@ var auditRouteActions = map[string]string{
 	"PUT /api/models/":               "model.update",
 	"DELETE /api/models/:id":         "model.delete",
 	"POST /api/models/sync_upstream": "model.sync_upstream",
+
+	// 部署
+	"POST /api/deployments/":      "deployment.create",
+	"PUT /api/deployments/:id":    "deployment.update",
+	"DELETE /api/deployments/:id": "deployment.delete",
+
+	// 订阅（管理员）
 
 	// 日志
 	"POST /api/system-task/log-cleanup": "log.cleanup_start",
@@ -177,7 +172,7 @@ func finishAdminAudit(c *gin.Context, writer *auditResponseWriter) {
 		Params:  routeParams,
 	}
 
-	model.RecordAccountOperationAuditLog(operatorId, operatorRole, content, ip, action, opParams, adminInfo, auditInfo, c)
+	model.RecordOperationAuditLog(operatorId, operatorRole, content, ip, action, opParams, adminInfo, auditInfo, c)
 }
 
 func auditAuthMethod(c *gin.Context) string {
@@ -237,7 +232,7 @@ func TokenOperationAudit() gin.HandlerFunc {
 		if id, err := strconv.Atoi(c.Param("id")); err == nil && id > 0 {
 			params["id"] = id
 		}
-		common.SetContextKey(c, "token_audit_params", params)
+		common.SetContextKey(c, constant.ContextKeyTokenAuditParams, params)
 		entry := model.AuditLog{
 			UserId: c.GetInt("id"), Username: c.GetString("username"), ActorRole: c.GetInt("role"),
 			Category: model.AuditCategorySecurity, Action: action, Content: content,
@@ -251,7 +246,7 @@ func TokenOperationAudit() gin.HandlerFunc {
 		if writer.body.Len() == writer.maxSize {
 			// JSON may be truncated before its success field. A completed handler
 			// supplies the result without retaining an unbounded response body.
-			entry.Success = entry.Status < 400 && common.GetContextKeyBool(c, "token_audit_succeeded")
+			entry.Success = entry.Status < 400 && common.GetContextKeyBool(c, constant.ContextKeyTokenAuditSucceeded)
 		}
 		model.RecordAuditLog(c, entry)
 	}
@@ -270,9 +265,8 @@ func AccessTokenAudit() gin.HandlerFunc {
 		if present {
 			_, internal, _ := service.ParseDashboardAccessToken(raw)
 			if !internal {
-				_, user, err := model.ValidatePersonalAccessToken(raw)
-				if err == nil && user != nil && user.Id > 0 {
-					beginAccessTokenAudit(c, user, raw)
+				if lookup := lookupAccessToken(c, raw); lookup.user != nil {
+					beginAccessTokenAudit(c, lookup.user, lookup.ref)
 					defer finishAccessTokenAudit(c)
 				}
 			}
@@ -281,16 +275,30 @@ func AccessTokenAudit() gin.HandlerFunc {
 	}
 }
 
-func beginAccessTokenAudit(c *gin.Context, user *model.User, token string) {
+func beginAccessTokenAudit(c *gin.Context, user *model.UserBase, tokenRef string) {
 	if _, exists := c.Get(accessTokenAuditContextKey); exists {
 		return
 	}
 	writer := &auditResponseWriter{ResponseWriter: c.Writer, body: bytes.NewBuffer(nil), maxSize: 64 * 1024}
 	c.Writer = writer
 	c.Set(accessTokenAuditContextKey, &accessTokenRequestAudit{
-		entry:  model.AuditLog{UserId: user.Id, Username: user.Username, ActorRole: user.Role, Category: model.AuditCategoryAccessToken, AuthMethod: "access_token", TokenRef: model.AccessTokenFingerprint(token), CreatedAt: common.GetTimestamp(), EventId: common.NewRequestId()},
+		entry:  model.AuditLog{UserId: user.Id, Username: user.Username, ActorRole: user.Role, Category: model.AuditCategoryAccessToken, AuthMethod: "access_token", TokenRef: tokenRef, CreatedAt: common.GetTimestamp(), EventId: common.NewRequestId()},
 		writer: writer,
 	})
+}
+
+// setAccessTokenAuditParam adds non-secret context, such as why a token was
+// rejected, to the current request's access audit entry.
+func setAccessTokenAuditParam(c *gin.Context, key string, value any) {
+	stored, _ := c.Get(accessTokenAuditContextKey)
+	audit, ok := stored.(*accessTokenRequestAudit)
+	if !ok {
+		return
+	}
+	if audit.entry.Other.Op == nil {
+		audit.entry.Other.Op = &model.AuditOperation{Params: model.AuditFields{}}
+	}
+	audit.entry.Other.Op.Params[key] = value
 }
 
 func finishAccessTokenAudit(c *gin.Context) {

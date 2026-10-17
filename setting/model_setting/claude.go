@@ -53,7 +53,7 @@ func GetClaudeSettings() *ClaudeSettings {
 func (c *ClaudeSettings) WriteHeaders(originModel string, httpHeader *http.Header) {
 	if headers, ok := c.HeadersSettings[originModel]; ok {
 		for headerKey, headerValues := range headers {
-			mergedValues := common.NormalizeHeaderListValues(
+			mergedValues := normalizeHeaderListValues(
 				append(append([]string(nil), httpHeader.Values(headerKey)...), headerValues...),
 			)
 			if len(mergedValues) == 0 {
@@ -62,6 +62,25 @@ func (c *ClaudeSettings) WriteHeaders(originModel string, httpHeader *http.Heade
 			httpHeader.Set(headerKey, strings.Join(mergedValues, ","))
 		}
 	}
+}
+
+func normalizeHeaderListValues(values []string) []string {
+	normalizedValues := make([]string, 0, len(values))
+	seenValues := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		for item := range strings.SplitSeq(value, ",") {
+			normalizedItem := strings.TrimSpace(item)
+			if normalizedItem == "" {
+				continue
+			}
+			if _, exists := seenValues[normalizedItem]; exists {
+				continue
+			}
+			seenValues[normalizedItem] = struct{}{}
+			normalizedValues = append(normalizedValues, normalizedItem)
+		}
+	}
+	return normalizedValues
 }
 
 func (c *ClaudeSettings) GetDefaultMaxTokens(model string) int {

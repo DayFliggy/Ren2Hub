@@ -134,9 +134,9 @@ func TestUserSessionPreviousRefreshHashMigrationConfiguredDatabases(t *testing.T
 		env       string
 		dialector func(string) gorm.Dialector
 	}{
-		{name: "mysql", env: "TEST_MYSQL_DSN", dialector: func(dsn string) gorm.Dialector { return mysqlMigrationDialector{*mysql.Open(dsn).(*mysql.Dialector)} }},
+		{name: "mysql", env: "TEST_MYSQL_DSN", dialector: func(dsn string) gorm.Dialector { return mysql.Open(dsn) }},
 		{name: "postgres", env: "TEST_POSTGRES_DSN", dialector: func(dsn string) gorm.Dialector {
-			return postgresMigrationDialector{*postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: true}).(*postgres.Dialector)}
+			return postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: true})
 		}},
 	}
 	for _, test := range tests {

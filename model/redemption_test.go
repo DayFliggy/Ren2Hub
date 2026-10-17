@@ -102,7 +102,6 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 
 func setupRedeemFixture(t *testing.T, quota int) (userId int, key string) {
 	t.Helper()
-	truncateTables(t)
 	require.NoError(t, DB.AutoMigrate(&Redemption{}))
 	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
 	t.Cleanup(func() {
@@ -119,7 +118,7 @@ func setupRedeemFixture(t *testing.T, quota int) (userId int, key string) {
 		Name:        "redeem-test",
 		Key:         key,
 		Status:      common.RedemptionCodeStatusEnabled,
-		Quota:       common.Quota(quota),
+		Quota:       quota,
 		CreatedTime: common.GetTimestamp(),
 	}
 	require.NoError(t, DB.Create(redemption).Error)
@@ -131,11 +130,11 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 
 	quota, err := Redeem(key, userId)
 	require.NoError(t, err)
-	assert.Equal(t, common.Quota(500), quota)
+	assert.Equal(t, 500, quota)
 
 	var user User
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
-	assert.Equal(t, common.Quota(500), user.Quota)
+	assert.Equal(t, 500, user.Quota)
 
 	var redemption Redemption
 	require.NoError(t, DB.First(&redemption, "name = ?", "redeem-test").Error)
@@ -146,7 +145,36 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	_, err = Redeem(key, userId)
 	require.Error(t, err)
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
-	assert.Equal(t, common.Quota(500), user.Quota)
+	assert.Equal(t, 500, user.Quota)
+}
+
+func TestRedeemRejectsWalletOverflow(t *testing.T) {
+	userId, key := setupRedeemFixture(t, 11)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", userId).Update("quota", common.MaxWalletQuota-10).Error)
+
+	_, err := Redeem(key, userId)
+	require.ErrorIs(t, err, ErrRedeemFailed)
+
+	var user User
+	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
+	assert.Equal(t, common.MaxWalletQuota-10, user.Quota)
+
+	var redemption Redemption
+	require.NoError(t, DB.First(&redemption, "key = ?", key).Error)
+	assert.Equal(t, common.RedemptionCodeStatusEnabled, redemption.Status)
+}
+
+func TestRedemptionQuotaRejectsWalletOverflow(t *testing.T) {
+	setupRedeemFixture(t, 500)
+
+	redemption := &Redemption{
+		Name:        "overflow-redemption",
+		Key:         "10000000000000000000000000000002",
+		Status:      common.RedemptionCodeStatusEnabled,
+		Quota:       common.MaxWalletQuota + 1,
+		CreatedTime: common.GetTimestamp(),
+	}
+	require.Error(t, redemption.Insert())
 }
 
 // Exactly one of several concurrent redeems of the same code may win, and
@@ -158,7 +186,7 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 	successes := make([]bool, goroutines)
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
 			if _, err := Redeem(key, userId); err == nil {
@@ -178,5 +206,5 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 
 	var user User
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
-	assert.Equal(t, common.Quota(300), user.Quota, "quota must be credited exactly once")
+	assert.Equal(t, 300, user.Quota, "quota must be credited exactly once")
 }

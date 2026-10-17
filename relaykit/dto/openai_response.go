@@ -33,21 +33,19 @@ type TextResponse struct {
 }
 
 type OpenAITextResponseChoice struct {
-	Index        int             `json:"index"`
-	Logprobs     json.RawMessage `json:"logprobs,omitempty"`
+	Index        int `json:"index"`
 	Message      `json:"message"`
 	FinishReason string `json:"finish_reason"`
 }
 
 type OpenAITextResponse struct {
-	ServiceTier string                     `json:"service_tier,omitempty"`
-	Id          string                     `json:"id"`
-	Model       string                     `json:"model"`
-	Object      string                     `json:"object"`
-	Created     any                        `json:"created"`
-	Choices     []OpenAITextResponseChoice `json:"choices"`
-	Error       any                        `json:"error,omitempty"`
-	Usage       `json:"usage"`
+	Id      string                     `json:"id"`
+	Model   string                     `json:"model"`
+	Object  string                     `json:"object"`
+	Created any                        `json:"created"`
+	Choices []OpenAITextResponseChoice `json:"choices"`
+	Error   any                        `json:"error,omitempty"`
+	Usage   `json:"usage"`
 }
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
@@ -89,9 +87,6 @@ type ChatCompletionsStreamResponseChoice struct {
 }
 
 type ChatCompletionsStreamResponseChoiceDelta struct {
-	Annotations      json.RawMessage    `json:"annotations,omitempty"`
-	Refusal          *string            `json:"refusal,omitempty"`
-	Audio            json.RawMessage    `json:"audio,omitempty"`
 	Content          *string            `json:"content,omitempty"`
 	ReasoningContent *string            `json:"reasoning_content,omitempty"`
 	Reasoning        *string            `json:"reasoning,omitempty"`
@@ -100,6 +95,7 @@ type ChatCompletionsStreamResponseChoiceDelta struct {
 	// Annotations is an OpenAI-compatible streaming extension supported by
 	// providers such as OpenRouter. Relaykit uses it to preserve streaming URL
 	// citations, including Claude round-trip metadata.
+	Annotations json.RawMessage `json:"annotations,omitempty"`
 }
 
 func (c *ChatCompletionsStreamResponseChoiceDelta) SetContentString(s string) {
@@ -132,7 +128,7 @@ type ToolCallResponse struct {
 	// Index is not nil only in chat completion chunk object
 	Index    *int             `json:"index,omitempty"`
 	ID       string           `json:"id,omitempty"`
-	Type     any              `json:"type,omitempty"`
+	Type     any              `json:"type"`
 	Function FunctionResponse `json:"function"`
 }
 
@@ -149,7 +145,6 @@ type FunctionResponse struct {
 }
 
 type ChatCompletionsStreamResponse struct {
-	ServiceTier       string                                `json:"service_tier,omitempty"`
 	Id                string                                `json:"id"`
 	Object            string                                `json:"object"`
 	Created           int64                                 `json:"created"`
@@ -231,15 +226,13 @@ type CompletionsStreamResponse struct {
 }
 
 type Usage struct {
-	MeasuredQuantities   map[string]string `json:"-"`
-	Observation          *UsageObservation `json:"-"`
-	PromptTokens         int               `json:"prompt_tokens"`
-	CompletionTokens     int               `json:"completion_tokens"`
-	TotalTokens          int               `json:"total_tokens"`
-	PromptCacheHitTokens int               `json:"prompt_cache_hit_tokens,omitempty"`
-	UsageSemantic        string            `json:"usage_semantic,omitempty"`
-	UsageSource          string            `json:"usage_source,omitempty"`
-	BillingUsage         *BillingUsage     `json:"billing_usage,omitempty"`
+	PromptTokens         int           `json:"prompt_tokens"`
+	CompletionTokens     int           `json:"completion_tokens"`
+	TotalTokens          int           `json:"total_tokens"`
+	PromptCacheHitTokens int           `json:"prompt_cache_hit_tokens,omitempty"`
+	UsageSemantic        string        `json:"usage_semantic,omitempty"`
+	UsageSource          string        `json:"usage_source,omitempty"`
+	BillingUsage         *BillingUsage `json:"billing_usage,omitempty"`
 
 	PromptTokensDetails    InputTokenDetails   `json:"prompt_tokens_details"`
 	CompletionTokenDetails OutputTokenDetails  `json:"completion_tokens_details"`
@@ -336,7 +329,6 @@ type OutputTokenDetails struct {
 }
 
 type OpenAIResponsesResponse struct {
-	ServiceTier        string             `json:"service_tier,omitempty"`
 	ID                 string             `json:"id"`
 	Object             string             `json:"object"`
 	CreatedAt          IntValue           `json:"created_at"`
@@ -382,6 +374,7 @@ type ResponsesOutput struct {
 	Result              string                          `json:"result,omitempty"`
 	CallId              string                          `json:"call_id,omitempty"`
 	Name                string                          `json:"name,omitempty"`
+	Namespace           string                          `json:"namespace,omitempty"`
 	Arguments           json.RawMessage                 `json:"arguments,omitempty"`
 	Input               json.RawMessage                 `json:"input,omitempty"`
 	Action              json.RawMessage                 `json:"action,omitempty"`
@@ -412,13 +405,14 @@ func (r ResponsesOutput) MarshalJSON() ([]byte, error) {
 			input = json.RawMessage(`""`)
 		}
 		return kitutil.Marshal(struct {
-			Type   string          `json:"type"`
-			ID     string          `json:"id,omitempty"`
-			Status string          `json:"status,omitempty"`
-			CallID string          `json:"call_id"`
-			Name   string          `json:"name"`
-			Input  json.RawMessage `json:"input"`
-		}{Type: r.Type, ID: r.ID, Status: r.Status, CallID: r.CallId, Name: r.Name, Input: input})
+			Type      string          `json:"type"`
+			ID        string          `json:"id,omitempty"`
+			Status    string          `json:"status,omitempty"`
+			CallID    string          `json:"call_id"`
+			Name      string          `json:"name"`
+			Namespace string          `json:"namespace,omitempty"`
+			Input     json.RawMessage `json:"input"`
+		}{Type: r.Type, ID: r.ID, Status: r.Status, CallID: r.CallId, Name: r.Name, Namespace: r.Namespace, Input: input})
 	case "web_search_call":
 		return kitutil.Marshal(struct {
 			Type   string          `json:"type"`
@@ -449,7 +443,7 @@ func (r ResponsesOutput) MarshalJSON() ([]byte, error) {
 			ApprovalRequestID: r.ApprovalRequestID,
 		})
 	case "reasoning":
-		// The protocol requires summary even before its first text delta.
+		// summary is required on a reasoning item, even before any summary text exists.
 		type responsesOutputAlias ResponsesOutput
 		if len(r.Summary) > 0 {
 			return kitutil.Marshal(responsesOutputAlias(r))
@@ -540,9 +534,6 @@ func (r *ResponsesOutput) ArgumentsString() string {
 	if r == nil {
 		return ""
 	}
-	if r.Type == "custom_tool_call" && len(r.Input) > 0 {
-		return ResponsesArgumentsString(r.Input)
-	}
 	return ResponsesArgumentsString(r.Arguments)
 }
 
@@ -552,19 +543,14 @@ func ResponsesArgumentsString(arguments json.RawMessage) string {
 }
 
 type ResponsesOutputContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-	// Refusal carries a type=refusal content part. Responses delivers model
-	// refusals here rather than in Text, so a converter that reads only Text
-	// would report an empty assistant message.
-	Refusal     *string `json:"refusal,omitempty"`
-	Annotations []any   `json:"annotations"`
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	Annotations []any  `json:"annotations"`
 }
 
 type ResponsesReasoningSummaryPart struct {
-	Type        string `json:"type"`
-	Text        string `json:"text"`
-	Annotations *[]any `json:"annotations,omitempty"`
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 const (
@@ -589,7 +575,6 @@ const (
 
 // ResponsesStreamResponse 用于处理 /v1/responses 流式响应
 type ResponsesStreamResponse struct {
-	Error           any                      `json:"error,omitempty"`
 	Type            string                   `json:"type"`
 	Response        *OpenAIResponsesResponse `json:"response,omitempty"`
 	Code            string                   `json:"code,omitempty"`
@@ -600,7 +585,6 @@ type ResponsesStreamResponse struct {
 	Input           *string                  `json:"input,omitempty"`
 	Name            string                   `json:"name,omitempty"`
 	Text            *string                  `json:"text,omitempty"`
-	Refusal         *string                  `json:"refusal,omitempty"`
 	Item            *ResponsesOutput         `json:"item,omitempty"`
 	SequenceNumber  *int                     `json:"sequence_number,omitempty"`
 	Annotation      json.RawMessage          `json:"annotation,omitempty"`
@@ -615,22 +599,6 @@ type ResponsesStreamResponse struct {
 	SummaryIndex *int                           `json:"summary_index,omitempty"`
 	ItemID       string                         `json:"item_id,omitempty"`
 	Part         *ResponsesReasoningSummaryPart `json:"part,omitempty"`
-}
-
-// GetOpenAIError preserves structured failures in both native Responses envelopes.
-func (s *ResponsesStreamResponse) GetOpenAIError() *types.OpenAIError {
-	if s.Response != nil {
-		if err := s.Response.GetOpenAIError(); err != nil {
-			return err
-		}
-	}
-	if err := GetOpenAIError(s.Error); err != nil {
-		return err
-	}
-	if s.Code != "" || s.Message != "" {
-		return &types.OpenAIError{Code: s.Code, Message: s.Message, Param: s.Param}
-	}
-	return nil
 }
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构

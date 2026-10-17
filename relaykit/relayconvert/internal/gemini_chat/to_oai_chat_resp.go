@@ -16,16 +16,14 @@ func UsageFromGeminiMetadata(metadata *dto.GeminiUsageMetadata, fallbackPromptTo
 		if fallbackPromptTokens <= 0 {
 			return nil
 		}
-		usage := &dto.Usage{PromptTokens: fallbackPromptTokens, UsageSource: "estimated"}
+		usage := &dto.Usage{PromptTokens: fallbackPromptTokens}
 		usage.PromptTokensDetails.TextTokens = fallbackPromptTokens
 		return usage
 	}
 
-	estimatedInput := false
 	promptTokens := metadata.PromptTokenCount + metadata.ToolUsePromptTokenCount
 	if promptTokens <= 0 && fallbackPromptTokens > 0 {
 		promptTokens = fallbackPromptTokens
-		estimatedInput = true
 	}
 
 	usage := &dto.Usage{
@@ -36,9 +34,6 @@ func UsageFromGeminiMetadata(metadata *dto.GeminiUsageMetadata, fallbackPromptTo
 	}
 	if usage.BillingUsage == nil {
 		usage.BillingUsage = dto.NewGeminiChatBillingUsage(metadata)
-	}
-	if estimatedInput {
-		usage.UsageSource = "provider_and_estimated"
 	}
 	usage.CompletionTokenDetails.ReasoningTokens = metadata.ThoughtsTokenCount
 	usage.PromptTokensDetails.CachedTokens = metadata.CachedContentTokenCount
@@ -90,8 +85,8 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 		Created: created,
 		Choices: make([]dto.OpenAITextResponseChoice, 0, len(response.Candidates)),
 	}
+	isToolCall := false
 	for _, candidate := range response.Candidates {
-		isToolCall := false
 		choice := dto.OpenAITextResponseChoice{
 			Index: int(candidate.Index),
 			Message: dto.Message{
@@ -102,7 +97,6 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 		}
 		if len(candidate.Content.Parts) > 0 {
 			var content strings.Builder
-			var reasoningText strings.Builder
 			var inlineGrow int
 			for _, part := range candidate.Content.Parts {
 				if part.InlineData != nil {
@@ -143,10 +137,7 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 						toolCalls = append(toolCalls, *call)
 					}
 				} else if part.Thought {
-					if reasoningText.Len() > 0 {
-						reasoningText.WriteByte('\n')
-					}
-					reasoningText.WriteString(part.Text)
+					choice.Message.ReasoningContent = &part.Text
 				} else {
 					if part.ExecutableCode != nil {
 						writeSep()
@@ -171,9 +162,6 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 				isToolCall = true
 			}
 			choice.Message.SetStringContent(content.String())
-			if reasoningText.Len() > 0 {
-				choice.Message.ReasoningContent = kitutil.GetPointer(reasoningText.String())
-			}
 		}
 		if candidate.FinishReason != nil {
 			switch *candidate.FinishReason {
@@ -187,7 +175,7 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 				choice.FinishReason = types.FinishReasonContentFilter
 			}
 		}
-		if isToolCall && choice.FinishReason == types.FinishReasonStop {
+		if isToolCall {
 			choice.FinishReason = types.FinishReasonToolCalls
 		}
 		choice.Message.Annotations = groundingAnnotationsToChat(candidate.GroundingMetadata, candidate.Content, choice.Message.StringContent())
@@ -210,7 +198,6 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 			Delta: dto.ChatCompletionsStreamResponseChoiceDelta{},
 		}
 		var content strings.Builder
-		var reasoningText strings.Builder
 		var inlineGrow int
 		for _, part := range candidate.Content.Parts {
 			if part.InlineData != nil {
@@ -228,7 +215,7 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 			appended++
 		}
 		isTools := false
-
+		isThought := false
 		if candidate.FinishReason != nil {
 			switch *candidate.FinishReason {
 			case "STOP":
@@ -258,10 +245,9 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 					choice.Delta.ToolCalls = append(choice.Delta.ToolCalls, *call)
 				}
 			} else if part.Thought {
-				if reasoningText.Len() > 0 {
-					reasoningText.WriteByte('\n')
-				}
-				reasoningText.WriteString(part.Text)
+				isThought = true
+				writeSep()
+				content.WriteString(part.Text)
 			} else {
 				if part.ExecutableCode != nil {
 					writeSep()
@@ -281,11 +267,12 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 				}
 			}
 		}
-		choice.Delta.SetContentString(content.String())
-		if reasoningText.Len() > 0 {
-			choice.Delta.SetReasoningContent(reasoningText.String())
+		if isThought {
+			choice.Delta.SetReasoningContent(content.String())
+		} else {
+			choice.Delta.SetContentString(content.String())
 		}
-		if isTools && (choice.FinishReason == nil || *choice.FinishReason == types.FinishReasonStop) {
+		if isTools {
 			choice.FinishReason = &types.FinishReasonToolCalls
 		}
 		choice.Delta.Annotations = groundingAnnotationsToChat(candidate.GroundingMetadata, candidate.Content, content.String())
@@ -305,14 +292,11 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 }
 
 type GeminiToChatStreamState struct {
-	toolsByCandidate   map[int64]bool
-	finishedCandidates map[int64]bool
-	rolesSent          map[int]bool
-	id                 string
-	created            int64
-	sawToolCall        bool
-	finishEmitted      bool
-	latestUsage        *dto.Usage
+	id            string
+	created       int64
+	sawToolCall   bool
+	finishEmitted bool
+	latestUsage   *dto.Usage
 	// Gemini generateContent streams complete function calls. Keep their
 	// occurrence indexes monotonic because chunk-local indexes restart at zero.
 	nextToolIndexByCandidate map[int64]int
@@ -379,25 +363,16 @@ func (s *GeminiToChatStreamState) ConvertChunk(geminiResponse *dto.GeminiChatRes
 	if err != nil {
 		return nil, err
 	}
-	if s.toolsByCandidate == nil {
-		s.toolsByCandidate = make(map[int64]bool)
+	hasNonStopFinish := false
+	for _, candidate := range geminiResponse.Candidates {
+		if candidate.FinishReason != nil && *candidate.FinishReason != "" && *candidate.FinishReason != "STOP" {
+			hasNonStopFinish = true
+			break
+		}
 	}
-	if s.finishedCandidates == nil {
-		s.finishedCandidates = make(map[int64]bool)
-	}
-	response, _ := StreamResponseGeminiChat2OpenAI(geminiResponse)
+	response, isStop := StreamResponseGeminiChat2OpenAI(geminiResponse)
 	if response == nil {
 		return nil, nil
-	}
-	if s.rolesSent == nil {
-		s.rolesSent = make(map[int]bool)
-	}
-	for i := range response.Choices {
-		choice := &response.Choices[i]
-		if !s.rolesSent[choice.Index] {
-			choice.Delta.Role = "assistant"
-			s.rolesSent[choice.Index] = true
-		}
 	}
 	response.Id = s.id
 	response.Created = s.created
@@ -437,51 +412,32 @@ func (s *GeminiToChatStreamState) ConvertChunk(geminiResponse *dto.GeminiChatRes
 			candidate.Index,
 			s.sentGroundingAnnotations,
 		)
-		if grounding.err != nil {
-			return nil, grounding.err
-		}
 	}
 
+	if response.IsToolCall() {
+		s.sawToolCall = true
+		if !hasNonStopFinish {
+			for i := range response.Choices {
+				if response.Choices[i].FinishReason != nil && *response.Choices[i].FinishReason == types.FinishReasonToolCalls {
+					response.Choices[i].FinishReason = nil
+				}
+			}
+		}
+	}
 	if usage != nil {
 		s.latestUsage = usage
 	}
-	terminal := &dto.ChatCompletionsStreamResponse{Id: s.id, Created: s.created, Model: model, Object: "chat.completion.chunk", Usage: s.latestUsage}
-	for index, candidate := range geminiResponse.Candidates {
-		if index >= len(response.Choices) {
+	for _, choice := range response.Choices {
+		if choice.FinishReason != nil && *choice.FinishReason != "" {
+			s.finishEmitted = true
 			break
 		}
-		choice := &response.Choices[index]
-		if len(choice.Delta.ToolCalls) > 0 {
-			s.toolsByCandidate[candidate.Index] = true
-		}
-		choice.FinishReason = nil
-		if candidate.FinishReason == nil || *candidate.FinishReason == "" || s.finishedCandidates[candidate.Index] {
-			continue
-		}
-		reason := types.FinishReasonStop
-		switch *candidate.FinishReason {
-		case "STOP":
-			if s.toolsByCandidate[candidate.Index] {
-				reason = types.FinishReasonToolCalls
-			}
-		case "MAX_TOKENS":
-			reason = types.FinishReasonLength
-		default:
-			reason = types.FinishReasonContentFilter
-		}
-		if *candidate.FinishReason == "STOP" {
-			terminal.Choices = append(terminal.Choices, dto.ChatCompletionsStreamResponseChoice{Index: int(candidate.Index), FinishReason: kitutil.GetPointer(reason)})
-		} else {
-			choice.FinishReason = kitutil.GetPointer(reason)
-		}
-		s.finishedCandidates[candidate.Index] = true
-		s.finishEmitted = true
-	}
-	responses := []*dto.ChatCompletionsStreamResponse{response}
-	if len(terminal.Choices) > 0 {
-		responses = append(responses, terminal)
 	}
 
+	responses := []*dto.ChatCompletionsStreamResponse{response}
+	if isStop && !s.finishEmitted {
+		responses = append(responses, s.terminalChunk(model))
+	}
 	return responses, nil
 }
 

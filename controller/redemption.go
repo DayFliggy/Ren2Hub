@@ -62,7 +62,7 @@ func GetRedemption(c *gin.Context) {
 
 func AddRedemption(c *gin.Context) {
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		common.ApiErrorT(c, "Payment, redemption, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
+		common.ApiErrorT(c, "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
 		return
 	}
 
@@ -82,6 +82,14 @@ func AddRedemption(c *gin.Context) {
 	}
 	if redemption.Count > 100 {
 		common.ApiErrorT(c, "Maximum 100 redemption codes can be generated at once")
+		return
+	}
+	if redemption.Quota <= 0 {
+		common.ApiErrorT(c, "Redemption quota must be positive")
+		return
+	}
+	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 	if err := validateExpiredTime(redemption.ExpiredTime); err != nil {
@@ -107,7 +115,7 @@ func AddRedemption(c *gin.Context) {
 		}
 		keys = append(keys, key)
 	}
-	recordManageAudit(c, "redemption.create", map[string]interface{}{
+	recordManageAudit(c, "redemption.create", map[string]any{
 		"name":  redemption.Name,
 		"count": redemption.Count,
 		"quota": logger.FormatQuota(redemption.Quota),
@@ -148,6 +156,14 @@ func UpdateRedemption(c *gin.Context) {
 		return
 	}
 	if statusOnly == "" {
+		if redemption.Quota <= 0 {
+			common.ApiErrorT(c, "Redemption quota must be positive")
+			return
+		}
+		if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 		if err := validateExpiredTime(redemption.ExpiredTime); err != nil {
 			common.ApiError(c, err)
 			return
@@ -192,4 +208,25 @@ func validateExpiredTime(expired int64) error {
 		return common.NewMessage("Expiration time cannot be earlier than current time")
 	}
 	return nil
+}
+
+func DeleteRedemptionBatch(c *gin.Context) {
+	var request struct {
+		Ids []int `json:"ids" binding:"required,min=1,max=1000,dive,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	count, err := model.BatchDeleteRedemptions(request.Ids)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "redemption.delete_batch", map[string]any{
+		"count":                    count,
+		"total":                    len(request.Ids),
+		"requested_redemption_ids": request.Ids,
+	})
+	common.ApiSuccess(c, count)
 }

@@ -29,13 +29,10 @@ type claudeCapabilities struct {
 	// disableAsBetweenTools marks models whose lowest thinking setting is
 	// {"type":"between_tools"} instead of {"type":"disabled"}.
 	disableAsBetweenTools bool
-	// rejectsForcedToolChoice marks models that return a 400 for tool_choice
-	// "any" or "tool" whatever the thinking setting.
-	rejectsForcedToolChoice bool
-	supportsEffort          bool
-	supportsXHigh           bool
-	supportsMax             bool
-	strictSampling          bool
+	supportsEffort        bool
+	supportsXHigh         bool
+	supportsMax           bool
+	strictSampling        bool
 	// offEffortAtMostHigh marks models that accept effort high or below only
 	// while thinking is off (disabled or between_tools).
 	offEffortAtMostHigh bool
@@ -46,7 +43,7 @@ type claudeCapabilities struct {
 }
 
 func claudeCapabilitiesFor(model string) claudeCapabilities {
-	model = canonicalClaudeModelID(model)
+	model = strings.ToLower(model)
 	capabilities := claudeCapabilities{supportsManual: true, supportsDisable: true, defaultEffort: EffortHigh}
 
 	switch {
@@ -56,9 +53,6 @@ func claudeCapabilitiesFor(model string) claudeCapabilities {
 		capabilities.supportsManual = false
 		capabilities.defaultThinking = true
 		capabilities.supportsDisable = false
-		// Forced tool use was removed in the 5.1 generation; Fable 5 and
-		// Mythos 5 still accept it.
-		capabilities.rejectsForcedToolChoice = strings.HasPrefix(model, "claude-fable-5-1") || strings.HasPrefix(model, "claude-mythos-5-1")
 		capabilities.supportsEffort = true
 		capabilities.supportsXHigh = true
 		capabilities.supportsMax = true
@@ -79,7 +73,6 @@ func claudeCapabilitiesFor(model string) claudeCapabilities {
 		capabilities.defaultThinking = true
 		capabilities.supportsDisable = false
 		capabilities.disableAsBetweenTools = strings.HasPrefix(model, "claude-sonnet-5-5")
-		capabilities.rejectsForcedToolChoice = true
 		capabilities.offEffortAtMostHigh = capabilities.disableAsBetweenTools
 		if strings.HasPrefix(model, "claude-opus-5-5") {
 			capabilities.defaultEffort = EffortMedium
@@ -418,12 +411,6 @@ func claudeEffortDiagnostics(model string, requested Effort, sent Effort) []type
 func ClaudeUsesManualThinking(model string, intent Intent) bool {
 	capabilities := claudeCapabilitiesFor(model)
 	return capabilities.supportsManual && intent.BudgetTokens != nil && intent.Mode != ModeAdaptive
-}
-
-// ClaudeRejectsForcedToolChoice reports whether the model returns a 400 for
-// tool_choice "any" or "tool" regardless of thinking settings.
-func ClaudeRejectsForcedToolChoice(model string) bool {
-	return claudeCapabilitiesFor(model).rejectsForcedToolChoice
 }
 
 func IsKnownClaudeModel(model string) bool {

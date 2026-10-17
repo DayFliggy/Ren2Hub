@@ -49,88 +49,77 @@ func TestNewOpenAIChatBillingUsageRequiresTokenContent(t *testing.T) {
 	assert.Equal(t, 1, billingUsage.OpenAIUsage.PromptTokens)
 }
 
+func TestImageCacheDetailsSurviveUsageSnapshots(t *testing.T) {
+	var original Usage
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300,"image_tokens":600,"cached_tokens_details":{"image_tokens":200,"text_tokens":100}}}`), &original))
+	billing := NewOpenAIResponsesBillingUsage(&original)
+	require.NotNil(t, billing)
+	*original.InputTokensDetails.CachedTokensDetails.ImageTokens = 99
+	canonical, ok := billing.CanonicalUsage()
+	require.True(t, ok)
+	require.NotNil(t, canonical.PromptTokensDetails.CachedTokensDetails)
+	assert.Equal(t, 200, *canonical.PromptTokensDetails.CachedTokensDetails.ImageTokens)
+	*canonical.PromptTokensDetails.CachedTokensDetails.ImageTokens = 42
+	assert.Equal(t, 200, *billing.OpenAIUsage.InputTokensDetails.CachedTokensDetails.ImageTokens)
+
+	var incoming Usage
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"input_tokens_details":{"cached_tokens_details":{"image_tokens":0}}}`), &incoming))
+	merged := MergeUsageNonZero(canonical, &incoming)
+	require.NotNil(t, merged.InputTokensDetails.CachedTokensDetails.ImageTokens)
+	assert.Zero(t, *merged.InputTokensDetails.CachedTokensDetails.ImageTokens)
+	assert.Equal(t, 100, *merged.InputTokensDetails.CachedTokensDetails.TextTokens)
+	*incoming.InputTokensDetails.CachedTokensDetails.ImageTokens = 9
+	assert.Zero(t, *merged.InputTokensDetails.CachedTokensDetails.ImageTokens)
+	encoded, err := kitutil.Marshal(merged)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"cached_tokens_details":{"text_tokens":100,"image_tokens":0}`)
+	assert.NotContains(t, string(encoded), `"audio_tokens":null`)
+}
+
 func TestNewEstimatedGeminiChatBillingUsage(t *testing.T) {
 	billingUsage := NewEstimatedGeminiChatBillingUsage(&Usage{
-		PromptTokens:           11,
-		CompletionTokens:       7,
-		PromptTokensDetails:    InputTokenDetails{CachedTokens: 8, TextTokens: 6, ImageTokens: 3, AudioTokens: 2},
-		CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 2, TextTokens: 3, AudioTokens: 2},
+		PromptTokens:     11,
+		CompletionTokens: 7,
 	})
 
 	require.NotNil(t, billingUsage)
 	require.NotNil(t, billingUsage.GeminiUsageMetadata)
 	assert.True(t, billingUsage.Estimated)
 	assert.Equal(t, 11, billingUsage.GeminiUsageMetadata.PromptTokenCount)
-	assert.Equal(t, 5, billingUsage.GeminiUsageMetadata.CandidatesTokenCount)
-	assert.Equal(t, 2, billingUsage.GeminiUsageMetadata.ThoughtsTokenCount)
+	assert.Equal(t, 7, billingUsage.GeminiUsageMetadata.CandidatesTokenCount)
 	assert.Equal(t, 18, billingUsage.GeminiUsageMetadata.TotalTokenCount)
-	assert.Equal(t, 8, billingUsage.GeminiUsageMetadata.CachedContentTokenCount)
-	assert.Equal(t, []GeminiPromptTokensDetails{{Modality: "TEXT", TokenCount: 6}, {Modality: "IMAGE", TokenCount: 3}, {Modality: "AUDIO", TokenCount: 2}}, billingUsage.GeminiUsageMetadata.PromptTokensDetails)
-	assert.Equal(t, []GeminiPromptTokensDetails{{Modality: "TEXT", TokenCount: 3}, {Modality: "AUDIO", TokenCount: 2}}, billingUsage.GeminiUsageMetadata.CandidatesTokensDetails)
 }
 
-func TestCloneBillingUsageWithEstimatedCompletionPreservesProviderFacts(t *testing.T) {
-	for _, tc := range []struct {
-		name         string
-		source, want *BillingUsage
-	}{
-		{
-			name: "openai responses",
-			source: NewOpenAIResponsesBillingUsage(&Usage{InputTokens: 10, TotalTokens: 30,
-				InputTokensDetails: &InputTokenDetails{CachedTokens: 8, AudioTokens: 2}}),
-			want: &BillingUsage{Source: BillingUsageSourceOAIResponses, Semantic: BillingUsageSemanticOpenAI, Estimated: true,
-				OpenAIUsage: &Usage{InputTokens: 10, CompletionTokens: 7, OutputTokens: 7, TotalTokens: 30,
-					InputTokensDetails: &InputTokenDetails{CachedTokens: 8, AudioTokens: 2}}},
+func TestCanonicalGeminiUsageClampsNegativeCompletionFromTotalMinusPrompt(t *testing.T) {
+	usage, ok := NewGeminiChatBillingUsage(&GeminiUsageMetadata{
+		PromptTokenCount: 50,
+		TotalTokenCount:  30,
+	}).CanonicalUsage()
+	require.True(t, ok)
+	assert.Equal(t, 0, usage.CompletionTokens)
+}
+
+func TestCanonicalOpenAIUsageMergesInputTokenDetailsFieldwise(t *testing.T) {
+	usage, ok := NewOpenAIResponsesBillingUsage(&Usage{
+		PromptTokens: 10,
+		PromptTokensDetails: InputTokenDetails{
+			CachedTokens: 8,
+			TextTokens:   12,
+			ImageTokens:  4,
+			AudioTokens:  3,
 		},
-		{
-			name: "claude messages",
-			source: NewClaudeMessagesBillingUsage(&ClaudeUsage{InputTokens: 10, CacheReadInputTokens: 8,
-				CacheCreation: &ClaudeCacheCreationUsage{Ephemeral1hInputTokens: 3}, ServerToolUse: &ClaudeServerToolUse{WebSearchRequests: 2}}),
-			want: &BillingUsage{Source: BillingUsageSourceClaudeMessages, Semantic: BillingUsageSemanticAnthropic, Estimated: true,
-				ClaudeUsage: &ClaudeUsage{InputTokens: 10, OutputTokens: 7, CacheReadInputTokens: 8,
-					CacheCreation: &ClaudeCacheCreationUsage{Ephemeral1hInputTokens: 3}, ServerToolUse: &ClaudeServerToolUse{WebSearchRequests: 2}}},
+		InputTokensDetails: &InputTokenDetails{
+			CachedTokens:         5,
+			CachedCreationTokens: 7,
+			TextTokens:           2,
 		},
-		{
-			name: "gemini",
-			source: NewGeminiChatBillingUsage(&GeminiUsageMetadata{PromptTokenCount: 10, ToolUsePromptTokenCount: 2,
-				ThoughtsTokenCount: 3, TotalTokenCount: 15, CachedContentTokenCount: 8,
-				PromptTokensDetails:        []GeminiPromptTokensDetails{{Modality: "IMAGE", TokenCount: 4}},
-				ToolUsePromptTokensDetails: []GeminiPromptTokensDetails{{Modality: "TEXT", TokenCount: 2}},
-				CandidatesTokensDetails:    []GeminiPromptTokensDetails{{Modality: "AUDIO", TokenCount: 1}}}),
-			want: &BillingUsage{Source: BillingUsageSourceGeminiChat, Semantic: BillingUsageSemanticGemini, Estimated: true,
-				GeminiUsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 10, ToolUsePromptTokenCount: 2,
-					ThoughtsTokenCount: 3, CandidatesTokenCount: 4, TotalTokenCount: 19, CachedContentTokenCount: 8,
-					PromptTokensDetails:        []GeminiPromptTokensDetails{{Modality: "IMAGE", TokenCount: 4}},
-					ToolUsePromptTokensDetails: []GeminiPromptTokensDetails{{Modality: "TEXT", TokenCount: 2}},
-					CandidatesTokensDetails:    []GeminiPromptTokensDetails{{Modality: "AUDIO", TokenCount: 1}}}},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			original, err := kitutil.Marshal(tc.source)
-			require.NoError(t, err)
-			patched := CloneBillingUsageWithEstimatedCompletion(tc.source, 7)
-			require.NotNil(t, patched)
-			assert.Equal(t, tc.want, patched)
-			patched.Estimated = false
-			assert.Equal(t, patched, CloneBillingUsageWithEstimatedCompletion(patched, 99), "known completion counts remain authoritative")
-			assert.Equal(t, tc.source, CloneBillingUsageWithEstimatedCompletion(tc.source, 0))
-			switch {
-			case patched.OpenAIUsage != nil:
-				patched.OpenAIUsage.InputTokensDetails.CachedTokens = 0
-			case patched.ClaudeUsage != nil:
-				patched.ClaudeUsage.CacheCreation.Ephemeral1hInputTokens = 0
-				patched.ClaudeUsage.ServerToolUse.WebSearchRequests = 0
-			case patched.GeminiUsageMetadata != nil:
-				patched.GeminiUsageMetadata.PromptTokensDetails[0].TokenCount = 0
-				patched.GeminiUsageMetadata.ToolUsePromptTokensDetails[0].TokenCount = 0
-				patched.GeminiUsageMetadata.CandidatesTokensDetails[0].TokenCount = 0
-			}
-			after, err := kitutil.Marshal(tc.source)
-			require.NoError(t, err)
-			assert.JSONEq(t, string(original), string(after), "patching and subsequent mutations must not change the provider snapshot")
-		})
-	}
-	assert.Nil(t, CloneBillingUsageWithEstimatedCompletion(nil, 7))
+	}).CanonicalUsage()
+	require.True(t, ok)
+	assert.Equal(t, 8, usage.PromptTokensDetails.CachedTokens)
+	assert.Equal(t, 12, usage.PromptTokensDetails.TextTokens)
+	assert.Equal(t, 4, usage.PromptTokensDetails.ImageTokens)
+	assert.Equal(t, 3, usage.PromptTokensDetails.AudioTokens)
+	assert.Equal(t, 7, usage.PromptTokensDetails.CachedCreationTokens)
 }
 
 func TestBillingUsageJSONUsesProtocolNamedFields(t *testing.T) {

@@ -1,3 +1,4 @@
+import { configureQuotaDisplay } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
@@ -162,6 +163,7 @@ export const useAppStore = defineStore('app', () => {
     uptimePercent.value = null
     try {
       status.value = (await publicApi.status()) || {}
+      configureQuotaDisplay(status.value)
       statusReachable.value = true
       applyBranding()
 

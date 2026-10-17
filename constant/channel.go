@@ -54,14 +54,14 @@ const (
 	ChannelTypeDoubaoVideo    = 54
 	ChannelTypeSora           = 55
 	ChannelTypeReplicate      = 56
-	ChannelTypeCodex          = 57 // retired; reserved for historical rows, never reuse
+	ChannelTypeCodex          = 57 // Reserved: retired subscription channel; never accepted.
 	ChannelTypeAdvancedCustom = 58
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
 	ChannelTypeTaskPlugin     = 61
 	ChannelTypeVLLM           = 62
 	ChannelTypeSGLang         = 63
-	ChannelTypeDummy          = 64 // this one is only for count, do not add any channel after this
+	ChannelTypeDummy          // this one is only for count, do not add any channel after this
 
 )
 
@@ -125,7 +125,7 @@ var ChannelBaseURLs = []string{
 	"https://ark.cn-beijing.volces.com",         //54
 	"https://api.openai.com",                    //55
 	"https://api.replicate.com",                 //56
-	"",                                          //57 retired
+	"",                                        //57 retired
 	"",                                          //58
 	"",                                          //59
 	"",                                          //60
@@ -141,78 +141,67 @@ func GetChannelBaseURL(channelType int) string {
 	return ChannelBaseURLs[channelType]
 }
 
-// ChannelTypes is the channel catalog; numeric identities remain stable across retirement.
-var ChannelTypes = map[int]ChannelTypeDefinition{
-	ChannelTypeUnknown:        {Name: "Unknown", Category: ChannelCategoryReserved, Lifecycle: ChannelLifecycleReserved},
-	ChannelTypeOpenAI:         {Name: "OpenAI", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeMidjourney:     {Name: "Midjourney", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAzure:          {Name: "Azure", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeOllama:         {Name: "Ollama", Category: ChannelCategoryLocal, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeMidjourneyPlus: {Name: "MidjourneyPlus", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeOpenAIMax:      {Name: "OpenAIMax", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeOhMyGPT:        {Name: "OhMyGPT", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeCustom:         {Name: "Custom", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAILS:           {Name: "AILS", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAIProxy:        {Name: "AIProxy", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypePaLM:           {Name: "PaLM", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAPI2GPT:        {Name: "API2GPT", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAIGC2D:         {Name: "AIGC2D", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAnthropic:      {Name: "Anthropic", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeBaidu:          {Name: "Baidu", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeZhipu:          {Name: "Zhipu", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAli:            {Name: "Ali", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeXunfei:         {Name: "Xunfei", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelType360:            {Name: "360", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeOpenRouter:     {Name: "OpenRouter", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAIProxyLibrary: {Name: "AIProxyLibrary", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeFastGPT:        {Name: "FastGPT", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeTencent:        {Name: "Tencent", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeGemini:         {Name: "Gemini", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeMoonshot:       {Name: "Moonshot", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeZhipu_v4:       {Name: "ZhipuV4", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypePerplexity:     {Name: "Perplexity", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeLingYiWanWu:    {Name: "LingYiWanWu", Category: ChannelCategoryOpenAICompatible, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeAws:            {Name: "AWS", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeCohere:         {Name: "Cohere", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeMiniMax:        {Name: "MiniMax", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeSunoAPI:        {Name: "SunoAPI", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeDify:           {Name: "Dify", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeJina:           {Name: "Jina", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelCloudflare:         {Name: "Cloudflare", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeSiliconFlow:    {Name: "SiliconFlow", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeVertexAi:       {Name: "VertexAI", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeMistral:        {Name: "Mistral", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeDeepSeek:       {Name: "DeepSeek", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeMokaAI:         {Name: "MokaAI", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeVolcEngine:     {Name: "VolcEngine", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeBaiduV2:        {Name: "BaiduV2", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeXinference:     {Name: "Xinference", Category: ChannelCategoryLocal, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeXai:            {Name: "xAI", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeCoze:           {Name: "Coze", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeKling:          {Name: "Kling", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeJimeng:         {Name: "Jimeng", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeVidu:           {Name: "Vidu", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeSubmodel:       {Name: "Submodel", Category: ChannelCategoryNativeProvider, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeDoubaoVideo:    {Name: "Doubao", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeSora:           {Name: "Sora", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeReplicate:      {Name: "Replicate", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeCodex:          {Name: "ChatGPT Subscription (Codex, retired)", Category: ChannelCategoryReserved, Lifecycle: ChannelLifecycleRetired},
-	ChannelTypeAdvancedCustom: {Name: "Advanced Custom", Category: ChannelCategoryLocal, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeSub2API:        {Name: "Sub2API", Category: ChannelCategoryGateway, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeNewAPI:         {Name: "New API", Category: ChannelCategoryGateway, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeTaskPlugin:     {Name: "Task Plugin", Category: ChannelCategoryMediaTask, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeVLLM:           {Name: "vLLM", Category: ChannelCategoryLocal, Lifecycle: ChannelLifecycleActive},
-	ChannelTypeSGLang:         {Name: "SGLang", Category: ChannelCategoryLocal, Lifecycle: ChannelLifecycleActive},
+var ChannelTypeNames = map[int]string{
+	ChannelTypeUnknown:        "Unknown",
+	ChannelTypeOpenAI:         "OpenAI",
+	ChannelTypeMidjourney:     "Midjourney",
+	ChannelTypeAzure:          "Azure",
+	ChannelTypeOllama:         "Ollama",
+	ChannelTypeMidjourneyPlus: "MidjourneyPlus",
+	ChannelTypeOpenAIMax:      "OpenAIMax",
+	ChannelTypeOhMyGPT:        "OhMyGPT",
+	ChannelTypeCustom:         "Custom",
+	ChannelTypeAILS:           "AILS",
+	ChannelTypeAIProxy:        "AIProxy",
+	ChannelTypePaLM:           "PaLM",
+	ChannelTypeAPI2GPT:        "API2GPT",
+	ChannelTypeAIGC2D:         "AIGC2D",
+	ChannelTypeAnthropic:      "Anthropic",
+	ChannelTypeBaidu:          "Baidu",
+	ChannelTypeZhipu:          "Zhipu",
+	ChannelTypeAli:            "Ali",
+	ChannelTypeXunfei:         "Xunfei",
+	ChannelType360:            "360",
+	ChannelTypeOpenRouter:     "OpenRouter",
+	ChannelTypeAIProxyLibrary: "AIProxyLibrary",
+	ChannelTypeFastGPT:        "FastGPT",
+	ChannelTypeTencent:        "Tencent",
+	ChannelTypeGemini:         "Gemini",
+	ChannelTypeMoonshot:       "Moonshot",
+	ChannelTypeZhipu_v4:       "ZhipuV4",
+	ChannelTypePerplexity:     "Perplexity",
+	ChannelTypeLingYiWanWu:    "LingYiWanWu",
+	ChannelTypeAws:            "AWS",
+	ChannelTypeCohere:         "Cohere",
+	ChannelTypeMiniMax:        "MiniMax",
+	ChannelTypeSunoAPI:        "SunoAPI",
+	ChannelTypeDify:           "Dify",
+	ChannelTypeJina:           "Jina",
+	ChannelCloudflare:         "Cloudflare",
+	ChannelTypeSiliconFlow:    "SiliconFlow",
+	ChannelTypeVertexAi:       "VertexAI",
+	ChannelTypeMistral:        "Mistral",
+	ChannelTypeDeepSeek:       "DeepSeek",
+	ChannelTypeMokaAI:         "MokaAI",
+	ChannelTypeVolcEngine:     "VolcEngine",
+	ChannelTypeBaiduV2:        "BaiduV2",
+	ChannelTypeXinference:     "Xinference",
+	ChannelTypeXai:            "xAI",
+	ChannelTypeCoze:           "Coze",
+	ChannelTypeKling:          "Kling",
+	ChannelTypeJimeng:         "Jimeng",
+	ChannelTypeVidu:           "Vidu",
+	ChannelTypeSubmodel:       "Submodel",
+	ChannelTypeDoubaoVideo:    "Doubao",
+	ChannelTypeSora:           "Sora",
+	ChannelTypeReplicate:      "Replicate",
+	ChannelTypeAdvancedCustom: "Advanced Custom",
+	ChannelTypeSub2API:        "Sub2API",
+	ChannelTypeNewAPI:         "New API",
+	ChannelTypeTaskPlugin:     "Task Plugin",
+	ChannelTypeVLLM:           "vLLM",
+	ChannelTypeSGLang:         "SGLang",
 }
-
-// ChannelTypeNames preserves the existing name projection for API consumers.
-var ChannelTypeNames = func() map[int]string {
-	names := make(map[int]string, len(ChannelTypes))
-	for channelType, definition := range ChannelTypes {
-		names[channelType] = definition.Name
-	}
-	return names
-}()
 
 func GetChannelTypeName(channelType int) string {
 	if name, ok := ChannelTypeNames[channelType]; ok {

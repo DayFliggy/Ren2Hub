@@ -8,8 +8,6 @@ upload
 build
 *.db-journal
 logs
-web/dist
-web/node_modules
 .env
 one-api
 new-api
@@ -26,8 +24,6 @@ tiktoken_cache
 .claude
 .cursor
 
-electron/node_modules
-electron/dist
 /data/
 .gomodcache/
 .gocache-temp

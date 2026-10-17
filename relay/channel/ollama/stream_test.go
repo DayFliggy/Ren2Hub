@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -56,7 +55,7 @@ func TestOllamaChatHandlerNonStreamToolCalls(t *testing.T) {
   "prompt_eval_count": 5,
   "eval_count": 7
 }`,
-			wantID: "",
+			wantID: "call_0",
 		},
 	}
 
@@ -86,11 +85,7 @@ func TestOllamaChatHandlerNonStreamToolCalls(t *testing.T) {
 			var toolCalls []dto.ToolCallResponse
 			require.NoError(t, common.Unmarshal(out.Choices[0].Message.ToolCalls, &toolCalls))
 			require.Len(t, toolCalls, 1)
-			if tt.wantID != "" {
-				assert.Equal(t, tt.wantID, toolCalls[0].ID)
-			} else {
-				assert.Equal(t, "call_"+out.Id+"_0", toolCalls[0].ID)
-			}
+			assert.Equal(t, tt.wantID, toolCalls[0].ID)
 			assert.Equal(t, "function", toolCalls[0].Type)
 			assert.Equal(t, "get_weather", toolCalls[0].Function.Name)
 			assert.Nil(t, toolCalls[0].Index)
@@ -103,129 +98,147 @@ func TestOllamaChatHandlerNonStreamToolCalls(t *testing.T) {
 	}
 }
 
-func TestOllamaToolResponsesCanContinueAcrossMultipleRounds(t *testing.T) {
-	request := &dto.GeneralOpenAIRequest{Messages: []dto.Message{{Role: "user", Content: "look it up"}}}
-	var previousID string
-	for range 2 {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-		resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"message":{"role":"assistant","tool_calls":[{"function":{"name":"lookup","arguments":{"integer":9007199254740993,"zero":0,"disabled":false}}}]},"done":true}`))}
-		_, apiErr := ollamaChatHandler(c, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama3.1"}}, resp)
-		require.Nil(t, apiErr)
-		var response dto.OpenAITextResponse
-		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &response))
-		require.Len(t, response.Choices, 1)
-		message := response.Choices[0].Message
-		calls := message.ParseToolCalls()
-		require.Len(t, calls, 1)
-		assert.Contains(t, calls[0].Function.Arguments, "9007199254740993")
-		assert.NotEqual(t, previousID, calls[0].ID, "synthetic call IDs must be unique across rounds")
-		previousID = calls[0].ID
-		request.Messages = append(request.Messages, message, dto.Message{Role: "tool", ToolCallId: calls[0].ID, Content: "result"})
-		_, err := openAIChatToOllamaChat(c, request)
-		require.NoError(t, err)
-	}
-}
-
-func TestOllamaRejectsMalformedToolResponsesBeforeClientCommit(t *testing.T) {
-	for _, input := range []string{
-		`{"message":{"role":"assistant","tool_calls":[{"function":{"name":"lookup","arguments":null}}]},"done":true}`,
-		`{"message":{"role":"assistant","tool_calls":[{"function":{"name":"lookup","arguments":[]}}]},"done":true}`,
-		`{"message":{"role":"assistant","tool_calls":[{"function":{"name":"","arguments":{}}}]},"done":true}`,
-	} {
-		for _, stream := range []bool{false, true} {
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-			resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(input + "\n"))}
-			_, apiErr := (&Adaptor{}).DoResponse(c, resp, &relaycommon.RelayInfo{IsStream: stream, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama3.1"}})
-			require.NotNil(t, apiErr)
-			assert.Empty(t, w.Body.String())
-			assert.False(t, c.Writer.Written())
+func TestBuildOllamaStreamDelta(t *testing.T) {
+	tests := []struct {
+		name          string
+		raw           string
+		startIndex    int
+		wantContent   string
+		wantReasoning string
+		wantToolCalls []struct {
+			id        string
+			name      string
+			index     int
+			arguments string
 		}
+		wantNextIndex int
+		wantPayload   bool
+	}{
+		{
+			name:        "chat content",
+			raw:         `{"message":{"content":"hello"}}`,
+			wantContent: "hello",
+			wantPayload: true,
+		},
+		{
+			name:        "generate content",
+			raw:         `{"response":"hello"}`,
+			wantContent: "hello",
+			wantPayload: true,
+		},
+		{
+			name:          "thinking json string",
+			raw:           `{"message":{"thinking":"consider this"}}`,
+			wantReasoning: "consider this",
+			wantPayload:   true,
+		},
+		{
+			name:          "thinking raw fallback",
+			raw:           `{"message":{"thinking":{"step":"consider this"}}}`,
+			wantReasoning: `{"step":"consider this"}`,
+			wantPayload:   true,
+		},
+		{
+			name:       "multiple tool calls",
+			raw:        `{"message":{"tool_calls":[{"id":"call_upstream","function":{"name":"get_weather","arguments":{"city":"Paris"}}},{"function":{"name":"get_time","arguments":{"timezone":"UTC"}}}]}}`,
+			startIndex: 2,
+			wantToolCalls: []struct {
+				id        string
+				name      string
+				index     int
+				arguments string
+			}{
+				{id: "call_upstream", name: "get_weather", index: 2, arguments: `{"city":"Paris"}`},
+				{id: "call_3", name: "get_time", index: 3, arguments: `{"timezone":"UTC"}`},
+			},
+			wantNextIndex: 4,
+			wantPayload:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var chunk ollamaChatStreamChunk
+			require.NoError(t, common.Unmarshal([]byte(tt.raw), &chunk))
+
+			toolCallIndex := tt.startIndex
+			delta, hasPayload := buildOllamaStreamDelta(&chunk, "response-id", 123, "model", &toolCallIndex)
+			assert.Equal(t, tt.wantPayload, hasPayload)
+			assert.Equal(t, tt.wantContent, delta.Choices[0].Delta.GetContentString())
+			assert.Equal(t, tt.wantReasoning, delta.Choices[0].Delta.GetReasoningContent())
+			assert.Equal(t, tt.wantNextIndex, toolCallIndex)
+
+			if tt.wantToolCalls == nil {
+				assert.Empty(t, delta.Choices[0].Delta.ToolCalls)
+				return
+			}
+			require.Len(t, delta.Choices[0].Delta.ToolCalls, len(tt.wantToolCalls))
+			for i, want := range tt.wantToolCalls {
+				got := delta.Choices[0].Delta.ToolCalls[i]
+				assert.Equal(t, want.id, got.ID)
+				assert.Equal(t, "function", got.Type)
+				assert.Equal(t, want.name, got.Function.Name)
+				assert.Equal(t, want.arguments, got.Function.Arguments)
+				require.NotNil(t, got.Index)
+				assert.Equal(t, want.index, *got.Index)
+			}
+		})
 	}
 }
 
-func TestOllamaClaudeJSONKeepsToolIdentity(t *testing.T) {
+func TestOllamaStreamHandlerDoneToolCalls(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/v1/messages", nil)
-	response := &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"model":"llama3.1","message":{"role":"assistant","content":"","tool_calls":[{"id":"upstream-call","function":{"name":"lookup","arguments":{"n":0}}}]},"done":true,"prompt_eval_count":5,"eval_count":7}`))}
-	usage, apiErr := ollamaChatHandler(c, &relaycommon.RelayInfo{RelayFormat: types.RelayFormatClaude, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama3.1"}}, response)
-	require.Nil(t, apiErr)
-	assert.Equal(t, 12, usage.TotalTokens)
-	var body map[string]any
-	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &body))
-	assert.Equal(t, "message", body["type"])
-	assert.Equal(t, "tool_use", body["stop_reason"])
-	assert.NotContains(t, body, "choices")
-	content := body["content"].([]any)
-	require.Len(t, content, 1)
-	assert.Equal(t, "upstream-call", content[0].(map[string]any)["id"])
-}
 
-func TestOllamaStreamHasExplicitCompletionAndPreludeBoundary(t *testing.T) {
-	content := `{"message":{"role":"assistant","content":"hello"},"done":false}` + "\n"
-	done := `{"done":true,"prompt_eval_count":5,"eval_count":7}` + "\n"
-	for _, format := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude} {
-		for _, test := range []struct {
-			name, input         string
-			complete, delivered bool
-		}{
-			{"complete", content + done, true, true},
-			{"truncated", content, false, true},
-			{"malformed", content + "invalid\n", false, true},
-			{"prelude_only", `{"message":{"role":"assistant"},"done":false}` + "\n", false, false},
-			{"prelude_limit", strings.Repeat(`{"message":{"role":"assistant"},"done":false}`+"\n", 65), false, false},
-		} {
-			t.Run(string(format)+"/"+test.name, func(t *testing.T) {
-				w := httptest.NewRecorder()
-				c, _ := gin.CreateTestContext(w)
-				c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-				info := &relaycommon.RelayInfo{RelayFormat: format, IsStream: true, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama3.1"}}
-				resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(test.input))}
-				usage, apiErr := ollamaStreamHandler(c, info, resp)
-				assert.Equal(t, test.delivered, info.HasValidOutput())
-				assert.Equal(t, test.complete, info.StreamStatus.IsNormalEnd())
-				if test.complete {
-					require.Nil(t, apiErr)
-					require.NotNil(t, usage)
-					assert.Equal(t, 12, usage.TotalTokens)
-					assert.Equal(t, "provider", usage.UsageSource)
-				} else {
-					require.NotNil(t, apiErr)
-					assert.NotContains(t, w.Body.String(), "[DONE]")
-					assert.NotContains(t, w.Body.String(), "message_stop")
-					if test.delivered {
-						require.NotNil(t, usage)
-						assert.Equal(t, "estimated", usage.UsageSource)
-					} else {
-						assert.Empty(t, w.Body.String())
-					}
-				}
-				if test.complete && format == types.RelayFormatClaude {
-					assert.Contains(t, w.Body.String(), "message_start")
-					assert.Equal(t, 1, strings.Count(w.Body.String(), "event: message_stop"))
-					assert.NotContains(t, w.Body.String(), "chat.completion.chunk")
-				}
-			})
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3-coder","created_at":"2026-05-27T12:00:00Z","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"北京"}}},{"function":{"name":"get_time","arguments":{"timezone":"Asia/Shanghai"}}}]},"done":true,"done_reason":"stop","prompt_eval_count":5,"eval_count":7}`)),
+	}
+
+	usage, apiErr := ollamaStreamHandler(c, &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "fallback-model"},
+	}, resp)
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	assert.Equal(t, 12, usage.TotalTokens)
+
+	var chunks []dto.ChatCompletionsStreamResponse
+	for _, line := range strings.Split(w.Body.String(), "\n") {
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok || data == "[DONE]" {
+			continue
+		}
+		var chunk dto.ChatCompletionsStreamResponse
+		require.NoError(t, common.Unmarshal([]byte(data), &chunk))
+		chunks = append(chunks, chunk)
+	}
+
+	var toolChunkIndex, stopChunkIndex int = -1, -1
+	for i := range chunks {
+		if len(chunks[i].Choices) == 0 {
+			continue
+		}
+		if len(chunks[i].Choices[0].Delta.ToolCalls) > 0 {
+			toolChunkIndex = i
+		}
+		if chunks[i].Choices[0].FinishReason != nil {
+			stopChunkIndex = i
 		}
 	}
-}
+	require.NotEqual(t, -1, toolChunkIndex)
+	require.NotEqual(t, -1, stopChunkIndex)
+	assert.Less(t, toolChunkIndex, stopChunkIndex)
 
-func TestOllamaJSONRejectsIncompleteOrCorruptCompletion(t *testing.T) {
-	for _, input := range []string{
-		`{"message":{"content":"hello"},"done":false}`,
-		`{"message":{"content":"hello"}}` + "\ninvalid\n" + `{"done":true}`,
-		`{"done":true,"eval_count":-1}`,
-	} {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-		resp := &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(input))}
-		_, apiErr := ollamaChatHandler(c, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama"}}, resp)
-		require.NotNil(t, apiErr)
-		assert.Empty(t, w.Body.String())
-	}
+	toolCalls := chunks[toolChunkIndex].Choices[0].Delta.ToolCalls
+	require.Len(t, toolCalls, 2)
+	assert.Equal(t, "call_0", toolCalls[0].ID)
+	assert.Equal(t, "call_1", toolCalls[1].ID)
+	require.NotNil(t, toolCalls[0].Index)
+	require.NotNil(t, toolCalls[1].Index)
+	assert.Equal(t, 0, *toolCalls[0].Index)
+	assert.Equal(t, 1, *toolCalls[1].Index)
+	assert.Equal(t, constant.FinishReasonToolCalls, *chunks[stopChunkIndex].Choices[0].FinishReason)
+	assert.Contains(t, w.Body.String(), "data: [DONE]")
 }

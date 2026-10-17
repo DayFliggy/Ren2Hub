@@ -1,18 +1,13 @@
 package sub2api
 
 import (
-	"bytes"
-	"net/http"
-	"net/http/httptest"
+	"encoding/json"
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,59 +47,39 @@ func TestAdaptorInheritsNewAPIResponsesCompactSupport(t *testing.T) {
 	assert.Empty(t, adaptor.GetModelList())
 }
 
-func TestRen2HubCompactUsesOrdinaryMappingForSub2API(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	for _, tt := range []struct {
-		name      string
-		mapping   string
-		wantModel string
-	}{
-		{name: "ordinary", mapping: `{}`, wantModel: "gpt-5"},
-		{name: "mapped", mapping: `{"gpt-5":"provider-model"}`, wantModel: "provider-model"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			capturedModel := ""
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, "/v1/responses/compact", r.URL.Path)
-				var payload struct {
-					Model string `json:"model"`
-				}
-				require.NoError(t, common.DecodeJson(r.Body, &payload))
-				capturedModel = payload.Model
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"output":[],"usage":{"input_tokens":1,"output_tokens":0,"total_tokens":1}}`))
-			}))
-			defer upstream.Close()
-
-			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
-			info := &relaycommon.RelayInfo{
-				RelayMode:       relayconstant.RelayModeResponsesCompact,
-				RelayFormat:     "openai_responses_compaction",
-				OriginModelName: "gpt-5",
-				RequestURLPath:  "/v1/responses/compact",
-				ChannelMeta: &relaycommon.ChannelMeta{
-					ChannelType:    constant.ChannelTypeSub2API,
-					ChannelBaseUrl: upstream.URL,
-					ApiKey:         "test-key",
-				},
-			}
-			ctx.Set("model_mapping", tt.mapping)
-			info.UpstreamModelName = "gpt-5"
-			request := &dto.OpenAIResponsesRequest{Model: "gpt-5"}
-			require.NoError(t, helper.ModelMappedHelper(ctx, info, request))
-
-			adaptor := &Adaptor{}
-			adaptor.Init(info)
-			converted, err := adaptor.ConvertOpenAIResponsesRequest(ctx, info, *request)
-			require.NoError(t, err)
-			body, err := common.Marshal(converted)
-			require.NoError(t, err)
-			response, err := adaptor.DoRequest(ctx, info, bytes.NewReader(body))
-			require.NoError(t, err)
-			require.NotNil(t, response)
-			defer response.(*http.Response).Body.Close()
-			require.Equal(t, tt.wantModel, capturedModel)
-		})
+func TestConvertClaudeRequestPreservesAdaptiveThinkingForCompatibleModel(t *testing.T) {
+	adaptor := &Adaptor{}
+	maxTokens := uint(8192)
+	temperature := 0.2
+	topP := 0.99
+	request := &dto.ClaudeRequest{
+		Model:        "gpt-5.6-sol",
+		MaxTokens:    &maxTokens,
+		Temperature:  &temperature,
+		TopP:         &topP,
+		Thinking:     &dto.Thinking{Type: "adaptive", Display: "summarized"},
+		OutputConfig: json.RawMessage(`{"effort":"xhigh","provider_option":true}`),
+		Messages: []dto.ClaudeMessage{
+			{Role: "user", Content: "hello"},
+		},
 	}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-5.6-sol",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: constant.ChannelTypeSub2API,
+		},
+	}
+
+	converted, err := adaptor.ConvertClaudeRequest(nil, info, request)
+
+	require.NoError(t, err)
+	assert.Same(t, request, converted)
+	require.NotNil(t, request.Thinking)
+	assert.Equal(t, "adaptive", request.Thinking.Type)
+	assert.Equal(t, "summarized", request.Thinking.Display)
+	assert.JSONEq(t, `{"effort":"xhigh","provider_option":true}`, string(request.OutputConfig))
+	assert.Same(t, &temperature, request.Temperature)
+	assert.Same(t, &topP, request.TopP)
+	assert.Equal(t, "xhigh", info.ReasoningEffort)
+	assert.Equal(t, "gpt-5.6-sol", info.UpstreamModelName)
 }

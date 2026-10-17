@@ -14,16 +14,16 @@ import (
 const userCacheSchemaVersion = 2
 
 type UserBase struct {
-	Id          int          `json:"id"`
-	Group       string       `json:"group"`
-	Email       string       `json:"email"`
-	Quota       common.Quota `json:"available_quota"`
-	Status      int          `json:"status"`
-	Role        int          `json:"role"`
-	Username    string       `json:"username"`
-	Setting     string       `json:"setting"`
-	AuthVersion int64        `json:"-"`
-	CacheSchema int          `json:"-"`
+	Id          int    `json:"id"`
+	Group       string `json:"group"`
+	Email       string `json:"email"`
+	Quota       int    `json:"quota"`
+	Status      int    `json:"status"`
+	Role        int    `json:"role"`
+	Username    string `json:"username"`
+	Setting     string `json:"setting"`
+	AuthVersion int64  `json:"-"`
+	CacheSchema int    `json:"-"`
 }
 
 func (user *UserBase) WriteContext(c *gin.Context) {
@@ -40,7 +40,7 @@ func (user *UserBase) GetSetting() dto.UserSetting {
 	if user.Setting != "" {
 		err := common.Unmarshal([]byte(user.Setting), &setting)
 		if err != nil {
-			common.SysLog("failed to unmarshal setting: " + err.Error())
+			common.SysLog(common.LogText("failed to unmarshal setting: %s", err.Error()))
 		}
 	}
 	return setting
@@ -61,7 +61,6 @@ func userCacheTTLSeconds() int {
 
 // invalidateUserCache clears user cache
 func invalidateUserCache(userId int) error {
-	NotifyGatewayAdmissionChanged("user", userId)
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -76,7 +75,8 @@ func populateUserCache(user User) error {
 }
 
 // updateUserCache refreshes non-quota user cache fields.
-// Cached quota is a display snapshot only; spending always reads the database.
+// Quota is maintained by atomic quota delta paths and must not be overwritten
+// by stale user snapshots from profile/settings updates.
 func updateUserCache(user User) error {
 	if !common.RedisEnabled {
 		return nil
@@ -108,7 +108,7 @@ func GetUserCache(userId int) (*UserBase, error) {
 			if errors.Is(err, ErrUserAuthCachePending) {
 				return nil, err
 			}
-			common.SysLog("failed to synchronously populate user cache: " + err.Error())
+			common.SysLog(common.LogText("failed to synchronously populate user cache: %s", err.Error()))
 		}
 	}
 	return user.ToBaseUser(), nil
@@ -137,6 +137,33 @@ func cacheGetUserBase(userId int) (*UserBase, error) {
 	return &userCache, nil
 }
 
+// Add atomic quota operations using hash fields.
+// 通过守卫式 Lua 脚本执行：哈希不存在时直接跳过（下次读取会从数据库水合），
+// 不会像裸 HINCRBY 那样创建只含 Quota 字段的残缺哈希。
+func cacheIncrUserQuota(userId int, delta int64) error {
+	if !common.RedisEnabled {
+		return nil
+	}
+	_, err := cacheApplyUserQuotaDelta(userId, delta)
+	return err
+}
+
+func cacheDecrUserQuota(userId int, delta int64) error {
+	return cacheIncrUserQuota(userId, -delta)
+}
+
+// syncCreditUserQuotaCache 在授信事务（充值/兑换等）提交后同步把增量补进缓存
+// 余额。预扣以缓存值为准（存在期间），授信不能绕过它，否则新到账的额度在
+// 缓存过期前不可用；缓存未命中无需处理，下次读取会从已提交的数据库余额水合。
+func syncCreditUserQuotaCache(userId int, quota int, operation string) {
+	if quota <= 0 {
+		return
+	}
+	if err := cacheIncrUserQuota(userId, int64(quota)); err != nil {
+		common.SysLog(common.LogText("failed to sync %s credit to user quota cache: %s", operation, err.Error()))
+	}
+}
+
 // Helper functions to get individual fields if needed
 func getUserGroupCache(userId int) (string, error) {
 	cache, err := GetUserCache(userId)
@@ -144,6 +171,14 @@ func getUserGroupCache(userId int) (string, error) {
 		return "", err
 	}
 	return cache.Group, nil
+}
+
+func getUserQuotaCache(userId int) (int, error) {
+	cache, err := GetUserCache(userId)
+	if err != nil {
+		return 0, err
+	}
+	return cache.Quota, nil
 }
 
 func getUserNameCache(userId int) (string, error) {
@@ -218,7 +253,7 @@ func updateUserSettingCache(userId int, setting string) error {
 // updateUserCacheField prevents individual cache refreshes from bypassing the
 // auth-version fence. It intentionally does nothing when the complete hash is
 // absent; the next GetUserCache call will repopulate it from the database.
-func updateUserCacheField(userId int, field string, value interface{}) error {
+func updateUserCacheField(userId int, field string, value any) error {
 	if !common.RedisEnabled {
 		return nil
 	}

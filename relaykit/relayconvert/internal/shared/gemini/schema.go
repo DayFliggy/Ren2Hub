@@ -124,8 +124,11 @@ func cleanGeminiFunctionParametersShallow(params interface{}) interface{} {
 }
 
 // sanitizeGeminiEnum keeps the enum constraint only when every element is a
-// string, the only form Gemini's typed Schema accepts; boolean or number
-// elements get a 400 from Gemini. The declared type is kept.
+// string, the only form Gemini's legacy Schema accepts. Any other shape is
+// dropped (e.g. boolean or number elements, which valid JSON Schema allows but
+// Gemini rejects with a 400). This widens the value domain for that schema, a
+// deliberate lossy relaxation: the declared type is preserved, string enums
+// pass through untouched.
 func sanitizeGeminiEnum(schema map[string]interface{}) {
 	raw, exists := schema["enum"]
 	if !exists {
@@ -217,8 +220,21 @@ func FunctionParameters(schema any, jsonSchema bool) (field string, value any, m
 	object, _ := schema.(map[string]any)
 	properties, hasProperties := object["properties"].(map[string]any)
 	emptyObject := hasProperties && len(properties) == 0
-	if emptyObject && emptyObjectHasConstraints(object) {
-		misfits = append(misfits, "constraints on an empty object")
+	if emptyObject {
+		for key, item := range object {
+			switch key {
+			case "type", "properties":
+				continue
+			case "required":
+				if required, _ := item.([]any); len(required) == 0 {
+					continue
+				}
+			}
+			if _, allowed := geminiOpenAPISchemaAllowedFields[key]; allowed {
+				misfits = append(misfits, "constraints on an empty object")
+				break
+			}
+		}
 	}
 	if len(misfits) > 0 && jsonSchema {
 		return "parametersJsonSchema", schema, nil
@@ -229,37 +245,11 @@ func FunctionParameters(schema any, jsonSchema bool) (field string, value any, m
 	return "parameters", CleanFunctionParameters(schema), misfits
 }
 
-// emptyObjectHasConstraints reports whether an object schema without
-// properties carries a typed Schema field that leaving parameters out drops.
-func emptyObjectHasConstraints(object map[string]any) bool {
-	for key, item := range object {
-		switch key {
-		case "type", "properties":
-			continue
-		case "required":
-			if required, _ := item.([]any); len(required) == 0 {
-				continue
-			}
-		}
-		if _, allowed := geminiOpenAPISchemaAllowedFields[key]; allowed {
-			return true
-		}
-	}
-	return false
-}
-
-// FitsTypedSchema reports whether Gemini's typed Schema holds a JSON Schema
-// as written, so conversion cleans it instead of sending it as JSON Schema.
-func FitsTypedSchema(schema any) bool {
-	return len(schemaMisfits(schema)) == 0
-}
-
 // ApplyResponseSchema sets the structured output schema from the json_schema
 // object of an OpenAI response format. A schema that fits Gemini's typed
 // Schema keeps the responseSchema cleanup. Any other schema is sent unchanged
 // as responseJsonSchema when jsonSchema is true; otherwise it is cleaned
-// anyway and a gemini_schema_keyword_dropped warning at path names what
-// responseSchema cannot carry.
+// anyway and a diagnostic at path names what responseSchema cannot carry.
 func ApplyResponseSchema(ctx context.Context, config *dto.GeminiChatGenerationConfig, rawFormat json.RawMessage, path string, jsonSchema bool) {
 	var format dto.FormatJsonSchema
 	if err := kitutil.Unmarshal(rawFormat, &format); err != nil {
@@ -457,10 +447,6 @@ var geminiSchemaInt64Fields = map[string]struct{}{
 // example becomes examples, and int64 bounds sent as strings become numbers.
 // It also returns the Gemini-only keywords JSON Schema cannot express, which
 // are dropped (propertyOrdering).
-//
-// example and format are Gemini/OpenAPI annotations JSON Schema treats as
-// opaque: example is rewritten to examples without a diagnostic, and format
-// is kept verbatim because no target validates it.
 func OpenAPISchemaToJSONSchema(schema any) (any, []string) {
 	dropped := make(map[string]struct{})
 	converted := openAPISchemaToJSONSchema(schema, 0, dropped)

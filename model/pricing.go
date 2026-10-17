@@ -1,9 +1,7 @@
 package model
 
 import (
-	"fmt"
 	"strings"
-
 	"sync"
 	"time"
 
@@ -11,12 +9,12 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 )
 
 type PricingPluginVariant struct {
-	BillingUsageFacts    map[string]jsplugin.UsageFieldSchema `json:"-"`
-	UsageReference       *types.UsageReference                `json:"usage_reference,omitempty"`
 	PluginKey            string                               `json:"plugin_key"`
 	PluginName           string                               `json:"plugin_name"`
 	Icon                 string                               `json:"icon,omitempty"`
@@ -27,11 +25,6 @@ type PricingPluginVariant struct {
 }
 
 type Pricing struct {
-	BillingUsageFacts      map[string]jsplugin.UsageFieldSchema `json:"-"`
-	PricingValues          PricingValues                        `json:"pricing_values"`
-	UsageReference         *types.UsageReference                `json:"usage_reference,omitempty"`
-	BillingPluginKey       string                               `json:"-"`
-	BillingPluginName      string                               `json:"-"`
 	BillingPluginVariants  []PricingPluginVariant               `json:"billing_plugin_variants,omitempty"`
 	ModelName              string                               `json:"model_name"`
 	Description            string                               `json:"description,omitempty"`
@@ -176,7 +169,7 @@ func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) map[
 	for _, channelID := range channelIDs {
 		channel, err := CacheGetChannel(channelID)
 		if err != nil {
-			common.SysLog(fmt.Sprintf("load advanced custom channel settings error: channel_id=%d, error=%v", channelID, err))
+			common.SysLog(common.LogText("load advanced custom channel settings error: channel_id=%d, error=%v", channelID, err))
 			continue
 		}
 		if channel.Type != constant.ChannelTypeAdvancedCustom {
@@ -197,62 +190,20 @@ func appendPricingEndpoint(endpoints []string, endpoint string) []string {
 }
 
 func updatePricing() {
+	//modelRatios := common.GetModelRatios()
 	enableAbilities, err := GetAllEnableAbilityWithChannels()
 	if err != nil {
-		common.SysLog(fmt.Sprintf("GetAllEnableAbilityWithChannels error: %v", err))
+		common.SysLog(common.LogText("GetAllEnableAbilityWithChannels error: %v", err))
 		return
 	}
 	// 预加载模型元数据与供应商一次，避免循环查询
 	var allMeta []Model
 	_ = DB.Find(&allMeta).Error
-	metaMap := make(map[string]*Model)
-	prefixList := make([]*Model, 0)
-	suffixList := make([]*Model, 0)
-	containsList := make([]*Model, 0)
-	for i := range allMeta {
-		m := &allMeta[i]
-		if m.NameRule == NameRuleExact {
-			metaMap[m.ModelName] = m
-		} else {
-			switch m.NameRule {
-			case NameRulePrefix:
-				prefixList = append(prefixList, m)
-			case NameRuleSuffix:
-				suffixList = append(suffixList, m)
-			case NameRuleContains:
-				containsList = append(containsList, m)
-			}
-		}
+	names := make([]string, 0, len(enableAbilities))
+	for _, ability := range enableAbilities {
+		names = append(names, ability.Model)
 	}
-
-	// 将非精确规则模型匹配到 metaMap
-	for _, m := range prefixList {
-		for _, pricingModel := range enableAbilities {
-			if strings.HasPrefix(pricingModel.Model, m.ModelName) {
-				if _, exists := metaMap[pricingModel.Model]; !exists {
-					metaMap[pricingModel.Model] = m
-				}
-			}
-		}
-	}
-	for _, m := range suffixList {
-		for _, pricingModel := range enableAbilities {
-			if strings.HasSuffix(pricingModel.Model, m.ModelName) {
-				if _, exists := metaMap[pricingModel.Model]; !exists {
-					metaMap[pricingModel.Model] = m
-				}
-			}
-		}
-	}
-	for _, m := range containsList {
-		for _, pricingModel := range enableAbilities {
-			if strings.Contains(pricingModel.Model, m.ModelName) {
-				if _, exists := metaMap[pricingModel.Model]; !exists {
-					metaMap[pricingModel.Model] = m
-				}
-			}
-		}
-	}
+	metaMap := resolveModelMetadata(allMeta, names)
 
 	// 预加载供应商
 	var vendors []Vendor
@@ -308,12 +259,12 @@ func updatePricing() {
 		if strings.TrimSpace(meta.Endpoints) == "" {
 			continue
 		}
-		var raw map[string]interface{}
+		var raw map[string]any
 		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			endpoints := modelSupportEndpointsStr[modelName]
 			for k, v := range raw {
 				switch v.(type) {
-				case string, map[string]interface{}:
+				case string, map[string]any:
 					endpoints = appendPricingEndpoint(endpoints, k)
 				}
 			}
@@ -350,13 +301,13 @@ func updatePricing() {
 		if strings.TrimSpace(meta.Endpoints) == "" {
 			continue
 		}
-		var raw map[string]interface{}
+		var raw map[string]any
 		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			for k, v := range raw {
 				switch val := v.(type) {
 				case string:
 					supportedEndpointMap[k] = common.EndpointInfo{Path: val, Method: "POST"}
-				case map[string]interface{}:
+				case map[string]any:
 					ep := common.EndpointInfo{Method: "POST"}
 					if p, ok := val["path"].(string); ok {
 						ep.Path = p
@@ -372,20 +323,8 @@ func updatePricing() {
 		}
 	}
 
-	names := make([]string, 0, len(modelGroupsMap))
-	for name := range modelGroupsMap {
-		names = append(names, name)
-	}
-	snapshot, err := GetModelPricingSnapshot(names)
-	if err != nil {
-		common.SysError("load model pricing: " + err.Error())
-		return
-	}
-	entries := make(map[string]ModelPricingEntry, len(snapshot.Entries))
-	for _, entry := range snapshot.Entries {
-		entries[entry.ModelName] = entry
-	}
 	pricingMap = make([]Pricing, 0)
+	pluginGeneration := jsplugin.DefaultRegistry.Generation()
 	for model, groups := range modelGroupsMap {
 		pricing := Pricing{
 			ModelName:              model,
@@ -394,8 +333,7 @@ func updatePricing() {
 		}
 
 		// 补充模型元数据（描述、标签、供应商、状态）
-		metaModel := model
-		if meta, ok := metaMap[metaModel]; ok {
+		if meta, ok := metaMap[model]; ok {
 			// 若模型被禁用(status!=1)，则直接跳过，不返回给前端
 			if meta.Status != 1 {
 				continue
@@ -404,65 +342,95 @@ func updatePricing() {
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
-			if vendor, exists := vendorMap[meta.VendorID]; exists {
-				pricing.OwnerBy = vendor.Name
-			}
 		}
-		entry := entries[model]
-		values := entry.Effective
-		pricing.PricingVersion = entry.Version
-		pricing.PricingValues = PricingValuesForAPI(values)
-		if pricing.PricingValues == nil {
-			pricing.PricingValues = PricingValues{}
-		}
-		delete(pricing.PricingValues, "billing_setting.plugin_billing_expr")
-		pricing.BillingPluginKey, pricing.BillingPluginName = entry.PluginKey, entry.PluginName
-		pricing.BillingUsageExamples = entry.UsageExamples
-		pricing.BillingUsageFacts = entry.UsageFacts
-		for key, dest := range map[string]*float64{"ModelRatio": &pricing.ModelRatio, "CompletionRatio": &pricing.CompletionRatio, "ModelPrice": &pricing.ModelPrice} {
-			if raw, exists := values[key]; exists {
-				number, err := modelPricingDecimal(raw)
-				if err != nil {
-					common.SysError("invalid saved model pricing")
-					return
-				}
-				*dest = number.InexactFloat64()
-			}
-		}
-		pricing.BillingMode, _ = values["billing_setting.billing_mode"].(string)
-		pricing.BillingExpr, _ = values["billing_setting.billing_expr"].(string)
-		if _, exists := values["ModelPrice"]; exists {
+		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
+		if findPrice {
+			pricing.ModelPrice = modelPrice
 			pricing.QuotaType = 1
+		} else {
+			modelRatio, _, _ := ratio_setting.GetModelRatio(model)
+			pricing.ModelRatio = modelRatio
+			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
+			pricing.QuotaType = 0
 		}
-		if _, ratio := values["ModelRatio"]; !ratio && pricing.BillingExpr == "" && pricing.QuotaType != 1 {
-			pricing.BillingMode = "unconfigured"
+		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
+			pricing.CacheRatio = &cacheRatio
 		}
-		for key, dest := range map[string]**float64{"CacheRatio": &pricing.CacheRatio, "CreateCacheRatio": &pricing.CreateCacheRatio, "ImageRatio": &pricing.ImageRatio, "AudioRatio": &pricing.AudioRatio, "AudioCompletionRatio": &pricing.AudioCompletionRatio} {
-			if raw, exists := values[key]; exists {
-				number, err := modelPricingDecimal(raw)
-				if err != nil {
-					common.SysError("invalid saved model pricing")
-					return
+		if createCacheRatio, ok := ratio_setting.GetCreateCacheRatio(model); ok {
+			pricing.CreateCacheRatio = &createCacheRatio
+		}
+		if imageRatio, ok := ratio_setting.GetImageRatio(model); ok {
+			pricing.ImageRatio = &imageRatio
+		}
+		if ratio_setting.ContainsAudioRatio(model) {
+			audioRatio := ratio_setting.GetAudioRatio(model)
+			pricing.AudioRatio = &audioRatio
+		}
+		if ratio_setting.ContainsAudioCompletionRatio(model) {
+			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(model)
+			pricing.AudioCompletionRatio = &audioCompletionRatio
+		}
+		if billingMode := billing_setting.GetBillingMode(model); billingMode == "tiered_expr" {
+			if expr, ok := billing_setting.GetBillingExpr(model); ok && strings.TrimSpace(expr) != "" {
+				pricing.BillingMode = billingMode
+				pricing.BillingExpr = expr
+			}
+		} else if target, resolved := ResolveTaskModelAlias(pluginGeneration, model); resolved && target.Declared != "" {
+			if tailMode := billing_setting.GetBillingMode(target.Declared); tailMode == "tiered_expr" {
+				if expr, ok := billing_setting.GetBillingExpr(target.Declared); ok && strings.TrimSpace(expr) != "" {
+					pricing.BillingMode = tailMode
+					pricing.BillingExpr = expr
 				}
-				value := number.InexactFloat64()
-				*dest = &value
 			}
 		}
-		pricing.BillingUsageSchema = entry.UsageSchema
-		for _, variant := range entry.PluginVariants {
-			if variant.Stale {
-				continue
+		usageModel := model
+		plugin, ok := pluginGeneration.GetByModel(model)
+		if !ok {
+			if target, resolved := ResolveTaskModelAlias(pluginGeneration, model); resolved {
+				plugin, ok = pluginGeneration.Get(target.PluginKey)
+				usageModel = target.Declared
 			}
-			mode := "unconfigured"
-			if variant.Compatible && variant.Effective != "" {
-				mode = "tiered_expr"
-			} else if variant.Configured == "" && values["billing_setting.billing_mode"] != "tiered_expr" && ModelPriceConfigured(values) {
-				mode = "ratio"
-			}
-			pricing.BillingPluginVariants = append(pricing.BillingPluginVariants, PricingPluginVariant{PluginKey: variant.PluginKey, PluginName: variant.PluginName, Icon: variant.Icon, BillingExpr: variant.Effective, BillingMode: mode, BillingUsageSchema: variant.UsageSchema, BillingUsageExamples: variant.UsageExamples, BillingUsageFacts: variant.UsageFacts})
 		}
-
+		if ok && plugin != nil {
+			usageSchema, usageExamples := plugin.Meta.UsageForModel(usageModel)
+			pricing.BillingUsageSchema = jsplugin.CloneUsageSchema(usageSchema)
+			pricing.BillingUsageExamples = jsplugin.CloneUsageExamples(usageExamples)
+		}
+		providers := pluginGeneration.PluginsByModel(model)
+		hasProviderOverride := false
+		for _, provider := range providers {
+			if _, configured := billing_setting.GetPluginBillingExpr(provider.Meta.Key, model); configured {
+				hasProviderOverride = true
+				break
+			}
+		}
+		if hasProviderOverride || (len(providers) >= 2 && pricing.BillingMode == billing_setting.BillingModeTieredExpr) {
+			for _, provider := range providers {
+				schema, examples := provider.Meta.UsageForModel(model)
+				if schema == nil {
+					schema = map[string]jsplugin.UsageFieldSchema{}
+				}
+				expression, hasExpression := billing_setting.ResolveTaskBillingExpr(provider.Meta.Key, model, "")
+				mode := billing_setting.BillingModeRatio
+				if hasExpression || billing_setting.GetBillingMode(model) == billing_setting.BillingModeTieredExpr {
+					mode = billing_setting.BillingModeTieredExpr
+				}
+				if mode == billing_setting.BillingModeTieredExpr && !billing_setting.TaskExprCompatible(expression, schema) {
+					expression = ""
+				}
+				pricing.BillingPluginVariants = append(pricing.BillingPluginVariants, PricingPluginVariant{
+					PluginKey: provider.Meta.Key, PluginName: provider.Meta.Name, Icon: provider.Meta.Icon,
+					BillingExpr: expression, BillingMode: mode,
+					BillingUsageSchema: jsplugin.CloneUsageSchema(schema), BillingUsageExamples: jsplugin.CloneUsageExamples(examples),
+				})
+			}
+		}
 		pricingMap = append(pricingMap, pricing)
+	}
+
+	// 防止大更新后数据不通用
+	if len(pricingMap) > 0 {
+		pricingMap[0].PricingVersion = "5a90f2b86c08bd983a9a2e6d66c255f4eaef9c4bc934386d2b6ae84ef0ff1f1f"
 	}
 
 	// 刷新缓存映射，供高并发快速查询

@@ -58,16 +58,16 @@ func getInferenceChannelStatus(c *gin.Context, channelType int) {
 	c.Header("Cache-Control", "no-store")
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid channel ID"))
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Invalid channel id"})
 		return
 	}
 	channel, err := model.GetChannelById(id, true)
 	if err != nil || channel == nil {
-		common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Channel does not exist"))
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Channel not found"})
 		return
 	}
 	if channel.Type != channelType {
-		common.ApiErrorT(c, "Channel type does not match the status endpoint")
+		common.ApiError(c, errors.New("Channel type does not match the status endpoint"))
 		return
 	}
 	status, err := fetchInferenceStatus(c.Request.Context(), channel)
@@ -82,21 +82,21 @@ func getInferenceChannelStatus(c *gin.Context, channelType int) {
 // Each endpoint can fail independently; upstream errors never echo credentials.
 func fetchInferenceStatus(ctx context.Context, channel *model.Channel) (*inferenceStatus, error) {
 	if channel.Type != constant.ChannelTypeVLLM && channel.Type != constant.ChannelTypeSGLang {
-		return nil, common.NewMessage("This operation is only supported for vLLM or SGLang channels")
+		return nil, errors.New("This operation is only supported for vLLM or SGLang channels")
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(channel.GetBaseURL()), "/")
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil || parsedURL.Host == "" || parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		return nil, common.NewMessage("Invalid inference server address")
+		return nil, errors.New("Invalid inference server address")
 	}
 	key, _, keyErr := channel.GetNextEnabledKey()
 	if keyErr != nil {
-		return nil, common.NewMessage("No enabled channel key")
+		return nil, errors.New("No enabled channel key")
 	}
 	key = strings.TrimSpace(key)
 	headers, err := buildFetchModelsHeaders(channel, key)
 	if err != nil {
-		return nil, common.NewMessage("Invalid channel header override")
+		return nil, errors.New("Invalid channel header override")
 	}
 	if (key == "" || key == "EMPTY") && headers.Get("Authorization") == "Bearer "+key {
 		headers.Del("Authorization")
@@ -104,7 +104,7 @@ func fetchInferenceStatus(ctx context.Context, channel *model.Channel) (*inferen
 	settings := channel.GetSetting()
 	client, err := service.GetHttpClientWithProxySettings(settings.Proxy, settings)
 	if err != nil {
-		return nil, common.NewMessage("Invalid channel proxy")
+		return nil, errors.New("Invalid channel proxy")
 	}
 	// Do not mutate the shared client or forward channel credentials on redirects.
 	statusClient := *client

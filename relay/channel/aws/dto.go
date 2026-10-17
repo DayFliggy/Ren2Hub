@@ -1,11 +1,14 @@
 package aws
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
@@ -37,14 +40,20 @@ func formatRequest(requestBody io.Reader, requestHeader http.Header) (*AwsClaude
 	awsClaudeRequest.AnthropicVersion = "bedrock-2023-05-31"
 
 	// check header anthropic-beta
-	betas := common.NormalizeHeaderListValues(requestHeader.Values("anthropic-beta"))
+	var betas []string
+	for beta := range strings.SplitSeq(requestHeader.Get("anthropic-beta"), ",") {
+		if beta = strings.TrimSpace(beta); beta != "" {
+			betas = append(betas, beta)
+		}
+	}
 	if len(betas) > 0 {
-		betaJSON, err := common.Marshal(betas)
+		betaJson, err := common.Marshal(betas)
 		if err != nil {
 			return nil, err
 		}
-		awsClaudeRequest.AnthropicBeta = betaJSON
+		awsClaudeRequest.AnthropicBeta = betaJson
 	}
+	logger.LogJson(context.Background(), "json", awsClaudeRequest)
 	return &awsClaudeRequest, nil
 }
 
@@ -59,49 +68,53 @@ type NovaContent struct {
 }
 
 type NovaRequest struct {
-	SchemaVersion   string               `json:"schemaVersion"` // 请求版本，例如 "1.0"
-	System          []NovaContent        `json:"system,omitempty"`
+	SchemaVersion   string               `json:"schemaVersion"`             // 请求版本，例如 "1.0"
 	Messages        []NovaMessage        `json:"messages"`                  // 对话消息列表
 	InferenceConfig *NovaInferenceConfig `json:"inferenceConfig,omitempty"` // 推理配置，可选
 }
 
 type NovaInferenceConfig struct {
-	MaxTokens     *uint    `json:"maxTokens,omitempty"`     // 最大生成的 token 数
-	Temperature   *float64 `json:"temperature,omitempty"`   // 随机性 (默认 0.7, 范围 0-1)
-	TopP          *float64 `json:"topP,omitempty"`          // nucleus sampling (默认 0.9, 范围 0-1)
-	TopK          *int     `json:"topK,omitempty"`          // 限制候选 token 数 (默认 50, 范围 0-128)
+	MaxTokens     int      `json:"maxTokens,omitempty"`     // 最大生成的 token 数
+	Temperature   float64  `json:"temperature,omitempty"`   // 随机性 (默认 0.7, 范围 0-1)
+	TopP          float64  `json:"topP,omitempty"`          // nucleus sampling (默认 0.9, 范围 0-1)
+	TopK          int      `json:"topK,omitempty"`          // 限制候选 token 数 (默认 50, 范围 0-128)
 	StopSequences []string `json:"stopSequences,omitempty"` // 停止生成的序列
 }
 
 // 转换OpenAI请求为Nova格式
 func convertToNovaRequest(req *dto.GeneralOpenAIRequest) *NovaRequest {
-	novaReq := &NovaRequest{
-		SchemaVersion: "messages-v1",
-		Messages:      make([]NovaMessage, 0, len(req.Messages)),
-	}
-	for _, msg := range req.Messages {
-		var content []NovaContent
-		for _, part := range msg.ParseContent() {
-			if part.Type == dto.ContentTypeText && part.Text != "" {
-				content = append(content, NovaContent{Text: part.Text})
-			}
-		}
-		if len(content) == 0 {
-			continue
-		}
-		switch msg.Role {
-		case "system":
-			novaReq.System = append(novaReq.System, content...)
-		case "user", "assistant":
-			novaReq.Messages = append(novaReq.Messages, NovaMessage{Role: msg.Role, Content: content})
+	novaMessages := make([]NovaMessage, len(req.Messages))
+	for i, msg := range req.Messages {
+		novaMessages[i] = NovaMessage{
+			Role:    msg.Role,
+			Content: []NovaContent{{Text: msg.StringContent()}},
 		}
 	}
 
+	novaReq := &NovaRequest{
+		SchemaVersion: "messages-v1",
+		Messages:      novaMessages,
+	}
+
 	// 设置推理配置
-	if req.MaxTokens != nil || req.MaxCompletionTokens != nil || req.Temperature != nil || req.TopP != nil || req.TopK != nil || req.Stop != nil {
-		novaReq.InferenceConfig = &NovaInferenceConfig{MaxTokens: req.MaxTokens, Temperature: req.Temperature, TopP: req.TopP, TopK: req.TopK, StopSequences: parseStopSequences(req.Stop)}
-		if req.MaxCompletionTokens != nil {
-			novaReq.InferenceConfig.MaxTokens = req.MaxCompletionTokens
+	if (req.MaxTokens != nil && *req.MaxTokens != 0) || (req.Temperature != nil && *req.Temperature != 0) || (req.TopP != nil && *req.TopP != 0) || (req.TopK != nil && *req.TopK != 0) || req.Stop != nil {
+		novaReq.InferenceConfig = &NovaInferenceConfig{}
+		if req.MaxTokens != nil && *req.MaxTokens != 0 {
+			novaReq.InferenceConfig.MaxTokens = int(*req.MaxTokens)
+		}
+		if req.Temperature != nil && *req.Temperature != 0 {
+			novaReq.InferenceConfig.Temperature = *req.Temperature
+		}
+		if req.TopP != nil && *req.TopP != 0 {
+			novaReq.InferenceConfig.TopP = *req.TopP
+		}
+		if req.TopK != nil && *req.TopK != 0 {
+			novaReq.InferenceConfig.TopK = *req.TopK
+		}
+		if req.Stop != nil {
+			if stopSequences := parseStopSequences(req.Stop); len(stopSequences) > 0 {
+				novaReq.InferenceConfig.StopSequences = stopSequences
+			}
 		}
 	}
 
@@ -121,7 +134,7 @@ func parseStopSequences(stop any) []string {
 		}
 	case []string:
 		return v
-	case []interface{}:
+	case []any:
 		var sequences []string
 		for _, item := range v {
 			if str, ok := item.(string); ok && str != "" {

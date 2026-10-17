@@ -6,14 +6,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// xaiResponsesToolPriceKeys lists, per declared hosted tool type prefix, the
-// price keys xaiResponsesToolUsage can bill. web_search_calls always bills
-// under web_search, so a declared web_search_preview also requires that price.
-var xaiResponsesToolPriceKeys = map[string][]string{
-	dto.BuildInToolWebSearch: {dto.BuildInToolWebSearch},
-	"x_search":               {"x_search_posts", "x_search_profiles"},
-}
-
 // xaiResponsesToolUsage reads xAI's billed server-side tool counts from
 // usage.server_side_tool_usage_details (terminal stream frames carry the
 // cumulative usage under response.usage; num_sources_used is not a billed

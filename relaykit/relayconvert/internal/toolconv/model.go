@@ -3,6 +3,7 @@ package toolconv
 import (
 	"encoding/json"
 
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
@@ -39,24 +40,12 @@ type Function struct {
 	OpenAPISchema bool
 }
 
-type ApproximateLocation struct {
-	City     string
-	Region   string
-	Country  string
-	Timezone string
-}
-
-type WebSearch struct {
-	Location          *ApproximateLocation
-	AllowedDomains    []string
-	BlockedDomains    []string
-	SearchContextSize string
-	MaxUses           *int
-	AllowedCallers    []string
-	ResponseInclusion string
-	ExternalWebAccess *bool
-	ReturnTokenBudget json.RawMessage
-}
+// ApproximateLocation and WebSearch are the convmeta types, so a host
+// web-search encoder receives the decoded specification unchanged.
+type (
+	ApproximateLocation = convmeta.ApproximateLocation
+	WebSearch           = convmeta.WebSearch
+)
 
 type Definition struct {
 	Kind       Kind
@@ -67,6 +56,9 @@ type Definition struct {
 	WebSearch  *WebSearch
 	Raw        json.RawMessage
 	Group      int
+	// Namespace is the Responses tool namespace the definition was declared
+	// in. Name and Function.Name already hold the flattened upstream name.
+	Namespace string
 }
 
 type ChoiceMode string
@@ -96,13 +88,16 @@ type Set struct {
 	ParallelAllowed  *bool
 	NativeToolConfig json.RawMessage
 	History          []HostedHistoryItem
+	// Diagnostics reports losses found while extracting the definitions; they
+	// are returned with the attach diagnostics.
+	Diagnostics []types.ConversionDiagnostic
 	// Model is the upstream model the definitions are attached for; target
 	// capability checks read it. The caller of AttachRequest sets it.
 	Model string
 }
 
 func (s Set) Empty() bool {
-	return len(s.Definitions) == 0 && s.Choice == nil && s.ParallelAllowed == nil && len(s.NativeToolConfig) == 0 && len(s.History) == 0
+	return len(s.Definitions) == 0 && s.Choice == nil && s.ParallelAllowed == nil && len(s.NativeToolConfig) == 0 && len(s.History) == 0 && len(s.Diagnostics) == 0
 }
 
 type HostedHistoryItem struct {

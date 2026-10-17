@@ -22,7 +22,7 @@ func TestAuthLogoutRejectsRefreshCookieSessionMismatch(t *testing.T) {
 	previousSecret := common.SessionSecret
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.TwoFA{}, &model.PasskeyCredential{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}))
 	model.DB = db
 	common.RedisEnabled = false
 	common.SessionSecret = "auth-logout-mismatch-test-secret"

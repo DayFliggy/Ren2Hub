@@ -5,11 +5,10 @@ import "github.com/QuantumNous/new-api/relaykit/types"
 // Options is the per-request snapshot of host configuration that converters
 // consult. The host fills it from its settings system when constructing the
 // Meta (see relaycommon.RelayInfo.ConvOptions); relaykit users fill it
-// directly. The zero value disables optional adaptations and uses safe conversion.
+// directly. Zero value = every adaptation disabled, no defaults applied.
 type Options struct {
-	Claude           ClaudeOptions
-	Gemini           GeminiOptions
-	ConversionPolicy types.ConversionLossPolicy
+	Claude ClaudeOptions
+	Gemini GeminiOptions
 
 	// ToolLossPolicy controls whether a cross-protocol conversion may omit or
 	// approximate built-in-tool semantics. The zero value uses the allow
@@ -24,6 +23,12 @@ type Options struct {
 	// it from the channel type.
 	OpenRouterDialect bool
 
+	// WebSearch encodes hosted web search for the upstream dialect. Nil, or a
+	// nil result, keeps the default: web_search_options on Chat and the native
+	// hosted tool on Responses, Claude, and Gemini. The host sets it from the
+	// channel adaptor's Init.
+	WebSearch WebSearchEncoder
+
 	// PreserveThinkingSuffix reports models whose -thinking/-nothinking/effort
 	// suffix must be kept on the outgoing model name (host blacklist lookup).
 	// Nil means "never preserve".
@@ -32,13 +37,6 @@ type Options struct {
 	// PreserveEffortTail reports real model IDs whose names already end in an
 	// effort-like token (for example qwen-max). Nil means "never preserve".
 	PreserveEffortTail func(modelName string) bool
-}
-
-func (o *Options) EffectiveConversionPolicy() types.ConversionLossPolicy {
-	if o == nil || o.ConversionPolicy == "" {
-		return types.ConversionLossPolicySafe
-	}
-	return o.ConversionPolicy
 }
 
 type ClaudeOptions struct {

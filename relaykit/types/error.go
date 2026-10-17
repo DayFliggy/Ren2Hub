@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 )
@@ -97,10 +96,6 @@ type NewAPIError struct {
 	errorCode      ErrorCode
 	StatusCode     int
 	Metadata       json.RawMessage
-	// RetryAfter is parsed from the upstream response header and is only used
-	// by the guarded live retry policy. It is not part of the client payload.
-	RetryAfter        time.Duration
-	upstreamAddresses []string
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -150,6 +145,8 @@ func (e *NewAPIError) ErrorWithStatusCode() string {
 	return fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg)
 }
 
+// MaskSensitiveError masks the upstream addresses of the channel that produced
+// the error in the error text; see kitutil.MaskSensitiveInfo.
 func (e *NewAPIError) MaskSensitiveError(upstreamURLs ...string) string {
 	if e == nil {
 		return ""
@@ -161,7 +158,7 @@ func (e *NewAPIError) MaskSensitiveError(upstreamURLs ...string) string {
 	if e.errorCode == ErrorCodeCountTokenFailed {
 		return errStr
 	}
-	return kitutil.MaskSensitiveInfo(errStr, e.maskingAddresses(upstreamURLs)...)
+	return kitutil.MaskSensitiveInfo(errStr, upstreamURLs...)
 }
 
 func (e *NewAPIError) MaskSensitiveErrorWithStatusCode(upstreamURLs ...string) string {
@@ -182,6 +179,8 @@ func (e *NewAPIError) SetMessage(message string) {
 	e.Err = errors.New(message)
 }
 
+// ToOpenAIError masks the upstream addresses in the message; pass those of the
+// channel that produced the error, or none when no channel did.
 func (e *NewAPIError) ToOpenAIError(upstreamURLs ...string) OpenAIError {
 	var result OpenAIError
 	switch e.errorType {
@@ -207,7 +206,7 @@ func (e *NewAPIError) ToOpenAIError(upstreamURLs ...string) OpenAIError {
 		}
 	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
-		result.Message = kitutil.MaskSensitiveInfo(result.Message, e.maskingAddresses(upstreamURLs)...)
+		result.Message = kitutil.MaskSensitiveInfo(result.Message, upstreamURLs...)
 	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)
@@ -215,6 +214,7 @@ func (e *NewAPIError) ToOpenAIError(upstreamURLs ...string) OpenAIError {
 	return result
 }
 
+// ToClaudeError masks the upstream addresses like ToOpenAIError.
 func (e *NewAPIError) ToClaudeError(upstreamURLs ...string) ClaudeError {
 	var result ClaudeError
 	switch e.errorType {
@@ -236,7 +236,7 @@ func (e *NewAPIError) ToClaudeError(upstreamURLs ...string) ClaudeError {
 		}
 	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
-		result.Message = kitutil.MaskSensitiveInfo(result.Message, e.maskingAddresses(upstreamURLs)...)
+		result.Message = kitutil.MaskSensitiveInfo(result.Message, upstreamURLs...)
 	}
 	if result.Message == "" {
 		result.Message = string(e.errorType)
@@ -403,7 +403,10 @@ func ErrOptionWithStatusCode(statusCode int) NewAPIErrorOptions {
 
 func ErrOptionWithHideErrMsg(replaceStr string) NewAPIErrorOptions {
 	return func(e *NewAPIError) {
-		e.Err = &hiddenErrorMessage{message: replaceStr, cause: e.Err}
+		if kitutil.Debug.Load() {
+			fmt.Printf("ErrOptionWithHideErrMsg: %s, origin error: %s", replaceStr, e.Err)
+		}
+		e.Err = errors.New(replaceStr)
 	}
 }
 
@@ -417,28 +420,3 @@ func IsRecordErrorLog(e *NewAPIError) bool {
 	}
 	return *e.recordErrorLog
 }
-
-// ErrOptionWithUpstreamAddresses binds masking to the attempt that produced the error.
-func ErrOptionWithUpstreamAddresses(addresses ...string) NewAPIErrorOptions {
-	return func(e *NewAPIError) {
-		if len(e.upstreamAddresses) == 0 {
-			e.upstreamAddresses = append([]string(nil), addresses...)
-		}
-	}
-}
-
-func (e *NewAPIError) maskingAddresses(fallback []string) []string {
-	if len(e.upstreamAddresses) > 0 {
-		return e.upstreamAddresses
-	}
-	return fallback
-}
-
-// Hidden display text must not erase transport cancellation or typed causes.
-type hiddenErrorMessage struct {
-	message string
-	cause   error
-}
-
-func (e *hiddenErrorMessage) Error() string { return e.message }
-func (e *hiddenErrorMessage) Unwrap() error { return e.cause }

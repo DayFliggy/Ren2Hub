@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/config"
 )
 
@@ -107,13 +106,6 @@ func GetGeminiVersionSetting(key string) string {
 		return value
 	}
 	return geminiSettings.VersionSettings["default"]
-}
-
-// GeminiAcceptsJSONSchema reports whether the channel's Gemini upstream takes
-// parametersJsonSchema and responseJsonSchema for the model: Gemini API v1
-// has neither, while v1beta and Vertex AI accept both.
-func GeminiAcceptsJSONSchema(channelType int, modelName string) bool {
-	return channelType == constant.ChannelTypeVertexAi || GetGeminiVersionSetting(modelName) != "v1"
 }
 
 func IsGeminiModelSupportImagine(model string) bool {

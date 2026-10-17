@@ -3,6 +3,12 @@ import { publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
+  quota_display_type?: string
+  quota_per_unit?: number
+  usd_exchange_rate?: number
+  custom_currency_symbol?: string
+  custom_currency_exchange_rate?: number
+  email_verification?: boolean
   log_export_enabled?: boolean
   log_max_range_days?: number
   server_address?: string
@@ -66,13 +72,6 @@ export interface UptimeGroup {
   monitors: UptimeMonitor[]
 }
 
-export interface HomeRequestMetrics {
-  available: boolean
-  requests_24h: number | null
-  hourly_requests: number[]
-  generated_at: number
-}
-
 const publicClient = createApiClient(publicHttpTransport)
 
 function invalidResponse(endpoint: string): never {
@@ -90,13 +89,31 @@ export function parsePublicStatus(value: unknown): PublicStatus {
 
   const result: PublicStatus = {}
   const stringKeys = [
+    'quota_display_type',
+    'custom_currency_symbol',
     'version',
     'system_name',
     'logo',
     'docs_link',
     'server_address',
   ] as const
+  for (const key of [
+    'quota_per_unit',
+    'usd_exchange_rate',
+    'custom_currency_exchange_rate',
+  ] as const) {
+    if (value[key] !== undefined) {
+      if (
+        typeof value[key] !== 'number' ||
+        !Number.isFinite(value[key]) ||
+        value[key] <= 0
+      )
+        invalidResponse('/api/status')
+      result[key] = value[key]
+    }
+  }
   const booleanKeys = [
+    'email_verification',
     'log_export_enabled',
     'api_info_enabled',
     'password_login_enabled',
@@ -285,50 +302,6 @@ export function parseUptimeGroups(value: unknown): UptimeGroup[] {
   })
 }
 
-export function parseHomeRequestMetrics(value: unknown): HomeRequestMetrics {
-  const isNonNegativeSafeInteger = (input: unknown): input is number =>
-    typeof input === 'number' && Number.isSafeInteger(input) && input >= 0
-
-  if (
-    !isRecord(value) ||
-    typeof value.available !== 'boolean' ||
-    !isNonNegativeSafeInteger(value.generated_at) ||
-    !Array.isArray(value.hourly_requests) ||
-    value.hourly_requests.length !== 24 ||
-    value.hourly_requests.some((count) => !isNonNegativeSafeInteger(count)) ||
-    (value.requests_24h !== null &&
-      !isNonNegativeSafeInteger(value.requests_24h))
-  ) {
-    invalidResponse('/api/home/metrics')
-  }
-  if (value.available !== (value.requests_24h !== null)) {
-    invalidResponse('/api/home/metrics')
-  }
-
-  const hourlyRequests = value.hourly_requests.map(Number)
-  const requests24h =
-    value.requests_24h === null ? null : Number(value.requests_24h)
-  let hourlyTotal = 0
-  for (const count of hourlyRequests) {
-    if (!Number.isSafeInteger(hourlyTotal + count)) {
-      invalidResponse('/api/home/metrics')
-    }
-    hourlyTotal += count
-  }
-  if (requests24h === null) {
-    if (hourlyTotal !== 0) invalidResponse('/api/home/metrics')
-  } else if (hourlyTotal !== requests24h) {
-    invalidResponse('/api/home/metrics')
-  }
-
-  return {
-    available: value.available,
-    requests_24h: requests24h,
-    hourly_requests: hourlyRequests,
-    generated_at: Number(value.generated_at),
-  }
-}
-
 export const publicApi = {
   async status(signal?: AbortSignal) {
     return parsePublicStatus(
@@ -350,13 +323,6 @@ export const publicApi = {
   async uptime(signal?: AbortSignal) {
     return parseUptimeGroups(
       await publicClient.get<unknown>('/api/uptime/status', undefined, {
-        signal,
-      })
-    )
-  },
-  async homeMetrics(signal?: AbortSignal) {
-    return parseHomeRequestMetrics(
-      await publicClient.get<unknown>('/api/home/metrics', undefined, {
         signal,
       })
     )

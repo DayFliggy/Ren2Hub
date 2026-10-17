@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -20,8 +21,10 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestServeTaskPluginProtocolWaitsForDurableSubmissionBeforeWriting(t *testing.T) {
@@ -143,6 +146,246 @@ func TestServeTaskPluginProtocolDisconnectDuringSubmissionFinishesDurableWithout
 		require.FailNow(t, "protocol observation started after client disconnect")
 	default:
 	}
+}
+
+func TestServeTaskPluginProtocolDisconnectBeforeDurableBarrierPersistsAndSettlesWithoutRefund(t *testing.T) {
+	events := make([]string, 0, 3)
+	database := setupTaskSubmissionDatabase(t, true, &events)
+	previousLogConsumeEnabled := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() { common.LogConsumeEnabled = previousLogConsumeEnabled })
+
+	pinned := compilePluginProtocolTestEndpoint(t, "disconnect-before-durable", `
+		export const protocols = {openai_responses: {
+			renderEvents: function() { return {events: [], done: false}; },
+			renderFinal: function() { return {}; }
+		}};
+	`)
+	c, recorder := newPluginProtocolTestContext(true, true)
+	requestContext, cancel := context.WithCancel(c.Request.Context())
+	c.Request = c.Request.WithContext(requestContext)
+	billing := &taskSubmissionTestBilling{events: &events}
+	submitStarted := make(chan struct{})
+	releaseSubmit := make(chan struct{})
+	observationStarted := make(chan struct{}, 1)
+	done := make(chan struct{})
+
+	deps := pluginProtocolTestDeps()
+	deps.submit = func(c *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
+		info.Billing = billing
+		info.TaskRelayInfo.PublicTaskID = "task_disconnect_persisted"
+		info.TaskRelayInfo.LockedChannel = &model.Channel{
+			Id:   1,
+			Type: constant.ChannelTypeTaskPlugin,
+			Name: "disconnect-before-durable",
+		}
+		info.ChannelMeta = &relaycommon.ChannelMeta{
+			ChannelId:   1,
+			ChannelType: constant.ChannelTypeTaskPlugin,
+		}
+		return executeTaskSubmissionWith(c, info, func(*gin.Context, *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+			close(submitStarted)
+			<-releaseSubmit
+			return &relay.TaskSubmitResult{
+				UpstreamTaskID: "upstream_disconnect_persisted",
+				Platform:       constant.TaskPlatform(pinned.Plugin.Meta.Key),
+				Quota:          7,
+			}, nil
+		})
+	}
+	deps.loadTask = func(context.Context, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
+		observationStarted <- struct{}{}
+		return nil, false, errors.New("observation must not start after disconnect")
+	}
+
+	go func() {
+		defer close(done)
+		serveTaskPluginProtocol(c, pinned, deps)
+	}()
+	select {
+	case <-submitStarted:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "submission did not start")
+	}
+	cancel()
+	close(releaseSubmit)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "detached submission did not finish")
+	}
+
+	assert.Equal(t, []string{"reserve", "insert", "settle"}, events)
+	assert.Zero(t, billing.refunds)
+	var persisted model.Task
+	require.NoError(t, database.Where("task_id = ?", "task_disconnect_persisted").First(&persisted).Error)
+	assert.Equal(t, model.TaskStatus(model.TaskStatusNotStart), persisted.Status)
+	assert.Equal(t, 7, persisted.Quota)
+	assert.Equal(t, "upstream_disconnect_persisted", persisted.PrivateData.UpstreamTaskID)
+	assert.Empty(t, recorder.Header().Get("Content-Type"))
+	assert.Empty(t, recorder.Body.String())
+	assert.False(t, recorder.Flushed)
+	select {
+	case <-observationStarted:
+		require.FailNow(t, "protocol observation started after client disconnect")
+	default:
+	}
+}
+
+func TestServeTaskPluginProtocolDisconnectDuringTerminalSettlementStopsOnlyObservation(t *testing.T) {
+	pinned := compilePluginProtocolTestEndpoint(t, "disconnect-terminal-settlement", `
+		export const protocols = {openai_responses: {
+			renderEvents: function() { return {events: [], done: false}; },
+			renderFinal: function() { return {}; }
+		}};
+	`)
+
+	previousDB := model.DB
+	previousMemoryCache := common.MemoryCacheEnabled
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, database.AutoMigrate(&model.Channel{}, &model.Task{}))
+	model.DB = database
+	common.MemoryCacheEnabled = false
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.MemoryCacheEnabled = previousMemoryCache
+	})
+	baseURL := "https://example.com"
+	channel := model.Channel{
+		Type:    constant.ChannelTypeTaskPlugin,
+		Name:    "terminal-settlement",
+		Key:     "test-key",
+		BaseURL: &baseURL,
+		Status:  common.ChannelStatusEnabled,
+	}
+	require.NoError(t, database.Create(&channel).Error)
+	task := model.Task{
+		TaskID:    "task_terminal_disconnect",
+		Platform:  constant.TaskPlatform(pinned.Plugin.Meta.Key),
+		UserId:    71,
+		ChannelId: channel.Id,
+		Quota:     10,
+		Status:    model.TaskStatusSubmitted,
+		PrivateData: model.TaskPrivateData{
+			UpstreamTaskID: "upstream-terminal",
+		},
+	}
+	require.NoError(t, database.Create(&task).Error)
+
+	c, recorder := newPluginProtocolTestContext(true, true)
+	requestContext, cancel := context.WithCancel(c.Request.Context())
+	c.Request = c.Request.WithContext(requestContext)
+	billingEvents := make([]string, 0)
+	billing := &taskSubmissionTestBilling{events: &billingEvents}
+	observationStarted := make(chan struct{})
+	settlementStarted := make(chan struct{})
+	releaseSettlement := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-releaseSettlement:
+		default:
+			close(releaseSettlement)
+		}
+	})
+	pollingDone := make(chan struct{})
+	adaptor := &terminalSettlementPollingAdaptor{
+		started: settlementStarted,
+		release: releaseSettlement,
+	}
+	previousAdaptorFactory := service.GetTaskAdaptorFunc
+	service.GetTaskAdaptorFunc = func(constant.TaskPlatform) service.TaskPollingAdaptor {
+		return adaptor
+	}
+	t.Cleanup(func() { service.GetTaskAdaptorFunc = previousAdaptorFactory })
+
+	deps := pluginProtocolTestDeps()
+	deps.submit = func(_ *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
+		info.Billing = billing
+		return &taskSubmissionOutcome{
+			Result:    &relay.TaskSubmitResult{},
+			Task:      &task,
+			RelayInfo: info,
+		}, nil
+	}
+	deps.loadTask = func(ctx context.Context, _ int, _ constant.TaskPlatform, _ string) (*model.Task, bool, error) {
+		close(observationStarted)
+		<-ctx.Done()
+		return nil, false, ctx.Err()
+	}
+	done := make(chan struct{})
+
+	go func() {
+		<-observationStarted
+		defer close(pollingDone)
+		service.DispatchPlatformUpdate(
+			context.Background(),
+			task.Platform,
+			map[int][]string{channel.Id: {"upstream-terminal"}},
+			map[string]*model.Task{"upstream-terminal": &task},
+		)
+	}()
+	go func() {
+		defer close(done)
+		serveTaskPluginProtocol(c, pinned, deps)
+	}()
+	select {
+	case <-settlementStarted:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "terminal settlement did not start")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "protocol observation did not stop after terminal disconnect")
+	}
+	assert.Equal(t, []string{"response.created"}, pluginProtocolTestSSEEventTypes(recorder.Body.String()))
+	assert.Zero(t, billing.refunds)
+
+	close(releaseSettlement)
+	select {
+	case <-pollingDone:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "terminal settlement was canceled with the client observation")
+	}
+
+	var persisted model.Task
+	require.NoError(t, database.Where("task_id = ?", task.TaskID).First(&persisted).Error)
+	assert.Equal(t, model.TaskStatus(model.TaskStatusSuccess), persisted.Status)
+	assert.Equal(t, "100%", persisted.Progress)
+	assert.Equal(t, 10, persisted.Quota)
+	assert.True(t, adaptor.completed)
+	assert.Empty(t, billingEvents)
+}
+
+type terminalSettlementPollingAdaptor struct {
+	started   chan struct{}
+	release   chan struct{}
+	completed bool
+}
+
+func (a *terminalSettlementPollingAdaptor) Init(*relaycommon.RelayInfo) {}
+
+func (a *terminalSettlementPollingAdaptor) FetchTask(string, string, *model.Task, string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{}`)),
+	}, nil
+}
+
+func (a *terminalSettlementPollingAdaptor) ParseTaskResult(*model.Task, *http.Response, []byte) (*relaycommon.TaskInfo, error) {
+	return &relaycommon.TaskInfo{
+		Status:   model.TaskStatusSuccess,
+		Progress: "100%",
+	}, nil
+}
+
+func (a *terminalSettlementPollingAdaptor) AdjustBillingOnComplete(task *model.Task, _ *relaycommon.TaskInfo) int {
+	close(a.started)
+	<-a.release
+	a.completed = true
+	return task.Quota
 }
 
 func TestPluginProtocolBridgeBoundsDatabaseReadBelowHeartbeat(t *testing.T) {
@@ -1133,8 +1376,8 @@ func TestRetrieveTaskPluginResponseNotFound(t *testing.T) {
 			common.SetContextKey(c, constant.ContextKeyUserId, testCase.userID)
 			deps := pluginProtocolRetrieveDeps(pinned, testCase.task, testCase.exists, nil)
 			if testCase.plugin == nil {
-				deps.loadPlugin = func(*model.Task) (*pluginruntime.LoadedPlugin, error) {
-					return nil, errors.New("pinned plugin unavailable")
+				deps.resolvePlugin = func(constant.TaskPlatform) (*pluginruntime.LoadedPlugin, *pluginruntime.RoutingGeneration, bool) {
+					return nil, nil, false
 				}
 			}
 
@@ -1343,9 +1586,6 @@ func newPluginProtocolRetrieveContext(responseID string) (*gin.Context, *httptes
 
 func pluginProtocolRetrieveDeps(pinned pluginruntime.PinnedEndpoint, task *model.Task, exists bool, err error) pluginProtocolBridgeDeps {
 	deps := pluginProtocolTestDeps()
-	if task != nil {
-		task.PrivateData.TokenId = 81
-	}
 	deps.getByTaskId = func(userId int, taskId string) (*model.Task, bool, error) {
 		if !exists {
 			return nil, false, err
@@ -1355,11 +1595,11 @@ func pluginProtocolRetrieveDeps(pinned pluginruntime.PinnedEndpoint, task *model
 		}
 		return task, task != nil, err
 	}
-	deps.loadPlugin = func(*model.Task) (*pluginruntime.LoadedPlugin, error) {
+	deps.resolvePlugin = func(constant.TaskPlatform) (*pluginruntime.LoadedPlugin, *pluginruntime.RoutingGeneration, bool) {
 		if pinned.Plugin == nil {
-			return nil, errors.New("pinned plugin unavailable")
+			return nil, nil, false
 		}
-		return pinned.Plugin, nil
+		return pinned.Plugin, pinned.Generation, true
 	}
 	return deps
 }
@@ -1424,7 +1664,7 @@ func imageProtocolTestOutcome(info *relaycommon.RelayInfo, status model.TaskStat
 
 // The OpenAI Images protocol answers synchronously: an immediate result is
 // rendered by the plugin, `created` is host-filled, and response_format
-// b64_json returns only encoded content; a failed download is explicit.
+// b64_json inlines each URL while keeping the URL.
 func TestServeTaskPluginImageProtocolRendersImmediateResultAndInlinesBase64(t *testing.T) {
 	for _, tc := range []struct {
 		name, responseFormat string
@@ -1433,7 +1673,7 @@ func TestServeTaskPluginImageProtocolRendersImmediateResultAndInlinesBase64(t *t
 	}{
 		{"url", "", nil, []any{nil, nil}},
 		{"b64_json", "b64_json", nil, []any{"QUFB", "QUFB"}},
-		{"b64_json download failure is explicit", "b64_json", errors.New("blocked"), []any{nil, nil}},
+		{"b64_json download failure keeps the URL", "b64_json", errors.New("blocked"), []any{nil, nil}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pinned := imageProtocolTestEndpoint(t)
@@ -1451,11 +1691,6 @@ func TestServeTaskPluginImageProtocolRendersImmediateResultAndInlinesBase64(t *t
 				return imageProtocolTestOutcome(info, model.TaskStatusSuccess, "https://cdn.example/1.png", "https://cdn.example/2.png"), nil
 			}
 			serveTaskPluginImageProtocol(c, pinned, deps)
-			if tc.downloadErr != nil {
-				assert.Equal(t, http.StatusBadGateway, recorder.Code)
-				assert.Contains(t, recorder.Body.String(), "image_download_failed")
-				return
-			}
 			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 			var response map[string]any
 			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
@@ -1466,11 +1701,7 @@ func TestServeTaskPluginImageProtocolRendersImmediateResultAndInlinesBase64(t *t
 			require.Len(t, data, 2)
 			for index, entry := range data {
 				item := entry.(map[string]any)
-				if tc.responseFormat == "b64_json" {
-					assert.NotContains(t, item, "url")
-				} else {
-					assert.Equal(t, fmt.Sprintf("https://cdn.example/%d.png", index+1), item["url"])
-				}
+				assert.Equal(t, fmt.Sprintf("https://cdn.example/%d.png", index+1), item["url"])
 				assert.Equal(t, tc.wantB64[index], item["b64_json"])
 			}
 			if tc.responseFormat == "b64_json" {
@@ -1500,6 +1731,7 @@ func TestServeTaskPluginImageProtocolWaitsForAsynchronousTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			pinned := imageProtocolTestEndpoint(t)
 			c, recorder := newImageProtocolTestContext("")
+			common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://private.example.com")
 			deps := pluginProtocolTestDeps()
 			deps.imagePollInterval = time.Millisecond
 			deps.submissionTimeout = 50 * time.Millisecond
@@ -1513,7 +1745,7 @@ func TestServeTaskPluginImageProtocolWaitsForAsynchronousTask(t *testing.T) {
 					return nil
 				}
 				task.Status = tc.terminal
-				task.FailReason = "DataInspectionFailed"
+				task.FailReason = "DataInspectionFailed: see https://private.example.com/jobs/1"
 				task.SetData(map[string]any{"images": []string{"https://cdn.example/polled.png"}})
 				return nil
 			}
@@ -1532,6 +1764,7 @@ func TestServeTaskPluginImageProtocolWaitsForAsynchronousTask(t *testing.T) {
 			errorBody := response["error"].(map[string]any)
 			assert.Equal(t, tc.wantCode, errorBody["code"])
 			assert.Contains(t, errorBody["message"], tc.wantMessage)
+			assert.NotContains(t, errorBody["message"], "private.example.com")
 		})
 	}
 }
@@ -1554,4 +1787,83 @@ func TestServeTaskPluginImageProtocolSubmissionErrorUsesOpenAIEnvelope(t *testin
 	assert.Equal(t, "invalid_request_error", errorBody["type"])
 	assert.Contains(t, errorBody["message"], "n must be 1")
 	assert.NotContains(t, errorBody["message"], "request_id")
+}
+
+// A synchronous image submission is billable the moment DashScope accepts it.
+// A client that disconnects while the upstream call is in flight must not
+// cancel that call or refund a durable result: the task row, its settlement
+// and its consume log stay, and nothing is written to the closed connection.
+func TestServeTaskPluginImageProtocolDisconnectDuringSubmissionKeepsDurableSettlement(t *testing.T) {
+	events := make([]string, 0, 3)
+	database := setupTaskSubmissionDatabase(t, true, &events)
+	previousLogConsumeEnabled := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() { common.LogConsumeEnabled = previousLogConsumeEnabled })
+
+	pinned := imageProtocolTestEndpoint(t)
+	c, recorder := newImageProtocolTestContext("")
+	c.Set(pluginruntime.ContextKeyPinnedEndpoint, pinned)
+	requestContext, cancel := context.WithCancel(c.Request.Context())
+	c.Request = c.Request.WithContext(requestContext)
+	billing := &taskSubmissionTestBilling{events: &events}
+	submitStarted := make(chan struct{})
+	releaseSubmit := make(chan struct{})
+	done := make(chan struct{})
+	polls := 0
+
+	deps := pluginProtocolTestDeps()
+	deps.pollTask = func(context.Context, *model.Task) error {
+		polls++
+		return nil
+	}
+	deps.submit = func(c *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
+		info.Billing = billing
+		info.TaskRelayInfo.PublicTaskID = "task_image_disconnect"
+		info.TaskRelayInfo.LockedChannel = &model.Channel{Id: 1, Type: constant.ChannelTypeTaskPlugin, Name: "image-bridge"}
+		info.ChannelMeta = &relaycommon.ChannelMeta{ChannelId: 1, ChannelType: constant.ChannelTypeTaskPlugin}
+		return executeTaskSubmissionWith(c, info, func(c *gin.Context, _ *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+			close(submitStarted)
+			<-releaseSubmit
+			// The upstream call runs on the request context: a context that
+			// followed the client would abort here and refund.
+			if requestErr := c.Request.Context().Err(); requestErr != nil {
+				return nil, service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
+			}
+			return &relay.TaskSubmitResult{
+				UpstreamTaskID: "task_image_disconnect",
+				Platform:       constant.TaskPlatform(pinned.Plugin.Meta.Key),
+				Quota:          7,
+				TaskData:       []byte(`{"images":["https://cdn.example/1.png"]}`),
+				Immediate:      &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, Progress: "100%"},
+			}, nil
+		})
+	}
+
+	go func() {
+		defer close(done)
+		serveTaskPluginImageProtocol(c, pinned, deps)
+	}()
+	select {
+	case <-submitStarted:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "submission did not start")
+	}
+	cancel()
+	close(releaseSubmit)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "detached submission did not finish")
+	}
+
+	assert.Equal(t, []string{"reserve", "insert", "settle"}, events)
+	assert.Zero(t, billing.refunds)
+	var persisted model.Task
+	require.NoError(t, database.Where("task_id = ?", "task_image_disconnect").First(&persisted).Error)
+	assert.Equal(t, model.TaskStatus(model.TaskStatusSuccess), persisted.Status)
+	assert.Equal(t, 7, persisted.Quota)
+	assert.True(t, persisted.PrivateData.ResultDiscarded, "the inline image result is not retained after the barrier")
+	assert.Zero(t, polls, "an immediate result is never polled")
+	assert.False(t, c.Writer.Written())
+	assert.Empty(t, recorder.Body.String())
 }

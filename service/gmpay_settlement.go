@@ -10,34 +10,12 @@ import (
 	"gorm.io/gorm"
 )
 
-func GmpaySettlementEnabled(ctx context.Context) (bool, error) {
-	var option model.Option
-	err := model.DB.WithContext(ctx).Where(&model.Option{Key: "payment_setting.gmpay_settlement_enabled"}).First(&option).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if option.Value != "true" && option.Value != "false" {
-		return false, errors.New("invalid gmpay settlement setting")
-	}
-	return option.Value == "true", nil
-}
-
 // SettleGmpayNotification verifies a callback against the credentials the order
 // was created with, then settles it. A callback carries no network and no
 // currency. The snapshot records the requested asset, but cannot prove the
 // final network selected in the hosted cashier. Settlement checks the token,
 // fiat amount, order number, gateway trade number and successful status.
 func SettleGmpayNotification(ctx context.Context, params map[string]string, callerIP string) error {
-	enabled, err := GmpaySettlementEnabled(ctx)
-	if err != nil {
-		return err
-	}
-	if !enabled {
-		return model.ErrGmpaySettlementPaused
-	}
 	orderNo := params["order_id"]
 	if orderNo == "" {
 		return gmpay.ErrInvalidParameters
@@ -71,7 +49,6 @@ func SettleGmpayNotification(ctx context.Context, params map[string]string, call
 		GatewayTradeNo: notification.TradeNo, AmountMinor: amountMinor, Token: strings.ToLower(notification.Token),
 		ActualAmount: notification.ActualAmount, ReceiveAddress: notification.ReceiveAddress,
 		BlockTransactionID: notification.BlockTransactionID,
-		PaymentMethod:      "gmpay:" + snapshot.Token + "." + snapshot.Network,
 	}, callerIP)
 	return err
 }
@@ -81,8 +58,6 @@ func GmpayFailureCode(err error) string {
 	switch {
 	case err == nil:
 		return ""
-	case errors.Is(err, model.ErrGmpaySettlementPaused):
-		return "SETTLEMENT_PAUSED"
 	case errors.Is(err, model.ErrGmpayPaymentMismatch):
 		return "PAYMENT_MISMATCH"
 	case errors.Is(err, gmpay.ErrInvalidSignature):

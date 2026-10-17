@@ -21,8 +21,6 @@ const (
 	responsesEventIncomplete                = "response.incomplete"
 	responsesEventOutputTextDelta           = "response.output_text.delta"
 	responsesEventOutputTextAnnotationAdded = "response.output_text.annotation.added"
-	responsesEventContentPartAdded          = "response.content_part.added"
-	responsesEventContentPartDone           = "response.content_part.done"
 	responsesEventOutputItemAdded           = "response.output_item.added"
 	responsesEventOutputItemDone            = "response.output_item.done"
 	responsesEventFunctionArgsDelta         = "response.function_call_arguments.delta"
@@ -108,7 +106,7 @@ func ChatCompletionsResponseToResponsesResponseWithTools(resp *dto.OpenAITextRes
 
 	for i, toolCall := range choice.Message.ParseToolCalls() {
 		if (toolCall.Type == "" || toolCall.Type == "function") && strings.TrimSpace(toolCall.Function.Name) == "" {
-			return nil, usage, errors.New("Chat tool call is missing function name")
+			continue
 		}
 		toolOutput, err := chatToolCallToResponsesOutput(toolCall, id, i, responseOutputStatus(out), tools)
 		if err != nil {
@@ -225,18 +223,16 @@ func chatToolCallToResponsesOutput(toolCall dto.ToolCallRequest, responseID stri
 		callID = fmt.Sprintf("%s_call_%d", responseID, index)
 	}
 	if toolCall.Type == "" || toolCall.Type == "function" {
+		namespace, name := tools.ResponsesToolName(toolCall.Function.Name)
 		if tools.IsCustomTool(toolCall.Function.Name) {
-			input, err := customToolInputFromArguments(toolCall.Function.Arguments)
-			if err != nil {
-				return dto.ResponsesOutput{}, err
-			}
 			return dto.ResponsesOutput{
-				Type:   responsesOutputTypeCustomToolCall,
-				ID:     callID,
-				Status: status,
-				CallId: callID,
-				Name:   toolCall.Function.Name,
-				Input:  chatArgumentsRawMessage(input),
+				Type:      responsesOutputTypeCustomToolCall,
+				ID:        callID,
+				Status:    status,
+				CallId:    callID,
+				Name:      name,
+				Namespace: namespace,
+				Input:     chatArgumentsRawMessage(customToolInputFromArguments(toolCall.Function.Arguments)),
 			}, nil
 		}
 		return dto.ResponsesOutput{
@@ -244,7 +240,8 @@ func chatToolCallToResponsesOutput(toolCall dto.ToolCallRequest, responseID stri
 			ID:        callID,
 			Status:    status,
 			CallId:    callID,
-			Name:      toolCall.Function.Name,
+			Name:      name,
+			Namespace: namespace,
 			Arguments: chatArgumentsRawMessage(toolCall.Function.Arguments),
 		}, nil
 	}
@@ -257,18 +254,26 @@ func chatToolCallToResponsesOutput(toolCall dto.ToolCallRequest, responseID stri
 	}, nil
 }
 
-// The wrapper is a protocol contract, not another source of executable input.
-// Invalid JSON or a different shape must not become a successful custom call.
-func customToolInputFromArguments(arguments string) (string, error) {
+// customToolInputFromArguments unwraps the raw custom tool input from the
+// {"input": ...} arguments a Chat function call carries. Arguments of any other
+// shape are returned unchanged so the model's output is never dropped.
+func customToolInputFromArguments(arguments string) string {
 	var value map[string]any
 	if err := kitutil.UnmarshalJsonStr(arguments, &value); err != nil {
-		return "", fmt.Errorf("custom tool arguments must be a JSON object with one string input")
+		return arguments
 	}
-	input, ok := value[convmeta.CustomToolInputArgument].(string)
-	if !ok || len(value) != 1 {
-		return "", fmt.Errorf("custom tool arguments must contain only the string input field")
+	input, ok := value[convmeta.CustomToolInputArgument]
+	if !ok {
+		return arguments
 	}
-	return input, nil
+	if text, ok := input.(string); ok {
+		return text
+	}
+	raw, err := kitutil.Marshal(input)
+	if err != nil {
+		return arguments
+	}
+	return string(raw)
 }
 
 func chatArgumentsRawMessage(arguments string) []byte {

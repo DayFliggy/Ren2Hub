@@ -3,7 +3,6 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -21,33 +20,39 @@ import (
 type JSONValue json.RawMessage
 
 // Value 实现 driver.Valuer 接口，用于数据库写入
+// 必须返回 string 而非 []byte:PG simple protocol 下 []byte 按 bytea 编码,
+// 写 json 列会触发 SQLSTATE 22P02。
 func (j JSONValue) Value() (driver.Value, error) {
 	if j == nil {
 		return nil, nil
 	}
-	var raw json.RawMessage
-	if err := common.Unmarshal(j, &raw); err != nil {
-		return nil, fmt.Errorf("invalid JSON database value: %w", err)
-	}
-	// Text avoids pgx simple-protocol treating []byte as a bytea literal.
 	return string(j), nil
 }
 
 // Scan 实现 sql.Scanner 接口，兼容不同驱动返回的类型
-func (j *JSONValue) Scan(value interface{}) error {
-	var data []byte
+func (j *JSONValue) Scan(value any) error {
 	switch v := value.(type) {
 	case nil:
 		*j = nil
 		return nil
 	case []byte:
-		data = v
+		// 拷贝底层字节，避免保留底层缓冲区
+		b := make([]byte, len(v))
+		copy(b, v)
+		*j = JSONValue(b)
+		return nil
 	case string:
-		data = []byte(v)
+		*j = JSONValue([]byte(v))
+		return nil
 	default:
-		return fmt.Errorf("unsupported JSON database value %T", value)
+		// 其他类型尝试序列化为 JSON
+		b, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		*j = JSONValue(b)
+		return nil
 	}
-	return j.UnmarshalJSON(data)
 }
 
 // MarshalJSON 确保在对外编码时与 json.RawMessage 行为一致
@@ -64,10 +69,6 @@ func (j *JSONValue) UnmarshalJSON(data []byte) error {
 		*j = nil
 		return nil
 	}
-	var raw json.RawMessage
-	if err := common.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("invalid JSON database value: %w", err)
-	}
 	b := make([]byte, len(data))
 	copy(b, data)
 	*j = JSONValue(b)
@@ -76,7 +77,7 @@ func (j *JSONValue) UnmarshalJSON(data []byte) error {
 
 type PrefillGroup struct {
 	Id          int            `json:"id"`
-	Name        string         `json:"name" gorm:"size:64;not null"`
+	Name        string         `json:"name" gorm:"size:64;not null;uniqueIndex:uk_prefill_name,where:deleted_at IS NULL"`
 	Type        string         `json:"type" gorm:"size:32;index;not null"`
 	Items       JSONValue      `json:"items" gorm:"type:json"`
 	Description string         `json:"description,omitempty" gorm:"type:varchar(255)"`

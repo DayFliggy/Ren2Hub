@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -75,12 +77,12 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 		requestContext, err := buildTaskPluginRouteRequest(c)
 		c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
 		if err != nil {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_request err=%q",
-				generation,
-				pinned.Plugin.Meta.Key,
-				err.Error(),
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_request err=%q",
+					generation,
+					pinned.Plugin.Meta.Key,
+					err.Error()),
 			)
 			status := invalidRequestStatus(err)
 			if errors.Is(err, errTaskPluginUnsupportedMediaType) {
@@ -92,12 +94,12 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 		bodyObject, _ := requestContext.Body.(map[string]any)
 		bodyKind, _ := bodyObject["kind"].(string)
 		if pinned.Route.Type == pluginruntime.RouteTypeQuery && bodyKind != string(pluginruntime.BodyNone) || pinned.Route.Type != pluginruntime.RouteTypeQuery && bodyKind != string(pluginruntime.BodyJSON) {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=body_kind_mismatch body_kind=%q",
-				generation,
-				pinned.Plugin.Meta.Key,
-				bodyKind,
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=body_kind_mismatch body_kind=%q",
+					generation,
+					pinned.Plugin.Meta.Key,
+					bodyKind),
 			)
 			detail := "this route requires a JSON body"
 			if pinned.Route.Type == pluginruntime.RouteTypeQuery {
@@ -123,12 +125,12 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 			bodyValue, _ := bodyObject["value"].(map[string]any)
 			claimedModel, _ := bodyValue["model"].(string)
 			if claimedModel == "" || !slices.Contains(pinned.Route.Models, claimedModel) {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=model_not_allowed model=%q",
-					generation,
-					pinned.Plugin.Meta.Key,
-					claimedModel,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=model_not_allowed model=%q",
+						generation,
+						pinned.Plugin.Meta.Key,
+						claimedModel),
 				)
 				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, fmt.Sprintf("model %q is not allowed on this route", claimedModel))
 				return
@@ -136,45 +138,48 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 		}
 
 		hookStarted := time.Now()
-		resolvedValue, err := pinned.Plugin.Engine.CallMember(c.Request.Context(), "native", pinned.Route.Decode, requestContext.JSValue())
+		resolvedValue, requestBodyText, err := pinned.Plugin.Engine.CallPathWithMemberJSON(
+			c.Request.Context(), 0, pinned.Plugin.Meta.JSONTextMember("requestBody"),
+			"native", []string{pinned.Route.Decode}, requestContext.JSValueFor(pinned.Plugin.Meta),
+		)
 		if err != nil {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=hook_failed err=%q elapsed_ms=%d",
-				generation,
-				pinned.Plugin.Meta.Key,
-				err.Error(),
-				time.Since(hookStarted).Milliseconds(),
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=hook_failed err=%q elapsed_ms=%d",
+					generation,
+					pinned.Plugin.Meta.Key,
+					err.Error(),
+					time.Since(hookStarted).Milliseconds()),
 			)
 			abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginHookDetail(err))
 			return
 		}
 		resolved, ok := resolvedValue.(map[string]any)
 		if !ok {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=result_not_object elapsed_ms=%d",
-				generation,
-				pinned.Plugin.Meta.Key,
-				time.Since(hookStarted).Milliseconds(),
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=result_not_object elapsed_ms=%d",
+					generation,
+					pinned.Plugin.Meta.Key,
+					time.Since(hookStarted).Milliseconds()),
 			)
 			abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 			return
 		}
 		kind, ok := resolved["kind"].(string)
 		if !ok {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=missing_kind elapsed_ms=%d",
-				generation,
-				pinned.Plugin.Meta.Key,
-				time.Since(hookStarted).Milliseconds(),
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=missing_kind elapsed_ms=%d",
+					generation,
+					pinned.Plugin.Meta.Key,
+					time.Since(hookStarted).Milliseconds()),
 			)
 			abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 			return
 		}
 		if _, forbidden := resolved["renderer"]; forbidden {
-			taskPluginWarn(c, "task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=forbidden_renderer", generation, pinned.Plugin.Meta.Key)
+			logger.LogWarn(c, common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=forbidden_renderer", generation, pinned.Plugin.Meta.Key))
 			abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 			return
 		}
@@ -183,34 +188,34 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 		case string(pluginruntime.RouteTypeSubmit):
 			modelName, valid := resolved["model"].(string)
 			if !valid || strings.TrimSpace(modelName) == "" {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=invalid_model",
-					generation,
-					pinned.Plugin.Meta.Key,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=invalid_model",
+						generation,
+						pinned.Plugin.Meta.Key),
 				)
 				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, "decoded request is missing a model")
 				return
 			}
 			owned := slices.Contains(pinned.Plugin.Meta.Models, modelName)
 			if !owned {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=model_not_owned model=%q",
-					generation,
-					pinned.Plugin.Meta.Key,
-					modelName,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=model_not_owned model=%q",
+						generation,
+						pinned.Plugin.Meta.Key,
+						modelName),
 				)
 				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, fmt.Sprintf("model %q is not served by this plugin", modelName))
 				return
 			}
 			if len(pinned.Route.Models) > 0 && !slices.Contains(pinned.Route.Models, modelName) {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=resolved_model_not_allowed model=%q",
-					generation,
-					pinned.Plugin.Meta.Key,
-					modelName,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=resolved_model_not_allowed model=%q",
+						generation,
+						pinned.Plugin.Meta.Key,
+						modelName),
 				)
 				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, fmt.Sprintf("model %q is not allowed on this route", modelName))
 				return
@@ -219,11 +224,11 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 			if resolvedAction, present := resolved["action"]; present {
 				actionValue, actionOK := resolvedAction.(string)
 				if !actionOK {
-					taskPluginWarn(
+					logger.LogWarn(
 						c,
-						"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=invalid_action",
-						generation,
-						pinned.Plugin.Meta.Key,
+						common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=invalid_action",
+							generation,
+							pinned.Plugin.Meta.Key),
 					)
 					abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 					return
@@ -237,6 +242,9 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 				c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
 			}
 			c.Set("task_request", requestContext.RequestBody)
+			if requestBodyText != nil {
+				c.Set(pluginruntime.ContextKeyRequestBodyText, requestBodyText)
+			}
 			c.Set("resolved_task_model", modelName)
 			c.Set("expected_task_plugin_key", pinned.Plugin.Meta.Key)
 			c.Set("task_plugin_key", pinned.Plugin.Meta.Key)
@@ -247,12 +255,12 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 			}
 			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
 			if intentErr := applyOriginTaskIntent(c, resolved, pinned.Plugin.Meta); intentErr != nil {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=origin_task reason=%s",
-					generation,
-					pinned.Plugin.Meta.Key,
-					intentErr.Code,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=origin_task reason=%s",
+						generation,
+						pinned.Plugin.Meta.Key,
+						intentErr.Code),
 				)
 				abortTaskPluginRouteErrorDetail(c, intentErr.StatusCode, intentErr.Message)
 				return
@@ -271,22 +279,22 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 			c.Next()
 		case string(pluginruntime.RouteTypeQuery):
 			if pinned.Route.Type != pluginruntime.RouteTypeDynamic {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=query_from_non_dynamic_route",
-					generation,
-					pinned.Plugin.Meta.Key,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=query_from_non_dynamic_route",
+						generation,
+						pinned.Plugin.Meta.Key),
 				)
 				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 				return
 			}
 			taskIDs, valid := resolvedTaskPluginIDs(resolved["taskIds"])
 			if !valid {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=invalid_query_result",
-					generation,
-					pinned.Plugin.Meta.Key,
+					common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=invalid_query_result",
+						generation,
+						pinned.Plugin.Meta.Key),
 				)
 				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 				return
@@ -302,11 +310,11 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 			)
 			renderTaskPluginQuery(c, pinned, requestContext, taskIDs, pinned.Route.Render, true)
 		default:
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=unsupported_kind",
-				generation,
-				pinned.Plugin.Meta.Key,
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=resolve_request reason=unsupported_kind",
+					generation,
+					pinned.Plugin.Meta.Key),
 			)
 			abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 		}
@@ -327,7 +335,7 @@ func PinTaskPluginEndpoint() gin.HandlerFunc {
 		modelRequest, err := getModelFromRequest(c)
 		if err != nil {
 			if _, _, protocolPath := pluginruntime.LookupHostProtocolOperation(c.Request.Method, c.Request.URL.Path); protocolPath {
-				abortInvalidRequest(c, err)
+				abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 				return
 			}
 			c.Next()
@@ -501,68 +509,6 @@ func TaskPluginEndpointOnly(handler gin.HandlerFunc) gin.HandlerFunc {
 	}
 }
 
-// BindTaskPluginEndpointToChannel fixes the accepted decoder and executable
-// before relay info, pricing and send protection consume the selected channel.
-func BindTaskPluginEndpointToChannel(c *gin.Context, channel *model.Channel) *types.NewAPIError {
-	value, exists := c.Get(pluginruntime.ContextKeyPinnedEndpoint)
-	if !exists {
-		return nil
-	}
-	pinned, valid := value.(pluginruntime.PinnedEndpoint)
-	if !valid || pinned.Plugin == nil || pinned.Generation == nil || channel == nil {
-		return types.NewErrorWithStatusCode(errors.New("task plugin endpoint is unavailable"), types.ErrorCode("plugin_channel_unavailable"), http.StatusServiceUnavailable)
-	}
-	candidates := pinned.Candidates
-	if len(candidates) == 0 || c.GetBool("task_plugin_endpoint_channel_bound") {
-		candidates = []pluginruntime.ProtocolBinding{{Plugin: pinned.Plugin, Protocol: pinned.Protocol, Operation: pinned.Operation, Model: pinned.Model}}
-	}
-	selected := service.SelectTaskPluginEndpointCandidate(channel, candidates)
-	if selected == nil {
-		return types.NewErrorWithStatusCode(errors.New("channel is not bound to an accepted task plugin"), types.ErrorCode("plugin_channel_unavailable"), http.StatusServiceUnavailable)
-	}
-	value, _ = c.Get(pluginruntime.ContextKeyProtocolRequest)
-	protocolContext, valid := value.(pluginruntime.ProtocolRequestContext)
-	if !valid {
-		return types.NewErrorWithStatusCode(errors.New("task protocol request is unavailable"), types.ErrorCode("plugin_request_invalid"), http.StatusBadRequest)
-	}
-	protocolContext.Protocol, protocolContext.Operation = selected.Protocol, selected.Operation.Name
-	resolvedValue, err := selected.Plugin.Engine.CallPathWithAdmissionTimeout(context.WithoutCancel(c.Request.Context()), pluginruntime.DefaultCallTimeout,
-		"protocols", []string{selected.Protocol, "decodeRequest"}, protocolContext.JSValue())
-	resolved, valid := resolvedValue.(map[string]any)
-	if err != nil || !valid || resolved["kind"] != string(pluginruntime.RouteTypeSubmit) || resolved["model"] != pinned.Model {
-		return types.NewErrorWithStatusCode(errors.New("selected task plugin decoder rejected the pinned model"), types.ErrorCode("plugin_request_invalid"), http.StatusBadRequest)
-	}
-	if _, forbidden := resolved["renderer"]; forbidden {
-		return types.NewErrorWithStatusCode(errors.New("decoder must not return renderer"), types.ErrorCode("plugin_request_invalid"), http.StatusBadRequest)
-	}
-	// A candidate cannot introduce a different origin owner after routing.
-	if intentErr := applyOriginTaskIntent(c, resolved, selected.Plugin.Meta); intentErr != nil {
-		return types.NewErrorWithStatusCode(errors.New(intentErr.Message), types.ErrorCode(intentErr.Code), intentErr.StatusCode)
-	}
-	if originChannel := c.GetInt("task_plugin_origin_channel"); originChannel > 0 && originChannel != channel.Id {
-		return types.NewErrorWithStatusCode(errors.New("task origin belongs to another channel"), types.ErrorCode("plugin_channel_unavailable"), http.StatusServiceUnavailable)
-	}
-	pinned.Plugin, pinned.Protocol, pinned.Operation = selected.Plugin, selected.Protocol, selected.Operation
-	pinned.Candidates = []pluginruntime.ProtocolBinding{*selected}
-	c.Set(pluginruntime.ContextKeyPinnedEndpoint, pinned)
-	c.Set(pluginruntime.ContextKeyPinnedPlugin, pluginruntime.PinnedPlugin{Generation: pinned.Generation, Plugin: selected.Plugin})
-	c.Set(pluginruntime.ContextKeyProtocolRequest, protocolContext)
-	requestContext := protocolContext.RouteRequestContext
-	if body, present := resolved["requestBody"]; present {
-		requestContext.RequestBody = body
-	}
-	c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
-	c.Set("task_request", requestContext.RequestBody)
-	if action, ok := resolved["action"].(string); ok {
-		c.Set("task_action", action)
-	}
-	c.Set("expected_task_plugin_key", selected.Plugin.Meta.Key)
-	c.Set("task_plugin_key", selected.Plugin.Meta.Key)
-	c.Set("platform", selected.Plugin.Meta.Key)
-	c.Set("task_plugin_endpoint_channel_bound", true)
-	return nil
-}
-
 // PrepareTaskPluginEndpoint normalizes a claimed shared request through the
 // candidates pinned before distribution, retaining only plugins that accept it.
 func PrepareTaskPluginEndpoint() gin.HandlerFunc {
@@ -586,25 +532,24 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			pinned.Model,
 		)
 		if !pluginruntime.SupportsHostProtocol(pinned.Protocol) {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=protocol_check reason=unsupported_protocol",
-				pinned.Generation.Number,
-				pinned.Plugin.Meta.Key,
+				common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=protocol_check reason=unsupported_protocol",
+					pinned.Generation.Number,
+					pinned.Plugin.Meta.Key),
 			)
 			abortWithOpenAiMessage(c, http.StatusNotImplemented, "Task protocol bridge is not available")
 			return
 		}
 		requestContext, err := buildTaskPluginRouteRequest(c)
 		if err != nil {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_request err=%q",
-				pinned.Generation.Number,
-				pinned.Plugin.Meta.Key,
-				err.Error(),
+				common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_request",
+					pinned.Generation.Number,
+					pinned.Plugin.Meta.Key),
 			)
-			status := invalidRequestStatus(err)
+			status := http.StatusBadRequest
 			if errors.Is(err, errTaskPluginUnsupportedMediaType) {
 				status = http.StatusUnsupportedMediaType
 			}
@@ -628,12 +573,12 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			}
 		}
 		if !allowedBody {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=body_kind_mismatch body_kind=%q",
-				pinned.Generation.Number,
-				pinned.Plugin.Meta.Key,
-				bodyKind,
+				common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=body_kind_mismatch body_kind=%q",
+					pinned.Generation.Number,
+					pinned.Plugin.Meta.Key,
+					bodyKind),
 			)
 			detail := "unsupported request body for this operation"
 			if len(pinned.Operation.BodyKinds) == 1 && pinned.Operation.BodyKinds[0] == pluginruntime.BodyJSON {
@@ -648,11 +593,11 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			if streamValue, present := requestBody["stream"]; present {
 				stream, ok = streamValue.(bool)
 				if !ok {
-					taskPluginWarn(
+					logger.LogWarn(
 						c,
-						"task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_stream_flag",
-						pinned.Generation.Number,
-						pinned.Plugin.Meta.Key,
+						common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_stream_flag",
+							pinned.Generation.Number,
+							pinned.Plugin.Meta.Key),
 					)
 					abortWithOpenAiMessage(c, http.StatusBadRequest, "stream must be a boolean")
 					return
@@ -674,6 +619,7 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 		}
 		accepted := make([]pluginruntime.ProtocolBinding, 0, len(candidates))
 		var resolved map[string]any
+		var resolvedBodyText json.RawMessage
 		var failures []string
 		rejectedPlugins := make(map[string][]string)
 		for _, candidate := range candidates {
@@ -682,9 +628,10 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			candidateContext.Operation = candidate.Operation.Name
 			// Parsing belongs to durable submission; disconnecting only stops
 			// the later Responses observation.
-			resolvedValue, callErr := candidate.Plugin.Engine.CallPathWithAdmissionTimeout(
+			resolvedValue, requestBodyText, callErr := candidate.Plugin.Engine.CallPathWithMemberJSON(
 				context.WithoutCancel(c.Request.Context()), pluginruntime.DefaultCallTimeout,
-				"protocols", []string{candidate.Protocol, "decodeRequest"}, candidateContext.JSValue(),
+				candidate.Plugin.Meta.JSONTextMember("requestBody"),
+				"protocols", []string{candidate.Protocol, "decodeRequest"}, candidateContext.JSValueFor(candidate.Plugin.Meta),
 			)
 			result, resultOK := resolvedValue.(map[string]any)
 			detail := ""
@@ -709,8 +656,8 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 				detail = fmt.Sprintf("model %q is not served by this plugin", model)
 			}
 			if detail != "" {
-				taskPluginWarn(c, "task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=parse_request reason=%s err=%q elapsed_ms=%d",
-					pinned.Generation.Number, candidate.Plugin.Meta.Key, reason, detail, time.Since(hookStarted).Milliseconds())
+				logger.LogWarn(c, common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=parse_request reason=%s err=%q elapsed_ms=%d",
+					pinned.Generation.Number, candidate.Plugin.Meta.Key, reason, detail, time.Since(hookStarted).Milliseconds()))
 				if _, seen := rejectedPlugins[detail]; !seen {
 					failures = append(failures, detail)
 				}
@@ -720,6 +667,7 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			accepted = append(accepted, candidate)
 			if resolved == nil {
 				resolved = result
+				resolvedBodyText = requestBodyText
 				protocolContext = candidateContext
 			}
 		}
@@ -745,11 +693,11 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 		if resolvedAction, present := resolved["action"]; present {
 			action, ok = resolvedAction.(string)
 			if !ok {
-				taskPluginWarn(
+				logger.LogWarn(
 					c,
-					"task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=parse_request reason=invalid_action",
-					pinned.Generation.Number,
-					pinned.Plugin.Meta.Key,
+					common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=parse_request reason=invalid_action",
+						pinned.Generation.Number,
+						pinned.Plugin.Meta.Key),
 				)
 				abortWithOpenAiMessage(c, http.StatusBadRequest, taskPluginInvalidRouteResult)
 				return
@@ -761,6 +709,9 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 		}
 		c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
 		c.Set("task_request", requestContext.RequestBody)
+		if resolvedBodyText != nil {
+			c.Set(pluginruntime.ContextKeyRequestBodyText, resolvedBodyText)
+		}
 		c.Set("resolved_task_model", resolvedModel)
 		c.Set("expected_task_plugin_key", pinned.Plugin.Meta.Key)
 		c.Set("task_plugin_key", pinned.Plugin.Meta.Key)
@@ -771,12 +722,12 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			c.Set("task_action", action)
 		}
 		if intentErr := applyOriginTaskIntent(c, resolved, pinned.Plugin.Meta); intentErr != nil {
-			taskPluginWarn(
+			logger.LogWarn(
 				c,
-				"task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=origin_task reason=%s",
-				pinned.Generation.Number,
-				pinned.Plugin.Meta.Key,
-				intentErr.Code,
+				common.LogText("task_plugin subsystem=endpoint event=prepare_rejected generation=%d plugin=%q stage=origin_task reason=%s",
+					pinned.Generation.Number,
+					pinned.Plugin.Meta.Key,
+					intentErr.Code),
 			)
 			abortWithOpenAiMessage(c, intentErr.StatusCode, intentErr.Message, types.ErrorCode(intentErr.Code))
 			return
@@ -855,6 +806,9 @@ func buildTaskPluginRouteRequest(c *gin.Context) (pluginruntime.RouteRequestCont
 			return requestContext, err
 		}
 		requestContext.Body = map[string]any{"kind": string(pluginruntime.BodyJSON), "value": value}
+		// Body storage never changes its bytes in place (a rewrite stores a
+		// new copy), so the text needs no copy of its own.
+		requestContext.BodyText = raw
 	case mediaType == "application/x-www-form-urlencoded":
 		storage, storageErr := common.GetBodyStorage(c)
 		if storageErr != nil {
@@ -1139,26 +1093,8 @@ func applyOriginTaskIntent(c *gin.Context, intent map[string]any, meta pluginrun
 		if !exist || task == nil {
 			return &originTaskIntentError{Code: "origin_task_not_found", Message: "origin task not found or not owned by you", StatusCode: http.StatusBadRequest}
 		}
-		if task.PrivateData.TokenId != c.GetInt("token_id") || task.PrivateData.TokenId <= 0 || !task.ResultRetrievable() {
-			return &originTaskIntentError{Code: "origin_task_not_found", Message: "origin task not found", StatusCode: http.StatusBadRequest}
-		}
-		if permissionErr := service.TokenModelPermissionError(c, service.StoredTaskModelName(task)); permissionErr != nil {
-			return &originTaskIntentError{Code: "origin_task_not_found", Message: "origin task not found", StatusCode: http.StatusNotFound}
-		}
 		if _, allowed := allowedPlatform[task.Platform]; !allowed {
 			return &originTaskIntentError{Code: "origin_task_platform_mismatch", Message: "origin task does not belong to this plugin", StatusCode: http.StatusBadRequest}
-		}
-		if task.PrivateData.CredentialVersion != 1 || task.PrivateData.CredentialID == "" || task.PrivateData.EndpointID == "" {
-			return &originTaskIntentError{Code: "origin_task_unavailable", Message: "origin task credential is unavailable", StatusCode: http.StatusServiceUnavailable}
-		}
-		if meta.Key == "sunoapi" {
-			if strings.ToUpper(task.Action) != constant.SunoActionMusic {
-				return &originTaskIntentError{Code: "origin_task_action_mismatch", Message: "origin task is not a music task", StatusCode: http.StatusBadRequest}
-			}
-			var songs []map[string]any
-			if task.Status != model.TaskStatusSuccess || common.Unmarshal(task.Data, &songs) != nil || len(songs) == 0 {
-				return &originTaskIntentError{Code: "origin_task_unavailable", Message: "origin task is unavailable", StatusCode: http.StatusServiceUnavailable}
-			}
 		}
 		if channelID == 0 {
 			channelID = task.ChannelId
@@ -1170,11 +1106,15 @@ func applyOriginTaskIntent(c *gin.Context, intent map[string]any, meta pluginrun
 
 	channel, err := model.CacheGetChannel(channelID)
 	if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
-		return &originTaskIntentError{Code: "origin_task_channel_disabled", Message: "origin task channel is disabled", StatusCode: http.StatusServiceUnavailable}
+		return &originTaskIntentError{Code: "origin_task_channel_disabled", Message: "origin task channel is disabled", StatusCode: http.StatusBadRequest}
 	}
-	c.Set("gateway_origin_task", tasks[0])
-	c.Set("task_plugin_origin_tasks", tasks)
-	c.Set("task_plugin_origin_channel", channel.Id)
+	service.GetChannelConstraints(c).AddPin(dto.ChannelPin{
+		ChannelId: channel.Id,
+		Source:    dto.PinSourceOriginTask,
+		Rank:      dto.PinRankOriginTask,
+		RetryMode: dto.PinRetrySameChannel,
+	})
+	common.SetContextKey(c, constant.ContextKeyOriginTasks, tasks)
 	return nil
 }
 
@@ -1241,8 +1181,7 @@ func renderTaskPluginQuery(
 	for _, task := range tasks {
 		tasksByID[task.TaskID] = task
 	}
-	views := make([]map[string]any, 0, len(taskIDs))
-	var rendererPlugin *pluginruntime.LoadedPlugin
+	views := make([]dto.TaskView, 0, len(taskIDs))
 	for _, taskID := range taskIDs {
 		task := tasksByID[taskID]
 		if task == nil || !task.ResultRetrievable() {
@@ -1257,48 +1196,25 @@ func renderTaskPluginQuery(
 			abortTaskPluginRouteError(c, http.StatusNotFound)
 			return
 		}
-		if task.PrivateData.TokenId != c.GetInt("token_id") || service.TokenModelPermissionError(c, service.StoredTaskModelName(task)) != nil {
-			abortTaskPluginRouteError(c, http.StatusNotFound)
-			return
-		}
-		exact, loadErr := service.LoadTaskPluginForTask(task)
-		if loadErr != nil || exact.Meta.Key != pinned.Plugin.Meta.Key {
-			abortTaskPluginRouteError(c, http.StatusServiceUnavailable)
-			return
-		}
-		if rendererPlugin != nil && rendererPlugin.SourceHash != exact.SourceHash {
-			abortTaskPluginRouteErrorDetail(c, http.StatusConflict, "batch retrieval spans different plugin versions")
-			return
-		}
-		rendererPlugin = exact
 		view, viewErr := service.BuildTaskPluginView(task)
 		if viewErr != nil {
 			abortTaskPluginRouteError(c, http.StatusInternalServerError)
 			return
 		}
-		var viewValue map[string]any
-		encoded, marshalErr := common.Marshal(view)
-		if marshalErr != nil {
-			abortTaskPluginRouteError(c, http.StatusInternalServerError)
-			return
-		}
-		if unmarshalErr := common.Unmarshal(encoded, &viewValue); unmarshalErr != nil {
-			abortTaskPluginRouteError(c, http.StatusInternalServerError)
-			return
-		}
-		views = append(views, viewValue)
+		views = append(views, view)
 	}
 
 	var rendererInput any = views
 	if !multiple {
 		rendererInput = views[0]
 	}
-	renderStarted := time.Now()
-	if rendererPlugin == nil {
-		abortTaskPluginRouteError(c, http.StatusNotFound)
+	encoded, err := common.Marshal(rendererInput)
+	if err != nil {
+		abortTaskPluginRouteError(c, http.StatusInternalServerError)
 		return
 	}
-	result, err := rendererPlugin.Engine.CallPath(c.Request.Context(), "native", []string{renderer}, requestContext.JSValue(), rendererInput)
+	renderStarted := time.Now()
+	result, err := pinned.Plugin.Engine.CallPath(c.Request.Context(), "native", []string{renderer}, requestContext.JSValue(), pluginruntime.RawJSON(encoded))
 	if err != nil {
 		logger.LogDebug(
 			c,
@@ -1359,20 +1275,20 @@ func RespondTaskPluginError(c *gin.Context, taskErr *dto.TaskError) bool {
 			c.JSON(sanitized.HTTPStatus, body)
 			return true
 		}
-		taskPluginWarn(
+		logger.LogWarn(
 			c,
-			"task_plugin subsystem=route event=error_renderer_failed plugin=%q reason=hook_failed status=%d err=%q",
-			pinned.Plugin.Meta.Key,
-			sanitized.HTTPStatus,
-			callErr.Error(),
+			common.LogText("task_plugin subsystem=route event=error_renderer_failed plugin=%q reason=hook_failed status=%d err=%q",
+				pinned.Plugin.Meta.Key,
+				sanitized.HTTPStatus,
+				callErr.Error()),
 		)
 	}
-	taskPluginWarn(
+	logger.LogWarn(
 		c,
-		"task_plugin subsystem=route event=error_rendered plugin=%q renderer=host_fallback status=%d code=%q",
-		pinned.Plugin.Meta.Key,
-		sanitized.HTTPStatus,
-		sanitized.Code,
+		common.LogText("task_plugin subsystem=route event=error_rendered plugin=%q renderer=host_fallback status=%d code=%q",
+			pinned.Plugin.Meta.Key,
+			sanitized.HTTPStatus,
+			sanitized.Code),
 	)
 	message := sanitized.Message
 	if requestID != "" {
@@ -1542,6 +1458,19 @@ func PrepareTaskPluginSubmit() gin.HandlerFunc {
 			}
 		}
 		c.Set("task_request", requestBody)
+		if plugin.Meta.PreservesJSONOrder() {
+			// The body as stored after any model rewrite: the text hooks get.
+			storage, err := common.GetBodyStorage(c)
+			var raw []byte
+			if err == nil {
+				raw, err = storage.Bytes()
+			}
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
+				return
+			}
+			c.Set(pluginruntime.ContextKeyRequestBodyText, json.RawMessage(raw))
+		}
 		c.Set("resolved_task_model", modelName)
 		c.Set("expected_task_plugin_key", pluginKey)
 		service.AppendTaskPluginIdentityFilter(c, pluginKey)
@@ -1555,8 +1484,4 @@ func PrepareTaskPluginSubmit() gin.HandlerFunc {
 		)
 		c.Next()
 	}
-}
-
-func taskPluginWarn(ctx context.Context, format string, args ...any) {
-	logger.LogWarn(ctx, common.LogText(format, args...))
 }

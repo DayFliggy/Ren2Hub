@@ -10,8 +10,9 @@ import (
 	"unicode"
 )
 
-// MaxIconDataURIBytes bounds the separate uploaded logo data URI, including
-// its Base64 encoding. Plugin source has its own 8 MiB limit.
+// MaxIconDataURIBytes bounds an uploaded plugin logo. It is deliberately
+// generous: the plugin source itself is capped at 1 MiB, so this only keeps a
+// logo from dwarfing the plugin it decorates.
 const MaxIconDataURIBytes = 512 * 1024
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}

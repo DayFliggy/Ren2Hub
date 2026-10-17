@@ -17,5 +17,14 @@ const { t } = useI18n()
       </strong>
       {{ t('footer.updated') }}
     </p>
+    <p>
+      <a
+        href="https://github.com/QuantumNous/new-api"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="underline underline-offset-2"
+        >Frontend design and development by New API contributors.</a
+      >
+    </p>
   </footer>
 </template>

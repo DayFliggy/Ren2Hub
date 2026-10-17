@@ -28,44 +28,6 @@ func init() {
 	}
 }
 
-func TestResponsesTerminalOutputMarksOnlySuccessfulPayload(t *testing.T) {
-	for _, tc := range []struct {
-		name, body         string
-		semantic, terminal bool
-	}{
-		{"completed text", `{"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"answer"}]}]}}`, true, true},
-		{"limited text", `{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}}`, true, true},
-		{"completed tool", `{"type":"response.completed","response":{"output":[{"type":"function_call","call_id":"call-one"}]}}`, true, true},
-		{"usage only", `{"type":"response.completed","response":{"output":[],"usage":{"input_tokens":3,"output_tokens":5}}}`, false, true},
-		{"unknown incomplete", `{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"future_reason"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}}`, false, false},
-		{"failed text", `{"type":"response.failed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}}`, false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			semantic, terminal := StreamPayloadState(tc.body)
-			assert.Equal(t, tc.semantic, semantic)
-			assert.Equal(t, tc.terminal, terminal)
-		})
-	}
-}
-
-// An audio-only Chat stream is real output: it commits the response instead of
-// buffering large audio deltas until the prelude limit or first-output timeout.
-func TestChatAudioDeltaIsSemanticOutput(t *testing.T) {
-	for _, tc := range []struct {
-		name, body string
-		semantic   bool
-	}{
-		{"audio bytes", `{"choices":[{"index":0,"delta":{"audio":{"id":"audio-one","data":"UklGRg=="}}}]}`, true},
-		{"audio transcript", `{"choices":[{"index":0,"delta":{"audio":{"transcript":"hello"}}}]}`, true},
-		{"empty audio", `{"choices":[{"index":0,"delta":{"audio":{"id":"audio-one"}}}]}`, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			semantic, _ := StreamPayloadState(tc.body)
-			assert.Equal(t, tc.semantic, semantic)
-		})
-	}
-}
-
 func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response, *relaycommon.RelayInfo) {
 	t.Helper()
 
@@ -86,14 +48,10 @@ func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response
 
 func buildSSEBody(n int) string {
 	var b strings.Builder
-	for i := 0; i < n; i++ {
-		finish := ""
-		if i == n-1 {
-			finish = `,"finish_reason":"stop"`
-		}
-		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}%s}]}\n\n", i, i, finish)
+	for i := range n {
+		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}\n", i, i)
 	}
-	b.WriteString("data: [DONE]\n\n")
+	b.WriteString("data: [DONE]\n")
 	return b.String()
 }
 
@@ -128,18 +86,6 @@ func TestNewStreamScanner_AllowsLargeStreamLine(t *testing.T) {
 	require.NoError(t, scanner.Err())
 }
 
-func TestNewStreamScannerCallerLimit(t *testing.T) {
-	// The smaller buffer must actually constrain a line; a preallocated 64 KiB
-	// buffer would otherwise bypass this caller's 1 KiB limit in bufio.Scanner.
-	scanner := NewStreamScanner(strings.NewReader(strings.Repeat("x", 2048)+"\n"), 1024)
-	assert.False(t, scanner.Scan())
-	require.Error(t, scanner.Err())
-	scanner = NewStreamScanner(strings.NewReader("data: ok\n"), 1024)
-	require.True(t, scanner.Scan())
-	assert.Equal(t, "data: ok", scanner.Text())
-	require.NoError(t, scanner.Err())
-}
-
 func TestStreamScannerHandler_EmptyBody(t *testing.T) {
 	t.Parallel()
 
@@ -163,8 +109,6 @@ func TestStreamScannerHandler_1000Chunks(t *testing.T) {
 	var count atomic.Int64
 	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 		count.Add(1)
-		sr.MarkValidOutput()
-		require.NoError(t, StringData(c, data))
 	})
 
 	assert.Equal(t, int64(numChunks), count.Load())
@@ -185,16 +129,11 @@ func TestStreamScannerHandler_OrderPreserved(t *testing.T) {
 		mu.Lock()
 		received = append(received, data)
 		mu.Unlock()
-		require.NoError(t, StringData(c, data))
 	})
 
 	require.Equal(t, numChunks, len(received))
-	for i := 0; i < numChunks; i++ {
-		finish := ""
-		if i == numChunks-1 {
-			finish = `,"finish_reason":"stop"`
-		}
-		expected := fmt.Sprintf("{\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}%s}]}", i, i, finish)
+	for i := range numChunks {
+		expected := fmt.Sprintf("{\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}", i, i)
 		assert.Equal(t, expected, received[i], "chunk %d out of order", i)
 	}
 }
@@ -242,8 +181,8 @@ func TestStreamScannerHandler_SkipsNonDataLines(t *testing.T) {
 	b.WriteString("event: message\n")
 	b.WriteString("id: 12345\n")
 	b.WriteString("retry: 5000\n")
-	for i := 0; i < 100; i++ {
-		fmt.Fprintf(&b, "data: payload_%d\n\n", i)
+	for i := range 100 {
+		fmt.Fprintf(&b, "data: payload_%d\n", i)
 		b.WriteString(": interleaved comment\n")
 	}
 	b.WriteString("data: [DONE]\n")
@@ -253,8 +192,6 @@ func TestStreamScannerHandler_SkipsNonDataLines(t *testing.T) {
 	var count atomic.Int64
 	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 		count.Add(1)
-		sr.MarkValidOutput()
-		require.NoError(t, StringData(c, data))
 	})
 
 	assert.Equal(t, int64(100), count.Load())
@@ -263,7 +200,7 @@ func TestStreamScannerHandler_SkipsNonDataLines(t *testing.T) {
 func TestStreamScannerHandler_DataWithExtraSpaces(t *testing.T) {
 	t.Parallel()
 
-	body := "data:   {\"trimmed\":true}  \n\ndata: [DONE]\n"
+	body := "data:   {\"trimmed\":true}  \ndata: [DONE]\n"
 	c, resp, info := setupStreamTest(t, strings.NewReader(body))
 
 	var got string
@@ -271,7 +208,7 @@ func TestStreamScannerHandler_DataWithExtraSpaces(t *testing.T) {
 		got = data
 	})
 
-	assert.Equal(t, "  {\"trimmed\":true}  ", got, "SSE removes exactly one optional space after the colon")
+	assert.Equal(t, "{\"trimmed\":true}", got)
 }
 
 // TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns pins the
@@ -305,7 +242,6 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 	go func() {
 		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 			count.Add(1)
-			sr.MarkValidOutput()
 			_ = StringData(c, data)
 			if data == "first" {
 				close(firstHandled)
@@ -314,7 +250,7 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 		close(done)
 	}()
 
-	_, err := fmt.Fprint(pw, "data: first\n\n")
+	_, err := fmt.Fprint(pw, "data: first\n")
 	require.NoError(t, err)
 
 	select {
@@ -349,62 +285,6 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 
 // ---------- Ping tests ----------
 
-func TestStreamScannerHandler_BufferedConversionDoesNotCommitPrelude(t *testing.T) {
-	const role = `{"choices":[{"delta":{"role":"assistant"}}]}`
-	const tool = `{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}]}`
-	for _, sendOutput := range []bool{false, true} {
-		t.Run(fmt.Sprintf("output=%t", sendOutput), func(t *testing.T) {
-			body := "data: " + role + "\n\ndata: " + tool + "\n\n"
-			if sendOutput {
-				body += "data: " + strings.Replace(tool, `"delta":`, `"finish_reason":"tool_calls","delta":`, 1) + "\n\ndata: [DONE]\n"
-			}
-			c, resp, info := setupStreamTest(t, strings.NewReader(body))
-			calls := 0
-			StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
-				calls++
-				assert.False(t, c.Writer.Written(), "metadata and buffered arguments must remain uncommitted")
-				if calls == 1 || calls == 3 {
-					require.NoError(t, StringData(c, data))
-				}
-			})
-			assert.Equal(t, sendOutput, c.Writer.Written())
-			assert.Equal(t, sendOutput, info.HasValidOutput())
-			assert.Equal(t, sendOutput, info.StreamStatus.IsNormalEnd())
-		})
-	}
-}
-
-func TestStreamScannerHandler_EmptyConversionCannotStartHeartbeat(t *testing.T) {
-	settings := operation_setting.GetGeneralSetting()
-	previousEnabled, previousSeconds := settings.PingIntervalEnabled, settings.PingIntervalSeconds
-	settings.PingIntervalEnabled, settings.PingIntervalSeconds = true, 1
-	t.Cleanup(func() { settings.PingIntervalEnabled, settings.PingIntervalSeconds = previousEnabled, previousSeconds })
-	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
-	defer cancel()
-	reader, writer := io.Pipe()
-	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
-	go func() {
-		_, _ = io.WriteString(writer, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n")
-	}()
-	c, resp, info := setupStreamTest(t, reader)
-	c.Request = c.Request.WithContext(ctx)
-	resp.Body = reader
-	StreamScannerHandler(c, resp, info, func(string, *StreamResult) {})
-	assert.Equal(t, 1, info.ReceivedResponseCount)
-	assert.False(t, c.Writer.Written(), "heartbeat must not commit a converter with no client events")
-	assert.False(t, info.HasValidOutput())
-	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
-}
-
-func TestStreamScannerHandler_BufferedSemanticFramesHavePreludeLimit(t *testing.T) {
-	body := strings.Repeat("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n", MaxStreamPreludeEvents+2)
-	c, resp, info := setupStreamTest(t, strings.NewReader(body))
-	StreamScannerHandler(c, resp, info, func(string, *StreamResult) {})
-	assert.Equal(t, MaxStreamPreludeEvents+1, info.ReceivedResponseCount)
-	assert.False(t, c.Writer.Written())
-	assert.Contains(t, info.StreamStatus.Err().Error(), "prelude exceeds")
-}
-
 func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	setting := operation_setting.GetGeneralSetting()
 	oldEnabled := setting.PingIntervalEnabled
@@ -419,8 +299,8 @@ func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	pr, pw := io.Pipe()
 	go func() {
 		defer pw.Close()
-		for i := 0; i < 4; i++ {
-			fmt.Fprintf(pw, "data: chunk_%d\n\n", i)
+		for i := range 4 {
+			fmt.Fprintf(pw, "data: chunk_%d\n", i)
 			time.Sleep(400 * time.Millisecond)
 		}
 		fmt.Fprint(pw, "data: [DONE]\n")
@@ -438,8 +318,6 @@ func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	go func() {
 		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 			count.Add(1)
-			sr.MarkValidOutput()
-			_ = StringData(c, data)
 		})
 		close(done)
 	}()
@@ -522,8 +400,8 @@ func TestStreamScannerHandler_StreamStatus_EOFWithoutDone(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
-	for i := 0; i < 5; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d}\n\n", i)
+	for i := range 5 {
+		fmt.Fprintf(&b, "data: {\"id\":%d}\n", i)
 	}
 	c, resp, info := setupStreamTest(t, strings.NewReader(b.String()))
 
@@ -531,8 +409,7 @@ func TestStreamScannerHandler_StreamStatus_EOFWithoutDone(t *testing.T) {
 
 	require.NotNil(t, info.StreamStatus)
 	assert.Equal(t, relaycommon.StreamEndReasonEOF, info.StreamStatus.EndReason)
-	assert.False(t, info.StreamStatus.IsNormalEnd())
-	assert.ErrorIs(t, info.StreamStatus.Err(), io.ErrUnexpectedEOF)
+	assert.True(t, info.StreamStatus.IsNormalEnd())
 }
 
 func TestStreamScannerHandler_StreamStatus_HandlerStop(t *testing.T) {
@@ -557,7 +434,7 @@ func TestStreamScannerHandler_StreamStatus_HandlerStop(t *testing.T) {
 func TestStreamScannerHandler_StreamStatus_HandlerDone(t *testing.T) {
 	t.Parallel()
 
-	body := strings.Repeat("data: {\"type\":\"provider_message\"}\n\n", 20)
+	body := buildSSEBody(20)
 	c, resp, info := setupStreamTest(t, strings.NewReader(body))
 
 	var count atomic.Int64
@@ -582,7 +459,7 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	go func() {
-		fmt.Fprint(pw, "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n")
+		fmt.Fprint(pw, "data: {\"id\":1}\n")
 		time.Sleep(2 * time.Second)
 		pw.Close()
 	}()
@@ -596,7 +473,7 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) { _ = StringData(c, data) })
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
 		close(done)
 	}()
 
@@ -622,9 +499,9 @@ func TestStreamScannerHandler_StreamStatus_SoftErrors(t *testing.T) {
 	})
 
 	require.NotNil(t, info.StreamStatus)
-	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 	assert.True(t, info.StreamStatus.HasErrors())
-	assert.Equal(t, 1, info.StreamStatus.TotalErrorCount())
+	assert.Equal(t, 10, info.StreamStatus.TotalErrorCount())
 }
 
 func TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk(t *testing.T) {
@@ -639,8 +516,8 @@ func TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk(t *testing.T) 
 	})
 
 	require.NotNil(t, info.StreamStatus)
-	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
-	assert.Equal(t, 2, info.StreamStatus.TotalErrorCount())
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.Equal(t, 10, info.StreamStatus.TotalErrorCount())
 }
 
 func TestStreamScannerHandler_StreamStatus_ErrorThenStop(t *testing.T) {
@@ -649,8 +526,8 @@ func TestStreamScannerHandler_StreamStatus_ErrorThenStop(t *testing.T) {
 	// Use a large body without [DONE] to avoid race between scanner's [DONE]
 	// and handler's Stop on the sync.Once EndReason.
 	var b strings.Builder
-	for i := 0; i < 100; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d}\n\n", i)
+	for i := range 100 {
+		fmt.Fprintf(&b, "data: {\"id\":%d}\n", i)
 	}
 	c, resp, info := setupStreamTest(t, strings.NewReader(b.String()))
 
@@ -693,4 +570,16 @@ func TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized(t *testing.T) 
 
 	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 	assert.Equal(t, 0, info.StreamStatus.TotalErrorCount())
+}
+
+func TestNewStreamScannerCallerLimit(t *testing.T) {
+	// The smaller buffer must actually constrain a line; a preallocated 64 KiB
+	// buffer would otherwise bypass this caller's 1 KiB limit in bufio.Scanner.
+	scanner := NewStreamScanner(strings.NewReader(strings.Repeat("x", 2048)+"\n"), 1024)
+	assert.False(t, scanner.Scan())
+	require.Error(t, scanner.Err())
+	scanner = NewStreamScanner(strings.NewReader("data: ok\n"), 1024)
+	require.True(t, scanner.Scan())
+	assert.Equal(t, "data: ok", scanner.Text())
+	require.NoError(t, scanner.Err())
 }

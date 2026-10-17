@@ -19,8 +19,6 @@ import (
 
 const passwordEncryptionKeyBits = 2048
 
-var PasswordLoginEncryptionEnabled = GetEnvOrDefaultBool("PASSWORD_LOGIN_ENCRYPTION_ENABLED", false)
-
 var ErrPasswordEncryptionInvalid = errors.New("password encryption payload is invalid")
 
 var passwordEncryptionState struct {

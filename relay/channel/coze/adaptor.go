@@ -1,19 +1,17 @@
 package coze
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
-	common2 "github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,10 +49,7 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *common.RelayInfo, r
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if err := service.ValidateRequestProjection(info, constant.APITypeCoze, request); err != nil {
-		return nil, err
-	}
-	return convertCozeChatRequest(c, *request)
+	return convertCozeChatRequest(c, *request), nil
 }
 
 // ConvertOpenAIResponsesRequest implements channel.Adaptor.
@@ -69,49 +64,41 @@ func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dt
 
 // DoRequest implements channel.Adaptor.
 func (a *Adaptor) DoRequest(c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (any, error) {
-	info.UpstreamSideEffecting = true
 	if info.IsStream {
 		return channel.DoApiRequest(a, c, info, requestBody)
 	}
+	// 首先发送创建消息请求，成功后再发送获取消息请求
+	// 发送创建消息请求
 	resp, err := channel.DoApiRequest(a, c, info, requestBody)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return resp, nil
-	}
+	// 解析 resp
 	var cozeResponse CozeChatResponse
-	parseErr := common2.DecodeJson(resp.Body, &cozeResponse)
-	service.CloseResponseBodyGracefully(resp)
-	if parseErr != nil {
-		return nil, types.NewErrorWithStatusCode(parseErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
+	err = json.Unmarshal(respBody, &cozeResponse)
 	if cozeResponse.Code != 0 {
-		return nil, types.NewErrorWithStatusCode(errors.New("coze chat creation failed"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-	}
-	if cozeResponse.Data.Id == "" || cozeResponse.Data.ConversationId == "" {
-		return nil, types.NewErrorWithStatusCode(errors.New("coze creation response has no chat identity"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		return nil, errors.New(cozeResponse.Msg)
 	}
 	c.Set("coze_conversation_id", cozeResponse.Data.ConversationId)
 	c.Set("coze_chat_id", cozeResponse.Data.Id)
-	// Creation is a side effect. Poll the accepted identity under the request
-	// lifecycle instead of creating another chat when a status query fails.
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// 轮询检查消息是否完成
 	for {
 		err, isComplete := checkIfChatComplete(a, c, info)
 		if err != nil {
 			return nil, err
+		} else {
+			if isComplete {
+				break
+			}
 		}
-		if isComplete {
-			return getChatDetail(a, c, info)
-		}
-		select {
-		case <-c.Request.Context().Done():
-			return nil, c.Request.Context().Err()
-		case <-ticker.C:
-		}
+		time.Sleep(time.Second * 1)
 	}
+	// 发送获取消息请求
+	return getChatDetail(a, c, info)
 }
 
 // DoResponse implements channel.Adaptor.
