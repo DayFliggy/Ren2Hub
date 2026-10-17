@@ -40,6 +40,7 @@ NewAPI `09109ec` 的 cgroup CPU/内存采样与连续阈值熔断随核心整体
 - `frontend-embedded-assets-release.log`、`pgo-build-final.log`、`pgo-binary-info.txt` 与 `pgo-sha256.txt`：真实 Vue 嵌入资源图检查及 moejs profile 的实际 PGO 构建通过，二进制工具链为 Go 1.26.9。
 - `sdk-preflight.json`：官方 Python/Node SDK 的 18 项本地协议预检通过；此结果不代替真实候选的扣费验证。
 - `vue/vue-vitest.log` 与 `vue/vue-vitest-exit.json`：167 文件、909 项 Vue 测试通过并确认 exit 0。类型、lint、格式和生产构建通过；工单、渠道、原生价格管理及公开页桌面/手机、明暗主题浏览器检查已通过。`vue/vue-topup-units-*` 另记录后续 36 项充值单位定向测试、四个 USD 浏览器组合及 TOKENS 组合通过，最新静态检查和构建均 exit 0。真实候选结果另行绑定。
+- `vue/vue-models-http-final.log`：真实嵌入资源 HTTP 回归通过；修复同名 `/models` 目录截获 Vue 页面导致的循环重定向，图标文件与 API 鉴权保持正常。
 - `licenses-1.log`：实际 Go/Vue 的 100 项直接依赖、110 份许可源文件已核对，生成完整许可及 NOTICE。
 - `release/archive-preflight-2/manifest.json`：在线只读归档及隔离恢复演练通过；检查时旧任务、未完成恢复、支付订单、附件均为 0，Redis db1 为空。这是切换准备，不能替代停旧应用后的最终归档。
 

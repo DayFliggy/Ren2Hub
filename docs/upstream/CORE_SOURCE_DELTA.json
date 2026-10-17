@@ -3,8 +3,8 @@
   "implementation_base_sha": "ab9fa349c75b39b53cf8f783c5c8be44e8ca3a9f",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件；Vue、发布自动化与文档分别审阅。",
   "counts": {
-    "upstream_equal": 991,
-    "adapted": 82,
+    "upstream_equal": 990,
+    "adapted": 83,
     "removed": 31,
     "extension": 41
   },
@@ -179,9 +179,9 @@
     },
     {
       "path": "common/embed-file-system.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "7761411362a75d9a26d6dbb54fe62853d0e01281056b46c5c0130f370ffb2349",
-      "local_sha256": "7761411362a75d9a26d6dbb54fe62853d0e01281056b46c5c0130f370ffb2349"
+      "local_sha256": "86c5eddc786b9198b77aa3bf2d57b7a770273c2011eb3d20c40dbfe76419ac83"
     },
     {
       "path": "common/endpoint_defaults.go",
@@ -1519,7 +1519,7 @@
       "path": "main_web_assets_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "abe1a6722896cbc65e2270c317086f7d777d69fc4670c25ce28623bd684ceda7"
+      "local_sha256": "18ca3a5b40bdd3c63babb6fbcffa9ceb4f00e1aa5c02dd9ad0a67d78b7ca3c90"
     },
     {
       "path": "middleware/access_token_extensions.go",

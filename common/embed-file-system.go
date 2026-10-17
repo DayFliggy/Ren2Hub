@@ -16,11 +16,15 @@ type embedFileSystem struct {
 }
 
 func (e *embedFileSystem) Exists(prefix string, path string) bool {
-	_, err := e.Open(path)
+	file, err := e.Open(path)
 	if err != nil {
 		return false
 	}
-	return true
+	defer file.Close()
+	info, err := file.Stat()
+	// Vue routes can share a name with an asset directory (for example /models).
+	// Only files belong to the static handler; directories use the SPA fallback.
+	return err == nil && !info.IsDir()
 }
 
 func (e *embedFileSystem) Open(name string) (http.File, error) {
