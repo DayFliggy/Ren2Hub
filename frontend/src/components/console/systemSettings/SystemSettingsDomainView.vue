@@ -21,9 +21,7 @@ import {
 } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import RequestPolicyPanel from '@/components/console/systemSettings/RequestPolicyPanel.vue'
-import { discoverOidcEndpoints } from '@/api/oidcDiscovery'
-import { ApiError } from '@/api/types'
+import GatewayConfigPanel from '@/components/console/gateway/GatewayConfigPanel.vue'
 
 const props = defineProps<{ domain: SystemSettingsDomainId }>()
 
@@ -172,48 +170,11 @@ async function saveSection() {
   }
 
   saving.value = true
-  const savedDomain = props.domain
-  const isCurrentSection = () =>
-    props.domain === savedDomain && activeSection.value?.id === section.id
-  try {
-    const wellKnown = String(draft['oidc.well_known'] ?? '').trim()
-    if (
-      savedDomain === 'auth' &&
-      section.id === 'oauth' &&
-      patch['oidc.enabled'] !== false &&
-      wellKnown &&
-      (wellKnown !== String(baseline['oidc.well_known'] ?? '').trim() ||
-        patch['oidc.enabled'] === true)
-    ) {
-      const endpoints = await discoverOidcEndpoints(wellKnown)
-      if (!isCurrentSection()) return
-      for (const [key, value] of Object.entries(endpoints)) {
-        draft[key] = value
-        if (value !== String(baseline[key] ?? '')) patch[key] = value
-        else delete patch[key]
-      }
-    }
-    const ok = await saveOptions(patch, {
-      onApplied(key, value, sensitive) {
-        if (!isCurrentSection()) return
-        baseline[key] = sensitive ? '' : value
-        if (sensitive) draft[key] = ''
-      },
-    })
-    if (ok && isCurrentSection()) {
-      syncDraft()
-      toast.success(t('systemSettings.saved'))
-    }
-  } catch (error) {
-    toast.error(
-      error instanceof ApiError && error.code === 'INVALID_OIDC_DISCOVERY'
-        ? t('systemSettings.oidcDiscoveryInvalid')
-        : error instanceof Error
-          ? error.message
-          : String(error)
-    )
-  } finally {
-    saving.value = false
+  const ok = await saveOptions(patch)
+  saving.value = false
+  if (ok) {
+    syncDraft()
+    toast.success(t('systemSettings.saved'))
   }
 }
 
@@ -362,7 +323,10 @@ onMounted(() => load())
           kind="performance"
         />
       </SysSettingsFormCard>
-      <RequestPolicyPanel v-if="props.domain === 'security'" />
+      <GatewayConfigPanel
+        v-if="domain === 'security' && activeSection.id === 'rate-limit'"
+        class="mt-6 border-t border-[var(--border-subtle)] pt-6"
+      />
     </div>
   </div>
 </template>

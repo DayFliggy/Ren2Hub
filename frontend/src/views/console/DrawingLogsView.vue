@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { parseDrawingLogPage } from '@/api/liveContracts'
-import { ApiError } from '@/api/types'
+import { ApiError, type PageResult } from '@/api/types'
 import type { DrawingLogItem } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -79,10 +79,10 @@ const listRequest = useLatestRequest()
 
 async function load() {
   loading.value = true
-  const result = await listRequest.run(async (signal) =>
-    parseDrawingLogPage(
-      await api.get<unknown>('/api/mj/self', currentParams(), { signal })
-    )
+  const result = await listRequest.run((signal) =>
+    api.get<PageResult<DrawingLogItem>>('/api/mj/self', currentParams(), {
+      signal,
+    })
   )
   if (result.stale) return
   loading.value = false
@@ -94,7 +94,7 @@ async function load() {
     )
     return
   }
-  const pageResult = result.value
+  const pageResult = parseDrawingLogPage(result.value as unknown)
   rows.value = pageResult.items
   total.value = pageResult.total
 }

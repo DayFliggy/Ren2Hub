@@ -37,9 +37,8 @@ for (const theme of ['light', 'dark'] as const) {
         description: { en: 'Image and video tasks', zh: '图片与视频任务' },
       }
       await page.route('**/api/plugin/task**', async (route) => {
-        if (route.request().method() !== 'GET') return route.fallback()
         const path = new URL(route.request().url()).pathname
-        let data: unknown
+        let data: unknown = []
         if (path === '/api/plugin/task')
           data = [
             {
@@ -54,24 +53,24 @@ for (const theme of ['light', 'dark'] as const) {
               in_flight_count: 2,
             },
           ]
-        else if (path === '/api/plugin/task/fixture/icon') {
+        else if (path.endsWith('/icon')) {
           expect(route.request().headers()['authorization']).toMatch(/^Bearer /)
           return route.fulfill({ status: 404 })
-        } else if (path === '/api/plugin/task/marketplace/sources')
+        } else if (path.endsWith('/marketplace/sources'))
           data = [
             {
               name: 'Fixture Market',
               index_url: 'https://plugins.example/index.json',
             },
           ]
-        else if (path === '/api/plugin/task/runtime/status')
+        else if (path.endsWith('/runtime/status'))
           data = {
             current_generation: 3,
             database_revision: 'revision',
             last_rebuild: { status: 'success' },
             plugin_errors: {},
           }
-        else if (path === '/api/plugin/task/fixture/versions')
+        else if (path.endsWith('/versions'))
           data = [
             {
               id: 1,
@@ -87,13 +86,14 @@ for (const theme of ['light', 'dark'] as const) {
               source_hash: 'a'.repeat(64),
             },
           ]
+        else if (path.endsWith('/preview'))
+          data = { meta, source_hash: 'a'.repeat(64), unresolved: [] }
         else if (path === '/api/plugin/task/fixture')
           data = {
             meta,
             source: 'export const meta = {};',
             layer: 'override',
           }
-        else return route.fallback()
         await route.fulfill({ json: { success: true, data } })
       })
       const englishNotes =

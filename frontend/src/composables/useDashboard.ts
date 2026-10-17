@@ -1,5 +1,4 @@
 import { addQuota, quotaRatio, sumQuota } from '@/utils/quota'
-import { useLatestRequest } from './useLatestRequest'
 import { ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
@@ -15,9 +14,21 @@ export interface DashboardStats {
   used_quota: string
   today_quota: string
   month_quota?: string
-  today_tokens?: number
   today_requests: number
   total_requests: number
+  month_quota_delta: number
+  month_requests_delta: number
+}
+
+export interface UserLimits {
+  /** Account request ceiling; 0 = unmetered. */
+  rate_limit: number
+  current_rpm: number // observed throughput
+}
+
+export interface UserDiscounts {
+  global_ratio: number // platform-wide pricing multiplier, e.g. 0.88
+  effective_ratio: number // effective pricing multiplier
 }
 
 export interface ModelShare {
@@ -28,15 +39,36 @@ export interface ModelShare {
   tokens: number
 }
 
+export interface TokenTrendPoint {
+  date: string
+  input: number
+  output: number
+  cache_create: number
+  cache_read: number
+  hit_rate: number
+}
+
+export interface SystemMetrics {
+  cpu_percent: number | null
+  /** Host logical CPUs — the scale a load average is read against. */
+  cpu_cores: number | null
+  /** Host run-queue averages over 1 / 5 / 15 minutes; null off Unix hosts. */
+  load_average: { one: number; five: number; fifteen: number } | null
+  memory_used_gb: number | null
+  memory_total_gb: number | null
+  bandwidth_up_mbps: number | null
+  bandwidth_down_mbps: number | null
+  disk_used_gb: number | null
+  disk_total_gb: number | null
+  api_success_rate: number | null
+  /** Recent throughput samples, oldest → newest; the last pair is the live figure. */
+  bandwidth_series: { up: number[]; down: number[] } | null
+}
+
 export interface FlowPoint {
   date: string
   consume: string
   requests: number
-}
-
-export interface TotalTokenPoint {
-  date: string
-  total: number
 }
 
 const DAY_SECONDS = 86_400
@@ -97,9 +129,20 @@ export function useDashboard() {
   const stats = ref<DashboardStats | null>(null)
   const share = ref<ModelShare[]>([])
   const flow = ref<FlowPoint[]>([])
-  const tokenTrend = ref<TotalTokenPoint[]>([])
-  const error = ref<string | null>(null),
-    request = useLatestRequest()
+  const tokenTrend = ref<TokenTrendPoint[]>([])
+  const system = ref<SystemMetrics | null>(null)
+  // No backend endpoint provides these yet; null renders "not connected"
+  // rather than a fabricated "unmetered" ceiling or a 1.0× rate.
+  const limits = ref<UserLimits | null>(null)
+  const discounts = ref<UserDiscounts | null>(null)
+  const error = ref<string | null>(null)
+
+  async function loadSystem() {
+    const result = await Promise.allSettled([
+      api.get<SystemMetrics>('/api/next/dashboard/system-status'),
+    ])
+    system.value = result[0]?.status === 'fulfilled' ? result[0].value : null
+  }
 
   async function load() {
     loading.value = true
@@ -107,40 +150,70 @@ export function useDashboard() {
     const endTimestamp = Math.floor(Date.now() / 1000)
     const startTimestamp = endTimestamp - 29 * DAY_SECONDS
     const monthStartTimestamp = getLocalMonthStartTimestamp()
-    const result = await request.run(async (signal) =>
-      Promise.all([
-        fetchSelfUsage(startTimestamp, endTimestamp, signal),
-        fetchSelfUsage(monthStartTimestamp, endTimestamp, signal),
-      ])
-    )
-    if (result.stale) return
-    if (!result.ok) {
-      error.value =
-        result.error instanceof ApiError
-          ? result.error.message
+    const [usageResult, trendResult, monthResult] = await Promise.allSettled([
+      fetchSelfUsage(startTimestamp, endTimestamp),
+      api.get<TokenTrendPoint[]>('/api/next/dashboard/token-trend', {
+        range: '30d',
+        tz_offset: String(-new Date().getTimezoneOffset()),
+      }),
+      fetchSelfUsage(monthStartTimestamp, endTimestamp),
+    ])
+
+    tokenTrend.value =
+      trendResult.status === 'fulfilled' ? trendResult.value : []
+    if (usageResult.status !== 'fulfilled') {
+      const message =
+        usageResult.reason instanceof ApiError
+          ? usageResult.reason.message
           : t('common.failed')
-      toast.error(error.value)
+      error.value = message
+      toast.error(message)
+      await loadSystem()
       loading.value = false
       return
     }
-    const [usage, monthUsage] = result.value
+
+    const usage = usageResult.value
+    const monthUsage =
+      monthResult.status === 'fulfilled' ? monthResult.value : []
+    const previousResult = await Promise.allSettled([
+      fetchSelfUsage(startTimestamp - 30 * DAY_SECONDS, startTimestamp - 1),
+    ])
+    const previousUsage =
+      previousResult[0]?.status === 'fulfilled' ? previousResult[0].value : []
     const todayStart = getLocalDayStartTimestamp()
     const totalQuota = sumQuota(usage.map((row) => row.quota))
     const totalRequests = usage.reduce((sum, row) => sum + row.count, 0)
+    const previousQuota = sumQuota(previousUsage.map((row) => row.quota))
+    const previousRequests = previousUsage.reduce(
+      (sum, row) => sum + row.count,
+      0
+    )
     stats.value = {
-      quota: String(auth.user?.quota ?? 0),
-      used_quota: String(auth.user?.used_quota ?? 0),
+      quota: auth.user?.available_quota ?? '0',
+      used_quota: auth.user?.used_quota ?? '0',
       today_quota: usage
         .filter((row) => row.created_at >= todayStart)
         .reduce((sum, row) => addQuota(sum, row.quota), '0'),
-      month_quota: sumQuota(monthUsage.map((row) => row.quota)),
-      today_tokens: usage
-        .filter((row) => row.created_at >= todayStart)
-        .reduce((sum, row) => sum + row.token_used, 0),
+      month_quota:
+        monthResult.status === 'fulfilled'
+          ? sumQuota(monthUsage.map((row) => row.quota))
+          : undefined,
       today_requests: usage
         .filter((row) => row.created_at >= todayStart)
         .reduce((sum, row) => sum + row.count, 0),
       total_requests: totalRequests,
+      month_quota_delta:
+        BigInt(previousQuota) > 0n
+          ? quotaRatio(
+              (BigInt(totalQuota) - BigInt(previousQuota)).toString(),
+              previousQuota
+            ) * 100
+          : 0,
+      month_requests_delta:
+        previousRequests > 0
+          ? ((totalRequests - previousRequests) / previousRequests) * 100
+          : 0,
     }
 
     const modelRows = new Map<string, ModelShare>()
@@ -148,7 +221,6 @@ export function useDashboard() {
     const dayRows = new Map<string, FlowPoint>(
       dateKeys.map((date) => [date, { date, consume: '0', requests: 0 }])
     )
-    const tokenRows = new Map(dateKeys.map((date) => [date, 0]))
     for (const row of usage) {
       const current = modelRows.get(row.model_name) ?? {
         model: row.model_name,
@@ -167,7 +239,6 @@ export function useDashboard() {
       if (day) {
         day.consume = addQuota(day.consume, row.quota)
         day.requests += row.count
-        tokenRows.set(date, tokenRows.get(date)! + row.token_used)
       }
     }
     share.value = [...modelRows.values()].map((row) => ({
@@ -175,10 +246,7 @@ export function useDashboard() {
       ratio: quotaRatio(row.quota, totalQuota),
     }))
     flow.value = dateKeys.map((date) => dayRows.get(date)!)
-    tokenTrend.value = dateKeys.map((date) => ({
-      date,
-      total: tokenRows.get(date)!,
-    }))
+    await loadSystem()
     loading.value = false
   }
 
@@ -188,7 +256,11 @@ export function useDashboard() {
     share,
     flow,
     tokenTrend,
+    system,
+    limits,
+    discounts,
     error,
+    loadSystem,
     load,
   }
 }

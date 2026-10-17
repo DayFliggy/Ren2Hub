@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import UnavailablePanel from '@/components/console/dashboard/UnavailablePanel.vue'
-import TokenTrendCard from '@/components/console/dashboard/TokenTrendCard.vue'
-import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import { restoredConsoleMessages } from '@/i18n/restoredConsole'
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
 import BalanceCard from '@/components/console/dashboard/BalanceCard.vue'
+import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
 import UsageDistributionCard from '@/components/console/dashboard/UsageDistributionCard.vue'
+import TokenTrendCard from '@/components/console/dashboard/TokenTrendCard.vue'
 import ModelDistributionCard from '@/components/console/dashboard/ModelDistributionCard.vue'
+import SystemStatusCard from '@/components/console/dashboard/SystemStatusCard.vue'
 import StatsKpiRow from '@/components/console/dashboard/stats/StatsKpiRow.vue'
 import StatsModelTable from '@/components/console/dashboard/stats/StatsModelTable.vue'
 import StatsHourlyChart from '@/components/console/dashboard/stats/StatsHourlyChart.vue'
 import StatsDualTrend from '@/components/console/dashboard/stats/StatsDualTrend.vue'
+import AutoRoutePanel from '@/components/console/dashboard/autoroute/AutoRoutePanel.vue'
 import ContactFloatBall from '@/components/console/ContactFloatBall.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
@@ -27,11 +27,7 @@ import { useAuthStore } from '@/stores/auth'
 import { dateInputValue } from '@/utils/format'
 import { greetingBucketForHour } from '@/utils/greeting'
 
-const { t } = useI18n({ useScope: 'global' })
-const { t: r } = useI18n({
-  useScope: 'local',
-  messages: restoredConsoleMessages,
-})
+const { t } = useI18n()
 const auth = useAuthStore()
 const {
   loading,
@@ -39,15 +35,26 @@ const {
   share,
   flow,
   tokenTrend,
+  system,
+  limits,
+  discounts,
   error: dashboardError,
+  loadSystem,
   load,
 } = useDashboard()
 const statsComposable = useDashboardStats()
 const distribution = useUsageDistribution()
 
+let systemRefreshTimer: ReturnType<typeof setInterval> | undefined
+
 onMounted(() => {
   void load()
   void distribution.load()
+  systemRefreshTimer = setInterval(() => void loadSystem(), 30_000)
+})
+
+onBeforeUnmount(() => {
+  if (systemRefreshTimer) clearInterval(systemRefreshTimer)
 })
 
 /**
@@ -81,9 +88,10 @@ const tabs = computed(() => {
   const items = [
     { key: 'overview', label: t('dashboard.tabOverview') },
     { key: 'stats', label: t('dashboard.tabStats') },
-    { key: 'autoroute', label: r('restored.routing') },
   ]
-
+  if (auth.isAdmin) {
+    items.push({ key: 'autoroute', label: t('dashboard.autoRoute.tabLabel') })
+  }
   return items
 })
 const activeTab = ref('overview')
@@ -162,11 +170,12 @@ const rangeOptions = computed(() => [
         v-if="activeTab === 'overview'"
         class="sibling-space-y-4 sm:sibling-space-y-5"
       >
-        <!-- Usage metrics open Statistics; unavailable live rates stay read-only. -->
+        <!-- KPI strip — 4 clickable chips, jumps to Stats tab -->
         <OverviewKpiStrip
           :stats="stats"
           :flow="flow"
           :token-trend="tokenTrend"
+          :limits="limits"
           :loading="loading"
           @switch-tab="activeTab = $event"
         />
@@ -180,7 +189,7 @@ const rangeOptions = computed(() => [
         />
 
         <div v-else class="grid gap-4 sm:gap-5 xl:grid-cols-3">
-          <!-- 原生可用额度与消费 -->
+          <!-- 总额度（限速已并入 KPI 条的 RPM 格） -->
           <BalanceCard
             class="min-w-0"
             :quota="stats?.quota ?? null"
@@ -196,19 +205,17 @@ const rangeOptions = computed(() => [
             :loading="distribution.loading.value"
           />
 
-          <UnavailablePanel
-            :title="r('restored.system')"
-            :hint="r('restored.systemHint')"
-          />
+          <!-- 系统状态 -->
+          <SystemStatusCard class="min-w-0" :metrics="system" />
+          <!-- Token 使用趋势 -->
           <TokenTrendCard
             class="min-w-0 xl:col-span-2"
             :points="tokenTrend"
             :loading="loading"
           />
-          <UnavailablePanel
-            :title="r('restored.discounts')"
-            :hint="r('restored.discountsHint')"
-          />
+
+          <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
+          <DiscountCard class="min-w-0" :discounts="discounts" />
           <!-- 模型消费分布 -->
           <ModelDistributionCard
             class="min-w-0 xl:col-span-2"
@@ -275,20 +282,16 @@ const rangeOptions = computed(() => [
           />
         </div>
       </div>
-      <ConsoleCard
-        v-else-if="activeTab === 'autoroute'"
-        :title="r('restored.routingTitle')"
+
+      <!-- ══════════════════════════════════════════
+         Tab: Auto Route
+    ══════════════════════════════════════════ -->
+      <div
+        v-else-if="activeTab === 'autoroute' && auth.isAdmin"
+        class="min-w-0"
       >
-        <p class="text-sm leading-6">{{ r('restored.routingHint') }}</p>
-        <p class="mt-3 text-sm text-[var(--text-tertiary)]">
-          {{ r('restored.routingReadOnly') }}
-        </p>
-        <RouterLink
-          to="/keys"
-          class="mt-5 inline-flex text-sm text-[var(--accent-text)] focus-ring"
-          >{{ r('restored.routingLink') }}</RouterLink
-        >
-      </ConsoleCard>
+        <AutoRoutePanel />
+      </div>
     </div>
 
     <ContactFloatBall />

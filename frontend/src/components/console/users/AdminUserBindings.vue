@@ -70,10 +70,8 @@ async function remove() {
   try {
     const binding = pending.value
     const proof = await proofDialog.value!.request({
-      scope: 'admin.user.binding.clear',
-      context: binding.key.startsWith('oauth-')
-        ? { user_id: props.user.id, provider_id: Number(binding.key.slice(6)) }
-        : { user_id: props.user.id, binding_type: binding.key },
+      scope: 'admin.user.change',
+      context: { ids: [props.user.id], action: 'clear_binding' },
     })
     if (run !== epoch) return
     await adminUserBindingsApi.remove(binding, proof)

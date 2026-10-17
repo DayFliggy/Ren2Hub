@@ -78,21 +78,11 @@ async function data(page: Page) {
       json: {
         success: true,
         data: {
-          candidates: [
-            {
-              model_name: 'missing-local',
-              kind: 'create',
-              scope: 'site',
-              record_version: 'new-v1',
-              fields: [
-                { field: 'description', local: null, upstream: 'New model' },
-              ],
-            },
+          missing: ['missing-local'],
+          conflicts: [
             {
               model_name: 'gpt-local',
-              kind: 'update',
-              scope: 'site',
-              record_version: 'local-v1',
+              local_version: 'local-v1',
               fields: [
                 {
                   field: 'description',
@@ -102,7 +92,7 @@ async function data(page: Page) {
               ],
             },
           ],
-          source: { locale: 'en', version: 'preview-v1' },
+          source: { version: 'preview-v1' },
         },
       },
     })
@@ -477,27 +467,25 @@ test('every model management section uses the wide admin layout', async ({
   // At 1920px ordinary pages cap at 1440px; admin lists must use the wider
   // responsive layout, within its 1688px cap and the available sidebar space.
   await page.setViewportSize({ width: 1920, height: 1000 })
-  const pricing = { ModelPrice: 0.2 }
-  await page.route(
-    /\/api\/option\/model_pricing(?:\/(?:preview|convert))?(?:\?.*)?$/,
-    (route) =>
-      route.fulfill({
-        json: {
-          success: true,
-          data: {
-            entries: [
-              {
-                model_name: 'gpt-local',
-                version: 'v1',
-                configured: pricing,
-                effective: pricing,
-              },
-            ],
-            options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
-            empty_version: 'empty',
-          },
+  const pricing = { ModelPrice: '0.2' }
+  await page.route('**/api/option/model_pricing**', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          entries: [
+            {
+              model_name: 'gpt-local',
+              version: 'v1',
+              configured: pricing,
+              effective: pricing,
+            },
+          ],
+          options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
+          empty_version: 'empty',
         },
-      })
+      },
+    })
   )
   const content = page.locator('[data-console-scroll-zone] main > div')
   for (const path of [
@@ -555,85 +543,4 @@ test('a dirty vendor draft can cancel or confirm a real browser reload', async (
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(visible(page, 'Model provider')).toBeVisible()
   expect(failures).toEqual([])
-})
-
-test('native metadata selection sends record versions and reads array results', async ({
-  page,
-}) => {
-  await setupPage(page, { language: 'en', theme: 'light', mobile: false })
-  const writes: unknown[] = []
-  await page.route('**/api/models/sync_upstream', (route) => {
-    expect(route.request().method()).toBe('POST')
-    const body = route.request().postDataJSON()
-    writes.push(body)
-    expect(body).toEqual({
-      locale: 'en',
-      source_version: 'preview-v1',
-      selections: [
-        {
-          model_name: 'missing-local',
-          record_version: 'new-v1',
-          create: true,
-          fields: ['description'],
-        },
-        {
-          model_name: 'gpt-local',
-          record_version: 'local-v1',
-          create: false,
-          fields: ['description'],
-        },
-      ],
-    })
-    return route.fulfill({
-      json: {
-        success: true,
-        data: {
-          created_models: ['missing-local'],
-          updated_models: [body.selections[1]],
-          created_vendors: null,
-        },
-      },
-    })
-  })
-  await page.goto('/models/metadata')
-  await page.getByRole('button', { name: 'Sync metadata', exact: true }).click()
-  const dialog = page.getByRole('dialog')
-  await dialog
-    .getByRole('button', { name: 'Load metadata preview', exact: true })
-    .click()
-  await expect(
-    dialog.getByRole('button', {
-      name: 'Preview selected changes',
-      exact: true,
-    })
-  ).toBeDisabled()
-  await dialog
-    .getByRole('checkbox', { name: 'Select missing-local', exact: true })
-    .check()
-  await dialog
-    .getByRole('checkbox', { name: 'Select gpt-local', exact: true })
-    .check()
-  await dialog
-    .getByRole('button', { name: 'Preview selected changes', exact: true })
-    .click()
-  await dialog
-    .getByRole('checkbox', {
-      name: 'Apply Description for gpt-local',
-      exact: true,
-    })
-    .check()
-  await dialog
-    .getByRole('button', { name: 'Review confirmation', exact: true })
-    .click()
-  expect(writes).toEqual([])
-  await dialog
-    .getByRole('button', { name: 'Apply 2 model changes', exact: true })
-    .click()
-  await expect(
-    dialog.getByText('Metadata sync completed', { exact: true })
-  ).toBeVisible()
-  await expect(dialog).toContainText(
-    '1 models created, 1 models updated, 0 vendors created.'
-  )
-  expect(writes).toHaveLength(1)
 })

@@ -6,6 +6,7 @@ export const ADMIN_CHANNEL_OPTIONAL_FIELDS = [
   'status',
   'priority',
   'weight',
+  'capacity',
   'usage',
   'upstream',
   'response',
@@ -25,9 +26,10 @@ export const ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS: AdminChannelOptionalField[] =
       field !== 'rowUpstreamAction'
   )
 
-// The native core no longer exposes capacity fields.
+// v2: defaults changed (priority/weight hidden, row test action shown), so a
+// new key lets the new defaults take effect on browsers with stored settings.
 export const ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY =
-  'ren2hub_admin_channel_visible_fields_v3'
+  'ren2hub_admin_channel_visible_fields_v2'
 
 export function sanitizeAdminChannelVisibleFields(
   fields: readonly string[]
@@ -46,45 +48,6 @@ export interface AdminChannelTypeMeta {
 
 export const ADMIN_CHANNEL_TYPE_META: Record<number, AdminChannelTypeMeta> = {
   1: { label: 'OpenAI', supplier: 'OpenAI' },
-  2: { label: 'Midjourney', supplier: 'Midjourney' },
-  5: { label: 'Midjourney Plus', supplier: 'Midjourney Plus' },
-  6: { label: 'OpenAI Max', supplier: 'OpenAI Max' },
-  7: { label: 'OhMyGPT', supplier: 'OhMyGPT' },
-  8: { label: 'Custom', supplier: 'Custom' },
-  9: { label: 'AILS', supplier: 'AILS' },
-  10: { label: 'AIProxy', supplier: 'AIProxy' },
-  11: { label: 'PaLM', supplier: 'PaLM' },
-  12: { label: 'API2GPT', supplier: 'API2GPT' },
-  13: { label: 'AIGC2D', supplier: 'AIGC2D' },
-  15: { label: 'Baidu', supplier: 'Baidu' },
-  16: { label: 'Zhipu', supplier: 'Zhipu' },
-  18: { label: 'Xunfei', supplier: 'Xunfei' },
-  19: { label: '360', supplier: '360' },
-  21: { label: 'AIProxy Library', supplier: 'AIProxy Library' },
-  22: { label: 'FastGPT', supplier: 'FastGPT' },
-  23: { label: 'Tencent', supplier: 'Tencent' },
-  26: { label: 'Zhipu V4', supplier: 'Zhipu V4' },
-  27: { label: 'Perplexity', supplier: 'Perplexity' },
-  31: { label: 'LingYiWanWu', supplier: 'LingYiWanWu' },
-  34: { label: 'Cohere', supplier: 'Cohere' },
-  35: { label: 'MiniMax', supplier: 'MiniMax' },
-  36: { label: 'Suno', supplier: 'Suno' },
-  37: { label: 'Dify', supplier: 'Dify' },
-  38: { label: 'Jina', supplier: 'Jina' },
-  39: { label: 'Cloudflare', supplier: 'Cloudflare' },
-  42: { label: 'Mistral', supplier: 'Mistral' },
-  44: { label: 'MokaAI', supplier: 'MokaAI' },
-  45: { label: 'VolcEngine', supplier: 'VolcEngine' },
-  46: { label: 'Baidu V2', supplier: 'Baidu V2' },
-  47: { label: 'Xinference', supplier: 'Xinference' },
-  49: { label: 'Coze', supplier: 'Coze' },
-  50: { label: 'Kling', supplier: 'Kling' },
-  51: { label: 'Jimeng', supplier: 'Jimeng' },
-  52: { label: 'Vidu', supplier: 'Vidu' },
-  53: { label: 'Submodel', supplier: 'Submodel' },
-  54: { label: 'Doubao Video', supplier: 'Doubao Video' },
-  55: { label: 'Sora', supplier: 'Sora' },
-  56: { label: 'Replicate', supplier: 'Replicate' },
   3: { label: 'Azure', supplier: 'OpenAI' },
   4: { label: 'Ollama', supplier: 'Ollama' },
   14: { label: 'Anthropic', supplier: 'Anthropic' },
@@ -169,7 +132,7 @@ export function adminChannelResponseText(
 }
 
 /**
- * Endpoint overrides accepted by GET /api/channel/test/:id via
+ * Endpoint overrides accepted by GET /api/next/admin/channels/test/:id via
  * ?endpoint_type=. Values mirror relaykit/types/endpoint_type.go; an empty
  * value means auto-detection (no query parameter).
  */

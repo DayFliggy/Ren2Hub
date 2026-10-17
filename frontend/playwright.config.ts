@@ -6,7 +6,7 @@ const captureScreenshots = process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true'
 
 export default defineConfig({
   testDir: './tests/visual',
-  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || './output/playwright',
+  outputDir: './output/playwright',
   preserveOutput: captureScreenshots ? 'always' : 'failures-only',
   fullyParallel: false,
   workers: 1,

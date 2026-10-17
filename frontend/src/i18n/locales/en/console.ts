@@ -599,9 +599,6 @@ export default {
   },
 
   keys: {
-    statusExpired: 'Expired',
-    statusExhausted: 'Quota exhausted',
-    crossGroupRetry: 'Retry across groups',
     title: 'API Keys',
     breadcrumb: ['Console', 'API Keys'],
     createKey: 'Create key',
@@ -877,8 +874,6 @@ export default {
   },
 
   models: {
-    autoPriceHint:
-      'Automatic mode shows base prices. The final price uses the group selected by upstream automatic routing.',
     viewToggle: 'View mode',
     title: 'Model Plaza',
     breadcrumb: ['Console', 'Models'],
@@ -1124,10 +1119,6 @@ export default {
   },
 
   channels: {
-    permissionDenied: 'You do not have permission for this channel action.',
-    group: 'Routing groups',
-    groupHint:
-      'Comma-separated. Requests can use channels only in their authorized groups.',
     providerStatus: 'Provider status',
     providerVersion: 'Version',
     contextWindow: 'Context window',
@@ -1221,7 +1212,7 @@ export default {
     refreshList: 'Refresh list',
     advancedLegacy: 'Advanced (legacy)',
     createChannel: 'New channel',
-    searchPlaceholder: 'Search name, ID or upstream URL',
+    searchPlaceholder: 'Search by name, ID or supplier',
     typeFilter: 'Channel type',
     statusFilter: 'Channel status',
     sortLabel: 'Sort by',
@@ -1450,7 +1441,6 @@ export default {
   },
 
   users: {
-    permissions: 'Permissions',
     bindingsTitle: 'Manage account bindings',
     bindingsEmpty: 'No bound sign-in providers or email.',
     unbind: 'Unbind',
@@ -1665,7 +1655,6 @@ export default {
   },
 
   orders: {
-    title: 'Top-up orders',
     gmpay: {
       title: 'GMPay order evidence',
       loading: 'Loading gateway evidence…',
@@ -1807,7 +1796,7 @@ export default {
     groupPlaceholder: 'Search or enter a group',
     title: 'Logs',
     breadcrumb: ['Console', 'Logs'],
-    keywordPlaceholder: 'Filter by exact request ID',
+    keywordPlaceholder: 'Search by model…',
     typeLabel: 'Type',
     typeConsume: 'Consume',
     typeTopup: 'Top-up',
@@ -1941,7 +1930,7 @@ export default {
 
   auditLogs: {
     breadcrumb: 'Audit logs',
-    keywordPlaceholder: 'Filter by exact request ID',
+    keywordPlaceholder: 'Search account, operation, or IP…',
     categoryLabel: 'Event category',
     scopeLabel: 'Scope',
     resultLabel: 'Result',
@@ -2908,10 +2897,10 @@ export default {
         'Sign-up and invite rewards, the top-up link, and currency display rules.',
       payment: 'Shared payment settings and other gateways',
       paymentDescription:
-        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant settings have their own pages. Blank credentials retain the saved value.',
+        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant and settlement settings have their own pages. Blank credentials retain the saved value.',
       epay: 'EPay',
       epayDescription:
-        'Purchase USD credits and pay in CNY through EPay. New orders and payment notifications require payment compliance confirmation, complete merchant credentials, and at least one payment method.',
+        'Purchase USD credits and pay in CNY through EPay. Complete credentials and at least one payment method enable new orders. An empty method list stops new orders; the settlement switch controls existing orders.',
       waffoPancake: 'Waffo Pancake',
       waffoPancakeDescription:
         'Verify credentials and choose a store and product, then save them atomically through the gateway endpoint.',
@@ -3071,11 +3060,17 @@ export default {
       merchantSecret: 'Merchant secret',
       secretHint:
         'Enter a value only to replace the credential. Leaving it blank preserves the current value, which is never displayed after saving.',
+      epaySettlement: 'Enable Epay settlement',
+      epaySettlementHint:
+        'Allow payment gateway callbacks to credit existing orders. Failed notifications are retried by the gateway, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of new payment methods.',
       epayPrice: 'CNY price per USD credit',
       minimumUsd: 'Minimum credit purchase (USD)',
       epayMethods: 'EPay payment methods',
       epayMethodsHint:
-        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list disables EPay orders and payment notifications.',
+        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list stops new EPay orders.',
+      gmpaySettlement: 'Enable crypto settlement',
+      gmpaySettlementHint:
+        'Allow crypto gateway callbacks to credit existing orders. The callback verifies the token and fiat amount but cannot prove the final payment network. Failed notifications depend on the gateway retry configuration, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of Epay and of new payment methods.',
       checkinEnabled: 'Enable daily check-in',
       checkinMinQuota: 'Minimum reward',
       checkinMaxQuota: 'Maximum reward',
@@ -3195,7 +3190,6 @@ export default {
       diskThreshold: 'Disk threshold (%)',
     },
     options: {
-      cny: 'CNY',
       guest: 'Guest',
       user: 'User',
       admin: 'Administrator',
@@ -3292,8 +3286,6 @@ export default {
       cleanupLogsByDays: 'Log files older than {count} days will be deleted.',
     },
     waffoPancake: {
-      orphanStore:
-        'Store {id} was created, but product creation failed. Check the gateway catalog before creating another pair.',
       label: 'Waffo Pancake configuration',
       merchantId: 'Merchant ID',
       privateKey: 'Private key',
@@ -3342,10 +3334,6 @@ export default {
       'Settings could not be loaded. Editing and saving are disabled until a successful reload.',
     retryLoad: 'Reload settings',
     gmpayPanel: {
-      enableNewOrders: 'Accept new orders',
-      enableNewOrdersHint:
-        'Disabling this stops new GMPay orders. Valid payment notifications for existing orders still credit the wallet using the merchant credentials saved with each order.',
-      selectedAssets: 'Enabled assets (JSON)',
       title: 'GMPay crypto payments',
       description:
         'Choose the tokens and networks available to customers, then save the gateway configuration.',
@@ -3377,6 +3365,8 @@ export default {
       addressRequired: 'Enter the gateway address first.',
       credentialsRequired: 'Enter the gateway address and merchant ID.',
       secretRequired: 'Enter the merchant secret.',
+      noSelectedAssets:
+        'Saving with no selected assets stops new crypto orders. Existing orders can still settle when crypto settlement is enabled.',
       invalidAmounts:
         'The price must be positive. Minimum purchases must be positive whole USD amounts.',
       invalidGroupRatios:
@@ -3394,10 +3384,6 @@ export default {
     title: 'System Settings',
     breadcrumb: ['Admin', 'System Settings'],
     saved: 'Saved',
-    partialSaveFailed:
-      '{count} settings were saved before an error: {error}. The remaining changes are kept for retry; saved settings were not rolled back.',
-    oidcDiscoveryInvalid:
-      'OIDC discovery must return valid HTTP or HTTPS authorization, token and user info endpoints. No settings were saved.',
     saveFailed: 'Save failed',
     loading: 'Loading…',
     saveChanges: 'Save changes',

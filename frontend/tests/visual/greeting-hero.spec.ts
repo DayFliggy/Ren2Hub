@@ -21,10 +21,10 @@ for (const theme of THEMES) {
     await expect(heading).toBeVisible()
 
     // Fixtures pin the clock to 12:00 Asia/Shanghai, so the noon bucket wins.
-    await expect(heading).toHaveText('该去吃饭了，Native Root。')
+    await expect(heading).toHaveText('该去吃饭了，Visual Root。')
 
     const accent = heading.locator('span.brush-highlight')
-    await expect(accent).toHaveText('Native Root')
+    await expect(accent).toHaveText('Visual Root')
     await expect(accent).toHaveClass(/brush-highlight--underline/)
 
     // Punctuation must sit outside the painted mark.

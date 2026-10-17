@@ -25,9 +25,12 @@ function user(language?: string): UserInfo {
     email: 'demo@example.com',
     role: 1,
     status: 1,
-    quota: 0,
-    used_quota: 0,
+    available_quota: '0',
+    reserved_quota: '0',
+    used_quota: '0',
+    quota_version: 0,
     request_count: 0,
+    created_at: 1_700_000_000,
     setting: language === undefined ? undefined : JSON.stringify({ language }),
   }
 }

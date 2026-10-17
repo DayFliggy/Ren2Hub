@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  isMetadataSourceChanged,
+  metadataApi,
   parseModelMetadata,
   parsePrefillGroup,
   parseSyncPreview,
 } from '../adminManagement'
+import { ApiError } from '../types'
 import { appendModelNames } from '@/utils/modelEndpoints'
+
+const client = vi.hoisted(() => ({ post: vi.fn() }))
+vi.mock('../client', () => ({ api: client }))
 
 describe('admin management contracts', () => {
   it('preserves enriched model fields and missing timestamps', () => {
@@ -78,6 +84,46 @@ describe('admin management contracts', () => {
         source: { version: 'v1' },
       })
     ).toThrow()
+  })
+  it('requires the preview catalog version and sends it with the apply plan', async () => {
+    const source = { locale: 'en', version: 'catalog-v1' }
+    expect(parseSyncPreview({ missing: ['a'], conflicts: [], source })).toEqual(
+      { version: 'catalog-v1', missing: ['a'], conflicts: [] }
+    )
+    for (const bad of [undefined, {}, { version: '' }])
+      expect(() =>
+        parseSyncPreview({ missing: [], conflicts: [], source: bad })
+      ).toThrow()
+
+    client.post.mockResolvedValueOnce({
+      created_models: 1,
+      updated_models: 0,
+      created_vendors: 0,
+      skipped_models: [],
+    })
+    const plan = {
+      source_version: 'catalog-v1',
+      create_models: ['a'],
+      overwrite: [
+        { model_name: 'b', fields: ['description'], local_version: 'local-v1' },
+      ],
+    }
+    await metadataApi.sync('official', 'en', plan)
+    expect(client.post).toHaveBeenCalledWith('/api/models/sync_upstream', {
+      source: 'official',
+      locale: 'en',
+      ...plan,
+    })
+  })
+  it('recognizes only the catalog-changed conflict', () => {
+    const changed = (status: number, code: string) =>
+      isMetadataSourceChanged(new ApiError('x', { status, code }))
+    expect(changed(409, 'METADATA_SOURCE_CHANGED')).toBe(true)
+    expect(changed(409, 'AUTH_SESSION_CHANGED')).toBe(false)
+    expect(changed(400, 'METADATA_SOURCE_CHANGED')).toBe(false)
+    expect(isMetadataSourceChanged(new Error('METADATA_SOURCE_CHANGED'))).toBe(
+      false
+    )
   })
   it('normalizes endpoint formats already accepted by the backend', () => {
     const group = parsePrefillGroup({

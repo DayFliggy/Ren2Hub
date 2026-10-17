@@ -211,3 +211,32 @@ export function billingFixture() {
     },
   }
 }
+
+export function summaryFixture() {
+  return {
+    types: [
+      {
+        type: 'channel_test',
+        scheduled: true,
+        enabled: true,
+        interval_seconds: 600,
+        last_success_at: 1_767_225_000,
+        last_failure_at: null,
+        last_error: '',
+        active: false,
+        status: 'ok',
+      },
+      {
+        type: 'gateway_state_cleanup',
+        scheduled: true,
+        enabled: true,
+        interval_seconds: 300,
+        last_success_at: null,
+        last_failure_at: 1_767_225_100,
+        last_error: 'lock lost',
+        active: false,
+        status: 'failing',
+      },
+    ],
+  }
+}

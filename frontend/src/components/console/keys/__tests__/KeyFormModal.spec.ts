@@ -1,14 +1,6 @@
 import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import {
-  beforeAll,
-  beforeEach,
-  afterEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import i18n, { loadMessageDomain } from '@/i18n'
@@ -19,15 +11,6 @@ beforeAll(async () => {
   await loadMessageDomain('console')
   i18n.global.locale.value = 'zh-CN'
 })
-
-beforeEach(() => {
-  vi.spyOn(api, 'get').mockImplementation(async (path) =>
-    path === '/api/token/auto-groups'
-      ? { groups: ['default'], max_count: 3 }
-      : ({ default: { ratio: 1, desc: '' } } as never)
-  )
-})
-afterEach(() => vi.restoreAllMocks())
 
 function mountForm(editing: TokenSummary | null = null) {
   return mount(KeyFormModal, {
@@ -80,13 +63,16 @@ describe('KeyFormModal', () => {
       type: 'auto',
       status: 1,
       used_quota: '0',
-      remain_quota: 0,
-      group: 'default',
-      auto_groups: [],
-      cross_group_retry: false,
+      available_quota: '0',
+      reserved_quota: '0',
+      quota_version: 0,
       unlimited: true,
       model_limits: ['gpt-4o'],
       ip_limits: ['127.0.0.1'],
+      rate_limit: 60,
+      max_ratio: '2',
+      load_balance: false,
+      channels: [],
       expired_time: -1,
       created_time: 1,
     }
@@ -107,7 +93,7 @@ describe('KeyFormModal', () => {
     wrapper.unmount()
   })
 
-  it('saves native numeric budgets and permission without legacy ledger fields', async () => {
+  it('reuses an uncertain operation only while all submitted fields match', async () => {
     const put = vi
       .spyOn(api, 'put')
       .mockRejectedValue(new Error('lost response'))
@@ -115,11 +101,10 @@ describe('KeyFormModal', () => {
       id: 2,
       name: 'original',
       type: 'auto',
-      remain_quota: 1,
-      group: 'default',
-      auto_groups: [],
-      cross_group_retry: false,
+      available_quota: '1',
+      reserved_quota: '0',
       used_quota: '0',
+      quota_version: 1,
       unlimited: false,
       model_limits: [],
       ip_limits: [],
@@ -134,14 +119,12 @@ describe('KeyFormModal', () => {
       await flushPromises()
     }
     try {
-      await flushPromises()
       await submit()
       await submit()
       const first = put.mock.calls[0][1] as Record<string, unknown>
       const repeated = put.mock.calls[1][1] as Record<string, unknown>
-      expect(repeated).toEqual(first)
-      expect(first).not.toHaveProperty('operation_id')
-      expect(first.remain_quota).toBe(1)
+      expect(repeated.operation_id).toBe(first.operation_id)
+      expect(first.available_quota).toBe('1')
       const name = document.querySelector<HTMLInputElement>(
         '[name="token-name"]'
       )!
@@ -151,6 +134,7 @@ describe('KeyFormModal', () => {
       await submit()
       const changed = put.mock.calls[2][1] as Record<string, unknown>
       expect(changed.name).toBe('renamed')
+      expect(changed.operation_id).not.toBe(first.operation_id)
       expect(changed.allow_user_quota_query).toBe(false)
       const queryToggle = document.querySelector<HTMLButtonElement>(
         '[name="token-allow-user-quota-query"]'
@@ -160,6 +144,7 @@ describe('KeyFormModal', () => {
       await submit()
       const permissionChanged = put.mock.calls[3][1] as Record<string, unknown>
       expect(permissionChanged.allow_user_quota_query).toBe(true)
+      expect(permissionChanged.operation_id).not.toBe(changed.operation_id)
     } finally {
       wrapper.unmount()
       put.mockRestore()
@@ -177,11 +162,10 @@ describe('KeyFormModal', () => {
       id: 3,
       name: 'expiring',
       type: 'auto',
-      remain_quota: 0,
-      group: 'default',
-      auto_groups: [],
-      cross_group_retry: false,
+      available_quota: '0',
+      reserved_quota: '0',
       used_quota: '0',
+      quota_version: 1,
       unlimited: true,
       model_limits: [],
       ip_limits: [],
@@ -189,7 +173,7 @@ describe('KeyFormModal', () => {
     } as unknown as TokenSummary
     const wrapper = mountForm(editing)
     try {
-      await flushPromises()
+      await nextTick()
       expect(
         document.querySelector<HTMLInputElement>('[name="token-expiration"]')
           ?.value

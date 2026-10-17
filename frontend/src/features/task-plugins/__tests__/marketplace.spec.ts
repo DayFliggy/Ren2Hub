@@ -7,7 +7,7 @@ import {
   resolvePluginSourceUrl,
 } from '../lib/marketplace'
 import {
-  parsePluginMetaPreview,
+  previewFromServer,
   resolvePluginMetaPreview,
 } from '../lib/plugin-meta-preview'
 import type { MarketplacePlugin, TaskPluginListItem } from '../types'
@@ -121,11 +121,17 @@ describe('marketplace index boundary', () => {
   })
 })
 
-describe('local metadata preview', () => {
+describe('server metadata preview', () => {
   it('separates missing, unresolved and malformed fields', () => {
-    const preview = parsePluginMetaPreview(
-      'export const meta = { models: ["m1"], baseUrl: "https://upstream.example", channelTypes: ["not-a-number"], allowedHosts: getHosts() };'
-    )
+    const preview = previewFromServer({
+      meta: {
+        models: ['m1'],
+        baseUrl: 'https://upstream.example',
+        channelTypes: ['not-a-number'],
+      },
+      unresolved: ['allowedHosts'],
+      source_hash: '',
+    })
     expect(preview.status).toBe('partial')
     expect(preview.fields.models).toEqual({
       state: 'value',
@@ -136,7 +142,8 @@ describe('local metadata preview', () => {
     expect(preview.fields.allowedHosts).toEqual({ state: 'unknown' })
     expect(preview.fields.channelTypes).toEqual({ state: 'unknown' })
     expect(
-      parsePluginMetaPreview('export const meta = getMeta();').status
+      previewFromServer({ meta: {}, unresolved: ['meta'], source_hash: '' })
+        .status
     ).toBe('unavailable')
   })
 
@@ -144,7 +151,7 @@ describe('local metadata preview', () => {
     const fields = resolvePluginMetaPreview(
       { ...plugin, models: ['from-index'] },
       plugin.versions[0],
-      parsePluginMetaPreview('export const meta = {models: getModels()};')
+      previewFromServer({ meta: {}, unresolved: ['models'], source_hash: '' })
     )
     expect(fields.models).toEqual({
       state: 'value',

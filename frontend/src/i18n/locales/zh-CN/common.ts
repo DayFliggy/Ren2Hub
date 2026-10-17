@@ -1,11 +1,5 @@
 export default {
   common: {
-    sort: '排序',
-    enable: '启用',
-    disable: '禁用',
-    default: '默认',
-    invalidInput: '请检查输入内容。',
-
     search: '搜索',
     all: '全部',
     actions: '操作',

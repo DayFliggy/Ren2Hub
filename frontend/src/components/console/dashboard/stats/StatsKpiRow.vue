@@ -3,6 +3,7 @@ import { quotaForChart } from '@/utils/quota'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
 import { kpiDividerClasses } from '@/components/console/dashboard/kpiDividers'
 import type { FlowPoint } from '@/composables/useDashboard'
@@ -17,6 +18,14 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+
+const successColor = computed(() => {
+  const rate = props.kpi?.successRate
+  if (rate === undefined) return 'var(--text-tertiary)'
+  if (rate >= 99) return 'var(--status-success)'
+  if (rate >= 95) return 'var(--status-warning)'
+  return 'var(--status-danger)'
+})
 
 interface Cell {
   key: string
@@ -60,6 +69,24 @@ const cells = computed<Cell[]>(() => [
     skeleton: 'w-20',
     series: (props.flow ?? []).map((f) => f.requests),
   },
+  {
+    key: 'latency',
+    label: t('dashboard.stats.avgLatency'),
+    icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 6v6l4 2',
+    value: props.kpi ? props.kpi.avgLatency.toFixed(2) : '—',
+    suffix: 's',
+    color: 'var(--support)',
+    skeleton: 'w-20',
+  },
+  {
+    key: 'success',
+    label: t('dashboard.stats.successRate'),
+    icon: 'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1zM9 12l2 2 4-4',
+    value: props.kpi ? props.kpi.successRate.toFixed(1) : '—',
+    suffix: '%',
+    color: successColor.value,
+    skeleton: 'w-16',
+  },
 ])
 </script>
 
@@ -76,7 +103,7 @@ const cells = computed<Cell[]>(() => [
     data-handdrawn="surface-clipped"
     data-stats-kpi
   >
-    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
       <div
         v-for="(cell, i) in cells"
         :key="cell.key"
@@ -132,10 +159,14 @@ const cells = computed<Cell[]>(() => [
             </p>
           </div>
 
-          <div
-            v-if="cell.key === 'success'"
-            class="mt-2 flex items-center"
-          ></div>
+          <div v-if="cell.key === 'success'" class="mt-2 flex items-center">
+            <MiniRing
+              :percent="kpi?.successRate ?? 0"
+              :color="successColor"
+              :size="30"
+              :indeterminate="!kpi || loading"
+            />
+          </div>
           <div v-else class="mt-2">
             <MiniSparkline
               v-if="!loading && cell.series && cell.series.length > 1"

@@ -20,7 +20,7 @@ import {
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { addQuota, sumQuota } from '@/utils/quota'
+import { addQuota, quotaToDecimal, sumQuota } from '@/utils/quota'
 import { formatNumber, formatQuota } from '@/utils/format'
 
 type WalletStats = DashboardStats
@@ -36,7 +36,6 @@ const flow = ref<FlowPoint[]>([])
 const todayConsume = ref('0')
 const refreshKey = ref(0)
 const paymentMethod = ref('epay')
-const redemptionEnabled = ref(false)
 const loading = ref(false)
 const statsRequest = useLatestRequest()
 
@@ -44,6 +43,11 @@ const activePanel = computed<'topup' | 'redeem'>(() =>
   route.query.panel === 'redeem' ? 'redeem' : 'topup'
 )
 
+const balanceParts = computed(() =>
+  quotaToDecimal(stats.value?.quota ?? '0', 2).split('.')
+)
+const balanceDollars = computed(() => balanceParts.value[0])
+const balanceCents = computed(() => balanceParts.value[1])
 const dayCount = computed(() => flow.value.length || 30)
 
 const statCards = computed(() => {
@@ -112,12 +116,14 @@ async function loadStats(): Promise<void> {
   }
   flow.value = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
   stats.value = {
-    quota: String(auth.user?.quota ?? 0),
+    quota: auth.user?.available_quota ?? '0',
     used_quota: monthQuota,
     today_quota: '0',
     month_quota: monthQuota,
     today_requests: 0,
     total_requests: rows.reduce((sum, row) => sum + row.count, 0),
+    month_quota_delta: 0,
+    month_requests_delta: 0,
   }
 }
 
@@ -144,8 +150,15 @@ onMounted(() => void loadStats())
       <template #actions>
         <div class="flex items-center gap-3" :aria-busy="loading">
           <p class="font-mono tracking-tight text-[var(--text-primary)]">
+            <span class="text-lg text-[var(--text-tertiary)]">$</span>
             <span class="display-number text-5xl">
-              {{ hidden ? '••••••' : stats ? formatQuota(stats.quota) : '—' }}
+              {{ hidden ? '••••••' : stats ? balanceDollars : '—' }}
+            </span>
+            <span
+              v-if="!hidden && stats"
+              class="display-number text-xl text-[var(--text-secondary)]"
+            >
+              .{{ balanceCents }}
             </span>
           </p>
           <button
@@ -181,18 +194,13 @@ onMounted(() => void loadStats())
 
     <StatTileGrid class="mb-6" :tiles="statCards" :columns="4" />
 
-    <div
-      class="mb-6 grid gap-6"
-      :class="redemptionEnabled ? 'xl:grid-cols-[1fr_23.75rem]' : ''"
-    >
+    <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_23.75rem]">
       <TopupPanel
         v-model:payment-method="paymentMethod"
         :balance-quota="stats?.quota ?? null"
         @done="handlePaymentDone"
-        @capabilities="redemptionEnabled = $event.enable_redemption"
       />
       <RedeemPanel
-        v-if="redemptionEnabled"
         :auto-focus="activePanel === 'redeem'"
         :refresh-key="refreshKey"
         @done="handlePaymentDone"

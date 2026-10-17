@@ -87,11 +87,14 @@ describe('system settings catalog', () => {
       'PayAddress',
       'EpayId',
       'EpayKey',
+      'payment_setting.epay_settlement_enabled',
       'Price',
       'MinTopUp',
       'PayMethods',
     ])
-    expect(gmpay.fields).toEqual([])
+    expect(gmpay.fields.map((field) => field.key)).toEqual([
+      'payment_setting.gmpay_settlement_enabled',
+    ])
     expect(gmpay.managedKeys).toEqual([
       'GmpayPayAddress',
       'GmpayId',

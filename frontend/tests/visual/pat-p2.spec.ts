@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
-const endpoint = '/api/user/access_tokens'
+const endpoint = '/api/user/self/personal-access-tokens'
 const now = Math.floor(new Date('2026-07-27T12:00:00+08:00').getTime() / 1000)
-const secret = `nap_${'p'.repeat(43)}`
+const secret = `pat_${'p'.repeat(48)}`
 const old = {
   id: 7,
   name: 'existing automation',
@@ -11,9 +11,7 @@ const old = {
   created_at: now - 120,
   last_used_at: 0,
   expires_at: now + 86400,
-  token_ref: 'fixture-reference',
-  token_hint: 'nap_****1234',
-  last_used_ip: '',
+  revoked_at: 0,
 }
 
 async function verification(page: Page) {
@@ -32,24 +30,18 @@ async function prepare(page: Page, theme: 'light' | 'dark', mobile: boolean) {
   let tokens = [
     { ...old },
     { ...old, id: 8, name: 'expired automation', expires_at: now - 1 },
+    { ...old, id: 9, name: 'revoked automation', revoked_at: now - 1 },
   ]
   const operations: Array<Record<string, unknown>> = []
   let proofCount = 0
-  await page.route(`**${endpoint}/catalog`, (route) =>
+  await page.route(`**${endpoint}/scopes`, (route) =>
     route.fulfill({
       json: {
         success: true,
         data: {
-          groups: [
-            {
-              resources: [
-                { resource: 'profile', actions: [{ action: 'read' }] },
-                { resource: 'token', actions: [{ action: 'read' }] },
-              ],
-            },
-          ],
-          max_tokens: 20,
-          default_expiry_days: 30,
+          scopes: ['profile:read', 'tokens:read'],
+          limit: 20,
+          default_lifetime_days: 30,
         },
       },
     })
@@ -85,7 +77,7 @@ async function prepare(page: Page, theme: 'light' | 'dark', mobile: boolean) {
   })
   await page.route(`**${endpoint}`, (route) => {
     if (route.request().method() === 'GET')
-      return route.fulfill({ json: { success: true, data: { items: tokens } } })
+      return route.fulfill({ json: { success: true, data: tokens } })
     const input = route.request().postDataJSON()
     expect(route.request().headers()['x-security-proof']).toBe(
       `proof-${proofCount}`
@@ -101,7 +93,7 @@ async function prepare(page: Page, theme: 'light' | 'dark', mobile: boolean) {
     return route.fulfill({
       json: {
         success: true,
-        data: { token: secret, item },
+        data: { token: secret, personal_access_token: item },
       },
     })
   })
@@ -111,7 +103,9 @@ async function prepare(page: Page, theme: 'light' | 'dark', mobile: boolean) {
       expect(route.request().headers()['x-security-proof']).toBe(
         `proof-${proofCount}`
       )
-      tokens = tokens.filter((token) => token.id !== id)
+      tokens = tokens.map((token) =>
+        token.id === id ? { ...token, revoked_at: now } : token
+      )
       return route.fulfill({ json: { success: true, data: null } })
     }
     const input = route.request().postDataJSON()
@@ -141,7 +135,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(
         panel.getByText('existing automation', { exact: true })
       ).toBeVisible()
-      for (const name of ['expired automation']) {
+      for (const name of ['expired automation', 'revoked automation']) {
         const row = panel.locator('li').filter({ hasText: name })
         await expect(row.getByRole('button')).toHaveCount(0)
       }
@@ -161,9 +155,7 @@ for (const theme of ['light', 'dark'] as const) {
       await create.getByRole('button', { name: '保存', exact: true }).click()
       await verification(page)
       await expect(page.getByTestId('pat-secret')).toHaveText(secret)
-      expect(operations.at(-1)).toMatchObject({
-        scope: 'access_token.generate',
-      })
+      expect(operations.at(-1)).toMatchObject({ scope: 'pat.create' })
       await assertNoHorizontalOverflow(page)
       await page.getByRole('button', { name: '完成', exact: true }).click()
       await expect(page.getByTestId('pat-secret')).toHaveCount(0)
@@ -188,13 +180,13 @@ for (const theme of ['light', 'dark'] as const) {
         .filter({ hasText: 'renamed automation' })
       await renamed.getByRole('button', { name: '权限', exact: true }).click()
       await edit
-        .getByRole('checkbox', { name: 'token:read', exact: true })
+        .getByRole('checkbox', { name: 'tokens:read', exact: true })
         .check()
       await edit.getByRole('button', { name: '保存', exact: true }).click()
       await verification(page)
       expect(operations.at(-1)).toMatchObject({
-        scope: 'access_token.update',
-        context: { token_id: 10, scopes: ['profile:read', 'token:read'] },
+        scope: 'pat.update',
+        context: { id: 10, scopes: ['profile:read', 'tokens:read'] },
       })
       await expect(edit).toHaveCount(0)
       await renamed.getByRole('button', { name: '撤销', exact: true }).click()
@@ -204,10 +196,11 @@ for (const theme of ['light', 'dark'] as const) {
         .click()
       await verification(page)
       expect(operations.at(-1)).toMatchObject({
-        scope: 'access_token.revoke',
-        context: { token_id: 10 },
+        scope: 'pat.revoke',
+        context: { id: 10 },
       })
-      await expect(renamed).toHaveCount(0)
+      await expect(renamed).toContainText('已撤销')
+      await expect(renamed.getByRole('button')).toHaveCount(0)
       await assertNoHorizontalOverflow(page)
       expect(await page.content()).not.toContain(secret)
     })
@@ -233,7 +226,7 @@ test('PAT late creation cannot reveal a secret after session sign-out', async ({
     await route.fulfill({
       json: {
         success: true,
-        data: { token: secret, item: { ...old, id: 10 } },
+        data: { token: secret, personal_access_token: { ...old, id: 10 } },
       },
     })
   })
@@ -264,7 +257,7 @@ test('PAT late creation cannot reveal a secret after session sign-out', async ({
     const channel = new BroadcastChannel('new-api:auth-session')
     channel.postMessage({
       kind: 'signed_out',
-      sid: 'fixture-session',
+      sid: 'visual-session',
       source: 'other-local-tab',
       nonce: 'logout-pat-test',
       timestamp: Date.now(),

@@ -1,30 +1,28 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { publicPricingReferences } from '@/features/pricing/reference'
+import {
+  publicPricingReferences,
+  expressionReferencePrices,
+} from '@/features/pricing/reference'
 import ReferencePrices from './ReferencePrices.vue'
 import { catalogPrices } from '@/api/publicCatalog'
 import type { PricingModelContract } from '@/api/liveContracts'
-import { formatUnitPriceUSD, multiplyDecimal } from '@/utils/decimal'
-import { decimalText } from '@/features/pricing/draft'
+import { formatUnitPriceUSD } from '@/utils/decimal'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 const props = withDefaults(
-  defineProps<{
-    pricing: PricingModelContract
-    unit?: 'M' | 'K'
-    groupRatio?: number
-  }>(),
-  { unit: 'M', groupRatio: 1 }
+  defineProps<{ pricing: PricingModelContract; unit?: 'M' | 'K' }>(),
+  { unit: 'M' }
 )
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
-const lines = computed(() =>
-  catalogPrices(props.pricing, props.unit).map((line) => ({
-    ...line,
-    value: multiplyDecimal(line.value, decimalText(props.groupRatio)),
-  }))
-)
-const references = computed(() =>
-  publicPricingReferences(props.pricing, props.groupRatio)
+const lines = computed(() => catalogPrices(props.pricing, props.unit))
+const references = computed(() => publicPricingReferences(props.pricing))
+const referencePlugin = computed(
+  () =>
+    props.pricing.billing_plugin_variants?.find(
+      (variant) =>
+        variant.billing_mode === 'tiered_expr' && variant.billing_expr
+    )?.plugin_name || props.pricing.usage_reference?.plugin_name
 )
 const labels: Record<string, string> = {
   input: 'input',
@@ -39,10 +37,11 @@ const labels: Record<string, string> = {
 </script>
 <template>
   <div class="model-price-items">
+    <p v-if="!references.length && referencePlugin">{{ referencePlugin }}</p>
     <ReferencePrices
       v-if="
-        pricing.billing_mode === 'tiered_expr' &&
-        !Object.keys(pricing.billing_usage_schema ?? {}).length
+        pricing.billing_mode === 'tiered_expr' ||
+        pricing.billing_plugin_variants?.length
       "
       :prices="references"
       :unit="unit"
@@ -55,7 +54,11 @@ const labels: Record<string, string> = {
       ><span>{{ t('expression') }}</span>
       <pre>{{ pricing.billing_expr }}</pre>
     </template>
-    <dl v-else>
+    <dl
+      v-else-if="
+        !pricing.billing_plugin_variants?.length || !pricing.pricing_values
+      "
+    >
       <div
         v-for="line in lines"
         :key="line.key"
@@ -86,7 +89,20 @@ const labels: Record<string, string> = {
       <p v-else-if="variant.billing_mode === 'ratio'">
         {{ t('inheritsModelPrice') }}
       </p>
-      <template v-else>
+      <template v-else
+        ><ReferencePrices
+          :prices="
+            expressionReferencePrices(
+              variant.billing_expr,
+              true,
+              variant.usage_reference,
+              '1',
+              variant.plugin_name
+            )
+          "
+          :unit="unit"
+          :details="true"
+        />
         <pre>{{ variant.billing_expr }}</pre>
       </template>
     </details>

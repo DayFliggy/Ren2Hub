@@ -8,7 +8,9 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
-import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
+import SegmentedToggle, {
+  type SegmentOption,
+} from '@/components/common/SegmentedToggle.vue'
 import ModelCard from '@/components/console/models/ModelCard.vue'
 import ModelChannelShelves from '@/components/console/models/ModelChannelShelves.vue'
 import ModelPriceMatrix from '@/components/console/models/ModelPriceMatrix.vue'
@@ -24,29 +26,33 @@ const {
   error,
   catalog,
   keyword,
-  group,
-  vendor,
+  channel,
   billing,
   type,
   sort,
   view,
   filtered,
-  visibleGroups,
-  selectedGroup,
-  vendors,
+  shelves,
+  visibleChannels,
+  resultCount,
+  offerCount,
+  hasResults,
+  pricingIssues,
   load,
   resetFilters,
 } = useModelMarket()
-const groupOptions = computed(() => [
-  { value: '', label: t('allGroups') },
-  ...(catalog.value?.groups ?? []).map((item) => ({
-    value: item.name,
-    label: `${item.name} · ${item.description}`,
+const channelValue = computed({
+  get: () => (channel.value === '' ? '' : String(channel.value)),
+  set: (value: string) => {
+    channel.value = value === '' ? '' : Number(value)
+  },
+})
+const channelOptions = computed(() => [
+  { value: '', label: t('allChannels') },
+  ...(catalog.value?.channels ?? []).map((item) => ({
+    value: String(item.id),
+    label: item.name,
   })),
-])
-const vendorOptions = computed(() => [
-  { value: '', label: t('allVendors') },
-  ...vendors.value.map((value) => ({ value, label: value })),
 ])
 const billingOptions = computed(() => [
   { value: '', label: t('allBilling') },
@@ -55,7 +61,10 @@ const billingOptions = computed(() => [
   ),
 ])
 const sortOptions = computed(() =>
-  PRICE_SORTS.map((value) => ({ value, label: t(`sorts.${value}`) }))
+  PRICE_SORTS.map((value) => ({
+    value,
+    label: t(`sorts.${value}`),
+  }))
 )
 const modelTypes: MarketModelType[] = [
   'chat',
@@ -64,173 +73,200 @@ const modelTypes: MarketModelType[] = [
   'audio',
   'video',
   'rerank',
-  'other',
 ]
-const viewOptions = computed(() => [
-  {
-    value: 'models',
-    label: t('views.models'),
-    icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
-  },
-  {
-    value: 'channels',
-    label: t('views.channels'),
-    icon: 'M3 4h18v6H3zM3 14h18v6H3zM8 4v6M8 14v6',
-  },
-  {
-    value: 'comparison',
-    label: t('views.comparison'),
-    icon: 'M3 4h18v16H3zM3 9h18M9 4v16M15 9v11',
-  },
-])
+const viewPaths = {
+  models:
+    'M5 7.5h9.5a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2ZM7.5 7.5V5a2 2 0 0 1 2-2H19a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2h-2.5M6.5 13h6.5M6.5 16.5h4.5',
+  channels:
+    'M4.5 4h15A1.5 1.5 0 0 1 21 5.5V9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 9V5.5A1.5 1.5 0 0 1 4.5 4ZM8.5 4v6.5M12 7.25h5.5M4.5 13.5h15A1.5 1.5 0 0 1 21 15v3.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V15a1.5 1.5 0 0 1 1.5-1.5ZM8.5 13.5V20M12 16.75h5.5',
+  comparison:
+    'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9h18M9 4v16M15 9v11M9 14.5h12M18 16v2.5',
+}
+const viewOptions = computed<SegmentOption[]>(() =>
+  (['models', 'channels', 'comparison'] as const).map((value) => ({
+    value,
+    ariaLabel: t(`views.${value}`),
+    icon: viewPaths[value],
+  }))
+)
+const hasCatalogSupply = computed(() =>
+  (catalog.value?.models ?? []).some((model) => model.offers.length > 0)
+)
 const detailId = ref<string | null>(null)
+const detailOfferId = ref<string>()
 const detailModel = computed(
   () =>
     catalog.value?.models.find((model) => model.id === detailId.value) ?? null
 )
-watch(catalog, () => {
-  if (!detailModel.value) detailId.value = null
+watch(catalog, (value) => {
+  if (
+    detailId.value &&
+    !value?.models.some((model) => model.id === detailId.value)
+  )
+    detailId.value = null
 })
+function openDetails(modelId: string, offerId?: string) {
+  detailOfferId.value = offerId
+  detailId.value = modelId
+}
 onMounted(load)
 </script>
 
 <template>
   <div class="model-market" data-model-market>
     <PageBreadcrumb :crumbs="[t('console'), t('title')]">
-      <template #action
-        ><ConsoleButton variant="secondary" :disabled="loading" @click="load">{{
-          loading ? t('refreshing') : t('refresh')
-        }}</ConsoleButton></template
-      >
+      <template #action>
+        <span class="market-view-label"
+          ><svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path :d="viewPaths[view]" /></svg
+          >{{ t(`views.${view}`) }}</span
+        >
+      </template>
     </PageBreadcrumb>
-    <ConsoleCard class="market-filter-card" :padded="false">
+
+    <ConsoleCard :padded="false" class="market-filter-card">
       <div class="market-toolbar">
         <SearchInput
           v-model="keyword"
-          class="market-search"
           :placeholder="t('search')"
           :aria-label="t('search')"
-        />
-        <SegmentedToggle
-          v-model="view"
-          class="market-view-switch"
-          :options="viewOptions"
-          :label="t('viewLabel')"
-        />
-      </div>
-      <div class="market-filters">
-        <FilterSelect
-          v-model="group"
-          :options="groupOptions"
-          :label="t('group')"
+          name="model-search"
+          class="market-search"
         />
         <FilterSelect
-          v-model="vendor"
-          :options="vendorOptions"
-          :label="t('vendor')"
+          v-model="channelValue"
+          :options="channelOptions"
+          :label="t('channel')"
+          class="market-channel-filter"
         />
         <FilterSelect
           v-model="billing"
           :options="billingOptions"
           :label="t('billing')"
+          class="market-billing-filter"
         />
         <FilterSelect
           v-model="sort"
           :options="sortOptions"
           :label="t('sort')"
+          class="market-sort-filter"
+        />
+        <SegmentedToggle
+          v-model="view"
+          :options="viewOptions"
+          :label="t('viewLabel')"
+          size="sm"
+          class="market-view-switch"
         />
       </div>
       <div class="market-type-tabs" role="group" :aria-label="t('typeLabel')">
         <button
+          type="button"
           class="market-type-tab focus-ring"
           :class="{ active: type === '' }"
-          type="button"
           :aria-pressed="type === ''"
           @click="type = ''"
         >
           {{ t('allTypes') }}
         </button>
         <button
-          v-for="item in modelTypes"
-          :key="item"
-          class="market-type-tab focus-ring"
-          :class="{ active: type === item }"
+          v-for="modelType in modelTypes"
+          :key="modelType"
           type="button"
-          :aria-pressed="type === item"
-          @click="type = item"
+          class="market-type-tab focus-ring"
+          :class="{ active: type === modelType }"
+          :aria-pressed="type === modelType"
+          @click="type = modelType"
         >
-          {{ t(`types.${item}`) }}
+          {{ t(`types.${modelType}`) }}
         </button>
       </div>
     </ConsoleCard>
-    <div class="market-result-meta">
-      <p>
-        {{ t('resultCount', { count: filtered.length }) }} ·
-        {{ t('groupCount', { count: visibleGroups.length }) }}
-      </p>
-      <button class="focus-ring" type="button" @click="resetFilters">
-        {{ t('resetFilters') }}
-      </button>
+
+    <div class="market-result-meta" aria-live="polite">
+      <p>{{ t('resultCount', { models: resultCount, offers: offerCount }) }}</p>
+      <span>{{ t('quotaNotice') }}</span>
     </div>
-    <details v-if="catalog?.missingPrices.length" class="market-pricing-issues">
-      <summary>
-        {{ t('missingPrices', { count: catalog.missingPrices.length }) }}
+    <details
+      v-if="pricingIssues.length"
+      class="market-pricing-issues"
+      data-pricing-issues
+    >
+      <summary class="focus-ring">
+        {{ t('partialPrices', { count: pricingIssues.length }) }}
       </summary>
-      <p>{{ t('missingPricesHint') }}</p>
       <ul>
-        <li v-for="name in catalog.missingPrices" :key="name">{{ name }}</li>
+        <li v-for="name in pricingIssues" :key="name">
+          {{ name }} · {{ t('unconfigured') }}
+        </li>
       </ul>
     </details>
+
     <div v-if="loading" class="market-model-grid" aria-busy="true">
-      <SkeletonBlock v-for="n in 6" :key="n" class="h-72" />
+      <SkeletonBlock v-for="index in 6" :key="index" bordered class="h-72" />
     </div>
-    <ConsoleCard v-else-if="error"
-      ><div class="market-load-error" role="alert">
+    <ConsoleCard v-else-if="error">
+      <div class="market-load-error" role="alert">
         <h2>{{ t('loadError') }}</h2>
-        <p>{{ error }}</p>
-        <ConsoleButton @click="load">{{ t('retry') }}</ConsoleButton>
+        <p>{{ error || t('loadErrorHint') }}</p>
+        <ConsoleButton variant="secondary" @click="load">{{
+          t('retry')
+        }}</ConsoleButton>
+      </div>
+    </ConsoleCard>
+    <ConsoleCard v-else-if="!hasResults"
+      ><EmptyState
+        :title="t(hasCatalogSupply ? 'emptyTitle' : 'noCatalogTitle')"
+        :hint="t(hasCatalogSupply ? 'emptyHint' : 'noCatalogHint')"
+        illustration="empty-models"
+      />
+      <div v-if="hasCatalogSupply" class="market-reset">
+        <ConsoleButton variant="secondary" @click="resetFilters">{{
+          t('resetFilters')
+        }}</ConsoleButton>
       </div></ConsoleCard
     >
-    <ModelChannelShelves v-else-if="view === 'channels'" />
-    <EmptyState
-      v-else-if="!catalog?.groups.length"
-      :title="t('noCatalogTitle')"
-      :hint="t('noGroups')"
-    />
-    <EmptyState
-      v-else-if="!catalog.models.length"
-      :title="t('noCatalogTitle')"
-      :hint="t('noCatalogHint')"
-    />
-    <EmptyState
-      v-else-if="!filtered.length"
-      :title="t('emptyTitle')"
-      :hint="t('emptyHint')"
-    />
-    <div v-else-if="view === 'models'" class="market-model-grid">
+    <div
+      v-else-if="view === 'models'"
+      class="market-model-grid"
+      data-market-models
+    >
       <ModelCard
         v-for="model in filtered"
         :key="model.id"
         :model="model"
-        :group="selectedGroup"
-        @detail="detailId = $event"
+        @detail="openDetails"
       />
     </div>
+    <ModelChannelShelves
+      v-else-if="view === 'channels'"
+      :shelves="shelves"
+      @detail="openDetails"
+    />
     <ModelPriceMatrix
       v-else
       :models="filtered"
-      :groups="visibleGroups"
-      @detail="detailId = $event"
+      :channels="visibleChannels"
+      @detail="openDetails"
     />
-    <footer class="market-page-note">
-      <p>{{ t('priceNote') }}</p>
-      <p>{{ t('sortNote') }}</p>
-      <p>{{ t('requestNote') }}</p>
+
+    <footer v-if="!loading && !error && hasResults" class="market-page-note">
+      <p>{{ t(view === 'comparison' ? 'comparisonNote' : 'catalogNote') }}</p>
+      <p>{{ t('supplyNote') }}</p>
     </footer>
     <ModelMarketDetails
-      v-if="detailModel"
       :model="detailModel"
-      :initial-group="group"
+      :offer-id="detailOfferId"
       @close="detailId = null"
     />
   </div>
@@ -238,8 +274,22 @@ onMounted(load)
 
 <style scoped>
 .model-market {
-  container-type: inline-size;
-  container-name: model-market;
+  container: model-market / inline-size;
+  min-width: 0;
+}
+.market-view-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  font-size: 0.6875rem;
+}
+.market-view-label svg {
+  color: var(--accent-text);
 }
 .market-filter-card {
   position: relative;
@@ -247,24 +297,30 @@ onMounted(load)
 }
 .market-toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  padding: 1rem;
+  padding: 1rem 1rem 0.75rem;
 }
 .market-search {
   flex: 1 1 16rem;
   min-width: 10rem;
+  max-width: 22rem;
+}
+.market-channel-filter {
+  flex: 0 1 10rem;
+  min-width: 7.5rem;
+}
+.market-billing-filter {
+  flex: 0 1 9rem;
+  min-width: 7rem;
+}
+.market-sort-filter {
+  flex: 0 1 12rem;
+  min-width: 9rem;
 }
 .market-view-switch {
   flex: none;
   margin-left: auto;
-}
-.market-filters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
-  padding: 0 1rem 1rem;
 }
 .market-type-tabs {
   display: flex;
@@ -299,16 +355,16 @@ onMounted(load)
 }
 .market-result-meta {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.35rem 1rem;
-  margin: 1rem 0;
+  margin: 1.2rem 0 0.85rem;
   color: var(--text-tertiary);
   font-size: 0.75rem;
 }
-.market-result-meta button {
-  min-height: 2rem;
+.market-result-meta > span {
+  font-size: 0.6875rem;
 }
 .market-model-grid {
   display: grid;
@@ -321,14 +377,16 @@ onMounted(load)
   font-size: 0.6875rem;
   line-height: 1.9;
 }
+.market-page-note p + p {
+  margin-top: 0.2rem;
+}
 .market-pricing-issues {
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: var(--shape-control);
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
   color: var(--text-secondary);
   font-size: 0.75rem;
-  overflow-wrap: anywhere;
 }
 .market-pricing-issues summary {
   cursor: pointer;
@@ -336,60 +394,106 @@ onMounted(load)
 .market-pricing-issues ul {
   margin-top: 0.5rem;
   padding-left: 1rem;
+  overflow-wrap: anywhere;
 }
 .market-load-error {
   display: grid;
   justify-items: start;
   gap: 0.8rem;
+  padding: 1rem;
 }
 .market-load-error h2 {
+  color: var(--text-primary);
   font-size: 1rem;
   font-weight: 600;
 }
 .market-load-error p {
+  color: var(--text-secondary);
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
+}
+.market-reset {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 1.5rem;
 }
 @container model-market (max-width: 1100px) {
   .market-model-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .market-toolbar {
+    flex-wrap: wrap;
+  }
+  .market-search {
+    flex-basis: calc(100% - 12rem);
+    max-width: none;
+  }
+  .market-view-switch {
+    order: 1;
+  }
+  .market-channel-filter {
+    order: 2;
+    flex: 1;
+  }
+  .market-billing-filter {
+    order: 3;
+    flex: 1;
+  }
+  .market-sort-filter {
+    order: 4;
+    flex: 1.5;
+  }
 }
 @container model-market (max-width: 720px) {
   .market-model-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
   }
-  .market-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .market-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.7rem;
+    padding: 0.9rem 0.9rem 0.75rem;
+  }
+  .market-search {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    order: 0;
+  }
+  .market-channel-filter {
+    order: 1;
+    min-width: 0;
+  }
+  .market-billing-filter {
+    order: 2;
+    min-width: 0;
+  }
+  .market-sort-filter {
+    order: 3;
+    min-width: 0;
   }
   .market-view-switch {
-    width: 100%;
+    order: 4;
+    min-width: 0;
+    justify-self: end;
     margin-left: 0;
   }
   .market-type-tabs {
     gap: 0 1rem;
+    padding-inline: 0.9rem;
+  }
+  .market-result-meta {
+    margin-top: 1rem;
+  }
+  .market-result-meta > span {
+    font-size: 0.625rem;
   }
 }
-@container model-market (max-width: 520px) {
-  .market-filters {
-    grid-template-columns: minmax(0, 1fr);
-  }
+@container model-market (max-width: 340px) {
+  .market-sort-filter,
   .market-view-switch {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .market-view-switch :deep([role='radio']) {
-    min-width: 0;
-    height: auto;
-    min-height: 3.25rem;
-    padding: 0.375rem;
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.75rem;
-    line-height: 1.25;
-  }
-  .market-view-switch :deep(svg) {
-    flex-shrink: 0;
+    grid-column: 1 / -1;
   }
 }
 </style>

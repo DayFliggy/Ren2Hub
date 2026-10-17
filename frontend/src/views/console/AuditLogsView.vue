@@ -162,13 +162,12 @@ function currentParams() {
     // The token filter is only shown on the all-accounts view; a value left
     // over from it must not silently narrow the personal view.
     token_ref: readingAll.value ? tokenRef.value.trim() : '',
-    request_id: keyword.value.trim(),
+    keyword: keyword.value.trim(),
     start_timestamp: startDate.value
-      ? Math.floor(new Date(`${startDate.value}T00:00:00`).getTime() / 1000)
+      ? Math.floor(new Date(startDate.value).getTime() / 1000)
       : 0,
     end_timestamp: endDate.value
-      ? Math.floor(new Date(`${endDate.value}T00:00:00`).getTime() / 1000) +
-        86_399
+      ? Math.floor(new Date(endDate.value).getTime() / 1000) + 86_399
       : 0,
   }
 }
@@ -178,10 +177,8 @@ const listRequest = useLatestRequest()
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
-  const result = await listRequest.run(async (signal) =>
-    parseAuditLogPage(
-      await api.get<unknown>(endpoint(), currentParams(), { signal })
-    )
+  const result = await listRequest.run((signal) =>
+    api.get<PageResult<AuditLogItem>>(endpoint(), currentParams(), { signal })
   )
   if (result.stale) return
   loading.value = false
@@ -196,7 +193,7 @@ async function load(): Promise<void> {
     )
     return
   }
-  const resultPage = result.value
+  const resultPage = parseAuditLogPage(result.value as unknown)
   rows.value = resultPage.items
   total.value = resultPage.total
 }
@@ -226,14 +223,6 @@ watch(
     scope.value = value === 'all' && canReadAll.value ? 'all' : 'self'
   }
 )
-watch(canReadAll, () => {
-  detailLog.value = null
-  exportOpen.value = false
-  rows.value = []
-  listRequest.cancel()
-  scope.value = 'self'
-  reload()
-})
 watch(pageSize, reload)
 watch(page, load)
 

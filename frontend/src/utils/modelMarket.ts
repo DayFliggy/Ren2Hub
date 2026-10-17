@@ -1,127 +1,222 @@
-import type { PricingCatalog, CatalogModel } from '@/api/publicCatalog'
+import { catalogPrices, type CatalogPricingInput } from '@/api/publicCatalog'
+import { multiplyDecimal } from '@/utils/decimal'
 import {
+  expressionReferencePrices,
   compareReferencePrices,
-  publicPricingReferences,
 } from '@/features/pricing/reference'
 import type {
   MarketBillingMode,
-  MarketGroup,
   MarketModel,
   MarketModelType,
+  MarketOffer,
+  MarketPricing,
+  MarketPriceLine,
+  MarketPricingContract,
   ModelMarketCatalog,
+  ModelMarketResponse,
   ModelMarketSort,
   ModelMarketViewMode,
 } from '@/types/modelMarket'
+
+export const PLATFORM_VENDOR = '__platform__'
+
+/** Display validated decimal ratios without converting to floating point. */
+export function formatMarketRatio(value: string): string {
+  const [integer, fraction = ''] = value.split('.')
+  return `${integer}.${fraction.replace(/0+$/, '') || '0'}×`
+}
 
 export function isAudioEndpoint(endpoint: string): boolean {
   return endpoint === 'realtime' || endpoint.includes('audio')
 }
 
-export function normalizeMarketView(value: string): ModelMarketViewMode {
+export function normalizeMarketView(value: unknown): ModelMarketViewMode {
   return value === 'channels' || value === 'comparison' ? value : 'models'
 }
 
-export function marketBillingMode(pricing: CatalogModel): MarketBillingMode {
-  if (pricing.billing_mode === 'unconfigured') return 'unconfigured'
-  if (pricing.billing_mode === 'tiered_expr') return 'dynamic'
-  return pricing.quota_type === 1 ? 'per_call' : 'token'
+function modelType(endpoints: string[]): MarketModelType {
+  if (endpoints.includes('image-generation')) return 'image'
+  if (endpoints.includes('embeddings')) return 'embedding'
+  if (endpoints.includes('jina-rerank')) return 'rerank'
+  if (endpoints.includes('openai-video')) return 'video'
+  if (endpoints.some(isAudioEndpoint)) return 'audio'
+  return 'chat'
 }
 
-function endpointTypes(endpoints: MarketModel['endpoints']): MarketModelType[] {
-  const types = new Set<MarketModelType>()
-  for (const endpoint of endpoints) {
-    const path = endpoint.path
-    if (endpoint.type === 'image-generation' || path.includes('/images/'))
-      types.add('image')
-    else if (endpoint.type === 'openai-video' || path.includes('/videos'))
-      types.add('video')
-    else if (endpoint.type === 'embeddings' || path.includes('/embeddings'))
-      types.add('embedding')
-    else if (endpoint.type === 'jina-rerank' || path.includes('/rerank'))
-      types.add('rerank')
-    else if (path.includes('/audio/')) types.add('audio')
-    else if (
-      [
-        'openai',
-        'openai-response',
-        'openai-response-compact',
-        'anthropic',
-        'gemini',
-      ].includes(endpoint.type)
-    )
-      types.add('chat')
+export function projectMarketPricing(
+  raw: MarketPricingContract,
+  ratio = '1'
+): MarketPricing {
+  const values = raw.values
+  const nativeAudio =
+    !raw.plugin_key &&
+    raw.supported_endpoint_types.length > 0 &&
+    raw.supported_endpoint_types.every(isAudioEndpoint)
+  const billingMode: MarketBillingMode = !raw.configured
+    ? 'unconfigured'
+    : values['billing_setting.billing_mode'] === 'tiered_expr'
+      ? 'dynamic'
+      : values.ModelPrice !== undefined
+        ? 'per_call'
+        : 'token'
+  const price: CatalogPricingInput = {
+    quota_type: billingMode === 'per_call' ? 1 : 0,
+    billing_mode:
+      billingMode === 'dynamic'
+        ? 'tiered_expr'
+        : billingMode === 'unconfigured'
+          ? 'unconfigured'
+          : 'ratio',
+    model_price: values.ModelPrice,
+    model_ratio: values.ModelRatio,
+    completion_ratio: values.CompletionRatio,
+    cache_ratio: values.CacheRatio,
+    create_cache_ratio: values.CreateCacheRatio,
+    image_ratio: values.ImageRatio,
+    audio_ratio: values.AudioRatio ?? (nativeAudio ? '1' : undefined),
+    audio_completion_ratio: values.AudioCompletionRatio,
   }
-  return types.size ? [...types] : ['other']
+  const priceLines: MarketPriceLine[] = catalogPrices(price, 'M')
+    .filter(
+      (line) =>
+        !nativeAudio || !['cacheRead', 'cacheWrite', 'image'].includes(line.key)
+    )
+    .map((line) => ({
+      key: line.key,
+      amount: multiplyDecimal(line.value, ratio),
+      unit:
+        line.unit === 'per_call'
+          ? raw.billing_details?.image_count === true
+            ? 'per_image'
+            : 'per_call'
+          : 'per_million_tokens',
+    }))
+  // A generic cache-write fallback is not a configured charge.
+  if (raw.cache_write_mode === 'none') {
+    const index = priceLines.findIndex((line) => line.key === 'cacheWrite')
+    if (index >= 0) priceLines.splice(index, 1)
+  }
+  if (raw.cache_write_mode === 'claude_ttl') {
+    const write = priceLines.find((line) => line.key === 'cacheWrite')
+    if (write)
+      priceLines.push({
+        ...write,
+        key: 'cacheWrite1h',
+        amount: multiplyDecimal(write.amount, '1.6'),
+      })
+  }
+  return {
+    id: raw.id,
+    version: raw.version,
+    billingMode,
+    priceLines,
+    referencePrices:
+      billingMode === 'dynamic'
+        ? expressionReferencePrices(
+            String(values['billing_setting.billing_expr'] ?? ''),
+            Boolean(
+              raw.plugin_key ||
+              raw.usage_reference ||
+              Object.keys(raw.usage_schema ?? {}).length
+            ),
+            raw.usage_reference,
+            ratio,
+            raw.plugin_name
+          )
+        : priceLines.map((line) => ({
+            ...line,
+            source: 'configured' as const,
+          })),
+    expression:
+      billingMode === 'dynamic'
+        ? String(values['billing_setting.billing_expr'] ?? '')
+        : '',
+    pluginKey: raw.plugin_key ?? '',
+    pluginName: raw.plugin_name ?? '',
+    endpointTypes: raw.supported_endpoint_types,
+    usageSchema: raw.usage_schema,
+    cacheWriteMode: raw.cache_write_mode,
+    billingDetails: raw.billing_details,
+  }
 }
 
 export function buildModelMarketCatalog(
-  pricing: PricingCatalog,
-  groups: MarketGroup[]
+  response: ModelMarketResponse
 ): ModelMarketCatalog {
-  const allowed = new Set(groups.flatMap((group) => group.models))
-  const models = pricing.models
-    .filter((model) => allowed.has(model.model_name))
-    .map((model): MarketModel => {
-      const endpoints = model.supported_endpoint_types.map((type) => ({
-        type,
-        path: pricing.endpoints[type]?.path ?? '',
-        method: pricing.endpoints[type]?.method ?? '',
-      }))
+  const channels = new Map(
+    response.channels.map((channel) => [channel.id, channel])
+  )
+  const byModel = new Map<string, typeof response.offers>()
+  for (const offer of response.offers) {
+    const offers = byModel.get(offer.model_id) ?? []
+    offers.push(offer)
+    byModel.set(offer.model_id, offers)
+  }
+  const models = response.models.map((model): MarketModel => {
+    const baselines = model.baselines.map((price) =>
+      projectMarketPricing(price)
+    )
+    const prices = new Map(model.baselines.map((price) => [price.id, price]))
+    const byPrice = new Map(baselines.map((price) => [price.id, price]))
+    const offers = (byModel.get(model.id) ?? []).map((offer): MarketOffer => {
+      const channel = channels.get(offer.channel_id)!
+      const raw = prices.get(offer.pricing_id)!
       return {
-        id: model.model_name,
-        name: model.model_name,
-        description: model.description,
-        vendor:
-          pricing.vendors.find((vendor) => vendor.id === model.vendor_id)
-            ?.name || model.owner_by,
-        tags: model.tags
-          .split(/[,，]/)
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-        types: endpointTypes(endpoints),
-        pricing: model,
-        billingMode: marketBillingMode(model),
-        groups: groups.filter((group) =>
-          group.models.includes(model.model_name)
-        ),
-        endpoints,
+        id: offer.id,
+        modelId: model.id,
+        channelId: channel.id,
+        channelName: channel.name,
+        ratio: channel.ratio,
+        pricing: projectMarketPricing(raw, channel.ratio),
+        baseline: byPrice.get(raw.id)!,
+        endpointTypes: offer.supported_endpoint_types,
       }
     })
-  const priced = new Set(models.map((model) => model.id))
-  return {
-    models,
-    groups,
-    missingPrices: [...allowed].filter((name) => !priced.has(name)),
-    issues: pricing.issues.filter(
-      (issue) => issue.model_name !== null && allowed.has(issue.model_name)
-    ),
-  }
+    return {
+      id: model.id,
+      name: model.id,
+      vendor: model.vendor || PLATFORM_VENDOR,
+      icon: model.icon,
+      description: model.description,
+      type: modelType(model.supported_endpoint_types),
+      capabilities: model.capabilities,
+      endpointTypes: model.supported_endpoint_types,
+      endpoints: model.supported_endpoint_types.map((type) => ({
+        type,
+        path:
+          response.supported_endpoints[type]?.path.replaceAll(
+            '{model}',
+            model.id
+          ) ?? '',
+        method: response.supported_endpoints[type]?.method ?? '',
+      })),
+      baselines,
+      offers,
+    }
+  })
+  return { models, channels: response.channels, telemetry: response.telemetry }
 }
 
-export function compareMarketModels(
-  a: MarketModel,
-  b: MarketModel,
-  sort: ModelMarketSort,
-  groupName: string
+export function compareMarketOffers(
+  a: MarketOffer,
+  b: MarketOffer,
+  sort: ModelMarketSort
 ): number {
-  if (sort === 'default') return 0
-  if (sort === 'name') return a.name.localeCompare(b.name)
-  const references = (model: MarketModel) => {
-    const group = model.groups.find((item) => item.name === groupName)
-    // Auto selection does not have a single price; no invented multiplier or quote.
-    if (groupName && (!group || group.ratio === 'auto')) return []
-    return publicPricingReferences(
-      model.pricing,
-      group?.ratio as number | undefined
+  if (sort !== 'default' && sort !== 'name') {
+    const audio = (offer: MarketOffer) =>
+      offer.endpointTypes.length > 0 &&
+      offer.endpointTypes.every(isAudioEndpoint)
+    return compareReferencePrices(
+      a.pricing.referencePrices ?? [],
+      b.pricing.referencePrices ?? [],
+      sort,
+      audio(a),
+      audio(b)
     )
   }
+  // API order follows the same configured channel priority as model discovery.
   return (
-    compareReferencePrices(
-      references(a),
-      references(b),
-      sort,
-      a.types.includes('audio'),
-      b.types.includes('audio')
-    ) || a.name.localeCompare(b.name)
+    Number(a.pricing.billingMode === 'unconfigured') -
+    Number(b.pricing.billingMode === 'unconfigured')
   )
 }

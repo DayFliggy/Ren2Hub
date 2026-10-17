@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Upstream components/marketplace-install-dialog.tsx. The browser fetches the
 // source, hashes it and blocks on a sha256 mismatch; the server re-hashes on
-// upload. Local static declarations are informational; replacement and
-// downgrade installs still require explicit confirmation.
+// upload. Ren2Hub previews metadata on the server and asks for confirmation
+// before a diverged or downgrade install.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AlertTriangle, Download } from 'lucide-vue-next'
@@ -18,6 +18,7 @@ import {
   activateTaskPlugin,
   getTaskPlugin,
   installMarketplacePlugin,
+  previewTaskPlugin,
 } from '../api'
 import {
   DEFAULT_MARKETPLACE_INDEX_URL,
@@ -27,7 +28,10 @@ import {
   type InstallState,
 } from '../lib/marketplace'
 import { fetchPluginIconDataUri } from '../lib/plugin-icon-file'
-import { parsePluginMetaPreview } from '../lib/plugin-meta-preview'
+import {
+  previewFromServer,
+  unavailablePreview,
+} from '../lib/plugin-meta-preview'
 import {
   computeSourceSha256,
   fetchPluginSourceText,
@@ -75,6 +79,7 @@ const fetched = ref<{
   icon: string | null
 } | null>(null)
 const preview = ref<PluginMetaPreview | undefined>()
+const previewMeta = ref<Record<string, unknown> | null>(null)
 const installedSource = ref<string | null>(null)
 const installedError = ref('')
 const installing = ref(false)
@@ -91,6 +96,7 @@ async function loadSource() {
   controller = request
   fetched.value = null
   preview.value = undefined
+  previewMeta.value = null
   fetchError.value = ''
   const version = entry.value
   if (!version) return
@@ -121,7 +127,15 @@ async function loadSource() {
       : null
     if (request.signal.aborted) return
     fetched.value = { text, digest, icon }
-    preview.value = parsePluginMetaPreview(text)
+    try {
+      const serverPreview = await previewTaskPlugin(text, request.signal)
+      previewMeta.value = serverPreview.meta
+      preview.value = previewFromServer(serverPreview)
+    } catch {
+      // A source the preview cannot parse shows as unreadable; the gateway
+      // still validates it on install.
+      if (!request.signal.aborted) preview.value = unavailablePreview()
+    }
   } catch (error) {
     if (request.signal.aborted) return
     fetchError.value =
@@ -165,6 +179,10 @@ const validationError = computed(() => {
   const version = entry.value
   if (!version) return ''
   if ((version.minApiVersion ?? 1) > 1) return t('taskPlugins.unsupported')
+  const meta = previewMeta.value
+  if (!meta) return t('taskPlugins.identityMismatch')
+  if (meta.key !== plugin.key || meta.version !== selectedVersion.value)
+    return t('taskPlugins.identityMismatch')
   return ''
 })
 const canInstall = computed(

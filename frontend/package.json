@@ -14,11 +14,9 @@
     "format:check": "prettier . --check",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:visual": "playwright test",
-    "test:visual:live": "playwright test --config playwright.live.config.ts"
+    "test:visual": "playwright test"
   },
   "dependencies": {
-    "@lezer/javascript": "1.5.4",
     "@vueuse/core": "^14.3.0",
     "axios": "1.20.0",
     "echarts": "^6.1.0",

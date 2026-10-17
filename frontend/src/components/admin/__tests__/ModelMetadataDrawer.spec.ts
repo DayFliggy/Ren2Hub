@@ -78,6 +78,36 @@ async function clickText(wrapper: ReturnType<typeof setup>, text: string) {
 }
 
 describe('model metadata drawer', () => {
+  it('preserves explicit capability values when saving unrelated metadata', async () => {
+    const metadata = await mocks.model()
+    mocks.model.mockResolvedValue({
+      ...metadata,
+      capabilities: {
+        reasoning_efforts: [],
+        input_modalities: null,
+        output_modalities: ['text'],
+        context_limit: 32000,
+        output_limit: null,
+        tool_call: false,
+        source: 'administrator',
+        updated_at: 10,
+      },
+    })
+    const wrapper = setup(42)
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capabilities: expect.objectContaining({
+          reasoning_efforts: [],
+          input_modalities: null,
+          tool_call: false,
+        }),
+      })
+    )
+    wrapper.unmount()
+  })
   it('protects uncommitted tag text from browser unload and releases the listener', async () => {
     const wrapper = setup(42)
     await flushPromises()

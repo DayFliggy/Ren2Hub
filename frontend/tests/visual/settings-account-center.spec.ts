@@ -93,26 +93,14 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await page.goto('/profile', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       await expect(
-        page.getByRole('heading', { name: 'Native Root', exact: true })
+        page.getByRole('heading', { name: '会员中心', exact: true })
       ).toBeVisible()
       await expect(
         page
           .getByRole('navigation', { name: '面包屑导航' })
           .getByText('会员中心', { exact: true })
       ).toBeVisible()
-      const profileHero = page.locator('[data-title-side="right"]')
-      await expect(
-        profileHero.getByRole('heading', { name: '会员中心', exact: true })
-      ).toBeVisible()
-      if (viewport.width < 768) {
-        const titleBox = await profileHero.getByRole('heading').boundingBox()
-        const subtitleBox = await profileHero.locator('p').boundingBox()
-        expect(titleBox).not.toBeNull()
-        expect(subtitleBox).not.toBeNull()
-        expect(subtitleBox!.y).toBeGreaterThanOrEqual(
-          titleBox!.y + titleBox!.height
-        )
-      }
+      await expect(page.locator('[data-title-side="right"]')).toHaveCount(1)
       const userMenuTrigger = page.getByRole('button', {
         name: '个人中心',
         exact: true,
@@ -130,21 +118,19 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       ).toBeVisible()
       await expect(
         page.getByRole('heading', { name: '账号设置', exact: true })
-      ).toHaveCount(1)
-      // Native account data exposes quota/usage/request counts; the retired
-      // aggregate join-date/member-duration projection is not synthesized.
-      await expect(
-        page.getByTestId('profile-stat-balance').locator('strong')
-      ).toHaveText('$10.00')
-      await expect(
-        page.getByTestId('profile-stat-usage').locator('strong')
-      ).toHaveText('$2.00')
-      await expect(
-        page.getByTestId('profile-stat-requests').locator('strong')
-      ).toHaveText('4')
-      await expect(page.getByTestId('profile-join-date')).toHaveText('暂不可用')
+      ).toBeVisible()
+      await expect(page.getByTestId('profile-join-date')).toHaveText(
+        '2026-06-20'
+      )
       await expect(page.getByTestId('profile-member-duration')).toHaveText(
-        '暂不可用'
+        '37 天'
+      )
+      await expect(page.getByTestId('profile-total-calls')).toHaveText('32.1K')
+      await expect(page.getByTestId('profile-account-status')).toContainText(
+        '账户状态 · 正常'
+      )
+      await expect(page.getByTestId('profile-stat-requests')).toContainText(
+        '32.1K'
       )
       await expect(page.locator('[data-security-entry]')).toBeVisible()
       await expect(

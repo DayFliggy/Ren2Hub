@@ -1,11 +1,5 @@
 export default {
   common: {
-    sort: 'Sort',
-    enable: 'Enable',
-    disable: 'Disable',
-    default: 'Default',
-    invalidInput: 'Check the input values.',
-
     search: 'Search',
     all: 'All',
     actions: 'Actions',

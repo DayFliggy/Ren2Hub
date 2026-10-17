@@ -12,13 +12,15 @@ const token: TokenSummary = {
   type: 'auto',
   status: 1,
   used_quota: '250',
-  remain_quota: 750,
-  group: 'default',
-  auto_groups: [],
-  cross_group_retry: false,
+  available_quota: '750',
+  reserved_quota: '0',
+  quota_version: 0,
   unlimited: false,
   model_limits: [],
   ip_limits: [],
+  rate_limit: 0,
+  load_balance: true,
+  channels: [],
   expired_time: -1,
   created_time: 1_722_000_000,
 }
@@ -32,7 +34,6 @@ async function mountList() {
     toggleSelected: vi.fn(),
     toggleStatus: vi.fn(),
     viewKey: vi.fn(),
-    clientConfig: vi.fn(),
     editKey: vi.fn(),
     deleteKey: vi.fn(),
   }
@@ -70,7 +71,6 @@ describe('KeyMobileList', () => {
     await row.get('input[type="checkbox"]').trigger('change')
     await row.get('header button[aria-label="启停"]').trigger('click')
     await row.get('button[aria-label="查看完整密钥"]').trigger('click')
-    await row.get('button[aria-label="客户端配置"]').trigger('click')
     await row.get('button[aria-label="编辑令牌"]').trigger('click')
     await row.get('button[aria-label="删除"]').trigger('click')
 
@@ -78,7 +78,6 @@ describe('KeyMobileList', () => {
     expect(actions.toggleSelected).toHaveBeenCalledWith(token)
     expect(actions.toggleStatus).toHaveBeenCalledWith(token)
     expect(actions.viewKey).toHaveBeenCalledWith(token)
-    expect(actions.clientConfig).toHaveBeenCalledWith(token)
     expect(actions.editKey).toHaveBeenCalledWith(token)
     expect(actions.deleteKey).toHaveBeenCalledWith(token)
   })

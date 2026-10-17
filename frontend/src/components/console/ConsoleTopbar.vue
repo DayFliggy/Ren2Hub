@@ -28,9 +28,7 @@ const searchShortcut = isApplePlatform ? '⌘K' : 'Ctrl+K'
 
 const mobileItems = computed(() =>
   getVisibleTopNavItems({
-    checkinEnabled: app.checkinEnabled,
     isAdmin: auth.isAdmin,
-    isRoot: auth.isRoot,
     surface: 'mobile',
     featureStatus: (feature) => app.featureStatus(feature),
   })

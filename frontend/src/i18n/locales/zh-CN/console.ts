@@ -575,9 +575,6 @@ export default {
   },
 
   keys: {
-    statusExpired: '已过期',
-    statusExhausted: '额度耗尽',
-    crossGroupRetry: '跨分组重试',
     title: 'API Key',
     breadcrumb: ['控制台', 'API Key'],
     createKey: '创建令牌',
@@ -845,8 +842,6 @@ export default {
   },
 
   models: {
-    autoPriceHint:
-      '自动模式展示基准价格；最终价格使用上游自动路由选中分组的倍率。',
     viewToggle: '视图切换',
     title: '模型广场',
     breadcrumb: ['控制台', '模型'],
@@ -1092,9 +1087,6 @@ export default {
   },
 
   channels: {
-    permissionDenied: '没有此渠道操作权限。',
-    group: '路由分组',
-    groupHint: '逗号分隔；请求只能使用其授权分组内的渠道。',
     providerStatus: '提供商状态',
     providerVersion: '版本',
     contextWindow: '上下文窗口',
@@ -1182,7 +1174,7 @@ export default {
     refreshList: '刷新列表',
     advancedLegacy: '高级管理（旧版）',
     createChannel: '新建渠道',
-    searchPlaceholder: '搜索名称、ID 或上游地址',
+    searchPlaceholder: '搜索名称、ID 或供应商',
     typeFilter: '渠道类型',
     statusFilter: '渠道状态',
     sortLabel: '排序字段',
@@ -1234,7 +1226,7 @@ export default {
     testSupplier: '测试 {supplier} Lab 分组的渠道响应',
     clearSupplier: '清空 {supplier} Lab 分组渠道',
     batchBalancePage: '同步本页上游',
-    batchBalanceLabel: '同步当前显示的 {count} 条渠道上游额度',
+    batchBalanceLabel: '同步当前显示的 {count} 条渠道上游额度与倍率',
     batchProgress: '{processed}/{total}',
     batchProgressLabel: '正在{action}：{processed}/{total}',
     batchBalanceAction: '同步上游',
@@ -1402,7 +1394,6 @@ export default {
   },
 
   users: {
-    permissions: '权限',
     bindingsTitle: '管理账户绑定',
     bindingsEmpty: '没有已绑定的登录提供商或邮箱。',
     unbind: '解绑',
@@ -1614,7 +1605,6 @@ export default {
   },
 
   orders: {
-    title: '充值订单',
     gmpay: {
       title: 'GMPay 订单证据',
       loading: '正在读取网关证据…',
@@ -1755,7 +1745,7 @@ export default {
     groupPlaceholder: '搜索或输入历史分组',
     title: '使用日志',
     breadcrumb: ['控制台', '日志'],
-    keywordPlaceholder: '按完整请求 ID 筛选',
+    keywordPlaceholder: '按模型名搜索…',
     typeLabel: '类型',
     typeConsume: '消费',
     typeTopup: '充值',
@@ -1888,7 +1878,7 @@ export default {
 
   auditLogs: {
     breadcrumb: '审计日志',
-    keywordPlaceholder: '按完整请求 ID 筛选',
+    keywordPlaceholder: '搜索账号、操作或 IP…',
     categoryLabel: '事件类别',
     scopeLabel: '查看范围',
     resultLabel: '结果',
@@ -2819,10 +2809,10 @@ export default {
       quotaDescription: '注册、邀请、充值入口和货币展示规则。',
       payment: '通用支付与其他网关',
       paymentDescription:
-        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户配置在各自页面；密钥留空保留现有值。',
+        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户与结算配置在各自页面；密钥留空保留现有值。',
       epay: 'EPay 易支付',
       epayDescription:
-        '通过 EPay 购买 USD 额度并以 CNY 付款。创建新单和处理支付回调均需完成支付合规确认、填写完整商户凭据，并配置至少一种支付方式。',
+        '通过 EPay 购买 USD 额度并以 CNY 付款。凭据齐全且支付方式非空时开放新单；清空支付方式只停止新单，已有订单由结算开关控制。',
       waffoPancake: 'Waffo Pancake',
       waffoPancakeDescription:
         '验证凭据、选择店铺与产品后，通过网关专用接口原子保存。',
@@ -2973,11 +2963,17 @@ export default {
       merchantId: '商户 ID',
       merchantSecret: '商户密钥',
       secretHint: '仅在更新时填写；留空保留现有密钥，保存后不回显。',
+      epaySettlement: '启用易支付结算',
+      epaySettlementHint:
+        '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。',
       epayPrice: '每 USD 额度的支付单价（CNY）',
       minimumUsd: '最低购买额度（USD）',
       epayMethods: 'EPay 支付方式',
       epayMethodsHint:
-        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停用 EPay 新单及支付回调。',
+        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停止创建 EPay 新单。',
+      gmpaySettlement: '启用虚拟币结算',
+      gmpaySettlementHint:
+        '允许虚拟币网关回调确认已有订单并入账。回调可核验代币与法币金额，但无法证明最终付款网络。异常通知是否重试取决于网关配置，也可经管理员复查后补单。关闭后暂停回调结算，与易支付与新单支付方式独立控制。',
       checkinEnabled: '启用每日签到',
       checkinMinQuota: '最小奖励',
       checkinMaxQuota: '最大奖励',
@@ -3096,7 +3092,6 @@ export default {
       diskThreshold: '磁盘阈值（%）',
     },
     options: {
-      cny: 'CNY',
       guest: '访客用户',
       user: '普通用户',
       admin: '管理员',
@@ -3191,8 +3186,6 @@ export default {
       cleanupLogsByDays: '将删除 {count} 天前的日志文件。',
     },
     waffoPancake: {
-      orphanStore:
-        '店铺 {id} 已创建，但产品创建失败。请先检查网关目录，避免重复创建店铺。',
       label: 'Waffo Pancake 配置',
       merchantId: '商户 ID',
       privateKey: '私钥',
@@ -3235,10 +3228,6 @@ export default {
     loadFailed: '系统设置读取失败。重新读取成功前不能编辑或保存。',
     retryLoad: '重新读取设置',
     gmpayPanel: {
-      enableNewOrders: '开放新订单',
-      enableNewOrdersHint:
-        '关闭后停止创建 GMPay 新订单。已有订单仍会使用下单时保存的商户凭据核验付款通知，核验通过后入账。',
-      selectedAssets: '启用的资产（JSON）',
       title: 'GMPay 虚拟币支付',
       description: '选择向用户开放的代币与网络，然后保存网关配置。',
       address: '网关地址',
@@ -3268,6 +3257,8 @@ export default {
       addressRequired: '请先填写网关地址。',
       credentialsRequired: '请填写网关地址与商户 ID。',
       secretRequired: '请填写商户密钥。',
+      noSelectedAssets:
+        '不选择资产并保存会停止创建新的虚拟币订单；已启用虚拟币结算时，已有订单仍可入账。',
       invalidAmounts: '支付单价必须大于零，最低购买额度必须为正整数 USD。',
       invalidGroupRatios: '请输入 JSON 对象，用户组倍率必须为正数。',
       invalidCatalog: '网关返回的资产目录格式无效。',
@@ -3281,10 +3272,6 @@ export default {
     title: '系统设置',
     breadcrumb: ['管理员', '系统设置'],
     saved: '已保存',
-    partialSaveFailed:
-      '已保存 {count} 项设置，随后发生错误：{error}。剩余更改已保留，可重试；已保存的设置没有回滚。',
-    oidcDiscoveryInvalid:
-      'OIDC 发现结果必须包含有效的 HTTP 或 HTTPS 授权、令牌和用户信息端点。本次没有保存任何设置。',
     saveFailed: '保存失败',
     loading: '加载中…',
     saveChanges: '保存更改',

@@ -246,9 +246,9 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('discord.enabled', 'discordEnabled'),
           text('discord.client_id', 'discordClientId'),
           secret('discord.client_secret', 'discordClientSecret'),
+          toggle('TelegramOAuthEnabled', 'telegramEnabled'),
           text('telegram.client_id', 'telegramClientId'),
           secret('telegram.client_secret', 'telegramClientSecret'),
-          toggle('TelegramOAuthEnabled', 'telegramEnabled'),
           secret('TelegramBotToken', 'telegramBotToken'),
           text('TelegramBotName', 'telegramBotName'),
           toggle('WeChatAuthEnabled', 'wechatEnabled'),
@@ -334,12 +334,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           select(
             'general_setting.quota_display_type',
             'quotaDisplayType',
-            'USD',
+            'quota',
             [
-              option('CNY', 'cny'),
+              option('quota', 'quota'),
               option('USD', 'usd'),
               option('TOKENS', 'tokens'),
-              option('CUSTOM', 'customCurrency'),
+              option('custom', 'customCurrency'),
             ]
           ),
           text(
@@ -407,6 +407,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('PayAddress', 'epayAddress'),
           text('EpayId', 'merchantId'),
           secret('EpayKey', 'merchantSecret', 'secretHint'),
+          toggle(
+            'payment_setting.epay_settlement_enabled',
+            'epaySettlement',
+            true,
+            'epaySettlementHint'
+          ),
           { ...number('Price', 'epayPrice', 7.3), min: 0 },
           {
             ...number('MinTopUp', 'minimumUsd', 1),
@@ -421,7 +427,14 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         id: 'gmpay',
         titleKey: 'systemSettings.gmpayPanel.title',
         descriptionKey: 'systemSettings.gmpayPanel.description',
-        fields: [],
+        fields: [
+          toggle(
+            'payment_setting.gmpay_settlement_enabled',
+            'gmpaySettlement',
+            true,
+            'gmpaySettlementHint'
+          ),
+        ],
         managedKeys: [
           'GmpayPayAddress',
           'GmpayId',

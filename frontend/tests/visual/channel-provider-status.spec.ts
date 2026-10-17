@@ -7,7 +7,7 @@ for (const theme of ['light', 'dark'] as const)
       await configureStablePage(page, { theme })
       const type = width === 390 ? 63 : 62
       const provider = type === 62 ? 'vllm' : 'sglang'
-      await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) =>
+      await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) =>
         route.fulfill({
           json: {
             success: true,
@@ -16,13 +16,16 @@ for (const theme of ['light', 'dark'] as const)
                 {
                   id: 101,
                   name: 'Provider Fixture',
-                  group: 'default',
+                  supplier: 'Custom',
                   type,
                   status: 1,
                   priority: 0,
                   weight: 1,
+                  capacity_used: 0,
+                  capacity_total: 20,
+                  channel_ratio: '1',
 
-                  used_quota: 0,
+                  used_quota: '0',
                   balance: 0,
                   response_time: 0,
                   test_time: 0,
@@ -33,6 +36,28 @@ for (const theme of ['light', 'dark'] as const)
               page: 1,
               page_size: 20,
               type_counts: { [type]: 1 },
+            },
+          },
+        })
+      )
+      await page.route('**/api/gateway/channels/101/credentials', (route) =>
+        route.fulfill({ json: { success: true, data: [] } })
+      )
+      await page.route('**/api/gateway/runtime/channels/101', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              channel_id: 101,
+              in_flight: 0,
+              queued: 0,
+              capacity: 20,
+              rate_status: 'unavailable',
+              rate: null,
+              config_version: 1,
+              revision: 1,
+              started_at: 1785114000,
+              draining: false,
             },
           },
         })
@@ -62,9 +87,9 @@ for (const theme of ['light', 'dark'] as const)
         })
       )
       await page.goto('/channels')
-      await page.locator('[aria-label="提供商状态"]:visible').first().click()
+      await page.locator('[aria-label="渠道运行状态"]:visible').first().click()
       const dialog = page.getByRole('dialog', {
-        name: '提供商状态',
+        name: 'Provider Fixture',
         exact: true,
       })
       await expect(dialog.getByText(/fixture-1.0/)).toBeVisible()

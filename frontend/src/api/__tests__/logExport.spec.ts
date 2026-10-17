@@ -8,10 +8,10 @@ const row = {
   token_name: 'fixture',
   model_name: 'model',
   channel_name: 'channel',
-  quota: 9007199254740991,
+  quota: '9007199254740993',
   prompt_tokens: 1,
   completion_tokens: 2,
-  use_time: 1,
+  use_time: 1000,
   is_stream: true,
   content: '=untrusted',
   created_at: 1700000000,
@@ -24,7 +24,7 @@ afterEach(() => vi.restoreAllMocks())
 describe('usage log export', () => {
   it('requires a successful terminal record matching the complete row count', () => {
     expect(parseLogExport(stream)[0]).toMatchObject({
-      quota: '9007199254740991',
+      quota: '9007199254740993',
       content: '=untrusted',
     })
     expect(parseLogExport('{"success":true,"data":{"count":0}}')).toEqual([])

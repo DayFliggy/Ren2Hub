@@ -1,19 +1,37 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { MoreHorizontal, Trash2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import { systemManagementApi, type SystemTask } from '@/api/systemManagement'
+import {
+  systemManagementApi,
+  type SystemTask,
+  type SystemTaskHealth,
+} from '@/api/systemManagement'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import SystemTaskSection from '@/components/admin/SystemTaskSection.vue'
 import { useSystemManagement } from '@/composables/useSystemManagement'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import { systemManagementMessages } from '@/i18n/systemManagement'
-import { formatTimestamp } from '@/utils/opsFormat'
+import {
+  durationParts,
+  formatRelative,
+  formatTimestamp,
+} from '@/utils/opsFormat'
+import OpsCard from './OpsCard.vue'
 import '@/components/admin/admin.css'
+
+const HEALTH_TONES = {
+  ok: 'success',
+  failing: 'danger',
+  stale: 'warning',
+  idle: 'neutral',
+  running: 'info',
+  inactive: 'neutral',
+} as const satisfies Record<SystemTaskHealth, string>
 
 // One local composer per component: Vue I18n reuses the first local scope.
 const { t, te, locale } = useI18n({
@@ -27,6 +45,7 @@ const { t, te, locale } = useI18n({
   },
 })
 const {
+  summary,
   active,
   history,
   activeTasks,
@@ -47,7 +66,10 @@ const cleanupDate = (stamp: number) =>
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(stamp * 1000)
-const taskTypesId = useId()
+const interval = (seconds: number) =>
+  durationParts(seconds)
+    .map((part) => t(`ops.duration.${part.unit}`, { n: part.amount }))
+    .join(' ')
 
 const result = ref('')
 const taskDetail = ref<SystemTask | null>(null)
@@ -136,7 +158,7 @@ async function cleanLogs() {
     result.value = t('cleanupCreated', { id: task.task_id })
     logTarget.value = null
     logDialog.value = false
-    await Promise.all([active.refresh(), history.refresh()])
+    await Promise.all([active.refresh(), history.refresh(), summary.refresh()])
   } catch (cause) {
     if (!disposed)
       logError.value = cause instanceof Error ? cause.message : String(cause)
@@ -147,8 +169,74 @@ async function cleanLogs() {
 </script>
 
 <template>
-  <ConsoleCard :title="t('ops.tasks.title')" data-ops-section="tasks">
+  <OpsCard
+    :title="t('ops.tasks.title')"
+    :scope="t('ops.rootOnly')"
+    :loading="summary.loading.value"
+    :loaded="summary.data.value !== null"
+    :error="summary.error.value"
+    :updated-at="summary.updatedAt.value"
+    data-ops-section="tasks"
+    @retry="summary.refresh"
+  >
     <p v-if="result" class="ops-result" role="status">{{ result }}</p>
+    <p v-if="!summary.data.value?.length" class="ops-empty">
+      {{ t('ops.tasks.empty') }}
+    </p>
+    <ul v-else class="ops-task-types" data-ops-task-summary>
+      <li
+        v-for="row in summary.data.value"
+        :key="row.type"
+        :data-task-type="row.type"
+      >
+        <div class="ops-task-head">
+          <strong>{{ typeLabel(row.type) }}</strong>
+          <StatusChip
+            :tone="HEALTH_TONES[row.status]"
+            :title="
+              row.status === 'inactive'
+                ? t('ops.tasks.inactiveHint')
+                : undefined
+            "
+            >{{ t(`ops.tasks.health.${row.status}`) }}</StatusChip
+          >
+        </div>
+        <p class="ops-task-meta">
+          <code>{{ row.type }}</code>
+          <span>{{
+            row.scheduled && row.interval_seconds !== null
+              ? t('ops.tasks.every', {
+                  interval: interval(row.interval_seconds),
+                })
+              : t('ops.tasks.onDemand')
+          }}</span>
+          <span :title="date(row.last_success_at)"
+            >{{ t('ops.tasks.lastSuccess') }}
+            {{
+              formatRelative(
+                row.last_success_at,
+                summary.updatedAt.value,
+                locale
+              )
+            }}</span
+          >
+          <span v-if="row.last_failure_at" :title="date(row.last_failure_at)"
+            >{{ t('ops.tasks.lastFailure') }}
+            {{
+              formatRelative(
+                row.last_failure_at,
+                summary.updatedAt.value,
+                locale
+              )
+            }}</span
+          >
+        </p>
+        <p v-if="row.last_error" class="ops-task-error" :title="row.last_error">
+          {{ row.last_error }}
+        </p>
+      </li>
+    </ul>
+
     <SystemTaskSection
       :title="t('activeTasks')"
       :empty-text="t('emptyActive')"
@@ -205,18 +293,12 @@ async function cleanLogs() {
         <div class="ops-history-filters">
           <label class="admin-field"
             ><span>{{ t('filterType') }}</span
-            ><input
-              v-model="historyType"
-              :disabled="clearingHistory"
-              :list="taskTypesId"
-              maxlength="64"
-              :placeholder="t('allTypes')"
-            />
-            <datalist :id="taskTypesId">
+            ><select v-model="historyType" :disabled="clearingHistory">
+              <option value="">{{ t('allTypes') }}</option>
               <option v-for="type in taskTypes" :key="type" :value="type">
                 {{ typeLabel(type) }}
               </option>
-            </datalist></label
+            </select></label
           >
           <label class="admin-field"
             ><span>{{ t('filterStatus') }}</span
@@ -236,7 +318,7 @@ async function cleanLogs() {
         />
       </template>
     </SystemTaskSection>
-  </ConsoleCard>
+  </OpsCard>
 
   <ConsoleModal
     :open="taskDetail !== null"
@@ -360,63 +442,3 @@ async function cleanLogs() {
     </p>
   </ConfirmDialog>
 </template>
-
-<style scoped>
-.ops-menu {
-  position: relative;
-}
-.ops-menu summary {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  border-radius: 0.5rem;
-  list-style: none;
-}
-.ops-menu summary::-webkit-details-marker {
-  display: none;
-}
-.ops-menu summary:hover {
-  color: var(--text-primary);
-  background: var(--state-hover-layer);
-}
-.ops-menu summary:focus-visible,
-.ops-menu button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-.ops-menu-content {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.375rem);
-  z-index: 20;
-  min-width: 10rem;
-  padding: 0.25rem;
-  background: var(--surface-solid);
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  box-shadow: var(--overlay-shadow);
-}
-.ops-menu-content button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem;
-  color: var(--status-danger-text);
-  font-size: 0.8125rem;
-  text-align: start;
-}
-.ops-menu-content button:hover {
-  background: var(--status-danger-soft);
-}
-@media (min-width: 640px) {
-  .ops-menu summary {
-    width: 2rem;
-    height: 2rem;
-  }
-}
-</style>

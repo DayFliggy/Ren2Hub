@@ -6,13 +6,12 @@ export interface UserInfo {
   email: string
   role: number
   status: number
-  quota: number
-  used_quota: number
-  aff_count?: number
-  aff_quota?: number
-  aff_history_quota?: number
-  aff_code?: string
+  available_quota: string
+  reserved_quota: string
+  used_quota: string
+  quota_version: number
   request_count: number
+  created_at: number
   group?: string
   github_id?: string
   discord_id?: string

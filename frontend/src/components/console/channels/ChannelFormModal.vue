@@ -24,12 +24,15 @@ import { getTaskPluginOptions } from '@/features/task-plugins/api'
 import type { TaskPluginOption } from '@/features/task-plugins/types'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
+import { compareDecimal, isDecimal } from '@/utils/decimal'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
 import AdvancedChannelEditor from './AdvancedChannelEditor.vue'
 import ProviderChannelSettings from './ProviderChannelSettings.vue'
 import FetchedModelsDialog from './FetchedModelsDialog.vue'
@@ -71,6 +74,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
+const app = useAppStore()
 const auth = useAuthStore()
 const saving = ref(false)
 const advancedOpen = ref(false)
@@ -78,7 +82,6 @@ const originalSetting = ref<Record<string, unknown>>({})
 const originalOtherSettings = ref<Record<string, unknown>>({})
 const settingsError = ref('')
 const awsApiType = ref('invoke_model')
-const awsKeyType = ref('ak_sk')
 const vertexKeyType = ref('json')
 const vertexProjectId = ref('')
 const vertexRegion = ref('')
@@ -117,7 +120,11 @@ const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
 const supportsResponsesWebSocket = computed(() =>
   [1, 58, 59, 60].includes(form.type)
 )
-const canBindPlugin = computed(() => auth.hasPermission('task_plugin', 'bind'))
+const canBindPlugin = computed(
+  () =>
+    app.featureStatus('taskPlugins') === 'live' &&
+    auth.hasPermission('task_plugin', 'bind')
+)
 const validAdvancedConfig = computed(() => {
   if (!isAdvancedChannel.value) return true
   try {
@@ -140,7 +147,12 @@ watch(
   () => props.open,
   async (open) => {
     pluginOptionsRequest?.abort()
-    if (!open || !auth.hasPermission('task_plugin', 'bind')) return
+    if (
+      !open ||
+      app.featureStatus('taskPlugins') !== 'live' ||
+      !auth.hasPermission('task_plugin', 'bind')
+    )
+      return
     const request = new AbortController()
     pluginOptionsRequest = request
     pluginError.value = ''
@@ -244,7 +256,8 @@ const form = reactive({
   // Advanced
   priority: 0,
   weight: 0,
-  group: 'default',
+  capacityTotal: 20,
+  channelRatio: '1',
 })
 
 // ── Model mapping ──────────────────────────────────────────────────────────
@@ -308,7 +321,9 @@ const prefillId = ref('')
 const prefillLoading = ref(false)
 const prefillError = ref('')
 let prefillRequest: AbortController | null = null
-const canUsePrefill = computed(() => auth.isAdmin)
+const canUsePrefill = computed(
+  () => auth.isAdmin && app.isFeatureEnabled('admin')
+)
 
 async function loadPrefillGroups() {
   prefillRequest?.abort()
@@ -388,15 +403,8 @@ function applyFetchedModels(models: string[]) {
   ).join(',')
   modelPickerOpen.value = false
 }
-const canFetchUpstream = computed(() =>
-  props.editing !== null
-    ? auth.hasPermission(
-        'channel',
-        isAdvancedChannel.value && canSensitiveWrite.value
-          ? 'sensitive_write'
-          : 'operate'
-      )
-    : canSensitiveWrite.value && form.key.trim().length > 0
+const canFetchUpstream = computed(
+  () => props.editing !== null || form.key.trim().length > 0
 )
 
 /**
@@ -449,13 +457,17 @@ async function copyAllModels() {
 
 // ── Computed helpers ───────────────────────────────────────────────────────
 const selectedTypeMeta = computed(() => adminChannelTypeMeta(form.type))
+const minimumCapacity = computed(() =>
+  Math.max(1, props.editing?.capacity_used ?? 1)
+)
+
 const valid = computed(
   () =>
     !settingsError.value &&
     validAdvancedConfig.value &&
     validOverrides.value &&
     form.name.trim().length > 0 &&
-    (![60, 61, 62, 63].includes(form.type) || form.baseUrl.trim().length > 0) &&
+    (form.type !== 61 || form.baseUrl.trim().length > 0) &&
     (props.editing !== null || form.key.trim().length > 0) &&
     (props.editing !== null || modelTags.value.length > 0) &&
     Number.isSafeInteger(form.type) &&
@@ -468,8 +480,14 @@ const valid = computed(
     Number.isSafeInteger(form.weight) &&
     form.weight >= 0 &&
     form.weight <= 1_000_000 &&
-    form.group.split(',').some((group) => group.trim()) &&
-    form.group.length <= 64
+    Number.isSafeInteger(form.capacityTotal) &&
+    form.capacityTotal >= minimumCapacity.value &&
+    form.capacityTotal <= 1_000_000 &&
+    isDecimal(form.channelRatio) &&
+    form.channelRatio.length <= 64 &&
+    (form.channelRatio.split('.')[1]?.length ?? 0) <= 18 &&
+    compareDecimal(form.channelRatio, '0') > 0 &&
+    compareDecimal(form.channelRatio, '1000') <= 0
 )
 
 // ── Reset on open ──────────────────────────────────────────────────────────
@@ -499,24 +517,20 @@ watch(
       typeof ch?.model_mapping === 'string' ? (ch.model_mapping ?? '') : ''
     form.priority = ch?.priority ?? 0
     form.weight = ch?.weight ?? 0
-    form.group = ch?.group ?? 'default'
+    form.capacityTotal = ch?.capacity_total ?? 20
+    form.channelRatio = ch?.channel_ratio ?? '1'
     settingsError.value = ''
     try {
       const setting = parseChannelObject(ch?.setting)
       originalSetting.value = setting
       originalOtherSettings.value = parseChannelObject(ch?.settings)
       awsApiType.value =
-        typeof originalOtherSettings.value.aws_api_type === 'string' &&
-        originalOtherSettings.value.aws_api_type
-          ? originalOtherSettings.value.aws_api_type
+        typeof setting.aws_api_type === 'string' && setting.aws_api_type
+          ? setting.aws_api_type
           : 'invoke_model'
-      awsKeyType.value =
-        originalOtherSettings.value.aws_key_type === 'api_key'
-          ? 'api_key'
-          : 'ak_sk'
       vertexProjectId.value =
-        typeof originalOtherSettings.value.vertex_project_id === 'string'
-          ? originalOtherSettings.value.vertex_project_id
+        typeof setting.vertex_project_id === 'string'
+          ? setting.vertex_project_id
           : ''
       vertexKeyType.value =
         originalOtherSettings.value.vertex_key_type === 'api_key'
@@ -577,15 +591,12 @@ function close() {
 }
 
 async function submit() {
-  if (
-    !valid.value ||
-    saving.value ||
-    !auth.hasPermission('channel', props.editing ? 'write' : 'sensitive_write')
-  )
-    return
+  if (!valid.value || saving.value) return
   saving.value = true
   try {
     if (modelMappingTab.value === 'visual') syncJsonFromRows()
+    // Group is deliberately absent: creation falls back to the backend
+    // default group, edits preserve the stored value untouched.
     const base: AdminChannelUpdateInput = {
       name: form.name.trim(),
       type: form.type,
@@ -594,18 +605,21 @@ async function submit() {
       model_mapping: form.modelMapping.trim(),
       priority: Number(form.priority),
       weight: Number(form.weight),
-      group: [
-        ...new Set(
-          form.group
-            .split(',')
-            .map((group) => group.trim())
-            .filter(Boolean)
-        ),
-      ].join(','),
+      capacity_total: Number(form.capacityTotal),
+      channel_ratio: form.channelRatio,
     }
     const settings = { ...originalSetting.value }
     if (canSensitiveWrite.value) {
+      if (
+        form.type === 33 &&
+        awsApiType.value !== (settings.aws_api_type || 'invoke_model')
+      )
+        settings.aws_api_type = awsApiType.value
       if (form.type === 41) {
+        const projectId =
+          vertexKeyType.value === 'api_key' ? vertexProjectId.value.trim() : ''
+        if (projectId !== (settings.vertex_project_id ?? ''))
+          settings.vertex_project_id = projectId
         if (vertexRegion.value.trim() !== (props.editing?.other ?? ''))
           base.other = vertexRegion.value.trim()
       }
@@ -649,18 +663,6 @@ async function submit() {
     }
     if (canSensitiveWrite.value) {
       const otherSettings = { ...originalOtherSettings.value }
-      if (form.type === 33) {
-        if (awsApiType.value !== (otherSettings.aws_api_type || 'invoke_model'))
-          otherSettings.aws_api_type = awsApiType.value
-        if (awsKeyType.value !== (otherSettings.aws_key_type || 'ak_sk'))
-          otherSettings.aws_key_type = awsKeyType.value
-      }
-      if (form.type === 41) {
-        const project =
-          vertexKeyType.value === 'api_key' ? vertexProjectId.value.trim() : ''
-        if (project !== (otherSettings.vertex_project_id ?? ''))
-          otherSettings.vertex_project_id = project
-      }
       if (
         form.type === 41 &&
         vertexKeyType.value !== (otherSettings.vertex_key_type || 'json')
@@ -701,9 +703,8 @@ async function submit() {
     // The key rides along only when actually replaced, so admins without
     // ChannelSensitiveWrite can still save routing-level edits.
     const replacementKey = form.key.trim()
-    if (canSensitiveWrite.value && replacementKey) base.key = replacementKey
-    if (canSensitiveWrite.value && replacementKey && existingMultiKey.value)
-      base.key_mode = keyMode.value
+    if (replacementKey) base.key = replacementKey
+    if (replacementKey && existingMultiKey.value) base.key_mode = keyMode.value
     if (await props.save(base)) emit('close')
   } finally {
     saving.value = false
@@ -786,7 +787,6 @@ async function submit() {
                   type="button"
                   class="flex h-10 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
                   :aria-expanded="typeDropdownOpen"
-                  :disabled="editing !== null && !canSensitiveWrite"
                   @click="typeDropdownOpen = !typeDropdownOpen"
                 >
                   <VendorLogo :vendor="selectedTypeMeta.supplier" :size="20" />
@@ -860,17 +860,6 @@ async function submit() {
             </FormField>
           </div>
 
-          <FormField
-            :label="t('channels.group')"
-            :hint="t('channels.groupHint')"
-          >
-            <TextInput
-              v-model="form.group"
-              name="admin-channel-group"
-              :aria-label="t('channels.group')"
-              :disabled="saving"
-            />
-          </FormField>
           <!-- Enabled toggle (create only; existing channels toggle status from the table) -->
           <div
             v-if="editing === null"
@@ -911,7 +900,6 @@ async function submit() {
         <div class="channel-form-section-body">
           <ProviderChannelSettings
             v-model:aws-api-type="awsApiType"
-            v-model:aws-key-type="awsKeyType"
             v-model:vertex-key-type="vertexKeyType"
             v-model:vertex-project-id="vertexProjectId"
             v-model:vertex-region="vertexRegion"
@@ -934,7 +922,6 @@ async function submit() {
             <TextInput
               v-model="form.baseUrl"
               name="admin-channel-base-url"
-              :disabled="!canSensitiveWrite"
               :placeholder="
                 form.type === 61
                   ? t('channels.apiAddressRequiredPlaceholder')
@@ -1052,7 +1039,6 @@ async function submit() {
                   v-model="form.key"
                   type="password"
                   name="admin-channel-key"
-                  :disabled="!canSensitiveWrite"
                   :placeholder="t('channels.apiKeyPlaceholder')"
                   autocomplete="off"
                 />
@@ -1061,7 +1047,6 @@ async function submit() {
                 <textarea
                   v-model="form.key"
                   name="admin-channel-key-multi"
-                  :disabled="!canSensitiveWrite"
                   rows="4"
                   class="channel-form-textarea focus-ring"
                   :placeholder="t('channels.apiKeyPlaceholder')"
@@ -1517,11 +1502,51 @@ async function submit() {
                 class="channel-form-number focus-ring"
               />
             </FormField>
+            <FormField
+              :label="t('channels.capacityTotal')"
+              :hint="t('channels.capacityTotalHint')"
+            >
+              <input
+                v-model.number="form.capacityTotal"
+                type="number"
+                :min="minimumCapacity"
+                max="1000000"
+                step="1"
+                name="admin-channel-capacity"
+                :aria-label="t('channels.capacityTotal')"
+                class="channel-form-number focus-ring"
+              />
+            </FormField>
+            <FormField
+              :label="t('channels.channelRatio')"
+              :hint="t('channels.channelRatioHint')"
+            >
+              <div class="relative">
+                <input
+                  v-model="form.channelRatio"
+                  type="text"
+                  inputmode="decimal"
+                  name="admin-channel-ratio"
+                  :aria-label="t('channels.channelRatio')"
+                  class="channel-form-number pr-10 focus-ring"
+                />
+                <span
+                  class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[var(--text-tertiary)]"
+                  aria-hidden="true"
+                  >×</span
+                >
+              </div>
+            </FormField>
           </div>
         </div>
       </section>
     </div>
 
+    <GatewayChannelPanel
+      v-if="open && editing && auth.hasPermission('channel', 'read')"
+      :key="editing.id"
+      :channel-id="editing.id"
+    />
     <template #footer>
       <div class="grid grid-cols-2 gap-3">
         <ConsoleButton

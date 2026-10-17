@@ -2,12 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { FileCode2 } from 'lucide-vue-next'
 
 import { api } from '@/api/console'
 import { parseTokenPage, parseUserModels } from '@/api/liveContracts'
 import { ApiError, type PageResult } from '@/api/types'
 import type { TokenSummary } from '@/types/console'
+import BillingHistory from '@/components/console/wallet/BillingHistory.vue'
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
 import KeyMobileList from '@/components/console/keys/KeyMobileList.vue'
@@ -29,10 +30,9 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores'
 import { formatDate, formatQuota } from '@/utils/format'
-import { tokenStatusLabel } from '@/utils/tokenStatus'
 
 const { t } = useI18n()
-const { t: configT } = useI18n({
+const { t: clientText } = useI18n({
   useScope: 'local',
   messages: clientConfigMessages,
 })
@@ -52,6 +52,7 @@ const selected = ref<Array<string | number>>([])
 
 const models = ref<string[]>([])
 
+const billingToken = ref<TokenSummary | null>(null)
 const formOpen = ref(false)
 const editing = ref<TokenSummary | null>(null)
 const deleting = ref<TokenSummary | null>(null)
@@ -332,13 +333,21 @@ onBeforeUnmount(() => {
             <StatusChip
               :tone="(row as TokenSummary).status === 1 ? 'success' : 'neutral'"
             >
-              {{ t(tokenStatusLabel((row as TokenSummary).status)) }}
+              {{
+                (row as TokenSummary).status === 1
+                  ? t('common.enabled')
+                  : t('common.disabled')
+              }}
             </StatusChip>
           </button>
         </template>
 
         <template #cell-usage="{ row }">
-          <div class="text-xs text-right break-keep">
+          <button
+            type="button"
+            class="text-xs text-right break-keep focus-ring"
+            @click.stop="billingToken = row as TokenSummary"
+          >
             {{ t('billing.used') }}
             {{ formatQuota((row as TokenSummary).used_quota, 3) }}<br />{{
               t('billing.available')
@@ -347,10 +356,14 @@ onBeforeUnmount(() => {
               {{
                 (row as TokenSummary).unlimited
                   ? t('common.unlimited')
-                  : formatQuota((row as TokenSummary).remain_quota, 3)
+                  : formatQuota((row as TokenSummary).available_quota ?? '0', 3)
               }}
             </span>
-          </div>
+            <span class="mt-1 block text-[var(--text-tertiary)]"
+              >{{ t('billing.reserved') }}
+              {{ formatQuota((row as TokenSummary).reserved_quota, 3) }}</span
+            >
+          </button>
         </template>
 
         <template #cell-expired_time="{ row }">
@@ -397,10 +410,20 @@ onBeforeUnmount(() => {
               </svg>
             </RouterLink>
             <IconButton
-              :label="configT('title')"
+              :label="clientText('title')"
               @click="clientConfigTokenId = (row as TokenSummary).id"
             >
-              <FileCode2 :size="16" />
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="m8 5-7 7 7 7m8-14 7 7-7 7M14 3l-4 18" />
+              </svg>
             </IconButton>
             <IconButton
               :label="t('keys.editKey')"
@@ -490,6 +513,7 @@ onBeforeUnmount(() => {
         />
         <KeyMobileList
           v-else
+          :view-billing="(token) => (billingToken = token)"
           :tokens="rows"
           :selected-ids="selected"
           :all-selected="allPageSelected"
@@ -498,7 +522,7 @@ onBeforeUnmount(() => {
           :is-toggling="(row) => togglingIds.has(row.id)"
           :toggle-status="toggleStatus"
           :view-key="copyKey"
-          :client-config="(row) => (clientConfigTokenId = row.id)"
+          :export-config="(row) => (clientConfigTokenId = row.id)"
           :edit-key="openEdit"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"
@@ -514,6 +538,13 @@ onBeforeUnmount(() => {
     </ConsoleCard>
 
     <!-- create / edit -->
+    <ConsoleModal
+      :open="billingToken !== null"
+      :title="t('billing.history')"
+      size="xl"
+      @close="billingToken = null"
+      ><BillingHistory v-if="billingToken" :token-id="billingToken.id"
+    /></ConsoleModal>
     <KeyFormModal
       :open="formOpen"
       :editing="editing"
@@ -527,7 +558,6 @@ onBeforeUnmount(() => {
       :token-id="revealTokenId"
       @close="revealTokenId = null"
     />
-
     <KeyClientConfigModal
       v-if="clientConfigTokenId !== null"
       :token-id="clientConfigTokenId"

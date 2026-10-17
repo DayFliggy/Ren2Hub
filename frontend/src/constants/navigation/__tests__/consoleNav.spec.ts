@@ -154,7 +154,7 @@ describe('console navigation', () => {
     })
     const items = groups.flatMap((group) => group.items)
 
-    expect(items.some((item) => item.route === 'market')).toBe(false)
+    expect(items.find((item) => item.route === 'market')?.disabled).toBe(true)
     expect(items.find((item) => item.route === 'models')?.disabled).toBeFalsy()
   })
 })

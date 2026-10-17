@@ -54,16 +54,20 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
         'line-height',
         width < 1024 ? '45px' : '48px'
       )
-      await page.goto('/keys')
-      await waitForStablePage(page)
-      const badge = page.locator('[data-handdrawn="chip"]:visible').first()
+      const badge = page
+        .locator('span:visible')
+        .filter({ hasText: /^即将上线$/ })
+        .first()
       await expect(badge).toBeVisible()
-      await expect(badge).toHaveCSS('line-height', '16px')
+      await expect(badge).toHaveCSS(
+        'line-height',
+        width < 640 ? '16px' : '20px'
+      )
     }
   })
 
   for (const motion of ['no-preference', 'reduce'] as const) {
-    test(`menu, native check-in calendar and pressed controls keep their geometry (${theme}, ${motion})`, async ({
+    test(`menu, check-in stamp and pressed controls keep their geometry (${theme}, ${motion})`, async ({
       page,
     }) => {
       await configureStablePage(page, { theme })
@@ -91,35 +95,26 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       )
 
       await page.goto('/activity')
-      const calendar = page.locator('[aria-label="签到日历"]')
-      await expect(calendar).toBeVisible()
-      // The shared record fixture is October; the legacy geometry clock is July.
-      // Query the record's month before asserting the calendar projection.
-      await Promise.all([
-        page.waitForResponse((response) => {
-          const url = new URL(response.url())
-          return (
-            url.pathname === '/api/user/checkin' &&
-            url.searchParams.get('month') === '2026-10'
-          )
-        }),
-        page.locator('input[type="month"]').fill('2026-10'),
-      ])
-      const recordedDay = calendar.locator('[data-checkin-record="2026-10-17"]')
-      await expect(recordedDay).toBeVisible()
-      const dayBox = await recordedDay.boundingBox()
-      expect(dayBox).not.toBeNull()
-      expect(dayBox!.height).toBeGreaterThanOrEqual(40)
-      expect(dayBox!.width).toBeGreaterThan(0)
-      await expect(calendar.locator('[data-checkin-record]')).toHaveCount(1)
-      await expect(page.locator('details table')).toBeHidden()
-      await page.locator('summary').filter({ hasText: '签到记录' }).click()
-      await expect(page.getByRole('table')).toBeVisible()
-      await expect(page.getByRole('cell', { name: '2026-10-17' })).toBeVisible()
+      await expect(page.locator('.checkin-stamp')).toBeVisible()
+      await page.evaluate(() => document.fonts.ready)
+      const stamp = await page.locator('.checkin-stamp').evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          width: rect.width,
+          height: rect.height,
+          layoutWidth: (element as HTMLElement).offsetWidth,
+          layoutHeight: (element as HTMLElement).offsetHeight,
+        }
+      })
+      if (theme === 'dark') {
+        expect(stamp.width).toBeCloseTo(stamp.layoutWidth, 0)
+        expect(stamp.height).toBeCloseTo(stamp.layoutHeight, 0)
+      } else {
+        expect(stamp.height).toBeGreaterThan(stamp.layoutHeight + 2)
+      }
 
-      const button = page.locator('[data-checkin-action]')
+      const button = page.locator('button.touch-snappy:not(:disabled)').first()
       await expect(button).toBeVisible()
-      await expect(button).toBeEnabled()
       await button.scrollIntoViewIfNeeded()
       const rest = (await button.boundingBox())!
       await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2)

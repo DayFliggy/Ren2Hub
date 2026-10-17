@@ -1,4 +1,28 @@
-type OpsStatus = 'ok' | 'warning' | 'critical' | 'unknown'
+import {
+  OPS_WINDOW_SECONDS,
+  type OpsCheckKey,
+  type OpsOverview,
+  type OpsStatus,
+} from '@/api/opsMonitor'
+
+/** The backend check is the single source of a metric's health. */
+export function checkStatus(
+  overview: OpsOverview | null,
+  key: OpsCheckKey
+): OpsStatus {
+  return (
+    overview?.checks.find((check) => check.key === key)?.status ?? 'unknown'
+  )
+}
+
+/** Full selected window ending at the sample time, so startup gaps show. */
+export function seriesRange(overview: OpsOverview): [number, number] {
+  return [
+    overview.sampled_at - OPS_WINDOW_SECONDS[overview.series.window],
+    overview.sampled_at,
+  ]
+}
+
 /** A display value with its unit kept separate, so the unit can sit smaller. */
 export interface DisplayValue {
   value: string

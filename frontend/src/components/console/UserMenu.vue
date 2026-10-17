@@ -84,7 +84,7 @@ onBeforeUnmount(() => {
         <span
           class="text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-text)]"
         >
-          {{ formatQuota(auth.user?.quota ?? 0) }}
+          {{ formatQuota(auth.user?.available_quota ?? 0) }}
         </span>
       </button>
       <button

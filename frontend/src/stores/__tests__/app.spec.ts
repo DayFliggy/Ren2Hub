@@ -25,19 +25,6 @@ beforeEach(() => {
 })
 
 describe('public application state', () => {
-  it('keeps the official upstream documentation visible without allowing arbitrary external origins', async () => {
-    publicApi.status.mockResolvedValueOnce({
-      docs_link: 'https://docs.newapi.pro/en/docs',
-    })
-    const store = useAppStore()
-    await store.initialize()
-    expect(store.docsLink).toBe('https://docs.newapi.pro/en/docs')
-    expect(store.showDocs).toBe(true)
-    store.status.docs_link = 'https://untrusted.example.test/docs'
-    expect(store.showDocs).toBe(false)
-    store.status.docs_link = 'javascript:alert(1)'
-    expect(store.showDocs).toBe(false)
-  })
   it('uses the landing reference brand before status is available', () => {
     expect(useAppStore().systemName).toBe('Ren2Hub')
   })
@@ -115,9 +102,12 @@ describe('public application state', () => {
       email: 'demo@example.com',
       role: 1,
       status: 1,
-      quota: 100,
-      used_quota: 0,
+      available_quota: '100',
+      reserved_quota: '0',
+      quota_version: 0,
+      used_quota: '0',
       request_count: 0,
+      created_at: 1_700_000_000,
     })
     publicApi.status.mockResolvedValueOnce({
       HeaderNavModules: {
@@ -156,9 +146,12 @@ describe('public application state', () => {
       email: 'demo@example.com',
       role: 1,
       status: 1,
-      quota: 100,
-      used_quota: 0,
+      available_quota: '100',
+      reserved_quota: '0',
+      quota_version: 0,
+      used_quota: '0',
       request_count: 0,
+      created_at: 1_700_000_000,
     })
     resolveNotice('Notice')
     await initialization

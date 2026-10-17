@@ -47,7 +47,7 @@ export function sanitizeAdminUserVisibleFields(
 export const ADMIN_USER_SORT_FIELDS: AdminUserSortBy[] = [
   'id',
   'username',
-  'quota',
+  'available_quota',
   'used_quota',
   'created_time',
   'last_login_time',
@@ -81,24 +81,22 @@ const QUOTA_LOW_REMAINING_RATIO = 0.1
  * rendering a used/total pair: the total is not a real domain value.
  */
 export function adminUserQuotaMeter(
-  user: Pick<AdminUser, 'quota' | 'used_quota'>
+  user: Pick<AdminUser, 'available_quota' | 'used_quota'>
 ): AdminUserQuotaMeter {
   // The display denominator can exceed one account field's int64 range.
-  const lifetime = quotaInteger(user.quota) + quotaInteger(user.used_quota)
+  const lifetime =
+    quotaInteger(user.available_quota) + quotaInteger(user.used_quota)
   const percent =
     lifetime > 0n
-      ? Math.min(
-          100,
-          Math.max(0, quotaRatio(String(user.used_quota), lifetime) * 100)
-        )
+      ? Math.min(100, Math.max(0, quotaRatio(user.used_quota, lifetime) * 100))
       : 0
   const remainingRatio =
-    lifetime > 0n ? quotaRatio(String(user.quota), lifetime) : 0
+    lifetime > 0n ? quotaRatio(user.available_quota, lifetime) : 0
 
   // quota <= 0 covers both a spent-out account and one never funded; either way
   // the operator's takeaway is identical — this user cannot spend.
   const state: AdminUserQuotaState =
-    BigInt(user.quota) <= 0n
+    BigInt(user.available_quota) <= 0n
       ? 'exhausted'
       : remainingRatio < QUOTA_LOW_REMAINING_RATIO
         ? 'low'

@@ -44,7 +44,7 @@ describe('relay task fail reasons', () => {
       action: 'MUSIC',
       status: 'FAILURE',
       progress: '100%',
-      quota: 0,
+      quota: '0',
       submit_time: 1_700_000_000,
       finish_time: 1_700_000_100,
     }
@@ -77,7 +77,7 @@ describe('relay task fail reasons', () => {
           fail_reason: 'Task timed out',
           image_url: '',
           video_url: '',
-          quota: 0,
+          quota: '0',
           submit_time: 1_700_000_000_000,
           finish_time: 1_700_000_100_000,
         },

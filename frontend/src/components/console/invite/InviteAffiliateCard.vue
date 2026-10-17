@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { restoredConsoleMessages } from '@/i18n/restoredConsole'
 import { Mail } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
@@ -8,6 +7,7 @@ import IconButton from '@/components/common/IconButton.vue'
 defineProps<{
   code: string
   inviteLink: string
+  ratePercent: number
 }>()
 
 const emit = defineEmits<{
@@ -18,36 +18,38 @@ const emit = defineEmits<{
   shareEmail: []
 }>()
 
-const { t } = useI18n({ useScope: 'global' })
-const { t: r } = useI18n({
-  useScope: 'local',
-  messages: restoredConsoleMessages,
-})
+const { t } = useI18n()
 </script>
 
 <template>
   <section
     class="pencil-surface sketch-card min-w-0 border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6"
     data-handdrawn="surface"
-    data-invite-affiliate-card
   >
     <span
       class="inline-flex items-center rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[0.6875rem] font-bold uppercase text-[var(--accent-text)]"
     >
-      {{ r('restored.referralTag') }}
+      {{ t('invite.affiliateTag') }}
     </span>
 
     <h2 class="mt-4 text-2xl font-bold leading-snug text-[var(--text-primary)]">
-      {{ r('restored.shareTitle') }}
+      {{ t('invite.affiliateHeadline') }}
+      <span class="text-[var(--accent-text)]">
+        {{
+          t('invite.affiliateHeadlineAccent', {
+            reward: `${ratePercent}%`,
+          })
+        }}
+      </span>
     </h2>
     <p
       class="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--text-tertiary)]"
     >
-      {{ r('restored.shareHint') }}
+      {{ t('invite.affiliateSubheadline') }}
     </p>
 
     <div class="mt-6 grid gap-4 md:grid-cols-2">
-      <div class="min-w-0">
+      <div>
         <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.inviteCode') }}
         </p>
@@ -57,18 +59,13 @@ const { t: r } = useI18n({
           >
             {{ code || '…' }}
           </code>
-          <ConsoleButton
-            variant="secondary"
-            class="shrink-0"
-            :disabled="!code"
-            @click="emit('copyCode')"
-          >
+          <ConsoleButton variant="secondary" @click="emit('copyCode')">
             {{ t('invite.copyCode') }}
           </ConsoleButton>
         </div>
       </div>
 
-      <div class="min-w-0">
+      <div>
         <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.inviteLink') }}
         </p>
@@ -78,11 +75,7 @@ const { t: r } = useI18n({
           >
             {{ inviteLink || '…' }}
           </code>
-          <ConsoleButton
-            class="shrink-0"
-            :disabled="!code"
-            @click="emit('copyLink')"
-          >
+          <ConsoleButton @click="emit('copyLink')">
             {{ t('invite.copyLink') }}
           </ConsoleButton>
         </div>
@@ -95,11 +88,7 @@ const { t: r } = useI18n({
       <span class="mr-1 text-xs text-[var(--text-tertiary)]">
         {{ t('invite.shareLabel') }}
       </span>
-      <IconButton
-        :disabled="!code"
-        :label="t('invite.shareX')"
-        @click="emit('shareX')"
-      >
+      <IconButton :label="t('invite.shareX')" @click="emit('shareX')">
         <svg
           width="15"
           height="15"
@@ -113,7 +102,6 @@ const { t: r } = useI18n({
         </svg>
       </IconButton>
       <IconButton
-        :disabled="!code"
         :label="t('invite.shareTelegram')"
         @click="emit('shareTelegram')"
       >
@@ -129,15 +117,11 @@ const { t: r } = useI18n({
           />
         </svg>
       </IconButton>
-      <IconButton
-        :disabled="!code"
-        :label="t('invite.shareEmail')"
-        @click="emit('shareEmail')"
-      >
+      <IconButton :label="t('invite.shareEmail')" @click="emit('shareEmail')">
         <Mail :size="16" />
       </IconButton>
       <p class="ml-auto text-xs text-[var(--text-tertiary)]">
-        {{ r('restored.sharePolicy') }}
+        {{ t('invite.affiliateDisclaimer') }}
       </p>
     </div>
   </section>

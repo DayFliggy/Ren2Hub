@@ -57,7 +57,6 @@ const sketch = computed(() => props.variant === 'sketch')
             '--border-default': 'var(--footer-border)',
             '--surface-muted': 'var(--ink-surface-muted)',
             '--accent-text': 'var(--footer-accent)',
-            color: 'var(--text-primary)',
             boxShadow: 'var(--card-shadow)',
           }
         : sketch

@@ -44,6 +44,13 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5',
       },
       {
+        name: 'market',
+        labelKey: 'nav.market',
+        route: 'market',
+        feature: 'marketplace',
+        icon: 'M3 9l1.5-5h15L21 9M3 9h18M3 9v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9M9 21v-6h6v6',
+      },
+      {
         name: 'logs',
         labelKey: 'nav.logs',
         route: 'logs',
@@ -78,6 +85,14 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         route: 'wallet',
         feature: 'wallet',
         icon: 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6ZM3 10h18M8 15h4',
+      },
+      {
+        name: 'invoice',
+        labelKey: 'nav.invoice',
+        route: 'invoice',
+        feature: 'invoices',
+        // Lucide "receipt": paper receipt with line items
+        icon: 'M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1ZM14 8H8M14 12H8M11 16H8',
       },
       {
         name: 'invite',

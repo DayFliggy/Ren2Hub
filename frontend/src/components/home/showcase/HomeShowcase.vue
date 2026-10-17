@@ -14,6 +14,7 @@ const { uptimeLabel, uptimePercent, startTime } = storeToRefs(app)
 const observesVisibility =
   typeof window !== 'undefined' && 'IntersectionObserver' in window
 const showcase = useHomeShowcase(startTime, {
+  loadMetrics: true,
   initiallyVisible: !observesVisibility,
 })
 
@@ -31,6 +32,7 @@ onBeforeUnmount(stop)
     <RuntimePulseBand
       :runtime="showcase.runtime.value"
       :uptime-label="uptimePercent === null ? null : uptimeLabel"
+      :request-metrics="showcase.requestMetrics.value"
     />
   </main>
 </template>

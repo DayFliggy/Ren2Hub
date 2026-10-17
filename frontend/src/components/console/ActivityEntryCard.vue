@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, type Component } from 'vue'
+import { ref } from 'vue'
 
 defineProps<{
   title: string
@@ -8,7 +8,7 @@ defineProps<{
   image: string
   /** CSS gradient shown before image loads or on image error */
   gradient: string
-  icon: Component
+  emoji: string
   cta: string
   disabled?: boolean
 }>()
@@ -50,13 +50,7 @@ const imageOk = ref(true)
         <span
           class="activity-entry__tag inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-[4px]"
         >
-          <component
-            :is="icon"
-            :size="14"
-            class="shrink-0"
-            aria-hidden="true"
-          />
-          {{ tag }}
+          {{ emoji }} {{ tag }}
         </span>
         <h3
           class="activity-entry__title mt-2.5 text-xl font-bold tracking-tight text-white drop-shadow-title"

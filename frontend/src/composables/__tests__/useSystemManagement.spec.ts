@@ -1,7 +1,12 @@
 import { defineComponent } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { parseSystemTask, systemManagementApi } from '@/api/systemManagement'
+import {
+  parseSystemTask,
+  parseSystemTaskSummary,
+  systemManagementApi,
+} from '@/api/systemManagement'
+import { summaryFixture } from '@/api/__tests__/opsFixtures'
 import { useSystemManagement } from '../useSystemManagement'
 
 const running = parseSystemTask({
@@ -11,6 +16,7 @@ const running = parseSystemTask({
   created_at: 1,
   updated_at: 2,
 })
+const summary = parseSystemTaskSummary(summaryFixture())
 let state: ReturnType<typeof useSystemManagement>
 let wrapper: VueWrapper | undefined
 const Host = defineComponent({
@@ -19,9 +25,11 @@ const Host = defineComponent({
     return () => null
   },
 })
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+  vi.spyOn(systemManagementApi, 'summary').mockResolvedValue(summary)
   vi.spyOn(systemManagementApi, 'tasks').mockResolvedValue({
     items: [],
     total: 0,
@@ -33,41 +41,57 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
-describe('native system task lifecycles', () => {
-  it('derives type suggestions from real loaded records only', async () => {
-    vi.mocked(systemManagementApi.tasks).mockImplementation(async (query) => ({
-      items:
-        query.scope === 'active'
-          ? [running]
-          : [{ ...running, type: 'channel_test', status: 'succeeded' }],
-      total: 1,
-    }))
+
+describe('system task lifecycles', () => {
+  it('offers the registered task types from the summary as history filters', async () => {
     wrapper = mount(Host)
     await flushPromises()
-    expect(state.taskTypes.value).toEqual(['channel_test', 'log_cleanup'])
+    expect(state.taskTypes.value).toEqual([
+      'channel_test',
+      'gateway_state_cleanup',
+    ])
   })
-  it('polls running tasks quickly and discovers new work while idle', async () => {
-    wrapper = mount(Host)
-    await flushPromises()
-    expect(systemManagementApi.tasks).toHaveBeenCalledTimes(2)
+
+  it('polls active tasks every 8 seconds only while one is active', async () => {
     vi.mocked(systemManagementApi.tasks).mockImplementation(async (query) => ({
       items: query.scope === 'active' ? [running] : [],
       total: query.scope === 'active' ? 1 : 0,
     }))
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(state.activeTasks.value).toEqual([running])
-    const before = vi
-      .mocked(systemManagementApi.tasks)
-      .mock.calls.filter(([q]) => q.scope === 'active').length
+    wrapper = mount(Host)
+    await flushPromises()
     await vi.advanceTimersByTimeAsync(8000)
-    expect(
-      vi
-        .mocked(systemManagementApi.tasks)
-        .mock.calls.filter(([q]) => q.scope === 'active')
-    ).toHaveLength(before + 1)
+    // The active poll plus the history refresh it triggers.
+    expect(systemManagementApi.tasks).toHaveBeenCalledTimes(4)
+    vi.mocked(systemManagementApi.tasks).mockImplementation(async (query) => ({
+      items:
+        query.scope === 'history' ? [{ ...running, status: 'succeeded' }] : [],
+      total: query.scope === 'history' ? 1 : 0,
+    }))
+    await vi.advanceTimersByTimeAsync(8000)
+    expect(state.activeTasks.value).toEqual([])
+    expect(state.historyTasks.value).toHaveLength(1)
+    const settled = vi.mocked(systemManagementApi.tasks).mock.calls.length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(systemManagementApi.tasks).toHaveBeenCalledTimes(settled)
   })
+
+  it('restarts active polling when the summary reports a newly started run', async () => {
+    wrapper = mount(Host)
+    await flushPromises()
+    const before = vi.mocked(systemManagementApi.tasks).mock.calls.length
+    vi.mocked(systemManagementApi.summary).mockResolvedValue(
+      summary.map((row, i) => (i === 0 ? { ...row, active: true } : row))
+    )
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(systemManagementApi.tasks).toHaveBeenCalledTimes(before + 1)
+    expect(systemManagementApi.tasks).toHaveBeenLastCalledWith(
+      { scope: 'active', limit: 100 },
+      expect.any(AbortSignal)
+    )
+  })
+
   it.each(['succeeded', 'failed'] as const)(
-    'refreshes history for a short task that %s between active polls',
+    'refreshes history when a short task %s between summary polls',
     async (status) => {
       wrapper = mount(Host)
       await flushPromises()
@@ -78,12 +102,30 @@ describe('native system task lifecycles', () => {
           total: query.scope === 'history' ? 1 : 0,
         })
       )
+      vi.mocked(systemManagementApi.summary).mockImplementation(async () =>
+        summary.map((row, i) =>
+          i === 0
+            ? {
+                ...row,
+                [status === 'succeeded'
+                  ? 'last_success_at'
+                  : 'last_failure_at']: 1_767_226_000,
+              }
+            : { ...row }
+        )
+      )
+      const before = vi.mocked(systemManagementApi.tasks).mock.calls.length
       await vi.advanceTimersByTimeAsync(60_000)
+      expect(state.activeTasks.value).toEqual([])
       expect(state.historyTasks.value).toEqual([completed])
       expect(state.historyTotal.value).toBe(1)
+      expect(systemManagementApi.tasks).toHaveBeenCalledTimes(before + 1)
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(systemManagementApi.tasks).toHaveBeenCalledTimes(before + 1)
     }
   )
-  it('uses native pagination and resets offsets when filters change', async () => {
+
+  it('uses server pagination and resets the offset when filters change', async () => {
     wrapper = mount(Host)
     await flushPromises()
     state.historyPage.value = 3
@@ -92,33 +134,19 @@ describe('native system task lifecycles', () => {
       { scope: 'history', type: '', status: '', offset: 40, limit: 20 },
       expect.any(AbortSignal)
     )
-    state.historyType.value = 'channel_test'
+    state.historyType.value = 'log_cleanup'
     state.historyStatus.value = 'failed'
     await flushPromises()
     expect(state.historyPage.value).toBe(1)
     expect(systemManagementApi.tasks).toHaveBeenLastCalledWith(
       {
         scope: 'history',
-        type: 'channel_test',
+        type: 'log_cleanup',
         status: 'failed',
         offset: 0,
         limit: 20,
       },
       expect.any(AbortSignal)
     )
-  })
-  it('shows native list failures and stops requests on unmount', async () => {
-    vi.mocked(systemManagementApi.tasks).mockRejectedValue(
-      new Error('Task storage unavailable')
-    )
-    wrapper = mount(Host)
-    await flushPromises()
-    expect(state.active.error.value).toBe('Task storage unavailable')
-    expect(state.history.error.value).toBe('Task storage unavailable')
-    wrapper.unmount()
-    wrapper = undefined
-    const before = vi.mocked(systemManagementApi.tasks).mock.calls.length
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(systemManagementApi.tasks).toHaveBeenCalledTimes(before)
   })
 })

@@ -2,8 +2,6 @@ import { securityMessages } from '../../security'
 export default {
   security: securityMessages['zh-CN'],
   auth: {
-    verificationCode: '邮箱验证码',
-    sendCode: '发送验证码',
     resetConfirm: '确认重置密码',
     resetInvalid: '重置链接无效或不完整。',
     resetCompleted: '密码已重置。请妥善保存新密码后登录。',

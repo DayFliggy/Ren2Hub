@@ -1,36 +1,66 @@
-import { expect, it } from 'vitest'
-import { serializeOrders } from '../orderExport'
-import type { TopupOrder } from '@/api/topup'
-it('exports documented native fields and protects spreadsheet formulas', () => {
-  const order = {
-    id: 7,
-    user_id: 9,
-    trade_no: '=SUM(1)',
-    amount: 10,
-    money: 1.25,
-    payment_provider: 'gmpay',
-    payment_method: 'usdt.tron',
-    create_time: 100,
-    complete_time: 0,
-    status: 'pending',
-    secret: 'never-export',
-  } as TopupOrder
-  const [csv] = serializeOrders([order], 'csv')
-  expect(csv).toContain("'=SUM(1)")
-  expect(csv).not.toContain('never-export')
-  const [json] = serializeOrders([order], 'json')
-  expect(JSON.parse(json)).toEqual([
-    {
-      id: 7,
-      user_id: 9,
-      trade_no: '=SUM(1)',
-      amount: 10,
-      money: 1.25,
-      payment_provider: 'gmpay',
-      payment_method: 'usdt.tron',
-      create_time: 100,
-      complete_time: 0,
-      status: 'pending',
-    },
-  ])
+import { describe, expect, it } from 'vitest'
+
+import {
+  getOrderExportValues,
+  ORDER_EXPORT_HEADERS,
+} from '@/components/console/orders/orderExport'
+import type { AdminOrder } from '@/types/console'
+
+const order: AdminOrder = {
+  id: 412,
+  order_no: 'USR2331NOabc123',
+  user_id: 2331,
+  username: 'ada.lovelace',
+  email: 'ada@example.com',
+  amount: 142.5,
+  quota: '10000000',
+  currency: 'CNY',
+  type: 'topup',
+  method: 'epay',
+  payment_method: 'alipay',
+  status: 'completed',
+  created: 1_752_000_000,
+  paid_at: 1_752_000_240,
+}
+
+describe('order exports', () => {
+  it('exports exact int64 quota without converting it through Number', () => {
+    const values = getOrderExportValues({
+      ...order,
+      quota: '9223372036854775807',
+    })
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('quota')]).toBe(
+      '9223372036854775807'
+    )
+  })
+  it('keeps the header row aligned with the value row', () => {
+    expect(getOrderExportValues(order)).toHaveLength(
+      ORDER_EXPORT_HEADERS.length
+    )
+  })
+
+  it('exports amount and currency as separate spreadsheet fields', () => {
+    const values = getOrderExportValues(order)
+
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('amount')]).toBe(142.5)
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('currency')]).toBe('CNY')
+  })
+
+  it('exports provider and Epay rail without conflating them', () => {
+    const values = getOrderExportValues(order)
+
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('payment_provider')]).toBe(
+      'epay'
+    )
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('payment_method')]).toBe(
+      'alipay'
+    )
+  })
+
+  it('leaves a missing payment timestamp blank', () => {
+    const values = getOrderExportValues({ ...order, paid_at: 0 })
+
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('paid_at')]).toBe('')
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('created')]).not.toBe('')
+  })
 })

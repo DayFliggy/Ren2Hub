@@ -1,109 +1,161 @@
 import { computed, ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
+import { useI18n } from 'vue-i18n'
 import { getModelMarket } from '@/api/modelMarket'
-import { useLatestRequest } from './useLatestRequest'
-import { compareMarketModels, normalizeMarketView } from '@/utils/modelMarket'
+import { useLatestRequest } from '@/composables/useLatestRequest'
+import { ApiError } from '@/api/types'
+import {
+  buildModelMarketCatalog,
+  compareMarketOffers,
+  normalizeMarketView,
+  PLATFORM_VENDOR,
+} from '@/utils/modelMarket'
 import type {
   MarketBillingMode,
+  MarketChannelShelf,
   MarketModelType,
   ModelMarketCatalog,
   ModelMarketSort,
+  ModelMarketViewMode,
 } from '@/types/modelMarket'
 
+export { PLATFORM_VENDOR } from '@/utils/modelMarket'
+export type { ModelMarketViewMode, ModelMarketSort } from '@/types/modelMarket'
+
 export function useModelMarket() {
-  const loading = ref(true),
-    error = ref('')
+  const { t } = useI18n()
+  const loading = ref(true)
+  const error = ref('')
   const catalog = ref<ModelMarketCatalog | null>(null)
-  const keyword = ref(''),
-    group = ref(''),
-    vendor = ref('')
-  const billing = ref<MarketBillingMode | ''>(''),
-    type = ref<MarketModelType | ''>('')
+  const keyword = ref('')
+  const channel = ref<number | ''>('')
+  const billing = ref<MarketBillingMode | ''>('')
+  const type = ref<MarketModelType | ''>('')
   const sort = ref<ModelMarketSort>('default')
   const savedView = useLocalStorage<string>('ren2hub_models_view', 'models')
-  const view = computed({
+  savedView.value = normalizeMarketView(savedView.value)
+  const view = computed<ModelMarketViewMode>({
     get: () => normalizeMarketView(savedView.value),
-    set: (value: string) => {
+    set: (value) => {
       savedView.value = normalizeMarketView(value)
     },
   })
   const request = useLatestRequest()
+
+  function vendorLabel(vendor: string): string {
+    return vendor === PLATFORM_VENDOR ? t('models.platformVendor') : vendor
+  }
+
   async function load() {
     loading.value = true
     error.value = ''
-    // Do not retain data from a previous permission scope while refreshing.
-    catalog.value = null
     const result = await request.run(getModelMarket)
     if (result.stale) return
     loading.value = false
-    if (!result.ok) {
+    if (result.ok) catalog.value = buildModelMarketCatalog(result.value)
+    else {
+      // Discard old permission-scoped data after a failed refresh.
+      catalog.value = null
       error.value =
-        result.error instanceof Error
+        result.error instanceof ApiError
           ? result.error.message
-          : String(result.error)
-      return
+          : t('common.failed')
     }
-    catalog.value = result.value
-    if (!result.value.groups.some((item) => item.name === group.value))
-      group.value = ''
-    if (!result.value.models.some((item) => item.vendor === vendor.value))
-      vendor.value = ''
   }
+
   const filtered = computed(() => {
     const query = keyword.value.trim().toLowerCase()
-    return (catalog.value?.models ?? [])
-      .filter(
-        (model) =>
-          (!group.value ||
-            model.groups.some((item) => item.name === group.value)) &&
-          (!vendor.value || model.vendor === vendor.value) &&
-          (!billing.value || model.billingMode === billing.value) &&
-          (!type.value || model.types.includes(type.value)) &&
-          (!query ||
-            `${model.name} ${model.description} ${model.vendor} ${model.tags.join(' ')}`
-              .toLowerCase()
-              .includes(query))
+    const rows = (catalog.value?.models ?? [])
+      .filter((model) => !type.value || model.type === type.value)
+      .map((model) => {
+        const offers = model.offers
+          .filter(
+            (offer) =>
+              (!channel.value || offer.channelId === Number(channel.value)) &&
+              (!billing.value || offer.pricing.billingMode === billing.value) &&
+              (!query ||
+                `${model.name} ${vendorLabel(model.vendor)} ${offer.channelName}`
+                  .toLowerCase()
+                  .includes(query))
+          )
+          .sort((a, b) => compareMarketOffers(a, b, sort.value))
+        const priceIds = new Set(offers.map((offer) => offer.baseline.id))
+        return {
+          ...model,
+          offers,
+          baselines: model.baselines.filter((price) => priceIds.has(price.id)),
+        }
+      })
+      .filter((model) => model.offers.length)
+    if (sort.value === 'name') rows.sort((a, b) => a.name.localeCompare(b.name))
+    else if (sort.value !== 'default')
+      rows.sort((a, b) =>
+        compareMarketOffers(a.offers[0]!, b.offers[0]!, sort.value)
       )
-      .sort((a, b) => compareMarketModels(a, b, sort.value, group.value))
+    return rows
   })
-  const visibleGroups = computed(() =>
-    (catalog.value?.groups ?? []).filter(
-      (item) => !group.value || item.name === group.value
-    )
+
+  const shelves = computed<MarketChannelShelf[]>(() =>
+    (catalog.value?.channels ?? [])
+      .map((item) => {
+        const items = filtered.value
+          .map((model) => ({
+            model,
+            offers: model.offers.filter((offer) => offer.channelId === item.id),
+          }))
+          .filter((row) => row.offers.length)
+        if (sort.value !== 'name')
+          items.sort((a, b) =>
+            compareMarketOffers(a.offers[0]!, b.offers[0]!, sort.value)
+          )
+        return { channel: item, items }
+      })
+      .filter((shelf) => shelf.items.length)
   )
-  const selectedGroup = computed(() =>
-    catalog.value?.groups.find((item) => item.name === group.value)
-  )
-  const vendors = computed(() =>
-    [
-      ...new Set(
-        catalog.value?.models.map((model) => model.vendor).filter(Boolean) ?? []
-      ),
-    ].sort()
-  )
+
   function resetFilters() {
     keyword.value = ''
-    group.value = ''
-    vendor.value = ''
+    channel.value = ''
     billing.value = ''
     type.value = ''
     sort.value = 'default'
   }
+
+  const visibleChannels = computed(() =>
+    shelves.value.map((shelf) => shelf.channel)
+  )
+  const resultCount = computed(() => filtered.value.length)
+  const offerCount = computed(() =>
+    filtered.value.reduce((sum, model) => sum + model.offers.length, 0)
+  )
+  const hasResults = computed(() => resultCount.value > 0)
+  const pricingIssues = computed(() =>
+    (catalog.value?.models ?? [])
+      .filter((model) =>
+        model.offers.some(
+          (offer) => offer.pricing.billingMode === 'unconfigured'
+        )
+      )
+      .map((model) => model.id)
+  )
   return {
     loading,
     error,
     catalog,
     keyword,
-    group,
-    vendor,
+    channel,
     billing,
     type,
     sort,
     view,
     filtered,
-    visibleGroups,
-    selectedGroup,
-    vendors,
+    shelves,
+    visibleChannels,
+    resultCount,
+    offerCount,
+    hasResults,
+    pricingIssues,
+    vendorLabel,
     load,
     resetFilters,
   }

@@ -1,82 +1,267 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+
 import { useEChart } from '@/charts/useEChart'
+import { areaGradient, lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import type { TotalTokenPoint } from '@/composables/useDashboard'
-import { restoredConsoleMessages } from '@/i18n/restoredConsole'
-const props = defineProps<{ points: TotalTokenPoint[]; loading?: boolean }>()
-const { t: rootT } = useI18n({ useScope: 'global' })
-const { t, locale } = useI18n({ messages: restoredConsoleMessages })
+import type { TokenTrendPoint } from '@/composables/useDashboard'
+import { formatCompact } from '@/utils/format'
+import { escapeHtml } from '@/utils/html'
+
+const props = defineProps<{
+  points: TokenTrendPoint[]
+  loading?: boolean
+}>()
+
+const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
-const hasUsage = computed(() => props.points.some((point) => point.total > 0))
+
+function defaultPoints(days = 30): TokenTrendPoint[] {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() - (days - index - 1))
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return {
+      date: `${year}-${month}-${day}`,
+      input: 0,
+      output: 0,
+      cache_create: 0,
+      cache_read: 0,
+      hit_rate: 0,
+    }
+  })
+}
+
+const displayPoints = computed(() =>
+  props.points.length > 0 ? props.points : defaultPoints(30)
+)
+
+const hasData = computed(() =>
+  props.points.some(
+    (point) =>
+      point.input > 0 ||
+      point.output > 0 ||
+      point.cache_create > 0 ||
+      point.cache_read > 0
+  )
+)
+
+/** Window-wide cache hit rate, shown next to the title. */
+const avgHitRate = computed(() => {
+  const totals = props.points.reduce(
+    (acc, point) => ({
+      input: acc.input + point.input,
+      cacheRead: acc.cacheRead + point.cache_read,
+    }),
+    { input: 0, cacheRead: 0 }
+  )
+  const readableInput = totals.input + totals.cacheRead
+  if (readableInput === 0) return 0
+  return Math.round((totals.cacheRead / readableInput) * 1000) / 10
+})
+
+interface TooltipParam {
+  dataIndex: number
+  seriesName: string
+  value: number
+  color: string
+  axisValueLabel: string
+}
+
 useEChart(
   el,
-  (palette) => ({
-    color: [palette.accent],
-    textStyle: { color: palette.textSecondary },
-    tooltip: {
-      trigger: 'axis',
-      renderMode: 'richText',
-      backgroundColor: palette.surfaceSolid,
-      borderColor: palette.borderSubtle,
-      textStyle: { color: palette.textPrimary },
-    },
-    grid: { top: 24, right: 18, bottom: 32, left: 60 },
-    xAxis: {
-      type: 'category',
-      data: props.points.map((point) => point.date),
-      axisLine: { lineStyle: { color: palette.borderSubtle } },
-      axisLabel: { color: palette.textTertiary },
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      axisLabel: { color: palette.textTertiary },
-      splitLine: { lineStyle: { color: palette.chartGrid } },
-    },
-    series: [
+  (p, scale = 1) => {
+    const mood = lineMood(p)
+    const dates = displayPoints.value.map((d) => d.date)
+    const labels = {
+      input: t('dashboard.tokenTrend.input'),
+      output: t('dashboard.tokenTrend.output'),
+      cacheCreate: t('dashboard.tokenTrend.cacheCreate'),
+      cacheRead: t('dashboard.tokenTrend.cacheRead'),
+      hitRate: t('dashboard.tokenTrend.hitRate'),
+    }
+
+    // Token series share the left axis; the hit-rate percentage gets its own.
+    const tokenSeries = [
+      { name: labels.input, key: 'input' as const, color: p.signal },
+      { name: labels.output, key: 'output' as const, color: p.success },
       {
-        name: t('restored.tokenTotal'),
-        type: 'line',
-        showSymbol: false,
-        data: props.points.map((point) => point.total),
+        name: labels.cacheCreate,
+        key: 'cache_create' as const,
+        color: p.warning,
       },
-    ],
-  }),
-  [() => props.points, locale]
+      { name: labels.cacheRead, key: 'cache_read' as const, color: p.accent },
+    ].map((s) => ({
+      name: s.name,
+      type: 'line' as const,
+      smooth: mood.line.smooth,
+      showSymbol: !p.isDark,
+      symbol: mood.line.symbol,
+      symbolSize: mood.line.symbolSize * scale,
+      yAxisIndex: 0,
+      data: displayPoints.value.map((d) => d[s.key]),
+      lineStyle: {
+        color: s.color,
+        ...mood.line.lineStyle,
+        width: mood.line.lineStyle.width * scale,
+      },
+      itemStyle: {
+        color: s.color,
+        borderColor: p.surfaceSolid,
+        borderWidth: 2 * scale,
+      },
+      areaStyle: {
+        color: {
+          type: 'linear' as const,
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: areaGradient(p, s.color),
+        },
+      },
+    }))
+
+    return {
+      grid: {
+        left: 52 * scale,
+        right: 42 * scale,
+        top: 26 * scale,
+        bottom: 20 * scale,
+      },
+      legend: {
+        top: 0,
+        left: 'center',
+        itemWidth: 10 * scale,
+        itemHeight: 10 * scale,
+        itemGap: 12 * scale,
+        icon: 'circle',
+        textStyle: { color: p.textTertiary, fontSize: 10 * scale },
+        inactiveColor: p.borderSubtle,
+      },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: p.surfaceSolid,
+        borderColor: p.borderSubtle,
+        textStyle: { color: p.textPrimary, fontSize: 12 * scale },
+        formatter: (params: TooltipParam[]) => {
+          if (!params.length) return ''
+          const rows = params
+            .map((s) => {
+              const value =
+                s.seriesName === labels.hitRate
+                  ? `${s.value}%`
+                  : formatCompact(s.value)
+              return `<div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.1875rem">
+                <span style="width:0.5rem;height:0.5rem;border-radius:0.125rem;background:${s.color}"></span>
+                <span style="color:${p.textSecondary}">${escapeHtml(s.seriesName)}:</span>
+                <span style="margin-left:auto;font-weight:600">${escapeHtml(value)}</span>
+              </div>`
+            })
+            .join('')
+          return `<div style="min-width:11.625rem">
+            <div style="font-weight:700;margin-bottom:0.125rem">${escapeHtml(params[0]!.axisValueLabel)}</div>
+            ${rows}
+          </div>`
+        },
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: dates,
+        axisLine: { lineStyle: { color: p.borderSubtle } },
+        axisTick: { show: false },
+        axisLabel: {
+          color: p.textTertiary,
+          fontSize: 9 * scale,
+          interval: Math.max(0, Math.floor(dates.length / 5) - 1),
+        },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          minInterval: 1,
+          splitLine: mood.splitLine,
+          axisLabel: {
+            color: p.textTertiary,
+            fontSize: 9 * scale,
+            formatter: (v: number) => formatCompact(v),
+          },
+        },
+        {
+          type: 'value',
+          min: 0,
+          max: 100,
+          splitLine: { show: false },
+          axisLabel: {
+            color: p.support,
+            fontSize: 9 * scale,
+            formatter: (v: number) => `${v}%`,
+          },
+        },
+      ],
+      series: [
+        ...tokenSeries,
+        {
+          name: labels.hitRate,
+          type: 'line',
+          smooth: mood.line.smooth,
+          yAxisIndex: 1,
+          showSymbol: !p.isDark,
+          symbol: mood.line.symbol,
+          symbolSize: mood.line.symbolSize * scale,
+          data: displayPoints.value.map((d) => d.hit_rate),
+          lineStyle: {
+            color: p.support,
+            ...mood.line.lineStyle,
+            width: mood.line.lineStyle.width * scale,
+            type: p.isDark ? 'solid' : 'dashed',
+          },
+          itemStyle: {
+            color: p.surfaceSolid,
+            borderColor: p.support,
+            borderWidth: 2 * scale,
+          },
+        },
+      ],
+    }
+  },
+  () => displayPoints.value
 )
 </script>
+
 <template>
-  <ConsoleCard :title="t('restored.tokenTrend')" :aria-busy="loading">
-    <p class="text-xs leading-5 text-[var(--text-tertiary)]">
-      {{ t('restored.tokenHint') }}
-    </p>
-    <div
-      v-if="hasUsage"
-      ref="el"
-      class="mt-3 h-56 w-full"
-      role="img"
-      :aria-label="t('restored.tokenTotal')"
-    />
-    <p
-      v-else
-      class="flex min-h-56 items-center justify-center text-sm text-[var(--text-tertiary)]"
-    >
-      {{ loading ? rootT('common.loading') : t('restored.noUsage') }}
-    </p>
-    <details v-if="hasUsage" class="mt-2 text-xs">
-      <summary class="cursor-pointer">{{ t('restored.tokenTotal') }}</summary>
-      <div class="mt-2 max-h-48 overflow-auto">
-        <table class="w-full text-left">
-          <tbody>
-            <tr v-for="point in points" :key="point.date">
-              <th class="py-1 font-normal">{{ point.date }}</th>
-              <td>{{ point.total.toLocaleString() }}</td>
-            </tr>
-          </tbody>
-        </table>
+  <ConsoleCard
+    :title="t('dashboard.tokenTrend.title')"
+    stretch
+    data-token-trend-card
+  >
+    <template #action>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="text-[var(--text-tertiary)]">
+          {{ t('dashboard.tokenTrend.avgHitRate') }}
+          <span class="font-semibold text-[var(--support)]"
+            >{{ hasData ? avgHitRate : 0 }}%</span
+          >
+        </span>
       </div>
-    </details>
+    </template>
+
+    <div
+      v-if="loading"
+      class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"
+    />
+    <div
+      v-else
+      ref="el"
+      class="h-[11.875rem] w-full grow sm:h-[12.25rem]"
+      role="img"
+      :aria-label="t('dashboard.tokenTrend.title')"
+    />
   </ConsoleCard>
 </template>

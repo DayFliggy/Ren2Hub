@@ -4,23 +4,10 @@
     data-handdrawn-scope="home"
   >
     <AppNavbar />
-    <ErrorBanner
-      v-if="homeError"
-      :message="homeError"
-      class="site-container pt-24"
-      @retry="loadHomeContent"
-    />
-    <ConfiguredContent
-      v-if="homeContent.trim()"
-      :content="homeContent"
-      :title="t('nav.home')"
-      class="min-h-screen pt-20"
-    />
-    <HomeProgressDots v-if="!homeContent.trim()" />
+    <HomeProgressDots />
 
     <!-- ===== 开屏 Hero ===== -->
     <section
-      v-if="!homeContent.trim()"
       id="hero-immersive-stage"
       class="relative flex min-h-[100svh] items-center overflow-hidden rounded-none pt-[calc(env(safe-area-inset-top)+5.5rem)] pb-[calc(env(safe-area-inset-bottom)+4.75rem)] [@media(max-height:843px)_and_(max-width:1023px)]:pb-[calc(env(safe-area-inset-bottom)+3.5rem)] lg:min-h-screen lg:pt-20 lg:pb-0"
     >
@@ -167,17 +154,14 @@
       </div>
     </section>
 
-    <HomeShowcase v-if="!homeContent.trim()" />
+    <HomeShowcase />
     <AppFooter />
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onScopeDispose, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { publicApi } from '@/api/public'
-import ErrorBanner from '@/components/common/ErrorBanner.vue'
-import ConfiguredContent from '@/components/public/ConfiguredContent.vue'
 import AppNavbar from '@/components/layout/AppNavbar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import HeroWorldMap from '@/components/home/hero/HeroWorldMap.vue'
@@ -193,25 +177,6 @@ import {
 } from '@/constants/home/signalConsole'
 
 const { t } = useI18n()
-const homeContent = ref('')
-const homeError = ref('')
-let homeController: AbortController | undefined
-async function loadHomeContent() {
-  homeController?.abort()
-  const request = new AbortController()
-  homeController = request
-  homeError.value = ''
-  try {
-    const content = await publicApi.homeContent(request.signal)
-    if (!request.signal.aborted) homeContent.value = content
-  } catch (cause) {
-    if (!request.signal.aborted)
-      homeError.value =
-        cause instanceof Error ? cause.message : t('common.loadFailed')
-  }
-}
-onMounted(loadHomeContent)
-onScopeDispose(() => homeController?.abort())
 
 const signalSnapshot = ref<SignalConsoleSnapshot>({
   ...INITIAL_SIGNAL_SNAPSHOT,

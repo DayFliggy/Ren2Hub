@@ -1,73 +1,164 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { api } from '@/api/client'
-import { publicCatalogApi } from '@/api/publicCatalog'
-import { getModelMarket, parseMarketGroups } from '@/api/modelMarket'
-import { nativeMarketFixture } from '@/utils/__tests__/modelMarketFixtures'
+import { describe, expect, it } from 'vitest'
+import { parseModelMarket } from '@/api/modelMarket'
+import { createModelMarketFixture } from '../../../tests/fixtures/modelMarket'
 
-afterEach(() => vi.restoreAllMocks())
-describe('native model market access', () => {
-  it('requests only user scoped groups and model names and intersects public prices', async () => {
-    const { pricing, groups } = nativeMarketFixture()
-    vi.spyOn(publicCatalogApi, 'pricing').mockResolvedValue(pricing)
-    const get = vi.spyOn(api, 'get').mockImplementation(async (path, query) => {
-      if (path === '/api/user/self/groups')
-        return Object.fromEntries(
-          groups.map((group) => [
-            group.name,
-            { desc: group.description, ratio: group.ratio },
-          ])
-        )
-      if (path === '/api/user/models')
-        return groups.find((group) => group.name === query?.group)!.models
-      throw new Error(`Forbidden endpoint: ${path}`)
+describe('authenticated model market contract', () => {
+  it('preserves decimal values, channel identity, endpoint variants and unavailable telemetry', () => {
+    const input = createModelMarketFixture()
+    input.channels[0]!.ratio = '0.1234567890123456789'
+    input.models[0]!.baselines[0]!.values.ModelRatio = '0.1234567890123456789'
+    const parsed = parseModelMarket(input)
+    expect(parsed.channels[0]!.ratio).toBe('0.1234567890123456789')
+    expect(parsed.models[0]!.baselines[0]!.values.ModelRatio).toBe(
+      '0.1234567890123456789'
+    )
+    expect(
+      parsed.models.find((model) => model.id === 'video-preview')!.baselines
+    ).toMatchObject([
+      { plugin_key: 'seconds', supported_endpoint_types: ['openai-video'] },
+      { plugin_key: 'fixed', supported_endpoint_types: ['video-task'] },
+    ])
+    expect(parsed.telemetry).toEqual({
+      status: 'unavailable',
+      reason: 'channel_metrics_not_collected',
     })
-    const signal = new AbortController().signal
-    const catalog = await getModelMarket(signal)
-    expect(catalog.models.map((model) => model.id)).not.toContain(
-      'private-only'
-    )
-    expect(
-      catalog.models
-        .find((model) => model.id === 'chat-two')!
-        .groups.map((group) => group.name)
-    ).toEqual(['premium', 'auto'])
-    expect(get).toHaveBeenCalledTimes(4)
-    expect(
-      get.mock.calls.every(([, , options]) => options?.signal === signal)
-    ).toBe(true)
-    expect(
-      pricing.models.find((model) => model.model_name === 'chat-one')!
-        .model_ratio
-    ).toBe(0.5)
   })
-  it('does not fall back to unrestricted data when a group model request fails', async () => {
-    vi.spyOn(publicCatalogApi, 'pricing').mockResolvedValue(
-      nativeMarketFixture().pricing
-    )
-    vi.spyOn(api, 'get').mockImplementation(async (path) => {
-      if (path === '/api/user/self/groups')
-        return { member: { desc: '', ratio: 1 } }
-      throw new Error('permission revoked')
-    })
-    await expect(getModelMarket()).rejects.toThrow('permission revoked')
+
+  it('preserves localized usage labels and exact request multipliers', () => {
+    const fixture = createModelMarketFixture()
+    const price = fixture.models.find((model) => model.id === 'video-preview')!
+      .baselines[0]!
+    price.usage_schema = {
+      seconds: {
+        type: 'number',
+        unit: 'second',
+        unitLabel: { en: 'seconds', 'zh-CN': '秒' },
+        description: { en: 'Duration' },
+        enum: ['5', '10'],
+      },
+    }
+    price.billing_details = {
+      image_count: false,
+      audio_text_branches: false,
+      request_rules: [
+        { condition: 'quality=hd', multiplier: '1.234567890123456789' },
+      ],
+    }
+    const parsed = parseModelMarket(fixture).models.find(
+      (model) => model.id === 'video-preview'
+    )!.baselines[0]!
+    expect(parsed.usage_schema).toEqual(price.usage_schema)
+    expect(parsed.billing_details).toEqual(price.billing_details)
   })
-  it('returns no models for an empty group directory without a global model query', async () => {
-    vi.spyOn(publicCatalogApi, 'pricing').mockResolvedValue(
-      nativeMarketFixture().pricing
-    )
-    const get = vi.spyOn(api, 'get').mockResolvedValue({})
-    expect((await getModelMarket()).models).toEqual([])
-    expect(get).toHaveBeenCalledTimes(1)
-  })
+
   it.each([
-    null,
-    [],
-    { member: { ratio: -1, desc: '' } },
-    { member: { ratio: '0.2', desc: '' } },
-    { member: { ratio: 'auto', desc: '' } },
-    { member: { ratio: Infinity, desc: '' } },
-    { auto: { ratio: 1, desc: '' } },
-  ])('rejects malformed group pricing %j', (value) => {
-    expect(() => parseMarketGroups(value)).toThrow()
+    [
+      'null usage field',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        Object.assign(input.models[0]!.baselines[0]!, {
+          usage_schema: { seconds: null },
+        })
+      },
+    ],
+    [
+      'invalid localized usage label',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        Object.assign(input.models[0]!.baselines[0]!, {
+          usage_schema: { seconds: { unitLabel: { en: 7 } } },
+        })
+      },
+    ],
+    [
+      'invalid usage choices',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        Object.assign(input.models[0]!.baselines[0]!, {
+          usage_schema: { seconds: { enum: [5] } },
+        })
+      },
+    ],
+    [
+      'numeric request rule multiplier',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.models[0]!.baselines[0]!.billing_details = {
+          request_rules: [{ condition: 'quality=hd', multiplier: 1.2 }],
+        }
+      },
+    ],
+    [
+      'null request rule',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.models[0]!.baselines[0]!.billing_details = {
+          request_rules: [null],
+        }
+      },
+    ],
+    [
+      'invalid image count rule',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.models[0]!.baselines[0]!.billing_details = { image_count: 'true' }
+      },
+    ],
+    [
+      'unknown cache-write meaning',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.models[0]!.baselines[0]!.cache_write_mode = 'unknown'
+      },
+    ],
+    [
+      'numeric multiplier',
+      (input: ReturnType<typeof createModelMarketFixture>) =>
+        Object.assign(input.channels[0]!, { ratio: 0.2 }),
+    ],
+    [
+      'negative multiplier',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.channels[0]!.ratio = '-1'
+      },
+    ],
+    [
+      'numeric price',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.models[0]!.baselines[0]!.values.ModelRatio = 0.1
+      },
+    ],
+    [
+      'missing price on configured row',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.models[0]!.baselines[0]!.values = {}
+      },
+    ],
+    [
+      'unavailable channel reference',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.offers[0]!.channel_id = 999
+      },
+    ],
+    [
+      'cross-model price reference',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.offers[0]!.pricing_id = input.models[1]!.baselines[0]!.id
+      },
+    ],
+    [
+      'unauthorized endpoint',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.offers[0]!.supported_endpoint_types = ['private-endpoint']
+      },
+    ],
+    [
+      'duplicate offer',
+      (input: ReturnType<typeof createModelMarketFixture>) => {
+        input.offers.push({ ...input.offers[0]! })
+      },
+    ],
+    [
+      'model-wide metrics masquerading as channel telemetry',
+      (input: ReturnType<typeof createModelMarketFixture>) =>
+        Object.assign(input.telemetry, { status: 'available' }),
+    ],
+  ])('rejects %s instead of displaying an invented quote', (_label, mutate) => {
+    const fixture = createModelMarketFixture()
+    mutate(fixture)
+    expect(() => parseModelMarket(fixture)).toThrow()
   })
 })

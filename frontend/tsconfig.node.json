@@ -11,9 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": [
-    "vite.config.ts",
-    "eslint.config.js",
-    "scripts/tests/fontCoverage.spec.ts"
-  ]
+  "include": ["vite.config.ts", "eslint.config.js"]
 }

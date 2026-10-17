@@ -5,21 +5,62 @@ for (const theme of ['light', 'dark'] as const)
     test(`admin bindings ${theme} ${width}`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 })
       await configureStablePage(page, { theme })
+      await page.route('**/api/gateway/users/42', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              user_id: 42,
+              group: 'default',
+              config_version: 1,
+              override: { concurrency: null, wait_ms: null, queue_size: null },
+              effective: {
+                concurrency: 10,
+                wait_ms: 1000,
+                queue_size: 2,
+                channel_queue_size: 20,
+              },
+              sources: {
+                concurrency: 'system',
+                wait_ms: 'system',
+                queue_size: 'system',
+                channel_queue_size: 'system',
+              },
+            },
+          },
+        })
+      )
+      await page.route('**/api/gateway/runtime/users/42', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              capacity: 10,
+              config_version: 1,
+              revision: 1,
+              started_at: 1785114000,
+              draining: false,
+              in_flight: 0,
+              queued: 0,
+            },
+          },
+        })
+      )
       let removed = false
       let emailRemoved = false
       const deletes: string[] = []
-      await page.route('**/api/user/2', (route) =>
+      await page.route('**/api/user/42', (route) =>
         route.fulfill({
           json: {
             success: true,
             data: {
               github_id: removed ? '' : 'private-identity',
-              email: emailRemoved ? '' : 'member@example.test',
+              email: emailRemoved ? '' : 'visual.member@example.test',
             },
           },
         })
       )
-      await page.route('**/api/user/2/oauth/bindings', (route) =>
+      await page.route('**/api/user/42/oauth/bindings', (route) =>
         route.fulfill({
           json: {
             success: true,
@@ -33,12 +74,12 @@ for (const theme of ['light', 'dark'] as const)
           },
         })
       )
-      await page.route('**/api/user/2/bindings/github', (route) => {
+      await page.route('**/api/user/42/bindings/github', (route) => {
         deletes.push(route.request().method())
         removed = true
         return route.fulfill({ json: { success: true } })
       })
-      await page.route('**/api/user/2/bindings/email', (route) => {
+      await page.route('**/api/user/42/bindings/email', (route) => {
         emailRemoved = true
         return route.fulfill({ json: { success: true } })
       })
@@ -47,7 +88,7 @@ for (const theme of ['light', 'dark'] as const)
           json: {
             success: true,
             data: {
-              scope: 'admin.user.binding.clear',
+              scope: 'admin.user.change',
               methods: [{ method: '2fa', available: true }],
               oauth_providers: [],
               password_encryption_enabled: false,
@@ -63,16 +104,13 @@ for (const theme of ['light', 'dark'] as const)
               proof_token: 'visual-proof',
               expires_at: Math.floor(Date.now() / 1000) + 300,
               method: '2fa',
-              scope: 'admin.user.binding.clear',
+              scope: 'admin.user.change',
             },
           },
         })
       )
       await page.goto('/users')
-      await page
-        .getByRole('button', { name: '编辑', exact: true })
-        .first()
-        .click()
+      await page.locator('[aria-label="编辑用户"]:visible').first().click()
       await page.locator('[data-admin-bindings]').click()
       const bindings = page.getByRole('dialog', {
         name: '管理账户绑定',
@@ -90,7 +128,7 @@ for (const theme of ['light', 'dark'] as const)
         exact: true,
       })
       expect(deletes).toEqual([])
-      await expect(confirmation).toContainText('member')
+      await expect(confirmation).toContainText('visual.member')
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('unbind-confirm.png'),
