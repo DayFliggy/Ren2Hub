@@ -12,6 +12,10 @@ export async function loginCandidate(page: Page) {
   )
     throw new Error('Invalid private candidate account file')
   await page.goto('/sign-in')
+  await expect(page.locator('input[autocomplete="username"]')).toBeVisible()
+  await expect(
+    page.locator('input[autocomplete="current-password"]')
+  ).toBeVisible()
   // Locator.fill logs its value on failure. Keep credentials out of the
   // function source and action log while retaining the browser's real form.
   await page.evaluate(

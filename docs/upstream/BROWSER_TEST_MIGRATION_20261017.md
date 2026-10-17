@@ -80,4 +80,4 @@
 
 ## 本批完整运行结果
 
-`a9-default-full.log` 与 `a9-default-results.json` 记录完整默认 `bun run test:visual --workers=2 --reporter=list,json`：55 文件、416 场景全部通过，耗时 22.1 分钟，unexpected/flaky/skipped 均为 0。旧 55 文件逐一映射验证无遗漏；旧 live 移出、新增 A4 spec 后默认仍为 55 文件。退役断言不计入通过，早期失败记录保留。live 入口缺目标会失败，新的不可变候选 live 尚待执行。
+`a9-default-full.log` 与 `a9-default-results.json` 记录完整默认 `bun run test:visual --workers=2 --reporter=list,json`：55 文件、416 场景全部通过，耗时 22.1 分钟，unexpected/flaky/skipped 均为 0。旧 55 文件逐一映射验证无遗漏；旧 live 移出、新增 A4 spec 后默认仍为 55 文件。退役断言不计入通过，早期失败记录保留。live 入口缺目标会失败，首镜像 live 在修正凭据协调和加载等待后通过；最终绑定提交的结果另由根发布报告登记。

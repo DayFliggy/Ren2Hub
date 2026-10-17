@@ -2,11 +2,11 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 的唯一上游。Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅为参考项目，不是并列上游，不要求追平。历史引用和作者归属保留在 Git 历史中。
 
-## 2026-10-17 已授权审计修复批次（未发布）
+## 2026-10-17 已授权审计修复批次
 
 `01098b7387fb67a79ea01b4192d71e96a62a78ad` 的完整审计发现 8 项代码缺陷和 1 项验收遗漏。首阶段只参考上游已有处理方式，发布为 `29a1d1c78ad576feda3e280dd359e37219b49df2`。用户随后批准：先核对 NewAPI，再研究两个参考项目；没有完整对应实现时做最小本地修复。先前“待授权”是历史阶段状态，当前执行限制已由本批授权替代。
 
-当前实施副本 `/home/work/ren2hub-audit-repair-20261017`，应用基点为 `29a1d1c78…`，证据 `/home/work/ren2hub-audit-repair-evidence-20261017/`。本批源码未提交，`candidate_sha=null`；A1/A3/A4/A5/A6/A7/A8 的源码及定向检查已完成，A2 复用先前已发布修复。A9 及最终本地检查已完成：Vue 174 文件/1012 单测、默认浏览器 55 文件/416 场景全部通过，无跳过/重试通过；Go 全套分批、vet、三库定向、race、生产构建与嵌入 HTTP 检查通过。发布、新候选待执行，不能关闭整批审计。
+当前实施副本 `/home/work/ren2hub-audit-repair-20261017`，应用基点为 `29a1d1c78…`，证据 `/home/work/ren2hub-audit-repair-evidence-20261017/`。源码及第一候选已发布为 `1c04f945e4f0927a3a803347fad3b4831e9c37bf`；A1/A3/A4/A5/A6/A7/A8 的源码及定向检查已完成，A2 复用先前已发布修复。A9 及最终本地检查已完成：Vue 174 文件/1012 单测、默认浏览器 55 文件/416 场景全部通过，无跳过/重试通过；Go 全套分批、vet、三库定向、race、生产构建与嵌入 HTTP 检查通过。发布、新候选待执行，不能关闭整批审计。
 
 标准采集 `source-state.json` 在 `2026-10-17T08:36:51.9100792Z` 为 complete。NewAPI 冻结核心仍是 `09109ec315a5086366f94bcce00f177ec831dbe1`，观察 main 为 `3e2ce2c8856e32ca7054d673f8cd059ae466e80c`；两者间 4 个提交未处理本批问题且未吸收。参考 Sub2API main 为 `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`，AxonHub unstable 为 `a946fca495c52344ed073abb6c3562b9ff728b12`；参考副本干净且引用未变。官方 latest 的标签、提交、发布时间及原始标志见[审计修复记录](AUDIT_FIXES_20261017.md)。
 
@@ -84,3 +84,5 @@ git log -- docs/upstream/SYNC_LEDGER.md
 ```
 
 历史追踪点为 NewAPI `d032204733db31208f10bac118b6e683aab3bf29`、Sub2API `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`、AxonHub `a946fca495c52344ed073abb6c3562b9ff728b12`。旧账本中的“保留本地合同”仅描述当时实现，不能覆盖本轮已批准的上游回归边界。历史等待 NewAPI 或实际供应商验证的事项不因重建自动变成完成；例如 `SYNC1008-06` 的百炼实际 reasoning_effort 仍未通过真实供应商验证。已删除产品的原测试及合同按退役记录，不据此声称修复其历史问题。
+
+本批首个不可变镜像的 48 项后端候选检查通过；真实浏览器修正了协调器凭据格式及登录组件就绪等待后，两个组合共 38 次保留页面访问、公开归属和真实 GitHub/OIDC 设置写入均通过。前两次测试驱动失败保留原始日志。等待修正只影响 live 辅助代码，不改变应用行为；最终提交对应的镜像和全部候选将重新执行。正式未切换。最终发布身份、候选通过及正式批准点由根工作区[路线图](../../../docs/workflows/REN2HUB_UPSTREAM_ROADMAP.md)登记，本文随应用镜像冻结，不用旧结果覆盖新候选。
