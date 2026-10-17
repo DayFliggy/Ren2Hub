@@ -87,7 +87,6 @@ describe('system settings catalog', () => {
       'PayAddress',
       'EpayId',
       'EpayKey',
-      'payment_setting.epay_settlement_enabled',
       'Price',
       'MinTopUp',
       'PayMethods',

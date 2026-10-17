@@ -2908,10 +2908,10 @@ export default {
         'Sign-up and invite rewards, the top-up link, and currency display rules.',
       payment: 'Shared payment settings and other gateways',
       paymentDescription:
-        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant and settlement settings have their own pages. Blank credentials retain the saved value.',
+        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant settings have their own pages. Blank credentials retain the saved value.',
       epay: 'EPay',
       epayDescription:
-        'Purchase USD credits and pay in CNY through EPay. Complete credentials and at least one payment method enable new orders. An empty method list stops new orders; the settlement switch controls existing orders.',
+        'Purchase USD credits and pay in CNY through EPay. New orders and payment notifications require payment compliance confirmation, complete merchant credentials, and at least one payment method.',
       waffoPancake: 'Waffo Pancake',
       waffoPancakeDescription:
         'Verify credentials and choose a store and product, then save them atomically through the gateway endpoint.',
@@ -3071,14 +3071,11 @@ export default {
       merchantSecret: 'Merchant secret',
       secretHint:
         'Enter a value only to replace the credential. Leaving it blank preserves the current value, which is never displayed after saving.',
-      epaySettlement: 'Enable Epay settlement',
-      epaySettlementHint:
-        'Allow payment gateway callbacks to credit existing orders. Failed notifications are retried by the gateway, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of new payment methods.',
       epayPrice: 'CNY price per USD credit',
       minimumUsd: 'Minimum credit purchase (USD)',
       epayMethods: 'EPay payment methods',
       epayMethodsHint:
-        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list stops new EPay orders.',
+        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list disables EPay orders and payment notifications.',
       gmpaySettlement: 'Enable crypto settlement',
       gmpaySettlementHint:
         'Allow crypto gateway callbacks to credit existing orders. The callback verifies the token and fiat amount but cannot prove the final payment network. Failed notifications depend on the gateway retry configuration, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of Epay and of new payment methods.',

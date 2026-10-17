@@ -156,20 +156,15 @@ export interface AdminUserCreateInput {
   admin_permissions?: Record<string, Record<string, boolean>>
   username: string
   display_name: string
-  email: string
   password: string
   role: AdminUserRole
-  status: AdminUserStatus
 }
 
 /** Status is owned by the dedicated toggle route, not by the edit form. */
-export type AdminUserUpdateInput = Omit<
-  AdminUserCreateInput,
-  'status' | 'password'
-> & {
+export type AdminUserUpdateInput = Omit<AdminUserCreateInput, 'password'> & {
+  email: string
   password?: string
   group?: string
-  admin_permissions?: Record<string, Record<string, boolean>>
 }
 
 export interface AdminUserPage {

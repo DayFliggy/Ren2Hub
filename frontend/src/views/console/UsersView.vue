@@ -57,7 +57,7 @@ function edit(user: AdminUser | null) {
 }
 async function save(input: AdminUserCreateInput | AdminUserUpdateInput) {
   return editing.value
-    ? updateUserDetails(editing.value, input)
+    ? updateUserDetails(editing.value, input as AdminUserUpdateInput)
     : createUser(input as AdminUserCreateInput)
 }
 async function saveQuota(delta: string) {

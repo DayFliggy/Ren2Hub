@@ -2819,10 +2819,10 @@ export default {
       quotaDescription: '注册、邀请、充值入口和货币展示规则。',
       payment: '通用支付与其他网关',
       paymentDescription:
-        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户与结算配置在各自页面；密钥留空保留现有值。',
+        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户配置在各自页面；密钥留空保留现有值。',
       epay: 'EPay 易支付',
       epayDescription:
-        '通过 EPay 购买 USD 额度并以 CNY 付款。凭据齐全且支付方式非空时开放新单；清空支付方式只停止新单，已有订单由结算开关控制。',
+        '通过 EPay 购买 USD 额度并以 CNY 付款。创建新单和处理支付回调均需完成支付合规确认、填写完整商户凭据，并配置至少一种支付方式。',
       waffoPancake: 'Waffo Pancake',
       waffoPancakeDescription:
         '验证凭据、选择店铺与产品后，通过网关专用接口原子保存。',
@@ -2973,14 +2973,11 @@ export default {
       merchantId: '商户 ID',
       merchantSecret: '商户密钥',
       secretHint: '仅在更新时填写；留空保留现有密钥，保存后不回显。',
-      epaySettlement: '启用易支付结算',
-      epaySettlementHint:
-        '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。',
       epayPrice: '每 USD 额度的支付单价（CNY）',
       minimumUsd: '最低购买额度（USD）',
       epayMethods: 'EPay 支付方式',
       epayMethodsHint:
-        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停止创建 EPay 新单。',
+        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停用 EPay 新单及支付回调。',
       gmpaySettlement: '启用虚拟币结算',
       gmpaySettlementHint:
         '允许虚拟币网关回调确认已有订单并入账。回调可核验代币与法币金额，但无法证明最终付款网络。异常通知是否重试取决于网关配置，也可经管理员复查后补单。关闭后暂停回调结算，与易支付与新单支付方式独立控制。',

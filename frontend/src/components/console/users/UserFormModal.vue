@@ -66,7 +66,6 @@ const form = reactive({
   email: '',
   password: '',
   role: '1',
-  status: 1 as 1 | 2,
   group: 'default',
 })
 
@@ -105,11 +104,11 @@ const usernameValid = computed(() =>
 const valid = computed(
   () =>
     usernameValid.value &&
-    emailValid.value &&
+    (props.editing === null ||
+      (emailValid.value && form.email.trim().length <= 50)) &&
     ((props.editing !== null && !form.password) ||
       ([...form.password].length >= 8 && [...form.password].length <= 128)) &&
     form.displayName.trim().length <= 20 &&
-    form.email.trim().length <= 50 &&
     ((ADMIN_USER_ASSIGNABLE_ROLES.includes(selectedRole.value) &&
       selectedRole.value < props.operatorLevel) ||
       (props.editing?.role === 100 &&
@@ -132,7 +131,6 @@ watch(
     form.email = user?.email ?? ''
     form.password = ''
     form.role = String(user?.role ?? 1)
-    form.status = user?.status === 2 ? 2 : 1
     form.group = user?.group ?? 'default'
   },
   { immediate: true }
@@ -150,17 +148,20 @@ async function submit() {
   if (!valid.value || saving.value) return
   saving.value = true
   try {
-    const base: AdminUserUpdateInput = {
+    const base = {
       username: form.username.trim(),
       display_name: form.displayName.trim(),
-      email: form.email.trim(),
       role: selectedRole.value,
-      group: form.group,
     }
     const input: AdminUserCreateInput | AdminUserUpdateInput =
       props.editing === null
-        ? { ...base, password: form.password, status: form.status }
-        : { ...base, ...(form.password ? { password: form.password } : {}) }
+        ? { ...base, password: form.password }
+        : {
+            ...base,
+            email: form.email.trim(),
+            group: form.group,
+            ...(form.password ? { password: form.password } : {}),
+          }
     if (
       auth.isRoot &&
       props.editing?.role === 10 &&
@@ -196,8 +197,8 @@ async function submit() {
         />
       </FormField>
 
-      <FormField :label="t('users.group')"
-        ><TextInput v-model="form.group"
+      <FormField v-if="editing !== null" :label="t('users.group')"
+        ><TextInput v-model="form.group" name="admin-user-group"
       /></FormField>
       <div class="grid gap-4 sm:grid-cols-2">
         <FormField :label="t('users.displayName')">
@@ -208,7 +209,7 @@ async function submit() {
             autocomplete="off"
           />
         </FormField>
-        <FormField :label="t('users.email')">
+        <FormField v-if="editing !== null" :label="t('users.email')">
           <TextInput
             v-model="form.email"
             type="email"
@@ -242,37 +243,6 @@ async function submit() {
         <p class="mt-1.5 text-xs text-[var(--text-tertiary)]">
           {{ t('users.roleCeilingHint') }}
         </p>
-      </div>
-
-      <div v-if="editing === null">
-        <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
-          {{ t('users.status') }}
-        </p>
-        <div
-          class="sketch-md grid grid-cols-2 gap-1 bg-[var(--surface-muted)] p-1"
-          role="radiogroup"
-          :aria-label="t('users.status')"
-        >
-          <button
-            v-for="option in [
-              { value: 1 as const, label: t('users.statusEnabled') },
-              { value: 2 as const, label: t('users.statusDisabled') },
-            ]"
-            :key="option.value"
-            type="button"
-            role="radio"
-            :aria-checked="form.status === option.value"
-            class="sketch-sm h-9 text-sm font-medium transition-colors focus-ring"
-            :class="
-              form.status === option.value
-                ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
-                : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-            "
-            @click="form.status = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
       </div>
     </div>
 
