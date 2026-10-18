@@ -507,13 +507,6 @@
     "area": "frontend",
     "scope": "production",
     "ecosystem": "npm",
-    "name": "@lezer/javascript",
-    "license": "MIT"
-  },
-  {
-    "area": "frontend",
-    "scope": "production",
-    "ecosystem": "npm",
     "name": "@vueuse/core",
     "license": "MIT"
   },

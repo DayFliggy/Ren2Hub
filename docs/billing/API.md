@@ -5,11 +5,13 @@
 | 接口 | 用途 |
 | --- | --- |
 | `GET /api/user/self` | 当前用户 `quota`、`used_quota`、权限与设置 |
-| `GET/POST /api/token/`、`PUT /api/token/` | API Key 原生预算、分组、模型及 IP 限制 |
+| `GET/POST /api/token/`、`PUT /api/token/` | API Key 原生预算、模型及 IP 限制；路由由 `/routing` 子接口管理 |
 | `GET /api/user/topup/info` | 当前启用支付方式、最低金额和折扣；含 GMPay 开关及资产 |
 | `POST /api/user/amount` | 原生充值金额计算，结果为格式化金额字符串 |
 | `GET /api/user/topup/self` | 本人原生充值记录 |
 | `GET /api/user/topup`、`POST /api/user/topup/complete` | 管理员查询与人工补单 |
+| `GET /api/user/affiliate`、`GET /api/user/affiliate/invitees` | 返利余额、规则及脱敏邀请名单 |
+| `POST /api/user/affiliate/transfer` | 带 `operation_id` 的全额幂等转入；拒绝旧金额参数 |
 | `GET /api/pricing` | 原生模型价格投影 |
 | `GET/PATCH /api/option/model_pricing` | 模型配置读取、版本校验保存 |
 | `POST /api/option/model_pricing/{preview,convert}` | 草稿辅助操作，不创建请求预留 |

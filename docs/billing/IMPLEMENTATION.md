@@ -1,19 +1,18 @@
-# 原生钱包与计费
+# 原生钱包与渠道计费
 
-Ren2Hub 使用 NewAPI 的计费实现，资金来源仅保留钱包。账户 `quota`、Token `remain_quota` / `unlimited_quota` 及 `used_quota` 沿用上游整数与 JSON number 合同。标准单位为 `500000 quota = 1 USD`；展示类型不会改变记账单位。
+Ren2Hub 以 NewAPI 原生钱包作为唯一资金来源。账户 `quota`、Token `remain_quota` / `unlimited_quota` 及 `used_quota` 沿用整数与 JSON number 合同，标准单位为 `500000 quota = 1 USD`。展示十进制字符串不改变记账单位或原生计算精度。
 
 | 入口 | 职责 |
 | --- | --- |
-| `service/billing_session.go` | 单次请求预扣、实际结算和退款；维护请求内状态 |
-| `service/funding_source.go` | 钱包预扣及差额调整；无订阅资金来源 |
-| `model/quota_reserve.go` | 钱包余额充足条件下原子预扣 |
-| `service/text_quota.go`、`service/tiered_settle.go` | 原生用量、倍率、表达式及工具费用 |
-| `model/model_pricing_config.go`、`setting/ratio_setting/` | 模型编辑配置与上游默认值 |
-| `service/task_billing.go`、`service/task_polling.go` | 任务计费与终态轮询 |
-| `model/topup.go`、`model/gmpay.go` | 原生充值与 GMPay 最多一次入账 |
+| `service/billing_session.go` | 每个逻辑调用唯一预扣、最终结算与退款状态；更贵重试前严格补足 |
+| `service/funding_source.go`、`model/quota_reserve.go` | 余额充足条件下预扣钱包，最终差额按原生规则处理 |
+| `service/text_quota.go`、`service/tiered_settle.go` | 原生用量、模型价格与表达式；渠道倍率在最终取整前应用一次 |
+| `model/model_pricing_config.go`、`setting/ratio_setting/` | 唯一模型价格配置及上游默认值 |
+| `service/task_billing.go`、`service/task_polling.go` | 原生任务计费与轮询；保存提交时渠道倍率 |
+| `model/topup.go`、`model/gmpay.go`、`model/affiliate.go` | 充值成功、额度入账与返利同事务；来源唯一，最多一次 |
 
-预扣结果按原生 BillingSession 保存于请求生命周期内，成功后按实际费用与预扣差额调整。符合上游信任条件的请求可以跳过实际预扣；不能把“每次请求必须持久化预留”当成本地合同。资金来源与 Token 的结算是分步操作，消费日志和统计也不是与余额同事务的第二账本。
+新路由强制估算预扣，不采用原生信任免预扣分支。顺序为认证解析、用户占槽、候选与渠道占槽、当前资格复核、估算预扣、实际发送、观察与结算释放。更贵渠道重试必须在余额条件下补足，失败不发送；更便宜渠道在最终结算退差。估算不是费用上限，实际用量超过估算仍遵循原生最终结算。
 
-本地没有旧 schema 5 资金事件、冻结报价、加密求值重放、独立准入和投递 outbox。日志是运营与用量记录，不能称为不可变钱包流水。进程中断、异步退款与日志失败的边界遵从原生实现；发布前须排空并按[恢复说明](RECOVERY.md)验证，不能宣称旧系统的崩溃恢复保证仍存在。
+业务分组及组间倍率已退役。实际价格是全局模型价格乘本次绑定的渠道倍率；管理员后续修改不追溯已发送调用和在途任务。不存在第二价格库、旧 schema 5 资金事件、冻结报价、加密求值重放或独立资金恢复系统。资金来源与 Token 的结算仍是原生分步操作，消费日志不是与余额同事务的不可变账本。
 
-价格默认值、缺项继承、分组倍率、表达式及舍入均采用上游。不存在渠道售价系数，也不要求空模型价或空工具价。详见[定价](PRICING.md)。新库使用原生初始化；旧库在迁移前被拒绝，不能借 AutoMigrate 转换旧余额。
+返利记录和管理员额度操作记录只承担本领域的归因、冻结及幂等职责，不扩展成通用账本。兑换码不产生返利。进程中断、异步退款和日志失败的限制遵从原生实现，不能宣称具备旧系统的崩溃恢复保证。详见[定价](PRICING.md)和[恢复说明](RECOVERY.md)。

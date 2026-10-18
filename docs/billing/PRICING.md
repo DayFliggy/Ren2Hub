@@ -1,17 +1,17 @@
-# NewAPI 定价合同
+# 模型价格与渠道倍率
 
-模型价格、分组倍率、默认值、预扣和结算均跟随固定 NewAPI 基线。`setting/ratio_setting/` 提供内置模型与辅助倍率；`setting/billing_setting/`、`setting/task_pricing_setting/` 和 `pkg/billingexpr/` 提供表达式与任务定价。缺项按原生规则继承默认，显式零与缺项不同。重置模型配置恢复原生默认行为，不是强制变为未定价。
+模型基础价格、缺项继承、默认值、用量规范化和舍入沿固定 NewAPI 核心。`setting/ratio_setting/` 提供模型及辅助倍率，`setting/billing_setting/`、`setting/task_pricing_setting/` 和 `pkg/billingexpr/` 提供表达式与原生任务定价。缺项与显式零不同；重置配置恢复原生默认。
 
-| 模式 | 原生语义 |
+每个渠道的 `channel_ratio` 必须大于 0、最多 18 位小数、最大 1000，默认 `"1"`。每 Key 的 `max_channel_ratio` 可为空；它仅限制候选，不创建第二份售价。业务分组、组间倍率及充值分组倍率已移除。
+
+| 模式 | 接入位置 |
 | --- | --- |
-| 模型倍率 | 输入及输出、缓存、图片、音频倍率；叠加有效用户/Token 分组倍率 |
-| 按次价格 | `ModelPrice` 与对应端点数量或费用规则 |
-| 表达式 | 原生 `tiered_expr`、请求上下文、用量变量、任务 `u(...)` 与插件覆盖 |
+| 按量 | 原生输入、输出、缓存、图像、音频、工具费用合成后，最终取整前应用一次渠道倍率 |
+| 按次 | `ModelPrice` 与原生数量规则应用渠道倍率 |
+| 表达式及任务 | 保留原生表达式和用量语义，独立绑定渠道倍率，不能放进会被适配器替换的 OtherRatios |
 
-模型编辑使用 `GET/PATCH /api/option/model_pricing`，通过 `expected_version` 拒绝覆盖并发更新；预览和转换接口只读草稿。有效值和公开 `/api/pricing` 均投影原生配置。不存在旧 PriceVersion 发布目录、独立 Quote/Charge 证据和渠道售价系数。
+模型编辑仍使用 `GET/PATCH /api/option/model_pricing` 和 `expected_version`。目录 `/api/user/model-catalog` 对基础价与各渠道报价提供同一展示/排序投影，区分 configured、default、zero、unavailable。只投影能静态确定的表达式单价；动态条件、上下文倍率不能猜成 1。目录十进制字符串不构成结算精度升级。
 
-价格同步使用原生 `controller/ratio_sync.go`：读取上游渠道或内置预设，保留原生预览与应用流程。当前预设包括 basellm 与 models.dev；不能继续使用已退役的五源固定下载合同。以实际返回的来源与差异为准，不假定外部价格就是供应商结算账单。
+价格同步在原生 `/api/ratio_sync/fetch` 增量支持固定来源纯解析，`/api/ratio_sync/sources` 列出来源。结果只进入草稿，保存后才生效；渠道上游抓取路径继续保留。抓取失败、部分不可解析和明确零价分别表达，不自动覆盖售价。
 
-工具价格使用原生 `tool_price_setting.prices` 及其默认规则。分组倍率包括原生分组与用户专属配置；Token 自动组选择同时影响授权和有效倍率。私有渠道列表只缩小授权候选，不创建新的价格或组。金额 API 和前端字段采用原生数值合同，不补造 `available_quota`、`reserved_quota` 或账户版本。
-
-预扣与最终结算的公式、用量规范化和舍入以 `relay/helper/price.go`、`service/text_quota.go`、`service/tiered_settle.go`、`service/task_billing.go` 为准。不要用一套自定义 Decimal 公式替换所有分支，也不要为统一展示改变实际计费。插件 ABI 与用量声明见[插件文档](../plugin-api/README.md)。
+所有金额 API 沿原生数值 quota，不补造旧 `available_quota`、`reserved_quota` 或钱包版本。配置生成、公开展示和排序不能反向决定路由。实际结算以 `relay/helper/price.go`、`service/text_quota.go`、`service/tiered_settle.go`、`service/task_billing.go` 为准。

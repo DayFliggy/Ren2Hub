@@ -2,7 +2,7 @@
 
 This file records the direct third-party dependencies of Ren2Hub and their supplied license texts. Keep it with `LICENSE` and `NOTICE` in Docker images, standalone binary distributions, and frontend distributions.
 
-Inventory checked on 2026-10-17 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
+Inventory checked on 2026-10-18 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
 
 The inventory covers direct dependencies, including additional license files supplied alongside their top-level license. It is not a complete inventory of the transitive dependency graph, operating-system packages, or browser/runtime components. Preserve notices shipped by those components. Independent asset notices are outside this direct-package inventory and must be retained with their assets. No React dependency inventory is used.
 
@@ -90,35 +90,34 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | backend | test | Go | `github.com/json-iterator/go` | `v1.1.12` | MIT | [51](#license-51) |
 | backend | test | Go | `github.com/openai/openai-go` | `v1.12.0` | Apache-2.0 | [52](#license-52) |
 | backend | test | Go | `github.com/stretchr/testify` | `v1.12.1` | MIT | [53](#license-53) |
-| frontend | production | npm | `@lezer/javascript` | `1.5.4` | MIT | [54](#license-54) |
-| frontend | production | npm | `@vueuse/core` | `14.3.0` | MIT | [55](#license-55) |
-| frontend | production | npm | `axios` | `1.20.0` | MIT | [56](#license-56) |
-| frontend | production | npm | `echarts` | `6.1.0` | Apache-2.0; d3 portions: BSD-3-Clause | [57](#license-57), [58](#license-58) |
-| frontend | production | npm | `lucide-vue-next` | `1.0.0` | ISC; Feather portions: MIT | [59](#license-59) |
-| frontend | production | npm | `marked` | `18.0.5` | MIT; Markdown portions: BSD-3-Clause | [60](#license-60) |
-| frontend | production | npm | `pinia` | `4.0.2` | MIT | [61](#license-61) |
-| frontend | production | npm | `vue` | `3.5.43` | MIT | [62](#license-62) |
-| frontend | production | npm | `vue-i18n` | `11.4.8` | MIT | [63](#license-63) |
-| frontend | production | npm | `vue-router` | `5.2.0` | MIT | [61](#license-61) |
-| frontend | production | npm | `yaml` | `2.9.0` | ISC | [64](#license-64) |
-| frontend | development | npm | `@eslint/js` | `10.0.1` | MIT | [65](#license-65) |
-| frontend | development | npm | `@playwright/test` | `1.62.0` | Apache-2.0 | [66](#license-66) |
-| frontend | development | npm | `@tailwindcss/vite` | `4.3.3` | MIT | [67](#license-67) |
-| frontend | development | npm | `@types/node` | `26.1.1` | MIT | [68](#license-68) |
-| frontend | development | npm | `@vitejs/plugin-vue` | `6.0.8` | MIT | [69](#license-69) |
-| frontend | development | npm | `@vue/test-utils` | `2.4.11` | MIT | [70](#license-70) |
-| frontend | development | npm | `eslint` | `10.8.0` | MIT | [65](#license-65) |
-| frontend | development | npm | `eslint-config-prettier` | `10.1.8` | MIT | [71](#license-71) |
-| frontend | development | npm | `eslint-plugin-vue` | `10.10.0` | MIT | [72](#license-72) |
-| frontend | development | npm | `globals` | `17.8.0` | MIT | [73](#license-73) |
-| frontend | development | npm | `jsdom` | `27.4.0` | MIT | [74](#license-74) |
-| frontend | development | npm | `prettier` | `3.9.6` | MIT | [75](#license-75) |
-| frontend | development | npm | `tailwindcss` | `4.3.3` | MIT | [67](#license-67) |
-| frontend | development | npm | `typescript` | `5.9.3` | Apache-2.0 | [76](#license-76) |
-| frontend | development | npm | `typescript-eslint` | `8.65.0` | MIT | [77](#license-77) |
-| frontend | development | npm | `vite` | `8.1.5` | MIT | [78](#license-78) |
-| frontend | development | npm | `vitest` | `4.1.11` | MIT | [79](#license-79) |
-| frontend | development | npm | `vue-tsc` | `3.3.8` | MIT | [80](#license-80) |
+| frontend | production | npm | `@vueuse/core` | `14.3.0` | MIT | [54](#license-54) |
+| frontend | production | npm | `axios` | `1.20.0` | MIT | [55](#license-55) |
+| frontend | production | npm | `echarts` | `6.1.0` | Apache-2.0; d3 portions: BSD-3-Clause | [56](#license-56), [57](#license-57) |
+| frontend | production | npm | `lucide-vue-next` | `1.0.0` | ISC; Feather portions: MIT | [58](#license-58) |
+| frontend | production | npm | `marked` | `18.0.5` | MIT; Markdown portions: BSD-3-Clause | [59](#license-59) |
+| frontend | production | npm | `pinia` | `4.0.2` | MIT | [60](#license-60) |
+| frontend | production | npm | `vue` | `3.5.43` | MIT | [61](#license-61) |
+| frontend | production | npm | `vue-i18n` | `11.4.8` | MIT | [62](#license-62) |
+| frontend | production | npm | `vue-router` | `5.2.0` | MIT | [60](#license-60) |
+| frontend | production | npm | `yaml` | `2.9.0` | ISC | [63](#license-63) |
+| frontend | development | npm | `@eslint/js` | `10.0.1` | MIT | [64](#license-64) |
+| frontend | development | npm | `@playwright/test` | `1.62.0` | Apache-2.0 | [65](#license-65) |
+| frontend | development | npm | `@tailwindcss/vite` | `4.3.3` | MIT | [66](#license-66) |
+| frontend | development | npm | `@types/node` | `26.1.1` | MIT | [67](#license-67) |
+| frontend | development | npm | `@vitejs/plugin-vue` | `6.0.8` | MIT | [68](#license-68) |
+| frontend | development | npm | `@vue/test-utils` | `2.4.11` | MIT | [69](#license-69) |
+| frontend | development | npm | `eslint` | `10.8.0` | MIT | [64](#license-64) |
+| frontend | development | npm | `eslint-config-prettier` | `10.1.8` | MIT | [70](#license-70) |
+| frontend | development | npm | `eslint-plugin-vue` | `10.10.0` | MIT | [71](#license-71) |
+| frontend | development | npm | `globals` | `17.8.0` | MIT | [72](#license-72) |
+| frontend | development | npm | `jsdom` | `27.4.0` | MIT | [73](#license-73) |
+| frontend | development | npm | `prettier` | `3.9.6` | MIT | [74](#license-74) |
+| frontend | development | npm | `tailwindcss` | `4.3.3` | MIT | [66](#license-66) |
+| frontend | development | npm | `typescript` | `5.9.3` | Apache-2.0 | [75](#license-75) |
+| frontend | development | npm | `typescript-eslint` | `8.65.0` | MIT | [76](#license-76) |
+| frontend | development | npm | `vite` | `8.1.5` | MIT | [77](#license-77) |
+| frontend | development | npm | `vitest` | `4.1.11` | MIT | [78](#license-78) |
+| frontend | development | npm | `vue-tsc` | `3.3.8` | MIT | [79](#license-79) |
 
 ## Supplied license texts
 
@@ -3627,34 +3626,6 @@ SOFTWARE.
 
 ### License 54
 
-- `@lezer/javascript 1.5.4 — LICENSE`
-
-```text
-MIT License
-
-Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
-### License 55
-
 - `@vueuse/core 14.3.0 — LICENSE`
 
 ```text
@@ -3681,7 +3652,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 56
+### License 55
 
 - `axios 1.20.0 — LICENSE`
 
@@ -3695,7 +3666,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 57
+### License 56
 
 - `echarts 6.1.0 — LICENSE`
 
@@ -3923,7 +3894,7 @@ The following files embed [d3.js](https://github.com/d3/d3) BSD 3-Clause:
 See `/licenses/LICENSE-d3` for details of the license.
 ```
 
-### License 58
+### License 57
 
 - `echarts 6.1.0 — licenses/LICENSE-d3`
 
@@ -3957,7 +3928,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### License 59
+### License 58
 
 - `lucide-vue-next 1.0.0 — LICENSE`
 
@@ -4003,7 +3974,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 60
+### License 59
 
 - `marked 18.0.5 — LICENSE`
 
@@ -4054,7 +4025,7 @@ Redistribution and use in source and binary forms, with or without modification,
 This software is provided by the copyright holders and contributors “as is” and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the copyright owner or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
 ```
 
-### License 61
+### License 60
 
 - `pinia 4.0.2 — LICENSE`
 - `vue-router 5.2.0 — LICENSE`
@@ -4083,7 +4054,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 62
+### License 61
 
 - `vue 3.5.43 — LICENSE`
 
@@ -4111,7 +4082,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 63
+### License 62
 
 - `vue-i18n 11.4.8 — LICENSE`
 
@@ -4138,7 +4109,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 64
+### License 63
 
 - `yaml 2.9.0 — LICENSE`
 
@@ -4158,7 +4129,7 @@ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ```
 
-### License 65
+### License 64
 
 - `@eslint/js 10.0.1 — LICENSE`
 - `eslint 10.8.0 — LICENSE`
@@ -4185,7 +4156,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 66
+### License 65
 
 - `@playwright/test 1.62.0 — LICENSE`
 
@@ -4394,7 +4365,7 @@ Apache License
    limitations under the License.
 ```
 
-### License 67
+### License 66
 
 - `@tailwindcss/vite 4.3.3 — LICENSE`
 - `tailwindcss 4.3.3 — LICENSE`
@@ -4423,7 +4394,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 68
+### License 67
 
 - `@types/node 26.1.1 — LICENSE`
 
@@ -4451,7 +4422,7 @@ MIT License
     SOFTWARE
 ```
 
-### License 69
+### License 68
 
 - `@vitejs/plugin-vue 6.0.8 — LICENSE`
 
@@ -4479,7 +4450,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 70
+### License 69
 
 - `@vue/test-utils 2.4.11 — LICENSE`
 
@@ -4507,7 +4478,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 71
+### License 70
 
 - `eslint-config-prettier 10.1.8 — LICENSE`
 
@@ -4535,7 +4506,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### License 72
+### License 71
 
 - `eslint-plugin-vue 10.10.0 — LICENSE`
 
@@ -4563,7 +4534,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 73
+### License 72
 
 - `globals 17.8.0 — license`
 
@@ -4579,7 +4550,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 74
+### License 73
 
 - `jsdom 27.4.0 — LICENSE.txt`
 
@@ -4608,7 +4579,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 75
+### License 74
 
 - `prettier 3.9.6 — LICENSE`
 
@@ -4622,7 +4593,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 76
+### License 75
 
 - `typescript 5.9.3 — LICENSE.txt`
 
@@ -4684,7 +4655,7 @@ If the Work includes a "NOTICE" text file as part of its distribution, then any 
 END OF TERMS AND CONDITIONS
 ```
 
-### License 77
+### License 76
 
 - `typescript-eslint 8.65.0 — LICENSE`
 
@@ -4712,7 +4683,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### License 78
+### License 77
 
 - `vite 8.1.5 — LICENSE.md`
 
@@ -7006,7 +6977,7 @@ Repository: https://github.com/websockets/ws
 > CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 79
+### License 78
 
 - `vitest 4.1.11 — LICENSE.md`
 
@@ -7824,7 +7795,7 @@ Repository: git+https://github.com/websockets/ws.git
 > CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### License 80
+### License 79
 
 - `vue-tsc 3.3.8 — LICENSE`
 
