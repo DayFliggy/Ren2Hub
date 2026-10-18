@@ -8,17 +8,17 @@ beforeAll(async () => {
   await setLocale('en')
 })
 
-describe('payment setting field drafts', () => {
-  it('marks incomplete and duplicate group keys invalid without replacing the last valid model', async () => {
+describe('structured setting field drafts', () => {
+  it('marks incomplete and duplicate ratio keys invalid without replacing the last valid model', async () => {
     const wrapper = mount(SystemSettingsField, {
       props: {
         field: {
-          key: 'TopupGroupRatio',
-          labelKey: 'systemSettings.fields.groupRatio',
+          key: 'ratio_map',
+          labelKey: 'channels.usageAndRatio',
           kind: 'ratio',
           defaultValue: '{}',
         },
-        modelValue: '{"default":1}',
+        modelValue: '{"gpt-4o":1}',
       },
       global: { plugins: [i18n] },
     })
@@ -26,15 +26,15 @@ describe('payment setting field drafts', () => {
     expect(wrapper.emitted('validity')?.at(-1)).toEqual([false])
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     const keys = wrapper.findAll('.settings-structured-row input:not([type])')
-    await keys[1]!.setValue('default')
+    await keys[1]!.setValue('gpt-4o')
     expect(wrapper.emitted('validity')?.at(-1)).toEqual([false])
     expect(wrapper.get('[role="alert"]').text()).toContain('Duplicate')
-    await keys[1]!.setValue('vip')
+    await keys[1]!.setValue('claude-sonnet')
     await wrapper.findAll('input[type="number"]')[1]!.setValue('0.8')
     expect(wrapper.emitted('validity')?.at(-1)).toEqual([true])
     expect(
       JSON.parse(String(wrapper.emitted('update:modelValue')?.at(-1)?.[0]))
-    ).toEqual({ default: 1, vip: 0.8 })
+    ).toEqual({ 'gpt-4o': 1, 'claude-sonnet': 0.8 })
     wrapper.unmount()
   })
 

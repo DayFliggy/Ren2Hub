@@ -1,10 +1,5 @@
-import type {
-  PriceSort,
-  ReferencePrice,
-  UsageReference,
-} from './pricingReference'
-import type { ModelCapabilities } from '@/api/modelManifest'
-import type { PricingValues } from '@/api/pricingConfig'
+import type { PriceSort, ReferencePrice } from './pricingReference'
+import type { ModelCapabilities } from '@/api/modelCatalog'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 
 export type ModelMarketViewMode = 'models' | 'channels' | 'comparison'
@@ -14,51 +9,10 @@ export type MarketBillingMode =
 export type MarketModelType =
   'chat' | 'image' | 'embedding' | 'audio' | 'video' | 'rerank'
 
-export interface MarketPricingContract {
-  usage_reference?: UsageReference
-  id: string
-  version: string
-  configured: boolean
-  values: PricingValues
-  plugin_key?: string
-  plugin_name?: string
-  supported_endpoint_types: string[]
-  usage_schema?: BillingUsageSchema
-  cache_write_mode?: string
-  billing_details?: Record<string, unknown>
-}
-
 export interface MarketChannel {
   id: number
   name: string
   ratio: string
-}
-
-export interface MarketModelContract {
-  id: string
-  description: string
-  vendor: string
-  icon: string
-  capabilities: ModelCapabilities | null
-  supported_endpoint_types: string[]
-  baselines: MarketPricingContract[]
-}
-
-export interface MarketOfferContract {
-  id: string
-  model_id: string
-  channel_id: number
-  pricing_id: string
-  supported_endpoint_types: string[]
-}
-
-export interface ModelMarketResponse {
-  schema_version: 1
-  models: MarketModelContract[]
-  channels: MarketChannel[]
-  offers: MarketOfferContract[]
-  supported_endpoints: Record<string, { path: string; method: string }>
-  telemetry: { status: 'unavailable'; reason: 'channel_metrics_not_collected' }
 }
 
 /** Values stay exact; labels and formatting are applied by the shared price UI. */
@@ -69,6 +23,8 @@ export interface MarketPriceLine {
 }
 
 export interface MarketPricing {
+  priceStatus?: import('@/api/modelCatalog').PriceStatus
+  priceReason?: string
   referencePrices?: ReferencePrice[]
   id: string
   version: string
@@ -111,7 +67,7 @@ export interface MarketModel {
 export interface ModelMarketCatalog {
   models: MarketModel[]
   channels: MarketChannel[]
-  telemetry: ModelMarketResponse['telemetry']
+  telemetry: { status: 'unavailable'; reason: 'channel_metrics_not_collected' }
 }
 
 export interface MarketChannelShelf {

@@ -22,20 +22,20 @@ beforeEach(() => {
 
 const sampleModels: StatsModelRow[] = [
   {
+    avgLatency: null,
     model: 'gpt-4o',
     tokens: 120_000,
     quota: '600000',
     requests: 45,
     share: 60,
-    avgLatency: 120,
   },
   {
+    avgLatency: null,
     model: 'claude-3-5-sonnet',
     tokens: 80_000,
     quota: '400000',
     requests: 30,
     share: 40,
-    avgLatency: 150,
   },
 ]
 

@@ -7,16 +7,18 @@ const channel = {
   id: 157,
   name: 'Audit OpenAI Fixture',
   type: 1,
-  supplier: 'OpenAI',
+  channel_ratio: '1',
+  max_concurrency: 8,
+  in_flight: 0,
+  lab: { id: 'fixture', name: 'Fixture lab', source: 'vendor' },
   status: 3,
-  status_reason: `供应商请求失败，已自动禁用。\n${'LongProviderErrorWithoutSpaces'.repeat(12)}`,
-  status_time: 1785124800,
+  other_info: JSON.stringify({
+    status_reason: `供应商请求失败，已自动禁用。\n${'LongProviderErrorWithoutSpaces'.repeat(12)}`,
+    status_time: 1785124800,
+  }),
   priority: 0,
   weight: 10,
-  capacity_used: 0,
-  capacity_total: 20,
-  channel_ratio: '1',
-  used_quota: '0',
+  used_quota: 0,
   balance: 0,
   response_time: 0,
   test_time: 0,
@@ -28,7 +30,7 @@ const channel = {
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {
     for (const operate of [false, true])
-      test(`channel runtime permissions and reason ${theme} ${width} operate=${operate}`, async ({
+      test(`native channel operation permissions and reason ${theme} ${width} operate=${operate}`, async ({
         page,
       }, info) => {
         await page.setViewportSize({ width, height: 900 })
@@ -44,7 +46,7 @@ for (const theme of ['light', 'dark'] as const)
             },
           },
         })
-        await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) =>
+        await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) =>
           route.fulfill({
             json: {
               success: true,
@@ -54,28 +56,6 @@ for (const theme of ['light', 'dark'] as const)
                 page: 1,
                 page_size: 20,
                 type_counts: { '1': 1 },
-              },
-            },
-          })
-        )
-        await page.route('**/api/gateway/channels/157/credentials', (route) =>
-          route.fulfill({ json: { success: true, data: [] } })
-        )
-        await page.route('**/api/gateway/runtime/channels/157', (route) =>
-          route.fulfill({
-            json: {
-              success: true,
-              data: {
-                channel_id: 157,
-                in_flight: 0,
-                queued: 0,
-                capacity: 20,
-                rate_status: 'unavailable',
-                rate: null,
-                config_version: 1,
-                revision: 1,
-                started_at: 0,
-                draining: false,
               },
             },
           })
@@ -106,11 +86,34 @@ for (const theme of ['light', 'dark'] as const)
           .getByRole('button', { name: '渠道运行状态', exact: true })
           .filter({ visible: true })
           .click()
-        const dialog = page.getByRole('dialog', { name: channel.name })
-        await expect(dialog).toBeVisible()
-        await expect(dialog.getByText('Codex 供应商用量')).toHaveCount(0)
-        await assertNoHorizontalOverflow(page)
-        await page.screenshot({ path: info.outputPath('channel-runtime.png') })
+        await expect(
+          page.locator('[data-native-channel-runtime]')
+        ).toContainText('Fixture lab')
+        await expect(
+          page.locator('[data-native-channel-runtime]')
+        ).toContainText('8')
+        // The first focusable status-reason control opens its tooltip; move focus
+        // to the panel before exercising the modal's Escape handler.
+        const runtime = page.getByRole('dialog', {
+          name: channel.name,
+          exact: true,
+        })
+        await runtime.locator('[data-handdrawn="modal"]').focus()
+        await page.keyboard.press('Escape')
+        await expect(runtime).toHaveCount(0)
+        const enable = page
+          .getByRole('button', { name: '启用渠道', exact: true })
+          .filter({ visible: true })
+        if (operate) {
+          let saved: unknown
+          await page.route('**/api/channel/157/status', (route) => {
+            expect(route.request().method()).toBe('POST')
+            saved = route.request().postDataJSON()
+            return route.fulfill({ json: { success: true, data: null } })
+          })
+          await enable.click()
+          await expect.poll(() => saved).toEqual({ status: 1 })
+        } else await expect(enable).toHaveCount(0)
       })
 
     test(`price field and expression differences ${theme} ${width}`, async ({
@@ -119,13 +122,13 @@ for (const theme of ['light', 'dark'] as const)
       await page.setViewportSize({ width, height: 900 })
       await configureStablePage(page, { theme })
       const current = {
-        ModelPrice: '0',
+        ModelPrice: 0,
         'billing_setting.billing_mode': 'tiered_expr',
         'billing_setting.billing_expr':
           'tier("base", p * 0.123456789012345678 + c * 2)',
       }
       const candidate = {
-        ModelRatio: '0',
+        ModelRatio: 0,
         'billing_setting.billing_mode': 'tiered_expr',
         'billing_setting.billing_expr':
           'tier("base", p * 0.123456789012345679 + c * 3)',
@@ -134,28 +137,31 @@ for (const theme of ['light', 'dark'] as const)
       await page.route('**/api/channel/models_enabled', (route) =>
         route.fulfill({ json: { success: true, data: ['precise-model'] } })
       )
-      await page.route('**/api/option/model_pricing**', (route) => {
-        if (route.request().method() === 'PATCH') saves++
-        return route.fulfill({
-          json: {
-            success: true,
-            data: {
-              entries: [
-                {
-                  model_name: 'precise-model',
-                  version: '1',
-                  configured: current,
-                  effective: current,
-                },
-              ],
-              options: Object.fromEntries(
-                PRICING_KEYS.map((key) => [key, '{}'])
-              ),
-              empty_version: 'empty',
+      await page.route(
+        /\/api\/option\/model_pricing(?:\/(?:preview|convert))?(?:\?.*)?$/,
+        (route) => {
+          if (route.request().method() === 'PATCH') saves++
+          return route.fulfill({
+            json: {
+              success: true,
+              data: {
+                entries: [
+                  {
+                    model_name: 'precise-model',
+                    version: '1',
+                    configured: current,
+                    effective: current,
+                  },
+                ],
+                options: Object.fromEntries(
+                  PRICING_KEYS.map((key) => [key, '{}'])
+                ),
+                empty_version: 'empty',
+              },
             },
-          },
-        })
-      })
+          })
+        }
+      )
       await page.route('**/api/ratio_sync/fetch', (route) =>
         route.fulfill({
           json: {
@@ -218,21 +224,6 @@ for (const theme of ['light', 'dark'] as const)
     }, info) => {
       await page.setViewportSize({ width, height: 900 })
       await configureStablePage(page, { theme, authenticated: true })
-      await page.route('**/api/status', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              frontend_capabilities: {
-                taskPlugins: 'live',
-                admin: 'live',
-                profile: 'live',
-                login: 'live',
-              },
-            },
-          },
-        })
-      )
       await page.addInitScript(() => {
         const browser = window as typeof window & {
           marketRequests: Array<{
@@ -266,26 +257,54 @@ for (const theme of ['light', 'dark'] as const)
       let installs = 0
       await page.route('**/api/plugin/task**', (route) => {
         const path = new URL(route.request().url()).pathname
-        if (route.request().method() === 'POST' && !path.endsWith('/preview'))
+        const method = route.request().method()
+        if (path === '/api/plugin/task/marketplace/sources' && method === 'GET')
+          return route.fulfill({
+            json: {
+              success: true,
+              data: [
+                {
+                  name: 'Audit Market',
+                  index_url: 'https://plugins.example/index.json',
+                },
+              ],
+            },
+          })
+        if (path === '/api/plugin/task/preview' && method === 'POST')
+          return route.fulfill({
+            json: {
+              success: true,
+              data: { meta, unresolved: [], source_hash: hash },
+            },
+          })
+        if (path === '/api/plugin/task' && method === 'POST') {
           installs++
-        const data = path.endsWith('/marketplace/sources')
-          ? [
-              {
-                name: 'Audit Market',
-                index_url: 'https://plugins.example/index.json',
+          expect(route.request().postDataJSON()).toEqual({
+            source,
+            sourceSha256: hash,
+            enabled: true,
+            remark: 'Audit Market v1.0.0',
+          })
+          return route.fulfill({
+            json: { success: true, data: { meta, source, layer: 'override' } },
+          })
+        }
+        if (path === '/api/plugin/task/runtime/status' && method === 'GET')
+          return route.fulfill({
+            json: {
+              success: true,
+              data: {
+                current_generation: 1,
+                database_revision: '1',
+                last_rebuild: { status: 'success' },
+                plugin_errors: {},
               },
-            ]
-          : path.endsWith('/preview')
-            ? { meta, source_hash: hash, unresolved: [] }
-            : path.endsWith('/runtime/status')
-              ? {
-                  current_generation: 1,
-                  database_revision: '1',
-                  last_rebuild: { status: 'success' },
-                  plugin_errors: {},
-                }
-              : []
-        return route.fulfill({ json: { success: true, data } })
+            },
+          })
+        if (path === '/api/plugin/task' && method === 'GET')
+          return route.fulfill({ json: { success: true, data: [] } })
+        if (method !== 'GET') installs++
+        return route.fallback()
       })
       await page.route('https://plugins.example/**', (route) => {
         const path = new URL(route.request().url()).pathname
@@ -346,5 +365,13 @@ for (const theme of ['light', 'dark'] as const)
       ).toBe(true)
       expect(installs).toBe(0)
       await assertNoHorizontalOverflow(page)
+      const install = page.getByRole('button', {
+        name: '安装并启用',
+        exact: true,
+      })
+      await expect(install).toBeEnabled()
+      await install.click()
+      await expect.poll(() => installs).toBe(1)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
     })
   }

@@ -25,6 +25,7 @@ const { t } = useI18n()
 
 type ExpiryOption = 'never' | '1d' | '3d' | '7d' | 'custom'
 
+const name = ref('')
 const amount = ref('10')
 const expiryOption = ref<ExpiryOption>('never')
 const customDate = ref('')
@@ -69,7 +70,13 @@ const canSubmit = computed(() => {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
     return false
   }
-  if (value <= 0n) return false
+  if (
+    value <= 0n ||
+    !Number.isSafeInteger(Number(value)) ||
+    !name.value.trim() ||
+    [...name.value.trim()].length > 20
+  )
+    return false
   if (expiryOption.value === 'custom' && !Number.isFinite(customExpiry()))
     return false
   return true
@@ -101,6 +108,7 @@ function computeExpiredTime(): number {
 function submit() {
   if (!canSubmit.value || props.loading) return
   emit('submit', {
+    name: name.value.trim(),
     type: 'quota',
     count: Number(count.value),
     amount: amount.value,
@@ -117,6 +125,9 @@ function submit() {
     @close="emit('close')"
   >
     <div class="sibling-space-y-4">
+      <FormField :label="t('redemption.name')"
+        ><TextInput v-model="name" maxlength="20"
+      /></FormField>
       <FormField
         :label="t('redemption.fieldAmount')"
         :hint="t('redemption.amountHint')"

@@ -519,10 +519,10 @@ function exportCsv() {
           <template #cell-redeemer="{ row }">
             <span
               class="max-w-[160px] truncate text-xs text-[var(--text-secondary)]"
-              :title="(row as AdminRedemptionCode).redeemer_email"
+              :title="String((row as AdminRedemptionCode).used_user_id || '')"
             >
               {{
-                (row as AdminRedemptionCode).redeemer_email ||
+                String((row as AdminRedemptionCode).used_user_id || '') ||
                 t('redemption.notRedeemed')
               }}
             </span>

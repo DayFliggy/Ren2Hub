@@ -38,7 +38,10 @@ const auth = useAuthStore()
 const ticketQueue = useTicketQueueStore()
 const queueRequest = useLatestRequest()
 const detailRequest = useLatestRequest()
+const agentsRequest = useLatestRequest()
+let mutationSequence = 0
 
+const canRead = computed(() => auth.hasPermission('ticket', 'read'))
 const canReply = computed(() => auth.hasPermission('ticket', 'reply'))
 const canManage = computed(() => auth.hasPermission('ticket', 'manage'))
 const selectedID = computed(() => {
@@ -139,11 +142,12 @@ function syncRoute(id = selectedID.value): void {
 }
 
 async function loadQueue(): Promise<void> {
+  if (!canRead.value) return
   queueLoading.value = true
   queueFailed.value = false
   const result = await queueRequest.run((signal) =>
     api.get<PageResult<AdminTicketItem>>(
-      '/api/next/admin/tickets',
+      '/api/admin/tickets',
       {
         page: page.value,
         page_size: pageSize,
@@ -172,17 +176,21 @@ async function loadQueue(): Promise<void> {
 }
 
 async function loadDetail(id: number): Promise<void> {
-  if (!id) {
-    ticket.value = null
-    messages.value = []
-    detailFailed.value = false
+  mutationSequence += 1
+  mutating.value = false
+  ticket.value = null
+  messages.value = []
+  detailFailed.value = false
+  if (!id || !canRead.value) {
+    detailRequest.cancel()
+    detailLoading.value = false
     return
   }
   detailLoading.value = true
   detailFailed.value = false
   const result = await detailRequest.run((signal) =>
     api.get<{ ticket: AdminTicketItem; messages: TicketMessage[] }>(
-      `/api/next/admin/tickets/${id}`,
+      `/api/admin/tickets/${id}`,
       undefined,
       { signal }
     )
@@ -206,18 +214,29 @@ async function loadDetail(id: number): Promise<void> {
 }
 
 async function loadAgents(): Promise<void> {
-  if (!canManage.value) return
-  agentsLoading.value = true
-  try {
-    const data = await api.get<{ items: TicketAgent[] }>(
-      '/api/next/admin/tickets/agents'
-    )
-    agents.value = data.items
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
+  if (!canManage.value) {
+    agentsRequest.cancel()
+    agents.value = []
     agentsLoading.value = false
+    return
   }
+  agentsLoading.value = true
+  const result = await agentsRequest.run((signal) =>
+    api.get<{ items: TicketAgent[] }>('/api/admin/tickets/agents', undefined, {
+      signal,
+    })
+  )
+  if (result.stale) return
+  agentsLoading.value = false
+  if (!result.ok) {
+    toast.error(
+      result.error instanceof ApiError
+        ? result.error.message
+        : String(result.error)
+    )
+    return
+  }
+  agents.value = result.value.items
 }
 
 function selectTicket(id: number): void {
@@ -236,14 +255,14 @@ function showQueue(): void {
   })
 }
 
-async function refreshAfterMutation(reloadDetail = false): Promise<void> {
+async function refreshAfterMutation(): Promise<void> {
   await Promise.all([loadQueue(), ticketQueue.refresh()])
-  if (reloadDetail && selectedID.value) await loadDetail(selectedID.value)
 }
 
 async function sendReply(payload: { content: string; attachments: File[] }) {
   if (!ticket.value || !canReply.value || mutating.value) return
   const id = ticket.value.id
+  const sequence = ++mutationSequence
   mutating.value = true
   try {
     const body = new FormData()
@@ -257,8 +276,8 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
         assigned_at: number
         updated: number
       }
-    }>(`/api/next/admin/tickets/${id}/messages`, body)
-    if (ticket.value?.id !== id) return
+    }>(`/api/admin/tickets/${id}/messages`, body)
+    if (sequence !== mutationSequence || ticket.value?.id !== id) return
     messages.value.push(data.message)
     ticket.value.status = data.ticket.status
     ticket.value.assignee_id = data.ticket.assignee_id
@@ -274,21 +293,24 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
     toast.success(t('tickets.replied'))
     await refreshAfterMutation()
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
-    mutating.value = false
+    if (sequence === mutationSequence) mutating.value = false
   }
 }
 
 async function changeStatus(next: 'open' | 'closed'): Promise<void> {
   if (!ticket.value || !canManage.value || mutating.value) return
   const id = ticket.value.id
+  const sequence = ++mutationSequence
   mutating.value = true
   try {
     const data = await api.patch<{
       ticket: { id: number; status: TicketStatus; updated: number }
-    }>(`/api/next/admin/tickets/${id}/status`, { status: next })
-    if (ticket.value?.id !== id) return
+    }>(`/api/admin/tickets/${id}/status`, { status: next })
+    if (sequence !== mutationSequence || ticket.value?.id !== id) return
     ticket.value.status = data.ticket.status
     ticket.value.updated = data.ticket.updated
     toast.success(
@@ -296,15 +318,18 @@ async function changeStatus(next: 'open' | 'closed'): Promise<void> {
     )
     await refreshAfterMutation()
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
-    mutating.value = false
+    if (sequence === mutationSequence) mutating.value = false
   }
 }
 
 async function saveAssignment(value = assignmentValue.value): Promise<void> {
   if (!ticket.value || !canManage.value || mutating.value) return
   const id = ticket.value.id
+  const sequence = ++mutationSequence
   const nextID = value ? Number(value) : null
   mutating.value = true
   try {
@@ -315,8 +340,8 @@ async function saveAssignment(value = assignmentValue.value): Promise<void> {
         assigned_at: number
         updated: number
       }
-    }>(`/api/next/admin/tickets/${id}/assignee`, { assignee_id: nextID })
-    if (ticket.value?.id !== id) return
+    }>(`/api/admin/tickets/${id}/assignee`, { assignee_id: nextID })
+    if (sequence !== mutationSequence || ticket.value?.id !== id) return
     ticket.value.assignee_id = data.ticket.assignee_id
     ticket.value.assigned_at = data.ticket.assigned_at
     ticket.value.updated = data.ticket.updated
@@ -330,9 +355,11 @@ async function saveAssignment(value = assignmentValue.value): Promise<void> {
     toast.success(t('tickets.admin.assigneeSaved'))
     await refreshAfterMutation()
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
-    mutating.value = false
+    if (sequence === mutationSequence) mutating.value = false
   }
 }
 
@@ -364,12 +391,30 @@ watch(page, () => {
   void loadQueue()
 })
 watch(selectedID, (id) => void loadDetail(id), { immediate: true })
+watch([() => auth.user?.id, canManage], () => void loadAgents(), {
+  immediate: true,
+})
+watch(
+  [() => auth.user?.id, canRead],
+  () => {
+    queueRequest.cancel()
+    queueLoading.value = false
+    queueFailed.value = false
+    tickets.value = []
+    total.value = 0
+    void loadDetail(selectedID.value)
+    if (canRead.value) void loadQueue()
+  },
+  { flush: 'sync' }
+)
 
 onMounted(() => {
   void loadQueue()
-  void loadAgents()
 })
-onBeforeUnmount(() => window.clearTimeout(searchTimer))
+onBeforeUnmount(() => {
+  mutationSequence += 1
+  window.clearTimeout(searchTimer)
+})
 </script>
 
 <template>

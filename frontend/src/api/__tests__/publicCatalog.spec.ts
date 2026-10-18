@@ -98,40 +98,20 @@ describe('public catalog contracts', () => {
       },
     ])
   })
-  it.each([
-    {
-      label: 'missing output factor',
-      audio_ratio: '3',
-      audio_completion_ratio: undefined,
-      input: '12',
-      output: '12',
-    },
-    {
-      label: 'missing input factor',
-      audio_ratio: undefined,
-      audio_completion_ratio: '3',
-      input: '4',
-      output: '12',
-    },
-  ])(
-    'uses the billing default for $label',
-    ({ audio_ratio, audio_completion_ratio, input, output }) => {
-      const prices = catalogPrices(
-        {
-          quota_type: 0,
-          billing_mode: 'ratio',
-          model_ratio: '2',
-          audio_ratio,
-          audio_completion_ratio,
-        },
-        'M'
-      )
-      expect(prices.filter((price) => price.key.startsWith('audio'))).toEqual([
-        { key: 'audioInput', value: input, unit: 'per_million_tokens' },
-        { key: 'audioOutput', value: output, unit: 'per_million_tokens' },
-      ])
-    }
-  )
+  it('omits audio prices when native ratio fields are absent', () => {
+    const partial = catalogPrices(
+      { quota_type: 0, model_ratio: 2, audio_ratio: 3 },
+      'M'
+    )
+    expect(partial.filter((price) => price.key.startsWith('audio'))).toEqual([
+      { key: 'audioInput', value: '12', unit: 'per_million_tokens' },
+    ])
+    const missing = catalogPrices(
+      { quota_type: 0, model_ratio: 2, audio_completion_ratio: 3 },
+      'M'
+    )
+    expect(missing.filter((price) => price.key.startsWith('audio'))).toEqual([])
+  })
 
   it('rejects malformed ranking shares and accepts valid history', () => {
     const parsed = parseRankings({

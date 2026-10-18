@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import UserPermissionsEditor from './UserPermissionsEditor.vue'
+import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+import { useLatestRequest } from '@/composables/useLatestRequest'
+import { useToast } from '@/composables/useToast'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -7,7 +12,6 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
 import AdminUserBindings from './AdminUserBindings.vue'
 import {
   ADMIN_USER_ASSIGNABLE_ROLES,
@@ -32,14 +36,37 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18n()
+const auth = useAuthStore(),
+  permissionRequest = useLatestRequest(),
+  toast = useToast()
+const permissions = ref<Record<string, Record<string, boolean>>>({}),
+  permissionBaseline = ref(''),
+  permissionsReady = ref(false)
+async function loadPermissions(user: AdminUser) {
+  permissionsReady.value = false
+  const result = await permissionRequest.run((signal) =>
+    api.get<AdminUser>(`/api/user/${user.id}`, undefined, { signal })
+  )
+  if (result.stale) return
+  if (result.ok) {
+    permissions.value = result.value.admin_permissions ?? {}
+    permissionBaseline.value = JSON.stringify(permissions.value)
+    permissionsReady.value = true
+  } else
+    toast.error(
+      result.error instanceof Error
+        ? result.error.message
+        : String(result.error)
+    )
+}
 const saving = ref(false)
 const form = reactive({
+  max_concurrency: 0,
   username: '',
   displayName: '',
   email: '',
   password: '',
   role: '1',
-  status: 1 as 1 | 2,
 })
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,19}$/
@@ -50,16 +77,21 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * privilege ceiling is visible in the UI rather than only enforced on submit.
  */
 const roleOptions = computed(() =>
-  ADMIN_USER_ASSIGNABLE_ROLES.filter((role) => role < props.operatorLevel).map(
-    (role) => {
+  [
+    ...ADMIN_USER_ASSIGNABLE_ROLES,
+    ...(props.editing?.role === 100 ? [100 as const] : []),
+  ]
+    .filter(
+      (role) => role < props.operatorLevel || role === props.editing?.role
+    )
+    .map((role) => {
       const tone = adminUserRoleTone(role)
       return {
         value: String(role),
         label: t(adminUserRoleLabelKey(role)),
         tone: tone === 'neutral' ? undefined : tone,
       }
-    }
-  )
+    })
 )
 
 const selectedRole = computed(() => Number(form.role) as AdminUserRole)
@@ -72,26 +104,36 @@ const usernameValid = computed(() =>
 const valid = computed(
   () =>
     usernameValid.value &&
-    emailValid.value &&
-    (props.editing !== null ||
-      (form.password.length >= 8 && [...form.password].length <= 128)) &&
+    Number.isSafeInteger(form.max_concurrency) &&
+    form.max_concurrency >= 0 &&
+    (props.editing === null ||
+      (emailValid.value && form.email.trim().length <= 50)) &&
+    ((props.editing !== null && !form.password) ||
+      ([...form.password].length >= 8 && [...form.password].length <= 128)) &&
     form.displayName.trim().length <= 20 &&
-    form.email.trim().length <= 50 &&
-    ADMIN_USER_ASSIGNABLE_ROLES.includes(selectedRole.value) &&
-    selectedRole.value < props.operatorLevel
+    ((ADMIN_USER_ASSIGNABLE_ROLES.includes(selectedRole.value) &&
+      selectedRole.value < props.operatorLevel) ||
+      (props.editing?.role === 100 &&
+        selectedRole.value === 100 &&
+        auth.isRoot))
 )
 
 watch(
   () => props.open,
   (open) => {
-    if (!open) return
+    if (!open) {
+      permissionRequest.cancel()
+      return
+    }
     const user = props.editing
+    permissionsReady.value = false
+    if (auth.isRoot && user && user.role >= 10) void loadPermissions(user)
+    form.max_concurrency = user?.max_concurrency ?? 0
     form.username = user?.username ?? ''
     form.displayName = user?.display_name ?? ''
     form.email = user?.email ?? ''
     form.password = ''
     form.role = String(user?.role ?? 1)
-    form.status = user?.status === 2 ? 2 : 1
   },
   { immediate: true }
 )
@@ -108,16 +150,27 @@ async function submit() {
   if (!valid.value || saving.value) return
   saving.value = true
   try {
-    const base: AdminUserUpdateInput = {
+    const base = {
+      max_concurrency: form.max_concurrency,
       username: form.username.trim(),
       display_name: form.displayName.trim(),
-      email: form.email.trim(),
       role: selectedRole.value,
     }
     const input: AdminUserCreateInput | AdminUserUpdateInput =
       props.editing === null
-        ? { ...base, password: form.password, status: form.status }
-        : base
+        ? { ...base, password: form.password }
+        : {
+            ...base,
+            email: form.email.trim(),
+            ...(form.password ? { password: form.password } : {}),
+          }
+    if (
+      auth.isRoot &&
+      props.editing?.role === 10 &&
+      permissionsReady.value &&
+      JSON.stringify(permissions.value) !== permissionBaseline.value
+    )
+      input.admin_permissions = permissions.value
     if (await props.save(input)) emit('close')
   } finally {
     saving.value = false
@@ -133,6 +186,20 @@ async function submit() {
     @close="close"
   >
     <div class="sibling-space-y-5 text-left">
+      <UserPermissionsEditor
+        v-if="auth.isRoot && editing?.role === 10 && permissionsReady"
+        v-model="permissions"
+      />
+      <FormField
+        :label="t('channels.maxConcurrency')"
+        :hint="t('channels.maxConcurrencyHint')"
+        ><input
+          v-model.number="form.max_concurrency"
+          type="number"
+          min="0"
+          step="1"
+          class="console-input"
+      /></FormField>
       <FormField :label="t('users.username')" :hint="t('users.usernameHint')">
         <TextInput
           v-model="form.username"
@@ -141,7 +208,6 @@ async function submit() {
           autocomplete="off"
         />
       </FormField>
-
       <div class="grid gap-4 sm:grid-cols-2">
         <FormField :label="t('users.displayName')">
           <TextInput
@@ -151,7 +217,7 @@ async function submit() {
             autocomplete="off"
           />
         </FormField>
-        <FormField :label="t('users.email')">
+        <FormField v-if="editing !== null" :label="t('users.email')">
           <TextInput
             v-model="form.email"
             type="email"
@@ -186,49 +252,8 @@ async function submit() {
           {{ t('users.roleCeilingHint') }}
         </p>
       </div>
-
-      <div v-if="editing === null">
-        <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
-          {{ t('users.status') }}
-        </p>
-        <div
-          class="sketch-md grid grid-cols-2 gap-1 bg-[var(--surface-muted)] p-1"
-          role="radiogroup"
-          :aria-label="t('users.status')"
-        >
-          <button
-            v-for="option in [
-              { value: 1 as const, label: t('users.statusEnabled') },
-              { value: 2 as const, label: t('users.statusDisabled') },
-            ]"
-            :key="option.value"
-            type="button"
-            role="radio"
-            :aria-checked="form.status === option.value"
-            class="sketch-sm h-9 text-sm font-medium transition-colors focus-ring"
-            :class="
-              form.status === option.value
-                ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-xs'
-                : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-            "
-            @click="form.status = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-      </div>
     </div>
 
-    <GatewayUserPanel
-      v-if="
-        open &&
-        editing &&
-        (operatorLevel >= 100 || editing.role < operatorLevel)
-      "
-      :key="editing.id"
-      :user-id="editing.id"
-      editable
-    />
     <AdminUserBindings
       v-if="open && editing"
       :key="editing.id"

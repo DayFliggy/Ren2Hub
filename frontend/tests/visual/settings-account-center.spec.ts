@@ -93,12 +93,12 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await page.goto('/profile', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       await expect(
-        page.getByRole('heading', { name: '会员中心', exact: true })
+        page.getByRole('heading', { name: 'Native Root', exact: true })
       ).toBeVisible()
       await expect(
         page
           .getByRole('navigation', { name: '面包屑导航' })
-          .getByText('会员中心', { exact: true })
+          .getByText('账户中心', { exact: true })
       ).toBeVisible()
       await expect(page.locator('[data-title-side="right"]')).toHaveCount(1)
       const userMenuTrigger = page.getByRole('button', {
@@ -119,19 +119,13 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await expect(
         page.getByRole('heading', { name: '账号设置', exact: true })
       ).toBeVisible()
-      await expect(page.getByTestId('profile-join-date')).toHaveText(
-        '2026-06-20'
+      // Registration time is a native User.created_at fact, not a membership tier.
+      await expect(page.getByTestId('profile-join-date')).not.toHaveText('—')
+      await expect(page.getByTestId('profile-member-duration')).not.toHaveText(
+        '—'
       )
-      await expect(page.getByTestId('profile-member-duration')).toHaveText(
-        '37 天'
-      )
-      await expect(page.getByTestId('profile-total-calls')).toHaveText('32.1K')
-      await expect(page.getByTestId('profile-account-status')).toContainText(
-        '账户状态 · 正常'
-      )
-      await expect(page.getByTestId('profile-stat-requests')).toContainText(
-        '32.1K'
-      )
+      const stats = page.locator('[data-testid^="profile-stat-"] strong')
+      await expect(stats).toHaveText(['$10.00', '$2.00', '4'])
       await expect(page.locator('[data-security-entry]')).toBeVisible()
       await expect(
         page.getByRole('heading', { name: '通知与偏好', exact: true })

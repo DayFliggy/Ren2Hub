@@ -173,10 +173,7 @@ export function validateSetting(
   if (field.kind === 'ratio')
     return object(parsed) &&
       Object.values(parsed).every(
-        (v) =>
-          typeof v === 'number' &&
-          Number.isFinite(v) &&
-          (field.key === 'TopupGroupRatio' ? v > 0 : v >= 0)
+        (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0
       )
       ? null
       : 'range'

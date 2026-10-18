@@ -21,8 +21,7 @@ const { t } = useI18n()
 const saving = ref(false)
 const mode = ref<'grant' | 'deduct'>('grant')
 const amount = ref('1')
-const reason = ref('')
-let pending: { fingerprint: string; id: string } | null = null
+let operation: { delta: string; id: string } | null = null
 
 /** Admins think in dollars; the ledger stores quota units. */
 const units = computed(() => {
@@ -39,7 +38,7 @@ const delta = computed(() =>
 )
 const nextQuota = computed(() => {
   try {
-    return addQuota(props.target?.available_quota ?? '0', delta.value)
+    return addQuota(String(props.target?.quota ?? 0), delta.value)
   } catch {
     return null
   }
@@ -49,8 +48,7 @@ const valid = computed(
     units.value !== null &&
     BigInt(units.value) > 0n &&
     nextQuota.value !== null &&
-    reason.value.trim().length > 0 &&
-    new TextEncoder().encode(reason.value.trim()).length <= 512
+    Number.isSafeInteger(Number(delta.value))
 )
 
 watch(
@@ -59,8 +57,6 @@ watch(
     if (!open) return
     mode.value = 'grant'
     amount.value = '1'
-    reason.value = ''
-    pending = null
   },
   { immediate: true }
 )
@@ -73,16 +69,9 @@ async function submit() {
   if (!valid.value || saving.value) return
   saving.value = true
   try {
-    const fingerprint = JSON.stringify([
-      props.target?.id,
-      props.target?.quota_version,
-      delta.value,
-      reason.value.trim(),
-    ])
-    if (pending?.fingerprint !== fingerprint)
-      pending = { fingerprint, id: crypto.randomUUID() }
-    if (await props.save(delta.value, reason.value.trim(), pending.id))
-      emit('close')
+    if (operation?.delta !== delta.value)
+      operation = { delta: delta.value, id: crypto.randomUUID() }
+    if (await props.save(delta.value, '', operation.id)) emit('close')
   } finally {
     saving.value = false
   }
@@ -142,14 +131,6 @@ async function submit() {
         </div>
       </FormField>
 
-      <FormField :label="t('billing.reason')">
-        <textarea
-          v-model="reason"
-          maxlength="512"
-          rows="2"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 focus-ring"
-        />
-      </FormField>
       <dl
         class="sketch-md sibling-space-y-1.5 border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs"
       >
@@ -160,7 +141,7 @@ async function submit() {
           <dd
             class="break-all font-mono tabular-nums text-[var(--text-secondary)]"
           >
-            {{ formatQuota(target?.available_quota ?? '0', 3) }}
+            {{ formatQuota(target?.quota ?? '0', 3) }}
           </dd>
         </div>
         <div class="flex items-center justify-between gap-3">

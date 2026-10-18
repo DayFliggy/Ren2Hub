@@ -39,7 +39,7 @@ let disposed = false
 const activeCount = computed(
   () =>
     items.value.filter(
-      (item) => !item.revoked_at && item.expires_at > Date.now() / 1000
+      (item) => item.expires_at === 0 || item.expires_at > Date.now() / 1000
     ).length
 )
 
@@ -84,10 +84,11 @@ async function save() {
   const requestedScopes = [...new Set(scopes.value)].sort()
   const expiry = expires.value
     ? Math.floor(new Date(expires.value).getTime() / 1000)
-    : 0
+    : Math.floor(Date.now() / 1000) +
+      catalog.value.default_lifetime_days * 86400
   if (
     !name.value.trim() ||
-    Array.from(name.value.trim()).length > 100 ||
+    Array.from(name.value.trim()).length > 64 ||
     (mode !== 'rename' &&
       (!requestedScopes.length ||
         requestedScopes.some(
@@ -95,7 +96,7 @@ async function save() {
         ))) ||
     (mode === 'create' &&
       expires.value &&
-      (!Number.isFinite(expiry) || expiry <= Date.now() / 1000))
+      (!Number.isFinite(expiry) || expiry < Date.now() / 1000 + 3600))
   ) {
     toast.error(t('pat.invalid'))
     return
@@ -106,7 +107,10 @@ async function save() {
   busy.value = true
   try {
     if (mode === 'create') {
-      const proof = await proofDialog.value!.request({ scope: 'pat.create' })
+      const proof = await proofDialog.value!.request({
+        scope: 'access_token.generate',
+        context: { scopes: requestedScopes, expires_at: expiry },
+      })
       if (disposed || version !== epoch) return
       const result = await personalAccessTokensApi.create(
         { name: inputName, scopes: requestedScopes, expires_at: expiry },
@@ -120,8 +124,8 @@ async function save() {
       let proof: string | undefined
       if (mode === 'scopes')
         proof = await proofDialog.value!.request({
-          scope: 'pat.update',
-          context: { id, scopes: requestedScopes },
+          scope: 'access_token.update',
+          context: { token_id: id, scopes: requestedScopes },
         })
       if (disposed || version !== epoch) return
       const result = await personalAccessTokensApi.update(
@@ -153,8 +157,8 @@ async function revoke() {
   busy.value = true
   try {
     const proof = await proofDialog.value!.request({
-      scope: 'pat.revoke',
-      context: { id: target.id },
+      scope: 'access_token.revoke',
+      context: { token_id: target.id },
     })
     if (disposed || version !== epoch) return
     await personalAccessTokensApi.revoke(target.id, proof, controller.signal)
@@ -177,11 +181,9 @@ function timestamp(value: number) {
     : t('pat.never')
 }
 function state(item: PersonalAccessToken) {
-  return item.revoked_at
-    ? 'revoked'
-    : item.expires_at <= Date.now() / 1000
-      ? 'expired'
-      : 'active'
+  return item.expires_at > 0 && item.expires_at <= Date.now() / 1000
+    ? 'expired'
+    : 'active'
 }
 async function copySecret() {
   try {

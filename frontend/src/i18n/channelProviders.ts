@@ -1,6 +1,8 @@
 export const channelProviderMessages = {
   'zh-CN': {
     awsApiType: 'AWS 接口',
+    awsKeyType: 'AWS 凭证类型',
+    awsAccessKey: 'Access Key / Secret Access Key',
     invokeModel: 'InvokeModel（默认）',
     mantle: 'Mantle Messages',
     awsHint:
@@ -19,6 +21,8 @@ export const channelProviderMessages = {
   },
   en: {
     awsApiType: 'AWS API',
+    awsKeyType: 'AWS credential type',
+    awsAccessKey: 'Access Key / Secret Access Key',
     invokeModel: 'InvokeModel (default)',
     mantle: 'Mantle Messages',
     awsHint:

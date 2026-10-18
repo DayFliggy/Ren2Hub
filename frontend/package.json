@@ -14,7 +14,8 @@
     "format:check": "prettier . --check",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:visual": "playwright test"
+    "test:visual": "playwright test",
+    "test:visual:live": "playwright test --config playwright.live.config.ts"
   },
   "dependencies": {
     "@vueuse/core": "^14.3.0",

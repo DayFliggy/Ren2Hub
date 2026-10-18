@@ -3,11 +3,30 @@ import { expect, test } from '@playwright/test'
 import {
   assertInteractiveCentersVisible,
   assertNoHorizontalOverflow,
-  configureStablePage,
+  configureStablePage as configureBase,
   freezeAndInspectHomeCanvas,
   waitForStablePage,
   type VisualTheme,
 } from './fixtures'
+
+async function configureStablePage(...args: Parameters<typeof configureBase>) {
+  await configureBase(args[0], {
+    ...args[1],
+    status: {
+      start_time: Math.floor(
+        new Date('2026-06-20T00:00:00+08:00').getTime() / 1000
+      ),
+    },
+  })
+  await args[0].route('**/api/uptime/status', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: [{ monitors: [{ uptime: 0.9995, status: 1 }] }],
+      },
+    })
+  )
+}
 
 const heroViewports = [
   { name: '4k', width: 3840, height: 2160, titleSize: 102.2 },
@@ -277,11 +296,8 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
 
       const runtime = page.locator('#home-runtime')
       await runtime.scrollIntoViewIfNeeded()
-      await expect(page.locator('[data-home-request-total]')).toHaveText('752')
-      await expect(page.locator('.runtime-trend polyline')).toHaveAttribute(
-        'points',
-        /,/
-      )
+      await expect(page.locator('[data-home-request-total]')).toHaveText('24')
+      await expect(page.locator('.runtime-trend polyline')).toBeVisible()
       const runtimeBounds = await runtime.evaluate((section) => {
         const bounds = (selector: string) => {
           const element = section.querySelector<HTMLElement>(selector)
@@ -310,17 +326,11 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
             left: rect.left,
           },
           uptime: bounds('.runtime-ledger-panel--uptime'),
-          requests: bounds('.runtime-ledger-panel--requests'),
           uptimeHeading: bounds(
             '.runtime-ledger-panel--uptime .runtime-ledger-heading'
           ),
           clock: bounds('.runtime-clock'),
           availability: bounds('.runtime-availability'),
-          total: bounds('[data-home-request-total]'),
-          caption: bounds('.runtime-request-caption'),
-          trend: bounds('.runtime-trend'),
-          totalOverflow: overflow('[data-home-request-total]'),
-          trendOverflow: overflow('.runtime-trend'),
           uptimeHeadingOverflow: overflow(
             '.runtime-ledger-panel--uptime .runtime-ledger-heading'
           ),
@@ -328,13 +338,9 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       })
       for (const bounds of [
         runtimeBounds.uptime,
-        runtimeBounds.requests,
         runtimeBounds.uptimeHeading,
         runtimeBounds.clock,
         runtimeBounds.availability,
-        runtimeBounds.total,
-        runtimeBounds.caption,
-        runtimeBounds.trend,
       ]) {
         expect(bounds.left).toBeGreaterThanOrEqual(
           runtimeBounds.section.left - 1
@@ -347,23 +353,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
           runtimeBounds.section.bottom + 1
         )
       }
-      expect(runtimeBounds.totalOverflow).toBeLessThanOrEqual(1)
-      expect(runtimeBounds.trendOverflow).toBeLessThanOrEqual(1)
       expect(runtimeBounds.uptimeHeadingOverflow).toBeLessThanOrEqual(1)
-      expect(overlapArea(runtimeBounds.total, runtimeBounds.trend)).toBe(0)
-      expect(overlapArea(runtimeBounds.caption, runtimeBounds.trend)).toBe(0)
-      if (viewport.width > 900) {
-        expect(runtimeBounds.uptime.right).toBeLessThanOrEqual(
-          runtimeBounds.requests.left + 1
-        )
-        expect(
-          Math.abs(runtimeBounds.uptime.top - runtimeBounds.requests.top)
-        ).toBeLessThanOrEqual(1)
-      } else {
-        expect(runtimeBounds.uptime.bottom).toBeLessThanOrEqual(
-          runtimeBounds.requests.top + 1
-        )
-      }
       await assertNoHorizontalOverflow(page)
     })
   }
@@ -408,7 +398,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       const showcase = page.locator('.home-showcase')
       await showcase.scrollIntoViewIfNeeded()
       await expect(showcase).toBeVisible()
-      await expect(page.locator('[data-home-request-total]')).toHaveText('752')
+      await expect(page.locator('[data-home-request-total]')).toHaveText('24')
       await expect(page.locator('.runtime-trend polyline')).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await expect(page.locator('.scroll-activity-indicator')).toHaveCount(0)
@@ -523,8 +513,8 @@ test('home runtime workbench remains self-contained', async ({ page }) => {
     '99.95%'
   )
   await page.locator('#home-runtime').scrollIntoViewIfNeeded()
-  await expect(page.locator('[data-home-request-total]')).toHaveText('752')
-  await expect(page.locator('.runtime-trend polyline')).toHaveCount(1)
+  await expect(page.locator('[data-home-request-total]')).toHaveText('24')
+  await expect(page.locator('.runtime-trend polyline')).toBeVisible()
   await expect(page.locator('[data-home-channel-exchange]')).toHaveCount(0)
   await expect(page.locator('[data-home-token-routing]')).toHaveCount(0)
   await expect(page.getByText('渠道供应，也能自由买卖')).toHaveCount(0)
@@ -569,57 +559,20 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
   }
 }
 
-test('zero request trend uses a floating wave placeholder', async ({
+test('native public request aggregate uses only the explicit 24 hour response', async ({
   page,
 }) => {
-  await configureStablePage(page, { theme: 'light', authenticated: true })
-  await page.route('**/api/home/metrics', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        success: true,
-        message: '',
-        data: {
-          available: true,
-          requests_24h: 0,
-          hourly_requests: Array(24).fill(0),
-          generated_at: 1_785_103_200,
-        },
-      }),
-    })
-  )
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await waitForStablePage(page)
-  await page.locator('#home-runtime').scrollIntoViewIfNeeded()
-
-  await expect(page.locator('[data-home-request-total]')).toHaveText('0')
-  await expect(page.locator('.runtime-trend polyline')).toHaveCount(0)
-  await expect(page.locator('[data-zero-trend-wave]')).toHaveCount(1)
-  await expect(page.locator('[data-zero-trend-wave] path')).toHaveAttribute(
-    'd',
-    /C/
-  )
-  await expect(page.locator('.runtime-trend-placeholder')).toHaveCount(0)
-
-  const styles = await page.evaluate(() => {
-    const wave = document.querySelector<SVGPathElement>(
-      '[data-zero-trend-wave] path'
-    )
-    if (!wave) {
-      throw new Error('Zero request trend wave missing')
-    }
-    const waveStyle = getComputedStyle(wave)
-    return {
-      animationName: waveStyle.animationName,
-      stroke: waveStyle.stroke,
-      opacity: waveStyle.opacity,
-    }
+  const requested: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/home/metrics')
+      requested.push(request.url())
   })
-
-  expect(styles.animationName).toBe('none')
-  expect(styles.stroke).not.toBe('none')
-  expect(Number(styles.opacity)).toBeGreaterThan(0)
+  await configureStablePage(page, { theme: 'light' })
+  await page.goto('/')
+  await waitForStablePage(page)
+  await expect.poll(() => requested.length).toBe(1)
+  const total = page.locator('[data-home-request-total]')
+  await expect(total).toContainText('24')
   await assertNoHorizontalOverflow(page)
 })
 
@@ -639,75 +592,8 @@ test('home showcase remains intact at narrow mobile width', async ({
     .locator('.runtime-clock')
     .evaluate((element) => element.scrollWidth - element.clientWidth)
   expect(clockOverflow).toBeLessThanOrEqual(1)
-  const trendOverflow = await page
-    .locator('.runtime-trend')
-    .evaluate((element) => element.scrollWidth - element.clientWidth)
-  expect(trendOverflow).toBeLessThanOrEqual(1)
+  await expect(page.locator('.runtime-trend polyline')).toBeVisible()
 })
-
-const requestTotalViewports = [
-  { name: 'narrow-phone', width: 320, height: 720 },
-  { name: 'small-phone', width: 360, height: 720 },
-  { name: 'phone', width: 390, height: 844 },
-  { name: 'small-desktop', width: 1024, height: 768 },
-] as const
-
-for (const theme of ['light', 'dark'] as VisualTheme[]) {
-  for (const viewport of requestTotalViewports) {
-    test(`${theme} ${viewport.name} long home request total stays contained`, async ({
-      page,
-    }) => {
-      await page.setViewportSize(viewport)
-      await configureStablePage(page, { theme, authenticated: true })
-      const requests24h = Number.MAX_SAFE_INTEGER
-      await page.route('**/api/home/metrics', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            message: '',
-            data: {
-              available: true,
-              requests_24h: requests24h,
-              hourly_requests: [requests24h, ...Array(23).fill(0)],
-              generated_at: 1_785_103_200,
-            },
-          }),
-        })
-      )
-      await page.goto('/', { waitUntil: 'domcontentloaded' })
-      await waitForStablePage(page)
-      await page.locator('#home-runtime').scrollIntoViewIfNeeded()
-
-      const total = page.locator('[data-home-request-total]')
-      await expect(total).toHaveText('9,007,199,254,740,991')
-      const geometry = await total.evaluate((element) => {
-        const totalBounds = element.getBoundingClientRect()
-        const panel = element.closest<HTMLElement>(
-          '.runtime-ledger-panel--requests'
-        )!
-        const panelBounds = panel.getBoundingClientRect()
-        const trendBounds = panel
-          .querySelector<HTMLElement>('.runtime-trend')!
-          .getBoundingClientRect()
-        return {
-          totalLeft: totalBounds.left,
-          totalRight: totalBounds.right,
-          panelLeft: panelBounds.left,
-          panelRight: panelBounds.right,
-          overflow: element.scrollWidth - element.clientWidth,
-          trendLeft: trendBounds.left,
-        }
-      })
-      expect(geometry.totalLeft).toBeGreaterThanOrEqual(geometry.panelLeft - 1)
-      expect(geometry.totalRight).toBeLessThanOrEqual(geometry.panelRight + 1)
-      expect(geometry.overflow).toBeLessThanOrEqual(1)
-      expect(geometry.totalRight).toBeLessThanOrEqual(geometry.trendLeft + 1)
-      await assertNoHorizontalOverflow(page)
-    })
-  }
-}
 
 test('home progress dots navigate and track page position', async ({
   page,

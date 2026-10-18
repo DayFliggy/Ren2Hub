@@ -116,7 +116,10 @@ for (const theme of ['light', 'dark'] as const) {
       await page.route('**/api/plugin/task**', async (route) => {
         const request = route.request(),
           url = new URL(request.url())
-        if (url.pathname.endsWith('/status') && request.method() === 'POST') {
+        if (
+          url.pathname === '/api/plugin/task/fixture/status' &&
+          request.method() === 'POST'
+        ) {
           mutations.push({ query: url.search, body: request.postDataJSON() })
           if (mode === 'error')
             return route.fulfill({
@@ -148,7 +151,8 @@ for (const theme of ['light', 'dark'] as const) {
             },
           })
         }
-        let data: unknown = []
+        if (request.method() !== 'GET') return route.fallback()
+        let data: unknown
         if (url.pathname === '/api/plugin/task')
           data = [
             {
@@ -169,12 +173,15 @@ for (const theme of ['light', 'dark'] as const) {
               in_flight_count: mode === 'pending' ? 2 : 0,
             },
           ]
-        else if (url.pathname.endsWith('/runtime/status'))
+        else if (url.pathname === '/api/plugin/task/runtime/status')
           data = {
             current_generation: 1,
             last_rebuild: { status: 'success' },
             plugin_errors: {},
           }
+        else if (url.pathname === '/api/plugin/task/marketplace/sources')
+          data = []
+        else return route.fallback()
         return route.fulfill({ json: { success: true, data } })
       })
       await page.goto('/task-plugins')

@@ -132,7 +132,7 @@ export function adminChannelResponseText(
 }
 
 /**
- * Endpoint overrides accepted by GET /api/next/admin/channels/test/:id via
+ * Endpoint overrides accepted by GET /api/channel/test/:id via
  * ?endpoint_type=. Values mirror relaykit/types/endpoint_type.go; an empty
  * value means auto-detection (no query parameter).
  */

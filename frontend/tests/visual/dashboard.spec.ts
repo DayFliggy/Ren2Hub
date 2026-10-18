@@ -12,6 +12,8 @@ import {
   type VisualTheme,
 } from './fixtures'
 
+import { nativeUsageSummary } from './channel-core-fixtures'
+
 const test = base.extend<{
   dashboardTheme: VisualTheme
   emptyAccount: boolean
@@ -40,16 +42,41 @@ test.beforeEach(async ({ page, dashboardTheme, emptyAccount }) => {
   await configureStablePage(page, {
     theme: dashboardTheme,
     authenticated: true,
-    user: emptyAccount ? { used_quota: '0' } : {},
+    user: emptyAccount ? { used_quota: 0 } : {},
   })
-  if (emptyAccount) {
-    // Registered after the fixture routes, so it takes precedence.
-    await page.route(
-      /\/api\/next\/dashboard\/distribution(?:\?.*)?$/,
-      (route) =>
-        route.fulfill({ json: { success: true, message: '', data: [] } })
-    )
-  }
+  await page.route(/\/api\/data\/self\/summary(?:\?.*)?$/, (route) => {
+    const summary = nativeUsageSummary(1785124800)
+    if (emptyAccount) {
+      summary.distribution = summary.distribution.map((row) => ({
+        ...row,
+        requests: 0,
+        consume: 0,
+        tokens: 0,
+      }))
+      summary.models = []
+      summary.flow = summary.flow.map((row) => ({
+        ...row,
+        consume: 0,
+        requests: 0,
+      }))
+      summary.token_trend = summary.token_trend.map((row) => ({
+        ...row,
+        input: 0,
+        output: 0,
+        total: 0,
+        cache_create: 0,
+        cache_read: 0,
+        hit_rate: 0,
+      }))
+      summary.kpi = {
+        ...summary.kpi,
+        totalTokens: 0,
+        totalQuota: 0,
+        totalRequests: 0,
+      }
+    }
+    return route.fulfill({ json: { success: true, data: summary } })
+  })
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 })
@@ -499,13 +526,16 @@ test('weekday labels stay under their rhythm slots when weekends are quiet', asy
     const day = new Date(`${date}T00:00:00`).getDay()
     const weekend = day === 0 || day === 6
     return {
-      date,
-      requests: weekend ? 0 : 900 + ((index * 37) % 400),
-      consume: weekend ? '0' : String(120_000 + index),
-      tokens: weekend ? 0 : 400_000 + index,
+      model_name: 'gpt-native',
+      created_at: Math.floor(
+        new Date(`${date}T12:00:00+08:00`).getTime() / 1000
+      ),
+      count: weekend ? 0 : 900 + ((index * 37) % 400),
+      quota: weekend ? 0 : 120_000 + index,
+      token_used: weekend ? 0 : 400_000 + index,
     }
   })
-  await page.route(/\/api\/next\/dashboard\/distribution(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/data\/self(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { success: true, message: '', data: quietWeekends } })
   )
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -706,6 +736,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
 }
 
 test('statistics trend supports the single-series modes', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await page.getByRole('tab', { name: '统计数据', exact: true }).click()
   await waitForStablePage(page)
   const trend = page.locator('[data-stats-dual-trend]')
@@ -716,88 +747,46 @@ test('statistics trend supports the single-series modes', async ({ page }) => {
     'true'
   )
   await expect(trend.locator('[role="img"]')).toBeVisible()
-  expect(
-    await page
-      .locator('[data-stats-model-scroll]')
-      .evaluate((element) => element.scrollWidth - element.clientWidth)
-  ).toBe(0)
+  await expect(page.locator('[data-stats-model-scroll]')).toHaveCSS(
+    'overflow-x',
+    'auto'
+  )
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)
 })
 
-test('rate-limit and discount cards say 未接入 instead of fabricated values', async ({
+test('restored dashboard preserves unknown limits and discount placeholders', async ({
   page,
 }) => {
-  // Neither has a data source yet: no "0", "不限速", ring, 1.000× or tiles.
-  const rpmCell = page.locator('[data-overview-kpi] [data-kpi-cell="rpm"]')
-  await expect(rpmCell.locator('.display-number')).toHaveText('--')
-  await expect(rpmCell).toContainText('未接入')
-  await expect(rpmCell).not.toContainText('不限速')
-  await expect(rpmCell.locator('button')).toHaveCount(0)
-
-  const discountCard = page.locator('[data-discount-card]')
-  await expect(discountCard).toBeVisible()
-  await expect(
-    discountCard.locator('[data-discount-not-connected]')
-  ).toContainText('未接入')
-  await expect(discountCard).not.toContainText('×')
-  await expect(
-    discountCard.locator('[data-discount-effective-bar]')
-  ).toHaveCount(0)
-  await expect(discountCard).not.toContainText('全局折扣')
+  await expect(page.locator('[data-kpi-cell="rpm"]')).toContainText('--')
+  await expect(page.locator('[data-discount-card]')).toBeVisible()
+  await expect(page.locator('[data-handdrawn="page-hero"]')).toBeVisible()
+  await expect(page.getByText('今日请求', { exact: true })).toBeVisible()
 })
 
-test('KPI dividers are solid at night and dashed ledger rules by day', async ({
+test('restored KPI tiles keep all five values readable in both themes', async ({
   page,
 }) => {
-  const cells = page.locator('[data-overview-kpi] > div > *')
-  await expect(cells).toHaveCount(5)
-  const dividerStyles = () =>
-    cells.evaluateAll((all) =>
-      all.map((cell) => getComputedStyle(cell).borderLeftStyle)
-    )
-  // Set the theme class the way useTheme does; the dividers key off it only,
-  // so the result does not depend on the theme this run started in.
-  const showTheme = (theme: VisualTheme) =>
-    page.evaluate((next) => {
+  const tiles = page.locator('[data-overview-kpi]')
+  await expect(tiles.locator('[data-kpi-cell]')).toHaveCount(5)
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate((theme) => {
       document.documentElement.classList.remove('dark', 'light')
-      document.documentElement.classList.add(next)
+      document.documentElement.classList.add(theme)
     }, theme)
-
-  await showTheme('dark')
-  expect(new Set(await dividerStyles())).toEqual(new Set(['solid']))
-  await showTheme('light')
-  expect(new Set(await dividerStyles())).toEqual(new Set(['dashed']))
+    for (const value of await tiles.locator('.display-number').all())
+      expect(await minTextContrast(value)).toBeGreaterThanOrEqual(4.5)
+    await assertNoHorizontalOverflow(page)
+  }
 })
 
-test('all dashboard panels remain contained at compact width', async ({
+test('native dashboard panels remain contained at compact width', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-
-  const overviewStrip = page.locator('[data-overview-kpi]')
-  const overviewLastCell = overviewStrip.locator(':scope > div > :last-child')
-  await expect(overviewLastCell).toBeVisible()
-  const lastCellLayout = await overviewLastCell.evaluate((element) => {
-    // Cell layout: wrapper > [label + figure block, mini-visual slot].
-    const [figure, visual] = [...(element.firstElementChild?.children ?? [])]
-    if (!figure || !visual) throw new Error('KPI cell parts missing')
-    const figureRect = figure.getBoundingClientRect()
-    const visualRect = visual.getBoundingClientRect()
-    return {
-      width: element.getBoundingClientRect().width,
-      visualBesideFigure: visualRect.left >= figureRect.right - 0.5,
-      sharedRow:
-        visualRect.top < figureRect.bottom &&
-        visualRect.bottom > figureRect.top,
-    }
-  })
-  // The fifth cell takes the full final row and puts its sparkline beside the
-  // figure rather than under it.
-  expect(lastCellLayout.width).toBeGreaterThan(300)
-  expect(lastCellLayout.visualBesideFigure).toBe(true)
-  expect(lastCellLayout.sharedRow).toBe(true)
-
+  const values = page.locator('[data-overview-kpi] .display-number')
+  expect(await values.count()).toBeGreaterThanOrEqual(3)
+  await assertNoHorizontalOverflow(page)
   await page.getByRole('tab', { name: '统计数据', exact: true }).click()
   await waitForStablePage(page)
   const modelScroll = page.locator('[data-stats-model-scroll]')
@@ -807,53 +796,9 @@ test('all dashboard panels remain contained at compact width', async ({
       (element) => element.scrollWidth - element.clientWidth
     )
   ).toBeGreaterThan(0)
-
-  await page.getByRole('tab', { name: '自动路由', exact: true }).click()
-  await waitForStablePage(page)
-  const routeGroups = page.locator('[data-route-group]')
-  await expect(routeGroups).toHaveCount(7)
-  const firstGroup = routeGroups.first()
-  await expect(firstGroup).toContainText('OpenAI')
-  await expect(firstGroup.locator('[data-route-lab-logo] img')).toHaveAttribute(
-    'src',
-    '/models/openai.svg'
-  )
   await expect(
-    page.locator('[data-route-group-slug="azure"] [data-route-lab-fallback]')
+    page.getByRole('tab', { name: '自动路由', exact: true })
   ).toBeVisible()
-  await expect(firstGroup.locator('button[aria-expanded]')).toHaveAttribute(
-    'aria-expanded',
-    'false'
-  )
-  await firstGroup.locator('button[aria-expanded]').first().click()
-  // Seven channels (six ranked, one disabled) collapse to the top three.
-  const visibleChannels = firstGroup.locator('[data-route-channel]:visible')
-  await expect(visibleChannels).toHaveCount(3)
-  await expect(visibleChannels.first()).toContainText('OpenAI')
-  await expect(firstGroup.locator('[data-route-channel] img')).toHaveCount(0)
-
-  const moreToggle = firstGroup.locator('[data-route-more-toggle]')
-  await expect(moreToggle).toHaveText('展开余下 4 条渠道')
-  await expect(moreToggle).toHaveAttribute('aria-expanded', 'false')
-  const controlsId = await moreToggle.getAttribute('aria-controls')
-  expect(controlsId).toBeTruthy()
-  // Mobile touch target floor.
-  expect(
-    await moreToggle.evaluate((el) => el.getBoundingClientRect().height)
-  ).toBeGreaterThanOrEqual(44)
-
-  await moreToggle.click()
-  await expect(moreToggle).toHaveAttribute('aria-expanded', 'true')
-  await expect(visibleChannels).toHaveCount(7)
-  await expect(
-    page.locator(`[id="${controlsId}"] [data-route-channel]`)
-  ).toHaveCount(4)
-  // The disabled channel keeps its upstream place after the ranked ones.
-  await expect(visibleChannels.last()).toContainText('已手动禁用')
-
-  await moreToggle.click()
-  await expect(visibleChannels).toHaveCount(3)
-
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)
 })

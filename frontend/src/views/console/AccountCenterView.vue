@@ -2,18 +2,11 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import {
-  Activity,
-  ArrowUpRight,
-  Award,
-  BarChart3,
-  WalletCards,
-} from 'lucide-vue-next'
+import { Activity, ArrowUpRight, BarChart3, WalletCards } from 'lucide-vue-next'
 
 import PageHero from '@/components/console/PageHero.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { adminUserRoleTone } from '@/constants/adminUsers'
-import { useFeatureAccess } from '@/composables/useFeatureAccess'
 import { useAuthStore } from '@/stores/auth'
 import { formatCompact, formatDate, formatQuota } from '@/utils/format'
 import AccountSettingsView from '@/views/console/AccountSettingsView.vue'
@@ -21,7 +14,6 @@ import AccountSettingsView from '@/views/console/AccountSettingsView.vue'
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
-const { disabled: farmDisabled } = useFeatureAccess('farm', 'disabled')
 
 const initial = computed(() =>
   (auth.user?.display_name || auth.user?.username || 'U')
@@ -50,7 +42,13 @@ const accountStatusTone = computed<'success' | 'danger'>(() =>
 const validCreatedAt = computed<number | null>(() => {
   const createdAt = auth.user?.created_at
   const now = Math.floor(Date.now() / 1000)
-  if (!createdAt || createdAt > now) return null
+  if (
+    !createdAt ||
+    !Number.isSafeInteger(createdAt) ||
+    createdAt < 0 ||
+    createdAt > now
+  )
+    return null
   return createdAt
 })
 const joinedDays = computed<number | null>(() => {
@@ -61,53 +59,11 @@ const joinDate = computed(() =>
   validCreatedAt.value === null ? '—' : formatDate(validCreatedAt.value)
 )
 
-const tier = computed(() => {
-  const used = BigInt(auth.user?.used_quota ?? '0')
-  if (used >= 50_000_000n) {
-    return {
-      name: t('profile.tierDiamond'),
-      progress: 100,
-      nextName: '',
-      next: null as null | number,
-    }
-  }
-  if (used >= 20_000_000n) {
-    return {
-      name: t('profile.tierPlatinum'),
-      progress: Number(((used - 20_000_000n) * 100n) / 30_000_000n),
-      nextName: t('profile.tierDiamond'),
-      next: 50_000_000,
-    }
-  }
-  if (used >= 5_000_000n) {
-    return {
-      name: t('profile.tierGold'),
-      progress: Number(((used - 5_000_000n) * 100n) / 15_000_000n),
-      nextName: t('profile.tierPlatinum'),
-      next: 20_000_000,
-    }
-  }
-  if (used >= 1_000_000n) {
-    return {
-      name: t('profile.tierSilver'),
-      progress: Number(((used - 1_000_000n) * 100n) / 4_000_000n),
-      nextName: t('profile.tierGold'),
-      next: 5_000_000,
-    }
-  }
-  return {
-    name: t('profile.tierBronze'),
-    progress: Number((used * 100n) / 1_000_000n),
-    nextName: t('profile.tierSilver'),
-    next: 1_000_000,
-  }
-})
-
 const accountStats = computed(() => [
   {
     key: 'balance',
     label: t('profile.balance'),
-    value: formatQuota(auth.user?.available_quota ?? 0),
+    value: formatQuota(auth.user?.quota ?? 0),
     destination: t('nav.wallet'),
     route: 'wallet',
     icon: WalletCards,
@@ -178,13 +134,6 @@ const accountStats = computed(() => [
             <span class="whitespace-nowrap">{{ memberNo }}</span>
           </p>
           <div class="mt-3 flex flex-wrap items-center gap-2">
-            <span
-              class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-              style="background: var(--accent-soft); color: var(--accent-text)"
-            >
-              <Award :size="13" aria-hidden="true" />
-              {{ tier.name }}
-            </span>
             <StatusChip
               data-testid="profile-account-status"
               :tone="accountStatusTone"
@@ -234,54 +183,6 @@ const accountStats = computed(() => [
             </dd>
           </div>
         </dl>
-      </div>
-
-      <div class="mt-6 border-t border-[var(--border-subtle)] pt-5">
-        <div
-          class="mb-2.5 flex flex-col items-start gap-2 text-xs sm:flex-row sm:items-center sm:justify-between"
-        >
-          <span
-            class="inline-flex items-center gap-1.5 font-semibold text-[var(--text-primary)]"
-          >
-            <Award
-              :size="14"
-              class="text-[var(--accent-text)]"
-              aria-hidden="true"
-            />
-            {{ tier.name }}
-          </span>
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span v-if="tier.next" class="text-[var(--text-tertiary)]">
-              {{ t('profile.progressToNext', { tier: tier.nextName }) }}
-              <strong class="ml-1 text-[var(--accent-text)]"
-                >{{ tier.progress }}%</strong
-              >
-            </span>
-            <!-- While the benefits page is deferred this is a status note, not
-                 a control, so it is not focusable or announced as a button. -->
-            <span v-if="farmDisabled" class="px-1 text-[var(--text-tertiary)]">
-              {{ t('nav.comingSoon') }}
-            </span>
-            <button
-              v-else
-              type="button"
-              class="-my-1 inline-flex min-h-6 items-center gap-1 rounded-md px-1 text-[var(--accent-text)] transition-opacity hover:opacity-70 focus-ring"
-              @click="router.push({ name: 'farm' })"
-            >
-              {{ t('profile.viewTierBenefits') }}
-              <ArrowUpRight :size="13" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-        <div
-          class="pencil-progress h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]"
-        >
-          <div
-            class="h-full rounded-full transition-all duration-700"
-            style="background: var(--accent)"
-            :style="{ width: `${tier.progress}%` }"
-          />
-        </div>
       </div>
     </section>
 

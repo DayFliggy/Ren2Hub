@@ -1,10 +1,19 @@
 import { expect, test } from '@playwright/test'
 import { createModelMarketFixture } from '../fixtures/modelMarket'
 import {
-  configureStablePage,
+  configureStablePage as configureNativePage,
   waitForStablePage,
   assertNoHorizontalOverflow,
 } from './fixtures'
+
+async function configureStablePage(
+  ...args: Parameters<typeof configureNativePage>
+) {
+  await configureNativePage(...args)
+  await args[0].route('**/api/user/model-catalog*', (route) =>
+    route.fulfill({ json: { success: true, data: createModelMarketFixture() } })
+  )
+}
 
 for (const locale of ['zh-CN', 'en']) {
   test(`narrow toolbar controls stay separate and clickable ${locale}`, async ({
@@ -121,11 +130,11 @@ for (const theme of ['light', 'dark'] as const) {
     await configureStablePage(page, { theme })
     const fixture = createModelMarketFixture()
     const longId = `provider/${'long-model-name-without-break'.repeat(6)}`
-    fixture.models[0]!.id = longId
+    fixture.models[0]!.model_name = longId
     fixture.offers.forEach((offer) => {
       if (offer.model_id === 'gpt-4.1') offer.model_id = longId
     })
-    await page.route('**/api/user/model-market', (route) =>
+    await page.route('**/api/user/model-catalog', (route) =>
       route.fulfill({ json: { success: true, data: fixture } })
     )
     await page.addInitScript(() => {
@@ -296,48 +305,30 @@ for (const theme of ['light', 'dark'] as const) {
   })
 }
 
-test('comparison aligns a missing first variant with its matching platform row', async ({
+test('comparison preserves a missing native offer beside the platform price', async ({
   page,
 }, testInfo) => {
   await configureStablePage(page, { theme: 'light' })
   await page.setViewportSize({ width: 1440, height: 900 })
   const fixture = createModelMarketFixture()
   fixture.offers = fixture.offers.filter(
-    (offer) =>
-      !(
-        offer.model_id === 'video-preview' &&
-        offer.channel_id === 11 &&
-        offer.pricing_id === 'video-preview:seconds'
-      )
+    (offer) => !(offer.model_id === 'video-preview' && offer.channel_id === 11)
   )
-  await page.route('**/api/user/model-market', (route) =>
+  await page.route('**/api/user/model-catalog', (route) =>
     route.fulfill({ json: { success: true, data: fixture } })
   )
   await page.goto('/models')
   await waitForStablePage(page)
   await page.getByRole('radio', { name: '比价矩阵', exact: true }).click()
-  const rows = page.locator(
+  const row = page.locator(
     '[data-market-matrix] tr[data-model-name="video-preview"]'
   )
-  await expect(rows).toHaveCount(2)
-  await expect(rows.first().locator('[data-channel-id="11"]')).toHaveText('—')
-  const fixed = rows.last()
-  await fixed.scrollIntoViewIfNeeded()
-  const quote = fixed.locator('[data-channel-id="11"]')
-  const baseline = fixed.locator('.benchmark-column')
-  await expect(quote).toContainText('Fixed video')
-  await expect(quote).toContainText('$0.016')
-  await expect(baseline).toContainText('$0.080')
-  expect((await quote.boundingBox())!.y).toBeCloseTo(
-    (await baseline.boundingBox())!.y,
-    0
-  )
-  expect(
-    (await quote.locator('[data-price-dimension="request"]').boundingBox())!.y
-  ).toBeCloseTo(
-    (await baseline.locator('[data-price-dimension="request"]').boundingBox())!
-      .y,
-    0
-  )
-  await page.screenshot({ path: testInfo.outputPath('variant-alignment.png') })
+  await expect(row).toHaveCount(1)
+  await expect(row.locator('[data-channel-id="11"]')).toHaveText('—')
+  await expect(row.locator('[data-channel-id="12"]')).toContainText('$0.080')
+  await expect(row.locator('.benchmark-column')).toContainText('$0.080')
+  await assertNoHorizontalOverflow(page)
+  await page.screenshot({
+    path: testInfo.outputPath('native-offer-alignment.png'),
+  })
 })

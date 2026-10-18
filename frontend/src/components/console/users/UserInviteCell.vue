@@ -13,13 +13,13 @@ import { formatQuota } from '@/utils/format'
  * dropped entirely so the rows that carry signal are the ones that stand out.
  */
 const props = defineProps<{
-  user: Pick<AdminUser, 'invited_count' | 'affiliate_quota' | 'inviter_id'>
+  user: Pick<AdminUser, 'aff_count' | 'aff_quota' | 'inviter_id'>
 }>()
 
 const { t } = useI18n()
 
-const hasInvitees = computed(() => props.user.invited_count > 0)
-const hasEarnings = computed(() => BigInt(props.user.affiliate_quota) > 0n)
+const hasInvitees = computed(() => props.user.aff_count > 0)
+const hasEarnings = computed(() => BigInt(props.user.aff_quota) > 0n)
 const hasInviter = computed(() => props.user.inviter_id > 0)
 const isDormant = computed(() => !hasInvitees.value && !hasInviter.value)
 
@@ -28,12 +28,12 @@ const ariaLabel = computed(() => {
   if (isDormant.value) return t('users.inviteNone')
   const parts: string[] = []
   if (hasInvitees.value) {
-    parts.push(t('users.invitedCount', { count: props.user.invited_count }))
+    parts.push(t('users.invitedCount', { count: props.user.aff_count }))
   }
   if (hasEarnings.value) {
     parts.push(
       t('users.affiliateEarned', {
-        amount: formatQuota(props.user.affiliate_quota),
+        amount: formatQuota(props.user.aff_quota),
       })
     )
   }
@@ -70,14 +70,14 @@ const ariaLabel = computed(() => {
         aria-hidden="true"
       >
         <UserPlus :size="11" />
-        {{ user.invited_count }}
+        {{ user.aff_count }}
       </span>
       <span
         v-if="hasEarnings"
         class="truncate tabular-nums text-[var(--text-secondary)]"
         aria-hidden="true"
       >
-        {{ formatQuota(user.affiliate_quota) }}
+        {{ formatQuota(user.aff_quota) }}
       </span>
     </div>
 

@@ -12,6 +12,7 @@ export const ADMIN_ORDER_STATUSES: readonly AdminOrderStatus[] = [
   'completed',
   'pending',
   'failed',
+  'expired',
 ]
 
 export const ADMIN_ORDER_TYPES: readonly AdminOrderType[] = ['topup']
@@ -47,6 +48,7 @@ export function adminOrderStatusTone(
   switch (status) {
     case 'completed':
       return 'success'
+    case 'expired':
     case 'pending':
       return 'warning'
     case 'failed':
@@ -82,7 +84,9 @@ export function formatAdminOrderAmount(
   amount: number,
   currency: AdminOrderCurrency
 ): string {
-  const symbol = currency === 'CNY' ? '¥' : '$'
+  if (!currency || !Number.isFinite(amount)) return '—'
+  const symbol =
+    currency === 'CNY' ? '¥' : currency === 'USD' ? '$' : `${currency} `
   return `${symbol}${amount.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

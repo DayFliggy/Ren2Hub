@@ -28,6 +28,43 @@ async function inspectAuditLogs(
       : { width: 390, height: 844 }
   )
   await configureStablePage(page, { theme, authenticated: true })
+  await page.route('**/api/audit?*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          page: 1,
+          page_size: 10,
+          total: 1,
+          items: [
+            {
+              id: 1,
+              event_id: 'audit-test',
+              user_id: 1,
+              username: 'native.root',
+              actor_role: 100,
+              created_at: 1785123000,
+              category: 'operation',
+              action: 'user.update',
+              token_ref: '',
+              auth_method: 'session',
+              ip: '203.0.113.25',
+              user_agent: 'browser',
+              method: 'PUT',
+              route: '/api/user/',
+              status: 403,
+              success: false,
+              request_id: 'audit-request',
+              content: 'User update rejected',
+              other: {
+                op: { action: 'user.update', params: { username: 'member' } },
+              },
+            },
+          ],
+        },
+      },
+    })
+  )
   const paths = auditPaths(page)
   await page.goto('/usage-logs/audit?scope=all', {
     waitUntil: 'domcontentloaded',

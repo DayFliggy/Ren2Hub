@@ -35,7 +35,7 @@ const flowWindow = computed(() => (props.flow ?? []).slice(-WINDOW))
 const tokenWindow = computed(() => (props.tokenTrend ?? []).slice(-WINDOW))
 
 function pointTotal(point: TokenTrendPoint): number {
-  return point.input + point.output + point.cache_create + point.cache_read
+  return point.total
 }
 
 /** All token classes billed today, from the last point of the trend series. */
@@ -75,6 +75,7 @@ interface Cell {
   icon: string
   value: string
   color: string
+  textColor?: string
   /** widens the loading skeleton to roughly match the real value */
   skeleton: string
   /** trend series; the RPM cell uses a ring instead */
@@ -100,6 +101,7 @@ const cells = computed<Cell[]>(() => [
     icon: 'M4 17h4l3-9 3 14 3-11 2 6h3',
     value: formatNumber(props.stats?.today_requests ?? 0),
     color: 'var(--signal)',
+    textColor: 'var(--signal-text)',
     skeleton: 'w-20',
     series: flowWindow.value.map((f) => f.requests),
     drillDown: true,
@@ -127,6 +129,7 @@ const cells = computed<Cell[]>(() => [
     icon: 'M13 2 3 14h7l-1 8 10-12h-7l1-8Z',
     value: formatCompact(avgTpm.value),
     color: 'var(--support)',
+    textColor: 'var(--support-text)',
     skeleton: 'w-16',
     series: tpmSeries.value,
   },
@@ -204,7 +207,7 @@ const rpmCaption = computed(() => {
             <p
               v-else
               class="display-number mt-1 truncate text-2xl leading-tight tabular-nums tracking-tight"
-              :style="{ color: cell.color }"
+              :style="{ color: cell.textColor ?? cell.color }"
             >
               {{ cell.value }}
             </p>

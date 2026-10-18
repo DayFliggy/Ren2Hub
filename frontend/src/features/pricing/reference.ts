@@ -1,10 +1,6 @@
 import { catalogPrices } from '@/api/publicCatalog'
 import type { PricingModelContract } from '@/api/liveContracts'
-import type {
-  PriceSort,
-  ReferencePrice,
-  UsageReference,
-} from '@/types/pricingReference'
+import type { PriceSort, ReferencePrice } from '@/types/pricingReference'
 import { compareDecimal, isDecimal, multiplyDecimal } from '@/utils/decimal'
 import { decimalText } from './draft'
 import { splitBillingExprAndRequestRules } from './lib/billing-expr'
@@ -53,29 +49,8 @@ function exactLiteral(source: string, node: ExpressionNode): string | null {
 
 export function expressionReferencePrices(
   expression: string,
-  task: boolean,
-  reference?: UsageReference,
-  ratio = '1',
-  pluginName = ''
+  ratio = '1'
 ): ReferencePrice[] {
-  if (task) {
-    if (reference?.status !== 'available' || reference.amount_usd === undefined)
-      return []
-    const amount = multiplyDecimal(reference.amount_usd, ratio)
-    if (!isDecimal(amount)) return []
-    return [
-      {
-        key: 'request',
-        amount,
-        unit: 'per_example',
-        source: 'usage_example',
-        label: reference.label,
-        condition: reference.matched_tier,
-        facts: reference.facts,
-        pluginName: reference.plugin_name || pluginName,
-      },
-    ]
-  }
   const { billingExpr, requestRuleExpr } =
     splitBillingExprAndRequestRules(expression)
   const compiled = compileBillingExpression(billingExpr)
@@ -91,7 +66,6 @@ export function expressionReferencePrices(
       first.conditionText ||
       first.conditions.map((c) => `${c.var} ${c.op} ${c.value}`).join(' && '),
     requestRules: requestRuleExpr,
-    pluginName,
   }
   if (first.fixedPriceNode) {
     const literal = exactLiteral(billingExpr, first.fixedPriceNode)
@@ -123,50 +97,21 @@ export function expressionReferencePrices(
   return prices
 }
 
-function publicBaseReferences(model: PricingModelContract): ReferencePrice[] {
-  if (model.billing_mode === 'tiered_expr')
-    return expressionReferencePrices(
-      model.billing_expr ?? '',
-      Boolean(
-        model.usage_reference ||
-        Object.keys(model.billing_usage_schema ?? {}).length
-      ),
-      model.usage_reference
-    )
-  if (!model.pricing_values) return []
-  return catalogPrices(model, 'M').map((line) => ({
-    key: line.key,
-    amount: line.value,
-    unit: line.unit as 'per_call' | 'per_million_tokens',
-    source: 'configured',
-  }))
-}
-
-/** Task variants return USD for their own usage schema, not token unit prices.
- * Keep the first configured compatible plugin even if its example is unavailable. */
+/** Task usage expressions are not token prices and have no native quote endpoint. */
 export function publicPricingReferences(
   model: PricingModelContract
 ): ReferencePrice[] {
-  const firstTask = model.billing_plugin_variants?.find(
-    (variant) => variant.billing_mode === 'tiered_expr' && variant.billing_expr
-  )
-  if (!firstTask) return publicBaseReferences(model)
-  // A separately configured native ratio remains the model's single source;
-  // task expressions cannot supply or replace its input/output dimensions.
-  const configured =
-    model.billing_mode === 'ratio'
-      ? publicBaseReferences(model).filter((price) => price.key !== 'request')
-      : []
-  return [
-    ...configured,
-    ...expressionReferencePrices(
-      firstTask.billing_expr,
-      true,
-      firstTask.usage_reference,
-      '1',
-      firstTask.plugin_name
-    ),
-  ]
+  const ratio = '1'
+  if (model.billing_mode === 'tiered_expr') {
+    if (Object.keys(model.billing_usage_schema ?? {}).length) return []
+    return expressionReferencePrices(model.billing_expr ?? '', ratio)
+  }
+  return catalogPrices(model, 'M').map((line) => ({
+    key: line.key,
+    amount: multiplyDecimal(line.value, ratio),
+    unit: line.unit as 'per_call' | 'per_million_tokens',
+    source: 'configured',
+  }))
 }
 
 function referenceSortKey(
@@ -187,7 +132,7 @@ function referenceSortKey(
   if (!price) return undefined
   const bucket =
     dimension === 'request'
-      ? ['per_call', 'per_image', 'per_example'].indexOf(price.unit)
+      ? ['per_call', 'per_image'].indexOf(price.unit)
       : audio
         ? 1
         : 0

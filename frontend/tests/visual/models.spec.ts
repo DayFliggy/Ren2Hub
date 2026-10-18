@@ -2,9 +2,18 @@ import { expect, test } from '@playwright/test'
 import { createModelMarketFixture } from '../fixtures/modelMarket'
 import {
   assertNoHorizontalOverflow,
-  configureStablePage,
+  configureStablePage as configureNativePage,
   waitForStablePage,
 } from './fixtures'
+
+async function configureStablePage(
+  ...args: Parameters<typeof configureNativePage>
+) {
+  await configureNativePage(...args)
+  await args[0].route('**/api/user/model-catalog*', (route) =>
+    route.fulfill({ json: { success: true, data: createModelMarketFixture() } })
+  )
+}
 
 for (const theme of ['light', 'dark'] as const) {
   for (const width of [320, 390, 768, 1024, 1440]) {
@@ -75,7 +84,7 @@ for (const theme of ['light', 'dark'] as const) {
         await matrix.locator('th[data-channel-id="11"]').hover()
         await expect(
           matrix.locator('[data-channel-id="11"].col-hover')
-        ).toHaveCount(9)
+        ).toHaveCount(8)
         await expect(
           matrix.locator('.benchmark-column.col-hover,.model-column.col-hover')
         ).toHaveCount(0)
@@ -87,8 +96,8 @@ for (const theme of ['light', 'dark'] as const) {
           '$2.500'
         )
         await expect(
-          group.locator('[data-price-dimension="cacheRead"]').first()
-        ).toContainText('$0.625')
+          group.locator('[data-price-dimension="output"]').first()
+        ).toContainText('$10.000')
       }
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
@@ -111,11 +120,11 @@ for (const theme of ['light', 'dark'] as const) {
         dialog.locator('[data-market-telemetry]').first()
       ).toContainText('统计')
       await expect(
-        dialog.locator('[data-price-dimension="cacheRead"]').last()
-      ).toContainText('$0.125')
+        dialog.locator('[data-price-dimension="input"]').last()
+      ).toContainText('$0.500')
       await expect(
-        dialog.locator('[data-price-dimension="cacheWrite"]').last()
-      ).toContainText('$0.625')
+        dialog.locator('[data-price-dimension="output"]').last()
+      ).toContainText('$2.000')
       await expect(dialog).toContainText('/v1/chat/completions')
       await page.screenshot({ path: testInfo.outputPath('details.png') })
       for (let tab = 0; tab < 14; tab++) {
@@ -131,7 +140,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(dialog).toHaveCount(0)
       await expect(trigger).toBeFocused()
       expect(
-        requests.filter((path) => path === '/api/user/model-market')
+        requests.filter((path) => path === '/api/user/model-catalog')
       ).toHaveLength(1)
       expect(requests).not.toContain('/api/perf-metrics/summary')
       expect(errors).toEqual([])
@@ -147,11 +156,11 @@ test('market filters persist across views and translated long names remain usabl
   await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
   const fixture = createModelMarketFixture()
   const longId = `provider/${'long-model-name-without-break'.repeat(6)}`
-  fixture.models[0]!.id = longId
+  fixture.models[0]!.model_name = longId
   fixture.offers.forEach((offer) => {
     if (offer.model_id === 'gpt-4.1') offer.model_id = longId
   })
-  await page.route('**/api/user/model-market', (route) =>
+  await page.route('**/api/user/model-catalog', (route) =>
     route.fulfill({ json: { success: true, data: fixture } })
   )
   await page.goto('/models')
@@ -199,14 +208,19 @@ test('comparison keeps model and platform columns fixed while scrolling and supp
   await page.setViewportSize({ width: 1440, height: 900 })
   const fixture = createModelMarketFixture()
   for (const id of [14, 15, 16, 17]) {
-    fixture.channels.push({ id, name: `Additional ${id}`, ratio: '0.8' })
+    fixture.channels.push({
+      ...fixture.channels[0]!,
+      id,
+      name: `Additional ${id}`,
+      channel_ratio: '0.2',
+    })
     fixture.offers.push(
       ...fixture.offers
         .filter((offer) => offer.channel_id === 11)
-        .map((offer) => ({ ...offer, channel_id: id, id: `${offer.id}:${id}` }))
+        .map((offer) => ({ ...offer, channel_id: id }))
     )
   }
-  await page.route('**/api/user/model-market', (route) =>
+  await page.route('**/api/user/model-catalog', (route) =>
     route.fulfill({ json: { success: true, data: fixture } })
   )
   await page.goto('/models')
@@ -230,7 +244,7 @@ test('comparison keeps model and platform columns fixed while scrolling and supp
   const offer = matrix.locator('td[data-channel-id="14"] button').first()
   await offer.focus()
   await expect(matrix.locator('[data-channel-id="14"].col-hover')).toHaveCount(
-    9
+    8
   )
   await expect(
     matrix.locator('.benchmark-column.col-hover,.model-column.col-hover')
@@ -245,7 +259,7 @@ test('failed catalog loads stay visible as errors and recover through retry', as
 }) => {
   await configureStablePage(page, { theme: 'light' })
   let calls = 0
-  await page.route('**/api/user/model-market', (route) => {
+  await page.route('**/api/user/model-catalog', (route) => {
     calls++
     return calls === 1
       ? route.fulfill({

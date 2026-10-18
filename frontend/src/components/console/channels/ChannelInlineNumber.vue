@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-const props = defineProps<{
-  value: number
-  label: string
-  busy: boolean
-  commit: (value: number) => Promise<boolean>
-}>()
+const props = withDefaults(
+  defineProps<{
+    value: number
+    label: string
+    busy: boolean
+    min?: number
+    max?: number
+    commit: (value: number) => Promise<boolean>
+  }>(),
+  { min: 0, max: 1_000_000 }
+)
 
 const draft = ref(String(props.value))
 let cancelled = false
@@ -27,8 +32,8 @@ async function commitDraft() {
   const value = Number(draft.value)
   if (
     !Number.isSafeInteger(value) ||
-    value < 0 ||
-    value > 1_000_000 ||
+    value < props.min ||
+    value > props.max ||
     value === props.value
   ) {
     draft.value = String(props.value)
@@ -55,8 +60,8 @@ function onKeydown(event: KeyboardEvent) {
     v-model="draft"
     type="number"
     inputmode="numeric"
-    min="0"
-    max="1000000"
+    :min="min"
+    :max="max"
     step="1"
     :aria-label="label"
     :disabled="busy"

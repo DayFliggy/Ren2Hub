@@ -380,7 +380,12 @@ const successTone = computed(() => rateTone(successRate.value))
 </script>
 
 <template>
-  <ConsoleCard data-system-status-card stretch :padded="false">
+  <ConsoleCard
+    data-system-status-card
+    data-handdrawn="surface-clipped"
+    stretch
+    :padded="false"
+  >
     <template #title>
       <div class="flex min-w-0 items-center gap-2">
         <h2 class="truncate text-sm font-semibold text-[var(--text-primary)]">

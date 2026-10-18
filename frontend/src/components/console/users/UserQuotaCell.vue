@@ -13,7 +13,7 @@ import { formatQuota } from '@/utils/format'
  * than more tabular data.
  */
 const props = defineProps<{
-  user: Pick<AdminUser, 'available_quota' | 'used_quota'>
+  user: Pick<AdminUser, 'quota' | 'used_quota'>
 }>()
 
 const { t } = useI18n()
@@ -52,7 +52,7 @@ const noteColor = computed(() =>
 
 const ariaLabel = computed(() =>
   t('users.quotaSummary', {
-    remaining: formatQuota(props.user.available_quota),
+    remaining: formatQuota(props.user.quota),
     note: note.value,
   })
 )
@@ -98,7 +98,7 @@ const ariaLabel = computed(() =>
 
     <div class="min-w-0">
       <p class="display-number font-mono text-xs text-[var(--text-primary)]">
-        {{ formatQuota(user.available_quota) }}
+        {{ formatQuota(user.quota) }}
       </p>
       <p class="truncate text-[0.6875rem]" :style="{ color: noteColor }">
         {{ note }}

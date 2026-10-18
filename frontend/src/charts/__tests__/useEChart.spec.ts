@@ -132,7 +132,7 @@ describe('useEChart', () => {
     const chart = echartsMock.instances[0]!
     const optionAt = (fontSize: number) =>
       expect.objectContaining({
-        textStyle: { fontSize },
+        textStyle: expect.objectContaining({ fontSize }),
         series: [{ type: 'line', data: [10, 20] }],
       })
 
@@ -153,6 +153,39 @@ describe('useEChart', () => {
     expect(chart.setOption).toHaveBeenLastCalledWith(optionAt(12), true)
     expect(chart.resize).toHaveBeenCalledTimes(4)
     wrapper.unmount()
+  })
+
+  it('uses the host font for canvas labels and refreshes after fonts load until disposed', async () => {
+    const fonts = new EventTarget()
+    const descriptor = Object.getOwnPropertyDescriptor(document, 'fonts')
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: fonts,
+    })
+    const wrapper = mount(Host, { attachTo: document.body })
+    try {
+      wrapper
+        .get('.chart')
+        .element.setAttribute(
+          'style',
+          'font-family: Ren2Inter, Ren2NotoSansSC, sans-serif'
+        )
+      await flushPromises()
+      const chart = echartsMock.instances[0]!
+      const initialCalls = chart.setOption.mock.calls.length
+      fonts.dispatchEvent(new Event('loadingdone'))
+      expect(chart.setOption).toHaveBeenCalledTimes(initialCalls + 1)
+      expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
+        textStyle: { fontFamily: 'Ren2Inter, Ren2NotoSansSC, sans-serif' },
+      })
+      wrapper.unmount()
+      fonts.dispatchEvent(new Event('loadingdone'))
+      expect(chart.setOption).toHaveBeenCalledTimes(initialCalls + 1)
+    } finally {
+      if (wrapper.exists()) wrapper.unmount()
+      if (descriptor) Object.defineProperty(document, 'fonts', descriptor)
+      else Reflect.deleteProperty(document, 'fonts')
+    }
   })
 })
 

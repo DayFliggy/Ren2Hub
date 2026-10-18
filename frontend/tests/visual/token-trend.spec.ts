@@ -5,6 +5,7 @@ import {
   configureStablePage,
   waitForStablePage,
 } from './fixtures'
+import { nativeUsageSummary } from './channel-core-fixtures'
 
 const EMPTY_TOKEN_TREND = Array.from({ length: 30 }, (_, index) => ({
   date: `2026-07-${String(index + 1).padStart(2, '0')}`,
@@ -26,18 +27,22 @@ for (const theme of ['light', 'dark'] as const) {
           : { width: 390, height: 844 }
       )
       await configureStablePage(page, { theme, authenticated: true })
-      await page.route(
-        /\/api\/next\/dashboard\/token-trend(?:\?.*)?$/,
-        (route) =>
-          route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-              success: true,
-              message: '',
-              data: EMPTY_TOKEN_TREND,
-            }),
-          })
+      await page.route(/\/api\/data\/self\/summary(?:\?.*)?$/, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            message: '',
+            data: {
+              ...nativeUsageSummary(1785124800),
+              token_trend: EMPTY_TOKEN_TREND.map((row) => ({
+                ...row,
+                total: 0,
+              })),
+            },
+          }),
+        })
       )
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)

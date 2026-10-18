@@ -2,7 +2,6 @@ import { api } from './client'
 import {
   invalidResponse,
   isRecord,
-  requiredBoolean,
   requiredStrictInteger,
   requiredStrictNumber,
   requiredString,
@@ -20,27 +19,6 @@ export interface SystemTaskPage {
   items: SystemTask[]
   total: number
 }
-export const SYSTEM_TASK_HEALTH = [
-  'ok',
-  'failing',
-  'stale',
-  'idle',
-  'running',
-  'inactive',
-] as const
-export type SystemTaskHealth = (typeof SYSTEM_TASK_HEALTH)[number]
-/** One registered handler; the summary endpoint is the source of task types. */
-export interface SystemTaskTypeSummary {
-  type: string
-  scheduled: boolean
-  enabled: boolean
-  interval_seconds: number | null
-  last_success_at: number | null
-  last_failure_at: number | null
-  last_error: string
-  active: boolean
-  status: SystemTaskHealth
-}
 export interface SystemTask {
   task_id: string
   type: string
@@ -53,71 +31,6 @@ export interface SystemTask {
   processed: number | null
   total: number | null
   deleted_count: number | null
-  pricing_result?: PricingSyncResult
-}
-
-export interface PricingSyncResult {
-  checked: number
-  changed: number
-  published: number
-  deactivated: number
-  unconfigured_count: number
-  unconfigured: string[]
-  errors: string[]
-  unconfigured_details: Array<{
-    model: string
-    reasons: Array<{ source: string; reason: string }>
-  }>
-}
-
-function parsePricingSyncResult(
-  value: Record<string, unknown>,
-  endpoint: string
-): PricingSyncResult {
-  const counters = {} as Pick<
-    PricingSyncResult,
-    'checked' | 'changed' | 'published' | 'deactivated' | 'unconfigured_count'
-  >
-  for (const key of [
-    'checked',
-    'changed',
-    'published',
-    'deactivated',
-    'unconfigured_count',
-  ] as const) {
-    const count = requiredStrictInteger(value[key], endpoint)
-    if (count < 0) invalidResponse(endpoint)
-    counters[key] = count
-  }
-  if (
-    !Array.isArray(value.unconfigured) ||
-    value.unconfigured.length > 100 ||
-    !Array.isArray(value.errors)
-  )
-    invalidResponse(endpoint)
-  const details = value.unconfigured_details ?? []
-  if (!Array.isArray(details) || details.length > 100) invalidResponse(endpoint)
-  return {
-    ...counters,
-    unconfigured: value.unconfigured.map((name) =>
-      requiredString(name, endpoint, false)
-    ),
-    errors: value.errors.map((message) => requiredString(message, endpoint)),
-    unconfigured_details: details.map((raw) => {
-      const detail = record(raw, endpoint)
-      if (!Array.isArray(detail.reasons)) invalidResponse(endpoint)
-      return {
-        model: requiredString(detail.model, endpoint, false),
-        reasons: detail.reasons.map((rawReason) => {
-          const reason = record(rawReason, endpoint)
-          return {
-            source: requiredString(reason.source, endpoint, false),
-            reason: requiredString(reason.reason, endpoint, false),
-          }
-        }),
-      }
-    }),
-  }
 }
 
 function record(value: unknown, endpoint: string): Record<string, unknown> {
@@ -143,30 +56,6 @@ function optionalInteger(value: unknown, endpoint: string): number | null {
   return number
 }
 
-export function parseSystemTaskSummary(
-  value: unknown,
-  endpoint = '/api/system-task/summary'
-): SystemTaskTypeSummary[] {
-  const data = record(value, endpoint)
-  if (!Array.isArray(data.types)) invalidResponse(endpoint)
-  return data.types.map((raw) => {
-    const row = record(raw, endpoint)
-    if (!SYSTEM_TASK_HEALTH.includes(row.status as SystemTaskHealth))
-      invalidResponse(endpoint)
-    return {
-      type: requiredString(row.type, endpoint, false),
-      scheduled: requiredBoolean(row.scheduled, endpoint),
-      enabled: requiredBoolean(row.enabled, endpoint),
-      interval_seconds: optionalInteger(row.interval_seconds, endpoint),
-      last_success_at: optionalInteger(row.last_success_at, endpoint),
-      last_failure_at: optionalInteger(row.last_failure_at, endpoint),
-      last_error: optionalText(row.last_error, endpoint),
-      active: requiredBoolean(row.active, endpoint),
-      status: row.status as SystemTaskHealth,
-    }
-  })
-}
-
 export function parseSystemTask(
   value: unknown,
   endpoint = '/api/system-task/list'
@@ -190,9 +79,6 @@ export function parseSystemTask(
     processed: optionalInteger(state.processed, endpoint),
     total: optionalInteger(state.total, endpoint),
     deleted_count: optionalInteger(result.deleted_count, endpoint),
-    ...(row.type === 'billing_pricing_sync' && Object.keys(result).length
-      ? { pricing_result: parsePricingSyncResult(result, endpoint) }
-      : {}),
   }
 }
 
@@ -201,12 +87,13 @@ export function isActiveSystemTask(task: SystemTask): boolean {
 }
 
 export const systemManagementApi = {
-  async summary(signal?: AbortSignal): Promise<SystemTaskTypeSummary[]> {
-    const endpoint = '/api/system-task/summary'
-    return parseSystemTaskSummary(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
+  async current(
+    type: string,
+    signal?: AbortSignal
+  ): Promise<SystemTask | null> {
+    const endpoint = '/api/system-task/current'
+    const data = await api.get(endpoint, { type }, { signal })
+    return data === null ? null : parseSystemTask(data, endpoint)
   },
   async tasks(
     query: SystemTaskQuery,

@@ -1,12 +1,12 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { getTopUps } from '@/api/adminOrders'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
 import { ADMIN_ORDER_DEFAULT_RANGE } from '@/constants/adminOrders'
 import type {
   AdminOrder,
-  AdminOrderPage,
   AdminOrderRange,
   AdminOrderStats,
 } from '@/types/console'
@@ -15,15 +15,12 @@ const EXPORT_PAGE_SIZE = 100
 
 export const ORDER_EXPORT_MAX_ROWS = 10_000
 
-/** Read-only recharge ledger backed by the Vue facade endpoints. */
+/** Read-only recharge ledger backed by native TopUp endpoints. */
 export function useAdminOrders() {
   const toast = useToast()
 
   const rows = ref<AdminOrder[]>([])
   const total = ref(0)
-  const statusCounts = ref<Record<string, number>>({})
-  const methodCounts = ref<Record<string, number>>({})
-  const filteredEpayRevenue = ref(0)
   const page = ref(1)
   const pageSize = ref(20)
   const keyword = ref('')
@@ -48,7 +45,8 @@ export function useAdminOrders() {
   function filterParams(): Record<string, string | undefined> {
     const trimmed = keyword.value.trim()
     return {
-      status: status.value || undefined,
+      status:
+        status.value === 'completed' ? 'success' : status.value || undefined,
       method: method.value || undefined,
       keyword: trimmed || undefined,
     }
@@ -66,17 +64,13 @@ export function useAdminOrders() {
     if (rows.value.length === 0) initialError.value = ''
 
     try {
-      const data = await api.get<AdminOrderPage>(
-        '/api/next/admin/orders',
+      const data = await getTopUps(
         { ...filterParams(), p: page.value, page_size: pageSize.value },
-        { signal: controller.signal }
+        controller.signal
       )
       if (sequence !== listSequence) return
       rows.value = data.items
       total.value = data.total
-      statusCounts.value = data.status_counts
-      methodCounts.value = data.method_counts
-      filteredEpayRevenue.value = data.filtered_epay_revenue
       initialError.value = ''
     } catch (error) {
       if (controller.signal.aborted || sequence !== listSequence) return
@@ -104,8 +98,11 @@ export function useAdminOrders() {
 
     try {
       const data = await api.get<AdminOrderStats>(
-        '/api/next/admin/orders/stats',
-        { range: range.value },
+        '/api/user/topup/stats',
+        {
+          start_time: Math.floor(Date.now() / 1000) - range.value * 86400,
+          end_time: Math.floor(Date.now() / 1000),
+        },
         { signal: controller.signal }
       )
       if (sequence !== statsSequence) return
@@ -143,10 +140,9 @@ export function useAdminOrders() {
     signal: AbortSignal
   ): Promise<{ items: AdminOrder[]; truncated: boolean }> {
     const filters = filterParams()
-    const first = await api.get<AdminOrderPage>(
-      '/api/next/admin/orders',
+    const first = await getTopUps(
       { ...filters, p: 1, page_size: EXPORT_PAGE_SIZE },
-      { signal }
+      signal
     )
 
     const items = [...first.items]
@@ -154,10 +150,9 @@ export function useAdminOrders() {
     const pages = Math.ceil(reachable / EXPORT_PAGE_SIZE)
 
     for (let p = 2; p <= pages; p++) {
-      const next = await api.get<AdminOrderPage>(
-        '/api/next/admin/orders',
+      const next = await getTopUps(
         { ...filters, p, page_size: EXPORT_PAGE_SIZE },
-        { signal }
+        signal
       )
       items.push(...next.items)
     }
@@ -187,9 +182,6 @@ export function useAdminOrders() {
   return {
     rows,
     total,
-    statusCounts,
-    methodCounts,
-    filteredEpayRevenue,
     page,
     pageSize,
     keyword,

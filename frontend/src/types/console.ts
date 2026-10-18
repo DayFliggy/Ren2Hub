@@ -1,8 +1,4 @@
-/**
- * Token routing types:
- * - manual: the user selects platform and marketplace channels
- * - auto:   the system computes the best channels across both pools
- */
+/** Each API key independently selects automatic or manual routing. */
 export type TokenType = 'manual' | 'auto'
 
 /** One upstream channel bound to a token; array order = routing priority. */
@@ -17,20 +13,13 @@ export interface TokenItem {
   name: string
   key: string
   type: TokenType
-  conversion_policy?: import('@/types/gateway').ConversionPolicy
   allow_user_quota_query?: boolean
-  status: 1 | 2 // 1 enabled · 2 disabled
+  status: number // Native: 1 enabled, 2 disabled, 3 expired, 4 exhausted
   used_quota: string
-  available_quota: string | null
-  reserved_quota: string
-  quota_version: number
+  remain_quota: number
   unlimited: boolean
   model_limits: string[]
   ip_limits: string[]
-  rate_limit: number // requests / minute, 0 = unlimited
-  max_ratio?: string // max accepted channel price ratio
-  load_balance: boolean
-  channels: TokenChannel[] // order = priority (auto: computed server-side)
   expired_time: number // -1 = never
   created_time: number
 }
@@ -42,23 +31,31 @@ export type AdminChannelSortBy =
 
 export type AdminChannelSortOrder = 'asc' | 'desc'
 
-export interface AdminChannelLabMatch {
-  slug: string
-  name: string
-  confidence: number
-  source: string
-}
-
-export interface AdminChannelModelMatch {
-  input_model: string
-  real_model: string
-  canonical_id?: string
-  lab_slug?: string
-  confidence: number
-  source: string
-}
-
 export interface AdminChannel extends Record<string, unknown> {
+  channel_ratio: string
+  max_concurrency: number
+  in_flight: number
+  lab: { id: string; name: string; source: string }
+  supplier: string
+  lab_group_slug?: string
+  lab_group_name?: string
+  lab_matches?: {
+    slug: string
+    name: string
+    confidence: number
+    source: string
+  }[]
+  lab_models?: {
+    input_model: string
+    real_model: string
+    canonical_id?: string
+    lab_slug?: string
+    confidence: number
+    source: string
+  }[]
+  lab_unresolved_count?: number
+  lab_catalog_version?: string
+
   channel_info?: {
     is_multi_key: boolean
     multi_key_mode: 'random' | 'polling'
@@ -67,32 +64,24 @@ export interface AdminChannel extends Record<string, unknown> {
   id: number
   name: string
   type: number
-  supplier: string
   status: AdminChannelStatus
   readonly status_reason?: string
   readonly status_time?: number
   priority: number
   weight: number
-  // Capacity & ratio fields (Phase A backend fields)
-  capacity_used: number
-  capacity_total: number
-  channel_ratio: string
-  used_quota: string
+  used_quota: number
   balance: number
   response_time: number
   test_time: number
   base_url: string
   models: string
   model_mapping: string
-  lab_group_slug?: string
-  lab_group_name?: string
-  lab_matches?: AdminChannelLabMatch[]
-  lab_models?: AdminChannelModelMatch[]
-  lab_unresolved_count?: number
-  lab_catalog_version?: string
+  other_info?: string
 }
 
 export interface AdminChannelCreateInput {
+  channel_ratio: string
+  max_concurrency: number
   other?: string
   setting?: string
   settings?: string
@@ -106,16 +95,11 @@ export interface AdminChannelCreateInput {
   // Credentials
   key: string
   base_url: string
-  // Models (no group: creation uses the backend default routing group,
-  // edits preserve the stored value verbatim)
   models: string
   model_mapping: string
   // Routing
   priority: number
   weight: number
-  // Capacity & ratio
-  capacity_total: number
-  channel_ratio: string
 }
 
 export interface AdminChannelCreateOptions {
@@ -140,8 +124,8 @@ export type AdminChannelFetchModelsParams =
 export interface AdminChannelPage {
   items: AdminChannel[]
   total: number
-  page: number
-  page_size: number
+  page?: number
+  page_size?: number
   type_counts: Record<string, number>
 }
 
@@ -157,7 +141,7 @@ export type AdminUserStatus = 1 | 2
 export type AdminUserSortBy =
   | 'id'
   | 'username'
-  | 'available_quota'
+  | 'quota'
   | 'used_quota'
   | 'created_time'
   | 'last_login_time'
@@ -165,42 +149,38 @@ export type AdminUserSortBy =
 export type AdminUserSortOrder = 'asc' | 'desc'
 
 export interface AdminUser extends Record<string, unknown> {
+  aff_frozen_quota: number
+  max_concurrency: number
   id: number
   username: string
   display_name: string
   email: string
   role: AdminUserRole
   status: AdminUserStatus
-  /** Account group: classifies top-up ratios and gateway admission limits. */
-  group: string
-  available_quota: string
-  reserved_quota: string
-  used_quota: string
-  quota_version: number
+  quota: number
+  used_quota: number
   request_count: number
-  invited_count: number
-  affiliate_quota: string
-  /** 0 = registered without an inviter. */
+  aff_count: number
+  aff_quota: number
+  aff_history_quota: number
   inviter_id: number
-  created_time: number
-  /** 0 = never signed in. */
-  last_login_time: number
+  created_at: number
+  last_login_at: number
+  admin_permissions?: Record<string, Record<string, boolean>>
 }
 
 export interface AdminUserCreateInput {
+  max_concurrency: number
+  admin_permissions?: Record<string, Record<string, boolean>>
   username: string
   display_name: string
-  email: string
   password: string
   role: AdminUserRole
-  status: AdminUserStatus
 }
 
 /** Status is owned by the dedicated toggle route, not by the edit form. */
-export type AdminUserUpdateInput = Omit<
-  AdminUserCreateInput,
-  'status' | 'password'
-> & {
+export type AdminUserUpdateInput = Omit<AdminUserCreateInput, 'password'> & {
+  email: string
   password?: string
 }
 
@@ -211,154 +191,6 @@ export interface AdminUserPage {
   page_size: number
   role_counts: Record<string, number>
   status_counts: Record<string, number>
-  /** Users per non-empty account group under the current keyword. */
-  group_counts: Record<string, number>
-}
-
-export interface AdminAffiliateUser {
-  id: number
-  username: string
-  status: AdminUserStatus
-  code: string
-  code_enabled: boolean
-  code_custom: boolean
-  rate_bps: number | null
-  effective_rate_bps: number
-  invite_limit: number | null
-  invited_count: number
-  available_reward: string
-  frozen_reward: string
-  total_reward: string
-}
-
-export interface AdminAffiliateUserUpdateInput {
-  code?: string
-  code_enabled?: boolean
-  rate_bps?: number
-  clear_rate?: boolean
-  invite_limit?: number
-  clear_invite_limit?: boolean
-}
-
-/* ---------------- administrator orders ---------------- */
-
-/**
- * Payment lifecycle. `completed` is the only state a refund may act on;
- * `cancelled` and `expired` are both terminal unpaid outcomes, distinguished
- * because one is a user action and the other a gateway timeout.
- */
-export type AdminOrderStatus = 'completed' | 'pending' | 'failed'
-
-/** Order management currently covers wallet top-ups. */
-export type AdminOrderType = 'topup'
-
-/**
- * Historical providers remain visible for read-only order reconciliation.
- */
-export type AdminOrderMethod =
-  | 'epay'
-  | 'gmpay'
-  | 'stripe'
-  | 'creem'
-  | 'waffo'
-  | 'waffo_pancake'
-  | 'balance'
-  | 'other'
-
-export type AdminOrderPaymentRail = 'alipay' | 'wechat' | 'other'
-
-export type AdminOrderCurrency = 'CNY' | 'USD'
-
-export type AdminOrderSortBy = 'id' | 'amount' | 'created'
-
-export type AdminOrderSortOrder = 'asc' | 'desc'
-
-/** Trailing window the statistics tab aggregates over, in days. */
-export type AdminOrderRange = 7 | 30 | 90
-
-export interface AdminOrder extends Record<string, unknown> {
-  id: number
-  /** Gateway trade number, e.g. `sub2_20260725RHcR5xPa`. */
-  order_no: string
-  user_id: number
-  username: string
-  email: string
-  /** Amount actually paid, denominated by `currency`. */
-  amount: number
-  /** Quota credited on completion. 0 for orders that never completed. */
-  quota: string
-  type: AdminOrderType
-  currency: AdminOrderCurrency
-  method: AdminOrderMethod
-  payment_method: string
-  status: AdminOrderStatus
-  created: number
-  /** 0 = never paid. */
-  paid_at: number
-}
-
-export interface GmpayOrderEvidence {
-  status: 'creating' | 'ready' | 'failed' | 'unknown' | 'settled'
-  last_failure: string
-  gateway_trade_no: string
-  token: string
-  /** Requested network; the callback does not attest to the final network. */
-  network: string
-  gateway_crypto_amount: string
-  receive_address: string
-  settled_crypto_amount: string
-  settled_receive_address: string
-  settled_transaction_id: string
-}
-
-export interface AdminOrderPage {
-  items: AdminOrder[]
-  total: number
-  page: number
-  page_size: number
-  status_counts: Record<string, number>
-  method_counts: Record<string, number>
-  type_counts: Record<string, number>
-  /** Completed Epay revenue across the whole filtered set, in CNY. */
-  filtered_epay_revenue: number
-}
-
-export interface AdminOrderDailyPoint {
-  /** `YYYY-MM-DD`, local time. */
-  date: string
-  revenue: number
-  orders: number
-}
-
-export interface AdminOrderMethodShare {
-  method: AdminOrderPaymentRail
-  amount: number
-  count: number
-}
-
-export interface AdminOrderSpender {
-  user_id: number
-  username: string
-  email: string
-  amount: number
-  orders: number
-}
-
-export interface AdminOrderStats {
-  range: AdminOrderRange
-  /** Server clock when the window was aggregated. */
-  generated_at: number
-  currency: 'CNY'
-  today_revenue: number
-  today_orders: number
-  /** Revenue over the requested window, not all-time. */
-  total_revenue: number
-  total_orders: number
-  /** Mean completed Epay order value over the window; 0 when empty. */
-  average_amount: number
-  daily: AdminOrderDailyPoint[]
-  payment_share: AdminOrderMethodShare[]
-  top_spenders: AdminOrderSpender[]
 }
 
 export type LogType =
@@ -516,48 +348,72 @@ export interface TaskArtifactsResult {
 export type MarketModelType =
   'chat' | 'image' | 'embedding' | 'rerank' | 'audio' | 'video'
 
+export interface Invitee {
+  masked_name: string
+  invited_at: number
+  reward_quota: number
+}
 export interface InviteRecord {
   id: number
-  invitee: string
-  created: number
-  paid: boolean
-  reward_total: string
-  last_paid_at: number
+  user_id: number
+  invitee_id: number
+  kind: 'accrue' | 'transfer'
+  skip_reason: string
+  source_type: string
+  source_id: string
+  base_quota: number
+  rate_bps: number
+  reward_quota: number
+  frozen_until: number
+  thawed_at: number
+  created_at: number
+  available_after: number
+  frozen_after: number
+  wallet_after: number
 }
-
 export interface InviteMonthPoint {
   month: string
-  new_count: number
-  cumulative: number
-  reward: string
+  reward: number
+  quota: number
 }
-
 export interface InvitePolicy {
   enabled: boolean
-  activated_at: number
-  registration_required: boolean
+  rate_bps: number
   freeze_hours: number
   duration_days: number
-  per_invitee_cap: string // exact USD decimal
-  cash_withdrawal: false
+  per_invitee_cap_quota: number
+  admin_recharge_enabled: boolean
 }
-
 export interface InviteInfo {
   code: string
+  code_enabled: boolean
   invited: number
-  reward_total: string // lifetime reward quota earned
-  transferable: string // reward quota available to move into balance
-  available_reward: string
-  frozen_reward: string
-  total_reward: string
   effective_rate_bps: number
   effective_rate_percent: number
-  code_enabled: boolean
-  invite_limit: number | null
-  remaining_invites: number | null
+  reward_total: number
+  transferable: number
+  available_reward: number
+  frozen_reward: number
+  total_reward: number
   policy: InvitePolicy
   monthly_series: InviteMonthPoint[]
   records: InviteRecord[]
+}
+export interface AdminAffiliateUser {
+  user_id: number
+  code: string
+  code_custom: boolean
+  enabled: boolean
+  rate_bps: number | null
+  effective_rate_bps: number
+  inviter_id: number
+  invited_at: number
+}
+export interface AdminAffiliateUserUpdateInput {
+  rate_bps: number | null
+  code?: string
+  reset_code?: boolean
+  enabled?: boolean
 }
 
 /* ---------------- tickets (support ledger) ---------------- */
@@ -828,7 +684,6 @@ export interface AdminRedemptionCode extends Record<string, unknown> {
   amount: string
   // redemption record
   redeemer_id: number // 0 = not yet redeemed
-  redeemer_email: string // '' = not yet redeemed
   created_time: number // unix epoch seconds
   used_time: number // 0 = not yet redeemed
   expired_time: number // -1 = never
@@ -844,8 +699,121 @@ export interface AdminRedemptionPage {
 }
 
 export interface AdminRedemptionCreateInput {
+  name: string
   type: AdminRedemptionType
   count: number // 1–100
   amount: string
   expired_time: number // -1 = never; future unix epoch = deadline
 }
+
+export type AdminOrderType = 'topup'
+
+/**
+ * Historical providers remain visible for read-only order reconciliation.
+ */
+export type AdminOrderMethod =
+  | 'epay'
+  | 'gmpay'
+  | 'stripe'
+  | 'creem'
+  | 'waffo'
+  | 'waffo_pancake'
+  | 'balance'
+  | 'other'
+
+export type AdminOrderPaymentRail = 'alipay' | 'wechat' | 'other'
+
+export type AdminOrderCurrency = string
+
+export type AdminOrderSortBy = 'id' | 'amount' | 'created'
+
+export type AdminOrderSortOrder = 'asc' | 'desc'
+
+/** Trailing window the statistics tab aggregates over, in days. */
+export type AdminOrderRange = 7 | 30 | 90
+
+export interface AdminOrder extends Record<string, unknown> {
+  id: number
+  /** Gateway trade number, e.g. `sub2_20260725RHcR5xPa`. */
+  order_no: string
+  user_id: number
+  username: string
+  email: string
+  /** Amount actually paid, denominated by `currency`. */
+  amount: number
+  /** Quota credited on completion. 0 for orders that never completed. */
+  quota: string
+  type: AdminOrderType
+  currency: AdminOrderCurrency
+  method: AdminOrderMethod
+  payment_method: string
+  status: AdminOrderStatus
+  created: number
+  /** 0 = never paid. */
+  paid_at: number
+}
+
+export interface GmpayOrderEvidence {
+  status: 'creating' | 'ready' | 'failed' | 'unknown' | 'settled'
+  last_failure: string
+  gateway_trade_no: string
+  token: string
+  /** Requested network; the callback does not attest to the final network. */
+  network: string
+  gateway_crypto_amount: string
+  receive_address: string
+  settled_crypto_amount: string
+  settled_receive_address: string
+  settled_transaction_id: string
+}
+
+export interface AdminOrderPage {
+  items: AdminOrder[]
+  total: number
+  page: number
+  page_size: number
+  status_counts: Record<string, number>
+  method_counts: Record<string, number>
+  type_counts: Record<string, number>
+  /** Completed Epay revenue across the whole filtered set, in CNY. */
+  filtered_epay_revenue: number
+}
+
+export interface AdminOrderDailyPoint {
+  /** `YYYY-MM-DD`, local time. */
+  date: string
+  revenue: number
+  orders: number
+}
+
+export interface AdminOrderMethodShare {
+  method: AdminOrderPaymentRail
+  amount: number
+  count: number
+}
+
+export interface AdminOrderSpender {
+  user_id: number
+  username: string
+  email: string
+  amount: number
+  orders: number
+}
+
+export interface AdminOrderCurrencyStats {
+  currency: string
+  count: number
+  paid_count: number
+  paid_amount: string
+  credited_quota: number
+  unknown_amount_count: number
+}
+export interface AdminOrderStats {
+  total: number
+  currencies: AdminOrderCurrencyStats[]
+  daily: (AdminOrderCurrencyStats & { date: string })[]
+  start_time: number
+  end_time: number
+}
+
+export type AdminOrderStatus = 'pending' | 'completed' | 'failed' | 'expired'

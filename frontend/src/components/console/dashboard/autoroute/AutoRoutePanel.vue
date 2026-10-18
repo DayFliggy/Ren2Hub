@@ -5,11 +5,12 @@ import { useI18n } from 'vue-i18n'
 
 import EmptyState from '@/components/common/EmptyState.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import VendorRouteGroup from './VendorRouteGroup.vue'
+import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import { useAutoRoute } from '@/composables/useAutoRoute'
 
 const { t, locale } = useI18n()
-const { loading, lastUpdated, vendorList, load } = useAutoRoute()
+const { loading, error, lastUpdated, vendorList, load } = useAutoRoute()
 
 onMounted(() => void load())
 </script>
@@ -54,6 +55,7 @@ onMounted(() => void load())
       </div>
     </div>
 
+    <ErrorBanner v-if="error" :message="error" @retry="load" />
     <!-- skeleton -->
     <div v-if="loading" class="sibling-space-y-4">
       <div
@@ -65,16 +67,38 @@ onMounted(() => void load())
 
     <!-- Lab groups, each ranking its own optimum. -->
     <template v-else-if="vendorList.length">
-      <VendorRouteGroup
+      <ConsoleCard
         v-for="group in vendorList"
         :key="group.groupSlug"
-        :group-slug="group.groupSlug"
-        :group-name="group.groupName"
-        :lab-matches="group.labMatches"
-        :channels="group.channels"
-        :active-count="group.activeCount"
-        :monitor="group.monitor"
-      />
+        :title="group.groupName"
+        data-route-group
+        :data-route-group-slug="group.groupSlug"
+      >
+        <p class="mb-3 text-xs text-[var(--text-tertiary)]">
+          {{
+            t('dashboard.autoRoute.activeChannelCount', {
+              active: group.activeCount,
+              total: group.channels.length,
+            })
+          }}
+        </p>
+        <div
+          v-for="channel in group.channels"
+          :key="channel.id"
+          class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-subtle)] py-3 text-sm"
+        >
+          <span>{{ channel.name }}</span
+          ><span class="text-xs text-[var(--text-tertiary)]"
+            >{{ t('channels.channelRatio') }} ×{{ channel.channel_ratio }} ·
+            {{ channel.in_flight }} / {{ channel.max_concurrency || '∞' }}</span
+          >
+          <span
+            v-if="!channel.eligible"
+            class="text-xs text-[var(--status-warning-text)]"
+            >{{ channel.filter_reason }}</span
+          >
+        </div>
+      </ConsoleCard>
     </template>
 
     <EmptyState

@@ -1,6 +1,18 @@
 import { expect, test } from '@playwright/test'
-import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
+import {
+  configureStablePage as configureNativePage,
+  assertNoHorizontalOverflow,
+} from './fixtures'
 import { createModelMarketFixture } from '../fixtures/modelMarket'
+
+async function configureStablePage(
+  ...args: Parameters<typeof configureNativePage>
+) {
+  await configureNativePage(...args)
+  await args[0].route('**/api/user/model-catalog*', (route) =>
+    route.fulfill({ json: { success: true, data: createModelMarketFixture() } })
+  )
+}
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {
@@ -39,45 +51,9 @@ for (const theme of ['light', 'dark'] as const)
               },
               {
                 model_name: 'task',
-                quota_type: 0,
-                billing_mode: 'tiered_expr',
-                billing_expr: 'u("seconds") * 0.1',
-                billing_usage_schema: {
-                  seconds: { type: 'number', unit: 'second' },
-                },
-                usage_reference: {
-                  status: 'available',
-                  amount_usd: '0.5',
-                  label: 'first 5s',
-                  facts: { seconds: '5' },
-                  plugin_name: 'Task Provider',
-                },
-                billing_plugin_variants: [
-                  {
-                    plugin_key: 'alpha',
-                    plugin_name: 'Task Provider',
-                    billing_mode: 'tiered_expr',
-                    billing_expr: 'u("seconds") * 0.1',
-                    usage_reference: {
-                      status: 'available',
-                      amount_usd: '0.5',
-                      label: 'first 5s',
-                      facts: { seconds: '5' },
-                    },
-                  },
-                  {
-                    plugin_key: 'beta',
-                    plugin_name: 'Other Provider',
-                    billing_mode: 'tiered_expr',
-                    billing_expr: 'u("seconds") * 0.1',
-                    usage_reference: {
-                      status: 'available',
-                      amount_usd: '0.2',
-                      label: 'second 2s',
-                      facts: { seconds: '2' },
-                    },
-                  },
-                ],
+                quota_type: 1,
+                model_price: 0.5,
+                billing_mode: 'ratio',
               },
               {
                 model_name: 'context',
@@ -129,18 +105,6 @@ for (const theme of ['light', 'dark'] as const)
         page.getByText('Conditions: len < 1000').first()
       ).toBeVisible()
       await expect(
-        page
-          .getByText('Example reference · Task Provider · first 5s')
-          .filter({ visible: true })
-          .first()
-      ).toBeVisible()
-      await expect(
-        page
-          .getByText('/ this example', { exact: true })
-          .filter({ visible: true })
-          .first()
-      ).toBeVisible()
-      await expect(
         page.getByText('Reference price unavailable', { exact: true })
       ).toBeVisible()
       await sort.focus()
@@ -153,14 +117,7 @@ for (const theme of ['light', 'dark'] as const)
       const taskCard = page.locator('.public-pricing-card').filter({
         has: page.getByRole('heading', { name: 'task', exact: true }),
       })
-      await taskCard.getByText('Other Provider', { exact: true }).click()
-      await expect(
-        taskCard.getByText('Example reference · Other Provider · second 2s')
-      ).toBeVisible()
-      await expect(taskCard.locator('details').nth(1)).toContainText('$0.200')
-      await expect(
-        taskCard.locator('.model-price-items > [data-reference-prices]')
-      ).toContainText('$0.500')
+      await expect(taskCard).toContainText('$0.500')
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('public-reference.png'),
@@ -168,21 +125,16 @@ for (const theme of ['light', 'dark'] as const)
       })
 
       const fixture = createModelMarketFixture()
-      const baseline = fixture.models[0]!.baselines[0]!
-      baseline.values = {
-        'billing_setting.billing_mode': 'tiered_expr',
-        'billing_setting.billing_expr': 'tier("first", p * 0.1 + c * 0.2)',
-      }
-      fixture.models.find(
-        (model) => model.id === 'video-preview'
-      )!.baselines[0]!.usage_reference = {
-        status: 'available',
-        amount_usd: '0.5',
-        label: 'first 5s',
-        facts: { seconds: '5' },
-        plugin_name: 'Task Provider',
-      }
-      await page.route('**/api/user/model-market', (route) =>
+      fixture.models[0]!.pricing_values = { input: '0.1', output: '0.2' }
+      fixture.offers
+        .filter((offer) => offer.model_id === 'gpt-4.1')
+        .forEach((offer) => {
+          offer.pricing_values = {
+            input: String(0.1 * Number(offer.channel_ratio)),
+            output: String(0.2 * Number(offer.channel_ratio)),
+          }
+        })
+      await page.route('**/api/user/model-catalog', (route) =>
         route.fulfill({ json: { success: true, data: fixture } })
       )
       await page.goto('/models')
@@ -210,7 +162,13 @@ for (const theme of ['light', 'dark'] as const)
         await page.getByRole('radio', { name: view, exact: true }).click()
         await expect(
           page
-            .getByText('Example reference · Task Provider · first 5s')
+            .getByText('$0.020', { exact: true })
+            .filter({ visible: true })
+            .first()
+        ).toBeVisible()
+        await expect(
+          page
+            .getByText('Price cannot be determined statically')
             .filter({ visible: true })
             .first()
         ).toBeVisible()

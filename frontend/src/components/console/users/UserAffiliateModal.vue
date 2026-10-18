@@ -36,8 +36,6 @@ const form = reactive({
   codeEnabled: true,
   useCustomRate: false,
   ratePercent: 10,
-  useInviteLimit: false,
-  inviteLimit: 0,
 })
 
 const codeValid = computed(() => /^[A-Z0-9_-]{4,32}$/.test(form.code.trim()))
@@ -48,23 +46,14 @@ const rateValid = computed(
       form.ratePercent >= 0 &&
       form.ratePercent <= 100)
 )
-const limitValid = computed(
-  () =>
-    !form.useInviteLimit ||
-    (Number.isInteger(form.inviteLimit) && form.inviteLimit >= 0)
-)
-const valid = computed(
-  () => codeValid.value && rateValid.value && limitValid.value
-)
+const valid = computed(() => codeValid.value && rateValid.value)
 
 function applyDetail(value: AdminAffiliateUser) {
   detail.value = value
   form.code = value.code
-  form.codeEnabled = value.code_enabled
+  form.codeEnabled = value.enabled
   form.useCustomRate = value.rate_bps !== null
   form.ratePercent = (value.rate_bps ?? value.effective_rate_bps) / 100
-  form.useInviteLimit = value.invite_limit !== null
-  form.inviteLimit = value.invite_limit ?? 0
 }
 
 async function load() {
@@ -73,7 +62,7 @@ async function load() {
   try {
     applyDetail(
       await api.get<AdminAffiliateUser>(
-        `/api/next/admin/affiliate/users/${props.target.id}`
+        `/api/admin/affiliate/users/${props.target.id}`
       )
     )
   } catch (error) {
@@ -100,18 +89,16 @@ function close() {
 async function submit() {
   if (!props.target || !valid.value || saving.value) return
   const input: AdminAffiliateUserUpdateInput = {
-    code_enabled: form.codeEnabled,
-    clear_rate: !form.useCustomRate,
-    clear_invite_limit: !form.useInviteLimit,
+    enabled: form.codeEnabled,
+    rate_bps: form.useCustomRate ? Math.round(form.ratePercent * 100) : null,
   }
   if (form.code.trim() !== detail.value?.code) input.code = form.code.trim()
   if (form.useCustomRate) input.rate_bps = Math.round(form.ratePercent * 100)
-  if (form.useInviteLimit) input.invite_limit = form.inviteLimit
 
   saving.value = true
   try {
-    await api.patch<AdminAffiliateUser>(
-      `/api/next/admin/affiliate/users/${props.target.id}`,
+    await api.put<AdminAffiliateUser>(
+      `/api/admin/affiliate/users/${props.target.id}`,
       input
     )
     toast.success(t('users.affiliateSaved'))
@@ -128,8 +115,9 @@ async function resetCode() {
   if (!props.target || resetting.value) return
   resetting.value = true
   try {
-    const result = await api.post<{ id: number; code: string }>(
-      `/api/next/admin/affiliate/users/${props.target.id}/reset-code`
+    const result = await api.put<AdminAffiliateUser>(
+      `/api/admin/affiliate/users/${props.target.id}`,
+      { rate_bps: detail.value?.rate_bps ?? null, reset_code: true }
     )
     form.code = result.code
     if (detail.value) {
@@ -180,7 +168,7 @@ async function resetCode() {
           <dd
             class="mt-1 font-semibold tabular-nums text-[var(--text-primary)]"
           >
-            {{ detail.invited_count }}
+            {{ target?.aff_count ?? 0 }}
           </dd>
         </div>
         <div class="border-b border-[var(--border-subtle)] pb-2">
@@ -190,7 +178,7 @@ async function resetCode() {
           <dd
             class="mt-1 font-semibold tabular-nums text-[var(--text-primary)]"
           >
-            {{ formatQuota(detail.available_reward) }}
+            {{ formatQuota(target?.aff_quota ?? 0) }}
           </dd>
         </div>
         <div class="border-b border-[var(--border-subtle)] pb-2">
@@ -200,7 +188,7 @@ async function resetCode() {
           <dd
             class="mt-1 font-semibold tabular-nums text-[var(--text-primary)]"
           >
-            {{ formatQuota(detail.frozen_reward) }}
+            {{ formatQuota(target?.aff_frozen_quota ?? 0) }}
           </dd>
         </div>
       </dl>
@@ -269,32 +257,6 @@ async function resetCode() {
             step="0.01"
             class="affiliate-number focus-ring"
             :aria-label="t('users.affiliateRatePercent')"
-          />
-        </div>
-
-        <div class="sibling-space-y-3">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-sm font-medium text-[var(--text-secondary)]">
-                {{ t('users.affiliateInviteLimit') }}
-              </p>
-              <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-                {{ t('users.affiliateInviteLimitHint') }}
-              </p>
-            </div>
-            <ConsoleToggle
-              v-model="form.useInviteLimit"
-              :label="t('users.affiliateInviteLimit')"
-            />
-          </div>
-          <input
-            v-if="form.useInviteLimit"
-            v-model.number="form.inviteLimit"
-            type="number"
-            min="0"
-            step="1"
-            class="affiliate-number focus-ring"
-            :aria-label="t('users.affiliateInviteLimit')"
           />
         </div>
       </div>

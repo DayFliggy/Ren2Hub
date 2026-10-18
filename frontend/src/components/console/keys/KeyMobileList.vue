@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import {
   Eye,
+  FileCode2,
   LoaderCircle,
   Pencil,
   Power,
   PowerOff,
   Route,
   Trash2,
-  CodeXml,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -16,6 +16,7 @@ import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import type { TokenSummary } from '@/types/console'
 import { formatDate, formatQuota } from '@/utils/format'
+import { tokenStatusLabel } from '@/utils/tokenStatus'
 import { clientConfigMessages } from '@/i18n/clientConfig'
 
 withDefaults(
@@ -28,17 +29,16 @@ withDefaults(
     isToggling: (token: TokenSummary) => boolean
     toggleStatus: (token: TokenSummary) => void | Promise<void>
     viewKey: (token: TokenSummary) => void
+    clientConfig?: (token: TokenSummary) => void
     editKey: (token: TokenSummary) => void
     deleteKey: (token: TokenSummary) => void
-    viewBilling?: (token: TokenSummary) => void
-    exportConfig?: (token: TokenSummary) => void
     routingEnabled?: boolean
   }>(),
-  { routingEnabled: false, viewBilling: undefined, exportConfig: undefined }
+  { routingEnabled: false, clientConfig: undefined }
 )
 
 const { t } = useI18n()
-const { t: clientText } = useI18n({
+const { t: configT } = useI18n({
   useScope: 'local',
   messages: clientConfigMessages,
 })
@@ -105,9 +105,7 @@ const { t: clientText } = useI18n({
             @click="toggleStatus(token)"
           >
             <StatusChip :tone="token.status === 1 ? 'success' : 'neutral'">
-              {{
-                token.status === 1 ? t('common.enabled') : t('common.disabled')
-              }}
+              {{ t(tokenStatusLabel(token.status)) }}
             </StatusChip>
           </button>
         </header>
@@ -132,18 +130,9 @@ const { t: clientText } = useI18n({
                 {{
                   token.unlimited
                     ? t('common.unlimited')
-                    : formatQuota(token.available_quota ?? '0', 3)
+                    : formatQuota(token.remain_quota, 3)
                 }}
               </span>
-              <button
-                v-if="viewBilling"
-                type="button"
-                class="-mb-1 flex min-h-6 items-center text-xs focus-ring"
-                @click="viewBilling(token)"
-              >
-                {{ t('billing.reserved') }}
-                {{ formatQuota(token.reserved_quota, 3) }}
-              </button>
             </dd>
           </div>
           <div class="col-span-2 min-w-0">
@@ -176,11 +165,12 @@ const { t: clientText } = useI18n({
             <Eye :size="16" />
           </IconButton>
           <IconButton
-            v-if="exportConfig"
-            :label="clientText('title')"
-            @click="exportConfig(token)"
-            ><CodeXml :size="16"
-          /></IconButton>
+            v-if="clientConfig"
+            :label="configT('title')"
+            @click="clientConfig(token)"
+          >
+            <FileCode2 :size="16" />
+          </IconButton>
           <IconButton :label="t('keys.editKey')" @click="editKey(token)">
             <Pencil :size="16" />
           </IconButton>

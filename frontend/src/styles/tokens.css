@@ -119,11 +119,13 @@
   --signal: #74765a;
   --signal-rgb: 116 118 90;
   --signal-strong: #5c5e45;
+  --signal-text: var(--signal-strong);
   --signal-bright: #9a9c7c;
   --signal-soft: #e9e9da;
   --signal-deep: #38372b;
   --support: #cfaf6b;
   --support-strong: #a98c4e;
+  --support-text: #856b35;
   --on-colored: #f4f2e8;
   /* 草甸绿点缀族：田园航拍（草甸中绿/树篱深绿/麦茬金）推导，仅作点缀、暖土基调不动 */
   --glow: #7fa463;
@@ -220,12 +222,12 @@
   /* ===== 手账质感令牌（雅致 × 手绘装饰层） ===== */
   /* 展示字型仅用于 hero 级标题；正文与工作区维持 sans。 */
   --font-display:
-    'Ren2NotoSerifSC', 'Noto Serif SC', 'Source Han Serif SC', 'STZhongsong',
-    'SimSun', Georgia, serif;
+    'Ren2NotoSerifSC', 'Ren2NotoSansSC', 'Noto Serif SC', 'Source Han Serif SC',
+    'STZhongsong', 'SimSun', Georgia, serif;
   /* 等宽字型：账本标签、代号与数值列使用；与 tailwind fontFamily.mono 同源。 */
   --font-mono:
-    'Ren2JetBrainsMono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace,
-    'SFMono-Regular', Menlo, monospace;
+    'Ren2JetBrainsMono', 'Ren2NotoSansSC', 'JetBrains Mono', 'IBM Plex Mono',
+    ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --surface-tile: #f6e8c9;
   --border-dashed-color: rgba(56, 55, 43, 0.24);
   /* 静态纸纹噪点：作为 background-image 叠在页面底色上，无层级成本。 */
@@ -424,11 +426,13 @@ html.dark {
   --signal: #6a8cb8;
   --signal-rgb: 106 140 184;
   --signal-strong: #364f72;
+  --signal-text: var(--signal-bright);
   --signal-bright: #a8c4e8;
   --signal-soft: #232d42;
   --signal-deep: #1a2236;
   --support: #e8a4c4;
   --support-strong: #d484ae;
+  --support-text: var(--support);
   --on-colored: #e8edf8;
   /* 薄荷绿点缀族：炭蓝底 + 星辉金主色之外的活力补色，
      柔化霓虹感（比旧萤绿更哑、更专业）。 */

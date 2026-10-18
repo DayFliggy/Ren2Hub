@@ -102,12 +102,9 @@ describe('public application state', () => {
       email: 'demo@example.com',
       role: 1,
       status: 1,
-      available_quota: '100',
-      reserved_quota: '0',
-      quota_version: 0,
-      used_quota: '0',
+      quota: 100,
+      used_quota: 0,
       request_count: 0,
-      created_at: 1_700_000_000,
     })
     publicApi.status.mockResolvedValueOnce({
       HeaderNavModules: {
@@ -146,12 +143,9 @@ describe('public application state', () => {
       email: 'demo@example.com',
       role: 1,
       status: 1,
-      available_quota: '100',
-      reserved_quota: '0',
-      quota_version: 0,
-      used_quota: '0',
+      quota: 100,
+      used_quota: 0,
       request_count: 0,
-      created_at: 1_700_000_000,
     })
     resolveNotice('Notice')
     await initialization

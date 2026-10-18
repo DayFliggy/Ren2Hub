@@ -49,10 +49,10 @@ const row = {
   token_name: 'export-fixture',
   model_name: 'fixture-model',
   channel_name: 'channel',
-  quota: '9007199254740993',
+  quota: 9007199254740991,
   prompt_tokens: 1,
   completion_tokens: 2,
-  use_time: 1000,
+  use_time: 1,
   is_stream: true,
   content: '=untrusted',
   created_at: 1785123000,
@@ -83,7 +83,9 @@ for (const theme of ['light', 'dark'] as const) {
         })
       })
       await page.goto('/logs')
-      await page.getByRole('combobox', { name: '日志分组' }).fill('old-team')
+      await expect(
+        page.getByRole('combobox', { name: '日志分组' })
+      ).toHaveCount(0)
       await page.getByRole('button', { name: '导出', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: '导出数据' })
       await expect(
@@ -164,7 +166,7 @@ for (const theme of ['light', 'dark'] as const) {
       const download = page.waitForEvent('download')
       await dialog.getByRole('button', { name: '确认', exact: true }).click()
       const file = await download
-      expect(new URL(exportURL).searchParams.get('group')).toBe('old-team')
+      expect(new URL(exportURL).searchParams.has('group')).toBe(false)
       expect(new URL(exportURL).searchParams.get('start_timestamp')).toBe(
         String(new Date('2026-07-01T00:00:00+08:00').getTime() / 1000)
       )
@@ -175,7 +177,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(path).not.toBeNull()
       const csv = await readFile(path!, 'utf8')
       expect(csv).toContain('额度（整数单位）')
-      expect(csv).toContain('9007199254740993')
+      expect(csv).toContain('9007199254740991')
       expect(csv).toContain("'=untrusted")
       await expect(dialog).not.toBeVisible()
       fail = true

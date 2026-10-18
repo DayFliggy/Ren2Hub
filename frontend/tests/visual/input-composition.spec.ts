@@ -33,7 +33,7 @@ for (const theme of ['light', 'dark'] as const) {
       await configureStablePage(page, { theme })
       const failures: string[] = []
       page.on('pageerror', (error) => failures.push(error.message))
-      await page.route('**/api/next/admin/channels/fetch_models*', (route) =>
+      await page.route('**/api/channel/fetch_models*', (route) =>
         route.fulfill({
           json: {
             success: true,
@@ -61,7 +61,9 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(channel).toBeVisible()
       }
       await model.press('Enter')
-      await expect(channel.locator('input[placeholder=""]')).toHaveValue('')
+      await expect(
+        channel.locator('input[placeholder=""]:not([name])')
+      ).toHaveValue('')
       await expect(
         channel.getByText('muse-spark-1.3', { exact: true }).first()
       ).toBeVisible()
@@ -139,8 +141,43 @@ for (const theme of ['light', 'dark'] as const) {
       await vendorName.press('Escape')
       await expect(drawer).toHaveCount(0)
 
+      await page.route('**/api/tickets/1', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              ticket: {
+                id: 1,
+                title: 'IME ticket',
+                category: 'billing',
+                priority: 'normal',
+                status: 'open',
+                reply_count: 0,
+                message_count: 1,
+                last_reply_role: 'user',
+                model_id: '',
+                request_id: '',
+                created: 1785114000,
+                updated: 1785114000,
+                assignee_id: null,
+                assignee_name: '',
+                assigned_at: 0,
+              },
+              messages: [
+                {
+                  id: 1,
+                  role: 'user',
+                  content: 'Initial request',
+                  images: [],
+                  created: 1785114000,
+                },
+              ],
+            },
+          },
+        })
+      )
       let replies = 0
-      await page.route('**/api/next/tickets/1/messages', (route) => {
+      await page.route('**/api/tickets/1/messages', (route) => {
         replies += 1
         return route.fulfill({
           status: 503,
@@ -168,41 +205,6 @@ for (const theme of ['light', 'dark'] as const) {
         fullPage: true,
       })
 
-      await page.goto('/activity')
-      const countdowns = page
-        .locator('span[aria-live="off"]')
-        .filter({ hasText: '距结束' })
-      await expect(countdowns).toHaveCount(2)
-      await expect(countdowns.first()).toBeVisible()
-      await page.evaluate(() => {
-        const future = Date.now() + 400 * 86_400_000
-        Object.defineProperty(window, 'Date', {
-          value: class extends Date {
-            static now() {
-              return future
-            }
-          },
-        })
-        document.dispatchEvent(new Event('visibilitychange'))
-      })
-      await expect(
-        page.locator('span[aria-live="off"]').filter({ hasText: '已结束' })
-      ).toHaveCount(1)
-      await expect(countdowns).toHaveText('距结束 3250 天 00:00:00')
-      await assertNoHorizontalOverflow(page)
-      await expect
-        .poll(() =>
-          page
-            .locator('img')
-            .evaluateAll((images) =>
-              images.every((img) => img.complete && img.naturalWidth > 0)
-            )
-        )
-        .toBe(true)
-      await page.screenshot({
-        path: testInfo.outputPath('activity-clock.png'),
-        fullPage: true,
-      })
       expect(failures).toEqual([])
     })
   }

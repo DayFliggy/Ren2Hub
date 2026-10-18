@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TextInput from '@/components/common/TextInput.vue'
 import { computed, reactive, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -10,12 +11,9 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
-import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { formatDate } from '@/utils/format'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
-import ConversionPolicySelect from '@/components/console/gateway/ConversionPolicySelect.vue'
-import type { ConversionPolicy } from '@/types/gateway'
 
 const props = defineProps<{
   open: boolean
@@ -31,10 +29,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
-
 const form = reactive({
   type: 'auto' as TokenType,
-  conversion_policy: 'safe' as ConversionPolicy,
   allow_user_quota_query: true,
   name: '',
   model_limits: [] as string[],
@@ -44,7 +40,6 @@ const form = reactive({
   expireDate: '',
 })
 const saving = ref(false)
-let pendingBudget: { fingerprint: string; id: string } | null = null
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
 
@@ -57,17 +52,12 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return
-    pendingBudget = null
     const e = props.editing
     form.type = e?.type ?? 'auto'
-    form.conversion_policy = e?.conversion_policy ?? 'safe'
     form.allow_user_quota_query = e ? (e.allow_user_quota_query ?? false) : true
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
-    form.quotaDollars =
-      e && !e.unlimited && e.available_quota !== null
-        ? quotaToDecimal(e.available_quota)
-        : ''
+    form.quotaDollars = e && !e.unlimited ? quotaToDecimal(e.remain_quota) : ''
     form.unlimited = e?.unlimited ?? true
     form.ipText = e?.ip_limits?.join('\n') ?? ''
     form.expireDate = e && e.expired_time > 0 ? formatDate(e.expired_time) : ''
@@ -104,15 +94,17 @@ async function save() {
   if (saving.value) return
   saving.value = true
   try {
+    const remainQuota = form.unlimited
+      ? 0
+      : Number(decimalToQuota(form.quotaDollars || '0'))
+    if (!Number.isSafeInteger(remainQuota) || remainQuota < 0)
+      throw new Error(t('common.invalidInput'))
     const payload: Record<string, unknown> = {
       name: form.name,
-      conversion_policy: form.conversion_policy,
       allow_user_quota_query: form.allow_user_quota_query,
       model_limits: form.model_limits,
       unlimited: form.unlimited,
-      available_quota: form.unlimited
-        ? '0'
-        : decimalToQuota(form.quotaDollars || '0'),
+      remain_quota: remainQuota,
       ip_limits: form.ipText
         .split('\n')
         .map((s) => s.trim())
@@ -134,11 +126,6 @@ async function save() {
     }
     if (props.editing) {
       payload.id = props.editing.id
-      payload.expected_version = props.editing.quota_version
-      const fingerprint = JSON.stringify(payload)
-      if (pendingBudget?.fingerprint !== fingerprint)
-        pendingBudget = { fingerprint, id: crypto.randomUUID() }
-      payload.operation_id = pendingBudget.id
       await api.put('/api/token/', payload)
       toast.success(t('keys.updated'))
     } else {
@@ -206,20 +193,9 @@ async function save() {
           </button>
         </div>
       </fieldset>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <FormField :label="t('keys.nameLabel')">
-          <TextInput
-            v-model="form.name"
-            name="token-name"
-            :placeholder="t('keys.namePlaceholder')"
-          />
-        </FormField>
-        <ConversionPolicySelect
-          v-model="form.conversion_policy"
-          :disabled="saving"
-        />
-      </div>
+      <FormField :label="t('keys.nameLabel')"
+        ><TextInput v-model="form.name" name="token-name" :maxlength="50"
+      /></FormField>
 
       <div class="grid gap-4 sm:grid-cols-2 items-start">
         <!-- expiry: toggle-hidden -->

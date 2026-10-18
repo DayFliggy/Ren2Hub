@@ -17,7 +17,8 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAdmin: mocks.isAdmin,
     hasPermission: (_resource: string, action: string) =>
-      action === 'sensitive_write' && mocks.canSensitiveWrite,
+      action === 'write' ||
+      (action === 'sensitive_write' && mocks.canSensitiveWrite),
   }),
 }))
 vi.mock('@/stores/app', () => ({
@@ -34,11 +35,10 @@ function setup(patch: Partial<AdminChannel> = {}) {
     type: 1,
     status: 1,
     models: 'b,a',
+    base_url: 'https://provider.example',
     priority: 0,
     weight: 0,
-    capacity_total: 20,
-    capacity_used: 0,
-    channel_ratio: '1',
+    group: 'default',
     ...patch,
   } as AdminChannel
   const wrapper = mount(ChannelFormModal, {
@@ -75,29 +75,6 @@ beforeEach(() => {
   ])
 })
 describe('channel model prefill integration', () => {
-  it('submits channel adjustments as exact decimal strings and rejects invalid ranges', async () => {
-    const { wrapper, save } = setup()
-    const input = wrapper.get('input[name="admin-channel-ratio"]')
-    const submit = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('channels.saveChannel'))!
-    for (const invalid of [
-      '0',
-      '1000.000000000000000001',
-      '0.0000000000000000001',
-      '1e3',
-      'NaN',
-    ]) {
-      await input.setValue(invalid)
-      expect(submit.attributes('disabled')).toBeDefined()
-    }
-    expect(save).not.toHaveBeenCalled()
-    await input.setValue('0.123456789012345678')
-    await submit.trigger('click')
-    await flushPromises()
-    expect(save.mock.calls[0]![0].channel_ratio).toBe('0.123456789012345678')
-    wrapper.unmount()
-  })
   it('saves supported passthrough fields while retaining unrelated settings', async () => {
     mocks.canSensitiveWrite = true
     const { wrapper, save } = setup({
@@ -344,17 +321,12 @@ describe('channel model prefill integration', () => {
     expect(save.mock.calls[0]![0].models).toBe('b,a,c')
     wrapper.unmount()
   })
-  it('does not request prefill groups with a missing capability or non-admin identity', () => {
-    mocks.enabled = false
-    const first = setup().wrapper
-    expect(mocks.groups).not.toHaveBeenCalled()
-    expect(first.find('#channel-prefill-group').exists()).toBe(false)
-    first.unmount()
-    mocks.enabled = true
+  it('does not request administrator prefill groups for a non-admin', () => {
     mocks.isAdmin = false
-    const second = setup().wrapper
+    const wrapper = setup().wrapper
     expect(mocks.groups).not.toHaveBeenCalled()
-    second.unmount()
+    expect(wrapper.find('#channel-prefill-group').exists()).toBe(false)
+    wrapper.unmount()
   })
   it('cancels the prefill read when the form closes', async () => {
     mocks.groups.mockImplementation(() => new Promise(() => {}))

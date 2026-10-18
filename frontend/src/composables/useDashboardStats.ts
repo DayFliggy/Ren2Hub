@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { api } from '@/api/console'
+import { getUsageSummary } from '@/api/dashboard'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
@@ -13,8 +13,8 @@ export interface StatsKpi {
   totalTokens: number
   totalQuota: string
   totalRequests: number
-  avgLatency: number
-  successRate: number
+  avgLatency: number | null
+  successRate: number | null
 }
 
 export interface StatsModelRow {
@@ -23,7 +23,7 @@ export interface StatsModelRow {
   quota: string
   requests: number
   share: number
-  avgLatency: number
+  avgLatency: number | null
 }
 
 export interface HourlyPoint {
@@ -69,7 +69,7 @@ export function useDashboardStats() {
     // Serialized via useLatestRequest: rapid range switches abort the older
     // request, and a late response can never overwrite the newer period.
     const result = await statsRequest.run((signal) =>
-      api.get<StatsPeriod>('/api/next/dashboard/stats', params, { signal })
+      getUsageSummary(params, signal)
     )
     if (result.stale) return
     loading.value = false

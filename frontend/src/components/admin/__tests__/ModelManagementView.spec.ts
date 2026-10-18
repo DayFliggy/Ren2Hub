@@ -21,6 +21,11 @@ const mocks = vi.hoisted(() => ({
   saveModel: vi.fn(),
 }))
 vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
+// This suite tests workspace navigation; keep its lazy pricing import isolated
+// from API initialization after the navigation wrapper has unmounted.
+vi.mock('@/views/admin/ModelPricingView.vue', () => ({
+  default: { name: 'ModelPricingView', template: '<div>Pricing view</div>' },
+}))
 const authState = vi.hoisted(() => ({ isRoot: true }))
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authState,
@@ -37,7 +42,6 @@ const rows = [1, 2].map((id) => ({
   sync_official: 1,
   name_rule: 0,
   bound_channels: [],
-  enable_groups: [],
   matched_models: [],
   matched_count: 0,
   quota_types: [],

@@ -22,7 +22,6 @@ vi.mock('@/api/auth', () => ({
   },
 }))
 
-import { ApiError } from '@/api/types'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import { storeAffiliateAttribution } from '@/utils/affiliate'
@@ -40,11 +39,8 @@ describe('SignUpView affiliate attribution', () => {
     await setLocale('zh-CN')
   })
 
-  it('restores the stored code when a new link carries an invalid code', async () => {
+  it('passes the URL attribution to native registration without a validation API', async () => {
     storeAffiliateAttribution('STORED-CODE')
-    validateAffiliate.mockRejectedValueOnce(
-      new ApiError('邀请码无效', { business: true })
-    )
     const pinia = createPinia()
     setActivePinia(pinia)
     const app = useAppStore()
@@ -63,8 +59,8 @@ describe('SignUpView affiliate attribution', () => {
     await flushPromises()
 
     const inputs = wrapper.findAll('input')
-    expect(inputs.at(-1)?.element.value).toBe('STORED-CODE')
-    expect(validateAffiliate).toHaveBeenCalledWith('INVALID')
+    expect(inputs.at(-1)?.element.value).toBe('INVALID')
+    expect(validateAffiliate).not.toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('邀请码无效')
     wrapper.unmount()
   })
