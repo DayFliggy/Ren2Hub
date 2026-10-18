@@ -87,8 +87,8 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 		"GET /api/admin/affiliate/records":           "user:read",
 		"GET /api/admin/affiliate/users/:id":         "user:read",
 		"PUT /api/admin/affiliate/users/:id":         "user:write",
-		"GET /api/user/topup/stats":                  "topup:read",
-		"GET /api/user/topup/admin/detail/:trade_no": "topup:read",
+		"GET /api/user/topup/stats":                  "billing:read",
+		"GET /api/user/topup/admin/detail/:trade_no": "billing:read",
 	}
 	for _, route := range engine.Routes() {
 		if strings.HasSuffix(route.Path, "/notify") {

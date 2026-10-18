@@ -14,8 +14,13 @@ import (
 )
 
 func GetAllRedemptions(c *gin.Context) {
+	sort, err := model.ParseRedemptionSort(c.Query("sort_by"), c.Query("sort_order"))
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
-	redemptions, total, err := model.GetAllRedemptions(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	redemptions, total, err := model.GetAllRedemptions(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sort)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -27,10 +32,15 @@ func GetAllRedemptions(c *gin.Context) {
 }
 
 func SearchRedemptions(c *gin.Context) {
+	sort, err := model.ParseRedemptionSort(c.Query("sort_by"), c.Query("sort_order"))
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
+		return
+	}
 	keyword := c.Query("keyword")
 	status := c.Query("status")
 	pageInfo := common.GetPageQuery(c)
-	redemptions, total, err := model.SearchRedemptions(keyword, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	redemptions, total, err := model.SearchRedemptions(keyword, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sort)
 	if err != nil {
 		common.ApiError(c, err)
 		return

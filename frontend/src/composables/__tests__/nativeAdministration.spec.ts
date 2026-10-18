@@ -129,3 +129,47 @@ it('preserves partially created redemption codes while showing the server failur
   expect(mocks.success).not.toHaveBeenCalled()
   wrapper.unmount()
 })
+
+it('sends native redemption sorting on both list and filtered requests and resets pagination', async () => {
+  const { wrapper, state } = setup(useAdminRedemption)
+  try {
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      '/api/redemption/',
+      expect.objectContaining({ p: 1, sort_by: 'id', sort_order: 'desc' }),
+      { signal: expect.any(AbortSignal) }
+    )
+    state.page.value = 3
+    await flushPromises()
+    expect(mocks.get.mock.lastCall![1].p).toBe(3)
+
+    state.sortBy.value = 'created_time'
+    state.sortOrder.value = 'asc'
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      '/api/redemption/',
+      expect.objectContaining({
+        p: 1,
+        sort_by: 'created_time',
+        sort_order: 'asc',
+      }),
+      { signal: expect.any(AbortSignal) }
+    )
+
+    state.statusFilter.value = 'used'
+    state.sortBy.value = 'used_time'
+    await flushPromises()
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      '/api/redemption/search',
+      expect.objectContaining({
+        status: 3,
+        p: 1,
+        sort_by: 'used_time',
+        sort_order: 'asc',
+      }),
+      { signal: expect.any(AbortSignal) }
+    )
+  } finally {
+    wrapper.unmount()
+  }
+})

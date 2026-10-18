@@ -581,16 +581,17 @@ func (channel *Channel) Update() error {
 	if err != nil {
 		return err
 	}
+	var routingErr error
+	if ChannelRoutingChanged != nil {
+		routingErr = ChannelRoutingChanged(channel.Id)
+	}
 	if err = DB.Model(channel).First(channel, "id = ?", channel.Id).Error; err != nil {
 		return err
 	}
 	if err = channel.UpdateAbilities(nil); err != nil {
 		return err
 	}
-	if ChannelRoutingChanged != nil {
-		return ChannelRoutingChanged(channel.Id)
-	}
-	return nil
+	return routingErr
 }
 
 func (channel *Channel) UpdateResponseTime(responseTime int64) {

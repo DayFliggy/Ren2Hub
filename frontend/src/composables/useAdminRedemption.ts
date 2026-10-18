@@ -61,7 +61,6 @@ export function useAdminRedemption() {
 
   const rows = ref<AdminRedemptionCode[]>([])
   const total = ref(0)
-  const statusCounts = ref<Record<string, number>>({})
   const page = ref(1)
   const pageSize = ref(20)
   const keyword = ref('')
@@ -145,6 +144,8 @@ export function useAdminRedemption() {
           )[statusFilter.value],
           p: page.value,
           page_size: pageSize.value,
+          sort_by: sortBy.value,
+          sort_order: sortOrder.value,
         },
         { signal }
       )
@@ -293,7 +294,6 @@ export function useAdminRedemption() {
   return {
     rows,
     total,
-    statusCounts,
     page,
     pageSize,
     keyword,

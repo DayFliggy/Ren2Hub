@@ -579,6 +579,9 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// Limit publication must run before other fallible post-commit work, but its
+	// failure must not skip publication of a committed authentication change.
+	concurrencyErr := service.RefreshUserConcurrencyLimit(c.Request.Context(), updatedUser.Id)
 	if authzTouched {
 		if err := authz.ReloadPolicy(); err != nil {
 			common.ApiError(c, err)
@@ -595,8 +598,8 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err := service.RefreshUserConcurrencyLimit(c.Request.Context(), updatedUser.Id); err != nil {
-		common.ApiError(c, err)
+	if concurrencyErr != nil {
+		common.ApiError(c, concurrencyErr)
 		return
 	}
 	recordManageAuditFor(c, updatedUser.Id, "user.update", auditParams)

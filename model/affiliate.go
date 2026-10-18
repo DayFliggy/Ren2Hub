@@ -162,14 +162,16 @@ func applyAffiliateRewardTx(tx *gorm.DB, user *User, sourceType, sourceID string
 		return errors.New("invalid self referral")
 	}
 	var inviter User
-	if err := lockForUpdate(tx).First(&inviter, user.InviterId).Error; err != nil {
+	err := lockForUpdate(tx).First(&inviter, user.InviterId).Error
+	inviterUnavailable := errors.Is(err, gorm.ErrRecordNotFound)
+	if err != nil && !inviterUnavailable {
 		return err
 	}
 	key := sourceType + ":" + sourceID
 	var existing AffiliateRecord
-	err := lockForUpdate(tx).Where("source_key = ?", key).First(&existing).Error
+	err = lockForUpdate(tx).Where("source_key = ?", key).First(&existing).Error
 	if err == nil {
-		if existing.UserID != inviter.Id || existing.InviteeID != user.Id || existing.BaseQuota != baseQuota {
+		if existing.UserID != user.InviterId || existing.InviteeID != user.Id || existing.BaseQuota != baseQuota {
 			return errors.New("affiliate source conflicts with the recorded decision")
 		}
 		return nil
@@ -186,8 +188,12 @@ func applyAffiliateRewardTx(tx *gorm.DB, user *User, sourceType, sourceID string
 	if rate < 0 || rate > 10000 {
 		return errors.New("invalid affiliate rate")
 	}
-	record := AffiliateRecord{UserID: inviter.Id, InviteeID: user.Id, Kind: "accrue", SourceType: sourceType, SourceID: sourceID, SourceKey: key, BaseQuota: baseQuota, RateBps: rate, CreatedAt: now, AvailableAfter: inviter.AffQuota, FrozenAfter: inviter.AffFrozenQuota}
+	record := AffiliateRecord{UserID: user.InviterId, InviteeID: user.Id, Kind: "accrue", SourceType: sourceType, SourceID: sourceID, SourceKey: key, BaseQuota: baseQuota, RateBps: rate, CreatedAt: now, AvailableAfter: inviter.AffQuota, FrozenAfter: inviter.AffFrozenQuota}
 	switch {
+	case inviterUnavailable:
+		// Deleting an inviter must not invalidate an invitee's paid credit.
+		// Persist the decision so restoring that user cannot backfill a reward.
+		record.SkipReason = "inviter_unavailable"
 	case !policy.Enabled:
 		record.SkipReason = "program_disabled"
 	case sourceType == "admin_quota" && !policy.AdminRechargeEnabled:

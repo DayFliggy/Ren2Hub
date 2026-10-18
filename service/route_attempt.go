@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -14,13 +15,27 @@ import (
 )
 
 type routeAttempt struct {
-	once      sync.Once
-	started   time.Time
-	channelID int
-	model     string
-	epoch     uint64
-	bound     bool
-	operation int
+	once        sync.Once
+	started     time.Time
+	channelID   int
+	model       string
+	epoch       uint64
+	bound       bool
+	operation   int
+	firstOutput atomic.Int64
+}
+
+// ObserveRouteStreamOutput only affects scheduling latency. The native first-byte
+// clock remains separate because retry safety also uses control frames.
+func ObserveRouteStreamOutput(c *gin.Context, data string) {
+	value, ok := c.Get("route_attempt")
+	attempt, valid := value.(*routeAttempt)
+	if !ok || !valid || attempt == nil || attempt.firstOutput.Load() != 0 {
+		return
+	}
+	if streamEventHasOutput(data) {
+		attempt.firstOutput.CompareAndSwap(0, time.Now().UnixNano())
+	}
 }
 
 // MarkRouteAttemptSent runs immediately before transport dispatch, after local validation.
@@ -67,8 +82,8 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 		if outcome == perfmetrics.OutcomeSuccess {
 			if !info.IsStream {
 				latency = time.Since(attempt.started).Milliseconds()
-			} else if info.FirstResponseTime.After(attempt.started) {
-				latency = info.FirstResponseTime.Sub(attempt.started).Milliseconds()
+			} else if first := attempt.firstOutput.Load(); first > attempt.started.UnixNano() {
+				latency = max(1, time.Unix(0, first).Sub(attempt.started).Milliseconds())
 			}
 		}
 		recordRouteObservation(attempt.epoch, attempt.channelID, attempt.model, attempt.operation, info.IsStream, outcome == perfmetrics.OutcomeSuccess, latency)

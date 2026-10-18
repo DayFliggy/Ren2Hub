@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestTokenRouteWebSocketRechecksEachCreate(t *testing.T) {
@@ -40,6 +42,41 @@ func TestTokenRouteWebSocketRechecksEachCreate(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, err.StatusCode)
 	require.ErrorContains(t, err, "no longer available")
 	require.False(t, service.ShouldRetryRelayError(newCall(), err, 5))
+}
+
+func TestTokenRouteWebSocketStorageFailureIsNotRevocation(t *testing.T) {
+	db := setupRelayChannelDB(t)
+	require.NoError(t, db.Create(&model.Token{Id: 7, UserId: 17, Key: "ws-routing"}).Error)
+	channel := model.Channel{Id: 11, Key: "ws-test", Models: "route-model", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled}
+	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Model: "route-model", Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
+	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
+	profileReads := 0
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:ws-route-second-read-error", func(tx *gorm.DB) {
+		if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "TokenRouteProfile" {
+			profileReads++
+			if profileReads == 2 {
+				tx.AddError(errors.New("private database routing fixture"))
+			}
+		}
+	}))
+	session := responsesWSSession{lockedChannelID: 11, lockedKey: "ws-test", lockedContext: map[constant.ContextKey]any{constant.ContextKeyChannelBaseUrl: channel.GetBaseURL(), constant.ContextKeyChannelHeaderOverride: channel.GetHeaderOverride()}}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	common.SetContextKey(c, constant.ContextKeyTokenId, 7)
+	service.GetChannelConstraints(c).AddPin(appdto.ChannelPin{ChannelId: 11, Source: appdto.PinSourceToken})
+	before := service.ChannelInFlight(11)
+	err := session.restoreConnectionContext(c, "route-model")
+	require.NotNil(t, err)
+	require.Equal(t, 2, profileReads, "the storage error must occur in the final acquisition, after the first authorization check")
+	require.Equal(t, http.StatusInternalServerError, err.StatusCode)
+	require.EqualValues(t, "get_channel_failed", err.GetErrorCode())
+	require.NotContains(t, err.Error(), "private database")
+	require.False(t, service.ShouldRetryRelayError(c, err, 5))
+	require.Equal(t, before, service.ChannelInFlight(11))
+	require.False(t, c.Writer.Written())
 }
 
 func TestTokenRouteWebSocketPinnedAbilityRevocation(t *testing.T) {

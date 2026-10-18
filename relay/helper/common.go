@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -69,8 +70,10 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 	} else {
 		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
+		if FlushWriter(c) == nil {
+			service.ObserveRouteStreamOutput(c, string(jsonData))
+		}
 	}
-	_ = FlushWriter(c)
 	return nil
 }
 
@@ -81,7 +84,9 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
 
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
-	_ = FlushWriter(c)
+	if FlushWriter(c) == nil {
+		service.ObserveRouteStreamOutput(c, data)
+	}
 }
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
@@ -91,7 +96,7 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
-	return FlushWriter(c)
+	return flushStreamOutput(c, data)
 }
 
 func StringData(c *gin.Context, str string) error {
@@ -104,7 +109,15 @@ func StringData(c *gin.Context, str string) error {
 	}
 
 	c.Render(-1, common.CustomEvent{Data: "data: " + str})
-	return FlushWriter(c)
+	return flushStreamOutput(c, str)
+}
+
+func flushStreamOutput(c *gin.Context, data string) error {
+	if err := FlushWriter(c); err != nil {
+		return err
+	}
+	service.ObserveRouteStreamOutput(c, data)
+	return nil
 }
 
 func PingData(c *gin.Context) error {

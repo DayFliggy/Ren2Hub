@@ -495,13 +495,9 @@ func executeTaskSubmissionWith(
 
 		if lockedCh, ok := relayInfo.LockedChannel.(*model.Channel); ok && lockedCh != nil {
 			var acquireErr error
-			channel, acquireErr = service.AcquirePinnedRouteChannel(c, lockedCh.Id, relayInfo.OriginModelName)
+			channel, acquireErr = service.AcquireOriginTaskRouteChannel(c, lockedCh.Id)
 			if acquireErr != nil {
-				status := http.StatusForbidden
-				if errors.Is(acquireErr, service.ErrConcurrencyFull) {
-					status = http.StatusTooManyRequests
-				}
-				taskErr = service.TaskErrorWrapperLocal(acquireErr, "origin_task_channel_unavailable", status)
+				taskErr = service.PinnedTaskRouteError(acquireErr)
 				break
 			}
 			policy.BeginAttempt(channel)

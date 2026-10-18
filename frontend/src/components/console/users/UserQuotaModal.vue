@@ -21,9 +21,9 @@ const { t } = useI18n()
 const saving = ref(false)
 const mode = ref<'grant' | 'deduct'>('grant')
 const amount = ref('1')
-let operation: { delta: string; id: string } | null = null
+let operation: { userId: number; delta: string; id: string } | null = null
 
-/** Admins think in dollars; the ledger stores quota units. */
+/** Admins think in dollars; the wallet stores quota units. */
 const units = computed(() => {
   try {
     return decimalToQuota(amount.value)
@@ -66,12 +66,18 @@ function close() {
 }
 
 async function submit() {
-  if (!valid.value || saving.value) return
+  const userId = props.target?.id
+  if (!userId || !valid.value || saving.value) return
   saving.value = true
   try {
-    if (operation?.delta !== delta.value)
-      operation = { delta: delta.value, id: crypto.randomUUID() }
-    if (await props.save(delta.value, '', operation.id)) emit('close')
+    if (operation?.userId !== userId || operation.delta !== delta.value)
+      operation = { userId, delta: delta.value, id: crypto.randomUUID() }
+    // An unconfirmed result keeps its identity for a safe retry. A confirmed
+    // success ends the operation, even when the next grant has the same value.
+    if (await props.save(delta.value, '', operation.id)) {
+      operation = null
+      emit('close')
+    }
   } finally {
     saving.value = false
   }

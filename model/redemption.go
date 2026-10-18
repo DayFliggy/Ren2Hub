@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Redemption struct {
@@ -25,41 +26,43 @@ type Redemption struct {
 	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
 }
 
-func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
-	// 开始事务
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// 获取总数
-	err = tx.Model(&Redemption{}).Count(&total).Error
-	if err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	// 获取分页数据
-	err = tx.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
-	if err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	// 提交事务
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
-
-	return redemptions, total, nil
+type RedemptionSort struct {
+	column string
+	asc    bool
 }
 
-func SearchRedemptions(keyword string, status string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
+// ParseRedemptionSort limits ordering to public fields; request values never
+// become SQL fragments. The zero value preserves NewAPI's default ID order.
+func ParseRedemptionSort(field, order string) (RedemptionSort, error) {
+	columns := map[string]string{"": "id", "id": "id", "created_time": "created_time", "used_time": "redeemed_time"}
+	column, ok := columns[field]
+	if !ok {
+		return RedemptionSort{}, errors.New("invalid redemption sort field")
+	}
+	if order != "" && order != "asc" && order != "desc" {
+		return RedemptionSort{}, errors.New("invalid redemption sort order")
+	}
+	return RedemptionSort{column: column, asc: order == "asc"}, nil
+}
+
+func (sort RedemptionSort) apply(query *gorm.DB) *gorm.DB {
+	column := sort.column
+	if column == "" {
+		column = "id"
+	}
+	query = query.Order(clause.OrderByColumn{Column: clause.Column{Name: column}, Desc: !sort.asc})
+	if column != "id" {
+		// Equal timestamps must keep a stable order across pagination.
+		query = query.Order(clause.OrderByColumn{Column: clause.Column{Name: "id"}, Desc: !sort.asc})
+	}
+	return query
+}
+
+func GetAllRedemptions(startIdx int, num int, sort RedemptionSort) ([]*Redemption, int64, error) {
+	return SearchRedemptions("", "", startIdx, num, sort)
+}
+
+func SearchRedemptions(keyword string, status string, startIdx int, num int, sort RedemptionSort) (redemptions []*Redemption, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -110,7 +113,7 @@ func SearchRedemptions(keyword string, status string, startIdx int, num int) (re
 	}
 
 	// Get paginated data
-	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
+	err = sort.apply(query).Limit(num).Offset(startIdx).Find(&redemptions).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err

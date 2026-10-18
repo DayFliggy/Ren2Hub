@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type RouteChannel struct {
@@ -312,16 +313,45 @@ func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) 
 		if channel.Id != channelID {
 			continue
 		}
-		permit, err := AcquireChannelConcurrency(c.Request.Context(), channel)
-		if err != nil {
-			return nil, err
-		}
-		c.Set("route_channel_permit", permit)
-		c.Set("route_selected_channel", channel)
-		c.Set("channel_ratio", channel.ChannelRatio)
-		return channel, nil
+		return acquireRouteChannel(c, channel)
 	}
 	return nil, model.ErrTokenRouteForbidden
+}
+
+// AcquireOriginTaskRouteChannel is only used after the task resolver has
+// verified ownership and pinned its original channel. Current Key preferences
+// do not move an accepted task to another supplier, but capacity still applies.
+func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int) (*model.Channel, error) {
+	ReleaseRouteChannel(c)
+	BeginRouteObservation(c)
+	if err := c.Request.Context().Err(); err != nil {
+		return nil, err
+	}
+	channel, err := model.GetChannelById(channelID, true)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, model.ErrTokenRouteForbidden
+	}
+	if err != nil {
+		return nil, err
+	}
+	if channel.Status != common.ChannelStatusEnabled || channel.Type == constant.ChannelTypeCodex {
+		return nil, model.ErrTokenRouteForbidden
+	}
+	if _, err := model.NormalizeChannelRatio(channel.ChannelRatio); err != nil {
+		return nil, err
+	}
+	return acquireRouteChannel(c, channel)
+}
+
+func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel, error) {
+	permit, err := AcquireChannelConcurrency(c.Request.Context(), channel)
+	if err != nil {
+		return nil, err
+	}
+	c.Set("route_channel_permit", permit)
+	c.Set("route_selected_channel", channel)
+	c.Set("channel_ratio", channel.ChannelRatio)
+	return channel, nil
 }
 
 func routeCandidateReason(row *model.Channel, route model.TokenRouting, token *model.Token, modelName string, abilities []string, filters []dto.ChannelFilter) string {

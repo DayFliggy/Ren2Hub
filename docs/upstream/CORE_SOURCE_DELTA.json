@@ -3,10 +3,10 @@
   "implementation_base_sha": "39daa6ccee738f7a26fdba131c829be1adbbdd5b",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 854,
-    "adapted": 208,
+    "upstream_equal": 849,
+    "adapted": 213,
     "removed": 42,
-    "extension": 108
+    "extension": 120
   },
   "files": [
     {
@@ -1109,9 +1109,9 @@
     },
     {
       "path": "controller/redemption.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "948603fabd05a33df4a0cd3375500995c220998563cae9aa93efe5f04c3c73b3",
-      "local_sha256": "948603fabd05a33df4a0cd3375500995c220998563cae9aa93efe5f04c3c73b3"
+      "local_sha256": "fce5d454f783e7705edd376bb445d5eef2384c1b6bc202edfac30fa9c1e2c8bf"
     },
     {
       "path": "controller/redemption_batch_test.go",
@@ -1120,10 +1120,16 @@
       "local_sha256": "aa1cd2c1fb46a57c6ed3655eec1503dbd4e19213a221f8463f27cfe1acafc8d7"
     },
     {
+      "path": "controller/redemption_sort_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "5e6a3c5ca59154481b24999b2a57ee2d297481cac1b3c89bb38e59601e5acfdd",
+      "status": "extension"
+    },
+    {
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "56e7dfedac391bd90ad91e1ab5115e5e69654986e83aa7b1428dc5148116a19a",
-      "local_sha256": "d71a5b18a71d8b914cff59906d523507783df4e36280f1c4b09c0712ca12daca"
+      "local_sha256": "55de77bf67b1767a6a1fb56e254988f140ec8b72527650439b530c96d229b013"
     },
     {
       "path": "controller/relay_count_tokens_test.go",
@@ -1142,6 +1148,12 @@
       "status": "adapted",
       "upstream_sha256": "f558696a3c4fc931c9430477033ece7c501233b92b905328fe159aec364a1f57",
       "local_sha256": "ffbe61717e6e9c4eb4f06f57c01b8c567d76708087c6afd69edbeed7278f554b"
+    },
+    {
+      "path": "controller/relay_task_route_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "a1ae9da2be7eabf1c6e4b91ca25a16ded5cb9712ec4d796c9ee8201cff9b684f",
+      "status": "extension"
     },
     {
       "path": "controller/request_policy.go",
@@ -1447,7 +1459,13 @@
       "path": "controller/user.go",
       "status": "adapted",
       "upstream_sha256": "d34c9f0d4a63b15807fa4836dfa89fcf35d6fce3e4dd43f93304dcd1ba7f0452",
-      "local_sha256": "648539b040fc17d910bf8ca9290ceff0539f20cbe9df32ff3bfc86076c575028"
+      "local_sha256": "4af170799d2489225bfcc0b272c99ce7c0150079d73324d0fc47ce26f7455bff"
+    },
+    {
+      "path": "controller/user_concurrency_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "92c3a0b137425755c201d795c592469a9780a9bb8bd9ae28011ff09f0b95f277",
+      "status": "extension"
     },
     {
       "path": "controller/user_manage_test.go",
@@ -1600,6 +1618,12 @@
       "local_sha256": "18ca3a5b40bdd3c63babb6fbcffa9ceb4f00e1aa5c02dd9ad0a67d78b7ca3c90"
     },
     {
+      "path": "middleware/access_token_catalog_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "f3074581935a7f4b836c541963d80d46270f3f5f83985dd8ec051a5111e3b7cc",
+      "status": "extension"
+    },
+    {
       "path": "middleware/access_token_extensions.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -1609,7 +1633,7 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "6d8369b5e86765d65511680bb5ef29a1c94877d9922479f08dca55c3e63f0145",
-      "local_sha256": "a38917f48d42f7a670781704c92c1b1d2e0148e2af53520fdc69bcca8b7bd01e"
+      "local_sha256": "91abbb834d01087e508ae77b65700ca4c8886bb2c0a5bf7b4b6f203f4293da11"
     },
     {
       "path": "middleware/audit.go",
@@ -1879,7 +1903,19 @@
       "path": "model/affiliate.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "43c7989be8f2e85791a0585568decfe1fde20b1f48fbcf2c8c8a274eb0ab4083"
+      "local_sha256": "569b4ad0338d111ddaecc08ff2bd9c35d202ac9e3a271c4e186ce6d862a7aebb"
+    },
+    {
+      "path": "model/affiliate_deleted_inviter_databases_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "494c8b9b15cb4a06b4d0be061a4dea37261d09e87e7284fa1d213755ef175020",
+      "status": "extension"
+    },
+    {
+      "path": "model/affiliate_deleted_inviter_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "96562a7c8385d260057d2b17a7f7b55c9fad3bf4353c90912a9e03dfb2d02c7a",
+      "status": "extension"
     },
     {
       "path": "model/affiliate_query.go",
@@ -1945,7 +1981,7 @@
       "path": "model/channel.go",
       "status": "adapted",
       "upstream_sha256": "f6a775c153109d3c6d2ccb1f80d46e22e8766c4ca24cf1439a2193ec1fa3b66d",
-      "local_sha256": "4da7e8c0897888c4226e3303e1d196cebc82b1bad334bd620776e3a92ed8612f"
+      "local_sha256": "e96a6f8a253f413a3909f0fd2933277ea5a5d84690f26af1c866cffa4869f09c"
     },
     {
       "path": "model/channel_cache.go",
@@ -2387,15 +2423,21 @@
     },
     {
       "path": "model/redemption.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "89f37144add9046366b5a1aaac08b3ed060ca72eadc421c4a9c909342a738b4b",
-      "local_sha256": "89f37144add9046366b5a1aaac08b3ed060ca72eadc421c4a9c909342a738b4b"
+      "local_sha256": "ce092c6b528899278139358b86e661dccf81daa260cd7ca7ae1c4d6b80b3e28a"
+    },
+    {
+      "path": "model/redemption_databases_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "b292dbf86fca58fa884c0010cf56dba324367c289ea3b54b2932e589370c9109",
+      "status": "extension"
     },
     {
       "path": "model/redemption_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "d5704ef10423c4f7e4ffe691fffbad7b1bc53332250d7dd4e17ee4966a34044e",
-      "local_sha256": "d5704ef10423c4f7e4ffe691fffbad7b1bc53332250d7dd4e17ee4966a34044e"
+      "local_sha256": "50afd4fcbe733d99d8fa83c6210976365f056899ca4b4574de4dbeed6514c8ea"
     },
     {
       "path": "model/request_policy.go",
@@ -3989,9 +4031,9 @@
     },
     {
       "path": "relay/channel/openai/relay_realtime.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "1e9bddd7c6f2a6a24c1faa9952896363d7cf057520fe3cb89e66dd485a2d4860",
-      "local_sha256": "1e9bddd7c6f2a6a24c1faa9952896363d7cf057520fe3cb89e66dd485a2d4860"
+      "local_sha256": "21e8a91acecfa813707e5d89c4ccae6d99933a134bded25bdc8e47514d721a15"
     },
     {
       "path": "relay/channel/openai/relay_responses.go",
@@ -4625,9 +4667,9 @@
     },
     {
       "path": "relay/helper/common.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "967fbea01848c5f5fe44eea5c9549b90c50ed75a0732c5602434a212647e7b94",
-      "local_sha256": "967fbea01848c5f5fe44eea5c9549b90c50ed75a0732c5602434a212647e7b94"
+      "local_sha256": "82f91fee41b0a0408059cb9f091f73ec5d4a51730501926edc2f032d7f59d410"
     },
     {
       "path": "relay/helper/max_tokens_bounds_test.go",
@@ -4676,6 +4718,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "4eaa5ae8cd286b89dafa35ae5d8143d8d1d0ce3e4f9c7ab1f97fa593e7feca68",
       "local_sha256": "4eaa5ae8cd286b89dafa35ae5d8143d8d1d0ce3e4f9c7ab1f97fa593e7feca68"
+    },
+    {
+      "path": "relay/helper/route_stream_output_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "ab01d5cae4403c3f47033e5e793dd7b2bc55503a2d4cd06b6271b865c26a898c",
+      "status": "extension"
     },
     {
       "path": "relay/helper/stream_result.go",
@@ -4747,7 +4795,13 @@
       "path": "relay/relay_task.go",
       "status": "adapted",
       "upstream_sha256": "1d2b62ed75671cda4d9e21aa8ae9b92002fddefa007d45f0748f467f61ec4841",
-      "local_sha256": "1455c223ad04a2fc7bf644eefd4d0936bb20b6db7854dc207fc52b3ec174c6ce"
+      "local_sha256": "7dc87b5c1b6cc1dc7518917467d83a84b8ac521eee32d42c99ef45060d7db388"
+    },
+    {
+      "path": "relay/relay_task_route_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "0fd87396022b519c20cc4e944719e71ce00d6be3c8a220e87c73fc71b1fb91e0",
+      "status": "extension"
     },
     {
       "path": "relay/relay_task_test.go",
@@ -4795,7 +4849,7 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "042b16b72bf783ec971ef8ed97a3dc8fe4be4dab98a1456e032d40c117763947",
-      "local_sha256": "7cc7ebe45bd3eaebc2e16f05fd0afe8e6e6bbd8d06164b5efba5fef490d09327"
+      "local_sha256": "cb5cf408d05ad00345ba6450c9f9e8814adcd9df50f7f9fa6cacf2d7cd4ba46d"
     },
     {
       "path": "relay/responses_websocket_test.go",
@@ -4807,7 +4861,7 @@
       "path": "relay/responses_websocket_token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "93a6855d1444ed2993a2dc739c60d5b6435d5d79631cee66161b26ca6d9cabca"
+      "local_sha256": "779230470ab6dce4550a905c49f80c7e420922d299c1eaabff0aa6c0204b7e08"
     },
     {
       "path": "relay/task_platform_error_test.go",
@@ -5833,7 +5887,7 @@
       "path": "router/extensions_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "af1e160170176c00b192743a7e8d64e50eaab0a29660c8c2805ce762eac220c4"
+      "local_sha256": "a56a30e357b8466ba8710420ad5fa974eba53e7274c8010496318c0c0742e68d"
     },
     {
       "path": "router/main.go",
@@ -6187,13 +6241,13 @@
       "path": "service/concurrency.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a29352281cbb5e2c05d9b533b863005898cc655b1a35ac265a509a6cfc2038a6"
+      "local_sha256": "af58dcdd416fbdfbdcf57907143989efc0742470de8224c40fcfbf06a05b5e2f"
     },
     {
       "path": "service/concurrency_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d0b7a360693a248bbf44e380c78a33c87a78a31702c4affd38c7111f6c02f9c8"
+      "local_sha256": "fb91a7547184e96442452185e73bf5f68895502a766f361852089a2a0cd7e01c"
     },
     {
       "path": "service/convert.go",
@@ -6529,19 +6583,25 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c9b4ec5c79229be04e0ebabbcfb04d13c348e381f855988e40a33641d6aed801"
+      "local_sha256": "ed00a05fb2b2eff33ebca88a5b5287f41f8680769f3b65fca1f9bf5910de66ed"
     },
     {
       "path": "service/route_attempt_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d7400a25257ed5e9e204b4d769337dffbe5d51c2dc523bc143dec3baa7510ba0"
+      "local_sha256": "091bdf8be148edb2b3a87c5b77d07f2afdd8482269784a44be34c89a26c050f9"
     },
     {
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e7f31d88ef8cc0fe0e1929e53ee3ed122949b36d48a0d95071e23d824cd170d9"
+      "local_sha256": "242e85b9ec2df3581b90dd829eccc132d81285f0be153c6b55c6e742ef2058f1"
+    },
+    {
+      "path": "service/route_error.go",
+      "upstream_sha256": null,
+      "local_sha256": "775b3489893df4330d8f85ea820f923fa556675073ab8b91e12d4d8993345675",
+      "status": "extension"
     },
     {
       "path": "service/route_observation.go",
@@ -6554,6 +6614,18 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "0bb704dffba7d13a02855b7a0471508573cde613e2268c8bfe6de6d7b9f4ed19"
+    },
+    {
+      "path": "service/route_stream_output.go",
+      "upstream_sha256": null,
+      "local_sha256": "44d8637cecb9c5cfba1b60c36c0b6e0135b8b68592ef3faf302519d29d0cc5fe",
+      "status": "extension"
+    },
+    {
+      "path": "service/route_stream_output_test.go",
+      "upstream_sha256": null,
+      "local_sha256": "b56f0fdbb3bbfce3775f3099c9e845801430c043ec628b99f2a11d8d6bc98885",
+      "status": "extension"
     },
     {
       "path": "service/route_test_helpers_test.go",
@@ -6739,7 +6811,7 @@
       "path": "service/token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e2bf926d7e2ad1411b598b2ca37518a49399f205cfab01b7fa1fa1e3f6fbe4d8"
+      "local_sha256": "cc75ab4ab664d4e84886d7a465d94f4a124a5c73ba4891ebe8e13b9fe9e188c0"
     },
     {
       "path": "service/twofa.go",

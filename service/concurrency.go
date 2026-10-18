@@ -5,11 +5,14 @@ import (
 	"errors"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/model"
 )
 
 var ErrConcurrencyFull = errors.New("concurrency limit reached")
+
+var errConcurrencyPublicationPending = errors.New("concurrency limit publication pending")
 
 type concurrencyKey struct {
 	kind string
@@ -21,6 +24,10 @@ type concurrencyResource struct{ limit, active int }
 type ConcurrencyManager struct {
 	mu        sync.Mutex
 	resources map[concurrencyKey]*concurrencyResource
+	// An unconfirmed publication blocks this resource's new admission until an
+	// authoritative database read succeeds. Reads use only the short state lock.
+	pending     map[concurrencyKey]uint64
+	publication uint64
 }
 
 type ConcurrencyPermit struct {
@@ -36,7 +43,7 @@ type ConcurrencySnapshot struct {
 }
 
 func NewConcurrencyManager() *ConcurrencyManager {
-	return &ConcurrencyManager{resources: make(map[concurrencyKey]*concurrencyResource)}
+	return &ConcurrencyManager{resources: make(map[concurrencyKey]*concurrencyResource), pending: make(map[concurrencyKey]uint64)}
 }
 
 var gatewayConcurrency = NewConcurrencyManager()
@@ -69,6 +76,9 @@ func (m *ConcurrencyManager) tryAcquire(ctx context.Context, kind string, id, in
 		return nil, err
 	}
 	key := concurrencyKey{kind, id}
+	if m.pending[key] != 0 {
+		return nil, errConcurrencyPublicationPending
+	}
 	r := m.resources[key]
 	if r == nil {
 		r = &concurrencyResource{limit: initialLimit}
@@ -89,14 +99,26 @@ func (p *ConcurrencyPermit) Release() {
 }
 
 func AcquireUserConcurrency(ctx context.Context, userID, limit int) (*ConcurrencyPermit, error) {
-	return gatewayConcurrency.tryAcquire(ctx, "user", userID, limit)
+	return acquireConcurrency(ctx, concurrencyKey{"user", userID}, limit)
 }
 
 func AcquireChannelConcurrency(ctx context.Context, channel *model.Channel) (*ConcurrencyPermit, error) {
 	if channel == nil {
 		return nil, errors.New("missing channel")
 	}
-	return gatewayConcurrency.tryAcquire(ctx, "channel", channel.Id, channel.MaxConcurrency)
+	return acquireConcurrency(ctx, concurrencyKey{"channel", channel.Id}, channel.MaxConcurrency)
+}
+
+func acquireConcurrency(ctx context.Context, key concurrencyKey, initialLimit int) (*ConcurrencyPermit, error) {
+	for {
+		permit, err := gatewayConcurrency.tryAcquire(ctx, key.kind, key.id, initialLimit)
+		if !errors.Is(err, errConcurrencyPublicationPending) {
+			return permit, err
+		}
+		if err := refreshPendingConcurrencyLimit(ctx, key); err != nil {
+			return nil, err
+		}
+	}
 }
 
 func ChannelInFlight(id int) int {
@@ -136,30 +158,77 @@ func RoutingSnapshot() RoutingRuntimeSnapshot {
 var concurrencyPublishMu sync.Mutex
 
 func RefreshUserConcurrencyLimit(ctx context.Context, id int) error {
-	concurrencyPublishMu.Lock()
-	defer concurrencyPublishMu.Unlock()
-	var row model.User
-	if err := model.DB.WithContext(ctx).Select("id", "max_concurrency").First(&row, id).Error; err != nil {
-		return err
-	}
-	if row.MaxConcurrency < 0 {
-		return errors.New("invalid user concurrency limit")
-	}
-	gatewayConcurrency.setLimit("user", id, row.MaxConcurrency, false)
-	return nil
+	return publishConcurrencyLimit(ctx, concurrencyKey{"user", id})
 }
 func RefreshChannelConcurrencyLimit(ctx context.Context, id int) error {
+	return publishConcurrencyLimit(ctx, concurrencyKey{"channel", id})
+}
+
+func publishConcurrencyLimit(ctx context.Context, key concurrencyKey) error {
+	// A committed setting must reach admission even when its HTTP caller has
+	// disconnected. Failed reads remain pending and admission retries them.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	gatewayConcurrency.mu.Lock()
+	gatewayConcurrency.publication++
+	gatewayConcurrency.pending[key] = gatewayConcurrency.publication
+	gatewayConcurrency.mu.Unlock()
 	concurrencyPublishMu.Lock()
 	defer concurrencyPublishMu.Unlock()
-	var row model.Channel
-	if err := model.DB.WithContext(ctx).Select("id", "max_concurrency").First(&row, id).Error; err != nil {
+	return refreshConcurrencyLimitLocked(ctx, key)
+}
+
+func refreshPendingConcurrencyLimit(ctx context.Context, key concurrencyKey) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if row.MaxConcurrency < 0 {
-		return errors.New("invalid channel concurrency limit")
+	if !gatewayConcurrency.publicationPending(key) {
+		return nil
 	}
-	gatewayConcurrency.setLimit("channel", id, row.MaxConcurrency, false)
-	routeObservations.invalidate(id)
+	concurrencyPublishMu.Lock()
+	defer concurrencyPublishMu.Unlock()
+	if !gatewayConcurrency.publicationPending(key) {
+		return nil
+	}
+	return refreshConcurrencyLimitLocked(ctx, key)
+}
+
+func (m *ConcurrencyManager) publicationPending(key concurrencyKey) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pending[key] != 0
+}
+
+func refreshConcurrencyLimitLocked(ctx context.Context, key concurrencyKey) error {
+	gatewayConcurrency.mu.Lock()
+	publication := gatewayConcurrency.pending[key]
+	gatewayConcurrency.mu.Unlock()
+	var limit int
+	var err error
+	if key.kind == "user" {
+		var row model.User
+		err = model.DB.WithContext(ctx).Select("id", "max_concurrency").First(&row, key.id).Error
+		limit = row.MaxConcurrency
+	} else {
+		var row model.Channel
+		err = model.DB.WithContext(ctx).Select("id", "max_concurrency").First(&row, key.id).Error
+		limit = row.MaxConcurrency
+	}
+	if err != nil {
+		return err
+	}
+	if limit < 0 {
+		return errors.New("invalid concurrency limit")
+	}
+	gatewayConcurrency.setLimit(key.kind, key.id, limit, false)
+	gatewayConcurrency.mu.Lock()
+	if gatewayConcurrency.pending[key] == publication {
+		delete(gatewayConcurrency.pending, key)
+	}
+	gatewayConcurrency.mu.Unlock()
+	if key.kind == "channel" {
+		routeObservations.invalidate(key.id)
+	}
 	return nil
 }
 func init() {

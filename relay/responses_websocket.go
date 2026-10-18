@@ -483,6 +483,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 					}
 				}
 				accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
+				service.ObserveRouteStreamOutput(c, string(incoming.body))
 			}
 			switch event.Type {
 			case "response.completed", "response.done", "response.incomplete", "response.failed", "response.cancelled", "response.canceled":
@@ -562,16 +563,15 @@ func responsesWSErrorEndsRequest(event responsesWSErrorEvent, streamID, response
 
 func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model string) *types.NewAPIError {
 	if err := service.CheckLockedTokenRoute(c, s.lockedChannelID, model); err != nil {
-		if errors.Is(err, appmodel.ErrTokenRouteForbidden) {
-			return types.NewErrorWithStatusCode(err, types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
-		}
-		common.SysError(common.LogText("unable to load token routing for Responses WebSocket: %s", err.Error()))
-		return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusInternalServerError, types.ErrOptionWithSkipRetry(), types.ErrOptionWithHideErrMsg("Unable to load token routing"))
+		return service.PinnedRouteError(err)
 	}
 	// The channel type is not rechecked: a locked channel keeps its type, and
 	// the FilterResponsesWebSocket rules were applied when it was selected.
 	channel, err := appmodel.CacheGetChannel(s.lockedChannelID)
-	if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled || !channel.GetSetting().ResponsesWebSocketEnabled {
+	if err != nil {
+		return service.PinnedRouteError(err)
+	}
+	if channel == nil || channel.Status != common.ChannelStatusEnabled || !channel.GetSetting().ResponsesWebSocketEnabled {
 		return types.NewErrorWithStatusCode(errors.New("Responses WebSocket is disabled for this channel"), types.ErrorCode(appdto.FilterResponsesWebSocket), http.StatusForbidden, types.ErrOptionWithSkipRetry())
 	}
 	keyEnabled := channel.Key == s.lockedKey
@@ -609,11 +609,7 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 	}
 
 	if _, err := service.AcquirePinnedRouteChannel(c, s.lockedChannelID, model); err != nil {
-		status := http.StatusForbidden
-		if errors.Is(err, service.ErrConcurrencyFull) {
-			status = http.StatusTooManyRequests
-		}
-		return types.NewErrorWithStatusCode(err, types.ErrorCodeAccessDenied, status, types.ErrOptionWithSkipRetry())
+		return service.PinnedRouteError(err)
 	}
 	for key, value := range s.lockedContext {
 		c.Set(string(key), value)
