@@ -96,17 +96,16 @@ func AppendRelayLogAdminInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 	}
 }
 
-func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, groupRatio, completionRatio float64,
-	cacheTokens int, cacheRatio float64, modelPrice float64, userGroupRatio float64) *model.LogOther {
+func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, channelRatio, completionRatio float64,
+	cacheTokens int, cacheRatio float64, modelPrice float64, userChannelRatio float64) *model.LogOther {
 	MarkRequestPolicySuccess(ctx, relayInfo.StreamStatus)
 	other := model.NewLogOther()
 	other.SetPublic("model_ratio", modelRatio)
-	other.SetPublic("group_ratio", groupRatio)
+	other.SetPublic("channel_ratio", channelRatio)
 	other.SetPublic("completion_ratio", completionRatio)
 	other.SetPublic("cache_tokens", cacheTokens)
 	other.SetPublic("cache_ratio", cacheRatio)
 	other.SetPublic("model_price", modelPrice)
-	other.SetPublic("user_group_ratio", userGroupRatio)
 	other.SetPublic("frt", float64(relayInfo.FirstResponseTime.UnixMilli()-relayInfo.StartTime.UnixMilli()))
 	if relayInfo.ReasoningEffort != "" {
 		other.SetPublic("reasoning_effort", relayInfo.ReasoningEffort)
@@ -232,8 +231,8 @@ func appendFinalRequestFormat(relayInfo *relaycommon.RelayInfo, other *model.Log
 	}
 }
 
-func GenerateWssOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, modelRatio, groupRatio, completionRatio, audioRatio, audioCompletionRatio, modelPrice, userGroupRatio float64) *model.LogOther {
-	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, groupRatio, completionRatio, 0, 0.0, modelPrice, userGroupRatio)
+func GenerateWssOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, modelRatio, channelRatio, completionRatio, audioRatio, audioCompletionRatio, modelPrice, userChannelRatio float64) *model.LogOther {
+	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, channelRatio, completionRatio, 0, 0.0, modelPrice, userChannelRatio)
 	info.SetPublic("ws", true)
 	info.SetPublic("audio_input", usage.InputTokenDetails.AudioTokens)
 	info.SetPublic("audio_output", usage.OutputTokenDetails.AudioTokens)
@@ -244,8 +243,8 @@ func GenerateWssOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	return info
 }
 
-func GenerateAudioOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, modelRatio, groupRatio, completionRatio, audioRatio, audioCompletionRatio, modelPrice, userGroupRatio float64) *model.LogOther {
-	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, groupRatio, completionRatio, 0, 0.0, modelPrice, userGroupRatio)
+func GenerateAudioOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, modelRatio, channelRatio, completionRatio, audioRatio, audioCompletionRatio, modelPrice, userChannelRatio float64) *model.LogOther {
+	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, channelRatio, completionRatio, 0, 0.0, modelPrice, userChannelRatio)
 	info.SetPublic("audio", true)
 	info.SetPublic("audio_input", usage.PromptTokensDetails.AudioTokens)
 	info.SetPublic("audio_output", usage.CompletionTokenDetails.AudioTokens)
@@ -256,13 +255,13 @@ func GenerateAudioOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, 
 	return info
 }
 
-func GenerateClaudeOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, groupRatio, completionRatio float64,
+func GenerateClaudeOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, channelRatio, completionRatio float64,
 	cacheTokens int, cacheRatio float64,
 	cacheCreationTokens int, cacheCreationRatio float64,
 	cacheCreationTokens5m int, cacheCreationRatio5m float64,
 	cacheCreationTokens1h int, cacheCreationRatio1h float64,
-	modelPrice float64, userGroupRatio float64) *model.LogOther {
-	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, groupRatio, completionRatio, cacheTokens, cacheRatio, modelPrice, userGroupRatio)
+	modelPrice float64, userChannelRatio float64) *model.LogOther {
+	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, channelRatio, completionRatio, cacheTokens, cacheRatio, modelPrice, userChannelRatio)
 	info.SetPublic("claude", true)
 	info.SetPublic("cache_creation_tokens", cacheCreationTokens)
 	info.SetPublic("cache_creation_ratio", cacheCreationRatio)
@@ -280,10 +279,7 @@ func GenerateClaudeOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData hosttypes.PriceData) *model.LogOther {
 	other := model.NewLogOther()
 	other.SetPublic("model_price", priceData.ModelPrice)
-	other.SetPublic("group_ratio", priceData.GroupRatioInfo.GroupRatio)
-	if priceData.GroupRatioInfo.HasSpecialRatio {
-		other.SetPublic("user_group_ratio", priceData.GroupRatioInfo.GroupSpecialRatio)
-	}
+	other.SetPublic("channel_ratio", priceData.ChannelRatioInfo.ChannelRatio)
 	appendRequestPath(nil, relayInfo, other)
 	return other
 }

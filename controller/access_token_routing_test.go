@@ -17,8 +17,8 @@ func TestAccessTokenCommonUserRoutingGrantAndEnforcement(t *testing.T) {
 	user, _ := setupAccessTokenAudit(t)
 	require.NoError(t, model.DB.Model(user).Update("role", common.RoleCommonUser).Error)
 	require.NoError(t, model.DB.AutoMigrate(&model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}, &model.Channel{}, &model.Ability{}))
-	owned := &model.Token{UserId: user.Id, Key: "routing-owned", Name: "owned", Group: "default"}
-	other := &model.Token{UserId: user.Id + 1, Key: "routing-other", Name: "other", Group: "default"}
+	owned := &model.Token{UserId: user.Id, Key: "routing-owned", Name: "owned"}
+	other := &model.Token{UserId: user.Id + 1, Key: "routing-other", Name: "other"}
 	require.NoError(t, model.DB.Create(owned).Error)
 	require.NoError(t, model.DB.Create(other).Error)
 	router := newAccessTokenTestRouter()

@@ -41,7 +41,7 @@ type batchPollingAdaptor struct {
 }
 
 func (a *batchPollingAdaptor) FetchMode() string { return "batch" }
-func (a *batchPollingAdaptor) FetchBatchTasks(_ string, _ string, tasks []*model.Task, _ string) (*http.Response, error) {
+func (a *batchPollingAdaptor) FetchBatchTasks(_ context.Context, _ string, _ string, tasks []*model.Task, _ string) (*http.Response, error) {
 	a.batchCalls++
 	a.batchIDs = a.batchIDs[:0]
 	for _, task := range tasks {
@@ -74,7 +74,7 @@ func (a *taskPollingFetchAdaptor) initChannelMeta() *relaycommon.ChannelMeta {
 	return a.initInfo.ChannelMeta
 }
 
-func (a *taskPollingFetchAdaptor) FetchTask(_ string, _ string, task *model.Task, _ string) (*http.Response, error) {
+func (a *taskPollingFetchAdaptor) FetchTask(_ context.Context, _ string, _ string, task *model.Task, _ string) (*http.Response, error) {
 	taskID := ""
 	if task != nil {
 		taskID = task.GetUpstreamTaskID()
@@ -329,7 +329,7 @@ func TestUpdateBatchTasksSettlesTieredUsageForTerminalStates(t *testing.T) {
 			task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 				ExprString:       expression,
 				ExprHash:         billingexpr.ExprHashString(expression),
-				GroupRatio:       1,
+				ChannelRatio:     1,
 				QuotaPerUnit:     1_000,
 				ExprVersion:      1,
 				TaskUsageBilling: true,
@@ -394,7 +394,7 @@ func TestUpdateBatchTasksRefundsFailedTieredTask(t *testing.T) {
 	task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 		ExprString:       expression,
 		ExprHash:         billingexpr.ExprHashString(expression),
-		GroupRatio:       1,
+		ChannelRatio:     1,
 		QuotaPerUnit:     1_000,
 		ExprVersion:      1,
 		TaskUsageBilling: true,
@@ -781,7 +781,7 @@ type scriptedPollingAdaptor struct {
 }
 
 func (a *scriptedPollingAdaptor) Init(*relaycommon.RelayInfo) {}
-func (a *scriptedPollingAdaptor) FetchTask(string, string, *model.Task, string) (*http.Response, error) {
+func (a *scriptedPollingAdaptor) FetchTask(context.Context, string, string, *model.Task, string) (*http.Response, error) {
 	if a.fetchErr != nil {
 		return nil, a.fetchErr
 	}
@@ -814,8 +814,8 @@ type scriptedBatchPollingAdaptor struct {
 }
 
 func (a *scriptedBatchPollingAdaptor) FetchMode() string { return "batch" }
-func (a *scriptedBatchPollingAdaptor) FetchBatchTasks(string, string, []*model.Task, string) (*http.Response, error) {
-	return a.FetchTask("", "", nil, "")
+func (a *scriptedBatchPollingAdaptor) FetchBatchTasks(context.Context, string, string, []*model.Task, string) (*http.Response, error) {
+	return a.FetchTask(context.Background(), "", "", nil, "")
 }
 func (a *scriptedBatchPollingAdaptor) ParseBatchResult([]*model.Task, *http.Response, []byte) (map[string]*BatchTaskResult, error) {
 	if a.parseErr != nil {

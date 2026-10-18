@@ -26,7 +26,7 @@ func useGmpayTestDB(t *testing.T) *gorm.DB {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&User{}, &TopUp{}, &Log{}, &Option{}, &GmpayMerchantVersion{}, &GmpayOrder{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &TopUp{}, &Log{}, &Option{}, &GmpayMerchantVersion{}, &GmpayOrder{}, &AffiliateRecord{}, &AdminQuotaOperation{}))
 	DB, LOG_DB = db, db
 	common.RedisEnabled = false
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)

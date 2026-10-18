@@ -187,12 +187,8 @@ func TestDistributeHidesTaskPluginDetailsButLogsDiagnostics(t *testing.T) {
 	common.MemoryCacheEnabled = true
 	t.Cleanup(func() { common.MemoryCacheEnabled = previousCacheEnabled })
 
-	const group = "private-plugin-error-test-group"
-	for _, locale := range []struct{ language, message string }{
-		{"en", "No available channel for model task-model under group " + group + ": the model is claimed by a task plugin, which has no enabled channel serving it (distributor)"},
-		{"zh-CN", "分组 " + group + " 下模型 task-model 无可用渠道：该模型由任务插件认领，但当前没有启用的渠道可服务此模型（distributor）"},
-		{"zh-TW", "分組 " + group + " 下模型 task-model 無可用管道：該模型由任務插件認領，但目前沒有啟用的管道可服務此模型（distributor）"},
-	} {
+	setupOriginTaskDB(t)
+	for _, locale := range []struct{ language, message string }{{"en", "No available channel for task model task-model"}} {
 		for _, providerCount := range []int{1, 2} {
 			t.Run(fmt.Sprintf("%s/%d_providers", locale.language, providerCount), func(t *testing.T) {
 				registry := jsplugin.NewRegistry()
@@ -218,7 +214,7 @@ func TestDistributeHidesTaskPluginDetailsButLogsDiagnostics(t *testing.T) {
 
 				router := gin.New()
 				router.POST("/v1/responses", RequestId(), func(c *gin.Context) {
-					common.SetContextKey(c, constant.ContextKeyUsingGroup, group)
+					c.Set("id", 1)
 					c.Set("resolved_task_model", "task-model")
 					c.Set("expected_task_plugin_key", keys[0])
 					c.Set(jsplugin.ContextKeyPinnedPlugin, jsplugin.PinnedPlugin{Generation: generation, Plugin: candidates[0].Plugin})
@@ -249,7 +245,6 @@ func TestDistributeHidesTaskPluginDetailsButLogsDiagnostics(t *testing.T) {
 					assert.Contains(t, logs.String(), key)
 				}
 				assert.Contains(t, logs.String(), requestID)
-				assert.Contains(t, logs.String(), `group="`+group+`"`)
 				assert.Contains(t, logs.String(), `model="task-model"`)
 				assert.Contains(t, logs.String(), "reason=no_eligible_channel")
 			})
@@ -262,7 +257,7 @@ func TestNoAvailableChannelMessageWithoutPlugin(t *testing.T) {
 	plain, _ := gin.CreateTestContext(nil)
 	plain.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	plain.Request.Header.Set("Accept-Language", "en")
-	generic := noAvailableChannelMessage(plain, "default", "gpt-4o")
+	generic := noAvailableChannelMessage(plain, "gpt-4o")
 	assert.NotContains(t, generic, "task plugin")
 	assert.Contains(t, generic, "gpt-4o")
 }

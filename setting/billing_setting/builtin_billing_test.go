@@ -54,10 +54,10 @@ func TestGPT6AstraBuiltinBilling(t *testing.T) {
 			}
 			params := service.BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expression))
 			result, err := billingexpr.ComputeTieredQuotaWithRequest(&billingexpr.BillingSnapshot{
-				ExprString: expression, GroupRatio: 1, QuotaPerUnit: 500000,
+				ExprString: expression, ChannelRatio: 1, QuotaPerUnit: 500000,
 			}, params, billingexpr.RequestInput{Body: []byte(tc.request)})
 			require.NoError(t, err)
-			assert.Equal(t, tc.quota, result.ActualQuotaAfterGroup)
+			assert.Equal(t, tc.quota, result.ActualQuotaAfterChannel)
 		})
 	}
 
@@ -129,10 +129,10 @@ func TestImageModelBuiltinPricesAndOverrides(t *testing.T) {
 			usage := &dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{
 				CachedTokens: 300, ImageTokens: 600, CachedTokensDetails: &dto.CachedTokenDetails{ImageTokens: common.GetPointer(200)},
 			}}
-			result, err := billingexpr.ComputeTieredQuota(&billingexpr.BillingSnapshot{ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 500000},
+			result, err := billingexpr.ComputeTieredQuota(&billingexpr.BillingSnapshot{ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), ChannelRatio: 1, QuotaPerUnit: 500000},
 				service.BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expression)))
 			require.NoError(t, err)
-			assert.Equal(t, 4113, result.ActualQuotaAfterGroup)
+			assert.Equal(t, 4113, result.ActualQuotaAfterChannel)
 			encoded, err := common.Marshal(map[string]float64{name: 0})
 			require.NoError(t, err)
 			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(encoded)))

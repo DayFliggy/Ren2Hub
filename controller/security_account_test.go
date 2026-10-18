@@ -54,7 +54,7 @@ func TestSecurityAccountDeletionRequiresScopedProof(t *testing.T) {
 			case "other session", "other account":
 				userID := user.Id
 				if scenario == "other account" {
-					other := &model.User{Username: "other", AffCode: "other", Group: "default", Password: user.Password, Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AuthVersion: 1}
+					other := &model.User{Username: "other", AffCode: "other", Password: user.Password, Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AuthVersion: 1}
 					require.NoError(t, model.DB.Create(other).Error)
 					userID = other.Id
 				}
@@ -434,7 +434,7 @@ func TestSecurityAccountProfileReadsPasswordStatusInOneQuery(t *testing.T) {
 			assert.Nil(t, profile.AccessToken)
 			assert.Empty(t, profile.Remark)
 			assert.Equal(t, user.AuthVersion, profile.AuthVersion)
-			assert.Equal(t, user.Group, profile.Group)
+			assert.Equal(t, user.MaxConcurrency, profile.MaxConcurrency)
 			require.NoError(t, model.DB.Callback().Query().Remove("profile_query_count"))
 
 			response := securityEnrollmentRequest(http.MethodGet, "/api/user/self", "", "", identity, GetSelf)
@@ -685,7 +685,7 @@ func TestSecurityAccountEmailResendAndAttemptLimit(t *testing.T) {
 func TestSecurityAccountEmailConcurrentClaimsHaveOneOwner(t *testing.T) {
 	user, firstIdentity := setupSecurityEnrollmentTest(t)
 	mailbox := newSecurityMailbox(t)
-	other := &model.User{Username: "other-user", AffCode: "other-account", Group: "default", Password: user.Password, Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AuthVersion: 1}
+	other := &model.User{Username: "other-user", AffCode: "other-account", Password: user.Password, Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AuthVersion: 1}
 	require.NoError(t, model.DB.Create(other).Error)
 	require.NoError(t, model.PublishUserAuthCache(other.Id))
 	bundle, err := service.CreateLoginSession(other.Id, "password", "127.0.0.1", "other-user")

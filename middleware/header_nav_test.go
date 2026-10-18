@@ -66,7 +66,6 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 			Password:    "unused-password-hash",
 			Role:        common.RoleCommonUser,
 			Status:      common.UserStatusEnabled,
-			Group:       "default",
 			AuthVersion: 1,
 		}
 		user.SetAccessToken(accessToken)
@@ -129,7 +128,7 @@ func TestDisabledPricingRequiresRootAuthentication(t *testing.T) {
 			withHeaderNavModules(t, options)
 			user := model.User{
 				Username: "pricing-reader", Password: "unused-password-hash", Role: tc.role,
-				Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+				Status: common.UserStatusEnabled, AuthVersion: 1,
 			}
 			require.NoError(t, model.DB.Create(&user).Error)
 			bundle, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "header-nav-test")

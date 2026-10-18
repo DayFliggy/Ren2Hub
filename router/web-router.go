@@ -19,7 +19,7 @@ type WebAssets struct {
 }
 
 func retiredFrontendPath(path string) bool {
-	for _, prefix := range []string{"/pg", "/next", "/playground", "/chat", "/subscription", "/plan-management", "/plans", "/deployments", "/console/subscription", "/console/plan-management", "/console/plans", "/console/playground", "/console/chat", "/console/deployments"} {
+	for _, prefix := range []string{"/market", "/console/market", "/pg", "/next", "/playground", "/chat", "/subscription", "/plan-management", "/plans", "/deployments", "/console/subscription", "/console/plan-management", "/console/plans", "/console/playground", "/console/chat", "/console/deployments"} {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}

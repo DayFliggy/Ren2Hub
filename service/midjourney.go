@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -17,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +48,10 @@ func PrepareMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.
 		return false, errors.New("quota cannot be negative")
 	}
 
+	if relayInfo.Billing == nil || relayInfo.Billing.GetPreConsumedQuota() < quota {
+		return false, errors.New("Midjourney billing must be reserved before dispatch")
+	}
+	task.TokenId = relayInfo.TokenId
 	task.Quota = quota
 	task.BillingChannelId = task.ChannelId
 	if relayInfo.ChannelMeta != nil && relayInfo.ChannelId > 0 {
@@ -56,37 +60,21 @@ func PrepareMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.
 	return true, nil
 }
 
-// SettleMidjourneyTaskBilling charges a persisted legacy task and records the applied stages.
+// SettleMidjourneyTaskBilling commits the native reservation after persistence.
 func SettleMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.Midjourney, prepared bool) (bool, error) {
 	if !prepared {
 		return false, nil
 	}
-	if relayInfo == nil {
-		return false, errors.New("relay info is nil")
+	if relayInfo == nil || relayInfo.Billing == nil {
+		return false, errors.New("Midjourney billing is not reserved")
 	}
 	if task == nil || task.Id == 0 {
 		return false, errors.New("Midjourney task must be persisted before billing")
 	}
-
-	result, billingErr := postConsumeQuotaWithResult(relayInfo, task.Quota, 0, true)
-	if !result.FundingApplied {
-		task.Quota = 0
-		task.TokenId = 0
-		task.BillingChannelId = 0
-		if updateErr := task.UpdateBillingState(); updateErr != nil {
-			return false, errors.Join(billingErr, fmt.Errorf("clear Midjourney billing state: %w", updateErr))
-		}
-		return false, billingErr
+	if err := relayInfo.Billing.Settle(task.Quota); err != nil {
+		return false, err
 	}
-
-	task.TokenId = 0
-	if result.TokenApplied {
-		task.TokenId = relayInfo.TokenId
-	}
-	if updateErr := task.UpdateBillingState(); updateErr != nil {
-		return true, errors.Join(billingErr, fmt.Errorf("update Midjourney billing state: %w", updateErr))
-	}
-	return true, billingErr
+	return true, nil
 }
 
 // RefundMidjourneyQuota reverses every accounting element recorded for a billed legacy task.
@@ -293,7 +281,30 @@ func RecordMidjourneyPolicyResponse(c *gin.Context, response *dto.MidjourneyResp
 	return false
 }
 
-func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestURL string) (*dto.MidjourneyResponseWithStatusCode, []byte, error) {
+func DoMidjourneyHttpRequest(c *gin.Context, info *relaycommon.RelayInfo, timeout time.Duration, fullRequestURL string) (response *dto.MidjourneyResponseWithStatusCode, body []byte, resultErr error) {
+	defer func() {
+		var apiErr *types.NewAPIError
+		if resultErr != nil {
+			apiErr = types.NewError(resultErr, types.ErrorCodeDoRequestFailed)
+		} else if response != nil {
+			status := response.StatusCode
+			switch response.Response.Code {
+			case 1, 21, 22:
+			case 24:
+				status = http.StatusBadRequest
+			case 23, 30:
+				status = http.StatusTooManyRequests
+			default:
+				if status < 400 {
+					status = http.StatusBadGateway
+				}
+			}
+			if status >= 400 {
+				apiErr = types.NewOpenAIError(errors.New(response.Response.Description), types.ErrorCodeBadResponseStatusCode, status)
+			}
+		}
+		FinishRouteAttempt(c, info, apiErr)
+	}()
 	var nullBytes []byte
 	//var requestBody io.Reader
 	//requestBody = c.Request.Body
@@ -331,7 +342,7 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 	if err != nil {
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "create_request_failed", http.StatusInternalServerError), nullBytes, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 	// 使用带有超时的 context 创建新的请求
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
@@ -342,11 +353,16 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 		req.Header.Set("mj-api-secret", auth)
 	}
 	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "request_canceled", http.StatusRequestTimeout), nil, err
+	}
+	MarkRouteAttemptSent(c, info)
 	resp, err := GetHttpClient().Do(req)
 	if err != nil {
 		common.SysLog(common.LogText("do request failed: %s", err.Error()))
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "do_request_failed", http.StatusInternalServerError), nullBytes, err
 	}
+	defer resp.Body.Close()
 	statusCode := resp.StatusCode
 	//if statusCode != 200  {
 	//	return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "bad_response_status_code", statusCode), nullBytes, nil

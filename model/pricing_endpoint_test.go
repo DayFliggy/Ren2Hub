@@ -49,7 +49,7 @@ func insertPricingEndpointChannel(t *testing.T, channelID int, channelType int, 
 func insertPricingEndpointAbility(t *testing.T, channelID int, modelName string) {
 	t.Helper()
 	require.NoError(t, DB.Create(&Ability{
-		Group:     "default",
+
 		Model:     modelName,
 		ChannelId: channelID,
 		Enabled:   true,

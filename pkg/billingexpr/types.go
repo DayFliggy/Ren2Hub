@@ -62,24 +62,24 @@ type TraceResult struct {
 // auto-group retry and settlement. It is fully serializable and contains no
 // compiled program pointers.
 type BillingSnapshot struct {
-	EstimatedImageCount       *int           `json:"estimated_image_count,omitempty"`
-	BillingMode               string         `json:"billing_mode"`
-	ModelName                 string         `json:"model_name"`
-	ExprString                string         `json:"expr_string"`
-	ExprHash                  string         `json:"expr_hash"`
-	GroupRatio                float64        `json:"group_ratio"`
-	EstimatedPromptTokens     int            `json:"estimated_prompt_tokens"`
-	EstimatedCompletionTokens int            `json:"estimated_completion_tokens"`
-	PreConsumeMultiplier      float64        `json:"pre_consume_multiplier,omitempty"` // Reservation only; zero in older snapshots means 1.
-	EstimatedQuotaBeforeGroup float64        `json:"estimated_quota_before_group"`
-	EstimatedQuotaAfterGroup  int            `json:"estimated_quota_after_group"`
-	EstimatedTier             string         `json:"estimated_tier"`
-	EstimatedBillingUnit      BillingUnit    `json:"estimated_billing_unit,omitempty"`
-	EstimatedFixedPrice       *float64       `json:"estimated_fixed_price,omitempty"`
-	QuotaPerUnit              float64        `json:"quota_per_unit"`
-	ExprVersion               int            `json:"expr_version"`
-	TaskUsageBilling          bool           `json:"task_usage_billing,omitempty"`
-	UsageFacts                map[string]any `json:"usage_facts,omitempty"`
+	EstimatedImageCount         *int           `json:"estimated_image_count,omitempty"`
+	BillingMode                 string         `json:"billing_mode"`
+	ModelName                   string         `json:"model_name"`
+	ExprString                  string         `json:"expr_string"`
+	ExprHash                    string         `json:"expr_hash"`
+	ChannelRatio                float64        `json:"channel_ratio"`
+	EstimatedPromptTokens       int            `json:"estimated_prompt_tokens"`
+	EstimatedCompletionTokens   int            `json:"estimated_completion_tokens"`
+	PreConsumeMultiplier        float64        `json:"pre_consume_multiplier,omitempty"` // Reservation only; zero in older snapshots means 1.
+	EstimatedQuotaBeforeChannel float64        `json:"estimated_quota_before_channel"`
+	EstimatedQuotaAfterChannel  int            `json:"estimated_quota_after_channel"`
+	EstimatedTier               string         `json:"estimated_tier"`
+	EstimatedBillingUnit        BillingUnit    `json:"estimated_billing_unit,omitempty"`
+	EstimatedFixedPrice         *float64       `json:"estimated_fixed_price,omitempty"`
+	QuotaPerUnit                float64        `json:"quota_per_unit"`
+	ExprVersion                 int            `json:"expr_version"`
+	TaskUsageBilling            bool           `json:"task_usage_billing,omitempty"`
+	UsageFacts                  map[string]any `json:"usage_facts,omitempty"`
 }
 
 // TieredResult holds everything needed after running tiered settlement.
@@ -87,15 +87,15 @@ type TieredResult struct {
 	// BillingTokens records the actual normalized inputs for successful token
 	// billing that explicitly references img_cr. Logs serialize these through
 	// the shared injection path, not as additional snapshot state.
-	BillingTokens          *TokenParams       `json:"-"`
-	ImageCount             *int               `json:"image_count,omitempty"`
-	BillingUnit            BillingUnit        `json:"billing_unit"`
-	FixedPrice             *float64           `json:"fixed_price,omitempty"`
-	ActualQuotaBeforeGroup float64            `json:"actual_quota_before_group"`
-	ActualQuotaAfterGroup  int                `json:"actual_quota_after_group"`
-	MatchedTier            string             `json:"matched_tier"`
-	RequestRules           []RequestRuleTrace `json:"request_rules,omitempty"`
-	CrossedTier            bool               `json:"crossed_tier"`
+	BillingTokens            *TokenParams       `json:"-"`
+	ImageCount               *int               `json:"image_count,omitempty"`
+	BillingUnit              BillingUnit        `json:"billing_unit"`
+	FixedPrice               *float64           `json:"fixed_price,omitempty"`
+	ActualQuotaBeforeChannel float64            `json:"actual_quota_before_channel"`
+	ActualQuotaAfterChannel  int                `json:"actual_quota_after_channel"`
+	MatchedTier              string             `json:"matched_tier"`
+	RequestRules             []RequestRuleTrace `json:"request_rules,omitempty"`
+	CrossedTier              bool               `json:"crossed_tier"`
 	// Clamp records a single-request saturation event during quota conversion so the
 	// caller can surface it on the consume log for admin auditing. Nil when no
 	// clamping occurred. Not serialized: the marker is attached separately via

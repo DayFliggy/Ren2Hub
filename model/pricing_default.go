@@ -1,43 +1,9 @@
 package model
 
 import (
-	"slices"
+"github.com/QuantumNous/new-api/pkg/modellab"
 	"strings"
 )
-
-// 简化的供应商映射规则
-var defaultVendorRules = map[string]string{
-	"gpt":      "OpenAI",
-	"dall-e":   "OpenAI",
-	"whisper":  "OpenAI",
-	"o1":       "OpenAI",
-	"o3":       "OpenAI",
-	"claude":   "Anthropic",
-	"gemini":   "Google",
-	"moonshot": "Moonshot",
-	"kimi":     "Moonshot",
-	"chatglm":  "智谱",
-	"glm-":     "智谱",
-	"qwen":     "阿里巴巴",
-	"deepseek": "DeepSeek",
-	"abab":     "MiniMax",
-	"minimax":  "MiniMax",
-	"ernie":    "百度",
-	"spark":    "讯飞",
-	"hunyuan":  "腾讯",
-	"command":  "Cohere",
-	"@cf/":     "Cloudflare",
-	"360":      "360",
-	"yi":       "零一万物",
-	"jina":     "Jina",
-	"mistral":  "Mistral",
-	"grok":     "xAI",
-	"llama":    "Meta",
-	"doubao":   "字节跳动",
-	"kling":    "快手",
-	"jimeng":   "即梦",
-	"vidu":     "Vidu",
-}
 
 // 供应商默认图标映射
 var defaultVendorIcons = map[string]string{
@@ -71,32 +37,16 @@ var defaultVendorIcons = map[string]string{
 
 // initDefaultVendorMapping 简化的默认供应商映射
 func initDefaultVendorMapping(metaMap map[string]*Model, vendorMap map[int]*Vendor, enableAbilities []AbilityWithChannel) {
-	patterns := make([]string, 0, len(defaultVendorRules))
-	for pattern := range defaultVendorRules {
-		patterns = append(patterns, pattern)
-	}
-	slices.SortFunc(patterns, func(a, b string) int {
-		if len(a) != len(b) {
-			return len(b) - len(a)
-		}
-		return strings.Compare(a, b)
-	})
 	for _, ability := range enableAbilities {
 		modelName := ability.Model
 		if _, exists := metaMap[modelName]; exists {
 			continue
 		}
 
-		// 匹配供应商
-		vendorID := 0
-		modelLower := strings.ToLower(modelName)
-		for _, pattern := range patterns {
-			vendorName := defaultVendorRules[pattern]
-			if strings.Contains(modelLower, pattern) {
-				vendorID = getDisplayVendor(vendorName, vendorMap)
-				break
-			}
-		}
+        lab:=modellab.ResolveModel(modelName, "")
+        display:=lab.Name
+        if alias:=map[string]string{"alibaba":"阿里巴巴","moonshotai":"Moonshot","zhipuai":"智谱","bytedance-seed":"字节跳动","tencent":"腾讯"}[lab.ID];alias!=""{display=alias}
+        vendorID:=getDisplayVendor(display,vendorMap)
 
 		// 创建模型元数据
 		metaMap[modelName] = &Model{

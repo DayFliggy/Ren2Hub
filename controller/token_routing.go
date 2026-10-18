@@ -57,15 +57,16 @@ func PutTokenRouting(c *gin.Context) {
 		return
 	}
 	var input struct {
-		Mode    string                  `json:"mode"`
-		Version *int64                  `json:"version"`
-		Entries []model.TokenRouteEntry `json:"entries"`
+		Mode            string                  `json:"mode"`
+		Version         *int64                  `json:"version"`
+		MaxChannelRatio *string                 `json:"max_channel_ratio"`
+		Entries         []model.TokenRouteEntry `json:"entries"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil || input.Version == nil {
 		tokenRoutingError(c, model.ErrTokenRouteInvalid)
 		return
 	}
-	view, err := service.PutTokenRouting(c.Request.Context(), c.GetInt("id"), id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: input.Mode, Version: *input.Version}, Entries: input.Entries})
+	view, err := service.PutTokenRouting(c.Request.Context(), c.GetInt("id"), id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: input.Mode, Version: *input.Version, MaxChannelRatio: input.MaxChannelRatio}, Entries: input.Entries})
 	if err != nil {
 		tokenRoutingError(c, err)
 		return

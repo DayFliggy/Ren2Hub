@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -25,9 +24,10 @@ var (
 
 // Keep the automatic row after a reset so stale editors cannot reuse version 0.
 type TokenRouteProfile struct {
-	TokenID int    `json:"token_id" gorm:"primaryKey;autoIncrement:false"`
-	Mode    string `json:"mode" gorm:"type:varchar(16);not null"`
-	Version int64  `json:"version" gorm:"not null"`
+	TokenID         int     `json:"token_id" gorm:"primaryKey;autoIncrement:false"`
+	Mode            string  `json:"mode" gorm:"type:varchar(16);not null"`
+	MaxChannelRatio *string `json:"max_channel_ratio" gorm:"type:varchar(64)"`
+	Version         int64   `json:"version" gorm:"not null"`
 }
 
 type TokenRouteEntry struct {
@@ -63,6 +63,11 @@ func readTokenRouting(db *gorm.DB, tokenID int) (TokenRouting, error) {
 }
 
 func ValidateTokenRouting(input TokenRouting) error {
+	if input.MaxChannelRatio != nil {
+		if _, err := NormalizeChannelRatio(*input.MaxChannelRatio); err != nil {
+			return ErrTokenRouteInvalid
+		}
+	}
 	if input.Mode != TokenRouteAuto && input.Mode != TokenRouteManual || input.Version < 0 || len(input.Entries) > MaxTokenRouteEntries {
 		return ErrTokenRouteInvalid
 	}
@@ -84,6 +89,13 @@ func ValidateTokenRouting(input TokenRouting) error {
 func SaveTokenRouting(ctx context.Context, userID, tokenID int, input TokenRouting, allowed map[int]bool) (TokenRouting, error) {
 	if err := ValidateTokenRouting(input); err != nil {
 		return TokenRouting{}, err
+	}
+	if input.MaxChannelRatio != nil {
+		normalized, err := NormalizeChannelRatio(*input.MaxChannelRatio)
+		if err != nil {
+			return TokenRouting{}, err
+		}
+		input.MaxChannelRatio = &normalized
 	}
 	var result TokenRouting
 	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -107,7 +119,7 @@ func SaveTokenRouting(ctx context.Context, userID, tokenID int, input TokenRouti
 				return ErrTokenRouteForbidden
 			}
 		}
-		profile := TokenRouteProfile{TokenID: tokenID, Mode: input.Mode, Version: current.Version + 1}
+		profile := TokenRouteProfile{TokenID: tokenID, Mode: input.Mode, MaxChannelRatio: input.MaxChannelRatio, Version: current.Version + 1}
 		if current.Version == 0 {
 			if err := tx.Create(&profile).Error; err != nil {
 				if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(strings.ToLower(err.Error()), "unique constraint") || strings.Contains(strings.ToLower(err.Error()), "duplicate") {
@@ -116,7 +128,7 @@ func SaveTokenRouting(ctx context.Context, userID, tokenID int, input TokenRouti
 				return err
 			}
 		} else {
-			update := tx.Model(&TokenRouteProfile{}).Where("token_id = ? AND version = ?", tokenID, current.Version).Updates(map[string]any{"mode": profile.Mode, "version": profile.Version})
+			update := tx.Model(&TokenRouteProfile{}).Where("token_id = ? AND version = ?", tokenID, current.Version).Updates(map[string]any{"mode": profile.Mode, "max_channel_ratio": profile.MaxChannelRatio, "version": profile.Version})
 			if update.Error != nil {
 				return update.Error
 			}
@@ -184,24 +196,4 @@ func deleteTokenRouting(tx *gorm.DB, tokenIDs []int) error {
 		return err
 	}
 	return tx.Where("token_id IN ?", tokenIDs).Delete(&TokenRouteProfile{}).Error
-}
-
-// PublicRouteChannels projects enabled abilities, without loading credentials.
-func PublicRouteChannels(ctx context.Context, groups []string) ([]Channel, []Ability, error) {
-	channels, abilities := []Channel{}, []Ability{}
-	if len(groups) == 0 {
-		return channels, abilities, nil
-	}
-	if err := DB.WithContext(ctx).Where(map[string]any{"group": groups, "enabled": true}).Find(&abilities).Error; err != nil {
-		return nil, nil, err
-	}
-	ids := make([]int, 0, len(abilities))
-	for _, ability := range abilities {
-		ids = append(ids, ability.ChannelId)
-	}
-	if len(ids) == 0 {
-		return channels, abilities, nil
-	}
-	err := DB.WithContext(ctx).Select("id", "name", "type", "status").Where("id IN ? AND status = ?", ids, common.ChannelStatusEnabled).Order("id asc").Find(&channels).Error
-	return channels, abilities, err
 }

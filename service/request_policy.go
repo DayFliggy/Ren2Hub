@@ -25,7 +25,6 @@ type PolicyDecision struct {
 type PolicyEvent struct {
 	Attempt     int            `json:"attempt"`
 	ChannelID   int            `json:"channel_id,omitempty"`
-	Group       string         `json:"group,omitempty"`
 	Rule        string         `json:"rule,omitempty"`
 	Status      int            `json:"status,omitempty"`
 	ErrorCode   string         `json:"error_code,omitempty"`
@@ -42,7 +41,6 @@ type RequestPolicyState struct {
 	FinalLogged       bool
 	StartedAt         time.Time
 	Attempts          int
-	SelectedGroup     string
 	SessionMode       string
 	SessionModeSource string
 	RuleName          string
@@ -67,9 +65,6 @@ func RequestPolicy(c *gin.Context) *RequestPolicyState {
 
 func (s *RequestPolicyState) AddEvent(event PolicyEvent) {
 	event.Attempt, event.ElapsedMS = s.Attempts, time.Since(s.StartedAt).Milliseconds()
-	if event.Group == "" {
-		event.Group = s.SelectedGroup
-	}
 	if event.Rule == "" {
 		event.Rule = s.RuleName
 	}
@@ -86,11 +81,10 @@ func (s *RequestPolicyState) Events() []PolicyEvent {
 	return slices.Clone(s.events)
 }
 
-func (s *RequestPolicyState) BeginAttempt(channel *model.Channel, group string) {
+func (s *RequestPolicyState) BeginAttempt(channel *model.Channel) {
 	s.Attempts++
 	s.Successful = false
 	s.OutcomeRecorded = false
-	s.SelectedGroup = group
 	s.AddEvent(PolicyEvent{ChannelID: channel.Id, Decision: PolicyDecision{Action: "attempt", Reason: "channel_selected", Source: "routing"}})
 }
 

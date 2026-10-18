@@ -20,6 +20,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -251,7 +252,8 @@ func TestExecuteTaskSubmissionHonorsRouteRetainResult(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			events := make([]string, 0, 3)
-			database, _ := openTaskDialectDatabase(t, &model.Task{}, &model.User{}, &model.Channel{})
+			database, _ := openTaskDialectDatabase(t, &model.Task{}, &model.User{}, &model.Channel{}, &model.Ability{})
+			seedTaskSubmissionRoute(t, database)
 			previousDB := model.DB
 			model.DB = database
 			t.Cleanup(func() { model.DB = previousDB })
@@ -433,17 +435,34 @@ func TestExecuteTaskSubmissionDisconnectAfterDurableInsertDoesNotRefund(t *testi
 func setupTaskSubmissionDatabase(t *testing.T, migrate bool, events *[]string) *gorm.DB {
 	t.Helper()
 	previousDB := model.DB
-	var models []any
+	models := []any{&model.User{}, &model.Channel{}, &model.Ability{}, &model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}}
 	if migrate {
 		models = append(models, &model.Task{})
 	}
 	database, _ := openTaskDialectDatabase(t, models...)
+	seedTaskSubmissionRoute(t, database)
+	require.NoError(t, database.Create(&model.Token{Id: 81, UserId: 71, Key: "protocol-task-test"}).Error)
 	require.NoError(t, database.Callback().Create().Before("gorm:create").Register("test:task-submit-order", func(*gorm.DB) {
 		*events = append(*events, "insert")
 	}))
 	model.DB = database
-	t.Cleanup(func() { model.DB = previousDB })
+	t.Cleanup(func() {
+		require.Eventually(t, func() bool { return gopool.WorkerCount() == 0 }, time.Second, time.Millisecond)
+		model.DB = previousDB
+	})
 	return database
+}
+
+func seedTaskSubmissionRoute(t *testing.T, database *gorm.DB) {
+	t.Helper()
+	channel := model.Channel{Id: 1, Type: constant.ChannelTypeTaskPlugin, Name: "plugin", Status: common.ChannelStatusEnabled, Models: "plugin-model,video-model,image-model", ChannelRatio: "1"}
+	require.NoError(t, database.Create(&channel).Error)
+	for _, id := range []int{1, 71} {
+		require.NoError(t, database.Create(&model.User{Id: id, Username: fmt.Sprintf("task-user-%d", id), AffCode: fmt.Sprintf("task-aff-%d", id), Quota: 1_000_000}).Error)
+	}
+	for _, modelName := range channel.GetModels() {
+		require.NoError(t, database.Create(&model.Ability{ChannelId: channel.Id, Model: modelName, Enabled: true}).Error)
+	}
 }
 
 func taskSubmissionTestContext() *gin.Context {
@@ -456,7 +475,7 @@ func taskSubmissionTestContext() *gin.Context {
 func taskSubmissionRelayInfo(billing relaycommon.BillingSettler) *relaycommon.RelayInfo {
 	return &relaycommon.RelayInfo{
 		UserId:          1,
-		UsingGroup:      "default",
+		UserQuota:       1_000_000,
 		OriginModelName: "plugin-model",
 		Billing:         billing,
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
@@ -512,7 +531,7 @@ func openTaskDialectDatabase(t *testing.T, models ...any) (*gorm.DB, common.Data
 }
 
 func TestImmediateTaskSettlementDatabase(t *testing.T) {
-	db, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.Log{})
+	db, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.Task{}, &model.Log{})
 	oldDB, oldLogDB := model.DB, model.LOG_DB
 	oldMain, oldLog := common.MainDatabaseType(), common.LogDatabaseType()
 	oldRedis, oldMemory, oldBatch, oldConsume, oldExport := common.RedisEnabled, common.MemoryCacheEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled
@@ -520,6 +539,7 @@ func TestImmediateTaskSettlementDatabase(t *testing.T) {
 	common.SetDatabaseTypes(dialect, dialect)
 	common.RedisEnabled, common.MemoryCacheEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled = false, false, false, true, false
 	t.Cleanup(func() {
+		require.Eventually(t, func() bool { return gopool.WorkerCount() == 0 }, time.Second, time.Millisecond)
 		model.DB, model.LOG_DB = oldDB, oldLogDB
 		common.SetDatabaseTypes(oldMain, oldLog)
 		common.RedisEnabled, common.MemoryCacheEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled = oldRedis, oldMemory, oldBatch, oldConsume, oldExport
@@ -563,10 +583,10 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 			initial := int(20 * common.QuotaPerUnit)
 			user := model.User{Username: fmt.Sprintf("task_user_%d", index), AffCode: fmt.Sprintf("task_aff_%d", index), Quota: initial}
 			require.NoError(t, db.Create(&user).Error)
-			ch := model.Channel{Name: "test provider", Type: constant.ChannelTypeTaskPlugin}
+			ch := model.Channel{Name: "test provider", Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Models: "document-model", ChannelRatio: "1"}
 			require.NoError(t, db.Create(&ch).Error)
+			require.NoError(t, db.Create(&model.Ability{ChannelId: ch.Id, Model: "document-model", Enabled: true}).Error)
 			c := taskSubmissionTestContext()
-			c.Set("group", "default")
 			c.Set("username", user.Username)
 			c.Set("task_request", map[string]any{"model": "document-model"})
 			c.Set(pluginruntime.ContextKeyPinnedPlugin, pluginruntime.PinnedPlugin{Plugin: plugin})
@@ -576,9 +596,8 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 			common.SetContextKey(c, constant.ContextKeyChannelType, ch.Type)
 			info := taskSubmissionRelayInfo(nil)
 			info.UserId = user.Id
+			info.UserQuota = initial
 			info.OriginModelName = "document-model"
-			info.UserGroup = "default"
-			info.UsingGroup = "default"
 			token := model.Token{UserId: user.Id, Key: fmt.Sprintf("task-key-%d", index), RemainQuota: initial}
 			require.NoError(t, db.Create(&token).Error)
 			info.TokenId = token.Id
@@ -596,7 +615,7 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 			assert.Equal(t, want, stored.Quota)
 			assert.Equal(t, model.TaskStatus(tc.status), stored.Status)
 			assert.Positive(t, stored.FinishTime)
-			assert.Equal(t, float64(4), info.TieredBillingSnapshot.EstimatedQuotaBeforeGroup/(0.01*common.QuotaPerUnit))
+			assert.Equal(t, float64(4), info.TieredBillingSnapshot.EstimatedQuotaBeforeChannel/(0.01*common.QuotaPerUnit))
 			if tc.status == "SUCCESS" {
 				assert.Equal(t, tc.count, stored.PrivateData.BillingContext.TieredSnapshot.UsageFacts["units"])
 			}

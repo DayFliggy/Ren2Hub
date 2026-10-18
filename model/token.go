@@ -26,36 +26,9 @@ type Token struct {
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
-	Group              string         `json:"group" gorm:"default:''"`
-	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
-	AutoGroups         string         `json:"-" gorm:"type:text"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 	// 允许用此令牌查询所属用户的额度；新建令牌默认开启，已有令牌升级后保持关闭
 	AllowUserQuotaQuery bool `json:"allow_user_quota_query"`
-}
-
-func (token *Token) GetAutoGroups() ([]string, error) {
-	if token.AutoGroups == "" {
-		return nil, nil
-	}
-	var groups []string
-	if err := common.UnmarshalJsonStr(token.AutoGroups, &groups); err != nil {
-		return nil, err
-	}
-	return groups, nil
-}
-
-func (token *Token) SetAutoGroups(groups []string) error {
-	if len(groups) == 0 {
-		token.AutoGroups = ""
-		return nil
-	}
-	data, err := common.Marshal(groups)
-	if err != nil {
-		return err
-	}
-	token.AutoGroups = string(data)
-	return nil
 }
 
 func (token *Token) Clean() {
@@ -315,7 +288,7 @@ func (token *Token) Update() (err error) {
 		common.SysLog(common.LogText("failed to invalidate token cache before update: %s", cacheErr.Error()))
 	}
 	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry", "auto_groups",
+		"model_limits_enabled", "model_limits", "allow_ips",
 		"allow_user_quota_query").Updates(token).Error
 }
 

@@ -16,7 +16,7 @@ func TestRetiredRoutesRejectBeforePluginDispatch(t *testing.T) {
 		calls++
 		c.AbortWithStatus(http.StatusNoContent)
 	})
-	for _, path := range []string{"/pg", "/pg/chat/completions", "/playground", "/next/keys", "/subscription", "/plan-management", "/deployments", "/console/chat", "/console/playground"} {
+	for _, path := range []string{"/market", "/market/example", "/console/market", "/pg", "/pg/chat/completions", "/playground", "/next/keys", "/subscription", "/plan-management", "/deployments", "/console/chat", "/console/playground"} {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
 			recorder := httptest.NewRecorder()
 			router.ServeHTTP(recorder, httptest.NewRequest(method, path, nil))

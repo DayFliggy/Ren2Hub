@@ -59,7 +59,6 @@ func RecordRelayResult(ctx context.Context, info *relaycommon.RelayInfo, apiErr 
 	}
 	Record(Sample{
 		Model:        info.OriginModelName,
-		Group:        info.UsingGroup,
 		LatencyMs:    latencyMs,
 		TtftMs:       ttftMs,
 		HasTtft:      hasTtft,
@@ -87,7 +86,6 @@ func RecordTaskResult(task *model.Task, result *relaycommon.TaskInfo) {
 	}
 	sample := Sample{
 		Model:   modelName,
-		Group:   task.Group,
 		Success: task.Status == model.TaskStatusSuccess,
 	}
 	if task.SubmitTime > 0 && endTs > task.SubmitTime {
@@ -109,16 +107,13 @@ func Record(sample Sample) {
 	if !setting.Enabled || sample.Model == "" {
 		return
 	}
-	if sample.Group == "" {
-		sample.Group = "default"
-	}
+
 	if sample.LatencyMs < 0 {
 		sample.LatencyMs = 0
 	}
 
 	key := bucketKey{
 		model:    sample.Model,
-		group:    sample.Group,
 		bucketTs: bucketStart(time.Now().Unix()),
 	}
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
@@ -141,22 +136,16 @@ func queryWindow(now time.Time, hours int) (int64, int64) {
 
 func Query(params QueryParams) (QueryResult, error) {
 	startTs, endTs := queryWindow(time.Now(), params.Hours)
-	allowedGroups := allowedGroupSet(params.AllowedGroups)
 
 	merged := map[bucketKey]counters{}
-	rows, err := model.GetPerfMetrics(params.Model, params.Group, startTs, endTs)
+	rows, err := model.GetPerfMetrics(params.Model, startTs, endTs)
 	if err != nil {
 		return QueryResult{}, err
 	}
 	for _, row := range rows {
-		if allowedGroups != nil {
-			if _, ok := allowedGroups[row.Group]; !ok {
-				continue
-			}
-		}
+
 		mergeCounters(merged, bucketKey{
 			model:    row.ModelName,
-			group:    row.Group,
 			bucketTs: row.BucketTs,
 		}, counters{
 			requestCount:   row.RequestCount,
@@ -174,14 +163,7 @@ func Query(params QueryParams) (QueryResult, error) {
 		if k.model != params.Model || k.bucketTs < startTs || k.bucketTs > endTs {
 			return true
 		}
-		if params.Group != "" && k.group != params.Group {
-			return true
-		}
-		if allowedGroups != nil {
-			if _, ok := allowedGroups[k.group]; !ok {
-				return true
-			}
-		}
+
 		mergeCounters(merged, k, value.(*atomicBucket).snapshot())
 		return true
 	})
@@ -191,16 +173,15 @@ func Query(params QueryParams) (QueryResult, error) {
 	return result, nil
 }
 
-func QuerySummaryAll(hours int, groups []string, recentModels ...string) (SummaryAllResult, error) {
+func QuerySummaryAll(hours int, recentModels ...string) (SummaryAllResult, error) {
 	if len(recentModels) > MaxRecentModels {
 		return SummaryAllResult{}, common.NewMessage("Invalid parameters")
 	}
 	now := time.Now()
 	startTs, endTs := queryWindow(now, hours)
 	recentStartTs, _ := queryWindow(now, recentSuccessHistoryHours)
-	allowedGroups := allowedGroupSet(groups)
 
-	rows, err := model.GetPerfMetricsSummaryBucketsAll(startTs, endTs, groups)
+	rows, err := model.GetPerfMetricsSummaryBucketsAll(startTs, endTs)
 	if err != nil {
 		return SummaryAllResult{}, err
 	}
@@ -214,7 +195,7 @@ func QuerySummaryAll(hours int, groups []string, recentModels ...string) (Summar
 			continue
 		}
 		recentBuckets[name] = map[int64]counters{}
-		buckets, err := model.GetRecentPerfMetricSuccessBuckets(name, recentStartTs, endTs, groups, recentSuccessSampleLimit)
+		buckets, err := model.GetRecentPerfMetricSuccessBuckets(name, recentStartTs, endTs, recentSuccessSampleLimit)
 		if err != nil {
 			return SummaryAllResult{}, err
 		}
@@ -245,11 +226,7 @@ func QuerySummaryAll(hours int, groups []string, recentModels ...string) (Summar
 		if k.bucketTs > endTs {
 			return true
 		}
-		if allowedGroups != nil {
-			if _, ok := allowedGroups[k.group]; !ok {
-				return true
-			}
-		}
+
 		snap := value.(*atomicBucket).snapshot()
 		if snap.requestCount == 0 {
 			return true
@@ -377,17 +354,6 @@ func recentSuccessSeries(buckets map[int64]counters) []SuccessRatePoint {
 	return points
 }
 
-func allowedGroupSet(groups []string) map[string]struct{} {
-	if groups == nil {
-		return nil
-	}
-	allowed := make(map[string]struct{}, len(groups))
-	for _, group := range groups {
-		allowed[group] = struct{}{}
-	}
-	return allowed
-}
-
 func bucketStart(ts int64) int64 {
 	bucketSeconds := perf_metrics_setting.GetBucketSeconds()
 	if bucketSeconds <= 0 {
@@ -412,81 +378,27 @@ func mergeCounters(merged map[bucketKey]counters, key bucketKey, value counters)
 }
 
 func buildQueryResult(modelName string, merged map[bucketKey]counters) QueryResult {
-	groupBuckets := map[string]map[int64]counters{}
-	modelBuckets := map[string]map[int64]counters{}
+	all := counters{}
+	buckets := map[string]map[int64]counters{}
 	for key, value := range merged {
 		if value.requestCount == 0 {
 			continue
 		}
-		if _, ok := groupBuckets[key.group]; !ok {
-			groupBuckets[key.group] = map[int64]counters{}
-		}
-		groupBuckets[key.group][key.bucketTs] = value
-		mergeModelBucket(modelBuckets, modelName, key.bucketTs, value)
+		mergeModelBucket(buckets, modelName, key.bucketTs, value)
+		all.requestCount += value.requestCount
+		all.successCount += value.successCount
+		all.totalLatencyMs += value.totalLatencyMs
+		all.ttftSumMs += value.ttftSumMs
+		all.ttftCount += value.ttftCount
+		all.outputTokens += value.outputTokens
+		all.generationMs += value.generationMs
 	}
-
-	groups := make([]string, 0, len(groupBuckets))
-	for group := range groupBuckets {
-		groups = append(groups, group)
+	series := make([]BucketPoint, 0, len(buckets[modelName]))
+	for ts, value := range buckets[modelName] {
+		series = append(series, bucketPoint(ts, value))
 	}
-	sort.Strings(groups)
-
-	all := counters{}
-	results := make([]GroupResult, 0, len(groups))
-	for _, group := range groups {
-		buckets := groupBuckets[group]
-		timestamps := make([]int64, 0, len(buckets))
-		for ts := range buckets {
-			timestamps = append(timestamps, ts)
-		}
-		sort.Slice(timestamps, func(i, j int) bool {
-			return timestamps[i] < timestamps[j]
-		})
-
-		total := counters{}
-		series := make([]BucketPoint, 0, len(timestamps))
-		for _, ts := range timestamps {
-			value := buckets[ts]
-			total.requestCount += value.requestCount
-			total.successCount += value.successCount
-			total.totalLatencyMs += value.totalLatencyMs
-			total.ttftSumMs += value.ttftSumMs
-			total.ttftCount += value.ttftCount
-			total.outputTokens += value.outputTokens
-			total.generationMs += value.generationMs
-			series = append(series, bucketPoint(ts, value))
-		}
-		all.requestCount += total.requestCount
-		all.successCount += total.successCount
-		all.totalLatencyMs += total.totalLatencyMs
-		all.outputTokens += total.outputTokens
-		all.generationMs += total.generationMs
-
-		results = append(results, GroupResult{
-			Group:        group,
-			AvgTtftMs:    avg(total.ttftSumMs, total.ttftCount),
-			AvgLatencyMs: avg(total.totalLatencyMs, total.requestCount),
-			SuccessRate:  successRate(total),
-			AvgTps:       avgTps(total),
-			Series:       series,
-		})
-	}
-
-	modelSeries := make([]BucketPoint, 0, len(modelBuckets[modelName]))
-	for ts, value := range modelBuckets[modelName] {
-		modelSeries = append(modelSeries, bucketPoint(ts, value))
-	}
-	sort.Slice(modelSeries, func(i, j int) bool {
-		return modelSeries[i].Ts < modelSeries[j].Ts
-	})
-
-	return QueryResult{
-		ModelName:    modelName,
-		SeriesSchema: seriesSchema,
-		Summary:      summarize(all),
-		Series:       modelSeries,
-		Groups:       results,
-	}
+	sort.Slice(series, func(i, j int) bool { return series[i].Ts < series[j].Ts })
+	return QueryResult{ModelName: modelName, SeriesSchema: seriesSchema, Summary: summarize(all), Series: series}
 }
 
 // summarize returns nil when nothing was sampled, so clients can show
@@ -562,14 +474,14 @@ func recordRedis(key bucketKey, sample Sample) {
 }
 
 func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, startTs int64, endTs int64) {
-	if !common.RedisEnabled || common.RDB == nil || params.Model == "" || params.Group == "" {
+	if !common.RedisEnabled || common.RDB == nil || params.Model == "" {
 		return
 	}
 	active := bucketStart(time.Now().Unix())
 	if active < startTs || active > endTs {
 		return
 	}
-	key := bucketKey{model: params.Model, group: params.Group, bucketTs: active}
+	key := bucketKey{model: params.Model, bucketTs: active}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	values, err := common.RDB.HGetAll(ctx, redisBucketKey(key)).Result()
@@ -580,5 +492,5 @@ func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, 
 }
 
 func redisBucketKey(key bucketKey) string {
-	return fmt.Sprintf("perf:%s:%s:%d", key.model, key.group, key.bucketTs)
+	return fmt.Sprintf("perf:channel-core:%s:%d", key.model, key.bucketTs)
 }

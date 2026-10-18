@@ -68,7 +68,7 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 			}
 		}
 	})
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.AuthFlow{}, &model.TwoFA{}, &model.PasskeyCredential{}, &model.UserAccessToken{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.AuthFlow{}, &model.TwoFA{}, &model.PasskeyCredential{}, &model.UserAccessToken{}, &model.AdminQuotaOperation{}))
 	require.NoError(t, logDB.AutoMigrate(&model.Log{}, &model.AuditLog{}))
 	versionQuery := "SELECT version()"
 	if dialect == "sqlite" {
@@ -130,7 +130,7 @@ func TestManageUserDisableAdvancesAuthVersionOnceAndRevokesSession(t *testing.T)
 	now := time.Now().Unix()
 	user := model.User{
 		Username: "managed-disable-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Status: common.UserStatusEnabled, AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(&user).Error)
 	require.NoError(t, db.Create(&model.UserSession{
@@ -163,7 +163,7 @@ func TestManageUserDemoteAdvancesAuthVersionAndRevokesSessionsOnce(t *testing.T)
 	now := time.Now().Unix()
 	user := model.User{
 		Username: "managed-demote-user", Password: "password", Role: common.RoleAdminUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Status: common.UserStatusEnabled, AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(&user).Error)
 	for _, sid := range []string{"managed-demote-session-one", "managed-demote-session-two"} {
@@ -204,7 +204,7 @@ func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	deleted := model.User{
 		Username: "managed-delete-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "delete-aff",
+		Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "delete-aff",
 	}
 	require.NoError(t, db.Create(&deleted).Error)
 
@@ -217,7 +217,7 @@ func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 
 	unchanged := model.User{
 		Username: "managed-unknown-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "unknown-aff",
+		Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "unknown-aff",
 	}
 	require.NoError(t, db.Create(&unchanged).Error)
 	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"unknown"}`, unchanged.Id))
@@ -256,7 +256,7 @@ func TestManageUserQuotaRecordsTopupAndAudit(t *testing.T) {
 			require.NoError(t, db.Create(&user).Error)
 			createQuotaTestOperator(t, db, common.RoleRootUser)
 
-			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
+			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","operation_id":"quota-audit-operation","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
 			assert.Equal(t, http.StatusOK, recorder.Code)
 			require.Contains(t, recorder.Body.String(), `"success":true`)
 			require.NoError(t, db.First(&user, user.Id).Error)
@@ -285,7 +285,7 @@ func TestManageUserQuotaRecordsTopupAndAudit(t *testing.T) {
 			assert.Equal(t, tc.action, other.Op.Action)
 			params, err := common.Marshal(other.Op.Params)
 			require.NoError(t, err)
-			expectedParams := model.AuditFields{"target_user_id": user.Id, "target_username": user.Username, "mode": tc.mode, "requested_quota": tc.value, "from": 1000, "to": tc.wantQuota}
+			expectedParams := model.AuditFields{"target_user_id": user.Id, "target_username": user.Username, "mode": tc.mode, "requested_quota": tc.value, "operation_id": "quota-audit-operation", "from": 1000, "to": tc.wantQuota}
 			if tc.mode != "override" {
 				expectedParams["quota"] = tc.value
 			}
@@ -339,7 +339,7 @@ func TestManageUserQuotaFailuresDoNotRecordTopup(t *testing.T) {
 					}
 				}))
 			}
-			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
+			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","operation_id":"quota-audit-operation","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
 			assert.Contains(t, recorder.Body.String(), `"success":false`)
 			require.NoError(t, db.First(&user, user.Id).Error)
 			assert.Equal(t, 1000, user.Quota)
@@ -379,7 +379,7 @@ func TestManageUserQuotaLogFailureKeepsSuccessfulAdjustment(t *testing.T) {
 					tx.AddError(errors.New("quota log unavailable"))
 				}
 			}))
-			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"add","value":500}`, user.Id))
+			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","operation_id":"quota-audit-operation","mode":"add","value":500}`, user.Id))
 			assert.Contains(t, recorder.Body.String(), `"success":true`)
 			require.NoError(t, db.First(&user, user.Id).Error)
 			assert.Equal(t, 1500, user.Quota)
@@ -433,7 +433,7 @@ func TestManageUserQuotaTargetsAndWalletBounds(t *testing.T) {
 			}
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
-			c.Request = httptest.NewRequest(http.MethodPost, "/api/user/manage", strings.NewReader(fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":%q,"value":%d}`, tc.targetID, tc.mode, tc.value)))
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/user/manage", strings.NewReader(fmt.Sprintf(`{"id":%d,"action":"add_quota","operation_id":"quota-audit-operation","mode":%q,"value":%d}`, tc.targetID, tc.mode, tc.value)))
 			role := tc.operatorRole
 			if role == 0 {
 				role = common.RoleRootUser
@@ -477,9 +477,9 @@ func TestManageUserQuotaMiddlewareKeepsOneOperationPerRequest(t *testing.T) {
 		body, action string
 		success      bool
 	}{
-		{`{"id":9999,"action":"add_quota","mode":"add","value":100}`, "user.quota_add", true},
-		{`{"id":9999,"action":"add_quota","mode":"subtract","value":0}`, "user.quota_subtract", false},
-		{`{"id":9999,"action":"add_quota","mode":"invalid","value":1}`, "generic", false},
+		{`{"id":9999,"action":"add_quota","operation_id":"quota-audit-operation","mode":"add","value":100}`, "user.quota_add", true},
+		{`{"id":9999,"action":"add_quota","operation_id":"quota-audit-operation","mode":"subtract","value":0}`, "user.quota_subtract", false},
+		{`{"id":9999,"action":"add_quota","operation_id":"quota-audit-operation","mode":"invalid","value":1}`, "generic", false},
 		{`{"id":`, "generic", false},
 	} {
 		recorder := httptest.NewRecorder()
@@ -529,7 +529,9 @@ func TestManageUserQuotaConcurrentSnapshots(t *testing.T) {
 	ready.Add(2)
 	release := make(chan struct{})
 	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:concurrent_quota_start", func(tx *gorm.DB) {
-		if tx.Statement.Table == "users" {
+		// Synchronize the first participant lookup of each operation, before
+		// row locking; later wallet reads must not re-enter this barrier.
+		if tx.Statement.Table == "users" && strings.Join(tx.Statement.Selects, ",") == "id,inviter_id" {
 			ready.Done()
 			<-release
 		}
@@ -625,7 +627,7 @@ func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 					}
 				}))
 			}
-			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
+			recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","operation_id":"quota-audit-operation","mode":%q,"value":%d}`, user.Id, tc.mode, tc.value))
 			assert.Contains(t, recorder.Body.String(), fmt.Sprintf(`"success":%t`, !tc.failUpdate))
 			require.NoError(t, db.First(&user, user.Id).Error)
 			assert.Equal(t, tc.after, user.Quota)

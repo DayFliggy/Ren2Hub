@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,8 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/i18n"
-	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -212,25 +212,15 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 		}
 	}
 
-	userQuota, err := model.GetUserQuota(info.UserId, false)
-	if err != nil {
-		return &dto.MidjourneyResponse{
-			Code:        4,
-			Description: err.Error(),
-		}
+	if apiErr := service.PreConsumeBilling(c, priceData.Quota, info); apiErr != nil {
+		return service.MidjourneyErrorWrapper(constant.MjRequestError, apiErr.Error())
 	}
-
-	if userQuota-priceData.Quota < 0 {
-		return &dto.MidjourneyResponse{
-			Code:        4,
-			Description: "quota_not_enough",
-		}
-	}
+	defer info.Billing.Refund(c)
 	requestURL := getMjRequestPath(c.Request.URL.String())
 	baseURL := c.GetString("base_url")
 	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
-	service.RequestPolicy(c).BeginAttempt(&model.Channel{Id: c.GetInt("channel_id")}, info.UsingGroup)
-	mjResp, _, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
+	service.RequestPolicy(c).BeginAttempt(&model.Channel{Id: c.GetInt("channel_id")})
+	mjResp, _, err := service.DoMidjourneyHttpRequest(c, info, time.Second*60, fullRequestURL)
 	accepted := service.RecordMidjourneyPolicyResponse(c, mjResp, err)
 	if err != nil {
 		return &mjResp.Response
@@ -277,10 +267,10 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 	if billingApplied {
 		billingChannelId := midjourneyTask.GetBillingChannelId()
 		tokenName := c.GetString("token_name")
-		logContent := []*common.Message{common.NewMessage("Model fixed price {{model_price}}, group ratio {{group_ratio}}, action {{action}}", map[string]any{
-			"model_price": fmt.Sprintf("%.2f", priceData.ModelPrice),
-			"group_ratio": fmt.Sprintf("%.2f", priceData.GroupRatioInfo.GroupRatio),
-			"action":      constant.MjActionSwapFace,
+		logContent := []*common.Message{common.NewMessage("Model fixed price {{model_price}}, channel ratio {{channel_ratio}}, action {{action}}", map[string]any{
+			"model_price":   fmt.Sprintf("%.2f", priceData.ModelPrice),
+			"channel_ratio": fmt.Sprintf("%.2f", priceData.ChannelRatioInfo.ChannelRatio),
+			"action":        constant.MjActionSwapFace,
 		})}
 		other := service.GenerateMjOtherInfo(info, priceData)
 		service.AppendRelayLogAdminInfo(c, info, other)
@@ -291,7 +281,6 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 			Quota:     midjourneyTask.Quota,
 			Content:   logContent,
 			TokenId:   midjourneyTask.TokenId,
-			Group:     info.UsingGroup,
 			Other:     other,
 		})
 		model.UpdateUserUsedQuotaAndRequestCount(info.UserId, midjourneyTask.Quota)
@@ -309,26 +298,22 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 	return nil
 }
 
-func RelayMidjourneyTaskImageSeed(c *gin.Context) *dto.MidjourneyResponse {
+func RelayMidjourneyTaskImageSeed(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyResponse {
 	taskId := c.Param("id")
 	userId := c.GetInt("id")
 	originTask := model.GetByMJId(userId, taskId)
 	if originTask == nil {
 		return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_no_found")
 	}
-	channel, err := model.GetChannelById(originTask.ChannelId, true)
-	if err != nil {
-		return service.MidjourneyErrorWrapper(constant.MjRequestError, "get_channel_info_failed")
+	info.OriginModelName = service.CovertMjpActionToModelName(originTask.Action)
+	channel, mjErr := acquireMidjourneyOriginChannel(c, info, originTask.ChannelId)
+	if mjErr != nil {
+		return mjErr
 	}
-	if channel.Status != common.ChannelStatusEnabled {
-		return service.MidjourneyErrorWrapper(constant.MjRequestError, i18n.T(c, i18n.MsgRelayTaskChannelDisabled))
-	}
-	c.Set("channel_id", originTask.ChannelId)
-	c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channel.Key))
 
 	requestURL := getMjRequestPath(c.Request.URL.String())
 	fullRequestURL := fmt.Sprintf("%s%s", channel.GetBaseURL(), requestURL)
-	midjResponseWithStatus, _, err := service.DoMidjourneyHttpRequest(c, time.Second*30, fullRequestURL)
+	midjResponseWithStatus, _, err := service.DoMidjourneyHttpRequest(c, info, time.Second*30, fullRequestURL)
 	if err != nil {
 		return &midjResponseWithStatus.Response
 	}
@@ -490,17 +475,10 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 					return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_status_not_success")
 				}
 			}
-			channel, err := model.GetChannelById(originTask.ChannelId, true)
-			if err != nil {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "get_channel_info_failed")
+			if _, mjErr := acquireMidjourneyOriginChannel(c, relayInfo, originTask.ChannelId); mjErr != nil {
+				return mjErr
 			}
-			if channel.Status != common.ChannelStatusEnabled {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, i18n.T(c, i18n.MsgRelayTaskChannelDisabled))
-			}
-			c.Set("base_url", channel.GetBaseURL())
-			c.Set("channel_id", originTask.ChannelId)
-			c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channel.Key))
-			logger.LogDebug(c, "Midjourney action uses origin channel: id=%s, base_url=%s", strconv.Itoa(originTask.ChannelId), channel.GetBaseURL())
+
 		}
 		midjRequest.Prompt = originTask.Prompt
 
@@ -535,23 +513,14 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		}
 	}
 
-	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
-	if err != nil {
-		return &dto.MidjourneyResponse{
-			Code:        4,
-			Description: err.Error(),
+	if consumeQuota {
+		if apiErr := service.PreConsumeBilling(c, priceData.Quota, relayInfo); apiErr != nil {
+			return service.MidjourneyErrorWrapper(constant.MjRequestError, apiErr.Error())
 		}
+		defer relayInfo.Billing.Refund(c)
 	}
-
-	if consumeQuota && userQuota-priceData.Quota < 0 {
-		return &dto.MidjourneyResponse{
-			Code:        4,
-			Description: "quota_not_enough",
-		}
-	}
-
-	service.RequestPolicy(c).BeginAttempt(&model.Channel{Id: c.GetInt("channel_id")}, relayInfo.UsingGroup)
-	midjResponseWithStatus, responseBody, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
+	service.RequestPolicy(c).BeginAttempt(&model.Channel{Id: c.GetInt("channel_id")})
+	midjResponseWithStatus, responseBody, err := service.DoMidjourneyHttpRequest(c, relayInfo, time.Second*60, fullRequestURL)
 	accepted := service.RecordMidjourneyPolicyResponse(c, midjResponseWithStatus, err)
 	if err != nil {
 		return &midjResponseWithStatus.Response
@@ -655,11 +624,11 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 	if billingApplied {
 		billingChannelId := midjourneyTask.GetBillingChannelId()
 		tokenName := c.GetString("token_name")
-		logContent := []*common.Message{common.NewMessage("Model fixed price {{model_price}}, group ratio {{group_ratio}}, action {{action}}, ID {{id}}", map[string]any{
-			"model_price": fmt.Sprintf("%.2f", priceData.ModelPrice),
-			"group_ratio": fmt.Sprintf("%.2f", priceData.GroupRatioInfo.GroupRatio),
-			"action":      midjRequest.Action,
-			"id":          midjResponse.Result,
+		logContent := []*common.Message{common.NewMessage("Model fixed price {{model_price}}, channel ratio {{channel_ratio}}, action {{action}}, ID {{id}}", map[string]any{
+			"model_price":   fmt.Sprintf("%.2f", priceData.ModelPrice),
+			"channel_ratio": fmt.Sprintf("%.2f", priceData.ChannelRatioInfo.ChannelRatio),
+			"action":        midjRequest.Action,
+			"id":            midjResponse.Result,
 		})}
 		other := service.GenerateMjOtherInfo(relayInfo, priceData)
 		service.AppendRelayLogAdminInfo(c, relayInfo, other)
@@ -670,7 +639,6 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 			Quota:     midjourneyTask.Quota,
 			Content:   logContent,
 			TokenId:   midjourneyTask.TokenId,
-			Group:     relayInfo.UsingGroup,
 			Other:     other,
 		})
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, midjourneyTask.Quota)
@@ -723,4 +691,20 @@ func getMjRequestPath(path string) string {
 		requestURL = "/mj/" + urls[1]
 	}
 	return requestURL
+}
+
+func acquireMidjourneyOriginChannel(c *gin.Context, info *relaycommon.RelayInfo, channelID int) (*model.Channel, *dto.MidjourneyResponse) {
+	channel, err := service.AcquirePinnedRouteChannel(c, channelID, info.OriginModelName)
+	if err != nil {
+		code := constant.MjRequestError
+		if errors.Is(err, service.ErrConcurrencyFull) {
+			code = 30
+		}
+		return nil, service.MidjourneyErrorWrapper(code, err.Error())
+	}
+	if apiErr := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName); apiErr != nil {
+		return nil, service.MidjourneyErrorWrapper(constant.MjRequestError, apiErr.Error())
+	}
+	info.InitChannelMeta(c)
+	return channel, nil
 }

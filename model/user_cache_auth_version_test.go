@@ -2,7 +2,6 @@ package model
 
 import (
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,11 +36,11 @@ func TestUserAuthFenceRollbackExpiresAndRecovers(t *testing.T) {
 	server := useUserCacheMiniRedis(t)
 
 	user := User{
-		Username:    "auth-fence-rollback",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
+		Username: "auth-fence-rollback",
+		Password: "password",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+
 		AuthVersion: 1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
@@ -79,7 +78,7 @@ func TestPendingUserAuthFenceRejectsStaleCacheWrite(t *testing.T) {
 	require.NoError(t, SetUserAuthVersionFence(userID, 2))
 
 	err := writeUserCache(&UserBase{
-		Id: userID, Group: "default", Username: "stale", AuthVersion: 1,
+		Id: userID, Username: "stale", AuthVersion: 1,
 	}, true)
 
 	assert.ErrorIs(t, err, ErrUserAuthCachePending)
@@ -90,65 +89,15 @@ func TestUserAuthFieldUpdateRejectsVersionMismatch(t *testing.T) {
 	useUserCacheMiniRedis(t)
 	const userID = 4202
 	require.NoError(t, writeUserCache(&UserBase{
-		Id: userID, Group: "current", Username: "cached", AuthVersion: 3,
+		Id: userID, Username: "current", AuthVersion: 3,
 	}, true))
 
-	err := updateUserCacheFieldAtVersion(userID, "Group", "stale", 2)
+	err := updateUserCacheFieldAtVersion(userID, "Username", "stale", 2)
 
 	assert.ErrorIs(t, err, ErrUserAuthCachePending)
-	group, err := common.RDB.HGet(t.Context(), getUserCacheKey(userID), "Group").Result()
+	group, err := common.RDB.HGet(t.Context(), getUserCacheKey(userID), "Username").Result()
 	require.NoError(t, err)
 	assert.Equal(t, "current", group)
-}
-
-func TestRefreshUserGroupCacheRepairsDelayedSameVersionWrite(t *testing.T) {
-	truncateTables(t)
-	useUserCacheMiniRedis(t)
-
-	user := User{
-		Username:    "delayed-group-refresh",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
-	}
-	require.NoError(t, DB.Create(&user).Error)
-	require.NoError(t, populateUserCache(user))
-
-	firstSnapshotRead := make(chan struct{})
-	releaseDelayedRefresh := make(chan struct{})
-	var intercepted atomic.Bool
-	const callbackName = "test:block_delayed_group_refresh"
-	require.NoError(t, DB.Callback().Query().After("gorm:query").Register(callbackName, func(*gorm.DB) {
-		if intercepted.CompareAndSwap(false, true) {
-			close(firstSnapshotRead)
-			<-releaseDelayedRefresh
-		}
-	}))
-	t.Cleanup(func() {
-		_ = DB.Callback().Query().Remove(callbackName)
-	})
-
-	delayedResult := make(chan error, 1)
-	go func() {
-		delayedResult <- RefreshUserGroupCache(user.Id)
-	}()
-	<-firstSnapshotRead
-
-	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Update("group", "pro").Error)
-	require.NoError(t, RefreshUserGroupCache(user.Id))
-	cached, err := cacheGetUserBase(user.Id)
-	require.NoError(t, err)
-	assert.Equal(t, "pro", cached.Group)
-	assert.EqualValues(t, 1, cached.AuthVersion)
-
-	close(releaseDelayedRefresh)
-	require.NoError(t, <-delayedResult)
-	cached, err = cacheGetUserBase(user.Id)
-	require.NoError(t, err)
-	assert.Equal(t, "pro", cached.Group)
-	assert.EqualValues(t, 1, cached.AuthVersion)
 }
 
 func TestCommittedUserAuthVersionPermanentlyRejectsDelayedCacheFill(t *testing.T) {
@@ -156,11 +105,11 @@ func TestCommittedUserAuthVersionPermanentlyRejectsDelayedCacheFill(t *testing.T
 	server := useUserCacheMiniRedis(t)
 
 	user := User{
-		Username:    "auth-fence-commit",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
+		Username: "auth-fence-commit",
+		Password: "password",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+
 		AuthVersion: 1,
 	}
 	require.NoError(t, DB.Create(&user).Error)

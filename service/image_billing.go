@@ -39,19 +39,19 @@ func PrepareImageBillingForRequest(c *gin.Context, info *relaycommon.RelayInfo, 
 		if runErr != nil {
 			return types.NewErrorWithStatusCode(runErr, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		beforeGroup := cost / 1_000_000 * snap.QuotaPerUnit
+		beforeChannel := cost / 1_000_000 * snap.QuotaPerUnit
 		if trace.BillingUnit != billingexpr.BillingUnitRequest && snap.PreConsumeMultiplier != 0 {
-			beforeGroup *= snap.PreConsumeMultiplier
+			beforeChannel *= snap.PreConsumeMultiplier
 		}
-		quota, err = billingexpr.QuotaRoundStrict(beforeGroup * info.PriceData.GroupRatioInfo.GroupRatio)
+		quota, err = billingexpr.QuotaRoundStrict(beforeChannel * info.PriceData.ChannelRatioInfo.ChannelRatio)
 		if err == nil {
 			snap.EstimatedImageCount = trace.ImageCount
-			snap.EstimatedQuotaBeforeGroup = beforeGroup
-			snap.EstimatedQuotaAfterGroup = quota
+			snap.EstimatedQuotaBeforeChannel = beforeChannel
+			snap.EstimatedQuotaAfterChannel = quota
 			snap.EstimatedTier = trace.MatchedTier
 			snap.EstimatedBillingUnit = trace.BillingUnit
 			snap.EstimatedFixedPrice = trace.FixedPrice
-			snap.GroupRatio = info.PriceData.GroupRatioInfo.GroupRatio
+			snap.ChannelRatio = info.PriceData.ChannelRatioInfo.ChannelRatio
 		}
 	} else {
 		quantity := 1
@@ -61,11 +61,11 @@ func PrepareImageBillingForRequest(c *gin.Context, info *relaycommon.RelayInfo, 
 		// Overwrite the per-attempt ratio so a failed attempt cannot leak its
 		// quantity into another channel.
 		info.PriceData.AddOtherRatio("n", float64(quantity))
-		base := info.ImageQuotaBeforeGroup
+		base := info.ImageQuotaBeforeChannel
 		if info.PriceData.UsePrice {
 			base = info.PriceData.ModelPrice * common.QuotaPerUnit
 		}
-		quota, err = common.QuotaFromFloatStrict(info.PriceData.ApplyOtherRatiosToFloat(base * info.PriceData.GroupRatioInfo.GroupRatio))
+		quota, err = common.QuotaFromFloatStrict(info.PriceData.ApplyOtherRatiosToFloat(base * info.PriceData.ChannelRatioInfo.ChannelRatio))
 	}
 	if err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())

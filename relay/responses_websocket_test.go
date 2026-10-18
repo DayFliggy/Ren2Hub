@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gorm.io/gorm/clause"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -80,7 +81,11 @@ func TestSelectResponsesWSChannelHonorsPinsAndFilters(t *testing.T) {
 	disabled := &model.Channel{Name: "disabled", Key: "sk-test", Status: common.ChannelStatusManuallyDisabled, Type: constant.ChannelTypeOpenAI}
 	filtered := &model.Channel{Name: "filtered", Key: "sk-test", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeAdvancedCustom}
 	for _, channel := range []*model.Channel{enabled, disabled, filtered, wsDisabled} {
+		if channel.Models == "" {
+			channel.Models = "gpt-5.1,ws-model"
+		}
 		require.NoError(t, database.Create(channel).Error)
+		require.NoError(t, channel.AddAbilities(database))
 	}
 	for _, tc := range []struct {
 		name      string
@@ -100,7 +105,7 @@ func TestSelectResponsesWSChannelHonorsPinsAndFilters(t *testing.T) {
 			constraints.AddPin(appdto.ChannelPin{ChannelId: disabled.Id, Source: appdto.PinSourceOriginTask, Rank: appdto.PinRankOriginTask, RetryMode: appdto.PinRetrySameChannel})
 			constraints.AddPin(appdto.ChannelPin{ChannelId: tc.channelID, Source: appdto.PinSourceToken, Rank: appdto.PinRankToken, RetryMode: appdto.PinRetrySingleAttempt})
 			constraints.AddFilter(appdto.ChannelFilter{Kind: appdto.FilterRequestPath, RequestPath: c.Request.URL.Path})
-			channel, apiErr := selectResponsesWSChannel(c, "gpt-5.1", &service.RetryParam{Ctx: c, ModelName: "gpt-5.1", TokenGroup: "default"})
+			channel, apiErr := selectResponsesWSChannel(c, "gpt-5.1", &service.RetryParam{Ctx: c, ModelName: "gpt-5.1"})
 			if tc.status != 0 {
 				require.NotNil(t, apiErr)
 				assert.Equal(t, tc.status, apiErr.StatusCode)
@@ -171,13 +176,17 @@ func TestSelectResponsesWSChannelAcceptsNativeResponsesChannelTypes(t *testing.T
 			channel := &model.Channel{Name: tc.name, Key: "sk-test", Status: common.ChannelStatusEnabled, Type: tc.channelType}
 			channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 			channel.SetOtherSettings(dto.ChannelOtherSettings{AdvancedCustom: tc.advanced})
+			if channel.Models == "" {
+				channel.Models = "gpt-5.1,ws-model"
+			}
 			require.NoError(t, database.Create(channel).Error)
+			require.NoError(t, channel.AddAbilities(database))
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 			constraints := service.GetChannelConstraints(c)
 			constraints.AddPin(appdto.ChannelPin{ChannelId: channel.Id, Source: appdto.PinSourceToken, Rank: appdto.PinRankToken, RetryMode: appdto.PinRetrySingleAttempt})
 			constraints.AddFilter(appdto.ChannelFilter{Kind: appdto.FilterRequestPath, RequestPath: c.Request.URL.Path})
-			selected, apiErr := selectResponsesWSChannel(c, "ws-model", &service.RetryParam{Ctx: c, ModelName: "ws-model", TokenGroup: "default"})
+			selected, apiErr := selectResponsesWSChannel(c, "ws-model", &service.RetryParam{Ctx: c, ModelName: "ws-model"})
 			if tc.rejectedBy != "" {
 				require.NotNil(t, apiErr)
 				assert.Nil(t, selected)
@@ -198,7 +207,11 @@ func TestRestoreConnectionContextRejectsChangedAdvancedCustomRoute(t *testing.T)
 	channel := &model.Channel{Name: "advanced", Key: "sk-test", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeAdvancedCustom, BaseURL: &baseURL}
 	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 	channel.SetOtherSettings(dto.ChannelOtherSettings{AdvancedCustom: &dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{IncomingPath: "/v1/responses", UpstreamPath: "/v1/responses"}}}})
+	if channel.Models == "" {
+		channel.Models = "gpt-5.1,ws-model"
+	}
 	require.NoError(t, database.Create(channel).Error)
+	require.NoError(t, channel.AddAbilities(database))
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 	service.GetChannelConstraints(c).AddPin(appdto.ChannelPin{ChannelId: channel.Id, Source: appdto.PinSourceToken, Rank: appdto.PinRankToken, RetryMode: appdto.PinRetrySingleAttempt})
@@ -225,14 +238,18 @@ func TestResponsesWSChannelRoutingRequiresExplicitOptIn(t *testing.T) {
 	require.NoError(t, i18n.Init())
 	database := setupRelayChannelDB(t)
 	require.NoError(t, database.AutoMigrate(&model.Ability{}))
-	legacy := &model.Channel{Name: "legacy-http", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "default", Models: "ws-model", Priority: common.GetPointer(int64(10))}
-	enabled := &model.Channel{Name: "websocket", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "default", Models: "ws-model", Priority: common.GetPointer(int64(0))}
-	unsupported := &model.Channel{Name: "unsupported", Key: "sk-test", Type: constant.ChannelTypeAnthropic, Status: common.ChannelStatusEnabled, Group: "default", Models: "ws-model", Priority: common.GetPointer(int64(5))}
+	legacy := &model.Channel{Name: "legacy-http", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "ws-model", Priority: common.GetPointer(int64(10))}
+	enabled := &model.Channel{Name: "websocket", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "ws-model", Priority: common.GetPointer(int64(0))}
+	unsupported := &model.Channel{Name: "unsupported", Key: "sk-test", Type: constant.ChannelTypeAnthropic, Status: common.ChannelStatusEnabled, Models: "ws-model", Priority: common.GetPointer(int64(5))}
 	enabled.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 	unsupported.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
 	for _, channel := range []*model.Channel{legacy, enabled, unsupported} {
+		if channel.Models == "" {
+			channel.Models = "gpt-5.1,ws-model"
+		}
 		require.NoError(t, database.Create(channel).Error)
-		require.NoError(t, database.Create(&model.Ability{ChannelId: channel.Id, Model: "ws-model", Group: "default", Enabled: true, Priority: channel.Priority}).Error)
+		require.NoError(t, channel.AddAbilities(database))
+		require.NoError(t, database.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.Ability{ChannelId: channel.Id, Model: "ws-model", Enabled: true, Priority: channel.Priority}).Error)
 	}
 	previousCache := common.MemoryCacheEnabled
 	t.Cleanup(func() {
@@ -246,15 +263,15 @@ func TestResponsesWSChannelRoutingRequiresExplicitOptIn(t *testing.T) {
 	model.InitChannelCache()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
-	params := &service.RetryParam{Ctx: c, ModelName: "ws-model", TokenGroup: "default"}
+	params := &service.RetryParam{Ctx: c, ModelName: "ws-model"}
 	channel, apiErr := selectResponsesWSChannel(c, "ws-model", params)
 	require.Nil(t, apiErr)
 	require.NotNil(t, channel)
 	assert.Equal(t, enabled.Id, channel.Id)
-	httpChannel, err := model.GetRandomSatisfiedChannel("default", "ws-model", 0, nil)
+	httpChannels, err := model.RouteChannelRows(c.Request.Context(), "ws-model", nil)
 	require.NoError(t, err)
-	require.NotNil(t, httpChannel)
-	assert.Equal(t, legacy.Id, httpChannel.Id)
+	require.NotEmpty(t, httpChannels)
+	assert.Equal(t, legacy.Id, httpChannels[0].Id)
 
 	// Disabling the saved setting takes effect for the next create on an existing session.
 	enabled.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: false})
@@ -276,12 +293,16 @@ func TestSelectResponsesWSChannelHonorsStrictSessionBinding(t *testing.T) {
 	require.NoError(t, i18n.Init())
 	database := setupRelayChannelDB(t)
 	require.NoError(t, database.AutoMigrate(&model.Ability{}))
-	bound := &model.Channel{Name: "bound", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusAutoDisabled, Group: "default", Models: "ws-model", Priority: common.GetPointer(int64(10))}
-	fallback := &model.Channel{Name: "fallback", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "default", Models: "ws-model", Priority: common.GetPointer(int64(0))}
+	bound := &model.Channel{Name: "bound", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusAutoDisabled, Models: "ws-model", Priority: common.GetPointer(int64(10))}
+	fallback := &model.Channel{Name: "fallback", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "ws-model", Priority: common.GetPointer(int64(0))}
 	for _, channel := range []*model.Channel{bound, fallback} {
 		channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
+		if channel.Models == "" {
+			channel.Models = "gpt-5.1,ws-model"
+		}
 		require.NoError(t, database.Create(channel).Error)
-		require.NoError(t, database.Create(&model.Ability{ChannelId: channel.Id, Model: "ws-model", Group: "default", Enabled: channel.Status == common.ChannelStatusEnabled, Priority: channel.Priority}).Error)
+		require.NoError(t, channel.AddAbilities(database))
+		require.NoError(t, database.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.Ability{ChannelId: channel.Id, Model: "ws-model", Enabled: channel.Status == common.ChannelStatusEnabled, Priority: channel.Priority}).Error)
 	}
 	previousCache := common.MemoryCacheEnabled
 	t.Cleanup(func() {
@@ -310,25 +331,25 @@ func TestSelectResponsesWSChannelHonorsStrictSessionBinding(t *testing.T) {
 		return c
 	}
 	seed := newSessionContext()
-	_, found := service.GetPreferredChannelByAffinity(seed, "ws-model", "default")
+	_, found := service.GetPreferredChannelByAffinity(seed, "ws-model")
 	require.False(t, found)
 	seed.Set("channel_id", bound.Id)
 	service.RecordChannelAffinity(seed, bound.Id)
 	t.Cleanup(func() { service.ClearCurrentChannelAffinityCache(seed) })
 
 	strict := newSessionContext()
-	channel, apiErr := selectResponsesWSChannel(strict, "ws-model", &service.RetryParam{Ctx: strict, ModelName: "ws-model", TokenGroup: "default", Retry: common.GetPointer(0)})
+	channel, apiErr := selectResponsesWSChannel(strict, "ws-model", &service.RetryParam{Ctx: strict, ModelName: "ws-model", Retry: common.GetPointer(0)})
 	require.NotNil(t, apiErr)
 	assert.Nil(t, channel)
 	assert.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
 	assert.False(t, service.ShouldRetryRelayError(strict, apiErr, 2))
-	_, found = service.GetPreferredChannelByAffinity(seed, "ws-model", "default")
+	_, found = service.GetPreferredChannelByAffinity(seed, "ws-model")
 	assert.False(t, found, "an unusable binding is cleared unless keep_on_channel_disabled is set")
 
 	affinity.SessionMode = "prefer"
 	service.RecordChannelAffinity(seed, bound.Id)
 	prefer := newSessionContext()
-	channel, apiErr = selectResponsesWSChannel(prefer, "ws-model", &service.RetryParam{Ctx: prefer, ModelName: "ws-model", TokenGroup: "default", Retry: common.GetPointer(0)})
+	channel, apiErr = selectResponsesWSChannel(prefer, "ws-model", &service.RetryParam{Ctx: prefer, ModelName: "ws-model", Retry: common.GetPointer(0)})
 	require.Nil(t, apiErr)
 	require.NotNil(t, channel)
 	assert.Equal(t, fallback.Id, channel.Id)

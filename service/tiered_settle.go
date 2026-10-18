@@ -1,14 +1,10 @@
 package service
 
 import (
-	"net/http"
-
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/gin-gonic/gin"
 )
 
 // TieredResultWrapper wraps billingexpr.TieredResult for use at the service layer.
@@ -136,68 +132,6 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	}
 }
 
-func refreshTieredBillingGroup(relayInfo *relaycommon.RelayInfo) (*billingexpr.BillingSnapshot, error) {
-	if relayInfo == nil {
-		return nil, nil
-	}
-	snap := relayInfo.TieredBillingSnapshot
-	if snap == nil || snap.BillingMode != "tiered_expr" {
-		return nil, nil
-	}
-
-	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
-	if snap.GroupRatio == groupRatio {
-		return snap, nil
-	}
-
-	estimatedQuotaAfterGroup := snap.EstimatedQuotaBeforeGroup * groupRatio
-	estimatedQuota, err := billingexpr.QuotaRoundStrict(estimatedQuotaAfterGroup)
-	if err != nil {
-		return nil, err
-	}
-	snap.GroupRatio = groupRatio
-	snap.EstimatedQuotaAfterGroup = estimatedQuota
-	return snap, nil
-}
-
-// PrepareTieredBillingForSelectedGroup refreshes routing-dependent billing
-// state before an upstream attempt. An existing session reserves any higher
-// estimate before sending. If the initial group was free and skipped
-// pre-consume, switching to a paid group creates the session at that point.
-func PrepareTieredBillingForSelectedGroup(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
-	snap, err := refreshTieredBillingGroup(relayInfo)
-	if err != nil {
-		return types.NewErrorWithStatusCode(
-			err,
-			types.ErrorCodeModelPriceError,
-			http.StatusBadRequest,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
-	if snap == nil {
-		return nil
-	}
-	if snap.GroupRatio == 0 {
-		// Paid-to-free keeps FreeModel as-is: FreeModel means "pre-consume was
-		// skipped", which is not true once a session exists, and settlement
-		// already yields 0 for a zero group ratio.
-		return nil
-	}
-
-	// The selected group is paid; clear a FreeModel flag frozen when the
-	// initial group was free so downstream state stays consistent.
-	relayInfo.PriceData.FreeModel = false
-
-	if relayInfo.Billing == nil {
-		return PreConsumeBilling(c, snap.EstimatedQuotaAfterGroup, relayInfo)
-	}
-	if err := relayInfo.Billing.Reserve(snap.EstimatedQuotaAfterGroup); err != nil {
-		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-	}
-	relayInfo.FinalPreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
-	return nil
-}
-
 // TryTieredSettle checks if the request uses tiered_expr billing and, if so,
 // computes the actual quota using the captured BillingSnapshot. Returns:
 //   - ok=true, quota, result  when tiered billing applies
@@ -222,7 +156,7 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 	if err != nil {
 		quota = relayInfo.FinalPreConsumedQuota
 		if quota <= 0 {
-			quota = snap.EstimatedQuotaAfterGroup
+			quota = snap.EstimatedQuotaAfterChannel
 		}
 		return true, quota, nil
 	}
@@ -232,7 +166,7 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 	// (text, audio, WSS) consumes the returned quota. First non-nil wins.
 	noteQuotaClamp(relayInfo, tr.Clamp)
 
-	return true, tr.ActualQuotaAfterGroup, &tr
+	return true, tr.ActualQuotaAfterChannel, &tr
 }
 
 // A failed evaluation retains the reservation and its estimated billing unit.

@@ -8,9 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -134,19 +132,10 @@ func TestRequestPolicyRoutingDatabaseMatrix(t *testing.T) {
 				}
 			}
 			db := modelManagementDB(t, dialect.kind, dsn)
-			previousGroups := setting.UserUsableGroups2JSONString()
-			previousRatios, err := common.Marshal(ratio_setting.GetGroupRatioCopy())
-			require.NoError(t, err)
-			require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default"}`))
-			require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1}`))
-			t.Cleanup(func() {
-				require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousGroups))
-				require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(string(previousRatios)))
-			})
-			// Channel 1 holds the session binding but is no longer usable.
+
 			channels := []model.Channel{
-				{Id: 1, Name: "A", Type: 1, Key: "test-only", Status: common.ChannelStatusAutoDisabled, Models: "policy-test", Group: "default", Priority: common.GetPointer(int64(10))},
-				{Id: 2, Name: "B", Type: 1, Key: "test-only", Status: common.ChannelStatusEnabled, Models: "policy-test", Group: "default", Priority: common.GetPointer(int64(5))},
+				{Id: 1, Name: "A", Type: 1, Key: "test-only", Status: common.ChannelStatusAutoDisabled, Models: "policy-test", Priority: common.GetPointer(int64(10))},
+				{Id: 2, Name: "B", Type: 1, Key: "test-only", Status: common.ChannelStatusEnabled, Models: "policy-test", Priority: common.GetPointer(int64(5))},
 			}
 			for i := range channels {
 				require.NoError(t, db.Create(&channels[i]).Error)
@@ -179,24 +168,24 @@ func TestRequestPolicyRoutingDatabaseMatrix(t *testing.T) {
 							*affinity = snapshot.Affinity
 							seed := newPinRetryContext()
 							seed.Request.Header.Set("X-Session", t.Name())
-							_, found := service.GetPreferredChannelByAffinity(seed, "policy-test", "default")
+							_, found := service.GetPreferredChannelByAffinity(seed, "policy-test")
 							require.False(t, found)
 							seed.Set("channel_id", 1)
 							service.RecordChannelAffinity(seed, 1)
 							t.Cleanup(func() { service.ClearCurrentChannelAffinityCache(seed) })
-							bound, found := service.GetPreferredChannelByAffinity(seed, "policy-test", "default")
+							bound, found := service.GetPreferredChannelByAffinity(seed, "policy-test")
 							require.True(t, found)
 							require.Equal(t, 1, bound)
 
 							request := newPinRetryContext()
+							request.Set("id", 1)
 							request.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"policy-test"}`))
 							request.Request.Header.Set("Content-Type", "application/json")
 							request.Request.Header.Set("X-Session", t.Name())
-							common.SetContextKey(request, constant.ContextKeyUsingGroup, "default")
 							middleware.Distribute()(request)
 							events := service.RequestPolicy(request).Events()
 							assert.True(t, slices.ContainsFunc(events, func(event service.PolicyEvent) bool { return event.Decision.Reason == "session_rule_matched" }), "decision events are recorded for every request")
-							bound, found = service.GetPreferredChannelByAffinity(seed, "policy-test", "default")
+							bound, found = service.GetPreferredChannelByAffinity(seed, "policy-test")
 							if tc.blocked {
 								assert.Equal(t, http.StatusServiceUnavailable, request.Writer.Status())
 								assert.True(t, request.IsAborted())

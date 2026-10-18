@@ -34,7 +34,7 @@ func TestAuthLogoutRejectsRefreshCookieSessionMismatch(t *testing.T) {
 
 	user := &model.User{
 		Username: "logout-mismatch-user", Password: "unused", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Status: common.UserStatusEnabled, AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(user).Error)
 	sessionA, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "agent-a")
@@ -132,7 +132,7 @@ func TestSessionLimitDoesNotRecordRejectedLoginAsSuccessful(t *testing.T) {
 	const previousLastLoginAt = int64(123)
 	user := &model.User{
 		Username: "rejected-login-audit-user", Password: "unused", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, LastLoginAt: previousLastLoginAt,
+		Status: common.UserStatusEnabled, AuthVersion: 1, LastLoginAt: previousLastLoginAt,
 	}
 	require.NoError(t, db.Create(user).Error)
 	now := time.Now().Unix()

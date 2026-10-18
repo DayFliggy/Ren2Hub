@@ -66,17 +66,16 @@ if redis.call('EXISTS', KEYS[2]) == 1 then
   return 0
 end
 if redis.call('EXISTS', KEYS[1]) == 1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[18])
+  redis.call('EXPIRE', KEYS[1], ARGV[15])
   return 2
 end
 redis.call('HSET', KEYS[1],
   'Id', ARGV[1], 'UserId', ARGV[2], 'Status', ARGV[3], 'Name', ARGV[4],
   'CreatedTime', ARGV[5], 'AccessedTime', ARGV[6], 'ExpiredTime', ARGV[7],
   'UnlimitedQuota', ARGV[8], 'ModelLimitsEnabled', ARGV[9], 'ModelLimits', ARGV[10],
-  'AllowIps', ARGV[11], 'Group', ARGV[12], 'CrossGroupRetry', ARGV[13],
-  'AutoGroups', ARGV[14], 'RemainQuota', ARGV[15], 'UsedQuota', ARGV[16],
-  'AllowUserQuotaQuery', ARGV[17])
-redis.call('EXPIRE', KEYS[1], ARGV[18])
+  'AllowIps', ARGV[11], 'RemainQuota', ARGV[12], 'UsedQuota', ARGV[13],
+  'AllowUserQuotaQuery', ARGV[14])
+redis.call('EXPIRE', KEYS[1], ARGV[15])
 return 1`
 
 	return common.RDB.Eval(context.Background(), script, []string{
@@ -85,8 +84,7 @@ return 1`
 		token.Id, token.UserId, token.Status, token.Name,
 		token.CreatedTime, token.AccessedTime, token.ExpiredTime,
 		strconv.FormatBool(token.UnlimitedQuota), strconv.FormatBool(token.ModelLimitsEnabled),
-		token.ModelLimits, allowIps, token.Group, strconv.FormatBool(token.CrossGroupRetry),
-		token.AutoGroups, token.RemainQuota, token.UsedQuota,
+		token.ModelLimits, allowIps, token.RemainQuota, token.UsedQuota,
 		strconv.FormatBool(token.AllowUserQuotaQuery),
 		tokenCacheTTLSeconds(),
 	).Int()

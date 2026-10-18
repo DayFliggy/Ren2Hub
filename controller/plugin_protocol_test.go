@@ -367,7 +367,7 @@ type terminalSettlementPollingAdaptor struct {
 
 func (a *terminalSettlementPollingAdaptor) Init(*relaycommon.RelayInfo) {}
 
-func (a *terminalSettlementPollingAdaptor) FetchTask(string, string, *model.Task, string) (*http.Response, error) {
+func (a *terminalSettlementPollingAdaptor) FetchTask(context.Context, string, string, *model.Task, string) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader(`{}`)),
@@ -1482,8 +1482,8 @@ func newPluginProtocolTestContext(stream, requestBodyStream bool) (*gin.Context,
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{}`))
 	common.SetContextKey(c, constant.ContextKeyUserId, 71)
+	common.SetContextKey(c, constant.ContextKeyUserQuota, 1_000_000)
 	common.SetContextKey(c, constant.ContextKeyTokenId, 81)
-	common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
 	c.Set("resolved_task_model", "video-model")
 	c.Set(pluginruntime.ContextKeyProtocolRequest, pluginruntime.ProtocolRequestContext{
 		RouteRequestContext: pluginruntime.RouteRequestContext{
@@ -1637,8 +1637,8 @@ func newImageProtocolTestContext(responseFormat string) (*gin.Context, *httptest
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{}`))
 	common.SetContextKey(c, constant.ContextKeyUserId, 71)
+	common.SetContextKey(c, constant.ContextKeyUserQuota, 1_000_000)
 	common.SetContextKey(c, constant.ContextKeyTokenId, 81)
-	common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
 	c.Set("resolved_task_model", "image-model")
 	value := map[string]any{"model": "image-model", "prompt": "a cat", "n": 2}
 	if responseFormat != "" {

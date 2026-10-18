@@ -41,6 +41,15 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // Casbin-guarded routes declare themselves through
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
+	"GET /api/user/model-catalog":                accessTokenScopeRule("profile:read"),
+	"GET /api/data/self/summary":                 accessTokenScopeRule("usage:read"),
+	"GET /api/performance/routing":               accessTokenScopeRule("ops:read"),
+	"GET /api/admin/affiliate/records":           accessTokenScopeRule("user:read"),
+	"GET /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:read"),
+	"PUT /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:write"),
+	"GET /api/user/topup/stats":                  accessTokenScopeRule("topup:read"),
+	"GET /api/user/topup/admin/detail/:trade_no": accessTokenScopeRule("topup:read"),
+
 	// router/api-router.go: top level
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
@@ -62,7 +71,6 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/user/sessions":                       accessTokenSessionRule,
 	"DELETE /api/user/sessions/:sid":               accessTokenSessionRule,
 	"POST /api/user/sessions/revoke-others":        accessTokenSessionRule,
-	"GET /api/user/self/groups":                    accessTokenScopeRule("profile:read"),
 	"GET /api/user/self":                           accessTokenScopeRule("profile:read"),
 	"GET /api/user/models":                         accessTokenScopeRule("profile:read"),
 	"PUT /api/user/self":                           accessTokenScopeRule("profile:write"),
@@ -147,6 +155,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/custom-oauth-provider/":          accessTokenScopeRule("option:write"),
 	"PUT /api/custom-oauth-provider/:id":        accessTokenScopeRule("option:write"),
 	"DELETE /api/custom-oauth-provider/:id":     accessTokenScopeRule("option:write"),
+	"GET /api/ratio_sync/sources":               accessTokenScopeRule("option:read"),
 	"GET /api/ratio_sync/channels":              accessTokenScopeRule("option:read"),
 	"POST /api/ratio_sync/fetch":                accessTokenScopeRule("option:write"),
 
@@ -187,7 +196,6 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/api-router.go: /api/token
 	"GET /api/token/":            accessTokenScopeRule("api_key:read"),
 	"GET /api/token/search":      accessTokenScopeRule("api_key:read"),
-	"GET /api/token/auto-groups": accessTokenScopeRule("api_key:read"),
 	"GET /api/token/:id":         accessTokenScopeRule("api_key:read"),
 	"POST /api/token/:id/key":    accessTokenScopeRule("api_key:reveal"),
 	"POST /api/token/":           accessTokenScopeRule("api_key:write"),
@@ -224,7 +232,6 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/data/flow/self":                   accessTokenScopeRule("usage:read"),
 
 	// router/api-router.go: /api/group, /api/prefill_group
-	"GET /api/group/":               accessTokenScopeRule("group:read"),
 	"GET /api/prefill_group/":       accessTokenScopeRule("group:read"),
 	"POST /api/prefill_group/":      accessTokenScopeRule("group:write"),
 	"PUT /api/prefill_group/":       accessTokenScopeRule("group:write"),

@@ -710,7 +710,7 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	assert.Empty(t, recorder.Body.String(), "response parsing must not write before the durable task barrier")
 	assert.Equal(t, map[string]float64{"seconds": 7}, adaptor.AdjustBillingOnSubmit(info, []byte(`{"seconds":7}`)))
 
-	queryResp, err := adaptor.FetchTask(server.URL, "secret", &model.Task{
+	queryResp, err := adaptor.FetchTask(context.Background(), server.URL, "secret", &model.Task{
 		Action:      info.Action,
 		PrivateData: model.TaskPrivateData{UpstreamTaskID: parsed.UpstreamTaskID},
 	}, "")
@@ -1439,7 +1439,7 @@ func TestTaskAdaptorBatchBridge(t *testing.T) {
 		{PrivateData: model.TaskPrivateData{UpstreamTaskID: "task-a"}},
 		{PrivateData: model.TaskPrivateData{UpstreamTaskID: "task-b"}},
 	}
-	resp, err := adaptor.FetchBatchTasks(server.URL, "secret", tasks, "")
+	resp, err := adaptor.FetchBatchTasks(context.Background(), server.URL, "secret", tasks, "")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	payload, err := io.ReadAll(resp.Body)
@@ -1566,7 +1566,7 @@ export function parseTaskResult(){return {status:"SUCCESS"}}
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			resp, fetchErr := adaptor.FetchTask(server.URL, "secret", testCase.task, "")
+			resp, fetchErr := adaptor.FetchTask(context.Background(), server.URL, "secret", testCase.task, "")
 			require.NoError(t, fetchErr)
 			require.NoError(t, resp.Body.Close())
 			assert.Equal(t, testCase.want, requested)
@@ -1622,7 +1622,7 @@ export function parseTaskResult(ctx, body, response){
 			PluginState:    []byte(`{"req_key":"kept"}`),
 		},
 	}
-	resp, err := adaptor.FetchTask(server.URL, "secret", task, "")
+	resp, err := adaptor.FetchTask(context.Background(), server.URL, "secret", task, "")
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
@@ -1710,7 +1710,7 @@ export function parseBatchResult(){return [];}
 		{Properties: model.Properties{OriginModelName: "model-a"}, PrivateData: model.TaskPrivateData{UpstreamTaskID: "task-a"}},
 		{Properties: model.Properties{OriginModelName: "model-b"}, PrivateData: model.TaskPrivateData{UpstreamTaskID: "task-b"}},
 	}
-	resp, err := adaptor.FetchBatchTasks(server.URL, "secret", tasks, "")
+	resp, err := adaptor.FetchBatchTasks(context.Background(), server.URL, "secret", tasks, "")
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, []any{"task-a", "task-b"}, captured["ids"])
@@ -2332,7 +2332,7 @@ func TestTaskAdaptorChainsDoubaoThroughNewAPIUpstream(t *testing.T) {
 		Properties:  model.Properties{OriginModelName: modelName, UpstreamModelName: modelName},
 		PrivateData: model.TaskPrivateData{UpstreamTaskID: parsed.UpstreamTaskID},
 	}
-	queryResp, err := adaptor.FetchTask(gateway.URL, "sk-gateway", task, "")
+	queryResp, err := adaptor.FetchTask(context.Background(), gateway.URL, "sk-gateway", task, "")
 	require.NoError(t, err)
 	queryBody, err := io.ReadAll(queryResp.Body)
 	require.NoError(t, err)
@@ -2390,7 +2390,7 @@ func TestTaskAdaptorChainsSunoBatchFetchThroughNewAPIUpstream(t *testing.T) {
 		Properties:  model.Properties{OriginModelName: "suno_music", UpstreamModelName: "suno_music"},
 		PrivateData: model.TaskPrivateData{UpstreamTaskID: parsed.UpstreamTaskID},
 	}
-	batchResp, err := adaptor.FetchBatchTasks(gateway.URL, "sk-gateway", []*model.Task{task}, "")
+	batchResp, err := adaptor.FetchBatchTasks(context.Background(), gateway.URL, "sk-gateway", []*model.Task{task}, "")
 	require.NoError(t, err)
 	batchBody, err := io.ReadAll(batchResp.Body)
 	require.NoError(t, err)

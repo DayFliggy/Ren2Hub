@@ -40,12 +40,7 @@ func GmpayPay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment method is unavailable"))
 		return
 	}
-	group, err := model.GetUserGroup(c.GetInt("id"), true)
-	if err != nil {
-		paymentError(c, common.NewMessage("Failed to get the user group"))
-		return
-	}
-	money := getPayMoney(request.Amount, group)
+	money := getPayMoney(request.Amount)
 	if math.IsNaN(money) || math.IsInf(money, 0) || money <= 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return

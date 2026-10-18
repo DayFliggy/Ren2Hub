@@ -34,20 +34,20 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 		return TieredResult{}, err
 	}
 
-	quotaBeforeGroup := quotaConversion(cost, snap)
-	afterGroup, clamp := common.QuotaRoundChecked(quotaBeforeGroup * snap.GroupRatio)
+	quotaBeforeChannel := quotaConversion(cost, snap)
+	afterChannel, clamp := common.QuotaRoundChecked(quotaBeforeChannel * snap.ChannelRatio)
 	crossed := trace.MatchedTier != snap.EstimatedTier
 
 	result := TieredResult{
-		ImageCount:             trace.ImageCount,
-		BillingUnit:            trace.BillingUnit,
-		FixedPrice:             trace.FixedPrice,
-		ActualQuotaBeforeGroup: quotaBeforeGroup,
-		ActualQuotaAfterGroup:  afterGroup,
-		MatchedTier:            trace.MatchedTier,
-		RequestRules:           trace.RequestRules,
-		CrossedTier:            crossed,
-		Clamp:                  clamp,
+		ImageCount:               trace.ImageCount,
+		BillingUnit:              trace.BillingUnit,
+		FixedPrice:               trace.FixedPrice,
+		ActualQuotaBeforeChannel: quotaBeforeChannel,
+		ActualQuotaAfterChannel:  afterChannel,
+		MatchedTier:              trace.MatchedTier,
+		RequestRules:             trace.RequestRules,
+		CrossedTier:              crossed,
+		Clamp:                    clamp,
 	}
 	if trace.BillingUnit == BillingUnitToken && UsedVarsByHash(snap.ExprString, snap.ExprHash)["img_cr"] {
 		result.BillingTokens = &params

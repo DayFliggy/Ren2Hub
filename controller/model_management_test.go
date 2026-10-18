@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -464,7 +465,7 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 					}
 				})
 			}
-			sora := &model.Channel{Name: "Opaque video route", Models: "opaque-video-route", Type: constant.ChannelTypeSora, Group: "a,b"}
+			sora := &model.Channel{Name: "Opaque video route", Models: "opaque-video-route", Type: constant.ChannelTypeSora}
 			require.NoError(t, sora.Insert())
 			video, err := model.PreviewModelPricingConversion("opaque-video-route", model.PricingValues{"ModelPrice": 1.0})
 			require.NoError(t, err)
@@ -512,9 +513,9 @@ export function parseTaskResult() { return {}; }
 					require.NoError(t, records[i].Insert())
 					ids = append(ids, records[i].Id)
 				}
-				active := model.Channel{Name: "Square active", Type: 1, Key: "fixture", Group: "default", Status: common.ChannelStatusEnabled,
+				active := model.Channel{Name: "Square active", Type: 1, Key: "fixture", Status: common.ChannelStatusEnabled,
 					Models: "square-visible,square-hidden,square-bare,square-partial-on,square-partial-hidden,square-hidden-child,square-hidden-override,square-prefix-ending,square-contains-ending"}
-				inactive := model.Channel{Name: "Square inactive", Type: 1, Key: "fixture", Group: "default", Status: common.ChannelStatusManuallyDisabled,
+				inactive := model.Channel{Name: "Square inactive", Type: 1, Key: "fixture", Status: common.ChannelStatusManuallyDisabled,
 					Models: "square-disabled,square-partial-off,square-off-child"}
 				for _, channel := range []*model.Channel{&active, &inactive} {
 					require.NoError(t, channel.Insert())
@@ -668,8 +669,8 @@ export function parseTaskResult() { return {}; }
 				for _, item := range []*model.Model{&exact, &catalog, &rule} {
 					require.NoError(t, item.Insert())
 				}
-				active := model.Channel{Name: "Listing active", Type: 1, Key: "fixture", Models: "listing-exact, listing-new,listing-rule-child,listing-new, ,", Group: "default", Status: common.ChannelStatusEnabled}
-				inactive := model.Channel{Name: "Listing inactive", Type: 1, Key: "fixture", Models: "listing-new,listing-disabled", Group: "default", Status: common.ChannelStatusManuallyDisabled}
+				active := model.Channel{Name: "Listing active", Type: 1, Key: "fixture", Models: "listing-exact, listing-new,listing-rule-child,listing-new, ,", Status: common.ChannelStatusEnabled}
+				inactive := model.Channel{Name: "Listing inactive", Type: 1, Key: "fixture", Models: "listing-new,listing-disabled", Status: common.ChannelStatusManuallyDisabled}
 				for _, channel := range []*model.Channel{&active, &inactive} {
 					require.NoError(t, channel.Insert())
 				}
@@ -910,16 +911,17 @@ export function parseTaskResult() { return {}; }
 				disabled := model.Channel{Name: "Disabled route", Type: 1, Status: common.ChannelStatusManuallyDisabled}
 				require.NoError(t, db.Create(&active).Error)
 				require.NoError(t, db.Create(&disabled).Error)
+				inactiveRoute := model.Channel{Name: "Inactive ability", Type: 1, Status: common.ChannelStatusEnabled}
+				require.NoError(t, db.Create(&inactiveRoute).Error)
 				require.NoError(t, db.Create(&[]model.Ability{
-					{Model: "matrix-hidden-unpriced", Group: "available", ChannelId: active.Id, Enabled: true},
-					{Model: "matrix-hidden-unpriced", Group: "disabled", ChannelId: disabled.Id, Enabled: true},
-					{Model: "matrix-hidden-unpriced", Group: "inactive", ChannelId: active.Id, Enabled: false},
+					{Model: "matrix-hidden-unpriced", ChannelId: active.Id, Enabled: true},
+					{Model: "matrix-hidden-unpriced", ChannelId: disabled.Id, Enabled: true},
+					{Model: "matrix-hidden-unpriced", ChannelId: inactiveRoute.Id, Enabled: false},
 				}).Error)
 				exact := &model.Model{ModelName: "matrix-hidden-unpriced", Status: 0, SyncOfficial: 0}
 				require.NoError(t, exact.Insert())
 				rule := &model.Model{ModelName: "matrix-hidden-", NameRule: model.NameRulePrefix}
 				enrichModels([]*model.Model{exact, rule})
-				assert.Equal(t, []string{"available"}, exact.EnableGroups)
 				assert.Equal(t, []model.BoundChannel{{Name: "Active route", Type: 1}}, exact.BoundChannels)
 				assert.Equal(t, []string{"matrix-hidden-unpriced"}, rule.MatchedModels)
 				assert.Empty(t, exact.Endpoints, "inferred endpoints must not become stored configuration")
@@ -952,7 +954,7 @@ export function parseTaskResult() { return {}; }
 				require.NoError(t, local.Insert())
 				blocked := &model.Model{ModelName: "matrix-blocked", Status: 1, SyncOfficial: 0}
 				require.NoError(t, blocked.Insert())
-				require.NoError(t, db.Create(&model.Ability{Model: "matrix-new", Group: "default", ChannelId: 1, Enabled: true}).Error)
+				require.NoError(t, db.Create(&model.Ability{Model: "matrix-new", ChannelId: 1, Enabled: true}).Error)
 				var revision atomic.Int32
 				var failVendors atomic.Bool
 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1086,7 +1088,7 @@ func TestVendorManagementDatabaseMatrix(t *testing.T) {
 			t.Run("pricing_reads_keep_default_brands_without_writing_vendors", func(t *testing.T) {
 				channel := model.Channel{Name: "Vendor fixture", Type: 1, Status: common.ChannelStatusEnabled}
 				require.NoError(t, db.Create(&channel).Error)
-				require.NoError(t, db.Create(&model.Ability{Model: "gemini-vendor-fixture", Group: "default", ChannelId: channel.Id, Enabled: true}).Error)
+				require.NoError(t, db.Create(&model.Ability{Model: "gemini-vendor-fixture", ChannelId: channel.Id, Enabled: true}).Error)
 				model.RefreshPricing()
 				model.GetPricing()
 				vendors := model.GetVendors()
@@ -1137,7 +1139,7 @@ func TestVendorManagementDatabaseMatrix(t *testing.T) {
 				require.NoError(t, err)
 				channel := model.Channel{Name: "Unchanged vendor channel", Type: 1, Status: common.ChannelStatusEnabled}
 				require.NoError(t, db.Create(&channel).Error)
-				ability := model.Ability{Model: one.ModelName, Group: "default", ChannelId: channel.Id, Enabled: true}
+				ability := model.Ability{Model: one.ModelName, ChannelId: channel.Id, Enabled: true}
 				require.NoError(t, db.Create(&ability).Error)
 				linked, total, err := model.SearchVendors("", 0, 20, "linked")
 				require.NoError(t, err)
@@ -1256,7 +1258,7 @@ func TestVendorManagementDatabaseMatrix(t *testing.T) {
 				assert.Equal(t, channel.Status, retainedChannel.Status)
 				var retainedAbility model.Ability
 				require.NoError(t, db.Where("model = ? AND channel_id = ?", one.ModelName, channel.Id).First(&retainedAbility).Error)
-				assert.Equal(t, ability.Group, retainedAbility.Group)
+				assert.Equal(t, ability.Enabled, retainedAbility.Enabled)
 				assert.Equal(t, ability.Enabled, retainedAbility.Enabled)
 			})
 			t.Run("concurrent_create_and_delete_never_orphan_model", func(t *testing.T) {
@@ -1301,7 +1303,7 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 			}
 			metadataOnly := model.Model{ModelName: "metadata-only", Status: 1}
 			require.NoError(t, metadataOnly.Insert())
-			channel := model.Channel{Name: "Retained channel", Type: 1, Key: "fixture-key", Models: metadataOnly.ModelName, Group: "default", Status: common.ChannelStatusEnabled}
+			channel := model.Channel{Name: "Retained channel", Type: 1, Key: "fixture-key", Models: metadataOnly.ModelName, Status: common.ChannelStatusEnabled}
 			require.NoError(t, db.Create(&channel).Error)
 			require.NoError(t, channel.UpdateAbilities(db))
 			recorder := modelManagementRequest(t, func(c *gin.Context) {
@@ -1327,10 +1329,10 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 					mapping := `{"` + name + `":"upstream-name"}`
 					priority, weight := int64(7), uint(9)
 					channels := []model.Channel{
-						{Name: "Enabled", Type: 1, Key: "fixture-key", Models: name + "," + name + "-keep," + second.ModelName, Group: "default,vip", Status: common.ChannelStatusEnabled, ModelMapping: &mapping, Priority: &priority, Weight: &weight},
-						{Name: "Disabled", Type: 1, Models: name + ",prefix-" + name, Group: "disabled-group", Status: common.ChannelStatusManuallyDisabled},
-						{Name: "Last model", Type: 1, Models: name, Group: "last-model-group", Status: common.ChannelStatusEnabled},
-						{Name: "Case-sensitive name", Type: 1, Models: strings.ToUpper(name), Group: "case-group", Status: common.ChannelStatusEnabled},
+						{Name: "Enabled", Type: 1, Key: "fixture-key", Models: name + "," + name + "-keep," + second.ModelName, Status: common.ChannelStatusEnabled, ModelMapping: &mapping, Priority: &priority, Weight: &weight},
+						{Name: "Disabled", Type: 1, Models: name + ",prefix-" + name, Status: common.ChannelStatusManuallyDisabled},
+						{Name: "Last model", Type: 1, Models: name, Status: common.ChannelStatusEnabled},
+						{Name: "Case-sensitive name", Type: 1, Models: strings.ToUpper(name), Status: common.ChannelStatusEnabled},
 					}
 					for i := range channels {
 						require.NoError(t, db.Create(&channels[i]).Error)
@@ -1338,9 +1340,9 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 					}
 					common.MemoryCacheEnabled = true
 					model.InitChannelCache()
-					cached, err := model.GetRandomSatisfiedChannel("default", name, 0, nil)
+					cached, err := model.RouteChannelRows(context.Background(), name, nil)
 					require.NoError(t, err)
-					require.NotNil(t, cached)
+					require.NotEmpty(t, cached)
 					baseline, err := model.GetModelPricingSnapshot([]string{name})
 					require.NoError(t, err)
 					require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: baseline.EmptyVersion, Pricing: model.PricingValues{"ModelPrice": float64(2)}}}))
@@ -1378,9 +1380,9 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 						require.NoError(t, db.First(&after, original.Id).Error)
 						assert.Equal(t, original, after)
 					}
-					cached, err = model.GetRandomSatisfiedChannel("default", name, 0, nil)
+					cached, err = model.RouteChannelRows(context.Background(), name, nil)
 					require.NoError(t, err)
-					require.NotNil(t, cached)
+					require.NotEmpty(t, cached)
 					recorder := modelManagementRequest(t, BatchDeleteModelMeta, http.MethodPost, "/api/models/delete", body, &response)
 					require.True(t, response.Success, recorder.Body.String())
 					assert.Equal(t, model.ModelDeleteResult{DeletedCount: 2, UpdatedChannels: 3}, response.Data)
@@ -1392,7 +1394,7 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 					}
 					var abilities []model.Ability
 					require.NoError(t, db.Where("channel_id IN ?", []int{channels[0].Id, channels[1].Id, channels[2].Id, channels[3].Id}).Find(&abilities).Error)
-					assert.Len(t, abilities, 4)
+					assert.Len(t, abilities, 3)
 					for _, ability := range abilities {
 						assert.NotEqual(t, name, ability.Model)
 						assert.NotEqual(t, second.ModelName, ability.Model)
@@ -1406,13 +1408,12 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 							assert.False(t, ability.Enabled)
 						}
 					}
-					for _, group := range []string{"default", "vip", "last-model-group"} {
-						cached, _ = model.GetRandomSatisfiedChannel(group, name, 0, nil)
-						assert.Nil(t, cached)
-					}
-					cached, err = model.GetRandomSatisfiedChannel("default", name+"-keep", 0, nil)
+					cached, err = model.RouteChannelRows(context.Background(), name, nil)
 					require.NoError(t, err)
-					require.NotNil(t, cached)
+					assert.Empty(t, cached)
+					cached, err = model.RouteChannelRows(context.Background(), name+"-keep", nil)
+					require.NoError(t, err)
+					require.NotEmpty(t, cached)
 					pricingAfter, err := model.GetModelPricingSnapshot([]string{name, second.ModelName})
 					require.NoError(t, err)
 					assert.Equal(t, pricingBefore, pricingAfter)
@@ -1428,7 +1429,7 @@ func TestModelDeletionDatabaseMatrix(t *testing.T) {
 					metadata := model.Model{ModelName: name, NameRule: model.NameRuleExact, Status: 1}
 					require.NoError(t, metadata.Insert())
 					keep := name + "-keep"
-					channel := model.Channel{Name: "Independent pricing removal", Type: 1, Models: name + "," + keep, Group: "pricing-removal", Status: common.ChannelStatusEnabled}
+					channel := model.Channel{Name: "Independent pricing removal", Type: 1, Models: name + "," + keep, Status: common.ChannelStatusEnabled}
 					require.NoError(t, db.Create(&channel).Error)
 					require.NoError(t, channel.UpdateAbilities(db))
 					model.InitChannelCache()

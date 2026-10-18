@@ -414,7 +414,7 @@ func TestSecurityLoginPasskeyCannotCompleteAnotherChallenge(t *testing.T) {
 			require.NoError(t, err)
 			passkeyToken, challenge := beginSecurityLoginPasskey(t, first.FlowToken)
 			if otherUser {
-				user = &model.User{Username: "other-login", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "other-login", AuthVersion: 1}
+				user = &model.User{Username: "other-login", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "other-login", AuthVersion: 1}
 				require.NoError(t, model.DB.Create(user).Error)
 				newSecurityLoginPasskey(t, user.Id)
 			}
@@ -931,7 +931,7 @@ func TestOAuthLoginLegacyGitHubBindingRequiresAccountEvidence(t *testing.T) {
 			previousRegister := common.RegisterEnabled
 			common.RegisterEnabled = test.registerEnabled
 			t.Cleanup(func() { common.RegisterEnabled = previousRegister })
-			existing := &model.User{Username: "legacy-github", Email: "legacy-github@example.com", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "legacy-github", AuthVersion: 1, GitHubId: test.existingGitHubID}
+			existing := &model.User{Username: "legacy-github", Email: "legacy-github@example.com", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "legacy-github", AuthVersion: 1, GitHubId: test.existingGitHubID}
 			if test.withoutEmail {
 				existing.Email = ""
 			}
@@ -992,7 +992,7 @@ func TestOAuthLoginLegacyGitHubBindingMigratesAfterLoginVerification(t *testing.
 	for _, interference := range []string{"none", "pending id claimed by another account", "binding relinked meanwhile"} {
 		t.Run(interference, func(t *testing.T) {
 			setupSecurityEnrollmentTest(t)
-			existing := &model.User{Username: "legacy-github", Email: "legacy-github@example.com", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "legacy-github", AuthVersion: 1, GitHubId: "octocat-legacy"}
+			existing := &model.User{Username: "legacy-github", Email: "legacy-github@example.com", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "legacy-github", AuthVersion: 1, GitHubId: "octocat-legacy"}
 			require.NoError(t, model.DB.Create(existing).Error)
 			factor := &model.TwoFA{UserId: existing.Id, Secret: "JBSWY3DPEHPK3PXP", IsEnabled: true}
 			require.NoError(t, model.DB.Create(factor).Error)
@@ -1017,7 +1017,7 @@ func TestOAuthLoginLegacyGitHubBindingMigratesAfterLoginVerification(t *testing.
 			expectedGitHubID, expectLogin := "900001", true
 			switch interference {
 			case "pending id claimed by another account":
-				other := &model.User{Username: "other-github", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "other-github", AuthVersion: 1, GitHubId: "900001"}
+				other := &model.User{Username: "other-github", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "other-github", AuthVersion: 1, GitHubId: "900001"}
 				require.NoError(t, model.DB.Create(other).Error)
 				expectedGitHubID, expectLogin = "octocat-legacy", false
 			case "binding relinked meanwhile":
@@ -1085,7 +1085,7 @@ func TestOAuthBindIgnoresLegacyGitHubUsernames(t *testing.T) {
 			if test.ownGitHubID != "" {
 				require.NoError(t, model.DB.Model(user).Update("github_id", test.ownGitHubID).Error)
 			}
-			other := &model.User{Username: "other-github", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "other-github", AuthVersion: 1, GitHubId: test.otherGitHubID}
+			other := &model.User{Username: "other-github", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "other-github", AuthVersion: 1, GitHubId: test.otherGitHubID}
 			require.NoError(t, model.DB.Create(other).Error)
 			const slug = "github-legacy-bind-test"
 			oauth.Register(slug, &legacyGitHubOAuthProvider{providerUserID: "900001", legacyID: test.legacyID})

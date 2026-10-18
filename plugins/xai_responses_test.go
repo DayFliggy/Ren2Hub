@@ -109,7 +109,7 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 	assert.Equal(t, "720p", trace.MatchedTier)
 	snapshot := &billingexpr.BillingSnapshot{
 		BillingMode: billing_setting.BillingModeTieredExpr, ModelName: videoModel, ExprString: expression, ExprHash: billingexpr.ExprHashString(expression),
-		GroupRatio: 1, QuotaPerUnit: 500000, ExprVersion: billingexpr.ExprVersion(expression), TaskUsageBilling: true, UsageFacts: facts,
+		ChannelRatio: 1, QuotaPerUnit: 500000, ExprVersion: billingexpr.ExprVersion(expression), TaskUsageBilling: true, UsageFacts: facts,
 	}
 
 	for _, tc := range []struct {
@@ -182,7 +182,7 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 			settled, _, err := service.EvaluateTaskCompletionUsage(snapshot, result.UsageFacts)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTier, settled.MatchedTier)
-			assert.Equal(t, tc.wantQuota, settled.ActualQuotaAfterGroup)
+			assert.Equal(t, tc.wantQuota, settled.ActualQuotaAfterChannel)
 
 			task.Status = model.TaskStatusSuccess
 			artifacts, err := adaptor.ListArtifacts(task)
@@ -440,7 +440,7 @@ func TestXAIEditSettlesOnOutputResolution(t *testing.T) {
 	assert.Equal(t, map[string]any{"seconds": float64(6), "resolution": "720p", "input_images": float64(0), "input_video_seconds": float64(15), "moderated": false}, reserved)
 	snapshot := &billingexpr.BillingSnapshot{
 		BillingMode: billing_setting.BillingModeTieredExpr, ModelName: videoModel, ExprString: expression, ExprHash: billingexpr.ExprHashString(expression),
-		GroupRatio: 1, QuotaPerUnit: 500000, ExprVersion: billingexpr.ExprVersion(expression), TaskUsageBilling: true, UsageFacts: reserved,
+		ChannelRatio: 1, QuotaPerUnit: 500000, ExprVersion: billingexpr.ExprVersion(expression), TaskUsageBilling: true, UsageFacts: reserved,
 	}
 
 	for _, tc := range []struct {
@@ -476,7 +476,7 @@ func TestXAIEditSettlesOnOutputResolution(t *testing.T) {
 			settled, _, err := service.EvaluateTaskCompletionUsage(snapshot, result.UsageFacts)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTier, settled.MatchedTier)
-			assert.Equal(t, tc.wantQuota, settled.ActualQuotaAfterGroup)
+			assert.Equal(t, tc.wantQuota, settled.ActualQuotaAfterChannel)
 		})
 	}
 	moov := len(ftyp) + len(mdat)

@@ -39,8 +39,7 @@ func setupGenericTaskTest(t *testing.T) *model.Task {
 
 	require.NoError(t, database.Create(&model.User{
 		Id: 7, Username: "artifact-owner", Status: common.UserStatusEnabled,
-		Role: common.RoleCommonUser, Group: "default",
-	}).Error)
+		Role: common.RoleCommonUser}).Error)
 	baseURL := "https://example.com"
 	require.NoError(t, database.Create(&model.Channel{
 		Id: 1, Name: "artifact", Key: "key", BaseURL: &baseURL, Status: common.ChannelStatusEnabled,
@@ -286,7 +285,7 @@ func TestTaskArtifactAccessRejectsAmbiguousHistoricalTaskID(t *testing.T) {
 	require.NoError(t, model.DB.Save(task).Error)
 	require.NoError(t, model.DB.Create(&model.User{
 		Id: 8, Username: "other-artifact-owner", Status: common.UserStatusEnabled,
-		Role: common.RoleCommonUser, Group: "default", AffCode: "artifact-owner-8",
+		Role: common.RoleCommonUser, AffCode: "artifact-owner-8",
 	}).Error)
 	require.NoError(t, model.DB.Create(&model.Task{
 		TaskID: task.TaskID, Platform: task.Platform, UserId: 8, ChannelId: task.ChannelId,

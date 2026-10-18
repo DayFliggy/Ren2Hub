@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -18,6 +19,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -56,7 +58,10 @@ func (b *nativeRouteBilling) GetPreConsumedQuota() int {
 
 func (b *nativeRouteBilling) Reserve(quota int) error {
 	b.events = append(b.events, "reserve")
-	if err := model.DecreaseUserQuota(b.userID, quota, true); err != nil {
+	if quota <= b.preConsumed {
+		return nil
+	}
+	if err := model.DecreaseUserQuota(b.userID, quota-b.preConsumed, true); err != nil {
 		return err
 	}
 	b.preConsumed = quota
@@ -75,7 +80,9 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	previousRedisEnabled := common.RedisEnabled
 	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}))
+	sqlDB, err := database.DB()
+	require.NoError(t, err)
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Task{}, &model.Log{}))
 	model.DB = database
 	model.LOG_DB = database
 	common.MemoryCacheEnabled = false
@@ -85,6 +92,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	previousModelRatios := ratio_setting.ModelRatio2JSONString()
 	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"kling-v1":1}`))
 	t.Cleanup(func() {
+		require.Eventually(t, func() bool { return gopool.WorkerCount() == 0 }, time.Second, time.Millisecond)
 		model.DB = previousDB
 		model.LOG_DB = previousLogDB
 		common.MemoryCacheEnabled = previousMemoryCache
@@ -92,11 +100,11 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 		common.LogConsumeEnabled = previousLogConsume
 		common.RedisEnabled = previousRedisEnabled
 		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(previousModelRatios))
+		require.NoError(t, sqlDB.Close())
 	})
 	require.NoError(t, database.Create(&model.User{
 		Id:       7,
 		Username: "native-route-user",
-		Group:    "default",
 		Quota:    1_000_000,
 	}).Error)
 
@@ -130,9 +138,9 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 		BaseURL: &upstream.URL,
 		Status:  common.ChannelStatusEnabled,
 		Models:  "kling-v1",
-		Group:   "default",
 	}
 	require.NoError(t, database.Create(&channel).Error)
+	require.NoError(t, database.Create(&model.Ability{ChannelId: channel.Id, Model: "kling-v1", Enabled: true}).Error)
 
 	generation := pluginruntime.DefaultRegistry.Generation()
 	require.NotNil(t, generation)
@@ -154,9 +162,6 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 		Route:      submitBinding.Route,
 	})
 	common.SetContextKey(submitContext, constant.ContextKeyUserId, 7)
-	common.SetContextKey(submitContext, constant.ContextKeyUserGroup, "default")
-	common.SetContextKey(submitContext, constant.ContextKeyUsingGroup, "default")
-	common.SetContextKey(submitContext, constant.ContextKeyTokenGroup, "default")
 	common.SetContextKey(submitContext, constant.ContextKeyUserQuota, 1_000_000)
 
 	middleware.PrepareTaskPluginRoute()(submitContext)
@@ -168,10 +173,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	billing := &nativeRouteBilling{userID: 7}
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          7,
-		UserGroup:       "default",
-		UsingGroup:      "default",
 		UserQuota:       1_000_000,
-		TokenGroup:      "default",
 		OriginModelName: "kling-v1",
 		Billing:         billing,
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
@@ -184,7 +186,11 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	outcome, taskErr := executeTaskSubmissionWith(submitContext, relayInfo, relay.RelayTaskSubmit)
 	require.Nil(t, taskErr)
 	require.NotNil(t, outcome)
-	require.Equal(t, []string{"reserve", "settle"}, billing.events)
+	require.Equal(t, []string{"reserve", "reserve", "settle"}, billing.events)
+	var reservedUser model.User
+	require.NoError(t, database.First(&reservedUser, 7).Error)
+	require.Positive(t, billing.preConsumed)
+	assert.Equal(t, 1_000_000-billing.preConsumed, reservedUser.Quota, "sending rechecks the existing hold without charging it twice")
 	require.False(t, submitContext.Writer.Written())
 
 	presentTaskSubmission(submitContext, outcome)

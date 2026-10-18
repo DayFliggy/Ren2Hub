@@ -55,7 +55,13 @@ func TestCoreEmptyDatabaseInitialization(t *testing.T) {
 			for _, table := range []string{"billing_schemas", "billing_events", "subscriptions", "subscription_plans", "subscription_orders", "user_subscriptions", "system_instances"} {
 				assert.False(t, db.Migrator().HasTable(table), table)
 			}
-			user := User{Username: "restart", Quota: 987654, Group: "default", Setting: `{"language":"zh-CN"}`}
+			for _, table := range []string{"users", "tokens", "channels", "abilities"} {
+				assert.False(t, db.Migrator().HasColumn(table, "group"), table)
+			}
+			for _, table := range []string{"affiliate_records", "admin_quota_operations"} {
+				assert.True(t, db.Migrator().HasTable(table), table)
+			}
+			user := User{Username: "restart", Quota: 987654, Setting: `{"language":"zh-CN"}`}
 			require.NoError(t, db.Create(&user).Error)
 			require.NoError(t, migrateDB())
 			require.NoError(t, migrateLOGDB())

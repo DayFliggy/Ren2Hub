@@ -15,20 +15,21 @@ import (
 )
 
 func TestTokenRouteCandidatesConcreteModelNormalization(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
+	db := setupRouteTest(t)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
-	user := &model.User{Username: "routing-model-owner", Group: "default", AffCode: "routing-model"}
+	user := &model.User{Username: "routing-model-owner", AffCode: "routing-model"}
 	require.NoError(t, db.Create(user).Error)
-	token := &model.Token{UserId: user.Id, Key: "routing-model-token", Group: "default", ModelLimitsEnabled: true, ModelLimits: "gpt-4-gizmo-audit"}
+	token := &model.Token{UserId: user.Id, Key: "routing-model-token", ModelLimitsEnabled: true, ModelLimits: "gpt-4-gizmo-audit"}
 	require.NoError(t, db.Create(token).Error)
-	createChannelSelectAutoGroupsChannel(t, db, 11, "default", "gpt-4-gizmo-*")
-	createChannelSelectAutoGroupsChannel(t, db, 22, "default", "gpt-4-gizmo-other")
-	createChannelSelectAutoGroupsChannel(t, db, 33, "vip", "gpt-4-gizmo-*")
-	createChannelSelectAutoGroupsChannel(t, db, 44, "default", "gpt-4-gizmo-*")
+	createRouteChannel(t, db, 11, "gpt-4-gizmo-*")
+	createRouteChannel(t, db, 22, "gpt-4-gizmo-other")
+	createRouteChannel(t, db, 33, "gpt-4-gizmo-*")
+	createRouteChannel(t, db, 44, "gpt-4-gizmo-*")
 	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 44).Update("status", common.ChannelStatusManuallyDisabled).Error)
 	channels, err := TokenRouteChannels(context.Background(), user.Id, token.Id)
 	require.NoError(t, err)
-	require.Len(t, channels, 1, "only the normalized ability is usable; sibling concrete model, foreign group and disabled channel are not")
+	require.Len(t, channels, 3, "concrete sibling is excluded; disabled channel is visible with its reason")
+	require.False(t, channels[2].Eligible)
 	require.Equal(t, 11, channels[0].ID)
 	require.Equal(t, []string{"gpt-4-gizmo-audit"}, channels[0].Models, "the editor must not imply wildcard authorization")
 	view, err := PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}, Entries: []model.TokenRouteEntry{{ChannelID: 11, Enabled: true}}})
@@ -46,11 +47,9 @@ func TestTokenRouteCandidatesConcreteModelNormalization(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 		common.SetContextKey(c, constant.ContextKeyTokenId, token.Id)
-		common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-		selected, group, apiErr := SelectChannelForRequest(c, "gpt-4-gizmo-audit", &RetryParam{Ctx: c, TokenGroup: "default", ModelName: "gpt-4-gizmo-audit"})
+		selected, apiErr := SelectChannelForRequest(c, "gpt-4-gizmo-audit", &RetryParam{Ctx: c, ModelName: "gpt-4-gizmo-audit"})
 		require.Nil(t, apiErr)
 		require.Equal(t, 11, selected.Id)
-		require.Equal(t, "default", group)
 	}
 	_, err = PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual, Version: 1}, Entries: []model.TokenRouteEntry{{ChannelID: 22, Enabled: true}}})
 	require.ErrorIs(t, err, model.ErrTokenRouteForbidden)
@@ -75,7 +74,7 @@ func TestTokenRouteCandidateModelWitnesses(t *testing.T) {
 		{name: "opaque exempt", limit: "opaque@sha256:deadbeef", ability: "opaque@sha256:deadbeef", want: []string{"opaque@sha256:deadbeef"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			db := setupChannelSelectAutoGroupsTest(t)
+			db := setupRouteTest(t)
 			require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}))
 			gemini := model_setting.GetGeminiSettings()
 			previousThinking := gemini.ThinkingAdapterEnabled
@@ -87,11 +86,11 @@ func TestTokenRouteCandidateModelWitnesses(t *testing.T) {
 				gemini.ThinkingAdapterEnabled = previousThinking
 				settings.ThinkingModelBlacklist = previousBlacklist
 			})
-			user := &model.User{Username: "witness", Group: "default", AffCode: "witness"}
+			user := &model.User{Username: "witness", AffCode: "witness"}
 			require.NoError(t, db.Create(user).Error)
-			token := &model.Token{UserId: user.Id, Key: "witness-token", Group: "default", ModelLimitsEnabled: !tc.unrestricted, ModelLimits: tc.limit}
+			token := &model.Token{UserId: user.Id, Key: "witness-token", ModelLimitsEnabled: !tc.unrestricted, ModelLimits: tc.limit}
 			require.NoError(t, db.Create(token).Error)
-			createChannelSelectAutoGroupsChannel(t, db, 11, "default", tc.ability)
+			createRouteChannel(t, db, 11, tc.ability)
 			channels, err := TokenRouteChannels(context.Background(), user.Id, token.Id)
 			require.NoError(t, err)
 			if tc.want == nil {
@@ -103,7 +102,9 @@ func TestTokenRouteCandidateModelWitnesses(t *testing.T) {
 			for _, name := range channels[0].Models {
 				require.True(t, tc.unrestricted || TokenModelLimitAllows(token.GetModelLimitsMap(), name))
 				common.MemoryCacheEnabled = false
-				require.True(t, model.IsChannelEnabledForGroupModel("default", name, channels[0].ID), "each published model must be an actual request witness")
+				enabled, err := model.CheckChannelEnabledForModel(name, channels[0].ID)
+				require.NoError(t, err)
+				require.True(t, enabled, "each published model must be an actual request witness")
 			}
 		})
 	}

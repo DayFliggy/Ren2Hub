@@ -41,7 +41,6 @@ type OpenAIModel struct {
 		AllowView          bool   `json:"allow_view"`
 		AllowFineTuning    bool   `json:"allow_fine_tuning"`
 		Organization       string `json:"organization"`
-		Group              string `json:"group"`
 		IsBlocking         bool   `json:"is_blocking"`
 	} `json:"permission"`
 	Root   string `json:"root"`
@@ -143,9 +142,8 @@ func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
 	return query
 }
 
-func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm.DB {
+func buildChannelListQuery(statusFilter int, typeFilter int) *gorm.DB {
 	query := model.DB.Model(&model.Channel{})
-	query = model.ApplyChannelGroupFilter(query, group)
 	query = applyChannelStatusFilter(query, statusFilter)
 	if typeFilter >= 0 {
 		query = query.Where("type = ?", typeFilter)
@@ -192,7 +190,6 @@ func GetAllChannels(c *gin.Context) {
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
-	groupFilter := model.NormalizeChannelGroupFilter(c.Query("group"))
 	statusParam := c.Query("status")
 	// statusFilter: -1 all, 1 enabled, 0 disabled (include auto & manual)
 	statusFilter := parseStatusFilter(statusParam)
@@ -205,16 +202,39 @@ func GetAllChannels(c *gin.Context) {
 		}
 	}
 
+	query := buildChannelListQuery(statusFilter, -1).WithContext(c.Request.Context())
+	if lab := c.Query("lab"); lab != "" {
+		labs, err := model.AllChannelLabs(c.Request.Context())
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		ids := make([]int, 0)
+		for id, value := range labs {
+			if value.ID == lab {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			query = query.Where("1 = 0")
+		} else {
+			query = query.Where("id IN ?", ids)
+		}
+	}
+	countQuery := query.Session(&gorm.Session{})
+	if typeFilter >= 0 {
+		query = query.Where("type = ?", typeFilter)
+	}
 	var total int64
 
 	if enableTagMode {
-		tags, err := model.GetPaginatedChannelTags(buildChannelListQuery(groupFilter, statusFilter, typeFilter), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		tags, err := model.GetPaginatedChannelTags(query.Session(&gorm.Session{}), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 		if err != nil {
 			common.SysError(common.LogText("failed to get paginated tags: %s", err.Error()))
 			common.ApiErrorT(c, "Failed to fetch tags. Please try again later")
 			return
 		}
-		total, err = model.CountChannelTags(buildChannelListQuery(groupFilter, statusFilter, typeFilter))
+		total, err = model.CountChannelTags(query.Session(&gorm.Session{}))
 		if err != nil {
 			common.SysError(common.LogText("failed to count tags: %s", err.Error()))
 			common.ApiErrorT(c, "Failed to count tags. Please try again later")
@@ -225,7 +245,7 @@ func GetAllChannels(c *gin.Context) {
 				continue
 			}
 			var tagChannels []*model.Channel
-			err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter).Where("tag = ?", *tag)).
+			err := sortOptions.Apply(query.Session(&gorm.Session{}).Where("tag = ?", *tag)).
 				Omit("key").
 				Find(&tagChannels).Error
 			if err != nil {
@@ -236,13 +256,13 @@ func GetAllChannels(c *gin.Context) {
 			channelData = append(channelData, tagChannels...)
 		}
 	} else {
-		if err := buildChannelListQuery(groupFilter, statusFilter, typeFilter).Count(&total).Error; err != nil {
+		if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 			common.SysError(common.LogText("failed to count channels: %s", err.Error()))
 			common.ApiErrorT(c, "Failed to count channels. Please try again later")
 			return
 		}
 
-		err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter)).
+		err := sortOptions.Apply(query.Session(&gorm.Session{})).
 			Limit(pageInfo.GetPageSize()).
 			Offset(pageInfo.GetStartIdx()).
 			Omit("key").
@@ -254,11 +274,14 @@ func GetAllChannels(c *gin.Context) {
 		}
 	}
 
+	if err := model.AttachChannelLabs(c.Request.Context(), channelData); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
 
-	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
 	var results []struct {
 		Type  int64
 		Count int64
@@ -329,7 +352,10 @@ func FetchUpstreamModels(c *gin.Context) {
 		return
 	}
 
-	ids, err := fetchChannelUpstreamModelIDs(channel)
+	ids, err := fetchChannelUpstreamModelIDs(c.Request.Context(), channel)
+	if rejectBusyChannelManagement(c, err) {
+		return
+	}
 	if err != nil {
 		common.ApiErrorT(c, "Failed to fetch models: {{error}}", map[string]any{"error": err.Error()})
 		return
@@ -360,7 +386,6 @@ func FixChannelsAbilities(c *gin.Context) {
 
 func SearchChannels(c *gin.Context) {
 	keyword := c.Query("keyword")
-	group := c.Query("group")
 	modelKeyword := c.Query("model")
 	statusParam := c.Query("status")
 	statusFilter := parseStatusFilter(statusParam)
@@ -369,7 +394,7 @@ func SearchChannels(c *gin.Context) {
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	channelData := make([]*model.Channel, 0)
 	if enableTagMode {
-		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
+		tags, err := model.SearchTags(keyword, modelKeyword, idSort)
 		if err != nil {
 			common.ApiError(c, err)
 			return
@@ -377,7 +402,7 @@ func SearchChannels(c *gin.Context) {
 		for _, tag := range tags {
 			if tag != nil && *tag != "" {
 				var tagChannels []*model.Channel
-				err := sortOptions.Apply(buildChannelListQuery(group, -1, -1).Where("tag = ?", *tag)).
+				err := sortOptions.Apply(buildChannelListQuery(-1, -1).Where("tag = ?", *tag)).
 					Omit("key").
 					Find(&tagChannels).Error
 				if err != nil {
@@ -388,7 +413,7 @@ func SearchChannels(c *gin.Context) {
 			}
 		}
 	} else {
-		channels, err := model.SearchChannels(keyword, group, modelKeyword, idSort, sortOptions)
+		channels, err := model.SearchChannels(keyword, modelKeyword, idSort, sortOptions)
 		if err != nil {
 			common.ApiError(c, err)
 			return
@@ -406,6 +431,20 @@ func SearchChannels(c *gin.Context) {
 				continue
 			}
 			filtered = append(filtered, ch)
+		}
+		channelData = filtered
+	}
+
+	if err := model.AttachChannelLabs(c.Request.Context(), channelData); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if lab := c.Query("lab"); lab != "" {
+		filtered := make([]*model.Channel, 0, len(channelData))
+		for _, channel := range channelData {
+			if channel.Lab.ID == lab {
+				filtered = append(filtered, channel)
+			}
 		}
 		channelData = filtered
 	}
@@ -477,6 +516,10 @@ func GetChannel(c *gin.Context) {
 		return
 	}
 	if channel != nil {
+		if err := model.AttachChannelLabs(c.Request.Context(), []*model.Channel{channel}); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 		clearChannelInfo(channel)
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -682,10 +725,38 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 
 func AddChannel(c *gin.Context) {
 	addChannelRequest := AddChannelRequest{}
-	err := c.ShouldBindJSON(&addChannelRequest)
+	storage, err := common.GetBodyStorage(c)
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	body, err := storage.Bytes()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	err = common.Unmarshal(body, &addChannelRequest)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	var provided struct {
+		Channel map[string]common.RawMessage `json:"channel"`
+	}
+	if err := common.Unmarshal(body, &provided); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if addChannelRequest.Channel != nil {
+		clearChannelProjections(addChannelRequest.Channel)
+		if _, ok := provided.Channel["channel_ratio"]; !ok {
+			addChannelRequest.Channel.ChannelRatio = "1"
+		}
+		if err := validateChannelRoutingInput(addChannelRequest.Channel); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 
 	// Binding a plugin needs the same permission on a New API channel as the
@@ -952,7 +1023,7 @@ func EditTagChannels(c *gin.Context) {
 		}
 		channelTag.HeaderOverride = common.GetPointer[string](trimmed)
 	}
-	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.ModelMapping, channelTag.Models, channelTag.Groups, channelTag.Priority, channelTag.Weight, channelTag.ParamOverride, channelTag.HeaderOverride)
+	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.ModelMapping, channelTag.Models, channelTag.Priority, channelTag.Weight, channelTag.ParamOverride, channelTag.HeaderOverride)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -1057,6 +1128,16 @@ func UpdateChannel(c *gin.Context) {
 	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
 	originChannel, err := model.GetChannelById(channel.Id, true)
 	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if _, provided := requestData["channel_ratio"]; !provided {
+		channel.ChannelRatio = originChannel.ChannelRatio
+	}
+	if _, provided := requestData["max_concurrency"]; !provided {
+		channel.MaxConcurrency = originChannel.MaxConcurrency
+	}
+	if err := validateChannelRoutingInput(&channel.Channel); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -1186,9 +1267,7 @@ func UpdateChannel(c *gin.Context) {
 	if channel.Models != originChannel.Models {
 		changedFields = append(changedFields, "models")
 	}
-	if channel.Group != originChannel.Group {
-		changedFields = append(changedFields, "group")
-	}
+
 	if channel.Type != originChannel.Type {
 		changedFields = append(changedFields, "type")
 	}
@@ -1413,7 +1492,10 @@ func FetchModels(c *gin.Context) {
 		}
 	}
 
-	models, err := fetchChannelUpstreamModelIDs(channel)
+	models, err := fetchChannelUpstreamModelIDs(c.Request.Context(), channel)
+	if rejectBusyChannelManagement(c, err) {
+		return
+	}
 	if err != nil {
 		common.ApiErrorT(c, "Failed to fetch models: {{error}}", map[string]any{"error": err.Error()})
 		return
@@ -2062,13 +2144,18 @@ func OllamaPullModel(c *gin.Context) {
 		return
 	}
 
+	permit, ok := acquireChannelManagement(c, channel)
+	if !ok {
+		return
+	}
+	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
 
 	key := strings.Split(channel.Key, "\n")[0]
-	err = ollama.PullOllamaModel(baseURL, key, req.ModelName)
+	err = ollama.PullOllamaModel(c.Request.Context(), baseURL, key, req.ModelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -2125,6 +2212,11 @@ func OllamaPullModelStream(c *gin.Context) {
 		return
 	}
 
+	permit, ok := acquireChannelManagement(c, channel)
+	if !ok {
+		return
+	}
+	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
@@ -2146,7 +2238,7 @@ func OllamaPullModelStream(c *gin.Context) {
 	}
 
 	// 执行拉取
-	err = ollama.PullOllamaModelStream(baseURL, key, req.ModelName, progressCallback)
+	err = ollama.PullOllamaModelStream(c.Request.Context(), baseURL, key, req.ModelName, progressCallback)
 
 	if err != nil {
 		errorData, _ := json.Marshal(gin.H{
@@ -2207,13 +2299,18 @@ func OllamaDeleteModel(c *gin.Context) {
 		return
 	}
 
+	permit, ok := acquireChannelManagement(c, channel)
+	if !ok {
+		return
+	}
+	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
 
 	key := strings.Split(channel.Key, "\n")[0]
-	err = ollama.DeleteOllamaModel(baseURL, key, req.ModelName)
+	err = ollama.DeleteOllamaModel(c.Request.Context(), baseURL, key, req.ModelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -2256,13 +2353,18 @@ func OllamaVersion(c *gin.Context) {
 		return
 	}
 
+	permit, ok := acquireChannelManagement(c, channel)
+	if !ok {
+		return
+	}
+	defer permit.Release()
 	baseURL := constant.GetChannelBaseURL(channel.Type)
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
 
 	key := strings.Split(channel.Key, "\n")[0]
-	version, err := ollama.FetchOllamaVersion(baseURL, key)
+	version, err := ollama.FetchOllamaVersion(c.Request.Context(), baseURL, key)
 	if err != nil {
 		common.ApiErrorT(c, "Failed to fetch Ollama version: {{error}}", map[string]any{"error": err.Error()})
 		return
@@ -2274,4 +2376,25 @@ func OllamaVersion(c *gin.Context) {
 			"version": version,
 		},
 	})
+}
+
+func validateChannelRoutingInput(channel *model.Channel) error {
+	if channel.MaxConcurrency < 0 {
+		return fmt.Errorf("max_concurrency must be nonnegative")
+	}
+	ratio, err := model.NormalizeChannelRatio(channel.ChannelRatio)
+	if err != nil {
+		return err
+	}
+	channel.ChannelRatio = ratio
+	return nil
+}
+
+func GetChannelLabs(c *gin.Context) {
+	items, total, err := model.ChannelLabCounts(c.Request.Context())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"total": total, "items": items})
 }

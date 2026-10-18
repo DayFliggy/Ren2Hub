@@ -32,11 +32,11 @@ func setupUserUpdateTestState(t *testing.T) {
 func createUserBindTestUser(t *testing.T) User {
 	t.Helper()
 	user := User{
-		Username:    "bind-test-user",
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
+		Username: "bind-test-user",
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+
 		AuthVersion: 1,
 		AffCode:     "bind-test-aff-code",
 	}
@@ -301,9 +301,9 @@ func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
 
 	user := createUserBindTestUser(t)
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]any{
-		"role":   common.RoleAdminUser,
-		"status": common.UserStatusEnabled,
-		"group":  "vip",
+		"role":            common.RoleAdminUser,
+		"status":          common.UserStatusEnabled,
+		"max_concurrency": 7,
 	}).Error)
 
 	require.NoError(t, UpdateUserBindColumn(user.Id, "github_id", "gh-12345"))
@@ -313,7 +313,7 @@ func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
 	assert.Equal(t, "gh-12345", reloaded.GitHubId)
 	assert.Equal(t, common.RoleAdminUser, reloaded.Role)
 	assert.Equal(t, common.UserStatusEnabled, reloaded.Status)
-	assert.Equal(t, "vip", reloaded.Group)
+	assert.Equal(t, 7, reloaded.MaxConcurrency)
 }
 
 func TestUpdateUserBindColumnPreservesRestrictiveChange(t *testing.T) {
@@ -410,11 +410,11 @@ func TestResetUserPasswordByEmailRequiresSingleActiveMatch(t *testing.T) {
 func createAccessTokenTestUser(t *testing.T, username string) User {
 	t.Helper()
 	user := User{
-		Username:    username,
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
+		Username: username,
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+
 		AuthVersion: 1,
 		AffCode:     username + "-aff",
 	}

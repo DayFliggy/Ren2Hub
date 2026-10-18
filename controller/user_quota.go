@@ -30,7 +30,12 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 		params["route"] = c.FullPath()
 	}
 	success := false
+	replayed := false
 	defer func() {
+		if replayed {
+			markAuditLogged(c)
+			return
+		}
 		content := auditContentEN(action, params)
 		if !success {
 			// Failed requests have no committed balance changes to render.
@@ -43,9 +48,15 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 		markAuditLogged(c)
 	}()
 
-	adjustment, err := model.AdjustUserQuota(req.Id, c.GetInt("role"), req.Mode, req.Value)
+	adjustment, err := model.AdjustUserQuotaWithOperation(req.Id, c.GetInt("id"), c.GetInt("role"), req.Mode, req.Value, req.OperationID)
 	if err != nil {
 		switch {
+		case errors.Is(err, model.ErrAffiliateOperationConflict):
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
+		case errors.Is(err, model.ErrAffiliateOperation):
+			common.ApiError(c, err)
+			return
 		case errors.Is(err, model.ErrInvalidUserQuotaAdjustment):
 			params["failure_reason"] = "invalid_parameters"
 			if (req.Mode == "add" || req.Mode == "subtract") && req.Value <= 0 {
@@ -69,6 +80,13 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 		return
 	}
 
+	if adjustment.Replayed {
+		replayed = true
+		success = true
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"replayed": true, "before": adjustment.Before, "after": adjustment.After}})
+		return
+	}
+	params["operation_id"] = req.OperationID
 	params["target_username"] = adjustment.Username
 	params["from"] = adjustment.Before
 	params["to"] = adjustment.After

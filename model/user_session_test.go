@@ -66,12 +66,12 @@ func setupUserSessionTest(t *testing.T) {
 func createUserSessionTestUser(t *testing.T, userID int, authVersion int64) {
 	t.Helper()
 	user := User{
-		Id:          userID,
-		Username:    fmt.Sprintf("user-session-%d", userID),
-		Password:    "unused",
-		Status:      common.UserStatusEnabled,
-		Role:        common.RoleCommonUser,
-		Group:       "default",
+		Id:       userID,
+		Username: fmt.Sprintf("user-session-%d", userID),
+		Password: "unused",
+		Status:   common.UserStatusEnabled,
+		Role:     common.RoleCommonUser,
+
 		AffCode:     fmt.Sprintf("session-aff-%d", userID),
 		AuthVersion: authVersion,
 	}
@@ -587,11 +587,11 @@ func TestUserSessionGrowthQueryIndexesExist(t *testing.T) {
 
 func TestUserBaseIncludesAuthorizationFields(t *testing.T) {
 	user := User{
-		Id:          42,
-		Username:    "cache-user",
-		Role:        common.RoleAdminUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "vip",
+		Id:       42,
+		Username: "cache-user",
+		Role:     common.RoleAdminUser,
+		Status:   common.UserStatusEnabled,
+
 		Quota:       123,
 		AuthVersion: 7,
 	}
@@ -609,7 +609,6 @@ func TestUserUpdateBumpsAuthVersionOnlyForAuthorizationChanges(t *testing.T) {
 		Password: "hashed-placeholder",
 		Role:     common.RoleCommonUser,
 		Status:   common.UserStatusEnabled,
-		Group:    "default",
 	}
 	require.NoError(t, DB.Create(user).Error)
 	t.Cleanup(func() { _ = DB.Unscoped().Delete(&User{}, user.Id).Error })
@@ -619,7 +618,7 @@ func TestUserUpdateBumpsAuthVersionOnlyForAuthorizationChanges(t *testing.T) {
 	require.NoError(t, user.Update(false))
 	assert.Equal(t, int64(1), user.AuthVersion)
 
-	user.Group = "vip"
+	user.Status = common.UserStatusDisabled
 	require.NoError(t, user.Update(false))
 	assert.Equal(t, int64(2), user.AuthVersion)
 
@@ -637,7 +636,6 @@ func TestPasswordResetBumpsAuthVersionAndRevokesSessions(t *testing.T) {
 		Email:    "password-reset@example.com",
 		Role:     common.RoleCommonUser,
 		Status:   common.UserStatusEnabled,
-		Group:    "default",
 	}
 	require.NoError(t, DB.Create(user).Error)
 	t.Cleanup(func() { _ = DB.Unscoped().Delete(&User{}, user.Id).Error })

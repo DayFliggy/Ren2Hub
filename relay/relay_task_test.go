@@ -35,7 +35,7 @@ func setupRelayChannelDB(t *testing.T) *gorm.DB {
 	sqlDB, err := database.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, database.AutoMigrate(&model.Channel{}))
+	require.NoError(t, database.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
 	model.DB = database
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	common.MemoryCacheEnabled = false
@@ -139,7 +139,7 @@ func newTaskSubmitContext(t *testing.T, originalModel, mapping string) (*gin.Con
 	common.RedisEnabled = false
 	t.Cleanup(func() { common.RedisEnabled = previousRedis })
 	require.NoError(t, database.AutoMigrate(&model.User{}))
-	user := model.User{Username: "task-pricing", Status: common.UserStatusEnabled, Group: "default", Quota: 0}
+	user := model.User{Username: "task-pricing", Status: common.UserStatusEnabled, Quota: 0}
 	require.NoError(t, database.Create(&user).Error)
 	require.NoError(t, i18n.Init())
 	gin.SetMode(gin.TestMode)
@@ -299,8 +299,6 @@ export function extractUsage(){return {old_units:2};}
 
 			c, info := newTaskSubmitContext(t, "alias-model", mapping)
 			c.Set("group", "default")
-			info.UserGroup = "default"
-			info.UsingGroup = "default"
 			source := testCase.source
 			if source == "" {
 				source = billingFallbackPlugin
@@ -325,7 +323,7 @@ export function extractUsage(){return {old_units:2};}
 				assert.Equal(t, billingexpr.ExprHashString(testCase.wantExpr), info.TieredBillingSnapshot.ExprHash)
 				assert.NotEqual(t, "model_price_error", taskErr.Code)
 				if testCase.wantExpr == legacyExpr {
-					assert.Equal(t, 4*common.QuotaPerUnit, info.TieredBillingSnapshot.EstimatedQuotaBeforeGroup)
+					assert.Equal(t, 4*common.QuotaPerUnit, info.TieredBillingSnapshot.EstimatedQuotaBeforeChannel)
 				}
 			} else {
 				assert.Nil(t, info.TieredBillingSnapshot)
@@ -386,8 +384,6 @@ func TestSharedTaskBillingExpressionSelectionAndFrozenSettlement(t *testing.T) {
 			c, info := newTaskSubmitContext(t, tc.model, tc.mapping)
 			c.Set("group", "default")
 			c.Set("task_plugin_key", tc.plugin)
-			info.UserGroup = "default"
-			info.UsingGroup = "default"
 			info.OriginModelName = tc.model
 			plugin, ok := registry.Generation().Get(tc.plugin)
 			require.True(t, ok)
@@ -411,7 +407,7 @@ func TestSharedTaskBillingExpressionSelectionAndFrozenSettlement(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, float64(4), usage[field])
 			assert.Equal(t, float64(2), info.TieredBillingSnapshot.UsageFacts[field])
-			assert.Equal(t, 2*info.TieredBillingSnapshot.EstimatedQuotaAfterGroup, result.ActualQuotaAfterGroup)
+			assert.Equal(t, 2*info.TieredBillingSnapshot.EstimatedQuotaAfterChannel, result.ActualQuotaAfterChannel)
 			assert.Equal(t, tc.wantExpr, info.TieredBillingSnapshot.ExprString)
 		})
 	}
@@ -455,7 +451,6 @@ export function parseTaskResult() { return {status:"SUCCESS"}; }
 			c, info := newTaskSubmitContext(t, "declared-model", "")
 			common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, server.URL)
 			c.Set("group", "default")
-			info.UserGroup, info.UsingGroup = "default", "default"
 			info.OriginModelName = "declared-model"
 			// An existing reservation skips pre-consume so the fixture reaches the upstream call.
 			info.Billing = &imageReservation{limit: 1 << 30}

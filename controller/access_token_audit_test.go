@@ -55,7 +55,7 @@ func setupAccessTokenAudit(t *testing.T) (*model.User, string) {
 		common.RedisEnabled = previousRedis
 	})
 	token := "legacy-opaque-token"
-	user := &model.User{Username: "audit-owner", Password: "placeholder", Role: common.RoleAdminUser, Status: common.UserStatusEnabled, Group: "default", AccessToken: &token, AuthVersion: 1, AffCode: "audit-owner"}
+	user := &model.User{Username: "audit-owner", Password: "placeholder", Role: common.RoleAdminUser, Status: common.UserStatusEnabled, AccessToken: &token, AuthVersion: 1, AffCode: "audit-owner"}
 	require.NoError(t, db.Create(user).Error)
 	return user, token
 }
@@ -215,7 +215,7 @@ func TestAccessTokenLifecycleAndLateRequests(t *testing.T) {
 	assert.Equal(t, model.LegacyAccessTokenRetireAt(), listed.Data.Legacy.RetireAt)
 
 	// A token id only resolves among the caller's own tokens.
-	other := &model.User{Username: "audit-other", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "audit-other"}
+	other := &model.User{Username: "audit-other", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "audit-other"}
 	require.NoError(t, model.DB.Create(other).Error)
 	otherRaw, otherToken := createScopedAccessToken(t, other.Id, 0, "profile:read")
 	otherProof := issueAccessTokenRevokeProof(t, identity, service.AccessTokenRevokeContext{TokenID: otherToken.Id})
@@ -428,7 +428,7 @@ func TestAccessTokenUpdateRenamesFreelyAndChangesGrantOnlyWithProof(t *testing.T
 	identity, browser := createAccessTokenTestSession(t, user.Id, "update-session")
 	raw, token := createScopedAccessToken(t, user.Id, 0, "profile:read")
 	tokenPath := fmt.Sprintf("/api/user/access_tokens/%d", token.Id)
-	other := &model.User{Username: "audit-other", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "audit-other"}
+	other := &model.User{Username: "audit-other", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "audit-other"}
 	require.NoError(t, model.DB.Create(other).Error)
 	_, otherToken := createScopedAccessToken(t, other.Id, 0, "profile:read")
 
@@ -760,7 +760,9 @@ func TestSecurityAndOperationEventsUseAuditTable(t *testing.T) {
 	assert.EqualValues(t, 10, count)
 }
 
-// Released schemas copied from v1.0.0-rc.33; only the Go type names differ.
+// Audit columns from v1.0.0-rc.33 on the group-free core schema. This exercises
+// additive audit upgrades; databases with legacy business groups are rejected
+// by the separate startup guard tests before any migration runs.
 
 type releasedAuditUser struct {
 	Id               int                        `json:"id"`
@@ -781,7 +783,6 @@ type releasedAuditUser struct {
 	Quota            int                        `json:"quota" gorm:"type:int;default:0"`
 	UsedQuota        int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
 	RequestCount     int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
-	Group            string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
 	AffCode          string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	AffCount         int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
 	AffQuota         int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度

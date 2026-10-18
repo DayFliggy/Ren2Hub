@@ -209,10 +209,22 @@ func modelPricingSyncValues(data map[string]any, name string) map[string]any {
 }
 
 func FetchUpstreamRatios(c *gin.Context) {
-	var req dto.UpstreamRequest
+	var req struct {
+		dto.UpstreamRequest
+		SourceIDs []string `json:"source_ids"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.SysError(common.LogText("failed to bind upstream request: %s", err.Error()))
 		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid request parameter format"))
+		return
+	}
+
+	if len(req.Upstreams) == 0 && len(req.ChannelIDs) == 0 {
+		fetchFixedPriceDrafts(c, req.SourceIDs)
+		return
+	}
+	if len(req.SourceIDs) != 0 {
+		common.ApiErrorStatus(c, http.StatusBadRequest, fmt.Errorf("source_ids cannot be combined with channel sources"))
 		return
 	}
 

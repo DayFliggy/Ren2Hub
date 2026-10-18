@@ -13,7 +13,7 @@ func TestTaskUsageExpressionUsesFactsAndTaskQuotaConversion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4.0, cost)
 	assert.Equal(t, "1080p", trace.MatchedTier)
-	result, err := ComputeTieredQuotaWithRequest(&BillingSnapshot{ExprString: expression, ExprHash: ExprHashString(expression), GroupRatio: 2, QuotaPerUnit: 500000, ExprVersion: 1, TaskUsageBilling: true}, TokenParams{}, RequestInput{Usage: map[string]any{"seconds": 10.0, "resolution": "1080p"}})
+	result, err := ComputeTieredQuotaWithRequest(&BillingSnapshot{ExprString: expression, ExprHash: ExprHashString(expression), ChannelRatio: 2, QuotaPerUnit: 500000, ExprVersion: 1, TaskUsageBilling: true}, TokenParams{}, RequestInput{Usage: map[string]any{"seconds": 10.0, "resolution": "1080p"}})
 	require.NoError(t, err)
-	assert.Equal(t, 4_000_000, result.ActualQuotaAfterGroup)
+	assert.Equal(t, 4_000_000, result.ActualQuotaAfterChannel)
 }

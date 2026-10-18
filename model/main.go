@@ -19,13 +19,11 @@ import (
 	"gorm.io/gorm"
 )
 
-var commonGroupCol string
 var commonKeyCol string
 var commonTrueVal string
 var commonFalseVal string
 
 var logKeyCol string
-var logGroupCol string
 
 // jsonScanBytes 归一化 json 列的驱动返回值:不同驱动/协议模式下同一列可能
 // 以 []byte 或 string 返回,静默丢弃 string 会导致字段被清零而不报错。
@@ -43,22 +41,18 @@ func jsonScanBytes(value any) []byte {
 func initCol() {
 	// init common column names
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		commonGroupCol = `"group"`
 		commonKeyCol = `"key"`
 		commonTrueVal = "true"
 		commonFalseVal = "false"
 	} else {
-		commonGroupCol = "`group`"
 		commonKeyCol = "`key`"
 		commonTrueVal = "1"
 		commonFalseVal = "0"
 	}
 	switch common.LogDatabaseType() {
 	case common.DatabaseTypePostgreSQL:
-		logGroupCol = `"group"`
 		logKeyCol = `"key"`
 	default:
-		logGroupCol = "`group`"
 		logKeyCol = "`key`"
 	}
 }
@@ -335,6 +329,8 @@ func migrateDB() error {
 		&Log{},
 		&Midjourney{},
 		&TopUp{},
+		&AffiliateRecord{},
+		&AdminQuotaOperation{},
 		&QuotaData{},
 		&Task{},
 		&TaskPlugin{},
@@ -435,7 +431,6 @@ CREATE TABLE IF NOT EXISTS logs (
 	is_stream UInt8 DEFAULT 0,
 	channel_id Int32 DEFAULT 0,
 	token_id Int32 DEFAULT 0,
-	`+"`group`"+` String DEFAULT '',
 	ip String DEFAULT '',
 	request_id String DEFAULT '',
 	upstream_request_id String DEFAULT '',

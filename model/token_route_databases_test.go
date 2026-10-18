@@ -63,13 +63,12 @@ func TestTokenRoutingDatabases(t *testing.T) {
 			token := Token{UserId: 17, Key: "routing-db-fixture"}
 			require.NoError(t, token.InsertWithRouting(TokenRouteManual))
 			for _, id := range []int{11, 22} {
-				require.NoError(t, db.Create(&Channel{Id: id, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "default", Models: "route-model"}).Error)
-				require.NoError(t, db.Create(&Ability{ChannelId: id, Group: "default", Model: "route-model", Enabled: true}).Error)
+				require.NoError(t, db.Create(&Channel{Id: id, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model"}).Error)
+				require.NoError(t, db.Create(&Ability{ChannelId: id, Model: "route-model", Enabled: true}).Error)
 			}
-			selected, selectionErr := GetRandomSatisfiedChannel("default", "route-model", 0, []dto.ChannelFilter{{Kind: dto.FilterTokenRoute, ChannelIDs: []int{22, 11}}})
+			rows, selectionErr := RouteChannelRows(context.Background(), "route-model", []dto.ChannelFilter{{Kind: dto.FilterTokenRoute, ChannelIDs: []int{22, 11}}})
 			require.NoError(t, selectionErr)
-			require.NotNil(t, selected)
-			require.Equal(t, 22, selected.Id)
+			require.Len(t, rows, 2)
 			ctx := context.Background()
 			input := TokenRouting{TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: 1}, Entries: []TokenRouteEntry{{ChannelID: 11, Enabled: true}, {ChannelID: 22, Enabled: false}}}
 			var wg sync.WaitGroup

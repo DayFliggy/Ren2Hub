@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -119,7 +120,11 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("mj-api-secret", midjourneyChannel.Key)
-		resp, err := service.GetHttpClient().Do(req)
+		resp, err := service.DoChannelRequest(requestCtx, midjourneyChannel, func() (*http.Response, error) { return service.GetHttpClient().Do(req) })
+		if errors.Is(err, service.ErrConcurrencyFull) {
+			cancel()
+			continue
+		}
 		if err != nil {
 			logger.LogError(ctx, common.LogText("Get Task Do req error: %v", err))
 			cancel()

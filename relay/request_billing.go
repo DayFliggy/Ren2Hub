@@ -64,6 +64,12 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 		logger.LogInfo(c, common.LogText("model %s is free, skipping pre-consume", info.OriginModelName))
 		return nil
 	}
+	if info.Billing != nil {
+		if err := info.Billing.Reserve(priceData.QuotaToPreConsume); err != nil {
+			return types.NewError(err, types.ErrorCodePreConsumeTokenQuotaFailed, types.ErrOptionWithSkipRetry())
+		}
+		return nil
+	}
 	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
 }
 

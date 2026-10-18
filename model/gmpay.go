@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/pkg/gmpay"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
@@ -108,6 +109,13 @@ func CreateGmpayOrder(ctx context.Context, topUp *TopUp, snapshot *GmpayOrder, m
 		merchant.Key == "" || merchant.MerchantID == "" || snapshot.Token == "" || snapshot.Network == "" {
 		return ErrGmpayPaymentMismatch
 	}
+	topUp.Currency = snapshot.Currency
+	topUp.PayAmount = decimal.NewFromInt(snapshot.AmountMinor).Div(decimal.NewFromInt(100)).String()
+	topUp.ExpectedQuota = snapshot.ExpectedQuota
+	if err := FreezeTopUpQuota(topUp); err != nil {
+		return err
+	}
+
 	account, err := common.Marshal([]string{merchant.GatewayURL, merchant.MerchantID})
 	if err != nil {
 		return err
@@ -330,13 +338,10 @@ func RechargeGmpay(payment GmpayPayment, callerIp string) (alreadyDone bool, err
 		if quotaToAdd <= 0 {
 			return ErrInvalidTopUpQuota
 		}
-		topUp.CompleteTime = common.GetTimestamp()
-		topUp.Status = common.TopUpStatusSuccess
-		if err := tx.Save(topUp).Error; err != nil {
-			return err
-		}
-		if err := creditTopUpQuota(tx, topUp.UserId, quotaToAdd, nil); err != nil {
-			return err
+		var completeErr error
+		quotaToAdd, completeErr = completeTopUpTx(tx, topUp, quotaToAdd, nil)
+		if completeErr != nil {
+			return completeErr
 		}
 		return nil
 	})

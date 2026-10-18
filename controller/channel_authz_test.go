@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,17 +27,16 @@ func TestChannelHasSensitiveChanges(t *testing.T) {
 		BaseURL:        &baseURL,
 		HeaderOverride: &headerOverride,
 		Models:         "gpt-4o",
-		Group:          "default",
 	}
 
 	t.Run("non-sensitive routing fields", func(t *testing.T) {
 		updated := PatchChannel{Channel: *origin}
 		updated.Models = "gpt-4o,gpt-4o-mini"
-		updated.Group = "vip"
 
 		assert.False(t, channelHasSensitiveChanges(&updated, origin, map[string]any{
-			"models": updated.Models,
-			"group":  updated.Group,
+			"models":          updated.Models,
+			"channel_ratio":   "1.5",
+			"max_concurrency": 2,
 		}))
 	})
 
@@ -104,8 +106,9 @@ func TestClearChannelReadOnlyFields(t *testing.T) {
 		Balance:            44.5,
 		BalanceUpdatedTime: 55,
 		UsedQuota:          66,
+		InFlight:           7,
+		Lab:                modellab.Classification{ID: "client-lab", Name: "client name", Source: "client"},
 		Models:             "gpt-4o",
-		Group:              "default",
 	}}
 
 	clearChannelReadOnlyFields(&channel, map[string]any{
@@ -115,8 +118,9 @@ func TestClearChannelReadOnlyFields(t *testing.T) {
 		"balance":              channel.Balance,
 		"balance_updated_time": channel.BalanceUpdatedTime,
 		"used_quota":           channel.UsedQuota,
+		"in_flight":            channel.InFlight,
+		"lab":                  channel.Lab,
 		"models":               channel.Models,
-		"group":                channel.Group,
 	})
 
 	assert.Zero(t, channel.CreatedTime)
@@ -125,8 +129,54 @@ func TestClearChannelReadOnlyFields(t *testing.T) {
 	assert.Zero(t, channel.Balance)
 	assert.Zero(t, channel.BalanceUpdatedTime)
 	assert.Zero(t, channel.UsedQuota)
+	assert.Zero(t, channel.InFlight)
+	assert.Empty(t, channel.Lab)
 	assert.Equal(t, "gpt-4o", channel.Models)
-	assert.Equal(t, "default", channel.Group)
+}
+
+func TestChannelWriteUpdatesRoutingWithoutChangingServerFields(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	require.True(t, authz.Can(2, common.RoleAdminUser, authz.ChannelWrite))
+	require.False(t, authz.Can(2, common.RoleAdminUser, authz.ChannelSensitiveWrite))
+	channel := model.Channel{
+		Type: 1, Name: "routing-permissions", Key: "server-key", Models: "gpt-test",
+		Status: common.ChannelStatusEnabled, ChannelRatio: "1", MaxConcurrency: 0,
+		CreatedTime: 11, TestTime: 22, ResponseTime: 33,
+		Balance: 44.5, BalanceUpdatedTime: 55, UsedQuota: 66,
+	}
+	require.NoError(t, channel.Insert())
+	payload := fmt.Sprintf(`{"id":%d,"channel_ratio":"1.5","max_concurrency":2,"in_flight":123,"lab":{"id":"client-lab","name":"client name","source":"client"},"created_time":111,"test_time":222,"response_time":333,"balance":444,"balance_updated_time":555,"used_quota":666}`, channel.Id)
+	response := putUpdateChannel(t, 2, common.RoleAdminUser, payload)
+	require.Contains(t, response.Body.String(), `"success":true`)
+	var saved model.Channel
+	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
+	assert.Equal(t, "1.5", saved.ChannelRatio)
+	assert.Equal(t, 2, saved.MaxConcurrency)
+	assert.Equal(t, channel.CreatedTime, saved.CreatedTime)
+	assert.Equal(t, channel.TestTime, saved.TestTime)
+	assert.Equal(t, channel.ResponseTime, saved.ResponseTime)
+	assert.Equal(t, channel.Balance, saved.Balance)
+	assert.Equal(t, channel.BalanceUpdatedTime, saved.BalanceUpdatedTime)
+	assert.Equal(t, channel.UsedQuota, saved.UsedQuota)
+	assert.Zero(t, saved.InFlight)
+	assert.Empty(t, saved.Lab)
+
+	response = putUpdateChannel(t, 2, common.RoleAdminUser, fmt.Sprintf(`{"id":%d,"key":"changed-secret"}`, channel.Id))
+	require.Contains(t, response.Body.String(), `"success":false`)
+	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
+	assert.Equal(t, "server-key", saved.Key)
+}
+
+func TestAddChannelIgnoresServerProjections(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	response := postAddChannel(t, 2, common.RoleAdminUser, `{"mode":"single","channel":{"type":1,"name":"routing-create","key":"server-key","models":"gpt-test","channel_ratio":"1.25","max_concurrency":3,"in_flight":123,"lab":{"id":"client-lab","source":"client"}}}`)
+	require.Contains(t, response.Body.String(), `"success":true`)
+	var saved model.Channel
+	require.NoError(t, model.DB.Where("name = ?", "routing-create").First(&saved).Error)
+	assert.Equal(t, "1.25", saved.ChannelRatio)
+	assert.Equal(t, 3, saved.MaxConcurrency)
+	assert.Zero(t, saved.InFlight)
+	assert.Empty(t, saved.Lab)
 }
 
 func TestUpdateChannelRejectsStatusField(t *testing.T) {
@@ -201,4 +251,5 @@ func TestChannelFieldsAreClassified(t *testing.T) {
 		assert.Truef(t, classified(name),
 			"channel field %q is not classified; add it to channelSensitiveFields, channelNonSensitiveFields, channelOperationalFields, or channelReadOnlyFields in channel_authz.go", name)
 	}
+	assert.False(t, classified("group"), "retired business groups must not remain writable channel fields")
 }

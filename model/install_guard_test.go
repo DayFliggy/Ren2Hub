@@ -34,3 +34,20 @@ func TestLegacyBillingDatabaseRejectedBeforeMigration(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupedDatabaseRejectedEvenWhenEmpty(t *testing.T) {
+	for _, table := range []string{"users", "tokens", "channels", "abilities"} {
+		t.Run(table, func(t *testing.T) {
+			db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "old.db")), &gorm.Config{})
+			require.NoError(t, err)
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
+			require.NoError(t, db.Exec("CREATE TABLE "+table+" (id INTEGER PRIMARY KEY, `group` TEXT)").Error)
+			require.ErrorContains(t, rejectLegacyBillingDatabase(db), "separate empty database")
+			tables, err := db.Migrator().GetTables()
+			require.NoError(t, err)
+			require.Equal(t, []string{table}, tables)
+		})
+	}
+}

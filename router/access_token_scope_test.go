@@ -31,8 +31,8 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/privacy-policy",
 	"GET /api/about",
 	"GET /api/home_page_content",
+	"GET /api/home/metrics",
 	"GET /api/ratio_config",
-	"GET /api/user/groups",
 
 	// Anonymous account entry points.
 	"GET /api/verification",

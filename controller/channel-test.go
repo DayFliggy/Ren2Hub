@@ -68,9 +68,17 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (outcome testResult) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	service.BeginRouteObservation(c)
+	var err error
+	channel, err = model.GetChannelById(channel.Id, true)
+	if err != nil {
+		return testResult{localErr: err}
 	}
 	tik := time.Now()
 	var unsupportedTestChannelTypes = []int{
@@ -89,9 +97,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			localErr: fmt.Errorf("%s channel test is not supported", channelTypeName),
 		}
 	}
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-
 	testModel = strings.TrimSpace(testModel)
 	if testModel == "" {
 		if channel.TestModel != nil && *channel.TestModel != "" {
@@ -159,13 +164,22 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 	cache.WriteContext(c)
 	c.Set("id", testUserID)
+	userPermit, err := service.AcquireUserConcurrency(ctx, testUserID, cache.MaxConcurrency)
+	if err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, "user_concurrency_exceeded", http.StatusTooManyRequests)}
+	}
+	defer userPermit.Release()
+	channelPermit, err := service.AcquireChannelConcurrency(ctx, channel)
+	if err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, "channel_concurrency_exceeded", http.StatusTooManyRequests)}
+	}
+	c.Set("route_channel_permit", channelPermit)
+	defer service.ReleaseRouteChannel(c)
 
 	//c.Request.Header.Set("Authorization", "Bearer "+channel.Key)
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set("channel", channel.Type)
 	c.Set("base_url", channel.GetBaseURL())
-	group, _ := model.GetUserGroup(testUserID, false)
-	c.Set("group", group)
 
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, testModel)
 	if newAPIError != nil {
@@ -238,6 +252,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
+	defer func() { service.FinishRouteAttempt(c, info, outcome.newAPIError) }()
 	info.IsChannelTest = true
 	info.InitChannelMeta(c)
 
@@ -511,7 +526,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		Content:          []*common.Message{common.NewMessage("Model test")},
 		UseTimeSeconds:   int(consumedTime),
 		IsStream:         info.IsStream,
-		Group:            info.UsingGroup,
 		Other:            other,
 	})
 	common.SysLog(common.LogText("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
@@ -559,8 +573,8 @@ func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData,
 }
 
 func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) *model.LogOther {
-	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio,
-		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio)
+	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.ChannelRatioInfo.ChannelRatio, priceData.CompletionRatio,
+		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice, -1)
 	if tieredResult != nil {
 		service.InjectTieredBillingInfo(other, info, tieredResult)
 	}

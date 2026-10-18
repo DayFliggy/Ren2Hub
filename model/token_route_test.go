@@ -71,43 +71,17 @@ func TestTokenRouteVersionOwnershipAndEmptyManual(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestTokenRouteSelectionCacheParityAndQualification(t *testing.T) {
+func TestRouteChannelRowsQualifiesAllBeforeSelection(t *testing.T) {
 	db := tokenRouteTestDB(t)
-	for _, channel := range []Channel{
-		{Id: 1, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model", Group: "default", Priority: common.GetPointer(int64(100))},
-		{Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model", Group: "default", Priority: common.GetPointer(int64(0))},
-		{Id: 3, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model", Group: "private"},
-		{Id: 4, Type: constant.ChannelTypeCodex, Status: common.ChannelStatusEnabled, Models: "route-model", Group: "default"},
-	} {
+	for _, channel := range []Channel{{Id: 1, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model"}, {Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "route-model"}, {Id: 3, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusAutoDisabled, Models: "route-model"}} {
 		require.NoError(t, db.Create(&channel).Error)
-		require.NoError(t, db.Create(&Ability{ChannelId: channel.Id, Model: "route-model", Group: channel.Group, Enabled: true, Priority: channel.Priority}).Error)
+		require.NoError(t, db.Create(&Ability{ChannelId: channel.Id, Model: "route-model", Enabled: true}).Error)
 	}
-	for _, cache := range []bool{false, true} {
-		common.MemoryCacheEnabled = cache
-		if cache {
-			InitChannelCache()
-		}
-		filters := []dto.ChannelFilter{{Kind: dto.FilterTokenRoute, ChannelIDs: []int{3, 4, 2, 1}}}
-		channel, err := GetRandomSatisfiedChannel("default", "route-model", 0, filters)
-		require.NoError(t, err)
-		require.NotNil(t, channel)
-		require.Equal(t, 2, channel.Id)
-		filters[0].ChannelIDs = []int{3, 4}
-		channel, err = GetRandomSatisfiedChannel("default", "route-model", 0, filters)
-		require.NoError(t, err)
-		require.Nil(t, channel, "private preference cannot grant another group or retired type")
-		filters[0].ChannelIDs = nil
-		channel, err = GetRandomSatisfiedChannel("default", "route-model", 0, filters)
-		require.NoError(t, err)
-		require.Nil(t, channel, "empty manual must not fall back to automatic")
-		channel, err = GetRandomSatisfiedChannel("default", "route-model", 0, nil)
-		require.NoError(t, err)
-		require.NotNil(t, channel)
-		require.Equal(t, 1, channel.Id, "automatic upstream priority is unchanged")
-		filters[0].ChannelIDs = []int{2}
-		filters = append(filters, dto.ChannelFilter{Kind: dto.FilterResponsesWebSocket})
-		channel, err = GetRandomSatisfiedChannel("default", "route-model", 0, filters)
-		require.NoError(t, err)
-		require.Nil(t, channel, "private channels must satisfy protocol filters")
-	}
+	rows, err := RouteChannelRows(context.Background(), "route-model", []dto.ChannelFilter{{Kind: dto.FilterTokenRoute, ChannelIDs: []int{2, 3}}})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, 2, rows[0].Id)
+	rows, err = RouteChannelRows(context.Background(), "route-model", []dto.ChannelFilter{{Kind: dto.FilterTokenRoute}})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,10 @@ import (
 // External DSNs are opt-in and must point to disposable acceptance databases.
 // Only rows created by this test are removed; the database is never dropped.
 func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
+	policy := operation_setting.GetAffiliateSetting()
+	previousPolicy := *policy
+	*policy = operation_setting.AffiliateSetting{Enabled: true, RateBps: 2000, AdminRechargeEnabled: true}
+	t.Cleanup(func() { *policy = previousPolicy })
 	for _, kind := range []string{"sqlite", "mysql", "postgres"} {
 		t.Run(kind, func(t *testing.T) {
 			var db *gorm.DB
@@ -60,9 +65,11 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 					sqlDB.Close()
 				})
 			}
-			require.NoError(t, db.AutoMigrate(&User{}, &TopUp{}, &Log{}, &GmpayMerchantVersion{}, &GmpayOrder{}, &Ticket{}, &TicketMessage{}, &TicketAttachment{}))
+			require.NoError(t, db.AutoMigrate(&User{}, &TopUp{}, &Log{}, &GmpayMerchantVersion{}, &GmpayOrder{}, &Ticket{}, &TicketMessage{}, &TicketAttachment{}, &AffiliateRecord{}, &AdminQuotaOperation{}))
 			name := "ext-" + uuid.NewString()[:8]
-			user := User{Username: name, AffCode: name, Group: "default"}
+			inviter := User{Username: name + "-i", AffCode: name + "-i", Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
+			require.NoError(t, db.Create(&inviter).Error)
+			user := User{Username: name, AffCode: name, InviterId: inviter.Id, InvitedAt: common.GetTimestamp(), Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
 			require.NoError(t, db.Create(&user).Error)
 			order := TopUp{UserId: user.Id, TradeNo: name, PaymentProvider: PaymentProviderGmpay, PaymentMethod: "gmpay:usdt.tron", Status: common.TopUpStatusPending, Amount: 1, Money: 7.30}
 			payment := &GmpayOrder{ExpectedQuota: 500000, AmountMinor: 730, Currency: "CNY", Token: "usdt", Network: "tron"}
@@ -72,6 +79,9 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			_, err := CreateTicket(&ticket, "Please check the order", user.Id, nil)
 			require.NoError(t, err)
 			t.Cleanup(func() {
+				assert.NoError(t, db.Where("user_id = ?", inviter.Id).Delete(&AffiliateRecord{}).Error)
+				assert.NoError(t, db.Where("user_id = ?", user.Id).Delete(&AdminQuotaOperation{}).Error)
+				assert.NoError(t, db.Unscoped().Where("id = ?", inviter.Id).Delete(&User{}).Error)
 				assert.NoError(t, db.Where("ticket_id = ?", ticket.ID).Delete(&TicketAttachment{}).Error)
 				assert.NoError(t, db.Where("ticket_id = ?", ticket.ID).Delete(&TicketMessage{}).Error)
 				assert.NoError(t, db.Unscoped().Where("id = ?", ticket.ID).Delete(&Ticket{}).Error)
@@ -99,9 +109,75 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			assert.True(t, already)
 			require.NoError(t, db.First(&user, user.Id).Error)
 			assert.Equal(t, 500000, user.Quota)
+			require.NoError(t, db.First(&inviter, inviter.Id).Error)
+			assert.Equal(t, 100000, inviter.AffQuota)
+			operationID := "admin-" + name
+			adminResults := make(chan error, 8)
+			var adminWG sync.WaitGroup
+			for i := 0; i < 8; i++ {
+				adminWG.Add(1)
+				go func() {
+					defer adminWG.Done()
+					_, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500000, operationID)
+					adminResults <- err
+				}()
+			}
+			adminWG.Wait()
+			close(adminResults)
+			for err := range adminResults {
+				require.NoError(t, err)
+			}
+			transferID := "transfer-" + name
+			transferResults := make(chan error, 8)
+			for i := 0; i < 8; i++ {
+				adminWG.Add(1)
+				go func() {
+					defer adminWG.Done()
+					_, _, err := TransferAffiliateQuota(inviter.Id, transferID)
+					transferResults <- err
+				}()
+			}
+			adminWG.Wait()
+			close(transferResults)
+			for err := range transferResults {
+				require.NoError(t, err)
+			}
+			require.NoError(t, db.First(&user, user.Id).Error)
+			require.NoError(t, db.First(&inviter, inviter.Id).Error)
+			assert.Equal(t, 1000000, user.Quota)
+			assert.Equal(t, 200000, inviter.Quota)
+			assert.Zero(t, inviter.AffQuota)
+			assert.Equal(t, 200000, inviter.AffHistoryQuota)
+			invitees, inviteeTotal, err := ListAffiliateInvitees(inviter.Id, "desc", &common.PageInfo{Page: 1, PageSize: 20})
+			require.NoError(t, err)
+			require.Len(t, invitees, 1)
+			assert.EqualValues(t, 1, inviteeTotal)
+			assert.Equal(t, maskAffiliateName(user.Username), invitees[0].MaskedName)
+			assert.Equal(t, 200000, invitees[0].RewardQuota)
+			var referrals int64
+			require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ?", inviter.Id).Count(&referrals).Error)
+			assert.EqualValues(t, 3, referrals)
 			var logs int64
 			require.NoError(t, db.Model(&Log{}).Where("user_id = ? AND type = ?", user.Id, LogTypeTopup).Count(&logs).Error)
 			assert.EqualValues(t, 1, logs)
+			policy.Enabled = false
+			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name)
+			require.NoError(t, err)
+			var skipped AffiliateRecord
+			require.NoError(t, db.Where("user_id = ? AND skip_reason = ?", inviter.Id, "program_disabled").First(&skipped).Error)
+			assert.Equal(t, 500, skipped.BaseQuota)
+			assert.Equal(t, 2000, skipped.RateBps)
+			assert.Zero(t, skipped.RewardQuota)
+			policy.Enabled = true
+			replay, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name)
+			require.NoError(t, err)
+			assert.True(t, replay.Replayed)
+			require.NoError(t, db.First(&user, user.Id).Error)
+			require.NoError(t, db.First(&inviter, inviter.Id).Error)
+			assert.Equal(t, 1000500, user.Quota)
+			assert.Zero(t, inviter.AffQuota)
+			require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ? AND skip_reason = ?", inviter.Id, "program_disabled").Count(&referrals).Error)
+			assert.EqualValues(t, 1, referrals)
 			_, updated, err := AddSupportTicketMessage(ticket.ID, user.Id, "Confirmed", nil)
 			require.NoError(t, err)
 			assert.Equal(t, TicketStatusReplied, updated.Status)

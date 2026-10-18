@@ -86,14 +86,10 @@ func formatWaffoAmount(amount float64, currency string) string {
 // getWaffoPayMoney converts the user-facing amount to USD for Waffo payment.
 // Waffo only accepts USD, so this function handles the conversion from different
 // display types (USD/CNY/TOKENS) to the actual USD amount to charge.
-func getWaffoPayMoney(amount float64, group string) float64 {
+func getWaffoPayMoney(amount float64) float64 {
 	originalAmount := amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		amount = amount / common.QuotaPerUnit
-	}
-	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
-		topupGroupRatio = 1
 	}
 	discount := 1.0
 	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]; ok {
@@ -101,7 +97,7 @@ func getWaffoPayMoney(amount float64, group string) float64 {
 			discount = ds
 		}
 	}
-	return amount * setting.WaffoUnitPrice * topupGroupRatio * discount
+	return amount * setting.WaffoUnitPrice * discount
 }
 
 type WaffoPayRequest struct {
@@ -128,13 +124,7 @@ func RequestWaffoAmount(c *gin.Context) {
 		return
 	}
 
-	group, err := model.GetUserGroup(id, true)
-	if err != nil {
-		paymentError(c, common.NewMessage("Failed to get the user group"))
-		return
-	}
-
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
+	payMoney := getWaffoPayMoney(float64(req.Amount))
 	if payMoney <= 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
@@ -202,9 +192,7 @@ func RequestWaffoPay(c *gin.Context) {
 		}
 	}
 	// resolvedPayMethodType/Name 为空时，Waffo 自动选择支付方式
-
-	group, _ := model.GetUserGroup(id, true)
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
+	payMoney := getWaffoPayMoney(float64(req.Amount))
 	if payMoney < 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
@@ -222,6 +210,7 @@ func RequestWaffoPay(c *gin.Context) {
 
 	// 创建本地订单
 	topUp := &model.TopUp{
+		Currency: getWaffoCurrency(), PayAmount: formatWaffoAmount(payMoney, getWaffoCurrency()),
 		UserId:          id,
 		Amount:          amount,
 		Money:           payMoney,
@@ -241,7 +230,9 @@ func RequestWaffoPay(c *gin.Context) {
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo SDK initialization failed user_id=%d trade_no=%s error=%q", id, merchantOrderId, err.Error()))
 		topUp.Status = common.TopUpStatusFailed
-		_ = topUp.Update()
+		if updateErr := topUp.Update(); updateErr != nil {
+			logger.LogError(c.Request.Context(), common.LogText("failed to mark payment order: %s", updateErr.Error()))
+		}
 		paymentError(c, common.NewMessage("Payment configuration error"))
 		return
 	}
@@ -287,14 +278,18 @@ func RequestWaffoPay(c *gin.Context) {
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo failed to create order user_id=%d trade_no=%s error=%q", id, merchantOrderId, err.Error()))
 		topUp.Status = common.TopUpStatusFailed
-		_ = topUp.Update()
+		if updateErr := topUp.Update(); updateErr != nil {
+			logger.LogError(c.Request.Context(), common.LogText("failed to mark payment order: %s", updateErr.Error()))
+		}
 		paymentError(c, common.NewMessage("Failed to start payment"))
 		return
 	}
 	if !resp.IsSuccess() {
 		logger.LogWarn(c.Request.Context(), common.LogText("Waffo order creation rejected user_id=%d trade_no=%s code=%s message=%q response=%q", id, merchantOrderId, resp.Code, resp.Message, common.GetJsonString(resp)))
 		topUp.Status = common.TopUpStatusFailed
-		_ = topUp.Update()
+		if updateErr := topUp.Update(); updateErr != nil {
+			logger.LogError(c.Request.Context(), common.LogText("failed to mark payment order: %s", updateErr.Error()))
+		}
 		paymentError(c, common.NewMessage("Failed to start payment"))
 		return
 	}

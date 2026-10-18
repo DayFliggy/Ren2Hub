@@ -22,5 +22,23 @@ func rejectLegacyBillingDatabase(db *gorm.DB) error {
 			return errors.New("legacy Ren2Hub billing database is unsupported; initialize a separate empty database")
 		}
 	}
+	// This release intentionally starts from an empty store. A business-group
+	// column identifies the previous routing contract even if every row is empty.
+	for _, table := range []string{"users", "tokens", "channels", "abilities"} {
+		for _, present := range tables {
+			if present != table {
+				continue
+			}
+			columns, err := db.Migrator().ColumnTypes(table)
+			if err != nil {
+				return fmt.Errorf("inspect %s before migration: %w", table, err)
+			}
+			for _, column := range columns {
+				if column.Name() == "group" {
+					return fmt.Errorf("legacy grouped routing database (%s.group) is unsupported; initialize a separate empty database", table)
+				}
+			}
+		}
+	}
 	return nil
 }

@@ -46,12 +46,10 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	req.ContentLength = 0
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
 
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "tiered-test-model",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 		RequestHeaders:  map[string]string{"Content-Type": "application/json"},
 		BillingRequestInput: &billingexpr.RequestInput{
 			Headers: map[string]string{"Content-Type": "application/json"},
@@ -78,9 +76,8 @@ func TestFixedPricePreConsumeAndRealtimeRejection(t *testing.T) {
 	}))
 	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(saved)) })
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"fixed-test":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"fixed-test":"len <= 32000 ? tier(\"short\", fixed(0.01)) : tier(\"long\", p * 2)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1.5}`,
+		"billing_setting.billing_mode": `{"fixed-test":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"fixed-test":"len <= 32000 ? tier(\"short\", fixed(0.01)) : tier(\"long\", p * 2)"}`,
 	}))
 	for _, tc := range []struct {
 		name      string
@@ -93,8 +90,10 @@ func TestFixedPricePreConsumeAndRealtimeRejection(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Set("channel_ratio", "1")
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-			info := &relaycommon.RelayInfo{OriginModelName: "fixed-test", UserGroup: "default", UsingGroup: "default", RelayFormat: tc.format, BillingRequestInput: &billingexpr.RequestInput{}}
+			ctx.Set("channel_ratio", "1.5")
+			info := &relaycommon.RelayInfo{OriginModelName: "fixed-test", RelayFormat: tc.format, BillingRequestInput: &billingexpr.RequestInput{}}
 			price, err := ModelPriceHelper(ctx, info, tc.prompt, &types.TokenCountMeta{})
 			if tc.wantError {
 				require.ErrorContains(t, err, "Realtime")
@@ -124,9 +123,8 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 	})
 
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-fallback-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-fallback-model":"len <= 1200 ? tier(\"base\", p * 3 + c * 15) : tier(\"long\", p * 30 + c * 150)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1,"free":0}`,
+		"billing_setting.billing_mode": `{"tiered-fallback-model":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"tiered-fallback-model":"len <= 1200 ? tier(\"base\", p * 3 + c * 15) : tier(\"long\", p * 30 + c * 150)"}`,
 	}))
 
 	cases := []struct {
@@ -143,7 +141,7 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 		{"fraction above one preserves context tier", "default", 1000, 0, 2.5, 3750},
 		{"small input has no token floor", "default", 100, 0, 1, 150},
 		{"zero input", "default", 0, 100, 1, 0},
-		{"free group", "free", 1000, 0, 2.5, 0},
+		{"half-price channel", "free", 1000, 0, 2.5, 1875},
 	}
 
 	for _, tc := range cases {
@@ -153,12 +151,13 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 			req.Header.Set("Content-Type", "application/json")
 			ctx.Request = req
-			ctx.Set("group", tc.group)
+			ctx.Set("channel_ratio", "1")
+			if tc.group == "free" {
+				ctx.Set("channel_ratio", "0.5")
+			}
 
 			info := &relaycommon.RelayInfo{
 				OriginModelName: "tiered-fallback-model",
-				UserGroup:       tc.group,
-				UsingGroup:      tc.group,
 				RequestHeaders:  map[string]string{"Content-Type": "application/json"},
 				BillingRequestInput: &billingexpr.RequestInput{
 					Headers: map[string]string{"Content-Type": "application/json"},
@@ -175,9 +174,9 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 			require.NoError(t, err)
 			wantActual := 2250
 			if tc.group == "free" {
-				wantActual = 0
+				wantActual = 1125
 			}
-			assert.Equal(t, wantActual, actual.ActualQuotaAfterGroup, "reservation multiplier must not change settlement")
+			assert.Equal(t, wantActual, actual.ActualQuotaAfterChannel, "reservation multiplier must not change settlement")
 		})
 	}
 }
@@ -195,19 +194,16 @@ func TestModelPriceHelperTieredRejectsPreConsumeOverflow(t *testing.T) {
 	})
 
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-overflow-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-overflow-model":"tier(\"overflow\", p * 100000000000000000)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1}`,
+		"billing_setting.billing_mode": `{"tiered-overflow-model":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"tiered-overflow-model":"tier(\"overflow\", p * 100000000000000000)"}`,
 	}))
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "tiered-overflow-model",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 		BillingRequestInput: &billingexpr.RequestInput{
 			Body: []byte(`{}`),
 		},
@@ -266,11 +262,10 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			ctx.Set("group", "default")
+			ctx.Set("channel_ratio", "1")
+			ctx.Set("channel_ratio", "1")
 			info := &relaycommon.RelayInfo{
 				OriginModelName: tt.model,
-				UserGroup:       "default",
-				UsingGroup:      "default",
 			}
 			meta := &types.TokenCountMeta{
 				ImagePriceRatio: 3,
@@ -289,11 +284,10 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 
 	newInfo := func(model string) (*gin.Context, *relaycommon.RelayInfo) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-		ctx.Set("group", "default")
+		ctx.Set("channel_ratio", "1")
+		ctx.Set("channel_ratio", "1")
 		return ctx, &relaycommon.RelayInfo{
 			OriginModelName: model,
-			UserGroup:       "default",
-			UsingGroup:      "default",
 		}
 	}
 	meta := &types.TokenCountMeta{BillingRatios: map[string]float64{"n": 3}}
@@ -338,12 +332,11 @@ func TestModelPriceHelperUsesSuffixedOriginLikeMain(t *testing.T) {
 	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = oldSelfUse })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 
 	suffixed := &relaycommon.RelayInfo{
 		OriginModelName: "gemini-2.5-flash-thinking-8192",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	suffixedPrice, err := ModelPriceHelper(ctx, suffixed, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -358,8 +351,6 @@ func TestModelPriceHelperUsesSuffixedOriginLikeMain(t *testing.T) {
 
 	adapterOn := &relaycommon.RelayInfo{
 		OriginModelName: "gemini-2.5-flash-thinking-8192",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	adapterOnPrice, err := ModelPriceHelper(ctx, adapterOn, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -369,8 +360,6 @@ func TestModelPriceHelperUsesSuffixedOriginLikeMain(t *testing.T) {
 
 	base := &relaycommon.RelayInfo{
 		OriginModelName: "gemini-2.5-flash",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	basePrice, err := ModelPriceHelper(ctx, base, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -403,11 +392,10 @@ func TestModelPriceHelperHonorsCustomClaudeThinkingAlias(t *testing.T) {
 	t.Cleanup(func() { claudeSettings.ThinkingAdapterEnabled = oldThinking })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "claude-3-7-sonnet-thinking",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -428,7 +416,8 @@ func TestModelPriceHelperCanonicalBillingLadder(t *testing.T) {
 	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = oldSelfUse })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 
 	t.Run("level2 full form", func(t *testing.T) {
 		ratios := ratio_setting.GetModelRatioCopy()
@@ -441,8 +430,6 @@ func TestModelPriceHelperCanonicalBillingLadder(t *testing.T) {
 
 		info := &relaycommon.RelayInfo{
 			OriginModelName: "qwen3-max@thinking:on@effort:high@temperature:0.2",
-			UserGroup:       "default",
-			UsingGroup:      "default",
 		}
 		priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 		require.NoError(t, err)
@@ -461,8 +448,6 @@ func TestModelPriceHelperCanonicalBillingLadder(t *testing.T) {
 
 		info := &relaycommon.RelayInfo{
 			OriginModelName: "qwen3-max@temperature:0.3@thinking:8192",
-			UserGroup:       "default",
-			UsingGroup:      "default",
 		}
 		priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 		require.NoError(t, err)
@@ -481,8 +466,6 @@ func TestModelPriceHelperCanonicalBillingLadder(t *testing.T) {
 
 		info := &relaycommon.RelayInfo{
 			OriginModelName: "qwen3-max@thinking:off",
-			UserGroup:       "default",
-			UsingGroup:      "default",
 		}
 		priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 		require.NoError(t, err)
@@ -499,8 +482,6 @@ func TestModelPriceHelperCanonicalBillingLadder(t *testing.T) {
 
 		info := &relaycommon.RelayInfo{
 			OriginModelName: "qwen3-max@thinking:-1",
-			UserGroup:       "default",
-			UsingGroup:      "default",
 		}
 		priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 		require.NoError(t, err)
@@ -534,11 +515,10 @@ func TestModelPriceHelperMigratesLegacyGeminiWildcardToCanonical(t *testing.T) {
 	t.Cleanup(func() { geminiSettings.ThinkingAdapterEnabled = oldThinking })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "gemini-2.5-flash-thinking-8192",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -564,11 +544,10 @@ func TestModelPriceHelperModifierNameFallsBackToBase(t *testing.T) {
 	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = oldSelfUse })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "qwen3.8-max@thinking:on@temperature:0.2",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -600,11 +579,10 @@ func TestModelPriceHelperExemptAtNameBillsVerbatim(t *testing.T) {
 	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = oldSelfUse })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "opaque@sha256:deadbeef",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -632,11 +610,10 @@ func TestModelPriceHelperPreservesGpt51CodexMaxIdentity(t *testing.T) {
 	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = oldSelfUse })
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "gpt-5.1-codex-max",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 	}
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 	require.NoError(t, err)
@@ -669,11 +646,10 @@ func TestModelPriceHelperNativeGeminiNoThinkingDoesNotAliasBillingModel(t *testi
 
 	budget := 0
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
+	ctx.Set("channel_ratio", "1")
+	ctx.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "gemini-3-pro",
-		UserGroup:       "default",
-		UsingGroup:      "default",
 		Request: &dto.GeminiChatRequest{
 			GenerationConfig: dto.GeminiChatGenerationConfig{
 				ThinkingConfig: &dto.GeminiThinkingConfig{
@@ -702,9 +678,8 @@ func TestInputPreConsumeMultiplierLegacyAndRequestPrices(t *testing.T) {
 	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"legacy-input-policy":1.5}`))
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"request-input-policy":0.01}`))
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"fixed-input-policy":"tiered_expr","image-input-policy":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"fixed-input-policy":"tier(\"request\", fixed(0.01))","image-input-policy":"tier(\"image\", p * 3) * image_count"}`,
-		"group_ratio_setting.group_ratio": `{"default":1}`,
+		"billing_setting.billing_mode": `{"fixed-input-policy":"tiered_expr","image-input-policy":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"fixed-input-policy":"tier(\"request\", fixed(0.01))","image-input-policy":"tier(\"image\", p * 3) * image_count"}`,
 	}))
 	for _, tc := range []struct {
 		model        string
@@ -721,8 +696,9 @@ func TestInputPreConsumeMultiplierLegacyAndRequestPrices(t *testing.T) {
 		t.Run(tc.model+"/"+fmt.Sprint(tc.multiplier, "/", tc.prompt), func(t *testing.T) {
 			operation_setting.GetQuotaSetting().PreConsumeMultiplier = tc.multiplier
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Set("channel_ratio", "1")
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-			info := &relaycommon.RelayInfo{OriginModelName: tc.model, UserGroup: "default", UsingGroup: "default", BillingRequestInput: &billingexpr.RequestInput{}}
+			info := &relaycommon.RelayInfo{OriginModelName: tc.model, BillingRequestInput: &billingexpr.RequestInput{}}
 			price, err := ModelPriceHelper(ctx, info, tc.prompt, &types.TokenCountMeta{MaxTokens: 10000})
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, price.QuotaToPreConsume)

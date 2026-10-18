@@ -39,7 +39,7 @@ func useGmpayControllerDB(t *testing.T) *gorm.DB {
 	require.NoError(t, model.InitDB())
 	db := model.DB
 	db.Logger = gormlogger.Default.LogMode(gormlogger.Silent)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}, &model.TopUp{}, &model.GmpayOrder{}, &model.GmpayMerchantVersion{}, &model.Log{}, &model.Ticket{}, &model.TicketMessage{}, &model.TicketAttachment{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}, &model.TopUp{}, &model.GmpayOrder{}, &model.GmpayMerchantVersion{}, &model.Log{}, &model.Ticket{}, &model.TicketMessage{}, &model.TicketAttachment{}, &model.AffiliateRecord{}, &model.AdminQuotaOperation{}))
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
@@ -60,16 +60,15 @@ func useGmpayControllerDB(t *testing.T) *gorm.DB {
 
 func TestGmpayUsesNativeAmountQuotaAndCNY(t *testing.T) {
 	db := useGmpayControllerDB(t)
-	user := model.User{Username: "payer", AffCode: "payer", Group: "vip"}
+	user := model.User{Username: "payer", AffCode: "payer"}
 	require.NoError(t, db.Create(&user).Error)
 	oldPayment, oldPrice, oldDisplay := *operation_setting.GetPaymentSetting(), operation_setting.Price, operation_setting.GetQuotaDisplayType()
-	oldRatio, oldAddress, oldCallback := common.TopupGroupRatio2JSONString(), system_setting.ServerAddress, operation_setting.CustomCallbackAddress
+	oldAddress, oldCallback := system_setting.ServerAddress, operation_setting.CustomCallbackAddress
 	oldTransport := http.DefaultTransport
 	t.Cleanup(func() {
 		*operation_setting.GetPaymentSetting() = oldPayment
 		operation_setting.Price = oldPrice
 		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplay
-		require.NoError(t, common.UpdateTopupGroupRatioByJSONString(oldRatio))
 		system_setting.ServerAddress = oldAddress
 		operation_setting.CustomCallbackAddress = oldCallback
 		http.DefaultTransport = oldTransport
@@ -79,7 +78,6 @@ func TestGmpayUsesNativeAmountQuotaAndCNY(t *testing.T) {
 	operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{750001: 0.9}
 	operation_setting.Price = 7.3
 	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeTokens
-	require.NoError(t, common.UpdateTopupGroupRatioByJSONString(`{"vip":0.8}`))
 	system_setting.ServerAddress = "https://console.example.test"
 	operation_setting.CustomCallbackAddress = "https://callback.example.test"
 	var sent map[string]string

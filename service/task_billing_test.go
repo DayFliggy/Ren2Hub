@@ -133,7 +133,6 @@ func makeTask(userId, channelId, quota, tokenId int, billingSource string) *mode
 		ChannelId: channelId,
 		Quota:     quota,
 		Status:    model.TaskStatus(model.TaskStatusInProgress),
-		Group:     "default",
 		Data:      json.RawMessage(`{}`),
 		CreatedAt: time.Now().Unix(),
 		UpdatedAt: time.Now().Unix(),
@@ -145,7 +144,7 @@ func makeTask(userId, channelId, quota, tokenId int, billingSource string) *mode
 			TokenId:       tokenId,
 			BillingContext: &model.TaskBillingContext{
 				ModelPrice:      0.02,
-				GroupRatio:      1.0,
+				ChannelRatio:    1.0,
 				OriginModelName: "test-model",
 			},
 		},
@@ -298,13 +297,12 @@ func TestLogTaskConsumptionIncludesTieredSnapshotUsageFacts(t *testing.T) {
 		UserId:          userID,
 		TokenId:         0,
 		OriginModelName: "wan2.5-i2v-preview",
-		UsingGroup:      "default",
 		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: channelID},
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{Action: "GENERATE"},
 		PriceData: types.PriceData{
-			ModelPrice:     0.02,
-			Quota:          100,
-			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+			ModelPrice:       0.02,
+			Quota:            100,
+			ChannelRatioInfo: types.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
 			ExprString:    expression,
@@ -341,9 +339,9 @@ func TestLogTaskConsumptionWithoutSnapshotKeepsRatioMode(t *testing.T) {
 	seedChannel(t, channelID)
 
 	priceData := types.PriceData{
-		ModelPrice:     0.02,
-		Quota:          100,
-		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		ModelPrice:       0.02,
+		Quota:            100,
+		ChannelRatioInfo: types.ChannelRatioInfo{ChannelRatio: 1},
 	}
 	priceData.AddOtherRatio("size", 2)
 	task := makeTask(userID, channelID, 100, 0, BillingSourceWallet)
@@ -351,7 +349,6 @@ func TestLogTaskConsumptionWithoutSnapshotKeepsRatioMode(t *testing.T) {
 		UserId:          userID,
 		TokenId:         0,
 		OriginModelName: "test-model",
-		UsingGroup:      "default",
 		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: channelID},
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{Action: "GENERATE"},
 		PriceData:       priceData,
@@ -400,10 +397,9 @@ func TestLogTaskConsumptionMarksInlineResultsAndDiscardedArtifacts(t *testing.T)
 			task.Status = tc.status
 			task.PrivateData.ResultDiscarded = tc.discarded
 			info := &relaycommon.RelayInfo{
-				UserId: userID, OriginModelName: "qwen-image-plus", UsingGroup: "default",
-				ChannelMeta:   &relaycommon.ChannelMeta{ChannelId: channelID},
+				UserId: userID, OriginModelName: "qwen-image-plus", ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channelID},
 				TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: "text_to_image"},
-				PriceData:     types.PriceData{ModelPrice: 0.03, Quota: 100, GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+				PriceData:     types.PriceData{ModelPrice: 0.03, Quota: 100, ChannelRatioInfo: types.ChannelRatioInfo{ChannelRatio: 1}},
 			}
 			gin.SetMode(gin.TestMode)
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -602,6 +598,14 @@ func TestSettleMidjourneyTaskBillingRequiresPersistedTask(t *testing.T) {
 		},
 	}
 	task := &model.Midjourney{UserId: userID, ChannelId: channelID}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/mj/submit/imagine", nil)
+	require.Nil(t, PreConsumeBilling(c, chargedQuota, relayInfo))
+	t.Cleanup(func() {
+		if relayInfo.Billing.NeedsRefund() {
+			require.NoError(t, relayInfo.Billing.Settle(0))
+		}
+	})
 	prepared, err := PrepareMidjourneyTaskBilling(relayInfo, task, chargedQuota, true)
 	require.NoError(t, err)
 	require.True(t, prepared)
@@ -610,8 +614,8 @@ func TestSettleMidjourneyTaskBillingRequiresPersistedTask(t *testing.T) {
 
 	require.Error(t, err)
 	assert.False(t, billed)
-	assert.Equal(t, initialUserQuota, getUserQuota(t, userID))
-	assert.Equal(t, initialTokenQuota, getTokenRemainQuota(t, tokenID))
+	assert.Equal(t, initialUserQuota-chargedQuota, getUserQuota(t, userID))
+	assert.Equal(t, initialTokenQuota-chargedQuota, getTokenRemainQuota(t, tokenID))
 }
 
 func TestMidjourneyRefundRestoresEveryAccountingElementOnBillingChannel(t *testing.T) {
@@ -626,11 +630,10 @@ func TestMidjourneyRefundRestoresEveryAccountingElementOnBillingChannel(t *testi
 	seedChannel(t, executionChannelID)
 
 	relayInfo := &relaycommon.RelayInfo{
-		UserId:     userID,
-		TokenId:    tokenID,
-		TokenKey:   "sk-midjourney",
-		UserQuota:  initialUserQuota,
-		UsingGroup: "default",
+		UserId:    userID,
+		TokenId:   tokenID,
+		TokenKey:  "sk-midjourney",
+		UserQuota: initialUserQuota,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelId: billingChannelID,
 		},
@@ -643,11 +646,19 @@ func TestMidjourneyRefundRestoresEveryAccountingElementOnBillingChannel(t *testi
 		Progress:  "0%",
 	}
 
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/mj/submit/imagine", nil)
+	require.Nil(t, PreConsumeBilling(c, chargedQuota, relayInfo))
+	t.Cleanup(func() {
+		if relayInfo.Billing.NeedsRefund() {
+			require.NoError(t, relayInfo.Billing.Settle(0))
+		}
+	})
 	prepared, err := PrepareMidjourneyTaskBilling(relayInfo, task, chargedQuota, true)
 	require.NoError(t, err)
 	require.True(t, prepared)
 	assert.Equal(t, chargedQuota, task.Quota)
-	assert.Zero(t, task.TokenId)
+	assert.Equal(t, tokenID, task.TokenId)
 	assert.Equal(t, billingChannelID, task.BillingChannelId)
 	require.NoError(t, task.Insert())
 
@@ -688,119 +699,14 @@ func TestMidjourneyRefundRestoresEveryAccountingElementOnBillingChannel(t *testi
 	assert.Equal(t, int64(1), countLogs(t))
 }
 
-func TestSettleMidjourneyTaskBillingFundingFailureClearsMarkers(t *testing.T) {
-	truncate(t)
-
-	const userID, tokenID, channelID = 52, 52, 52
-	const initialUserQuota, initialTokenQuota, chargedQuota = 10000, 5000, 3000
-	seedUser(t, userID, initialUserQuota)
-	seedToken(t, tokenID, userID, "sk-midjourney-funding-failure", initialTokenQuota)
-	seedChannel(t, channelID)
-
-	relayInfo := &relaycommon.RelayInfo{
-		UserId:    userID,
-		TokenId:   tokenID,
-		TokenKey:  "sk-midjourney-funding-failure",
-		UserQuota: initialUserQuota,
-		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelId: channelID,
-		},
-	}
-	task := &model.Midjourney{UserId: userID, MjId: "mj-funding-failure", ChannelId: channelID}
-	prepared, err := PrepareMidjourneyTaskBilling(relayInfo, task, chargedQuota, true)
-	require.NoError(t, err)
-	require.True(t, prepared)
-	require.NoError(t, task.Insert())
-
-	require.NoError(t, model.DB.Exec(`
-		CREATE TRIGGER fail_midjourney_user_update
-		BEFORE UPDATE ON users
-		WHEN OLD.id = 52
-		BEGIN
-			SELECT RAISE(ABORT, 'forced user quota failure');
-		END;
-	`).Error)
-	t.Cleanup(func() {
-		model.DB.Exec("DROP TRIGGER IF EXISTS fail_midjourney_user_update")
-	})
-
-	billed, err := SettleMidjourneyTaskBilling(relayInfo, task, prepared)
-
+func TestMidjourneyCannotPrepareWithoutPreDispatchReservation(t *testing.T) {
+	task := &model.Midjourney{UserId: 52, ChannelId: 52}
+	prepared, err := PrepareMidjourneyTaskBilling(&relaycommon.RelayInfo{UserId: 52}, task, 3000, true)
 	require.Error(t, err)
-	assert.False(t, billed)
-	assert.Equal(t, initialUserQuota, getUserQuota(t, userID))
-	assert.Equal(t, initialTokenQuota, getTokenRemainQuota(t, tokenID))
-	persisted := getMidjourneyTask(t, task.Id)
-	assert.Zero(t, persisted.Quota)
-	assert.Zero(t, persisted.TokenId)
-	assert.Zero(t, persisted.BillingChannelId)
-	usedQuota, requestCount := getUserUsageAccounting(t, userID)
-	assert.Zero(t, usedQuota)
-	assert.Zero(t, requestCount)
-	assert.Zero(t, getChannelUsedQuota(t, channelID))
-	assert.Zero(t, countLogs(t))
-}
-
-func TestSettleMidjourneyTaskBillingTokenFailureKeepsFundingRefundable(t *testing.T) {
-	truncate(t)
-	ctx := context.Background()
-
-	const userID, tokenID, channelID = 53, 53, 53
-	const initialUserQuota, initialTokenQuota, chargedQuota = 10000, 5000, 3000
-	seedUser(t, userID, initialUserQuota)
-	seedToken(t, tokenID, userID, "sk-midjourney-token-failure", initialTokenQuota)
-	seedChannel(t, channelID)
-
-	relayInfo := &relaycommon.RelayInfo{
-		UserId:    userID,
-		TokenId:   tokenID,
-		TokenKey:  "sk-midjourney-token-failure",
-		UserQuota: initialUserQuota,
-		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelId: channelID,
-		},
-	}
-	task := &model.Midjourney{UserId: userID, MjId: "mj-token-failure", ChannelId: channelID}
-	prepared, err := PrepareMidjourneyTaskBilling(relayInfo, task, chargedQuota, true)
-	require.NoError(t, err)
-	require.True(t, prepared)
-	require.NoError(t, task.Insert())
-
-	require.NoError(t, model.DB.Exec(`
-		CREATE TRIGGER fail_midjourney_token_update
-		BEFORE UPDATE ON tokens
-		WHEN OLD.id = 53
-		BEGIN
-			SELECT RAISE(ABORT, 'forced token quota failure');
-		END;
-	`).Error)
-	t.Cleanup(func() {
-		model.DB.Exec("DROP TRIGGER IF EXISTS fail_midjourney_token_update")
-	})
-
-	billed, err := SettleMidjourneyTaskBilling(relayInfo, task, prepared)
-
-	require.Error(t, err)
-	require.True(t, billed)
-	assert.Equal(t, initialUserQuota-chargedQuota, getUserQuota(t, userID))
-	assert.Equal(t, initialTokenQuota, getTokenRemainQuota(t, tokenID))
-	assert.Zero(t, getTokenUsedQuota(t, tokenID))
-	persisted := getMidjourneyTask(t, task.Id)
-	assert.Equal(t, chargedQuota, persisted.Quota)
-	assert.Zero(t, persisted.TokenId)
-	assert.Equal(t, channelID, persisted.BillingChannelId)
-
-	seedChargedAccounting(t, userID, channelID, 0, chargedQuota, 1)
-	assert.True(t, RefundMidjourneyQuota(ctx, task, "token settlement failed"))
-	assert.Equal(t, initialUserQuota, getUserQuota(t, userID))
-	assert.Equal(t, initialTokenQuota, getTokenRemainQuota(t, tokenID))
-	usedQuota, requestCount := getUserUsageAccounting(t, userID)
-	assert.Zero(t, usedQuota)
-	assert.Equal(t, 1, requestCount)
-	assert.Zero(t, getChannelUsedQuota(t, channelID))
-	log := getLastLog(t)
-	require.NotNil(t, log)
-	assert.Zero(t, log.TokenId)
+	require.False(t, prepared)
+	require.Zero(t, task.Quota)
+	require.Zero(t, task.TokenId)
+	require.Zero(t, task.BillingChannelId)
 }
 
 func TestRefundMidjourneyQuotaUsesLegacyChannelFallbackWithoutTokenAdjustment(t *testing.T) {
@@ -1304,7 +1210,7 @@ type mockAdaptor struct {
 }
 
 func (m *mockAdaptor) Init(_ *relaycommon.RelayInfo) {}
-func (m *mockAdaptor) FetchTask(string, string, *model.Task, string) (*http.Response, error) {
+func (m *mockAdaptor) FetchTask(context.Context, string, string, *model.Task, string) (*http.Response, error) {
 	return nil, nil
 }
 func (m *mockAdaptor) ParseTaskResult(*model.Task, *http.Response, []byte) (*relaycommon.TaskInfo, error) {
@@ -1418,7 +1324,7 @@ func TestSettle_TieredEvaluationFailureKeepsPreConsumedCharge(t *testing.T) {
 	task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 		ExprString:       `tier("broken",`,
 		ExprHash:         billingexpr.ExprHashString(`tier("broken",`),
-		GroupRatio:       1,
+		ChannelRatio:     1,
 		QuotaPerUnit:     1_000,
 		ExprVersion:      1,
 		TaskUsageBilling: true,
@@ -1446,7 +1352,7 @@ func TestSettle_TieredFailureReturnsFalseForCallerRefund(t *testing.T) {
 	task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 		ExprString:       expression,
 		ExprHash:         billingexpr.ExprHashString(expression),
-		GroupRatio:       1,
+		ChannelRatio:     1,
 		QuotaPerUnit:     1,
 		ExprVersion:      1,
 		TaskUsageBilling: true,
@@ -1483,7 +1389,7 @@ func TestSettle_TieredSuccessStillRecomputes(t *testing.T) {
 	task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 		ExprString:       expression,
 		ExprHash:         billingexpr.ExprHashString(expression),
-		GroupRatio:       1,
+		ChannelRatio:     1,
 		QuotaPerUnit:     1,
 		ExprVersion:      1,
 		TaskUsageBilling: true,
@@ -1556,7 +1462,7 @@ func TestSettle_TieredUsageFactsMergeCompletionOverSubmission(t *testing.T) {
 			task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 				ExprString:       expression,
 				ExprHash:         billingexpr.ExprHashString(expression),
-				GroupRatio:       1,
+				ChannelRatio:     1,
 				QuotaPerUnit:     1,
 				ExprVersion:      1,
 				TaskUsageBilling: true,
@@ -1605,7 +1511,7 @@ func TestSettle_TieredSnapshotWriteBackUsesSettledFactsAndMatchedTier(t *testing
 	task.PrivateData.BillingContext.TieredSnapshot = &billingexpr.BillingSnapshot{
 		ExprString:       expression,
 		ExprHash:         billingexpr.ExprHashString(expression),
-		GroupRatio:       1,
+		ChannelRatio:     1,
 		QuotaPerUnit:     1,
 		ExprVersion:      1,
 		TaskUsageBilling: true,

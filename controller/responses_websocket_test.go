@@ -28,6 +28,7 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
@@ -52,10 +53,6 @@ func setupResponsesWSRequestTest(t *testing.T) (*model.User, *model.Token) {
 	previousDuration := setting.ModelRequestRateLimitDurationMinutes
 	previousTotal := setting.ModelRequestRateLimitCount
 	previousSuccess := setting.ModelRequestRateLimitSuccessCount
-	setting.ModelRequestRateLimitMutex.Lock()
-	previousGroups := setting.ModelRequestRateLimitGroup
-	setting.ModelRequestRateLimitGroup = nil
-	setting.ModelRequestRateLimitMutex.Unlock()
 	t.Setenv("SQL_DSN", os.Getenv("TEST_RESPONSES_SQL_DSN"))
 	t.Setenv("LOG_SQL_DSN", os.Getenv("TEST_RESPONSES_LOG_SQL_DSN"))
 	common.IsMasterNode, common.MemoryCacheEnabled, common.RedisEnabled = false, false, false
@@ -84,15 +81,12 @@ func setupResponsesWSRequestTest(t *testing.T) (*model.User, *model.Token) {
 		setting.ModelRequestRateLimitDurationMinutes = previousDuration
 		setting.ModelRequestRateLimitCount = previousTotal
 		setting.ModelRequestRateLimitSuccessCount = previousSuccess
-		setting.ModelRequestRateLimitMutex.Lock()
-		setting.ModelRequestRateLimitGroup = previousGroups
-		setting.ModelRequestRateLimitMutex.Unlock()
 		require.NoError(t, sqlDB.Close())
 	})
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
 	// The shared in-memory limiter outlives each database fixture. Give every
 	// user a separate quota bucket, including when the tests run with -count.
-	user := &model.User{Id: 5062000 + int(responsesWSTestUserSequence.Add(1)), Username: "responses-ws-user", Status: common.UserStatusEnabled, Group: "default", Quota: 1000, AuthVersion: 1}
+	user := &model.User{Id: 5062000 + int(responsesWSTestUserSequence.Add(1)), Username: "responses-ws-user", Status: common.UserStatusEnabled, Quota: 1000, AuthVersion: 1}
 	require.NoError(t, db.Create(user).Error)
 	token := &model.Token{UserId: user.Id, Key: "responseswstoken", Status: common.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 100}
 	require.NoError(t, db.Create(token).Error)
@@ -166,7 +160,7 @@ func TestResponsesWSRequestRunnerRefreshesBillingContextAndCleansBody(t *testing
 		"remain_quota": 2, "model_limits_enabled": true, "model_limits": "gpt-5.1",
 	}).Error)
 	require.NoError(t, model.DB.Model(user).Updates(map[string]any{
-		"group": "updated", "setting": `{"language":"zh-CN"}`,
+		"max_concurrency": 3, "setting": `{"language":"zh-CN"}`,
 	}).Error)
 	request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"input":"second"}`))
 	require.Nil(t, runner(request, "ws-second", func(c *gin.Context) *types.NewAPIError {
@@ -174,7 +168,6 @@ func TestResponsesWSRequestRunnerRefreshesBillingContextAndCleansBody(t *testing
 		assert.True(t, c.GetBool("token_model_limit_enabled"))
 		modelLimits, _ := c.Get("token_model_limit")
 		assert.Equal(t, map[string]bool{"gpt-5.1": true}, modelLimits)
-		assert.Equal(t, "updated", common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 		userSetting, ok := common.GetContextKeyType[dto.UserSetting](c, constant.ContextKeyUserSetting)
 		require.True(t, ok)
 		assert.Equal(t, "zh-CN", userSetting.Language)
@@ -303,6 +296,7 @@ func (fixture *responsesWSBillingTest) closeAndWait(t *testing.T) {
 			t.Error("upstream connection was not closed")
 		}
 	}
+	require.Eventually(t, func() bool { return gopool.WorkerCount() == 0 }, time.Second, time.Millisecond, "asynchronous refunds and health writes must finish before the test closes Redis")
 	// Health classification is synchronous at the request boundary; only the
 	// Redis write is asynchronous, see waitPerfCounters.
 }
@@ -313,7 +307,7 @@ func waitPerfCounters(t *testing.T, wantRequests int64) (requests, successes int
 	t.Helper()
 	require.Eventually(t, func() bool {
 		requests, successes = 0, 0
-		keys, err := common.RDB.Keys(context.Background(), "perf:ws-billing:*").Result()
+		keys, err := common.RDB.Keys(context.Background(), "perf:channel-core:ws-billing:*").Result()
 		if err != nil {
 			return false
 		}
@@ -346,7 +340,7 @@ func newResponsesWSBillingTestWithSetup(t *testing.T, expression string, handle 
 	saved := map[string]string{}
 	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
 		switch key {
-		case "billing_setting.billing_mode", "billing_setting.billing_expr", "group_ratio_setting.group_ratio", "perf_metrics_setting.enabled":
+		case "billing_setting.billing_mode", "billing_setting.billing_expr", "perf_metrics_setting.enabled":
 			saved[key] = value
 		}
 		return nil
@@ -358,10 +352,9 @@ func newResponsesWSBillingTestWithSetup(t *testing.T, expression string, handle 
 	expressions, err := common.Marshal(map[string]string{"ws-billing": expression})
 	require.NoError(t, err)
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"ws-billing":"tiered_expr"}`,
-		"billing_setting.billing_expr":    string(expressions),
-		"group_ratio_setting.group_ratio": `{"default":1}`,
-		"perf_metrics_setting.enabled":    "true",
+		"billing_setting.billing_mode": `{"ws-billing":"tiered_expr"}`,
+		"billing_setting.billing_expr": string(expressions),
+		"perf_metrics_setting.enabled": "true",
 	}))
 	require.NoError(t, model.DB.AutoMigrate(&model.Channel{}, &model.Ability{}))
 	require.NoError(t, model.LOG_DB.AutoMigrate(&model.Log{}))
@@ -397,7 +390,7 @@ func newResponsesWSBillingTestWithSetup(t *testing.T, expression string, handle 
 		handle(ws, r)
 	}))
 	t.Cleanup(upstream.Close)
-	channel := &model.Channel{Name: "responses-ws-upstream", Key: "upstream-first\nupstream-second", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Group: "default", Models: "ws-billing", BaseURL: &upstream.URL,
+	channel := &model.Channel{Name: "responses-ws-upstream", Key: "upstream-first\nupstream-second", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: "ws-billing", BaseURL: &upstream.URL,
 		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling}}
 	modelMapping := `{"ws-billing":"gpt-4o"}`
 	channel.ModelMapping = &modelMapping
@@ -405,7 +398,7 @@ func newResponsesWSBillingTestWithSetup(t *testing.T, expression string, handle 
 	channel.SetOtherSettings(dto.ChannelOtherSettings{AllowServiceTier: true})
 	require.NoError(t, model.DB.Create(channel).Error)
 	fixture.channel = channel
-	require.NoError(t, model.DB.Create(&model.Ability{ChannelId: channel.Id, Model: "ws-billing", Group: "default", Enabled: true}).Error)
+	require.NoError(t, model.DB.Create(&model.Ability{ChannelId: channel.Id, Model: "ws-billing", Enabled: true}).Error)
 	t.Cleanup(func() {
 		require.NoError(t, model.LOG_DB.Where("token_id = ?", token.Id).Delete(&model.Log{}).Error)
 		require.NoError(t, model.DB.Where("channel_id = ?", channel.Id).Delete(&model.Ability{}).Error)
@@ -499,7 +492,7 @@ func TestResponsesInterruptedStreamHealth(t *testing.T) {
 			fixture.closeAndWait(t)
 			assertResponsesWSAccounting(t, fixture, []int{1000})
 			if scenario == "sse client cancel" {
-				keys, err := common.RDB.Keys(context.Background(), "perf:ws-billing:*").Result()
+				keys, err := common.RDB.Keys(context.Background(), "perf:channel-core:ws-billing:*").Result()
 				require.NoError(t, err)
 				assert.Empty(t, keys, "client cancellation must not affect model health")
 				return
@@ -755,7 +748,7 @@ func TestResponsesWebSocketDisconnectSettlesDeliveredOutputOnce(t *testing.T) {
 	assert.Equal(t, "hello", delta["delta"])
 	fixture.closeAndWait(t)
 	assertResponsesWSAccounting(t, fixture, []int{1})
-	keys, err := common.RDB.Keys(context.Background(), "perf:ws-billing:*").Result()
+	keys, err := common.RDB.Keys(context.Background(), "perf:channel-core:ws-billing:*").Result()
 	require.NoError(t, err)
 	assert.Empty(t, keys, "client cancellation must not affect model health")
 }
@@ -1035,6 +1028,18 @@ func TestResponsesHTTPHealthCountsFinalResult(t *testing.T) {
 			}))
 			t.Cleanup(upstream.Close)
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("name = ?", "responses-ws-upstream").Update("base_url", upstream.URL).Error)
+			if tc.success {
+				backup := *fixture.channel
+				backup.Id = 0
+				backup.Name = "responses-http-retry-backup"
+				backup.BaseURL = &upstream.URL
+				require.NoError(t, model.DB.Create(&backup).Error)
+				require.NoError(t, model.DB.Create(&model.Ability{ChannelId: backup.Id, Model: "ws-billing", Enabled: true}).Error)
+				t.Cleanup(func() {
+					require.NoError(t, model.DB.Where("channel_id = ?", backup.Id).Delete(&model.Ability{}).Error)
+					require.NoError(t, model.DB.Delete(&backup).Error)
+				})
+			}
 			request, err := http.NewRequest(http.MethodPost, fixture.gatewayURL+"/v1/responses", strings.NewReader(`{"model":"ws-billing","input":"hello"}`))
 			require.NoError(t, err)
 			request.Header.Set("Authorization", "Bearer sk-"+fixture.token.Key)
@@ -1057,7 +1062,7 @@ func TestResponsesHTTPHealthCountsFinalResult(t *testing.T) {
 				assert.Equal(t, http.StatusOK, response.StatusCode)
 			}
 			if tc.ignored {
-				keys, err := common.RDB.Keys(context.Background(), "perf:ws-billing:*").Result()
+				keys, err := common.RDB.Keys(context.Background(), "perf:channel-core:ws-billing:*").Result()
 				require.NoError(t, err)
 				assert.Empty(t, keys)
 				return
@@ -1429,7 +1434,7 @@ func TestResponsesWebSocketPreRoutingRejectionsFollowHealthClassification(t *tes
 			fixture.closeAndWait(t)
 			assertResponsesWSAccounting(t, fixture, nil)
 			if !tc.sampled {
-				keys, err := common.RDB.Keys(context.Background(), "perf:ws-billing:*").Result()
+				keys, err := common.RDB.Keys(context.Background(), "perf:channel-core:ws-billing:*").Result()
 				require.NoError(t, err)
 				assert.Empty(t, keys, "a business rejection must not affect model health")
 				return

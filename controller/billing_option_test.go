@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -20,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,7 +140,6 @@ export function parseTaskResult() { return {}; }
 		Key:          "key-1",
 		Status:       common.ChannelStatusEnabled,
 		Name:         "ch-1",
-		Group:        "default",
 		Models:       "alias-model,declared-model",
 		ModelMapping: &mapping,
 	}).Error)
@@ -204,6 +205,11 @@ func TestPreConsumePolicyDatabaseMatrix(t *testing.T) {
 				t.Skip("set " + dialect.env + " to run this database")
 			}
 			db := modelManagementDB(t, dialect.kind, os.Getenv(dialect.env))
+			t.Cleanup(func() {
+				// Refunds update Redis asynchronously. Keep the fixture's Redis
+				// state alive until those callbacks have finished.
+				require.Eventually(t, func() bool { return gopool.WorkerCount() == 0 }, time.Second, time.Millisecond)
+			})
 			require.NoError(t, db.AutoMigrate(&model.Token{}))
 			for key, value := range map[string]string{
 				"quota_setting.trust_quota_usd":        "10.5",
@@ -244,40 +250,40 @@ func TestPreConsumePolicyDatabaseMatrix(t *testing.T) {
 				assert.Equal(t, stored[key], saved.Value, "invalid saves must preserve the previous value")
 			}
 			require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-				"billing_setting.billing_mode":    `{"policy-model":"tiered_expr"}`,
-				"billing_setting.billing_expr":    `{"policy-model":"tier(\"base\", p * 3 + c * 15)"}`,
-				"group_ratio_setting.group_ratio": `{"default":1}`,
+				"billing_setting.billing_mode": `{"policy-model":"tiered_expr"}`,
+				"billing_setting.billing_expr": `{"policy-model":"tier(\"base\", p * 3 + c * 15)"}`,
 			}))
 			cases := []struct {
 				name                  string
 				threshold, multiplier float64
 				wallet, token         int
-				force, unlimited      bool
+				unlimited             bool
 				wantHeld              int
 			}{
-				{"above threshold", 10, 1, 5500000, 5500000, false, false, 0},
-				{"custom threshold", 20, 1, 5500000, 5500000, false, false, 1500},
-				{"zero disables bypass", 0, 1, 5500000, 5500000, false, false, 1500},
-				{"wallet equals threshold", 10, 1, 5000000, 5500000, false, false, 1500},
-				{"token equals threshold", 10, 1, 5500000, 5000000, false, false, 1500},
-				{"fractional threshold", 10.5, 1, 5250001, 5250001, false, false, 0},
-				{"unlimited token", 10, 1, 5500000, 0, false, true, 0},
-				{"forced reservation", 10, 1, 5500000, 5500000, true, false, 1500},
-				{"half input cost", 0, 0.5, 100000, 100000, false, false, 750},
-				{"fractional multiple refunds excess", 0, 2.5, 100000, 100000, false, false, 3750},
+				{"above threshold", 10, 1, 5500000, 5500000, false, 1500},
+				{"custom threshold", 20, 1, 5500000, 5500000, false, 1500},
+				{"zero disables bypass", 0, 1, 5500000, 5500000, false, 1500},
+				{"wallet equals threshold", 10, 1, 5000000, 5500000, false, 1500},
+				{"token equals threshold", 10, 1, 5500000, 5000000, false, 1500},
+				{"fractional threshold", 10.5, 1, 5250001, 5250001, false, 1500},
+				{"unlimited token", 10, 1, 5500000, 0, true, 1500},
+				{"forced reservation", 10, 1, 5500000, 5500000, false, 1500},
+				{"half input cost", 0, 0.5, 100000, 100000, false, 750},
+				{"fractional multiple refunds excess", 0, 2.5, 100000, 100000, false, 3750},
 			}
 			for i, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					require.NoError(t, model.UpdateOption("quota_setting.trust_quota_usd", strconv.FormatFloat(tc.threshold, 'f', -1, 64)))
 					require.NoError(t, model.UpdateOption("quota_setting.pre_consume_multiplier", strconv.FormatFloat(tc.multiplier, 'f', -1, 64)))
-					user := model.User{Username: fmt.Sprintf("policy-user-%d", i), Quota: tc.wallet, Group: "default", AffCode: fmt.Sprintf("policy-aff-%d", i)}
+					user := model.User{Username: fmt.Sprintf("policy-user-%d", i), Quota: tc.wallet, AffCode: fmt.Sprintf("policy-aff-%d", i)}
 					require.NoError(t, db.Create(&user).Error)
 					token := model.Token{UserId: user.Id, Key: fmt.Sprintf("policy-token-%d", i), RemainQuota: tc.token, UnlimitedQuota: tc.unlimited}
 					require.NoError(t, db.Create(&token).Error)
 					ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 					ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 					ctx.Set("token_quota", tc.token)
-					info := &relaycommon.RelayInfo{UserId: user.Id, TokenId: token.Id, TokenKey: token.Key, TokenUnlimited: tc.unlimited, ForcePreConsume: tc.force, OriginModelName: "policy-model", UserGroup: "default", UsingGroup: "default", BillingRequestInput: &billingexpr.RequestInput{}}
+					ctx.Set("channel_ratio", "1")
+					info := &relaycommon.RelayInfo{UserId: user.Id, TokenId: token.Id, TokenKey: token.Key, TokenUnlimited: tc.unlimited, OriginModelName: "policy-model", BillingRequestInput: &billingexpr.RequestInput{}}
 					price, err := helper.ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 10000})
 					require.NoError(t, err)
 					require.Nil(t, service.PreConsumeBilling(ctx, price.QuotaToPreConsume, info))
@@ -308,15 +314,14 @@ func TestPreConsumeMultiplierRejectsInvalidRuntimeAndOverflow(t *testing.T) {
 	previous := config.GlobalConfig.ExportAllConfigs()
 	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(previous)) })
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"policy-overflow":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"policy-overflow":"tier(\"base\", p * 3)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1}`,
+		"billing_setting.billing_mode": `{"policy-overflow":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"policy-overflow":"tier(\"base\", p * 3)"}`,
 	}))
 	for _, multiplier := range []float64{0, -0.5, math.NaN(), math.Inf(1), math.MaxFloat64} {
 		operation_setting.GetQuotaSetting().PreConsumeMultiplier = multiplier
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-		info := &relaycommon.RelayInfo{OriginModelName: "policy-overflow", UserGroup: "default", UsingGroup: "default", BillingRequestInput: &billingexpr.RequestInput{}}
+		info := &relaycommon.RelayInfo{OriginModelName: "policy-overflow", BillingRequestInput: &billingexpr.RequestInput{}}
 		_, err := helper.ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 		require.Error(t, err)
 		assert.Nil(t, info.Billing)

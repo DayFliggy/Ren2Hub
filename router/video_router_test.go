@@ -46,7 +46,6 @@ func TestGetOpenAIVideoRouteRendersJimengTask(t *testing.T) {
 		Role:        common.RoleCommonUser,
 		Status:      common.UserStatusEnabled,
 		Quota:       100,
-		Group:       "default",
 		AuthVersion: 1,
 	}).Error)
 	require.NoError(t, database.Create(&model.Token{
@@ -65,7 +64,6 @@ func TestGetOpenAIVideoRouteRendersJimengTask(t *testing.T) {
 		Status: common.ChannelStatusEnabled,
 		Name:   "jimeng fetch",
 		Models: "jimeng_vgfm_t2v_l20",
-		Group:  "default",
 	}).Error)
 
 	task := &model.Task{
@@ -74,7 +72,6 @@ func TestGetOpenAIVideoRouteRendersJimengTask(t *testing.T) {
 		TaskID:    "task_jimeng_public",
 		Platform:  constant.TaskPlatform("jimeng"),
 		UserId:    91,
-		Group:     "default",
 		ChannelId: 17,
 		Status:    model.TaskStatusSuccess,
 		Progress:  "100%",

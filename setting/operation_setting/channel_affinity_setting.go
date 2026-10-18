@@ -25,9 +25,8 @@ type ChannelAffinityRule struct {
 	// Empty preserves the legacy SkipRetryOnFailure behavior.
 	SessionMode string `json:"session_mode,omitempty"`
 
-	IncludeUsingGroup bool `json:"include_using_group"`
-	IncludeModelName  bool `json:"include_model_name"`
-	IncludeRuleName   bool `json:"include_rule_name"`
+	IncludeModelName bool `json:"include_model_name"`
+	IncludeRuleName  bool `json:"include_rule_name"`
 }
 
 type ChannelAffinitySetting struct {
@@ -132,7 +131,6 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			TTLSeconds:            0,
 			ParamOverrideTemplate: buildCodexPassHeaderTemplate(),
 			SkipRetryOnFailure:    true,
-			IncludeUsingGroup:     true,
 			IncludeRuleName:       true,
 			UserAgentInclude:      nil,
 		},
@@ -147,7 +145,6 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			TTLSeconds:            0,
 			ParamOverrideTemplate: buildPassHeaderTemplate(claudeCliPassThroughHeaders),
 			SkipRetryOnFailure:    true,
-			IncludeUsingGroup:     true,
 			IncludeRuleName:       true,
 			UserAgentInclude:      nil,
 		},

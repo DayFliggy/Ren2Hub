@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
@@ -21,25 +22,28 @@ import (
 )
 
 type Channel struct {
-	Id                 int     `json:"id"`
-	Type               int     `json:"type" gorm:"default:0"`
-	Key                string  `json:"key" gorm:"not null"`
-	OpenAIOrganization *string `json:"openai_organization"`
-	TestModel          *string `json:"test_model"`
-	Status             int     `json:"status" gorm:"default:1"`
-	Name               string  `json:"name" gorm:"index"`
-	Weight             *uint   `json:"weight" gorm:"default:0"`
-	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
-	TestTime           int64   `json:"test_time" gorm:"bigint"`
-	ResponseTime       int     `json:"response_time"` // in milliseconds
-	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
-	Other              string  `json:"other"`
-	Balance            float64 `json:"balance"` // in USD
-	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
-	Models             string  `json:"models"`
-	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
-	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
-	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
+	InFlight           int                     `json:"in_flight" gorm:"-"`
+	Lab                modellab.Classification `json:"lab" gorm:"-"`
+	ChannelRatio       string                  `json:"channel_ratio" gorm:"type:varchar(64);not null;default:1"`
+	MaxConcurrency     int                     `json:"max_concurrency" gorm:"not null;default:0"`
+	Id                 int                     `json:"id"`
+	Type               int                     `json:"type" gorm:"default:0"`
+	Key                string                  `json:"key" gorm:"not null"`
+	OpenAIOrganization *string                 `json:"openai_organization"`
+	TestModel          *string                 `json:"test_model"`
+	Status             int                     `json:"status" gorm:"default:1"`
+	Name               string                  `json:"name" gorm:"index"`
+	Weight             *uint                   `json:"weight" gorm:"default:0"`
+	CreatedTime        int64                   `json:"created_time" gorm:"bigint"`
+	TestTime           int64                   `json:"test_time" gorm:"bigint"`
+	ResponseTime       int                     `json:"response_time"` // in milliseconds
+	BaseURL            *string                 `json:"base_url" gorm:"column:base_url;default:''"`
+	Other              string                  `json:"other"`
+	Balance            float64                 `json:"balance"` // in USD
+	BalanceUpdatedTime int64                   `json:"balance_updated_time" gorm:"bigint"`
+	Models             string                  `json:"models"`
+	UsedQuota          int64                   `json:"used_quota" gorm:"bigint;default:0"`
+	ModelMapping       *string                 `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
@@ -105,10 +109,15 @@ func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool) Channel
 
 func (options ChannelSortOptions) Apply(query *gorm.DB) *gorm.DB {
 	if columnName, ok := channelSortColumns[options.SortBy]; ok {
+		column := clause.Column{Name: columnName}
+		if columnName == "priority" {
+			// Routing treats a missing priority as zero on every database.
+			column = clause.Column{Name: "COALESCE(priority, 0)", Raw: true}
+		}
 		return query.Order(clause.OrderByColumn{
-			Column: clause.Column{Name: columnName},
+			Column: column,
 			Desc:   options.SortOrder != "asc",
-		})
+		}).Order(clause.OrderByColumn{Column: clause.Column{Name: "id"}, Desc: true})
 	}
 	if options.IDSort {
 		return query.Order(clause.OrderByColumn{
@@ -117,9 +126,9 @@ func (options ChannelSortOptions) Apply(query *gorm.DB) *gorm.DB {
 		})
 	}
 	return query.Order(clause.OrderByColumn{
-		Column: clause.Column{Name: "priority"},
+		Column: clause.Column{Name: "COALESCE(priority, 0)", Raw: true},
 		Desc:   true,
-	})
+	}).Order(clause.OrderByColumn{Column: clause.Column{Name: "id"}, Desc: true})
 }
 
 func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) ChannelSortOptions {
@@ -129,38 +138,6 @@ func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) Ch
 	options := sortOptions[0]
 	options.IDSort = options.IDSort || idSort
 	return options
-}
-
-func NormalizeChannelGroupFilter(group string) string {
-	group = strings.TrimSpace(group)
-	if group == "" || strings.EqualFold(group, "all") || strings.EqualFold(group, "null") {
-		return ""
-	}
-	return group
-}
-
-func channelGroupFilterCondition() string {
-	if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
-		return `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ? ESCAPE '!'`
-	}
-	return `(',' || ` + commonGroupCol + ` || ',') LIKE ? ESCAPE '!'`
-}
-
-func channelGroupFilterPattern(group string) string {
-	group = strings.NewReplacer(
-		"!", "!!",
-		"%", "!%",
-		"_", "!_",
-	).Replace(group)
-	return "%," + group + ",%"
-}
-
-func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
-	group = NormalizeChannelGroupFilter(group)
-	if group == "" {
-		return query
-	}
-	return query.Where(channelGroupFilterCondition(), channelGroupFilterPattern(group))
 }
 
 // Value implements driver.Valuer interface
@@ -300,17 +277,6 @@ func (channel *Channel) GetModels() []string {
 	return strings.Split(strings.Trim(channel.Models, ","), ",")
 }
 
-func (channel *Channel) GetGroups() []string {
-	if channel.Group == "" {
-		return []string{}
-	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
-	}
-	return groups
-}
-
 func (channel *Channel) GetOtherInfo() map[string]any {
 	otherInfo := make(map[string]any)
 	if channel.OtherInfo != "" {
@@ -393,7 +359,7 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...Ch
 	return channels, err
 }
 
-func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
+func SearchChannels(keyword string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	modelsCol := "`models`"
 
@@ -416,7 +382,7 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 	// 构造WHERE子句
 	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	baseQuery = baseQuery.Where(whereClause, args...)
 
 	// 执行查询
 	err := order.Apply(baseQuery).Find(&channels).Error
@@ -556,6 +522,17 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
+	if channel.ChannelRatio == "" {
+		existing, err := GetChannelById(channel.Id, true)
+		if err != nil {
+			return err
+		}
+		channel.ChannelRatio = existing.ChannelRatio
+	}
+	if err := channel.validateRoutingFields(); err != nil {
+		return err
+	}
+
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string
@@ -595,13 +572,25 @@ func (channel *Channel) Update() error {
 		}
 	}
 	var err error
-	err = DB.Model(channel).Updates(channel).Error
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Updates(channel).Error; err != nil {
+			return err
+		}
+		return tx.Model(channel).Updates(map[string]any{"channel_ratio": channel.ChannelRatio, "max_concurrency": channel.MaxConcurrency}).Error
+	})
 	if err != nil {
 		return err
 	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	err = channel.UpdateAbilities(nil)
-	return err
+	if err = DB.Model(channel).First(channel, "id = ?", channel.Id).Error; err != nil {
+		return err
+	}
+	if err = channel.UpdateAbilities(nil); err != nil {
+		return err
+	}
+	if ChannelRoutingChanged != nil {
+		return ChannelRoutingChanged(channel.Id)
+	}
+	return nil
 }
 
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
@@ -812,6 +801,12 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			common.SysLog(common.LogText("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
 			return false
 		}
+		if ChannelRoutingChanged != nil {
+			if err := ChannelRoutingChanged(channel.Id); err != nil {
+				common.SysLog(common.LogText("failed to publish channel status: channel_id=%d, error=%v", channel.Id, err))
+				return false
+			}
+		}
 	}
 	return true
 }
@@ -821,8 +816,10 @@ func EnableChannelByTag(tag string) error {
 	if err != nil {
 		return err
 	}
-	err = UpdateAbilityStatusByTag(tag, true)
-	return err
+	if err = UpdateAbilityStatusByTag(tag, true); err != nil {
+		return err
+	}
+	return publishChannelRoutingByTag(tag)
 }
 
 func DisableChannelByTag(tag string) error {
@@ -843,11 +840,29 @@ func DisableChannelByTag(tag string) error {
 	if err != nil {
 		return err
 	}
-	err = UpdateAbilityStatusByTag(tag, false)
-	return err
+	if err = UpdateAbilityStatusByTag(tag, false); err != nil {
+		return err
+	}
+	return publishChannelRoutingByTag(tag)
 }
 
-func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
+func publishChannelRoutingByTag(tag string) error {
+	if ChannelRoutingChanged == nil {
+		return nil
+	}
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := ChannelRoutingChanged(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
 	shouldReCreateAbilities := false
 	updatedTag := tag
@@ -862,10 +877,6 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if models != nil && *models != "" {
 		shouldReCreateAbilities = true
 		updateData.Models = *models
-	}
-	if group != nil && *group != "" {
-		shouldReCreateAbilities = true
-		updateData.Group = *group
 	}
 	if priority != nil {
 		updateData.Priority = priority
@@ -886,12 +897,12 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	}
 	if shouldReCreateAbilities {
 		channels, err := GetChannelsByTag(updatedTag, false, false)
-		if err == nil {
-			for _, channel := range channels {
-				err = channel.UpdateAbilities(nil)
-				if err != nil {
-					common.SysLog(common.LogText("failed to update abilities: channel_id=%d, tag=%s, error=%v", channel.Id, channel.GetTag(), err))
-				}
+		if err != nil {
+			return err
+		}
+		for _, channel := range channels {
+			if err = channel.UpdateAbilities(nil); err != nil {
+				return err
 			}
 		}
 	} else {
@@ -900,7 +911,7 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 			return err
 		}
 	}
-	return nil
+	return publishChannelRoutingByTag(updatedTag)
 }
 
 func UpdateChannelUsedQuota(id int, quota int) {
@@ -944,7 +955,7 @@ func GetPaginatedChannelTags(query *gorm.DB, offset int, limit int) ([]*string, 
 	return tags, err
 }
 
-func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
+func SearchTags(keyword string, model string, idSort bool) ([]*string, error) {
 	var tags []*string
 	modelsCol := "`models`"
 
@@ -970,7 +981,7 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	// 构造WHERE子句
 	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	baseQuery = baseQuery.Where(whereClause, args...)
 
 	subQuery := baseQuery.
 		Select("tag").

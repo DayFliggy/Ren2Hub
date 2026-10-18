@@ -1,6 +1,9 @@
 package controller
 
-import "github.com/QuantumNous/new-api/model"
+import (
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/modellab"
+)
 
 func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, requestData map[string]any) bool {
 	if _, ok := requestData["type"]; ok && channel.Type != origin.Type {
@@ -82,6 +85,8 @@ var channelOperationalFields = map[string]struct{}{
 // channelReadOnlyFields lists server-managed/accounting fields that the general
 // channel edit endpoint must ignore even if a client sends them.
 var channelReadOnlyFields = map[string]struct{}{
+	"in_flight":            {},
+	"lab":                  {},
 	"created_time":         {},
 	"test_time":            {},
 	"response_time":        {},
@@ -91,6 +96,7 @@ var channelReadOnlyFields = map[string]struct{}{
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {
+	clearChannelProjections(&channel.Channel)
 	if _, ok := requestData["created_time"]; ok {
 		channel.CreatedTime = 0
 	}
@@ -111,7 +117,12 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 	}
 }
 
-// channelNonSensitiveFields lists routing / server-managed channel
+func clearChannelProjections(channel *model.Channel) {
+	channel.InFlight = 0
+	channel.Lab = modellab.Classification{}
+}
+
+// channelNonSensitiveFields lists routing channel
 // fields a ChannelWrite admin may edit without ChannelSensitiveWrite. When a new
 // field is added to model.Channel it must be added to either this set or
 // channelSensitiveFields or channelOperationalFields; otherwise it falls through
@@ -123,7 +134,8 @@ var channelNonSensitiveFields = map[string]struct{}{
 	"name":                {},
 	"weight":              {},
 	"models":              {},
-	"group":               {},
+	"channel_ratio":       {},
+	"max_concurrency":     {},
 	"model_mapping":       {},
 	"status_code_mapping": {},
 	"priority":            {},

@@ -29,7 +29,7 @@ func setupOriginTaskDB(t *testing.T) {
 	previousType := common.MainDatabaseType()
 	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, database.AutoMigrate(&model.Task{}, &model.Channel{}))
+	require.NoError(t, database.AutoMigrate(&model.Task{}, &model.Channel{}, &model.Ability{}))
 	model.DB = database
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	t.Cleanup(func() {
@@ -42,11 +42,13 @@ func insertOriginTaskChannel(t *testing.T, status int) *model.Channel {
 	t.Helper()
 	channel := &model.Channel{
 		Name:   "origin-channel",
+		Models: "resolved-model",
 		Key:    "sk-origin",
 		Status: status,
 		Type:   constant.ChannelTypeDoubaoVideo,
 	}
 	require.NoError(t, model.DB.Create(channel).Error)
+	require.NoError(t, channel.AddAbilities(nil))
 	return channel
 }
 
@@ -364,6 +366,7 @@ func TestDistributeHonorsOriginTaskChannelPin(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{}`))
 	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("id", 1)
 	c.Set("resolved_task_model", "resolved-model")
 	service.GetChannelConstraints(c).AddPin(dto.ChannelPin{
 		ChannelId: channel.Id,
@@ -397,6 +400,7 @@ func TestDistributeTokenPinBeatsOriginPin(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{}`))
 	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("id", 1)
 	c.Set("resolved_task_model", "resolved-model")
 	constraints := service.GetChannelConstraints(c)
 	constraints.AddPin(dto.ChannelPin{
@@ -434,6 +438,7 @@ func TestDistributePinViolatingIdentityFilterErrors(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{}`))
 	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("id", 1)
 	c.Set("resolved_task_model", "resolved-model")
 	c.Set("expected_task_plugin_key", "alpha")
 	service.GetChannelConstraints(c).AddPin(dto.ChannelPin{

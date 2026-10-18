@@ -279,7 +279,6 @@ func enrichModels(models []*model.Model) error {
 			continue
 		}
 		channels := make(map[int]model.BoundChannel)
-		groups := make(map[string]bool)
 		names := make(map[string]bool)
 		endpoints := make(map[string]bool)
 		quotas := make(map[int]bool)
@@ -289,7 +288,6 @@ func enrichModels(models []*model.Model) error {
 				continue
 			}
 			names[name] = true
-			groups[connection.Group] = true
 			channels[connection.ChannelId] = model.BoundChannel{Name: connection.ChannelName, Type: connection.ChannelType}
 			for _, endpoint := range model.GetModelSupportEndpointTypes(name) {
 				endpoints[string(endpoint)] = true
@@ -299,7 +297,6 @@ func enrichModels(models []*model.Model) error {
 			}
 		}
 		metadata.BoundChannels = nil
-		metadata.EnableGroups = nil
 		metadata.SupportedEndpoints = nil
 		metadata.QuotaTypes = nil
 		metadata.MatchedModels = nil
@@ -313,16 +310,12 @@ func enrichModels(models []*model.Model) error {
 			}
 			return a.Name < b.Name
 		})
-		for group := range groups {
-			metadata.EnableGroups = append(metadata.EnableGroups, group)
-		}
 		for endpoint := range endpoints {
 			metadata.SupportedEndpoints = append(metadata.SupportedEndpoints, endpoint)
 		}
 		for quota := range quotas {
 			metadata.QuotaTypes = append(metadata.QuotaTypes, quota)
 		}
-		sort.Strings(metadata.EnableGroups)
 		sort.Strings(metadata.SupportedEndpoints)
 		sort.Ints(metadata.QuotaTypes)
 		if metadata.NameRule != model.NameRuleExact {

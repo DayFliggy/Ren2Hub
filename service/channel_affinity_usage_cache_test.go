@@ -19,7 +19,6 @@ func buildChannelAffinityStatsContextForTest(ruleName, usingGroup, keyFP string)
 		CacheKey:       fmt.Sprintf("test:%s:%s:%s", ruleName, usingGroup, keyFP),
 		TTLSeconds:     600,
 		RuleName:       ruleName,
-		UsingGroup:     usingGroup,
 		KeyFingerprint: keyFP,
 	})
 	return ctx
@@ -41,7 +40,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_ClaudeMode(t *testing.T) 
 	}
 
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, usage, types.RelayFormatClaude)
-	stats := GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFP)
+	stats := GetChannelAffinityUsageCacheStats(ruleName, keyFP)
 
 	require.EqualValues(t, 1, stats.Total)
 	require.EqualValues(t, 1, stats.Hit)
@@ -73,7 +72,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode(t *testing.T) {
 
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, openAIUsage, types.RelayFormatOpenAI)
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, claudeUsage, types.RelayFormatClaude)
-	stats := GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFP)
+	stats := GetChannelAffinityUsageCacheStats(ruleName, keyFP)
 
 	require.EqualValues(t, 2, stats.Total)
 	require.EqualValues(t, 2, stats.Hit)
@@ -96,7 +95,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_UnsupportedModeKeepsEmpty
 	}
 
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, usage, types.RelayFormatGemini)
-	stats := GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFP)
+	stats := GetChannelAffinityUsageCacheStats(ruleName, keyFP)
 
 	require.EqualValues(t, 1, stats.Total)
 	require.EqualValues(t, 1, stats.Hit)

@@ -755,8 +755,6 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 			production[0],
 			func(c *gin.Context) {
 				common.SetContextKey(c, constant.ContextKeyUserId, 91)
-				common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-				common.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
 				c.Next()
 			},
 			production[2],

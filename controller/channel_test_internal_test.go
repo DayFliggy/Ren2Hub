@@ -173,7 +173,6 @@ func TestCopyChannelRejectsInvalidLegacyProxySettings(t *testing.T) {
 		Name:    "legacy proxy channel",
 		Key:     "test-key",
 		Models:  "gpt-test",
-		Group:   "default",
 		Setting: &setting,
 	}
 	require.NoError(t, db.Create(origin).Error)
@@ -256,7 +255,7 @@ func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
 			BillingMode:   "tiered_expr",
 			ExprString:    `param("stream") == true ? tier("stream", p * 3) : tier("base", p * 2)`,
 			ExprHash:      billingexpr.ExprHashString(`param("stream") == true ? tier("stream", p * 3) : tier("base", p * 2)`),
-			GroupRatio:    1,
+			ChannelRatio:  1,
 			EstimatedTier: "stream",
 			QuotaPerUnit:  common.QuotaPerUnit,
 			ExprVersion:   1,
@@ -290,7 +289,7 @@ func TestBuildTestLogOtherInjectsTieredInfo(t *testing.T) {
 		ChannelMeta: &relaycommon.ChannelMeta{},
 	}
 	priceData := types.PriceData{
-		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		ChannelRatioInfo: types.ChannelRatioInfo{ChannelRatio: 1},
 	}
 	usage := &dto.Usage{
 		PromptTokensDetails: dto.InputTokenDetails{

@@ -47,7 +47,6 @@ func TestApplyChannelAffinityOverrideTemplate_MergeTemplate(t *testing.T) {
 			"temperature": 0.2,
 			"top_p":       0.95,
 		},
-		UsingGroup:     "default",
 		ModelName:      "gpt-4.1",
 		RequestPath:    "/v1/responses",
 		KeySourceType:  "gjson",
@@ -139,10 +138,9 @@ func TestShouldSkipRetryAfterChannelAffinityFailure(t *testing.T) {
 			name: "explicit skip retry flag in context",
 			ctx: func() *gin.Context {
 				ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
-					RuleName:   "rule-explicit-flag",
-					SkipRetry:  false,
-					UsingGroup: "default",
-					ModelName:  "gpt-5",
+					RuleName:  "rule-explicit-flag",
+					SkipRetry: false,
+					ModelName: "gpt-5",
 				})
 				ctx.Set(ginKeyChannelAffinitySkipRetry, true)
 				return ctx
@@ -153,10 +151,9 @@ func TestShouldSkipRetryAfterChannelAffinityFailure(t *testing.T) {
 			name: "fallback to matched rule meta",
 			ctx: func() *gin.Context {
 				return buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
-					RuleName:   "rule-skip-retry",
-					SkipRetry:  true,
-					UsingGroup: "default",
-					ModelName:  "gpt-5",
+					RuleName:  "rule-skip-retry",
+					SkipRetry: true,
+					ModelName: "gpt-5",
 				})
 			},
 			want: true,
@@ -165,10 +162,9 @@ func TestShouldSkipRetryAfterChannelAffinityFailure(t *testing.T) {
 			name: "no flag and no skip retry meta",
 			ctx: func() *gin.Context {
 				return buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
-					RuleName:   "rule-no-skip-retry",
-					SkipRetry:  false,
-					UsingGroup: "default",
-					ModelName:  "gpt-5",
+					RuleName:  "rule-no-skip-retry",
+					SkipRetry: false,
+					ModelName: "gpt-5",
 				})
 			},
 			want: false,
@@ -211,7 +207,7 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 	}
 
 	affinityValue := fmt.Sprintf("header-hit-%d", time.Now().UnixNano())
-	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", "default", affinityValue)
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", affinityValue)
 
 	cache := getChannelAffinityCache()
 	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 9528, time.Minute))
@@ -231,7 +227,7 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	ctx.Request.Header.Set("X-Affinity-Key", affinityValue)
 
-	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-5", "default")
+	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-5")
 	require.True(t, found)
 	require.Equal(t, 9528, channelID)
 
@@ -286,7 +282,7 @@ func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	require.NotNil(t, codexRule)
 
 	affinityValue := fmt.Sprintf("pc-hit-%d", time.Now().UnixNano())
-	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(*codexRule, "gpt-5", "default", affinityValue)
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(*codexRule, "gpt-5", affinityValue)
 
 	cache := getChannelAffinityCache()
 	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 9527, time.Minute))
@@ -299,7 +295,7 @@ func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"prompt_cache_key":"%s"}`, affinityValue)))
 	ctx.Request.Header.Set("Content-Type", "application/json")
 
-	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-5", "default")
+	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-5")
 	require.True(t, found)
 	require.Equal(t, 9527, channelID)
 
@@ -362,7 +358,7 @@ func TestMidjourneyPolicyAcceptance(t *testing.T) {
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/mj/submit/imagine", strings.NewReader(`{}`))
 			ctx.Set("channel_id", 7)
 			state := RequestPolicy(ctx)
-			state.BeginAttempt(&model.Channel{Id: 7}, "default")
+			state.BeginAttempt(&model.Channel{Id: 7})
 			response := &dto.MidjourneyResponseWithStatusCode{StatusCode: tc.status, Response: dto.MidjourneyResponse{Code: tc.code, Properties: tc.properties}}
 			accepted := RecordMidjourneyPolicyResponse(ctx, response, tc.requestErr)
 			assert.Equal(t, tc.accepted, accepted)
@@ -418,7 +414,7 @@ func TestSessionRulesInheritOrOverrideGlobalDefault(t *testing.T) {
 				require.NoError(t, err)
 				*setting = snapshot.Affinity
 				key := t.Name()
-				cacheKey := buildChannelAffinityCacheKeySuffix(rule, "test-model", "default", key)
+				cacheKey := buildChannelAffinityCacheKeySuffix(rule, "test-model", key)
 				cache := getChannelAffinityCache()
 				require.NoError(t, cache.SetWithTTL(cacheKey, 1, time.Minute))
 				t.Cleanup(func() { _, err := cache.DeleteMany([]string{cacheKey}); assert.NoError(t, err) })
@@ -426,7 +422,7 @@ func TestSessionRulesInheritOrOverrideGlobalDefault(t *testing.T) {
 				ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 				ctx.Request.Header.Set("X-Session", key)
 				state := RequestPolicy(ctx)
-				channelID, found := GetPreferredChannelByAffinity(ctx, "test-model", "default")
+				channelID, found := GetPreferredChannelByAffinity(ctx, "test-model")
 				assert.Equal(t, expected != "off", found)
 				if found {
 					assert.Equal(t, 1, channelID)

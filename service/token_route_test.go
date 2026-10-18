@@ -1,201 +1,62 @@
 package service
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/setting"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"net/http"
+	"testing"
 )
 
 func TestTokenRouteFirstRetryAndNextRequest(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	require.NoError(t, db.AutoMigrate(&model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
-	createChannelSelectAutoGroupsChannel(t, db, 11, "default", "route-model")
-	createChannelSelectAutoGroupsChannel(t, db, 22, "default", "route-model")
-	createChannelSelectAutoGroupsChannel(t, db, 33, "vip", "route-model")
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
-	require.NoError(t, db.Create(&[]model.TokenRouteEntry{{TokenID: 7, ChannelID: 33, Position: 0, Enabled: true}, {TokenID: 7, ChannelID: 22, Position: 1, Enabled: true}, {TokenID: 7, ChannelID: 11, Position: 2, Enabled: true}}).Error)
-	common.RetryTimes = 2
-	for _, cache := range []bool{false, true} {
-		common.MemoryCacheEnabled = cache
-		if cache {
-			model.InitChannelCache()
-		}
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-		common.SetContextKey(c, constant.ContextKeyTokenId, 7)
-		common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-		param := &RetryParam{Ctx: c, TokenGroup: "default", ModelName: "route-model"}
-		selected, group, err := SelectChannelForRequest(c, "route-model", param)
-		require.Nil(t, err)
-		require.Equal(t, "default", group)
-		require.Equal(t, 22, selected.Id)
-		AppendUsedChannel(c, selected.Id)
-		param.IncreaseRetry()
-		selected, group, selectErr := CacheGetRandomSatisfiedChannel(param)
-		require.NoError(t, selectErr)
-		require.Equal(t, "default", group)
-		require.Equal(t, 11, selected.Id)
-		AppendUsedChannel(c, selected.Id)
-		param.IncreaseRetry()
-		selected, _, selectErr = CacheGetRandomSatisfiedChannel(param)
-		require.NoError(t, selectErr)
-		require.Nil(t, selected)
+	db := setupRouteTest(t)
+	for _, id := range []int{11, 22, 33} {
+		createRouteChannel(t, db, id, "route-model")
 	}
-	// A new WebSocket call gets a new request context and observes the edit.
-	require.NoError(t, db.Model(&model.TokenRouteEntry{}).Where("token_id = ? AND channel_id = ?", 7, 22).Update("enabled", false).Error)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
-	common.SetContextKey(c, constant.ContextKeyTokenId, 7)
-	common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
-	require.ErrorContains(t, CheckLockedTokenRoute(c, 22, "route-model", "default"), "no longer")
-	require.NoError(t, CheckLockedTokenRoute(c, 11, "route-model", "default"))
-}
-
-func TestPrivateRouteAbilityQueryErrorsAreTechnicalFailures(t *testing.T) {
-	for _, failAt := range []int{1, 2} {
-		t.Run([]string{"exact query", "normalized query"}[failAt-1], func(t *testing.T) {
-			db := setupChannelSelectAutoGroupsTest(t)
-			common.MemoryCacheEnabled = false
-			require.NoError(t, db.AutoMigrate(&model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
-			createChannelSelectAutoGroupsChannel(t, db, 11, "default", "gpt-4-gizmo-*")
-			require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
-			require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
-			newCall := func() *gin.Context {
-				c, _ := gin.CreateTestContext(httptest.NewRecorder())
-				c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
-				common.SetContextKey(c, constant.ContextKeyTokenId, 7)
-				common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
-				common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-				GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 11, Source: dto.PinSourceToken})
-				return c
-			}
-			failure := errors.New("ability database unavailable")
-			queries := 0
-			require.NoError(t, db.Callback().Query().Before("gorm:query").Register("routing:ability-error", func(tx *gorm.DB) {
-				if tx.Statement.Table == "abilities" {
-					queries++
-					if queries == failAt {
-						tx.AddError(failure)
-					}
-				}
-			}))
-			c := newCall()
-			channel, _, selectErr := SelectChannelForRequest(c, "gpt-4-gizmo-a", &RetryParam{Ctx: c, TokenGroup: "default", ModelName: "gpt-4-gizmo-a"})
-			require.Nil(t, channel)
-			require.NotNil(t, selectErr)
-			require.Equal(t, http.StatusInternalServerError, selectErr.StatusCode)
-			require.Equal(t, types.ErrorCodeGetChannelFailed, selectErr.Code)
-			require.Equal(t, failAt, queries, "a failed exact query must not be hidden by normalization")
-			queries = 0
-			require.ErrorIs(t, CheckLockedTokenRoute(newCall(), 11, "gpt-4-gizmo-a", "default"), failure)
-			require.Equal(t, failAt, queries)
-		})
-	}
-}
-
-func TestTokenRouteKeepsGroupBoundariesAndTaskContinuations(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	require.NoError(t, db.AutoMigrate(&model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
-	createChannelSelectAutoGroupsChannel(t, db, 11, "default", "route-model")
-	createChannelSelectAutoGroupsChannel(t, db, 22, "vip", "route-model")
-	model.InitChannelCache()
-	common.RetryTimes = 2
-	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["default","vip"]`))
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
-	require.NoError(t, db.Create(&[]model.TokenRouteEntry{{TokenID: 7, ChannelID: 22, Position: 0, Enabled: true}, {TokenID: 7, ChannelID: 11, Position: 1, Enabled: true}}).Error)
-	newRequest := func() *gin.Context {
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-		common.SetContextKey(c, constant.ContextKeyTokenId, 7)
-		common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-		return c
-	}
-	for _, cross := range []bool{false, true} {
-		c := newRequest()
-		common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, cross)
-		param := &RetryParam{Ctx: c, TokenGroup: "auto", ModelName: "route-model"}
-		channel, group, err := CacheGetRandomSatisfiedChannel(param)
+	saveRouteTest(t, 33, 22, 11)
+	c := routeTestContext(t)
+	for _, want := range []int{33, 22, 11} {
+		channel, err := selectQualifiedChannel(c, "route-model")
 		require.NoError(t, err)
-		require.Equal(t, 11, channel.Id)
-		require.Equal(t, "default", group, "private order does not reorder upstream pricing groups")
+		require.Equal(t, want, channel.Id)
 		AppendUsedChannel(c, channel.Id)
-		param.IncreaseRetry()
-		channel, group, err = CacheGetRandomSatisfiedChannel(param)
-		require.NoError(t, err)
-		if cross {
-			require.NotNil(t, channel)
-			require.Equal(t, 22, channel.Id)
-			require.Equal(t, "vip", group)
-		} else {
-			require.Nil(t, channel)
-		}
 	}
-	c := newRequest()
-	GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 22, Source: dto.PinSourceToken})
-	channel, _, selectionErr := SelectChannelForRequest(c, "route-model", &RetryParam{Ctx: c, TokenGroup: "default"})
+	channel, err := selectQualifiedChannel(c, "route-model")
+	require.NoError(t, err)
 	require.Nil(t, channel)
-	require.NotNil(t, selectionErr)
-	require.Equal(t, http.StatusForbidden, selectionErr.StatusCode)
-	c = newRequest()
-	common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, true)
-	common.SetContextKey(c, constant.ContextKeyTokenModelLimit, map[string]bool{"another-model": true})
-	GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 11, Source: dto.PinSourceToken})
-	channel, _, selectionErr = SelectChannelForRequest(c, "route-model", &RetryParam{Ctx: c, TokenGroup: "default"})
-	require.Nil(t, channel)
-	require.NotNil(t, selectionErr)
-	require.Equal(t, http.StatusForbidden, selectionErr.StatusCode)
-	// A preference edit cannot strand an already authorized origin task.
-	require.NoError(t, db.Where("token_id = ?", 7).Delete(&model.TokenRouteEntry{}).Error)
-	c = newRequest()
-	GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 22, Source: dto.PinSourceOriginTask})
-	channel, _, selectionErr = SelectChannelForRequest(c, "route-model", &RetryParam{Ctx: c, TokenGroup: "default"})
-	require.Nil(t, selectionErr)
-	require.Equal(t, 22, channel.Id)
+	require.NoError(t, db.Model(&model.TokenRouteEntry{}).Where("token_id = ? AND channel_id = ?", 7, 22).Update("enabled", false).Error)
+	require.ErrorIs(t, CheckLockedTokenRoute(routeTestContext(t), 22, "route-model"), model.ErrTokenRouteForbidden)
+	require.NoError(t, CheckLockedTokenRoute(routeTestContext(t), 11, "route-model"))
 }
-
-func TestLockedPrivateRouteKeepsOriginalAutoGroup(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	require.NoError(t, db.AutoMigrate(&model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
-	createChannelSelectAutoGroupsChannel(t, db, 11, "default,vip", "route-model")
-	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Group: "default", Model: "route-model", Enabled: true}).Error)
-	require.NoError(t, db.Create(&model.Ability{ChannelId: 11, Group: "vip", Model: "route-model", Enabled: true}).Error)
-	require.NoError(t, db.Create(&model.TokenRouteProfile{TokenID: 7, Mode: model.TokenRouteManual, Version: 1}).Error)
-	require.NoError(t, db.Create(&model.TokenRouteEntry{TokenID: 7, ChannelID: 11, Enabled: true}).Error)
-	for _, cache := range []bool{false, true} {
-		common.MemoryCacheEnabled = cache
-		if cache {
-			model.InitChannelCache()
+func TestTokenRouteContinuationsRespectCurrentManualAndRatio(t *testing.T) {
+	db := setupRouteTest(t)
+	createRouteChannel(t, db, 11, "route-model")
+	createRouteChannel(t, db, 22, "route-model")
+	saveRouteTest(t, 11)
+	c := routeTestContext(t)
+	GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 22, Source: dto.PinSourceOriginTask})
+	channel, err := selectQualifiedChannel(c, "route-model")
+	require.NoError(t, err)
+	require.Nil(t, channel)
+	require.NoError(t, db.Model(&model.TokenRouteProfile{}).Where("token_id = ?", 7).Update("max_channel_ratio", "0.5").Error)
+	_, err = AcquirePinnedRouteChannel(routeTestContext(t), 11, "route-model")
+	require.ErrorIs(t, err, model.ErrTokenRouteForbidden)
+}
+func TestRouteCandidateDatabaseErrorIsNotEmptyAvailability(t *testing.T) {
+	db := setupRouteTest(t)
+	createRouteChannel(t, db, 11, "gpt-4-gizmo-*")
+	failure := errors.New("candidate database unavailable")
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("routing:query-error", func(tx *gorm.DB) {
+		if tx.Statement.Table == "channels" {
+			tx.AddError(failure)
 		}
-		newCall := func(groups []string) *gin.Context {
-			c, _ := gin.CreateTestContext(httptest.NewRecorder())
-			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
-			common.SetContextKey(c, constant.ContextKeyTokenId, 7)
-			common.SetContextKey(c, constant.ContextKeyUsingGroup, "auto")
-			common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
-			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, groups)
-			GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 11, Source: dto.PinSourceToken})
-			return c
-		}
-		c := newCall([]string{"vip", "default"})
-		require.NoError(t, CheckLockedTokenRoute(c, 11, "route-model", "default"))
-		require.Equal(t, "default", common.GetContextKeyString(c, constant.ContextKeyAutoGroup), "reordering groups cannot move an existing connection's billing group")
-		c = newCall([]string{"vip"})
-		require.ErrorIs(t, CheckLockedTokenRoute(c, 11, "route-model", "default"), model.ErrTokenRouteForbidden)
-		require.Empty(t, common.GetContextKeyString(c, constant.ContextKeyAutoGroup), "a different still-authorized group cannot rescue the locked connection")
-		c = newCall([]string{"default"})
-		common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, true)
-		common.SetContextKey(c, constant.ContextKeyTokenModelLimit, map[string]bool{"different-model": true})
-		require.ErrorIs(t, CheckLockedTokenRoute(c, 11, "route-model", "default"), model.ErrTokenRouteForbidden)
-	}
+	}))
+	_, err := RouteCandidates(context.Background(), 7, "gpt-4-gizmo-a", nil)
+	require.ErrorIs(t, err, failure)
+	_, apiErr := SelectChannelForRequest(routeTestContext(t), "gpt-4-gizmo-a", nil)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
 }

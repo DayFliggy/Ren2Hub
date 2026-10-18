@@ -1,6 +1,8 @@
 package model
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -11,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
 )
 
 type PricingPluginVariant struct {
@@ -41,7 +42,6 @@ type Pricing struct {
 	ImageRatio             *float64                             `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                             `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                             `json:"audio_completion_ratio,omitempty"`
-	EnableGroup            []string                             `json:"enable_groups"`
 	SupportedEndpointTypes []constant.EndpointType              `json:"supported_endpoint_types"`
 	BillingMode            string                               `json:"billing_mode,omitempty"`
 	BillingExpr            string                               `json:"billing_expr,omitempty"`
@@ -64,10 +64,9 @@ var (
 	lastGetPricingTime   time.Time
 	updatePricingLock    sync.Mutex
 
-	// 缓存映射：模型名 -> 启用分组 / 计费类型
-	modelEnableGroups     = make(map[string][]string)
-	modelQuotaTypeMap     = make(map[string]int)
-	modelEnableGroupsLock = sync.RWMutex{}
+	// 缓存映射：模型名 -> 计费类型
+	modelQuotaTypeMap  = make(map[string]int)
+	modelQuotaTypeLock = sync.RWMutex{}
 )
 
 var (
@@ -76,17 +75,12 @@ var (
 )
 
 func GetPricing() []Pricing {
-	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-		updatePricingLock.Lock()
-		defer updatePricingLock.Unlock()
-		// Double check after acquiring the lock
-		if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-			modelSupportEndpointsLock.Lock()
-			defer modelSupportEndpointsLock.Unlock()
-			updatePricing()
-		}
+	prices, _, _, err := ReadPricing()
+	if err != nil {
+		common.SysError(common.LogText("read pricing: %s", err.Error()))
+		return nil
 	}
-	return pricingMap
+	return prices
 }
 
 func InvalidatePricingCache() {
@@ -100,11 +94,12 @@ func InvalidatePricingCache() {
 
 // GetVendors 返回当前定价接口使用到的供应商信息
 func GetVendors() []PricingVendor {
-	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-		// 保证先刷新一次
-		GetPricing()
+	_, vendors, _, err := ReadPricing()
+	if err != nil {
+		common.SysError(common.LogText("read pricing vendors: %s", err.Error()))
+		return nil
 	}
-	return vendorsList
+	return vendors
 }
 
 func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
@@ -114,7 +109,7 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 	modelSupportEndpointsLock.RLock()
 	defer modelSupportEndpointsLock.RUnlock()
 	if endpoints, ok := modelSupportEndpointTypes[model]; ok {
-		return endpoints
+		return slices.Clone(endpoints)
 	}
 	return make([]constant.EndpointType, 0)
 }
@@ -137,7 +132,7 @@ func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCusto
 // The returned configs are pointers shared with the channel cache; they are
 // replaced wholesale on update and never mutated in place, so reading them after
 // RUnlock is safe.
-func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) map[int]*dto.AdvancedCustomConfig {
+func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) (map[int]*dto.AdvancedCustomConfig, error) {
 	channelIDs := make([]int, 0)
 	seen := make(map[int]struct{})
 	for _, ability := range enableAbilities {
@@ -151,7 +146,7 @@ func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) map[
 		channelIDs = append(channelIDs, ability.ChannelId)
 	}
 	if len(channelIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	configs := make(map[int]*dto.AdvancedCustomConfig, len(channelIDs))
@@ -163,23 +158,25 @@ func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) map[
 				configs[channelID] = config
 			}
 		}
-		return configs
+		return configs, nil
 	}
 
-	for _, channelID := range channelIDs {
-		channel, err := CacheGetChannel(channelID)
-		if err != nil {
-			common.SysLog(common.LogText("load advanced custom channel settings error: channel_id=%d, error=%v", channelID, err))
-			continue
+	var channels []Channel
+	if err := DB.Select("id", "type", "settings").Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	for _, channel := range channels {
+		var settings dto.ChannelOtherSettings
+		if channel.OtherSettings != "" {
+			if err := common.UnmarshalJsonStr(channel.OtherSettings, &settings); err != nil {
+				return nil, err
+			}
 		}
-		if channel.Type != constant.ChannelTypeAdvancedCustom {
-			continue
-		}
-		if config := channel.GetOtherSettings().AdvancedCustom; config != nil {
-			configs[channelID] = config
+		if settings.AdvancedCustom != nil {
+			configs[channel.Id] = settings.AdvancedCustom
 		}
 	}
-	return configs
+	return configs, nil
 }
 
 func appendPricingEndpoint(endpoints []string, endpoint string) []string {
@@ -189,16 +186,17 @@ func appendPricingEndpoint(endpoints []string, endpoint string) []string {
 	return append(endpoints, endpoint)
 }
 
-func updatePricing() {
+func updatePricing() error {
 	//modelRatios := common.GetModelRatios()
 	enableAbilities, err := GetAllEnableAbilityWithChannels()
 	if err != nil {
-		common.SysLog(common.LogText("GetAllEnableAbilityWithChannels error: %v", err))
-		return
+		return err
 	}
 	// 预加载模型元数据与供应商一次，避免循环查询
 	var allMeta []Model
-	_ = DB.Find(&allMeta).Error
+	if err := DB.Find(&allMeta).Error; err != nil {
+		return err
+	}
 	names := make([]string, 0, len(enableAbilities))
 	for _, ability := range enableAbilities {
 		names = append(names, ability.Model)
@@ -207,7 +205,9 @@ func updatePricing() {
 
 	// 预加载供应商
 	var vendors []Vendor
-	_ = DB.Find(&vendors).Error
+	if err := DB.Find(&vendors).Error; err != nil {
+		return err
+	}
 	vendorMap := make(map[int]*Vendor)
 	for i := range vendors {
 		vendorMap[vendors[i].Id] = &vendors[i]
@@ -227,20 +227,17 @@ func updatePricing() {
 		})
 	}
 
-	modelGroupsMap := make(map[string]*types.Set[string])
-
+	modelNames := make(map[string]bool)
 	for _, ability := range enableAbilities {
-		groups, ok := modelGroupsMap[ability.Model]
-		if !ok {
-			groups = types.NewSet[string]()
-			modelGroupsMap[ability.Model] = groups
-		}
-		groups.Add(ability.Group)
+		modelNames[ability.Model] = true
 	}
 
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
-	advancedCustomConfigs := loadPricingAdvancedCustomConfigs(enableAbilities)
+	advancedCustomConfigs, err := loadPricingAdvancedCustomConfigs(enableAbilities)
+	if err != nil {
+		return err
+	}
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
@@ -325,10 +322,9 @@ func updatePricing() {
 
 	pricingMap = make([]Pricing, 0)
 	pluginGeneration := jsplugin.DefaultRegistry.Generation()
-	for model, groups := range modelGroupsMap {
+	for model := range modelNames {
 		pricing := Pricing{
 			ModelName:              model,
-			EnableGroup:            groups.Items(),
 			SupportedEndpointTypes: modelSupportEndpointTypes[model],
 		}
 
@@ -434,19 +430,34 @@ func updatePricing() {
 	}
 
 	// 刷新缓存映射，供高并发快速查询
-	modelEnableGroupsLock.Lock()
-	modelEnableGroups = make(map[string][]string)
+	modelQuotaTypeLock.Lock()
 	modelQuotaTypeMap = make(map[string]int)
 	for _, p := range pricingMap {
-		modelEnableGroups[p.ModelName] = p.EnableGroup
 		modelQuotaTypeMap[p.ModelName] = p.QuotaType
 	}
-	modelEnableGroupsLock.Unlock()
+	modelQuotaTypeLock.Unlock()
 
 	lastGetPricingTime = time.Now()
+	return nil
 }
 
 // GetSupportedEndpointMap 返回全局端点到路径的映射
 func GetSupportedEndpointMap() map[string]common.EndpointInfo {
-	return supportedEndpointMap
+	updatePricingLock.Lock()
+	defer updatePricingLock.Unlock()
+	return maps.Clone(supportedEndpointMap)
+}
+
+// ReadPricing returns a consistent snapshot or the actual refresh failure.
+func ReadPricing() ([]Pricing, []PricingVendor, map[string]common.EndpointInfo, error) {
+	updatePricingLock.Lock()
+	defer updatePricingLock.Unlock()
+	modelSupportEndpointsLock.Lock()
+	defer modelSupportEndpointsLock.Unlock()
+	if time.Since(lastGetPricingTime) > time.Minute || pricingMap == nil {
+		if err := updatePricing(); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	return slices.Clone(pricingMap), slices.Clone(vendorsList), maps.Clone(supportedEndpointMap), nil
 }

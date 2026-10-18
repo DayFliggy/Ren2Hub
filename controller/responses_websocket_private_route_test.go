@@ -9,7 +9,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,7 @@ import (
 
 func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 	for _, cache := range []bool{false, true} {
-		for _, scenario := range []string{"ability revoked", "entry removed", "token model revoked", "auto group revoked", "route store unavailable", "automatic pin keeps native behavior", "unchanged private pin", "unchanged auto group"} {
+		for _, scenario := range []string{"ability revoked", "entry removed", "token model revoked", "channel ratio revoked", "route store unavailable", "automatic pin revoked", "unchanged private pin", "unchanged automatic pin"} {
 			t.Run(fmt.Sprintf("cache=%t/%s", cache, scenario), func(t *testing.T) {
 				var creates atomic.Int32
 				fixture := newResponsesWSBillingTestWithSetup(t, `tier("request", fixed(0.002))`, func(ws *websocket.Conn, _ *http.Request) {
@@ -34,20 +33,13 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 					}
 				}, func(f *responsesWSBillingTest) string {
 					require.NoError(t, model.DB.Model(f.user).Update("role", common.RoleAdminUser).Error)
-					if scenario != "automatic pin keeps native behavior" {
+					if scenario != "automatic pin revoked" && scenario != "unchanged automatic pin" {
 						require.NoError(t, model.DB.Create(&model.TokenRouteProfile{TokenID: f.token.Id, Mode: model.TokenRouteManual, Version: 1}).Error)
 						require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: f.token.Id, ChannelID: f.channel.Id, Enabled: true}).Error)
 						t.Cleanup(func() {
 							require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteEntry{}).Error)
 							require.NoError(t, model.DB.Where("token_id = ?", f.token.Id).Delete(&model.TokenRouteProfile{}).Error)
 						})
-					}
-					if scenario == "auto group revoked" || scenario == "unchanged auto group" {
-						previousGroups := setting.UserUsableGroups2JSONString()
-						require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","auto":"Auto"}`))
-						t.Cleanup(func() { require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousGroups)) })
-						f.token.Group, f.token.AutoGroups = "auto", `["default"]`
-						require.NoError(t, f.token.Update())
 					}
 					common.MemoryCacheEnabled = cache
 					if cache {
@@ -65,7 +57,7 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 					return model.DB.First(&token, fixture.token.Id).Error == nil && token.UsedQuota == 1000
 				}, 3*time.Second, 10*time.Millisecond)
 				switch scenario {
-				case "ability revoked", "automatic pin keeps native behavior":
+				case "ability revoked", "automatic pin revoked":
 					fixture.channel.Models = "another-model"
 					require.NoError(t, fixture.channel.Update())
 					if cache {
@@ -80,18 +72,18 @@ func TestResponsesWebSocketPrivatePinRechecksBeforeBilling(t *testing.T) {
 						}
 					}))
 					t.Cleanup(func() { model.DB.Callback().Query().Remove("routing:unavailable") })
-				case "token model revoked", "auto group revoked":
+				case "token model revoked", "channel ratio revoked":
 					require.NoError(t, model.DB.First(fixture.token, fixture.token.Id).Error)
 					if scenario == "token model revoked" {
 						fixture.token.ModelLimitsEnabled, fixture.token.ModelLimits = true, "another-model"
 					} else {
-						fixture.token.AutoGroups = `["not-authorized"]`
+						require.NoError(t, model.DB.Model(&model.TokenRouteProfile{}).Where("token_id = ?", fixture.token.Id).Update("max_channel_ratio", "0.5").Error)
 					}
 					require.NoError(t, fixture.token.Update())
 				}
 				require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, create))
 				event := readResponsesWSTestEvent(t, fixture.client)
-				if scenario == "automatic pin keeps native behavior" || scenario == "unchanged private pin" || scenario == "unchanged auto group" {
+				if scenario == "unchanged private pin" || scenario == "unchanged automatic pin" {
 					require.Equal(t, "response.completed", event["type"])
 					fixture.closeAndWait(t)
 					require.EqualValues(t, 2, creates.Load())

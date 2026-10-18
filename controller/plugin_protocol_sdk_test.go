@@ -287,7 +287,6 @@ func newPluginProtocolSDKTestServer(
 		c.Request = request
 		common.SetContextKey(c, constant.ContextKeyUserId, 71)
 		common.SetContextKey(c, constant.ContextKeyTokenId, 81)
-		common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
 		c.Set("resolved_task_model", modelName)
 		c.Set(pluginruntime.ContextKeyProtocolRequest, pluginruntime.ProtocolRequestContext{
 			RouteRequestContext: pluginruntime.RouteRequestContext{

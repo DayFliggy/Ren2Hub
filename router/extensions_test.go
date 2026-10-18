@@ -40,9 +40,9 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 		common.SetMainDatabaseType(oldType)
 		sqlDB.Close()
 	})
-	owner := model.User{Username: "owner", AffCode: "owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1, Group: "default"}
-	other := model.User{Username: "other", AffCode: "other", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1, Group: "default"}
-	root := model.User{Username: "root", AffCode: "root", Role: common.RoleRootUser, Status: common.UserStatusEnabled, AuthVersion: 1, Group: "default"}
+	owner := model.User{Username: "owner", AffCode: "owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}
+	other := model.User{Username: "other", AffCode: "other", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}
+	root := model.User{Username: "root", AffCode: "root", Role: common.RoleRootUser, Status: common.UserStatusEnabled, AuthVersion: 1}
 	for _, u := range []*model.User{&owner, &other, &root} {
 		require.NoError(t, db.Create(u).Error)
 	}
@@ -83,15 +83,26 @@ func TestExtensionsSessionOwnershipAndPATScopes(t *testing.T) {
 			assert.Contains(t, response.Body.String(), tc.contains)
 		})
 	}
+	adminScopes := map[string]string{
+		"GET /api/admin/affiliate/records":           "user:read",
+		"GET /api/admin/affiliate/users/:id":         "user:read",
+		"PUT /api/admin/affiliate/users/:id":         "user:write",
+		"GET /api/user/topup/stats":                  "topup:read",
+		"GET /api/user/topup/admin/detail/:trade_no": "topup:read",
+	}
 	for _, route := range engine.Routes() {
 		if strings.HasSuffix(route.Path, "/notify") {
 			continue
 		}
-		rule, ok := middleware.AccessTokenRouteRule(route.Method + " " + route.Path)
+		key := route.Method + " " + route.Path
+		rule, ok := middleware.AccessTokenRouteRule(key)
 		require.True(t, ok)
 		if strings.HasPrefix(route.Path, "/api/admin/tickets") {
 			assert.Equal(t, "scope", rule.Kind())
 			assert.True(t, strings.HasPrefix(rule.Scope(), "ticket:"))
+		} else if scope, adminRoute := adminScopes[key]; adminRoute {
+			assert.Equal(t, "scope", rule.Kind(), key)
+			assert.Equal(t, scope, rule.Scope(), key)
 		} else {
 			assert.Equal(t, "session", rule.Kind())
 		}

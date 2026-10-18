@@ -87,11 +87,11 @@ func TestImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 			}
 			info := &relaycommon.RelayInfo{Request: request, OriginModelName: "gpt-image-2", RelayMode: relayconstant.RelayModeImagesGenerations,
 				RequestURLPath: c.Request.URL.Path, Billing: reservation,
-				PriceData: hosttypes.PriceData{UsePrice: true, ModelPrice: 0.04, GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1}},
+				PriceData: hosttypes.PriceData{UsePrice: true, ModelPrice: 0.04, ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1}},
 			}
 			if tc.tiered {
 				expr := `tier("image", fixed(0.04)) * image_count`
-				info.TieredBillingSnapshot = &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ExprString: expr, ExprHash: billingexpr.ExprHashString(expr), GroupRatio: 1, QuotaPerUnit: common.QuotaPerUnit, EstimatedImageCount: common.GetPointer(1)}
+				info.TieredBillingSnapshot = &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ExprString: expr, ExprHash: billingexpr.ExprHashString(expr), ChannelRatio: 1, QuotaPerUnit: common.QuotaPerUnit, EstimatedImageCount: common.GetPointer(1)}
 				info.BillingRequestInput = &billingexpr.RequestInput{Body: []byte(tc.body), ImageCount: common.GetPointer(1)}
 				info.PriceData.UsePrice = false
 			}
@@ -303,7 +303,7 @@ func TestImageHelperKeepsAdaptorClassifiedConvertError(t *testing.T) {
 	require.NoError(t, err)
 	info := &relaycommon.RelayInfo{Request: request, OriginModelName: "wanx-style-repaint-v1", RelayMode: relayconstant.RelayModeImagesGenerations,
 		RequestURLPath: c.Request.URL.Path, Billing: &imageReservation{limit: 500000},
-		PriceData: hosttypes.PriceData{UsePrice: true, ModelPrice: 0.04, GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1}},
+		PriceData: hosttypes.PriceData{UsePrice: true, ModelPrice: 0.04, ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1}},
 	}
 
 	apiErr := ImageHelper(c, info)

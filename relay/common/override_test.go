@@ -1472,12 +1472,8 @@ func TestApplyParamOverrideConditionByUserAndGPTModel(t *testing.T) {
 	}
 }
 
-func TestApplyParamOverrideConditionByGroupContext(t *testing.T) {
-	info := &RelayInfo{
-		UserGroup:  "vip",
-		TokenGroup: "premium",
-		UsingGroup: "priority-route",
-	}
+func TestApplyParamOverrideRetiredGroupContextDoesNotMatch(t *testing.T) {
+	info := &RelayInfo{}
 	ctx := BuildParamOverrideContext(info)
 	paramOverride := map[string]any{
 		"operations": []any{
@@ -1510,7 +1506,7 @@ func TestApplyParamOverrideConditionByGroupContext(t *testing.T) {
 	out, err := ApplyParamOverride([]byte(`{"model":"gpt-5.2"}`), paramOverride, ctx)
 
 	require.NoError(t, err)
-	require.JSONEq(t, `{"model":"gpt-5.2","service_tier":"priority"}`, string(out))
+	require.JSONEq(t, `{"model":"gpt-5.2"}`, string(out))
 }
 
 func TestApplyParamOverrideConditionFromRequestHeaders(t *testing.T) {

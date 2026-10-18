@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -18,35 +19,36 @@ func TestTaskPluginChannelSelectionFiltersBothCachePaths(t *testing.T) {
 	alphaSetting := `{"task_plugin_key":"alpha"}`
 	betaSetting := `{"task_plugin_key":"beta"}`
 	channels := []Channel{
-		{Id: 900001, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: "alpha", Models: "shared", Group: "default", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &alphaSetting},
-		{Id: 900002, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: "beta", Models: "shared", Group: "default", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &betaSetting},
-		{Id: 900003, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Name: "ordinary", Models: "ordinary", Group: "default", Priority: &priority, Weight: &weight},
-		{Id: 900004, Type: constant.ChannelTypeKling, Status: common.ChannelStatusEnabled, Name: "legacy-alpha", Models: "legacy", Group: "default", Priority: &priority, Weight: &weight},
-		{Id: 900005, Type: constant.ChannelTypeJimeng, Status: common.ChannelStatusEnabled, Name: "legacy-beta", Models: "legacy", Group: "default", Priority: &priority, Weight: &weight},
+		{Id: 900001, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: "alpha", Models: "shared", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &alphaSetting},
+		{Id: 900002, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: "beta", Models: "shared", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &betaSetting},
+		{Id: 900003, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Name: "ordinary", Models: "ordinary", Priority: &priority, Weight: &weight},
+		{Id: 900004, Type: constant.ChannelTypeKling, Status: common.ChannelStatusEnabled, Name: "legacy-alpha", Models: "legacy", Priority: &priority, Weight: &weight},
+		{Id: 900005, Type: constant.ChannelTypeJimeng, Status: common.ChannelStatusEnabled, Name: "legacy-beta", Models: "legacy", Priority: &priority, Weight: &weight},
 	}
 	for i := range channels {
 		require.NoError(t, channels[i].Insert())
 	}
 
-	selected, err := GetChannel("default", "shared", 0, identityFilters("alpha", nil))
+	selected, err := RouteChannelRows(context.Background(), "shared", identityFilters("alpha", nil))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "alpha", selected.Name)
-	selected, err = GetChannel("default", "shared", 0, identityFilters("", nil))
+	require.Len(t, selected, 1)
+	assert.Equal(t, "alpha", selected[0].Name)
+	selected, err = RouteChannelRows(context.Background(), "shared", identityFilters("", nil))
 	require.NoError(t, err)
-	assert.Nil(t, selected)
-	selected, err = GetChannel("default", "ordinary", 0, identityFilters("", nil))
+	assert.Empty(t, selected)
+	selected, err = RouteChannelRows(context.Background(), "ordinary", identityFilters("", nil))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "ordinary", selected.Name)
-	selected, err = GetChannel("default", "legacy", 0, identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}))
+	require.Len(t, selected, 1)
+	assert.Equal(t, "ordinary", selected[0].Name)
+	selected, err = RouteChannelRows(context.Background(), "legacy", identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "legacy-alpha", selected.Name)
-	selected, err = GetChannel("default", "legacy", 0, identityFilters("legacy-alpha", []int{constant.ChannelTypeKling, constant.ChannelTypeJimeng}))
+	require.Len(t, selected, 1)
+	assert.Equal(t, "legacy-alpha", selected[0].Name)
+	selected, err = RouteChannelRows(context.Background(), "legacy", identityFilters("legacy-alpha", []int{constant.ChannelTypeKling, constant.ChannelTypeJimeng}))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Contains(t, []string{"legacy-alpha", "legacy-beta"}, selected.Name)
+	require.Len(t, selected, 2)
+	names := []string{selected[0].Name, selected[1].Name}
+	assert.ElementsMatch(t, []string{"legacy-alpha", "legacy-beta"}, names)
 }
 
 func identityFilters(key string, channelTypes []int) []dto.ChannelFilter {
@@ -66,9 +68,9 @@ func TestSharedPluginKeysFilterBothChannelSources(t *testing.T) {
 	var abilities []Ability
 	for index, key := range []string{"alpha", "beta", "unrelated"} {
 		setting := `{"task_plugin_key":"` + key + `"}`
-		channel := Channel{Id: 910001 + index, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: key, Models: "shared", Group: "default", Setting: &setting}
+		channel := Channel{Id: 910001 + index, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Name: key, Models: "shared", Setting: &setting}
 		require.NoError(t, channel.Insert())
-		abilities = append(abilities, Ability{ChannelId: channel.Id, Model: "shared", Group: "default", Enabled: true})
+		abilities = append(abilities, Ability{ChannelId: channel.Id, Model: "shared", Enabled: true})
 		matches, _ := ChannelSatisfiesFilters(&channel, "shared", filters)
 		assert.Equal(t, index < 2, matches)
 	}
@@ -89,31 +91,31 @@ func TestNewAPIChannelServesExtendedTaskPlugins(t *testing.T) {
 	extended := `{"task_extend_plugin_keys":["alpha","gamma"]}`
 	single := `{"task_plugin_key":"delta"}`
 	channels := []Channel{
-		{Id: 920001, Type: constant.ChannelTypeNewAPI, Status: common.ChannelStatusEnabled, Name: "gateway", Models: "shared,chat", Group: "default", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &extended},
-		{Id: 920002, Type: constant.ChannelTypeNewAPI, Status: common.ChannelStatusEnabled, Name: "gateway-single", Models: "shared", Group: "default", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &single},
+		{Id: 920001, Type: constant.ChannelTypeNewAPI, Status: common.ChannelStatusEnabled, Name: "gateway", Models: "shared,chat", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &extended},
+		{Id: 920002, Type: constant.ChannelTypeNewAPI, Status: common.ChannelStatusEnabled, Name: "gateway-single", Models: "shared", Priority: &priority, Weight: &weight, BaseURL: &baseURL, Setting: &single},
 	}
 	for i := range channels {
 		require.NoError(t, channels[i].Insert())
 	}
 
-	selected, err := GetChannel("default", "shared", 0, identityFilters("alpha", nil))
+	selected, err := RouteChannelRows(context.Background(), "shared", identityFilters("alpha", nil))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "gateway", selected.Name)
-	selected, err = GetChannel("default", "shared", 0, identityFilters("delta", nil))
+	require.Len(t, selected, 1)
+	assert.Equal(t, "gateway", selected[0].Name)
+	selected, err = RouteChannelRows(context.Background(), "shared", identityFilters("delta", nil))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "gateway-single", selected.Name, "a single task_plugin_key still binds a New API channel")
-	selected, err = GetChannel("default", "shared", 0, identityFilters("beta", nil))
+	require.Len(t, selected, 1)
+	assert.Equal(t, "gateway-single", selected[0].Name, "a single task_plugin_key still binds a New API channel")
+	selected, err = RouteChannelRows(context.Background(), "shared", identityFilters("beta", nil))
 	require.NoError(t, err)
-	assert.Nil(t, selected, "unbound plugins never reach the gateway channel")
+	assert.Empty(t, selected, "unbound plugins never reach the gateway channel")
 	shared := []dto.ChannelFilter{{Kind: dto.FilterTaskPluginIdentity, TaskPluginKey: "beta", TaskPluginKeys: []string{"beta", "gamma"}}}
-	selected, err = GetChannel("default", "shared", 0, shared)
+	selected, err = RouteChannelRows(context.Background(), "shared", shared)
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "gateway", selected.Name, "a bound shared-model candidate admits the channel")
-	selected, err = GetChannel("default", "chat", 0, identityFilters("", nil))
+	require.Len(t, selected, 1)
+	assert.Equal(t, "gateway", selected[0].Name, "a bound shared-model candidate admits the channel")
+	selected, err = RouteChannelRows(context.Background(), "chat", identityFilters("", nil))
 	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, "gateway", selected.Name, "requests without a pinned plugin keep using the gateway")
+	require.Len(t, selected, 1)
+	assert.Equal(t, "gateway", selected[0].Name, "requests without a pinned plugin keep using the gateway")
 }

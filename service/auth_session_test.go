@@ -55,7 +55,6 @@ func setupAuthSessionTestDB(t *testing.T) *model.User {
 		Password:    "unused-password-hash",
 		Role:        common.RoleCommonUser,
 		Status:      common.UserStatusEnabled,
-		Group:       "default",
 		AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(user).Error)

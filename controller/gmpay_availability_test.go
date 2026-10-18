@@ -22,7 +22,7 @@ import (
 
 func TestGmpayDisabledNewOrdersPreservesExistingPayments(t *testing.T) {
 	db := useGmpayControllerDB(t)
-	user := model.User{Username: "disabled-gmpay", AffCode: "disabled-gmpay", Group: "default"}
+	user := model.User{Username: "disabled-gmpay", AffCode: "disabled-gmpay"}
 	require.NoError(t, db.Create(&user).Error)
 	oldPayment := *operation_setting.GetPaymentSetting()
 	oldDisplay, oldMinimum := operation_setting.GetQuotaDisplayType(), operation_setting.MinTopUp

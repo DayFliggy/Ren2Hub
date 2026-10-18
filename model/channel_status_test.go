@@ -59,7 +59,6 @@ func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.
 		Key:         "original-key",
 		Status:      common.ChannelStatusEnabled,
 		Models:      "original-model",
-		Group:       "default",
 		UsedQuota:   100,
 		ChannelInfo: ChannelInfo{},
 	}

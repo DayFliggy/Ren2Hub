@@ -25,8 +25,9 @@ import (
 )
 
 type ModelRequest struct {
-	Model string `json:"model"`
-	Group string `json:"group,omitempty"`
+	Model        string `json:"model"`
+	Stream       bool   `json:"stream"`
+	StreamFormat string `json:"stream_format"`
 }
 
 func Distribute() func(c *gin.Context) {
@@ -48,6 +49,11 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		stream := modelRequest.Stream || modelRequest.StreamFormat == "sse"
+		if relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeGemini {
+			stream = c.Query("alt") == "sse" || strings.Contains(c.Request.URL.Path, "streamGenerateContent")
+		}
+		common.SetContextKey(c, constant.ContextKeyIsStream, stream)
 		_, pinned, _ := constraints.ResolvedPin()
 		if !pinned {
 			// Select a channel for the user
@@ -79,13 +85,22 @@ func Distribute() func(c *gin.Context) {
 
 			}
 		}
+		userPermit, admissionErr := service.AcquireUserConcurrency(c.Request.Context(), c.GetInt("id"), c.GetInt("user_max_concurrency"))
+		if admissionErr != nil {
+			status := http.StatusServiceUnavailable
+			if errors.Is(admissionErr, service.ErrConcurrencyFull) {
+				status = http.StatusTooManyRequests
+			}
+			abortWithOpenAiMessage(c, status, admissionErr.Error(), "user_concurrency_exceeded")
+			return
+		}
+		defer userPermit.Release()
+		defer service.ReleaseRouteChannel(c)
 		if pinned || shouldSelectChannel {
-			usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 			var selectErr *service.ChannelSelectError
-			channel, _, selectErr = service.SelectChannelForRequest(c, modelRequest.Model, &service.RetryParam{
+			channel, selectErr = service.SelectChannelForRequest(c, modelRequest.Model, &service.RetryParam{
 				Ctx:         c,
 				ModelName:   modelRequest.Model,
-				TokenGroup:  usingGroup,
 				RequestPath: c.Request.URL.Path,
 				Retry:       common.GetPointer(0),
 			})
@@ -95,7 +110,7 @@ func Distribute() func(c *gin.Context) {
 				}
 				message := selectErr.Message
 				if selectErr.NoAvailableChannel {
-					message = noAvailableChannelMessage(c, usingGroup, modelRequest.Model)
+					message = noAvailableChannelMessage(c, modelRequest.Model)
 				} else if selectErr.MessageID != "" {
 					message = i18n.T(c, selectErr.MessageID, selectErr.Params)
 				}
@@ -115,7 +130,7 @@ func Distribute() func(c *gin.Context) {
 // noAvailableChannelMessage explains a 503 for a task-plugin-claimed model.
 // The response tells the caller the model is plugin-claimed without naming the
 // plugin; the candidate plugin keys go to the server log under the request id.
-func noAvailableChannelMessage(c *gin.Context, group, modelName string) string {
+func noAvailableChannelMessage(c *gin.Context, modelName string) string {
 	value, exists := c.Get(jsplugin.ContextKeyPinnedPlugin)
 	pinned, ok := value.(jsplugin.PinnedPlugin)
 	if exists && ok && pinned.Plugin != nil {
@@ -130,10 +145,10 @@ func noAvailableChannelMessage(c *gin.Context, group, modelName string) string {
 				}
 			}
 		}
-		logger.LogWarn(c, common.LogText("task_plugin subsystem=distribution event=no_available_channel group=%q model=%q plugins=%q reason=no_eligible_channel", group, modelName, strings.Join(keys, ",")))
-		return i18n.T(c, i18n.MsgDistributorNoAvailableChannelTaskPlugin, map[string]any{"Group": group, "Model": modelName})
+		logger.LogWarn(c, common.LogText("task_plugin subsystem=distribution event=no_available_channel model=%q plugins=%q reason=no_eligible_channel", modelName, strings.Join(keys, ",")))
+		return fmt.Sprintf("No available channel for task model %s", modelName)
 	}
-	return i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": group, "Model": modelName})
+	return fmt.Sprintf("No available channel for model %s", modelName)
 }
 
 func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, expected string) bool {
@@ -245,12 +260,8 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 		return nil, errors.New("model must be provided once")
 	}
 
-	values := gjson.GetManyBytes(requestBody, "model", "group")
-	model, err := getJSONStringValue(values[0], "model")
-	if err != nil {
-		return nil, err
-	}
-	group, err := getJSONStringValue(values[1], "group")
+	value := gjson.GetBytes(requestBody, "model")
+	model, err := getJSONStringValue(value, "model")
 	if err != nil {
 		return nil, err
 	}
@@ -261,8 +272,9 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	c.Request.Body = io.NopCloser(storage)
 
 	return &ModelRequest{
-		Model: model,
-		Group: group,
+		Model:        model,
+		Stream:       gjson.GetBytes(requestBody, "stream").Bool(),
+		StreamFormat: gjson.GetBytes(requestBody, "stream_format").String(),
 	}, nil
 }
 
@@ -386,7 +398,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 				return nil, false, err
 			}
 			if req != nil {
-				modelRequest.Model = req.Model
+				modelRequest = *req
 			}
 		} else if c.Request.Method == http.MethodGet {
 			relayMode = relayconstant.RelayModeVideoFetchByID
@@ -401,7 +413,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			if err != nil {
 				return nil, false, err
 			}
-			modelRequest.Model = req.Model
+			modelRequest = *req
 			relayMode = relayconstant.RelayModeVideoSubmit
 		} else if c.Request.Method == http.MethodGet {
 			relayMode = relayconstant.RelayModeVideoFetchByID
@@ -424,7 +436,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		modelRequest.Model = req.Model
+		modelRequest = *req
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/realtime") {
 		//wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01
@@ -448,7 +460,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		if slices.Contains([]string{gin.MIMEPOSTForm, gin.MIMEMultipartPOSTForm}, contentType) {
 			req, err := getModelFromRequest(c)
 			if err == nil && req.Model != "" {
-				modelRequest.Model = req.Model
+				modelRequest = *req
 			}
 		}
 	}
@@ -460,14 +472,14 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/translations") {
 			// 先尝试从请求读取
 			if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
-				modelRequest.Model = req.Model
+				modelRequest = *req
 			}
 			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "whisper-1")
 			relayMode = relayconstant.RelayModeAudioTranslation
 		} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") {
 			// 先尝试从请求读取
 			if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
-				modelRequest.Model = req.Model
+				modelRequest = *req
 			}
 			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "whisper-1")
 			relayMode = relayconstant.RelayModeAudioTranscription
@@ -508,6 +520,10 @@ func getTaskOriginModelName(c *gin.Context) string {
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {
+	if channel != nil {
+		c.Set("channel_ratio", channel.ChannelRatio)
+		c.Set("route_selected_channel", channel)
+	}
 	c.Set("original_model", modelName) // for retry
 	expectedPlugin := c.GetString("expected_task_plugin_key")
 	if channel == nil {

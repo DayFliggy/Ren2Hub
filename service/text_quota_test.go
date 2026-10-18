@@ -111,7 +111,7 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 		audio, stream, refund, insufficient, tool bool
 		realtime, reserveInsufficient             bool
 		wallet, outboundImages                    int
-		groupRatio                                float64
+		channelRatio                              float64
 		want                                      int
 		unit                                      billingexpr.BillingUnit
 		requestedImages, actualImages             int
@@ -126,7 +126,7 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 		{name: "missing usage uses estimated token fallback", expression: mixed, estimate: 50000, want: 50000, unit: billingexpr.BillingUnitToken},
 		{name: "evaluation error retains fixed reservation metadata", expression: `p == 50 ? tier("error", param("missing") * p + img_cr * 2) : tier("request", fixed(0.01))`, estimate: 100, usage: &dto.Usage{PromptTokens: 50, TotalTokens: 50}, want: 5000, unit: billingexpr.BillingUnitRequest},
 		{name: "explicit zero remains free", expression: `tier("free", fixed(0))`, usage: &dto.Usage{PromptTokens: 100, TotalTokens: 100}, unit: billingexpr.BillingUnitRequest},
-		{name: "multipliers and separate tool surcharge", expression: flat + ` * (param("fast") == true ? 2 : 1)`, groupRatio: 1.5, tool: true, want: 18000, unit: billingexpr.BillingUnitRequest},
+		{name: "multipliers and separate tool surcharge", expression: flat + ` * (param("fast") == true ? 2 : 1)`, channelRatio: 1.5, tool: true, want: 18000, unit: billingexpr.BillingUnitRequest},
 		{name: "failed request refunds exactly once", expression: flat, refund: true},
 		{name: "insufficient wallet never reserves tokens", expression: flat, insufficient: true},
 		{name: "image cache stream settles usage and refunds unused reservation", expression: imageExpression, estimate: 10000, usage: imageUsage, stream: true, want: 4113, unit: billingexpr.BillingUnitToken},
@@ -161,7 +161,7 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 				require.NoError(t, db.Unscoped().Delete(&user).Error)
 				require.NoError(t, db.Unscoped().Delete(&channel).Error)
 			})
-			group := tc.groupRatio
+			group := tc.channelRatio
 			if group == 0 {
 				group = 1
 			}
@@ -173,9 +173,9 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 			require.NoError(t, err)
 			reservation, err := billingexpr.QuotaRoundStrict(cost / 1_000_000 * common.QuotaPerUnit * group)
 			require.NoError(t, err)
-			snapshot := &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ExprString: tc.expression, ExprHash: billingexpr.ExprHashString(tc.expression), QuotaPerUnit: common.QuotaPerUnit, GroupRatio: group, EstimatedTier: trace.MatchedTier, EstimatedBillingUnit: trace.BillingUnit, EstimatedFixedPrice: trace.FixedPrice, EstimatedQuotaAfterGroup: reservation}
+			snapshot := &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ExprString: tc.expression, ExprHash: billingexpr.ExprHashString(tc.expression), QuotaPerUnit: common.QuotaPerUnit, ChannelRatio: group, EstimatedTier: trace.MatchedTier, EstimatedBillingUnit: trace.BillingUnit, EstimatedFixedPrice: trace.FixedPrice, EstimatedQuotaAfterChannel: reservation}
 			snapshot.EstimatedImageCount = trace.ImageCount
-			info := &relaycommon.RelayInfo{UserId: user.Id, TokenId: token.Id, TokenKey: token.Key, ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, OriginModelName: "fixed-test", UsingGroup: "default", UserGroup: "default", UserSetting: dto.UserSetting{}, ForcePreConsume: true, StartTime: time.Now(), IsStream: tc.stream, RelayFormat: types.RelayFormatOpenAI, PriceData: hosttypes.PriceData{GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: group}}, TieredBillingSnapshot: snapshot, BillingRequestInput: request}
+			info := &relaycommon.RelayInfo{UserId: user.Id, TokenId: token.Id, TokenKey: token.Key, ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, OriginModelName: "fixed-test", UserSetting: dto.UserSetting{}, StartTime: time.Now(), IsStream: tc.stream, RelayFormat: types.RelayFormatOpenAI, PriceData: hosttypes.PriceData{ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: group}}, TieredBillingSnapshot: snapshot, BillingRequestInput: request}
 			info.SetEstimatePromptTokens(tc.estimate)
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
@@ -320,8 +320,8 @@ func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 		CacheCreationRatio:   1.25,
 		CacheCreation5mRatio: 1.25,
 		CacheCreation1hRatio: 2,
-		GroupRatioInfo: hosttypes.GroupRatioInfo{
-			GroupRatio: 1,
+		ChannelRatioInfo: hosttypes.ChannelRatioInfo{
+			ChannelRatio: 1,
 		},
 	}
 
@@ -366,8 +366,8 @@ func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.
 			CacheCreationRatio:   1,
 			CacheCreation5mRatio: 2,
 			CacheCreation1hRatio: 3,
-			GroupRatioInfo: hosttypes.GroupRatioInfo{
-				GroupRatio: 1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{
+				ChannelRatio: 1,
 			},
 		},
 		StartTime: time.Now(),
@@ -404,8 +404,8 @@ func TestCalculateTextQuotaSummaryUsesAnthropicUsageSemanticFromUpstreamUsage(t 
 			CacheCreationRatio:   1.25,
 			CacheCreation5mRatio: 1.25,
 			CacheCreation1hRatio: 2,
-			GroupRatioInfo: hosttypes.GroupRatioInfo{
-				GroupRatio: 1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{
+				ChannelRatio: 1,
 			},
 		},
 		StartTime: time.Now(),
@@ -445,7 +445,7 @@ func TestCalculateTextQuotaSummaryUsesClaudeBillingUsageBeforeTopLevelUsage(t *t
 			CacheCreationRatio:   1.25,
 			CacheCreation5mRatio: 1.25,
 			CacheCreation1hRatio: 2,
-			GroupRatioInfo:       hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:     hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -488,10 +488,10 @@ func TestCalculateTextQuotaSummaryUsesGeminiBillingUsageBeforeTopLevelUsage(t *t
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "gemini-2.5-flash",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 2,
-			CacheRatio:      0.1,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ModelRatio:       1,
+			CompletionRatio:  2,
+			CacheRatio:       0.1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -530,9 +530,9 @@ func TestCalculateTextQuotaSummaryUsesOpenAIBillingUsageBeforeTopLevelUsage(t *t
 		RelayFormat:     types.RelayFormatClaude,
 		OriginModelName: "gpt-4o",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 2,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ModelRatio:       1,
+			CompletionRatio:  2,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -565,10 +565,10 @@ func TestCalculateTextQuotaSummaryUsesOpenAIResponsesInputTokenDetails(t *testin
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "gpt-4o",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 2,
-			CacheRatio:      0.25,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ModelRatio:       1,
+			CompletionRatio:  2,
+			CacheRatio:       0.25,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -657,7 +657,7 @@ func TestCalculateTextQuotaSummaryNormalizesOpenAIResponsesBillingUsageDetails(t
 			CompletionRatio:    2,
 			CacheRatio:         0.5,
 			CacheCreationRatio: 2,
-			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:   hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -775,7 +775,7 @@ func TestCalculateTextQuotaSummaryHandlesLegacyClaudeDerivedOpenAIUsage(t *testi
 			CacheCreationRatio:   1.25,
 			CacheCreation5mRatio: 1.25,
 			CacheCreation1hRatio: 2,
-			GroupRatioInfo:       hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:     hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -808,7 +808,7 @@ func TestCalculateTextQuotaSummaryBillsOpenAICacheWriteTokens(t *testing.T) {
 			CompletionRatio:    2,
 			CacheRatio:         0.1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:   hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -866,7 +866,7 @@ func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheReadFromPromptBilling(
 			CompletionRatio:    1,
 			CacheRatio:         0.1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:   hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -902,7 +902,7 @@ func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheCreationFromPromptBill
 			ModelRatio:         1,
 			CompletionRatio:    1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:   hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -939,7 +939,7 @@ func TestCalculateTextQuotaSummaryKeepsPrePRClaudeOpenRouterBilling(t *testing.T
 			CompletionRatio:    1,
 			CacheRatio:         0.1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ChannelRatioInfo:   hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -976,9 +976,9 @@ func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "o1",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 1,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ModelRatio:       1,
+			CompletionRatio:  1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
 			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
@@ -994,9 +994,9 @@ func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 			},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:               "tiered_expr",
-			GroupRatio:                1,
-			EstimatedQuotaBeforeGroup: 1000,
+			BillingMode:                 "tiered_expr",
+			ChannelRatio:                1,
+			EstimatedQuotaBeforeChannel: 1000,
 		},
 		StartTime: time.Now(),
 	}
@@ -1009,8 +1009,8 @@ func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
 	quota := composeTieredTextQuota(relayInfo, summary, 1000, &billingexpr.TieredResult{
-		ActualQuotaBeforeGroup: 1000,
-		ActualQuotaAfterGroup:  1000,
+		ActualQuotaBeforeChannel: 1000,
+		ActualQuotaAfterChannel:  1000,
 	})
 
 	require.Equal(t, int64(13000), summary.ToolCallSurchargeQuota.Round(0).IntPart())
@@ -1025,9 +1025,9 @@ func TestComposeTieredTextQuotaFallbackKeepsToolCallSurcharges(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "claude-3-7-sonnet",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 1,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1.25},
+			ModelRatio:       1,
+			CompletionRatio:  1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1.25},
 		},
 		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
 			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
@@ -1035,9 +1035,9 @@ func TestComposeTieredTextQuotaFallbackKeepsToolCallSurcharges(t *testing.T) {
 			},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:               "tiered_expr",
-			GroupRatio:                1.25,
-			EstimatedQuotaBeforeGroup: 1000,
+			BillingMode:                 "tiered_expr",
+			ChannelRatio:                1.25,
+			EstimatedQuotaBeforeChannel: 1000,
 		},
 		StartTime: time.Now(),
 	}
@@ -1063,9 +1063,9 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "claude-3-7-sonnet",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 1,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1.25},
+			ModelRatio:       1,
+			CompletionRatio:  1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1.25},
 		},
 		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
 			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
@@ -1073,9 +1073,9 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 			},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:               "tiered_expr",
-			GroupRatio:                1.25,
-			EstimatedQuotaBeforeGroup: 1000,
+			BillingMode:                 "tiered_expr",
+			ChannelRatio:                1.25,
+			EstimatedQuotaBeforeChannel: 1000,
 		},
 		StartTime: time.Now(),
 	}
@@ -1090,7 +1090,7 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 
 	// tieredResult=nil simulates a settlement error where TryTieredSettle
 	// falls back to FinalPreConsumedQuota (2000), which differs from
-	// EstimatedQuotaBeforeGroup * GroupRatio (1250).
+	// EstimatedQuotaBeforeChannel * ChannelRatio (1250).
 	preConsumedFallback := 2000
 	quota := composeTieredTextQuota(relayInfo, summary, preConsumedFallback, nil)
 
@@ -1102,7 +1102,7 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 // settlement both saturates the quota and records the clamp on RelayInfo, so
 // every consume path (text, audio, WSS) can surface it under admin_info.
 func TestTryTieredSettleRecordsClampOnOverflow(t *testing.T) {
-	// exprOutput = p * 1e12; quotaBeforeGroup = p*1e12 / 1e6 * 5e5 far exceeds
+	// exprOutput = p * 1e12; quotaBeforeChannel = p*1e12 / 1e6 * 5e5 far exceeds
 	// the supported single-request range and must saturate.
 	exprStr := `tier("base", p * 1000000000000)`
 	relayInfo := &relaycommon.RelayInfo{
@@ -1111,7 +1111,7 @@ func TestTryTieredSettleRecordsClampOnOverflow(t *testing.T) {
 			BillingMode:  "tiered_expr",
 			ExprString:   exprStr,
 			ExprHash:     billingexpr.ExprHashString(exprStr),
-			GroupRatio:   1,
+			ChannelRatio: 1,
 			QuotaPerUnit: 500_000,
 		},
 	}
@@ -1135,7 +1135,7 @@ func TestTryTieredSettleNoClampInRange(t *testing.T) {
 			BillingMode:  "tiered_expr",
 			ExprString:   exprStr,
 			ExprHash:     billingexpr.ExprHashString(exprStr),
-			GroupRatio:   1,
+			ChannelRatio: 1,
 			QuotaPerUnit: 500_000,
 		},
 	}
@@ -1153,8 +1153,8 @@ func TestCalculateTextQuotaSummaryFixedPriceAppliesImageCountOnceAndAllowsOverri
 	priceData := hosttypes.PriceData{
 		ModelPrice: 0.12,
 		UsePrice:   true,
-		GroupRatioInfo: hosttypes.GroupRatioInfo{
-			GroupRatio: 1,
+		ChannelRatioInfo: hosttypes.ChannelRatioInfo{
+			ChannelRatio: 1,
 		},
 	}
 	priceData.AddOtherRatio("n", 3)
@@ -1195,8 +1195,8 @@ func TestCalculateTextToolCallSurchargeGeneralizedBuiltInTools(t *testing.T) {
 		},
 	}
 	summary := &textQuotaSummary{
-		ModelName:  "o1",
-		GroupRatio: 1,
+		ModelName:    "o1",
+		ChannelRatio: 1,
 	}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
@@ -1230,8 +1230,8 @@ func TestCalculateTextToolCallSurchargeKeepsSearchPreviewFallbackWithCustomFunct
 		},
 	}
 	summary := &textQuotaSummary{
-		ModelName:  relayInfo.OriginModelName,
-		GroupRatio: 1,
+		ModelName:    relayInfo.OriginModelName,
+		ChannelRatio: 1,
 	}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
@@ -1255,8 +1255,8 @@ func TestCalculateTextToolCallSurchargeDoesNotInferSearchForResponses(t *testing
 		},
 	}
 	summary := &textQuotaSummary{
-		ModelName:  relayInfo.OriginModelName,
-		GroupRatio: 1,
+		ModelName:    relayInfo.OriginModelName,
+		ChannelRatio: 1,
 	}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
@@ -1281,7 +1281,7 @@ func TestCalculateTextToolCallSurchargeClampsCallCount(t *testing.T) {
 				},
 			},
 		}
-		summary := &textQuotaSummary{ModelName: relayInfo.OriginModelName, GroupRatio: 1}
+		summary := &textQuotaSummary{ModelName: relayInfo.OriginModelName, ChannelRatio: 1}
 
 		surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 
@@ -1318,7 +1318,7 @@ func TestCalculateTextQuotaSummaryZeroTokensStillBillsToolSurcharge(t *testing.T
 			},
 		},
 	}
-	relayInfo.PriceData.GroupRatioInfo.GroupRatio = 1
+	relayInfo.PriceData.ChannelRatioInfo.ChannelRatio = 1
 
 	usage := &dto.Usage{} // zero tokens, mirrors alpha search
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
@@ -1350,7 +1350,7 @@ func TestClaudeCacheOnlyUsageRemainsBillable(t *testing.T) {
 				PriceData: hosttypes.PriceData{
 					ModelRatio: 2.5, CompletionRatio: 5, CacheRatio: 0.1,
 					CacheCreationRatio: 1.25, CacheCreation5mRatio: 1.25, CacheCreation1hRatio: 2,
-					GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1},
+					ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 				},
 			}
 			usage := &dto.Usage{UsageSemantic: dto.BillingUsageSemanticAnthropic, BillingUsage: dto.NewClaudeMessagesBillingUsage(&tc.usage)}
@@ -1371,9 +1371,9 @@ func TestCalculateTextQuotaSummaryDoesNotApplyRequestMultipliersToToolSurcharge(
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "o1",
 		PriceData: hosttypes.PriceData{
-			ModelRatio:      1,
-			CompletionRatio: 1,
-			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
+			ModelRatio:       1,
+			CompletionRatio:  1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1},
 		},
 		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
 			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
@@ -1402,7 +1402,7 @@ func TestCalculateTextToolCallSurchargeGeminiGoogleSearch(t *testing.T) {
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: "gemini-3.7-flash", GroupRatio: 1}
+	summary := &textQuotaSummary{ModelName: "gemini-3.7-flash", ChannelRatio: 1}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	expected := decimal.NewFromFloat(14.0 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
@@ -1430,7 +1430,7 @@ func TestCalculateTextToolCallSurchargeGeminiFunctionCall(t *testing.T) {
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", GroupRatio: 1}
+	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", ChannelRatio: 1}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	expected := decimal.NewFromFloat(5.0 * 2 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
@@ -1460,7 +1460,7 @@ func TestCalculateTextToolCallSurchargeImageGenerationDefaultPrice(t *testing.T)
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: "gpt-5.1", GroupRatio: 1.5}
+	summary := &textQuotaSummary{ModelName: "gpt-5.1", ChannelRatio: 1.5}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	expected := decimal.NewFromFloat(150.0).
@@ -1491,7 +1491,7 @@ func TestCalculateTextToolCallSurchargeImageGenerationExplicitZeroDisables(t *te
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: "gpt-5.1", GroupRatio: 1}
+	summary := &textQuotaSummary{ModelName: "gpt-5.1", ChannelRatio: 1}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	assert.True(t, surcharge.IsZero())
@@ -1513,7 +1513,7 @@ func TestCalculateTextQuotaSummaryImageGenerationUsesStructuredSurcharge(t *test
 			},
 		},
 	}
-	relayInfo.PriceData.GroupRatioInfo.GroupRatio = 1
+	relayInfo.PriceData.ChannelRatioInfo.ChannelRatio = 1
 	relayInfo.PriceData.ModelRatio = 1
 	relayInfo.PriceData.CompletionRatio = 1
 
@@ -1564,10 +1564,9 @@ func TestPostTextConsumeQuotaLogsMissingUsageAsStructuredContent(t *testing.T) {
 	info := &relaycommon.RelayInfo{
 		UserId:          userID,
 		OriginModelName: "missing-usage-model",
-		UsingGroup:      "default",
 		StartTime:       time.Now(),
 		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: channelID},
-		PriceData:       hosttypes.PriceData{ModelRatio: 1, CompletionRatio: 1, GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1}},
+		PriceData:       hosttypes.PriceData{ModelRatio: 1, CompletionRatio: 1, ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 1}},
 	}
 
 	PostTextConsumeQuota(ctx, info, &dto.Usage{}, nil)
