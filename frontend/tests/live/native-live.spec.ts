@@ -66,7 +66,7 @@ test.describe('native isolated backend', () => {
         await expect(page).toHaveURL(
           new RegExp(`${expectedPath.replaceAll('/', '\\/')}(?:[?#].*)?$`)
         )
-        await expect(page.locator('main')).toBeVisible()
+        await expect(page.locator('main').first()).toBeVisible()
         await expect(page.locator('[role=alert]')).toHaveCount(0)
         expect(
           await page.evaluate(
