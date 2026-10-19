@@ -12,9 +12,11 @@ import type { AdminOrderSpender } from '@/types/console'
 withDefaults(
   defineProps<{
     items: AdminOrderSpender[]
+    currency?: string
+    unavailable?: boolean
     loading?: boolean
   }>(),
-  { loading: false }
+  { loading: false, unavailable: false, currency: '' }
 )
 
 const { t } = useI18n()
@@ -22,7 +24,12 @@ const { t } = useI18n()
 
 <template>
   <ConsoleCard :title="t('orders.topSpenders')">
-    <ul v-if="loading" class="sibling-space-y-3.5" aria-hidden="true">
+    <EmptyState
+      v-if="unavailable && !loading"
+      :title="t('orders.summaryUnavailable')"
+      :hint="t('orders.summaryUnavailableHint')"
+    />
+    <ul v-else-if="loading" class="sibling-space-y-3.5" aria-hidden="true">
       <li
         v-for="i in 5"
         :key="i"
@@ -58,7 +65,7 @@ const { t } = useI18n()
         <span
           class="shrink-0 font-semibold tabular-nums text-[var(--text-primary)]"
         >
-          {{ formatAdminOrderAmount(item.amount, 'CNY') }}
+          {{ formatAdminOrderAmount(item.amount, currency) }}
         </span>
       </li>
     </ol>

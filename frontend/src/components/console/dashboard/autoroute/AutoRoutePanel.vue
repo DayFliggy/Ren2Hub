@@ -5,8 +5,8 @@ import { useI18n } from 'vue-i18n'
 
 import EmptyState from '@/components/common/EmptyState.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import VendorRouteGroup from './VendorRouteGroup.vue'
 import { useAutoRoute } from '@/composables/useAutoRoute'
 
 const { t, locale } = useI18n()
@@ -17,7 +17,7 @@ onMounted(() => void load())
 
 <template>
   <div class="sibling-space-y-3 sm:sibling-space-y-4" data-auto-route-panel>
-    <!-- Header card: explains the per-lab optimum and hosts refresh. -->
+    <!-- Lab classification is for display, not execution priority. -->
     <div
       class="relative overflow-hidden rounded-xl border border-[var(--accent-soft)] bg-[var(--accent-soft)] px-4 py-3 sm:rounded-2xl"
     >
@@ -56,6 +56,14 @@ onMounted(() => void load())
     </div>
 
     <ErrorBanner v-if="error" :message="error" @retry="load" />
+    <p
+      v-if="error && lastUpdated"
+      role="status"
+      class="text-xs text-[var(--status-warning-text)]"
+    >
+      {{ t('dashboard.autoRoute.stale') }}
+    </p>
+
     <!-- skeleton -->
     <div v-if="loading" class="sibling-space-y-4">
       <div
@@ -65,44 +73,20 @@ onMounted(() => void load())
       />
     </div>
 
-    <!-- Lab groups, each ranking its own optimum. -->
+    <!-- Preserve the historical vendor cards with native catalog facts. -->
     <template v-else-if="vendorList.length">
-      <ConsoleCard
+      <VendorRouteGroup
         v-for="group in vendorList"
         :key="group.groupSlug"
-        :title="group.groupName"
-        data-route-group
-        :data-route-group-slug="group.groupSlug"
-      >
-        <p class="mb-3 text-xs text-[var(--text-tertiary)]">
-          {{
-            t('dashboard.autoRoute.activeChannelCount', {
-              active: group.activeCount,
-              total: group.channels.length,
-            })
-          }}
-        </p>
-        <div
-          v-for="channel in group.channels"
-          :key="channel.id"
-          class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-subtle)] py-3 text-sm"
-        >
-          <span>{{ channel.name }}</span
-          ><span class="text-xs text-[var(--text-tertiary)]"
-            >{{ t('channels.channelRatio') }} ×{{ channel.channel_ratio }} ·
-            {{ channel.in_flight }} / {{ channel.max_concurrency || '∞' }}</span
-          >
-          <span
-            v-if="!channel.eligible"
-            class="text-xs text-[var(--status-warning-text)]"
-            >{{ channel.filter_reason }}</span
-          >
-        </div>
-      </ConsoleCard>
+        :group-slug="group.groupSlug"
+        :group-name="group.groupName"
+        :channels="group.channels"
+        :active-count="group.activeCount"
+      />
     </template>
 
     <EmptyState
-      v-else
+      v-else-if="!error"
       :title="t('dashboard.autoRoute.emptyTitle')"
       :hint="t('dashboard.autoRoute.emptyHint')"
     />

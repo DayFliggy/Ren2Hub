@@ -2,6 +2,9 @@
 import {
   AlertTriangle,
   BadgeDollarSign,
+  CreditCard,
+  Receipt,
+  TrendingUp,
   Download,
   Eye,
   RefreshCw,
@@ -30,6 +33,9 @@ import {
 } from '@/components/console/orders/orderExport'
 import OrderMobileList from '@/components/console/orders/OrderMobileList.vue'
 import OrderStatCard from '@/components/console/orders/OrderStatCard.vue'
+import OrderRevenueChart from '@/components/console/orders/OrderRevenueChart.vue'
+import PaymentMethodShare from '@/components/console/orders/PaymentMethodShare.vue'
+import TopSpenders from '@/components/console/orders/TopSpenders.vue'
 import {
   ORDER_EXPORT_MAX_ROWS,
   useAdminOrders,
@@ -67,6 +73,7 @@ const {
   statsLoading,
   statsRefreshing,
   statsError,
+  statsStale,
   load,
   loadStats,
   fetchAllForExport,
@@ -101,6 +108,51 @@ const rangeOptions = computed(() =>
     value: String(days),
     label: t('orders.rangeDays', { days }),
   }))
+)
+
+// Currency totals are never added together. Missing currency remains unavailable.
+const chosenCurrency = ref('')
+const currencyOptions = computed(() =>
+  (stats.value?.currencies ?? [])
+    .filter((entry) => entry.currency !== '')
+    .map((entry) => ({ value: entry.currency, label: entry.currency }))
+)
+const selectedCurrency = computed(() =>
+  currencyOptions.value.some((option) => option.value === chosenCurrency.value)
+    ? chosenCurrency.value
+    : (currencyOptions.value[0]?.value ?? '')
+)
+const currencyModel = computed({
+  get: () => selectedCurrency.value,
+  set: (value: string) => {
+    chosenCurrency.value = value
+  },
+})
+const selectedStats = computed(() =>
+  stats.value?.currencies.find(
+    (entry) =>
+      entry.currency === selectedCurrency.value && entry.currency !== ''
+  )
+)
+const unknownAmounts = computed(
+  () =>
+    stats.value?.currencies.reduce(
+      (sum, entry) => sum + entry.unknown_amount_count,
+      0
+    ) ?? 0
+)
+const daily = computed(() =>
+  (stats.value?.daily ?? [])
+    .filter(
+      (entry) =>
+        selectedCurrency.value !== '' &&
+        entry.currency === selectedCurrency.value
+    )
+    .map((entry) => ({
+      date: entry.date,
+      revenue: Number(entry.paid_amount),
+      orders: entry.paid_count,
+    }))
 )
 
 /* ---------------- list ---------------- */
@@ -212,7 +264,7 @@ onBeforeUnmount(() => exportController?.abort())
           >
             {{
               activeTab === 'list'
-                ? `${t('orders.orderCount', { count: total })} · ${t('orders.rangeDays', { days: 30 })}`
+                ? t('orders.orderCount', { count: total })
                 : t('orders.rangeDays', { days: range })
             }}
           </span>
@@ -267,7 +319,7 @@ onBeforeUnmount(() => exportController?.abort())
       <!-- ============ overview ============ -->
       <div v-if="activeTab === 'overview'">
         <div
-          v-if="statsError"
+          v-if="statsError && !statsStale"
           class="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-6 py-16 text-center"
           role="alert"
         >
@@ -284,58 +336,115 @@ onBeforeUnmount(() => exportController?.abort())
         </div>
 
         <template v-else>
+          <p
+            v-if="statsStale"
+            role="alert"
+            class="mb-4 text-sm text-[var(--status-warning-text)]"
+          >
+            {{ t('orders.statsStale') }} {{ statsError }}
+          </p>
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p class="text-xs text-[var(--text-tertiary)]">
+              {{ t('orders.currencyScope') }}
+            </p>
+            <FilterSelect
+              v-model="currencyModel"
+              :options="currencyOptions"
+              :label="t('orders.currency')"
+              class="w-full sm:w-52"
+            />
+          </div>
+          <p
+            v-if="unknownAmounts"
+            class="mb-3 text-xs text-[var(--status-warning-text)]"
+            role="status"
+          >
+            {{ t('orders.unknownAmounts', { count: unknownAmounts }) }}
+          </p>
           <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <OrderStatCard
-              v-for="entry in stats?.currencies ?? []"
-              :key="entry.currency"
-              :label="`${t('orders.totalRevenue')} (${entry.currency || t('orders.notRecorded')})`"
+              :label="t('orders.totalRevenue')"
               :value="
-                entry.currency
-                  ? formatAdminOrderAmount(
-                      Number(entry.paid_amount),
-                      entry.currency
-                    )
-                  : '—'
+                formatAdminOrderAmount(
+                  selectedStats ? Number(selectedStats.paid_amount) : NaN,
+                  selectedCurrency
+                )
               "
-              :hint="t('orders.orderCount', { count: entry.paid_count })"
+              :hint="
+                selectedStats?.unknown_amount_count
+                  ? t('orders.knownAmountSubtotal')
+                  : selectedCurrency || t('orders.notRecorded')
+              "
               tone="success"
               :loading="statsLoading"
             >
               <template #icon><BadgeDollarSign :size="20" /></template>
             </OrderStatCard>
+            <OrderStatCard
+              :label="t('orders.periodOrders')"
+              :value="selectedStats ? String(selectedStats.count) : '—'"
+              :hint="selectedCurrency || t('orders.notRecorded')"
+              tone="info"
+              :loading="statsLoading"
+            >
+              <template #icon><CreditCard :size="20" /></template>
+            </OrderStatCard>
+            <OrderStatCard
+              :label="t('orders.paidOrders')"
+              :value="selectedStats ? String(selectedStats.paid_count) : '—'"
+              :hint="t('orders.settledOnly')"
+              tone="accent"
+              :loading="statsLoading"
+            >
+              <template #icon><Receipt :size="20" /></template>
+            </OrderStatCard>
+            <OrderStatCard
+              :label="t('orders.averageAmount')"
+              :value="
+                formatAdminOrderAmount(
+                  selectedStats &&
+                    selectedStats.unknown_amount_count === 0 &&
+                    selectedStats.paid_count > 0
+                    ? Number(selectedStats.paid_amount) /
+                        selectedStats.paid_count
+                    : NaN,
+                  selectedCurrency
+                )
+              "
+              :hint="
+                selectedStats?.unknown_amount_count
+                  ? t('orders.averageUnavailable')
+                  : t('orders.rangeDays', { days: range })
+              "
+              tone="warning"
+              :loading="statsLoading"
+            >
+              <template #icon><TrendingUp :size="20" /></template>
+            </OrderStatCard>
           </div>
-          <ConsoleCard class="mt-5" :title="t('orders.tabOverview')">
-            <table class="w-full text-left text-sm">
-              <thead>
-                <tr>
-                  <th>{{ t('orders.created') }}</th>
-                  <th>{{ t('orders.currency') }}</th>
-                  <th>{{ t('orders.amount') }}</th>
-                  <th>{{ t('orders.orderNo') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="entry in stats?.daily ?? []"
-                  :key="`${entry.date}:${entry.currency}`"
-                >
-                  <td>{{ entry.date }}</td>
-                  <td>{{ entry.currency || t('orders.notRecorded') }}</td>
-                  <td>
-                    {{
-                      entry.currency
-                        ? formatAdminOrderAmount(
-                            Number(entry.paid_amount),
-                            entry.currency
-                          )
-                        : '—'
-                    }}
-                  </td>
-                  <td>{{ entry.paid_count }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </ConsoleCard>
+
+          <OrderRevenueChart
+            class="mt-5"
+            :points="daily"
+            :currency="selectedCurrency"
+            :partial-amounts="Boolean(selectedStats?.unknown_amount_count)"
+            :loading="statsLoading"
+          />
+
+          <div class="mt-5 grid gap-5 lg:grid-cols-2">
+            <PaymentMethodShare
+              :items="[]"
+              :currency="selectedCurrency"
+              unavailable
+              :loading="statsLoading"
+            />
+            <TopSpenders
+              :items="[]"
+              :currency="selectedCurrency"
+              unavailable
+              :loading="statsLoading"
+            />
+          </div>
         </template>
       </div>
 
@@ -429,9 +538,17 @@ onBeforeUnmount(() => exportController?.abort())
               <template #cell-user="{ row }">
                 <span
                   class="block truncate text-xs text-[var(--text-secondary)]"
-                  :title="(row as AdminOrder).email"
+                  :title="
+                    (row as AdminOrder).email ||
+                    (row as AdminOrder).username ||
+                    `#${(row as AdminOrder).user_id}`
+                  "
                 >
-                  {{ (row as AdminOrder).email }}
+                  {{
+                    (row as AdminOrder).email ||
+                    (row as AdminOrder).username ||
+                    `#${(row as AdminOrder).user_id}`
+                  }}
                 </span>
               </template>
 

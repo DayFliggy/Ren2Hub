@@ -188,7 +188,7 @@ test('unavailable activity entries are disabled and retired routes fail closed',
   await expect(page.locator('.profile-identity')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Native Root' })).toBeVisible()
 
-  for (const path of ['/market', '/invoice', '/farm', '/bigame']) {
+  for (const path of ['/market', '/farm', '/bigame']) {
     await page.goto(path, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('页面不存在', { exact: true })).toBeVisible()
     await expect(page.locator('.app-sidebar')).toHaveCount(0)

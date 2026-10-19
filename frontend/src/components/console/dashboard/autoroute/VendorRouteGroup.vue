@@ -1,0 +1,157 @@
+<script setup lang="ts">
+import { computed, ref, useId } from 'vue'
+import { ChevronDown, CircleHelp, Layers3 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import VendorLogo from '@/components/console/models/VendorLogo.vue'
+import { labLogoVendor } from '@/constants/console'
+import ChannelScoreRow from './ChannelScoreRow.vue'
+import RouteHealthTimeline from './RouteHealthTimeline.vue'
+import type { CatalogChannel } from '@/api/modelCatalog'
+
+const props = defineProps<{
+  groupSlug: string
+  groupName: string
+  channels: CatalogChannel[]
+  activeCount: number
+}>()
+
+const { t } = useI18n()
+const expanded = ref(false)
+const showExtra = ref(false)
+const extraRowsId = useId()
+
+// Catalog order is stable; it does not claim to be the next request order.
+const COLLAPSED_ROWS = 3
+const topChannels = computed(() => props.channels.slice(0, COLLAPSED_ROWS))
+const extraChannels = computed(() => props.channels.slice(COLLAPSED_ROWS))
+
+const labLogo = computed(() => {
+  const slug = props.groupSlug.trim().toLowerCase()
+  if (slug === 'mixed' || slug === 'unknown') return null
+  return labLogoVendor[slug] ?? null
+})
+
+const stateMeta = { icon: CircleHelp, tone: 'info' }
+</script>
+
+<template>
+  <ConsoleCard
+    :padded="false"
+    data-route-group
+    data-route-vendor
+    :data-route-group-slug="groupSlug"
+  >
+    <div class="p-4 sm:p-5">
+      <button
+        type="button"
+        class="focus-ring grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-lg text-left sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]"
+        :aria-expanded="expanded"
+        @click="expanded = !expanded"
+      >
+        <span class="row-span-2 flex items-center gap-2 sm:row-span-1">
+          <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            :style="{
+              background: `var(--status-${stateMeta.tone}-soft)`,
+              color: `var(--status-${stateMeta.tone}-text)`,
+            }"
+          >
+            <component :is="stateMeta.icon" :size="17" aria-hidden="true" />
+          </span>
+          <VendorLogo
+            v-if="labLogo"
+            :vendor="labLogo"
+            :size="28"
+            data-route-lab-logo
+          />
+          <span
+            v-else
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-text)]"
+            data-route-lab-fallback
+          >
+            <Layers3 :size="17" aria-hidden="true" />
+          </span>
+        </span>
+
+        <span class="min-w-0">
+          <span
+            class="block truncate text-sm font-semibold text-[var(--text-primary)]"
+          >
+            {{ groupName }}
+          </span>
+          <span
+            class="mt-0.5 block truncate text-xs text-[var(--text-tertiary)]"
+          >
+            {{
+              t('dashboard.autoRoute.activeChannelCount', {
+                active: activeCount,
+                total: channels.length,
+              })
+            }}
+            · {{ t('dashboard.autoRoute.monitorState.unknown') }}
+          </span>
+        </span>
+
+        <span
+          class="col-start-3 row-start-2 shrink-0 justify-self-end whitespace-nowrap font-mono text-xs font-semibold tabular-nums text-[var(--text-secondary)] sm:col-start-4 sm:row-start-1"
+        >
+          {{ t('dashboard.autoRoute.availabilityUnknown') }}
+        </span>
+        <ChevronDown
+          :size="16"
+          class="col-start-3 row-start-1 shrink-0 justify-self-end text-[var(--text-tertiary)] transition-transform sm:col-start-5"
+          :class="{ 'rotate-180': expanded }"
+          aria-hidden="true"
+        />
+      </button>
+
+      <RouteHealthTimeline class="mt-4" />
+
+      <div
+        v-if="expanded"
+        class="mt-3 sibling-divide-y sibling-divide-[var(--border-subtle)]"
+      >
+        <ChannelScoreRow
+          v-for="channel in topChannels"
+          :key="channel.id"
+          :entry="channel"
+        />
+
+        <!-- Always rendered when there are extras so aria-controls resolves. -->
+        <div
+          v-if="extraChannels.length"
+          v-show="showExtra"
+          :id="extraRowsId"
+          class="sibling-divide-y sibling-divide-[var(--border-subtle)] pt-2"
+          data-route-extra-channels
+        >
+          <ChannelScoreRow
+            v-for="channel in extraChannels"
+            :key="channel.id"
+            :entry="channel"
+            compact
+          />
+        </div>
+      </div>
+
+      <div v-if="expanded && extraChannels.length" class="mt-1 text-center">
+        <button
+          type="button"
+          class="focus-ring inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-xs font-medium text-[var(--accent)] hover:underline sm:min-h-8 sm:px-2"
+          :aria-expanded="showExtra"
+          :aria-controls="extraRowsId"
+          data-route-more-toggle
+          @click="showExtra = !showExtra"
+        >
+          {{
+            showExtra
+              ? t('dashboard.autoRoute.hideExtraChannels')
+              : t('dashboard.autoRoute.showMoreChannels', extraChannels.length)
+          }}
+        </button>
+      </div>
+    </div>
+  </ConsoleCard>
+</template>

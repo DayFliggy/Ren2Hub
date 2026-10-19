@@ -91,32 +91,36 @@ for (const theme of ['light', 'dark'] as const) {
         })
       })
       await page.goto('/wallet')
-      await page
-        .getByRole('combobox', { name: 'Payment method', exact: true })
-        .selectOption('alipay')
       await expect(
-        page.getByRole('spinbutton', { name: 'Top-up quantity', exact: true })
+        page.getByRole('button', { name: 'Alipay', exact: true })
+      ).toBeVisible()
+      await expect(
+        page.getByRole('textbox', { name: 'Top-up quantity', exact: true })
       ).toHaveValue('10')
-      await page
-        .getByRole('button', { name: 'Calculate amount due', exact: true })
-        .click()
+      const checkout = page.getByRole('button', {
+        name: 'Top up now',
+        exact: true,
+      })
+      // The initial quantity is quoted automatically. A failed quote must not
+      // allow checkout, and retrying must request a fresh server quote.
       await expect(page.getByRole('alert')).toContainText('Amount unavailable')
+      await expect(checkout).toBeDisabled()
       expect(payments).toEqual([])
       failAmount = false
       await page
-        .getByRole('button', { name: 'Calculate amount due', exact: true })
+        .getByRole('button', { name: 'Retry quote', exact: true })
         .click()
       await expect(
-        page.getByText('Amount due: 73.00', { exact: true })
-      ).toBeVisible()
+        page.getByText('Amount due', { exact: true }).locator('..')
+      ).toContainText('73.00')
+      await expect(page.getByRole('alert')).toHaveCount(0)
+      await expect(checkout).toBeEnabled()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('epay-native-wallet.png'),
         fullPage: true,
       })
-      await page
-        .getByRole('button', { name: 'Continue to checkout', exact: true })
-        .click()
+      await checkout.click()
       await expect(
         page.getByRole('heading', { name: 'Local EPay checkout' })
       ).toBeVisible()

@@ -35,11 +35,13 @@ export function useAdminOrders() {
   const statsLoading = ref(true)
   const statsRefreshing = ref(false)
   const statsError = ref('')
+  const statsStale = ref(false)
 
   let listController: AbortController | null = null
   let statsController: AbortController | null = null
   let listSequence = 0
   let statsSequence = 0
+  let statsRange: AdminOrderRange | null = null
   let searchTimer = 0
 
   function filterParams(): Record<string, string | undefined> {
@@ -90,29 +92,46 @@ export function useAdminOrders() {
     const controller = new AbortController()
     statsController = controller
     const sequence = ++statsSequence
+    const requestedRange = range.value
+    if (statsRange !== requestedRange) {
+      stats.value = null
+      statsRange = null
+      statsStale.value = false
+      statsError.value = ''
+    }
     const background = options.background === true && stats.value !== null
 
-    if (background) statsRefreshing.value = true
-    else statsLoading.value = true
+    statsRefreshing.value = background
+    statsLoading.value = !background
     if (!stats.value) statsError.value = ''
 
     try {
+      const endTime = Math.floor(Date.now() / 1000)
       const data = await api.get<AdminOrderStats>(
         '/api/user/topup/stats',
         {
-          start_time: Math.floor(Date.now() / 1000) - range.value * 86400,
-          end_time: Math.floor(Date.now() / 1000),
+          start_time: endTime - requestedRange * 86400,
+          end_time: endTime,
         },
         { signal: controller.signal }
       )
-      if (sequence !== statsSequence) return
+      if (controller.signal.aborted || sequence !== statsSequence) return
       stats.value = data
+      statsRange = requestedRange
       statsError.value = ''
+      statsStale.value = false
     } catch (error) {
       if (controller.signal.aborted || sequence !== statsSequence) return
-      const message = error instanceof ApiError ? error.message : String(error)
-      if (!stats.value) statsError.value = message
-      else toast.error(message)
+      if (
+        error instanceof ApiError &&
+        (error.status === 401 || error.status === 403)
+      ) {
+        stats.value = null
+        statsRange = null
+      }
+      statsError.value =
+        error instanceof ApiError ? error.message : String(error)
+      statsStale.value = stats.value !== null
     } finally {
       if (sequence === statsSequence) {
         statsLoading.value = false
@@ -134,7 +153,7 @@ export function useAdminOrders() {
   watch([status, method], reloadFromFirstPage)
   watch(pageSize, reloadFromFirstPage)
   watch(page, () => void load())
-  watch(range, () => void loadStats())
+  watch(range, () => void loadStats(), { flush: 'sync' })
 
   async function fetchAllForExport(
     signal: AbortSignal
@@ -195,6 +214,7 @@ export function useAdminOrders() {
     statsLoading,
     statsRefreshing,
     statsError,
+    statsStale,
     load,
     loadStats,
     fetchAllForExport,

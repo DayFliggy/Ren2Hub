@@ -43,7 +43,15 @@ useEChart(
         data: categories.value,
         axisLine: { lineStyle: { color: p.borderSubtle } },
         axisTick: { show: false },
-        axisLabel: { color: p.textTertiary, fontSize: 10 * scale, interval: 4 },
+        axisLabel: {
+          color: p.textTertiary,
+          fontSize: 10 * scale,
+          // Keep full dates in the categories and tooltip; only shorten ticks.
+          interval: 'auto',
+          hideOverlap: true,
+          formatter: (value: string) =>
+            /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.slice(5) : value,
+        },
       },
       yAxis: {
         type: 'value',

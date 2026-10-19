@@ -534,6 +534,12 @@ export default {
       emptyHint: '当前周期内还没有可展示的调用数据。',
     },
     autoRoute: {
+      stale: '刷新失败，卡片显示上次成功取得的目录。',
+      concurrency: '渠道占用',
+      channelOccupancy: '在途 {active} / 上限 {limit}',
+      catalogEligible: '符合目录条件；实际选择仍按当前路由规则执行。',
+      historyUnavailable:
+        '当前目录未提供历史健康序列，展示顺序不代表路由优先级。',
       tabLabel: '自动路由',
       subtitle: '按实验室展示平台渠道；每个 API Key 独立选择路由模式。',
       refresh: '刷新',
@@ -546,9 +552,9 @@ export default {
       untested: '未测试',
       channelCount: '{count} 条渠道',
       topScore: '组内最高分',
-      activeChannelCount: '{active}/{total} 条可用',
+      activeChannelCount: '符合目录条件 {active} / {total}',
       availability1h: '1h {value}%',
-      availabilityUnknown: '1h --',
+      availabilityUnknown: '健康 --',
       monitorState: {
         healthy: '运行正常',
         degraded: '服务降级',
@@ -1620,6 +1626,17 @@ export default {
   },
 
   orders: {
+    periodOrders: '区间订单',
+    paidOrders: '已完成订单',
+    currencyScope: '按订单实际币种分别统计，不合并不同币种。',
+    unknownAmounts: '另有 {count} 笔订单未记录金额；金额指标不含这些订单。',
+    statsStale: '刷新失败，当前显示本周期上次成功读取的数据。',
+    partialAmountTrend:
+      '曲线仅统计已记录金额，未知金额未计入；零值不表示当日实收为零。',
+    knownAmountSubtotal: '已记录金额小计',
+    averageUnavailable: '存在未记录金额，无法确定平均订单金额。',
+    summaryUnavailable: '聚合数据暂不可用',
+    summaryUnavailableHint: '当前服务暂未提供该项统计。',
     currency: '币种',
     title: '充值订单',
     gmpay: {

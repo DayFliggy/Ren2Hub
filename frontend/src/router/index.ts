@@ -307,6 +307,12 @@ const router = createRouter({
           meta: { feature: 'wallet' },
         },
         {
+          path: '/invoice',
+          name: 'invoice',
+          component: () => import('@/views/console/InvoiceView.vue'),
+          meta: { feature: 'wallet' },
+        },
+        {
           path: '/invite',
           name: 'invite',
           component: () => import('@/views/console/InviteView.vue'),

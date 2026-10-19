@@ -17,6 +17,8 @@ for (const theme of ['light', 'dark'] as const) {
         release = resolve
       })
       await page.route('**/api/user/amount', (route) => {
+        if (route.request().postDataJSON().payment_method === 'alipay')
+          return route.fallback()
         expect(route.request().postDataJSON()).toEqual({
           amount: 10,
           payment_method: 'gmpay:usdt.tron',
@@ -46,26 +48,31 @@ for (const theme of ['light', 'dark'] as const) {
       })
       await page.goto('/wallet')
       await page
-        .getByRole('combobox', { name: 'Payment method', exact: true })
-        .selectOption('gmpay:usdt.tron')
-      await page.getByRole('button', { name: 'Calculate amount due' }).click()
+        .getByRole('button', { name: 'USDT · Tron', exact: true })
+        .click()
       await expect(
-        page.getByText('Amount due: 73.00', { exact: true })
+        page
+          .getByText('Amount due', { exact: true })
+          .locator('..')
+          .getByText('73.00', { exact: true })
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('gmpay-native-wallet.png'),
         fullPage: true,
       })
-      const pay = page.getByRole('button', { name: 'Continue to checkout' })
+      const pay = page.getByRole('button', {
+        name: 'Continue to cashier',
+        exact: true,
+      })
       await pay.click()
       await expect.poll(() => writes.length).toBe(1)
       await expect(pay).toBeDisabled()
       await expect(
-        page.getByRole('combobox', { name: 'Payment method', exact: true })
+        page.getByRole('button', { name: 'USDT · Tron', exact: true })
       ).toBeDisabled()
       await expect(
-        page.getByRole('spinbutton', { name: 'Top-up quantity', exact: true })
+        page.getByRole('textbox', { name: 'Top-up quantity', exact: true })
       ).toBeDisabled()
       release()
       await expect(
@@ -98,15 +105,13 @@ test('wallet reports unified top-up info failure and recovers after reload', asy
     'Payment configuration unavailable'
   )
   await expect(
-    page.getByRole('button', { name: 'Continue to checkout' })
+    page.getByRole('button', { name: 'Top up now', exact: true })
   ).toBeDisabled()
   fail = false
   await page.reload()
-  await page
-    .getByRole('combobox', { name: 'Payment method', exact: true })
-    .selectOption('gmpay:usdt.tron')
+  await page.getByRole('button', { name: 'USDT · Tron', exact: true }).click()
   await expect(
-    page.getByRole('button', { name: 'Continue to checkout' })
+    page.getByRole('button', { name: 'Continue to cashier', exact: true })
   ).toBeEnabled()
   expect(fixture.unexpected).toEqual([])
   expect(fixture.errors).toEqual([])

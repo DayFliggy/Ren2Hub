@@ -6,7 +6,7 @@ import { systemManagementApi, type SystemTask } from '@/api/systemManagement'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import OpsCard from './OpsCard.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import SystemTaskSection from '@/components/admin/SystemTaskSection.vue'
 import { useSystemManagement } from '@/composables/useSystemManagement'
@@ -125,6 +125,10 @@ function confirmLogCleanup() {
   logTarget.value = Math.floor(timestamp / 1000)
 }
 
+async function refreshTasks() {
+  await Promise.all([active.refresh(), history.refresh()])
+}
+
 async function cleanLogs() {
   if (!logTarget.value || creating.value) return
   creating.value = true
@@ -147,7 +151,21 @@ async function cleanLogs() {
 </script>
 
 <template>
-  <ConsoleCard :title="t('ops.tasks.title')" data-ops-section="tasks">
+  <OpsCard
+    :title="t('ops.tasks.title')"
+    :scope="t('ops.rootOnly')"
+    :loading="active.loading.value || history.loading.value"
+    :loaded="active.data.value !== null || history.data.value !== null"
+    :error="
+      [active.error.value, history.error.value].filter(Boolean).join(' · ')
+    "
+    :updated-at="Math.max(active.updatedAt.value, history.updatedAt.value)"
+    data-ops-section="tasks"
+    @retry="refreshTasks"
+  >
+    <p class="ops-note" data-ops-task-summary-unavailable>
+      {{ t('ops.native.taskSummaryUnavailable') }}
+    </p>
     <p v-if="result" class="ops-result" role="status">{{ result }}</p>
     <SystemTaskSection
       :title="t('activeTasks')"
@@ -236,7 +254,7 @@ async function cleanLogs() {
         />
       </template>
     </SystemTaskSection>
-  </ConsoleCard>
+  </OpsCard>
 
   <ConsoleModal
     :open="taskDetail !== null"

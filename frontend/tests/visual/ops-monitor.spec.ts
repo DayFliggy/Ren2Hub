@@ -63,7 +63,7 @@ for (const theme of ['light', 'dark'] as const)
       const fixture = await nativeTasks(page)
       await page.goto('/ops')
       await expect(
-        page.getByText('Go 运行时内存', { exact: true })
+        page.getByRole('heading', { name: '系统资源', exact: true })
       ).toBeVisible()
       const active = page.getByRole('region', { name: '活动任务', exact: true })
       await expect(active.getByText('运行中', { exact: true })).toBeVisible()
@@ -113,7 +113,9 @@ test('native task refresh failures remain visible with previous data and recover
     'Task refresh unavailable'
   )
   await expect(active).toContainText('运行中')
-  await expect(page.getByText('Go 运行时内存', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '系统资源', exact: true })
+  ).toBeVisible()
   fixture.recover()
   await active.getByRole('button', { name: '重试', exact: true }).click()
   await expect(active.getByRole('alert')).toHaveCount(0)
@@ -144,7 +146,9 @@ test('native empty task lists remain empty and performance reads recover after f
   failed = false
   await page.getByRole('button', { name: '刷新', exact: true }).first().click()
   await expect(page.getByRole('alert')).toHaveCount(0)
-  await expect(page.getByText('Go 运行时内存', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '系统资源', exact: true })
+  ).toBeVisible()
 })
 
 for (const role of [1, 10])

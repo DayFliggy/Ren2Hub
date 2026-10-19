@@ -80,6 +80,13 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6ZM3 10h18M8 15h4',
       },
       {
+        name: 'invoice',
+        labelKey: 'nav.invoice',
+        route: 'invoice',
+        feature: 'wallet',
+        icon: 'M9 3h6v4H9zM9 12h6M9 16h6M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2',
+      },
+      {
         name: 'invite',
         labelKey: 'nav.invite',
         // Lucide "user-plus": plus sits clear to the right of the person

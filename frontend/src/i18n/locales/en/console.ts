@@ -558,6 +558,13 @@ export default {
       emptyHint: 'There is no usage data in the selected period yet.',
     },
     autoRoute: {
+      stale: 'Refresh failed; the cards show the last successful catalog.',
+      concurrency: 'Channel concurrency',
+      channelOccupancy: 'In flight {active} / limit {limit}',
+      catalogEligible:
+        'Eligible in this catalog; requests still follow the current routing rules.',
+      historyUnavailable:
+        'Historical health is unavailable. Display order does not indicate routing priority.',
       tabLabel: 'Auto Route',
       subtitle:
         'Platform channels grouped by lab for display. Each API key controls its own routing mode.',
@@ -571,9 +578,9 @@ export default {
       untested: 'untested',
       channelCount: '{count} channels',
       topScore: 'Best score in group',
-      activeChannelCount: '{active}/{total} available',
+      activeChannelCount: 'Catalog eligible {active} / {total}',
       availability1h: '1h {value}%',
-      availabilityUnknown: '1h --',
+      availabilityUnknown: 'Health --',
       monitorState: {
         healthy: 'Operational',
         degraded: 'Degraded',
@@ -1673,6 +1680,21 @@ export default {
   },
 
   orders: {
+    periodOrders: 'Orders in period',
+    paidOrders: 'Completed orders',
+    currencyScope:
+      'Totals are separated by recorded currency. Currencies are never combined.',
+    unknownAmounts:
+      'Amounts are missing for {count} orders and are excluded from monetary metrics.',
+    statsStale:
+      'Refresh failed. These figures show the last successful snapshot for this period.',
+    partialAmountTrend:
+      'The curve includes recorded amounts only. Unknown amounts are excluded; a zero does not establish zero receipts for that day.',
+    knownAmountSubtotal: 'Known amounts subtotal',
+    averageUnavailable:
+      'An average cannot be determined while amounts are missing.',
+    summaryUnavailable: 'Summary unavailable',
+    summaryUnavailableHint: 'This statistic is currently unavailable.',
     currency: 'Currency',
     title: 'Top-up orders',
     gmpay: {

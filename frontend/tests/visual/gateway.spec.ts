@@ -26,9 +26,14 @@ for (const theme of ['light', 'dark'])
       await page
         .getByRole('button', { name: 'Preview saved routing', exact: true })
         .click()
-      await expect(
-        page.locator('li').filter({ hasText: 'Native channel · Eligible' })
-      ).toBeVisible()
+      const preview = page.locator('section').filter({
+        has: page.getByRole('heading', {
+          name: 'Preview saved routing',
+          exact: true,
+        }),
+      })
+      await expect(preview).toContainText('#2 Native channel')
+      await expect(preview.getByText('Eligible', { exact: true })).toBeVisible()
       await page.getByLabel('Automatic', { exact: true }).check()
       await page.getByRole('button', { name: 'Save', exact: true }).click()
       await expect
@@ -44,10 +49,16 @@ for (const theme of ['light', 'dark'])
         })
       await page.goto('/ops')
       await expect(
-        page.getByText('Native channel', { exact: false }).first()
+        page.getByRole('heading', { name: 'Upstream health', exact: true })
       ).toBeVisible()
       await expect(
-        page.getByText('Go runtime memory', { exact: true })
+        page.getByRole('term').filter({ hasText: /^#2$/ })
+      ).toBeVisible()
+      await expect(
+        page.getByRole('definition').filter({ hasText: /^2 \/ 8$/ })
+      ).toBeVisible()
+      await expect(
+        page.getByText('Go runtime system memory:', { exact: false })
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
       expect(
