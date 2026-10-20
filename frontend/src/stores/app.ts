@@ -1,4 +1,3 @@
-import { configureQuotaDisplay } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
@@ -105,7 +104,6 @@ export const useAppStore = defineStore('app', () => {
   const registerEnabled = computed(() =>
     parseBoolean(status.value.register_enabled, true)
   )
-  const checkinEnabled = computed(() => status.value.checkin_enabled === true)
   // The backend serves /api/uptime/status whenever groups are configured, so
   // the administrator's panel switch is enforced here. A missing field keeps
   // the backend default (enabled).
@@ -164,7 +162,6 @@ export const useAppStore = defineStore('app', () => {
     uptimePercent.value = null
     try {
       status.value = (await publicApi.status()) || {}
-      configureQuotaDisplay(status.value)
       statusReachable.value = true
       applyBranding()
 
@@ -277,7 +274,6 @@ export const useAppStore = defineStore('app', () => {
     showDocs,
     showAbout,
     registerEnabled,
-    checkinEnabled,
     affiliateRegistrationRequired,
     turnstileEnabled,
     turnstileSiteKey,

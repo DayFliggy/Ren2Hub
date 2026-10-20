@@ -1,391 +1,621 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createI18n } from 'vue-i18n'
-const payment = vi.hoisted(() => ({
-  info: vi.fn(),
-  quote: vi.fn(),
-  pay: vi.fn(),
-}))
-vi.mock('@/api/topup', async () => ({
-  ...(await vi.importActual<typeof import('@/api/topup')>('@/api/topup')),
-  topupApi: payment,
-}))
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+
+import { api } from '@/api/console'
+import { ApiError } from '@/api/types'
+import TopupPanel from '@/components/console/wallet/TopupPanel.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-import { useAppStore } from '@/stores/app'
-import type { TopupInfo } from '@/api/topup'
-import TopupPanel from '../TopupPanel.vue'
-const info: TopupInfo = {
-  enable_online_topup: true,
-  enable_stripe_topup: true,
-  enable_creem_topup: false,
-  enable_waffo_topup: false,
-  enable_waffo_pancake_topup: false,
-  enable_gmpay_topup: true,
-  enable_redemption: true,
-  pay_methods: [
-    { type: 'alipay', name: 'Alipay' },
-    { type: 'gmpay:usdt.tron', name: 'USDT · Tron' },
-    { type: 'stripe', name: 'Stripe' },
-  ],
-  waffo_pay_methods: null,
-  creem_products: '',
-  min_topup: 1,
-  stripe_min_topup: 1,
-  waffo_min_topup: 1,
-  waffo_pancake_min_topup: 1,
-  amount_options: [10, 25, 50],
-  discount: {},
-  topup_link: '',
-}
+
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('en')
 })
-beforeEach(() => {
-  vi.clearAllMocks()
-  setActivePinia(createPinia())
-  useAppStore().status = { quota_display_type: 'USD', quota_per_unit: 500000 }
-  payment.info.mockResolvedValue(structuredClone(info))
-  payment.quote.mockResolvedValue('69.123400')
-  payment.pay.mockResolvedValue({
-    url: 'https://pay.example/checkout',
-    data: { trade_no: 'order-one' },
+
+const nativeLocation = window.location
+
+afterEach(() => {
+  Object.defineProperty(window, 'location', {
+    value: nativeLocation,
+    configurable: true,
+    writable: true,
   })
+  vi.restoreAllMocks()
 })
-async function render() {
-  const wrapper = mount(TopupPanel, { global: { plugins: [i18n] } })
+
+interface StubQuote {
+  amount: number
+  amount_unit: 'USD'
+  payment_method: string
+  currency: 'CNY' | 'USD'
+  amount_minor: string
+  pay_amount: string
+  expected_quota: string
+  min_topup: number
+  quote_fingerprint: string
+  token?: string
+  network?: string
+}
+
+function quote(
+  amount = 10,
+  expectedQuota = String(amount * 500_000)
+): StubQuote {
+  return {
+    amount,
+    amount_unit: 'USD',
+    payment_method: 'alipay',
+    currency: 'CNY',
+    amount_minor: String(amount * 730),
+    pay_amount: (amount * 7.3).toFixed(2),
+    expected_quota: expectedQuota,
+    min_topup: 1,
+    quote_fingerprint: `quote-${amount}`,
+  }
+}
+
+/**
+ * One USD crypto quote. The panel re-derives gmpay:<token>.<network> from the
+ * quote and rejects it when it does not reproduce the selected method.
+ */
+function cryptoQuote(
+  amount = 10,
+  overrides: Partial<StubQuote> = {}
+): StubQuote {
+  return {
+    amount,
+    amount_unit: 'USD',
+    payment_method: 'usdt.tron',
+    currency: 'USD',
+    amount_minor: String(amount * 100),
+    pay_amount: amount.toFixed(2),
+    expected_quota: String(amount * 500_000),
+    min_topup: 1,
+    quote_fingerprint: `crypto-quote-${amount}`,
+    token: 'usdt',
+    network: 'tron',
+    ...overrides,
+  }
+}
+
+async function render(
+  balanceQuota = '0',
+  selectedMethod = 'epay:alipay',
+  extraMethods: string[] = [],
+  epayMinimum = 1
+) {
+  // Each provider publishes its own endpoint and uses a different minimum type.
+  const methods = [selectedMethod, ...extraMethods]
+  if (!vi.isMockFunction(api.get))
+    vi.spyOn(api, 'get').mockImplementation(async (path) => {
+      if (path === '/api/next/wallet/config') {
+        const epay = methods.filter((value) => value.startsWith('epay:'))
+        return {
+          enable_online_topup: epay.length > 0,
+          enable_redemption: true,
+          pay_methods: epay.map((value) => ({
+            name: value.slice(5),
+            type: value.slice(5),
+            min_topup: epayMinimum,
+          })),
+          min_topup: epayMinimum,
+          amount_options: [10, 20],
+        }
+      }
+      if (path === '/api/next/wallet/gmpay/config') {
+        const crypto = methods.filter((value) => value.startsWith('gmpay:'))
+        return {
+          enable_gmpay_topup: crypto.length > 0,
+          enable_gmpay_settlement: true,
+          pay_methods: crypto.map((value) => {
+            const asset = value.slice(6)
+            const [token, network] = asset.split('.')
+            return {
+              name: asset,
+              type: value,
+              token,
+              network,
+              min_topup: '1',
+              icon: '',
+              color: '',
+            }
+          }),
+          min_topup: 1,
+          amount_options: [10, 20],
+          price: '1',
+          discount: {},
+          crypto_callback_proves_network: false,
+        }
+      }
+      throw new Error('Unexpected endpoint')
+    })
+  if (!vi.isMockFunction(api.post))
+    vi.spyOn(api, 'post').mockResolvedValue(quote())
+  const wrapper = mount(TopupPanel, {
+    props: {
+      balanceQuota,
+      paymentMethod: selectedMethod,
+      'onUpdate:paymentMethod': (value: string) => {
+        void wrapper.setProps({ paymentMethod: value })
+      },
+    },
+    global: { plugins: [i18n] },
+  })
   await flushPromises()
   return wrapper
 }
-function button(wrapper: Awaited<ReturnType<typeof render>>, text: string) {
-  return wrapper.findAll('button').find((b) => b.text() === text)!
-}
 
-describe('historical top-up layout with native payment contracts', () => {
-  it.each([
-    {
-      locale: 'en',
-      title: 'Quick top-up',
-      placeholder: 'Enter amount',
-      balance: 'Balance after',
-      callback:
-        'Credit arrival is confirmed by the server after verifying payment.',
-      submit: 'Top up now',
-      loading: 'Updating payment quote…',
-      currency: 'Confirm the payment currency at checkout.',
-      invalid:
-        'Enter a safe integer that meets the minimum quantity and recharge step.',
-      retry: 'Retry quote',
-      gmpay: 'Continue to cashier',
-      network:
-        'Pay with the selected token. Before transferring, check the network, address, and amount shown in the cashier.',
-    },
-    {
-      locale: 'zh-CN',
-      title: '快捷充值',
-      placeholder: '输入金额',
-      balance: '到账后余额',
-      callback: '服务端核验支付成功后，额度将自动到账。',
-      submit: '立即充值',
-      loading: '正在更新支付报价…',
-      currency: '支付币种以收银台显示为准。',
-      invalid: '请输入符合最低数量和充值步长的安全整数。',
-      retry: '重新获取报价',
-      gmpay: '前往收银台支付',
-      network:
-        '请使用所选代币付款，并在转账前核对收银台显示的网络、地址和金额。',
-    },
-  ])(
-    'renders restored $locale copy without historical global wallet messages',
-    async (copy) => {
-      let resolveQuote!: (value: string) => void
-      payment.quote.mockImplementationOnce(
+describe('TopupPanel server quotes', () => {
+  it('locks the quoted selection and sends only one order while creation is pending', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(cryptoQuote())
+      .mockImplementationOnce(
         () =>
-          new Promise<string>((resolve) => {
-            resolveQuote = resolve
+          new Promise((resolve) => {
+            finish = resolve
           })
       )
-      const localI18n = createI18n({
-        legacy: false,
-        locale: copy.locale,
-        fallbackLocale: 'en',
-        messages: {
-          en: { wallet: { payMethodLabel: 'Payment method' } },
-          'zh-CN': { wallet: { payMethodLabel: '支付方式' } },
-        },
+    const wrapper = await render('0', 'gmpay:usdt.tron', [
+      'gmpay:usdc.ethereum',
+    ])
+    const submit = wrapper.findAll('button').at(-1)!
+    await submit.trigger('click')
+    await submit.trigger('click')
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(
+      post.mock.calls.filter(([url]) => url.endsWith('/topup'))
+    ).toHaveLength(1)
+    expect(post).toHaveBeenLastCalledWith('/api/next/wallet/gmpay/topup', {
+      amount: 10,
+      amount_unit: 'USD',
+      payment_method: 'usdt.tron',
+      quote_fingerprint: 'crypto-quote-10',
+    })
+    // A terminal rejection restores the controls without silently creating another order.
+    finish({ url: 'http://invalid.example' })
+    await flushPromises()
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it.each(['epay:alipay', 'gmpay:usdt.tron'])(
+    'does not navigate from a late %s order response after the wallet is unmounted',
+    async (method) => {
+      Object.defineProperty(window, 'location', {
+        value: { href: 'http://localhost/other-page' },
+        configurable: true,
+        writable: true,
       })
-      const wrapper = mount(TopupPanel, { global: { plugins: [localI18n] } })
-      await flushPromises()
-      expect(wrapper.text()).toContain(copy.title)
-      expect(
-        wrapper.get('input[inputmode=numeric]').attributes('placeholder')
-      ).toBe(copy.placeholder)
-      expect(wrapper.text()).toContain(copy.balance)
-      expect(wrapper.text()).toContain(copy.callback)
-      expect(wrapper.text()).toContain(copy.loading)
-      expect(wrapper.text()).toContain(copy.currency)
-      expect(button(wrapper, copy.submit).attributes('disabled')).toBeDefined()
-      expect(wrapper.text()).not.toContain('wallet.')
-      resolveQuote('69.123400')
-      await flushPromises()
-      expect(wrapper.text()).not.toContain(copy.loading)
-      expect(
-        button(wrapper, copy.submit).attributes('disabled')
-      ).toBeUndefined()
-      await wrapper.get('input[inputmode=numeric]').setValue('10.50')
-      await flushPromises()
-      expect(wrapper.text()).toContain(copy.invalid)
-      payment.quote.mockRejectedValueOnce(new Error('quote unavailable'))
-      await wrapper.get('input[inputmode=numeric]').setValue('10')
-      await flushPromises()
-      expect(button(wrapper, copy.retry).exists()).toBe(true)
-      await button(wrapper, 'USDT · Tron').trigger('click')
-      await flushPromises()
-      expect(button(wrapper, copy.gmpay).exists()).toBe(true)
-      expect(wrapper.text()).toContain(copy.network)
-      expect(wrapper.text()).not.toContain('wallet.')
+      const submitForm = vi
+        .spyOn(HTMLFormElement.prototype, 'submit')
+        .mockImplementation(() => {})
+      let finish!: (value: unknown) => void
+      vi.spyOn(api, 'post')
+        .mockResolvedValueOnce(
+          method.startsWith('gmpay:') ? cryptoQuote() : quote()
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve
+            })
+        )
+      const wrapper = await render('0', method)
+      await wrapper.findAll('button').at(-1)!.trigger('click')
       wrapper.unmount()
+      finish({ url: 'https://gateway.example/cashier', data: { sign: 'test' } })
+      await flushPromises()
+      expect(window.location.href).toBe('http://localhost/other-page')
+      expect(submitForm).not.toHaveBeenCalled()
+      expect(wrapper.emitted('done')).toBeUndefined()
     }
   )
 
-  it('restores presets, payment buttons and summary rows using the actual server amount', async () => {
-    const wrapper = await render()
-    expect(wrapper.text()).toContain('Quick top-up')
-    expect(button(wrapper, '10').attributes('aria-pressed')).toBe('true')
-    expect(button(wrapper, '25').exists()).toBe(true)
-    expect(button(wrapper, 'USDT · Tron').exists()).toBe(true)
-    expect(wrapper.findAll('select')).toHaveLength(0)
-    expect(wrapper.text()).toContain('Credit received')
-    expect(wrapper.text()).toContain('Balance after')
-    expect(wrapper.text()).toContain('69.123400')
-    expect(wrapper.text()).not.toContain('You pay (USD)')
-    expect(payment.quote).toHaveBeenCalledWith(
-      'alipay',
-      10,
-      expect.any(AbortSignal)
-    )
-    expect(wrapper.emitted('capabilities')?.[0]).toEqual([info])
-    await button(wrapper, '25').trigger('click')
+  it('ignores an old asset quote after the payment asset changes', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi
+      .spyOn(api, 'post')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          })
+      )
+      .mockResolvedValueOnce(
+        cryptoQuote(10, {
+          payment_method: 'usdc.ethereum',
+          token: 'usdc',
+          network: 'ethereum',
+          pay_amount: '11.00',
+          amount_minor: '1100',
+          quote_fingerprint: 'usdc-quote',
+        })
+      )
+    const wrapper = await render('0', 'gmpay:usdt.tron', [
+      'gmpay:usdc.ethereum',
+    ])
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'usdc.ethereum')!
+      .trigger('click')
     await flushPromises()
-    expect(payment.quote).toHaveBeenLastCalledWith(
-      'alipay',
-      25,
-      expect.any(AbortSignal)
+    expect(post.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
+    finish(cryptoQuote())
+    await flushPromises()
+    expect(wrapper.text()).toContain('$11.00')
+    wrapper.unmount()
+  })
+
+  it('loads crypto from its own endpoint when Epay is disabled and chooses it for the initial method', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(cryptoQuote())
+    const wrapper = await render('0', 'epay', ['gmpay:usdt.tron'])
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/next/wallet/config',
+      undefined,
+      expect.anything()
+    )
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/next/wallet/gmpay/config',
+      undefined,
+      expect.anything()
+    )
+    expect(wrapper.text()).toContain('usdt.tron')
+    expect(wrapper.text()).toContain('You pay (USD)')
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeUndefined()
+    expect(post).toHaveBeenCalledWith(
+      '/api/next/wallet/gmpay/quote',
+      {
+        amount: 10,
+        amount_unit: 'USD',
+        payment_method: 'usdt.tron',
+      },
+      expect.anything()
     )
     wrapper.unmount()
   })
 
-  it('keeps token quantities exact and disables unsupported Stripe in token mode', async () => {
-    useAppStore().status.quota_display_type = 'TOKENS'
-    const wrapper = await render()
-    expect(button(wrapper, '5000000').exists()).toBe(true)
-    expect(button(wrapper, 'Stripe')).toBeUndefined()
-    expect(wrapper.text()).toContain('Stripe top-up is disabled')
-    expect(payment.quote).toHaveBeenCalledWith(
-      'alipay',
-      5000000,
-      expect.any(AbortSignal)
-    )
-    await wrapper.get('input[inputmode=numeric]').setValue('5000001')
-    await flushPromises()
-    expect(wrapper.text()).toContain('Enter a multiple of 500000 tokens')
-    expect(button(wrapper, 'Top up now').attributes('disabled')).toBeDefined()
-    expect(payment.quote).toHaveBeenCalledTimes(1)
-    wrapper.unmount()
-  })
-
-  it.each(['10.50', '1e3', '-10', '+10', '10 50'])(
-    'keeps invalid quantity %s unchanged without quoting or ordering it',
-    async (value) => {
-      const wrapper = await render()
-      payment.quote.mockClear()
-      const input = wrapper.get('input[inputmode=numeric]')
-      await input.setValue(value)
-      await input.trigger('blur')
-      await flushPromises()
-      expect(input.element).toHaveProperty('value', value)
-      expect(payment.quote).not.toHaveBeenCalled()
-      expect(wrapper.text()).not.toContain('69.123400')
-      expect(button(wrapper, 'Top up now').attributes('disabled')).toBeDefined()
-      await button(wrapper, 'Top up now').trigger('click')
-      await flushPromises()
-      expect(payment.pay).not.toHaveBeenCalled()
-
-      await input.setValue('42')
-      await flushPromises()
-      expect(payment.quote).toHaveBeenCalledExactlyOnceWith(
-        'alipay',
-        42,
-        expect.any(AbortSignal)
+  it.each(['epay', 'gmpay'] as const)(
+    'keeps the other provider usable when %s configuration fails and retries it separately',
+    async (failed) => {
+      let restored = false
+      const get = vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        const provider = path.includes('/gmpay/') ? 'gmpay' : 'epay'
+        if (provider === failed && !restored) throw new Error('offline')
+        return provider === 'epay'
+          ? {
+              enable_online_topup: true,
+              enable_redemption: true,
+              pay_methods: [{ name: 'Alipay', type: 'alipay', min_topup: 1 }],
+              min_topup: 1,
+              amount_options: [10, 20],
+            }
+          : {
+              enable_gmpay_topup: true,
+              pay_methods: [
+                {
+                  name: 'USDT Tron',
+                  type: 'gmpay:usdt.tron',
+                  token: 'usdt',
+                  network: 'tron',
+                  min_topup: '1',
+                  icon: '',
+                  color: '',
+                },
+              ],
+              min_topup: 1,
+              amount_options: [10, 20],
+            }
+      })
+      const post = vi
+        .spyOn(api, 'post')
+        .mockImplementation(async (path) =>
+          path.includes('/gmpay/') ? cryptoQuote() : quote()
+        )
+      const wrapper = await render('0', 'epay')
+      expect(wrapper.get('[role="alert"]').text()).toContain(
+        failed === 'epay'
+          ? 'Epay payment methods could not be loaded.'
+          : 'Crypto payment methods could not be loaded.'
       )
       expect(
-        button(wrapper, 'Top up now').attributes('disabled')
+        wrapper.findAll('button').at(-1)?.attributes('disabled')
       ).toBeUndefined()
-      payment.pay.mockRejectedValueOnce(new Error('mock checkout'))
-      await button(wrapper, 'Top up now').trigger('click')
-      await flushPromises()
-      expect(payment.pay).toHaveBeenCalledExactlyOnceWith(
-        'alipay',
-        { amount: 42 },
-        expect.any(AbortSignal)
+      expect(post).toHaveBeenCalledWith(
+        failed === 'epay'
+          ? '/api/next/wallet/gmpay/quote'
+          : '/api/next/wallet/topup/quote',
+        expect.anything(),
+        expect.anything()
       )
+      restored = true
+      await wrapper
+        .findAll('button')
+        .find(
+          (button) =>
+            button.text() ===
+            (failed === 'epay'
+              ? 'Reload Epay methods'
+              : 'Reload crypto methods')
+        )!
+        .trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(get).toHaveBeenCalledTimes(3)
       wrapper.unmount()
     }
   )
 
-  it('ignores an outdated quote after changing the quantity', async () => {
-    let resolve!: (value: string) => void
-    payment.quote.mockImplementationOnce(
+  it('shows both provider failures and never requests a quote when neither configuration loads', async () => {
+    vi.spyOn(api, 'get').mockRejectedValue(new Error('offline'))
+    const post = vi.spyOn(api, 'post')
+    const wrapper = await render('0', 'epay')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(2)
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    expect(post).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('aborts both configuration requests on unmount and ignores late results', async () => {
+    const finishes: Array<(value: unknown) => void> = []
+    const get = vi.spyOn(api, 'get').mockImplementation(
       () =>
-        new Promise<string>((done) => {
-          resolve = done
+        new Promise((resolve) => {
+          finishes.push(resolve)
         })
     )
-    const wrapper = await render()
-    const signal = payment.quote.mock.calls[0]![2] as AbortSignal
-    await button(wrapper, '25').trigger('click')
+    const post = vi.spyOn(api, 'post')
+    const wrapper = await render('0', 'epay')
+    wrapper.unmount()
+    expect(get.mock.calls.every((call) => call[2]?.signal?.aborted)).toBe(true)
+    finishes.forEach((finish) => finish({}))
     await flushPromises()
-    expect(signal.aborted).toBe(true)
-    resolve('999.00')
-    await flushPromises()
-    expect(wrapper.text()).toContain('69.123400')
-    expect(wrapper.text()).not.toContain('999.00')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('uses the exact server credit for the balance projection and displays CNY separately', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(quote(10, '750000'))
+    const wrapper = await render('9007199254740993')
+    expect(wrapper.text()).toContain('$18,014,398,510.98')
+    expect(wrapper.text()).toContain('¥73.00')
+    expect(wrapper.text()).toContain('$1.500')
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeUndefined()
     wrapper.unmount()
   })
 
-  it('blocks checkout when the server quote fails or is malformed and supports retry', async () => {
-    payment.quote.mockRejectedValueOnce(new Error('quote unavailable'))
-    const wrapper = await render()
-    expect(wrapper.text()).toContain('quote unavailable')
-    expect(button(wrapper, 'Top up now').attributes('disabled')).toBeDefined()
-    payment.quote.mockResolvedValueOnce({ amount: '3.00' })
-    await button(wrapper, 'Retry quote').trigger('click')
-    await flushPromises()
-    expect(button(wrapper, 'Top up now').attributes('disabled')).toBeDefined()
-    await button(wrapper, 'Retry quote').trigger('click')
-    await flushPromises()
-    expect(button(wrapper, 'Top up now').attributes('disabled')).toBeUndefined()
+  it('shows an explicit error and blocks purchase when the resulting balance overflows', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(quote())
+    const wrapper = await render('9223372036854775807')
+    expect(wrapper.get('[role="alert"]').text()).toContain('supported range')
+    const submit = wrapper.findAll('button').at(-1)!
+    expect(submit.attributes('disabled')).toBeDefined()
+    await submit.trigger('click')
+    expect(post.mock.calls.every(([url]) => url.endsWith('/quote'))).toBe(true)
     wrapper.unmount()
   })
 
-  it('sends only the native order quantity and submits the validated EPay form', async () => {
-    const submit = vi
+  it('rejects fractional purchase units without throwing during rendering', async () => {
+    const wrapper = await render('0')
+    await wrapper.get('input').setValue('1.000001')
+    expect(wrapper.get('[role="alert"]').text()).toContain('whole USD amount')
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('ignores older responses even if abort is ignored and clears quotes for invalid input', async () => {
+    let completeOld!: (value: ReturnType<typeof quote>) => void
+    const post = vi
+      .spyOn(api, 'post')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            completeOld = resolve
+          })
+      )
+      .mockResolvedValueOnce(quote(20))
+    const wrapper = await render()
+    await wrapper.get('input').setValue('20')
+    await flushPromises()
+    expect(wrapper.text()).toContain('¥146.00')
+    expect(post.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
+    completeOld(quote())
+    await flushPromises()
+    expect(wrapper.text()).toContain('¥146.00')
+    expect(wrapper.text()).not.toContain('¥73.00')
+    await wrapper.get('input').setValue('')
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    expect(wrapper.text()).not.toContain('¥146.00')
+    wrapper.unmount()
+  })
+
+  it('shows quote failures and never retains a previously valid quote', async () => {
+    vi.spyOn(api, 'post')
+      .mockResolvedValueOnce(quote())
+      .mockRejectedValueOnce(new Error('offline'))
+    const wrapper = await render()
+    await wrapper.get('input').setValue('20')
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'could not be loaded'
+    )
+    expect(wrapper.text()).not.toContain('¥73.00')
+    wrapper.unmount()
+  })
+
+  it('prices the crypto rail in USD and quotes the bare asset', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(cryptoQuote(10))
+    const wrapper = await render('0', 'gmpay:usdt.tron', ['epay:alipay'])
+    expect(post).toHaveBeenCalledWith(
+      '/api/next/wallet/gmpay/quote',
+      { amount: 10, amount_unit: 'USD', payment_method: 'usdt.tron' },
+      expect.anything()
+    )
+    expect(wrapper.text()).toContain('You pay (USD)')
+    expect(wrapper.text()).toContain('$10.00')
+    expect(wrapper.text()).not.toContain('¥')
+    expect(wrapper.text()).toContain('Continue to cashier')
+    expect(wrapper.text()).toContain(
+      'Pay with the selected token. Before transferring, check the network, address, and amount shown in the cashier.'
+    )
+    wrapper.unmount()
+  })
+
+  it('uses the crypto minimum independently from the Epay minimum', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(cryptoQuote(10))
+    const wrapper = await render('0', 'gmpay:usdt.tron', ['epay:alipay'], 50)
+    expect(post).toHaveBeenCalledWith(
+      '/api/next/wallet/gmpay/quote',
+      { amount: 10, amount_unit: 'USD', payment_method: 'usdt.tron' },
+      expect.anything()
+    )
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeUndefined()
+    expect(
+      wrapper.findAll('button').some((button) => button.text() === '$10')
+    ).toBe(true)
+    await wrapper.setProps({ paymentMethod: 'epay:alipay' })
+    await flushPromises()
+    expect(
+      wrapper.findAll('button').some((button) => button.text() === '$10')
+    ).toBe(false)
+    expect(
+      wrapper.findAll('button').some((button) => button.text() === '$50')
+    ).toBe(true)
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it.each([
+    'javascript:alert(1)',
+    'http://gateway.example/pay',
+    'https://user:password@gateway.example/pay',
+    '/relative-cashier',
+  ])('rejects an unsafe crypto cashier address: %s', async (url) => {
+    Object.defineProperty(window, 'location', {
+      value: { href: 'http://localhost/wallet' },
+      configurable: true,
+      writable: true,
+    })
+    vi.spyOn(api, 'post')
+      .mockResolvedValueOnce(cryptoQuote())
+      .mockResolvedValueOnce({ url })
+    const wrapper = await render('0', 'gmpay:usdt.tron')
+    await wrapper.findAll('button').at(-1)!.trigger('click')
+    await flushPromises()
+    expect(window.location.href).toBe('http://localhost/wallet')
+    expect(wrapper.emitted('done')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('leaves the site for the hosted cashier instead of submitting a hidden form', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { href: 'http://localhost/wallet' },
+      configurable: true,
+      writable: true,
+    })
+    const submitForm = vi
       .spyOn(HTMLFormElement.prototype, 'submit')
       .mockImplementation(() => {})
-    const wrapper = await render()
-    await button(wrapper, 'Top up now').trigger('click')
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(cryptoQuote(10))
+      .mockResolvedValueOnce({
+        trade_no: 'GP0123456789012345678901234567890',
+        status: 'PENDING',
+        currency: 'USD',
+        pay_amount: '10.00',
+        token: 'usdt',
+        network: 'tron',
+        url: 'https://gateway.example/pay/checkout-counter/cashier-1',
+      })
+    const wrapper = await render('0', 'gmpay:usdt.tron', ['epay:alipay'])
+    await wrapper.findAll('button').at(-1)!.trigger('click')
     await flushPromises()
-    expect(payment.pay).toHaveBeenCalledExactlyOnceWith(
-      'alipay',
-      { amount: 10 },
-      expect.any(AbortSignal)
+    expect(post).toHaveBeenLastCalledWith('/api/next/wallet/gmpay/topup', {
+      amount: 10,
+      amount_unit: 'USD',
+      payment_method: 'usdt.tron',
+      quote_fingerprint: 'crypto-quote-10',
+    })
+    expect(window.location.href).toBe(
+      'https://gateway.example/pay/checkout-counter/cashier-1'
     )
-    expect(submit).toHaveBeenCalledOnce()
-    expect(wrapper.emitted('done')).toHaveLength(1)
+    expect(submitForm).not.toHaveBeenCalled()
+    await wrapper.findAll('button').at(-1)!.trigger('click')
     expect(
-      document.querySelector('form[action="https://pay.example/checkout"]')
-    ).toBeNull()
-    wrapper.unmount()
-    submit.mockRestore()
-  })
-
-  it('preserves provider errors without reporting a completed order or redirecting', async () => {
-    payment.pay.mockRejectedValueOnce(new Error('order result unknown'))
-    const wrapper = await render()
-    await button(wrapper, 'Top up now').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('order result unknown')
-    expect(wrapper.emitted('done')).toBeUndefined()
-    expect(payment.pay).toHaveBeenCalledOnce()
-    wrapper.unmount()
-  })
-
-  it('does not treat an invalid checkout URL as a completed order', async () => {
-    payment.pay.mockResolvedValueOnce({ url: 'javascript:alert(1)', data: {} })
-    const wrapper = await render()
-    await button(wrapper, 'Top up now').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('Invalid checkout URL')
-    expect(wrapper.emitted('done')).toBeUndefined()
-    wrapper.unmount()
-  })
-
-  it('cancels payment completion after leaving the wallet', async () => {
-    let resolve!: (value: unknown) => void
-    payment.pay.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done
-        })
-    )
-    const wrapper = await render()
-    await button(wrapper, 'Top up now').trigger('click')
-    const signal = payment.pay.mock.calls[0]![2] as AbortSignal
+      post.mock.calls.filter(([url]) => url.endsWith('/topup'))
+    ).toHaveLength(1)
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
     wrapper.unmount()
-    expect(signal.aborted).toBe(true)
-    resolve({
-      url: 'https://pay.example/checkout',
-      data: { trade_no: 'late-order' },
-    })
-    await flushPromises()
-    expect(wrapper.emitted('done')).toBeUndefined()
   })
 
-  it('cancels a pending checkout when the site display unit changes even if the quantity stays the same', async () => {
-    let resolve!: (value: unknown) => void
-    payment.pay.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done
-        })
+  it('refuses a crypto quote whose frozen asset is not the selected method', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue(cryptoQuote(10, { network: 'ethereum' }))
+    const wrapper = await render('0', 'gmpay:usdt.tron', ['epay:alipay'])
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'could not be loaded'
     )
-    const wrapper = await render()
-    await button(wrapper, 'Top up now').trigger('click')
-    const signal = payment.pay.mock.calls[0]![2] as AbortSignal
-    useAppStore().status.quota_display_type = 'CNY'
-    await flushPromises()
-    expect(signal.aborted).toBe(true)
-    expect(wrapper.get('input[inputmode=numeric]').element).toHaveProperty(
-      'value',
-      '10'
-    )
-    resolve({
-      url: 'https://pay.example/checkout',
-      data: { trade_no: 'old-unit-order' },
-    })
-    await flushPromises()
-    expect(wrapper.emitted('done')).toBeUndefined()
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    expect(post.mock.calls.every(([url]) => url.endsWith('/quote'))).toBe(true)
     wrapper.unmount()
   })
 
-  it('preserves Creem product selection and order payload', async () => {
-    const product = {
-      productId: 'credits-100',
-      name: '100 credits',
-      price: 99,
-      currency: 'USD',
-      quota: 100,
-    }
-    payment.info.mockResolvedValueOnce({
-      ...info,
-      enable_creem_topup: true,
-      creem_products: JSON.stringify([product]),
-    })
+  it('requires another click after QUOTE_CHANGED and submits explicit USD with the new fingerprint', async () => {
+    const submitForm = vi
+      .spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(() => {})
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(quote())
+      .mockRejectedValueOnce(new ApiError('changed', { code: 'QUOTE_CHANGED' }))
+      .mockResolvedValueOnce({
+        ...quote(),
+        quote_fingerprint: 'new-quote',
+        amount_minor: '7400',
+        pay_amount: '74.00',
+      })
+      .mockResolvedValueOnce({
+        url: 'https://gateway.example/submit.php',
+        data: { test: 'mock' },
+      })
     const wrapper = await render()
-    await button(wrapper, 'Creem').trigger('click')
+    await wrapper.findAll('button').at(-1)!.trigger('click')
     await flushPromises()
-    expect(wrapper.get('select').text()).toContain('100 credits · 99 USD')
-    expect(wrapper.text()).toContain('99 USD')
-    payment.pay.mockRejectedValueOnce(new Error('mock checkout'))
-    await button(wrapper, 'Top up now').trigger('click')
+    expect(wrapper.text()).toContain('quote changed')
+    expect(wrapper.text()).toContain('¥74.00')
+    expect(submitForm).not.toHaveBeenCalled()
+    expect(
+      post.mock.calls.filter(([url]) => url.endsWith('/topup'))
+    ).toHaveLength(1)
+    await wrapper.findAll('button').at(-1)!.trigger('click')
     await flushPromises()
-    expect(payment.pay).toHaveBeenCalledWith(
-      'creem',
-      { product_id: 'credits-100' },
-      expect.any(AbortSignal)
-    )
+    expect(post).toHaveBeenLastCalledWith('/api/next/wallet/topup', {
+      amount: 10,
+      amount_unit: 'USD',
+      payment_method: 'alipay',
+      quote_fingerprint: 'new-quote',
+    })
+    expect(submitForm).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 })

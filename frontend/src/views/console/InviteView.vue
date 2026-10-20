@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import InviteAffiliateCard from '@/components/console/invite/InviteAffiliateCard.vue'
@@ -17,21 +17,13 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import { useInvite } from '@/composables/useInvite'
 import { formatDate, formatQuota } from '@/utils/format'
 
-const { t, te } = useI18n()
+const { t } = useI18n()
 const {
   info,
   loadError,
   inviteLink,
-  invitees,
-  inviteesPage,
-  inviteesTotal,
-  inviteesPageCount,
-  inviteesOrder,
-  inviteesLoading,
-  inviteesError,
-  loadInvitees,
-  sortInvitees,
   transferOpen,
+  transferDollars,
   canTransfer,
   transferring,
   readOnly,
@@ -44,10 +36,24 @@ const {
   transfer,
 } = useInvite()
 
+type SortMode = 'recent' | 'early'
+const sort = ref<SortMode>('recent')
+
+const sortedRecords = computed(() => {
+  const rows = info.value?.records ?? []
+  return sort.value === 'recent' ? rows : [...rows].reverse()
+})
+
+/** Anonymize the invitee handle: user_1042 → u***2 (contract: no raw id). */
+function maskInvitee(handle: string): string {
+  if (handle.length <= 2) return handle
+  return `${handle[0]}***${handle[handle.length - 1]}`
+}
+
 const howSteps = [1, 2, 3, 4]
 const faqs = [1, 2, 3, 4]
 
-onMounted(() => Promise.all([load(), loadInvitees()]))
+onMounted(load)
 </script>
 
 <template>
@@ -172,85 +178,59 @@ onMounted(() => Promise.all([load(), loadInvitees()]))
             >
               {{ t('invite.invitees') }}
               <StatusChip tone="neutral">{{
-                t('invite.people', { count: inviteesTotal })
+                t('invite.people', { count: info?.invited ?? 0 })
               }}</StatusChip>
             </h3>
             <SegmentedToggle
-              :model-value="inviteesOrder"
+              :model-value="sort"
               size="sm"
               :options="[
-                { value: 'desc', label: t('invite.sortRecent') },
-                { value: 'asc', label: t('invite.sortEarly') },
+                { value: 'recent', label: t('invite.sortRecent') },
+                { value: 'early', label: t('invite.sortEarly') },
               ]"
               :label="t('invite.invitees')"
-              @update:model-value="sortInvitees($event as 'desc' | 'asc')"
+              @update:model-value="sort = $event as SortMode"
             />
           </div>
 
-          <ErrorBanner
-            v-if="inviteesError"
-            class="m-4"
-            :message="inviteesError"
-            @retry="loadInvitees()"
-          />
           <ul
             class="subtle-scroll mt-2 sibling-divide-y sibling-divide-[var(--border-subtle)] px-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
-            :aria-busy="inviteesLoading"
           >
             <li
-              v-for="(invitee, index) in invitees"
-              :key="`${inviteesPage}-${index}`"
+              v-for="record in sortedRecords"
+              :key="record.id"
               class="flex items-center justify-between gap-3 py-3"
             >
-              <p class="min-w-0 truncate text-sm text-[var(--text-secondary)]">
-                {{ invitee.masked_name }}
-              </p>
-              <div class="shrink-0 text-right">
-                <p class="text-xs font-medium text-[var(--text-secondary)]">
-                  {{ formatQuota(invitee.reward_quota) }}
-                </p>
-                <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-                  {{ formatDate(invitee.invited_at) }}
+              <div class="flex min-w-0 items-center gap-2.5">
+                <span
+                  class="inline-flex shrink-0 items-center rounded-md bg-[var(--surface-muted)] px-2.5 py-0.5 font-mono text-xs tracking-wide text-[var(--text-secondary)]"
+                >
+                  {{ maskInvitee(record.invitee) }}
+                </span>
+              </div>
+              <div class="text-right">
+                <div class="mb-1 flex items-center justify-end gap-2">
+                  <StatusChip :tone="record.paid ? 'success' : 'neutral'">
+                    {{ record.paid ? t('invite.paid') : t('invite.unpaid') }}
+                  </StatusChip>
+                  <span
+                    class="text-xs font-medium text-[var(--text-secondary)]"
+                  >
+                    {{ formatQuota(record.reward_total) }}
+                  </span>
+                </div>
+                <p class="text-xs text-[var(--text-tertiary)]">
+                  {{ formatDate(record.created) }}
                 </p>
               </div>
             </li>
             <li
-              v-if="!inviteesLoading && !inviteesError && invitees.length === 0"
+              v-if="info && info.records.length === 0"
               class="py-10 text-center text-sm text-[var(--text-tertiary)]"
             >
               {{ t('common.none') }}
             </li>
           </ul>
-          <div
-            v-if="inviteesPageCount > 1"
-            class="flex shrink-0 items-center justify-between gap-2 px-5 py-2"
-          >
-            <ConsoleButton
-              size="sm"
-              variant="ghost"
-              :disabled="inviteesLoading || inviteesPage <= 1"
-              @click="loadInvitees(inviteesPage - 1)"
-              >{{ t('common.prevPage') }}</ConsoleButton
-            >
-            <span
-              class="text-xs text-[var(--text-tertiary)]"
-              aria-live="polite"
-            >
-              {{
-                t('common.pageProgress', {
-                  page: inviteesPage,
-                  count: inviteesPageCount,
-                })
-              }}
-            </span>
-            <ConsoleButton
-              size="sm"
-              variant="ghost"
-              :disabled="inviteesLoading || inviteesPage >= inviteesPageCount"
-              @click="loadInvitees(inviteesPage + 1)"
-              >{{ t('common.nextPage') }}</ConsoleButton
-            >
-          </div>
 
           <p
             class="shrink-0 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-tertiary)]"
@@ -277,76 +257,6 @@ onMounted(() => Promise.all([load(), loadInvitees()]))
       />
       <SkeletonBlock v-else class="h-72" />
     </div>
-
-    <ConsoleCard v-if="info" class="mt-5">
-      <SectionHeading class="mb-2">{{ t('invite.records') }}</SectionHeading>
-      <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
-        <li
-          v-for="record in info.records"
-          :key="record.id"
-          class="flex items-center justify-between gap-3 py-3"
-        >
-          <div class="flex min-w-0 items-center gap-2.5">
-            <span
-              class="inline-flex shrink-0 items-center rounded-md bg-[var(--surface-muted)] px-2.5 py-0.5 font-mono text-xs tracking-wide text-[var(--text-secondary)]"
-            >
-              {{
-                record.kind === 'transfer'
-                  ? t('invite.transfer')
-                  : `#${record.invitee_id}`
-              }}
-            </span>
-          </div>
-          <div class="text-right">
-            <div class="mb-1 flex items-center justify-end gap-2">
-              <StatusChip
-                :tone="
-                  record.skip_reason
-                    ? 'neutral'
-                    : record.frozen_until > 0 && record.thawed_at === 0
-                      ? 'warning'
-                      : 'success'
-                "
-              >
-                {{
-                  record.skip_reason
-                    ? t('invite.skipped')
-                    : record.frozen_until > 0 && record.thawed_at === 0
-                      ? t('invite.frozenReward')
-                      : t(
-                          record.kind === 'transfer'
-                            ? 'invite.transfer'
-                            : 'invite.credited'
-                        )
-                }}
-              </StatusChip>
-              <span class="text-xs font-medium text-[var(--text-secondary)]">
-                {{ formatQuota(record.reward_quota) }}
-              </span>
-            </div>
-            <p
-              v-if="record.skip_reason"
-              class="mb-1 text-xs text-[var(--text-tertiary)]"
-            >
-              {{
-                te(`invite.skipReasons.${record.skip_reason}`)
-                  ? t(`invite.skipReasons.${record.skip_reason}`)
-                  : record.skip_reason
-              }}
-            </p>
-            <p class="text-xs text-[var(--text-tertiary)]">
-              {{ formatDate(record.created_at) }}
-            </p>
-          </div>
-        </li>
-        <li
-          v-if="info && info.records.length === 0"
-          class="py-10 text-center text-sm text-[var(--text-tertiary)]"
-        >
-          {{ t('common.none') }}
-        </li>
-      </ul>
-    </ConsoleCard>
 
     <!-- how it works -->
     <section class="mt-8">
@@ -424,6 +334,13 @@ onMounted(() => Promise.all([load(), loadInvitees()]))
       @close="transferOpen = false"
     >
       <div class="sibling-space-y-3">
+        <input
+          v-model="transferDollars"
+          inputmode="decimal"
+          class="w-full rounded-lg bg-[var(--surface-muted)] p-3 font-mono focus-ring"
+          :placeholder="formatQuota(info?.transferable ?? 0)"
+          :min="1"
+        />
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.transferable') }}:
           {{ formatQuota(info?.transferable ?? 0) }}

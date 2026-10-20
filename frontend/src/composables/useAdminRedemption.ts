@@ -1,7 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
@@ -11,43 +10,10 @@ import { useAuthStore } from '@/stores/auth'
 import type {
   AdminRedemptionCode,
   AdminRedemptionCreateInput,
+  AdminRedemptionPage,
   AdminRedemptionSortBy,
   AdminRedemptionSortOrder,
 } from '@/types/console'
-
-interface NativeRedemption {
-  id: number
-  name: string
-  key: string
-  status: number
-  quota: number
-  used_user_id: number
-  created_time: number
-  redeemed_time: number
-  expired_time: number
-}
-export function projectRedemption(raw: NativeRedemption): AdminRedemptionCode {
-  return {
-    id: raw.id,
-    name: raw.name,
-    code: raw.key,
-    type: 'quota',
-    status:
-      raw.status === 3
-        ? 'used'
-        : raw.status === 2
-          ? 'disabled'
-          : raw.expired_time > 0 && raw.expired_time < Date.now() / 1000
-            ? 'expired'
-            : 'unused',
-    quota: String(raw.quota),
-    amount: quotaToDecimal(raw.quota),
-    redeemer_id: raw.used_user_id,
-    created_time: raw.created_time,
-    used_time: raw.redeemed_time,
-    expired_time: raw.expired_time === 0 ? -1 : raw.expired_time,
-  }
-}
 
 type RedemptionRowAction = 'status'
 type RedemptionCrudAction = 'create' | 'delete'
@@ -61,6 +27,7 @@ export function useAdminRedemption() {
 
   const rows = ref<AdminRedemptionCode[]>([])
   const total = ref(0)
+  const statusCounts = ref<Record<string, number>>({})
   const page = ref(1)
   const pageSize = ref(20)
   const keyword = ref('')
@@ -127,25 +94,17 @@ export function useAdminRedemption() {
     if (rows.value.length === 0) initialError.value = ''
 
     const trimmed = keyword.value.trim()
-    const url =
-      trimmed || statusFilter.value
-        ? '/api/redemption/search'
-        : '/api/redemption/'
+    const url = '/api/next/admin/redemptions'
     const result = await listRequest.run((signal) =>
-      api.get<{ items: NativeRedemption[]; total: number }>(
+      api.get<AdminRedemptionPage>(
         url,
         {
           keyword: trimmed || undefined,
-          status: (
-            { unused: 1, used: 3, disabled: 2, expired: 'expired' } as Record<
-              string,
-              string | number
-            >
-          )[statusFilter.value],
-          p: page.value,
-          page_size: pageSize.value,
+          status: statusFilter.value || undefined,
           sort_by: sortBy.value,
           sort_order: sortOrder.value,
+          p: page.value,
+          page_size: pageSize.value,
         },
         { signal }
       )
@@ -164,9 +123,9 @@ export function useAdminRedemption() {
       return
     }
 
-    rows.value = result.value.items.map(projectRedemption)
+    rows.value = result.value.items
     total.value = result.value.total
-
+    statusCounts.value = result.value.status_counts
     initialError.value = ''
   }
 
@@ -193,11 +152,9 @@ export function useAdminRedemption() {
     next.set(code.id, 'status')
     busy.value = next
     try {
-      const updated = projectRedemption(
-        await api.put<NativeRedemption>('/api/redemption/?status_only=true', {
-          id: code.id,
-          status: code.status === 'disabled' ? 1 : 2,
-        })
+      const updated = await api.post<AdminRedemptionCode>(
+        `/api/next/admin/redemptions/${code.id}/status`,
+        {}
       )
       const index = rows.value.findIndex((c) => c.id === code.id)
       if (index >= 0) rows.value[index] = updated
@@ -221,29 +178,15 @@ export function useAdminRedemption() {
   ): Promise<{ codes: string[]; items: AdminRedemptionCode[] } | null> {
     crudAction.value = { action: 'create', id: null }
     try {
-      const quota = Number(decimalToQuota(input.amount))
-      if (!Number.isSafeInteger(quota)) throw new Error('Invalid quota')
-      const codes = await api.post<string[]>('/api/redemption/', {
-        name: input.name,
-        quota,
-        count: input.count,
-        expired_time: input.expired_time === -1 ? 0 : input.expired_time,
-      })
-      const result = { codes, items: [] as AdminRedemptionCode[] }
+      const result = await api.post<{
+        codes: string[]
+        items: AdminRedemptionCode[]
+      }>('/api/next/admin/redemptions', input)
       toast.success(t('redemption.created'))
       await load({ background: true })
       return result
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : String(err))
-      if (
-        err instanceof ApiError &&
-        Array.isArray(err.data) &&
-        err.data.length > 0 &&
-        err.data.every((code) => typeof code === 'string')
-      ) {
-        await load({ background: true })
-        return { codes: err.data as string[], items: [] }
-      }
       return null
     } finally {
       crudAction.value = null
@@ -272,9 +215,10 @@ export function useAdminRedemption() {
     if (codes.length === 0) return false
     bulkAction.value = 'delete'
     try {
-      const deleted = await api.post<number>('/api/redemption/batch', {
-        ids: codes.map((c) => c.id),
-      })
+      const deleted = await api.post<number>(
+        '/api/next/admin/redemptions/delete/batch',
+        { ids: codes.map((c) => c.id) }
+      )
       toast.success(
         t('redemption.bulkDeleted', { count: deleted ?? codes.length })
       )
@@ -294,6 +238,7 @@ export function useAdminRedemption() {
   return {
     rows,
     total,
+    statusCounts,
     page,
     pageSize,
     keyword,

@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
-import { getUsageSummary } from '@/api/dashboard'
 import { ApiError } from '@/api/types'
 import PageHero from '@/components/console/PageHero.vue'
 import StatTileGrid from '@/components/common/StatTileGrid.vue'
@@ -12,11 +11,16 @@ import RedeemPanel from '@/components/console/wallet/RedeemPanel.vue'
 import TopupPanel from '@/components/console/wallet/TopupPanel.vue'
 import TopupRecords from '@/components/console/wallet/TopupRecords.vue'
 import type { DashboardStats, FlowPoint } from '@/composables/useDashboard'
-import { useBalanceVisibility } from '@/composables/useDashboard'
+import {
+  fetchSelfUsage,
+  getLocalDayStartTimestamp,
+  getLocalMonthStartTimestamp,
+  useBalanceVisibility,
+} from '@/composables/useDashboard'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { quotaToDecimal, sumQuota } from '@/utils/quota'
+import { addQuota, quotaToDecimal, sumQuota } from '@/utils/quota'
 import { formatNumber, formatQuota } from '@/utils/format'
 
 type WalletStats = DashboardStats
@@ -81,14 +85,10 @@ const statCards = computed(() => {
 
 async function loadStats(): Promise<void> {
   loading.value = true
-  const now = new Date(),
-    start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-    end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const endTimestamp = Math.floor(Date.now() / 1000)
+  const startTimestamp = getLocalMonthStartTimestamp()
   const result = await statsRequest.run((signal) =>
-    Promise.all([
-      getUsageSummary({ range: 'custom', start, end }, signal),
-      getUsageSummary({ range: 'today' }, signal),
-    ])
+    fetchSelfUsage(startTimestamp, endTimestamp, signal)
   )
   if (result.stale) return
   loading.value = false
@@ -100,18 +100,30 @@ async function loadStats(): Promise<void> {
     )
     return
   }
-  const [month, today] = result.value
-  todayConsume.value = today.kpi.totalQuota
-  flow.value = month.flow
+  const rows = result.value
+  const monthQuota = rows.reduce((sum, row) => addQuota(sum, row.quota), '0')
+  const todayStart = getLocalDayStartTimestamp()
+  todayConsume.value = rows
+    .filter((row) => row.created_at >= todayStart)
+    .reduce((sum, row) => addQuota(sum, row.quota), '0')
+  const byDay = new Map<string, FlowPoint>()
+  for (const row of rows) {
+    const date = new Date(row.created_at * 1000).toISOString().slice(0, 10)
+    const point = byDay.get(date) ?? { date, consume: '0', requests: 0 }
+    point.consume = addQuota(point.consume, row.quota)
+    point.requests += row.count
+    byDay.set(date, point)
+  }
+  flow.value = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
   stats.value = {
-    quota: String(auth.user?.quota ?? 0),
-    used_quota: month.kpi.totalQuota,
-    today_quota: today.kpi.totalQuota,
-    month_quota: month.kpi.totalQuota,
-    today_requests: today.kpi.totalRequests,
-    total_requests: month.kpi.totalRequests,
-    month_quota_delta: month.comparison.quotaDelta,
-    month_requests_delta: month.comparison.requestsDelta,
+    quota: auth.user?.available_quota ?? '0',
+    used_quota: monthQuota,
+    today_quota: '0',
+    month_quota: monthQuota,
+    today_requests: 0,
+    total_requests: rows.reduce((sum, row) => sum + row.count, 0),
+    month_quota_delta: 0,
+    month_requests_delta: 0,
   }
 }
 

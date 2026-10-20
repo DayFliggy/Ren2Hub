@@ -2,20 +2,12 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
-import {
-  invalidResponse,
-  isRecord,
-  parsePage,
-  requiredStrictInteger,
-  requiredString,
-} from '@/api/contracts'
 import { ApiError } from '@/api/types'
-import { useAdminRequest } from '@/composables/useAdminRequest'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import type { Invitee, InviteInfo } from '@/types/console'
-import { MAX_QUOTA } from '@/utils/quota'
+import type { InviteInfo } from '@/types/console'
+import { decimalToQuota, MAX_QUOTA } from '@/utils/quota'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
 export function useInvite() {
@@ -28,54 +20,24 @@ export function useInvite() {
   const loading = ref(true)
   const loadError = ref<string | null>(null)
   const inviteLink = ref('')
-  const invitees = ref<Invitee[]>([])
-  const inviteesPage = ref(1)
-  const inviteesTotal = ref(0)
-  const inviteesPageSize = 20
-  const inviteesOrder = ref<'desc' | 'asc'>('desc')
-  const inviteesRequest = useAdminRequest()
-  const inviteesPageCount = computed(() =>
-    Math.max(1, Math.ceil(inviteesTotal.value / inviteesPageSize))
-  )
-
-  async function loadInvitees(page = inviteesPage.value) {
-    const endpoint = '/api/user/affiliate/invitees'
-    await inviteesRequest.run(async (signal) => {
-      const query = new URLSearchParams({
-        p: String(page),
-        page_size: String(inviteesPageSize),
-        order: inviteesOrder.value,
-      })
-      const data = await api.get<unknown>(`${endpoint}?${query}`, undefined, {
-        signal,
-      })
-      const result = parsePage(data, endpoint, (item) => {
-        if (!isRecord(item)) invalidResponse(endpoint)
-        return {
-          masked_name: requiredString(item.masked_name, endpoint),
-          invited_at: requiredStrictInteger(item.invited_at, endpoint),
-          reward_quota: requiredStrictInteger(item.reward_quota, endpoint),
-        }
-      })
-      if (signal.aborted) return
-      invitees.value = result.items
-      inviteesPage.value = result.page
-      inviteesTotal.value = result.total
-    })
-  }
-
-  async function sortInvitees(order: 'desc' | 'asc') {
-    inviteesOrder.value = order
-    await loadInvitees(1)
-  }
 
   const transferOpen = ref(false)
-  let transferOperation: string | null = null
+  const transferDollars = ref('')
+  let transferOperation: { amount: string; id: string } | null = null
+  const transferQuota = computed(() => {
+    try {
+      return decimalToQuota(transferDollars.value)
+    } catch {
+      return null
+    }
+  })
   const canTransfer = computed(
     () =>
       !readOnly.value &&
-      (info.value?.transferable ?? 0) > 0 &&
-      BigInt(auth.user?.quota ?? 0) + BigInt(info.value?.transferable ?? 0) <=
+      transferQuota.value !== null &&
+      BigInt(transferQuota.value) >= 500000n &&
+      BigInt(transferQuota.value) <= BigInt(info.value?.transferable ?? '0') &&
+      BigInt(auth.user?.available_quota ?? '0') + BigInt(transferQuota.value) <=
         MAX_QUOTA
   )
   const transferring = ref(false)
@@ -84,7 +46,7 @@ export function useInvite() {
     loading.value = true
     loadError.value = null
     try {
-      const data = await api.get<InviteInfo>('/api/user/affiliate')
+      const data = await api.get<InviteInfo>('/api/next/invite/self')
       info.value = data
       inviteLink.value = `${window.location.origin}/auth/sign-up?aff=${data.code}`
     } catch (error) {
@@ -148,15 +110,24 @@ export function useInvite() {
   }
 
   async function transfer() {
-    if (!canTransfer.value || transferring.value) return
-    transferOperation ??= crypto.randomUUID()
+    if (
+      !canTransfer.value ||
+      transferQuota.value === null ||
+      transferring.value
+    )
+      return
+    const quota = transferQuota.value
+    if (transferOperation?.amount !== quota)
+      transferOperation = { amount: quota, id: crypto.randomUUID() }
     transferring.value = true
     try {
-      await api.post('/api/user/affiliate/transfer', {
-        operation_id: transferOperation,
+      await api.post('/api/next/invite/transfer', {
+        amount: quota,
+        operation_id: transferOperation.id,
       })
       toast.success(t('invite.transferSuccess'))
       transferOpen.value = false
+      transferDollars.value = ''
       transferOperation = null
       await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
@@ -171,16 +142,8 @@ export function useInvite() {
     loading,
     loadError,
     inviteLink,
-    invitees,
-    inviteesPage,
-    inviteesTotal,
-    inviteesPageCount,
-    inviteesOrder,
-    inviteesLoading: inviteesRequest.loading,
-    inviteesError: inviteesRequest.error,
-    loadInvitees,
-    sortInvitees,
     transferOpen,
+    transferDollars,
     canTransfer,
     transferring,
     readOnly,

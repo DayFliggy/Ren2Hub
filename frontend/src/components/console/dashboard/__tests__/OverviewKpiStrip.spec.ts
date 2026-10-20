@@ -60,12 +60,6 @@ function trendPoint(over: Partial<TokenTrendPoint> = {}): TokenTrendPoint {
     cache_read: 2_250_000,
     hit_rate: 69.2,
     ...over,
-    total:
-      over.total ??
-      (over.input ?? 1000000) +
-        (over.output ?? 500000) +
-        (over.cache_create ?? 250000) +
-        (over.cache_read ?? 2250000),
   }
 }
 

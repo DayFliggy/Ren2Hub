@@ -192,6 +192,22 @@ export const pricingConfigApi = {
       pricing,
     })
   },
+  simulate(input: {
+    plugin_key?: string
+    model_name: string
+    pricing: PricingValues
+    usage: Record<string, unknown>
+    request: {
+      params: Record<string, unknown>
+      headers: Record<string, string>
+    }
+    time: string
+  }) {
+    return api.post<{ amount_usd: string; details?: unknown }>(
+      '/api/option/model_pricing/simulate',
+      input
+    )
+  },
   async fetch(signal?: AbortSignal) {
     return parseFetchedPrices(
       await api.post('/api/ratio_sync/fetch', {}, { signal })

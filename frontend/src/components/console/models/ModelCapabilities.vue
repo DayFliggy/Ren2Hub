@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { ModelCapabilities } from '@/api/modelCatalog'
+import type { ModelCapabilities } from '@/api/modelManifest'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatContext } from '@/utils/format'
 

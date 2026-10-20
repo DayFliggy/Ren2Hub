@@ -478,10 +478,6 @@ export default {
       cacheCreate: 'Cache Creation',
       cacheRead: 'Cache Read',
       hitRate: 'Cache Hit Rate',
-      cacheCoverage:
-        'Recorded cache usage only: {read} read, {write} write and {invalid} invalid records out of {records} consumption records. Cross-protocol hit rate is unknown.',
-      cacheUnknown:
-        'Cache totals include recorded usage only. Missing usage and cross-protocol hit rate remain unknown.',
       avgHitRate: 'Avg hit',
       emptyHint: 'No token usage recorded in the last 30 days',
     },
@@ -558,16 +554,9 @@ export default {
       emptyHint: 'There is no usage data in the selected period yet.',
     },
     autoRoute: {
-      stale: 'Refresh failed; the cards show the last successful catalog.',
-      concurrency: 'Channel concurrency',
-      channelOccupancy: 'In flight {active} / limit {limit}',
-      catalogEligible:
-        'Eligible in this catalog; requests still follow the current routing rules.',
-      historyUnavailable:
-        'Historical health is unavailable. Display order does not indicate routing priority.',
       tabLabel: 'Auto Route',
       subtitle:
-        'Platform channels grouped by lab for display. Each API key controls its own routing mode.',
+        'Compare channel operating metrics by model lab. Token access, protocol support, priority and current load determine actual routing.',
       refresh: 'Refresh',
       updated: 'Updated {time}',
       groupBest: 'Leading operating score',
@@ -578,9 +567,9 @@ export default {
       untested: 'untested',
       channelCount: '{count} channels',
       topScore: 'Best score in group',
-      activeChannelCount: 'Catalog eligible {active} / {total}',
+      activeChannelCount: '{active}/{total} available',
       availability1h: '1h {value}%',
-      availabilityUnknown: 'Health --',
+      availabilityUnknown: '1h --',
       monitorState: {
         healthy: 'Operational',
         degraded: 'Degraded',
@@ -610,8 +599,6 @@ export default {
   },
 
   keys: {
-    statusExhausted: 'Quota exhausted',
-    statusExpired: 'Expired',
     title: 'API Keys',
     breadcrumb: ['Console', 'API Keys'],
     createKey: 'Create key',
@@ -640,10 +627,9 @@ export default {
     type: {
       label: 'Key type',
       manual: 'Manual',
-      manualDesc: 'Use the platform channel order saved for this key',
+      manualDesc: "Use the token's active route group and channel order",
       auto: 'Auto',
-      autoDesc:
-        'Select platform channels by priority, health, load and latency',
+      autoDesc: 'Select by model capability, channel health, and capacity',
     },
     advancedTitle: 'Advanced settings',
     advancedSummary: 'Model and IP restrictions',
@@ -1133,14 +1119,6 @@ export default {
   },
 
   channels: {
-    permissionDenied: 'You do not have permission for this channel action.',
-    lab: 'Lab classification',
-    allLabs: 'All labs',
-    priorityConflict: 'Channel priority changed. Reload before editing.',
-    channelRatio: 'Channel multiplier',
-    maxConcurrency: 'Concurrent requests',
-    maxConcurrencyHint: '0 means no limit.',
-
     providerStatus: 'Provider status',
     providerVersion: 'Version',
     contextWindow: 'Context window',
@@ -1234,7 +1212,7 @@ export default {
     refreshList: 'Refresh list',
     advancedLegacy: 'Advanced (legacy)',
     createChannel: 'New channel',
-    searchPlaceholder: 'Search name, ID or upstream URL',
+    searchPlaceholder: 'Search by name, ID or supplier',
     typeFilter: 'Channel type',
     statusFilter: 'Channel status',
     sortLabel: 'Sort by',
@@ -1254,6 +1232,7 @@ export default {
     capacity: 'Capacity',
     usage: 'Usage',
     usageAndRatio: 'Usage / channel ratio',
+    channelRatio: 'Channel ratio',
     channelRatioValue: 'Channel ratio {ratio}×',
     upstreamBalance: 'Upstream balance',
     upstreamAndRatio: 'Upstream balance / ratio',
@@ -1431,7 +1410,7 @@ export default {
     supplierCleared: 'Cleared {count} channels from {supplier} Lab',
     fieldSettings: 'Visible fields',
     resetFields: 'Restore defaults',
-    supplierGroupCount: '{count} channels on this page',
+    supplierGroupCount: '{count} channels',
     expandSupplier: 'Expand {supplier} channel group',
     collapseSupplier: 'Collapse {supplier} channel group',
     updated: 'Channel settings updated',
@@ -1462,7 +1441,6 @@ export default {
   },
 
   users: {
-    permissions: 'Permissions',
     bindingsTitle: 'Manage account bindings',
     bindingsEmpty: 'No bound sign-in providers or email.',
     unbind: 'Unbind',
@@ -1503,11 +1481,8 @@ export default {
     sort: {
       id: 'ID',
       username: 'Username',
-      quota: 'Remaining quota',
       available_quota: 'Remaining quota',
       used_quota: 'Used quota',
-      created_at: 'Registered',
-      last_login_at: 'Last active',
       created_time: 'Registered',
       last_login_time: 'Last active',
     },
@@ -1680,23 +1655,6 @@ export default {
   },
 
   orders: {
-    periodOrders: 'Orders in period',
-    paidOrders: 'Completed orders',
-    currencyScope:
-      'Totals are separated by recorded currency. Currencies are never combined.',
-    unknownAmounts:
-      'Amounts are missing for {count} orders and are excluded from monetary metrics.',
-    statsStale:
-      'Refresh failed. These figures show the last successful snapshot for this period.',
-    partialAmountTrend:
-      'The curve includes recorded amounts only. Unknown amounts are excluded; a zero does not establish zero receipts for that day.',
-    knownAmountSubtotal: 'Known amounts subtotal',
-    averageUnavailable:
-      'An average cannot be determined while amounts are missing.',
-    summaryUnavailable: 'Summary unavailable',
-    summaryUnavailableHint: 'This statistic is currently unavailable.',
-    currency: 'Currency',
-    title: 'Top-up orders',
     gmpay: {
       title: 'GMPay order evidence',
       loading: 'Loading gateway evidence…',
@@ -1736,7 +1694,7 @@ export default {
     rangeLabel: 'Statistics range',
     rangeDays: '{days} days',
     todayRevenue: "Today's revenue",
-    totalRevenue: 'Revenue in selected period',
+    totalRevenue: 'Total revenue',
     todayOrders: "Today's orders",
     averageAmount: 'Average amount',
     orderCount: '{count} order(s)',
@@ -1771,7 +1729,6 @@ export default {
       completed: 'Completed',
       pending: 'Pending',
       failed: 'Failed',
-      expired: 'Expired',
     },
     type: {
       label: 'Type',
@@ -1839,7 +1796,7 @@ export default {
     groupPlaceholder: 'Search or enter a group',
     title: 'Logs',
     breadcrumb: ['Console', 'Logs'],
-    keywordPlaceholder: 'Filter by exact request ID',
+    keywordPlaceholder: 'Search by model…',
     typeLabel: 'Type',
     typeConsume: 'Consume',
     typeTopup: 'Top-up',
@@ -1973,7 +1930,7 @@ export default {
 
   auditLogs: {
     breadcrumb: 'Audit logs',
-    keywordPlaceholder: 'Filter by exact request ID',
+    keywordPlaceholder: 'Search account, operation, or IP…',
     categoryLabel: 'Event category',
     scopeLabel: 'Scope',
     resultLabel: 'Result',
@@ -2479,26 +2436,14 @@ export default {
   },
 
   invite: {
-    skipped: 'No reward accrued',
-    credited: 'Credited',
-    skipReasons: {
-      program_disabled: 'Program disabled',
-      admin_recharge_disabled: 'Admin top-ups excluded',
-      no_paid_quota: 'No eligible paid quota',
-      referral_expired: 'Referral period ended',
-      inviter_disabled: 'Inviter rewards disabled',
-      zero_rate: 'Zero reward rate',
-      below_quota_unit: 'Below one quota unit',
-      invitee_cap_reached: 'Per-invitee cap reached',
-    },
     title: 'Invite Rewards',
     breadcrumb: ['Console', 'Invite Rewards'],
     people: '{count}',
     heroTotal: 'Lifetime invite rewards',
     invitedCount: 'Successful invites',
-    invitedCountHint: 'Lifetime registrations with your invite code',
+    invitedCountHint: 'Registered with your invite code',
     transferable: 'Transferable rewards',
-    transferableHint: 'Transfer all available rewards to account balance',
+    transferableHint: 'Transfer to balance after reaching $1',
     rewardPerInvite: 'Effective rebate rate',
     rewardPerInviteHint: 'Calculated from the invitee’s actual payment',
     rebateRate: 'Effective rebate rate',
@@ -2526,25 +2471,25 @@ export default {
     affiliateDisclaimer:
       'Only eligible real payments earn rebates; cash withdrawal is unavailable',
     invitees: 'Invited users',
-    records: 'Reward records',
     sortRecent: 'Recent',
     sortEarly: 'Earliest',
     inviteesNote:
-      'Current referrals with masked names, registration dates and earned rewards.',
-    chartTitle: 'Referral rewards',
-    chartSubtitle: 'Actual referral quota earned each month',
-    chartTabNew: 'Monthly reward',
-    chartTabCumulative: 'Cumulative reward',
+      'Only an anonymized identity and registration date are shown.',
+    chartTitle: 'Invite registrations · last 6 months',
+    chartSubtitle: 'Users registered with your invite code each month',
+    chartTabNew: 'New',
+    chartTabCumulative: 'Cumulative',
     rewardBalanceTitle: 'Invite reward balance',
     rewardBalanceSubtitle:
       'Rewards from {count} invited users can be transferred to your account balance.',
     currentBalance: 'Current account balance',
     balanceAfterTransfer: 'Balance after full transfer',
-    minimumTransfer: 'No available reward',
+    minimumTransfer: 'Reach $1 to transfer',
     rewardHistoryTotal: 'Lifetime invite rewards',
     transfer: 'Transfer to balance',
     transferTitle: 'Transfer invite rewards',
-    transferHint: 'Transfer all available rewards to your account balance.',
+    transferHint:
+      'Minimum transfer is $1. Transferred quota can fund model calls.',
     transferSuccess: 'Transferred to your account balance',
     howTitle: 'How it works',
     howStep1Title: 'Copy your code or invite link',
@@ -2555,23 +2500,23 @@ export default {
       'The friend submits your invite code during registration and the relationship is recorded.',
     howStep3Title: 'Real payments earn rebates',
     howStep3Desc:
-      'Qualifying top-ups earn {reward} of their eligible quota. Freeze periods and eligibility duration follow the current policy.',
+      'After your friend completes a wallet top-up, {reward} of the actual payment is calculated as a rebate and enters the freeze period.',
     howStep4Title: 'Transfer rewards to balance',
     howStep4Desc:
-      'Transfer all available rewards to your account balance with no minimum amount.',
+      'Once rewards reach $1, transfer them to your account balance for model calls.',
     faqTitle: 'FAQ',
     faqQ1: 'When is the invite reward issued?',
     faqA1:
-      'Rewards accrue on qualifying top-ups after registration. Redemption codes do not qualify. The platform policy controls admin top-ups, freeze periods and eligibility duration.',
+      'It is settled after a friend registers with your code and completes a real payment. Balance purchases, redemption codes and direct admin quota grants do not qualify.',
     faqQ2: 'What is the referral rebate rate?',
     faqA2:
       'Your current effective rate is {reward}. A user-specific rate may differ from the global rate.',
     faqQ3: 'Can invite rewards be withdrawn as cash?',
     faqA3:
       'No. Rewards can only be transferred to Ren2Hub account balance for platform model calls.',
-    faqQ4: 'What information appears in reward records?',
+    faqQ4: 'What information appears for invited users?',
     faqA4:
-      'Records show the invited user ID, reward or transfer amount, time and freeze status, without their email address.',
+      'The list shows only an anonymized identifier and registration date, not the user email.',
   },
 
   activity: {
@@ -2580,7 +2525,8 @@ export default {
     title: 'Activity Center',
     breadcrumb: 'Activity Center',
     heroPill: 'Activity Plaza',
-    heroSubtitle: 'Daily check-ins and platform activities.',
+    heroSubtitle:
+      'Check-in, newcomer packs and invite rewards — all in one place.',
     refresh: 'Refresh',
     tabs: {
       all: 'All',
@@ -2699,7 +2645,6 @@ export default {
       'No invoice records yet. Contact the group owner to request one.',
     submitted: 'Request submitted. Pending admin review.',
     status: {
-      expired: 'Expired',
       pending: 'Pending',
       issued: 'Issued',
       rejected: 'Rejected',
@@ -2712,8 +2657,8 @@ export default {
   },
 
   profile: {
-    title: 'Account Center',
-    subtitle: 'Review your account and manage security and preferences',
+    title: 'Member Center',
+    subtitle: 'Review membership details and manage security and preferences',
     settingsSectionEyebrow: 'ACCOUNT SETTINGS',
     settingsSectionTitle: 'Account settings',
     settingsSectionSubtitle:
@@ -2726,7 +2671,7 @@ export default {
     tierGold: 'Gold',
     tierSilver: 'Silver',
     tierBronze: 'Bronze',
-    breadcrumb: ['Home', 'Account Center'],
+    breadcrumb: ['Home', 'Member Center'],
     memberNo: 'Member No.',
     joinDate: 'Joined',
     totalCalls: 'Total Calls',
@@ -2752,7 +2697,7 @@ export default {
     viewTierBenefits: 'View tier benefits →',
     progressToNext: 'to {tier}',
     joinedDays: 'Joined {n} days ago',
-    memberDuration: 'Time since joining',
+    memberDuration: 'Membership',
     personalInfo: 'Personal Info',
     displayName: 'Display Name',
     username: 'Username',
@@ -2923,10 +2868,6 @@ export default {
 
   systemSettings: {
     sections: {
-      affiliate: 'Referral rewards',
-      affiliateDescription:
-        'Rewards are based on credited recharge quota. Zero duration or cap means unlimited.',
-
       systemInfo: 'System information',
       systemInfoDescription:
         'Site name, public address, branding content, and legal texts.',
@@ -2956,10 +2897,10 @@ export default {
         'Sign-up and invite rewards, the top-up link, and currency display rules.',
       payment: 'Shared payment settings and other gateways',
       paymentDescription:
-        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant settings have their own pages. Blank credentials retain the saved value.',
+        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant and settlement settings have their own pages. Blank credentials retain the saved value.',
       epay: 'EPay',
       epayDescription:
-        'Purchase USD credits and pay in CNY through EPay. New orders and payment notifications require payment compliance confirmation, complete merchant credentials, and at least one payment method.',
+        'Purchase USD credits and pay in CNY through EPay. Complete credentials and at least one payment method enable new orders. An empty method list stops new orders; the settlement switch controls existing orders.',
       waffoPancake: 'Waffo Pancake',
       waffoPancakeDescription:
         'Verify credentials and choose a store and product, then save them atomically through the gateway endpoint.',
@@ -3006,13 +2947,6 @@ export default {
         'Entry point for system tasks and runtime status.',
     },
     fields: {
-      affiliateEnabled: 'Enable referral rewards',
-      affiliateRateBps: 'Reward rate (basis points)',
-      affiliateFreezeHours: 'Freeze duration (hours)',
-      affiliateDurationDays: 'Eligibility duration (days)',
-      affiliateCapQuota: 'Reward cap per invitee (quota units)',
-      affiliateAdminRecharge: 'Include administrator credits',
-
       systemName: 'System name',
       serverAddress: 'Server address',
       serverAddressHint:
@@ -3074,9 +3008,6 @@ export default {
       turnstileEnabled: 'Enable Turnstile',
       turnstileSiteKey: 'Turnstile Site Key',
       turnstileSecretKey: 'Turnstile Secret Key',
-      preConsumeMultiplier: 'Input cost reservation multiplier',
-      preConsumeMultiplierHint:
-        'Must be greater than zero. Changes the initial reservation, not the final bill.',
       newUserQuota: 'Initial quota for new users',
       inviterReward: 'Inviter reward',
       inviteeReward: 'Invitee reward',
@@ -3129,11 +3060,17 @@ export default {
       merchantSecret: 'Merchant secret',
       secretHint:
         'Enter a value only to replace the credential. Leaving it blank preserves the current value, which is never displayed after saving.',
+      epaySettlement: 'Enable Epay settlement',
+      epaySettlementHint:
+        'Allow payment gateway callbacks to credit existing orders. Failed notifications are retried by the gateway, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of new payment methods.',
       epayPrice: 'CNY price per USD credit',
       minimumUsd: 'Minimum credit purchase (USD)',
       epayMethods: 'EPay payment methods',
       epayMethodsHint:
-        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list disables EPay orders and payment notifications.',
+        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list stops new EPay orders.',
+      gmpaySettlement: 'Enable crypto settlement',
+      gmpaySettlementHint:
+        'Allow crypto gateway callbacks to credit existing orders. The callback verifies the token and fiat amount but cannot prove the final payment network. Failed notifications depend on the gateway retry configuration, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of Epay and of new payment methods.',
       checkinEnabled: 'Enable daily check-in',
       checkinMinQuota: 'Minimum reward',
       checkinMaxQuota: 'Maximum reward',
@@ -3253,7 +3190,6 @@ export default {
       diskThreshold: 'Disk threshold (%)',
     },
     options: {
-      cny: 'CNY',
       guest: 'Guest',
       user: 'User',
       admin: 'Administrator',
@@ -3350,8 +3286,6 @@ export default {
       cleanupLogsByDays: 'Log files older than {count} days will be deleted.',
     },
     waffoPancake: {
-      orphanStore:
-        'Store {id} was created, but product creation failed. Check the gateway catalog before creating another pair.',
       label: 'Waffo Pancake configuration',
       merchantId: 'Merchant ID',
       privateKey: 'Private key',
@@ -3400,10 +3334,6 @@ export default {
       'Settings could not be loaded. Editing and saving are disabled until a successful reload.',
     retryLoad: 'Reload settings',
     gmpayPanel: {
-      enableNewOrders: 'Accept new orders',
-      enableNewOrdersHint:
-        'Disabling this stops new GMPay orders. Valid payment notifications for existing orders still credit the wallet using the merchant credentials saved with each order.',
-      selectedAssets: 'Enabled assets (JSON)',
       title: 'GMPay crypto payments',
       description:
         'Choose the tokens and networks available to customers, then save the gateway configuration.',
@@ -3435,6 +3365,8 @@ export default {
       addressRequired: 'Enter the gateway address first.',
       credentialsRequired: 'Enter the gateway address and merchant ID.',
       secretRequired: 'Enter the merchant secret.',
+      noSelectedAssets:
+        'Saving with no selected assets stops new crypto orders. Existing orders can still settle when crypto settlement is enabled.',
       invalidAmounts:
         'The price must be positive. Minimum purchases must be positive whole USD amounts.',
       invalidGroupRatios:
@@ -3452,10 +3384,6 @@ export default {
     title: 'System Settings',
     breadcrumb: ['Admin', 'System Settings'],
     saved: 'Saved',
-    partialSaveFailed:
-      '{count} settings were saved before an error: {error}. The remaining changes are kept for retry; saved settings were not rolled back.',
-    oidcDiscoveryInvalid:
-      'OIDC discovery must return valid HTTP or HTTPS authorization, token and user info endpoints. No settings were saved.',
     saveFailed: 'Save failed',
     loading: 'Loading…',
     saveChanges: 'Save changes',

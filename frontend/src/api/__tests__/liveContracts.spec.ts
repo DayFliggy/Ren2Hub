@@ -12,6 +12,8 @@ import {
   parseTaskArtifactsResult,
   parseTaskLogPage,
   parseTokenPage,
+  parseTopupInfo,
+  parseGmpayTopupInfo,
   parseUsageRows,
   parseUserModels,
 } from '@/api/liveContracts'
@@ -138,13 +140,21 @@ describe('live API contracts', () => {
     )
   })
 
-  it('parses native quota/rpm/tpm statistics', () => {
-    expect(parseLogStat({ quota: 500, rpm: 2, tpm: 70 })).toEqual({
-      quota: '500',
-      rpm: 2,
-      tpm: 70,
+  it('parses the log overview contract and rejects missing fields', () => {
+    expect(
+      parseLogStat({
+        total_requests: 20,
+        total_quota: '500',
+        today_requests: 2,
+        today_quota: '70',
+      })
+    ).toEqual({
+      total_requests: 20,
+      total_quota: '500',
+      today_requests: 2,
+      today_quota: '70',
     })
-    expectInvalidResponse(() => parseLogStat({ quota: 500 }))
+    expectInvalidResponse(() => parseLogStat({ quota: '500' }))
   })
 
   it('uses the route type returned by the backend and normalizes token limits', () => {
@@ -159,11 +169,10 @@ describe('live API contracts', () => {
           key: 'sk-12**********7890',
           type: 'manual',
           status: 1,
-          used_quota: 120,
-          remain_quota: 880,
-          group: 'default',
-          auto_groups: null,
-          cross_group_retry: false,
+          used_quota: '120',
+          available_quota: '880',
+          reserved_quota: '0',
+          quota_version: 0,
           unlimited_quota: false,
           model_limits_enabled: true,
           model_limits: 'gpt-4o, claude-3-7-sonnet',
@@ -195,11 +204,10 @@ describe('live API contracts', () => {
       key: 'sk-****',
       type: 'auto',
       status: 1,
-      used_quota: 0,
-      remain_quota: 0,
-      group: 'default',
-      auto_groups: [],
-      cross_group_retry: false,
+      used_quota: '0',
+      available_quota: null,
+      reserved_quota: '0',
+      quota_version: 1,
       unlimited_quota: true,
       expired_time: -1,
       created_time: 1,
@@ -228,7 +236,7 @@ describe('live API contracts', () => {
           model_name: 'gpt-4o',
           created_at: 1_700_000_000,
           count: 2,
-          quota: 300,
+          quota: '300',
           token_used: 42,
         },
       ])
@@ -245,9 +253,100 @@ describe('live API contracts', () => {
     expectInvalidResponse(() => parseUsageRows([{ model_name: 'gpt-4o' }]))
   })
 
-  it('accepts native numeric redeemed quota and rejects old wire strings', () => {
-    expect(parseRedeemedQuota(500000)).toBe('500000')
-    expectInvalidResponse(() => parseRedeemedQuota('500000'))
+  it('parses wallet capabilities, top-up records, and redeemed quota', () => {
+    const info = parseTopupInfo({
+      enable_online_topup: true,
+      enable_redemption: true,
+      pay_methods: [
+        { name: 'Alipay', type: 'alipay', min_topup: 5 },
+        { name: 'WeChat Pay', type: 'wxpay', min_topup: 10 },
+      ],
+      min_topup: 1,
+      amount_options: [5, 10],
+    })
+    expect(info.pay_methods).toEqual([
+      {
+        name: 'Alipay',
+        type: 'alipay',
+        min_topup: 5,
+        color: undefined,
+      },
+      {
+        name: 'WeChat Pay',
+        type: 'wxpay',
+        min_topup: 10,
+        color: undefined,
+      },
+    ])
+    expect(info.amount_options).toEqual([5, 10])
+
+    expect(parseRedeemedQuota('500000')).toBe('500000')
+    expectInvalidResponse(() => parseRedeemedQuota(500000))
+    expect(parseRedeemedQuota({ quota: '250000' })).toBe('250000')
+    expectInvalidResponse(() => parseTopupInfo({}))
+    expectInvalidResponse(() =>
+      parseTopupInfo({
+        enable_online_topup: false,
+        enable_redemption: false,
+        pay_methods: [],
+        min_topup: 0,
+        amount_options: [10],
+      })
+    )
+    expectInvalidResponse(() =>
+      parseTopupInfo({
+        enable_online_topup: false,
+        enable_redemption: false,
+        pay_methods: [],
+        min_topup: 1,
+        amount_options: [-10],
+      })
+    )
+    const cryptoConfig = {
+      enable_gmpay_topup: true,
+      enable_gmpay_settlement: true,
+      pay_methods: [
+        {
+          name: 'USDT Tron',
+          type: 'gmpay:usdt.tron',
+          token: 'usdt',
+          network: 'tron',
+          min_topup: '2',
+          icon: '',
+          color: '',
+        },
+      ],
+      min_topup: 1,
+      amount_options: [10],
+    }
+    const crypto = parseGmpayTopupInfo(cryptoConfig)
+    expect(crypto.pay_methods).toEqual([
+      {
+        name: 'USDT Tron',
+        type: 'gmpay:usdt.tron',
+        min_topup: 2,
+        color: undefined,
+        token: 'usdt',
+        network: 'tron',
+        icon: undefined,
+      },
+    ])
+    expectInvalidResponse(() =>
+      parseTopupInfo({
+        ...cryptoConfig,
+        enable_online_topup: true,
+        enable_redemption: true,
+      })
+    )
+    // The crypto endpoint identifies an asset with both token and network.
+    expectInvalidResponse(() =>
+      parseGmpayTopupInfo({
+        ...cryptoConfig,
+        pay_methods: [{ name: 'USDT', type: 'gmpay:usdt.tron', token: 'usdt' }],
+      })
+    )
+
+    expectInvalidResponse(() => parseRedeemedQuota({ amount: 1 }))
   })
 
   it('parses safe user log DTOs without requiring internal channel fields', () => {
@@ -265,8 +364,8 @@ describe('live API contracts', () => {
           prompt_tokens: 10,
           completion_tokens: 20,
           other: '{"frt":250}',
-          quota: 300,
-          use_time: 1,
+          quota: '300',
+          use_time: 1000,
           is_stream: true,
           content: '',
           created_at: 1_700_000_000,
@@ -304,7 +403,7 @@ describe('live API contracts', () => {
       channel_name: 'OpenAI',
       prompt_tokens: 0,
       completion_tokens: 0,
-      quota: 0,
+      quota: '0',
       use_time: 0,
       is_stream: false,
       content: 'Model test',
@@ -333,7 +432,7 @@ describe('live API contracts', () => {
           channel_name: '',
           prompt_tokens: 0,
           completion_tokens: 0,
-          quota: 0,
+          quota: '0',
           use_time: 0,
           is_stream: false,
           content: 'Logged in',
@@ -460,7 +559,7 @@ describe('live API contracts', () => {
           progress: '100%',
           fail_reason: '',
           image_url: 'https://cdn.example.com/fox.png',
-          quota: 5000,
+          quota: '5000',
           submit_time: 1_700_000_000_000,
           finish_time: 1_700_000_060_000,
         },
@@ -480,7 +579,7 @@ describe('live API contracts', () => {
       page: 1,
       page_size: 20,
       total: 1,
-      items: [{ id: 4, status: 'BRAND_NEW_STATE', quota: 0 }],
+      items: [{ id: 4, status: 'BRAND_NEW_STATE', quota: '0' }],
     })
     expect(futureStatus.items[0]).toMatchObject({
       status: 'BRAND_NEW_STATE',
@@ -516,7 +615,7 @@ describe('live API contracts', () => {
           progress: '100%',
           fail_reason: '',
           result_url: '',
-          quota: 12000,
+          quota: '12000',
           submit_time: 1_700_000_000,
           finish_time: 1_700_000_090,
           legacy_video_available: true,
@@ -528,7 +627,7 @@ describe('live API contracts', () => {
           action: 'IMAGE',
           status: 'SUCCESS',
           progress: '100%',
-          quota: 0,
+          quota: '0',
           submit_time: 1_700_000_100,
           result_discarded: true,
         },
@@ -540,7 +639,7 @@ describe('live API contracts', () => {
           status: 'FAILURE',
           progress: '0%',
           fail_reason: 'upstream timeout',
-          quota: 0,
+          quota: '0',
           submit_time: 1_700_000_200,
           finish_time: 0,
         },
@@ -577,7 +676,7 @@ describe('live API contracts', () => {
         page: 1,
         page_size: 20,
         total: 1,
-        items: [{ id: 1, quota: 0, result_discarded: 'yes' }],
+        items: [{ id: 1, quota: '0', result_discarded: 'yes' }],
       })
     )
   })

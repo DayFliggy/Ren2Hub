@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
@@ -39,14 +39,11 @@ const form = reactive({
 const errors = reactive({ title: '', content: '' })
 const saving = ref(false)
 const uploader = ref<InstanceType<typeof TicketImageUploader> | null>(null)
-let submission = 0
 
 watch(
   () => props.open,
   (open) => {
     if (open) return
-    submission += 1
-    saving.value = false
     // Reset on close so the next open starts clean.
     form.title = ''
     form.category = 'other'
@@ -84,8 +81,7 @@ function validate(): boolean {
 }
 
 async function save() {
-  if (!props.open || props.readonly || !validate() || saving.value) return
-  const current = ++submission
+  if (props.readonly || !validate() || saving.value) return
   saving.value = true
   try {
     const payload = new FormData()
@@ -98,22 +94,16 @@ async function save() {
     for (const file of uploader.value?.getFiles() ?? []) {
       payload.append('attachments', file)
     }
-    await api.post('/api/tickets', payload)
-    if (current !== submission || !props.open) return
+    await api.post('/api/next/tickets', payload)
     toast.success(t('tickets.created'))
     emit('saved')
     emit('close')
   } catch (error) {
-    if (current === submission) {
-      toast.error(error instanceof ApiError ? error.message : String(error))
-    }
+    toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    if (current === submission) saving.value = false
+    saving.value = false
   }
 }
-onBeforeUnmount(() => {
-  submission += 1
-})
 </script>
 
 <template>

@@ -61,6 +61,7 @@ const connectionsTitle = computed(() =>
       (channel) =>
         `${channel.name} (${adminChannelTypeMeta(channel.type).label})`
     ),
+    ...props.row.enable_groups,
   ].join('\n')
 )
 
@@ -112,6 +113,7 @@ function formatTime(value: number | null) {
     >{{
       t('connectionsSummary', {
         channels: row.bound_channels.length,
+        groups: row.enable_groups.length,
       })
     }}</span
   >

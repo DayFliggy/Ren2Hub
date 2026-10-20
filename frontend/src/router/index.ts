@@ -146,11 +146,7 @@ const router = createRouter({
           path: '/ops',
           name: 'ops-monitor',
           component: () => import('@/views/admin/OpsMonitorView.vue'),
-          meta: {
-            wide: true,
-            requiresRoot: true,
-            ...getTopNavRouteMeta('ops'),
-          },
+          meta: { wide: true, ...getTopNavRouteMeta('ops') },
         },
         {
           path: '/activity',
@@ -166,6 +162,16 @@ const router = createRouter({
           name: 'models',
           component: () => import('@/views/console/ModelsView.vue'),
           meta: { feature: 'user_models', wide: true },
+        },
+        {
+          path: '/market',
+          name: 'market',
+          component: () => import('@/views/console/MarketplaceView.vue'),
+          meta: {
+            noPageScroll: true,
+            protected: true,
+            feature: 'marketplace',
+          },
         },
         {
           path: '/keys',
@@ -307,16 +313,16 @@ const router = createRouter({
           meta: { feature: 'wallet' },
         },
         {
-          path: '/invoice',
-          name: 'invoice',
-          component: () => import('@/views/console/InvoiceView.vue'),
-          meta: { feature: 'wallet' },
-        },
-        {
           path: '/invite',
           name: 'invite',
           component: () => import('@/views/console/InviteView.vue'),
           meta: { feature: 'invites' },
+        },
+        {
+          path: '/invoice',
+          name: 'invoice',
+          component: () => import('@/views/console/InvoiceView.vue'),
+          meta: { protected: true, feature: 'invoices' },
         },
         {
           path: '/settings',
@@ -409,6 +415,26 @@ const router = createRouter({
           name: 'profile',
           component: () => import('@/views/console/AccountCenterView.vue'),
           meta: { feature: 'profile' },
+        },
+        {
+          path: '/farm',
+          name: 'farm',
+          component: () => import('@/views/console/FarmView.vue'),
+          meta: {
+            topNav: 'activities',
+            protected: true,
+            feature: 'farm',
+          },
+        },
+        {
+          path: '/bigame',
+          name: 'bigame',
+          component: () => import('@/views/console/BigameView.vue'),
+          meta: {
+            topNav: 'activities',
+            protected: true,
+            feature: 'bigame',
+          },
         },
       ],
     },

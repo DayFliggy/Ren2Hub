@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import enConsole from '@/i18n/locales/en/console'
 import zhConsole from '@/i18n/locales/zh-CN/console'
-import {
-  ADMIN_ORDER_STATUSES,
-  adminOrderStatusLabelKey,
-} from '@/constants/adminOrders'
 
 /**
  * The orders surface is the first console page whose labels are built from the
@@ -69,15 +65,6 @@ describe('orders locale parity', () => {
 })
 
 describe('orders message references', () => {
-  it('resolves every status label generated from native order states', () => {
-    for (const status of ADMIN_ORDER_STATUSES) {
-      const key = adminOrderStatusLabelKey(status)
-      for (const messages of [zhConsole, enConsole]) {
-        expect(resolve(messages as Messages, key), key).toBeTypeOf('string')
-      }
-    }
-  })
-
   it('resolves every literal orders.* key used in the source', () => {
     const referenced = new Set<string>()
     for (const source of Object.values(sources)) {
@@ -90,7 +77,7 @@ describe('orders message references', () => {
 
     // Guards the guard: were the scan to stop matching, the assertion below
     // would pass vacuously and protect nothing.
-    expect(referenced).toContain('orders.title')
+    expect(referenced.size).toBeGreaterThan(20)
 
     const missing = [...referenced].filter(
       (key) =>

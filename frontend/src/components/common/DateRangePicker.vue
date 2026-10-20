@@ -269,9 +269,6 @@ async function focusDay(key: string, preventScroll = false): Promise<void> {
       candidate.dataset.dateKey === key && candidate.dataset.inMonth === 'true'
   )
   button?.focus({ preventScroll })
-  // Native focus can leave a partially visible day clipped by a dialog body.
-  if (!preventScroll)
-    button?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
 function onDayKeydown(event: KeyboardEvent, key: string): void {

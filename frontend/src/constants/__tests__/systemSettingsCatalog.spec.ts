@@ -17,17 +17,6 @@ function message(messages: unknown, key: unknown): unknown {
 }
 
 describe('system settings catalog', () => {
-  it('matches the server limits for referral hold and eligibility periods', () => {
-    const fields = SYSTEM_SETTINGS_DOMAINS.flatMap((domain) =>
-      domain.sections.flatMap((section) => section.fields)
-    )
-    expect(
-      fields.find((field) => field.key === 'affiliate_setting.freeze_hours')
-    ).toMatchObject({ min: 0, max: 720, integer: true })
-    expect(
-      fields.find((field) => field.key === 'affiliate_setting.duration_days')
-    ).toMatchObject({ min: 0, max: 3650, integer: true })
-  })
   it('provides a stable default deep link for every top-level domain', () => {
     expect(SYSTEM_SETTINGS_DOMAINS.map((domain) => domain.id)).toEqual([
       'site',
@@ -56,9 +45,7 @@ describe('system settings catalog', () => {
 
     expect(new Set(keys).size).toBe(keys.length)
     expect(keys).toContain('HeaderNavModules')
-    expect(keys).not.toContain('ModelRequestRateLimitGroup')
-    expect(keys).not.toContain('quota_setting.trust_quota_usd')
-    expect(keys).toContain('quota_setting.pre_consume_multiplier')
+    expect(keys).toContain('ModelRequestRateLimitGroup')
     expect(keys).toContain('WorkerAllowHttpImageRequestEnabled')
     expect(keys).toContain('perf_metrics_setting.retention_days')
     expect(keys).not.toContain('billing_setting.billing_expr')
@@ -82,7 +69,7 @@ describe('system settings catalog', () => {
 
     expect(
       payment?.fields.find((field) => field.key === 'TopupGroupRatio')?.kind
-    ).toBeUndefined()
+    ).toBe('ratio')
     expect(
       ssrf?.fields.find((field) => field.key === 'fetch_setting.domain_list')
         ?.kind
@@ -100,11 +87,14 @@ describe('system settings catalog', () => {
       'PayAddress',
       'EpayId',
       'EpayKey',
+      'payment_setting.epay_settlement_enabled',
       'Price',
       'MinTopUp',
       'PayMethods',
     ])
-    expect(gmpay.fields).toEqual([])
+    expect(gmpay.fields.map((field) => field.key)).toEqual([
+      'payment_setting.gmpay_settlement_enabled',
+    ])
     expect(gmpay.managedKeys).toEqual([
       'GmpayPayAddress',
       'GmpayId',
@@ -112,6 +102,7 @@ describe('system settings catalog', () => {
       'GmpayAssets',
       'GmpayPrice',
       'GmpayMinTopUp',
+      'GmpayGroupRatio',
     ])
     const payment = sections.find((section) => section.id === 'payment')!
     expect(

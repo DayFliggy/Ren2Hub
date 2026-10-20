@@ -17,9 +17,7 @@ const item = {
   created_at: 1,
   last_used_at: 0,
   expires_at: 4000000000,
-  token_ref: 'ref',
-  token_hint: 'nap_****',
-  last_used_ip: '',
+  revoked_at: 0,
 }
 beforeEach(() => vi.clearAllMocks())
 describe('PAT response contract', () => {
@@ -33,7 +31,7 @@ describe('PAT response contract', () => {
   it('rejects a malformed one-time secret and preserves proof headers', async () => {
     mocks.post.mockResolvedValue({
       token: 'short',
-      item,
+      personal_access_token: item,
     })
     await expect(
       personalAccessTokensApi.create(
@@ -47,21 +45,17 @@ describe('PAT response contract', () => {
   })
   it('requires a valid server scope catalog', async () => {
     mocks.get.mockResolvedValue({
-      groups: [
-        { resources: [{ resource: 'profile', actions: [{ action: 'read' }] }] },
-      ],
-      max_tokens: 20,
-      default_expiry_days: 30,
+      scopes: ['profile:read'],
+      limit: 20,
+      default_lifetime_days: 30,
     })
     expect((await personalAccessTokensApi.scopes()).scopes).toEqual([
       'profile:read',
     ])
     mocks.get.mockResolvedValue({
-      groups: [
-        { resources: [{ resource: 'profile', actions: [{ action: 'read' }] }] },
-      ],
-      max_tokens: 0,
-      default_expiry_days: 30,
+      scopes: ['profile:read'],
+      limit: 0,
+      default_lifetime_days: 30,
     })
     await expect(personalAccessTokensApi.scopes()).rejects.toThrow()
   })

@@ -5,14 +5,12 @@ import { useI18n } from 'vue-i18n'
 import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import type { UsageSummary } from '@/api/dashboard'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import { formatCompact } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
   points: TokenTrendPoint[]
-  cacheCoverage?: UsageSummary['meta']['cache_coverage'] | null
   loading?: boolean
 }>()
 
@@ -30,12 +28,11 @@ function defaultPoints(days = 30): TokenTrendPoint[] {
     const day = String(date.getDate()).padStart(2, '0')
     return {
       date: `${year}-${month}-${day}`,
-      total: 0,
-      input: null,
-      output: null,
-      cache_create: null,
-      cache_read: null,
-      hit_rate: null,
+      input: 0,
+      output: 0,
+      cache_create: 0,
+      cache_read: 0,
+      hit_rate: 0,
     }
   })
 }
@@ -44,10 +41,34 @@ const displayPoints = computed(() =>
   props.points.length > 0 ? props.points : defaultPoints(30)
 )
 
+const hasData = computed(() =>
+  props.points.some(
+    (point) =>
+      point.input > 0 ||
+      point.output > 0 ||
+      point.cache_create > 0 ||
+      point.cache_read > 0
+  )
+)
+
+/** Window-wide cache hit rate, shown next to the title. */
+const avgHitRate = computed(() => {
+  const totals = props.points.reduce(
+    (acc, point) => ({
+      input: acc.input + point.input,
+      cacheRead: acc.cacheRead + point.cache_read,
+    }),
+    { input: 0, cacheRead: 0 }
+  )
+  const readableInput = totals.input + totals.cacheRead
+  if (readableInput === 0) return 0
+  return Math.round((totals.cacheRead / readableInput) * 1000) / 10
+})
+
 interface TooltipParam {
   dataIndex: number
   seriesName: string
-  value: number | null
+  value: number
   color: string
   axisValueLabel: string
 }
@@ -67,15 +88,6 @@ useEChart(
 
     // Token series share the left axis; the hit-rate percentage gets its own.
     const tokenSeries = [
-      ...(props.points.some((point) => point.input === null)
-        ? [
-            {
-              name: t('dashboard.stats.totalTokens'),
-              key: 'total' as const,
-              color: p.signal,
-            },
-          ]
-        : []),
       { name: labels.input, key: 'input' as const, color: p.signal },
       { name: labels.output, key: 'output' as const, color: p.success },
       {
@@ -143,12 +155,8 @@ useEChart(
             .map((s) => {
               const value =
                 s.seriesName === labels.hitRate
-                  ? s.value === null
-                    ? '—'
-                    : `${s.value}%`
-                  : s.value === null
-                    ? '—'
-                    : formatCompact(s.value)
+                  ? `${s.value}%`
+                  : formatCompact(s.value)
               return `<div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.1875rem">
                 <span style="width:0.5rem;height:0.5rem;border-radius:0.125rem;background:${s.color}"></span>
                 <span style="color:${p.textSecondary}">${escapeHtml(s.seriesName)}:</span>
@@ -237,23 +245,13 @@ useEChart(
       <div class="flex items-center gap-3 text-xs">
         <span class="text-[var(--text-tertiary)]">
           {{ t('dashboard.tokenTrend.avgHitRate') }}
-          <span class="font-semibold text-[var(--support)]">—</span>
+          <span class="font-semibold text-[var(--support)]"
+            >{{ hasData ? avgHitRate : 0 }}%</span
+          >
         </span>
       </div>
     </template>
 
-    <p class="mb-3 text-xs text-[var(--text-tertiary)]" data-cache-coverage>
-      {{
-        cacheCoverage
-          ? t('dashboard.tokenTrend.cacheCoverage', {
-              records: cacheCoverage.records,
-              read: cacheCoverage.read_records,
-              write: cacheCoverage.write_records,
-              invalid: cacheCoverage.invalid_records,
-            })
-          : t('dashboard.tokenTrend.cacheUnknown')
-      }}
-    </p>
     <div
       v-if="loading"
       class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"

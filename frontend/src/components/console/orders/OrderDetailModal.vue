@@ -2,12 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
-import { parseTopUpDetail } from '@/api/adminOrders'
+import { parseGmpayOrderDetail } from '@/api/adminOrders'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import { useAuthStore } from '@/stores/auth'
-import { nativePaymentMessages } from '@/i18n/nativePayment'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import {
@@ -28,56 +25,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  completed: []
 }>()
 
 const { t } = useI18n()
-const { t: paymentT } = useI18n({
-  useScope: 'local',
-  messages: nativePaymentMessages,
-})
-const auth = useAuthStore()
-const confirmComplete = ref(false),
-  completing = ref(false),
-  completeError = ref(''),
-  completedOrder = ref('')
-const canComplete = computed(
-  () =>
-    auth.isAdmin &&
-    auth.hasPermission('billing', 'write') &&
-    displayOrder.value?.status === 'pending' &&
-    completedOrder.value !== displayOrder.value.order_no
-)
-watch(
-  () => props.order?.order_no,
-  () => {
-    confirmComplete.value = false
-    completeError.value = ''
-    completedOrder.value = ''
-  }
-)
-async function complete() {
-  if (!canComplete.value || completing.value || !props.order) return
-  const tradeNo = props.order.order_no
-  completing.value = true
-  completeError.value = ''
-  try {
-    await api.post('/api/user/topup/complete', { trade_no: tradeNo })
-    if (props.order?.order_no === tradeNo) {
-      completedOrder.value = tradeNo
-      confirmComplete.value = false
-      evidenceRetry.value++
-    }
-    emit('completed')
-  } catch (error) {
-    if (props.order?.order_no === tradeNo)
-      completeError.value =
-        error instanceof Error ? error.message : String(error)
-  } finally {
-    completing.value = false
-  }
-}
-const detail = ref<ReturnType<typeof parseTopUpDetail> | null>(null)
+const detail = ref<ReturnType<typeof parseGmpayOrderDetail> | null>(null)
 const evidence = computed(() => detail.value?.evidence ?? null)
 const displayOrder = computed(() =>
   props.order && detail.value
@@ -133,18 +84,18 @@ watch(
     evidenceFailed.value = false
     evidenceLoading.value = false
     const current = props.order
-    if (!current) return
+    if (!current || current.method !== 'gmpay') return
     const controller = new AbortController()
     onCleanup(() => controller.abort())
     evidenceLoading.value = true
     try {
       const response = await api.get<unknown>(
-        `/api/user/topup/admin/detail/${encodeURIComponent(current.order_no)}`,
+        `/api/next/admin/orders/${encodeURIComponent(current.order_no)}`,
         undefined,
         { signal: controller.signal }
       )
       if (!controller.signal.aborted) {
-        detail.value = parseTopUpDetail(response, current.order_no)
+        detail.value = parseGmpayOrderDetail(response, current.order_no)
       }
     } catch {
       if (!controller.signal.aborted) evidenceFailed.value = true
@@ -227,9 +178,6 @@ function paymentRailLabel(method: string): string {
           {{
             formatAdminOrderAmount(displayOrder.amount, displayOrder.currency)
           }}
-          <span v-if="displayOrder.currency">
-            · {{ displayOrder.currency }}</span
-          >
         </dd>
       </div>
       <div class="min-w-0">
@@ -347,36 +295,9 @@ function paymentRailLabel(method: string): string {
     </section>
 
     <template #footer>
-      <ConsoleButton
-        v-if="canComplete"
-        :disabled="completing || evidenceLoading"
-        @click="confirmComplete = true"
-        >{{ paymentT('nativePayment.complete') }}</ConsoleButton
-      >
-      <ConsoleButton
-        variant="secondary"
-        block
-        :disabled="completing"
-        @click="emit('close')"
-      >
+      <ConsoleButton variant="secondary" block @click="emit('close')">
         {{ t('common.close') }}
       </ConsoleButton>
     </template>
   </ConsoleModal>
-  <ConfirmDialog
-    :open="confirmComplete"
-    :title="paymentT('nativePayment.complete')"
-    :message="paymentT('nativePayment.confirm')"
-    :loading="completing"
-    @confirm="complete"
-    @cancel="confirmComplete = false"
-  >
-    <p
-      v-if="completeError"
-      role="alert"
-      class="mt-3 text-sm text-[var(--status-danger-text)]"
-    >
-      {{ completeError }}
-    </p>
-  </ConfirmDialog>
 </template>

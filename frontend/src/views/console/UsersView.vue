@@ -70,11 +70,15 @@ const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
 const {
   rows,
   total,
+  roleCounts,
+  statusCounts,
+  groupCounts,
   page,
   pageSize,
   keyword,
   role,
   status,
+  group,
   sortBy,
   sortOrder,
   loading,
@@ -192,6 +196,12 @@ const allColumns = computed<
     optional: 'status',
   },
   { key: 'role', label: t('users.role'), width: '116px', optional: 'role' },
+  {
+    key: 'group',
+    label: t('users.group'),
+    width: '120px',
+    optional: 'group',
+  },
   { key: 'quota', label: t('users.quota'), width: '132px', optional: 'quota' },
   {
     key: 'invite',
@@ -232,16 +242,49 @@ const minTableWidth = computed(() => {
 
 const roleOptions = computed(() => [
   { value: '', label: t('users.allRoles') },
-  ...ADMIN_USER_ROLES.map((item) => ({
-    value: String(item),
-    label: t(adminUserRoleLabelKey(item)),
-  })),
+  ...ADMIN_USER_ROLES.filter(
+    (item) => (roleCounts.value[String(item)] ?? 0) > 0
+  ).map((item) => {
+    const tone = adminUserRoleTone(item)
+    return {
+      value: String(item),
+      label: `${t(adminUserRoleLabelKey(item))} (${roleCounts.value[String(item)] ?? 0})`,
+      tone: tone === 'neutral' ? undefined : tone,
+    }
+  }),
 ])
+
 const statusOptions = computed(() => [
   { value: '', label: t('users.allStatuses') },
-  { value: '1', label: t('users.statusEnabled') },
-  { value: '2', label: t('users.statusDisabled') },
+  {
+    value: 'enabled',
+    label: `${t('users.statusEnabled')} (${statusCounts.value.enabled ?? 0})`,
+    tone: 'success' as const,
+  },
+  {
+    value: 'disabled',
+    label: `${t('users.statusDisabled')} (${statusCounts.value.disabled ?? 0})`,
+    tone: 'danger' as const,
+  },
 ])
+
+// Counts follow the keyword, so the selected group can drop out of them while
+// the list is still filtered by it. Keep it as an option with count 0, as
+// NewAPI's group list does not depend on the keyword either.
+const groupOptions = computed(() => {
+  const names = new Set(Object.keys(groupCounts.value))
+  if (group.value) names.add(group.value)
+  return [
+    { value: '', label: t('users.allGroups') },
+    ...[...names]
+      .sort((left, right) => left.localeCompare(right))
+      .map((name) => ({
+        value: name,
+        label: `${name} (${groupCounts.value[name] ?? 0})`,
+      })),
+  ]
+})
+
 const sortOptions = computed(() =>
   ADMIN_USER_SORT_FIELDS.map((field) => ({
     value: field,
@@ -416,7 +459,12 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
             :label="t('users.statusFilter')"
             class="w-full"
           />
-
+          <FilterSelect
+            v-model="group"
+            :options="groupOptions"
+            :label="t('users.groupFilter')"
+            class="w-full"
+          />
           <div class="flex min-w-0 gap-2">
             <FilterSelect
               v-model="sortModel"
@@ -600,7 +648,16 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
               {{ t(adminUserRoleLabelKey((row as AdminUser).role)) }}
             </StatusChip>
           </template>
-
+          <template #cell-group="{ row }">
+            <StatusChip>
+              <span
+                class="max-w-[96px] truncate"
+                :title="(row as AdminUser).group || t('users.noGroup')"
+              >
+                {{ (row as AdminUser).group || t('users.noGroup') }}
+              </span>
+            </StatusChip>
+          </template>
           <template #cell-quota="{ row }">
             <UserQuotaCell :user="row as AdminUser" />
           </template>
@@ -612,8 +669,8 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           <template #cell-lastLogin="{ row }">
             <span class="text-xs text-[var(--text-secondary)]">
               {{
-                (row as AdminUser).last_login_at > 0
-                  ? relativeTime((row as AdminUser).last_login_at, locale)
+                (row as AdminUser).last_login_time > 0
+                  ? relativeTime((row as AdminUser).last_login_time, locale)
                   : t('users.neverLoggedIn')
               }}
             </span>
@@ -621,7 +678,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
 
           <template #cell-createdTime="{ row }">
             <span class="text-xs tabular-nums text-[var(--text-secondary)]">
-              {{ formatTime((row as AdminUser).created_at) }}
+              {{ formatTime((row as AdminUser).created_time) }}
             </span>
           </template>
 

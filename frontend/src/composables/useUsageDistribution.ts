@@ -1,46 +1,39 @@
 import { ref } from 'vue'
-import { getUsageSummary } from '@/api/dashboard'
-import { useLatestRequest } from './useLatestRequest'
-import { useToast } from './useToast'
+import { useI18n } from 'vue-i18n'
+
+import { api } from '@/api/console'
+import { ApiError } from '@/api/types'
+import { useToast } from '@/composables/useToast'
+
 export interface UsageDistributionPoint {
   date: string
   requests: number
   consume: string
   tokens: number
 }
+
 export function useUsageDistribution() {
-  const loading = ref(true),
-    points = ref<UsageDistributionPoint[]>([]),
-    request = useLatestRequest(),
-    toast = useToast()
+  const { t } = useI18n()
+  const toast = useToast()
+  const loading = ref(true)
+  const points = ref<UsageDistributionPoint[]>([])
+
   async function load() {
     loading.value = true
-    const today = new Date()
-    const end = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    const result = await request.run(
-      async (signal) =>
-        (
-          await getUsageSummary(
-            {
-              range: 'custom',
-              start: `${today.getFullYear()}-01-01`,
-              end,
-            },
-            signal
-          )
-        ).distribution
-    )
-    if (result.stale) return
-    loading.value = false
-    if (result.ok) points.value = result.value
-    else {
+    try {
+      points.value = await api.get<UsageDistributionPoint[]>(
+        '/api/next/dashboard/distribution',
+        { tz_offset: String(-new Date().getTimezoneOffset()) }
+      )
+    } catch (error) {
       points.value = []
       toast.error(
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error)
+        error instanceof ApiError ? error.message : t('common.failed')
       )
+    } finally {
+      loading.value = false
     }
   }
+
   return { loading, points, load }
 }

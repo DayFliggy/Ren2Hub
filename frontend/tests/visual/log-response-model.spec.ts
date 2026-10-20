@@ -10,9 +10,16 @@ for (const theme of ['light', 'dark'] as const) {
         mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
       )
       await configureStablePage(page, { theme })
-      const queries: URLSearchParams[] = []
+      const groups: string[] = []
+      await page.route('**/api/log/self/groups?*', (route) =>
+        route.fulfill({
+          json: { success: true, data: ['legacy-team', 'auto'] },
+        })
+      )
       await page.route('**/api/log/self?*', (route) => {
-        queries.push(new URL(route.request().url()).searchParams)
+        groups.push(
+          new URL(route.request().url()).searchParams.get('group') || ''
+        )
         return route.fulfill({
           json: {
             success: true,
@@ -26,15 +33,15 @@ for (const theme of ['light', 'dark'] as const) {
                   channel_name: 'fixture-channel',
                   prompt_tokens: 12,
                   completion_tokens: 5,
-                  quota: 100,
-                  use_time: 1,
+                  quota: '100',
+                  use_time: 1000,
                   is_stream: false,
                   content: 'Response evidence fixture',
                   created_at: 1785123000,
-                  other: JSON.stringify({
+                  other: {
                     upstream_model_name: 'expected-provider-model',
                     response_model_name: 'unexpected-actual-model',
-                  }),
+                  },
                 },
               ],
               total: 1,
@@ -45,23 +52,24 @@ for (const theme of ['light', 'dark'] as const) {
         })
       })
       await page.goto('/logs')
-      await expect.poll(() => queries.length).toBeGreaterThan(0)
-      expect(queries.every((query) => !query.has('group'))).toBe(true)
-      await expect(
-        page.getByRole('combobox', { name: '日志分组' })
-      ).toHaveCount(0)
+      await page
+        .getByRole('combobox', { name: '日志分组' })
+        .fill('historical-custom')
+      await expect.poll(() => groups.at(-1)).toBe('historical-custom')
+      await expect(page.locator('datalist option[value=auto]')).toHaveCount(0)
       const mismatch = page.locator('[data-log-model-mismatch]:visible')
       await expect(mismatch).toHaveText('响应模型不一致')
       await page
         .getByRole('button', { name: '查看日志详情', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
-      const evidence = dialog.locator('pre')
-      await expect(evidence).toBeVisible()
-      expect(JSON.parse(await evidence.innerText())).toEqual({
-        upstream_model_name: 'expected-provider-model',
-        response_model_name: 'unexpected-actual-model',
-      })
+      await expect(
+        dialog.getByText('unexpected-actual-model', { exact: true })
+      ).toBeVisible()
+      await expect(
+        dialog.getByText('expected-provider-model', { exact: true })
+      ).toBeVisible()
+      await expect(dialog.locator('[data-log-model-mismatch]')).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('response-model.png'),

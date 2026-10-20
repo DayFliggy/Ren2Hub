@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
-import { ChevronDown, CircleHelp, Layers3 } from 'lucide-vue-next'
+import {
+  ChevronDown,
+  CircleCheck,
+  CircleHelp,
+  CircleX,
+  Layers3,
+  TriangleAlert,
+} from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -8,13 +15,18 @@ import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import { labLogoVendor } from '@/constants/console'
 import ChannelScoreRow from './ChannelScoreRow.vue'
 import RouteHealthTimeline from './RouteHealthTimeline.vue'
-import type { CatalogChannel } from '@/api/modelCatalog'
+import type { RouteChannelRow } from '@/composables/useAutoRoute'
+import type { RouteLabMatch } from '@/utils/routeScore'
+import type { RouteHealthSummary } from '@/utils/routeHealth'
+import { scoreBand } from '@/utils/routeScore'
 
 const props = defineProps<{
   groupSlug: string
   groupName: string
-  channels: CatalogChannel[]
+  labMatches: RouteLabMatch[]
+  channels: RouteChannelRow[]
   activeCount: number
+  monitor: RouteHealthSummary
 }>()
 
 const { t } = useI18n()
@@ -22,7 +34,10 @@ const expanded = ref(false)
 const showExtra = ref(false)
 const extraRowsId = useId()
 
-// Catalog order is stable; it does not claim to be the next request order.
+/**
+ * Rows shown before "more". `channels` already arrives ranked-then-inactive
+ * from buildRouteGroupList, so the collapsed view is simply its head.
+ */
 const COLLAPSED_ROWS = 3
 const topChannels = computed(() => props.channels.slice(0, COLLAPSED_ROWS))
 const extraChannels = computed(() => props.channels.slice(COLLAPSED_ROWS))
@@ -33,7 +48,33 @@ const labLogo = computed(() => {
   return labLogoVendor[slug] ?? null
 })
 
-const stateMeta = { icon: CircleHelp, tone: 'info' }
+const bestScore = computed(
+  () => props.channels.find((channel) => channel.score !== null)?.score ?? null
+)
+const bestBand = computed(() =>
+  bestScore.value === null ? 'danger' : scoreBand(bestScore.value)
+)
+
+const stateMeta = computed(() => {
+  switch (props.monitor.state) {
+    case 'healthy':
+      return { icon: CircleCheck, tone: 'success' }
+    case 'degraded':
+      return { icon: TriangleAlert, tone: 'warning' }
+    case 'down':
+      return { icon: CircleX, tone: 'danger' }
+    default:
+      return { icon: CircleHelp, tone: 'info' }
+  }
+})
+
+const availabilityLabel = computed(() =>
+  props.monitor.availability === null
+    ? t('dashboard.autoRoute.availabilityUnknown')
+    : t('dashboard.autoRoute.availability1h', {
+        value: props.monitor.availability.toFixed(2),
+      })
+)
 </script>
 
 <template>
@@ -90,14 +131,42 @@ const stateMeta = { icon: CircleHelp, tone: 'info' }
                 total: channels.length,
               })
             }}
-            · {{ t('dashboard.autoRoute.monitorState.unknown') }}
+            · {{ t(`dashboard.autoRoute.monitorState.${monitor.state}`) }}
           </span>
+          <span
+            v-if="labMatches.length > 1"
+            class="mt-1 flex min-w-0 flex-wrap items-center gap-1"
+          >
+            <span
+              v-for="match in labMatches"
+              :key="match.slug"
+              class="max-w-full truncate rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--accent-text)]"
+            >
+              {{ match.name }}
+            </span>
+          </span>
+        </span>
+
+        <span
+          v-if="bestScore !== null"
+          class="col-start-2 row-start-2 flex items-center gap-1.5 justify-self-start rounded-md px-2 py-1 text-xs font-bold tabular-nums sm:col-start-3 sm:row-start-1"
+          :style="{
+            background: `var(--status-${bestBand}-soft)`,
+            color: `var(--status-${bestBand}-text)`,
+          }"
+          :title="t('dashboard.autoRoute.topScore')"
+        >
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            :style="{ background: `var(--status-${bestBand})` }"
+          />
+          {{ bestScore }}
         </span>
 
         <span
           class="col-start-3 row-start-2 shrink-0 justify-self-end whitespace-nowrap font-mono text-xs font-semibold tabular-nums text-[var(--text-secondary)] sm:col-start-4 sm:row-start-1"
         >
-          {{ t('dashboard.autoRoute.availabilityUnknown') }}
+          {{ availabilityLabel }}
         </span>
         <ChevronDown
           :size="16"
@@ -107,7 +176,7 @@ const stateMeta = { icon: CircleHelp, tone: 'info' }
         />
       </button>
 
-      <RouteHealthTimeline class="mt-4" />
+      <RouteHealthTimeline class="mt-4" :checks="monitor.checks" />
 
       <div
         v-if="expanded"

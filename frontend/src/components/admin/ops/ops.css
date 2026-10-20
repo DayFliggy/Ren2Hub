@@ -765,31 +765,3 @@
   min-height: 100vh;
   overflow-y: auto;
 }
-
-/* Native projections keep the historical card grid and expose narrow content. */
-.ops-counter-list--scroll {
-  max-height: 10rem;
-  overflow-y: auto;
-}
-.ops-table-scroll {
-  overflow-x: auto;
-}
-.ops-table-scroll .ops-model-table {
-  min-width: 28rem;
-}
-.ops-table-scroll:focus-visible,
-.ops-counter-list--scroll:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-.ops-unavailable-panel {
-  min-height: 3.25rem;
-  display: flex;
-  align-items: center;
-}
-.ops-maintenance-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}

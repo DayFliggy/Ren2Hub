@@ -1,336 +1,361 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createI18n } from 'vue-i18n'
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
-vi.mock('@/api/client', () => ({ api }))
-import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
+import { api } from '@/api/console'
 import GmpayPanel from '../GmpayPanel.vue'
-const config = {
-  pay_address: 'https://pay.example',
-  merchant_id: 'merchant',
-  has_secret: true,
-  enabled: true,
-  assets: [
-    {
-      name: 'USDT',
-      token: 'usdt',
-      network: 'tron',
-      icon: 'coin',
-      color: '#008800',
-    },
-  ],
-}
+import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+
+const settings = vi.hoisted(() => ({
+  configured: true,
+  values: {} as Record<string, string | number>,
+  load: vi.fn(),
+}))
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
+vi.mock('@/composables/useSystemSettings', () => ({
+  useSystemSettings: () => ({
+    load: settings.load,
+    rawValue: (key: string, fallback: unknown) =>
+      settings.values[key] ?? fallback,
+    isSecretConfigured: () => settings.configured,
+  }),
+}))
+vi.mock('@/composables/useToast', () => ({ useToast: () => toast }))
+
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('en')
 })
-beforeEach(async () => {
-  await setLocale('en')
-  vi.clearAllMocks()
-  api.get.mockResolvedValue(structuredClone(config))
-  api.post.mockResolvedValue({})
+beforeEach(() => {
+  settings.configured = true
+  settings.values = {
+    GmpayPayAddress: 'https://pay.example',
+    GmpayId: '1000',
+    GmpayPrice: 1,
+    GmpayMinTopUp: 1,
+    GmpayGroupRatio: '{"default":1,"vip":0.8}',
+    GmpayAssets: JSON.stringify([
+      {
+        name: 'USDT Tron',
+        token: 'usdt',
+        network: 'tron',
+        icon: 'usdt',
+        color: '#123456',
+      },
+      { name: 'USDC Ethereum', token: 'usdc', network: 'ethereum' },
+    ]),
+  }
+  settings.load.mockResolvedValue(true)
 })
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.clearAllMocks()
+})
+
 async function render() {
   const wrapper = mount(GmpayPanel, { global: { plugins: [i18n] } })
   await flushPromises()
   return wrapper
 }
-function button(wrapper: Awaited<ReturnType<typeof render>>, text: string) {
-  return wrapper.findAll('button').find((b) => b.text() === text)!
-}
-describe('native GMPay configuration', () => {
-  it.each([
-    {
-      locale: 'en',
-      title: 'GMPay crypto payments',
-      retry: 'Reload gateway configuration',
-      probe: 'Load available assets',
-      save: 'Save gateway configuration',
-      name: 'USDT · tron display name',
-      icon: 'USDT · tron icon identifier (optional)',
-      color: 'USDT · tron color metadata (optional)',
-      configured: 'Configured',
-      keepSecret: 'Leave blank to keep the existing secret.',
-      remove: 'Remove USDT · tron',
-      noAssets: 'No payment assets are available.',
-      noSelectedAssets: 'No assets selected.',
-      addressRequired: 'Enter the gateway address first.',
-    },
-    {
-      locale: 'zh-CN',
-      title: 'GMPay 虚拟币支付',
-      retry: '重新读取网关配置',
-      probe: '探测可用资产',
-      save: '保存网关配置',
-      name: 'USDT · tron 显示名',
-      icon: 'USDT · tron 图标标识（可选）',
-      color: 'USDT · tron 颜色元数据（可选）',
-      configured: '已配置',
-      keepSecret: '留空会保留现有密钥。',
-      remove: '移除 USDT · tron',
-      noAssets: '暂无可用支付资产',
-      noSelectedAssets: '尚未选择支付资产。',
-      addressRequired: '请先填写网关地址。',
-    },
-  ])(
-    'resolves every restored $locale state locally without missing translations',
-    async (copy) => {
-      const missing = vi.fn()
-      const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const localI18n = createI18n({
-        legacy: false,
-        locale: copy.locale,
-        fallbackLocale: 'en',
-        messages: { en: {}, 'zh-CN': {} },
-        missing,
-      })
-      api.get.mockRejectedValueOnce(new Error('read unavailable'))
-      const wrapper = mount(GmpayPanel, {
-        global: { plugins: [localI18n] },
-      })
-      try {
-        expect(wrapper.attributes('aria-label')).toBe(copy.title)
-        await flushPromises()
-        await button(wrapper, copy.retry).trigger('click')
-        await flushPromises()
-        expect(wrapper.text()).toContain(copy.configured)
-        expect(wrapper.text()).toContain(copy.keepSecret)
-        for (const label of [copy.name, copy.icon, copy.color])
-          expect(wrapper.text()).toContain(label)
 
-        await wrapper
-          .get(`button[aria-label="${copy.remove}"]`)
-          .trigger('click')
-        expect(wrapper.text()).toContain(copy.noSelectedAssets)
-        api.post.mockResolvedValueOnce({ supported_assets: [] })
-        await button(wrapper, copy.probe).trigger('click')
-        await flushPromises()
-        expect(wrapper.text()).toContain(copy.noAssets)
-        api.post.mockResolvedValueOnce({
-          supported_assets: [
-            { network: 'tron', display_name: 'Tron', tokens: ['usdt'] },
-          ],
-        })
-        await button(wrapper, copy.probe).trigger('click')
-        await flushPromises()
-        await button(wrapper, 'USDT · tron').trigger('click')
-        await button(wrapper, copy.save).trigger('click')
-        await flushPromises()
-        await wrapper.get('input[type=url]').setValue('')
-        await button(wrapper, copy.probe).trigger('click')
-        expect(wrapper.text()).toContain(copy.addressRequired)
-        expect(wrapper.html()).not.toContain('systemSettings.gmpayPanel.')
-        expect(missing).not.toHaveBeenCalled()
-        expect(
-          warnings.mock.calls.filter((call) =>
-            String(call[0]).includes('[intlify]')
-          )
-        ).toEqual([])
-      } finally {
-        wrapper.unmount()
-        warnings.mockRestore()
-      }
+describe('GMPay administration', () => {
+  it('edits optional asset metadata without changing its token and network', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    const fields = wrapper.findAllComponents({ name: 'FormField' })
+    const icon = fields.find((field) =>
+      String(field.props('label')).includes('USDT · tron icon identifier')
+    )!
+    const color = fields.find((field) =>
+      String(field.props('label')).includes('USDT · tron color metadata')
+    )!
+    await icon.get('input').setValue('coin-usdt')
+    await color.get('input').setValue('#246810')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    const payload = post.mock.calls[0]?.[1] as { assets: string }
+    expect(JSON.parse(payload.assets)[0]).toEqual({
+      name: 'USDT Tron',
+      token: 'usdt',
+      network: 'tron',
+      icon: 'coin-usdt',
+      color: '#246810',
+    })
+    expect(wrapper.text()).toContain('/api/user/gmpay/notify')
+    wrapper.unmount()
+  })
+  it.each(['invalid-json', '{}', '[{"token":"usdt"}]'])(
+    'never replaces a malformed stored catalog with an empty selection: %s',
+    async (value) => {
+      settings.values.GmpayAssets = value
+      const post = vi.spyOn(api, 'post')
+      const wrapper = await render()
+      expect(wrapper.get('[role="alert"]').text()).toContain(
+        'could not be loaded'
+      )
+      expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+      expect(post).not.toHaveBeenCalled()
+      wrapper.unmount()
     }
   )
-  it.each([
-    {
-      locale: 'en',
-      label: 'Accept new orders',
-      hint: 'Valid payment notifications for existing orders still credit the wallet',
-      retired: 'Enable crypto settlement',
-      saveLabel: 'Save gateway configuration',
-    },
-    {
-      locale: 'zh-CN',
-      label: '开放新订单',
-      hint: '已有订单仍会使用下单时保存的商户凭据核验付款通知，核验通过后入账。',
-      retired: '启用虚拟币结算',
-      saveLabel: '保存网关配置',
-    },
-  ])(
-    'disables only new orders through the native configuration in $locale',
-    async ({ locale, label, hint, retired, saveLabel }) => {
-      await setLocale(locale)
+  it('blocks editing until configuration loads and supports an explicit retry after failure', async () => {
+    let finish!: (ok: boolean) => void
+    settings.load.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve
+        })
+    )
+    const post = vi.spyOn(api, 'post')
+    const wrapper = mount(GmpayPanel, { global: { plugins: [i18n] } })
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[role="status"]').text()).toContain('Loading gateway')
+    finish(false)
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'could not be loaded'
+    )
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(post).not.toHaveBeenCalled()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Reload gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="url"]').element.value
+    ).toBe('https://pay.example')
+    wrapper.unmount()
+  })
+
+  it('keeps the saved draft visible when refreshing fails, without permitting a stale second save', async () => {
+    settings.load.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    await wrapper.get('input[type="url"]').setValue('https://new-pay.example')
+    await wrapper.get('input[type="password"]').setValue('replacement-secret')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledOnce()
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="url"]').element.value
+    ).toBe('https://new-pay.example')
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="password"]').element.value
+    ).toBe('')
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'could not be loaded'
+    )
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('sends whole-number asset minimums in the decimal string format required by the API', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    await wrapper.findAll('input[type="number"]').at(2)!.setValue('1e2')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    const payload = post.mock.calls[0]?.[1] as { assets: string }
+    expect(JSON.parse(payload.assets)[0].min_topup).toBe('100')
+    wrapper.unmount()
+  })
+
+  it('sends one configuration write while saving and ignores completion after leaving the panel', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi.spyOn(api, 'post').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const wrapper = await render()
+    const save = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+    await save.trigger('click')
+    await save.trigger('click')
+    expect(post).toHaveBeenCalledOnce()
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+    finish({})
+    await flushPromises()
+    expect(settings.load).toHaveBeenCalledWith(true)
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('removes saved assets without probing and preserves payment metadata and the existing secret', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('Gateway address')
+    await wrapper.get('[aria-label="Remove USDC · ethereum"]').trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledOnce()
+    expect(post).toHaveBeenCalledWith(
+      '/api/option/gmpay/save',
+      expect.objectContaining({
+        secret_key: '',
+        assets: JSON.stringify([
+          {
+            name: 'USDT Tron',
+            token: 'usdt',
+            network: 'tron',
+            icon: 'usdt',
+            color: '#123456',
+          },
+        ]),
+        group_ratio: '{"default":1,"vip":0.8}',
+      })
+    )
+    expect(settings.load).toHaveBeenCalledWith(true)
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('probes only the public address and ignores a response after the address changes', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi.spyOn(api, 'post').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const wrapper = await render()
+    await wrapper.get('input[type="password"]').setValue('test-secret')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Load available assets')!
+      .trigger('click')
+    expect(post).toHaveBeenCalledWith(
+      '/api/option/gmpay/probe',
+      { pay_address: 'https://pay.example' },
+      expect.anything()
+    )
+    await wrapper.get('input[type="url"]').setValue('https://new-pay.example')
+    expect(post.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
+    finish({
+      supported_assets: [
+        { network: 'tron', display_name: 'Old gateway', tokens: ['usdt'] },
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Old gateway')
+    expect(toast.success).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('can stop new crypto orders by saving an empty asset catalog', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    await wrapper.get('[aria-label="Remove USDC · ethereum"]').trigger('click')
+    await wrapper.get('[aria-label="Remove USDT · tron"]').trigger('click')
+    expect(wrapper.text()).toContain('stops new crypto orders')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith(
+      '/api/option/gmpay/save',
+      expect.objectContaining({ assets: '[]' })
+    )
+    wrapper.unmount()
+  })
+
+  it.each(['not-json', 'null', '[]', '{"vip":0}', '{"vip":"0.5"}'])(
+    'rejects invalid group pricing %s',
+    async (value) => {
+      settings.values.GmpayGroupRatio = value
+      const post = vi.spyOn(api, 'post')
       const wrapper = await render()
-      expect(wrapper.text()).toContain(label)
-      expect(wrapper.text()).toContain(hint)
-      expect(wrapper.text()).not.toContain(retired)
-      await wrapper.get('input[type=checkbox]').setValue(false)
-      await button(wrapper, saveLabel).trigger('click')
-      await flushPromises()
-      expect(api.post).toHaveBeenCalledExactlyOnceWith(
-        '/api/option/gmpay/save',
-        {
-          pay_address: config.pay_address,
-          merchant_id: config.merchant_id,
-          secret_key: '',
-          enabled: false,
-          assets: config.assets,
-        },
-        { signal: expect.any(AbortSignal) }
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Save gateway configuration')!
+        .trigger('click')
+      expect(post).not.toHaveBeenCalled()
+      expect(toast.error).toHaveBeenCalledWith(
+        'Enter a JSON object with positive numeric group multipliers.'
       )
       wrapper.unmount()
     }
   )
-  it('loads the merchant snapshot and preserves secret and asset metadata on save', async () => {
-    const wrapper = await render()
-    expect(api.get).toHaveBeenCalledWith(
-      '/api/option/gmpay/config',
-      undefined,
-      { signal: expect.any(AbortSignal) }
-    )
-    expect(wrapper.get('input[type=password]').element).toHaveProperty(
-      'value',
-      ''
-    )
-    await button(wrapper, 'Save gateway configuration').trigger('click')
-    await flushPromises()
-    expect(api.post).toHaveBeenCalledWith(
-      '/api/option/gmpay/save',
-      {
-        pay_address: config.pay_address,
-        merchant_id: 'merchant',
-        secret_key: '',
-        enabled: true,
-        assets: config.assets,
-      },
-      { signal: expect.any(AbortSignal) }
-    )
-    expect(wrapper.emitted('saved')).toHaveLength(1)
-    wrapper.unmount()
-  })
-  it('blocks writes after a configuration read fails and supports retry', async () => {
-    api.get.mockRejectedValueOnce(new Error('unavailable'))
-    const wrapper = await render()
-    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('unavailable')
-    await button(wrapper, 'Reload gateway configuration').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
-    wrapper.unmount()
-  })
-  it.each([{}, [{ token: 'usdt' }], null])(
-    'rejects malformed stored assets without clearing them (%j)',
-    async (assets) => {
-      api.get.mockResolvedValue({ ...config, assets })
-      const wrapper = await render()
-      expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
-      expect(wrapper.find('[role=alert]').exists()).toBe(true)
-      expect(api.post).not.toHaveBeenCalled()
-      wrapper.unmount()
-    }
-  )
-  it('rejects malformed draft assets before making a configuration write', async () => {
-    const wrapper = await render()
-    await wrapper.findAll('input[type=text]')[1]!.setValue('   ')
-    await button(wrapper, 'Save gateway configuration').trigger('click')
-    expect(api.post).not.toHaveBeenCalled()
-    expect(wrapper.find('[role=alert]').exists()).toBe(true)
-    wrapper.unmount()
-  })
-  it('keeps editing blocked if the post-save refresh fails', async () => {
-    const wrapper = await render()
-    api.get.mockRejectedValueOnce(new Error('refresh failed'))
-    await button(wrapper, 'Save gateway configuration').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('refresh failed')
-    wrapper.unmount()
-  })
-  it('probes only the public address and ignores a response after it changes', async () => {
-    let resolve!: (x: unknown) => void
-    api.post.mockReturnValue(
-      new Promise((r) => {
-        resolve = r
-      })
-    )
-    const wrapper = await render()
-    await button(wrapper, 'Load available assets').trigger('click')
-    expect(api.post).toHaveBeenCalledWith(
-      '/api/option/gmpay/probe',
-      { pay_address: 'https://pay.example' },
-      { signal: expect.any(AbortSignal) }
-    )
-    await wrapper.get('input[type=url]').setValue('https://other.example')
-    resolve({ supported_assets: [{ secret_marker: 'old' }] })
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('secret_marker')
-    wrapper.unmount()
-  })
-  it('restores catalog selection and per-asset editors without the retired pricing controls', async () => {
-    const wrapper = await render()
-    api.post.mockResolvedValueOnce({
+
+  it('normalizes catalog identities and lets the administrator deselect a saved asset', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({
       supported_assets: [
-        { network: 'Tron', display_name: 'Tron', tokens: ['USDT', 'USDC'] },
+        { network: 'TRON', display_name: 'Tron', tokens: ['USDT'] },
       ],
     })
-    await button(wrapper, 'Load available assets').trigger('click')
+    const wrapper = await render()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Load available assets')!
+      .trigger('click')
     await flushPromises()
-    expect(wrapper.find('textarea').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('User group price multipliers')
-    expect(button(wrapper, 'USDT · tron').attributes('aria-pressed')).toBe(
-      'true'
-    )
-    await button(wrapper, 'USDC · tron').trigger('click')
-    expect(button(wrapper, 'USDC · tron').attributes('aria-pressed')).toBe(
-      'true'
-    )
-    const assetInputs = wrapper.findAll('input[type=text]')
-    await assetInputs[4]!.setValue('USDC Tron')
-    await assetInputs[5]!.setValue('usdc-logo')
-    await assetInputs[6]!.setValue('#0088ff')
-    await button(wrapper, 'Save gateway configuration').trigger('click')
-    await flushPromises()
-    expect(api.post).toHaveBeenLastCalledWith(
-      '/api/option/gmpay/save',
-      expect.objectContaining({
-        assets: [
-          ...config.assets,
-          {
-            name: 'USDC Tron',
-            token: 'usdc',
-            network: 'tron',
-            icon: 'usdc-logo',
-            color: '#0088ff',
-          },
-        ],
-      }),
-      { signal: expect.any(AbortSignal) }
+    const asset = wrapper.get('button[aria-pressed]')
+    expect(asset.attributes('aria-pressed')).toBe('true')
+    await asset.trigger('click')
+    expect(asset.attributes('aria-pressed')).toBe('false')
+    expect(wrapper.find('[aria-label="Remove USDT · tron"]').exists()).toBe(
+      false
     )
     wrapper.unmount()
   })
-  it('preserves an unsaved secret and asset edits when saving fails', async () => {
+
+  it('rejects invalid prices without publishing a configuration', async () => {
+    const post = vi.spyOn(api, 'post')
     const wrapper = await render()
-    await wrapper.get('input[type=password]').setValue('draft-secret')
-    await wrapper.findAll('input[type=text]')[1]!.setValue('Edited asset')
-    api.post.mockRejectedValueOnce(new Error('save failed'))
-    await button(wrapper, 'Save gateway configuration').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('input[type=password]').element).toHaveProperty(
-      'value',
-      'draft-secret'
+    await wrapper.get('input[type="number"]').setValue('0')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    expect(post).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringContaining('price must be positive')
     )
-    expect(wrapper.findAll('input[type=text]')[1]!.element).toHaveProperty(
-      'value',
-      'Edited asset'
-    )
-    expect(wrapper.text()).toContain('save failed')
-    expect(wrapper.emitted('saved')).toBeUndefined()
     wrapper.unmount()
   })
-  it('suppresses completion after leaving the settings panel', async () => {
-    let resolve!: (x: unknown) => void
-    api.post.mockReturnValue(
-      new Promise((r) => {
-        resolve = r
-      })
-    )
+
+  it('reports malformed catalogs without offering payment assets', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({
+      supported_assets: [
+        { network: 'tron', display_name: 'Tron', tokens: [7] },
+      ],
+    })
     const wrapper = await render()
-    await button(wrapper, 'Save gateway configuration').trigger('click')
-    wrapper.unmount()
-    resolve({})
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Load available assets')!
+      .trigger('click')
     await flushPromises()
-    expect(wrapper.emitted('saved')).toBeUndefined()
-    expect(api.get).toHaveBeenCalledOnce()
+    expect(toast.error).toHaveBeenCalledWith(
+      'The gateway returned an invalid asset catalog.'
+    )
+    expect(wrapper.find('button[aria-pressed]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

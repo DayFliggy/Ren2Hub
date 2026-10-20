@@ -455,9 +455,6 @@ export default {
       cacheCreate: '缓存写入',
       cacheRead: '缓存读取',
       hitRate: '缓存命中率',
-      cacheCoverage:
-        '缓存仅汇总已记录的用量：{records} 条消费记录中，读取 {read} 条、写入 {write} 条、无效 {invalid} 条；跨协议命中率未知。',
-      cacheUnknown: '缓存仅展示已记录的用量；未记录部分与跨协议命中率未知。',
       avgHitRate: '平均命中',
       emptyHint: '最近 30 天暂无 Token 使用记录',
     },
@@ -534,14 +531,9 @@ export default {
       emptyHint: '当前周期内还没有可展示的调用数据。',
     },
     autoRoute: {
-      stale: '刷新失败，卡片显示上次成功取得的目录。',
-      concurrency: '渠道占用',
-      channelOccupancy: '在途 {active} / 上限 {limit}',
-      catalogEligible: '符合目录条件；实际选择仍按当前路由规则执行。',
-      historyUnavailable:
-        '当前目录未提供历史健康序列，展示顺序不代表路由优先级。',
       tabLabel: '自动路由',
-      subtitle: '按实验室展示平台渠道；每个 API Key 独立选择路由模式。',
+      subtitle:
+        '按实验室比较渠道运营指标。实际选路由令牌权限、协议能力、优先级和实时负载决定。',
       refresh: '刷新',
       updated: '更新于 {time}',
       groupBest: '运营评分领先',
@@ -552,9 +544,9 @@ export default {
       untested: '未测试',
       channelCount: '{count} 条渠道',
       topScore: '组内最高分',
-      activeChannelCount: '符合目录条件 {active} / {total}',
+      activeChannelCount: '{active}/{total} 条可用',
       availability1h: '1h {value}%',
-      availabilityUnknown: '健康 --',
+      availabilityUnknown: '1h --',
       monitorState: {
         healthy: '运行正常',
         degraded: '服务降级',
@@ -583,8 +575,6 @@ export default {
   },
 
   keys: {
-    statusExhausted: '额度耗尽',
-    statusExpired: '已过期',
     title: 'API Key',
     breadcrumb: ['控制台', 'API Key'],
     createKey: '创建令牌',
@@ -613,9 +603,9 @@ export default {
     type: {
       label: '令牌类型',
       manual: '手动令牌',
-      manualDesc: '按此令牌保存的平台渠道顺序选择',
+      manualDesc: '按令牌的活动路由组和渠道顺序选择',
       auto: '自动令牌',
-      autoDesc: '按优先级、健康、负载和延迟选择全平台渠道',
+      autoDesc: '按模型能力、渠道健康和容量自动选择',
     },
     advancedTitle: '高级设置',
     advancedSummary: '模型限制与 IP 限制',
@@ -1097,14 +1087,6 @@ export default {
   },
 
   channels: {
-    permissionDenied: '没有此渠道操作权限。',
-    lab: '实验室分类',
-    allLabs: '全部实验室',
-    priorityConflict: '渠道优先级已变更，请重新加载后编辑。',
-    channelRatio: '渠道倍率',
-    maxConcurrency: '并发请求上限',
-    maxConcurrencyHint: '0 表示不限制。',
-
     providerStatus: '提供商状态',
     providerVersion: '版本',
     contextWindow: '上下文窗口',
@@ -1192,7 +1174,7 @@ export default {
     refreshList: '刷新列表',
     advancedLegacy: '高级管理（旧版）',
     createChannel: '新建渠道',
-    searchPlaceholder: '搜索名称、ID 或上游地址',
+    searchPlaceholder: '搜索名称、ID 或供应商',
     typeFilter: '渠道类型',
     statusFilter: '渠道状态',
     sortLabel: '排序字段',
@@ -1212,6 +1194,7 @@ export default {
     capacity: '容量',
     usage: '用量',
     usageAndRatio: '用量 / 渠道倍率',
+    channelRatio: '渠道倍率',
     channelRatioValue: '渠道倍率 {ratio}×',
     upstreamBalance: '上游额度',
     upstreamAndRatio: '上游额度 / 上游倍率',
@@ -1243,7 +1226,7 @@ export default {
     testSupplier: '测试 {supplier} Lab 分组的渠道响应',
     clearSupplier: '清空 {supplier} Lab 分组渠道',
     batchBalancePage: '同步本页上游',
-    batchBalanceLabel: '同步当前显示的 {count} 条渠道上游额度',
+    batchBalanceLabel: '同步当前显示的 {count} 条渠道上游额度与倍率',
     batchProgress: '{processed}/{total}',
     batchProgressLabel: '正在{action}：{processed}/{total}',
     batchBalanceAction: '同步上游',
@@ -1381,7 +1364,7 @@ export default {
     supplierCleared: '已清空 {supplier} Lab 分组的 {count} 条渠道',
     fieldSettings: '字段显示',
     resetFields: '恢复默认',
-    supplierGroupCount: '本页 {count} 条渠道',
+    supplierGroupCount: '{count} 条渠道',
     expandSupplier: '展开 {supplier} 渠道组',
     collapseSupplier: '折叠 {supplier} 渠道组',
     updated: '渠道参数已更新',
@@ -1411,7 +1394,6 @@ export default {
   },
 
   users: {
-    permissions: '权限',
     bindingsTitle: '管理账户绑定',
     bindingsEmpty: '没有已绑定的登录提供商或邮箱。',
     unbind: '解绑',
@@ -1452,11 +1434,8 @@ export default {
     sort: {
       id: 'ID',
       username: '用户名',
-      quota: '剩余额度',
       available_quota: '剩余额度',
       used_quota: '已用额度',
-      created_at: '注册时间',
-      last_login_at: '最后活跃',
       created_time: '注册时间',
       last_login_time: '最后活跃',
     },
@@ -1626,19 +1605,6 @@ export default {
   },
 
   orders: {
-    periodOrders: '区间订单',
-    paidOrders: '已完成订单',
-    currencyScope: '按订单实际币种分别统计，不合并不同币种。',
-    unknownAmounts: '另有 {count} 笔订单未记录金额；金额指标不含这些订单。',
-    statsStale: '刷新失败，当前显示本周期上次成功读取的数据。',
-    partialAmountTrend:
-      '曲线仅统计已记录金额，未知金额未计入；零值不表示当日实收为零。',
-    knownAmountSubtotal: '已记录金额小计',
-    averageUnavailable: '存在未记录金额，无法确定平均订单金额。',
-    summaryUnavailable: '聚合数据暂不可用',
-    summaryUnavailableHint: '当前服务暂未提供该项统计。',
-    currency: '币种',
-    title: '充值订单',
     gmpay: {
       title: 'GMPay 订单证据',
       loading: '正在读取网关证据…',
@@ -1677,7 +1643,7 @@ export default {
     rangeLabel: '统计区间',
     rangeDays: '{days} 天',
     todayRevenue: '今日收入',
-    totalRevenue: '所选期间收入',
+    totalRevenue: '区间总收入',
     todayOrders: '今日成交',
     averageAmount: '平均金额',
     orderCount: '{count} 笔',
@@ -1712,7 +1678,6 @@ export default {
       completed: '已完成',
       pending: '待支付',
       failed: '失败',
-      expired: '已过期',
     },
     type: {
       label: '类型',
@@ -1780,7 +1745,7 @@ export default {
     groupPlaceholder: '搜索或输入历史分组',
     title: '使用日志',
     breadcrumb: ['控制台', '日志'],
-    keywordPlaceholder: '按完整请求 ID 筛选',
+    keywordPlaceholder: '按模型名搜索…',
     typeLabel: '类型',
     typeConsume: '消费',
     typeTopup: '充值',
@@ -1913,7 +1878,7 @@ export default {
 
   auditLogs: {
     breadcrumb: '审计日志',
-    keywordPlaceholder: '按完整请求 ID 筛选',
+    keywordPlaceholder: '搜索账号、操作或 IP…',
     categoryLabel: '事件类别',
     scopeLabel: '查看范围',
     resultLabel: '结果',
@@ -2399,26 +2364,14 @@ export default {
   },
 
   invite: {
-    skipped: '未产生返佣',
-    credited: '已入账',
-    skipReasons: {
-      program_disabled: '返佣计划已停用',
-      admin_recharge_disabled: '管理员充值不参与',
-      no_paid_quota: '无可返佣额度',
-      referral_expired: '返佣期限已过',
-      inviter_disabled: '邀请者返佣已停用',
-      zero_rate: '返佣比例为零',
-      below_quota_unit: '奖励不足一个额度单位',
-      invitee_cap_reached: '已达到受邀用户返佣上限',
-    },
     title: '邀请奖励',
     breadcrumb: ['控制台', '邀请奖励'],
     people: '{count} 人',
     heroTotal: '累计邀请奖励',
     invitedCount: '成功邀请',
-    invitedCountHint: '历史累计通过你的邀请码完成注册人数',
+    invitedCountHint: '通过你的邀请码完成注册',
     transferable: '可转奖励',
-    transferableHint: '可用奖励可全额转入账户余额',
+    transferableHint: '满 $1 后可转入账户余额',
     rewardPerInvite: '有效返利比例',
     rewardPerInviteHint: '按受邀用户真实付费金额计算',
     rebateRate: '有效返利比例',
@@ -2444,23 +2397,22 @@ export default {
       '通过我的链接注册 Ren2Hub；完成符合条件的真实付费后，我将按 {reward} 获得平台额度返利。',
     affiliateDisclaimer: '仅符合条件的真实付费产生返利，不支持现金提现',
     invitees: '受邀用户',
-    records: '返佣记录',
     sortRecent: '最近',
     sortEarly: '最早',
-    inviteesNote: '展示当前绑定的脱敏用户、注册日期和累计返佣。',
-    chartTitle: '返佣趋势',
-    chartSubtitle: '按月统计实际产生的返佣额度',
-    chartTabNew: '当月返佣',
-    chartTabCumulative: '累计返佣',
+    inviteesNote: '仅显示匿名身份和注册日期，不展示邮箱。',
+    chartTitle: '近 6 个月邀请注册',
+    chartSubtitle: '每月通过你的邀请码完成注册的用户',
+    chartTabNew: '新增',
+    chartTabCumulative: '累计',
     rewardBalanceTitle: '邀请奖励余额',
     rewardBalanceSubtitle: '来自 {count} 位受邀用户的奖励可手动转入账户余额。',
     currentBalance: '当前账户余额',
     balanceAfterTransfer: '全部转入后余额',
-    minimumTransfer: '暂无可转入奖励',
+    minimumTransfer: '至少满 $1 方可转入',
     rewardHistoryTotal: '历史累计奖励',
     transfer: '转入余额',
     transferTitle: '邀请奖励转余额',
-    transferHint: '将全部可用奖励转入账户余额。',
+    transferHint: '单次至少转入 $1，转入后可用于模型调用。',
     transferSuccess: '已转入账户余额',
     howTitle: '如何运作',
     howStep1Title: '复制邀请码或邀请链接',
@@ -2469,20 +2421,19 @@ export default {
     howStep2Desc: '朋友在注册时提交你的邀请码，系统记录邀请关系。',
     howStep3Title: '真实付费产生返利',
     howStep3Desc:
-      '朋友完成符合政策的充值后，按返佣基数额度的 {reward} 计算奖励；冻结时间与有效期以当前政策为准。',
+      '朋友完成钱包充值后，按实际支付金额的 {reward} 计算返利并进入冻结期。',
     howStep4Title: '手动转入账户余额',
-    howStep4Desc: '可用奖励可一次全部转入账户余额，没有最低转入金额。',
+    howStep4Desc: '邀请奖励累计满 $1 后可转入账户余额，用于平台内模型调用。',
     faqTitle: '常见问题',
     faqQ1: '什么时候会获得邀请奖励？',
     faqA1:
-      '朋友注册后完成符合政策的充值时结算。兑换码不参与；管理员充值是否参与、冻结时长和返佣期限由平台政策决定。',
+      '朋友使用你的邀请码注册并完成真实支付后结算。余额购买、兑换码和管理员直接加额度不参与。',
     faqQ2: '邀请返利比例是多少？',
     faqA2: '当前有效返利比例为 {reward}，专属用户比例可能与全局比例不同。',
     faqQ3: '邀请奖励可以提现吗？',
     faqA3: '不可以。奖励只能转入 Ren2Hub 账户余额并用于平台内模型调用。',
-    faqQ4: '奖励记录会展示哪些信息？',
-    faqA4:
-      '记录展示受邀用户编号、奖励或转入额度、发生时间及冻结状态，不展示对方邮箱。',
+    faqQ4: '受邀用户列表会展示哪些信息？',
+    faqA4: '列表仅展示匿名标识和注册日期，不展示对方邮箱等账户信息。',
   },
 
   activity: {
@@ -2491,7 +2442,7 @@ export default {
     title: '活动中心',
     breadcrumb: '活动中心',
     heroPill: '活动广场',
-    heroSubtitle: '查看每日签到与平台活动。',
+    heroSubtitle: '签到、新人礼包与邀请奖励，都在这里。',
     refresh: '刷新',
     tabs: {
       all: '全部',
@@ -2606,7 +2557,6 @@ export default {
     emptyHint: '暂无开票记录，如需开票请联系群主',
     submitted: '申请已提交，等待管理员审核',
     status: {
-      expired: '已过期',
       pending: '审核中',
       issued: '已开具',
       rejected: '已拒绝',
@@ -2619,8 +2569,8 @@ export default {
   },
 
   profile: {
-    title: '账户中心',
-    subtitle: '查看账户概览，管理登录安全与账户偏好',
+    title: '会员中心',
+    subtitle: '查看会员概览，管理登录安全与账户偏好',
     settingsSectionEyebrow: 'ACCOUNT SETTINGS',
     settingsSectionTitle: '账号设置',
     settingsSectionSubtitle: '按需管理登录方式、认证来源、通知渠道与界面偏好。',
@@ -2632,7 +2582,7 @@ export default {
     tierGold: '黄金',
     tierSilver: '白银',
     tierBronze: '青铜',
-    breadcrumb: ['首页', '账户中心'],
+    breadcrumb: ['首页', '会员中心'],
     memberNo: '会员编号',
     joinDate: '加入时间',
     totalCalls: '累计调用',
@@ -2658,7 +2608,7 @@ export default {
     viewTierBenefits: '查看等级权益 →',
     progressToNext: '至 {tier}',
     joinedDays: '已加入 {n} 天',
-    memberDuration: '加入时长',
+    memberDuration: '会员时长',
     personalInfo: '个人资料',
     displayName: '展示名称',
     username: '用户名',
@@ -2836,10 +2786,6 @@ export default {
 
   systemSettings: {
     sections: {
-      affiliate: '邀请返佣',
-      affiliateDescription:
-        '按实际充值入账额度计提返佣；期限或上限为 0 表示不限。',
-
       systemInfo: '系统信息',
       systemInfoDescription: '站点名称、公开地址、品牌内容与法律文本。',
       fileAccess: '文件与媒体访问',
@@ -2863,10 +2809,10 @@ export default {
       quotaDescription: '注册、邀请、充值入口和货币展示规则。',
       payment: '通用支付与其他网关',
       paymentDescription:
-        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户配置在各自页面；密钥留空保留现有值。',
+        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户与结算配置在各自页面；密钥留空保留现有值。',
       epay: 'EPay 易支付',
       epayDescription:
-        '通过 EPay 购买 USD 额度并以 CNY 付款。创建新单和处理支付回调均需完成支付合规确认、填写完整商户凭据，并配置至少一种支付方式。',
+        '通过 EPay 购买 USD 额度并以 CNY 付款。凭据齐全且支付方式非空时开放新单；清空支付方式只停止新单，已有订单由结算开关控制。',
       waffoPancake: 'Waffo Pancake',
       waffoPancakeDescription:
         '验证凭据、选择店铺与产品后，通过网关专用接口原子保存。',
@@ -2879,7 +2825,7 @@ export default {
       vendor: '模型供应商策略',
       vendorDescription: '供应商专属安全与生成策略。',
       rateLimit: '请求限流',
-      rateLimitDescription: '全局模型请求限流策略。',
+      rateLimitDescription: '全局模型请求限流与按分组策略。',
       sensitive: '敏感内容',
       sensitiveDescription: '请求/响应敏感词检测和处理方式。',
       ssrf: 'SSRF 防护',
@@ -2906,13 +2852,6 @@ export default {
       maintenanceDescription: '系统任务与运行状态的入口。',
     },
     fields: {
-      affiliateEnabled: '启用邀请返佣',
-      affiliateRateBps: '返佣比例（基点）',
-      affiliateFreezeHours: '冻结时长（小时）',
-      affiliateDurationDays: '返佣期限（天）',
-      affiliateCapQuota: '每位受邀用户奖励上限（额度单位）',
-      affiliateAdminRecharge: '管理员加款参与返佣',
-
       systemName: '系统名称',
       serverAddress: '服务器地址',
       serverAddressHint: '用于 OAuth 回调、Webhook 与外部集成。',
@@ -2973,9 +2912,6 @@ export default {
       turnstileEnabled: '启用 Turnstile',
       turnstileSiteKey: 'Turnstile Site Key',
       turnstileSecretKey: 'Turnstile Secret Key',
-      preConsumeMultiplier: '输入费用预扣倍率',
-      preConsumeMultiplierHint:
-        '必须大于 0，仅影响请求开始时的额度预留，不改变最终账单。',
       newUserQuota: '新用户初始配额',
       inviterReward: '邀请人奖励',
       inviteeReward: '被邀请人奖励',
@@ -3027,11 +2963,17 @@ export default {
       merchantId: '商户 ID',
       merchantSecret: '商户密钥',
       secretHint: '仅在更新时填写；留空保留现有密钥，保存后不回显。',
+      epaySettlement: '启用易支付结算',
+      epaySettlementHint:
+        '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。',
       epayPrice: '每 USD 额度的支付单价（CNY）',
       minimumUsd: '最低购买额度（USD）',
       epayMethods: 'EPay 支付方式',
       epayMethodsHint:
-        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停用 EPay 新单及支付回调。',
+        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停止创建 EPay 新单。',
+      gmpaySettlement: '启用虚拟币结算',
+      gmpaySettlementHint:
+        '允许虚拟币网关回调确认已有订单并入账。回调可核验代币与法币金额，但无法证明最终付款网络。异常通知是否重试取决于网关配置，也可经管理员复查后补单。关闭后暂停回调结算，与易支付与新单支付方式独立控制。',
       checkinEnabled: '启用每日签到',
       checkinMinQuota: '最小奖励',
       checkinMaxQuota: '最大奖励',
@@ -3150,7 +3092,6 @@ export default {
       diskThreshold: '磁盘阈值（%）',
     },
     options: {
-      cny: 'CNY',
       guest: '访客用户',
       user: '普通用户',
       admin: '管理员',
@@ -3245,8 +3186,6 @@ export default {
       cleanupLogsByDays: '将删除 {count} 天前的日志文件。',
     },
     waffoPancake: {
-      orphanStore:
-        '店铺 {id} 已创建，但产品创建失败。请先检查网关目录，避免重复创建店铺。',
       label: 'Waffo Pancake 配置',
       merchantId: '商户 ID',
       privateKey: '私钥',
@@ -3289,10 +3228,6 @@ export default {
     loadFailed: '系统设置读取失败。重新读取成功前不能编辑或保存。',
     retryLoad: '重新读取设置',
     gmpayPanel: {
-      enableNewOrders: '开放新订单',
-      enableNewOrdersHint:
-        '关闭后停止创建 GMPay 新订单。已有订单仍会使用下单时保存的商户凭据核验付款通知，核验通过后入账。',
-      selectedAssets: '启用的资产（JSON）',
       title: 'GMPay 虚拟币支付',
       description: '选择向用户开放的代币与网络，然后保存网关配置。',
       address: '网关地址',
@@ -3322,6 +3257,8 @@ export default {
       addressRequired: '请先填写网关地址。',
       credentialsRequired: '请填写网关地址与商户 ID。',
       secretRequired: '请填写商户密钥。',
+      noSelectedAssets:
+        '不选择资产并保存会停止创建新的虚拟币订单；已启用虚拟币结算时，已有订单仍可入账。',
       invalidAmounts: '支付单价必须大于零，最低购买额度必须为正整数 USD。',
       invalidGroupRatios: '请输入 JSON 对象，用户组倍率必须为正数。',
       invalidCatalog: '网关返回的资产目录格式无效。',
@@ -3335,10 +3272,6 @@ export default {
     title: '系统设置',
     breadcrumb: ['管理员', '系统设置'],
     saved: '已保存',
-    partialSaveFailed:
-      '已保存 {count} 项设置，随后发生错误：{error}。剩余更改已保留，可重试；已保存的设置没有回滚。',
-    oidcDiscoveryInvalid:
-      'OIDC 发现结果必须包含有效的 HTTP 或 HTTPS 授权、令牌和用户信息端点。本次没有保存任何设置。',
     saveFailed: '保存失败',
     loading: '加载中…',
     saveChanges: '保存更改',

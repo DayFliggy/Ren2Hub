@@ -1,201 +1,219 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { api } from '../client'
 import {
-  appendOpsSample,
   opsMonitorApi,
-  parsePerformanceStats,
-  parseRoutingSnapshot,
-  projectOpsOverview,
-  seriesRange,
-  type OpsSeriesPoint,
+  parseOpsBillingMetrics,
+  parseOpsChannels,
+  parseOpsOverview,
+  parseOpsRequests,
 } from '../opsMonitor'
-import { performanceFixture, routingFixture } from './opsFixtures'
-const mocks = vi.hoisted(() => ({
-  get: vi.fn(),
-  post: vi.fn(),
-  delete: vi.fn(),
-}))
-vi.mock('../client', () => ({ api: mocks }))
-beforeEach(() => vi.clearAllMocks())
+import {
+  billingFixture,
+  channelsFixture,
+  overviewFixture,
+  requestsFixture,
+} from './opsFixtures'
 
-describe('native ops monitoring', () => {
-  it('keeps Go process memory separate from unmeasured host memory and health', () => {
-    const result = projectOpsOverview(
-      parsePerformanceStats(performanceFixture()),
-      routingFixture(),
-      '1h',
-      [],
-      3600
-    )!
-    expect(result.resources?.process.heap_alloc_bytes).toBe(1_048_576)
-    expect(result.resources?.memory.percent).toBeNull()
-    expect(result.resources?.cpu.percent).toBeNull()
-    expect(result.resources?.network.up_mbps).toBeNull()
-    expect(result.resources?.disk.percent).toBe(40)
-    expect(result.checks.find((row) => row.key === 'disk')?.status).toBe('ok')
-    expect(
-      result.checks.find((row) => row.key === 'database')?.value
-    ).toBeNull()
-    expect(result.health_score).toBeNull()
-    expect(result.status).toBe('unknown')
-    expect(seriesRange(result)).toEqual([0, 3600])
-  })
-  it('does not treat a failed native disk probe or disabled threshold as healthy', () => {
-    const data = performanceFixture()
-    data.disk_space_info = { total: 0, used: 0, used_percent: 0 }
-    const unavailable = projectOpsOverview(data, null, '1h', [], 3600)!
-    expect(unavailable.resources?.disk.percent).toBeNull()
-    expect(unavailable.checks.find((row) => row.key === 'disk')?.status).toBe(
-      'unknown'
-    )
-    data.disk_space_info = { total: 1000, used: 980, used_percent: 98 }
-    expect(projectOpsOverview(data, null, '1h', [], 3600)?.status).toBe(
-      'critical'
-    )
-    data.config.monitor_enabled = false
-    expect(projectOpsOverview(data, null, '1h', [], 3600)?.status).toBe(
-      'unknown'
-    )
-  })
-  it.each([
-    ['cache_stats', 'memory_cache_hits', -1],
-    ['cache_stats', 'current_disk_usage_bytes', '0'],
-    ['disk_space_info', 'used_percent', 101],
-    ['disk_space_info', 'total', -1],
-    ['config', 'monitor_enabled', 'true'],
-    ['config', 'monitor_disk_threshold', 101],
-    ['config', 'disk_cache_path', 9],
-    ['memory_stats', 'alloc', -1],
-  ])('rejects malformed %s.%s in the API feed', (section, key, value) => {
-    const data = performanceFixture() as unknown as Record<
-      string,
-      Record<string, unknown>
-    >
-    data[section as string]![key as string] = value
-    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
-  })
-  it('preserves zero values and missing optional metrics without filling probes', () => {
-    const data = performanceFixture()
-    data.config = {}
-    data.cache_stats = { memory_cache_hits: 0 }
-    const parsed = parsePerformanceStats(data)
-    expect(parsed.cache_stats.memory_cache_hits).toBe(0)
-    expect(
-      projectOpsOverview(parsed, null, '1h', [], 3600)?.resources
-        ?.monitor_enabled
-    ).toBeNull()
-  })
-  it('keeps stream and operation identity, milliseconds and latency sample coverage', () => {
-    const parsed = parseRoutingSnapshot(routingFixture())
-    expect(parsed.observations[0]).toMatchObject({
-      operation: 1,
-      latency_known: true,
-      updated_at: 1_792_353_600_000,
-    })
-    const legacy = JSON.parse(JSON.stringify(routingFixture()))
-    delete legacy.observations[0].latency_known
-    delete legacy.observations[0].latency_samples
-    delete legacy.observations[0].operation
-    expect(parseRoutingSnapshot(legacy).observations[0]).toMatchObject({
-      operation: null,
-      latency_known: false,
-      latency_samples: null,
-    })
-  })
-  it('does not accept latency coverage without samples or classify zero observations as known', () => {
-    const data = JSON.parse(JSON.stringify(routingFixture()))
-    delete data.observations[0].latency_samples
-    data.observations[0].samples = 0
-    expect(parseRoutingSnapshot(data).observations[0]).toMatchObject({
-      known: false,
-      latency_known: false,
-      latency_samples: null,
-    })
-  })
-  it('rejects invalid concurrency and observation metrics', () => {
-    const data = routingFixture()
-    data.channels[0]!.in_flight = -1
-    expect(() => parseRoutingSnapshot(data)).toThrow('Invalid API response')
-    data.channels[0]!.in_flight = 0
-    data.observations[0]!.error_rate = 1.01
-    expect(() => parseRoutingSnapshot(data)).toThrow('Invalid API response')
-  })
-  it('keeps page-session gaps and bounds retained history without backfilling', () => {
-    const point = (ts: number, users: number | null): OpsSeriesPoint => ({
-      ts,
-      cpu: null,
-      memory: null,
-      disk: null,
-      users,
-      channels: null,
-    })
-    let points = appendOpsSample([point(1, 2)], point(100000, null))
-    expect(points).toEqual([point(100000, null)])
-    points = appendOpsSample(points, point(100000, 0))
-    expect(points).toEqual([point(100000, 0)])
-    const result = projectOpsOverview(
-      null,
-      routingFixture(),
-      '1h',
-      [point(90000, 1), ...points],
-      100000
-    )!
-    expect(result.series.points).toEqual([point(100000, 0)])
-    expect(seriesRange(result)).toEqual([96400, 100000])
-  })
-  it('retains the full 24-hour window even with frequent manual refreshes', () => {
-    const point = (ts: number): OpsSeriesPoint => ({
-      ts,
-      cpu: null,
-      memory: null,
-      disk: 40,
-      users: null,
-      channels: null,
-    })
-    const points = appendOpsSample(
-      Array.from({ length: 3000 }, (_, index) => point(100000 + index * 10)),
-      point(130000)
-    )
-    expect(points).toHaveLength(3001)
-    expect(points[0]?.ts).toBe(100000)
-    for (const window of ['1h', '6h', '24h'] as const) {
-      const result = projectOpsOverview(
-        performanceFixture(),
-        null,
-        window,
-        points,
-        130000
-      )!
-      const seconds = { '1h': 3600, '6h': 21600, '24h': 86400 }[window]
-      expect(
-        result.series.points.every(({ ts }) => ts >= 130000 - seconds)
-      ).toBe(true)
-      expect(seriesRange(result)).toEqual([130000 - seconds, 130000])
-    }
-    expect(
-      projectOpsOverview(performanceFixture(), null, '24h', points, 130000)!
-        .series.points
-    ).toHaveLength(3001)
-  })
-  it('uses native reads and maintenance endpoints and propagates cancellation', async () => {
-    mocks.get
-      .mockResolvedValueOnce(performanceFixture())
-      .mockResolvedValueOnce(routingFixture())
+type Overview = ReturnType<typeof overviewFixture>
+
+afterEach(() => vi.restoreAllMocks())
+
+describe('ops billing health contract', () => {
+  it('reads recovery and settlement counters from the Root gateway endpoint', async () => {
     const signal = new AbortController().signal
-    await opsMonitorApi.stats(signal)
-    await opsMonitorApi.routing(signal)
-    expect(mocks.get.mock.calls).toEqual([
-      ['/api/performance/stats', undefined, { signal }],
-      ['/api/performance/routing', undefined, { signal }],
+    const get = vi.spyOn(api, 'get').mockResolvedValue(billingFixture())
+    const metrics = await opsMonitorApi.billing(signal)
+    expect(get).toHaveBeenCalledWith('/api/gateway/metrics', undefined, {
+      signal,
+    })
+    expect(metrics.billing_recovery).toEqual({
+      pending: 2,
+      oldest_updated_at: 1_767_225_000,
+    })
+    expect(metrics.billing.settlements_total).toEqual({
+      confirmed: 115,
+      estimated: 5,
+      frozen_estimate: 2,
+    })
+  })
+
+  it('rejects obsolete versions, wrong scopes and missing or invalid counters', () => {
+    const valid = billingFixture()
+    for (const value of [
+      { ...valid, schema_version: 1 },
+      { ...valid, recovery_scope: 'instance' },
+      { ...valid, billing: { ...valid.billing, counter_scope: 'database' } },
+      {
+        ...valid,
+        billing_recovery: { ...valid.billing_recovery, pending: -1 },
+      },
+      { ...valid, billing: { ...valid.billing, calculation_total: '123' } },
+      {
+        ...valid,
+        billing: {
+          ...valid.billing,
+          settlements_total: { confirmed: 1, estimated: 0 },
+        },
+      },
     ])
-    await opsMonitorApi.execute('gc')
-    await opsMonitorApi.execute('reset_stats')
-    await opsMonitorApi.execute('disk_cache')
-    expect(mocks.post.mock.calls).toEqual([
-      ['/api/performance/gc'],
-      ['/api/performance/reset_stats'],
-    ])
-    expect(mocks.delete).toHaveBeenCalledExactlyOnceWith(
-      '/api/performance/disk_cache'
+      expect(() => parseOpsBillingMetrics(value)).toThrow(
+        'Invalid API response'
+      )
+  })
+})
+
+describe('ops overview contract', () => {
+  it('keeps unmeasured values as null and measured zeros as zero', () => {
+    const overview = parseOpsOverview(overviewFixture())
+    expect(overview.health_score).toBe(85)
+    expect(overview.resources.cpu.percent).toBeNull()
+    expect(overview.resources.network).toEqual({
+      up_mbps: null,
+      down_mbps: 1.1,
+    })
+    expect(overview.gateway.success_rate).toBeNull()
+    expect(overview.gateway.granted_per_minute).toBeNull()
+    expect(overview.gateway.rejected_per_minute).toBe(0)
+    expect(overview.gateway.wait_bucket_bounds_ms.at(-1)).toBeNull()
+    expect(overview.storage.log_database).toBeNull()
+    expect(overview.storage.redis).toMatchObject({
+      latency_ms: null,
+      error: 'timeout',
+    })
+    expect(overview.storage.database.error).toBeNull()
+    expect(overview.series.points[0]).toMatchObject({
+      success_rate: null,
+      requests_per_minute: 0,
+    })
+  })
+
+  it('normalizes omitted check fields without inventing values', () => {
+    const [cpu, redis, master] = parseOpsOverview(overviewFixture()).checks
+    expect(cpu).toEqual({
+      key: 'cpu',
+      status: 'ok',
+      value: 12.5,
+      threshold: 90,
+      error: null,
+    })
+    expect(redis).toMatchObject({
+      value: null,
+      threshold: null,
+      error: 'timeout',
+    })
+    expect(master).toMatchObject({ value: null, threshold: null, error: null })
+  })
+
+  it.each<[string, (value: Overview) => void]>([
+    ['an unknown schema', (v) => void (v.schema_version = 2)],
+    ['an unknown status', (v) => void (v.status = 'degraded')],
+    ['an out of range health score', (v) => void (v.health_score = 101)],
+    [
+      'a missing health score',
+      (v) => void delete (v as Record<string, unknown>).health_score,
+    ],
+    ['an unknown check key', (v) => void (v.checks[0]!.key = 'gpu')],
+    ['an unknown probe error', (v) => void (v.storage.redis.error = 'refused')],
+    [
+      'a stringified percent',
+      (v) =>
+        void ((v.resources.memory as Record<string, unknown>).percent = '40'),
+    ],
+    [
+      'an omitted nullable field',
+      (v) => void delete (v.gateway as Record<string, unknown>).success_rate,
+    ],
+    [
+      'a negative counter',
+      (v) => void (v.gateway.admission.granted_total = -1),
+    ],
+    [
+      'mismatched wait buckets',
+      (v) => void v.gateway.admission.wait_duration_ms_buckets.pop(),
+    ],
+    [
+      'non-cumulative wait buckets',
+      (v) => void (v.gateway.admission.wait_duration_ms_buckets[3] = 0),
+    ],
+    [
+      'a finite last wait bound',
+      (v) => void ((v.gateway.wait_bucket_bounds_ms as unknown[])[7] = 10_000),
+    ],
+    ['an unknown series window', (v) => void (v.series.window = '7d')],
+    [
+      'unordered series points',
+      (v) => void v.series.points.push({ ...v.series.points[0]! }),
+    ],
+  ])('rejects %s', (_case, mutate) => {
+    const value = overviewFixture()
+    mutate(value)
+    expect(() => parseOpsOverview(value)).toThrow('Invalid API response')
+  })
+
+  it('requests the selected window and rejects a series for another window', async () => {
+    const signal = new AbortController().signal
+    const get = vi.spyOn(api, 'get').mockResolvedValue(overviewFixture())
+    expect((await opsMonitorApi.overview('1h', signal)).series.window).toBe(
+      '1h'
     )
+    expect(get).toHaveBeenCalledWith(
+      '/api/ops/overview',
+      { window: '1h' },
+      { signal }
+    )
+    await expect(opsMonitorApi.overview('6h')).rejects.toThrow(
+      'Invalid API response'
+    )
+  })
+})
+
+describe('ops requests and channels contracts', () => {
+  it('keeps empty buckets unmeasured', () => {
+    const parsed = parseOpsRequests(requestsFixture())
+    expect(parsed.series[0]).toEqual({
+      ts: 1_767_222_000,
+      requests: 0,
+      success_rate: null,
+      avg_latency_ms: 0,
+      avg_tps: 0,
+    })
+    expect(parsed.top_models[0]?.model_name).toBe('gpt-4o')
+  })
+
+  it('rejects out-of-range windows, oversized model lists and null averages', () => {
+    const requests = requestsFixture()
+    expect(() => parseOpsRequests({ ...requests, hours: 169 })).toThrow()
+    expect(() =>
+      parseOpsRequests({
+        ...requests,
+        top_models: new Array(7).fill(requests.top_models[0]),
+      })
+    ).toThrow()
+    expect(() =>
+      parseOpsRequests({
+        ...requests,
+        summary: { ...requests.summary, avg_tps: null },
+      })
+    ).toThrow()
+  })
+
+  it('keeps unmeasured latency and rejects closed or unknown breaker states', () => {
+    const channels = channelsFixture()
+    expect(
+      parseOpsChannels(channels).unhealthy[0]?.first_token_latency_ms
+    ).toBeNull()
+    for (const state of ['closed', 'tripped'])
+      expect(() =>
+        parseOpsChannels({
+          ...channels,
+          unhealthy: [{ ...channels.unhealthy[0], state }],
+        })
+      ).toThrow()
+    expect(() =>
+      parseOpsChannels({
+        ...channels,
+        unhealthy: new Array(51).fill(channels.unhealthy[0]),
+      })
+    ).toThrow()
   })
 })

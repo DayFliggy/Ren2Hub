@@ -6,7 +6,6 @@ import { useEChart } from '@/charts/useEChart'
 import { lineMood } from '@/charts/themePreset'
 import type { InviteMonthPoint } from '@/types/console'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import { formatQuota } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
@@ -21,16 +20,12 @@ const mode = ref<Mode>('new')
 
 const categories = computed(() => props.series.map((p) => p.month))
 const values = computed(() =>
-  props.series.map((p, index) =>
-    mode.value === 'new'
-      ? p.reward
-      : props.series
-          .slice(0, index + 1)
-          .reduce((sum, item) => sum + item.reward, 0)
-  )
+  props.series.map((p) => (mode.value === 'new' ? p.new_count : p.cumulative))
 )
 
-const totalNew = computed(() => props.series.reduce((s, p) => s + p.reward, 0))
+const totalNew = computed(() =>
+  props.series.reduce((s, p) => s + p.new_count, 0)
+)
 
 useEChart(
   el,
@@ -53,7 +48,7 @@ useEChart(
           mode.value === 'new'
             ? t('invite.chartTabNew')
             : t('invite.chartTabCumulative')
-        return `${escapeHtml(item.name)} · ${escapeHtml(label)} ${escapeHtml(formatQuota(item.value))}`
+        return `${escapeHtml(item.name)} · ${escapeHtml(label)} ${escapeHtml(t('invite.people', { count: item.value }))}`
       },
     },
     xAxis: {
@@ -67,11 +62,7 @@ useEChart(
       type: 'value',
       minInterval: 1,
       splitLine: lineMood(p).splitLine,
-      axisLabel: {
-        color: p.textTertiary,
-        fontSize: 10 * scale,
-        formatter: (value: number) => formatQuota(value),
-      },
+      axisLabel: { color: p.textTertiary, fontSize: 10 * scale },
     },
     series: [
       {
@@ -88,7 +79,7 @@ useEChart(
           color: p.textSecondary,
           fontSize: 11 * scale,
           formatter: (o: { value: number }) =>
-            o.value > 0 ? formatQuota(o.value) : '',
+            o.value > 0 ? String(o.value) : '',
         },
       },
     ],
@@ -125,7 +116,7 @@ useEChart(
     <p
       class="display-number text-2xl tracking-tight text-[var(--text-primary)]"
     >
-      {{ formatQuota(totalNew) }}
+      {{ t('invite.people', { count: totalNew }) }}
     </p>
     <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
       {{ t('invite.chartSubtitle') }}

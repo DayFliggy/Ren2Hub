@@ -1,55 +1,10 @@
-import { reactive } from 'vue'
 import { formatDecimalUSD } from './decimal'
 import { quotaToDecimal } from './quota'
-
-const quotaDisplay = reactive({
-  type: 'USD',
-  perUnit: 500000,
-  cnyRate: 7.3,
-  symbol: '¤',
-  customRate: 1,
-})
-export function configureQuotaDisplay(status: {
-  quota_display_type?: string
-  quota_per_unit?: number
-  usd_exchange_rate?: number
-  custom_currency_symbol?: string
-  custom_currency_exchange_rate?: number
-}) {
-  quotaDisplay.type = status.quota_display_type ?? 'USD'
-  quotaDisplay.perUnit = status.quota_per_unit ?? 500000
-  quotaDisplay.cnyRate = status.usd_exchange_rate ?? 7.3
-  quotaDisplay.symbol = status.custom_currency_symbol || '¤'
-  quotaDisplay.customRate = status.custom_currency_exchange_rate ?? 1
-}
 
 export function formatQuota(
   quota: string | bigint | number,
   digits = 2
 ): string {
-  if (quotaDisplay.type === 'TOKENS')
-    return BigInt(quota).toLocaleString('en-US')
-  if (quotaDisplay.type !== 'USD' || quotaDisplay.perUnit !== 500000) {
-    const rate =
-      quotaDisplay.type === 'CNY'
-        ? quotaDisplay.cnyRate
-        : quotaDisplay.type === 'CUSTOM'
-          ? quotaDisplay.customRate
-          : 1
-    const symbol =
-      quotaDisplay.type === 'CNY'
-        ? '¥'
-        : quotaDisplay.type === 'CUSTOM'
-          ? quotaDisplay.symbol
-          : '$'
-    return (
-      symbol +
-      ((Number(quota) / quotaDisplay.perUnit) * rate).toLocaleString('en-US', {
-        minimumFractionDigits: Math.min(digits, 3),
-        maximumFractionDigits: Math.min(digits, 3),
-      })
-    )
-  }
   const [whole = '0', fraction] = quotaToDecimal(
     quota,
     Math.min(digits, 3)

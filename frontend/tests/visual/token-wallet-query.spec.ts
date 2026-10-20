@@ -5,12 +5,7 @@ for (const theme of ['light', 'dark'] as const) {
   for (const width of [1440, 390]) {
     test(`wallet query permission ${theme} ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
-      const fixture = await configureStablePage(page, {
-        theme,
-        authenticated: true,
-        locale: 'en',
-      })
-      fixture.token.allow_user_quota_query = false
+      await configureStablePage(page, { theme, authenticated: true })
       await page.addInitScript(() =>
         localStorage.setItem('ren2hub_locale', 'en')
       )
@@ -60,8 +55,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Confirm', exact: true }).click()
       await expect(toggle).toBeHidden()
       expect(writes[1]?.allow_user_quota_query).toBe(true)
-      expect(writes[1]?.id).toBe(7)
-      expect(writes[1]).not.toHaveProperty('operation_id')
+      expect(writes[1]?.operation_id).toEqual(expect.any(String))
     })
   }
 }

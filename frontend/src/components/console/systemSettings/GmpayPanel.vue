@@ -1,117 +1,140 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from '@/api/client'
-import { invalidResponse, isRecord } from '@/api/contracts'
+import { api } from '@/api/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import { useLatestRequest } from '@/composables/useLatestRequest'
+import { useSystemSettings } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
-import { paymentRestorationMessages } from '@/i18n/paymentRestoration'
 
+/**
+ * One asset the gateway reports as collectable. The administrator picks the
+ * concrete token and network requested when creating an order.
+ */
 interface SupportedAsset {
   network: string
   display_name: string
   tokens: string[]
 }
+
 interface SelectedAsset {
   name: string
   token: string
   network: string
+  minTopUp: string
   icon?: string
   color?: string
 }
-const endpoint = '/api/option/gmpay/config'
-const identifier = /^[a-z0-9_-]+$/
-function parseAssets(value: unknown): SelectedAsset[] {
-  if (
-    !Array.isArray(value) ||
-    value.some(
-      (a) =>
-        !isRecord(a) ||
-        typeof a.name !== 'string' ||
-        !a.name.trim() ||
-        typeof a.token !== 'string' ||
-        !identifier.test(a.token) ||
-        typeof a.network !== 'string' ||
-        !identifier.test(a.network) ||
-        ['icon', 'color'].some(
-          (k) => a[k] !== undefined && typeof a[k] !== 'string'
-        )
-    )
-  )
-    invalidResponse(endpoint)
-  return value as SelectedAsset[]
-}
-function parseConfig(value: unknown) {
-  if (
-    !isRecord(value) ||
-    typeof value.pay_address !== 'string' ||
-    typeof value.merchant_id !== 'string' ||
-    typeof value.has_secret !== 'boolean' ||
-    typeof value.enabled !== 'boolean'
-  )
-    invalidResponse(endpoint)
-  return {
-    pay_address: value.pay_address,
-    merchant_id: value.merchant_id,
-    has_secret: value.has_secret,
-    enabled: value.enabled,
-    assets: parseAssets(value.assets),
-  }
-}
+
 const emit = defineEmits<{ saved: [] }>()
-const { t } = useI18n({ messages: paymentRestorationMessages })
+
+const { t } = useI18n()
 const toast = useToast()
-const request = useLatestRequest()
-const probeRequest = useLatestRequest()
+const { load, rawValue, isSecretConfigured } = useSystemSettings()
 const probing = ref(false)
 const saving = ref(false)
 const configurationReady = ref(false)
 const configurationLoading = ref(true)
 const configurationFailed = ref(false)
-const configurationError = ref('')
-const actionError = ref('')
 const supported = ref<SupportedAsset[] | null>(null)
 const selected = ref<SelectedAsset[]>([])
-const secretConfigured = ref(false)
+let probeController: AbortController | null = null
+let disposed = false
 const form = reactive({
   payAddress: '',
   merchantId: '',
   secretKey: '',
-  enabled: false,
+  price: 1,
+  minTopUp: 1,
+  groupRatio: '{"default":1}',
 })
+
+const secretConfigured = computed(() => isSecretConfigured('GmpayKey'))
 const selectedCount = computed(() => selected.value.length)
-const failure = (error: unknown) =>
-  error instanceof Error ? error.message : String(error)
-function isSelected(network: string, token: string) {
+
+function parseStoredAssets(raw: string): SelectedAsset[] {
+  const parsed: unknown = JSON.parse(raw)
+  // The backend also accepts JSON null as an empty catalog.
+  if (parsed === null) return []
+  if (!Array.isArray(parsed)) throw new Error('Invalid stored asset catalog')
+  return parsed.map((record) => {
+    if (
+      !record ||
+      typeof record !== 'object' ||
+      typeof record.name !== 'string' ||
+      !record.name.trim() ||
+      typeof record.token !== 'string' ||
+      !record.token.trim() ||
+      typeof record.network !== 'string' ||
+      !record.network.trim() ||
+      (record.min_topup !== undefined && typeof record.min_topup !== 'string')
+    ) {
+      throw new Error('Invalid stored asset catalog')
+    }
+    return {
+      name: record.name.trim(),
+      token: record.token.trim().toLowerCase(),
+      network: record.network.trim().toLowerCase(),
+      minTopUp: (record.min_topup ?? '').trim(),
+      ...(typeof record.icon === 'string' ? { icon: record.icon } : {}),
+      ...(typeof record.color === 'string' ? { color: record.color } : {}),
+    }
+  })
+}
+
+function syncForm() {
+  form.payAddress = String(rawValue('GmpayPayAddress', ''))
+  form.merchantId = String(rawValue('GmpayId', ''))
+  form.price = Number(rawValue('GmpayPrice', 1))
+  form.minTopUp = Number(rawValue('GmpayMinTopUp', 1))
+  form.groupRatio = String(rawValue('GmpayGroupRatio', '{"default":1}'))
+  selected.value = parseStoredAssets(String(rawValue('GmpayAssets', '[]')))
+}
+
+function isSelected(network: string, token: string): boolean {
   return selected.value.some(
     (item) => item.network === network && item.token === token
   )
 }
+
 function removeAsset(network: string, token: string) {
   selected.value = selected.value.filter(
     (item) => !(item.network === network && item.token === token)
   )
 }
+
 function toggleAsset(asset: SupportedAsset, token: string) {
   if (isSelected(asset.network, token)) {
     removeAsset(asset.network, token)
     return
   }
-  selected.value.push({
-    name: `${token.toUpperCase()} ${asset.display_name || asset.network}`,
-    token,
-    network: asset.network,
-  })
+  selected.value = [
+    ...selected.value,
+    {
+      name: `${token.toUpperCase()} ${asset.display_name || asset.network}`,
+      token: token.toLowerCase(),
+      network: asset.network.toLowerCase(),
+      minTopUp: '',
+    },
+  ]
 }
+
 function setAssetName(token: string, network: string, name: string) {
   selected.value = selected.value.map((item) =>
     item.token === token && item.network === network ? { ...item, name } : item
   )
 }
+
+function setAssetMinimum(token: string, network: string, value: string) {
+  selected.value = selected.value.map((item) =>
+    item.token === token && item.network === network
+      ? { ...item, minTopUp: value }
+      : item
+  )
+}
+
 function setAssetMetadata(
   token: string,
   network: string,
@@ -124,124 +147,183 @@ function setAssetMetadata(
       : item
   )
 }
-async function loadConfiguration() {
-  configurationReady.value = false
-  configurationLoading.value = true
-  configurationFailed.value = false
-  configurationError.value = ''
-  const result = await request.run(async (signal) =>
-    parseConfig(await api.get<unknown>(endpoint, undefined, { signal }))
+
+function assetPayload(): string {
+  return JSON.stringify(
+    selected.value.map((item) => ({
+      name: item.name.trim() || item.token.toUpperCase(),
+      token: item.token,
+      network: item.network,
+      ...(item.icon === undefined ? {} : { icon: item.icon }),
+      ...(item.color === undefined ? {} : { color: item.color }),
+      ...(item.minTopUp.trim() === ''
+        ? {}
+        : { min_topup: String(Number(item.minTopUp)) }),
+    }))
   )
-  if (result.stale) return
-  configurationLoading.value = false
-  if (!result.ok) {
-    configurationFailed.value = true
-    configurationError.value = failure(result.error)
-    return
-  }
-  const data = result.value
-  Object.assign(form, {
-    payAddress: data.pay_address,
-    merchantId: data.merchant_id,
-    secretKey: '',
-    enabled: data.enabled,
-  })
-  secretConfigured.value = data.has_secret
-  selected.value = data.assets.map((item) => ({ ...item }))
-  configurationReady.value = true
 }
+
+/** The gateway secret is verified by an order, so the probe never needs it. */
 async function probe() {
-  if (!configurationReady.value || saving.value || probing.value) return
+  if (!configurationReady.value || saving.value) return
   if (!form.payAddress.trim()) {
-    actionError.value = t('systemSettings.gmpayPanel.addressRequired')
+    toast.error(t('systemSettings.gmpayPanel.addressRequired'))
     return
   }
-  probing.value = true
-  actionError.value = ''
+  probeController?.abort()
+  const controller = new AbortController()
+  probeController = controller
   supported.value = null
-  const result = await probeRequest.run(async (signal) => {
-    const value = await api.post<unknown>(
+  probing.value = true
+  try {
+    const result = await api.post<{ supported_assets: SupportedAsset[] }>(
       '/api/option/gmpay/probe',
-      { pay_address: form.payAddress.trim() },
-      { signal }
+      {
+        pay_address: form.payAddress.trim(),
+      },
+      { signal: controller.signal }
     )
-    if (!isRecord(value) || !Array.isArray(value.supported_assets))
-      invalidResponse('/api/option/gmpay/probe')
-    return value.supported_assets.map((asset) => {
-      if (
-        !isRecord(asset) ||
-        typeof asset.network !== 'string' ||
-        !identifier.test(asset.network.toLowerCase()) ||
-        typeof asset.display_name !== 'string' ||
-        !Array.isArray(asset.tokens) ||
-        asset.tokens.some(
-          (token) =>
-            typeof token !== 'string' || !identifier.test(token.toLowerCase())
-        )
+    if (controller.signal.aborted) return
+    if (
+      !Array.isArray(result.supported_assets) ||
+      result.supported_assets.some(
+        (asset) =>
+          !asset ||
+          typeof asset.network !== 'string' ||
+          !asset.network ||
+          typeof asset.display_name !== 'string' ||
+          !Array.isArray(asset.tokens) ||
+          asset.tokens.some((token) => typeof token !== 'string' || !token)
       )
-        invalidResponse('/api/option/gmpay/probe')
-      return {
-        network: asset.network.toLowerCase(),
-        display_name: asset.display_name,
-        tokens: asset.tokens.map((token: string) => token.toLowerCase()),
-      }
-    })
-  })
-  if (result.stale) return
-  probing.value = false
-  if (!result.ok) {
-    actionError.value = failure(result.error)
-    return
+    ) {
+      throw new Error(t('systemSettings.gmpayPanel.invalidCatalog'))
+    }
+    supported.value = result.supported_assets.map((asset) => ({
+      ...asset,
+      network: asset.network.toLowerCase(),
+      tokens: asset.tokens.map((token) => token.toLowerCase()),
+    }))
+    if (!supported.value.length) {
+      toast.error(t('systemSettings.gmpayPanel.noAssets'))
+      return
+    }
+    toast.success(t('systemSettings.gmpayPanel.probed'))
+  } catch (error) {
+    if (!controller.signal.aborted)
+      toast.error(error instanceof Error ? error.message : String(error))
+  } finally {
+    if (probeController === controller) probing.value = false
   }
-  supported.value = result.value
-  if (result.value.length) toast.success(t('systemSettings.gmpayPanel.probed'))
 }
+
 async function save() {
   if (saving.value || !configurationReady.value) return
-  actionError.value = ''
-  let assets: SelectedAsset[]
+  if (!form.payAddress.trim() || !form.merchantId.trim()) {
+    toast.error(t('systemSettings.gmpayPanel.credentialsRequired'))
+    return
+  }
+  if (!form.secretKey.trim() && !secretConfigured.value) {
+    toast.error(t('systemSettings.gmpayPanel.secretRequired'))
+    return
+  }
   try {
-    assets = parseAssets(
-      selected.value.map((item) => ({ ...item, name: item.name.trim() }))
+    const ratios: unknown = JSON.parse(form.groupRatio)
+    if (
+      ratios === null ||
+      typeof ratios !== 'object' ||
+      Array.isArray(ratios) ||
+      Object.values(ratios).some(
+        (ratio) =>
+          typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio <= 0
+      )
+    ) {
+      throw new Error('Invalid group ratios')
+    }
+  } catch {
+    toast.error(t('systemSettings.gmpayPanel.invalidGroupRatios'))
+    return
+  }
+  if (
+    !Number.isFinite(form.price) ||
+    form.price <= 0 ||
+    !Number.isSafeInteger(form.minTopUp) ||
+    form.minTopUp < 1 ||
+    form.minTopUp > 18446744073709 ||
+    selected.value.some(
+      (item) =>
+        item.minTopUp.trim() !== '' &&
+        (!Number.isSafeInteger(Number(item.minTopUp)) ||
+          Number(item.minTopUp) < 1 ||
+          Number(item.minTopUp) > 18446744073709)
     )
-  } catch (error) {
-    actionError.value = failure(error)
+  ) {
+    toast.error(t('systemSettings.gmpayPanel.invalidAmounts'))
     return
   }
   saving.value = true
-  const result = await request.run((signal) =>
-    api.post(
-      '/api/option/gmpay/save',
-      {
-        pay_address: form.payAddress,
-        merchant_id: form.merchantId,
-        secret_key: form.secretKey,
-        enabled: form.enabled,
-        assets,
-      },
-      { signal }
-    )
-  )
-  if (result.stale) return
-  saving.value = false
-  if (!result.ok) {
-    actionError.value = failure(result.error)
-    return
+  try {
+    await api.post('/api/option/gmpay/save', {
+      pay_address: form.payAddress,
+      merchant_id: form.merchantId,
+      secret_key: form.secretKey,
+      assets: assetPayload(),
+      price: form.price,
+      min_topup: form.minTopUp,
+      group_ratio: form.groupRatio,
+    })
+    if (disposed) {
+      // The write still completed. Refresh the shared cache for the next visit.
+      await load(true)
+      return
+    }
+    form.secretKey = ''
+    emit('saved')
+    toast.success(t('systemSettings.gmpayPanel.saved'))
+    await loadConfiguration(true)
+  } catch (error) {
+    if (!disposed)
+      toast.error(error instanceof Error ? error.message : String(error))
+  } finally {
+    saving.value = false
   }
-  form.secretKey = ''
-  emit('saved')
-  toast.success(t('systemSettings.gmpayPanel.saved'))
-  await loadConfiguration()
 }
+
+async function loadConfiguration(force = false) {
+  configurationReady.value = false
+  configurationLoading.value = true
+  configurationFailed.value = false
+  try {
+    const loaded = await load(force)
+    if (disposed) return
+    if (!loaded) {
+      configurationFailed.value = true
+      return
+    }
+    syncForm()
+    configurationReady.value = true
+  } catch {
+    if (!disposed) configurationFailed.value = true
+  } finally {
+    if (!disposed) configurationLoading.value = false
+  }
+}
+
+onMounted(() => void loadConfiguration())
+
 watch(
   () => form.payAddress,
   () => {
-    probeRequest.cancel()
+    probeController?.abort()
+    probeController = null
     probing.value = false
     supported.value = null
   }
 )
-onMounted(loadConfiguration)
+
+onUnmounted(() => {
+  disposed = true
+  probeController?.abort()
+})
 </script>
 
 <template>
@@ -253,42 +335,20 @@ onMounted(loadConfiguration)
       {{ t('systemSettings.gmpayPanel.loading') }}
     </p>
     <div v-if="configurationFailed" class="gmpay-hint" role="alert">
-      <p>{{ configurationError }}</p>
+      <p>{{ t('systemSettings.gmpayPanel.loadFailed') }}</p>
       <ConsoleButton
         class="mt-2"
         variant="secondary"
         size="sm"
-        @click="loadConfiguration"
+        @click="loadConfiguration(true)"
       >
         {{ t('systemSettings.gmpayPanel.retryLoad') }}
       </ConsoleButton>
     </div>
-    <p
-      v-if="actionError"
-      role="alert"
-      class="mt-3 text-sm text-[var(--status-danger-text)]"
-    >
-      {{ actionError }}
-    </p>
     <fieldset
       :disabled="saving || !configurationReady"
       class="min-w-0 border-0 p-0"
     >
-      <label class="mb-4 flex items-center gap-3 text-sm font-medium">
-        <input
-          v-model="form.enabled"
-          type="checkbox"
-          class="size-4 accent-[var(--accent)]"
-          aria-describedby="gmpay-new-orders-hint"
-        />
-        {{ t('systemSettings.gmpayPanel.enableNewOrders') }}
-      </label>
-      <p
-        id="gmpay-new-orders-hint"
-        class="mb-5 text-xs leading-5 text-[var(--text-tertiary)]"
-      >
-        {{ t('systemSettings.gmpayPanel.enableNewOrdersHint') }}
-      </p>
       <div class="grid gap-4 sm:grid-cols-2">
         <FormField
           :label="t('systemSettings.gmpayPanel.address')"
@@ -313,6 +373,37 @@ onMounted(loadConfiguration)
               t('systemSettings.gmpayPanel.keepSecret')
             }}</span>
           </div>
+        </FormField>
+        <FormField :label="t('systemSettings.gmpayPanel.price')">
+          <TextInput
+            :model-value="String(form.price)"
+            type="number"
+            min="0.0001"
+            step="0.01"
+            autocomplete="off"
+            @update:model-value="form.price = Number($event)"
+          />
+        </FormField>
+        <FormField :label="t('systemSettings.gmpayPanel.minimum')">
+          <TextInput
+            :model-value="String(form.minTopUp)"
+            type="number"
+            min="1"
+            step="1"
+            autocomplete="off"
+            @update:model-value="form.minTopUp = Number($event)"
+          />
+        </FormField>
+        <FormField
+          :label="t('systemSettings.gmpayPanel.groupRatio')"
+          :hint="t('systemSettings.gmpayPanel.groupRatioHint')"
+          class="sm:col-span-2"
+        >
+          <TextInput
+            v-model="form.groupRatio"
+            class="font-mono"
+            autocomplete="off"
+          />
         </FormField>
       </div>
 
@@ -370,7 +461,7 @@ onMounted(loadConfiguration)
         {{ t('systemSettings.gmpayPanel.noAssets') }}
       </p>
       <p v-if="!selectedCount" class="gmpay-hint" role="status">
-        {{ t('paymentRestoration.noSelectedAssets') }}
+        {{ t('systemSettings.gmpayPanel.noSelectedAssets') }}
       </p>
       <div v-if="selectedCount" class="mt-5 grid gap-4 sm:grid-cols-2">
         <div v-for="item in selected" :key="`${item.token}.${item.network}`">
@@ -389,7 +480,28 @@ onMounted(loadConfiguration)
               "
             />
           </FormField>
-
+          <FormField
+            :label="
+              t('systemSettings.gmpayPanel.assetMinimum', {
+                asset: `${item.token.toUpperCase()} · ${item.network}`,
+              })
+            "
+            class="mt-2"
+          >
+            <TextInput
+              :model-value="item.minTopUp"
+              type="number"
+              min="1"
+              step="1"
+              autocomplete="off"
+              :placeholder="
+                t('systemSettings.gmpayPanel.assetMinimumPlaceholder')
+              "
+              @update:model-value="
+                setAssetMinimum(item.token, item.network, String($event))
+              "
+            />
+          </FormField>
           <FormField
             :label="
               t('systemSettings.gmpayPanel.assetIcon', {

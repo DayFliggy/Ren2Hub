@@ -1,30 +1,39 @@
-import { compareReferencePrices } from '@/features/pricing/reference'
+import { catalogPrices, type CatalogPricingInput } from '@/api/publicCatalog'
+import { multiplyDecimal } from '@/utils/decimal'
+import {
+  expressionReferencePrices,
+  compareReferencePrices,
+} from '@/features/pricing/reference'
 import type {
-  CatalogModel,
-  CatalogOffer,
-  ModelCatalog,
-} from '@/api/modelCatalog'
-import type {
+  MarketBillingMode,
   MarketModel,
   MarketModelType,
   MarketOffer,
   MarketPricing,
+  MarketPriceLine,
+  MarketPricingContract,
   ModelMarketCatalog,
+  ModelMarketResponse,
   ModelMarketSort,
   ModelMarketViewMode,
 } from '@/types/modelMarket'
 
 export const PLATFORM_VENDOR = '__platform__'
+
+/** Display validated decimal ratios without converting to floating point. */
 export function formatMarketRatio(value: string): string {
   const [integer, fraction = ''] = value.split('.')
   return `${integer}.${fraction.replace(/0+$/, '') || '0'}×`
 }
+
 export function isAudioEndpoint(endpoint: string): boolean {
   return endpoint === 'realtime' || endpoint.includes('audio')
 }
+
 export function normalizeMarketView(value: unknown): ModelMarketViewMode {
   return value === 'channels' || value === 'comparison' ? value : 'models'
 }
+
 function modelType(endpoints: string[]): MarketModelType {
   if (endpoints.includes('image-generation')) return 'image'
   if (endpoints.includes('embeddings')) return 'embedding'
@@ -33,61 +42,142 @@ function modelType(endpoints: string[]): MarketModelType {
   if (endpoints.some(isAudioEndpoint)) return 'audio'
   return 'chat'
 }
+
 export function projectMarketPricing(
-  raw: CatalogModel | CatalogOffer,
-  id: string
+  raw: MarketPricingContract,
+  ratio = '1'
 ): MarketPricing {
-  const priceLines = Object.entries(raw.pricing_values).map(
-    ([key, amount]) => ({
-      key,
-      amount,
+  const values = raw.values
+  const nativeAudio =
+    !raw.plugin_key &&
+    raw.supported_endpoint_types.length > 0 &&
+    raw.supported_endpoint_types.every(isAudioEndpoint)
+  const billingMode: MarketBillingMode = !raw.configured
+    ? 'unconfigured'
+    : values['billing_setting.billing_mode'] === 'tiered_expr'
+      ? 'dynamic'
+      : values.ModelPrice !== undefined
+        ? 'per_call'
+        : 'token'
+  const price: CatalogPricingInput = {
+    quota_type: billingMode === 'per_call' ? 1 : 0,
+    billing_mode:
+      billingMode === 'dynamic'
+        ? 'tiered_expr'
+        : billingMode === 'unconfigured'
+          ? 'unconfigured'
+          : 'ratio',
+    model_price: values.ModelPrice,
+    model_ratio: values.ModelRatio,
+    completion_ratio: values.CompletionRatio,
+    cache_ratio: values.CacheRatio,
+    create_cache_ratio: values.CreateCacheRatio,
+    image_ratio: values.ImageRatio,
+    audio_ratio: values.AudioRatio ?? (nativeAudio ? '1' : undefined),
+    audio_completion_ratio: values.AudioCompletionRatio,
+  }
+  const priceLines: MarketPriceLine[] = catalogPrices(price, 'M')
+    .filter(
+      (line) =>
+        !nativeAudio || !['cacheRead', 'cacheWrite', 'image'].includes(line.key)
+    )
+    .map((line) => ({
+      key: line.key,
+      amount: multiplyDecimal(line.value, ratio),
       unit:
-        key === 'request'
-          ? ('per_call' as const)
-          : ('per_million_tokens' as const),
-    })
-  )
+        line.unit === 'per_call'
+          ? raw.billing_details?.image_count === true
+            ? 'per_image'
+            : 'per_call'
+          : 'per_million_tokens',
+    }))
+  // A generic cache-write fallback is not a configured charge.
+  if (raw.cache_write_mode === 'none') {
+    const index = priceLines.findIndex((line) => line.key === 'cacheWrite')
+    if (index >= 0) priceLines.splice(index, 1)
+  }
+  if (raw.cache_write_mode === 'claude_ttl') {
+    const write = priceLines.find((line) => line.key === 'cacheWrite')
+    if (write)
+      priceLines.push({
+        ...write,
+        key: 'cacheWrite1h',
+        amount: multiplyDecimal(write.amount, '1.6'),
+      })
+  }
   return {
-    id,
-    priceStatus: raw.price_status,
-    priceReason: 'price_reason' in raw ? raw.price_reason : undefined,
-    version: '',
-    billingMode:
-      raw.price_status === 'unavailable'
-        ? 'unconfigured'
-        : raw.pricing_values.request != null
-          ? 'per_call'
-          : 'token',
+    id: raw.id,
+    version: raw.version,
+    billingMode,
     priceLines,
-    referencePrices: priceLines.map((line) => ({
-      ...line,
-      source: 'configured' as const,
-    })),
-    expression: '',
-    pluginKey: '',
-    pluginName: '',
+    referencePrices:
+      billingMode === 'dynamic'
+        ? expressionReferencePrices(
+            String(values['billing_setting.billing_expr'] ?? ''),
+            Boolean(
+              raw.plugin_key ||
+              raw.usage_reference ||
+              Object.keys(raw.usage_schema ?? {}).length
+            ),
+            raw.usage_reference,
+            ratio,
+            raw.plugin_name
+          )
+        : priceLines.map((line) => ({
+            ...line,
+            source: 'configured' as const,
+          })),
+    expression:
+      billingMode === 'dynamic'
+        ? String(values['billing_setting.billing_expr'] ?? '')
+        : '',
+    pluginKey: raw.plugin_key ?? '',
+    pluginName: raw.plugin_name ?? '',
     endpointTypes: raw.supported_endpoint_types,
+    usageSchema: raw.usage_schema,
+    cacheWriteMode: raw.cache_write_mode,
+    billingDetails: raw.billing_details,
   }
 }
+
 export function buildModelMarketCatalog(
-  response: ModelCatalog
+  response: ModelMarketResponse
 ): ModelMarketCatalog {
-  const channels = response.channels.map((row) => ({
-    id: row.id,
-    name: row.name,
-    ratio: row.channel_ratio,
-  }))
-  const byChannel = new Map(channels.map((row) => [row.id, row]))
+  const channels = new Map(
+    response.channels.map((channel) => [channel.id, channel])
+  )
+  const byModel = new Map<string, typeof response.offers>()
+  for (const offer of response.offers) {
+    const offers = byModel.get(offer.model_id) ?? []
+    offers.push(offer)
+    byModel.set(offer.model_id, offers)
+  }
   const models = response.models.map((model): MarketModel => {
-    const baseline = projectMarketPricing(model, model.model_name)
+    const baselines = model.baselines.map((price) =>
+      projectMarketPricing(price)
+    )
+    const prices = new Map(model.baselines.map((price) => [price.id, price]))
+    const byPrice = new Map(baselines.map((price) => [price.id, price]))
+    const offers = (byModel.get(model.id) ?? []).map((offer): MarketOffer => {
+      const channel = channels.get(offer.channel_id)!
+      const raw = prices.get(offer.pricing_id)!
+      return {
+        id: offer.id,
+        modelId: model.id,
+        channelId: channel.id,
+        channelName: channel.name,
+        ratio: channel.ratio,
+        pricing: projectMarketPricing(raw, channel.ratio),
+        baseline: byPrice.get(raw.id)!,
+        endpointTypes: offer.supported_endpoint_types,
+      }
+    })
     return {
-      id: model.model_name,
-      name: model.model_name,
-      description: model.description,
+      id: model.id,
+      name: model.id,
+      vendor: model.vendor || PLATFORM_VENDOR,
       icon: model.icon,
-      vendor:
-        response.vendors.find((vendor) => vendor.id === model.vendor_id)
-          ?.name || PLATFORM_VENDOR,
+      description: model.description,
       type: modelType(model.supported_endpoint_types),
       capabilities: model.capabilities,
       endpointTypes: model.supported_endpoint_types,
@@ -96,36 +186,15 @@ export function buildModelMarketCatalog(
         path:
           response.supported_endpoints[type]?.path.replaceAll(
             '{model}',
-            model.model_name
+            model.id
           ) ?? '',
         method: response.supported_endpoints[type]?.method ?? '',
       })),
-      baselines: [baseline],
-      offers: response.offers
-        .filter((offer) => offer.model_id === model.model_name)
-        .map((offer): MarketOffer => ({
-          id: `${offer.model_id}:${offer.channel_id}`,
-          modelId: offer.model_id,
-          channelId: offer.channel_id,
-          channelName: byChannel.get(offer.channel_id)!.name,
-          ratio: offer.channel_ratio,
-          pricing: projectMarketPricing(
-            offer,
-            `${offer.model_id}:${offer.channel_id}`
-          ),
-          baseline,
-          endpointTypes: offer.supported_endpoint_types,
-        })),
+      baselines,
+      offers,
     }
   })
-  return {
-    models,
-    channels,
-    telemetry: {
-      status: 'unavailable',
-      reason: 'channel_metrics_not_collected',
-    },
-  }
+  return { models, channels: response.channels, telemetry: response.telemetry }
 }
 
 export function compareMarketOffers(

@@ -59,16 +59,9 @@ export function useEChart(
   }
 
   function render() {
-    if (!chart || !chartTarget) return
+    if (!chart) return
     renderedScale = layoutScale()
-    const built = buildOption(chartPalette(), renderedScale)
-    const option = {
-      ...built,
-      textStyle: {
-        fontFamily: getComputedStyle(chartTarget).fontFamily,
-        ...built.textStyle,
-      },
-    }
+    const option = buildOption(chartPalette(), renderedScale)
     chart.setOption(
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? { ...option, animation: false }
@@ -96,7 +89,6 @@ export function useEChart(
     resizeObserver = null
     themeObserver?.disconnect()
     themeObserver = null
-    document.fonts?.removeEventListener('loadingdone', render)
     chart?.dispose()
     chart = null
     chartTarget = null
@@ -107,8 +99,6 @@ export function useEChart(
     detach()
     chartTarget = target
     chart = echarts.init(target)
-    // Canvas text does not inherit CSS fonts or redraw when a web font loads.
-    document.fonts?.addEventListener('loadingdone', render)
     render()
 
     resizeObserver = new ResizeObserver(() => {

@@ -36,8 +36,9 @@ const darkScenarios: Scenario[] = [
     selectTabByName: '统计数据',
   },
   {
-    name: 'token-private-route',
-    path: '/keys/7/routing',
+    name: 'dashboard-auto-route',
+    path: '/dashboard',
+    selectTabByName: '自动路由',
   },
   { name: 'models', path: '/models' },
   { name: 'keys', path: '/keys' },
@@ -60,9 +61,9 @@ const darkScenarios: Scenario[] = [
   { name: 'activity', path: '/activity' },
   { name: 'invite', path: '/invite' },
   {
-    name: 'users-create-modal',
+    name: 'users-affiliate-modal',
     path: '/users',
-    openModalByButton: '新建用户',
+    openModalByButton: '配置邀请码',
   },
   { name: 'farm', path: '/farm' },
 ]
@@ -78,17 +79,18 @@ const lightScenarios: Scenario[] = [
     selectTabByName: '统计数据',
   },
   {
-    name: 'token-private-route',
-    path: '/keys/7/routing',
+    name: 'dashboard-auto-route',
+    path: '/dashboard',
+    selectTabByName: '自动路由',
   },
   { name: 'models', path: '/models' },
   { name: 'logs', path: '/usage-logs' },
   { name: 'activity', path: '/activity' },
   { name: 'invite', path: '/invite' },
   {
-    name: 'users-create-modal',
+    name: 'users-affiliate-modal',
     path: '/users',
-    openModalByButton: '新建用户',
+    openModalByButton: '配置邀请码',
   },
 ]
 
@@ -153,9 +155,11 @@ async function auditScenario(
     await trigger.click()
     const dialog = page.locator('[role="dialog"][aria-modal="true"]')
     await expect(dialog).toBeVisible()
-    await expect(dialog).toContainText('gpt-native')
-    await expect(dialog).toContainText('最终费用')
-    await expect(dialog.locator('pre')).toHaveText('{}')
+    const evidence = dialog.locator('[data-log-billing-detail]')
+    await expect(evidence).toBeVisible()
+    await expect(evidence.getByText('gpt-4.1', { exact: true })).toBeVisible()
+    await expect(evidence.getByText('尚无已确认的费用结果。')).toBeVisible()
+    await expect(evidence.getByRole('table')).toHaveCount(0)
     await waitForStablePage(page)
   }
   if (scenario.path === '/usage-logs') {
@@ -201,9 +205,9 @@ for (const scenario of lightScenarios) {
   })
 }
 
-test('light mobile token-private-route', async ({ page }) => {
+test('light mobile dashboard-auto-route', async ({ page }) => {
   const scenario = lightScenarios.find(
-    (item) => item.name === 'token-private-route'
+    (item) => item.name === 'dashboard-auto-route'
   )!
   await auditScenario('light', 'mobile', scenario, page)
 })
@@ -214,7 +218,7 @@ for (const name of [
   'sign-up',
   'activity',
   'invite',
-  'users-create-modal',
+  'users-affiliate-modal',
 ] as const) {
   test(`light mobile ${name}`, async ({ page }) => {
     const scenario = lightScenarios.find((item) => item.name === name)!

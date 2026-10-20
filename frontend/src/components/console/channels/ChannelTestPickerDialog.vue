@@ -134,7 +134,7 @@ async function runBatch() {
   const batchTargets = [...targets.value]
   if (props.recordAudit) {
     try {
-      await props.recordAudit?.(
+      await props.recordAudit(
         'channel.lab_model_test',
         batchTargets,
         props.groupSlug

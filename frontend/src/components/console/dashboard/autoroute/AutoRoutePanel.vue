@@ -5,19 +5,18 @@ import { useI18n } from 'vue-i18n'
 
 import EmptyState from '@/components/common/EmptyState.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import VendorRouteGroup from './VendorRouteGroup.vue'
 import { useAutoRoute } from '@/composables/useAutoRoute'
 
 const { t, locale } = useI18n()
-const { loading, error, lastUpdated, vendorList, load } = useAutoRoute()
+const { loading, lastUpdated, vendorList, load } = useAutoRoute()
 
 onMounted(() => void load())
 </script>
 
 <template>
   <div class="sibling-space-y-3 sm:sibling-space-y-4" data-auto-route-panel>
-    <!-- Lab classification is for display, not execution priority. -->
+    <!-- Header card: explains the per-lab optimum and hosts refresh. -->
     <div
       class="relative overflow-hidden rounded-xl border border-[var(--accent-soft)] bg-[var(--accent-soft)] px-4 py-3 sm:rounded-2xl"
     >
@@ -55,15 +54,6 @@ onMounted(() => void load())
       </div>
     </div>
 
-    <ErrorBanner v-if="error" :message="error" @retry="load" />
-    <p
-      v-if="error && lastUpdated"
-      role="status"
-      class="text-xs text-[var(--status-warning-text)]"
-    >
-      {{ t('dashboard.autoRoute.stale') }}
-    </p>
-
     <!-- skeleton -->
     <div v-if="loading" class="sibling-space-y-4">
       <div
@@ -73,20 +63,22 @@ onMounted(() => void load())
       />
     </div>
 
-    <!-- Preserve the historical vendor cards with native catalog facts. -->
+    <!-- Lab groups, each ranking its own optimum. -->
     <template v-else-if="vendorList.length">
       <VendorRouteGroup
         v-for="group in vendorList"
         :key="group.groupSlug"
         :group-slug="group.groupSlug"
         :group-name="group.groupName"
+        :lab-matches="group.labMatches"
         :channels="group.channels"
         :active-count="group.activeCount"
+        :monitor="group.monitor"
       />
     </template>
 
     <EmptyState
-      v-else-if="!error"
+      v-else
       :title="t('dashboard.autoRoute.emptyTitle')"
       :hint="t('dashboard.autoRoute.emptyHint')"
     />

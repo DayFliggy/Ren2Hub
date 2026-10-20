@@ -3,13 +3,6 @@ import { publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
-  checkin_enabled?: boolean
-  quota_display_type?: string
-  quota_per_unit?: number
-  usd_exchange_rate?: number
-  custom_currency_symbol?: string
-  custom_currency_exchange_rate?: number
-  email_verification?: boolean
   log_export_enabled?: boolean
   log_max_range_days?: number
   server_address?: string
@@ -97,32 +90,13 @@ export function parsePublicStatus(value: unknown): PublicStatus {
 
   const result: PublicStatus = {}
   const stringKeys = [
-    'quota_display_type',
-    'custom_currency_symbol',
     'version',
     'system_name',
     'logo',
     'docs_link',
     'server_address',
   ] as const
-  for (const key of [
-    'quota_per_unit',
-    'usd_exchange_rate',
-    'custom_currency_exchange_rate',
-  ] as const) {
-    if (value[key] !== undefined) {
-      if (
-        typeof value[key] !== 'number' ||
-        !Number.isFinite(value[key]) ||
-        value[key] <= 0
-      )
-        invalidResponse('/api/status')
-      result[key] = value[key]
-    }
-  }
   const booleanKeys = [
-    'checkin_enabled',
-    'email_verification',
     'log_export_enabled',
     'api_info_enabled',
     'password_login_enabled',

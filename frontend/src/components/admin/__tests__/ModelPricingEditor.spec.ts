@@ -218,7 +218,46 @@ describe('manual model price editor', () => {
     })
     wrapper.unmount()
   })
-
+  it('simulates task facts without hidden request fields while keeping the clock', async () => {
+    const simulate = vi
+      .spyOn(pricingConfigApi, 'simulate')
+      .mockResolvedValue({ amount_usd: '0.4' })
+    const pricing: PricingValues = {
+      'billing_setting.billing_mode': 'tiered_expr',
+      'billing_setting.billing_expr': 'u("seconds") * 0.4',
+    }
+    const wrapper = setup(pricing)
+    await wrapper
+      .findAll('label')
+      .find((label) => label.text() === 'Parameters JSON')!
+      .get('textarea')
+      .setValue('invalid JSON')
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: pricing,
+        effective: pricing,
+        usage_schema: { seconds: { type: 'number', unit: 'second' } },
+      },
+    })
+    expect(wrapper.text()).not.toContain('Parameters JSON')
+    expect(wrapper.text()).not.toContain('Headers JSON')
+    expect(wrapper.text()).toContain('Task models use task usage facts')
+    expect(wrapper.text()).toContain('Simulation time')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Calculate draft charge')!
+      .trigger('click')
+    await flushPromises()
+    expect(simulate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: { params: {}, headers: {} },
+        time: expect.any(String),
+      })
+    )
+    wrapper.unmount()
+  })
   it('does not invent a free expression for an empty model', async () => {
     const wrapper = setup()
     expect(wrapper.get('textarea').element).toHaveProperty('value', '')
@@ -318,6 +357,45 @@ describe('manual model price editor', () => {
       'fixed(0.2)'
     )
     expect(save).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('surfaces server simulation failures without displaying a fake zero', async () => {
+    vi.spyOn(pricingConfigApi, 'simulate').mockRejectedValue(
+      new Error('missing usage')
+    )
+    const wrapper = setup({
+      'billing_setting.billing_mode': 'tiered_expr',
+      'billing_setting.billing_expr': 'p * 2',
+    })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Calculate draft charge')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('missing usage')
+    expect(wrapper.text()).not.toContain('$0.000')
+    wrapper.unmount()
+  })
+  it('ignores a failed simulation after its pricing draft has changed', async () => {
+    let rejectSimulation!: (reason: Error) => void
+    vi.spyOn(pricingConfigApi, 'simulate').mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectSimulation = reject
+        })
+    )
+    const wrapper = setup({
+      'billing_setting.billing_mode': 'tiered_expr',
+      'billing_setting.billing_expr': 'p * 2',
+    })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Calculate draft charge')!
+      .trigger('click')
+    await wrapper.get('.price-expression textarea').setValue('p * 3')
+    rejectSimulation(new Error('old draft error'))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('old draft error')
     wrapper.unmount()
   })
 })

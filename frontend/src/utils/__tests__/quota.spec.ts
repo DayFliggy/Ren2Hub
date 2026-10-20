@@ -38,13 +38,10 @@ describe('exact quota contracts', () => {
       '9223372036854775808',
     ]) {
       expect(isQuota(value)).toBe(false)
-      if (value !== 1)
-        expect(() => requiredQuota(value, '/billing')).toThrow(
-          'Invalid API response'
-        )
+      expect(() => requiredQuota(value, '/billing')).toThrow(
+        'Invalid API response'
+      )
     }
-    expect(requiredQuota(1, '/native')).toBe('1')
-    expect(() => requiredQuota('1', '/native')).toThrow()
     expect(() => addQuota('9223372036854775807', '1')).toThrow('overflow')
     expect(() => decimalToQuota('0.000001')).toThrow('Fractional quota')
     expect(() => decimalToQuota('18446744073709.551616')).toThrow('overflow')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -56,9 +56,7 @@ async function load(id = ticketId.value) {
   statusChanging.value = false
   confirmClose.value = false
   if (!Number.isSafeInteger(id) || id <= 0) {
-    detailRequest.cancel()
     loading.value = false
-    loadFailed.value = false
     notFound.value = true
     return
   }
@@ -70,12 +68,12 @@ async function load(id = ticketId.value) {
     api.get<{
       ticket: TicketMeta
       messages: TicketMessage[]
-    }>(`/api/tickets/${id}`, undefined, { signal })
+    }>(`/api/next/tickets/${id}`, undefined, { signal })
   )
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
-    if (result.error instanceof ApiError && result.error.code === 'NOT_FOUND') {
+    if (result.error instanceof ApiError && result.error.business) {
       notFound.value = true
     } else {
       loadFailed.value = true
@@ -92,8 +90,7 @@ async function load(id = ticketId.value) {
 }
 
 async function sendReply(payload: { content: string; attachments: File[] }) {
-  if (readOnly.value || !ticket.value || replying.value || statusChanging.value)
-    return
+  if (readOnly.value || !ticket.value || replying.value) return
   const id = ticket.value.id
   const sequence = ++mutationSequence
   replying.value = true
@@ -102,7 +99,7 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
     body.set('content', payload.content)
     for (const file of payload.attachments) body.append('attachments', file)
     const data = await api.post<{ message: TicketMessage }>(
-      `/api/tickets/${id}/messages`,
+      `/api/next/tickets/${id}/messages`,
       body
     )
     if (sequence !== mutationSequence || ticket.value?.id !== id) return
@@ -124,14 +121,13 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
 }
 
 async function changeStatus(next: 'open' | 'closed') {
-  if (readOnly.value || !ticket.value || statusChanging.value || replying.value)
-    return
+  if (readOnly.value || !ticket.value || statusChanging.value) return
   const id = ticket.value.id
   const sequence = ++mutationSequence
   statusChanging.value = true
   try {
     const data = await api.patch<{ ticket: TicketMeta }>(
-      `/api/tickets/${id}/status`,
+      `/api/next/tickets/${id}/status`,
       { status: next }
     )
     if (sequence !== mutationSequence || ticket.value?.id !== id) return
@@ -140,6 +136,8 @@ async function changeStatus(next: 'open' | 'closed') {
       next === 'closed' ? t('tickets.closed') : t('tickets.reopened')
     )
     void ticketQueue.refresh()
+    // Refresh the thread to pick up the system note the backend appended.
+    await load(id)
   } catch (error) {
     if (sequence === mutationSequence) {
       toast.error(error instanceof ApiError ? error.message : String(error))
@@ -157,9 +155,6 @@ function openLightbox(url: string) {
 }
 
 watch(ticketId, (id) => void load(id), { immediate: true })
-onBeforeUnmount(() => {
-  mutationSequence += 1
-})
 </script>
 
 <template>
@@ -270,7 +265,7 @@ onBeforeUnmount(() => {
             variant="secondary"
             size="sm"
             :loading="statusChanging"
-            :disabled="readOnly || replying"
+            :disabled="readOnly"
             @click="confirmClose = true"
           >
             {{ t('tickets.closeTicket') }}
@@ -280,7 +275,7 @@ onBeforeUnmount(() => {
             variant="secondary"
             size="sm"
             :loading="statusChanging"
-            :disabled="readOnly || replying"
+            :disabled="readOnly"
             @click="changeStatus('open')"
           >
             {{ t('tickets.reopenTicket') }}
@@ -306,7 +301,7 @@ onBeforeUnmount(() => {
         <TicketReplyBox
           ref="replyBox"
           :submitting="replying"
-          :readonly="readOnly || statusChanging"
+          :readonly="readOnly"
           @submit="sendReply"
         />
       </ConsoleCard>

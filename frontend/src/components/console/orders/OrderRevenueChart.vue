@@ -11,22 +11,15 @@ import type { AdminOrderDailyPoint } from '@/types/console'
 const props = withDefaults(
   defineProps<{
     points: AdminOrderDailyPoint[]
-    currency?: string
     loading?: boolean
-    partialAmounts?: boolean
   }>(),
-  { loading: false, currency: '', partialAmounts: false }
+  { loading: false }
 )
 
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
 
 const points = computed(() => props.points)
-const amountLabel = computed(() =>
-  t(
-    props.partialAmounts ? 'orders.knownAmountSubtotal' : 'orders.chart.revenue'
-  )
-)
 
 /**
  * Label density is derived from the window length: 7 days shows every tick,
@@ -74,11 +67,11 @@ useEChart(
         itemHeight: 10 * scale,
         icon: p.isDark ? 'roundRect' : 'rect',
         textStyle: { color: p.textSecondary, fontSize: 11 * scale },
-        data: [amountLabel.value, t('orders.paidOrders')],
+        data: [t('orders.chart.revenue'), t('orders.chart.orders')],
         formatter: (name: string) =>
-          name === amountLabel.value
-            ? `${amountLabel.value} (${props.currency || '—'})`
-            : t('orders.paidOrders'),
+          name === t('orders.chart.revenue')
+            ? t('orders.chart.revenueAxis')
+            : t('orders.chart.ordersAxis'),
       },
       tooltip: {
         trigger: 'axis',
@@ -123,7 +116,7 @@ useEChart(
       ],
       series: [
         {
-          name: amountLabel.value,
+          name: t('orders.chart.revenue'),
           type: 'line',
           smooth: mood.line.smooth,
           showSymbol: !p.isDark,
@@ -141,8 +134,7 @@ useEChart(
             borderWidth: 2 * scale,
           },
           tooltip: {
-            valueFormatter: (v: number) =>
-              formatAdminOrderAmount(v, props.currency),
+            valueFormatter: (v: number) => formatAdminOrderAmount(v, 'CNY'),
           },
           areaStyle: {
             color: {
@@ -156,7 +148,7 @@ useEChart(
           },
         },
         {
-          name: t('orders.paidOrders'),
+          name: t('orders.chart.orders'),
           type: 'line',
           yAxisIndex: 1,
           smooth: mood.line.smooth,
@@ -178,19 +170,12 @@ useEChart(
       ],
     }
   },
-  [points, labelInterval, () => props.currency, () => amountLabel.value]
+  [points, labelInterval, () => t('orders.chart.revenue')]
 )
 </script>
 
 <template>
   <ConsoleCard :title="t('orders.chart.title')">
-    <p
-      v-if="partialAmounts"
-      role="status"
-      class="mb-3 text-xs text-[var(--text-secondary)]"
-    >
-      {{ t('orders.partialAmountTrend') }}
-    </p>
     <!-- The skeleton overlays the canvas host rather than replacing it: a
          hidden host would report 0×0 to echarts.init() on first mount, and the
          chart would only recover on the next resize. -->
@@ -218,14 +203,14 @@ useEChart(
       <thead>
         <tr>
           <th scope="col">{{ t('orders.chart.date') }}</th>
-          <th scope="col">{{ amountLabel }}</th>
-          <th scope="col">{{ t('orders.paidOrders') }}</th>
+          <th scope="col">{{ t('orders.chart.revenue') }}</th>
+          <th scope="col">{{ t('orders.chart.orders') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="point in points" :key="point.date">
           <th scope="row">{{ point.date }}</th>
-          <td>{{ formatAdminOrderAmount(point.revenue, currency) }}</td>
+          <td>{{ formatAdminOrderAmount(point.revenue, 'CNY') }}</td>
           <td>{{ point.orders }}</td>
         </tr>
       </tbody>

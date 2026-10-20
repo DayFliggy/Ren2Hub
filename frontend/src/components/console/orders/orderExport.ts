@@ -33,7 +33,7 @@ export function getOrderExportValues(
     order.method,
     order.payment_method,
     order.status,
-    Number.isFinite(order.amount) ? order.amount : '',
+    order.amount,
     order.currency,
     order.quota,
     formatTime(order.created),

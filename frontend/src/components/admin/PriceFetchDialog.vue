@@ -7,6 +7,7 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import {
   pricingConfigApi,
+  PRICE_SOURCES,
   type FetchedPriceSource,
   type FetchedModelPrice,
 } from '@/api/pricingConfig'
@@ -26,6 +27,13 @@ const loading = ref(false),
 const page = ref(1),
   pageSize = ref(50)
 let controller: AbortController | undefined
+const names: Record<string, string> = {
+  sub2api: 'Sub2API',
+  axonhub: 'AxonHub',
+  basellm: 'basellm',
+  models_dev: 'models.dev',
+  openrouter: 'OpenRouter',
+}
 const current = computed(() =>
   sources.value.find((item) => item.id === source.value)
 )
@@ -116,7 +124,7 @@ onBeforeUnmount(() => controller?.abort())
       <fieldset class="price-source-list">
         <legend class="sr-only">{{ t('source') }}</legend>
         <label
-          v-for="{ id, name } in sources"
+          v-for="id in PRICE_SOURCES"
           :key="id"
           class="price-source"
           :data-selected="source === id"
@@ -137,7 +145,7 @@ onBeforeUnmount(() => controller?.abort())
                 )
             "
           />
-          <span>{{ name }}</span>
+          <span>{{ names[id] }}</span>
           <small>{{
             t(
               loading

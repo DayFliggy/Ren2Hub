@@ -1,19 +1,37 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { MoreHorizontal, Trash2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import { systemManagementApi, type SystemTask } from '@/api/systemManagement'
+import {
+  systemManagementApi,
+  type SystemTask,
+  type SystemTaskHealth,
+} from '@/api/systemManagement'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import OpsCard from './OpsCard.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import SystemTaskSection from '@/components/admin/SystemTaskSection.vue'
 import { useSystemManagement } from '@/composables/useSystemManagement'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import { systemManagementMessages } from '@/i18n/systemManagement'
-import { formatTimestamp } from '@/utils/opsFormat'
+import {
+  durationParts,
+  formatRelative,
+  formatTimestamp,
+} from '@/utils/opsFormat'
+import OpsCard from './OpsCard.vue'
 import '@/components/admin/admin.css'
+
+const HEALTH_TONES = {
+  ok: 'success',
+  failing: 'danger',
+  stale: 'warning',
+  idle: 'neutral',
+  running: 'info',
+  inactive: 'neutral',
+} as const satisfies Record<SystemTaskHealth, string>
 
 // One local composer per component: Vue I18n reuses the first local scope.
 const { t, te, locale } = useI18n({
@@ -27,6 +45,7 @@ const { t, te, locale } = useI18n({
   },
 })
 const {
+  summary,
   active,
   history,
   activeTasks,
@@ -47,7 +66,10 @@ const cleanupDate = (stamp: number) =>
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(stamp * 1000)
-const taskTypesId = useId()
+const interval = (seconds: number) =>
+  durationParts(seconds)
+    .map((part) => t(`ops.duration.${part.unit}`, { n: part.amount }))
+    .join(' ')
 
 const result = ref('')
 const taskDetail = ref<SystemTask | null>(null)
@@ -125,10 +147,6 @@ function confirmLogCleanup() {
   logTarget.value = Math.floor(timestamp / 1000)
 }
 
-async function refreshTasks() {
-  await Promise.all([active.refresh(), history.refresh()])
-}
-
 async function cleanLogs() {
   if (!logTarget.value || creating.value) return
   creating.value = true
@@ -140,7 +158,7 @@ async function cleanLogs() {
     result.value = t('cleanupCreated', { id: task.task_id })
     logTarget.value = null
     logDialog.value = false
-    await Promise.all([active.refresh(), history.refresh()])
+    await Promise.all([active.refresh(), history.refresh(), summary.refresh()])
   } catch (cause) {
     if (!disposed)
       logError.value = cause instanceof Error ? cause.message : String(cause)
@@ -154,19 +172,71 @@ async function cleanLogs() {
   <OpsCard
     :title="t('ops.tasks.title')"
     :scope="t('ops.rootOnly')"
-    :loading="active.loading.value || history.loading.value"
-    :loaded="active.data.value !== null || history.data.value !== null"
-    :error="
-      [active.error.value, history.error.value].filter(Boolean).join(' · ')
-    "
-    :updated-at="Math.max(active.updatedAt.value, history.updatedAt.value)"
+    :loading="summary.loading.value"
+    :loaded="summary.data.value !== null"
+    :error="summary.error.value"
+    :updated-at="summary.updatedAt.value"
     data-ops-section="tasks"
-    @retry="refreshTasks"
+    @retry="summary.refresh"
   >
-    <p class="ops-note" data-ops-task-summary-unavailable>
-      {{ t('ops.native.taskSummaryUnavailable') }}
-    </p>
     <p v-if="result" class="ops-result" role="status">{{ result }}</p>
+    <p v-if="!summary.data.value?.length" class="ops-empty">
+      {{ t('ops.tasks.empty') }}
+    </p>
+    <ul v-else class="ops-task-types" data-ops-task-summary>
+      <li
+        v-for="row in summary.data.value"
+        :key="row.type"
+        :data-task-type="row.type"
+      >
+        <div class="ops-task-head">
+          <strong>{{ typeLabel(row.type) }}</strong>
+          <StatusChip
+            :tone="HEALTH_TONES[row.status]"
+            :title="
+              row.status === 'inactive'
+                ? t('ops.tasks.inactiveHint')
+                : undefined
+            "
+            >{{ t(`ops.tasks.health.${row.status}`) }}</StatusChip
+          >
+        </div>
+        <p class="ops-task-meta">
+          <code>{{ row.type }}</code>
+          <span>{{
+            row.scheduled && row.interval_seconds !== null
+              ? t('ops.tasks.every', {
+                  interval: interval(row.interval_seconds),
+                })
+              : t('ops.tasks.onDemand')
+          }}</span>
+          <span :title="date(row.last_success_at)"
+            >{{ t('ops.tasks.lastSuccess') }}
+            {{
+              formatRelative(
+                row.last_success_at,
+                summary.updatedAt.value,
+                locale
+              )
+            }}</span
+          >
+          <span v-if="row.last_failure_at" :title="date(row.last_failure_at)"
+            >{{ t('ops.tasks.lastFailure') }}
+            {{
+              formatRelative(
+                row.last_failure_at,
+                summary.updatedAt.value,
+                locale
+              )
+            }}</span
+          >
+        </p>
+        <p v-if="row.last_error" class="ops-task-error" :title="row.last_error">
+          {{ row.last_error }}
+        </p>
+      </li>
+    </ul>
+
     <SystemTaskSection
       :title="t('activeTasks')"
       :empty-text="t('emptyActive')"
@@ -223,18 +293,12 @@ async function cleanLogs() {
         <div class="ops-history-filters">
           <label class="admin-field"
             ><span>{{ t('filterType') }}</span
-            ><input
-              v-model="historyType"
-              :disabled="clearingHistory"
-              :list="taskTypesId"
-              maxlength="64"
-              :placeholder="t('allTypes')"
-            />
-            <datalist :id="taskTypesId">
+            ><select v-model="historyType" :disabled="clearingHistory">
+              <option value="">{{ t('allTypes') }}</option>
               <option v-for="type in taskTypes" :key="type" :value="type">
                 {{ typeLabel(type) }}
               </option>
-            </datalist></label
+            </select></label
           >
           <label class="admin-field"
             ><span>{{ t('filterStatus') }}</span

@@ -2,8 +2,8 @@
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { getTopUps } from '@/api/adminOrders'
-import { ApiError } from '@/api/types'
+import { api } from '@/api/console'
+import { ApiError, type PageResult } from '@/api/types'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
@@ -33,7 +33,11 @@ const listRequest = useLatestRequest()
 async function load() {
   loading.value = true
   const result = await listRequest.run((signal) =>
-    getTopUps({ p: page.value, page_size: pageSize.value }, signal, true)
+    api.get<PageResult<AdminOrder>>(
+      '/api/next/wallet/topups',
+      { p: page.value, page_size: pageSize.value },
+      { signal }
+    )
   )
   if (result.stale) return
   loading.value = false

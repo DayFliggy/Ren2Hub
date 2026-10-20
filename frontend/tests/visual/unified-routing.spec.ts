@@ -2,37 +2,9 @@ import { expect, test } from '@playwright/test'
 import {
   assertInteractiveCentersVisible,
   assertNoHorizontalOverflow,
-  configureStablePage as configureNativePage,
+  configureStablePage,
   waitForStablePage,
 } from './fixtures'
-
-async function configureStablePage(
-  ...args: Parameters<typeof configureNativePage>
-) {
-  await configureNativePage(...args)
-  await args[0].route('**/api/pricing', (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        vendors: [],
-        supported_endpoint: {
-          openai: { path: '/v1/chat/completions', method: 'POST' },
-        },
-        data: [
-          {
-            model_name: 'gpt-4.1',
-            quota_type: 0,
-            model_ratio: 1.25,
-            completion_ratio: 4,
-            cache_ratio: 0.25,
-            create_cache_ratio: 1.25,
-            supported_endpoint_types: ['openai'],
-          },
-        ],
-      },
-    })
-  )
-}
 
 for (const theme of ['light', 'dark'] as const) {
   for (const viewport of ['desktop', 'mobile'] as const) {
@@ -102,7 +74,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.goto('/keys', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       await expect(
-        page.getByText('Native Key').filter({ visible: true })
+        page.getByText('Production key').filter({ visible: true })
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)

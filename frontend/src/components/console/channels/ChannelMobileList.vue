@@ -388,8 +388,6 @@ function responseDisplay(channel: AdminChannel): {
                   <ChannelInlineNumber
                     v-if="canWrite && !isRetiredChannelType(channel.type)"
                     :value="channel.priority"
-                    :min="Number.MIN_SAFE_INTEGER"
-                    :max="Number.MAX_SAFE_INTEGER"
                     :label="t('channels.priorityFor', { name: channel.name })"
                     :busy="isRowBusy(channel.id)"
                     :commit="

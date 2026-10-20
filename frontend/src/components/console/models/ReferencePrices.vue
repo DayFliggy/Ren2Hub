@@ -56,6 +56,16 @@ const { t, te } = useI18n({
       <p v-if="price.requestRules" class="reference-condition">
         {{ t('rules') }}<span v-if="details">: {{ price.requestRules }}</span>
       </p>
+      <dl
+        v-if="details && price.facts"
+        class="reference-facts"
+        :aria-label="t('facts')"
+      >
+        <div v-for="(value, key) in price.facts" :key="key">
+          <dt>{{ key }}</dt>
+          <dd>{{ value }}</dd>
+        </div>
+      </dl>
     </div>
   </div>
 </template>

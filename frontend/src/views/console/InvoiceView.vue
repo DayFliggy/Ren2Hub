@@ -1,24 +1,51 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { onMounted, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import type { InvoiceItem } from '@/types/console'
 import PageHero from '@/components/console/PageHero.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FormField from '@/components/common/FormField.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
+import TablePagination from '@/components/common/TablePagination.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import { invoiceMessages } from '@/i18n/invoice'
+import { useInvoice, type InvoiceForm } from '@/composables/useInvoice'
+import { formatDate } from '@/utils/format'
+import { safeExternalUrl } from '@/utils/safeUrl'
 
-const { t } = useI18n({ useScope: 'local', messages: invoiceMessages })
+const { t } = useI18n()
 
-// The draft stays on this page. Invoice submission and records are unavailable.
-const form = reactive({
+const { invoices, total, page, pageSize, loading, loadInvoices, goToPage } =
+  useInvoice()
+
+const form = reactive<InvoiceForm>({
   title: '',
   tax_id: '',
   amount: '',
   email: '',
   note: '',
+})
+
+/** Map invoice status → StatusChip tone */
+function statusTone(
+  status: InvoiceItem['status']
+): 'warning' | 'success' | 'danger' {
+  if (status === 'issued') return 'success'
+  if (status === 'rejected') return 'danger'
+  return 'warning'
+}
+
+function downloadPDF(invoice: InvoiceItem) {
+  if (invoice.status !== 'issued') return
+  const url = safeExternalUrl(invoice.pdf_url)
+  if (url) window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+onMounted(() => {
+  loadInvoices()
 })
 </script>
 
@@ -26,7 +53,7 @@ const form = reactive({
   <div>
     <PageHero
       :title="t('invoice.title')"
-      :crumbs="[t('invoice.breadcrumb.0'), t('invoice.breadcrumb.1')]"
+      :crumbs="[$t('invoice.breadcrumb.0'), $t('invoice.breadcrumb.1')]"
     >
       <p class="mt-1 text-sm text-[var(--text-tertiary)]">
         {{ t('invoice.bannerDesc') }}
@@ -118,6 +145,7 @@ const form = reactive({
               <TextInput
                 v-model="form.amount"
                 type="number"
+                min="200"
                 step="0.01"
                 :placeholder="t('invoice.amountPlaceholder')"
               >
@@ -182,7 +210,8 @@ const form = reactive({
             />
           </FormField>
 
-          <!-- Keep the historical form without claiming an available service. -->
+          <!-- Submit: online submission stays fail-closed until the backend
+               ships /api/invoice/apply; the reason must stay visible here. -->
           <div class="sibling-space-y-3">
             <p
               id="invoice-submit-note"
@@ -242,12 +271,110 @@ const form = reactive({
             </span>
           </template>
 
+          <!-- Loading skeleton -->
+          <div v-if="loading" class="sibling-space-y-3 p-5">
+            <SkeletonBlock v-for="i in 3" :key="i" rounded="xl" class="h-16" />
+          </div>
+
+          <!-- Empty state -->
           <EmptyState
-            :title="t('invoice.recordsUnavailable')"
-            :hint="t('invoice.recordsUnavailableHint')"
+            v-else-if="!invoices.length"
+            :title="t('invoice.emptyTitle')"
+            :hint="t('invoice.emptyHint')"
             illustration="empty-invoice"
-            role="status"
           />
+
+          <!-- Record rows -->
+          <div
+            v-else
+            class="sibling-divide-y sibling-divide-[var(--border-subtle)]"
+          >
+            <div
+              v-for="inv in invoices"
+              :key="inv.id"
+              class="flex flex-col gap-2 px-5 py-4 transition-colors hover:bg-[var(--state-hover-layer)]"
+            >
+              <!-- Title + status -->
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p
+                    class="truncate text-sm font-medium text-[var(--text-primary)]"
+                  >
+                    {{ inv.title }}
+                  </p>
+                  <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
+                    {{ formatDate(inv.created) }}
+                  </p>
+                </div>
+                <StatusChip
+                  :tone="statusTone(inv.status)"
+                  class="mt-0.5 shrink-0"
+                >
+                  {{ t(`invoice.status.${inv.status}`) }}
+                </StatusChip>
+              </div>
+
+              <!-- Amount + action -->
+              <div class="flex items-center justify-between gap-2">
+                <span
+                  class="text-sm font-semibold tabular-nums text-[var(--text-primary)]"
+                >
+                  ¥{{
+                    inv.amount.toLocaleString('zh-CN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  }}
+                </span>
+                <!-- Rejection reason (truncated, full text on hover) -->
+                <span
+                  v-if="inv.status === 'rejected' && inv.reject_reason"
+                  class="max-w-[160px] truncate text-xs"
+                  style="color: var(--status-danger-text)"
+                  :title="inv.reject_reason"
+                >
+                  {{ inv.reject_reason }}
+                </span>
+                <!-- PDF download -->
+                <button
+                  v-if="inv.status === 'issued'"
+                  type="button"
+                  class="flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] focus-ring"
+                  @click="downloadPDF(inv)"
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  {{ t('invoice.download') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pagination -->
+          <div
+            v-if="total > pageSize"
+            class="border-t border-[var(--border-subtle)]"
+          >
+            <TablePagination
+              :page="page"
+              :page-size="pageSize"
+              :total="total"
+              @update:page="goToPage"
+            />
+          </div>
         </ConsoleCard>
       </div>
     </div>

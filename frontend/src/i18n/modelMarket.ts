@@ -1,11 +1,5 @@
 import { pricingReferenceMessages } from './pricingReference'
 const zh = {
-  priceStates: {
-    configured: '已配置价格',
-    default: '默认价格',
-    zero: '零价格',
-    unavailable: '价格不可静态确定',
-  },
   title: '模型广场',
   console: '控制台',
   views: { models: '模型聚合', channels: '渠道货架', comparison: '比价矩阵' },
@@ -144,12 +138,6 @@ const zh = {
 }
 
 const en: typeof zh = {
-  priceStates: {
-    configured: 'Configured price',
-    default: 'Default price',
-    zero: 'Zero price',
-    unavailable: 'Price cannot be determined statically',
-  },
   title: 'Model market',
   console: 'Console',
   views: {

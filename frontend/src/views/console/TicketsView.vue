@@ -67,7 +67,7 @@ async function load() {
   loadFailed.value = false
   const result = await listRequest.run((signal) =>
     api.get<PageResult<TicketRow>>(
-      '/api/tickets',
+      '/api/next/tickets',
       {
         page: page.value,
         page_size: pageSize.value,

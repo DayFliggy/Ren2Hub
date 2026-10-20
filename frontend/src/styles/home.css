@@ -103,12 +103,11 @@ html.light .landing-shell .signal-console__rail {
 .landing-shell {
   font-family: 'Ren2Inter', 'Ren2NotoSansSC', system-ui, sans-serif;
   --home-font-display:
-    'Ren2HomeTime', 'Ren2NotoSerifSC', 'Ren2NotoSansSC', 'Noto Serif SC', serif;
+    'Ren2HomeTime', 'Ren2NotoSerifSC', 'Noto Serif SC', serif;
   --home-font-hand:
     'Ren2HomeSketch', 'Ren2NotoSansSC', 'Noto Sans SC', sans-serif;
   --home-font-stamp:
-    'Ren2HomeStamp', 'Ren2JetBrainsMono', 'Ren2NotoSansSC', ui-monospace,
-    monospace;
+    'Ren2HomeStamp', 'Ren2JetBrainsMono', ui-monospace, monospace;
   --hero-copy-overlay: var(--home-hero-copy-overlay);
   --surface-overlay: rgba(246, 243, 235, 0.96);
 }
@@ -229,12 +228,11 @@ html.dark .landing-shell .signal-dot-matrix {
    rounded surfaces. */
 .home-showcase {
   --home-font-display:
-    'Ren2HomeTime', 'Ren2NotoSerifSC', 'Ren2NotoSansSC', 'Noto Serif SC', serif;
+    'Ren2HomeTime', 'Ren2NotoSerifSC', 'Noto Serif SC', serif;
   --home-font-hand:
     'Ren2HomeSketch', 'Ren2NotoSansSC', 'Noto Sans SC', sans-serif;
   --home-font-stamp:
-    'Ren2HomeStamp', 'Ren2JetBrainsMono', 'Ren2NotoSansSC', ui-monospace,
-    monospace;
+    'Ren2HomeStamp', 'Ren2JetBrainsMono', ui-monospace, monospace;
   --showcase-rule: color-mix(in srgb, var(--text-primary) 16%, transparent);
   --showcase-runtime-surface: var(--page-background);
   --showcase-flap-surface: var(--surface-solid);
@@ -249,13 +247,11 @@ html.dark .landing-shell .signal-dot-matrix {
 html.dark .landing-shell,
 html.dark .home-showcase {
   --home-font-display:
-    'Ren2NotoSerifSC', 'Ren2NotoSansSC', 'Noto Serif SC', 'Source Han Serif SC',
-    serif;
+    'Ren2NotoSerifSC', 'Noto Serif SC', 'Source Han Serif SC', serif;
   --home-font-hand:
     'Ren2Inter', 'Ren2NotoSansSC', 'Noto Sans SC', system-ui, sans-serif;
   --home-font-stamp:
-    'Ren2JetBrainsMono', 'Ren2NotoSansSC', ui-monospace, 'SFMono-Regular',
-    Menlo, monospace;
+    'Ren2JetBrainsMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 .home-band {
@@ -1374,8 +1370,7 @@ html.dark .mobile-nav-drawer {
 .landing-shell .font-mono,
 .mobile-nav-drawer .font-mono {
   font-family:
-    'Ren2JetBrainsMono', 'Ren2NotoSansSC', ui-monospace, 'SFMono-Regular',
-    Menlo, monospace;
+    'Ren2JetBrainsMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 /* HomeView owns its progress dots. Native chrome is removed rather than merely

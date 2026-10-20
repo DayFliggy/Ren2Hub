@@ -1,77 +1,104 @@
-import { ref, watch } from 'vue'
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
 import { api } from '@/api/console'
-import { useLatestRequest } from './useLatestRequest'
+import type { Activity, ActivitySummary } from '@/types/console'
+import { ApiError } from '@/api/types'
+import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { useAppStore } from '@/stores/app'
-export interface CheckinStatus {
-  enabled: boolean
-  min_quota: number
-  max_quota: number
-  stats: {
-    total_quota: number
-    total_checkins: number
-    checkin_count: number
-    checked_in_today: boolean
-    records: Array<{ checkin_date: string; quota_awarded: number }>
-  }
-}
+
+/**
+ * Activity center state + actions. Owns loading, filtering and the
+ * claim / checkin flows so ActivityView.vue stays focused on layout.
+ * Failures keep the cached list (contract §4 convention).
+ */
 export function useActivity() {
-  const now = new Date(),
-    month = ref(
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    )
-  const status = ref<CheckinStatus | null>(null),
-    loading = ref(false),
-    claiming = ref(false),
-    loadError = ref<string | null>(null)
-  const request = useLatestRequest(),
-    auth = useAuthStore(),
-    app = useAppStore()
+  const { t } = useI18n()
+  const toast = useToast()
+  const auth = useAuthStore()
+
+  const activities = ref<Activity[]>([])
+  const summary = ref<ActivitySummary>({
+    claimable: 0,
+    reward_earned: '0',
+    ongoing: 0,
+  })
+  const loading = ref(true)
+  const loadError = ref<string | null>(null)
+  const claiming = ref(false)
+
+  const ongoing = computed(() =>
+    activities.value.filter((a) => a.status === 'ongoing')
+  )
+  const ended = computed(() =>
+    activities.value.filter((a) => a.status !== 'ongoing')
+  )
+
   async function load() {
-    if (!app.checkinEnabled) {
-      request.cancel()
-      status.value = null
-      loading.value = false
-      loadError.value = null
-      return
-    }
     loading.value = true
     loadError.value = null
-    const result = await request.run((signal) =>
-      api.get<CheckinStatus>(
-        '/api/user/checkin',
-        { month: month.value },
-        { signal }
-      )
-    )
-    if (result.stale) return
-    loading.value = false
-    if (result.ok) status.value = result.value
-    else
-      loadError.value =
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error)
-  }
-  async function checkin(turnstileToken?: string) {
-    if (!app.checkinEnabled || !status.value?.enabled || claiming.value) return
-    claiming.value = true
-    loadError.value = null
     try {
-      await api.post(
-        '/api/user/checkin',
-        undefined,
+      const data = await api.get<{
+        activities: Activity[]
+        summary: ActivitySummary
+      }>('/api/next/activity/self')
+      activities.value = data.activities
+      summary.value = data.summary
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : t('common.failed')
+      loadError.value = message
+      toast.error(message)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function checkin(id: number, turnstileToken?: string) {
+    claiming.value = true
+    try {
+      const res = await api.post<{ reward: string; streak: number }>(
+        '/api/next/activity/checkin',
+        { activity_id: id },
         turnstileToken
           ? { headers: { 'X-Turnstile-Token': turnstileToken } }
           : undefined
       )
-      await Promise.all([load(), auth.fetchSelf()])
+      toast.success(t('activity.checkin.success', { reward: res.reward }))
+      await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
-      loadError.value = error instanceof Error ? error.message : String(error)
+      toast.error(error instanceof ApiError ? error.message : String(error))
     } finally {
       claiming.value = false
     }
   }
-  watch([() => app.checkinEnabled, month], load, { immediate: true })
-  return { month, status, loading, claiming, loadError, load, checkin }
+
+  async function claim(id: number, taskId?: string) {
+    claiming.value = true
+    try {
+      await api.post('/api/next/activity/claim', {
+        activity_id: id,
+        task_id: taskId,
+      })
+      toast.success(t('activity.claim.success'))
+      await Promise.all([auth.fetchSelf(), load()])
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    } finally {
+      claiming.value = false
+    }
+  }
+
+  return {
+    activities,
+    summary,
+    loading,
+    loadError,
+    claiming,
+    ongoing,
+    ended,
+    load,
+    checkin,
+    claim,
+  }
 }

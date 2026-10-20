@@ -25,7 +25,7 @@ vi.stubGlobal('ResizeObserver', ResizeObserverStub)
 // JSDOM does not implement the browser's font-loading lifecycle.
 Object.defineProperty(document, 'fonts', {
   configurable: true,
-  value: Object.assign(new EventTarget(), { ready: Promise.resolve() }),
+  value: { ready: Promise.resolve() },
 })
 Element.prototype.scrollIntoView = vi.fn()
 HTMLElement.prototype.scrollTo = vi.fn()
