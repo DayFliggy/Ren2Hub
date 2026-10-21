@@ -1267,7 +1267,6 @@ func UpdateChannel(c *gin.Context) {
 	if channel.Models != originChannel.Models {
 		changedFields = append(changedFields, "models")
 	}
-
 	if channel.Type != originChannel.Type {
 		changedFields = append(changedFields, "type")
 	}
@@ -1483,9 +1482,7 @@ func FetchModels(c *gin.Context) {
 		}
 
 		key := strings.TrimSpace(req.Key)
-
 		key = strings.Split(key, "\n")[0]
-
 		channel = &model.Channel{
 			Type:    req.Type,
 			Key:     key,
