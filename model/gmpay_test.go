@@ -302,6 +302,32 @@ func TestGmpayCreateResponseBindsReceiptBeforeSettlement(t *testing.T) {
 	assert.Equal(t, int(750_000), user.Quota)
 }
 
+// 管理员补单只接受创建中、已就绪或结果不明的快照；网关已拒绝或已结算的快照拒绝补单且不入账。
+func TestManualCompleteGmpayRequiresOpenSnapshot(t *testing.T) {
+	for _, status := range []string{GmpayStatusCreating, GmpayStatusReady, GmpayStatusUnknown, GmpayStatusFailed, GmpayStatusSettled} {
+		t.Run(status, func(t *testing.T) {
+			db := useGmpayTestDB(t)
+			user := User{Username: "gmpay-manual-" + status, AffCode: "gmpay-manual-" + status}
+			require.NoError(t, db.Create(&user).Error)
+			order := TopUp{UserId: user.Id, TradeNo: "gmpay-manual-" + status, Amount: 1, Money: 1, PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
+			insertGmpaySnapshotTestOrder(t, &order, 750_000, "test-key")
+			require.NoError(t, db.Model(&GmpayOrder{}).Where("top_up_id = ?", order.Id).Update("status", status).Error)
+			err := ManualCompleteTopUp(order.TradeNo, "")
+			require.NoError(t, db.First(&order, order.Id).Error)
+			require.NoError(t, db.First(&user, user.Id).Error)
+			if status == GmpayStatusFailed || status == GmpayStatusSettled {
+				require.EqualError(t, err, "The payment gateway rejected or already settled this order and it cannot be completed")
+				assert.Equal(t, common.TopUpStatusPending, order.Status)
+				assert.Zero(t, user.Quota)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, common.TopUpStatusSuccess, order.Status)
+			assert.Equal(t, 750_000, user.Quota)
+		})
+	}
+}
+
 func TestGmpayLateCreateResultPreservesCompletedOrder(t *testing.T) {
 	for _, manual := range []bool{false, true} {
 		t.Run(fmt.Sprintf("manual=%t", manual), func(t *testing.T) {

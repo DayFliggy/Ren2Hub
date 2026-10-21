@@ -396,6 +396,8 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		return common.NewMessage("Top-up order does not exist")
 	case errors.Is(err, ErrTopUpStatusInvalid):
 		return common.NewMessage("Order is not pending payment and cannot be completed")
+	case errors.Is(err, ErrGmpayStateConflict):
+		return common.NewMessage("The payment gateway rejected or already settled this order and it cannot be completed")
 	}
 	return err
 }

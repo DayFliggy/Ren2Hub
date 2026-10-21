@@ -335,10 +335,21 @@ func bindGmpayReceipt(tx *gorm.DB, order *TopUp, payment GmpayPayment) error {
 
 // settleGmpaySnapshotByAdmin closes the creation window of a pending order the
 // administrator completes; a later verified callback may still bind its receipt.
+// 只有创建中、已就绪或结果不明的快照可以补单。网关已明确拒绝（failed）或快照
+// 已结算（settled）时拒绝补单。epusdt 没有商户查单接口，unknown 订单只能等迟到
+// 的回调，或由管理员核实后补单。
 func settleGmpaySnapshotByAdmin(tx *gorm.DB, order *TopUp) error {
 	var snapshot GmpayOrder
 	if err := lockForUpdate(tx).First(&snapshot, order.Id).Error; err != nil {
-		return ErrGmpaySnapshotMissing
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrGmpaySnapshotMissing
+		}
+		return err
+	}
+	switch snapshot.Status {
+	case GmpayStatusCreating, GmpayStatusReady, GmpayStatusUnknown:
+	default:
+		return ErrGmpayStateConflict
 	}
 	return tx.Model(&snapshot).Update("status", GmpayStatusSettled).Error
 }
