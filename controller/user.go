@@ -403,10 +403,6 @@ func GetUser(c *gin.Context) {
 	return
 }
 
-type TransferAffQuotaRequest struct {
-	Quota int `json:"quota" binding:"required"`
-}
-
 func GetAffCode(c *gin.Context) {
 	user, err := model.GetUserById(c.GetInt("id"), false)
 	if err != nil {

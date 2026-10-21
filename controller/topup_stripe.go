@@ -94,10 +94,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		paymentError(c, common.NewMessage("User does not exist"))
 		return
 	}
-	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
-	if rejectInvalidCreditedQuota(c, id,
-		decimal.NewFromFloat(chargedMoney).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-	) {
+	if rejectInvalidCreditedQuota(c, id, getStripeCreditedQuota(req.Amount)) {
 		return
 	}
 
@@ -115,7 +112,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		Currency: strings.ToUpper(string(checkout.Currency)), PayAmount: stripePaymentAmount(checkout.AmountSubtotal, string(checkout.Currency)),
 		UserId:          id,
 		Amount:          req.Amount,
-		Money:           chargedMoney,
+		Money:           float64(req.Amount),
 		TradeNo:         referenceId,
 		PaymentMethod:   model.PaymentMethodStripe,
 		PaymentProvider: model.PaymentProviderStripe,
@@ -128,7 +125,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		paymentError(c, common.NewMessage("Failed to create order"))
 		return
 	}
-	logger.LogInfo(c.Request.Context(), common.LogText("Stripe top-up order created user_id=%d trade_no=%s amount=%d money=%.2f", id, referenceId, req.Amount, chargedMoney))
+	logger.LogInfo(c.Request.Context(), common.LogText("Stripe top-up order created user_id=%d trade_no=%s amount=%d money=%.2f", id, referenceId, req.Amount, float64(req.Amount)))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{
@@ -401,8 +398,6 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 
 	return result, nil
 }
-
-func GetChargedAmount(count float64, _ model.User) float64 { return count }
 
 func getStripeCreditedQuota(amount int64) decimal.Decimal {
 	return decimal.NewFromInt(amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
