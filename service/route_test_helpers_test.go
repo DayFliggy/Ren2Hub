@@ -53,6 +53,14 @@ func routeTestContext(t *testing.T) *gin.Context {
 	t.Cleanup(func() { ReleaseRouteChannel(c) })
 	return c
 }
+
+// resetRouteObservations isolates the process-wide observation store.
+func resetRouteObservations(t *testing.T) {
+	t.Helper()
+	previous, last := routeObservations.rows, routeObservations.lastPrune
+	routeObservations.rows = map[routeObservationKey]RouteObservationSnapshot{}
+	t.Cleanup(func() { routeObservations.rows, routeObservations.lastPrune = previous, last })
+}
 func saveRouteTest(t *testing.T, entries ...int) {
 	t.Helper()
 	r := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}}

@@ -8,24 +8,38 @@ import (
 	"strings"
 )
 
+// 自动模式的加权随机按每个请求的 request id 重新计算，预览给出的只是其中一种排列。
+const (
+	TokenRouteOrderingManual             = "manual"
+	TokenRouteOrderingWeightedPerRequest = "weighted_random_per_request"
+)
+
+type TokenRoutePreviewQuery struct {
+	Model  string
+	Path   string
+	Stream bool
+}
+
 type TokenRoutePreviewEntry struct {
 	ChannelID    int    `json:"channel_id"`
 	Name         string `json:"name,omitempty"`
 	Eligible     bool   `json:"eligible"`
 	Reason       string `json:"reason"`
 	ChannelRatio string `json:"channel_ratio"`
-	InFlight     int    `json:"in_flight"`
 }
 type TokenRoutePreview struct {
-	Mode    string                   `json:"mode"`
-	Version int64                    `json:"version"`
-	Model   string                   `json:"model"`
-	Path    string                   `json:"path"`
-	Entries []TokenRoutePreviewEntry `json:"entries"`
+	Mode     string                   `json:"mode"`
+	Version  int64                    `json:"version"`
+	Model    string                   `json:"model"`
+	Path     string                   `json:"path"`
+	Stream   bool                     `json:"stream"`
+	Ordering string                   `json:"ordering"`
+	Entries  []TokenRoutePreviewEntry `json:"entries"`
 }
 
-func PreviewTokenRouting(ctx context.Context, userID, tokenID int, modelName, requestPath string) (TokenRoutePreview, error) {
-	out := TokenRoutePreview{Model: modelName, Path: requestPath, Entries: []TokenRoutePreviewEntry{}}
+func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRoutePreviewQuery) (TokenRoutePreview, error) {
+	modelName, requestPath := query.Model, query.Path
+	out := TokenRoutePreview{Model: modelName, Path: requestPath, Stream: query.Stream, Entries: []TokenRoutePreviewEntry{}}
 	if strings.TrimSpace(modelName) == "" || len(modelName) > 256 || !strings.HasPrefix(requestPath, "/") || strings.ContainsAny(requestPath, "?#\r\n") || len(requestPath) > 512 {
 		return out, model.ErrTokenRouteInvalid
 	}
@@ -59,8 +73,8 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, modelName, re
 		if row != nil {
 			item.Name = row.Name
 			item.ChannelRatio = row.ChannelRatio
-			item.InFlight = ChannelInFlight(id)
-			if item.Reason == "" && row.MaxConcurrency > 0 && item.InFlight >= row.MaxConcurrency {
+			// 满载只给出原因，不返回其他用户的实时占用数。
+			if item.Reason == "" && row.MaxConcurrency > 0 && ChannelInFlight(id) >= row.MaxConcurrency {
 				item.Reason = "channel_concurrency_full"
 			}
 		}
@@ -71,6 +85,7 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, modelName, re
 		return item
 	}
 	if route.Mode == model.TokenRouteManual {
+		out.Ordering = TokenRouteOrderingManual
 		for _, entry := range route.Entries {
 			item := project(entry.ChannelID)
 			if !entry.Enabled {
@@ -79,13 +94,14 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, modelName, re
 			}
 			out.Entries = append(out.Entries, item)
 		}
-	} else {
-		orderAutomaticRoutes(rows, "preview", modelName, relayconstant.Path2RelayMode(requestPath), false)
-		for _, row := range rows {
-			item := project(row.Id)
-			if item.Reason != "model_not_allowed" && item.Reason != "model_unavailable" {
-				out.Entries = append(out.Entries, item)
-			}
+		return out, nil
+	}
+	out.Ordering = TokenRouteOrderingWeightedPerRequest
+	orderAutomaticRoutes(rows, "preview", modelName, relayconstant.Path2RelayMode(requestPath), query.Stream)
+	for _, row := range rows {
+		item := project(row.Id)
+		if item.Reason != "model_not_allowed" && item.Reason != "model_unavailable" {
+			out.Entries = append(out.Entries, item)
 		}
 	}
 	return out, nil

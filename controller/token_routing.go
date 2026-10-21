@@ -111,7 +111,16 @@ func GetTokenRoutingPreview(c *gin.Context) {
 	if !ok {
 		return
 	}
-	preview, err := service.PreviewTokenRouting(c.Request.Context(), c.GetInt("id"), id, c.Query("model"), c.Query("path"))
+	query := service.TokenRoutePreviewQuery{Model: c.Query("model"), Path: c.Query("path")}
+	if value := c.Query("stream"); value != "" {
+		stream, err := strconv.ParseBool(value)
+		if err != nil {
+			tokenRoutingError(c, model.ErrTokenRouteInvalid)
+			return
+		}
+		query.Stream = stream
+	}
+	preview, err := service.PreviewTokenRouting(c.Request.Context(), c.GetInt("id"), id, query)
 	if err != nil {
 		tokenRoutingError(c, err)
 		return

@@ -12,14 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type TokenRouteChannel = RouteChannel
-
 // TokenModelLimitAllows is shared by HTTP, WebSocket and the route editor.
 func TokenModelLimitAllows(limit map[string]bool, name string) bool {
 	return limit[name] || limit[ratio_setting.FormatMatchingModelName(name)] || limit[ratio_setting.RoutingMatchModelName(name)]
 }
 
-func TokenRouteChannels(ctx context.Context, userID, tokenID int) ([]TokenRouteChannel, error) {
+func TokenRouteChannels(ctx context.Context, userID, tokenID int) ([]RouteChannel, error) {
 	return catalogRouteChannels(ctx, userID, tokenID, false)
 }
 

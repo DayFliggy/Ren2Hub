@@ -21,6 +21,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// RouteChannel 是普通用户看到的渠道视图，模型目录和 Key 路由编辑器共用这一份定义。
+// 保留计价和手动选路需要的 channel_ratio、max_concurrency；不含实时 in_flight，
+// 其他用户的占用情况只在管理端（渠道管理、/api/performance/routing）可见。
 type RouteChannel struct {
 	ID                 int                                `json:"id"`
 	Name               string                             `json:"name"`
@@ -30,7 +33,6 @@ type RouteChannel struct {
 	SupportedEndpoints map[string][]constant.EndpointType `json:"supported_endpoints"`
 	ChannelRatio       string                             `json:"channel_ratio"`
 	MaxConcurrency     int                                `json:"max_concurrency"`
-	InFlight           int                                `json:"in_flight"`
 	Eligible           bool                               `json:"eligible"`
 	FilterReason       string                             `json:"filter_reason,omitempty"`
 }
@@ -144,7 +146,7 @@ func catalogRouteChannels(ctx context.Context, userID, tokenID int, manual bool)
 	}
 	result := make([]RouteChannel, 0, len(rows))
 	for _, row := range rows {
-		item := RouteChannel{ID: row.Id, Name: row.Name, Type: row.Type, Status: row.Status, Models: []string{}, SupportedEndpoints: map[string][]constant.EndpointType{}, ChannelRatio: row.ChannelRatio, MaxConcurrency: row.MaxConcurrency, InFlight: ChannelInFlight(row.Id)}
+		item := RouteChannel{ID: row.Id, Name: row.Name, Type: row.Type, Status: row.Status, Models: []string{}, SupportedEndpoints: map[string][]constant.EndpointType{}, ChannelRatio: row.ChannelRatio, MaxConcurrency: row.MaxConcurrency}
 		names := advertised[row.Id]
 		if token != nil && token.ModelLimitsEnabled {
 			abilities := make(map[string]bool, len(names))
