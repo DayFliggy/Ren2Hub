@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"io"
-	"mime"
 	"net/http"
 	"strings"
 
@@ -30,11 +29,8 @@ func RejectRetiredGroups() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		media, _, _ := mime.ParseMediaType(c.GetHeader("Content-Type"))
-		if media != "application/json" {
-			c.Next()
-			return
-		}
+		// 不看 Content-Type：管理端 handler 不论请求头都按 JSON 解析，缺少或伪造请求头
+		// 不能绕过检查。只有空请求体没有可检查的字段。
 		body, err := common.GetBodyStorage(c)
 		if err != nil {
 			status := http.StatusBadRequest
@@ -42,6 +38,10 @@ func RejectRetiredGroups() gin.HandlerFunc {
 				status = http.StatusRequestEntityTooLarge
 			}
 			c.AbortWithStatusJSON(status, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if body.Size() == 0 {
+			c.Next()
 			return
 		}
 		var value map[string]common.RawMessage

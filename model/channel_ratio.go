@@ -21,10 +21,12 @@ func (c *Channel) BeforeCreate(*gorm.DB) error {
 	if c.ChannelRatio == "" {
 		c.ChannelRatio = "1"
 	}
-	return c.validateRoutingFields()
+	return c.ValidateRoutingFields()
 }
 
-func (c *Channel) validateRoutingFields() error {
+// ValidateRoutingFields 是 channel_ratio 和 max_concurrency 唯一的校验，
+// 同时把 channel_ratio 规范化，调用方写库的是规范值。
+func (c *Channel) ValidateRoutingFields() error {
 	if c.MaxConcurrency < 0 {
 		return errors.New("max_concurrency must be nonnegative")
 	}
@@ -39,11 +41,19 @@ func (c *Channel) validateRoutingFields() error {
 // ChannelRoutingChanged publishes committed admission settings and invalidates old observations.
 var ChannelRoutingChanged func(int) error
 
-var ChannelRuntimeOccupancy func(int) int
-
-func (c *Channel) AfterFind(*gorm.DB) error {
-	if ChannelRuntimeOccupancy != nil {
-		c.InFlight = ChannelRuntimeOccupancy(c.Id)
+// publishChannelRoutingByTag 对按 tag 批量修改的渠道逐个发布路由变更。
+func publishChannelRoutingByTag(tag string) error {
+	if ChannelRoutingChanged == nil {
+		return nil
+	}
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := ChannelRoutingChanged(id); err != nil {
+			return err
+		}
 	}
 	return nil
 }

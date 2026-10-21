@@ -27,17 +27,26 @@ func TestChannelHasSensitiveChanges(t *testing.T) {
 		BaseURL:        &baseURL,
 		HeaderOverride: &headerOverride,
 		Models:         "gpt-4o",
+		ChannelRatio:   "1",
 	}
 
 	t.Run("non-sensitive routing fields", func(t *testing.T) {
 		updated := PatchChannel{Channel: *origin}
 		updated.Models = "gpt-4o,gpt-4o-mini"
+		updated.MaxConcurrency = 2
 
 		assert.False(t, channelHasSensitiveChanges(&updated, origin, map[string]any{
 			"models":          updated.Models,
-			"channel_ratio":   "1.5",
-			"max_concurrency": 2,
+			"channel_ratio":   origin.ChannelRatio,
+			"max_concurrency": updated.MaxConcurrency,
 		}))
+	})
+
+	t.Run("channel ratio change", func(t *testing.T) {
+		updated := PatchChannel{Channel: *origin}
+		updated.ChannelRatio = "1.5"
+
+		assert.True(t, channelHasSensitiveChanges(&updated, origin, map[string]any{"channel_ratio": updated.ChannelRatio}))
 	})
 
 	t.Run("key change", func(t *testing.T) {
@@ -145,12 +154,12 @@ func TestChannelWriteUpdatesRoutingWithoutChangingServerFields(t *testing.T) {
 		Balance: 44.5, BalanceUpdatedTime: 55, UsedQuota: 66,
 	}
 	require.NoError(t, channel.Insert())
-	payload := fmt.Sprintf(`{"id":%d,"channel_ratio":"1.5","max_concurrency":2,"in_flight":123,"lab":{"id":"client-lab","name":"client name","source":"client"},"created_time":111,"test_time":222,"response_time":333,"balance":444,"balance_updated_time":555,"used_quota":666}`, channel.Id)
+	payload := fmt.Sprintf(`{"id":%d,"channel_ratio":"1.0","max_concurrency":2,"in_flight":123,"lab":{"id":"client-lab","name":"client name","source":"client"},"created_time":111,"test_time":222,"response_time":333,"balance":444,"balance_updated_time":555,"used_quota":666}`, channel.Id)
 	response := putUpdateChannel(t, 2, common.RoleAdminUser, payload)
-	require.Contains(t, response.Body.String(), `"success":true`)
+	require.Contains(t, response.Body.String(), `"success":true`, "an unchanged ratio in canonical or equivalent form stays editable")
 	var saved model.Channel
 	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
-	assert.Equal(t, "1.5", saved.ChannelRatio)
+	assert.Equal(t, "1", saved.ChannelRatio)
 	assert.Equal(t, 2, saved.MaxConcurrency)
 	assert.Equal(t, channel.CreatedTime, saved.CreatedTime)
 	assert.Equal(t, channel.TestTime, saved.TestTime)
@@ -165,6 +174,32 @@ func TestChannelWriteUpdatesRoutingWithoutChangingServerFields(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"success":false`)
 	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
 	assert.Equal(t, "server-key", saved.Key)
+}
+
+// B12：channel_ratio 决定所有用户的计费，只有 ChannelSensitiveWrite 能修改；
+// max_concurrency 只影响运行，ChannelWrite 即可修改。
+func TestChannelRatioRequiresSensitiveWrite(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	channel := model.Channel{Type: 1, Name: "ratio-permissions", Key: "server-key", Models: "gpt-test", Status: common.ChannelStatusEnabled, ChannelRatio: "1"}
+	require.NoError(t, channel.Insert())
+
+	denied := putUpdateChannel(t, 2, common.RoleAdminUser, fmt.Sprintf(`{"id":%d,"channel_ratio":"0.01","max_concurrency":3}`, channel.Id))
+	require.Contains(t, denied.Body.String(), `"success":false`)
+	var saved model.Channel
+	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
+	assert.Equal(t, "1", saved.ChannelRatio)
+	assert.Zero(t, saved.MaxConcurrency, "a rejected request must not apply any field")
+
+	allowed := putUpdateChannel(t, 2, common.RoleAdminUser, fmt.Sprintf(`{"id":%d,"max_concurrency":3}`, channel.Id))
+	require.Contains(t, allowed.Body.String(), `"success":true`)
+	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
+	assert.Equal(t, 3, saved.MaxConcurrency)
+
+	require.True(t, authz.Can(1, common.RoleRootUser, authz.ChannelSensitiveWrite))
+	root := putUpdateChannel(t, 1, common.RoleRootUser, fmt.Sprintf(`{"id":%d,"channel_ratio":"0.5"}`, channel.Id))
+	require.Contains(t, root.Body.String(), `"success":true`)
+	require.NoError(t, model.DB.First(&saved, channel.Id).Error)
+	assert.Equal(t, "0.5", saved.ChannelRatio)
 }
 
 func TestAddChannelIgnoresServerProjections(t *testing.T) {

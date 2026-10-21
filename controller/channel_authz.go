@@ -1,9 +1,6 @@
 package controller
 
-import (
-	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/modellab"
-)
+import "github.com/QuantumNous/new-api/model"
 
 func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, requestData map[string]any) bool {
 	if _, ok := requestData["type"]; ok && channel.Type != origin.Type {
@@ -34,6 +31,10 @@ func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, re
 		return true
 	}
 	if _, ok := requestData["key_mode"]; ok && channel.KeyMode != nil {
+		return true
+	}
+	// 渠道倍率直接决定所有用户的计费，与上游的分组倍率一样只允许敏感写权限修改
+	if _, ok := requestData["channel_ratio"]; ok && channel.ChannelRatio != origin.ChannelRatio {
 		return true
 	}
 	// Fail closed: any field present in the request that is neither a known
@@ -74,6 +75,7 @@ var channelSensitiveFields = map[string]struct{}{
 	"other":               {},
 	"settings":            {},
 	"key_mode":            {},
+	"channel_ratio":       {},
 }
 
 // channelOperationalFields lists fields managed by operation endpoints instead
@@ -117,11 +119,6 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 	}
 }
 
-func clearChannelProjections(channel *model.Channel) {
-	channel.InFlight = 0
-	channel.Lab = modellab.Classification{}
-}
-
 // channelNonSensitiveFields lists routing / server-managed channel
 // fields a ChannelWrite admin may edit without ChannelSensitiveWrite. When a new
 // field is added to model.Channel it must be added to either this set or
@@ -134,7 +131,6 @@ var channelNonSensitiveFields = map[string]struct{}{
 	"name":                {},
 	"weight":              {},
 	"models":              {},
-	"channel_ratio":       {},
 	"max_concurrency":     {},
 	"model_mapping":       {},
 	"status_code_mapping": {},

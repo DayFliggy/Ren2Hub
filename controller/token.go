@@ -237,7 +237,7 @@ func AddToken(c *gin.Context) {
 		tokenRoutingError(c, model.ErrTokenRouteInvalid)
 		return
 	}
-	if request.Type == model.TokenRouteManual && !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.RoutingWrite) {
+	if request.Type == model.TokenRouteManual && !requestCan(c, authz.RoutingWrite) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "code": "ROUTING_FORBIDDEN", "message": "Unauthorized, insufficient privileges"})
 		return
 	}
@@ -386,7 +386,6 @@ func UpdateToken(c *gin.Context) {
 		if request.AllowUserQuotaQuery != nil {
 			cleanToken.AllowUserQuotaQuery = *request.AllowUserQuotaQuery
 		}
-
 	}
 	err = cleanToken.Update()
 	if err != nil {

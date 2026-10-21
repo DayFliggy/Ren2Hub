@@ -940,6 +940,9 @@ func (user *User) HardDelete() (int64, error) {
 				return err
 			}
 		}
+		if err := deleteUserTokenRouting(tx, user.Id); err != nil {
+			return err
+		}
 		if err := deleteUserAuthenticationData(tx, user.Id); err != nil {
 			return err
 		}

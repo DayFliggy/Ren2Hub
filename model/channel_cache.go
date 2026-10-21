@@ -7,12 +7,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/logger"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 )
 
-var model2channels map[string][]int // enabled channels
-var channelsIDM map[int]*Channel    // all channels include disabled
+var channelsIDM map[int]*Channel // all channels include disabled
 // channel2advancedCustomConfig caches parsed Advanced Custom (type 58) configs so
 // path-aware selection avoids re-parsing JSON per request. Refreshed on full sync.
 var channel2advancedCustomConfig map[int]*kitdto.AdvancedCustomConfig
@@ -36,17 +34,8 @@ func InitChannelCache() {
 			}
 		}
 	}
-	newModel2channels := make(map[string][]int)
-	for _, channel := range channels {
-		if channel.Status == common.ChannelStatusEnabled {
-			for _, name := range channel.GetModels() {
-				newModel2channels[name] = append(newModel2channels[name], channel.Id)
-			}
-		}
-	}
 
 	channelSyncLock.Lock()
-	model2channels = newModel2channels
 	//channelsIDM = newChannelId2channel
 	for i, channel := range newChannelId2channel {
 		if channel.ChannelInfo.IsMultiKey {
@@ -122,49 +111,4 @@ func CacheUpdateChannelStatus(id int, status int) {
 	if channel, ok := channelsIDM[id]; ok {
 		channel.Status = status
 	}
-	if status != common.ChannelStatusEnabled {
-		for name, ids := range model2channels {
-			for i, channelID := range ids {
-				if channelID == id {
-					model2channels[name] = append(ids[:i], ids[i+1:]...)
-					break
-				}
-			}
-		}
-	}
-}
-
-func CacheUpdateChannel(channel *Channel) {
-	if !common.MemoryCacheEnabled {
-		return
-	}
-	channelSyncLock.Lock()
-	if channel == nil {
-		channelSyncLock.Unlock()
-		return
-	}
-
-	if channelsIDM == nil {
-		channelsIDM = make(map[int]*Channel)
-	}
-	if oldChannel, ok := channelsIDM[channel.Id]; ok {
-		logger.LogDebug(nil, "CacheUpdateChannel before: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, oldChannel.ChannelInfo.MultiKeyPollingIndex)
-	}
-	channelsIDM[channel.Id] = channel
-	if channel2advancedCustomConfig == nil {
-		channel2advancedCustomConfig = make(map[int]*kitdto.AdvancedCustomConfig)
-	}
-	delete(channel2advancedCustomConfig, channel.Id)
-	if channel.Type == constant.ChannelTypeAdvancedCustom {
-		if config := channel.GetOtherSettings().AdvancedCustom; config != nil {
-			channel2advancedCustomConfig[channel.Id] = config
-		}
-	}
-	logger.LogDebug(nil, "CacheUpdateChannel after: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, channel.ChannelInfo.MultiKeyPollingIndex)
-	// Lock ordering: do NOT hold channelSyncLock while calling
-	// InvalidatePricingCache. GetPricing acquires updatePricingLock first and then
-	// channelSyncLock.RLock (via loadPricingAdvancedCustomConfigs); acquiring
-	// updatePricingLock while holding channelSyncLock would be an AB-BA deadlock.
-	channelSyncLock.Unlock()
-	InvalidatePricingCache()
 }
