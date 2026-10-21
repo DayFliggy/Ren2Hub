@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -9,6 +10,68 @@ import (
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
+
+// topUpSettlement 描述一次入账尝试。渠道只提供自己的差异：mutate 在订单行锁内、
+// provider 校验之后运行，可以改写订单字段或拒绝回执，并返回需要随额度一起写入用户表的列。
+type topUpSettlement struct {
+	tradeNo string
+	// provider 为空表示管理员补单，接受任意渠道的订单。
+	provider  string
+	callerIP  string
+	logMethod string
+	mutate    func(tx *gorm.DB, order *TopUp) (map[string]any, error)
+	message   func(order *TopUp, quota int) *common.Message
+}
+
+// settleTopUp 是 completeTopUpTx 外唯一的入账外壳：加锁取单、校验渠道、执行渠道 mutate，
+// 再交给 completeTopUpTx 完成状态迁移、钱包和返利。mutate 对已成功的订单同样执行，
+// 以便迟到回调补记回执；之后已成功的订单直接返回。返回的 quota 为 0 表示订单此前已完成，本次未改动。
+func settleTopUp(s topUpSettlement) (*TopUp, int, error) {
+	if s.tradeNo == "" {
+		return nil, 0, ErrTopUpNotFound
+	}
+	order := &TopUp{}
+	quota := 0
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockForUpdate(tx).Where("trade_no = ?", s.tradeNo).First(order).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTopUpNotFound
+			}
+			return err
+		}
+		if s.provider != "" && order.PaymentProvider != s.provider {
+			return ErrPaymentMethodMismatch
+		}
+		var updates map[string]any
+		if s.mutate != nil {
+			var err error
+			if updates, err = s.mutate(tx, order); err != nil {
+				return err
+			}
+		}
+		if order.Status == common.TopUpStatusSuccess {
+			return nil
+		}
+		fallback := order.ExpectedQuota
+		if fallback <= 0 && order.Status == common.TopUpStatusPending {
+			var err error
+			if fallback, err = legacyTopUpQuota(order); err != nil {
+				return err
+			}
+		}
+		var err error
+		quota, err = completeTopUpTx(tx, order, fallback, updates)
+		return err
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if quota > 0 {
+		syncCreditUserQuotaCache(order.UserId, quota, common.LogText("%s topup", s.logMethod))
+		RecordTopupLog(order.UserId, s.message(order, quota), s.callerIP, order.PaymentMethod, s.logMethod)
+	}
+	return order, quota, nil
+}
 
 var topUpCurrencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
 
