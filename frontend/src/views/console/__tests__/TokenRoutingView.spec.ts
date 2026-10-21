@@ -51,7 +51,6 @@ function channel(id: number, eligible = true): TokenRouteChannel {
     models: ['gpt'],
     channel_ratio: '1',
     max_concurrency: 0,
-    in_flight: 0,
     eligible,
   }
 }
@@ -68,7 +67,6 @@ function previewResult(): TokenRoutePreview {
         eligible: true,
         reason: 'eligible',
         channel_ratio: '1',
-        in_flight: 0,
       },
     ],
   }

@@ -533,7 +533,7 @@ export default {
     autoRoute: {
       stale: '刷新失败，卡片显示上次成功取得的目录。',
       concurrency: '渠道占用',
-      channelOccupancy: '在途 {active} / 上限 {limit}',
+      channelLimit: '并发上限 {limit}',
       catalogEligible: '符合目录条件；实际选择仍按当前路由规则执行。',
       historyUnavailable:
         '当前目录未提供历史健康序列，展示顺序不代表路由优先级。',

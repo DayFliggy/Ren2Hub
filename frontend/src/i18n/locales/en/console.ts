@@ -558,7 +558,7 @@ export default {
     autoRoute: {
       stale: 'Refresh failed; the cards show the last successful catalog.',
       concurrency: 'Channel concurrency',
-      channelOccupancy: 'In flight {active} / limit {limit}',
+      channelLimit: 'Concurrency limit {limit}',
       catalogEligible:
         'Eligible in this catalog; requests still follow the current routing rules.',
       historyUnavailable:

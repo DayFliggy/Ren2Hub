@@ -11,7 +11,6 @@ describe('native channel display grouping', () => {
         id: 10,
         eligible: false,
         filter_reason: 'channel_saturated',
-        in_flight: 3,
       },
     ])
     expect(groups).toHaveLength(1)

@@ -44,7 +44,8 @@ export const tokenRoutingMessages = {
       readDenied:
         'You no longer have permission to view this routing configuration.',
       loading: 'Loading routing configuration…',
-      channelMetrics: 'Multiplier {ratio} · in flight {active}',
+      channelMetrics: 'Multiplier {ratio} · concurrency limit {limit}',
+      previewMetrics: 'Multiplier {ratio}',
       maxRatio: 'Maximum channel multiplier',
       unlimitedRatio: 'No multiplier limit',
       invalidRatio:
@@ -113,7 +114,8 @@ export const tokenRoutingMessages = {
       readOnly: '你可以查看路由配置，但没有编辑权限。',
       readDenied: '你已没有查看此路由配置的权限。',
       loading: '正在加载路由配置…',
-      channelMetrics: '倍率 {ratio} · 进行中 {active}',
+      channelMetrics: '倍率 {ratio} · 并发上限 {limit}',
+      previewMetrics: '倍率 {ratio}',
       maxRatio: '渠道倍率上限',
       unlimitedRatio: '不限制倍率',
       invalidRatio:
