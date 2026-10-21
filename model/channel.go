@@ -531,7 +531,7 @@ func (channel *Channel) Update() error {
 		}
 		channel.ChannelRatio = existing.ChannelRatio
 	}
-	if err := channel.validateRoutingFields(); err != nil {
+	if err := channel.ValidateRoutingFields(); err != nil {
 		return err
 	}
 

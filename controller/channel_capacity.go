@@ -2,10 +2,11 @@ package controller
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 func acquireChannelManagement(c *gin.Context, ch *model.Channel) (*service.ConcurrencyPermit, bool) {
@@ -19,6 +20,14 @@ func acquireChannelManagement(c *gin.Context, ch *model.Channel) (*service.Concu
 	}
 	c.JSON(status, gin.H{"success": false, "message": err.Error()})
 	return nil, false
+}
+
+// attachChannelInFlight 用实时准入状态填充管理端的 in_flight 投影。
+// 只有管理端渠道响应调用它，数据库查询不再隐式填充。
+func attachChannelInFlight(channels []*model.Channel) {
+	for _, channel := range channels {
+		channel.InFlight = service.ChannelInFlight(channel.Id)
+	}
 }
 
 func rejectBusyChannelManagement(c *gin.Context, err error) bool {

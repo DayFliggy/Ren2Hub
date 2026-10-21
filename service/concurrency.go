@@ -232,6 +232,5 @@ func refreshConcurrencyLimitLocked(ctx context.Context, key concurrencyKey) erro
 	return nil
 }
 func init() {
-	model.ChannelRuntimeOccupancy = ChannelInFlight
 	model.ChannelRoutingChanged = func(id int) error { return RefreshChannelConcurrencyLimit(context.Background(), id) }
 }

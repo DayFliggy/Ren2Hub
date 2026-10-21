@@ -142,8 +142,9 @@ func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
 	return query
 }
 
-func buildChannelListQuery(statusFilter int, typeFilter int) *gorm.DB {
+func buildChannelListQuery(labIDs []int, statusFilter int, typeFilter int) *gorm.DB {
 	query := model.DB.Model(&model.Channel{})
+	query = applyChannelLabFilter(query, labIDs)
 	query = applyChannelStatusFilter(query, statusFilter)
 	if typeFilter >= 0 {
 		query = query.Where("type = ?", typeFilter)
@@ -202,39 +203,22 @@ func GetAllChannels(c *gin.Context) {
 		}
 	}
 
-	query := buildChannelListQuery(statusFilter, -1).WithContext(c.Request.Context())
-	if lab := c.Query("lab"); lab != "" {
-		labs, err := model.AllChannelLabs(c.Request.Context())
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		ids := make([]int, 0)
-		for id, value := range labs {
-			if value.ID == lab {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
-			query = query.Where("1 = 0")
-		} else {
-			query = query.Where("id IN ?", ids)
-		}
+	labIDs, err := channelLabFilterIDs(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
-	countQuery := query.Session(&gorm.Session{})
-	if typeFilter >= 0 {
-		query = query.Where("type = ?", typeFilter)
-	}
+
 	var total int64
 
 	if enableTagMode {
-		tags, err := model.GetPaginatedChannelTags(query.Session(&gorm.Session{}), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		tags, err := model.GetPaginatedChannelTags(buildChannelListQuery(labIDs, statusFilter, typeFilter), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 		if err != nil {
 			common.SysError(common.LogText("failed to get paginated tags: %s", err.Error()))
 			common.ApiErrorT(c, "Failed to fetch tags. Please try again later")
 			return
 		}
-		total, err = model.CountChannelTags(query.Session(&gorm.Session{}))
+		total, err = model.CountChannelTags(buildChannelListQuery(labIDs, statusFilter, typeFilter))
 		if err != nil {
 			common.SysError(common.LogText("failed to count tags: %s", err.Error()))
 			common.ApiErrorT(c, "Failed to count tags. Please try again later")
@@ -245,7 +229,7 @@ func GetAllChannels(c *gin.Context) {
 				continue
 			}
 			var tagChannels []*model.Channel
-			err := sortOptions.Apply(query.Session(&gorm.Session{}).Where("tag = ?", *tag)).
+			err := sortOptions.Apply(buildChannelListQuery(labIDs, statusFilter, typeFilter).Where("tag = ?", *tag)).
 				Omit("key").
 				Find(&tagChannels).Error
 			if err != nil {
@@ -256,13 +240,13 @@ func GetAllChannels(c *gin.Context) {
 			channelData = append(channelData, tagChannels...)
 		}
 	} else {
-		if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		if err := buildChannelListQuery(labIDs, statusFilter, typeFilter).Count(&total).Error; err != nil {
 			common.SysError(common.LogText("failed to count channels: %s", err.Error()))
 			common.ApiErrorT(c, "Failed to count channels. Please try again later")
 			return
 		}
 
-		err := sortOptions.Apply(query.Session(&gorm.Session{})).
+		err := sortOptions.Apply(buildChannelListQuery(labIDs, statusFilter, typeFilter)).
 			Limit(pageInfo.GetPageSize()).
 			Offset(pageInfo.GetStartIdx()).
 			Omit("key").
@@ -278,10 +262,12 @@ func GetAllChannels(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	attachChannelInFlight(channelData)
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
 
+	countQuery := buildChannelListQuery(labIDs, statusFilter, -1)
 	var results []struct {
 		Type  int64
 		Count int64
@@ -402,7 +388,7 @@ func SearchChannels(c *gin.Context) {
 		for _, tag := range tags {
 			if tag != nil && *tag != "" {
 				var tagChannels []*model.Channel
-				err := sortOptions.Apply(buildChannelListQuery(-1, -1).Where("tag = ?", *tag)).
+				err := sortOptions.Apply(buildChannelListQuery(nil, -1, -1).Where("tag = ?", *tag)).
 					Omit("key").
 					Find(&tagChannels).Error
 				if err != nil {
@@ -439,6 +425,7 @@ func SearchChannels(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	attachChannelInFlight(channelData)
 	if lab := c.Query("lab"); lab != "" {
 		filtered := make([]*model.Channel, 0, len(channelData))
 		for _, channel := range channelData {
@@ -520,6 +507,7 @@ func GetChannel(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+		attachChannelInFlight([]*model.Channel{channel})
 		clearChannelInfo(channel)
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -753,7 +741,7 @@ func AddChannel(c *gin.Context) {
 		if _, ok := provided.Channel["channel_ratio"]; !ok {
 			addChannelRequest.Channel.ChannelRatio = "1"
 		}
-		if err := validateChannelRoutingInput(addChannelRequest.Channel); err != nil {
+		if err := addChannelRequest.Channel.ValidateRoutingFields(); err != nil {
 			common.ApiError(c, err)
 			return
 		}
@@ -1137,7 +1125,7 @@ func UpdateChannel(c *gin.Context) {
 	if _, provided := requestData["max_concurrency"]; !provided {
 		channel.MaxConcurrency = originChannel.MaxConcurrency
 	}
-	if err := validateChannelRoutingInput(&channel.Channel); err != nil {
+	if err := channel.Channel.ValidateRoutingFields(); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -1287,6 +1275,7 @@ func UpdateChannel(c *gin.Context) {
 	}
 	recordManageAudit(c, "channel.update", updateAudit)
 	channel.Key = ""
+	attachChannelInFlight([]*model.Channel{&channel.Channel})
 	clearChannelInfo(&channel.Channel)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -2378,16 +2367,34 @@ func OllamaVersion(c *gin.Context) {
 	})
 }
 
-func validateChannelRoutingInput(channel *model.Channel) error {
-	if channel.MaxConcurrency < 0 {
-		return fmt.Errorf("max_concurrency must be nonnegative")
+// channelLabFilterIDs 把 lab 查询参数解析为渠道 id。nil 表示不按 lab 筛选，
+// 空切片表示该 lab 没有任何渠道。
+func channelLabFilterIDs(c *gin.Context) ([]int, error) {
+	lab := c.Query("lab")
+	if lab == "" {
+		return nil, nil
 	}
-	ratio, err := model.NormalizeChannelRatio(channel.ChannelRatio)
+	labs, err := model.AllChannelLabs(c.Request.Context())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	channel.ChannelRatio = ratio
-	return nil
+	ids := make([]int, 0)
+	for id, value := range labs {
+		if value.ID == lab {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+func applyChannelLabFilter(query *gorm.DB, labIDs []int) *gorm.DB {
+	if labIDs == nil {
+		return query
+	}
+	if len(labIDs) == 0 {
+		return query.Where("1 = 0")
+	}
+	return query.Where("id IN ?", labIDs)
 }
 
 func GetChannelLabs(c *gin.Context) {
