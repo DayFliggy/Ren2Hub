@@ -35,14 +35,7 @@ func ReorderChannelPriority(c *gin.Context) {
 	}
 	if !move.Preview && len(order.Changes) > 0 {
 		model.InitChannelCache()
-		if model.ChannelRoutingChanged != nil {
-			for _, change := range order.Changes {
-				if err := model.ChannelRoutingChanged(change.ID); err != nil {
-					common.ApiError(c, err)
-					return
-				}
-			}
-		}
+		publishChannelPriorityChanges(order.Changes)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": order})
 }

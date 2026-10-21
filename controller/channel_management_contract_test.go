@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -185,6 +186,30 @@ func channelConcurrencyTracked(id int) bool {
 		}
 	}
 	return false
+}
+
+// B10：优先级已经提交后，路由发布失败只记日志，不能把写入报告为失败。
+func TestReorderChannelPriorityReportsCommittedWriteWhenPublicationFails(t *testing.T) {
+	setupChannelManagementContractTest(t)
+	for id, priority := range map[int]int64{8401: 100, 8402: 80, 8403: 0} {
+		value := priority
+		createContractChannel(t, model.Channel{Id: id, Type: constant.ChannelTypeOpenAI, Name: fmt.Sprint(id), Key: "k", Models: "gpt-4o", Priority: &value})
+	}
+	previous := model.ChannelRoutingChanged
+	published := 0
+	model.ChannelRoutingChanged = func(int) error { published++; return errors.New("forced publication failure") }
+	t.Cleanup(func() { model.ChannelRoutingChanged = previous })
+	order, err := model.GetChannelPriorityOrder()
+	require.NoError(t, err)
+
+	body := fmt.Sprintf(`{"revision":%q,"id":8403,"target_id":8402,"position":"before"}`, order.Revision)
+	recorder := serveChannelAdmin(t, ReorderChannelPriority, http.MethodPost, "/api/channel/priority/reorder", body, nil)
+
+	require.Contains(t, recorder.Body.String(), `"success":true`, recorder.Body.String())
+	assert.Positive(t, published)
+	stored, err := model.GetChannelById(8403, false)
+	require.NoError(t, err)
+	assert.Equal(t, int64(90), stored.GetPriority())
 }
 
 // E2-5：渠道倍率和并发上限只由模型层校验，非法值在写库前被拒绝。

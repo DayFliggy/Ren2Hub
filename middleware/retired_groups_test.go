@@ -42,3 +42,29 @@ func TestRetiredGroupsRejectExplicitOldRestrictionsAndPreserveBody(t *testing.T)
 	require.Equal(t, 400, w.Code)
 	require.Equal(t, 1, called)
 }
+
+// B10：退役分组字段的检查不依赖 Content-Type，缺少或伪造请求头都不能绕过；空请求体照常放行。
+func TestRetiredGroupsCheckBodyRegardlessOfContentType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(BodyStorageCleanup(), RejectRetiredGroups())
+	called := 0
+	r.POST("/api/channel/", func(c *gin.Context) {
+		called++
+		common.ApiSuccess(c, nil)
+	})
+	for _, contentType := range []string{"", "text/plain", "application/x-www-form-urlencoded"} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/channel/", strings.NewReader(`{"channel":{"group":"default"}}`))
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		r.ServeHTTP(w, req)
+		require.Equal(t, http.StatusBadRequest, w.Code, contentType)
+	}
+	require.Zero(t, called)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/channel/", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, called)
+}
