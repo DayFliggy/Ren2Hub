@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
 )
@@ -33,4 +34,7 @@ func TestCompactRequestsSkipChannelsWithoutCompactSupport(t *testing.T) {
 	require.NotNil(t, selectErr)
 	require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
 	require.True(t, selectErr.NoAvailableChannel)
+	// 与上游一致走 i18n 文案，重试轮次经 Text 输出时也是本地化文本。
+	require.Equal(t, i18n.MsgDistributorNoAvailableChannel, selectErr.MessageID)
+	require.Equal(t, map[string]any{"Model": "route-model"}, selectErr.Params)
 }

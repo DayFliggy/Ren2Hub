@@ -176,7 +176,10 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		return nil, &ChannelSelectError{StatusCode: http.StatusForbidden, Code: types.ErrorCodeAccessDenied, Message: "Pinned channel is no longer available for this key and model"}
 	}
 	if channel == nil {
-		return nil, &ChannelSelectError{StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, Message: "No available channel for this model", NoAvailableChannel: true}
+		return nil, &ChannelSelectError{
+			StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, MessageID: i18n.MsgDistributorNoAvailableChannel,
+			Params: map[string]any{"Model": modelName}, NoAvailableChannel: true,
+		}
 	}
 	return channel, nil
 }
