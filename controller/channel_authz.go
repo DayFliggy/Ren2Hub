@@ -36,6 +36,10 @@ func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, re
 	if _, ok := requestData["key_mode"]; ok && channel.KeyMode != nil {
 		return true
 	}
+	// 渠道倍率直接决定所有用户的计费，与上游的分组倍率一样只允许敏感写权限修改
+	if _, ok := requestData["channel_ratio"]; ok && channel.ChannelRatio != origin.ChannelRatio {
+		return true
+	}
 	// Fail closed: any field present in the request that is neither a known
 	// sensitive field (gated above) nor an explicitly classified non-sensitive
 	// field must be treated as sensitive. This keeps a newly added channel field
@@ -74,6 +78,7 @@ var channelSensitiveFields = map[string]struct{}{
 	"other":               {},
 	"settings":            {},
 	"key_mode":            {},
+	"channel_ratio":       {},
 }
 
 // channelOperationalFields lists fields managed by operation endpoints instead
@@ -134,7 +139,6 @@ var channelNonSensitiveFields = map[string]struct{}{
 	"name":                {},
 	"weight":              {},
 	"models":              {},
-	"channel_ratio":       {},
 	"max_concurrency":     {},
 	"model_mapping":       {},
 	"status_code_mapping": {},
