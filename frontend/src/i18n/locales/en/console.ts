@@ -2462,7 +2462,7 @@ export default {
     notifyGotify: 'Gotify',
     quotaWarningThreshold: 'Quota warning threshold',
     quotaWarningHint:
-      'Show a notification when the balance falls below this value.',
+      'Remind once when the balance drops below this quota. Leave empty to use the site default.',
     notificationEmail: 'Notification email',
     notificationEmailPlaceholder: 'Leave empty to use the login email',
     webhookUrl: 'Webhook URL',
@@ -2471,9 +2471,12 @@ export default {
     gotifyUrl: 'Gotify server URL',
     gotifyToken: 'Gotify application token',
     gotifyPriority: 'Gotify priority (0-10)',
-    walletQuotaReminder: 'Wallet quota reminder',
+    walletQuotaReminder: 'Low balance reminder',
     walletQuotaReminderDesc:
-      'Send a notification when wallet balance falls below the threshold.',
+      'Remind me once when my balance drops below the threshold.',
+    channelNotifications: 'Channel notifications',
+    channelNotificationsDesc:
+      'When a channel is disabled or re-enabled automatically, or a test of all channels finishes.',
     saveNotificationSettings: 'Save notification settings',
     notificationSaved: 'Notification settings saved',
     loadFailed: 'Failed to load settings',
@@ -2487,7 +2490,8 @@ export default {
     recordIpAddress: 'Record IP address',
     recordIpAddressDesc: 'Include the IP address in usage and error logs.',
     editDisplayName: 'Edit display name',
-    errorPositiveThreshold: 'Enter a threshold greater than 0.',
+    errorThresholdInteger:
+      'Enter a whole quota of 0 or more, or leave it empty for the site default.',
     errorEmail: 'Enter a valid email address.',
     errorHttpUrl: 'Enter a valid HTTP or HTTPS URL.',
     errorRequired: 'This field is required.',
@@ -3007,8 +3011,9 @@ export default {
       drawingDescription: 'Midjourney proxy features and callback behavior.',
       behavior: 'System behavior',
       behaviorDescription: 'Console defaults and operating modes.',
-      email: 'SMTP email',
-      emailDescription: 'Outbound mail server and TLS policy.',
+      email: 'Email sending',
+      emailDescription:
+        'Outbound mail through SMTP or Resend. Only the selected method sends email; the other keeps its settings.',
       monitoring: 'Monitoring and alerts',
       monitoringDescription:
         'User balance alerts and performance metrics collection.',
@@ -3251,6 +3256,16 @@ export default {
       smtpStartTls: 'Enable STARTTLS',
       smtpSkipVerify: 'Skip TLS certificate verification',
       smtpForceAuthLogin: 'Force AUTH LOGIN',
+      resendFrom: 'Resend sender',
+      resendFromHint:
+        "Use address{'@'}example.com or Name <address{'@'}example.com>. The domain must be verified in Resend; a blank name uses the site name.",
+      resendApiKey: 'Resend API key',
+      emailProvider: 'Email sending method',
+      emailProviderHint:
+        'Switching to Resend requires a saved API key and sender.',
+      quotaRemindEnabled: 'Low balance reminders',
+      quotaRemindEnabledHint:
+        'Remind users through their chosen notification method when their balance drops below the threshold.',
       quotaRemindThreshold: 'Quota reminder threshold',
       perfMetricsEnabled: 'Enable performance metrics',
       perfMetricsFlushInterval: 'Metrics flush interval (minutes)',
@@ -3292,6 +3307,8 @@ export default {
       week: 'Week',
       minute: 'Minute',
       fiveMinutes: '5 minutes',
+      emailSmtp: 'SMTP',
+      emailResend: 'Resend',
     },
     customOAuth: {
       title: 'Custom OAuth providers',

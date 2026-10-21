@@ -326,6 +326,32 @@ describe('GMPay settings page', () => {
   )
 })
 
+describe('Email settings page', () => {
+  // The backend validates the stored Resend key and sender when the method
+  // switches, so a single save must write both before EmailProvider.
+  it('writes Resend credentials before switching the sending method', async () => {
+    const wrapper = await render('operations', 'email')
+    await wrapper.get('[id="setting-EmailProvider"]').setValue('resend')
+    await wrapper.get('[id="setting-ResendApiKey"]').setValue('re_test')
+    await wrapper
+      .get('[id="setting-ResendFrom"]')
+      .setValue('"Site" <noreply@example.com>')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    const patch = state.saveOptions.mock.calls[0]?.[0] ?? {}
+    expect(Object.keys(patch)).toEqual([
+      'ResendFrom',
+      'ResendApiKey',
+      'EmailProvider',
+    ])
+    expect(patch.EmailProvider).toBe('resend')
+    wrapper.unmount()
+  })
+})
+
 describe('system settings in English', () => {
   it('renders every section without Chinese text or raw message keys', async () => {
     for (const domain of SYSTEM_SETTINGS_DOMAINS) {
