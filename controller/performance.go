@@ -27,6 +27,7 @@ type PerformanceStats struct {
 	DiskSpaceInfo common.DiskSpaceInfo `json:"disk_space_info"`
 	// 配置信息
 	Config PerformanceConfig `json:"config"`
+	PerformanceStatsExtension
 }
 
 // MemoryStats 内存统计
@@ -131,6 +132,7 @@ func GetPerformanceStats(c *gin.Context) {
 		DiskSpaceInfo: diskSpaceInfo,
 		Config:        config,
 	}
+	stats.PerformanceStatsExtension = newPerformanceStatsExtension()
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
