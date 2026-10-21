@@ -1,7 +1,6 @@
 package pricesource
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -10,13 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// axonCost 把单个模型的 cost 对象包装成 AxonHub all.json 文档。
+func axonCost(cost string) string {
+	return `{"providers":{"v":{"models":{"m":{"cost":` + cost + `}}}}}`
+}
+
 func TestPriceSourceDraftPreservesUnitsAndZero(t *testing.T) {
 	for _, tc := range []struct{ name, source, body, expression string }{
 		{"sub2api exact decimal", "sub2api", `{"example":{"input_cost_per_token":0.000001234567890123456789,"output_cost_per_token":0,"cache_read_input_token_cost":0}}`, `tier("base", p * 1.234567890123456789 + c * 0 + cr * 0)`},
-		{"axonhub million tokens", "axonhub", `{"providers":{"vendor":{"models":[{"id":"model","cost":{"input":2,"output":6,"cacheRead":0,"cacheWrite":2.5}}]}}}`, `tier("base", p * 2 + c * 6 + cr * 0 + cc * 2.5)`},
-		{"models dev million tokens", "models_dev", `{"vendor":{"models":{"model":{"cost":{"input":2,"output":6}}}}}`, `tier("base", p * 2 + c * 6)`},
-		{"openrouter string tokens", "openrouter", `{"data":[{"id":"vendor/model","pricing":{"prompt":"0.000002","completion":"0.000006","input_cache_write_1h":"0.000004"}}]}`, `tier("base", p * 2 + c * 6 + cc1h * 4)`},
-		{"basellm literal expression", "basellm", `{"success":true,"data":{"billing_mode":{"model":"tiered_expr"},"billing_expr":{"model":"tier(\"custom\", p * 0.123456789 + c * 0)"}}}`, `tier("custom", p * 0.123456789 + c * 0)`},
+		{"axonhub model array", "axonhub", `{"providers":{"vendor":{"models":[{"id":"model","cost":{"input":2,"output":6,"cacheRead":0,"cacheWrite":2.5}}]}}}`, `tier("base", p * 2 + c * 6 + cr * 0 + cc * 2.5)`},
+		{"axonhub keyed models", "axonhub", axonCost(`{"input":2,"output":6}`), `tier("base", p * 2 + c * 6)`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			models, err := Parse(tc.source, []byte(tc.body))
@@ -30,14 +32,14 @@ func TestPriceSourceDraftPreservesUnitsAndZero(t *testing.T) {
 }
 
 func TestPriceSourceContextBoundariesAndCacheCharges(t *testing.T) {
+	tiers := `{"input":2,"output":6,"cache_read":0.2,"tiers":[{"input":4,"output":12,"cache_read":0.4,"tier":{"type":"context","size":100}},{"input":8,"output":24,"cache_read":0.8,"tier":{"type":"context","size":200}}]}`
 	for _, tc := range []struct {
 		name, source, document string
 		length                 int64
 		expected               float64
 	}{
-		{"catalog first threshold inclusive base", "models_dev", `{"v":{"models":{"m":{"cost":{"input":2,"output":6,"cache_read":0.2,"tiers":[{"input":4,"output":12,"cache_read":0.4,"tier":{"type":"context","size":100}},{"input":8,"output":24,"cache_read":0.8,"tier":{"type":"context","size":200}}]}}}}}`, 100, 3.2},
-		{"catalog second tier", "models_dev", `{"v":{"models":{"m":{"cost":{"input":2,"output":6,"cache_read":0.2,"tiers":[{"input":4,"output":12,"cache_read":0.4,"tier":{"type":"context","size":100}},{"input":8,"output":24,"cache_read":0.8,"tier":{"type":"context","size":200}}]}}}}}`, 201, 12.8},
-		{"openrouter minimum inclusive", "openrouter", `{"data":[{"id":"m","pricing":{"prompt":"0.000002","completion":"0.000006","input_cache_read":"0.0000002","overrides":[{"min_prompt_tokens":100,"prompt":"0.000004","completion":"0.000012","input_cache_read":"0.0000004"}]}}]}`, 100, 6.4},
+		{"catalog first threshold inclusive base", "axonhub", axonCost(tiers), 100, 3.2},
+		{"catalog second tier", "axonhub", axonCost(tiers), 201, 12.8},
 		{"sub2api scales cache with input", "sub2api", `{"m":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000006,"cache_read_input_token_cost":0.0000002,"long_context_input_token_threshold":100,"long_context_input_cost_multiplier":2,"long_context_output_cost_multiplier":2}}`, 101, 6.4},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -55,26 +57,20 @@ func TestPriceSourceContextBoundariesAndCacheCharges(t *testing.T) {
 
 func TestPriceSourceRejectsLossyOrUnknownPrices(t *testing.T) {
 	for _, tc := range []struct{ name, source, body string }{
-		{"missing output is not free", "openrouter", `{"data":[{"id":"m","pricing":{"prompt":"0.000002"}}]}`},
-		{"malformed output is not free", "openrouter", `{"data":[{"id":"m","pricing":{"prompt":"0.000002","completion":"bad"}}]}`},
-		{"dynamic sentinel", "openrouter", `{"data":[{"id":"m","pricing":{"prompt":"-1","completion":"-1"}}]}`},
-		{"nested nonzero overrides", "openrouter", `{"data":[{"id":"m","pricing":{"prompt":"0.000002","completion":"0.000004","overrides":[{"min_prompt_tokens":100,"prompt":"0.000003","overrides":[{"min_prompt_tokens":200,"prompt":"0.0001"}]}]}}]}`},
-		{"conditional base price", "openrouter", `{"data":[{"id":"m","pricing":{"prompt":"0.000002","completion":"0.000004","min_prompt_tokens":100}}]}`},
-		{"unknown paid dimension", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"unknown":4}}}}}`},
-		{"different reasoning price", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"reasoning":4}}}}}`},
-		{"conflicting tiers", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":6},"tiers":[{"input":4,"output":8,"tier":{"type":"context","size":200000}}]}}}}}`},
-		{"same prices with conflicting thresholds", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":6},"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":100}}]}}}}}`},
-		{"nested nonzero context prices", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":100},"context_over_200k":{"input":100,"output":200}}]}}}}}`},
-		{"unmapped context selector", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":100,"service_tier":"priority"}}]}}}}}`},
-		{"duplicate price fields", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"input":0,"output":2}}}}}`},
-		{"missing base cache dimension", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":4,"output":8,"cache_read":1,"tier":{"type":"context","size":200000}}]}}}}}`},
+		{"unknown paid dimension", "axonhub", axonCost(`{"input":1,"output":2,"unknown":4}`)},
+		{"different reasoning price", "axonhub", axonCost(`{"input":1,"output":2,"reasoning":4}`)},
+		{"conflicting tiers", "axonhub", axonCost(`{"input":1,"output":2,"context_over_200k":{"input":3,"output":6},"tiers":[{"input":4,"output":8,"tier":{"type":"context","size":200000}}]}`)},
+		{"same prices with conflicting thresholds", "axonhub", axonCost(`{"input":1,"output":2,"context_over_200k":{"input":3,"output":6},"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":100}}]}`)},
+		{"nested nonzero context prices", "axonhub", axonCost(`{"input":1,"output":2,"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":100},"context_over_200k":{"input":100,"output":200}}]}`)},
+		{"unmapped context selector", "axonhub", axonCost(`{"input":1,"output":2,"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":100,"service_tier":"priority"}}]}`)},
+		{"duplicate price fields", "axonhub", axonCost(`{"input":1,"input":0,"output":2}`)},
+		{"missing base cache dimension", "axonhub", axonCost(`{"input":1,"output":2,"tiers":[{"input":4,"output":8,"cache_read":1,"tier":{"type":"context","size":200000}}]}`)},
+		{"duplicate thresholds", "axonhub", axonCost(`{"input":1,"output":2,"tiers":[{"input":2,"tier":{"type":"context","size":10}},{"input":3,"tier":{"type":"context","size":10}}]}`)},
 		{"partial priority", "sub2api", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_priority":0.000002}}`},
 		{"category only in priority", "sub2api", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_priority":0.000002,"output_cost_per_token_priority":0.000004,"cache_read_input_token_cost_priority":0.0000002}}`},
 		{"unknown context policy", "sub2api", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"long_context_input_token_threshold":100,"long_context_unknown_multiplier":2}}`},
 		{"range tiers with separate context surcharge", "sub2api", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"long_context_input_token_threshold":100,"long_context_input_cost_multiplier":2,"tiered_pricing":[{"range":[0,200000],"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}]}}`},
 		{"mixed image and token", "sub2api", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`},
-		{"invalid expression", "basellm", `{"success":true,"data":{"billing_mode":{"m":"tiered_expr"},"billing_expr":{"m":"unknown(42)"}}}`},
-		{"duplicate thresholds", "models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":2,"tier":{"type":"context","size":10}},{"input":3,"tier":{"type":"context","size":10}}]}}}}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			models, err := Parse(tc.source, []byte(tc.body))
@@ -86,18 +82,33 @@ func TestPriceSourceRejectsLossyOrUnknownPrices(t *testing.T) {
 	}
 }
 
+// Sub2API 认识但本地不计费的字段只警告；其他未知计价字段仍整条拒收。
+func TestSub2APIUnbilledFieldsWarnButUnknownChargesReject(t *testing.T) {
+	base := `"input_cost_per_token":0.000001,"output_cost_per_token":0.000002`
+	models, err := Parse("sub2api", []byte(`{"m":{`+base+`,"cache_storage_cost_per_token_per_hour":0.00000025}}`))
+	require.NoError(t, err)
+	require.Empty(t, models[0].UnsupportedReason)
+	assert.Equal(t, `tier("base", p * 1 + c * 2)`, models[0].Pricing["billing_setting.billing_expr"])
+	assert.Equal(t, []string{"cache_storage_cost_per_token_per_hour is not billed locally; imported prices exclude it"}, models[0].Warnings)
+
+	models, err = Parse("sub2api", []byte(`{"m":{`+base+`,"cache_storage_cost_per_token_per_hour":0}}`))
+	require.NoError(t, err)
+	require.Empty(t, models[0].UnsupportedReason)
+	assert.Empty(t, models[0].Warnings)
+
+	models, err = Parse("sub2api", []byte(`{"m":{`+base+`,"input_cost_per_video_per_second":0.1}}`))
+	require.NoError(t, err)
+	assert.Equal(t, "unsupported charge field: input_cost_per_video_per_second", models[0].UnsupportedReason)
+	assert.Empty(t, models[0].Pricing)
+}
+
 func TestPriceSourceKeepsProviderIdentitiesAndSeparateProducts(t *testing.T) {
-	models, err := Parse("models_dev", []byte(`{"a":{"models":{"m":{"cost":{"input":3,"output":6}}}},"b":{"models":{"m":{"cost":{"input":1,"output":2}}}}}`))
+	models, err := Parse("axonhub", []byte(`{"providers":{"a":{"models":{"m":{"cost":{"input":3,"output":6}}}},"b":{"models":{"m":{"cost":{"input":1,"output":2}}}}}}`))
 	require.NoError(t, err)
 	require.Len(t, models, 2)
 	assert.Equal(t, "a", models[0].Provider)
 	assert.Equal(t, "b", models[1].Provider)
 	assert.NotEqual(t, models[0].Pricing, models[1].Pricing)
-	models, err = Parse("openrouter", []byte(`{"data":[{"id":"vendor/model:batch","pricing":{"prompt":"0.000001","completion":"0.000002","web_search":"0"}}]}`))
-	require.NoError(t, err)
-	assert.Equal(t, "vendor/model:batch", models[0].ModelName)
-	assert.Empty(t, models[0].UnsupportedReason)
-	assert.NotEmpty(t, models[0].Warnings)
 	models, err = Parse("sub2api", []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_batches":0.0000005}}`))
 	require.NoError(t, err)
 	require.Empty(t, models[0].UnsupportedReason)
@@ -105,12 +116,8 @@ func TestPriceSourceKeepsProviderIdentitiesAndSeparateProducts(t *testing.T) {
 }
 
 func TestPriceSourceRejectsUnmappedToolFeesUnlessExplicitlyZero(t *testing.T) {
-	for _, field := range []struct{ source, name, document string }{
-		{"openrouter", "web_search", `{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","web_search":%s}}]}`},
-		{"openrouter", "tier_web_search", `{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","overrides":[{"min_prompt_tokens":100,"web_search":%s}]}}]}`},
-		{"sub2api", "search_context_cost_per_query", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"search_context_cost_per_query":%s}}`},
-		{"sub2api", "google_maps_grounding_cost_per_query", `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"google_maps_grounding_cost_per_query":%s}}`},
-	} {
+	for _, field := range []string{"search_context_cost_per_query", "google_maps_grounding_cost_per_query"} {
+		document := `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"` + field + `":%s}}`
 		for _, tc := range []struct {
 			name, value string
 			allowed     bool
@@ -132,8 +139,8 @@ func TestPriceSourceRejectsUnmappedToolFeesUnlessExplicitlyZero(t *testing.T) {
 			{"nested empty", `{"low":0,"other":{}}`, false},
 			{"ambiguous duplicate", `{"low":0.01,"low":0}`, false},
 		} {
-			t.Run(field.source+"/"+field.name+"/"+tc.name, func(t *testing.T) {
-				models, err := Parse(field.source, []byte(fmt.Sprintf(field.document, tc.value)))
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				models, err := Parse("sub2api", []byte(fmt.Sprintf(document, tc.value)))
 				require.NoError(t, err)
 				require.Len(t, models, 1)
 				if tc.allowed {
@@ -172,44 +179,31 @@ func TestPriceSourceServiceTierAndImageQuantities(t *testing.T) {
 	assert.Equal(t, float64(120000), amount)
 }
 
-func TestPriceSourceLegacyDraftAndSourceValidation(t *testing.T) {
-	models, err := Parse("basellm", []byte(`{"success":true,"data":{"model_ratio":{"m":1.234567890123456789},"completion_ratio":{"m":0}}}`))
-	require.NoError(t, err)
-	assert.Equal(t, "1.234567890123456789", models[0].Pricing["ModelRatio"])
-	assert.Equal(t, "0", models[0].Pricing["CompletionRatio"])
-	_, err = Select([]string{"basellm", "basellm"})
+func TestPriceSourceSelectionAndDocumentValidation(t *testing.T) {
+	_, err := Select([]string{"sub2api", "sub2api"})
 	assert.ErrorContains(t, err, "duplicate")
 	_, err = Select([]string{"http://localhost"})
 	assert.ErrorContains(t, err, "unknown")
+	// 这三个来源由原生 ratio_sync 预设处理，本地不再接受。
+	for _, id := range []string{"basellm", "models_dev", "openrouter"} {
+		_, err = Select([]string{id})
+		assert.ErrorContains(t, err, "unknown price source", id)
+		_, err = Parse(id, []byte(`{}`))
+		assert.ErrorContains(t, err, "unknown price source", id)
+	}
 	for _, source := range Sources() {
 		_, err := Parse(source.ID, []byte(`{}`))
 		assert.Error(t, err, source.ID)
 	}
-	_, err = Parse("openrouter", []byte(`{"data":[{"id":"m","pricing":{"prompt":"0","completion":"0"}},{"id":"m","pricing":{"prompt":"1","completion":"1"}}]}`))
+	_, err = Parse("axonhub", []byte(`{"providers":{"v":{"models":[{"id":"m","cost":{"input":0,"output":0}},{"id":"m","cost":{"input":1,"output":1}}]}}}`))
 	assert.ErrorContains(t, err, "duplicate model")
-}
-
-func TestLegacyPriceDraftRetainsDecimalsAcrossBrowserJSON(t *testing.T) {
-	models, err := Parse("basellm", []byte(`{"success":true,"data":{"model_ratio":{"m":1.234567890123456789e-7},"completion_ratio":{"m":0},"cache_ratio":{"m":"2.5e-3"}}}`))
-	require.NoError(t, err)
-	require.Empty(t, models[0].UnsupportedReason)
-	encoded, err := json.Marshal(models[0])
-	require.NoError(t, err)
-	var wire struct {
-		Pricing map[string]string `json:"pricing"`
-	}
-	// Strings survive JSON.parse in the editor, unlike numeric literals.
-	require.NoError(t, json.Unmarshal(encoded, &wire))
-	assert.Equal(t, "0.0000001234567890123456789", wire.Pricing["ModelRatio"])
-	assert.Equal(t, "0", wire.Pricing["CompletionRatio"])
-	assert.Equal(t, "0.0025", wire.Pricing["CacheRatio"])
 }
 
 func TestPriceSourceRejectsAmbiguousObjectIdentities(t *testing.T) {
 	for _, tc := range []struct{ source, body string }{
 		{"sub2api", `{"m":{"input_cost_per_token":1,"output_cost_per_token":2},"m":{"input_cost_per_token":0,"output_cost_per_token":0}}`},
-		{"models_dev", `{"v":{"models":{"m":{"cost":{"input":1,"output":2}},"m":{"cost":{"input":0,"output":0}}}}}`},
-		{"basellm", `{"success":true,"data":{"model_ratio":{"m":1,"m":0}}}`},
+		{"axonhub", `{"providers":{"v":{"models":{"m":{"cost":{"input":1,"output":2}},"m":{"cost":{"input":0,"output":0}}}}}}`},
+		{"axonhub", `{"providers":{"v":{"models":{}},"v":{"models":{}}}}`},
 	} {
 		models, err := Parse(tc.source, []byte(tc.body))
 		require.Error(t, err, tc.source)
@@ -218,7 +212,7 @@ func TestPriceSourceRejectsAmbiguousObjectIdentities(t *testing.T) {
 }
 
 func TestPriceSourceAcceptsEquivalentContextDeclarations(t *testing.T) {
-	models, err := Parse("models_dev", []byte(`{"v":{"models":{"m":{"cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":6},"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":200000}}]}}}}}`))
+	models, err := Parse("axonhub", []byte(axonCost(`{"input":1,"output":2,"context_over_200k":{"input":3,"output":6},"tiers":[{"input":3,"output":6,"tier":{"type":"context","size":200000}}]}`)))
 	require.NoError(t, err)
 	require.Empty(t, models[0].UnsupportedReason)
 	expression := models[0].Pricing["billing_setting.billing_expr"].(string)

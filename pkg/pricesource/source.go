@@ -13,10 +13,12 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 )
 
+// HashURL 指向来源发布的 .sha256 文件；为空表示该来源没有发布指纹。
 type Source struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	URL  string `json:"-"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	URL     string `json:"-"`
+	HashURL string `json:"-"`
 }
 
 type Model struct {
@@ -27,13 +29,21 @@ type Model struct {
 	Warnings          []string       `json:"warnings,omitempty"`
 }
 
+// 只保留需要本地格式转换的来源。basellm、models.dev、OpenRouter 由原生
+// ratio_sync 预设上游处理，这里不再重复解析。
 func Sources() []Source {
 	return []Source{
-		{"sub2api", "Sub2API", "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json"},
-		{"axonhub", "AxonHub", "https://raw.githubusercontent.com/ThinkInAIXYZ/PublicProviderConf/refs/heads/dev/dist/all.json"},
-		{"basellm", "basellm", "https://basellm.github.io/llm-metadata/api/newapi/ratio_config-v1-base.json"},
-		{"models_dev", "models.dev", "https://models.dev/api.json"},
-		{"openrouter", "OpenRouter", "https://openrouter.ai/api/v1/models"},
+		{
+			ID:      "sub2api",
+			Name:    "Sub2API",
+			URL:     "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json",
+			HashURL: "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.sha256",
+		},
+		{
+			ID:   "axonhub",
+			Name: "AxonHub",
+			URL:  "https://raw.githubusercontent.com/ThinkInAIXYZ/PublicProviderConf/refs/heads/dev/dist/all.json",
+		},
 	}
 }
 
@@ -135,12 +145,8 @@ func Parse(id string, document []byte) ([]Model, error) {
 	switch id {
 	case "sub2api":
 		models, err = parseSub2API(root)
-	case "axonhub", "models_dev":
-		models, err = parseProviderCatalog(id, root)
-	case "basellm":
-		models, err = parseBasellm(root)
-	case "openrouter":
-		models, err = parseOpenRouter(root)
+	case "axonhub":
+		models, err = parseAxonHub(root)
 	default:
 		return nil, fmt.Errorf("unknown price source: %s", id)
 	}
