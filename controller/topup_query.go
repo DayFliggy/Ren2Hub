@@ -76,3 +76,24 @@ func GetTopUpStatistics(c *gin.Context) {
 	}
 	common.ApiSuccess(c, result)
 }
+
+func GetTopUpRanking(c *gin.Context) {
+	filter, err := topUpRequestFilter(c, 0)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	limit := model.TopUpRankingDefaultLimit
+	if value := c.Query("limit"); value != "" {
+		if limit, err = strconv.Atoi(value); err != nil {
+			common.ApiError(c, errors.New("invalid limit"))
+			return
+		}
+	}
+	result, err := model.GetTopUpRanking(filter, limit)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}

@@ -48,6 +48,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:read"),
 	"PUT /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:write"),
 	"GET /api/user/topup/stats":                  accessTokenScopeRule("billing:read"),
+	"GET /api/user/topup/ranking":                accessTokenScopeRule("billing:read"),
 	"GET /api/user/topup/admin/detail/:trade_no": accessTokenScopeRule("billing:read"),
 
 	// router/api-router.go: top level

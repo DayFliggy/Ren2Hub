@@ -41,3 +41,33 @@ func TestUserTopUpListCannotBypassQueryWindow(t *testing.T) {
 		assert.Equal(t, want, result.Data.Total, path)
 	}
 }
+
+// 排行接口的 JSON 字段是 Vue 订单页的合同：items[].{user_id,username,paid_count,credited_quota}。
+func TestTopUpRankingResponseContract(t *testing.T) {
+	db := useGmpayControllerDB(t)
+	user := model.User{Username: "ranking-contract", AffCode: "RANKING-CONTRACT"}
+	require.NoError(t, db.Create(&user).Error)
+	require.NoError(t, db.Create(&model.TopUp{UserId: user.Id, TradeNo: "ranking-contract-order", Status: common.TopUpStatusSuccess, CreditedQuota: 42, CreateTime: common.GetTimestamp()}).Error)
+	router := gin.New()
+	router.GET("/ranking", GetTopUpRanking)
+	invoke := func(path string) map[string]json.RawMessage {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		var result map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result), response.Body.String())
+		return result
+	}
+	result := invoke("/ranking")
+	require.JSONEq(t, "true", string(result["success"]))
+	var data struct {
+		Items     []map[string]any `json:"items"`
+		StartTime int64            `json:"start_time"`
+	}
+	require.NoError(t, json.Unmarshal(result["data"], &data))
+	require.Len(t, data.Items, 1)
+	assert.Equal(t, map[string]any{"user_id": float64(user.Id), "username": "ranking-contract", "paid_count": float64(1), "credited_quota": float64(42)}, data.Items[0])
+	assert.Positive(t, data.StartTime)
+	for _, limit := range []string{"abc", "0", "51"} {
+		assert.JSONEq(t, "false", string(invoke("/ranking?limit=" + limit)["success"]), limit)
+	}
+}

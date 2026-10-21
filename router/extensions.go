@@ -43,6 +43,7 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	orders := api.Group("/user/topup", middleware.UserAuth(), middleware.DisableCache())
 	handleSessionRoute(orders, http.MethodGet, "/detail/:trade_no", controller.GetTopUpDetail)
 	orders.GET("/stats", middleware.AdminAuth(), controller.GetTopUpStatistics)
+	orders.GET("/ranking", middleware.AdminAuth(), controller.GetTopUpRanking)
 	orders.GET("/admin/detail/:trade_no", middleware.AdminAuth(), controller.GetAdminTopUpDetail)
 
 	pay := api.Group("/user/gmpay", middleware.UserAuth())
