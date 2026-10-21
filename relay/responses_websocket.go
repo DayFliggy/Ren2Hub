@@ -306,6 +306,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			var channel *appmodel.Channel
 			channel, apiErr = selectResponsesWSChannel(c, modelName, retry)
 			if apiErr != nil {
+				if info != nil {
+					apiErr = service.PreferUpstreamError(info.LastError, apiErr)
+				}
 				if apiErr.StatusCode == http.StatusInternalServerError && apiErr.GetErrorCode() == types.ErrorCodeGetChannelFailed {
 					state.closeCode = websocket.CloseInternalServerErr
 				}

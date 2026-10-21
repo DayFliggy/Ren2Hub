@@ -11,7 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFilterCandidateIDs(t *testing.T) {
+// TestChannelSatisfiesFiltersPerChannel keeps the per-channel cases of the
+// removed id-list filter: identity keys, legacy task types, request paths and
+// first-violation attribution in filterEvalOrder regardless of slice order.
+func TestChannelSatisfiesFiltersPerChannel(t *testing.T) {
 	alphaSetting := `{"task_plugin_key":"alpha"}`
 	betaSetting := `{"task_plugin_key":"beta"}`
 	alpha := &Channel{Id: 900001, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Setting: &alphaSetting}
@@ -42,136 +45,33 @@ func TestFilterCandidateIDs(t *testing.T) {
 	emptyPathFilter := dto.ChannelFilter{Kind: dto.FilterRequestPath, RequestPath: ""}
 
 	tests := []struct {
-		name      string
-		ids       []int
-		modelName string
-		filters   []dto.ChannelFilter
-		wantKept  []int
-		wantEmpty dto.ChannelFilterKind
+		name     string
+		channel  *Channel
+		model    string
+		filters  []dto.ChannelFilter
+		wantOK   bool
+		wantKind dto.ChannelFilterKind
 	}{
-		{
-			name:      "identity keeps matching type-59 key",
-			ids:       []int{900001, 900002},
-			modelName: "shared",
-			filters:   identityFilters("alpha", nil),
-			wantKept:  []int{900001},
-		},
-		{
-			name:      "identity empty key drops all type-59",
-			ids:       []int{900001, 900002},
-			modelName: "shared",
-			filters:   identityFilters("", nil),
-			wantKept:  []int{},
-			wantEmpty: dto.FilterTaskPluginIdentity,
-		},
-		{
-			name:      "identity empty key keeps ordinary channel",
-			ids:       []int{900003},
-			modelName: "ordinary",
-			filters:   identityFilters("", nil),
-			wantKept:  []int{900003},
-		},
-		{
-			name:      "identity keeps matching legacy type",
-			ids:       []int{900004, 900005},
-			modelName: "legacy",
-			filters:   identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}),
-			wantKept:  []int{900004},
-		},
-		{
-			name:      "identity keeps all listed legacy types",
-			ids:       []int{900004, 900005},
-			modelName: "legacy",
-			filters:   identityFilters("legacy-alpha", []int{constant.ChannelTypeKling, constant.ChannelTypeJimeng}),
-			wantKept:  []int{900004, 900005},
-		},
-		{
-			name:      "identity keyed with no types drops legacy",
-			ids:       []int{900004, 900005},
-			modelName: "legacy",
-			filters:   identityFilters("legacy-alpha", nil),
-			wantKept:  []int{},
-			wantEmpty: dto.FilterTaskPluginIdentity,
-		},
-		{
-			name:      "identity drops missing cache entry",
-			ids:       []int{900004, 999999},
-			modelName: "legacy",
-			filters:   identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}),
-			wantKept:  []int{900004},
-		},
-		{
-			name:      "empty request path is a passthrough including missing ids",
-			ids:       []int{900003, 900010, 999999},
-			modelName: "gpt-4",
-			filters:   []dto.ChannelFilter{emptyPathFilter},
-			wantKept:  []int{900003, 900010, 999999},
-		},
-		{
-			name:      "request path keeps missing cache entry for consistency",
-			ids:       []int{900003, 999999},
-			modelName: "gpt-4",
-			filters:   []dto.ChannelFilter{pathFilter},
-			wantKept:  []int{900003, 999999},
-		},
-		{
-			name:      "request path keeps matching type-58 and ordinary",
-			ids:       []int{900003, 900010, 900011},
-			modelName: "gpt-4",
-			filters:   []dto.ChannelFilter{pathFilter},
-			wantKept:  []int{900003, 900010},
-		},
-		{
-			name:      "request path empties when only unmatched type-58 remains",
-			ids:       []int{900011},
-			modelName: "gpt-4",
-			filters:   []dto.ChannelFilter{pathFilter},
-			wantKept:  []int{},
-			wantEmpty: dto.FilterRequestPath,
-		},
-		{
-			name:      "intersection attributes empty set to identity after path keeps candidates",
-			ids:       []int{900001, 900010},
-			modelName: "gpt-4",
-			filters:   []dto.ChannelFilter{pathFilter, identityFilters("missing", nil)[0]},
-			wantKept:  []int{},
-			wantEmpty: dto.FilterTaskPluginIdentity,
-		},
-		{
-			name:      "intersection attributes empty set to path when path runs first",
-			ids:       []int{900011},
-			modelName: "gpt-4",
-			filters:   []dto.ChannelFilter{identityFilters("", nil)[0], pathFilter},
-			wantKept:  []int{},
-			wantEmpty: dto.FilterRequestPath,
-		},
+		{"identity keeps matching type-59 key", alpha, "shared", identityFilters("alpha", nil), true, ""},
+		{"identity drops other type-59 key", beta, "shared", identityFilters("alpha", nil), false, dto.FilterTaskPluginIdentity},
+		{"identity empty key drops type-59", alpha, "shared", identityFilters("", nil), false, dto.FilterTaskPluginIdentity},
+		{"identity empty key keeps ordinary channel", ordinary, "ordinary", identityFilters("", nil), true, ""},
+		{"identity keeps listed legacy type", kling, "legacy", identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}), true, ""},
+		{"identity drops unlisted legacy type", jimeng, "legacy", identityFilters("legacy-alpha", []int{constant.ChannelTypeKling}), false, dto.FilterTaskPluginIdentity},
+		{"identity keeps every listed legacy type", jimeng, "legacy", identityFilters("legacy-alpha", []int{constant.ChannelTypeKling, constant.ChannelTypeJimeng}), true, ""},
+		{"identity keyed with no types drops legacy", kling, "legacy", identityFilters("legacy-alpha", nil), false, dto.FilterTaskPluginIdentity},
+		{"empty request path passes type-58", otherCustom, "gpt-4", []dto.ChannelFilter{emptyPathFilter}, true, ""},
+		{"request path keeps ordinary", ordinary, "gpt-4", []dto.ChannelFilter{pathFilter}, true, ""},
+		{"request path keeps matching type-58", matchingCustom, "gpt-4", []dto.ChannelFilter{pathFilter}, true, ""},
+		{"request path drops unmatched type-58", otherCustom, "gpt-4", []dto.ChannelFilter{pathFilter}, false, dto.FilterRequestPath},
+		{"identity is blamed after path passes", matchingCustom, "gpt-4", []dto.ChannelFilter{pathFilter, identityFilters("missing", nil)[0]}, false, dto.FilterTaskPluginIdentity},
+		{"path is blamed first whatever the slice order", otherCustom, "gpt-4", []dto.ChannelFilter{identityFilters("", nil)[0], pathFilter}, false, dto.FilterRequestPath},
 	}
-
-	channelSyncLock.Lock()
-	previous := channelsIDM
-	channelsIDM = map[int]*Channel{
-		900001: alpha,
-		900002: beta,
-		900003: ordinary,
-		900004: kling,
-		900005: jimeng,
-		900010: matchingCustom,
-		900011: otherCustom,
-	}
-	t.Cleanup(func() {
-		channelsIDM = previous
-		channelSyncLock.Unlock()
-	})
-
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			kept, emptiedBy := filterCandidateIDs(testCase.ids, testCase.modelName, testCase.filters)
-			if testCase.wantKept == nil {
-				assert.Nil(t, kept)
-			} else {
-				assert.Equal(t, testCase.wantKept, kept)
-			}
-			assert.Equal(t, testCase.wantEmpty, emptiedBy)
+			ok, kind := ChannelSatisfiesFilters(testCase.channel, testCase.model, testCase.filters)
+			assert.Equal(t, testCase.wantOK, ok)
+			assert.Equal(t, testCase.wantKind, kind)
 		})
 	}
 }

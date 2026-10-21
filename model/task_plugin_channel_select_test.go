@@ -76,12 +76,6 @@ func TestSharedPluginKeysFilterBothChannelSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, selected, 2)
 	assert.Equal(t, []int{910001, 910002}, []int{selected[0].Id, selected[1].Id})
-	InitChannelCache()
-	channelSyncLock.RLock()
-	kept, emptied := filterCandidateIDs([]int{910001, 910002, 910003}, "shared", filters)
-	channelSyncLock.RUnlock()
-	assert.Equal(t, []int{910001, 910002}, kept)
-	assert.Empty(t, emptied)
 }
 
 func TestNewAPIChannelServesExtendedTaskPlugins(t *testing.T) {
