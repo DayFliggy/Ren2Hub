@@ -1,7 +1,7 @@
 package model
 
 import (
-"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/pkg/modellab"
 	"strings"
 )
 
@@ -43,10 +43,12 @@ func initDefaultVendorMapping(metaMap map[string]*Model, vendorMap map[int]*Vend
 			continue
 		}
 
-        lab:=modellab.ResolveModel(modelName, "")
-        display:=lab.Name
-        if alias:=map[string]string{"alibaba":"阿里巴巴","moonshotai":"Moonshot","zhipuai":"智谱","bytedance-seed":"字节跳动","tencent":"腾讯"}[lab.ID];alias!=""{display=alias}
-        vendorID:=getDisplayVendor(display,vendorMap)
+		lab := modellab.ResolveModel(modelName, "")
+		display := lab.Name
+		if alias := map[string]string{"alibaba": "阿里巴巴", "moonshotai": "Moonshot", "zhipuai": "智谱", "bytedance-seed": "字节跳动", "tencent": "腾讯"}[lab.ID]; alias != "" {
+			display = alias
+		}
+		vendorID := getDisplayVendor(display, vendorMap)
 
 		// 创建模型元数据
 		metaMap[modelName] = &Model{

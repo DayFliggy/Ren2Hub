@@ -107,7 +107,6 @@ func Record(sample Sample) {
 	if !setting.Enabled || sample.Model == "" {
 		return
 	}
-
 	if sample.LatencyMs < 0 {
 		sample.LatencyMs = 0
 	}
@@ -143,7 +142,6 @@ func Query(params QueryParams) (QueryResult, error) {
 		return QueryResult{}, err
 	}
 	for _, row := range rows {
-
 		mergeCounters(merged, bucketKey{
 			model:    row.ModelName,
 			bucketTs: row.BucketTs,
@@ -163,7 +161,6 @@ func Query(params QueryParams) (QueryResult, error) {
 		if k.model != params.Model || k.bucketTs < startTs || k.bucketTs > endTs {
 			return true
 		}
-
 		mergeCounters(merged, k, value.(*atomicBucket).snapshot())
 		return true
 	})
@@ -226,7 +223,6 @@ func QuerySummaryAll(hours int, recentModels ...string) (SummaryAllResult, error
 		if k.bucketTs > endTs {
 			return true
 		}
-
 		snap := value.(*atomicBucket).snapshot()
 		if snap.requestCount == 0 {
 			return true
@@ -404,8 +400,6 @@ func buildQueryResult(modelName string, merged map[bucketKey]counters) QueryResu
 		all.requestCount += value.requestCount
 		all.successCount += value.successCount
 		all.totalLatencyMs += value.totalLatencyMs
-		all.ttftSumMs += value.ttftSumMs
-		all.ttftCount += value.ttftCount
 		all.outputTokens += value.outputTokens
 		all.generationMs += value.generationMs
 	}

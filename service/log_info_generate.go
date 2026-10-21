@@ -189,7 +189,6 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other *model.LogOther) 
 	if relayInfo.BillingSource != "" {
 		other.SetPublic("billing_source", relayInfo.BillingSource)
 	}
-
 }
 
 func appendRequestConversionChain(relayInfo *relaycommon.RelayInfo, other *model.LogOther) {

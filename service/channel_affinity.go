@@ -171,7 +171,6 @@ func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
 				continue
 			}
 		}
-
 		byRuleName[ruleName]++
 	}
 

@@ -128,7 +128,7 @@ type RelayInfo struct {
 	ChatToGeminiStreamState any
 	ReceivedResponseCount   int
 	FinalPreConsumedQuota   int // 最终预消耗的配额
-	// Billing owns the native reservation, settlement and refund lifecycle.
+	// Billing 是计费会话，封装了预扣费/结算/退款的统一生命周期。
 	Billing                   BillingSettler
 	BillingSource             string
 	RequestId                 string

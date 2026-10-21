@@ -82,7 +82,6 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
-
 			}
 		}
 		userPermit, admissionErr := service.AcquireUserConcurrency(c.Request.Context(), c.GetInt("id"), c.GetInt("user_max_concurrency"))
@@ -146,9 +145,9 @@ func noAvailableChannelMessage(c *gin.Context, modelName string) string {
 			}
 		}
 		logger.LogWarn(c, common.LogText("task_plugin subsystem=distribution event=no_available_channel model=%q plugins=%q reason=no_eligible_channel", modelName, strings.Join(keys, ",")))
-		return fmt.Sprintf("No available channel for task model %s", modelName)
+		return i18n.T(c, i18n.MsgDistributorNoAvailableChannelTaskPlugin, map[string]any{"Model": modelName})
 	}
-	return fmt.Sprintf("No available channel for model %s", modelName)
+	return i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Model": modelName})
 }
 
 func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, expected string) bool {

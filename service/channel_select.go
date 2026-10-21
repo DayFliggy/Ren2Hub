@@ -140,8 +140,11 @@ type ChannelSelectError struct {
 func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam) (*model.Channel, *ChannelSelectError) {
 	constraints := GetChannelConstraints(c)
 	pin, pinned, overridden := constraints.ResolvedPin()
-	for _, loser := range overridden {
-		logger.LogWarn(c, "channel pin overridden winning_source=%s winning_channel_id=%d overridden_source=%s overridden_channel_id=%d", pin.Source, pin.ChannelId, loser.Source, loser.ChannelId)
+	for _, lost := range overridden {
+		logger.LogWarn(c, common.LogText(
+			"channel pin overridden: winning_source=%s winning_channel_id=%d overridden_source=%s overridden_channel_id=%d",
+			pin.Source, pin.ChannelId, lost.Source, lost.ChannelId,
+		))
 	}
 	if err := LoadTokenRouteConstraints(c); err != nil {
 		logger.LogError(c, common.LogText("load token routing failed: %v", err))

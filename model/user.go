@@ -1196,6 +1196,7 @@ func GetUserEmail(id int) (email string, err error) {
 	return email, err
 }
 
+// GetUserSetting gets setting from Redis first, falls back to DB if needed
 func GetUserSetting(id int, fromDB bool) (settingMap dto.UserSetting, err error) {
 	var setting string
 	defer func() {

@@ -32,6 +32,8 @@
 - **分层**：保持 Router → Controller → Service → Model。
 - **复用**：JSON 用 `common.Marshal/Unmarshal`，响应用 `common.ApiError*`，文案走 i18n key，SQL 兼容 SQLite、MySQL、PostgreSQL，锁和事务沿用上游的写法。
 - **扩展点**：本地逻辑优先放进已有的扩展文件，比如 `*_extension`、`route_*` 和 `topup_settlement`，不在原生文件里散落修改。原生文件只有在必须接入时才加一行调用，并在账本里说明原因。
+- **上游代码原样照搬**（2026-10-21 用户要求）：凡是 NewAPI 已经实现的功能或写法，都直接复制上游代码，不重写，也不写等价实现。原生文件尽量保持上游原文，合同要求的差异只允许两种改法：删除分组、订阅相关的行，或者加一行调用本地扩展函数。本地逻辑都放在扩展文件里。阶段 3 的修复如果在上游已有对应实现（如 `sanitizeLikePattern`、`pinnedChannelUnavailable`、`ratio_sync` 预设、`notifyAdmins`），直接复用或复制上游代码。Sub2API 和 AxonHub 的架构不同，只借鉴做法，不搬代码。
+- **经评估的重构例外**（2026-10-21 用户要求）：评估后确实值得彻底重构或优化的上游代码，允许大量删改。原样照搬仍是默认做法，重构必须先通过阶段 3E 的评估。评估要给出类别、证据、收益、风险、上游近 6 个月的改动频率和同步成本，只有收益明显大于同步成本和风险的才实施。协议适配器和 RelayKit 不做风格性重写。
 - **规则只写一处**：每条不变量只表达一次。同一检查不在多个支付渠道、多条删除路径或多个控制器里各写一遍，抽成一个共享函数，由各处调用。
 - **可用性**：进程内状态必须有上限、有过期，超限时显式淘汰并记日志，不静默丢弃。外部依赖失败要明确返回错误或降级状态，不伪造成功，也不吞掉错误。缓存刷新失败不能把已经提交的写操作报告为失败。
 - **测试**：新增测试要保护真实行为或失败边界，不要写复刻实现细节的测试。Go 测试统一加 `-timeout 60s`，RelayKit 和 TokenKit 用 `GOWORK=off`。
@@ -118,6 +120,7 @@
 - **A4（P1）订单查询加固。** 本地的 `ListTopUps` 支持状态、币种、渠道等过滤，原生函数不支持，所以保留，但要复用原生的 `sanitizeLikePattern` 和 `searchTopUpCountHardLimit`。普通用户的 `start_time` 不能早于 30 天截止点；管理员也要有计数上限。已无调用方的原生查询函数按阶段 2 的规则二选一：确认确实被替代后删除，或者改回由原生函数承担查询。
 - **A5（P2）订单统计。** 不建新表，在 `/api/user/topup/stats` 里按支付方式和币种汇总占比，供 Vue 的 `OrdersView` 使用。管理员端额外提供充值排行，只按用户和到账额度排序，不暴露支付凭据。
 - **A6（P2）返利策略局部更新。** `UpdateAffiliateUserPolicy` 只更新请求中提交的字段，只改 enabled 时不能把专属比例清空。
+- **A7（P1，阶段 2 分类时发现）Creem、Stripe 回调的状态码。** 分类时发现两处：Creem 收到非一次性订单时，返回值从 200 改成了 400；Stripe 入账失败或找不到订单时返回 500。这两种情况都会让支付平台一直重试。处理方法：先和上游 206e0fa 的 webhook 处理逐条对照，再统一按这条规则返回——永久性错误（订单不存在、类型不支持、验签失败）返回不触发重试的状态并记审计日志，暂时性错误（数据库不可用）返回可重试的状态。和上游语义一致的地方回归上游，确有必要的偏离登记到账本。
 
 ### B 组：路由与容量
 
@@ -144,6 +147,14 @@
 
 - **B11（P0，阶段 1 发现）渠道倍率无效时任务被按 0 计费。** `HandleChannelRatio` 在倍率无效时会吞掉错误、返回 0。`ModelPriceHelper` 检查了返回值，但任务表达式计费分支（`relay/relay_task.go:304`）没有检查，渠道倍率缺失时任务会按 0 额度计费。修复方式：让 `HandleChannelRatio` 返回 error，所有调用方都必须处理，以后新增的调用方也绕不过去。
 
+- **B12（P0，阶段 2 分类时发现）修改渠道倍率要有敏感写权限。** 上游把 `group` 列为非敏感字段，因为计价跟着用户分组走，分组倍率只能在 root 设置里改。Ren2Hub 的 `channel_ratio` 直接决定用户付多少钱，现在却在 `channelNonSensitiveFields` 里，只有 ChannelWrite 的管理员也能改所有用户的计费。改为要求 ChannelSensitiveWrite，并补权限回归测试。`max_concurrency` 只影响运行，继续按非敏感处理。
+- **B13（P1）** 固定渠道（pin）的错误返回要和上游一致：
+  - `service/channel_select.go:185`：非原任务的 pin 找不到渠道时，返回的 message 和 code 都是空的。
+  - `:187-189`：原任务的渠道被禁用时返回 403，没有返回 `origin_task_channel_disabled`。
+  
+  这两处都改为按上游 `pinnedChannelUnavailable` 的语义返回。
+- **B14（P2）** 删除用户时的硬删除路径要清理 Key 路由表，复用 B4 的共享清理函数。任务轮询遇到满载跳过本轮时，要按限频记一条日志。
+
 ### C 组：运营与可观测
 
 文件归属：`service/model_catalog.go`、`controller/model_catalog.go`、`*/dashboard_summary.go`、`*/home_metrics.go`、`controller/performance.go`、`model/ticket.go`、`controller/tickets*.go`、`model/channel_lab.go`、`pkg/modellab`、`pkg/pricesource`、`*/price_source.go`。
@@ -168,6 +179,8 @@
   - sub2api 解析器把已知、但本地不计费的字段（如 `cache_storage_cost_per_token_per_hour`）列为可忽略，在草稿里给出警告，不再整条拒收。其他未知的计价字段仍然拒收。
   - 草稿中显示来源 `.sha256` 指纹，借鉴 Sub2API。
 
+- **C9（P1，阶段 2 分类时发现）渠道列表的类型计数被筛选条件污染。** `controller/channel.go:224-226` 同时按 lab 和 type 筛选时，计数查询与列表查询共用一个 gorm Statement，type 条件会被带进 `type_counts`。已用 DryRun 生成的 SQL 确认。修复办法：计数查询改为独立构建，并补一个同时带两种筛选的回归测试。
+
 ### D 组：Vue 接通
 
 文件归属：`frontend/`。
@@ -180,6 +193,24 @@
 - **D6（P2）** 如果现有邮件设置页能直接扩展，就补上 Resend 服务商选项和通知开关；不能扩展的，在账本里登记为延期。
 
 D1、D2、D3 不依赖其他组，可以先做。D4、D5、D6 要等 A 组和 C 组把接口合同定下来，再按真实接口接通。
+
+### 3E 组：上游代码重构评估与实施
+
+评估范围分三块，分别出评估报告：
+
+- **中继与计费核心**：`phase3e-eval-relay-billing.json`
+- **渠道、路由、定价与模型数据**：`phase3e-eval-routing-pricing.json`
+- **权限、配置、用户、支付、启动与系统任务**：`phase3e-eval-platform-payment.json`
+
+每个候选按以下类别归类：
+
+- 本地合同下已失效的代码，比如只剩一个分支的分组或订阅 switch、恒等函数、走不到的分支、单节点下的多实例分支
+- 可以证实的性能问题
+- 上游还没修的正确性缺陷
+- 可以明显简化的复杂度
+- 重复的规则实现
+
+报告结论分为 do-now、defer、reject 三种。do-now 的条目按文件归属并入 A、B、C 组实施，每项都要有回归测试，并在账本里登记重构理由和复评条件。defer 和 reject 的条目只在账本中登记。
 
 ### 文档与工具
 

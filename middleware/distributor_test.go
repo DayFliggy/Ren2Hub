@@ -209,7 +209,11 @@ func TestDistributeHidesTaskPluginDetailsButLogsDiagnostics(t *testing.T) {
 	t.Cleanup(func() { common.MemoryCacheEnabled = previousCacheEnabled })
 
 	setupOriginTaskDB(t)
-	for _, locale := range []struct{ language, message string }{{"en", "No available channel for task model task-model"}} {
+	for _, locale := range []struct{ language, message string }{
+		{"en", "No available channel for model task-model: the model is claimed by a task plugin, which has no enabled channel serving it (distributor)"},
+		{"zh-CN", "模型 task-model 无可用渠道：该模型由任务插件认领，但当前没有启用的渠道可服务此模型（distributor）"},
+		{"zh-TW", "模型 task-model 無可用管道：該模型由任務插件認領，但目前沒有啟用的管道可服務此模型（distributor）"},
+	} {
 		for _, providerCount := range []int{1, 2} {
 			t.Run(fmt.Sprintf("%s/%d_providers", locale.language, providerCount), func(t *testing.T) {
 				registry := jsplugin.NewRegistry()

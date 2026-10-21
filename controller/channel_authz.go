@@ -122,7 +122,7 @@ func clearChannelProjections(channel *model.Channel) {
 	channel.Lab = modellab.Classification{}
 }
 
-// channelNonSensitiveFields lists routing channel
+// channelNonSensitiveFields lists routing / server-managed channel
 // fields a ChannelWrite admin may edit without ChannelSensitiveWrite. When a new
 // field is added to model.Channel it must be added to either this set or
 // channelSensitiveFields or channelOperationalFields; otherwise it falls through

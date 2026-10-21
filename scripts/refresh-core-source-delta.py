@@ -6,10 +6,21 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
+
+# 冻结的 NewAPI 核心基线；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
+UPSTREAM_SHA = '206e0fa5c600127a314a97f88592c067f784f4a6'
 
 
 def git(*args, repository=None):
     return subprocess.check_output(['git', *args], cwd=repository or ROOT)
+
+
+def requires_reasons(row):
+    # 非测试的 adapted 行必须说明保留差异的合同理由；测试文件不强制。
+    path = row['path']
+    return (row['status'] == 'adapted' and not path.endswith('_test.go')
+            and '/testdata/' not in path and not path.startswith('testdata/'))
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,8 +30,9 @@ parser.add_argument('--upstream-repo', type=Path, required=True,
 args = parser.parse_args()
 MANIFEST = ROOT / 'docs/upstream/CORE_SOURCE_DELTA.json'
 data = json.loads(MANIFEST.read_text())
-upstream = data['upstream_sha']
+upstream = UPSTREAM_SHA
 previous = {row['path'] for row in data['files']}
+reasons = {row['path']: row['reasons'] for row in data['files'] if row.get('reasons')}
 directories = sorted({path.split('/')[0] for path in previous if '/' in path})
 root_files = sorted({path for path in previous if '/' not in path}
                     | {path.name for path in ROOT.glob('*.go')})
@@ -40,10 +52,21 @@ for path in sorted((previous | source_paths | local_paths) - {''}):
         continue
     status = ('extension' if source is None else 'removed' if local is None
               else 'upstream_equal' if source == local else 'adapted')
-    rows.append(dict(path=path, status=status, upstream_sha256=source, local_sha256=local))
-data.update(implementation_base_sha='39daa6ccee738f7a26fdba131c829be1adbbdd5b',
+    row = dict(path=path, status=status, upstream_sha256=source, local_sha256=local)
+    # 回到上游一致的文件不再需要理由，旧理由随之丢弃。
+    if status != 'upstream_equal' and path in reasons:
+        row['reasons'] = reasons[path]
+    rows.append(row)
+missing = [row['path'] for row in rows if requires_reasons(row) and not row.get('reasons')]
+if missing:
+    print('adapted rows without reasons (manifest not written):', file=sys.stderr)
+    for path in missing:
+        print('  ' + path, file=sys.stderr)
+    sys.exit(1)
+data.update(upstream_sha=upstream,
+            implementation_base_sha='39daa6ccee738f7a26fdba131c829be1adbbdd5b',
             history_baseline_sha='9a63062227c31ba54a6346e07ee8b4fd8802f22f',
-            reference_newapi_sha='6cf0d90b5ff27f901697dddd61e0c28aba8efefc',
+            reference_newapi_sha=upstream,
             candidate_sha=None, counts=dict(collections.Counter(row['status'] for row in rows)), files=rows)
 data.pop('audit_repair_base_sha', None)
 MANIFEST.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')

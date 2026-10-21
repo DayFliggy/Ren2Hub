@@ -47,7 +47,6 @@ func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) s
 	if normalized != "" {
 		return normalized
 	}
-
 	return normalized
 }
 

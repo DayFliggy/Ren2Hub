@@ -75,12 +75,20 @@ var (
 )
 
 func GetPricing() []Pricing {
-	prices, _, _, err := ReadPricing()
-	if err != nil {
-		common.SysError(common.LogText("read pricing: %s", err.Error()))
-		return nil
+	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
+		updatePricingLock.Lock()
+		defer updatePricingLock.Unlock()
+		// Double check after acquiring the lock
+		if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
+			modelSupportEndpointsLock.Lock()
+			defer modelSupportEndpointsLock.Unlock()
+			if err := updatePricing(); err != nil {
+				common.SysError(common.LogText("read pricing: %s", err.Error()))
+				return nil
+			}
+		}
 	}
-	return prices
+	return pricingMap
 }
 
 func InvalidatePricingCache() {
@@ -94,12 +102,11 @@ func InvalidatePricingCache() {
 
 // GetVendors 返回当前定价接口使用到的供应商信息
 func GetVendors() []PricingVendor {
-	_, vendors, _, err := ReadPricing()
-	if err != nil {
-		common.SysError(common.LogText("read pricing vendors: %s", err.Error()))
-		return nil
+	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
+		// 保证先刷新一次
+		GetPricing()
 	}
-	return vendors
+	return vendorsList
 }
 
 func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
@@ -452,9 +459,9 @@ func GetSupportedEndpointMap() map[string]common.EndpointInfo {
 func ReadPricing() ([]Pricing, []PricingVendor, map[string]common.EndpointInfo, error) {
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
-	modelSupportEndpointsLock.Lock()
-	defer modelSupportEndpointsLock.Unlock()
 	if time.Since(lastGetPricingTime) > time.Minute || pricingMap == nil {
+		modelSupportEndpointsLock.Lock()
+		defer modelSupportEndpointsLock.Unlock()
 		if err := updatePricing(); err != nil {
 			return nil, nil, nil, err
 		}

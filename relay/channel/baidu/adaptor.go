@@ -1,7 +1,6 @@
 package baidu
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +16,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Adaptor struct{ requestContext context.Context }
+type Adaptor struct {
+}
 
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
 	//TODO implement me
@@ -104,7 +104,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	fullRequestURL := fmt.Sprintf("%s/rpc/2.0/ai_custom/v1/wenxinworkshop/%s", info.ChannelBaseUrl, suffix)
 	var accessToken string
 	var err error
-	if accessToken, err = getBaiduAccessToken(a.requestContext, info.ApiKey); err != nil {
+	if accessToken, err = getBaiduAccessToken(info.ApiKey); err != nil {
 		return "", err
 	}
 	fullRequestURL += "?access_token=" + accessToken
@@ -143,7 +143,6 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
-	a.requestContext = c.Request.Context()
 	return channel.DoApiRequest(a, c, info, requestBody)
 }
 

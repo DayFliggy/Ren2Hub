@@ -37,7 +37,7 @@ func modelPriceNotConfiguredError(c *gin.Context, modelName string, userId int) 
 const claudeCacheCreation1hMultiplier = 6 / 3.75
 
 // HandleChannelRatio uses the selected channel's validated decimal multiplier.
-func HandleChannelRatio(ctx *gin.Context, info *relaycommon.RelayInfo) hosttypes.ChannelRatioInfo {
+func HandleChannelRatio(ctx *gin.Context) hosttypes.ChannelRatioInfo {
 	value, err := model.NormalizeChannelRatio(ctx.GetString("channel_ratio"))
 	if err != nil {
 		return hosttypes.ChannelRatioInfo{}
@@ -55,7 +55,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	billingModelName := info.GetBillingModelName()
 	modelPrice, usePrice := ratio_setting.GetModelPrice(billingModelName, false)
 
-	channelRatioInfo := HandleChannelRatio(c, info)
+	channelRatioInfo := HandleChannelRatio(c)
 	if channelRatioInfo.ChannelRatio <= 0 {
 		return hosttypes.PriceData{}, errors.New("selected channel ratio is invalid")
 	}
@@ -195,7 +195,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
-	channelRatioInfo := HandleChannelRatio(c, info)
+	channelRatioInfo := HandleChannelRatio(c)
 	if channelRatioInfo.ChannelRatio <= 0 {
 		return hosttypes.PriceData{}, errors.New("selected channel ratio is invalid")
 	}

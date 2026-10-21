@@ -57,7 +57,6 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	}
 	// 2) 调整令牌额度
 	var tokenErr error
-
 	if delta > 0 {
 		tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 	} else {
@@ -68,7 +67,6 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		common.SysLog(common.LogText("error adjusting token quota after funding settled (userId=%d, tokenId=%d, delta=%d): %s",
 			s.relayInfo.UserId, s.relayInfo.TokenId, delta, tokenErr.Error()))
 	}
-
 	s.settled = true
 	return tokenErr
 }
@@ -179,6 +177,10 @@ func (s *BillingSession) reserve(targetQuota int) error {
 func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIError {
 	effectiveQuota := quota
 
+	if effectiveQuota > 0 {
+		logger.LogInfo(c, common.LogText("user %d needs pre-consume %s (funding=%s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source()))
+	}
+
 	// ---- 1) 预扣令牌额度 ----
 	if effectiveQuota > 0 {
 		if err := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); err != nil {
@@ -236,7 +238,6 @@ func (s *BillingSession) rollbackFundingReserve(delta int) {
 		} else {
 			funding.consumed -= delta
 		}
-
 	}
 }
 

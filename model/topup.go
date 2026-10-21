@@ -526,8 +526,6 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return ErrInvalidTopUpQuota
 		}
 
-		// 标记完成
-
 		// 增加用户额度（立即写库，保持一致性）
 		var completeErr error
 		quotaToAdd, completeErr = completeTopUpTx(tx, topUp, quotaToAdd, nil)
@@ -654,7 +652,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 		}
 
 		if topUp.Status == common.TopUpStatusSuccess {
-			return nil
+			return nil // 幂等：已成功直接返回
 		}
 		if topUp.Status != common.TopUpStatusPending {
 			return ErrTopUpStatusInvalid

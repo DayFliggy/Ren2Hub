@@ -478,7 +478,6 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 			if _, mjErr := acquireMidjourneyOriginChannel(c, relayInfo, originTask.ChannelId); mjErr != nil {
 				return mjErr
 			}
-
 		}
 		midjRequest.Prompt = originTask.Prompt
 

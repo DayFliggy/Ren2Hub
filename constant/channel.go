@@ -125,7 +125,7 @@ var ChannelBaseURLs = []string{
 	"https://ark.cn-beijing.volces.com",         //54
 	"https://api.openai.com",                    //55
 	"https://api.replicate.com",                 //56
-	"",                                        //57 retired
+	"",                                          //57 retired
 	"",                                          //58
 	"",                                          //59
 	"",                                          //60
