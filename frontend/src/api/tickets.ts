@@ -1,4 +1,5 @@
 import { api } from './client'
+import { ApiError } from './types'
 import {
   invalidResponse,
   isRecord,
@@ -17,6 +18,14 @@ import type {
 } from '@/types/console'
 
 export type TicketRow = Omit<TicketItem, 'messages'>
+
+/**
+ * The ticket or reply was committed but its attachment files were not stored.
+ * Submitting again would duplicate it, so callers refresh instead of retrying.
+ */
+export function isAttachmentStorageFailure(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'ATTACHMENT_STORAGE_FAILED'
+}
 export interface TicketFilters {
   page: number
   page_size: number

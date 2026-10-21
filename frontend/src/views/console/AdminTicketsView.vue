@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, RefreshCw, UserRoundCheck } from 'lucide-vue-next'
 
-import { ticketsApi } from '@/api/tickets'
+import { isAttachmentStorageFailure, ticketsApi } from '@/api/tickets'
 import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -272,8 +272,14 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
     toast.success(t('tickets.replied'))
     await refreshAfterMutation()
   } catch (error) {
-    if (sequence === mutationSequence)
-      toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence !== mutationSequence) return
+    if (isAttachmentStorageFailure(error)) {
+      replyBox.value?.reset()
+      toast.warning(t('tickets.replyAttachmentsNotStored'))
+      await refreshAfterMutation(true)
+      return
+    }
+    toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
     if (sequence === mutationSequence) mutating.value = false
   }

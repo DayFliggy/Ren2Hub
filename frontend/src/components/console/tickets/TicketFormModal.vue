@@ -2,7 +2,7 @@
 import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { ticketsApi } from '@/api/tickets'
+import { isAttachmentStorageFailure, ticketsApi } from '@/api/tickets'
 import { ApiError } from '@/api/types'
 import type { TicketCategory, TicketPriority } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -97,6 +97,12 @@ async function save() {
     emit('saved')
     emit('close')
   } catch (error) {
+    if (isAttachmentStorageFailure(error)) {
+      toast.warning(t('tickets.attachmentsNotStored'))
+      emit('saved')
+      emit('close')
+      return
+    }
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
     saving.value = false

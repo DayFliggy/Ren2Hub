@@ -54,18 +54,10 @@ const flowPoints: FlowPoint[] = Array.from({ length: 14 }, (_, i) => ({
 function trendPoint(over: Partial<TokenTrendPoint> = {}): TokenTrendPoint {
   return {
     date: '2026-07-26',
-    input: 1_000_000,
-    output: 500_000,
+    total: 4_000_000,
     cache_create: 250_000,
     cache_read: 2_250_000,
-    hit_rate: 69.2,
     ...over,
-    total:
-      over.total ??
-      (over.input ?? 1000000) +
-        (over.output ?? 500000) +
-        (over.cache_create ?? 250000) +
-        (over.cache_read ?? 2250000),
   }
 }
 

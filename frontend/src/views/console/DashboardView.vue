@@ -35,7 +35,7 @@ const {
   share,
   flow,
   tokenTrend,
-  cacheCoverage,
+  flushIntervalMinutes,
   system,
   limits,
   discounts,
@@ -205,7 +205,7 @@ const rangeOptions = computed(() => [
           <TokenTrendCard
             class="min-w-0 xl:col-span-2"
             :points="tokenTrend"
-            :cache-coverage="cacheCoverage"
+            :flush-interval-minutes="flushIntervalMinutes"
             :loading="loading"
           />
 

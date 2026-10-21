@@ -2,13 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   appendOpsSample,
   opsMonitorApi,
+  parsePerformanceQuality,
   parsePerformanceStats,
   parseRoutingSnapshot,
   projectOpsOverview,
   seriesRange,
   type OpsSeriesPoint,
 } from '../opsMonitor'
-import { performanceFixture, routingFixture } from './opsFixtures'
+import {
+  performanceFixture,
+  qualityFixture,
+  routingFixture,
+} from './opsFixtures'
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
@@ -29,6 +34,9 @@ describe('native ops monitoring', () => {
     expect(result.resources?.process.heap_alloc_bytes).toBe(1_048_576)
     expect(result.resources?.memory.percent).toBeNull()
     expect(result.resources?.cpu.percent).toBeNull()
+    expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
+      'unknown'
+    )
     expect(result.resources?.network.up_mbps).toBeNull()
     expect(result.resources?.disk.percent).toBe(40)
     expect(result.checks.find((row) => row.key === 'disk')?.status).toBe('ok')
@@ -38,6 +46,34 @@ describe('native ops monitoring', () => {
     expect(result.health_score).toBeNull()
     expect(result.status).toBe('unknown')
     expect(seriesRange(result)).toEqual([0, 3600])
+  })
+  it('rates sampled host CPU and memory against their thresholds', () => {
+    const data = performanceFixture()
+    data.system_usage = {
+      cpu_percent: 92,
+      memory_percent: 40,
+      sampled_at: 3590,
+    }
+    const result = projectOpsOverview(data, null, '1h', [], 3600)!
+    expect(result.resources?.cpu.percent).toBe(92)
+    expect(result.resources?.memory.percent).toBe(40)
+    expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
+      'critical'
+    )
+    expect(result.checks.find((row) => row.key === 'memory')?.status).toBe('ok')
+    expect(result.status).toBe('critical')
+  })
+  it('reads DB pool counters and keeps an unreadable pool null', () => {
+    const data = JSON.parse(JSON.stringify(performanceFixture()))
+    data.db_pool.main = null
+    data.db_pool.log_shared = false
+    const parsed = parsePerformanceStats(data)
+    expect(parsed.db_pool).toEqual({ main: null, log: null, log_shared: false })
+    expect(parsePerformanceStats(performanceFixture()).db_pool.main).toEqual(
+      performanceFixture().db_pool.main
+    )
+    delete data.db_pool
+    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
   })
   it('does not treat a failed native disk probe or disabled threshold as healthy', () => {
     const data = performanceFixture()
@@ -65,6 +101,8 @@ describe('native ops monitoring', () => {
     ['config', 'monitor_disk_threshold', 101],
     ['config', 'disk_cache_path', 9],
     ['memory_stats', 'alloc', -1],
+    ['db_pool', 'log_shared', 'true'],
+    ['db_pool', 'main', { in_use: 1 }],
   ])('rejects malformed %s.%s in the API feed', (section, key, value) => {
     const data = performanceFixture() as unknown as Record<
       string,
@@ -72,6 +110,41 @@ describe('native ops monitoring', () => {
     >
     data[section as string]![key as string] = value
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
+  })
+  it('rejects a host usage sample above 100%', () => {
+    const data = performanceFixture()
+    data.system_usage = { cpu_percent: 101, memory_percent: 1, sampled_at: 1 }
+    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
+  })
+  it('sums hourly quality and keeps idle hours without a rate', () => {
+    const parsed = parsePerformanceQuality(qualityFixture())
+    expect(parsed.summary).toEqual({
+      requests: 40,
+      success_rate: 95,
+      avg_latency_ms: 820,
+      avg_tps: 31.5,
+    })
+    expect(parsed.series[0]).toMatchObject({
+      request_count: 0,
+      success_rate: null,
+      avg_latency_ms: null,
+    })
+  })
+  it('does not report 0 t/s when no hour measured throughput', () => {
+    const data = qualityFixture()
+    data.series[1]!.avg_tps = null
+    data.summary = { success_rate: 95, avg_latency_ms: 820, avg_tps: 0 }
+    expect(parsePerformanceQuality(data).summary?.avg_tps).toBeNull()
+    data.summary = null
+    expect(parsePerformanceQuality(data).summary).toBeNull()
+  })
+  it('rejects impossible quality counts and rates', () => {
+    const data = qualityFixture()
+    data.series[1]!.success_count = 41
+    expect(() => parsePerformanceQuality(data)).toThrow('Invalid API response')
+    const rate = qualityFixture()
+    rate.series[1]!.success_rate = 101
+    expect(() => parsePerformanceQuality(rate)).toThrow('Invalid API response')
   })
   it('preserves zero values and missing optional metrics without filling probes', () => {
     const data: Record<string, unknown> = {
@@ -183,12 +256,15 @@ describe('native ops monitoring', () => {
     mocks.get
       .mockResolvedValueOnce(performanceFixture())
       .mockResolvedValueOnce(routingFixture())
+      .mockResolvedValueOnce(qualityFixture())
     const signal = new AbortController().signal
     await opsMonitorApi.stats(signal)
     await opsMonitorApi.routing(signal)
+    await opsMonitorApi.quality(signal)
     expect(mocks.get.mock.calls).toEqual([
       ['/api/performance/stats', undefined, { signal }],
       ['/api/performance/routing', undefined, { signal }],
+      ['/api/performance/quality', { hours: '24' }, { signal }],
     ])
     await opsMonitorApi.execute('gc')
     await opsMonitorApi.execute('reset_stats')

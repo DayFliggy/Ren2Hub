@@ -2,6 +2,7 @@ import { api } from './client'
 import {
   invalidResponse,
   isRecord,
+  requiredBoolean,
   requiredQuota,
   requiredStrictInteger,
   requiredStrictNumber,
@@ -19,20 +20,13 @@ export interface UsageSummary extends StatsPeriod {
     end: number
     tz_offset: number
     generated_at: number
+    /** False means no data source (data export is off), not zero usage. */
     available: boolean
-    source: 'consume_logs'
-    cache_coverage: {
-      records: number
-      read_records: number
-      write_records: number
-      invalid_records: number
-    }
-    coverage: {
-      consume_logs: boolean
-      cache_usage: boolean
-      latency: boolean
-      success_rate: false
-    }
+    source: 'quota_data'
+    bucket_seconds: number
+    /** quota_data is flushed on this interval, so the latest hour may lag. */
+    flush_interval_minutes: number
+    coverage: { latency: boolean; success_rate: boolean }
   }
 }
 const endpoint = '/api/data/self/summary'
@@ -42,7 +36,18 @@ const list = (value: unknown): Record<string, unknown>[] => {
   return value as Record<string, unknown>[]
 }
 const number = (value: unknown) => requiredStrictNumber(value, endpoint)
+const integer = (value: unknown) => requiredStrictInteger(value, endpoint)
 const nullable = (value: unknown) => (value === null ? null : number(value))
+// A dimension whose log source is off must stay unknown; a number would be fabricated.
+function measured(value: unknown, covered: boolean) {
+  if (!covered && value !== null) invalidResponse(endpoint)
+  return nullable(value)
+}
+function successRate(value: unknown, covered: boolean) {
+  const rate = measured(value, covered)
+  if (rate !== null && (rate < 0 || rate > 100)) invalidResponse(endpoint)
+  return rate
+}
 export function parseUsageSummary(value: unknown): UsageSummary {
   if (
     !isRecord(value) ||
@@ -50,26 +55,18 @@ export function parseUsageSummary(value: unknown): UsageSummary {
     (value.comparison !== null && !isRecord(value.comparison)) ||
     !isRecord(value.meta) ||
     !isRecord(value.meta.coverage) ||
-    !isRecord(value.meta.cache_coverage)
+    value.meta.source !== 'quota_data'
   )
     invalidResponse(endpoint)
-  if (
-    value.meta.source !== 'consume_logs' ||
-    typeof value.meta.available !== 'boolean' ||
-    value.meta.coverage.success_rate !== false ||
-    value.kpi.successRate !== null
-  )
-    invalidResponse(endpoint)
-  const coverage = value.meta.coverage
-  for (const key of ['consume_logs', 'cache_usage', 'latency'])
-    if (typeof coverage[key] !== 'boolean') invalidResponse(endpoint)
+  const latency = requiredBoolean(value.meta.coverage.latency, endpoint)
+  const success = requiredBoolean(value.meta.coverage.success_rate, endpoint)
   return {
     kpi: {
-      totalTokens: requiredStrictInteger(value.kpi.totalTokens, endpoint),
+      totalTokens: integer(value.kpi.totalTokens),
       totalQuota: requiredQuota(value.kpi.totalQuota, endpoint),
-      totalRequests: requiredStrictInteger(value.kpi.totalRequests, endpoint),
-      avgLatency: nullable(value.kpi.avgLatency),
-      successRate: nullable(value.kpi.successRate),
+      totalRequests: integer(value.kpi.totalRequests),
+      avgLatency: measured(value.kpi.avgLatency, latency),
+      successRate: successRate(value.kpi.successRate, success),
     },
     comparison:
       value.comparison === null
@@ -80,67 +77,45 @@ export function parseUsageSummary(value: unknown): UsageSummary {
           },
     models: list(value.models).map((row) => ({
       model: requiredString(row.model, endpoint),
-      tokens: requiredStrictInteger(row.tokens, endpoint),
+      tokens: integer(row.tokens),
       quota: requiredQuota(row.quota, endpoint),
-      requests: requiredStrictInteger(row.requests, endpoint),
+      requests: integer(row.requests),
       share: number(row.share),
-      avgLatency: nullable(row.avgLatency),
+      avgLatency: measured(row.avgLatency, latency),
     })),
     hourly: list(value.hourly).map((row) => ({
-      hour: requiredString(row.hour, endpoint),
-      requests: requiredStrictInteger(row.requests, endpoint),
+      ts: integer(row.ts),
+      requests: integer(row.requests),
+      tokens: integer(row.tokens),
+      quota: requiredQuota(row.quota, endpoint),
     })),
     flow: list(value.flow).map((row) => ({
       date: requiredString(row.date, endpoint),
       consume: requiredQuota(row.consume, endpoint),
-      requests: requiredStrictInteger(row.requests, endpoint),
+      requests: integer(row.requests),
     })),
     token_trend: list(value.token_trend).map((row) => ({
       date: requiredString(row.date, endpoint),
-      total: requiredStrictInteger(row.total, endpoint),
-      input: nullable(row.input),
-      output: nullable(row.output),
-      cache_create: nullable(row.cache_create),
-      cache_read: nullable(row.cache_read),
-      hit_rate: nullable(row.hit_rate),
+      total: integer(row.total),
+      cache_read: integer(row.cache_read),
+      cache_create: integer(row.cache_create),
     })),
     distribution: list(value.distribution).map((row) => ({
       date: requiredString(row.date, endpoint),
-      requests: requiredStrictInteger(row.requests, endpoint),
+      requests: integer(row.requests),
       consume: requiredQuota(row.consume, endpoint),
-      tokens: requiredStrictInteger(row.tokens, endpoint),
+      tokens: integer(row.tokens),
     })),
     meta: {
       start: number(value.meta.start),
       end: number(value.meta.end),
       tz_offset: number(value.meta.tz_offset),
       generated_at: number(value.meta.generated_at),
-      available: value.meta.available,
-      source: 'consume_logs',
-      cache_coverage: {
-        records: requiredStrictInteger(
-          value.meta.cache_coverage.records,
-          endpoint
-        ),
-        read_records: requiredStrictInteger(
-          value.meta.cache_coverage.read_records,
-          endpoint
-        ),
-        write_records: requiredStrictInteger(
-          value.meta.cache_coverage.write_records,
-          endpoint
-        ),
-        invalid_records: requiredStrictInteger(
-          value.meta.cache_coverage.invalid_records,
-          endpoint
-        ),
-      },
-      coverage: {
-        consume_logs: coverage.consume_logs as boolean,
-        cache_usage: coverage.cache_usage as boolean,
-        latency: coverage.latency as boolean,
-        success_rate: false,
-      },
+      available: requiredBoolean(value.meta.available, endpoint),
+      source: 'quota_data',
+      bucket_seconds: integer(value.meta.bucket_seconds),
+      flush_interval_minutes: integer(value.meta.flush_interval_minutes),
+      coverage: { latency, success_rate: success },
     },
   }
 }

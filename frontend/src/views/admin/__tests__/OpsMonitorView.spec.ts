@@ -9,7 +9,11 @@ import OpsQualityCard from '@/components/admin/ops/OpsQualityCard.vue'
 import OpsStorageCards from '@/components/admin/ops/OpsStorageCards.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
-import { performanceFixture, routingFixture } from '@/api/__tests__/opsFixtures'
+import {
+  performanceFixture,
+  qualityFixture,
+  routingFixture,
+} from '@/api/__tests__/opsFixtures'
 import { modelCatalogFixture } from '@/api/__tests__/modelCatalogFixture'
 
 const mocks = vi.hoisted(() => ({
@@ -63,6 +67,7 @@ beforeEach(() => {
   mocks.get.mockImplementation(async (path: string) => {
     if (path === '/api/performance/stats') return performanceFixture()
     if (path === '/api/performance/routing') return routingFixture()
+    if (path === '/api/performance/quality') return qualityFixture()
     if (path === '/api/user/model-catalog') return modelCatalogFixture()
     throw new Error(`Unexpected API ${path}`)
   })
@@ -96,8 +101,13 @@ describe('historical ops layout with native data', () => {
     expect(view.get('[data-ops-section="storage"]').classes()).toContain(
       'ops-area--storage'
     )
-    expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('--')
-    expect(view.get('[data-ops-gauge="memory"]').text()).toContain('--')
+    for (const gauge of ['cpu', 'memory'])
+      expect(
+        view.get(`[data-ops-gauge="${gauge}"] [data-ops-unavailable]`).text()
+      ).toBe('Unavailable')
+    expect(view.get('[data-ops-gauge="cpu"] .ops-gauge-value').text()).toBe(
+      '--'
+    )
     expect(view.get('[data-ops-gauge="disk"]').text()).toContain('40%')
     expect(view.getComponent(OpsResourcesCard).text()).toContain(
       'Go runtime system memory:'
@@ -108,13 +118,18 @@ describe('historical ops layout with native data', () => {
     expect(view.get('[data-ops-concurrency="channels"]').text()).toContain(
       '#92 / Unlimited'
     )
-    expect(view.get('[data-ops-storage="database"]').text()).toContain(
-      'does not provide connection pools'
-    )
+    const database = view.get('[data-ops-storage="database"]').text()
+    expect(database).toContain('Unlimited')
+    expect(database).toContain('1.5s')
+    expect(database).toContain('Logs share the main database')
+    expect(view.find('[data-ops-storage="logDatabase"]').exists()).toBe(false)
     expect(view.get('[data-ops-storage="redis"]').text()).toContain('Unknown')
-    expect(view.get('[data-ops-history-unavailable]').text()).toContain(
-      'does not provide hourly request history'
-    )
+    expect(view.get('[data-ops-quality-summary]').text()).toContain('95%')
+    expect(
+      view
+        .findAll('[data-ops-health-strip] span')
+        .map((cell) => cell.attributes('data-tone'))
+    ).toEqual(['idle', 'good'])
     expect(view.get('[data-ops-task-summary-unavailable]').text()).toContain(
       'not the scheduler registry'
     )
@@ -129,6 +144,59 @@ describe('historical ops layout with native data', () => {
     expect(
       view.getComponent(OpsGatewayCard).props('overview')!.series.points
     ).toHaveLength(1)
+  })
+  it('shows sampled host usage and a separate unreadable log pool', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/stats') {
+        const data = performanceFixture()
+        data.system_usage = {
+          cpu_percent: 12.5,
+          memory_percent: 40,
+          sampled_at: 1,
+        }
+        data.db_pool.log_shared = false
+        return Promise.resolve(data)
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('12.5%')
+    expect(
+      view.find('[data-ops-gauge="cpu"] [data-ops-unavailable]').exists()
+    ).toBe(false)
+    expect(
+      view
+        .get('[data-ops-storage="logDatabase"] [data-ops-pool-unavailable]')
+        .text()
+    ).toContain('could not be read')
+  })
+  it('keeps quality metrics unknown when perf metrics are off or idle', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    let enabled = false
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/quality') {
+        const data = qualityFixture()
+        data.enabled = enabled
+        data.summary = null
+        data.series[1] = { ...data.series[0]!, ts: data.series[1]!.ts }
+        return Promise.resolve(data)
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    const card = view.getComponent(OpsQualityCard)
+    expect(card.find('[data-ops-quality-disabled]').exists()).toBe(true)
+    expect(card.find('[data-ops-quality-summary]').exists()).toBe(false)
+    enabled = true
+    card.vm.$emit('retry')
+    await flushPromises()
+    const summary = card.get('[data-ops-quality-summary]').text()
+    expect(summary).not.toContain('0%')
+    expect(summary).toContain('Unavailable')
+    expect(card.find('[data-ops-no-traffic]').exists()).toBe(true)
   })
   it('does not imply the platform has no channels when the catalog has none published', async () => {
     const defaultGet = mocks.get.getMockImplementation()!

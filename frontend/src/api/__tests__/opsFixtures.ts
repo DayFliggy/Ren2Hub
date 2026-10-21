@@ -32,6 +32,55 @@ export function performanceFixture(): PerformanceStats {
       monitor_disk_threshold: 95,
       disk_cache_path: '/tmp/cache',
     },
+    // Monitoring has no fresh sample: host CPU and memory are unknown, not 0%.
+    system_usage: null,
+    db_pool: {
+      main: {
+        max_open_connections: 0,
+        open_connections: 3,
+        in_use: 1,
+        idle: 2,
+        wait_count: 4,
+        wait_duration_ms: 1500,
+        max_idle_closed: 0,
+        max_lifetime_closed: 0,
+      },
+      log: null,
+      log_shared: true,
+    },
+  }
+}
+
+/** C3 wire response: one idle hour, one partially failing hour. */
+export function qualityFixture() {
+  return {
+    enabled: true,
+    window_start: 1_792_533_600,
+    window_end: 1_792_540_900,
+    bucket_seconds: 3600,
+    summary: { success_rate: 95, avg_latency_ms: 820, avg_tps: 31.5 } as {
+      success_rate: number
+      avg_latency_ms: number
+      avg_tps: number
+    } | null,
+    series: [
+      {
+        ts: 1_792_533_600,
+        request_count: 0,
+        success_count: 0,
+        success_rate: null as number | null,
+        avg_latency_ms: null as number | null,
+        avg_tps: null as number | null,
+      },
+      {
+        ts: 1_792_537_200,
+        request_count: 40,
+        success_count: 38,
+        success_rate: 95,
+        avg_latency_ms: 820,
+        avg_tps: 31.5,
+      },
+    ],
   }
 }
 

@@ -450,15 +450,11 @@ export default {
     },
     tokenTrend: {
       title: 'Token 使用趋势',
-      input: '输入',
-      output: '输出',
       cacheCreate: '缓存写入',
       cacheRead: '缓存读取',
-      hitRate: '缓存命中率',
       cacheCoverage:
-        '缓存仅汇总已记录的用量：{records} 条消费记录中，读取 {read} 条、写入 {write} 条、无效 {invalid} 条；跨协议命中率未知。',
-      cacheUnknown: '缓存仅展示已记录的用量；未记录部分与跨协议命中率未知。',
-      avgHitRate: '平均命中',
+        '数据来自按小时汇总的用量记录，每 {minutes} 分钟写入一次，最近一小时可能尚未计全；跨协议命中率未知。',
+      cacheUnknown: '数据来自按小时汇总的用量记录；跨协议命中率未知。',
       emptyHint: '最近 30 天暂无 Token 使用记录',
     },
     systemStatus: {
@@ -481,7 +477,7 @@ export default {
       version: '系统版本',
     },
     stats: {
-      unavailable: '当前未启用消费日志，无法统计使用情况。',
+      unavailable: '当前未启用数据导出，无法统计使用情况。',
       totalTokens: '总 Token 用量',
       totalSpend: '总消费金额',
       totalRequests: '总请求次数',
@@ -494,7 +490,7 @@ export default {
       spend: '消费金额',
       requests: '请求次数',
       share: '占比',
-      hourlyDist: '24h 请求分布',
+      hourlyDist: '每小时请求数',
       peakAt: '峰值 {hour}',
       trendTitle: '消费 & 请求双轴趋势',
       noData: '暂无数据',
@@ -847,6 +843,10 @@ export default {
     },
     created: '工单创建成功',
     replied: '回复已发送',
+    attachmentsNotStored:
+      '工单已保存，但附件未能存储。列表已刷新，请勿重新提交。',
+    replyAttachmentsNotStored:
+      '回复已保存，但附件未能存储。对话已刷新，请勿重新发送。',
     closed: '工单已关闭',
     reopened: '工单已重新开启',
     notFound: '工单不存在',
@@ -1103,6 +1103,8 @@ export default {
     allLabs: '全部实验室',
     priorityConflict: '渠道优先级已变更，请重新加载后编辑。',
     channelRatio: '渠道倍率',
+    channelRatioReadOnly:
+      '倍率决定用户实际支付的金额，修改需要渠道敏感写权限。',
     maxConcurrency: '并发请求上限',
     maxConcurrencyHint: '0 表示不限制。',
 

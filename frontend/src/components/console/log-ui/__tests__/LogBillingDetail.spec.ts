@@ -17,7 +17,7 @@ describe('native consumption log detail', () => {
           quota: '9000',
           other: JSON.stringify({
             model_ratio: 2,
-            channel_ratio: 1.5,
+            channel_ratio: '1.5',
             upstream_model_name: 'provider-model',
           }),
         } as LogItem,
@@ -28,7 +28,7 @@ describe('native consumption log detail', () => {
     expect(wrapper.text()).toContain('$0.02')
     expect(JSON.parse(wrapper.get('pre').text())).toEqual({
       model_ratio: 2,
-      channel_ratio: 1.5,
+      channel_ratio: '1.5',
       upstream_model_name: 'provider-model',
     })
     wrapper.unmount()

@@ -1,0 +1,112 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
+import type { AdminChannel } from '@/types/console'
+
+const permissions = vi.hoisted(() => ({ sensitive: false }))
+vi.mock('@/api/adminManagement', () => ({
+  metadataApi: { groups: vi.fn().mockResolvedValue([]) },
+}))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    isAdmin: true,
+    hasPermission: (resource: string, action: string) =>
+      resource === 'channel' &&
+      (action !== 'sensitive_write' || permissions.sensitive),
+  }),
+}))
+vi.mock('@/stores/app', () => ({
+  useAppStore: () => ({
+    isFeatureEnabled: () => true,
+    featureStatus: () => 'live',
+  }),
+}))
+
+const channel: AdminChannel = {
+  id: 7,
+  name: 'Priced channel',
+  type: 1,
+  channel_ratio: '1.5',
+  max_concurrency: 0,
+  in_flight: 0,
+  supplier: 'OpenAI',
+  lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
+  status: 1,
+  priority: 0,
+  weight: 1,
+  used_quota: 0,
+  balance: 0,
+  response_time: 0,
+  test_time: 0,
+  base_url: '',
+  models: 'gpt-5',
+  model_mapping: '',
+}
+
+function mountForm(save = vi.fn().mockResolvedValue(true)) {
+  const wrapper = mount(ChannelFormModal, {
+    attachTo: document.body,
+    props: { open: true, editing: channel, save, fetchModels: vi.fn() },
+    global: {
+      plugins: [
+        createI18n({
+          legacy: false,
+          locale: 'en',
+          missingWarn: false,
+          fallbackWarn: false,
+        }),
+      ],
+    },
+  })
+  return { wrapper, save }
+}
+function ratioInput() {
+  return document.body.querySelector<HTMLInputElement>(
+    '[role="dialog"] input[name="channel-ratio"]'
+  )!
+}
+function saveButton() {
+  return [
+    ...document.body.querySelectorAll<HTMLButtonElement>(
+      '[role="dialog"] button'
+    ),
+  ].find((button) => button.textContent?.includes('channels.saveChannel'))!
+}
+afterEach(() => {
+  permissions.sensitive = false
+  document.body.innerHTML = ''
+})
+
+describe('channel multiplier permission', () => {
+  it('is read-only without sensitive write and saves the stored value unchanged', async () => {
+    const { wrapper, save } = mountForm()
+    try {
+      await flushPromises()
+      expect(ratioInput().disabled).toBe(true)
+      expect(document.body.textContent).toContain(
+        'channels.channelRatioReadOnly'
+      )
+      saveButton().click()
+      await flushPromises()
+      expect(save).toHaveBeenCalledOnce()
+      expect(save.mock.calls[0]![0]).toMatchObject({ channel_ratio: '1.5' })
+    } finally {
+      wrapper.unmount()
+    }
+  })
+  it('stays editable for sensitive writers', async () => {
+    permissions.sensitive = true
+    const { wrapper } = mountForm()
+    try {
+      await flushPromises()
+      expect(ratioInput().disabled).toBe(false)
+      expect(document.body.textContent).not.toContain(
+        'channels.channelRatioReadOnly'
+      )
+    } finally {
+      wrapper.unmount()
+    }
+  })
+})

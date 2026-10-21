@@ -3,7 +3,11 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { ticketsApi, type TicketRow } from '@/api/tickets'
+import {
+  isAttachmentStorageFailure,
+  ticketsApi,
+  type TicketRow,
+} from '@/api/tickets'
 import { ApiError } from '@/api/types'
 import type { TicketMessage } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -109,9 +113,15 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
     toast.success(t('tickets.replied'))
     void ticketQueue.refresh()
   } catch (error) {
-    if (sequence === mutationSequence) {
-      toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence !== mutationSequence) return
+    if (isAttachmentStorageFailure(error)) {
+      replyBox.value?.reset()
+      toast.warning(t('tickets.replyAttachmentsNotStored'))
+      void ticketQueue.refresh()
+      await load(id)
+      return
     }
+    toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
     if (sequence === mutationSequence) replying.value = false
   }

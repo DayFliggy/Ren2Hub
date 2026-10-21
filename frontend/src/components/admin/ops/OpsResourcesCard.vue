@@ -173,6 +173,13 @@ const trend = computed(() => {
               >({{ t(`status.${gauge.status}`) }})</span
             >
           </p>
+          <p
+            v-if="gauge.percent === null"
+            class="ops-gauge-detail"
+            data-ops-unavailable
+          >
+            {{ t('errors.unavailable') }}
+          </p>
           <p class="ops-gauge-detail">{{ gauge.thresholdLabel }}</p>
           <p v-if="gauge.detail" class="ops-gauge-detail" :title="gauge.detail">
             {{ gauge.detail }}

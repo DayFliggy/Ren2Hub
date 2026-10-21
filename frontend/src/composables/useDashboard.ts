@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
-import { getUsageSummary, type UsageSummary } from '@/api/dashboard'
+import { getUsageSummary } from '@/api/dashboard'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 
@@ -40,11 +40,8 @@ export interface ModelShare {
 export interface TokenTrendPoint {
   total: number
   date: string
-  input: number | null
-  output: number | null
-  cache_create: number | null
-  cache_read: number | null
-  hit_rate: number | null
+  cache_create: number
+  cache_read: number
 }
 
 export interface SystemMetrics {
@@ -90,7 +87,7 @@ export function useDashboard() {
     share = ref<ModelShare[]>([]),
     flow = ref<FlowPoint[]>([]),
     tokenTrend = ref<TokenTrendPoint[]>([]),
-    cacheCoverage = ref<UsageSummary['meta']['cache_coverage'] | null>(null)
+    flushIntervalMinutes = ref<number | null>(null)
   // No public native endpoint exposes host metrics, account RPM limits or discounts.
   const system = ref<SystemMetrics | null>(null),
     limits = ref<UserLimits | null>(null),
@@ -102,7 +99,7 @@ export function useDashboard() {
     share.value = []
     flow.value = []
     tokenTrend.value = []
-    cacheCoverage.value = null
+    flushIntervalMinutes.value = null
     const now = new Date(),
       start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
       end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -148,7 +145,7 @@ export function useDashboard() {
     }))
     flow.value = recent.flow
     tokenTrend.value = recent.token_trend
-    cacheCoverage.value = recent.meta.cache_coverage
+    flushIntervalMinutes.value = recent.meta.flush_interval_minutes
   }
   return {
     loading,
@@ -156,7 +153,7 @@ export function useDashboard() {
     share,
     flow,
     tokenTrend,
-    cacheCoverage,
+    flushIntervalMinutes,
     system,
     limits,
     discounts,

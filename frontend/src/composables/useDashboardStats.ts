@@ -26,9 +26,12 @@ export interface StatsModelRow {
   avgLatency: number | null
 }
 
+/** One hour of the selected range; `ts` is the bucket start in Unix seconds. */
 export interface HourlyPoint {
-  hour: string
+  ts: number
   requests: number
+  tokens: number
+  quota: string
 }
 
 export interface StatsComparison {

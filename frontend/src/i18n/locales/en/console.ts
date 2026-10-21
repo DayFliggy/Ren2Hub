@@ -473,16 +473,12 @@ export default {
     },
     tokenTrend: {
       title: 'Token usage trend',
-      input: 'Input',
-      output: 'Output',
       cacheCreate: 'Cache Creation',
       cacheRead: 'Cache Read',
-      hitRate: 'Cache Hit Rate',
       cacheCoverage:
-        'Recorded cache usage only: {read} read, {write} write and {invalid} invalid records out of {records} consumption records. Cross-protocol hit rate is unknown.',
+        'Totals come from hourly usage records written every {minutes} minutes, so the latest hour may be incomplete. Cross-protocol hit rate is unknown.',
       cacheUnknown:
-        'Cache totals include recorded usage only. Missing usage and cross-protocol hit rate remain unknown.',
-      avgHitRate: 'Avg hit',
+        'Totals come from hourly usage records. Cross-protocol hit rate is unknown.',
       emptyHint: 'No token usage recorded in the last 30 days',
     },
     systemStatus: {
@@ -506,7 +502,7 @@ export default {
     },
     stats: {
       unavailable:
-        'Usage statistics are unavailable because consumption logging is disabled.',
+        'Usage statistics are unavailable because data export is disabled.',
       totalTokens: 'Total tokens',
       totalSpend: 'Total spend',
       totalRequests: 'Total requests',
@@ -519,7 +515,7 @@ export default {
       spend: 'Spend',
       requests: 'Requests',
       share: 'Share',
-      hourlyDist: '24h request distribution',
+      hourlyDist: 'Hourly requests',
       peakAt: 'Peak at {hour}',
       trendTitle: 'Spend & requests dual trend',
       noData: 'No data',
@@ -884,6 +880,10 @@ export default {
     },
     created: 'Ticket created successfully',
     replied: 'Reply sent',
+    attachmentsNotStored:
+      'The ticket was saved, but its attachments could not be stored. The list has been refreshed; do not submit it again.',
+    replyAttachmentsNotStored:
+      'The reply was saved, but its attachments could not be stored. The thread has been refreshed; do not send it again.',
     closed: 'Ticket closed',
     reopened: 'Ticket reopened',
     notFound: 'Ticket not found',
@@ -1140,6 +1140,8 @@ export default {
     allLabs: 'All labs',
     priorityConflict: 'Channel priority changed. Reload before editing.',
     channelRatio: 'Channel multiplier',
+    channelRatioReadOnly:
+      'Changing the multiplier changes what users pay and requires sensitive channel write permission.',
     maxConcurrency: 'Concurrent requests',
     maxConcurrencyHint: '0 means no limit.',
 

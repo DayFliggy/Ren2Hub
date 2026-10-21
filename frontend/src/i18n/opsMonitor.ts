@@ -179,6 +179,7 @@ export const opsMonitorMessages = {
       maxOpen: '上限',
       unlimited: '不限',
       waitCount: '等待连接次数',
+      waitDuration: '累计等待时长',
       totalConns: '连接总数',
       idleConns: '空闲连接',
       staleConns: '过期连接',
@@ -220,13 +221,13 @@ export const opsMonitorMessages = {
       sessionHistory:
         '趋势仅记录本页打开后的成功采样；刷新页面后重新开始，不代表服务端历史。',
       resourceCoverage:
-        '当前接口提供磁盘与 Go 进程数据；主机 CPU、内存、网络及 GC 停顿尚未采集。',
+        'CPU 与内存来自资源监控采样（优先容器口径），监控关闭或采样超过 30 秒时不可用；网络与 GC 停顿尚未采集。',
       observationScope: '当前进程观察',
       observationNote:
         '按渠道、模型和请求类型观察；错误率与延迟为 EWMA，连续 5 分钟无新样本后过期，不是固定时间窗口的请求统计。',
       latencyObservations: '有效延迟观察',
-      notCollected: '当前接口未采集',
-      requestHistoryUnavailable: '当前接口不提供逐小时请求历史，暂无法展示。',
+      qualityScope:
+        '全站跨模型的 perf_metrics 按小时合计，包含尚未落库的当前小时；没有请求的小时不计算成功率。',
       topObservations: '样本最多的观察',
       noObservations: '暂无请求观察；未采样不表示健康。',
       unknownOperation: '请求类型未知',
@@ -247,7 +248,9 @@ export const opsMonitorMessages = {
       completionLatency: '完成耗时',
       taskSummaryUnavailable:
         '当前接口提供活动任务和任务历史，未提供定时任务注册表与执行健康摘要。',
-      storageUnavailable: '当前监控接口未提供连接池或连通性探测，状态不可用。',
+      storageUnavailable: '当前监控接口未提供连通性探测，状态不可用。',
+      poolScope: '连接池计数来自 sql.DB.Stats()，不代表连通性探测结果。',
+      poolUnavailable: '连接池数据读取失败，不可用。',
       cache: '缓存与维护',
       cacheCounterScope: '缓存命中为当前进程计数，重置统计后重新累计。',
       cacheMetrics: {
@@ -453,6 +456,7 @@ export const opsMonitorMessages = {
       maxOpen: 'Limit',
       unlimited: 'Unlimited',
       waitCount: 'Connection waits',
+      waitDuration: 'Total wait time',
       totalConns: 'Total connections',
       idleConns: 'Idle connections',
       staleConns: 'Stale connections',
@@ -494,14 +498,13 @@ export const opsMonitorMessages = {
       sessionHistory:
         'Trends contain successful samples collected while this page is open. Reloading starts a new session; these are not server history.',
       resourceCoverage:
-        'The current API provides disk and Go process data. Host CPU, memory, network and GC pause are not collected.',
+        'CPU and memory come from the resource monitor sample (container limits first). They are unavailable while monitoring is off or the sample is older than 30 seconds. Network and GC pause are not collected.',
       observationScope: 'Current process observations',
       observationNote:
         'Observed by channel, model and request type. Error rate and latency use EWMA; observations expire after 5 minutes without new samples. Counts are not a fixed time window.',
       latencyObservations: 'Measured latency observations',
-      notCollected: 'Not collected by the current API',
-      requestHistoryUnavailable:
-        'The current API does not provide hourly request history.',
+      qualityScope:
+        'Hourly perf_metrics totals across all models, including the current unflushed hour. Hours without requests have no success rate.',
       topObservations: 'Observations with most samples',
       noObservations:
         'No request observations. Missing samples do not imply health.',
@@ -527,7 +530,10 @@ export const opsMonitorMessages = {
       taskSummaryUnavailable:
         'The current API provides active tasks and history, but not the scheduler registry or health summary.',
       storageUnavailable:
-        'The current monitoring API does not provide connection pools or connectivity probes.',
+        'The current monitoring API does not provide connectivity probes.',
+      poolScope:
+        'Pool counters come from sql.DB.Stats() and do not prove connectivity.',
+      poolUnavailable: 'Connection pool statistics could not be read.',
       cache: 'Cache and maintenance',
       cacheCounterScope:
         'Cache hits are process counters, counted again after resetting statistics.',
