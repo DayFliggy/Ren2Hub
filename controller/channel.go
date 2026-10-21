@@ -868,6 +868,7 @@ func DeleteChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ReleaseDeletedChannels(c.Request.Context(), []int{id})
 	if channelLookupFailed {
 		service.ResetProxyClientCache()
 	} else {
@@ -899,6 +900,7 @@ func DeleteDisabledChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ReleaseDeletedChannels(c.Request.Context(), ids)
 	if rows > 0 {
 		service.ResetProxyClientCache()
 	}
@@ -1045,6 +1047,7 @@ func DeleteChannelBatch(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ReleaseDeletedChannels(c.Request.Context(), channelBatch.Ids)
 	if deletedCount > 0 {
 		service.ResetProxyClientCache()
 	}

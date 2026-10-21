@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -128,6 +129,27 @@ func ChannelInFlight(id int) int {
 		return r.active
 	}
 	return 0
+}
+
+// ReleaseDeletedChannels 是渠道删除后的共享清理：删除指向已不存在渠道的 Key 路由条目，
+// 并移除这些渠道的并发资源表项。渠道删除已经提交，清理失败只记日志，残留条目不参与选路，
+// 会在下一次删除渠道时被清扫。
+func ReleaseDeletedChannels(ctx context.Context, channelIDs []int) {
+	if err := model.DeleteOrphanChannelRouteEntries(context.WithoutCancel(ctx)); err != nil {
+		common.SysError(common.LogText("failed to delete route entries of deleted channels: %v", err))
+	}
+	gatewayConcurrency.forget("channel", channelIDs)
+}
+
+// forget 移除资源表项。仍持有许可的请求引用旧对象，释放时不受影响。
+func (m *ConcurrencyManager) forget(kind string, ids []int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, id := range ids {
+		key := concurrencyKey{kind, id}
+		delete(m.resources, key)
+		delete(m.pending, key)
+	}
 }
 
 func (m *ConcurrencyManager) snapshot(kind string) []ConcurrencySnapshot {

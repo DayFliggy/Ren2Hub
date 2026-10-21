@@ -135,6 +135,58 @@ func TestAdminChannelResponsesAttachLiveInFlight(t *testing.T) {
 	assert.Zero(t, inFlight(detail(), true))
 }
 
+// B4：三条原生删除路径都清理 Key 路由条目和并发资源表项，且清扫之前遗留的孤立条目。
+func TestChannelDeletionReleasesRouteEntriesAndConcurrency(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		handler gin.HandlerFunc
+		method  string
+		target  string
+		body    string
+		params  gin.Params
+	}{
+		{name: "single", status: common.ChannelStatusEnabled, handler: DeleteChannel, method: http.MethodDelete, target: "/api/channel/8301", params: gin.Params{{Key: "id", Value: "8301"}}},
+		{name: "batch", status: common.ChannelStatusEnabled, handler: DeleteChannelBatch, method: http.MethodPost, target: "/api/channel/batch", body: `{"ids":[8301]}`},
+		{name: "disabled", status: common.ChannelStatusManuallyDisabled, handler: DeleteDisabledChannel, method: http.MethodDelete, target: "/api/channel/disabled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupChannelManagementContractTest(t)
+			createContractChannel(t, model.Channel{Id: 8301, Type: constant.ChannelTypeOpenAI, Name: "deleted", Key: "k", Models: "gpt-4o", Status: tc.status})
+			createContractChannel(t, model.Channel{Id: 8302, Type: constant.ChannelTypeOpenAI, Name: "kept", Key: "k", Models: "gpt-4o"})
+			token := &model.Token{UserId: 7, Key: "route-cleanup-" + tc.name, Name: "route"}
+			require.NoError(t, token.InsertWithRouting(model.TokenRouteManual))
+			for position, channelID := range []int{8301, 8302, 8399} {
+				require.NoError(t, model.DB.Create(&model.TokenRouteEntry{TokenID: token.Id, ChannelID: channelID, Position: position, Enabled: true}).Error)
+			}
+			deleted, err := model.GetChannelById(8301, false)
+			require.NoError(t, err)
+			permit, err := service.AcquireChannelConcurrency(context.Background(), deleted)
+			require.NoError(t, err)
+			permit.Release()
+			require.True(t, channelConcurrencyTracked(8301))
+
+			recorder := serveChannelAdmin(t, tc.handler, tc.method, tc.target, tc.body, tc.params)
+			require.Contains(t, recorder.Body.String(), `"success":true`, recorder.Body.String())
+
+			view, err := model.ReadTokenRouting(context.Background(), token.Id)
+			require.NoError(t, err)
+			require.Len(t, view.Entries, 1, "entries of deleted channels, including older leftovers, must be removed")
+			assert.Equal(t, 8302, view.Entries[0].ChannelID)
+			assert.False(t, channelConcurrencyTracked(8301))
+		})
+	}
+}
+
+func channelConcurrencyTracked(id int) bool {
+	for _, row := range service.RoutingSnapshot().Channels {
+		if row.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // E2-5：渠道倍率和并发上限只由模型层校验，非法值在写库前被拒绝。
 func TestChannelRoutingFieldsAreRejectedBeforeWrite(t *testing.T) {
 	setupChannelManagementContractTest(t)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/samber/lo"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -186,6 +187,29 @@ func TokenRoutingModes(tokenIDs []int) (map[int]string, error) {
 		modes[profile.TokenID] = profile.Mode
 	}
 	return modes, nil
+}
+
+// DeleteOrphanChannelRouteEntries 删除指向已不存在渠道的 Key 路由条目。
+// 渠道没有软删除，按“渠道已不存在”清扫而不是按本次 id，失败或并发写入留下的残留
+// 会在下一次删除渠道时一并清掉。
+func DeleteOrphanChannelRouteEntries(ctx context.Context) error {
+	existing := DB.Model(&Channel{}).Select("id")
+	return DB.WithContext(ctx).Where("channel_id NOT IN (?)", existing).Delete(&TokenRouteEntry{}).Error
+}
+
+// deleteUserTokenRouting 在硬删除用户的事务里清理该用户全部令牌（含已软删除的）的
+// Key 路由，规则与删除单个令牌共用 deleteTokenRouting。
+func deleteUserTokenRouting(tx *gorm.DB, userID int) error {
+	var tokenIDs []int
+	if err := tx.Unscoped().Model(&Token{}).Where("user_id = ?", userID).Pluck("id", &tokenIDs).Error; err != nil {
+		return err
+	}
+	for _, chunk := range lo.Chunk(tokenIDs, 200) {
+		if err := deleteTokenRouting(tx, chunk); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deleteTokenRouting(tx *gorm.DB, tokenIDs []int) error {

@@ -85,3 +85,36 @@ func TestRouteChannelRowsQualifiesAllBeforeSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
+
+// B14：硬删除用户时清理该用户全部令牌（含已软删除的）的 Key 路由，其他用户的路由不受影响。
+func TestHardDeleteUserRemovesTokenRouting(t *testing.T) {
+	truncateTables(t)
+	require.NoError(t, DB.AutoMigrate(&TokenRouteProfile{}, &TokenRouteEntry{}))
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM token_route_entries")
+		DB.Exec("DELETE FROM token_route_profiles")
+	})
+	owner := User{Username: "route-owner", Password: "password", AffCode: "route-owner"}
+	other := User{Username: "route-other", Password: "password", AffCode: "route-other"}
+	require.NoError(t, DB.Create(&owner).Error)
+	require.NoError(t, DB.Create(&other).Error)
+	tokens := []*Token{
+		{UserId: owner.Id, Key: "route-owner-active"},
+		{UserId: owner.Id, Key: "route-owner-soft-deleted"},
+		{UserId: other.Id, Key: "route-other-active"},
+	}
+	for _, token := range tokens {
+		require.NoError(t, token.InsertWithRouting(TokenRouteManual))
+		require.NoError(t, DB.Create(&TokenRouteEntry{TokenID: token.Id, ChannelID: 1, Enabled: true}).Error)
+	}
+	require.NoError(t, DB.Delete(tokens[1]).Error)
+
+	_, err := HardDeleteUserById(owner.Id)
+	require.NoError(t, err)
+
+	var profileTokens, entryTokens []int
+	require.NoError(t, DB.Model(&TokenRouteProfile{}).Pluck("token_id", &profileTokens).Error)
+	require.NoError(t, DB.Model(&TokenRouteEntry{}).Pluck("token_id", &entryTokens).Error)
+	require.Equal(t, []int{tokens[2].Id}, profileTokens)
+	require.Equal(t, []int{tokens[2].Id}, entryTokens)
+}
