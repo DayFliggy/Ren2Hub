@@ -217,7 +217,9 @@ func sendGeminiStreamResults(c *gin.Context, results []relayconvert.ResponseResu
 			return types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
 		c.Render(-1, common.CustomEvent{Data: "data: " + string(data)})
-		_ = helper.FlushWriter(c)
+		if helper.FlushWriter(c) == nil {
+			service.ObserveRouteStreamOutput(c, string(data))
+		}
 	}
 	return nil
 }

@@ -281,6 +281,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 					)
 				}
 				c.Writer.Flush()
+				service.ObserveRouteBinaryOutput(c)
 			}
 
 			if msg.Sequence < 0 {

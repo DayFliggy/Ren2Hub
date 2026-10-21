@@ -44,6 +44,16 @@ func ObserveRouteStreamOutput(c *gin.Context, data string) {
 	}
 }
 
+// ObserveRouteBinaryOutput 供直接写出二进制数据的流使用：调用方在非空数据写出并刷新后调用，
+// 与有输出的事件一样标记首个输出。
+func ObserveRouteBinaryOutput(c *gin.Context) {
+	attempt := currentRouteAttempt(c)
+	if attempt == nil || attempt.firstOutput.Load() != 0 {
+		return
+	}
+	attempt.firstOutput.CompareAndSwap(0, time.Now().UnixNano())
+}
+
 // ObserveRouteResponse 由传输层在收到上游响应后调用。上游 429 带 Retry-After 时，
 // 在这段时间内把渠道降到最差档；只降档、不剔除。
 func ObserveRouteResponse(c *gin.Context, resp *http.Response) {
