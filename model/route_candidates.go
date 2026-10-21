@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -30,36 +29,48 @@ func ChannelRoutable(ch *Channel) bool {
 
 // RouteChannelRows is shared by dispatch and public projections. Querying all
 // matching rows before filtering prevents an arbitrary top-k from hiding a route.
+// Like upstream GetChannel and the memory cache, channels declaring the exact
+// name win; the routing name (for example without @ modifiers) is only tried
+// when no exact channel passes the filters.
 func RouteChannelRows(ctx context.Context, modelName string, filters []dto.ChannelFilter) ([]*Channel, error) {
-	rows := []*Channel{}
-	q := DB.WithContext(ctx).Model(&Channel{})
-	if modelName != "" {
-		names := []string{modelName}
-		if normalized := ratio_setting.RoutingMatchModelName(modelName); normalized != modelName {
-			names = append(names, normalized)
-		}
-		var abilities []Ability
-		if err := DB.WithContext(ctx).Select("channel_id", "model").Where("model IN ? AND enabled = ?", names, true).Find(&abilities).Error; err != nil {
+	if modelName == "" {
+		rows := []*Channel{}
+		if err := DB.WithContext(ctx).Order("id asc").Find(&rows).Error; err != nil {
 			return nil, err
 		}
-		// MySQL 默认排序规则不区分大小写，IN 会命中只差大小写的模型名；在 Go 侧
-		// 精确比对，使三种数据库与上游内存缓存的精确查找一致。
-		ids := make([]int, 0, len(abilities))
-		for _, ability := range abilities {
-			if slices.Contains(names, ability.Model) {
-				ids = append(ids, ability.ChannelId)
-			}
-		}
-		if len(ids) == 0 {
-			return rows, nil
-		}
-		q = q.Where("id IN ?", ids)
+		return rows, nil
 	}
-	if err := q.Order("id asc").Find(&rows).Error; err != nil {
+	rows, err := routeChannelRowsForAbility(ctx, modelName, modelName, filters)
+	if err != nil || len(rows) > 0 {
+		return rows, err
+	}
+	if normalized := ratio_setting.RoutingMatchModelName(modelName); normalized != "" && normalized != modelName {
+		return routeChannelRowsForAbility(ctx, normalized, modelName, filters)
+	}
+	return rows, nil
+}
+
+// routeChannelRowsForAbility 返回声明了 abilityModel 且满足过滤条件的渠道；过滤仍按请求的
+// modelName 判定，与上游 filterAbilitiesByConstraints 的参数一致。
+func routeChannelRowsForAbility(ctx context.Context, abilityModel, modelName string, filters []dto.ChannelFilter) ([]*Channel, error) {
+	rows := []*Channel{}
+	var abilities []Ability
+	if err := DB.WithContext(ctx).Select("channel_id", "model").Where("model = ? AND enabled = ?", abilityModel, true).Find(&abilities).Error; err != nil {
 		return nil, err
 	}
-	if modelName == "" {
+	// MySQL 默认排序规则不区分大小写，会命中只差大小写的模型名；在 Go 侧精确比对，
+	// 使三种数据库与上游内存缓存的精确查找一致。
+	ids := make([]int, 0, len(abilities))
+	for _, ability := range abilities {
+		if ability.Model == abilityModel {
+			ids = append(ids, ability.ChannelId)
+		}
+	}
+	if len(ids) == 0 {
 		return rows, nil
+	}
+	if err := DB.WithContext(ctx).Where("id IN ?", ids).Order("id asc").Find(&rows).Error; err != nil {
+		return nil, err
 	}
 	result := make([]*Channel, 0, len(rows))
 	for _, c := range rows {

@@ -378,3 +378,42 @@ func TestChannelUpdatePublicationFailureStillUpdatesAbilities(t *testing.T) {
 	permit.Release()
 	require.Equal(t, ConcurrencySnapshot{ID: 11, Limit: 1, InFlight: 0}, gatewayConcurrency.snapshot("channel")[0])
 }
+
+// 删除仍有在途请求的渠道后再用同一 ID 新建：两者共用一份计数并按新渠道的上限准入，
+// 删除前发出的尝试也不能把失败、熔断或冷却写进新渠道。
+func TestDeletedChannelKeepsInFlightCountAndObservationsForReusedID(t *testing.T) {
+	setupRouteTest(t)
+	resetRouteObservations(t)
+	ctx := context.Background()
+	routeObservations.mu.Lock()
+	staleEpoch := routeObservations.epoch
+	routeObservations.mu.Unlock()
+	held, err := AcquireChannelConcurrency(ctx, &model.Channel{Id: 11, MaxConcurrency: 1})
+	require.NoError(t, err)
+
+	ReleaseDeletedChannels(ctx, []int{11})
+	recreated := &model.Channel{Id: 11, MaxConcurrency: 2}
+	reused, err := AcquireChannelConcurrency(ctx, recreated)
+	require.NoError(t, err, "the new channel's limit applies on its first admission")
+	_, err = AcquireChannelConcurrency(ctx, recreated)
+	require.ErrorIs(t, err, ErrConcurrencyFull, "the old request still occupies the reused ID")
+	require.Equal(t, []ConcurrencySnapshot{{ID: 11, Limit: 2, InFlight: 2}}, gatewayConcurrency.snapshot("channel"))
+	for range routeBreakerOpenFailures {
+		recordRouteBreaker(staleEpoch, 11, "m", false)
+	}
+	routeObservations.coolDown(staleEpoch, 11, time.Now().Add(time.Minute).UnixMilli())
+	health, weight := routeObservations.routeHealth(11, "m")
+	require.Zero(t, health, "attempts sent before the delete cannot demote the new channel")
+	require.Equal(t, 1.0, weight)
+	held.Release()
+	reused.Release()
+	require.Equal(t, []ConcurrencySnapshot{{ID: 11, Limit: 2, InFlight: 0}}, gatewayConcurrency.snapshot("channel"))
+
+	idle, err := AcquireChannelConcurrency(ctx, &model.Channel{Id: 22, MaxConcurrency: 1})
+	require.NoError(t, err)
+	ReleaseDeletedChannels(ctx, []int{22})
+	idle.Release()
+	for _, row := range gatewayConcurrency.snapshot("channel") {
+		require.NotEqual(t, 22, row.ID, "a deleted channel leaves no entry once its last permit is released")
+	}
+}

@@ -37,6 +37,27 @@ func TestChannelSatisfiesFiltersOwnsRoutability(t *testing.T) {
 	require.Equal(t, []int{920001}, channelIDs(found), "request filters are applied by the row query itself")
 }
 
+// 与上游 GetChannel 和内存缓存相同：声明精确模型名的渠道优先，只有精确候选全部被过滤掉时
+// 才回退到去掉 @ 修饰后的路由名。
+func TestRouteChannelRowsPrefersExactModelName(t *testing.T) {
+	truncateTables(t)
+	const exact, base = "qwen3-max@thinking:on@temperature:0.2", "qwen3-max"
+	for id, name := range map[int]string{930001: exact, 930002: base, 930003: base} {
+		require.NoError(t, DB.Create(&Channel{Id: id, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Name: "exact-first", Key: "test-key", Models: name}).Error)
+		require.NoError(t, DB.Create(&Ability{Model: name, ChannelId: id, Enabled: true}).Error)
+	}
+	found, err := RouteChannelRows(context.Background(), exact, nil)
+	require.NoError(t, err)
+	require.Equal(t, []int{930001}, channelIDs(found), "an exact channel hides channels that only serve the routing name")
+	found, err = RouteChannelRows(context.Background(), exact, []dto.ChannelFilter{{Kind: dto.FilterTokenRoute, ChannelIDs: []int{930002, 930003}}})
+	require.NoError(t, err)
+	require.Equal(t, []int{930002, 930003}, channelIDs(found), "the routing name is used once filters remove every exact channel")
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 930001).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	found, err = RouteChannelRows(context.Background(), exact, nil)
+	require.NoError(t, err)
+	require.Equal(t, []int{930002, 930003}, channelIDs(found), "a disabled exact channel does not block the fallback")
+}
+
 func channelIDs(rows []*Channel) []int {
 	ids := make([]int, 0, len(rows))
 	for _, row := range rows {

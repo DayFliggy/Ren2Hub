@@ -213,6 +213,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	conn, resp, dialErr := websocket.DefaultDialer.DialContext(c.Request.Context(), requestURL, header)
 	if dialErr != nil {
 		if resp != nil {
+			service.ObserveRouteResponse(c, resp)
 			return nil, types.NewErrorWithStatusCode(
 				fmt.Errorf("failed to connect to websocket: %w, status: %d", dialErr, resp.StatusCode),
 				types.ErrorCodeBadResponseStatusCode,

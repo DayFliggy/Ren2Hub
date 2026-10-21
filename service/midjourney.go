@@ -363,6 +363,7 @@ func DoMidjourneyHttpRequest(c *gin.Context, info *relaycommon.RelayInfo, timeou
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "do_request_failed", http.StatusInternalServerError), nullBytes, err
 	}
 	defer resp.Body.Close()
+	ObserveRouteResponse(c, resp)
 	statusCode := resp.StatusCode
 	//if statusCode != 200  {
 	//	return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "bad_response_status_code", statusCode), nullBytes, nil

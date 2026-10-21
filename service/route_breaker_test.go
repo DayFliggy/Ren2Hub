@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -213,4 +214,26 @@ func TestRouteObservationStoreEvictsWhenFull(t *testing.T) {
 	}
 	require.Len(t, routeObservations.breakers, 3)
 	require.Contains(t, routeObservations.breakers, routeBreakerKey{22, "w"})
+}
+
+// Midjourney 直接用 http.Client 发送，不经过 relay/channel 的 doRequest，冷却挂点要单独接上。
+func TestMidjourneyRetryAfterStartsCooldown(t *testing.T) {
+	setupRouteTest(t)
+	resetRouteObservations(t)
+	initDefaultHTTPClientFixture(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "30")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"code":23,"description":"queue full"}`))
+	}))
+	t.Cleanup(upstream.Close)
+	c := routeTestContext(t)
+	c.Request = httptest.NewRequest(http.MethodGet, "/mj/task/abc/fetch", nil)
+	BeginRouteObservation(c)
+	common.SetContextKey(c, constant.ContextKeyChannelId, 11)
+	info := &relaycommon.RelayInfo{OriginModelName: "mj_imagine", StartTime: time.Now()}
+	_, _, err := DoMidjourneyHttpRequest(c, info, time.Second, upstream.URL)
+	require.NoError(t, err)
+	health, _ := routeObservations.routeHealth(11, "")
+	require.Equal(t, routeWorstHealth, health)
 }

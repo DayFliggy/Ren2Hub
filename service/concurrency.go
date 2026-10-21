@@ -19,7 +19,13 @@ type concurrencyKey struct {
 	kind string
 	id   int
 }
-type concurrencyResource struct{ limit, active int }
+
+// retired 表示渠道已删除但仍有在途许可。同 ID 再次准入时沿用这份计数并按新渠道的上限
+// 重新设定，最后一个许可释放后移除表项。
+type concurrencyResource struct {
+	limit, active int
+	retired       bool
+}
 
 // Resource identities survive limit changes, including changes to and from unlimited.
 type ConcurrencyManager struct {
@@ -34,6 +40,7 @@ type ConcurrencyManager struct {
 type ConcurrencyPermit struct {
 	once     sync.Once
 	manager  *ConcurrencyManager
+	key      concurrencyKey
 	resource *concurrencyResource
 }
 
@@ -85,18 +92,30 @@ func (m *ConcurrencyManager) tryAcquire(ctx context.Context, kind string, id, in
 		r = &concurrencyResource{limit: initialLimit}
 		m.resources[key] = r
 	}
+	if r.retired {
+		r.limit, r.retired = initialLimit, false
+	}
 	if r.limit > 0 && r.active >= r.limit {
 		return nil, ErrConcurrencyFull
 	}
 	r.active++
-	return &ConcurrencyPermit{manager: m, resource: r}, nil
+	return &ConcurrencyPermit{manager: m, key: key, resource: r}, nil
 }
 
 func (p *ConcurrencyPermit) Release() {
 	if p == nil {
 		return
 	}
-	p.once.Do(func() { p.manager.mu.Lock(); defer p.manager.mu.Unlock(); p.resource.active-- })
+	p.once.Do(func() { p.manager.release(p.key, p.resource) })
+}
+
+func (m *ConcurrencyManager) release(key concurrencyKey, r *concurrencyResource) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r.active--
+	if r.retired && r.active == 0 && m.resources[key] == r {
+		delete(m.resources, key)
+	}
 }
 
 func AcquireUserConcurrency(ctx context.Context, userID, limit int) (*ConcurrencyPermit, error) {
@@ -132,23 +151,32 @@ func ChannelInFlight(id int) int {
 }
 
 // ReleaseDeletedChannels 是渠道删除后的共享清理：删除指向已不存在渠道的 Key 路由条目，
-// 并移除这些渠道的并发资源表项。渠道删除已经提交，清理失败只记日志，残留条目不参与选路，
+// 移除这些渠道的并发资源表项，并让观察、熔断和冷却失效，使删除前发出的尝试不能写进
+// 复用同一 ID 的新渠道。渠道删除已经提交，清理失败只记日志，残留条目不参与选路，
 // 会在下一次删除渠道时被清扫。
 func ReleaseDeletedChannels(ctx context.Context, channelIDs []int) {
 	if err := model.DeleteOrphanChannelRouteEntries(context.WithoutCancel(ctx)); err != nil {
 		common.SysError(common.LogText("failed to delete route entries of deleted channels: %v", err))
 	}
 	gatewayConcurrency.forget("channel", channelIDs)
+	for _, id := range channelIDs {
+		routeObservations.invalidate(id)
+	}
 }
 
-// forget 移除资源表项。仍持有许可的请求引用旧对象，释放时不受影响。
+// forget 移除空闲的资源表项；仍有在途许可的表项标记为 retired，同 ID 再准入时继续共用
+// 计数，最后一个许可释放时移除。
 func (m *ConcurrencyManager) forget(kind string, ids []int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, id := range ids {
 		key := concurrencyKey{kind, id}
-		delete(m.resources, key)
 		delete(m.pending, key)
+		if r := m.resources[key]; r != nil && r.active > 0 {
+			r.retired = true
+			continue
+		}
+		delete(m.resources, key)
 	}
 }
 
