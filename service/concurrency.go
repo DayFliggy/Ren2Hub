@@ -3,25 +3,31 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"gorm.io/gorm"
 )
 
 var ErrConcurrencyFull = errors.New("concurrency limit reached")
 
 var errConcurrencyPublicationPending = errors.New("concurrency limit publication pending")
 
+// errConcurrencyResourceDeleted 表示删除留下的待确认标记仍在：数据库里没有这个渠道或用户，
+// 删除前取得旧数据的请求不能再准入，也不能重新建立表项。
+var errConcurrencyResourceDeleted = errors.New("concurrency resource deleted")
+
 type concurrencyKey struct {
 	kind string
 	id   int
 }
 
-// retired 表示渠道已删除但仍有在途许可。同 ID 再次准入时沿用这份计数并按新渠道的上限
-// 重新设定，最后一个许可释放后移除表项。
+// retired 表示渠道或用户已删除但仍有在途许可，最后一个许可释放后移除表项。同 ID 的记录
+// 经数据库读取确认重新存在时清除 retired，新资源沿用这份计数。
 type concurrencyResource struct {
 	limit, active int
 	retired       bool
@@ -56,19 +62,17 @@ func NewConcurrencyManager() *ConcurrencyManager {
 
 var gatewayConcurrency = NewConcurrencyManager()
 
-func (m *ConcurrencyManager) setLimit(kind string, id, limit int, initialize bool) {
+// setLimit 只在数据库读取成功后调用，读到记录即确认资源存在。
+func (m *ConcurrencyManager) setLimit(kind string, id, limit int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := concurrencyKey{kind, id}
 	r := m.resources[key]
 	if r == nil {
-		r = &concurrencyResource{limit: limit}
-		m.resources[key] = r
+		m.resources[key] = &concurrencyResource{limit: limit}
 		return
 	}
-	if !initialize {
-		r.limit = limit
-	}
+	r.limit, r.retired = limit, false
 }
 
 func (m *ConcurrencyManager) tryAcquire(ctx context.Context, kind string, id, initialLimit int) (*ConcurrencyPermit, error) {
@@ -91,9 +95,6 @@ func (m *ConcurrencyManager) tryAcquire(ctx context.Context, kind string, id, in
 	if r == nil {
 		r = &concurrencyResource{limit: initialLimit}
 		m.resources[key] = r
-	}
-	if r.retired {
-		r.limit, r.retired = initialLimit, false
 	}
 	if r.limit > 0 && r.active >= r.limit {
 		return nil, ErrConcurrencyFull
@@ -175,14 +176,17 @@ func ReleaseDeletedUser(userID int) {
 	gatewayConcurrency.forget("user", []int{userID})
 }
 
-// forget 移除空闲的资源表项；仍有在途许可的表项标记为 retired，同 ID 再准入时继续共用
-// 计数，最后一个许可释放时移除。
+// forget 移除空闲的资源表项；仍有在途许可的表项标记为 retired，最后一个许可释放时移除。
+// 每个 ID 留下待确认的发布标记，之后的准入先读数据库：记录不存在就拒绝，删除前取得旧数据
+// 的请求不能复活或重建表项；同 ID 的记录重新存在时读取成功，标记随之清除。标记数量以
+// 删除的渠道和用户数为上限。
 func (m *ConcurrencyManager) forget(kind string, ids []int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, id := range ids {
 		key := concurrencyKey{kind, id}
-		delete(m.pending, key)
+		m.publication++
+		m.pending[key] = m.publication
 		if r := m.resources[key]; r != nil && r.active > 0 {
 			r.retired = true
 			continue
@@ -275,13 +279,16 @@ func refreshConcurrencyLimitLocked(ctx context.Context, key concurrencyKey) erro
 		err = model.DB.WithContext(ctx).Select("id", "max_concurrency").First(&row, key.id).Error
 		limit = row.MaxConcurrency
 	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("%w: %w", errConcurrencyResourceDeleted, err)
+	}
 	if err != nil {
 		return err
 	}
 	if limit < 0 {
 		return errors.New("invalid concurrency limit")
 	}
-	gatewayConcurrency.setLimit(key.kind, key.id, limit, false)
+	gatewayConcurrency.setLimit(key.kind, key.id, limit)
 	gatewayConcurrency.mu.Lock()
 	if gatewayConcurrency.pending[key] == publication {
 		delete(gatewayConcurrency.pending, key)

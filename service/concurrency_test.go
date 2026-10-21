@@ -20,7 +20,7 @@ func TestConcurrencyUnlimitedHotUpdateAndOnceRelease(t *testing.T) {
 	require.NoError(t, err)
 	second, err := m.tryAcquire(ctx, "user", 1, 0)
 	require.NoError(t, err)
-	m.setLimit("user", 1, 1, false)
+	m.setLimit("user", 1, 1)
 	_, err = m.tryAcquire(ctx, "user", 1, 0)
 	require.ErrorIs(t, err, ErrConcurrencyFull)
 	first.Release()
@@ -30,7 +30,7 @@ func TestConcurrencyUnlimitedHotUpdateAndOnceRelease(t *testing.T) {
 	second.Release()
 	next, err := m.tryAcquire(ctx, "user", 1, 0)
 	require.NoError(t, err)
-	m.setLimit("user", 1, 0, false)
+	m.setLimit("user", 1, 0)
 	other, err := m.tryAcquire(ctx, "user", 1, 1)
 	require.NoError(t, err)
 	next.Release()
@@ -382,7 +382,7 @@ func TestChannelUpdatePublicationFailureStillUpdatesAbilities(t *testing.T) {
 // 删除仍有在途请求的渠道后再用同一 ID 新建：两者共用一份计数并按新渠道的上限准入，
 // 删除前发出的尝试也不能把失败、熔断或冷却写进新渠道。
 func TestDeletedChannelKeepsInFlightCountAndObservationsForReusedID(t *testing.T) {
-	setupRouteTest(t)
+	db := setupRouteTest(t)
 	resetRouteObservations(t)
 	ctx := context.Background()
 	routeObservations.mu.Lock()
@@ -392,9 +392,11 @@ func TestDeletedChannelKeepsInFlightCountAndObservationsForReusedID(t *testing.T
 	require.NoError(t, err)
 
 	ReleaseDeletedChannels(ctx, []int{11})
+	createRouteChannel(t, db, 11, "m")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("max_concurrency", 2).Error)
 	recreated := &model.Channel{Id: 11, MaxConcurrency: 2}
 	reused, err := AcquireChannelConcurrency(ctx, recreated)
-	require.NoError(t, err, "the new channel's limit applies on its first admission")
+	require.NoError(t, err, "the new channel's committed limit applies on its first admission")
 	_, err = AcquireChannelConcurrency(ctx, recreated)
 	require.ErrorIs(t, err, ErrConcurrencyFull, "the old request still occupies the reused ID")
 	require.Equal(t, []ConcurrencySnapshot{{ID: 11, Limit: 2, InFlight: 2}}, gatewayConcurrency.snapshot("channel"))
@@ -408,18 +410,54 @@ func TestDeletedChannelKeepsInFlightCountAndObservationsForReusedID(t *testing.T
 	held.Release()
 	reused.Release()
 	require.Equal(t, []ConcurrencySnapshot{{ID: 11, Limit: 2, InFlight: 0}}, gatewayConcurrency.snapshot("channel"))
-
-	idle, err := AcquireChannelConcurrency(ctx, &model.Channel{Id: 22, MaxConcurrency: 1})
-	require.NoError(t, err)
-	ReleaseDeletedChannels(ctx, []int{22})
-	idle.Release()
-	for _, row := range gatewayConcurrency.snapshot("channel") {
-		require.NotEqual(t, 22, row.ID, "a deleted channel leaves no entry once its last permit is released")
-	}
 }
 
-// 发布在删除前读到旧上限、删除清理随后执行时，旧上限不能在清理之后写回，否则复用同一 ID
-// 的新渠道会按旧上限准入。
+// 删除前取得旧渠道数据的请求在清理之后才准入：无论表项仍有在途许可还是已被移除，都不能
+// 复活或重建表项，否则已删除的渠道会一直留在运行状态里。
+func TestDeletedChannelRejectsStaleAdmission(t *testing.T) {
+	db := setupRouteTest(t)
+	ctx := context.Background()
+	stale := &model.Channel{Id: 11, MaxConcurrency: 1}
+	held, err := AcquireChannelConcurrency(ctx, stale)
+	require.NoError(t, err)
+	idle, err := AcquireChannelConcurrency(ctx, &model.Channel{Id: 22, MaxConcurrency: 1})
+	require.NoError(t, err)
+	idle.Release()
+
+	ReleaseDeletedChannels(ctx, []int{11, 22})
+	_, err = AcquireChannelConcurrency(ctx, stale)
+	require.ErrorIs(t, err, errConcurrencyResourceDeleted, "a retired entry is not revived by a stale request")
+	_, err = AcquireChannelConcurrency(ctx, &model.Channel{Id: 22, MaxConcurrency: 1})
+	require.ErrorIs(t, err, errConcurrencyResourceDeleted, "a removed entry is not recreated by a stale request")
+	held.Release()
+	require.Empty(t, gatewayConcurrency.snapshot("channel"))
+
+	createRouteChannel(t, db, 22, "m")
+	permit, err := AcquireChannelConcurrency(ctx, &model.Channel{Id: 22, MaxConcurrency: 1})
+	require.NoError(t, err, "a channel that exists again under the same ID admits")
+	permit.Release()
+}
+
+func TestSelectionSkipsChannelDeletedAfterCandidateRead(t *testing.T) {
+	db := setupRouteTest(t)
+	for _, id := range []int{11, 22} {
+		createRouteChannel(t, db, id, "route-model")
+	}
+	saveRouteTest(t, 11, 22)
+	var deleted atomic.Bool
+	// 候选读出之后、准入之前删除渠道 11，与管理员删除和选路交错的时序相同。
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:delete-after-candidates", func(tx *gorm.DB) {
+		if tx.Statement.Table == "channels" && !tx.DryRun && deleted.CompareAndSwap(false, true) {
+			require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Delete(&model.Channel{}, 11).Error)
+			gatewayConcurrency.forget("channel", []int{11})
+		}
+	}))
+	selected, err := selectQualifiedChannel(routeTestContext(t), "route-model")
+	require.NoError(t, err)
+	require.True(t, deleted.Load())
+	require.Equal(t, 22, selected.Id, "a channel deleted after the candidate read is skipped")
+}
+
 func TestDeleteCleanupWaitsForInFlightLimitPublication(t *testing.T) {
 	db := setupRouteTest(t)
 	createRouteChannel(t, db, 11, "route-model")
@@ -453,7 +491,10 @@ func TestDeleteCleanupWaitsForInFlightLimitPublication(t *testing.T) {
 	close(unblock)
 	require.NoError(t, <-published)
 	<-cleaned
+	require.Empty(t, gatewayConcurrency.snapshot("channel"), "the stale limit is not written back after cleanup")
 
+	createRouteChannel(t, db, 11, "route-model")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("max_concurrency", 2).Error)
 	recreated := &model.Channel{Id: 11, MaxConcurrency: 2}
 	for range 2 {
 		permit, err := AcquireChannelConcurrency(context.Background(), recreated)
@@ -464,7 +505,8 @@ func TestDeleteCleanupWaitsForInFlightLimitPublication(t *testing.T) {
 
 // 硬删除用户后不留并发表项；仍有在途许可时等最后一个许可释放再移除。
 func TestReleaseDeletedUserForgetsConcurrency(t *testing.T) {
-	setupRouteTest(t)
+	db := setupRouteTest(t)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
 	ctx := context.Background()
 	idle, err := AcquireUserConcurrency(ctx, 31, 1)
 	require.NoError(t, err)
@@ -474,6 +516,10 @@ func TestReleaseDeletedUserForgetsConcurrency(t *testing.T) {
 	ReleaseDeletedUser(31)
 	ReleaseDeletedUser(32)
 	require.Equal(t, []ConcurrencySnapshot{{ID: 32, Limit: 1, InFlight: 1}}, gatewayConcurrency.snapshot("user"))
+	for _, id := range []int{31, 32} {
+		_, err = AcquireUserConcurrency(ctx, id, 1)
+		require.ErrorIs(t, err, errConcurrencyResourceDeleted, "a request authenticated before the delete cannot admit")
+	}
 	busy.Release()
 	require.Empty(t, gatewayConcurrency.snapshot("user"))
 }

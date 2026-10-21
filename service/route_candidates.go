@@ -275,6 +275,10 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 			busy = true
 			continue
 		}
+		if errors.Is(err, errConcurrencyResourceDeleted) {
+			// 候选读出后渠道被删除：它已不是候选，继续尝试下一个。
+			continue
+		}
 		return selected, err
 	}
 	if busy {
