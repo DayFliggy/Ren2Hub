@@ -1,9 +1,6 @@
 package controller
 
-import (
-	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/modellab"
-)
+import "github.com/QuantumNous/new-api/model"
 
 func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, requestData map[string]any) bool {
 	if _, ok := requestData["type"]; ok && channel.Type != origin.Type {
@@ -120,11 +117,6 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 	if _, ok := requestData["used_quota"]; ok {
 		channel.UsedQuota = 0
 	}
-}
-
-func clearChannelProjections(channel *model.Channel) {
-	channel.InFlight = 0
-	channel.Lab = modellab.Classification{}
 }
 
 // channelNonSensitiveFields lists routing / server-managed channel

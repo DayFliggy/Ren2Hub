@@ -849,22 +849,6 @@ func DisableChannelByTag(tag string) error {
 	return publishChannelRoutingByTag(tag)
 }
 
-func publishChannelRoutingByTag(tag string) error {
-	if ChannelRoutingChanged == nil {
-		return nil
-	}
-	var ids []int
-	if err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &ids).Error; err != nil {
-		return err
-	}
-	for _, id := range ids {
-		if err := ChannelRoutingChanged(id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
 	shouldReCreateAbilities := false
