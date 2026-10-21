@@ -12,9 +12,20 @@ import (
 )
 
 type TopUpFilter struct {
-	UserID                            int
+	UserID int
+	// SelfView 表示普通用户查看自己的订单，起始时间不能早于 30 天截止点。
+	SelfView                          bool
 	Keyword, Status, Method, Currency string
 	StartTime, EndTime                int64
+}
+
+// topUpQueryStart 返回生效的起始时间：未指定时取 30 天截止点，普通用户不能早于截止点。
+func topUpQueryStart(filter TopUpFilter) int64 {
+	cutoff := topUpQueryCutoff()
+	if filter.StartTime == 0 || (filter.SelfView && filter.StartTime < cutoff) {
+		return cutoff
+	}
+	return filter.StartTime
 }
 
 func topUpFilteredQuery(filter TopUpFilter) (*gorm.DB, error) {
@@ -26,7 +37,11 @@ func topUpFilteredQuery(filter TopUpFilter) (*gorm.DB, error) {
 		query = query.Where("user_id = ?", filter.UserID)
 	}
 	if filter.Keyword != "" {
-		query = query.Where("trade_no LIKE ? ESCAPE '!'", "%"+strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(filter.Keyword)+"%")
+		pattern, err := sanitizeLikePattern(filter.Keyword)
+		if err != nil {
+			return nil, err
+		}
+		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
 	}
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
@@ -37,10 +52,7 @@ func topUpFilteredQuery(filter TopUpFilter) (*gorm.DB, error) {
 	if filter.Currency != "" {
 		query = query.Where("currency = ?", strings.ToUpper(filter.Currency))
 	}
-	start := filter.StartTime
-	if start == 0 {
-		start = topUpQueryCutoff()
-	}
+	start := topUpQueryStart(filter)
 	query = query.Where("create_time >= ?", start)
 	if filter.EndTime > 0 {
 		if filter.EndTime < start {
@@ -55,13 +67,20 @@ func ListTopUps(filter TopUpFilter, page *common.PageInfo) ([]TopUp, int64, erro
 	if err != nil {
 		return nil, 0, err
 	}
-	var rows []TopUp
+	// 计数最多 searchTopUpCountHardLimit 行，避免对大表做无界 COUNT。
+	// GORM 的 Limit(n).Count() 不限制计数，所以用子查询封顶。
 	var total int64
-	if err = query.Count(&total).Error; err != nil {
-		return nil, 0, err
+	capped := query.Session(&gorm.Session{}).Select("id").Limit(searchTopUpCountHardLimit)
+	if err = DB.Table("(?) AS capped_top_ups", capped).Count(&total).Error; err != nil {
+		common.SysError(common.LogText("failed to count topups: %s", err.Error()))
+		return nil, 0, common.NewMessage("Failed to search top-up records")
 	}
-	err = query.Order("id DESC").Offset(page.GetStartIdx()).Limit(page.GetPageSize()).Find(&rows).Error
-	return rows, total, err
+	var rows []TopUp
+	if err = query.Order("id DESC").Offset(page.GetStartIdx()).Limit(page.GetPageSize()).Find(&rows).Error; err != nil {
+		common.SysError(common.LogText("failed to search topups: %s", err.Error()))
+		return nil, 0, common.NewMessage("Failed to search top-up records")
+	}
+	return rows, total, nil
 }
 
 type TopUpDetail struct {
@@ -108,9 +127,16 @@ type TopUpDailyTotal struct {
 	Date string `json:"date"`
 	TopUpCurrencyTotal
 }
+
+// TopUpMethodTotal 按支付渠道和币种汇总；method 取 payment_provider，旧订单没有渠道时取 payment_method。
+type TopUpMethodTotal struct {
+	Method string `json:"method"`
+	TopUpCurrencyTotal
+}
 type TopUpStatistics struct {
 	Total      int                  `json:"total"`
 	Currencies []TopUpCurrencyTotal `json:"currencies"`
+	Methods    []TopUpMethodTotal   `json:"methods"`
 	Daily      []TopUpDailyTotal    `json:"daily"`
 	StartTime  int64                `json:"start_time"`
 	EndTime    int64                `json:"end_time"`
@@ -123,11 +149,9 @@ func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &TopUpStatistics{Currencies: []TopUpCurrencyTotal{}, Daily: []TopUpDailyTotal{}, StartTime: filter.StartTime, EndTime: filter.EndTime}
-	if result.StartTime == 0 {
-		result.StartTime = topUpQueryCutoff()
-	}
+	result := &TopUpStatistics{Currencies: []TopUpCurrencyTotal{}, Methods: []TopUpMethodTotal{}, Daily: []TopUpDailyTotal{}, StartTime: topUpQueryStart(filter), EndTime: filter.EndTime}
 	currencies := map[string]*TopUpCurrencyTotal{}
+	methods := map[string]*TopUpMethodTotal{}
 	daily := map[string]*TopUpDailyTotal{}
 	var batch []TopUp
 	err = query.Order("id ASC").FindInBatches(&batch, 500, func(tx *gorm.DB, batchNo int) error {
@@ -142,7 +166,15 @@ func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
 			if daily[key] == nil {
 				daily[key] = &TopUpDailyTotal{Date: date, TopUpCurrencyTotal: TopUpCurrencyTotal{Currency: currency, PaidAmount: "0"}}
 			}
-			for _, total := range []*TopUpCurrencyTotal{currencies[currency], &daily[key].TopUpCurrencyTotal} {
+			method := row.PaymentProvider
+			if method == "" {
+				method = row.PaymentMethod
+			}
+			methodKey := method + ":" + currency
+			if methods[methodKey] == nil {
+				methods[methodKey] = &TopUpMethodTotal{Method: method, TopUpCurrencyTotal: TopUpCurrencyTotal{Currency: currency, PaidAmount: "0"}}
+			}
+			for _, total := range []*TopUpCurrencyTotal{currencies[currency], &methods[methodKey].TopUpCurrencyTotal, &daily[key].TopUpCurrencyTotal} {
 				total.Count++
 				if row.Status != common.TopUpStatusSuccess {
 					continue
@@ -166,6 +198,9 @@ func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
 	for _, total := range currencies {
 		result.Currencies = append(result.Currencies, *total)
 	}
+	for _, total := range methods {
+		result.Methods = append(result.Methods, *total)
+	}
 	for _, total := range daily {
 		result.Daily = append(result.Daily, *total)
 	}
@@ -175,10 +210,69 @@ func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
 
 func sortTopUpStatistics(result *TopUpStatistics) {
 	sort.Slice(result.Currencies, func(i, j int) bool { return result.Currencies[i].Currency < result.Currencies[j].Currency })
+	sort.Slice(result.Methods, func(i, j int) bool {
+		if result.Methods[i].Method == result.Methods[j].Method {
+			return result.Methods[i].Currency < result.Methods[j].Currency
+		}
+		return result.Methods[i].Method < result.Methods[j].Method
+	})
 	sort.Slice(result.Daily, func(i, j int) bool {
 		if result.Daily[i].Date == result.Daily[j].Date {
 			return result.Daily[i].Currency < result.Daily[j].Currency
 		}
 		return result.Daily[i].Date < result.Daily[j].Date
 	})
+}
+
+const (
+	TopUpRankingDefaultLimit = 10
+	TopUpRankingMaxLimit     = 50
+)
+
+// TopUpRankingEntry 只包含用户标识和到账汇总，不含支付凭据或订单明细。
+type TopUpRankingEntry struct {
+	UserID        int    `json:"user_id"`
+	Username      string `json:"username"`
+	PaidCount     int64  `json:"paid_count"`
+	CreditedQuota int64  `json:"credited_quota"`
+}
+type TopUpRanking struct {
+	Items     []TopUpRankingEntry `json:"items"`
+	StartTime int64               `json:"start_time"`
+	EndTime   int64               `json:"end_time"`
+}
+
+// GetTopUpRanking 按到账额度从高到低排列用户，同额按 user_id 升序；只统计成功订单，其余条件与订单列表相同。
+func GetTopUpRanking(filter TopUpFilter, limit int) (*TopUpRanking, error) {
+	if limit < 1 || limit > TopUpRankingMaxLimit {
+		return nil, errors.New("invalid ranking limit")
+	}
+	query, err := topUpFilteredQuery(filter)
+	if err != nil {
+		return nil, err
+	}
+	result := &TopUpRanking{Items: []TopUpRankingEntry{}, StartTime: topUpQueryStart(filter), EndTime: filter.EndTime}
+	err = query.Where("status = ?", common.TopUpStatusSuccess).
+		Select("user_id, COUNT(*) AS paid_count, SUM(credited_quota) AS credited_quota").
+		Group("user_id").Order("SUM(credited_quota) DESC, user_id ASC").Limit(limit).
+		Scan(&result.Items).Error
+	if err != nil || len(result.Items) == 0 {
+		return result, err
+	}
+	ids := make([]int, len(result.Items))
+	for i, item := range result.Items {
+		ids[i] = item.UserID
+	}
+	var users []User
+	if err = DB.Unscoped().Select("id", "username").Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	names := make(map[int]string, len(users))
+	for _, user := range users {
+		names[user.Id] = user.Username
+	}
+	for i := range result.Items {
+		result.Items[i].Username = names[result.Items[i].UserID]
+	}
+	return result, nil
 }

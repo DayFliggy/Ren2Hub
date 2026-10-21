@@ -378,7 +378,9 @@ func WaffoWebhook(c *gin.Context) {
 			return
 		}
 		if payload.Result.SubscriptionInfo != nil {
-			sendWaffoWebhookResponse(c, wh, false, "unsupported order type")
+			// 订阅已退役：签名确认收到，避免 Waffo 重试一个永远不会成功的回调。
+			model.RecordTopUpCallbackRejection(c.ClientIP(), model.PaymentProviderWaffo, payload.Result.MerchantOrderID, 0, model.ErrTopUpTypeUnsupported)
+			sendWaffoWebhookResponse(c, wh, true, "")
 			return
 		}
 		logger.LogInfo(c.Request.Context(), common.LogText("Waffo webhook verified and parsed event_type=%s merchant_order_id=%s order_status=%s client_ip=%s", event.EventType, payload.Result.MerchantOrderID, payload.Result.OrderStatus, c.ClientIP()))
@@ -412,7 +414,7 @@ func handleWaffoPayment(c *gin.Context, wh *core.WebhookHandler, result *core.Pa
 
 	if err := model.RechargeWaffo(merchantOrderId, c.ClientIP()); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo top-up processing failed trade_no=%s client_ip=%s error=%q", merchantOrderId, c.ClientIP(), err.Error()))
-		sendWaffoWebhookResponse(c, wh, false, err.Error())
+		sendWaffoWebhookResponse(c, wh, !model.TopUpCallbackRetryable(err), "top-up failed")
 		return
 	}
 

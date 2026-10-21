@@ -10,7 +10,7 @@ import (
 )
 
 func topUpRequestFilter(c *gin.Context, userID int) (model.TopUpFilter, error) {
-	filter := model.TopUpFilter{UserID: userID, Keyword: c.Query("keyword"), Status: c.Query("status"), Method: c.Query("method"), Currency: c.Query("currency")}
+	filter := model.TopUpFilter{UserID: userID, SelfView: userID > 0, Keyword: c.Query("keyword"), Status: c.Query("status"), Method: c.Query("method"), Currency: c.Query("currency")}
 	if userID == 0 && c.Query("user_id") != "" {
 		id, err := strconv.Atoi(c.Query("user_id"))
 		if err != nil || id < 1 {
@@ -70,6 +70,27 @@ func GetTopUpStatistics(c *gin.Context) {
 		return
 	}
 	result, err := model.GetTopUpStatistics(filter)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
+func GetTopUpRanking(c *gin.Context) {
+	filter, err := topUpRequestFilter(c, 0)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	limit := model.TopUpRankingDefaultLimit
+	if value := c.Query("limit"); value != "" {
+		if limit, err = strconv.Atoi(value); err != nil {
+			common.ApiError(c, errors.New("invalid limit"))
+			return
+		}
+	}
+	result, err := model.GetTopUpRanking(filter, limit)
 	if err != nil {
 		common.ApiError(c, err)
 		return

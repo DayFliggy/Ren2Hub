@@ -270,100 +270,86 @@ func MarkGmpayOrderResult(ctx context.Context, topUpID int, result GmpayOrderRes
 // the success transition and native wallet credit share one transaction, so
 // concurrent or repeated callbacks credit at most once.
 func RechargeGmpay(payment GmpayPayment, callerIp string) (alreadyDone bool, err error) {
-	tradeNo := payment.OrderNo
-	if tradeNo == "" {
-		return false, errors.New("payment order number not provided")
-	}
-
-	refCol := "`trade_no`"
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		refCol = `"trade_no"`
-	}
-
-	var quotaToAdd int
-	topUp := &TopUp{}
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrTopUpNotFound
-			}
-			return err
-		}
-		if topUp.PaymentProvider != PaymentProviderGmpay {
-			return ErrPaymentMethodMismatch
-		}
-		var snapshot GmpayOrder
-		if err := lockForUpdate(tx).First(&snapshot, topUp.Id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrGmpaySnapshotMissing
-			}
-			return err
-		}
-		merchant, err := loadGmpayMerchantVersion(tx, snapshot.MerchantVersionID)
-		if err != nil {
-			return err
-		}
-		if payment.MerchantVersionID != merchant.ID || payment.MerchantID != merchant.MerchantID ||
-			payment.AmountMinor != snapshot.AmountMinor || payment.AmountMinor <= 0 ||
-			payment.GatewayTradeNo == "" || len(payment.GatewayTradeNo) > 128 ||
-			snapshot.ExpectedQuota <= 0 || snapshot.Currency != "CNY" {
-			return ErrGmpayPaymentMismatch
-		}
-		if payment.Token == "" || payment.Token != snapshot.Token {
-			return ErrGmpayPaymentMismatch
-		}
-		actualAmount, err := gmpay.ParseTokenAmount(payment.ActualAmount)
-		if err != nil || len(actualAmount.String()) > 64 ||
-			payment.ReceiveAddress == "" || len(payment.ReceiveAddress) > 256 ||
-			payment.BlockTransactionID == "" || len(payment.BlockTransactionID) > 128 {
-			return ErrGmpayPaymentMismatch
-		}
-		settledAmount := actualAmount.String()
-		if snapshot.SettledCryptoAmount != "" || snapshot.SettledReceiveAddress != "" || snapshot.SettledTransactionID != "" {
-			if snapshot.SettledCryptoAmount != settledAmount || snapshot.SettledReceiveAddress != payment.ReceiveAddress ||
-				snapshot.SettledTransactionID != payment.BlockTransactionID {
-				return ErrGmpayPaymentMismatch
-			}
-		}
-		if snapshot.GatewayTradeNo != nil && *snapshot.GatewayTradeNo != payment.GatewayTradeNo {
-			return ErrGmpayPaymentMismatch
-		}
-		// Close the creation window in the same transaction that credits: a
-		// callback can arrive before the gateway answers, and the order must not
-		// stay creatable once real money has moved. An administrator-completed
-		// order can bind its first receipt here without crediting again.
-		if err := tx.Model(&snapshot).Updates(map[string]interface{}{
-			"status": GmpayStatusSettled, "gateway_trade_no": payment.GatewayTradeNo,
-			"settled_crypto_amount": settledAmount, "settled_receive_address": payment.ReceiveAddress,
-			"settled_transaction_id": payment.BlockTransactionID,
-		}).Error; err != nil {
-			return err
-		}
-		if topUp.Status == common.TopUpStatusSuccess {
-			alreadyDone = true
-			return nil
-		}
-		if topUp.Status != common.TopUpStatusPending {
-			return ErrTopUpStatusInvalid
-		}
-		quotaToAdd = snapshot.ExpectedQuota
-		if quotaToAdd <= 0 {
-			return ErrInvalidTopUpQuota
-		}
-		var completeErr error
-		quotaToAdd, completeErr = completeTopUpTx(tx, topUp, quotaToAdd, nil)
-		if completeErr != nil {
-			return completeErr
-		}
-		return nil
+	_, quota, err := settleTopUp(topUpSettlement{
+		tradeNo: payment.OrderNo, provider: PaymentProviderGmpay, callerIP: callerIp, logMethod: PaymentProviderGmpay,
+		receipt: &TopUpReceipt{Currency: "CNY", Amount: gmpay.FormatFiatAmount(payment.AmountMinor)},
+		mutate: func(tx *gorm.DB, order *TopUp) (map[string]any, error) {
+			return nil, bindGmpayReceipt(tx, order, payment)
+		},
+		message: func(_ *TopUp, quota int) *common.Message {
+			return common.NewMessage("Crypto top-up succeeded, amount added: {{quota}}", map[string]any{"quota": logger.FormatQuota(quota)})
+		},
 	})
+	return err == nil && quota == 0, err
+}
+
+// bindGmpayReceipt checks the verified receipt against the frozen snapshot and
+// records it. It runs for completed orders too: an administrator-completed
+// order binds its first receipt here without crediting again.
+func bindGmpayReceipt(tx *gorm.DB, order *TopUp, payment GmpayPayment) error {
+	var snapshot GmpayOrder
+	if err := lockForUpdate(tx).First(&snapshot, order.Id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrGmpaySnapshotMissing
+		}
+		return err
+	}
+	merchant, err := loadGmpayMerchantVersion(tx, snapshot.MerchantVersionID)
 	if err != nil {
-		return false, err
+		return err
 	}
-	if alreadyDone {
-		return true, nil
+	// The fiat amount is checked against the order's frozen pay amount by the
+	// shared receipt check in settleTopUp.
+	if payment.MerchantVersionID != merchant.ID || payment.MerchantID != merchant.MerchantID ||
+		payment.GatewayTradeNo == "" || len(payment.GatewayTradeNo) > 128 {
+		return ErrGmpayPaymentMismatch
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, common.LogText("gmpay topup"))
-	RecordTopupLog(topUp.UserId, common.NewMessage("Crypto top-up succeeded, amount added: {{quota}}", map[string]any{"quota": logger.FormatQuota(quotaToAdd)}), callerIp, topUp.PaymentMethod, PaymentProviderGmpay)
-	return false, nil
+	if payment.Token == "" || payment.Token != snapshot.Token {
+		return ErrGmpayPaymentMismatch
+	}
+	actualAmount, err := gmpay.ParseTokenAmount(payment.ActualAmount)
+	if err != nil || len(actualAmount.String()) > 64 ||
+		payment.ReceiveAddress == "" || len(payment.ReceiveAddress) > 256 ||
+		payment.BlockTransactionID == "" || len(payment.BlockTransactionID) > 128 {
+		return ErrGmpayPaymentMismatch
+	}
+	settledAmount := actualAmount.String()
+	if snapshot.SettledCryptoAmount != "" || snapshot.SettledReceiveAddress != "" || snapshot.SettledTransactionID != "" {
+		if snapshot.SettledCryptoAmount != settledAmount || snapshot.SettledReceiveAddress != payment.ReceiveAddress ||
+			snapshot.SettledTransactionID != payment.BlockTransactionID {
+			return ErrGmpayPaymentMismatch
+		}
+	}
+	if snapshot.GatewayTradeNo != nil && *snapshot.GatewayTradeNo != payment.GatewayTradeNo {
+		return ErrGmpayPaymentMismatch
+	}
+	// Close the creation window in the same transaction that credits: a
+	// callback can arrive before the gateway answers, and the order must not
+	// stay creatable once real money has moved.
+	return tx.Model(&snapshot).Updates(map[string]interface{}{
+		"status": GmpayStatusSettled, "gateway_trade_no": payment.GatewayTradeNo,
+		"settled_crypto_amount": settledAmount, "settled_receive_address": payment.ReceiveAddress,
+		"settled_transaction_id": payment.BlockTransactionID,
+	}).Error
+}
+
+// settleGmpaySnapshotByAdmin closes the creation window of a pending order the
+// administrator completes; a later verified callback may still bind its receipt.
+// 只有创建中、已就绪或结果不明的快照可以补单。网关已明确拒绝（failed）或快照
+// 已结算（settled）时拒绝补单。epusdt 没有商户查单接口，unknown 订单只能等迟到
+// 的回调，或由管理员核实后补单。
+func settleGmpaySnapshotByAdmin(tx *gorm.DB, order *TopUp) error {
+	var snapshot GmpayOrder
+	if err := lockForUpdate(tx).First(&snapshot, order.Id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrGmpaySnapshotMissing
+		}
+		return err
+	}
+	switch snapshot.Status {
+	case GmpayStatusCreating, GmpayStatusReady, GmpayStatusUnknown:
+	default:
+		return ErrGmpayStateConflict
+	}
+	return tx.Model(&snapshot).Update("status", GmpayStatusSettled).Error
 }

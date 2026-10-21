@@ -43,12 +43,13 @@ func registerExtensionRoutes(api *gin.RouterGroup) {
 	orders := api.Group("/user/topup", middleware.UserAuth(), middleware.DisableCache())
 	handleSessionRoute(orders, http.MethodGet, "/detail/:trade_no", controller.GetTopUpDetail)
 	orders.GET("/stats", middleware.AdminAuth(), controller.GetTopUpStatistics)
+	orders.GET("/ranking", middleware.AdminAuth(), controller.GetTopUpRanking)
 	orders.GET("/admin/detail/:trade_no", middleware.AdminAuth(), controller.GetAdminTopUpDetail)
 
 	pay := api.Group("/user/gmpay", middleware.UserAuth())
 	handleSessionRoute(pay, http.MethodPost, "/pay", middleware.CriticalRateLimit(), controller.GmpayPay)
 	handleSessionRoute(pay, http.MethodGet, "/orders/:trade_no", controller.GetGmpayOrder)
-	api.GET("/user/gmpay/notify", controller.GmpayNotify)
+	// epusdt 对未声明 payment_type=Epay 的订单只发 POST JSON 回调，GET 通知已退役。
 	api.POST("/user/gmpay/notify", controller.GmpayNotify)
 	settings := api.Group("/option/gmpay", middleware.RootAuth())
 	handleSessionRoute(settings, http.MethodGet, "/config", controller.GetGmpayConfig)

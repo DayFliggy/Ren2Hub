@@ -48,6 +48,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:read"),
 	"PUT /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:write"),
 	"GET /api/user/topup/stats":                  accessTokenScopeRule("billing:read"),
+	"GET /api/user/topup/ranking":                accessTokenScopeRule("billing:read"),
 	"GET /api/user/topup/admin/detail/:trade_no": accessTokenScopeRule("billing:read"),
 
 	// router/api-router.go: top level
@@ -101,7 +102,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/user/waffo/pay":                     accessTokenScopeRule("wallet:write"),
 	"POST /api/user/waffo-pancake/amount":          accessTokenScopeRule("wallet:read"),
 	"POST /api/user/waffo-pancake/pay":             accessTokenScopeRule("wallet:write"),
-	"POST /api/user/aff_transfer":                  accessTokenScopeRule("wallet:write"),
+	"POST /api/user/aff_transfer":                  accessTokenSessionRule, // 与 /api/user/affiliate/transfer 一致，只接受浏览器会话
 	"PUT /api/user/setting":                        accessTokenScopeRule("profile:write"),
 	"GET /api/user/2fa/status":                     accessTokenScopeRule("account_security:read"),
 	"POST /api/user/2fa/setup":                     accessTokenScopeRule("account_security:write"),

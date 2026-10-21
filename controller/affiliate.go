@@ -91,7 +91,7 @@ func UpdateAffiliateUserPolicy(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	model.RecordOperationAuditLog(c.GetInt("id"), c.GetInt("role"), "Updated user referral policy", c.ClientIP(), "user.affiliate_update", model.AuditFields{"target_user_id": id, "rate_bps": request.RateBps, "enabled": request.Enabled, "code_changed": request.Code != nil || request.ResetCode}, auditOperatorInfo(c), &model.AuditRequestInfo{Method: c.Request.Method, Route: c.FullPath(), Status: http.StatusOK, Success: true}, c)
+	model.RecordOperationAuditLog(c.GetInt("id"), c.GetInt("role"), "Updated user referral policy", c.ClientIP(), "user.affiliate_update", model.AuditFields{"target_user_id": id, "rate_changed": request.RateBps.Set, "rate_bps": request.RateBps.Value, "enabled": request.Enabled, "code_changed": request.Code != nil || request.ResetCode}, auditOperatorInfo(c), &model.AuditRequestInfo{Method: c.Request.Method, Route: c.FullPath(), Status: http.StatusOK, Success: true}, c)
 	markAuditLogged(c)
 	common.ApiSuccess(c, result)
 }

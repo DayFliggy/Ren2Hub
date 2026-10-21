@@ -35,7 +35,7 @@ func TestAffiliateDeletedInviterDoesNotBlockPaidCredit(t *testing.T) {
 						order := testAffiliateTopUp(t, invitee.Id, "deleted-inviter-order", quota)
 						sourceType, sourceID = "topup", fmt.Sprint(order.Id)
 						if source == "callback" {
-							_, err := RechargeEpay(order.TradeNo, "", "")
+							_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 							require.NoError(t, err)
 						} else {
 							require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
@@ -44,7 +44,7 @@ func TestAffiliateDeletedInviterDoesNotBlockPaidCredit(t *testing.T) {
 							if err := ManualCompleteTopUp(order.TradeNo, ""); err != nil {
 								return err
 							}
-							_, err := RechargeEpay(order.TradeNo, "", "")
+							_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 							return err
 						}
 						got := GetTopUpByTradeNo(order.TradeNo)
@@ -118,7 +118,7 @@ func TestAffiliateDeletedInviterConcurrentCompletionCreditsOnce(t *testing.T) {
 				results <- ManualCompleteTopUp(order.TradeNo, "")
 				return
 			}
-			_, err := RechargeEpay(order.TradeNo, "", "")
+			_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 			results <- err
 		}(i)
 	}
@@ -147,7 +147,7 @@ func TestAffiliateInviterQueryFailureStillRollsBackCredit(t *testing.T) {
 			}))
 			t.Cleanup(func() { _ = db.Callback().Query().Remove("fail_inviter_lookup") })
 			if source == "topup" {
-				_, err := RechargeEpay(order.TradeNo, "", "")
+				_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 				require.ErrorIs(t, err, queryFailure)
 			} else {
 				_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500000, "inviter-query-failure")
@@ -176,7 +176,7 @@ func TestAffiliateUnavailableDecisionWriteFailureRollsBackCredit(t *testing.T) {
 		}
 	}))
 	t.Cleanup(func() { _ = db.Callback().Create().Remove("fail_unavailable_decision") })
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.ErrorIs(t, err, writeFailure)
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	assert.Zero(t, invitee.Quota)

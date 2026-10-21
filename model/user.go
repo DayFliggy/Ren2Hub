@@ -534,15 +534,6 @@ func GetSelfUserById(id int) (*User, error) {
 	return &profile.User, err
 }
 
-func GetUserIdByAffCode(affCode string) (int, error) {
-	if affCode == "" {
-		return 0, errors.New("affiliate code is empty")
-	}
-	var user User
-	err := DB.Select("id").First(&user, "aff_code = ?", affCode).Error
-	return user.Id, err
-}
-
 // DeleteUserById soft-deletes a user and returns how many scoped access tokens
 // were deleted with it.
 func DeleteUserById(id int) (int64, error) {

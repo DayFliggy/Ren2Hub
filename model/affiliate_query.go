@@ -40,15 +40,27 @@ func GetAffiliateUserPolicy(id int, operatorRole int) (*AffiliateUserPolicy, err
 	return &result, nil
 }
 
-type AffiliatePolicyUpdate struct {
-	RateBps   *int    `json:"rate_bps"`
-	Code      *string `json:"code"`
-	ResetCode bool    `json:"reset_code"`
-	Enabled   *bool   `json:"enabled"`
+// AffiliateRateUpdate 区分未提交与显式 null：未提交保持原值，null 清除专属比例，数字设置专属比例。
+type AffiliateRateUpdate struct {
+	Set   bool
+	Value *int
 }
 
+func (u *AffiliateRateUpdate) UnmarshalJSON(data []byte) error {
+	u.Set = true
+	return common.Unmarshal(data, &u.Value)
+}
+
+type AffiliatePolicyUpdate struct {
+	RateBps   AffiliateRateUpdate `json:"rate_bps"`
+	Code      *string             `json:"code"`
+	ResetCode bool                `json:"reset_code"`
+	Enabled   *bool               `json:"enabled"`
+}
+
+// UpdateAffiliateUserPolicy 只修改请求中提交的字段。
 func UpdateAffiliateUserPolicy(id, operatorRole int, request AffiliatePolicyUpdate) (*AffiliateUserPolicy, error) {
-	if request.RateBps != nil && (*request.RateBps < 0 || *request.RateBps > 10000) {
+	if rate := request.RateBps.Value; rate != nil && (*rate < 0 || *rate > 10000) {
 		return nil, errors.New("invalid affiliate rate")
 	}
 	if request.ResetCode && request.Code != nil {
@@ -63,7 +75,9 @@ func UpdateAffiliateUserPolicy(id, operatorRole int, request AffiliatePolicyUpda
 		if operatorRole != common.RoleRootUser && operatorRole <= user.Role {
 			return ErrUserQuotaPermission
 		}
-		user.AffRebateRateBps = request.RateBps
+		if request.RateBps.Set {
+			user.AffRebateRateBps = request.RateBps.Value
+		}
 		if request.Enabled != nil {
 			user.AffCodeEnabled = *request.Enabled
 		}

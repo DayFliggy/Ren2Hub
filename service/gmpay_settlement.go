@@ -13,14 +13,15 @@ import (
 // SettleGmpayNotification verifies a callback against the credentials the order
 // was created with, then settles it. A callback carries no network and no
 // currency. The snapshot records the requested asset, but cannot prove the
-// final network selected in the hosted cashier. Settlement checks the token,
-// fiat amount, order number, gateway trade number and successful status.
+// final network selected in the hosted cashier. RechargeGmpay checks the token,
+// fiat amount, gateway trade number and receipt under the order lock; this
+// function checks the signature, order number and successful status.
 func SettleGmpayNotification(ctx context.Context, params map[string]string, callerIP string) error {
 	orderNo := params["order_id"]
 	if orderNo == "" {
 		return gmpay.ErrInvalidParameters
 	}
-	_, snapshot, merchant, err := model.GetGmpayOrder(ctx, orderNo)
+	_, _, merchant, err := model.GetGmpayOrder(ctx, orderNo)
 	if err != nil {
 		return err
 	}
@@ -33,11 +34,8 @@ func SettleGmpayNotification(ctx context.Context, params map[string]string, call
 	if notification.OrderNo != orderNo {
 		return model.ErrGmpayPaymentMismatch
 	}
-	if notification.Token == "" || !strings.EqualFold(notification.Token, snapshot.Token) {
-		return model.ErrGmpayPaymentMismatch
-	}
 	amountMinor, err := gmpay.ParseFiatAmount(notification.Amount)
-	if err != nil || amountMinor != snapshot.AmountMinor {
+	if err != nil {
 		return model.ErrGmpayPaymentMismatch
 	}
 	if notification.Status != gmpay.StatusPaySuccess {
@@ -58,7 +56,7 @@ func GmpayFailureCode(err error) string {
 	switch {
 	case err == nil:
 		return ""
-	case errors.Is(err, model.ErrGmpayPaymentMismatch):
+	case errors.Is(err, model.ErrGmpayPaymentMismatch), errors.Is(err, model.ErrTopUpReceiptMismatch):
 		return "PAYMENT_MISMATCH"
 	case errors.Is(err, gmpay.ErrInvalidSignature):
 		return "INVALID_SIGNATURE"

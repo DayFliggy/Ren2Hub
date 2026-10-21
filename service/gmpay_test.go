@@ -114,6 +114,19 @@ func TestGmpayCreationOutcomeAndEarlyCallback(t *testing.T) {
 			config.SecretKey = "rotated-secret"
 			require.NoError(t, SaveGmpayConfig(context.Background(), config))
 			callback := map[string]string{"pid": "merchant", "trade_id": "remote-order", "order_id": order.TradeNo, "amount": "7.30", "token": "usdt", "actual_amount": "1.00", "receive_address": "address", "block_transaction_id": "transaction", "status": "2"}
+			// 签名有效但法币金额与订单冻结的应付值不符：拒绝且不入账。
+			tampered := map[string]string{}
+			for key, value := range callback {
+				tampered[key] = value
+			}
+			tampered["amount"] = "7.31"
+			tampered["signature"], err = gmpay.Sign(tampered, "old-secret")
+			require.NoError(t, err)
+			quotaBefore := user.Quota
+			err = SettleGmpayNotification(context.Background(), tampered, "")
+			assert.Equal(t, "PAYMENT_MISMATCH", GmpayFailureCode(err))
+			require.NoError(t, db.First(&user, user.Id).Error)
+			assert.Equal(t, quotaBefore, user.Quota)
 			callback["signature"], err = gmpay.Sign(callback, "old-secret")
 			require.NoError(t, err)
 			require.NoError(t, SettleGmpayNotification(context.Background(), callback, ""), "old order stays bound to its credential version after rotation")

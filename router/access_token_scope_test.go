@@ -56,7 +56,6 @@ var accessTokenExemptRoutes = []string{
 	"POST /api/user/auth/logout",
 
 	// Payment callbacks.
-	"GET /api/user/gmpay/notify",
 	"POST /api/user/gmpay/notify",
 	"POST /api/stripe/webhook",
 	"POST /api/creem/webhook",
