@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -57,6 +58,8 @@ type PricingVendor struct {
 	Icon        string `json:"icon,omitempty"`
 }
 
+// updatePricing 只在 updatePricingLock 下写这组变量，作为构建快照的工作区；
+// 读者只读 pricingCache 发布的不可变快照，不再碰这组变量。
 var (
 	pricingMap           []Pricing
 	vendorsList          []PricingVendor
@@ -67,56 +70,92 @@ var (
 	// 缓存映射：模型名 -> 计费类型
 	modelQuotaTypeMap  = make(map[string]int)
 	modelQuotaTypeLock = sync.RWMutex{}
+
+	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
 )
 
-var (
-	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
-	modelSupportEndpointsLock = sync.RWMutex{}
-)
+// pricingSnapshot 是一次成功 updatePricing 的完整产物，发布后不再修改。
+// builtAt 为零表示已作废：下一次读价格时重建，端点查询仍读最后一次成功的结果。
+type pricingSnapshot struct {
+	prices         []Pricing
+	vendors        []PricingVendor
+	endpointMap    map[string]common.EndpointInfo
+	modelEndpoints map[string][]constant.EndpointType
+	builtAt        time.Time
+}
+
+var pricingCache atomic.Pointer[pricingSnapshot]
+
+func (s *pricingSnapshot) fresh() bool {
+	return s != nil && len(s.prices) > 0 && !s.builtAt.IsZero() && time.Since(s.builtAt) <= time.Minute
+}
+
+// currentPricingSnapshot 命中时无锁返回；过期时在 updatePricingLock 下双重检查后重建。
+// 重建失败返回错误，不发布半成品。
+func currentPricingSnapshot() (*pricingSnapshot, error) {
+	if snapshot := pricingCache.Load(); snapshot.fresh() {
+		return snapshot, nil
+	}
+	updatePricingLock.Lock()
+	defer updatePricingLock.Unlock()
+	if snapshot := pricingCache.Load(); snapshot.fresh() {
+		return snapshot, nil
+	}
+	return rebuildPricingLocked()
+}
+
+// rebuildPricingLocked 是唯一的重建入口，调用方必须持有 updatePricingLock。
+// 锁顺序仍是 updatePricingLock -> channelSyncLock（见 loadPricingAdvancedCustomConfigs）。
+func rebuildPricingLocked() (*pricingSnapshot, error) {
+	if err := updatePricing(); err != nil {
+		return nil, err
+	}
+	snapshot := &pricingSnapshot{
+		prices:         pricingMap,
+		vendors:        vendorsList,
+		endpointMap:    supportedEndpointMap,
+		modelEndpoints: modelSupportEndpointTypes,
+		builtAt:        lastGetPricingTime,
+	}
+	pricingCache.Store(snapshot)
+	return snapshot, nil
+}
+
+// invalidatePricingLocked 是唯一的作废入口，调用方必须持有 updatePricingLock。
+func invalidatePricingLocked() {
+	previous := pricingCache.Load()
+	if previous == nil {
+		return
+	}
+	stale := *previous
+	stale.prices, stale.vendors, stale.endpointMap = nil, nil, nil
+	stale.builtAt = time.Time{}
+	pricingCache.Store(&stale)
+}
 
 func GetPricing() []Pricing {
-	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-		updatePricingLock.Lock()
-		defer updatePricingLock.Unlock()
-		// Double check after acquiring the lock
-		if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-			modelSupportEndpointsLock.Lock()
-			defer modelSupportEndpointsLock.Unlock()
-			if err := updatePricing(); err != nil {
-				common.SysError(common.LogText("read pricing: %s", err.Error()))
-				return nil
-			}
-		}
+	snapshot, err := currentPricingSnapshot()
+	if err != nil {
+		common.SysError(common.LogText("read pricing: %s", err.Error()))
+		return nil
 	}
-	return pricingMap
+	return snapshot.prices
 }
 
 func InvalidatePricingCache() {
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
-
-	pricingMap = nil
-	vendorsList = nil
-	lastGetPricingTime = time.Time{}
-}
-
-// GetVendors 返回当前定价接口使用到的供应商信息
-func GetVendors() []PricingVendor {
-	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-		// 保证先刷新一次
-		GetPricing()
-	}
-	return vendorsList
+	invalidatePricingLocked()
 }
 
 func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 	if model == "" {
 		return make([]constant.EndpointType, 0)
 	}
-	modelSupportEndpointsLock.RLock()
-	defer modelSupportEndpointsLock.RUnlock()
-	if endpoints, ok := modelSupportEndpointTypes[model]; ok {
-		return slices.Clone(endpoints)
+	if snapshot := pricingCache.Load(); snapshot != nil {
+		if endpoints, ok := snapshot.modelEndpoints[model]; ok {
+			return slices.Clone(endpoints)
+		}
 	}
 	return make([]constant.EndpointType, 0)
 }
@@ -448,23 +487,13 @@ func updatePricing() error {
 	return nil
 }
 
-// GetSupportedEndpointMap 返回全局端点到路径的映射
-func GetSupportedEndpointMap() map[string]common.EndpointInfo {
-	updatePricingLock.Lock()
-	defer updatePricingLock.Unlock()
-	return maps.Clone(supportedEndpointMap)
-}
-
 // ReadPricing returns a consistent snapshot or the actual refresh failure.
+// The outer slices and map are cloned; nested values stay shared with the
+// immutable snapshot, so callers may reassign fields but must not mutate them in place.
 func ReadPricing() ([]Pricing, []PricingVendor, map[string]common.EndpointInfo, error) {
-	updatePricingLock.Lock()
-	defer updatePricingLock.Unlock()
-	if time.Since(lastGetPricingTime) > time.Minute || pricingMap == nil {
-		modelSupportEndpointsLock.Lock()
-		defer modelSupportEndpointsLock.Unlock()
-		if err := updatePricing(); err != nil {
-			return nil, nil, nil, err
-		}
+	snapshot, err := currentPricingSnapshot()
+	if err != nil {
+		return nil, nil, nil, err
 	}
-	return slices.Clone(pricingMap), slices.Clone(vendorsList), maps.Clone(supportedEndpointMap), nil
+	return slices.Clone(snapshot.prices), slices.Clone(snapshot.vendors), maps.Clone(snapshot.endpointMap), nil
 }

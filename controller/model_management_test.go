@@ -1090,8 +1090,12 @@ func TestVendorManagementDatabaseMatrix(t *testing.T) {
 				require.NoError(t, db.Create(&channel).Error)
 				require.NoError(t, db.Create(&model.Ability{Model: "gemini-vendor-fixture", ChannelId: channel.Id, Enabled: true}).Error)
 				model.RefreshPricing()
-				model.GetPricing()
-				vendors := model.GetVendors()
+				readVendors := func() []model.PricingVendor {
+					_, vendors, _, err := model.ReadPricing()
+					require.NoError(t, err)
+					return vendors
+				}
+				vendors := readVendors()
 				require.Len(t, vendors, 1)
 				assert.Equal(t, "Google", vendors[0].Name)
 				assert.Equal(t, "Gemini.Color", vendors[0].Icon)
@@ -1101,9 +1105,9 @@ func TestVendorManagementDatabaseMatrix(t *testing.T) {
 				assert.Zero(t, count)
 				saved := model.Vendor{Name: "Google", Icon: "Gemini.Color"}
 				require.NoError(t, saved.Insert())
-				assert.Equal(t, saved.Id, model.GetVendors()[0].ID)
+				assert.Equal(t, saved.Id, readVendors()[0].ID)
 				require.NoError(t, saved.Delete())
-				assert.Equal(t, vendors[0].ID, model.GetVendors()[0].ID)
+				assert.Equal(t, vendors[0].ID, readVendors()[0].ID)
 				require.NoError(t, db.Model(&model.Vendor{}).Count(&count).Error)
 				assert.Zero(t, count, "refresh must not recreate a deleted vendor")
 			})

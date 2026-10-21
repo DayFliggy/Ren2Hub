@@ -9,11 +9,8 @@ func RefreshPricing() {
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
 
-	modelSupportEndpointsLock.Lock()
-	defer modelSupportEndpointsLock.Unlock()
-
-	if err := updatePricing(); err != nil {
-		pricingMap = nil
+	if _, err := rebuildPricingLocked(); err != nil {
+		invalidatePricingLocked()
 		common.SysError(common.LogText("refresh pricing: %s", err.Error()))
 	}
 }
