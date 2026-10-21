@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -101,10 +102,9 @@ func TestTokenRouteCandidateModelWitnesses(t *testing.T) {
 			require.Equal(t, tc.want, channels[0].Models)
 			for _, name := range channels[0].Models {
 				require.True(t, tc.unrestricted || TokenModelLimitAllows(token.GetModelLimitsMap(), name))
-				common.MemoryCacheEnabled = false
-				enabled, err := model.CheckChannelEnabledForModel(name, channels[0].ID)
+				rows, err := model.RouteChannelRows(context.Background(), name, nil)
 				require.NoError(t, err)
-				require.True(t, enabled, "each published model must be an actual request witness")
+				require.True(t, slices.ContainsFunc(rows, func(row *model.Channel) bool { return row.Id == channels[0].ID }), "each published model must be an actual request witness")
 			}
 		})
 	}
