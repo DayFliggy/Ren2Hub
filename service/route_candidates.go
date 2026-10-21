@@ -210,19 +210,20 @@ func orderAutomaticRoutes(rows []*model.Channel, requestID, modelName string, op
 	for _, c := range rows {
 		r := ranking{load: routeLoadBucket(ChannelInFlight(c.Id))}
 		upstreamModel, _, mappingErr := relaycommon.ResolveMappedModelName(modelName, c.GetModelMapping())
-		ob := RouteObservationSnapshot{}
-		if mappingErr == nil {
-			ob = routeObservations.get(c.Id, upstreamModel, operation, stream)
+		if mappingErr != nil {
+			upstreamModel = ""
 		}
-		if ob.Known {
-			r.health = observationBand(ob.ErrorRate, .05, .20)
-			if ob.LatencyKnown {
+		// 健康档来自熔断状态（B7），错误率只保留在快照里供观测，不再参与排序。
+		health, weightFactor := routeObservations.routeHealth(c.Id, upstreamModel)
+		r.health = health
+		if upstreamModel != "" {
+			if ob := routeObservations.get(c.Id, upstreamModel, operation, stream); ob.LatencyKnown {
 				r.latency = observationBand(ob.LatencyMS, 3000, 10000)
 			}
 		}
 		hash := sha256.Sum256([]byte(requestID + ":" + strconv.Itoa(c.Id)))
 		uniform := (float64(binary.BigEndian.Uint64(hash[:8])>>11) + 1) / (float64(uint64(1)<<53) + 1)
-		r.rank = -math.Log(uniform) / float64(max(c.GetWeight(), 1))
+		r.rank = -math.Log(uniform) / (float64(max(c.GetWeight(), 1)) * weightFactor)
 		ranks[c.Id] = r
 	}
 	sort.SliceStable(rows, func(i, j int) bool {

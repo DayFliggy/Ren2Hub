@@ -57,9 +57,15 @@ func routeTestContext(t *testing.T) *gin.Context {
 // resetRouteObservations isolates the process-wide observation store.
 func resetRouteObservations(t *testing.T) {
 	t.Helper()
-	previous, last := routeObservations.rows, routeObservations.lastPrune
-	routeObservations.rows = map[routeObservationKey]RouteObservationSnapshot{}
-	t.Cleanup(func() { routeObservations.rows, routeObservations.lastPrune = previous, last })
+	s := &routeObservations
+	rows, breakers, cooldowns, changed, last := s.rows, s.breakers, s.cooldowns, s.changed, s.lastPrune
+	s.rows = map[routeObservationKey]RouteObservationSnapshot{}
+	s.breakers = map[routeBreakerKey]routeBreakerState{}
+	s.cooldowns = map[int]int64{}
+	s.changed = map[int]uint64{}
+	t.Cleanup(func() {
+		s.rows, s.breakers, s.cooldowns, s.changed, s.lastPrune = rows, breakers, cooldowns, changed, last
+	})
 }
 func saveRouteTest(t *testing.T, entries ...int) {
 	t.Helper()
