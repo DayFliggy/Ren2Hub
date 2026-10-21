@@ -13,13 +13,8 @@ const ticketNotifyType = "ticket_update"
 
 func NotifyNewTicket(ticket model.Ticket) {
 	gopool.Go(func() {
-		lang := RootUserLanguage()
 		params := map[string]any{"Id": ticket.ID, "Category": ticket.Category, "Title": ticket.Title}
-		NotifyRootUser(
-			ticketNotifyType,
-			i18n.Translate(lang, i18n.MsgTicketNotifyNewSubject, params),
-			i18n.Translate(lang, i18n.MsgTicketNotifyNewContent, params),
-		)
+		notifyRootAboutTicket(i18n.MsgTicketNotifyNewSubject, i18n.MsgTicketNotifyNewContent, params)
 	})
 }
 
@@ -55,13 +50,19 @@ func NotifyTicketAssignment(ticket model.Ticket, assigneeID int) {
 }
 
 func notifyRootAboutTicketReply(ticket model.Ticket) {
-	lang := RootUserLanguage()
 	params := map[string]any{"Id": ticket.ID, "Title": ticket.Title}
-	NotifyRootUser(
-		ticketNotifyType,
-		i18n.Translate(lang, i18n.MsgTicketNotifyReplyNeededSubject, params),
-		i18n.Translate(lang, i18n.MsgTicketNotifyReplyNeededContent, params),
-	)
+	notifyRootAboutTicket(i18n.MsgTicketNotifyReplyNeededSubject, i18n.MsgTicketNotifyReplyNeededContent, params)
+}
+
+// notifyRootAboutTicket sends an unassigned-ticket notice to the root user in
+// the root user's saved language, through the same administrator notifier as
+// channel notices.
+func notifyRootAboutTicket(subjectKey, contentKey string, params map[string]any) {
+	notifyAdmins(ticketNotifyType, func(role int, _ dto.UserSetting) bool {
+		return role == common.RoleRootUser
+	}, func(lang string) (string, string) {
+		return i18n.Translate(lang, subjectKey, params), i18n.Translate(lang, contentKey, params)
+	})
 }
 
 func getEligibleTicketAgent(userID int) (*model.User, bool) {

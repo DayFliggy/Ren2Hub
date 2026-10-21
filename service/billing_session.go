@@ -132,7 +132,18 @@ func (s *BillingSession) GetPreConsumedQuota() int {
 	return s.preConsumedQuota
 }
 
+// Reserve 把预扣补到 targetQuota。Ren2Hub 的钱包预扣始终要求余额覆盖差额
+// （发送前强制预扣），不记欠费，因此与 ReserveBeforeSubmit 语义相同。
 func (s *BillingSession) Reserve(targetQuota int) error {
+	return s.reserve(targetQuota)
+}
+
+// ReserveBeforeSubmit 在发起上游请求前补扣，钱包余额必须覆盖差额。
+func (s *BillingSession) ReserveBeforeSubmit(targetQuota int) error {
+	return s.reserve(targetQuota)
+}
+
+func (s *BillingSession) reserve(targetQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

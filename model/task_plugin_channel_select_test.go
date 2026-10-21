@@ -119,3 +119,23 @@ func TestNewAPIChannelServesExtendedTaskPlugins(t *testing.T) {
 	require.Len(t, selected, 1)
 	assert.Equal(t, "gateway", selected[0].Name, "requests without a pinned plugin keep using the gateway")
 }
+
+func TestModelModifierNamesRouteWithAndWithoutMemoryCache(t *testing.T) {
+	truncateTables(t)
+	originalMemoryCache := common.MemoryCacheEnabled
+	t.Cleanup(func() { common.MemoryCacheEnabled = originalMemoryCache; InitChannelCache() })
+	channel := Channel{Id: 930001, Type: constant.ChannelTypeDeepSeek, Status: common.ChannelStatusEnabled, Name: "deepseek", Models: "deepseek-flash"}
+	require.NoError(t, channel.Insert())
+
+	for _, memoryCache := range []bool{false, true} {
+		common.MemoryCacheEnabled = memoryCache
+		InitChannelCache()
+		selected, err := RouteChannelRows(context.Background(), "deepseek-flash@effort:max", nil)
+		require.NoError(t, err)
+		require.Len(t, selected, 1, "memory cache %v", memoryCache)
+		assert.Equal(t, "deepseek", selected[0].Name)
+		selected, err = RouteChannelRows(context.Background(), "deepseek-pro@effort:max", nil)
+		require.NoError(t, err)
+		assert.Empty(t, selected, "memory cache %v", memoryCache)
+	}
+}

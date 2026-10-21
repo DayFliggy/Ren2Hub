@@ -68,6 +68,13 @@ func (b *nativeRouteBilling) Reserve(quota int) error {
 	return nil
 }
 
+// ReserveBeforeSubmit records the pre-submission check and holds nothing:
+// this fixture charges in Reserve once the upstream has accepted.
+func (b *nativeRouteBilling) ReserveBeforeSubmit(int) error {
+	b.events = append(b.events, "reserve_before_submit")
+	return nil
+}
+
 func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service.InitHttpClient()
@@ -186,7 +193,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	outcome, taskErr := executeTaskSubmissionWith(submitContext, relayInfo, relay.RelayTaskSubmit)
 	require.Nil(t, taskErr)
 	require.NotNil(t, outcome)
-	require.Equal(t, []string{"reserve", "reserve", "settle"}, billing.events)
+	require.Equal(t, []string{"reserve_before_submit", "reserve", "settle"}, billing.events)
 	var reservedUser model.User
 	require.NoError(t, database.First(&reservedUser, 7).Error)
 	require.Positive(t, billing.preConsumed)
