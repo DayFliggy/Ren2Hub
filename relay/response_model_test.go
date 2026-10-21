@@ -61,7 +61,7 @@ func TestResponseModelComparisonAndLog(t *testing.T) {
 			for _, name := range tc.models {
 				info.ObserveResponseModel(name)
 			}
-			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
+			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
 			var stored struct {
 				ResponseModel *relaycommon.ResponseModel `json:"response_model"`
 			}
@@ -104,7 +104,7 @@ func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
 				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: tc.upstream, IsModelMapped: tc.mapped},
 			}
 			info.ObserveResponseModel(tc.returned)
-			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
+			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
 			require.NotNil(t, info.ResponseModel)
 			assert.Equal(t, float64(1), other.Snapshot()["model_ratio"])
 			if tc.record {
@@ -231,7 +231,7 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 			require.NotNil(t, info.ResponseModel)
 			assert.Equal(t, &relaycommon.ResponseModel{RequestedModel: "requested", UpstreamModel: "mapped", ReturnedModel: "returned"}, info.ResponseModel)
 			assert.True(t, info.ResponseModel.Mismatch())
-			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
+			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
 			assert.Equal(t, *info.ResponseModel, other.Snapshot()["response_model"])
 		})
 	}

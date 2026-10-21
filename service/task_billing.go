@@ -57,7 +57,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 	if info.PriceData.ModelRatio > 0 {
 		other.SetPublic("model_ratio", info.PriceData.ModelRatio)
 	}
-	other.SetPublic("channel_ratio", info.PriceData.ChannelRatioInfo.ChannelRatio)
+	other.SetPublic("channel_ratio", FormatChannelRatio(info.PriceData.ChannelRatioInfo.ChannelRatio))
 	if info.IsModelMapped {
 		other.SetPublic("is_model_mapped", true)
 		other.SetPublic("upstream_model_name", info.UpstreamModelName)
@@ -142,7 +142,7 @@ func taskBillingOther(task *model.Task) *model.LogOther {
 		if bc.ModelRatio > 0 {
 			other.SetPublic("model_ratio", bc.ModelRatio)
 		}
-		other.SetPublic("channel_ratio", bc.ChannelRatio)
+		other.SetPublic("channel_ratio", FormatChannelRatio(bc.ChannelRatio))
 		if priceData := taskBillingContextPriceData(bc); priceData != nil {
 			for k, v := range priceData.OtherRatios() {
 				if !other.SetPublic(k, v) {
@@ -381,6 +381,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 
 	billing := task.PrivateData.BillingContext
 	if billing == nil || billing.ChannelRatio <= 0 {
+		logger.LogWarn(ctx, common.LogText("task %s has no valid channel ratio in its billing context, keeping the pre-consumed quota", task.TaskID))
 		return false
 	}
 	finalChannelRatio := billing.ChannelRatio
@@ -397,7 +398,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	reason := common.NewMessage("Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, channel ratio {{channel_ratio}}, other multiplier {{other_multiplier}}", map[string]any{
 		"tokens":           totalTokens,
 		"model_ratio":      fmt.Sprintf("%.2f", modelRatio),
-		"channel_ratio":    fmt.Sprintf("%.2f", finalChannelRatio),
+		"channel_ratio":    FormatChannelRatio(finalChannelRatio),
 		"other_multiplier": fmt.Sprintf("%.4f", otherMultiplier),
 	})
 	RecalculateTaskQuota(ctx, task, actualQuota, reason, clamp)

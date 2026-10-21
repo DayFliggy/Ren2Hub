@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -85,17 +84,8 @@ func calculateAudioQuota(info QuotaInfo) (int, *common.QuotaClamp) {
 }
 
 func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) error {
-	if relayInfo.UsePrice {
+	if relayInfo.PriceData.UsePrice {
 		return nil
-	}
-	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
-	if err != nil {
-		return err
-	}
-
-	token, err := model.GetTokenByKey(strings.TrimPrefix(relayInfo.TokenKey, "sk-"), false)
-	if err != nil {
-		return err
 	}
 
 	modelName := relayInfo.OriginModelName
@@ -116,7 +106,6 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 			AudioTokens: audioOutTokens,
 		},
 		ModelName:    modelName,
-		UsePrice:     relayInfo.UsePrice,
 		ModelRatio:   modelRatio,
 		ChannelRatio: channelRatio,
 	}
@@ -124,17 +113,8 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	quota, clamp := calculateAudioQuota(quotaInfo)
 	noteQuotaClamp(relayInfo, clamp)
 
-	if userQuota < quota {
-		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
-	}
-
-	if !token.UnlimitedQuota && token.RemainQuota < quota {
-		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
-	}
-
-	err = PostConsumeQuota(relayInfo, quota, 0, false)
-	if err != nil {
-		return err
+	if apiErr := reserveRealtimeRound(ctx, relayInfo, quota); apiErr != nil {
+		return apiErr
 	}
 	logger.LogInfo(ctx, common.LogText("realtime streaming consume quota success, quota: %d", quota))
 	return nil
@@ -199,12 +179,12 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 			"completion_ratio":       fmt.Sprintf("%.2f", completionRatio.InexactFloat64()),
 			"audio_ratio":            fmt.Sprintf("%.2f", audioRatio.InexactFloat64()),
 			"audio_completion_ratio": fmt.Sprintf("%.2f", audioCompletionRatio.InexactFloat64()),
-			"channel_ratio":          fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio":          FormatChannelRatio(channelRatio),
 		}))
 	} else {
 		logContent = append(logContent, common.NewMessage("Model price {{model_price}}, channel ratio {{channel_ratio}}", map[string]any{
 			"model_price":   fmt.Sprintf("%.2f", modelPrice),
-			"channel_ratio": fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio": FormatChannelRatio(channelRatio),
 		}))
 	}
 
@@ -217,6 +197,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		logger.LogError(ctx, common.LogText("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d",
 			relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, modelName, relayInfo.FinalPreConsumedQuota))
 	} else {
+		quota = realtimeChargeableQuota(ctx, relayInfo, quota)
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
 	}
@@ -228,7 +209,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	logModel := modelName
 	logContent = append(logContent, extraContent...)
 	other := GenerateWssOtherInfo(ctx, relayInfo, usage, modelRatio, channelRatio,
-		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, -1)
+		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice)
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
@@ -337,12 +318,12 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 			"completion_ratio":       fmt.Sprintf("%.2f", completionRatio.InexactFloat64()),
 			"audio_ratio":            fmt.Sprintf("%.2f", audioRatio.InexactFloat64()),
 			"audio_completion_ratio": fmt.Sprintf("%.2f", audioCompletionRatio.InexactFloat64()),
-			"channel_ratio":          fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio":          FormatChannelRatio(channelRatio),
 		}))
 	} else {
 		logContent = append(logContent, common.NewMessage("Model price {{model_price}}, channel ratio {{channel_ratio}}", map[string]any{
 			"model_price":   fmt.Sprintf("%.2f", modelPrice),
-			"channel_ratio": fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio": FormatChannelRatio(channelRatio),
 		}))
 	}
 
@@ -366,7 +347,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	logModel := billingModelName
 	logContent = append(logContent, extraContent...)
 	other := GenerateAudioOtherInfo(ctx, relayInfo, usage, modelRatio, channelRatio,
-		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, -1)
+		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice)
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}

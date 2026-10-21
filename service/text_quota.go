@@ -475,10 +475,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			summary.CacheCreationTokens, summary.CacheCreationRatio,
 			summary.CacheCreationTokens5m, summary.CacheCreationRatio5m,
 			summary.CacheCreationTokens1h, summary.CacheCreationRatio1h,
-			summary.ModelPrice, -1)
+			summary.ModelPrice)
 		other.SetPublic("usage_semantic", "anthropic")
 	} else {
-		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.ChannelRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice, -1)
+		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.ChannelRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice)
 	}
 	appendUsageBillingPathForLog(other, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens), originUsage)
 	if adminRejectReason != "" {
