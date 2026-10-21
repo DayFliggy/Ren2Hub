@@ -11,6 +11,7 @@
 | 新表 | 本批不做“渠道×模型历史统计”这张新表。按渠道维度的健康时间线和统计继续标为不可用 |
 | 交付终点 | 发布并部署。正式更新按普通更新执行，数据库、Redis db2 和附件目标都不变。如果需要更换数据目标或恢复备份，届时单独请求批准 |
 | 共同审计 | 本机 `codex-cli 0.163.0`，模型 `gpt-6-astra`，只读沙箱 |
+| 与上游相同的资金问题 | 上游存在相同的资金问题、且属于多扣时，保持上游原样，不做本地修复（2026-10-21 用户决定） |
 
 ## 基线与工作位置
 
@@ -213,11 +214,10 @@ D1、D2、D3 不依赖其他组，可以先做。D4、D5、D6 要等 A 组和 C 
 
 报告结论分为 do-now、defer、reject 三种。do-now 的条目按文件归属并入 A、B、C 组实施，每项都要有回归测试，并在账本里登记重构理由和复评条件。defer 和 reject 的条目只在账本中登记。
 
-三份报告共 44 项（E1 16 项、E2 13 项、E3 15 项），其中 13 项定为 do-now：
+三份报告共 44 项（E1 16 项、E2 13 项、E3 15 项），其中 12 项定为 do-now：
 
 | 编号 | 内容 | 实施组 |
 |---|---|---|
-| E1-1（P0） | Realtime WSS 每轮 `response.done` 已经直扣钱包，结束时 `SettleBilling` 又按预扣 0 补扣一次全额，上游 206e0fa 同样存在。主代理已静态核对 `PreWssConsumeQuota`、`PostWssConsumeQuota` 和 `BillingSession.Settle` 的调用链；实施前先在隔离库用两轮 `response.done` 复现，再改为每轮通过 `PreConsumeBilling` 补足会话预扣 | R |
 | E1-2 | 删除 `Generate*OtherInfo` 没有读取方的 `userChannelRatio` 参数和 5 处 `-1` 实参 | R |
 | E1-3 | 与 B11 同批：删除 `ChannelRatio == 0` 的不可达分支，FreeModel 判定只留一处 | R |
 | E1-4 | 与 B14 同批：任务轮询的满载跳过和取消处理抽成一个共享函数 | R |
@@ -231,7 +231,9 @@ D1、D2、D3 不依赖其他组，可以先做。D4、D5、D6 要等 A 组和 C 
 | E3-2 | `UpdateOption` 写库失败时返回错误，不再改写内存并报告成功；上游同样存在 | A |
 | E3-3 | 删除本地改写后没有调用方的符号（`GetUserIdByAffCode`、`TransferAffQuotaRequest`、`isPositiveOptionValue`、`GetChargedAmount`、`QuotaForInviter/QuotaForInvitee`） | A |
 
-defer 8 项：E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 23 项 reject，全部在阶段 4 连同复评条件登记到账本。E1-7（没有计费会话时 `SettleBilling` 退回不预扣的直扣路径）只在 `enable_free_model_pre_consume=false` 时可达，默认值为 true；本批不读取正式库，阶段 6 把停机备份恢复到隔离库比对时核对这个选项，若存的是 false，立即升为 do-now。
+E1-1（Realtime WSS 每轮已直扣钱包，结束时 `SettleBilling` 又按预扣 0 补扣一次全额）评估时定为 do-now；它与上游 206e0fa 相同，属于多扣，按用户决定改为 reject，保持上游原样。复评条件：上游修复这个问题，或用户另行决定。
+
+defer 8 项：E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 24 项 reject，全部在阶段 4 连同复评条件登记到账本。E1-7（没有计费会话时 `SettleBilling` 退回不预扣的直扣路径）只在 `enable_free_model_pre_consume=false` 时可达，默认值为 true；本批不读取正式库，阶段 6 把停机备份恢复到隔离库比对时核对这个选项，若存的是 false，立即升为 do-now。
 
 ### 实施分组（执行版）
 
@@ -240,7 +242,7 @@ defer 8 项：E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 23 
 | 组 | 条目 | 文件归属 |
 |---|---|---|
 | A 资金、支付与平台 | A1–A7、E3-1、E3-2、E3-3 | `middleware/access_token_*`、`model/topup*.go`、`model/gmpay*.go`、`service/gmpay_*`、`controller/topup*.go`、`controller/gmpay.go`、`model/affiliate*.go`、`controller/affiliate.go`、`model/option.go`、`controller/option.go`、`controller/user.go`、`common/constants.go`，`model/user.go` 中的 `GetUserIdByAffCode` |
-| R 中继计费与定价 | B11、B10 中的倍率日志、B14 中的轮询日志、E1-1–E1-4、E2-1 | `relay/helper/price.go`、`relay/relay_task.go`、`relay/request_billing.go`、`service/quota.go`、`service/billing*.go`、`service/text_quota.go`、`service/log_info_generate.go`、`service/task_billing.go`、`service/task_polling.go`、新增的轮询扩展文件、`model/pricing.go`、`model/pricing_refresh.go`，`controller/channel-test.go` 中 E1-2 的调用点 |
+| R 中继计费与定价 | B11、B10 中的倍率日志、B14 中的轮询日志、E1-2–E1-4、E2-1 | `relay/helper/price.go`、`relay/relay_task.go`、`relay/request_billing.go`、`service/quota.go`、`service/billing*.go`、`service/text_quota.go`、`service/log_info_generate.go`、`service/task_billing.go`、`service/task_polling.go`、新增的轮询扩展文件、`model/pricing.go`、`model/pricing_refresh.go`，`controller/channel-test.go` 中 E1-2 的调用点 |
 | B1 路由选择 | B1、B2、B3、B7、B8、B9、B13、C1、B10 中的路由预览、E2-3、E2-6 | `service/route_*.go`、`service/channel_select.go`、`service/channel_request.go`、`service/token_route.go`、`service/token_route_preview.go`、`service/model_catalog.go`、`controller/model_catalog.go`、`middleware/distributor.go`、`controller/relay.go`、`controller/token_routing.go`、`model/route_candidates.go`、`model/channel_constraint.go` |
 | B2 渠道与令牌管理 | B4、B5、B6、B10 中的优先级重排和 `RejectRetiredGroups`、B12、B14 中的硬删除清理、B15、C9、E2-2、E2-4、E2-5 | `controller/channel.go`、`controller/channel_authz.go`、`controller/channel_capacity.go`、`controller/channel_priority.go`、`controller/channel_upstream_update.go`、`controller/token.go`、`model/channel.go`、`model/channel_cache.go`、`model/channel_satisfy.go`、`model/channel_ratio.go`、`model/channel_priority.go`、`model/token_route.go`、`service/concurrency.go`、`middleware/retired_groups.go`，`model/user.go` 中的删除路径 |
 | C 运营与可观测 | C2–C8 | `*/dashboard_summary.go`、`*/home_metrics.go`、`controller/performance.go`、`controller/perf_metrics.go`、`model/perf_metric.go`、`model/ticket.go`、`controller/tickets*.go`、`model/channel_lab.go`、`pkg/modellab`、`pkg/pricesource`、`*/price_source.go`、`controller/ratio_sync.go`、`model/pricing_default.go` |
