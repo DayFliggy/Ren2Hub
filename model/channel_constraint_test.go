@@ -178,9 +178,9 @@ func TestFilterCandidateIDs(t *testing.T) {
 
 func TestChannelSatisfiesFilters(t *testing.T) {
 	alphaSetting := `{"task_plugin_key":"alpha"}`
-	alpha := &Channel{Id: 1, Type: constant.ChannelTypeTaskPlugin, Setting: &alphaSetting}
-	ordinary := &Channel{Id: 2, Type: constant.ChannelTypeOpenAI}
-	custom := &Channel{Id: 3, Type: constant.ChannelTypeAdvancedCustom}
+	alpha := &Channel{Id: 1, Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled, Setting: &alphaSetting}
+	ordinary := &Channel{Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled}
+	custom := &Channel{Id: 3, Type: constant.ChannelTypeAdvancedCustom, Status: common.ChannelStatusEnabled}
 	custom.SetOtherSettings(kitdto.ChannelOtherSettings{
 		AdvancedCustom: &kitdto.AdvancedCustomConfig{
 			Routes: []kitdto.AdvancedCustomRoute{{

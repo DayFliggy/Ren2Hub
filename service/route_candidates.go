@@ -37,10 +37,17 @@ type RouteChannel struct {
 	FilterReason       string                             `json:"filter_reason,omitempty"`
 }
 
+const routeReasonChannelUnavailable = "channel_unavailable"
+
 func routeChannelReason(channel *model.Channel, route model.TokenRouting, manual bool) string {
-	if channel.Status != common.ChannelStatusEnabled || channel.Type == constant.ChannelTypeCodex {
-		return "channel_unavailable"
+	if !model.ChannelRoutable(channel) {
+		return routeReasonChannelUnavailable
 	}
+	return routePolicyReason(channel, route, manual)
+}
+
+// routePolicyReason 只判 Key 侧策略（倍率上限、手动列表）；渠道可用性由调用方先判。
+func routePolicyReason(channel *model.Channel, route model.TokenRouting, manual bool) string {
 	ratio, err := model.NormalizeChannelRatio(channel.ChannelRatio)
 	if err != nil {
 		return "invalid_channel_ratio"
@@ -69,38 +76,20 @@ func routeChannelReason(channel *model.Channel, route model.TokenRouting, manual
 	return ""
 }
 
-func RouteCandidates(ctx context.Context, tokenID int, modelName string, filters []dto.ChannelFilter) ([]*model.Channel, error) {
-	route := model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto}}
-	var token *model.Token
-	if tokenID > 0 {
-		var err error
-		route, err = model.ReadTokenRouting(ctx, tokenID)
-		if err != nil {
-			return nil, err
-		}
-		token, err = model.GetTokenById(tokenID)
-		if err != nil {
-			return nil, err
-		}
-		if token.ModelLimitsEnabled && !TokenModelLimitAllows(token.GetModelLimitsMap(), modelName) {
-			return []*model.Channel{}, nil
-		}
+// routeCandidates 返回当前 Key 和模型可选的渠道。RouteChannelRows 已按模型能力、
+// ChannelRoutable 和请求过滤器筛过，这里只再判 Key 侧策略；手动路由按列表顺序返回。
+func routeCandidates(ctx context.Context, scope routeScope, modelName string, filters []dto.ChannelFilter) ([]*model.Channel, error) {
+	if modelName == "" || !scope.allowsModel(modelName) {
+		return []*model.Channel{}, nil
 	}
-	rows, err := model.RouteChannelRows(ctx, modelName, nil)
+	rows, err := model.RouteChannelRows(ctx, modelName, filters)
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]int, 0, len(rows))
-	for _, row := range rows {
-		ids = append(ids, row.Id)
-	}
-	abilities, err := model.EnabledRouteModels(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
+	route := scope.route
 	result := make([]*model.Channel, 0, len(rows))
 	for _, row := range rows {
-		if routeCandidateReason(row, route, token, modelName, abilities[row.Id], filters) == "" {
+		if routePolicyReason(row, route, true) == "" {
 			result = append(result, row)
 		}
 	}
@@ -263,11 +252,11 @@ func ReleaseRouteChannel(c *gin.Context) {
 func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, error) {
 	ReleaseRouteChannel(c)
 	BeginRouteObservation(c)
-	if err := LoadTokenRouteConstraints(c); err != nil {
+	scope, err := requestRouteScope(c)
+	if err != nil {
 		return nil, err
 	}
-	tokenID := common.GetContextKeyInt(c, constant.ContextKeyTokenId)
-	rows, err := RouteCandidates(c.Request.Context(), tokenID, modelName, GetChannelConstraints(c).Filters)
+	rows, err := routeCandidates(c.Request.Context(), scope, modelName, GetChannelConstraints(c).Filters)
 	if err != nil {
 		return nil, err
 	}
@@ -285,18 +274,12 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 		if used[channel.Id] && !(pinned && pin.RetryMode == dto.PinRetrySameChannel) || pinned && channel.Id != pin.ChannelId {
 			continue
 		}
-		permit, err := AcquireChannelConcurrency(c.Request.Context(), channel)
+		selected, err := acquireRouteChannel(c, channel)
 		if errors.Is(err, ErrConcurrencyFull) {
 			busy = true
 			continue
 		}
-		if err != nil {
-			return nil, err
-		}
-		c.Set("route_channel_permit", permit)
-		c.Set("route_selected_channel", channel)
-		c.Set("channel_ratio", channel.ChannelRatio)
-		return channel, nil
+		return selected, err
 	}
 	if busy {
 		return nil, ErrConcurrencyFull
@@ -308,7 +291,11 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, error) {
 	ReleaseRouteChannel(c)
 	BeginRouteObservation(c)
-	rows, err := RouteCandidates(c.Request.Context(), c.GetInt("token_id"), modelName, GetChannelConstraints(c).Filters)
+	scope, err := requestRouteScope(c)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := routeCandidates(c.Request.Context(), scope, modelName, GetChannelConstraints(c).Filters)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +324,7 @@ func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int) (*model.Channe
 	if err != nil {
 		return nil, err
 	}
-	if channel.Status != common.ChannelStatusEnabled || channel.Type == constant.ChannelTypeCodex {
+	if !model.ChannelRoutable(channel) {
 		return nil, model.ErrTokenRouteForbidden
 	}
 	if _, err := model.NormalizeChannelRatio(channel.ChannelRatio); err != nil {
@@ -357,14 +344,16 @@ func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel
 	return channel, nil
 }
 
-func routeCandidateReason(row *model.Channel, route model.TokenRouting, token *model.Token, modelName string, abilities []string, filters []dto.ChannelFilter) string {
+// previewRouteReason 只给路由预览用：预览列出全部渠道，所以要逐个说明不可选的原因，
+// 包括渠道是否服务该模型。选路走 routeCandidates，不经过这里。
+func previewRouteReason(row *model.Channel, scope routeScope, modelName string, abilities []string, filters []dto.ChannelFilter) string {
 	if row == nil {
-		return "channel_unavailable"
+		return routeReasonChannelUnavailable
 	}
-	if token != nil && token.ModelLimitsEnabled && !TokenModelLimitAllows(token.GetModelLimitsMap(), modelName) {
+	if !scope.allowsModel(modelName) {
 		return "model_not_allowed"
 	}
-	if reason := routeChannelReason(row, route, true); reason != "" {
+	if reason := routeChannelReason(row, scope.route, true); reason != "" {
 		return reason
 	}
 	matched := false

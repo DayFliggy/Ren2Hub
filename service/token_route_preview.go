@@ -52,6 +52,7 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 		return out, err
 	}
 	out.Mode, out.Version = route.Mode, route.Version
+	scope := newRouteScope(route, token)
 	rows, err := model.RouteChannelRows(ctx, "", nil)
 	if err != nil {
 		return out, err
@@ -69,7 +70,7 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 	filters := []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: requestPath}}
 	project := func(id int) TokenRoutePreviewEntry {
 		row := byID[id]
-		item := TokenRoutePreviewEntry{ChannelID: id, Reason: routeCandidateReason(row, route, token, modelName, abilities[id], filters)}
+		item := TokenRoutePreviewEntry{ChannelID: id, Reason: previewRouteReason(row, scope, modelName, abilities[id], filters)}
 		if row != nil {
 			item.Name = row.Name
 			item.ChannelRatio = row.ChannelRatio

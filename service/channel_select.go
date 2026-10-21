@@ -147,8 +147,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		))
 	}
 	if err := LoadTokenRouteConstraints(c); err != nil {
-		logger.LogError(c, common.LogText("load token routing failed: %v", err))
-		return nil, &ChannelSelectError{StatusCode: 500, Code: types.ErrorCodeGetChannelFailed, Message: "Unable to load token routing"}
+		return nil, routeLoadFailure(c, err)
 	}
 	if !pinned && !HasPrivateTokenRoute(c) && (retry == nil || retry.GetRetry() == 0) {
 		if row, selectErr, decided := selectAffinityChannel(c, modelName); decided {

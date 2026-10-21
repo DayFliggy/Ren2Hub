@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
@@ -18,6 +19,12 @@ func channelServesRequestPath(ch *Channel, requestPath string) bool {
 	}
 	apiType, _ := common.ChannelType2APIType(ch.Type)
 	return common.SupportsResponsesCompact(ch.Type, apiType)
+}
+
+// ChannelRoutable 是读侧“渠道能否被选中”的唯一规则：已启用且不是退役的 type 57。
+// 写入侧拒绝 type 57 在 controller/channel.go，属于另一处合同，不走这里。
+func ChannelRoutable(ch *Channel) bool {
+	return ch != nil && ch.Status == common.ChannelStatusEnabled && ch.Type != constant.ChannelTypeCodex
 }
 
 // RouteChannelRows is shared by dispatch and public projections. Querying all
@@ -51,10 +58,8 @@ func RouteChannelRows(ctx context.Context, modelName string, filters []dto.Chann
 	}
 	result := make([]*Channel, 0, len(rows))
 	for _, c := range rows {
-		if c.Status == common.ChannelStatusEnabled {
-			if ok, _ := ChannelSatisfiesFilters(c, modelName, filters); ok {
-				result = append(result, c)
-			}
+		if ok, _ := ChannelSatisfiesFilters(c, modelName, filters); ok {
+			result = append(result, c)
 		}
 	}
 	return result, nil

@@ -21,8 +21,8 @@ func ChannelSatisfiesFilters(ch *Channel, modelName string, filters []dto.Channe
 	if ch == nil {
 		return false, ""
 	}
-	if ch.Type == constant.ChannelTypeCodex {
-		return false, "channel_retired"
+	if !ChannelRoutable(ch) {
+		return false, "channel_unavailable"
 	}
 	for _, kind := range filterEvalOrder {
 		for _, filter := range filters {
