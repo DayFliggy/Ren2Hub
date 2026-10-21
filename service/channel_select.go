@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -151,36 +150,13 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		return nil, &ChannelSelectError{StatusCode: 500, Code: types.ErrorCodeGetChannelFailed, Message: "Unable to load token routing"}
 	}
 	if !pinned && !HasPrivateTokenRoute(c) && (retry == nil || retry.GetRetry() == 0) {
-		preferred, found := GetPreferredChannelByAffinity(c, modelName)
-		if found && RequestPolicy(c).SessionMode == "strict" {
-			row, err := AcquirePinnedRouteChannel(c, preferred, modelName)
-			if err != nil {
-				if !errors.Is(err, ErrConcurrencyFull) && !ShouldKeepChannelAffinityOnChannelDisabled() {
-					ClearCurrentChannelAffinityCache(c)
-				}
-				c.Set(ginKeyChannelAffinitySkipRetry, true)
-				status := 503
-				if errors.Is(err, ErrConcurrencyFull) {
-					status = 429
-				}
-				return nil, &ChannelSelectError{StatusCode: status, Code: "session_channel_unavailable", Message: "Bound session channel is unavailable"}
-			}
-			MarkChannelAffinityUsed(c, row.Id)
-			return row, nil
+		if row, selectErr, decided := selectAffinityChannel(c, modelName); decided {
+			return row, selectErr
 		}
 	}
 	channel, err := selectQualifiedChannel(c, modelName)
 	if err != nil {
-		status := http.StatusInternalServerError
-		code := types.ErrorCodeGetChannelFailed
-		message := "Unable to load token routing"
-		logger.LogError(c, common.LogText("load routing candidates failed: %v", err))
-		if errors.Is(err, ErrConcurrencyFull) {
-			status = http.StatusTooManyRequests
-			code = "channel_concurrency_exceeded"
-			message = err.Error()
-		}
-		return nil, &ChannelSelectError{StatusCode: status, Code: code, Message: message}
+		return nil, routeLoadFailure(c, err)
 	}
 	if channel == nil && pinned {
 		row, lookupErr := model.GetChannelById(pin.ChannelId, true)

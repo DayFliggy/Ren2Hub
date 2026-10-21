@@ -7,8 +7,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -30,6 +32,16 @@ func PinnedRouteError(err error) *types.NewAPIError {
 		options = append(options, types.ErrOptionWithHideErrMsg("Unable to load pinned channel"))
 	}
 	return types.NewErrorWithStatusCode(err, code, status, options...)
+}
+
+// routeLoadFailure renders a candidate lookup or admission failure. Capacity is
+// the only expected outcome; storage details stay in the server log.
+func routeLoadFailure(c *gin.Context, err error) *ChannelSelectError {
+	logger.LogError(c, common.LogText("load routing candidates failed: %v", err))
+	if errors.Is(err, ErrConcurrencyFull) {
+		return &ChannelSelectError{StatusCode: http.StatusTooManyRequests, Code: "channel_concurrency_exceeded", Message: err.Error()}
+	}
+	return &ChannelSelectError{StatusCode: http.StatusInternalServerError, Code: types.ErrorCodeGetChannelFailed, Message: "Unable to load token routing"}
 }
 
 func PinnedTaskRouteError(err error) *dto.TaskError {
