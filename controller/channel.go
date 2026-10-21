@@ -665,10 +665,19 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 	}
 
 	// Official subscription credentials are not supported.
-	if channel.Type == constant.ChannelTypeCodex {
-		return fmt.Errorf("channel type 57 has been retired")
+	if err := rejectRetiredChannelType(channel.Type); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+// rejectRetiredChannelType 是渠道写入和拉取上游模型共用的 type 57 退役拒绝，
+// 保证管理员 key 不会因为任何一条路径被发往已退役的订阅账号上游。
+func rejectRetiredChannelType(channelType int) error {
+	if channelType == constant.ChannelTypeCodex {
+		return errors.New("channel type 57 has been retired")
+	}
 	return nil
 }
 

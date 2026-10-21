@@ -53,7 +53,6 @@ var channelUpstreamModelUpdateSelectFields = []string{
 	"settings",
 	"setting",
 	"other",
-	"group",
 	"priority",
 	"weight",
 	"tag",
@@ -364,6 +363,9 @@ func getFetchModelsResponseBody(ctx context.Context, method string, requestURL s
 }
 
 func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) ([]string, error) {
+	if err := rejectRetiredChannelType(channel.Type); err != nil {
+		return nil, err
+	}
 	if channel.Type == constant.ChannelTypeTaskPlugin {
 		plugin, ok := jsplugin.DefaultRegistry.Get(channel.GetSetting().TaskPluginKey)
 		if !ok {

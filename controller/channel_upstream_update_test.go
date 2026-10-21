@@ -612,3 +612,60 @@ func TestDetectAllChannelUpstreamModelUpdatesRejectsExistingActiveTask(t *testin
 	require.Contains(t, recorder.Body.String(), existing.TaskID)
 	require.Contains(t, recorder.Body.String(), "A model update task is already running or queued")
 }
+
+// B5：定时检测按真实列查询启用渠道；已删除的 group 列不能出现在查询字段里。
+func TestFindEnabledChannelsAfterIDQueriesExistingColumns(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	for _, channel := range []model.Channel{
+		{Id: 8601, Type: constant.ChannelTypeOpenAI, Name: "enabled-a", Key: "k", Models: "gpt-4o", Status: common.ChannelStatusEnabled},
+		{Id: 8602, Type: constant.ChannelTypeOpenAI, Name: "disabled", Key: "k", Models: "gpt-4o", Status: common.ChannelStatusManuallyDisabled},
+		{Id: 8603, Type: constant.ChannelTypeOpenAI, Name: "enabled-b", Key: "k", Models: "gpt-4o", Status: common.ChannelStatusEnabled},
+	} {
+		require.NoError(t, db.Create(&channel).Error)
+	}
+
+	channels, err := findEnabledChannelsAfterID(8601, 10)
+
+	require.NoError(t, err)
+	require.Len(t, channels, 1)
+	assert.Equal(t, 8603, channels[0].Id)
+	assert.Equal(t, "k", channels[0].Key)
+}
+
+// B15：拉取模型列表在发请求前显式拒绝已退役的 type 57，错误与渠道写入一致。
+func TestFetchModelsRejectsRetiredCodexChannelBeforeRequest(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, i18n.Init())
+	hits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-5"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	baseURL := server.URL
+	saved := model.Channel{Id: 8701, Type: constant.ChannelTypeCodex, Name: "retired", Key: "admin-key", Models: "gpt-5", Status: common.ChannelStatusEnabled, BaseURL: &baseURL}
+	require.NoError(t, db.Create(&saved).Error)
+	retired := validateChannel(&model.Channel{Type: constant.ChannelTypeCodex, Key: "admin-key", Models: "gpt-5"}, true)
+	require.Error(t, retired)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Params = gin.Params{{Key: "id", Value: "8701"}}
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/channel/fetch_models/8701", nil)
+	FetchUpstreamModels(ctx)
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+	assert.Contains(t, recorder.Body.String(), retired.Error())
+
+	body, err := common.Marshal(map[string]any{"base_url": server.URL, "type": constant.ChannelTypeCodex, "key": "admin-key"})
+	require.NoError(t, err)
+	recorder = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/channel/fetch_models", bytes.NewReader(body))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	FetchModels(ctx)
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+	assert.Contains(t, recorder.Body.String(), retired.Error())
+
+	assert.Zero(t, hits, "the administrator key must never reach a retired channel's upstream")
+}
