@@ -49,18 +49,6 @@ func TestHomeMetricsExactRollingBuckets(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.Available)
 	require.Nil(t, result.Requests24h)
-	for _, other := range []string{`{"cache_tokens":0}`, `{"cache_tokens":4,"cache_write_tokens":3,"cache_creation_tokens":99}`, `{"cache_tokens":-1}`, `not-json`, `{}`} {
-		require.NoError(t, db.Create(&Log{Type: LogTypeConsume, UserId: 71, CreatedAt: start, Other: other}).Error)
-	}
-	require.NoError(t, db.Create(&Log{Type: LogTypeConsume, UserId: 72, CreatedAt: start, Other: `{"cache_tokens":1000}`}).Error)
-	cacheRows, err := ReadDashboardCacheUsage(context.Background(), 71, start, end)
-	require.NoError(t, err)
-	require.Len(t, cacheRows, 1)
-	require.EqualValues(t, 4, cacheRows[0].Read)
-	require.EqualValues(t, 3, cacheRows[0].Write)
-	require.EqualValues(t, 2, cacheRows[0].ReadRecords)
-	require.EqualValues(t, 1, cacheRows[0].WriteRecords)
-	require.EqualValues(t, 2, cacheRows[0].InvalidRecords)
 	common.LogConsumeEnabled = true
 	require.NoError(t, db.Migrator().DropTable(&Log{}))
 	_, err = GetHomeRequestMetricsWithContext(context.Background(), now)

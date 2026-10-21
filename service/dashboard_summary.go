@@ -3,12 +3,17 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 )
+
+// dashboardBucketSeconds 与 quota_data 的写入粒度一致（LogQuotaData 只精确到小时）。
+const dashboardBucketSeconds = 3600
 
 type DashboardKPI struct {
 	TotalTokens   int64    `json:"totalTokens"`
@@ -29,9 +34,13 @@ type DashboardModel struct {
 	Share      float64  `json:"share"`
 	AvgLatency *float64 `json:"avgLatency"`
 }
+
+// DashboardHour 是一个小时桶，Ts 为桶起点的 Unix 秒，序列按时间升序且不缺小时。
 type DashboardHour struct {
-	Hour     string `json:"hour"`
-	Requests int64  `json:"requests"`
+	Ts       int64 `json:"ts"`
+	Requests int64 `json:"requests"`
+	Tokens   int64 `json:"tokens"`
+	Quota    int64 `json:"quota"`
 }
 type DashboardDay struct {
 	Date     string `json:"date"`
@@ -39,24 +48,31 @@ type DashboardDay struct {
 	Consume  int64  `json:"consume"`
 	Tokens   int64  `json:"tokens"`
 }
+
+// DashboardTokenDay 只含 quota_data 记录的事实：合计 token 和缓存读写 token。
+// quota_data 没有输入/输出拆分，因此不提供这两项。
 type DashboardTokenDay struct {
-	Date        string   `json:"date"`
-	Total       int64    `json:"total"`
-	Input       *int64   `json:"input"`
-	Output      *int64   `json:"output"`
-	CacheCreate *int64   `json:"cache_create"`
-	CacheRead   *int64   `json:"cache_read"`
-	HitRate     *float64 `json:"hit_rate"`
+	Date        string `json:"date"`
+	Total       int64  `json:"total"`
+	CacheRead   int64  `json:"cache_read"`
+	CacheCreate int64  `json:"cache_create"`
+}
+
+// DashboardCoverage 说明耗时和成功率能否从本人日志得出；不能时对应值为 null。
+type DashboardCoverage struct {
+	Latency     bool `json:"latency"`
+	SuccessRate bool `json:"success_rate"`
 }
 type DashboardMeta struct {
-	Start         int64            `json:"start"`
-	End           int64            `json:"end"`
-	TZOffset      int              `json:"tz_offset"`
-	GeneratedAt   int64            `json:"generated_at"`
-	Available     bool             `json:"available"`
-	Source        string           `json:"source"`
-	Coverage      map[string]bool  `json:"coverage"`
-	CacheCoverage map[string]int64 `json:"cache_coverage"`
+	Start                int64             `json:"start"`
+	End                  int64             `json:"end"`
+	TZOffset             int               `json:"tz_offset"`
+	GeneratedAt          int64             `json:"generated_at"`
+	Available            bool              `json:"available"`
+	Source               string            `json:"source"`
+	BucketSeconds        int64             `json:"bucket_seconds"`
+	FlushIntervalMinutes int               `json:"flush_interval_minutes"`
+	Coverage             DashboardCoverage `json:"coverage"`
 }
 type DashboardSummary struct {
 	KPI          DashboardKPI         `json:"kpi"`
@@ -67,6 +83,11 @@ type DashboardSummary struct {
 	TokenTrend   []DashboardTokenDay  `json:"token_trend"`
 	Distribution []DashboardDay       `json:"distribution"`
 	Meta         DashboardMeta        `json:"meta"`
+}
+
+type dashboardWindow struct {
+	userID     int
+	start, end int64
 }
 
 // ParseDashboardRange uses the browser's Date.getTimezoneOffset convention.
@@ -104,72 +125,119 @@ func ParseDashboardRange(rangeName, startDate, endDate string, offset int, now t
 	return start, end, nil
 }
 
+// Dashboard 的请求数、token 和额度来自 quota_data（与原生 /api/data/self 同源）；
+// 耗时和成功率只按本人日志计算，日志开关关闭时显式返回 null，不借用全站 perf_metrics。
 func Dashboard(ctx context.Context, userID int, start, end time.Time, offset int, includeComparison bool) (DashboardSummary, error) {
-	result := DashboardSummary{Models: []DashboardModel{}, Hourly: []DashboardHour{}, Flow: []DashboardDay{}, TokenTrend: []DashboardTokenDay{}, Distribution: []DashboardDay{}, Meta: DashboardMeta{Start: start.Unix(), End: end.Unix(), TZOffset: offset, GeneratedAt: time.Now().Unix(), Available: common.LogConsumeEnabled, Source: "consume_logs", Coverage: map[string]bool{"consume_logs": common.LogConsumeEnabled, "cache_usage": false, "latency": common.LogConsumeEnabled, "success_rate": false}}}
+	result := newDashboardSummary(start, end, offset, includeComparison)
+	window := dashboardWindow{userID: userID, start: start.Unix(), end: end.Unix()}
+	if result.Meta.Available {
+		rows, err := model.ReadDashboardQuota(ctx, userID, window.start, window.end)
+		if err != nil {
+			return result, err
+		}
+		if err := aggregateDashboard(&result, rows, start, end); err != nil {
+			return result, err
+		}
+		if includeComparison {
+			prior := dashboardWindow{userID: userID, start: start.Add(-end.Sub(start)).Unix(), end: window.start}
+			if err := applyDashboardComparison(ctx, &result, prior); err != nil {
+				return result, err
+			}
+		}
+	}
+	if err := applyDashboardLatency(ctx, &result, window); err != nil {
+		return result, err
+	}
+	return result, applyDashboardOutcome(ctx, &result, window)
+}
+
+func newDashboardSummary(start, end time.Time, offset int, includeComparison bool) DashboardSummary {
+	result := DashboardSummary{
+		Models: []DashboardModel{}, Hourly: []DashboardHour{}, Flow: []DashboardDay{},
+		TokenTrend: []DashboardTokenDay{}, Distribution: []DashboardDay{},
+		Meta: DashboardMeta{
+			Start: start.Unix(), End: end.Unix(), TZOffset: offset, GeneratedAt: time.Now().Unix(),
+			Available: common.DataExportEnabled, Source: "quota_data",
+			BucketSeconds: dashboardBucketSeconds, FlushIntervalMinutes: common.DataExportInterval,
+			Coverage: DashboardCoverage{
+				Latency:     common.LogConsumeEnabled,
+				SuccessRate: common.LogConsumeEnabled && constant.ErrorLogEnabled,
+			},
+		},
+	}
 	if includeComparison {
 		result.Comparison = &DashboardComparison{}
 	}
-	result.Meta.CacheCoverage = map[string]int64{"records": 0, "read_records": 0, "write_records": 0, "invalid_records": 0}
-	if !result.Meta.Available {
-		return result, nil
-	}
-	rows, err := model.ReadDashboardUsage(ctx, userID, start.Unix(), end.Unix())
-	if err != nil {
-		return result, err
-	}
-	result = aggregateDashboard(result, rows, start, end)
-	cacheRows, err := model.ReadDashboardCacheUsage(ctx, userID, start.Unix(), end.Unix())
-	if err != nil {
-		return result, err
-	}
-	applyDashboardCache(&result, cacheRows, start)
-	if !includeComparison {
-		return result, nil
-	}
-	prior, err := model.ReadDashboardUsage(ctx, userID, start.Add(-end.Sub(start)).Unix(), start.Unix())
-	if err != nil {
-		return result, err
-	}
-	var previousQuota, previousRequests int64
-	for _, row := range prior {
-		previousQuota += row.Quota
-		previousRequests += row.Requests
-	}
-	result.Comparison = &DashboardComparison{QuotaDelta: percentageChange(result.KPI.TotalQuota, previousQuota), RequestsDelta: percentageChange(result.KPI.TotalRequests, previousRequests)}
-	return result, nil
+	return result
 }
 
-func applyDashboardCache(result *DashboardSummary, rows []model.DashboardCacheRow, start time.Time) {
-	result.Meta.CacheCoverage = map[string]int64{"records": result.KPI.TotalRequests, "read_records": 0, "write_records": 0, "invalid_records": 0}
-	days := map[string]*DashboardTokenDay{}
-	for i := range result.TokenTrend {
-		days[result.TokenTrend[i].Date] = &result.TokenTrend[i]
+func applyDashboardComparison(ctx context.Context, result *DashboardSummary, prior dashboardWindow) error {
+	rows, err := model.ReadDashboardQuota(ctx, prior.userID, prior.start, prior.end)
+	if err != nil {
+		return err
 	}
+	var quota, requests int64
 	for _, row := range rows {
-		result.Meta.CacheCoverage["read_records"] += row.ReadRecords
-		result.Meta.CacheCoverage["write_records"] += row.WriteRecords
-		result.Meta.CacheCoverage["invalid_records"] += row.InvalidRecords
-		day := days[start.Add(time.Duration(row.Bucket)*time.Hour).Format("2006-01-02")]
-		if day == nil {
-			continue
-		}
-		if row.ReadRecords > 0 {
-			if day.CacheRead == nil {
-				day.CacheRead = new(int64)
-			}
-			*day.CacheRead += row.Read
-		}
-		if row.WriteRecords > 0 {
-			if day.CacheCreate == nil {
-				day.CacheCreate = new(int64)
-			}
-			*day.CacheCreate += row.Write
-		}
+		quota += row.Quota
+		requests += row.Requests
 	}
-	result.Meta.Coverage["cache_usage"] = result.Meta.CacheCoverage["read_records"] > 0 || result.Meta.CacheCoverage["write_records"] > 0
-	// Native input semantics differ across protocols; no cross-protocol cache
-	// hit denominator is inferred from prompt_tokens.
+	result.Comparison = &DashboardComparison{
+		QuotaDelta:    percentageChange(result.KPI.TotalQuota, quota),
+		RequestsDelta: percentageChange(result.KPI.TotalRequests, requests),
+	}
+	return nil
 }
+
+// use_time 以秒记录，平均耗时换算为毫秒；没有样本时保持 null。
+func applyDashboardLatency(ctx context.Context, result *DashboardSummary, window dashboardWindow) error {
+	if !result.Meta.Coverage.Latency {
+		return nil
+	}
+	rows, err := model.ReadDashboardLatency(ctx, window.userID, window.start, window.end)
+	if err != nil {
+		return err
+	}
+	byModel := make(map[string]*float64, len(rows))
+	var requests, elapsed int64
+	for _, row := range rows {
+		requests += row.Requests
+		elapsed += row.UseTime
+		byModel[row.ModelName] = averageMilliseconds(row.UseTime, row.Requests)
+	}
+	result.KPI.AvgLatency = averageMilliseconds(elapsed, requests)
+	for i := range result.Models {
+		result.Models[i].AvgLatency = byModel[result.Models[i].Model]
+	}
+	return nil
+}
+
+func averageMilliseconds(seconds, count int64) *float64 {
+	if count <= 0 {
+		return nil
+	}
+	value := float64(seconds) * 1000 / float64(count)
+	return &value
+}
+
+// 成功率按请求计算（0–100）：同一 request_id 失败后重试成功算一次成功。
+// 只有消费日志和错误日志都开启时才有分母；否则或区间内没有请求时为 null。
+func applyDashboardOutcome(ctx context.Context, result *DashboardSummary, window dashboardWindow) error {
+	if !result.Meta.Coverage.SuccessRate {
+		return nil
+	}
+	outcome, err := model.ReadDashboardOutcome(ctx, window.userID, window.start, window.end)
+	if err != nil {
+		return err
+	}
+	total := outcome.Succeeded + outcome.Failed
+	if total == 0 {
+		return nil
+	}
+	rate := float64(outcome.Succeeded) / float64(total) * 100
+	result.KPI.SuccessRate = &rate
+	return nil
+}
+
 func percentageChange(current, previous int64) *float64 {
 	if previous == 0 {
 		return nil
@@ -177,76 +245,110 @@ func percentageChange(current, previous int64) *float64 {
 	v := float64(current-previous) / float64(previous) * 100
 	return &v
 }
-func aggregateDashboard(result DashboardSummary, rows []model.DashboardUsageRow, start, end time.Time) DashboardSummary {
-	models := map[string]*DashboardModel{}
-	latencies := map[string]int64{}
-	days := map[string]*DashboardDay{}
-	tokens := map[string]*DashboardTokenDay{}
-	hours := map[string]int64{}
-	for day := start; day.Before(end); day = day.AddDate(0, 0, 1) {
-		key := day.Format("2006-01-02")
-		days[key] = &DashboardDay{Date: key}
-		in, out := int64(0), int64(0)
-		tokens[key] = &DashboardTokenDay{Date: key, Input: &in, Output: &out}
+
+// aggregateDashboard 把 quota_data 的小时桶展开为连续小时序列，并按查看者时区归日。
+// 小时桶整体计入其起点所在的日期（半小时时区下跨午夜的桶不拆分）。
+func aggregateDashboard(result *DashboardSummary, rows []model.DashboardQuotaRow, start, end time.Time) error {
+	result.Hourly = dashboardHours(start.Unix(), end.Unix())
+	index := make(map[int64]int, len(result.Hourly))
+	for i, hour := range result.Hourly {
+		index[hour.Ts] = i
 	}
-	var elapsed int64
+	days := newDashboardDays(start, end)
+	models := map[string]*DashboardModel{}
 	for _, row := range rows {
+		slot, ok := index[row.CreatedAt]
+		if !ok {
+			return fmt.Errorf("quota_data bucket %d is not an hour inside the dashboard range", row.CreatedAt)
+		}
+		hour := &result.Hourly[slot]
+		hour.Requests += row.Requests
+		hour.Tokens += row.Tokens
+		hour.Quota += row.Quota
 		result.KPI.TotalRequests += row.Requests
 		result.KPI.TotalQuota += row.Quota
-		result.KPI.TotalTokens += row.Input + row.Output
-		elapsed += row.UseTime
-		m := models[row.ModelName]
-		if m == nil {
-			m = &DashboardModel{Model: row.ModelName}
-			models[row.ModelName] = m
-		}
-		m.Requests += row.Requests
-		m.Quota += row.Quota
-		m.Tokens += row.Input + row.Output
-		latencies[row.ModelName] += row.UseTime
-		at := start.Add(time.Duration(row.Bucket) * time.Hour)
-		key := at.Format("2006-01-02")
-		// Buckets start at viewer midnight, including half-hour timezone offsets.
-		if day := days[key]; day != nil {
-			day.Requests += row.Requests
-			day.Consume += row.Quota
-			day.Tokens += row.Input + row.Output
-			t := tokens[key]
-			*t.Input += row.Input
-			*t.Output += row.Output
-			t.Total += row.Input + row.Output
-		}
-		hours[at.Format("15:00")] += row.Requests
+		result.KPI.TotalTokens += row.Tokens
+		days.add(time.Unix(row.CreatedAt, 0).In(start.Location()).Format(time.DateOnly), row)
+		addDashboardModel(models, row)
 	}
-	if result.KPI.TotalRequests > 0 {
-		value := float64(elapsed) * 1000 / float64(result.KPI.TotalRequests)
-		result.KPI.AvgLatency = &value
+	result.Models = sortedDashboardModels(models, result.KPI.TotalQuota)
+	result.Flow, result.Distribution, result.TokenTrend = days.series()
+	return nil
+}
+
+func dashboardHours(start, end int64) []DashboardHour {
+	first := start - start%dashboardBucketSeconds
+	if first < start {
+		first += dashboardBucketSeconds
 	}
-	for _, m := range models {
-		if result.KPI.TotalQuota != 0 {
-			m.Share = float64(m.Quota) / float64(result.KPI.TotalQuota) * 100
-		}
-		if m.Requests > 0 {
-			v := float64(latencies[m.Model]) * 1000 / float64(m.Requests)
-			m.AvgLatency = &v
-		}
-		result.Models = append(result.Models, *m)
+	hours := []DashboardHour{}
+	for ts := first; ts < end; ts += dashboardBucketSeconds {
+		hours = append(hours, DashboardHour{Ts: ts})
 	}
-	sort.Slice(result.Models, func(i, j int) bool {
-		if result.Models[i].Quota != result.Models[j].Quota {
-			return result.Models[i].Quota > result.Models[j].Quota
-		}
-		return result.Models[i].Model < result.Models[j].Model
-	})
-	for hour := 0; hour < 24; hour++ {
-		key := time.Date(2000, 1, 1, hour, 0, 0, 0, time.UTC).Format("15:00")
-		result.Hourly = append(result.Hourly, DashboardHour{Hour: key, Requests: hours[key]})
-	}
+	return hours
+}
+
+type dashboardDays struct {
+	order  []string
+	usage  map[string]*DashboardDay
+	tokens map[string]*DashboardTokenDay
+}
+
+func newDashboardDays(start, end time.Time) dashboardDays {
+	days := dashboardDays{usage: map[string]*DashboardDay{}, tokens: map[string]*DashboardTokenDay{}}
 	for day := start; day.Before(end); day = day.AddDate(0, 0, 1) {
-		key := day.Format("2006-01-02")
-		result.Flow = append(result.Flow, *days[key])
-		result.Distribution = append(result.Distribution, *days[key])
-		result.TokenTrend = append(result.TokenTrend, *tokens[key])
+		key := day.Format(time.DateOnly)
+		days.order = append(days.order, key)
+		days.usage[key] = &DashboardDay{Date: key}
+		days.tokens[key] = &DashboardTokenDay{Date: key}
 	}
+	return days
+}
+
+func (days dashboardDays) add(key string, row model.DashboardQuotaRow) {
+	usage, tokens := days.usage[key], days.tokens[key]
+	usage.Requests += row.Requests
+	usage.Consume += row.Quota
+	usage.Tokens += row.Tokens
+	tokens.Total += row.Tokens
+	tokens.CacheRead += row.CacheReadTokens
+	tokens.CacheCreate += row.CacheCreationTokens
+}
+
+func (days dashboardDays) series() ([]DashboardDay, []DashboardDay, []DashboardTokenDay) {
+	flow := make([]DashboardDay, 0, len(days.order))
+	tokens := make([]DashboardTokenDay, 0, len(days.order))
+	for _, key := range days.order {
+		flow = append(flow, *days.usage[key])
+		tokens = append(tokens, *days.tokens[key])
+	}
+	return flow, append([]DashboardDay(nil), flow...), tokens
+}
+
+func addDashboardModel(models map[string]*DashboardModel, row model.DashboardQuotaRow) {
+	item := models[row.ModelName]
+	if item == nil {
+		item = &DashboardModel{Model: row.ModelName}
+		models[row.ModelName] = item
+	}
+	item.Requests += row.Requests
+	item.Quota += row.Quota
+	item.Tokens += row.Tokens
+}
+
+func sortedDashboardModels(models map[string]*DashboardModel, totalQuota int64) []DashboardModel {
+	result := make([]DashboardModel, 0, len(models))
+	for _, item := range models {
+		if totalQuota != 0 {
+			item.Share = float64(item.Quota) / float64(totalQuota) * 100
+		}
+		result = append(result, *item)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Quota != result[j].Quota {
+			return result[i].Quota > result[j].Quota
+		}
+		return result[i].Model < result[j].Model
+	})
 	return result
 }
