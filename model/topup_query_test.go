@@ -1,10 +1,12 @@
 package model
 
 import (
+	"fmt"
+	"testing"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestTopUpQueryFiltersOwnershipAndCurrencyTotals(t *testing.T) {
@@ -38,4 +40,37 @@ func TestTopUpQueryFiltersOwnershipAndCurrencyTotals(t *testing.T) {
 	assert.Equal(t, "USD", stats.Currencies[2].Currency)
 	assert.Equal(t, "0.3", stats.Currencies[2].PaidAmount)
 	assert.Equal(t, 2, stats.Currencies[2].PaidCount)
+}
+
+// 关键词沿用原生 sanitizeLikePattern：不带 % 时精确匹配，_ 不是通配符，非法模式直接报错。
+func TestTopUpKeywordUsesNativeLikePattern(t *testing.T) {
+	db, _, invitee := affiliateTestDB(t)
+	for _, tradeNo := range []string{"order_1", "orderX1", "order_10"} {
+		require.NoError(t, db.Create(&TopUp{UserId: invitee.Id, TradeNo: tradeNo, CreateTime: common.GetTimestamp()}).Error)
+	}
+	page := &common.PageInfo{Page: 1, PageSize: 10}
+	for keyword, want := range map[string]int64{"order_1": 1, "order_1%": 2, "order%": 3, "rder_1": 0} {
+		_, total, err := ListTopUps(TopUpFilter{Keyword: keyword}, page)
+		require.NoError(t, err, keyword)
+		assert.Equal(t, want, total, keyword)
+	}
+	for _, keyword := range []string{"or%%", "%a%b%c", "%a"} {
+		_, _, err := ListTopUps(TopUpFilter{Keyword: keyword}, page)
+		assert.Error(t, err, keyword)
+	}
+}
+
+// 计数最多 searchTopUpCountHardLimit 行；上游的 Limit(n).Count() 不封顶。
+func TestListTopUpsCapsCount(t *testing.T) {
+	db, _, invitee := affiliateTestDB(t)
+	now := common.GetTimestamp()
+	rows := make([]TopUp, searchTopUpCountHardLimit+5)
+	for i := range rows {
+		rows[i] = TopUp{UserId: invitee.Id, TradeNo: fmt.Sprintf("cap-%05d", i), CreateTime: now}
+	}
+	require.NoError(t, db.CreateInBatches(rows, 500).Error)
+	result, total, err := ListTopUps(TopUpFilter{UserID: invitee.Id}, &common.PageInfo{Page: 1, PageSize: 3})
+	require.NoError(t, err)
+	assert.EqualValues(t, searchTopUpCountHardLimit, total)
+	assert.Len(t, result, 3)
 }

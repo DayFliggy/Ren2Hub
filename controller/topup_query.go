@@ -10,7 +10,7 @@ import (
 )
 
 func topUpRequestFilter(c *gin.Context, userID int) (model.TopUpFilter, error) {
-	filter := model.TopUpFilter{UserID: userID, Keyword: c.Query("keyword"), Status: c.Query("status"), Method: c.Query("method"), Currency: c.Query("currency")}
+	filter := model.TopUpFilter{UserID: userID, SelfView: userID > 0, Keyword: c.Query("keyword"), Status: c.Query("status"), Method: c.Query("method"), Currency: c.Query("currency")}
 	if userID == 0 && c.Query("user_id") != "" {
 		id, err := strconv.Atoi(c.Query("user_id"))
 		if err != nil || id < 1 {
