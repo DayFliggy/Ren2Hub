@@ -137,7 +137,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 		"violation_fee_code":   string(types.ErrorCodeViolationFeeGrokCSAM),
 		"fee_quota":            feeQuota,
 		"base_amount":          settings.ViolationDeductionAmount,
-		"channel_ratio":        channelRatio,
+		"channel_ratio":        FormatChannelRatio(channelRatio),
 		"status_code":          apiErr.StatusCode,
 		"upstream_error_type":  oai.Type,
 		"upstream_error_code":  fmt.Sprintf("%v", oai.Code),
