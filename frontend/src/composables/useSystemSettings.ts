@@ -24,6 +24,9 @@ const dependentEnableKeys = new Set([
   'EmailDomainRestrictionEnabled',
 ])
 
+// Read-only status flags the backend returns instead of saved secret values.
+const secretStatusKeys = new Map([['ResendKeyConfigured', 'ResendApiKey']])
+
 function savePhase(key: string, value: SystemSettingValue): number {
   if (!dependentEnableKeys.has(key)) return 1
   if (String(value) === 'false') return 0
@@ -137,7 +140,16 @@ export function useSystemSettings() {
         )
           throw new Error('Invalid system settings response')
         const raw: SystemSettingsRawOptions = {}
+        const configuredSecrets: string[] = []
         for (const option of data) {
+          const secretKey = secretStatusKeys.get(option.key)
+          if (secretKey) {
+            // Status flags are never editable options, so keep them out of raw.
+            if (!['true', 'false'].includes(option.value))
+              throw new Error(`Invalid boolean option: ${option.key}`)
+            if (option.value === 'true') configuredSecrets.push(secretKey)
+            continue
+          }
           if (!isSensitiveOption(option.key, descriptors))
             raw[option.key] = option.value
         }
@@ -155,7 +167,7 @@ export function useSystemSettings() {
             : item
         )
         _settings.value = settings
-        _configuredSecrets.value = []
+        _configuredSecrets.value = configuredSecrets
         _loaded.value = true
         return true
       })

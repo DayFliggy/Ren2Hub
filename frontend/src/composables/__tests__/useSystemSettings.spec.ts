@@ -30,6 +30,7 @@ describe('native per-key settings', () => {
     for (const data of [
       [{ key: 'Price', value: 'bad' }],
       [{ key: 'CheckSensitiveEnabled', value: 'maybe' }],
+      [{ key: 'ResendKeyConfigured', value: 'maybe' }],
       { data: [] },
     ]) {
       vi.mocked(api.get).mockResolvedValueOnce(data)
@@ -37,7 +38,7 @@ describe('native per-key settings', () => {
       expect(settings.loaded.value).toBe(false)
       expect(settings.rawValue('Price')).toBe('7.3')
     }
-    expect(toast.error).toHaveBeenCalledTimes(3)
+    expect(toast.error).toHaveBeenCalledTimes(4)
   })
   it('writes parameters before enabling a dependent provider and keeps secrets out of caches', async () => {
     const settings = await setup()
@@ -84,6 +85,27 @@ describe('native per-key settings', () => {
     expect(settings.rawValue('GitHubOAuthEnabled')).toBe('')
     expect(toast.error).toHaveBeenCalledOnce()
     expect(settings.saving.value).toBe(false)
+  })
+  it('marks a saved Resend key from its read-only status without resubmitting the status', async () => {
+    const settings = await setup([
+      { key: 'ResendFrom', value: 'noreply@example.com' },
+      { key: 'ResendKeyConfigured', value: 'true' },
+    ])
+    expect(settings.isSecretConfigured('ResendApiKey')).toBe(true)
+    expect(settings.rawValue('ResendApiKey')).toBe('')
+    expect(settings.rawOptions.value).not.toHaveProperty('ResendKeyConfigured')
+    vi.mocked(api.put).mockResolvedValue(null)
+    expect(await settings.saveOptions({ ResendFrom: 'mail@example.com' })).toBe(
+      true
+    )
+    expect(vi.mocked(api.put).mock.calls.map(([, body]) => body)).toEqual([
+      { key: 'ResendFrom', value: 'mail@example.com' },
+    ])
+    vi.mocked(api.get).mockResolvedValueOnce([
+      { key: 'ResendKeyConfigured', value: 'false' },
+    ])
+    expect(await settings.load(true)).toBe(true)
+    expect(settings.isSecretConfigured('ResendApiKey')).toBe(false)
   })
   it('does not overwrite saved credentials with a blank input', async () => {
     const settings = await setup()
