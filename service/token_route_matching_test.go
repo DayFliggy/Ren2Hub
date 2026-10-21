@@ -36,7 +36,7 @@ func TestTokenRouteCandidatesConcreteModelNormalization(t *testing.T) {
 	view, err := PutTokenRouting(context.Background(), user.Id, token.Id, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual}, Entries: []model.TokenRouteEntry{{ChannelID: 11, Enabled: true}}})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, view.Version)
-	preview, err := PreviewTokenRouting(context.Background(), user.Id, token.Id, "gpt-4-gizmo-audit", "/v1/chat/completions")
+	preview, err := PreviewTokenRouting(context.Background(), user.Id, token.Id, TokenRoutePreviewQuery{Model: "gpt-4-gizmo-audit", Path: "/v1/chat/completions"})
 	require.NoError(t, err)
 	require.Len(t, preview.Entries, 1)
 	require.True(t, preview.Entries[0].Eligible)

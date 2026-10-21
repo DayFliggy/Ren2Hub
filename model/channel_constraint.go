@@ -21,8 +21,8 @@ func ChannelSatisfiesFilters(ch *Channel, modelName string, filters []dto.Channe
 	if ch == nil {
 		return false, ""
 	}
-	if ch.Type == constant.ChannelTypeCodex {
-		return false, "channel_retired"
+	if !ChannelRoutable(ch) {
+		return false, "channel_unavailable"
 	}
 	for _, kind := range filterEvalOrder {
 		for _, filter := range filters {
@@ -45,12 +45,7 @@ func filterCandidateIDs(ids []int, modelName string, filters []dto.ChannelFilter
 	if len(ids) == 0 {
 		return ids, ""
 	}
-	kept = make([]int, 0, len(ids))
-	for _, id := range ids {
-		if channel := channelsIDM[id]; channel == nil || channel.Type != constant.ChannelTypeCodex {
-			kept = append(kept, id)
-		}
-	}
+	kept = ids
 	for _, kind := range filterEvalOrder {
 		kindFilters := filtersByKind(filters, kind)
 		if len(kindFilters) == 0 {
@@ -105,7 +100,7 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 			return true
 		}
 		if !constant.IsAdvancedCustomChannel(ch.Type) {
-			return true
+			return channelServesRequestPath(ch, filter.RequestPath)
 		}
 		config := ch.GetOtherSettings().AdvancedCustom
 		return config != nil && config.SupportsPathForModel(filter.RequestPath, modelName)
@@ -125,7 +120,7 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 			return false
 		}
 		switch ch.Type {
-		case constant.ChannelTypeOpenAI, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
+		case constant.ChannelTypeOpenAI, constant.ChannelTypeCodex, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
 			return true
 		case constant.ChannelTypeAdvancedCustom:
 			// The session forwards native Responses events without protocol

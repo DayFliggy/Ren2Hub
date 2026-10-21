@@ -33,12 +33,22 @@ type routeObservationKey struct {
 type routeObservationStore struct {
 	mu        sync.Mutex
 	rows      map[routeObservationKey]RouteObservationSnapshot
+	breakers  map[routeBreakerKey]routeBreakerState
+	cooldowns map[int]int64
 	lastPrune int64
 	epoch     uint64
 	changed   map[int]uint64
+	// evicted 统计上次日志之后因容量淘汰的键数。
+	evicted         int
+	lastEvictionLog int64
 }
 
-var routeObservations = routeObservationStore{rows: make(map[routeObservationKey]RouteObservationSnapshot), changed: make(map[int]uint64)}
+var routeObservations = routeObservationStore{
+	rows:      make(map[routeObservationKey]RouteObservationSnapshot),
+	breakers:  make(map[routeBreakerKey]routeBreakerState),
+	cooldowns: make(map[int]int64),
+	changed:   make(map[int]uint64),
+}
 
 // BeginRouteObservation must run before reading the selected channel configuration.
 // A later publication invalidates even a request that has not reached transport yet.
@@ -59,6 +69,36 @@ func (s *routeObservationStore) invalidate(channelID int) {
 			delete(s.rows, key)
 		}
 	}
+	for key := range s.breakers {
+		if key.id == channelID {
+			delete(s.breakers, key)
+		}
+	}
+	delete(s.cooldowns, channelID)
+}
+
+// pruneLocked 每个过期周期最多清理一次过期的样本、熔断状态和 429 冷却。调用方持有 s.mu。
+func (s *routeObservationStore) pruneLocked(now int64) {
+	ttl := routeObservationTTL.Milliseconds()
+	if now-s.lastPrune <= ttl {
+		return
+	}
+	for key, row := range s.rows {
+		if now-row.UpdatedAt > ttl {
+			delete(s.rows, key)
+		}
+	}
+	for key, state := range s.breakers {
+		if now-state.updatedAt > ttl {
+			delete(s.breakers, key)
+		}
+	}
+	for id, until := range s.cooldowns {
+		if now >= until {
+			delete(s.cooldowns, id)
+		}
+	}
+	s.lastPrune = now
 }
 
 // Callers classify an actually sent attempt once. Local rejection and cancellation
@@ -81,18 +121,11 @@ func recordRouteObservation(epoch uint64, channelID int, model string, operation
 	if routeObservations.changed[channelID] > epoch {
 		return
 	}
-	if now-routeObservations.lastPrune > routeObservationTTL.Milliseconds() {
-		for k, row := range routeObservations.rows {
-			if now-row.UpdatedAt > routeObservationTTL.Milliseconds() {
-				delete(routeObservations.rows, k)
-			}
-		}
-		routeObservations.lastPrune = now
+	routeObservations.pruneLocked(now)
+	r, exists := routeObservations.rows[key]
+	if !exists {
+		evictForInsertLocked(&routeObservations, routeObservations.rows, func(v RouteObservationSnapshot) int64 { return v.UpdatedAt }, now)
 	}
-	if _, exists := routeObservations.rows[key]; !exists && len(routeObservations.rows) >= 10000 {
-		return
-	}
-	r := routeObservations.rows[key]
 	if now-r.UpdatedAt > routeObservationTTL.Milliseconds() {
 		r = RouteObservationSnapshot{ChannelID: channelID, Model: model, Operation: operation, Stream: stream}
 	}

@@ -1,13 +1,13 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -147,56 +147,39 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		))
 	}
 	if err := LoadTokenRouteConstraints(c); err != nil {
-		logger.LogError(c, common.LogText("load token routing failed: %v", err))
-		return nil, &ChannelSelectError{StatusCode: 500, Code: types.ErrorCodeGetChannelFailed, Message: "Unable to load token routing"}
+		return nil, routeLoadFailure(c, err)
 	}
 	if !pinned && !HasPrivateTokenRoute(c) && (retry == nil || retry.GetRetry() == 0) {
-		preferred, found := GetPreferredChannelByAffinity(c, modelName)
-		if found && RequestPolicy(c).SessionMode == "strict" {
-			row, err := AcquirePinnedRouteChannel(c, preferred, modelName)
-			if err != nil {
-				if !errors.Is(err, ErrConcurrencyFull) && !ShouldKeepChannelAffinityOnChannelDisabled() {
-					ClearCurrentChannelAffinityCache(c)
-				}
-				c.Set(ginKeyChannelAffinitySkipRetry, true)
-				status := 503
-				if errors.Is(err, ErrConcurrencyFull) {
-					status = 429
-				}
-				return nil, &ChannelSelectError{StatusCode: status, Code: "session_channel_unavailable", Message: "Bound session channel is unavailable"}
-			}
-			MarkChannelAffinityUsed(c, row.Id)
-			return row, nil
+		if row, selectErr, decided := selectAffinityChannel(c, modelName); decided {
+			return row, selectErr
 		}
 	}
 	channel, err := selectQualifiedChannel(c, modelName)
 	if err != nil {
-		status := http.StatusInternalServerError
-		code := types.ErrorCodeGetChannelFailed
-		message := "Unable to load token routing"
-		logger.LogError(c, common.LogText("load routing candidates failed: %v", err))
-		if errors.Is(err, ErrConcurrencyFull) {
-			status = http.StatusTooManyRequests
-			code = "channel_concurrency_exceeded"
-			message = err.Error()
-		}
-		return nil, &ChannelSelectError{StatusCode: status, Code: code, Message: message}
+		return nil, routeLoadFailure(c, err)
 	}
 	if channel == nil && pinned {
-		row, lookupErr := model.GetChannelById(pin.ChannelId, true)
-		if lookupErr != nil {
-			return nil, pinnedChannelUnavailable(pin, 400, "")
+		channel, err := model.CacheGetChannel(pin.ChannelId)
+		if err != nil {
+			return nil, pinnedChannelUnavailable(pin, http.StatusBadRequest, i18n.MsgDistributorInvalidChannelId)
 		}
-		if row.Status != common.ChannelStatusEnabled {
-			return nil, &ChannelSelectError{StatusCode: 403, Code: types.ErrorCodeAccessDenied, Message: "Pinned channel is disabled"}
+		if channel.Status != common.ChannelStatusEnabled {
+			return nil, pinnedChannelUnavailable(pin, http.StatusForbidden, i18n.MsgDistributorChannelDisabled)
 		}
-		if ok, kind := model.ChannelSatisfiesFilters(row, modelName, constraints.Filters); !ok {
-			return nil, &ChannelSelectError{StatusCode: 400, Code: types.ErrorCode(kind), FilterKind: kind, Channel: row, Message: "Pinned channel does not satisfy " + string(kind)}
+		if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, constraints.Filters); !ok {
+			return nil, &ChannelSelectError{
+				StatusCode: http.StatusBadRequest, Code: types.ErrorCode(kind), MessageID: i18n.MsgDistributorNoAvailableChannel,
+				Params:     map[string]any{"Model": modelName},
+				FilterKind: kind, Channel: channel,
+			}
 		}
-		return nil, &ChannelSelectError{StatusCode: 403, Code: types.ErrorCodeAccessDenied, Message: "Pinned channel is no longer available for this key and model"}
+		return nil, &ChannelSelectError{StatusCode: http.StatusForbidden, Code: types.ErrorCodeAccessDenied, Message: "Pinned channel is no longer available for this key and model"}
 	}
 	if channel == nil {
-		return nil, &ChannelSelectError{StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, Message: "No available channel for this model", NoAvailableChannel: true}
+		return nil, &ChannelSelectError{
+			StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, MessageID: i18n.MsgDistributorNoAvailableChannel,
+			Params: map[string]any{"Model": modelName}, NoAvailableChannel: true,
+		}
 	}
 	return channel, nil
 }

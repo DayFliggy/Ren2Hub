@@ -129,7 +129,9 @@ func TestRouteCandidateDatabaseErrorIsNotEmptyAvailability(t *testing.T) {
 			tx.AddError(failure)
 		}
 	}))
-	_, err := RouteCandidates(context.Background(), 7, "gpt-4-gizmo-a", nil)
+	scope, err := loadRouteScope(context.Background(), 7)
+	require.NoError(t, err)
+	_, err = routeCandidates(context.Background(), scope, "gpt-4-gizmo-a", nil)
 	require.ErrorIs(t, err, failure)
 	_, apiErr := SelectChannelForRequest(routeTestContext(t), "gpt-4-gizmo-a", nil)
 	require.NotNil(t, apiErr)

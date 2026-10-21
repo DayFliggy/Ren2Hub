@@ -118,7 +118,10 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+		if setupErr := SetupContextForSelectedChannel(c, channel, modelRequest.Model); setupErr != nil && channel != nil {
+			abortWithOpenAiMessage(c, setupErr.StatusCode, setupErr.Error(), setupErr.GetErrorCode())
+			return
+		}
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
@@ -259,8 +262,8 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 		return nil, errors.New("model must be provided once")
 	}
 
-	value := gjson.GetBytes(requestBody, "model")
-	model, err := getJSONStringValue(value, "model")
+	values := gjson.GetManyBytes(requestBody, "model", "stream", "stream_format")
+	model, err := getJSONStringValue(values[0], "model")
 	if err != nil {
 		return nil, err
 	}
@@ -272,8 +275,8 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 
 	return &ModelRequest{
 		Model:        model,
-		Stream:       gjson.GetBytes(requestBody, "stream").Bool(),
-		StreamFormat: gjson.GetBytes(requestBody, "stream_format").String(),
+		Stream:       values[1].Bool(),
+		StreamFormat: values[2].String(),
 	}, nil
 }
 

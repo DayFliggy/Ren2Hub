@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,16 +26,33 @@ type routeAttempt struct {
 	firstOutput atomic.Int64
 }
 
-// ObserveRouteStreamOutput only affects scheduling latency. The native first-byte
-// clock remains separate because retry safety also uses control frames.
+func currentRouteAttempt(c *gin.Context) *routeAttempt {
+	value, _ := c.Get("route_attempt")
+	attempt, _ := value.(*routeAttempt)
+	return attempt
+}
+
+// ObserveRouteStreamOutput 标记第一个有模型输出的事件：它既是调度延迟的终点，也是熔断
+// 判定流式请求已服务的成功界。原生首字节时钟保持独立，因为重试安全还要看控制帧。
 func ObserveRouteStreamOutput(c *gin.Context, data string) {
-	value, ok := c.Get("route_attempt")
-	attempt, valid := value.(*routeAttempt)
-	if !ok || !valid || attempt == nil || attempt.firstOutput.Load() != 0 {
+	attempt := currentRouteAttempt(c)
+	if attempt == nil || attempt.firstOutput.Load() != 0 {
 		return
 	}
 	if streamEventHasOutput(data) {
 		attempt.firstOutput.CompareAndSwap(0, time.Now().UnixNano())
+	}
+}
+
+// ObserveRouteResponse 由传输层在收到上游响应后调用。上游 429 带 Retry-After 时，
+// 在这段时间内把渠道降到最差档；只降档、不剔除。
+func ObserveRouteResponse(c *gin.Context, resp *http.Response) {
+	attempt := currentRouteAttempt(c)
+	if attempt == nil || !attempt.bound || resp == nil || resp.StatusCode != http.StatusTooManyRequests {
+		return
+	}
+	if until, ok := retryAfterUntil(resp.Header, time.Now()); ok {
+		routeObservations.coolDown(attempt.epoch, attempt.channelID, until)
 	}
 }
 
@@ -71,10 +89,11 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 		if !attempt.bound {
 			return
 		}
-		if c.Request.Context().Err() == context.DeadlineExceeded {
-			return
+		outcome := perfmetrics.OutcomeIgnored
+		if c.Request.Context().Err() != context.DeadlineExceeded {
+			outcome = perfmetrics.ClassifyRelayOutcome(c.Request.Context(), info, apiErr)
 		}
-		outcome := perfmetrics.ClassifyRelayOutcome(c.Request.Context(), info, apiErr)
+		recordAttemptBreaker(attempt, info.IsStream, outcome)
 		if outcome == perfmetrics.OutcomeIgnored {
 			return
 		}
@@ -88,4 +107,17 @@ func FinishRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, apiErr *typ
 		}
 		recordRouteObservation(attempt.epoch, attempt.channelID, attempt.model, attempt.operation, info.IsStream, outcome == perfmetrics.OutcomeSuccess, latency)
 	})
+}
+
+// recordAttemptBreaker 以第一个有内容的事件为流式请求的成功界：之后的中断、取消或
+// 错误不再算作渠道失败。没有输出的流式请求和非流式请求按最终结果计。
+func recordAttemptBreaker(attempt *routeAttempt, stream bool, outcome perfmetrics.Outcome) {
+	switch {
+	case stream && attempt.firstOutput.Load() != 0:
+		recordRouteBreaker(attempt.epoch, attempt.channelID, attempt.model, true)
+	case outcome == perfmetrics.OutcomeSuccess:
+		recordRouteBreaker(attempt.epoch, attempt.channelID, attempt.model, true)
+	case outcome == perfmetrics.OutcomeFailure:
+		recordRouteBreaker(attempt.epoch, attempt.channelID, attempt.model, false)
+	}
 }

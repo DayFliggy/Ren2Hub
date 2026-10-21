@@ -12,14 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type TokenRouteChannel = RouteChannel
-
 // TokenModelLimitAllows is shared by HTTP, WebSocket and the route editor.
 func TokenModelLimitAllows(limit map[string]bool, name string) bool {
 	return limit[name] || limit[ratio_setting.FormatMatchingModelName(name)] || limit[ratio_setting.RoutingMatchModelName(name)]
 }
 
-func TokenRouteChannels(ctx context.Context, userID, tokenID int) ([]TokenRouteChannel, error) {
+func TokenRouteChannels(ctx context.Context, userID, tokenID int) ([]RouteChannel, error) {
 	return catalogRouteChannels(ctx, userID, tokenID, false)
 }
 
@@ -40,9 +38,45 @@ func PutTokenRouting(ctx context.Context, userID, tokenID int, input model.Token
 	}
 	allowed := make(map[int]bool, len(channels))
 	for _, channel := range channels {
-		allowed[channel.ID] = channel.Status == common.ChannelStatusEnabled && channel.Type != constant.ChannelTypeCodex
+		allowed[channel.ID] = channel.FilterReason != routeReasonChannelUnavailable
 	}
 	return model.SaveTokenRouting(ctx, userID, tokenID, input, allowed)
+}
+
+// routeScope 是一次选路用到的 Key 侧数据：路由配置和模型限制。HTTP 请求在
+// LoadTokenRouteConstraints 里读一次，首轮、亲和、重试都复用同一份快照。
+type routeScope struct {
+	route         model.TokenRouting
+	limitsEnabled bool
+	limits        map[string]bool
+}
+
+func autoRouteScope() routeScope {
+	return routeScope{route: model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto}}}
+}
+
+func newRouteScope(route model.TokenRouting, token *model.Token) routeScope {
+	return routeScope{route: route, limitsEnabled: token.ModelLimitsEnabled, limits: token.GetModelLimitsMap()}
+}
+
+func (s routeScope) allowsModel(name string) bool {
+	return !s.limitsEnabled || TokenModelLimitAllows(s.limits, name)
+}
+
+// loadRouteScope 从库里读 Key 的路由和模型限制；没有 Key 的调用按自动路由、不限模型处理。
+func loadRouteScope(ctx context.Context, tokenID int) (routeScope, error) {
+	if tokenID <= 0 {
+		return autoRouteScope(), nil
+	}
+	route, err := model.ReadTokenRouting(ctx, tokenID)
+	if err != nil {
+		return routeScope{}, err
+	}
+	token, err := model.GetTokenById(tokenID)
+	if err != nil {
+		return routeScope{}, err
+	}
+	return newRouteScope(route, token), nil
 }
 
 // LoadTokenRouteConstraints runs once per authenticated request (including each
@@ -51,30 +85,44 @@ func LoadTokenRouteConstraints(c *gin.Context) error {
 	if c == nil {
 		return nil
 	}
-	if _, loaded := c.Get("token_route_loaded"); loaded {
+	if _, loaded := c.Get(ginKeyTokenRouteScope); loaded {
 		return nil
 	}
 	tokenID := common.GetContextKeyInt(c, constant.ContextKeyTokenId)
 	if tokenID <= 0 {
 		return nil
 	}
-	view, err := model.ReadTokenRouting(c.Request.Context(), tokenID)
+	scope, err := loadRouteScope(c.Request.Context(), tokenID)
 	if err != nil {
 		return err
 	}
-	c.Set("token_route_loaded", true)
-	c.Set("token_route_version", view.Version)
-	if view.Mode != model.TokenRouteManual {
+	c.Set(ginKeyTokenRouteScope, scope)
+	c.Set("token_route_version", scope.route.Version)
+	if scope.route.Mode != model.TokenRouteManual {
 		return nil
 	}
-	ids := make([]int, 0, len(view.Entries))
-	for _, entry := range view.Entries {
+	ids := make([]int, 0, len(scope.route.Entries))
+	for _, entry := range scope.route.Entries {
 		if entry.Enabled {
 			ids = append(ids, entry.ChannelID)
 		}
 	}
 	GetChannelConstraints(c).AddFilter(dto.ChannelFilter{Kind: dto.FilterTokenRoute, ChannelIDs: ids})
 	return nil
+}
+
+const ginKeyTokenRouteScope = "token_route_scope"
+
+// requestRouteScope 返回本请求已加载的快照；没有 Key 的调用按自动路由处理。
+func requestRouteScope(c *gin.Context) (routeScope, error) {
+	if err := LoadTokenRouteConstraints(c); err != nil {
+		return routeScope{}, err
+	}
+	value, loaded := c.Get(ginKeyTokenRouteScope)
+	if !loaded {
+		return autoRouteScope(), nil
+	}
+	return value.(routeScope), nil
 }
 
 func HasPrivateTokenRoute(c *gin.Context) bool {
@@ -86,8 +134,13 @@ func HasPrivateTokenRoute(c *gin.Context) bool {
 	return false
 }
 
+// CheckLockedTokenRoute 服务长连接：每次都从库重读路由和模型限制，会话中途的变更立即生效。
 func CheckLockedTokenRoute(c *gin.Context, channelID int, modelName string) error {
-	rows, err := RouteCandidates(c.Request.Context(), common.GetContextKeyInt(c, constant.ContextKeyTokenId), modelName, GetChannelConstraints(c).Filters)
+	scope, err := loadRouteScope(c.Request.Context(), common.GetContextKeyInt(c, constant.ContextKeyTokenId))
+	if err != nil {
+		return err
+	}
+	rows, err := routeCandidates(c.Request.Context(), scope, modelName, GetChannelConstraints(c).Filters)
 	if err != nil {
 		return err
 	}
