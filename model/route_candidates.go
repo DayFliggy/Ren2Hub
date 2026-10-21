@@ -2,10 +2,23 @@ package model
 
 import (
 	"context"
+	"strings"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
+
+// channelServesRequestPath 判断非 AdvancedCustom 渠道能否处理该路径。目前只有
+// /v1/responses/compact 有可确定的端点能力；判断与 PrepareResponsesRequest 的运行时
+// 拒绝完全一致，使不支持的渠道在选路时就被跳过，而不是返回不可重试的 400。
+func channelServesRequestPath(ch *Channel, requestPath string) bool {
+	if !strings.HasPrefix(requestPath, "/v1/responses/compact") {
+		return true
+	}
+	apiType, _ := common.ChannelType2APIType(ch.Type)
+	return common.SupportsResponsesCompact(ch.Type, apiType)
+}
 
 // RouteChannelRows is shared by dispatch and public projections. Querying all
 // matching rows before filtering prevents an arbitrary top-k from hiding a route.

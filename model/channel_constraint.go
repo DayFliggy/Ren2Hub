@@ -105,7 +105,7 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 			return true
 		}
 		if !constant.IsAdvancedCustomChannel(ch.Type) {
-			return true
+			return channelServesRequestPath(ch, filter.RequestPath)
 		}
 		config := ch.GetOtherSettings().AdvancedCustom
 		return config != nil && config.SupportsPathForModel(filter.RequestPath, modelName)
