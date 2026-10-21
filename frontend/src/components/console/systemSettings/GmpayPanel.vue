@@ -6,7 +6,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import { useSystemSettings } from '@/composables/useSystemSettings'
+import { parseGmpayConfig, type GmpayConfig } from '@/api/topup'
 import { useToast } from '@/composables/useToast'
 
 /**
@@ -23,7 +23,6 @@ interface SelectedAsset {
   name: string
   token: string
   network: string
-  minTopUp: string
   icon?: string
   color?: string
 }
@@ -32,7 +31,8 @@ const emit = defineEmits<{ saved: [] }>()
 
 const { t } = useI18n()
 const toast = useToast()
-const { load, rawValue, isSecretConfigured } = useSystemSettings()
+const secretConfigured = ref(false)
+let configController: AbortController | null = null
 const probing = ref(false)
 const saving = ref(false)
 const configurationReady = ref(false)
@@ -46,51 +46,17 @@ const form = reactive({
   payAddress: '',
   merchantId: '',
   secretKey: '',
-  price: 1,
-  minTopUp: 1,
-  groupRatio: '{"default":1}',
+  enabled: false,
 })
 
-const secretConfigured = computed(() => isSecretConfigured('GmpayKey'))
 const selectedCount = computed(() => selected.value.length)
 
-function parseStoredAssets(raw: string): SelectedAsset[] {
-  const parsed: unknown = JSON.parse(raw)
-  // The backend also accepts JSON null as an empty catalog.
-  if (parsed === null) return []
-  if (!Array.isArray(parsed)) throw new Error('Invalid stored asset catalog')
-  return parsed.map((record) => {
-    if (
-      !record ||
-      typeof record !== 'object' ||
-      typeof record.name !== 'string' ||
-      !record.name.trim() ||
-      typeof record.token !== 'string' ||
-      !record.token.trim() ||
-      typeof record.network !== 'string' ||
-      !record.network.trim() ||
-      (record.min_topup !== undefined && typeof record.min_topup !== 'string')
-    ) {
-      throw new Error('Invalid stored asset catalog')
-    }
-    return {
-      name: record.name.trim(),
-      token: record.token.trim().toLowerCase(),
-      network: record.network.trim().toLowerCase(),
-      minTopUp: (record.min_topup ?? '').trim(),
-      ...(typeof record.icon === 'string' ? { icon: record.icon } : {}),
-      ...(typeof record.color === 'string' ? { color: record.color } : {}),
-    }
-  })
-}
-
-function syncForm() {
-  form.payAddress = String(rawValue('GmpayPayAddress', ''))
-  form.merchantId = String(rawValue('GmpayId', ''))
-  form.price = Number(rawValue('GmpayPrice', 1))
-  form.minTopUp = Number(rawValue('GmpayMinTopUp', 1))
-  form.groupRatio = String(rawValue('GmpayGroupRatio', '{"default":1}'))
-  selected.value = parseStoredAssets(String(rawValue('GmpayAssets', '[]')))
+function syncForm(config: GmpayConfig) {
+  form.payAddress = config.pay_address
+  form.merchantId = config.merchant_id
+  form.enabled = config.enabled
+  secretConfigured.value = config.has_secret
+  selected.value = config.assets
 }
 
 function isSelected(network: string, token: string): boolean {
@@ -116,7 +82,6 @@ function toggleAsset(asset: SupportedAsset, token: string) {
       name: `${token.toUpperCase()} ${asset.display_name || asset.network}`,
       token: token.toLowerCase(),
       network: asset.network.toLowerCase(),
-      minTopUp: '',
     },
   ]
 }
@@ -124,14 +89,6 @@ function toggleAsset(asset: SupportedAsset, token: string) {
 function setAssetName(token: string, network: string, name: string) {
   selected.value = selected.value.map((item) =>
     item.token === token && item.network === network ? { ...item, name } : item
-  )
-}
-
-function setAssetMinimum(token: string, network: string, value: string) {
-  selected.value = selected.value.map((item) =>
-    item.token === token && item.network === network
-      ? { ...item, minTopUp: value }
-      : item
   )
 }
 
@@ -148,19 +105,14 @@ function setAssetMetadata(
   )
 }
 
-function assetPayload(): string {
-  return JSON.stringify(
-    selected.value.map((item) => ({
-      name: item.name.trim() || item.token.toUpperCase(),
-      token: item.token,
-      network: item.network,
-      ...(item.icon === undefined ? {} : { icon: item.icon }),
-      ...(item.color === undefined ? {} : { color: item.color }),
-      ...(item.minTopUp.trim() === ''
-        ? {}
-        : { min_topup: String(Number(item.minTopUp)) }),
-    }))
-  )
+function assetPayload() {
+  return selected.value.map((item) => ({
+    name: item.name.trim() || item.token.toUpperCase(),
+    token: item.token,
+    network: item.network,
+    ...(item.icon === undefined ? {} : { icon: item.icon }),
+    ...(item.color === undefined ? {} : { color: item.color }),
+  }))
 }
 
 /** The gateway secret is verified by an order, so the probe never needs it. */
@@ -218,68 +170,34 @@ async function probe() {
 
 async function save() {
   if (saving.value || !configurationReady.value) return
-  if (!form.payAddress.trim() || !form.merchantId.trim()) {
+  if (form.enabled && (!form.payAddress.trim() || !form.merchantId.trim())) {
     toast.error(t('systemSettings.gmpayPanel.credentialsRequired'))
     return
   }
-  if (!form.secretKey.trim() && !secretConfigured.value) {
+  if (form.enabled && !form.secretKey.trim() && !secretConfigured.value) {
     toast.error(t('systemSettings.gmpayPanel.secretRequired'))
     return
   }
-  try {
-    const ratios: unknown = JSON.parse(form.groupRatio)
-    if (
-      ratios === null ||
-      typeof ratios !== 'object' ||
-      Array.isArray(ratios) ||
-      Object.values(ratios).some(
-        (ratio) =>
-          typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio <= 0
-      )
-    ) {
-      throw new Error('Invalid group ratios')
-    }
-  } catch {
-    toast.error(t('systemSettings.gmpayPanel.invalidGroupRatios'))
-    return
-  }
-  if (
-    !Number.isFinite(form.price) ||
-    form.price <= 0 ||
-    !Number.isSafeInteger(form.minTopUp) ||
-    form.minTopUp < 1 ||
-    form.minTopUp > 18446744073709 ||
-    selected.value.some(
-      (item) =>
-        item.minTopUp.trim() !== '' &&
-        (!Number.isSafeInteger(Number(item.minTopUp)) ||
-          Number(item.minTopUp) < 1 ||
-          Number(item.minTopUp) > 18446744073709)
-    )
-  ) {
-    toast.error(t('systemSettings.gmpayPanel.invalidAmounts'))
+  if (form.enabled && selected.value.length === 0) {
+    toast.error(t('systemSettings.gmpayPanel.noSelectedAssets'))
     return
   }
   saving.value = true
   try {
-    await api.post('/api/option/gmpay/save', {
-      pay_address: form.payAddress,
-      merchant_id: form.merchantId,
-      secret_key: form.secretKey,
-      assets: assetPayload(),
-      price: form.price,
-      min_topup: form.minTopUp,
-      group_ratio: form.groupRatio,
-    })
-    if (disposed) {
-      // The write still completed. Refresh the shared cache for the next visit.
-      await load(true)
-      return
-    }
+    const saved = parseGmpayConfig(
+      await api.post('/api/option/gmpay/save', {
+        pay_address: form.payAddress,
+        merchant_id: form.merchantId,
+        secret_key: form.secretKey,
+        assets: assetPayload(),
+        enabled: form.enabled,
+      })
+    )
+    if (disposed) return
+    syncForm(saved)
     form.secretKey = ''
     emit('saved')
     toast.success(t('systemSettings.gmpayPanel.saved'))
-    await loadConfiguration(true)
   } catch (error) {
     if (!disposed)
       toast.error(error instanceof Error ? error.message : String(error))
@@ -288,18 +206,21 @@ async function save() {
   }
 }
 
-async function loadConfiguration(force = false) {
+async function loadConfiguration() {
   configurationReady.value = false
   configurationLoading.value = true
   configurationFailed.value = false
   try {
-    const loaded = await load(force)
-    if (disposed) return
-    if (!loaded) {
-      configurationFailed.value = true
-      return
-    }
-    syncForm()
+    configController?.abort()
+    const controller = new AbortController()
+    configController = controller
+    const loaded = parseGmpayConfig(
+      await api.get('/api/option/gmpay/config', undefined, {
+        signal: controller.signal,
+      })
+    )
+    if (disposed || controller.signal.aborted) return
+    syncForm(loaded)
     configurationReady.value = true
   } catch {
     if (!disposed) configurationFailed.value = true
@@ -323,6 +244,7 @@ watch(
 onUnmounted(() => {
   disposed = true
   probeController?.abort()
+  configController?.abort()
 })
 </script>
 
@@ -340,7 +262,7 @@ onUnmounted(() => {
         class="mt-2"
         variant="secondary"
         size="sm"
-        @click="loadConfiguration(true)"
+        @click="loadConfiguration"
       >
         {{ t('systemSettings.gmpayPanel.retryLoad') }}
       </ConsoleButton>
@@ -374,37 +296,15 @@ onUnmounted(() => {
             }}</span>
           </div>
         </FormField>
-        <FormField :label="t('systemSettings.gmpayPanel.price')">
-          <TextInput
-            :model-value="String(form.price)"
-            type="number"
-            min="0.0001"
-            step="0.01"
-            autocomplete="off"
-            @update:model-value="form.price = Number($event)"
-          />
-        </FormField>
-        <FormField :label="t('systemSettings.gmpayPanel.minimum')">
-          <TextInput
-            :model-value="String(form.minTopUp)"
-            type="number"
-            min="1"
-            step="1"
-            autocomplete="off"
-            @update:model-value="form.minTopUp = Number($event)"
-          />
-        </FormField>
-        <FormField
-          :label="t('systemSettings.gmpayPanel.groupRatio')"
-          :hint="t('systemSettings.gmpayPanel.groupRatioHint')"
-          class="sm:col-span-2"
+        <label
+          class="flex items-center gap-2 text-sm text-[var(--text-secondary)] sm:col-span-2"
         >
-          <TextInput
-            v-model="form.groupRatio"
-            class="font-mono"
-            autocomplete="off"
-          />
-        </FormField>
+          <input v-model="form.enabled" type="checkbox" />
+          {{ t('systemSettings.gmpayPanel.enabled') }}
+        </label>
+        <p class="gmpay-hint sm:col-span-2">
+          {{ t('systemSettings.gmpayPanel.nativePricing') }}
+        </p>
       </div>
 
       <p class="gmpay-hint">
@@ -477,28 +377,6 @@ onUnmounted(() => {
               autocomplete="off"
               @update:model-value="
                 setAssetName(item.token, item.network, String($event))
-              "
-            />
-          </FormField>
-          <FormField
-            :label="
-              t('systemSettings.gmpayPanel.assetMinimum', {
-                asset: `${item.token.toUpperCase()} · ${item.network}`,
-              })
-            "
-            class="mt-2"
-          >
-            <TextInput
-              :model-value="item.minTopUp"
-              type="number"
-              min="1"
-              step="1"
-              autocomplete="off"
-              :placeholder="
-                t('systemSettings.gmpayPanel.assetMinimumPlaceholder')
-              "
-              @update:model-value="
-                setAssetMinimum(item.token, item.network, String($event))
               "
             />
           </FormField>

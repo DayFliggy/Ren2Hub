@@ -23,12 +23,7 @@ import {
 } from '@/features/pricing/draft'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { isRecord } from '@/api/contracts'
-import {
-  isDecimal,
-  multiplyDecimal,
-  divideDecimal,
-  formatDecimalUSD,
-} from '@/utils/decimal'
+import { isDecimal, multiplyDecimal, divideDecimal } from '@/utils/decimal'
 const props = withDefaults(
   defineProps<{
     modelName: string
@@ -83,13 +78,6 @@ const expressionEditor = ref<InstanceType<
   // Each hydration mounts a fresh expression editor, so no draft, mode or
   // error carries over to another model or a reloaded price.
   hydration = ref(0)
-const usage = ref('{"p":1000,"c":1000,"len":1000}'),
-  params = ref('{}'),
-  headers = ref('{}'),
-  time = ref(new Date().toISOString())
-const simulation = ref(''),
-  simulationError = ref(''),
-  simulating = ref(false)
 let baseline = '',
   defaultBaseline = '',
   hydrating = false,
@@ -101,7 +89,6 @@ const variant = computed(() =>
 const schema = computed(
   () => variant.value?.usage_schema ?? props.entry?.usage_schema
 )
-const taskSimulation = computed(() => schema.value !== undefined)
 const activeExpression = computed({
   get: () =>
     plugin.value
@@ -179,7 +166,6 @@ watch(
     plugin.value = ''
     hydration.value++
     error.value = ''
-    simulation.value = ''
     preview.value = null
     Object.assign(prices, tokenPrices(props.pricing))
     for (const lane of TOKEN_LANES)
@@ -265,8 +251,6 @@ watch([formSnapshot, plugin], () => {
   error.value = ''
   preview.value = null
   previewError.value = ''
-  simulation.value = ''
-  simulationError.value = ''
   clearTimeout(previewTimer)
   previewController?.abort()
   previewTimer = setTimeout(async () => {
@@ -398,64 +382,6 @@ function applyTaskConditions() {
     ') ? ' +
     taskMultiplier.value +
     ' : 1)'
-}
-function simulationSnapshot() {
-  return JSON.stringify([
-    formSnapshot(),
-    plugin.value,
-    usage.value,
-    params.value,
-    headers.value,
-    time.value,
-  ])
-}
-async function simulate() {
-  simulationError.value = ''
-  simulation.value = ''
-  simulating.value = true
-  const before = simulationSnapshot()
-  try {
-    const draft = build(),
-      parsedUsage: unknown = JSON.parse(usage.value),
-      parsedParams: unknown = taskSimulation.value
-        ? {}
-        : JSON.parse(params.value),
-      parsedHeaders: unknown = taskSimulation.value
-        ? {}
-        : JSON.parse(headers.value)
-    if (
-      !isRecord(parsedUsage) ||
-      !isRecord(parsedParams) ||
-      !isRecord(parsedHeaders) ||
-      Object.values(parsedHeaders).some((value) => typeof value !== 'string')
-    )
-      throw new Error('badJson')
-    const result = await pricingConfigApi.simulate({
-      model_name: name.value,
-      ...(plugin.value ? { plugin_key: plugin.value } : {}),
-      pricing: draft,
-      usage: parsedUsage,
-      request: {
-        params: parsedParams,
-        headers: parsedHeaders as Record<string, string>,
-      },
-      time: time.value,
-    })
-    if (before !== simulationSnapshot()) return
-    simulation.value = isDecimal(result.amount_usd)
-      ? formatDecimalUSD(result.amount_usd)
-      : String(result.amount_usd)
-  } catch (cause) {
-    if (before !== simulationSnapshot()) return
-    simulationError.value =
-      cause instanceof Error
-        ? te(cause.message)
-          ? t(cause.message)
-          : cause.message
-        : String(cause)
-  } finally {
-    simulating.value = false
-  }
 }
 onBeforeUnmount(() => {
   clearTimeout(previewTimer)
@@ -688,44 +614,6 @@ defineExpose({ commit, dirty })
         }}</pre>
         <p v-else class="admin-muted">{{ t('savedOnly') }}</p>
       </aside>
-      <details class="pricing-simulation">
-        <summary>{{ t('simulation') }}</summary>
-        <p class="admin-muted">{{ t('simulationHint') }}</p>
-        <p v-if="taskSimulation" class="admin-muted">
-          {{ t('taskSimulationHint') }}
-        </p>
-        <ConsoleButton
-          v-for="example in variant?.usage_examples ?? []"
-          :key="example.label"
-          size="sm"
-          variant="ghost"
-          @click="usage = JSON.stringify(example.facts, null, 2)"
-          >{{ example.label }}</ConsoleButton
-        ><label class="admin-field"
-          ><span>{{ t('usage') }}</span
-          ><textarea v-model="usage" rows="3" /></label
-        ><label v-if="!taskSimulation" class="admin-field"
-          ><span>{{ t('params') }}</span
-          ><textarea v-model="params" rows="3" /></label
-        ><label v-if="!taskSimulation" class="admin-field"
-          ><span>{{ t('headers') }}</span
-          ><textarea v-model="headers" rows="2" /></label
-        ><label class="admin-field"
-          ><span>{{ t('instant') }}</span
-          ><input v-model="time" /></label
-        ><ConsoleButton
-          :loading="simulating"
-          variant="secondary"
-          @click="simulate"
-          >{{ t('simulate') }}</ConsoleButton
-        >
-        <p v-if="simulation" role="status">
-          {{ t('result') }}: {{ simulation }}
-        </p>
-        <p v-if="simulationError" role="alert" class="admin-error">
-          {{ simulationError }}
-        </p>
-      </details>
     </div>
     <footer class="pricing-editor-footer">
       <ConsoleButton :loading="saving" @click="commit() && emit('save')">{{

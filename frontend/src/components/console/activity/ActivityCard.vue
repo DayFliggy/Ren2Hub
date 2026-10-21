@@ -1,39 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-
 import StatusChip from '@/components/common/StatusChip.vue'
-import CountdownPill from '@/components/console/activity/CountdownPill.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 
-const props = defineProps<{
-  id: number
-  kind: string
+defineProps<{
   title: string
   tagline: string
-  status: 'ongoing' | 'upcoming' | 'ended'
-  badgeKey?: 'hot' | 'new' | 'ending'
-  end: number
+  statusLabel: string
   icon: string
   claimLabel: string
-  claimDisabled?: boolean
+  footerHint: string
 }>()
 
-const emit = defineEmits<{ claim: [id: number] }>()
-
-const { t } = useI18n()
-
-const statusTone = computed(() => {
-  if (props.status === 'ended') return 'neutral'
-  if (props.status === 'upcoming') return 'info'
-  return 'accent'
-})
-
-const badgeTone = computed(() => {
-  if (props.badgeKey === 'ending') return 'danger'
-  if (props.badgeKey === 'new') return 'accent'
-  return 'warning'
-})
+const emit = defineEmits<{ claim: [] }>()
 </script>
 
 <template>
@@ -42,7 +20,7 @@ const badgeTone = computed(() => {
     data-handdrawn="surface"
   >
     <header class="flex items-start justify-between gap-3">
-      <div class="flex items-center gap-3">
+      <div class="flex min-w-0 items-center gap-3">
         <span
           class="flex size-10 shrink-0 items-center justify-center rounded-full"
           style="background: var(--accent-soft)"
@@ -54,14 +32,13 @@ const badgeTone = computed(() => {
             fill="none"
             stroke="var(--accent-text)"
             stroke-width="1.8"
+            aria-hidden="true"
           >
             <path :d="icon" />
           </svg>
         </span>
         <div class="min-w-0">
-          <h3
-            class="truncate text-base font-semibold text-[var(--text-primary)]"
-          >
+          <h3 class="text-base font-semibold text-[var(--text-primary)]">
             {{ title }}
           </h3>
           <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
@@ -70,12 +47,7 @@ const badgeTone = computed(() => {
         </div>
       </div>
       <div class="flex shrink-0 flex-col items-end gap-1.5">
-        <StatusChip v-if="badgeKey" :tone="badgeTone">{{
-          t(`activity.badge.${badgeKey}`)
-        }}</StatusChip>
-        <StatusChip :tone="statusTone">{{
-          t(`activity.category.${status}`)
-        }}</StatusChip>
+        <StatusChip tone="neutral">{{ statusLabel }}</StatusChip>
       </div>
     </header>
 
@@ -84,14 +56,10 @@ const badgeTone = computed(() => {
     </div>
 
     <footer
-      class="mt-5 flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-4"
+      class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-4"
     >
-      <CountdownPill :end="end" />
-      <ConsoleButton
-        size="sm"
-        :disabled="claimDisabled"
-        @click="emit('claim', id)"
-      >
+      <p class="text-xs text-[var(--text-tertiary)]">{{ footerHint }}</p>
+      <ConsoleButton size="sm" @click="emit('claim')">
         {{ claimLabel }}
       </ConsoleButton>
     </footer>

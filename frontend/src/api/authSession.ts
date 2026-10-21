@@ -1,4 +1,3 @@
-import { isQuota } from '@/utils/quota'
 import type {
   AuthBundle,
   AuthTokenRotation,
@@ -39,22 +38,58 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isUserInfo(value: unknown): value is UserInfo {
   if (!isRecord(value)) return false
+  for (const key of [
+    'aff_count',
+    'aff_quota',
+    'aff_history_quota',
+    'aff_frozen_quota',
+    'max_concurrency',
+    'created_at',
+  ]) {
+    if (
+      value[key] !== undefined &&
+      (!Number.isSafeInteger(value[key]) || Number(value[key]) < 0)
+    )
+      return false
+  }
+  if (
+    value.has_password !== undefined &&
+    typeof value.has_password !== 'boolean'
+  )
+    return false
+  if (value.permissions !== undefined) {
+    if (!isRecord(value.permissions)) return false
+    const permissions = value.permissions.admin_permissions
+    if (
+      permissions !== undefined &&
+      (!isRecord(permissions) ||
+        Object.values(permissions).some(
+          (actions) =>
+            !isRecord(actions) ||
+            Object.values(actions).some(
+              (allowed) => typeof allowed !== 'boolean'
+            )
+        ))
+    )
+      return false
+  }
   return (
-    Number.isInteger(value.id) &&
+    Number.isSafeInteger(value.id) &&
     Number(value.id) > 0 &&
     typeof value.username === 'string' &&
     typeof value.display_name === 'string' &&
     typeof value.email === 'string' &&
-    isFiniteNumber(value.role) &&
-    isFiniteNumber(value.status) &&
-    isQuota(value.available_quota) &&
-    isQuota(value.reserved_quota) &&
-    Number.isSafeInteger(value.quota_version) &&
-    Number(value.quota_version) >= 0 &&
-    isQuota(value.used_quota) &&
-    isFiniteNumber(value.request_count) &&
-    isFiniteNumber(value.created_at)
+    [1, 10, 100].includes(value.role as number) &&
+    [1, 2].includes(value.status as number) &&
+    Number.isSafeInteger(value.quota) &&
+    Number.isSafeInteger(value.used_quota) &&
+    Number.isSafeInteger(value.request_count) &&
+    Number(value.request_count) >= 0
   )
+}
+
+export function parseUserInfo(value: unknown): UserInfo | null {
+  return isUserInfo(value) ? value : null
 }
 
 function isLoginSession(value: unknown): value is LoginSession {

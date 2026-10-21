@@ -21,7 +21,7 @@ import (
 )
 
 func TestGmpayCreationOutcomeAndEarlyCallback(t *testing.T) {
-	for _, outcome := range []string{"early callback", "unknown outcome"} {
+	for _, outcome := range []string{"early callback", "unknown outcome", "gateway rejection", "early callback then failure"} {
 		t.Run(outcome, func(t *testing.T) {
 			oldDB, oldLog, oldRedis, oldTransport, oldAddress := model.DB, model.LOG_DB, common.RedisEnabled, http.DefaultTransport, system_setting.ServerAddress
 			oldType, oldLogType := common.MainDatabaseType(), common.LogDatabaseType()
@@ -54,6 +54,10 @@ func TestGmpayCreationOutcomeAndEarlyCallback(t *testing.T) {
 					w.WriteHeader(http.StatusServiceUnavailable)
 					return
 				}
+				if outcome == "gateway rejection" {
+					_, _ = w.Write([]byte(`{"status_code":10004,"data":null}`))
+					return
+				}
 				if !assert.NoError(t, r.ParseForm()) {
 					return
 				}
@@ -64,6 +68,10 @@ func TestGmpayCreationOutcomeAndEarlyCallback(t *testing.T) {
 				}
 				callback["signature"] = signature
 				assert.NoError(t, SettleGmpayNotification(context.Background(), callback, ""), "callback must find the order before creation returns")
+				if outcome == "early callback then failure" {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
 				body, err := common.Marshal(map[string]any{"status_code": 200, "data": map[string]any{"trade_id": "remote-order", "order_id": r.Form.Get("order_id"), "amount": "7.30", "currency": "CNY", "token": "USDT", "actual_amount": "1.00", "receive_address": "address", "status": 2, "expiration_time": 1893456000, "payment_url": "https://cashier.example.test/pay"}})
 				if !assert.NoError(t, err) {
 					return
@@ -75,9 +83,12 @@ func TestGmpayCreationOutcomeAndEarlyCallback(t *testing.T) {
 			http.DefaultTransport = server.Client().Transport
 			config := setting.GmpayConfig{PayAddress: server.URL, MerchantID: "merchant", SecretKey: "old-secret", Enabled: true, Assets: []setting.GmpayAsset{{Name: "USDT", Token: "usdt", Network: "tron"}}}
 			order := &model.TopUp{UserId: user.Id, Amount: 1, Money: 7.3, PaymentMethod: "gmpay:usdt.tron"}
-			_, err = CreateGmpayTopUp(context.Background(), GmpayOrderRequest{Order: order, ExpectedQuota: 500000, PayAmount: "7.30", ReturnURL: "https://console.example.test/wallet"}, config)
-			if outcome == "unknown outcome" {
+			created, err := CreateGmpayTopUp(context.Background(), GmpayOrderRequest{Order: order, ExpectedQuota: 500000, PayAmount: "7.30", ReturnURL: "https://console.example.test/wallet"}, config)
+			if outcome != "early callback" {
 				require.Error(t, err)
+				require.NotNil(t, created)
+				assert.Equal(t, order.TradeNo, created.Order.TradeNo)
+				require.NotNil(t, created.Payment)
 			} else {
 				require.NoError(t, err)
 			}
@@ -85,12 +96,20 @@ func TestGmpayCreationOutcomeAndEarlyCallback(t *testing.T) {
 			var payment model.GmpayOrder
 			require.NoError(t, db.First(&payment, order.Id).Error)
 			require.NoError(t, db.First(&user, user.Id).Error)
-			if outcome == "unknown outcome" {
-				assert.Equal(t, model.GmpayStatusUnknown, payment.Status)
+			if outcome == "unknown outcome" || outcome == "gateway rejection" {
+				want := model.GmpayStatusUnknown
+				if outcome == "gateway rejection" {
+					want = model.GmpayStatusFailed
+				}
+				assert.Equal(t, want, payment.Status)
+				assert.Equal(t, want, created.Payment.Status)
 				assert.Zero(t, user.Quota)
 			} else {
 				assert.Equal(t, model.GmpayStatusSettled, payment.Status)
 				assert.Equal(t, 500000, user.Quota)
+				if outcome == "early callback then failure" {
+					assert.Equal(t, model.GmpayStatusSettled, created.Payment.Status)
+				}
 			}
 			config.SecretKey = "rotated-secret"
 			require.NoError(t, SaveGmpayConfig(context.Background(), config))

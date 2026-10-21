@@ -6,7 +6,6 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatQuota } from '@/utils/format'
-import { MAX_QUOTA } from '@/utils/quota'
 
 const props = defineProps<{
   transferable: string
@@ -21,16 +20,16 @@ const emit = defineEmits<{ transfer: [] }>()
 const { t } = useI18n()
 const auth = useAuthStore()
 
-const currentBalance = computed(() => auth.user?.available_quota ?? 0)
+const currentBalance = computed(() => auth.user?.quota ?? 0)
 const afterBalance = computed(() => {
   const total = BigInt(currentBalance.value) + BigInt(props.transferable)
-  return total <= MAX_QUOTA ? total : null
+  return total <= BigInt(Number.MAX_SAFE_INTEGER) ? total : null
 })
 const canTransfer = computed(
   () =>
     !props.readonly &&
-    BigInt(props.transferable) >= 500000n &&
-    MAX_QUOTA - BigInt(currentBalance.value) >= 500000n
+    BigInt(props.transferable) > 0n &&
+    afterBalance.value !== null
 )
 </script>
 
@@ -80,7 +79,7 @@ const canTransfer = computed(
       :disabled="!canTransfer"
       @click="emit('transfer')"
     >
-      {{ canTransfer ? t('invite.transfer') : t('invite.minimumTransfer') }}
+      {{ t('invite.transfer') }}
     </ConsoleButton>
 
     <p

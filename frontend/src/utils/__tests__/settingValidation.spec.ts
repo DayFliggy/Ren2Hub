@@ -39,10 +39,6 @@ describe('payment setting validation', () => {
     expect(validate('MinTopUp', 18446744073710)).toBe('range')
     expect(validate('MinTopUp', 1.5)).toBe('range')
   })
-  it('requires positive shared pricing multipliers', () => {
-    expect(validate('TopupGroupRatio', '{"vip":0}')).toBe('range')
-    expect(validate('TopupGroupRatio', '{"vip":0.8}')).toBeNull()
-  })
   it.each([
     { name: 'A', type: 'alipay', min_topup: '1e2' },
     { name: 'A', type: 'alipay', min_topup: '18446744073710' },

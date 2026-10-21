@@ -14,21 +14,23 @@ for (const theme of ['light', 'dark'] as const) {
       page.on('pageerror', (error) => errors.push(error.message))
       const order = {
         id: 1,
-        order_no: 'GPvisual',
+        trade_no: 'GPvisual',
         user_id: 1,
         username: 'visual',
         email: '',
         amount: 10,
-        quota: '0',
-        type: 'topup',
-        currency: 'USD',
-        method: 'gmpay',
+        money: 73,
+        expected_quota: 5000000,
+        credited_quota: 0,
+        currency: 'CNY',
+        pay_amount: '73.00',
+        payment_provider: 'gmpay',
         payment_method: 'gmpay:usdt.tron',
         status: 'pending',
-        created: 1785114000,
-        paid_at: 0,
+        create_time: 1785114000,
+        complete_time: 0,
       }
-      await page.route(/\/api\/next\/admin\/orders(?:\?.*)?$/, (route) =>
+      await page.route(/\/api\/user\/topup(?:\?.*)?$/, (route) =>
         route.fulfill({
           json: {
             success: true,
@@ -37,17 +39,13 @@ for (const theme of ['light', 'dark'] as const) {
               total: 1,
               page: 1,
               page_size: 20,
-              status_counts: { pending: 1 },
-              method_counts: { gmpay: 1 },
-              type_counts: { topup: 1 },
-              filtered_epay_revenue: 0,
             },
           },
         })
       )
       let fail = true
       let settled = false
-      await page.route('**/api/next/admin/orders/GPvisual', (route) => {
+      await page.route('**/api/user/topup/admin/detail/GPvisual', (route) => {
         expect(route.request().method()).toBe('GET')
         if (fail)
           return route.fulfill({
@@ -58,9 +56,9 @@ for (const theme of ['light', 'dark'] as const) {
             success: true,
             data: {
               ...order,
-              status: settled ? 'completed' : 'pending',
-              quota: settled ? '5000000' : '0',
-              paid_at: settled ? 1785114100 : 0,
+              status: settled ? 'success' : 'pending',
+              credited_quota: settled ? 5000000 : 0,
+              complete_time: settled ? 1785114100 : 0,
               gmpay: {
                 status: settled ? 'settled' : 'unknown',
                 last_failure: settled ? '' : 'TRANSPORT',

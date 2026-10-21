@@ -4,11 +4,12 @@ import type {
   LoginSessionRevokeResult,
 } from '@/types/auth'
 import { ApiError, type PageResult } from './types'
-import { isQuota, type Quota } from '@/utils/quota'
+import type { Quota } from '@/utils/quota'
 
 export function requiredQuota(value: unknown, endpoint: string): Quota {
-  if (!isQuota(value)) invalidResponse(endpoint)
-  return value
+  if (typeof value !== 'number' || !Number.isSafeInteger(value))
+    invalidResponse(endpoint)
+  return String(value)
 }
 
 export function invalidResponse(endpoint: string): never {

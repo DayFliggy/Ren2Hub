@@ -1,6 +1,4 @@
-// Copy for the metadata sync wizard and the missing-models dialog. Wording
-// follows NewAPI web/src/i18n/locales (c71eefbc); lines that describe backend
-// behavior are adjusted to what Ren2Hub's sync protocol actually does.
+// Metadata sync follows the native NewAPI candidate and selection contract.
 const zh = {
   syncTitle: '同步模型资料',
   syncSubtitle: '应用前逐项检查新增和覆盖内容，定价、渠道及分组权限不会改变。',
@@ -25,7 +23,6 @@ const zh = {
   clearSelection: '清除选择',
   selectPageSyncable: '全选本页可同步项',
   selectModel: '选择 {name}',
-  autoIncluded: '{name} 将自动导入，无需勾选',
   model: '模型',
   plannedAction: '计划操作',
   kindCreate: '新增资料',
@@ -37,7 +34,7 @@ const zh = {
   pageOf: '第 {current} 页，共 {total} 页',
   previousPage: '上一页',
   nextPage: '下一页',
-  newModelsHint: '新模型：将自动导入上游资料，无需勾选。',
+  newModelsHint: '已选择的新模型会导入下列全部资料；无需逐个勾选字段。',
   existingModelsHint:
     '已有模型：勾选要更新的字段，当前内容会被右侧内容替换；未勾选的保持不变。',
   selectAllFields: '全选变更字段',
@@ -52,6 +49,19 @@ const zh = {
   fieldIcon: '图标',
   fieldTags: '标签',
   fieldVendor: '供应商',
+  fieldEndpoints: '接口',
+  scopeLabel: '同步范围',
+  scopeSite: '本站使用的模型',
+  scopeAll: '上游模型列表',
+  vendorsToCreate: '将创建供应商：{names}',
+  kinds: {
+    create: '新增资料',
+    update: '资料变更',
+    unchanged: '无需变更',
+    blocked: '资料同步已禁用',
+    missing_upstream: '上游未找到',
+    missing_vendor: '上游供应商缺失',
+  },
   fieldNameRule: '匹配类型',
   fieldStatus: '广场展示',
   nameRuleImpact: '会修改哪些模型名称继承此元信息，不会继承价格。',
@@ -69,12 +79,6 @@ const zh = {
   planOverwrite: '将覆盖 {models} 个模型的 {fields} 个字段',
   importNote: '导入元信息不会添加渠道、开放模型访问或配置价格。',
   syncFailed: '资料同步失败',
-  sourceChangedTitle: '上游资料已变化',
-  sourceChangedHint:
-    '预览之后上游资料有更新，本次未做任何修改。请重新预览后再应用。',
-  localChangedTitle: '本地资料已变化',
-  localChangedHint:
-    '预览之后本地资料有修改，本次未做任何修改。请重新预览并确认最新内容。',
   previewAgain: '重新预览',
   syncCompleted: '资料同步完成',
   syncSummary:
@@ -102,7 +106,11 @@ const zh = {
   copied: '已复制到剪贴板',
   copyFailed: '复制到剪贴板失败',
 }
-const en: Record<keyof typeof zh, string> = {
+const en: {
+  [K in keyof typeof zh]: (typeof zh)[K] extends string
+    ? string
+    : Record<keyof (typeof zh)[K], string>
+} = {
   syncTitle: 'Sync model metadata',
   syncSubtitle:
     'Review every addition and overwrite before applying. Pricing, channels, and group access are not changed.',
@@ -128,7 +136,6 @@ const en: Record<keyof typeof zh, string> = {
   clearSelection: 'Clear selection',
   selectPageSyncable: 'Select syncable models on this page',
   selectModel: 'Select {name}',
-  autoIncluded: '{name} is imported automatically. No selection is needed.',
   model: 'Model',
   plannedAction: 'Planned action',
   kindCreate: 'New metadata',
@@ -142,7 +149,7 @@ const en: Record<keyof typeof zh, string> = {
   previousPage: 'Previous page',
   nextPage: 'Next page',
   newModelsHint:
-    'New models: upstream metadata will be imported automatically. No selection is needed.',
+    'Selected new models import all metadata shown below. No field selection is needed.',
   existingModelsHint:
     'Existing models: select fields to replace their current values with the values on the right. Unselected fields stay unchanged.',
   selectAllFields: 'Select all changed fields',
@@ -157,6 +164,19 @@ const en: Record<keyof typeof zh, string> = {
   fieldIcon: 'Icon',
   fieldTags: 'Tags',
   fieldVendor: 'Vendor',
+  fieldEndpoints: 'Endpoints',
+  scopeLabel: 'Sync scope',
+  scopeSite: 'Models used on this site',
+  scopeAll: 'Upstream model list',
+  vendorsToCreate: 'Vendors to create: {names}',
+  kinds: {
+    create: 'New metadata',
+    update: 'Metadata changes',
+    unchanged: 'No changes',
+    blocked: 'Metadata sync disabled',
+    missing_upstream: 'Not found upstream',
+    missing_vendor: 'Upstream vendor missing',
+  },
   fieldNameRule: 'Match Type',
   fieldStatus: 'Model square visibility',
   nameRuleImpact:
@@ -176,12 +196,6 @@ const en: Record<keyof typeof zh, string> = {
   importNote:
     'Importing metadata does not add channels, enable model access, or configure prices.',
   syncFailed: 'Metadata sync failed',
-  sourceChangedTitle: 'Upstream metadata changed',
-  sourceChangedHint:
-    'The upstream metadata was updated after this preview, so nothing was changed. Preview again before applying.',
-  localChangedTitle: 'Local metadata changed',
-  localChangedHint:
-    'Local metadata changed after this preview, so nothing was changed. Preview again and review the latest values.',
   previewAgain: 'Preview again',
   syncCompleted: 'Metadata sync completed',
   syncSummary:

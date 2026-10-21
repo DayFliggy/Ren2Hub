@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { RefreshCw } from 'lucide-vue-next'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { api } from '@/api/console'
+import {
+  affiliateApi,
+  type AffiliatePolicyUpdate,
+  type AffiliateUserPolicy,
+} from '@/api/affiliate'
 import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -11,11 +15,8 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
-import type {
-  AdminAffiliateUser,
-  AdminAffiliateUserUpdateInput,
-  AdminUser,
-} from '@/types/console'
+import type { AdminUser } from '@/types/console'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import { formatQuota } from '@/utils/format'
 
 const props = defineProps<{
@@ -30,14 +31,12 @@ const toast = useToast()
 const loading = ref(false)
 const saving = ref(false)
 const resetting = ref(false)
-const detail = ref<AdminAffiliateUser | null>(null)
+const detail = ref<AffiliateUserPolicy | null>(null)
 const form = reactive({
   code: '',
   codeEnabled: true,
   useCustomRate: false,
   ratePercent: 10,
-  useInviteLimit: false,
-  inviteLimit: 0,
 })
 
 const codeValid = computed(() => /^[A-Z0-9_-]{4,32}$/.test(form.code.trim()))
@@ -48,47 +47,51 @@ const rateValid = computed(
       form.ratePercent >= 0 &&
       form.ratePercent <= 100)
 )
-const limitValid = computed(
-  () =>
-    !form.useInviteLimit ||
-    (Number.isInteger(form.inviteLimit) && form.inviteLimit >= 0)
-)
-const valid = computed(
-  () => codeValid.value && rateValid.value && limitValid.value
-)
+const valid = computed(() => codeValid.value && rateValid.value)
+const policyRequest = useLatestRequest()
+let mutationSequence = 0
+onScopeDispose(() => {
+  mutationSequence += 1
+})
 
-function applyDetail(value: AdminAffiliateUser) {
+function applyDetail(value: AffiliateUserPolicy) {
   detail.value = value
   form.code = value.code
-  form.codeEnabled = value.code_enabled
+  form.codeEnabled = value.enabled
   form.useCustomRate = value.rate_bps !== null
   form.ratePercent = (value.rate_bps ?? value.effective_rate_bps) / 100
-  form.useInviteLimit = value.invite_limit !== null
-  form.inviteLimit = value.invite_limit ?? 0
 }
 
 async function load() {
   if (!props.target) return
+  const id = props.target.id
   loading.value = true
-  try {
-    applyDetail(
-      await api.get<AdminAffiliateUser>(
-        `/api/next/admin/affiliate/users/${props.target.id}`
-      )
+  const result = await policyRequest.run((signal) =>
+    affiliateApi.userPolicy(id, signal)
+  )
+  if (result.stale) return
+  loading.value = false
+  if (!result.ok) {
+    toast.error(
+      result.error instanceof ApiError
+        ? result.error.message
+        : String(result.error)
     )
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
     emit('close')
-  } finally {
-    loading.value = false
+    return
   }
+  applyDetail(result.value)
 }
 
 watch(
   () => [props.open, props.target?.id] as const,
   ([open]) => {
+    mutationSequence += 1
+    policyRequest.cancel()
+    detail.value = null
+    saving.value = false
+    resetting.value = false
     if (open) void load()
-    else detail.value = null
   },
   { immediate: true }
 )
@@ -98,51 +101,63 @@ function close() {
 }
 
 async function submit() {
-  if (!props.target || !valid.value || saving.value) return
-  const input: AdminAffiliateUserUpdateInput = {
-    code_enabled: form.codeEnabled,
-    clear_rate: !form.useCustomRate,
-    clear_invite_limit: !form.useInviteLimit,
+  if (
+    !props.target ||
+    !detail.value ||
+    !props.open ||
+    !valid.value ||
+    saving.value ||
+    resetting.value
+  )
+    return
+  const id = props.target.id
+  const sequence = ++mutationSequence
+  const input: AffiliatePolicyUpdate = {
+    enabled: form.codeEnabled,
+    rate_bps: form.useCustomRate ? Math.round(form.ratePercent * 100) : null,
   }
-  if (form.code.trim() !== detail.value?.code) input.code = form.code.trim()
-  if (form.useCustomRate) input.rate_bps = Math.round(form.ratePercent * 100)
-  if (form.useInviteLimit) input.invite_limit = form.inviteLimit
-
+  if (form.code.trim() !== detail.value.code) input.code = form.code.trim()
   saving.value = true
   try {
-    await api.patch<AdminAffiliateUser>(
-      `/api/next/admin/affiliate/users/${props.target.id}`,
-      input
-    )
+    await affiliateApi.updateUserPolicy(id, input)
+    if (sequence !== mutationSequence || props.target?.id !== id) return
     toast.success(t('users.affiliateSaved'))
     emit('saved')
     emit('close')
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence)
+      toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    saving.value = false
+    if (sequence === mutationSequence) saving.value = false
   }
 }
 
 async function resetCode() {
-  if (!props.target || resetting.value) return
+  if (
+    !props.target ||
+    !detail.value ||
+    !props.open ||
+    resetting.value ||
+    saving.value
+  )
+    return
+  const id = props.target.id
+  const sequence = ++mutationSequence
   resetting.value = true
   try {
-    const result = await api.post<{ id: number; code: string }>(
-      `/api/next/admin/affiliate/users/${props.target.id}/reset-code`
-    )
-    form.code = result.code
-    if (detail.value) {
-      detail.value.code = result.code
-      detail.value.code_custom = false
-    }
-    form.codeEnabled = true
+    const result = await affiliateApi.updateUserPolicy(id, {
+      rate_bps: detail.value.rate_bps,
+      reset_code: true,
+    })
+    if (sequence !== mutationSequence || props.target?.id !== id) return
+    applyDetail(result)
     toast.success(t('users.affiliateCodeReset'))
     emit('saved')
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence)
+      toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    resetting.value = false
+    if (sequence === mutationSequence) resetting.value = false
   }
 }
 </script>
@@ -180,7 +195,7 @@ async function resetCode() {
           <dd
             class="mt-1 font-semibold tabular-nums text-[var(--text-primary)]"
           >
-            {{ detail.invited_count }}
+            {{ target?.aff_count ?? 0 }}
           </dd>
         </div>
         <div class="border-b border-[var(--border-subtle)] pb-2">
@@ -190,7 +205,7 @@ async function resetCode() {
           <dd
             class="mt-1 font-semibold tabular-nums text-[var(--text-primary)]"
           >
-            {{ formatQuota(detail.available_reward) }}
+            {{ formatQuota(target?.aff_quota ?? 0) }}
           </dd>
         </div>
         <div class="border-b border-[var(--border-subtle)] pb-2">
@@ -200,7 +215,7 @@ async function resetCode() {
           <dd
             class="mt-1 font-semibold tabular-nums text-[var(--text-primary)]"
           >
-            {{ formatQuota(detail.frozen_reward) }}
+            {{ formatQuota(target?.aff_frozen_quota ?? 0) }}
           </dd>
         </div>
       </dl>
@@ -269,32 +284,6 @@ async function resetCode() {
             step="0.01"
             class="affiliate-number focus-ring"
             :aria-label="t('users.affiliateRatePercent')"
-          />
-        </div>
-
-        <div class="sibling-space-y-3">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-sm font-medium text-[var(--text-secondary)]">
-                {{ t('users.affiliateInviteLimit') }}
-              </p>
-              <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-                {{ t('users.affiliateInviteLimitHint') }}
-              </p>
-            </div>
-            <ConsoleToggle
-              v-model="form.useInviteLimit"
-              :label="t('users.affiliateInviteLimit')"
-            />
-          </div>
-          <input
-            v-if="form.useInviteLimit"
-            v-model.number="form.inviteLimit"
-            type="number"
-            min="0"
-            step="1"
-            class="affiliate-number focus-ring"
-            :aria-label="t('users.affiliateInviteLimit')"
           />
         </div>
       </div>

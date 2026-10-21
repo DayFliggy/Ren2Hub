@@ -92,7 +92,7 @@ describe('API client request scope', () => {
   })
 
   it('rejects nonstandard response envelopes for every endpoint', async () => {
-    const endpoints = ['/api/next/wallet/topup', '/api/user/pay']
+    const endpoints = ['/api/user/self', '/api/user/pay']
     for (const url of endpoints) {
       const client = createApiClient({
         request: vi.fn().mockResolvedValue({

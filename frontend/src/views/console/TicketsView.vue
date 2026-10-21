@@ -3,9 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { api } from '@/api/console'
-import { ApiError, type PageResult } from '@/api/types'
-import type { TicketItem } from '@/types/console'
+import { ticketsApi, type TicketRow } from '@/api/tickets'
+import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
@@ -22,9 +21,6 @@ import { useToast } from '@/composables/useToast'
 import { ticketStatusTone } from '@/constants/console'
 import { useTicketQueueStore } from '@/stores/ticketQueue'
 import { relativeTime } from '@/utils/format'
-
-// The list endpoint omits the message thread from each row.
-type TicketRow = Omit<TicketItem, 'messages'>
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -66,15 +62,14 @@ async function load() {
   loading.value = true
   loadFailed.value = false
   const result = await listRequest.run((signal) =>
-    api.get<PageResult<TicketRow>>(
-      '/api/next/tickets',
+    ticketsApi.list(
       {
         page: page.value,
         page_size: pageSize.value,
         keyword: keyword.value,
         status: status.value,
       },
-      { signal }
+      signal
     )
   )
   if (result.stale) return

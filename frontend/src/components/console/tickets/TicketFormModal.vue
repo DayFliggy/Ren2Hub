@@ -2,7 +2,7 @@
 import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { api } from '@/api/console'
+import { ticketsApi } from '@/api/tickets'
 import { ApiError } from '@/api/types'
 import type { TicketCategory, TicketPriority } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -84,17 +84,15 @@ async function save() {
   if (props.readonly || !validate() || saving.value) return
   saving.value = true
   try {
-    const payload = new FormData()
-    payload.set('title', form.title.trim())
-    payload.set('category', form.category)
-    payload.set('priority', form.priority)
-    payload.set('content', form.content.trim())
-    payload.set('model_id', form.model_id.trim())
-    payload.set('request_id', form.request_id.trim())
-    for (const file of uploader.value?.getFiles() ?? []) {
-      payload.append('attachments', file)
-    }
-    await api.post('/api/next/tickets', payload)
+    await ticketsApi.create({
+      title: form.title.trim(),
+      category: form.category,
+      priority: form.priority,
+      content: form.content.trim(),
+      model_id: form.model_id.trim(),
+      request_id: form.request_id.trim(),
+      attachments: uploader.value?.getFiles() ?? [],
+    })
     toast.success(t('tickets.created'))
     emit('saved')
     emit('close')

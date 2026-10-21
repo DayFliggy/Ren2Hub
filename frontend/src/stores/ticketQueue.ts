@@ -1,7 +1,7 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
-import { api } from '@/api/console'
+import { ticketsApi } from '@/api/tickets'
 import type { TicketQueueSummary } from '@/types/console'
 
 import { useAuthStore } from './auth'
@@ -9,6 +9,7 @@ import { useAuthStore } from './auth'
 const REFRESH_INTERVAL_MS = 60_000
 
 export const useTicketQueueStore = defineStore('ticket-queue', () => {
+  const auth = useAuthStore()
   const summary = ref<TicketQueueSummary>({
     pending: 0,
     unassigned: 0,
@@ -17,24 +18,42 @@ export const useTicketQueueStore = defineStore('ticket-queue', () => {
   let timer = 0
   let consumers = 0
   let refreshing: Promise<void> | null = null
+  let request: AbortController | null = null
+
+  watch(
+    () => [auth.user?.id, auth.hasPermission('ticket', 'read')],
+    () => {
+      request?.abort()
+      request = null
+      refreshing = null
+      summary.value = { pending: 0, unassigned: 0, mine: 0 }
+      if (consumers > 0) void refresh()
+    }
+  )
 
   async function refresh(): Promise<void> {
-    const auth = useAuthStore()
     if (!auth.hasPermission('ticket', 'read')) {
       summary.value = { pending: 0, unassigned: 0, mine: 0 }
       return
     }
     if (refreshing) return refreshing
-    refreshing = api
-      .get<TicketQueueSummary>('/api/next/admin/tickets/summary')
+    const current = new AbortController()
+    request = current
+    refreshing = ticketsApi
+      .summary(current.signal)
       .then((value) => {
-        summary.value = value
+        if (!current.signal.aborted && auth.hasPermission('ticket', 'read'))
+          summary.value = value
       })
       .catch((error: unknown) => {
-        console.error('Failed to refresh ticket queue summary', error)
+        if (!current.signal.aborted)
+          console.error('Failed to refresh ticket queue summary', error)
       })
       .finally(() => {
-        refreshing = null
+        if (request === current) {
+          request = null
+          refreshing = null
+        }
       })
     return refreshing
   }

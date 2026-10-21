@@ -113,7 +113,7 @@ export type TaskPluginOption = {
   upstreams?: string[] | null
 }
 
-/** POST /api/plugin/task/preview: literal metadata, never evaluated. */
+/** Local literal metadata preview, never evaluated. */
 export type TaskPluginPreview = {
   meta: Record<string, unknown>
   unresolved: string[]

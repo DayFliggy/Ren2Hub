@@ -114,7 +114,8 @@ useEChart(
         name: line.name,
         type: props.kind,
         data: withGaps(line.points, props.bucketSeconds),
-        showSymbol: false,
+        showSymbol:
+          line.points.filter((point) => point.value !== null).length === 1,
         symbol: 'circle',
         symbolSize: 4 * scale,
         smooth: mood.line.smooth,

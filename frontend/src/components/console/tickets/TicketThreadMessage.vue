@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { api } from '@/api/console'
+import { ticketsApi } from '@/api/tickets'
 import type { TicketMessage } from '@/types/console'
 import { relativeTime } from '@/utils/format'
 import { safeImageUrl } from '@/utils/safeUrl'
@@ -46,7 +46,7 @@ async function loadImage(image: MessageImageState, generation: number) {
   const controller = new AbortController()
   imageControllers.add(controller)
   try {
-    const blob = await api.getBlob(image.source, { signal: controller.signal })
+    const blob = await ticketsApi.attachment(image.source, controller.signal)
     const objectUrl = URL.createObjectURL(blob)
     if (
       controller.signal.aborted ||

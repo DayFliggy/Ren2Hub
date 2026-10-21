@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import UsageHeatmapGrid from '@/components/console/dashboard/UsageHeatmapGrid.vue'
@@ -24,8 +25,9 @@ const props = withDefaults(
   defineProps<{
     points: UsageDistributionPoint[]
     loading?: boolean
+    error?: string
   }>(),
-  { loading: false }
+  { loading: false, error: '' }
 )
 
 const { t, locale } = useI18n()
@@ -149,6 +151,11 @@ const topDaySummary = computed(() => {
       <SkeletonBlock class="mt-3 h-5" rounded="md" />
     </div>
 
+    <EmptyState
+      v-else-if="error"
+      :title="t('dashboard.loadFailed')"
+      :hint="error"
+    />
     <div v-else class="flex grow flex-col" data-usage-content>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">

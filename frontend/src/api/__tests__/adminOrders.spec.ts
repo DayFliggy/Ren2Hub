@@ -1,101 +1,89 @@
 import { describe, expect, it } from 'vitest'
-import { parseGmpayOrderDetail, parseGmpayOrderEvidence } from '../adminOrders'
+import {
+  parseTopUp,
+  parseTopUpDetail,
+  parseTopUpStatistics,
+} from '../adminOrders'
+import { nativeTopUp, nativeGmpayEvidence } from './topupFixtures'
 
-const evidence = {
-  status: 'unknown',
-  last_failure: 'TRANSPORT',
-  token: 'usdt',
-  network: 'tron',
-  gateway_crypto_amount: '',
-  receive_address: '',
-  settled_crypto_amount: '',
-  settled_receive_address: '',
-  settled_transaction_id: '',
-}
-
-describe('GMPay administrator evidence', () => {
-  it('preserves large exact quota and crypto values and excludes unrecognized fields', () => {
-    const detail = parseGmpayOrderDetail(
+describe('native order contracts', () => {
+  it('projects native success and credited quota without inventing missing payment facts', () => {
+    const order = parseTopUp({
+      ...nativeTopUp,
+      status: 'success',
+      credited_quota: 5000000,
+      complete_time: 1792368100,
+    })
+    expect(order).toMatchObject({
+      order_no: 'GPtest',
+      method: 'gmpay',
+      currency: 'CNY',
+      amount: 73,
+      quota: '5000000',
+      status: 'completed',
+    })
+    const legacy = parseTopUp({ ...nativeTopUp, currency: '', pay_amount: '' })
+    expect(legacy.currency).toBe('')
+    expect(legacy.amount).toBeNaN()
+  })
+  it('validates the order identity, excludes merchant fields, and keeps exact crypto receipts', () => {
+    const detail = parseTopUpDetail(
       {
-        order_no: 'GPtest',
-        method: 'gmpay',
-        status: 'completed',
-        quota: '9007199254740993',
-        paid_at: 1785114100,
+        ...nativeTopUp,
+        username: 'payer',
+        email: 'payer@example.test',
         gmpay: {
-          ...evidence,
-          status: 'settled',
+          ...nativeGmpayEvidence,
           settled_crypto_amount: '0.123456789012345678',
-          merchant_key: 'must-not-be-exposed',
+          merchant_key: 'private',
         },
       },
       'GPtest'
     )
-    expect(detail.state).toEqual({
-      status: 'completed',
-      quota: '9007199254740993',
-      paid_at: 1785114100,
-    })
+    expect(detail.state.email).toBe('payer@example.test')
     expect(detail.evidence?.settled_crypto_amount).toBe('0.123456789012345678')
     expect(detail.evidence).not.toHaveProperty('merchant_key')
+    expect(() =>
+      parseTopUpDetail(
+        { ...nativeTopUp, gmpay: nativeGmpayEvidence },
+        'GPother'
+      )
+    ).toThrow()
   })
-
   it.each([
-    { quota: 500000 },
-    { quota: '-1' },
-    { paid_at: -1 },
-    { status: 'unverified' },
-  ])('rejects invalid authoritative order state %j', (overrides) => {
-    expect(() =>
-      parseGmpayOrderDetail(
-        {
-          order_no: 'GPtest',
-          method: 'gmpay',
-          status: 'pending',
-          quota: '0',
-          paid_at: 0,
-          gmpay: evidence,
-          ...overrides,
-        },
-        'GPtest'
-      )
-    ).toThrow()
+    { credited_quota: '5000000' },
+    { credited_quota: Number.MAX_SAFE_INTEGER + 1 },
+    { status: 'completed' },
+    { pay_amount: 'NaN' },
+  ])('rejects invalid native rows %j', (change) => {
+    expect(() => parseTopUp({ ...nativeTopUp, ...change })).toThrow()
   })
-
-  it('accepts an unknown creation result without inventing a gateway trade number', () => {
-    expect(
-      parseGmpayOrderEvidence(
-        { order_no: 'GPtest', method: 'gmpay', gmpay: evidence },
-        'GPtest'
-      )
-    ).toEqual({ ...evidence, gateway_trade_no: '' })
-  })
-
-  it('rejects evidence for a different order or provider', () => {
+  it('keeps currency totals separate and exposes unknown legacy amounts', () => {
+    const total = {
+      currency: 'CNY',
+      count: 2,
+      paid_count: 1,
+      paid_amount: '73.00',
+      credited_quota: 5000000,
+      unknown_amount_count: 0,
+    }
+    const stats = parseTopUpStatistics({
+      total: 3,
+      currencies: [
+        total,
+        { ...total, currency: '', paid_amount: '0', unknown_amount_count: 1 },
+      ],
+      daily: [],
+      start_time: 1,
+      end_time: 2,
+    })
+    expect(stats.currencies.map((value) => value.currency)).toEqual(['CNY', ''])
+    expect(stats.currencies[1]?.unknown_amount_count).toBe(1)
     expect(() =>
-      parseGmpayOrderEvidence(
-        { order_no: 'GPother', method: 'gmpay', gmpay: evidence },
-        'GPtest'
-      )
-    ).toThrow()
-    expect(() =>
-      parseGmpayOrderEvidence(
-        { order_no: 'GPtest', method: 'epay', gmpay: evidence },
-        'GPtest'
-      )
-    ).toThrow()
-  })
-
-  it('rejects malformed receipt fields without hiding their absence behind defaults', () => {
-    expect(() =>
-      parseGmpayOrderEvidence(
-        {
-          order_no: 'GPtest',
-          method: 'gmpay',
-          gmpay: { ...evidence, settled_crypto_amount: 10 },
-        },
-        'GPtest'
-      )
+      parseTopUpStatistics({
+        ...stats,
+        currencies: [{ ...total, paid_amount: 73 }],
+      })
     ).toThrow()
   })
 })

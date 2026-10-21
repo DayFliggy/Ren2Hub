@@ -18,7 +18,10 @@ async function setup(role: number, capabilities: Record<string, string>) {
   const pinia = createPinia()
   setActivePinia(pinia)
   useAuthStore().persist({ role } as never)
-  useAppStore().status = { frontend_capabilities: capabilities } as never
+  useAppStore().status = {
+    frontend_capabilities: capabilities,
+    checkin_enabled: true,
+  } as never
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -44,9 +47,36 @@ beforeEach(async () => {
 })
 
 describe('top navigation', () => {
-  it('places the admin-only ops monitor between dashboard and console', () => {
+  it('disables the shared desktop and mobile check-in entry from native status', async () => {
+    const options = await setup(100, { admin: 'live', activity: 'live' })
+    useAppStore().status.checkin_enabled = false
+    const desktop = mount(TopNavMenu, options)
+    await flushPromises()
+    expect(desktop.findAll('button')[0]!.attributes()).toHaveProperty(
+      'disabled'
+    )
+    for (const surface of ['desktop', 'mobile'] as const) {
+      expect(
+        getVisibleTopNavItems({
+          isAdmin: true,
+          isRoot: true,
+          surface,
+          checkinEnabled: useAppStore().checkinEnabled,
+          featureStatus: live,
+        }).find((item) => item.name === 'activities')?.disabled
+      ).toBe(true)
+    }
+    useAppStore().status.checkin_enabled = true
+    await flushPromises()
+    expect(desktop.findAll('button')[0]!.attributes()).not.toHaveProperty(
+      'disabled'
+    )
+    desktop.unmount()
+  })
+  it('places the root-only ops monitor between dashboard and console', () => {
     const admin = getVisibleTopNavItems({
       isAdmin: true,
+      isRoot: true,
       surface: 'desktop',
       featureStatus: live,
     })
@@ -67,6 +97,7 @@ describe('top navigation', () => {
     expect(
       getVisibleTopNavItems({
         isAdmin: true,
+        isRoot: true,
         surface: 'mobile',
         featureStatus: live,
       }).map((item) => item.name)
@@ -76,6 +107,7 @@ describe('top navigation', () => {
   it('fails closed when the admin capability is disabled', () => {
     const items = getVisibleTopNavItems({
       isAdmin: true,
+      isRoot: true,
       surface: 'desktop',
       featureStatus: (feature) => (feature === 'admin' ? 'disabled' : 'live'),
     })
@@ -86,7 +118,7 @@ describe('top navigation', () => {
   })
 
   it('renders the desktop menu by role and marks the ops route active', async () => {
-    const admin = mount(TopNavMenu, await setup(10, { admin: 'live' }))
+    const admin = mount(TopNavMenu, await setup(100, { admin: 'live' }))
     await flushPromises()
     const buttons = admin.findAll('button')
     expect(buttons.slice(0, 5).map((button) => button.text())).toEqual([
@@ -106,7 +138,7 @@ describe('top navigation', () => {
   })
 
   it('renders the mobile strip from the same definition', async () => {
-    const options = await setup(10, { admin: 'live' })
+    const options = await setup(100, { admin: 'live' })
     const topbar = mount(ConsoleTopbar, {
       global: {
         ...options.global,

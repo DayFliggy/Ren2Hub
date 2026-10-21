@@ -62,6 +62,7 @@ func CreateGmpayTopUp(ctx context.Context, request GmpayOrderRequest, config set
 	if err := model.CreateGmpayOrder(ctx, order, snapshot, merchant); err != nil {
 		return nil, err
 	}
+	result := &GmpayCreatedOrder{Order: order}
 	created, callErr := callGmpayCreateOrder(ctx, config.Merchant(), outbound)
 	// Persist an unknown outcome even when the browser disconnected. No gateway
 	// creation request is retried, because the remote operation is not idempotent.
@@ -73,14 +74,25 @@ func CreateGmpayTopUp(ctx context.Context, request GmpayOrderRequest, config set
 			status = model.GmpayStatusFailed
 		}
 		if markErr := model.MarkGmpayOrderResult(resultContext, order.Id, model.GmpayOrderResult{Status: status, Failure: gmpayFailureCode(callErr)}); markErr != nil {
-			return nil, errors.Join(callErr, markErr)
+			return failedGmpayCreation(resultContext, result, errors.Join(callErr, markErr))
 		}
-		return nil, callErr
+		return failedGmpayCreation(resultContext, result, callErr)
 	}
 	if err := model.MarkGmpayOrderResult(resultContext, order.Id, model.GmpayOrderResult{Status: model.GmpayStatusReady, GatewayTradeNo: created.TradeNo, GatewayAmount: created.Amount, GatewayCryptoAmount: created.ActualAmount, ReceiveAddress: created.ReceiveAddress, ExpirationTime: created.ExpirationTime}); err != nil {
-		return nil, err
+		return failedGmpayCreation(resultContext, result, err)
 	}
 	return &GmpayCreatedOrder{Order: order, Payment: snapshot, PaymentURL: created.PaymentURL}, nil
+}
+
+// Return the durable identity even when creation is uncertain. Reload instead
+// of guessing the status: a callback may already have settled the same order.
+func failedGmpayCreation(ctx context.Context, result *GmpayCreatedOrder, cause error) (*GmpayCreatedOrder, error) {
+	payment, err := model.GetGmpayOrderSnapshot(ctx, result.Order.Id)
+	if err != nil {
+		return result, errors.Join(cause, err)
+	}
+	result.Payment = payment
+	return result, cause
 }
 
 // callGmpayCreateOrder performs the single outbound creation request. The

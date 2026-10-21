@@ -3,10 +3,10 @@ import { expect, test } from '@playwright/test'
 import {
   assertInteractiveCentersVisible,
   assertNoHorizontalOverflow,
-  configureStablePage,
   waitForStablePage,
   type VisualTheme,
 } from './fixtures'
+import { configureNativeTickets } from './businessFixtures'
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -17,7 +17,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
   for (const viewport of viewports) {
     test(`${theme} ${viewport.name} user tickets`, async ({ page }) => {
       await page.setViewportSize(viewport)
-      await configureStablePage(page, { theme, authenticated: true })
+      await configureNativeTickets(page, theme)
       await page.goto('/tickets', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
 
@@ -48,7 +48,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
       page,
     }, testInfo) => {
       await page.setViewportSize(viewport)
-      await configureStablePage(page, { theme, authenticated: true })
+      await configureNativeTickets(page, theme)
       await page.goto('/ticket-management/1', {
         waitUntil: 'domcontentloaded',
       })

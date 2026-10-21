@@ -12,17 +12,6 @@ for (const theme of ['light', 'dark'] as const) {
     }) => {
       await page.setViewportSize({ width, height: 900 })
       await configureStablePage(page, { theme, authenticated: true })
-      await page.route('**/api/gateway/channels/101/credentials', (route) =>
-        route.fulfill({ json: { success: true, data: [] } })
-      )
-      await page.route('**/api/gateway/runtime/channels/101', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: { in_flight: 0, capacity: 20, queued: 0, rate: null },
-          },
-        })
-      )
       const advanced = {
         advanced_routes: [
           {
@@ -41,15 +30,15 @@ for (const theme of ['light', 'dark'] as const) {
         id: 101,
         name: 'Advanced Fixture',
         type: 58,
-        supplier: 'Custom',
+        lab: { id: 'fixture', name: 'Fixture lab', source: 'vendor' },
+        max_concurrency: 20,
+        in_flight: 0,
         status: 1,
         priority: 0,
         weight: 10,
-        capacity_used: 0,
-        capacity_total: 20,
         channel_ratio: '1',
 
-        used_quota: '0',
+        used_quota: 0,
         balance: 0,
         response_time: 0,
         test_time: 0,
@@ -73,9 +62,9 @@ for (const theme of ['light', 'dark'] as const) {
         null,
         2
       )
-      await page.route('**/api/next/admin/channels/balance/101', (route) =>
+      await page.route('**/api/channel/update_balance/101', (route) =>
         route.fulfill({
-          json: { success: true, data: { raw_response: rawBalance } },
+          json: { success: true, raw_response: rawBalance },
         })
       )
       await page.route('**/api/channel/upstream_updates/detect', (route) =>
@@ -96,7 +85,7 @@ for (const theme of ['light', 'dark'] as const) {
           json: { success: true, data: { models: 'fixture-model,new-model' } },
         })
       })
-      await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) => {
+      await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) => {
         if (route.request().method() === 'POST') {
           created = route.request().postDataJSON()
           return route.fulfill({ json: { success: true, data: { id: 102 } } })
@@ -161,7 +150,7 @@ for (const theme of ['light', 'dark'] as const) {
       })
       await page.locator('[aria-label="编辑渠道"]:visible').first().click()
       const dialog = page.getByRole('dialog', { name: '编辑渠道', exact: true })
-      await page.route('**/api/next/admin/channels/fetch_models*', (route) =>
+      await page.route('**/api/channel/fetch_models*', (route) =>
         route.fulfill({
           json: { success: true, data: ['gpt-4.1', 'gpt-4o', 'wan2.6-t2v'] },
         })
@@ -181,7 +170,7 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog
         .getByRole('button', { name: '高级设置', exact: false })
         .click()
-      const ratioInput = dialog.locator('input[name="admin-channel-ratio"]')
+      const ratioInput = dialog.locator('input[name="channel-ratio"]')
       await ratioInput.fill('1000.000000000000000001')
       await expect(
         dialog.getByRole('button', { name: '保存渠道' })

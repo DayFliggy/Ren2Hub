@@ -64,7 +64,6 @@ const settingsSections: Record<string, string> = {
   'models/deployment': 'models/auto-pricing',
   'site/header-navigation': 'site/navigation',
   'site/sidebar-modules': 'site/navigation',
-  'content/dashboard': 'content/console-content',
   'content/announcements': 'content/console-content',
   'content/api-info': 'content/console-content',
   'content/faq': 'content/console-content',

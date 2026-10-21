@@ -23,7 +23,7 @@ export interface TopNavItem {
   /** Shown disabled when the backend reports this capability disabled. */
   feature?: string
   /** Restricts the entry to administrators (role >= 10). */
-  access?: 'admin'
+  access?: 'admin' | 'root'
   /** The mobile strip has no dropdowns, so menu-only groups stay desktop. */
   desktopOnly?: boolean
   disabled?: boolean
@@ -32,6 +32,8 @@ export interface TopNavItem {
 
 export interface TopNavAccessContext {
   isAdmin: boolean
+  checkinEnabled?: boolean
+  isRoot?: boolean
   surface: 'desktop' | 'mobile'
   featureStatus: (feature: string) => FeatureStatus
 }
@@ -44,7 +46,7 @@ export const topNavItems: readonly TopNavItem[] = [
     labelKey: 'nav.opsMonitor',
     route: 'ops-monitor',
     feature: 'admin',
-    access: 'admin',
+    access: 'root',
   },
   // Direct link into the workspace layout; its sub-nav lives in the sidebar.
   { name: 'console', labelKey: 'nav.console', route: consoleEntryRoute },
@@ -65,12 +67,14 @@ export function getVisibleTopNavItems(
     .filter(
       (item) =>
         (item.access !== 'admin' || context.isAdmin) &&
+        (item.access !== 'root' || context.isRoot === true) &&
         (context.surface === 'desktop' || !item.desktopOnly)
     )
     .map((item) => ({
       ...item,
       disabled:
         item.disabled ||
+        (item.name === 'activities' && context.checkinEnabled === false) ||
         (item.feature !== undefined &&
           context.featureStatus(item.feature) === 'disabled'),
     }))
@@ -85,11 +89,13 @@ export function getTopNavRouteMeta<
   topNav: N
   feature?: string
   requiresAdmin?: true
+  requiresRoot?: true
 } {
   const item = topNavItems.find((candidate) => candidate.name === name)
   return {
     topNav: name,
     ...(item?.feature ? { feature: item.feature } : {}),
     ...(item?.access === 'admin' ? { requiresAdmin: true as const } : {}),
+    ...(item?.access === 'root' ? { requiresRoot: true as const } : {}),
   }
 }

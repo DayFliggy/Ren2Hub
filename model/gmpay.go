@@ -166,11 +166,8 @@ func GetGmpayOrder(ctx context.Context, orderNo string) (*TopUp, *GmpayOrder, *G
 	if topUp.PaymentProvider != PaymentProviderGmpay {
 		return nil, nil, nil, ErrPaymentMethodMismatch
 	}
-	snapshot := &GmpayOrder{}
-	if err := DB.WithContext(ctx).First(snapshot, topUp.Id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil, nil, ErrGmpaySnapshotMissing
-		}
+	snapshot, err := GetGmpayOrderSnapshot(ctx, topUp.Id)
+	if err != nil {
 		return nil, nil, nil, err
 	}
 	merchant, err := loadGmpayMerchantVersion(DB.WithContext(ctx), snapshot.MerchantVersionID)
@@ -178,6 +175,21 @@ func GetGmpayOrder(ctx context.Context, orderNo string) (*TopUp, *GmpayOrder, *G
 		return nil, nil, nil, err
 	}
 	return topUp, snapshot, merchant, nil
+}
+
+// GetGmpayOrderSnapshot reads durable creation state without loading credentials.
+func GetGmpayOrderSnapshot(ctx context.Context, topUpID int) (*GmpayOrder, error) {
+	if topUpID <= 0 {
+		return nil, ErrGmpaySnapshotMissing
+	}
+	var snapshot GmpayOrder
+	if err := DB.WithContext(ctx).First(&snapshot, topUpID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrGmpaySnapshotMissing
+		}
+		return nil, err
+	}
+	return &snapshot, nil
 }
 
 func loadGmpayMerchantVersion(tx *gorm.DB, id string) (*GmpayMerchantVersion, error) {

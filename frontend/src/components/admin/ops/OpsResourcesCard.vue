@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { OpsOverview, OpsSeriesField } from '@/api/opsMonitor'
+import {
+  checkStatus,
+  seriesRange,
+  type OpsOverview,
+  type OpsSeriesField,
+} from '@/api/opsMonitor'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import {
   GAUGE_COLORS,
-  checkStatus,
   formatBytes,
   formatCount,
   formatLatencyMs,
   formatMbps,
   formatPercent,
-  seriesRange,
 } from '@/utils/opsFormat'
 import OpsCard from './OpsCard.vue'
 import OpsMetric from './OpsMetric.vue'
@@ -74,9 +77,11 @@ const gauges = computed(() => {
       color: GAUGE_COLORS[status],
       reading: formatPercent(gauge.percent, locale.value),
       thresholdLabel:
-        gauge.threshold > 0
+        gauge.threshold !== null && gauge.threshold > 0
           ? t('resources.threshold', { value: gauge.threshold })
-          : t('resources.thresholdOff'),
+          : gauge.threshold === null
+            ? t('unavailable')
+            : t('resources.thresholdOff'),
     }
   })
 })
@@ -119,16 +124,17 @@ const trend = computed(() => {
     :title="t('resources.title')"
     :scope="t('scope.instant')"
     :loading="loading"
-    :loaded="overview !== null"
+    :loaded="overview?.resources != null"
     :error="error"
     :updated-at="updatedAt"
     :retryable="false"
     data-ops-section="resources"
   >
-    <template v-if="overview">
-      <p v-if="!overview.resources.monitor_enabled" class="ops-note">
+    <template v-if="overview?.resources">
+      <p v-if="overview.resources.monitor_enabled === false" class="ops-note">
         {{ t('resources.monitorOff') }}
       </p>
+      <p class="ops-note">{{ t('native.resourceCoverage') }}</p>
       <ul class="ops-gauges">
         <li
           v-for="gauge in gauges"
@@ -195,9 +201,14 @@ const trend = computed(() => {
             formatBytes(overview.resources.process.heap_alloc_bytes, locale)
           "
           :hint="
-            joined(
-              formatBytes(overview.resources.process.heap_sys_bytes, locale)
-            )
+            t('native.runtimeMemory', {
+              value: joined(
+                formatBytes(
+                  overview.resources.process.runtime_sys_bytes,
+                  locale
+                )
+              ),
+            })
           "
           size="sm"
         />
@@ -222,6 +233,7 @@ const trend = computed(() => {
             t('scope.window', { window: t(`window.${overview.series.window}`) })
           }}</span>
         </p>
+        <p class="ops-footnote">{{ t('native.sessionHistory') }}</p>
         <OpsTrendChart
           :label="t('resources.trend')"
           :series="trend.series"

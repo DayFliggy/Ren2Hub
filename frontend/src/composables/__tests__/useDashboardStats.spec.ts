@@ -1,34 +1,14 @@
 import { defineComponent } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-
-import { api } from '@/api/console'
-import {
-  useDashboardStats,
-  type StatsPeriod,
-} from '@/composables/useDashboardStats'
+import { api } from '@/api/client'
+import { useDashboardStats } from '@/composables/useDashboardStats'
+import { dashboardFixture } from '@/api/__tests__/dashboardFixture'
 import i18n from '@/i18n'
-
-function statsPeriod(marker: number): StatsPeriod {
-  return {
-    kpi: {
-      totalTokens: marker,
-      totalQuota: '0',
-      totalRequests: 0,
-      avgLatency: 0,
-      successRate: 0,
-    },
-    comparison: { quotaDelta: null, requestsDelta: null },
-    models: [],
-    hourly: [],
-    flow: [],
-  }
-}
-
-let wrapper: VueWrapper | null = null
-
+vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
+let wrapper: VueWrapper | undefined
 function setupStats() {
-  let state: ReturnType<typeof useDashboardStats> | null = null
+  let state!: ReturnType<typeof useDashboardStats>
   wrapper = mount(
     defineComponent({
       setup() {
@@ -38,59 +18,66 @@ function setupStats() {
     }),
     { global: { plugins: [i18n] } }
   )
-  if (!state) throw new Error('expected stats composable instance')
-  return state as ReturnType<typeof useDashboardStats>
+  return state
 }
-
 afterEach(() => {
   wrapper?.unmount()
-  wrapper = null
   vi.restoreAllMocks()
+  vi.resetAllMocks()
 })
-
-describe('useDashboardStats', () => {
-  it('discards a late response from a superseded range', async () => {
+describe('native dashboard statistics lifecycle', () => {
+  it('discards an old response after switching the selected period', async () => {
     const stats = setupStats()
-
-    let resolveSlow: (value: StatsPeriod) => void = () => undefined
-    const slow = new Promise<StatsPeriod>((resolve) => {
-      resolveSlow = resolve
-    })
-    const fast = Promise.resolve(statsPeriod(2))
-    vi.spyOn(api, 'get').mockReturnValueOnce(slow).mockReturnValueOnce(fast)
-
-    stats.range.value = '30d'
-    const firstLoad = stats.load() // hangs on `slow`
+    let resolve!: (value: ReturnType<typeof dashboardFixture>) => void
+    vi.mocked(api.get)
+      .mockReturnValueOnce(
+        new Promise((done) => {
+          resolve = done
+        })
+      )
+      .mockResolvedValueOnce(dashboardFixture(20))
+    const first = stats.load()
     stats.range.value = '7d'
-    await stats.load() // resolves immediately with marker 2
-
-    expect(stats.data.value?.kpi.totalTokens).toBe(2)
-    expect(stats.loading.value).toBe(false)
-
-    // The stale 30d response lands afterwards and must not clobber 7d data.
-    resolveSlow(statsPeriod(1))
-    await firstLoad
-    expect(stats.data.value?.kpi.totalTokens).toBe(2)
-  })
-
-  it('sends the custom window bounds only for the custom range', async () => {
-    const stats = setupStats()
-    const get = vi.spyOn(api, 'get').mockResolvedValue(statsPeriod(1) as never)
-
-    stats.range.value = 'custom'
-    stats.customStart.value = '2026-07-01'
-    stats.customEnd.value = '2026-07-14'
     await stats.load()
-
-    expect(get).toHaveBeenCalledWith(
-      '/api/next/dashboard/stats',
+    expect(stats.data.value?.kpi.totalTokens).toBe(20)
+    resolve(dashboardFixture(10))
+    await first
+    expect(stats.data.value?.kpi.totalTokens).toBe(20)
+  })
+  it('sends custom dates with the browser offset sign to the native endpoint', async () => {
+    vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-330)
+    vi.mocked(api.get).mockResolvedValue(dashboardFixture())
+    const stats = setupStats()
+    stats.range.value = 'custom'
+    stats.customStart.value = '2026-10-01'
+    stats.customEnd.value = '2026-10-21'
+    await stats.load()
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/data/self/summary',
       {
         range: 'custom',
-        start: '2026-07-01',
-        end: '2026-07-14',
-        tz_offset: expect.any(String),
+        start: '2026-10-01',
+        end: '2026-10-21',
+        tz_offset: '-330',
       },
-      expect.anything()
+      { signal: expect.any(AbortSignal) }
     )
+    expect(stats.data.value?.kpi.successRate).toBeNull()
+  })
+  it('removes old results on a failed or unavailable period instead of showing zero use', async () => {
+    const stats = setupStats()
+    vi.mocked(api.get)
+      .mockResolvedValueOnce(dashboardFixture())
+      .mockRejectedValueOnce(new Error('failed'))
+    await stats.load()
+    await stats.load()
+    expect(stats.data.value).toBeNull()
+    expect(stats.error.value).toBeTruthy()
+    const unavailable = dashboardFixture()
+    unavailable.meta.available = false
+    vi.mocked(api.get).mockResolvedValueOnce(unavailable)
+    await stats.load()
+    expect(stats.data.value).toBeNull()
+    expect(stats.error.value).toBeTruthy()
   })
 })

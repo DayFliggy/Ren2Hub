@@ -1,11 +1,19 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { api } from '@/api/console'
-import { parseChannelStatusDetails } from '@/api/channelStatus'
+import { api } from '@/api/client'
+import { channelOperation, parseChannelPage } from '@/api/channelStatus'
+import {
+  invalidResponse,
+  isRecord,
+  requiredString,
+  requiredStrictInteger,
+  parseStringArray,
+  requiredStrictNumber,
+} from '@/api/contracts'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
-import { useFeatureAccess } from '@/composables/useFeatureAccess'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { isRetiredChannelType } from '@/constants/adminChannels'
 import type {
@@ -13,7 +21,6 @@ import type {
   AdminChannelCreateInput,
   AdminChannelCreateOptions,
   AdminChannelFetchModelsParams,
-  AdminChannelPage,
   AdminChannelSortBy,
   AdminChannelSortOrder,
   AdminChannelUpdateInput,
@@ -50,7 +57,9 @@ const CHANNEL_BATCH_SIZE = 5
 export function useAdminChannels() {
   const { t } = useI18n()
   const toast = useToast()
-  const { readOnly } = useFeatureAccess('admin', 'disabled')
+  const auth = useAuthStore()
+  const allowed = (action: string) => auth.hasPermission('channel', action)
+  const canRead = computed(() => allowed('read'))
 
   const rows = ref<AdminChannel[]>([])
   const total = ref(0)
@@ -59,6 +68,10 @@ export function useAdminChannels() {
   const pageSize = ref(20)
   const keyword = ref('')
   const type = ref('')
+  const lab = ref('')
+  const labs = ref<
+    { id: string; name: string; source: string; count: number }[]
+  >([])
   const status = ref('')
   const sortBy = ref<AdminChannelSortBy>('id')
   const sortOrder = ref<AdminChannelSortOrder>('desc')
@@ -81,7 +94,7 @@ export function useAdminChannels() {
   const isBulkBusy = computed(() => bulkAction.value !== null)
   const canMutate = computed(
     () =>
-      !readOnly.value &&
+      canRead.value &&
       !loading.value &&
       !refreshing.value &&
       !isBatchBusy.value &&
@@ -91,7 +104,13 @@ export function useAdminChannels() {
   )
   const canRunBatch = computed(
     () =>
-      rows.value.some((channel) => !isRetiredChannelType(channel.type)) &&
+      allowed('operate') &&
+      rows.value.some(
+        (channel) =>
+          !isRetiredChannelType(channel.type) &&
+          channel.type !== 61 &&
+          !channel.channel_info?.is_multi_key
+      ) &&
       canMutate.value
   )
 
@@ -141,72 +160,12 @@ export function useAdminChannels() {
     busy.value = next
   }
 
-  function buildLabAudit(
-    channels: AdminChannel[],
-    groupSlug?: string
-  ): Record<string, unknown> {
-    const labs = new Set<string>()
-    const models = new Set<string>()
-    const sources = new Set<string>()
-    let unresolvedCount = 0
-    let catalogVersion = ''
-    channels.forEach((channel) => {
-      for (const match of channel.lab_matches ?? []) {
-        labs.add(match.slug)
-      }
-      for (const match of channel.lab_models ?? []) {
-        const model = match.canonical_id || match.real_model
-        if (model) models.add(model)
-        if (match.source) sources.add(match.source)
-      }
-      unresolvedCount += channel.lab_unresolved_count ?? 0
-      if (!catalogVersion && channel.lab_catalog_version) {
-        catalogVersion = channel.lab_catalog_version
-      }
-    })
-    const matchedLabs = [...labs].sort()
-    const resolvedGroupSlug =
-      groupSlug ||
-      (matchedLabs.length === 1
-        ? matchedLabs[0]
-        : matchedLabs.length > 1
-          ? 'mixed'
-          : 'unknown')
-    const groupKind =
-      resolvedGroupSlug === 'mixed'
-        ? 'mixed'
-        : resolvedGroupSlug === 'unknown'
-          ? 'unknown'
-          : 'single'
-    return {
-      group_slug: resolvedGroupSlug,
-      group_kind: groupKind,
-      channel_ids: channels.map((channel) => channel.id),
-      matched_labs: matchedLabs,
-      matched_models: [...models].sort(),
-      match_sources: [...sources].sort(),
-      catalog_version: catalogVersion,
-      unresolved_count: unresolvedCount,
-    }
-  }
-
-  async function recordLabAudit(
-    action: 'channel.lab_balance_sync' | 'channel.lab_model_test',
-    channels: AdminChannel[],
-    groupSlug?: string
-  ): Promise<void> {
-    if (channels.length === 0) return
-    await api.post<unknown>('/api/next/admin/channels/lab-audit', {
-      action,
-      ...buildLabAudit(channels, groupSlug),
-    })
-  }
-
   function currentParams() {
     return {
       p: page.value,
       page_size: pageSize.value,
       type: type.value || undefined,
+      lab: lab.value || undefined,
       status: status.value || undefined,
       sort_by: sortBy.value,
       sort_order: sortOrder.value,
@@ -215,23 +174,25 @@ export function useAdminChannels() {
   }
 
   async function load(options: { background?: boolean } = {}) {
+    if (!canRead.value) return
     const background = options.background === true && rows.value.length > 0
 
     if (background) refreshing.value = true
     else loading.value = true
     if (rows.value.length === 0) initialError.value = ''
 
-    const endpoint = '/api/next/admin/channels'
+    const endpoint = keyword.value.trim()
+      ? '/api/channel/search'
+      : '/api/channel/'
     const result = await listRequest.run(async (signal) => {
-      const response = await api.get<AdminChannelPage>(
-        endpoint,
-        currentParams(),
-        { signal }
-      )
-      return {
-        ...response,
-        items: response.items.map(parseChannelStatusDetails),
-      }
+      const response = await api.get<unknown>(endpoint, currentParams(), {
+        signal,
+      })
+      const categories = await api.get<{
+        items: { id: string; name: string; source: string; count: number }[]
+      }>('/api/channel/labs', undefined, { signal })
+      labs.value = categories.items
+      return parseChannelPage(response)
     })
     if (result.stale) return
     loading.value = false
@@ -261,7 +222,7 @@ export function useAdminChannels() {
     window.clearTimeout(searchTimer)
     searchTimer = window.setTimeout(reloadFromFirstPage, 300)
   })
-  watch([type, status, sortBy, sortOrder], reloadFromFirstPage)
+  watch([type, lab, status, sortBy, sortOrder], reloadFromFirstPage)
   watch(pageSize, reloadFromFirstPage)
   watch(page, () => void load())
 
@@ -271,7 +232,9 @@ export function useAdminChannels() {
     request: () => Promise<unknown>,
     successKey: string
   ): Promise<boolean> {
-    if (isRowBusy(id)) return false
+    const permission =
+      action === 'priority' || action === 'weight' ? 'write' : 'operate'
+    if (!canMutate.value || !allowed(permission) || isRowBusy(id)) return false
     setBusy(id, action)
     try {
       await request()
@@ -291,15 +254,53 @@ export function useAdminChannels() {
     field: 'priority' | 'weight',
     value: number
   ): Promise<boolean> {
-    if (isRetiredChannelType(channel.type)) return Promise.resolve(false)
+    if (isRetiredChannelType(channel.type) || !Number.isSafeInteger(value))
+      return Promise.resolve(false)
     return runChannelAction(
       channel.id,
       field,
-      () =>
-        api.put<unknown>('/api/next/admin/channels', {
-          id: channel.id,
-          [field]: value,
-        }),
+      async () => {
+        if (field === 'weight')
+          return api.put<unknown>('/api/channel/', {
+            id: channel.id,
+            weight: value,
+          })
+        const endpoint = '/api/channel/priority/order'
+        const snapshot = await api.get<unknown>(endpoint)
+        if (!isRecord(snapshot) || !Array.isArray(snapshot.items))
+          invalidResponse(endpoint)
+        const revision = requiredString(snapshot.revision, endpoint, false)
+        const items = snapshot.items.map((item) => {
+          if (!isRecord(item)) invalidResponse(endpoint)
+          return {
+            id: requiredStrictInteger(item.id, endpoint),
+            priority:
+              item.priority === null
+                ? null
+                : requiredStrictInteger(item.priority, endpoint),
+          }
+        })
+        const current = items.find((item) => item.id === channel.id)
+        if (!current || (current.priority ?? 0) !== channel.priority)
+          throw new ApiError(t('channels.priorityConflict'), {
+            status: 409,
+            code: 'CHANNEL_PRIORITY_CONFLICT',
+          })
+        const input = {
+          revision,
+          restore: [
+            { id: channel.id, previous: current.priority, priority: value },
+          ],
+        }
+        await api.post('/api/channel/priority/reorder', {
+          ...input,
+          preview: true,
+        })
+        await api.post('/api/channel/priority/reorder', {
+          ...input,
+          preview: false,
+        })
+      },
       'channels.updated'
     )
   }
@@ -311,7 +312,7 @@ export function useAdminChannels() {
       channel.id,
       'status',
       () =>
-        api.post<unknown>(`/api/next/admin/channels/${channel.id}/status`, {
+        api.post<unknown>(`/api/channel/${channel.id}/status`, {
           status: nextStatus,
         }),
       nextStatus === 1 ? 'channels.enabled' : 'channels.disabled'
@@ -324,10 +325,10 @@ export function useAdminChannels() {
       channel.id,
       'balance',
       async () => {
-        const result = await api.get<
-          { balance: number } | { raw_response: string }
-        >(`/api/next/admin/channels/balance/${channel.id}`)
-        if (result && 'raw_response' in result) {
+        const result = await channelOperation(
+          `/api/channel/update_balance/${channel.id}`
+        )
+        if (typeof result.raw_response === 'string') {
           balanceResponse.value = {
             channelName: channel.name,
             rawResponse: result.raw_response,
@@ -349,11 +350,14 @@ export function useAdminChannels() {
     options: ChannelModelTestOptions = {},
     signal?: AbortSignal
   ): Promise<ChannelModelTestResult> {
+    if (!allowed('operate'))
+      return { ok: false, message: t('channels.permissionDenied') }
     if (isRetiredChannelType(channel.type))
       return { ok: false, message: t('channels.retiredHint') }
     try {
-      const data = await api.get<{ time?: number }>(
-        `/api/next/admin/channels/test/${channel.id}`,
+      const endpoint = `/api/channel/test/${channel.id}`
+      const data = await channelOperation(
+        endpoint,
         {
           model,
           ...(options.endpointType
@@ -361,9 +365,10 @@ export function useAdminChannels() {
             : {}),
           ...(options.stream ? { stream: 'true' } : {}),
         },
-        { signal }
+        signal
       )
-      const seconds = typeof data?.time === 'number' ? data.time : 0
+      const seconds = requiredStrictNumber(data.time, endpoint)
+      if (seconds < 0) invalidResponse(endpoint)
       return { ok: true, timeMs: Math.round(seconds * 1000) }
     } catch (error) {
       if (signal?.aborted) throw error
@@ -395,7 +400,7 @@ export function useAdminChannels() {
     }
     return runCrudAction('edit', channel.id, async (signal) => {
       await api.put<unknown>(
-        '/api/next/admin/channels',
+        '/api/channel/',
         { id: channel.id, models: remaining.join(',') },
         { signal }
       )
@@ -411,7 +416,11 @@ export function useAdminChannels() {
     id: number | null,
     request: (signal: AbortSignal) => Promise<void>
   ): Promise<boolean> {
-    if (!canMutate.value) return false
+    if (
+      !canMutate.value ||
+      !allowed(action === 'edit' ? 'write' : 'sensitive_write')
+    )
+      return false
 
     const controller = new AbortController()
     crudController = controller
@@ -436,7 +445,7 @@ export function useAdminChannels() {
     if (isRetiredChannelType(input.type)) return Promise.resolve(false)
     return runCrudAction('create', null, async (signal) => {
       await api.post<AdminChannel>(
-        '/api/next/admin/channels',
+        '/api/channel/',
         {
           mode: options?.multiKey
             ? 'multi_to_single'
@@ -464,7 +473,7 @@ export function useAdminChannels() {
       return Promise.resolve(false)
     return runCrudAction('edit', channel.id, async (signal) => {
       await api.put<unknown>(
-        '/api/next/admin/channels',
+        '/api/channel/',
         { id: channel.id, ...input },
         { signal }
       )
@@ -486,24 +495,6 @@ export function useAdminChannels() {
     })
   }
 
-  function deleteSupplierChannels(
-    supplier: string,
-    channels: AdminChannel[],
-    groupSlug?: string
-  ): Promise<boolean> {
-    const ids = channels.map((channel) => channel.id)
-    return runCrudAction('delete', null, async (signal) => {
-      const deleted = await api.post<number>(
-        '/api/channel/batch',
-        { ids, lab_audit: buildLabAudit(channels, groupSlug) },
-        { signal }
-      )
-      toast.success(t('channels.supplierCleared', { supplier, count: deleted }))
-      if (rows.value.length === ids.length && page.value > 1) page.value -= 1
-      else await load({ background: true })
-    })
-  }
-
   /**
    * Discover the upstream model list, either for a saved channel (by id) or
    * from in-form credentials before the channel exists. Used by the
@@ -512,6 +503,9 @@ export function useAdminChannels() {
   async function fetchUpstreamModels(
     params: AdminChannelFetchModelsParams
   ): Promise<string[]> {
+    const saved = 'channelId' in params && params.advancedCustom === undefined
+    if (!allowed(saved ? 'operate' : 'sensitive_write'))
+      throw new ApiError(t('channels.permissionDenied'), { status: 403 })
     const channelType =
       'channelId' in params
         ? rows.value.find((channel) => channel.id === params.channelId)?.type
@@ -521,9 +515,9 @@ export function useAdminChannels() {
     const models =
       'channelId' in params && params.advancedCustom === undefined
         ? await api.get<string[]>(
-            `/api/next/admin/channels/fetch_models/${params.channelId}`
+            `/api/channel/fetch_models/${params.channelId}`
           )
-        : await api.post<string[]>('/api/next/admin/channels/fetch_models', {
+        : await api.post<string[]>('/api/channel/fetch_models', {
             ...('channelId' in params
               ? { channel_id: params.channelId }
               : { type: params.type, key: params.key }),
@@ -532,14 +526,18 @@ export function useAdminChannels() {
               ? {}
               : { advanced_custom: params.advancedCustom }),
           })
-    return Array.isArray(models) ? models.filter(Boolean) : []
+    return parseStringArray(models, '/api/channel/fetch_models')
   }
 
   async function runBulkAction(
     action: ChannelBulkAction,
     request: (signal: AbortSignal) => Promise<void>
   ): Promise<boolean> {
-    if (!canMutate.value) return false
+    if (
+      !canMutate.value ||
+      !allowed(action === 'delete' ? 'sensitive_write' : 'operate')
+    )
+      return false
 
     const controller = new AbortController()
     bulkController = controller
@@ -583,11 +581,10 @@ export function useAdminChannels() {
 
     return runBulkAction(action, async (signal) => {
       const changed = await api.post<number>(
-        '/api/next/admin/channels/status/batch',
+        '/api/channel/status/batch',
         {
           ids: targets.map((channel) => channel.id),
           status,
-          lab_audit: buildLabAudit(targets),
         },
         { signal }
       )
@@ -612,7 +609,7 @@ export function useAdminChannels() {
     return runBulkAction('delete', async (signal) => {
       const deleted = await api.post<number>(
         '/api/channel/batch',
-        { ids, lab_audit: buildLabAudit(channels) },
+        { ids },
         { signal }
       )
       toast.success(t('channels.bulkDeleted', { count: deleted }))
@@ -627,21 +624,19 @@ export function useAdminChannels() {
   async function runBalanceBatch(
     scope: ChannelBatchScope,
     channels: AdminChannel[],
-    supplier?: string,
-    groupSlug?: string
+    supplier?: string
   ): Promise<void> {
-    if (!canMutate.value || channels.length === 0) return
+    if (!canMutate.value || !allowed('operate') || channels.length === 0) return
 
     const targets = channels
-      .filter((channel) => !isRetiredChannelType(channel.type))
+      .filter(
+        (channel) =>
+          !isRetiredChannelType(channel.type) &&
+          channel.type !== 61 &&
+          !channel.channel_info?.is_multi_key
+      )
       .map((channel) => ({ ...channel }))
     if (targets.length === 0) return
-    try {
-      await recordLabAudit('channel.lab_balance_sync', targets, groupSlug)
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : String(error))
-      return
-    }
     const controller = new AbortController()
     batchController = controller
     batchProgress.value = {
@@ -664,12 +659,10 @@ export function useAdminChannels() {
 
         const results = await Promise.allSettled(
           batch.map((channel) =>
-            api.get<unknown>(
-              `/api/next/admin/channels/balance/${channel.id}`,
+            channelOperation(
+              `/api/channel/update_balance/${channel.id}`,
               undefined,
-              {
-                signal: controller.signal,
-              }
+              controller.signal
             )
           )
         )
@@ -726,19 +719,40 @@ export function useAdminChannels() {
     }
   }
 
+  function runSupplierBalance(
+    supplier: string,
+    targets: AdminChannel[],
+    _groupSlug?: string
+  ) {
+    return runBalanceBatch('supplier', targets, supplier)
+  }
+  function deleteSupplierChannels(
+    _supplier: string,
+    targets: AdminChannel[],
+    _groupSlug?: string
+  ) {
+    return deleteSelectedChannels(targets)
+  }
   function runVisibleBalance(): Promise<void> {
     return runBalanceBatch('page', rows.value)
   }
 
-  function runSupplierBalance(
-    supplier: string,
-    channels: AdminChannel[],
-    groupSlug?: string
-  ): Promise<void> {
-    return runBalanceBatch('supplier', channels, supplier, groupSlug)
-  }
-
-  onMounted(() => void load())
+  watch(canRead, (readable) => {
+    listRequest.cancel()
+    batchController?.abort()
+    crudController?.abort()
+    bulkController?.abort()
+    rows.value = []
+    total.value = 0
+    typeCounts.value = {}
+    loading.value = false
+    refreshing.value = false
+    if (readable) void load()
+  })
+  onMounted(() => {
+    if (canRead.value) void load()
+    else loading.value = false
+  })
   onBeforeUnmount(() => {
     batchController?.abort()
     crudController?.abort()
@@ -754,6 +768,8 @@ export function useAdminChannels() {
     pageSize,
     keyword,
     type,
+    lab,
+    labs,
     status,
     sortBy,
     sortOrder,
@@ -776,16 +792,15 @@ export function useAdminChannels() {
     toggleStatus,
     refreshBalance,
     testChannelModel,
-    recordLabAudit,
     removeChannelModels,
     createChannel,
     updateChannelDetails,
     deleteChannel,
-    deleteSupplierChannels,
     fetchUpstreamModels,
     updateChannelsStatus,
     deleteSelectedChannels,
     runVisibleBalance,
     runSupplierBalance,
+    deleteSupplierChannels,
   }
 }

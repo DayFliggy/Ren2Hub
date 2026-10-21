@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
 import { ApiError } from '@/api/types'
+import { api } from '@/api/console'
+import { getUsageSummary } from '@/api/dashboard'
+import { parseTopUpDetail } from '@/api/adminOrders'
+import { rememberedGmpayOrder, type TopupInfo } from '@/api/topup'
+import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import StatTileGrid from '@/components/common/StatTileGrid.vue'
 import FlowChart from '@/components/console/wallet/FlowChart.vue'
@@ -11,16 +17,11 @@ import RedeemPanel from '@/components/console/wallet/RedeemPanel.vue'
 import TopupPanel from '@/components/console/wallet/TopupPanel.vue'
 import TopupRecords from '@/components/console/wallet/TopupRecords.vue'
 import type { DashboardStats, FlowPoint } from '@/composables/useDashboard'
-import {
-  fetchSelfUsage,
-  getLocalDayStartTimestamp,
-  getLocalMonthStartTimestamp,
-  useBalanceVisibility,
-} from '@/composables/useDashboard'
+import { useBalanceVisibility } from '@/composables/useDashboard'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { addQuota, quotaToDecimal, sumQuota } from '@/utils/quota'
+import { quotaToDecimal, sumQuota } from '@/utils/quota'
 import { formatNumber, formatQuota } from '@/utils/format'
 
 type WalletStats = DashboardStats
@@ -36,6 +37,12 @@ const flow = ref<FlowPoint[]>([])
 const todayConsume = ref('0')
 const refreshKey = ref(0)
 const paymentMethod = ref('epay')
+const capabilities = ref<TopupInfo | null>(null)
+const trackedTradeNo = ref('')
+const trackedPayment = ref<ReturnType<typeof parseTopUpDetail> | null>(null)
+const paymentStatusError = ref('')
+const paymentStatusLoading = ref(false)
+let statusController: AbortController | null = null
 const loading = ref(false)
 const statsRequest = useLatestRequest()
 
@@ -85,10 +92,17 @@ const statCards = computed(() => {
 
 async function loadStats(): Promise<void> {
   loading.value = true
-  const endTimestamp = Math.floor(Date.now() / 1000)
-  const startTimestamp = getLocalMonthStartTimestamp()
+  const now = new Date()
+  const date = (day: number) =>
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   const result = await statsRequest.run((signal) =>
-    fetchSelfUsage(startTimestamp, endTimestamp, signal)
+    Promise.all([
+      getUsageSummary(
+        { range: 'custom', start: date(1), end: date(now.getDate()) },
+        signal
+      ),
+      getUsageSummary({ range: 'today' }, signal),
+    ])
   )
   if (result.stale) return
   loading.value = false
@@ -100,30 +114,23 @@ async function loadStats(): Promise<void> {
     )
     return
   }
-  const rows = result.value
-  const monthQuota = rows.reduce((sum, row) => addQuota(sum, row.quota), '0')
-  const todayStart = getLocalDayStartTimestamp()
-  todayConsume.value = rows
-    .filter((row) => row.created_at >= todayStart)
-    .reduce((sum, row) => addQuota(sum, row.quota), '0')
-  const byDay = new Map<string, FlowPoint>()
-  for (const row of rows) {
-    const date = new Date(row.created_at * 1000).toISOString().slice(0, 10)
-    const point = byDay.get(date) ?? { date, consume: '0', requests: 0 }
-    point.consume = addQuota(point.consume, row.quota)
-    point.requests += row.count
-    byDay.set(date, point)
+  const [month, today] = result.value
+  if (!month.meta.available || !today.meta.available) {
+    stats.value = null
+    toast.error(t('dashboard.stats.unavailable'))
+    return
   }
-  flow.value = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
+  todayConsume.value = today.kpi.totalQuota
+  flow.value = month.flow
   stats.value = {
-    quota: auth.user?.available_quota ?? '0',
-    used_quota: monthQuota,
-    today_quota: '0',
-    month_quota: monthQuota,
-    today_requests: 0,
-    total_requests: rows.reduce((sum, row) => sum + row.count, 0),
-    month_quota_delta: 0,
-    month_requests_delta: 0,
+    quota: String(auth.user?.quota ?? 0),
+    used_quota: month.kpi.totalQuota,
+    today_quota: today.kpi.totalQuota,
+    month_quota: month.kpi.totalQuota,
+    today_requests: today.kpi.totalRequests,
+    total_requests: month.kpi.totalRequests,
+    month_quota_delta: month.comparison?.quotaDelta ?? null,
+    month_requests_delta: month.comparison?.requestsDelta ?? null,
   }
 }
 
@@ -137,7 +144,47 @@ async function handlePaymentDone(): Promise<void> {
   }
 }
 
-onMounted(() => void loadStats())
+async function trackPayment(tradeNo: string): Promise<void> {
+  if (!tradeNo || tradeNo.length > 128) return
+  trackedTradeNo.value = tradeNo
+  statusController?.abort()
+  const controller = new AbortController()
+  statusController = controller
+  paymentStatusLoading.value = true
+  paymentStatusError.value = ''
+  try {
+    const response = await api.get<unknown>(
+      `/api/user/topup/detail/${encodeURIComponent(tradeNo)}`,
+      undefined,
+      { signal: controller.signal }
+    )
+    if (controller.signal.aborted) return
+    trackedPayment.value = parseTopUpDetail(response, tradeNo)
+    if (trackedPayment.value.state.status === 'completed')
+      await handlePaymentDone()
+  } catch (error) {
+    if (!controller.signal.aborted)
+      paymentStatusError.value =
+        error instanceof ApiError
+          ? error.message
+          : t('wallet.paymentStatusUnavailable')
+  } finally {
+    if (!controller.signal.aborted) paymentStatusLoading.value = false
+  }
+}
+onMounted(() => {
+  void loadStats()
+  const returned =
+    route.query.trade_no ?? route.query.out_trade_no ?? route.query.order_id
+  const tradeNo =
+    typeof returned === 'string'
+      ? returned
+      : auth.user
+        ? rememberedGmpayOrder(auth.user.id)
+        : ''
+  if (tradeNo) void trackPayment(tradeNo)
+})
+onBeforeUnmount(() => statusController?.abort())
 </script>
 
 <template>
@@ -194,13 +241,57 @@ onMounted(() => void loadStats())
 
     <StatTileGrid class="mb-6" :tiles="statCards" :columns="4" />
 
+    <ConsoleCard
+      v-if="trackedTradeNo"
+      class="mb-6"
+      :title="t('wallet.paymentStatus')"
+    >
+      <p class="break-all font-mono text-xs text-[var(--text-secondary)]">
+        {{ trackedTradeNo }}
+      </p>
+      <p
+        v-if="paymentStatusError"
+        role="alert"
+        class="mt-2 text-sm text-[var(--status-danger-text)]"
+      >
+        {{ paymentStatusError }}
+      </p>
+      <p
+        v-else-if="trackedPayment"
+        role="status"
+        class="mt-2 text-sm text-[var(--text-primary)]"
+      >
+        {{ t(`orders.status.${trackedPayment.state.status}`) }}
+        <span v-if="trackedPayment.evidence">
+          · {{ t(`orders.gmpay.${trackedPayment.evidence.status}`) }}</span
+        >
+      </p>
+      <p
+        v-if="trackedPayment?.state.status === 'pending'"
+        class="mt-2 text-xs text-[var(--text-secondary)]"
+      >
+        {{ t('wallet.creationUncertain') }}
+      </p>
+      <ConsoleButton
+        class="mt-3"
+        size="sm"
+        variant="secondary"
+        :loading="paymentStatusLoading"
+        @click="trackPayment(trackedTradeNo)"
+        >{{ t('orders.refresh') }}</ConsoleButton
+      >
+    </ConsoleCard>
+
     <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_23.75rem]">
       <TopupPanel
         v-model:payment-method="paymentMethod"
         :balance-quota="stats?.quota ?? null"
         @done="handlePaymentDone"
+        @track-order="trackPayment"
+        @capabilities="capabilities = $event"
       />
       <RedeemPanel
+        v-if="capabilities?.enable_redemption"
         :auto-focus="activePanel === 'redeem'"
         :refresh-key="refreshKey"
         @done="handlePaymentDone"

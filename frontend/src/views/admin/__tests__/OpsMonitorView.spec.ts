@@ -1,301 +1,377 @@
-import { defineComponent } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
+import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createMemoryHistory, createRouter } from 'vue-router'
-
-import {
-  opsMonitorApi,
-  parseOpsBillingMetrics,
-  parseOpsChannels,
-  parseOpsOverview,
-  parseOpsRequests,
-} from '@/api/opsMonitor'
-import {
-  parseSystemTaskSummary,
-  systemManagementApi,
-} from '@/api/systemManagement'
-import {
-  billingFixture,
-  channelsFixture,
-  overviewFixture,
-  requestsFixture,
-  summaryFixture,
-} from '@/api/__tests__/opsFixtures'
-import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-import { useAuthStore } from '@/stores/auth'
 import OpsMonitorView from '@/views/admin/OpsMonitorView.vue'
+import OpsStatusHeader from '@/components/admin/ops/OpsStatusHeader.vue'
+import OpsResourcesCard from '@/components/admin/ops/OpsResourcesCard.vue'
+import OpsGatewayCard from '@/components/admin/ops/OpsGatewayCard.vue'
+import OpsQualityCard from '@/components/admin/ops/OpsQualityCard.vue'
+import OpsStorageCards from '@/components/admin/ops/OpsStorageCards.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
+import { performanceFixture, routingFixture } from '@/api/__tests__/opsFixtures'
+import { modelCatalogFixture } from '@/api/__tests__/modelCatalogFixture'
 
-vi.mock('@/charts/useEChart', () => ({
-  useEChart: () => ({ refresh: vi.fn(), dispatch: vi.fn() }),
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  getEnvelope: vi.fn(),
+  post: vi.fn(),
+  delete: vi.fn(),
 }))
-
-const Empty = defineComponent({ template: '<div />' })
+vi.mock('@/api/client', () => ({ api: mocks }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ isRoot: true, hasPermission: () => true }),
+}))
+vi.mock('@/charts/useEChart', () => ({ useEChart: vi.fn() }))
 let wrapper: VueWrapper | undefined
-
-async function render(role: number, channelRead = false) {
-  const pinia = createPinia()
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: '/ops', name: 'ops-monitor', component: Empty }],
-  })
-  await router.push('/ops')
-  setActivePinia(pinia)
-  useAuthStore().persist({
-    role,
-    permissions: {
-      admin_permissions: channelRead ? { channel: { read: true } } : {},
-    },
-  } as never)
+function setup() {
   wrapper = mount(OpsMonitorView, {
-    global: { plugins: [pinia, router, i18n] },
+    global: {
+      plugins: [
+        createI18n({
+          legacy: false,
+          locale: 'en',
+          messages: {
+            en: {
+              common: {
+                confirm: 'Confirm',
+                cancel: 'Cancel',
+                pageInfo: '{page} of {total}',
+                pageSize: 'Page size',
+                itemsPerPage: 'Items per page',
+              },
+            },
+          },
+        }),
+      ],
+      stubs: {
+        ConsoleModal: {
+          props: ['open'],
+          template: '<div v-if="open"><slot /><slot name="footer" /></div>',
+        },
+      },
+    },
   })
-  await flushPromises()
   return wrapper
 }
-
-const section = (name: string) =>
-  wrapper!.find(`[data-ops-section="${name}"]`).exists()
-
-beforeEach(async () => {
-  await setLocale('en')
-  await loadMessageDomain('console')
-  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
-  vi.spyOn(opsMonitorApi, 'overview').mockResolvedValue(
-    parseOpsOverview(overviewFixture())
-  )
-  vi.spyOn(opsMonitorApi, 'requests').mockResolvedValue(
-    parseOpsRequests(requestsFixture())
-  )
-  vi.spyOn(opsMonitorApi, 'channels').mockResolvedValue(
-    parseOpsChannels(channelsFixture())
-  )
-  vi.spyOn(systemManagementApi, 'summary').mockResolvedValue(
-    parseSystemTaskSummary(summaryFixture())
-  )
-  vi.spyOn(systemManagementApi, 'tasks').mockResolvedValue({
-    items: [],
-    total: 0,
+beforeEach(() => {
+  vi.clearAllMocks()
+  Object.defineProperty(document, 'hidden', {
+    configurable: true,
+    value: false,
   })
-  vi.spyOn(opsMonitorApi, 'billing').mockResolvedValue(
-    parseOpsBillingMetrics(billingFixture())
-  )
+  mocks.get.mockImplementation(async (path: string) => {
+    if (path === '/api/performance/stats') return performanceFixture()
+    if (path === '/api/performance/routing') return routingFixture()
+    if (path === '/api/user/model-catalog') return modelCatalogFixture()
+    throw new Error(`Unexpected API ${path}`)
+  })
+  mocks.getEnvelope.mockImplementation(async (path: string) => {
+    if (path === '/api/system-task/list') return { data: [], total: 0 }
+    throw new Error(`Unexpected API ${path}`)
+  })
+  mocks.post.mockResolvedValue({})
 })
 afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
-  vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
-describe('ops monitor access', () => {
-  it('never mounts or requests Root-only and channel sections for a plain admin', async () => {
-    const view = await render(10)
-    expect(opsMonitorApi.overview).toHaveBeenCalledWith(
-      '1h',
-      expect.any(AbortSignal)
-    )
-    expect(opsMonitorApi.requests).toHaveBeenCalledWith(
-      24,
-      expect.any(AbortSignal)
-    )
-    expect(opsMonitorApi.channels).not.toHaveBeenCalled()
-    expect(systemManagementApi.summary).not.toHaveBeenCalled()
-    expect(systemManagementApi.tasks).not.toHaveBeenCalled()
-    expect(opsMonitorApi.billing).not.toHaveBeenCalled()
-    expect(section('upstream')).toBe(false)
-    expect(section('tasks')).toBe(false)
-    expect(section('billing')).toBe(false)
-    expect(view.get('[data-ops-section="quality"]').classes()).toContain(
-      'ops-area--full'
-    )
-  })
-
-  it('shows upstream health to an admin holding channel.read', async () => {
-    const view = await render(10, true)
-    expect(opsMonitorApi.channels).toHaveBeenCalledTimes(1)
-    expect(view.get('[data-ops-section="upstream"]').text()).toContain(
-      'openai-a'
-    )
-    expect(section('tasks')).toBe(false)
-  })
-
-  it('gives Root the task registry without billing health', async () => {
-    const view = await render(100)
-    expect(systemManagementApi.summary).toHaveBeenCalledTimes(1)
-    const tasks = view.get('[data-ops-section="tasks"]')
-    expect(tasks.text()).toContain('Gateway state cleanup')
-    expect(tasks.text()).toContain('Failing')
-    expect(
-      tasks
-        .findAll('select')[0]!
-        .findAll('option')
-        .map((option) => option.text())
-    ).toEqual(['All types', 'Batch channel test', 'Gateway state cleanup'])
-    expect(view.find('[data-ops-section="billing"]').exists()).toBe(false)
-  })
-
-  it('folds task history until Root expands it', async () => {
-    const view = await render(100)
-    const history = view.get('[data-ops-task-history]')
-    const toggle = history.get('button[aria-expanded]')
-    expect(toggle.attributes('aria-expanded')).toBe('false')
-    expect(history.text()).not.toContain('Clean up task history')
-    await toggle.trigger('click')
-    expect(toggle.attributes('aria-expanded')).toBe('true')
-    expect(history.text()).toContain('Clean up task history')
-  })
-
-  it('cleans up logs before the exact second that was picked', async () => {
-    const view = await render(100)
-    const cleanup = vi
-      .spyOn(systemManagementApi, 'cleanup')
-      .mockResolvedValue({ task_id: 'task-1' } as never)
-    const menu = view
-      .findAll('button')
-      .find((button) => button.text() === 'Clean up logs')
-    await menu!.trigger('click')
-    const form = document.querySelector<HTMLFormElement>('#log-cleanup-form')!
-    const field = form.querySelector<HTMLInputElement>(
-      'input[type="datetime-local"]'
-    )!
-    field.value = '2026-01-02T03:04:05'
-    field.dispatchEvent(new Event('input'))
-    // requestSubmit runs the browser's constraint validation first.
-    form.requestSubmit()
+describe('historical ops layout with native data', () => {
+  it('restores every section, preserves real concurrency and marks missing probes unavailable', async () => {
+    const view = setup()
     await flushPromises()
-    const confirm = Array.from(document.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Delete'
+    for (const name of [
+      'status',
+      'quality',
+      'upstream',
+      'gateway',
+      'resources',
+      'storage',
+      'tasks',
+    ]) {
+      expect(view.find(`[data-ops-section="${name}"]`).exists()).toBe(true)
+    }
+    expect(view.get('[data-ops-section="storage"]').classes()).toContain(
+      'ops-area--storage'
     )
-    confirm!.click()
-    await flushPromises()
-    expect(cleanup).toHaveBeenCalledWith(
-      new Date(2026, 0, 2, 3, 4, 5).getTime() / 1000
-    )
-  })
-})
-
-describe('ops monitor data states', () => {
-  it('does not mount billing health section for any user', async () => {
-    const view = await render(100)
-    expect(view.find('[data-ops-section="billing"]').exists()).toBe(false)
-  })
-
-  it('renders unmeasured readings as "--" instead of zero', async () => {
-    const view = await render(10)
     expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('--')
-    const kpis = view.get('[data-ops-kpis]').text()
-    expect(kpis).toContain('--')
-    expect(kpis).toContain('Fewer than 15 samples')
-    expect(view.get('[data-ops-storage="redis"]').text()).toContain(
-      'Probe timed out'
+    expect(view.get('[data-ops-gauge="memory"]').text()).toContain('--')
+    expect(view.get('[data-ops-gauge="disk"]').text()).toContain('40%')
+    expect(view.getComponent(OpsResourcesCard).text()).toContain(
+      'Go runtime system memory:'
+    )
+    expect(view.get('[data-ops-concurrency="users"]').text()).toContain(
+      '#12 / 4'
+    )
+    expect(view.get('[data-ops-concurrency="channels"]').text()).toContain(
+      '#92 / Unlimited'
+    )
+    expect(view.get('[data-ops-storage="database"]').text()).toContain(
+      'does not provide connection pools'
+    )
+    expect(view.get('[data-ops-storage="redis"]').text()).toContain('Unknown')
+    expect(view.get('[data-ops-history-unavailable]').text()).toContain(
+      'does not provide hourly request history'
+    )
+    expect(view.get('[data-ops-task-summary-unavailable]').text()).toContain(
+      'not the scheduler registry'
+    )
+    expect(view.find('pre').exists()).toBe(false)
+    expect(
+      mocks.get.mock.calls.every(
+        ([path]) =>
+          !String(path).includes('/api/ops/') &&
+          !String(path).includes('/api/next')
+      )
+    ).toBe(true)
+    expect(
+      view.getComponent(OpsGatewayCard).props('overview')!.series.points
+    ).toHaveLength(1)
+  })
+  it('does not imply the platform has no channels when the catalog has none published', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/user/model-catalog') {
+        const data = modelCatalogFixture()
+        data.channels = []
+        data.offers = []
+        return Promise.resolve(data)
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    expect(view.get('[data-ops-section="upstream"]').text()).toContain(
+      'Other configured channels may exist'
     )
   })
-
-  it('names graded problems in the header, critical first', async () => {
-    const view = await render(10)
-    const reasons = view.get('[data-ops-reasons]').findAll('[data-ops-reason]')
-    expect(reasons.map((item) => item.find('strong').text())).toEqual([
-      'Redis',
-      'Master node',
+  it('keeps resources and cache current when routing refresh fails and recovers by retry', async () => {
+    let failed = false
+    const defaultGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/routing' && !failed) {
+        failed = true
+        return Promise.reject(new Error('routing offline'))
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    expect(view.getComponent(OpsQualityCard).text()).toContain(
+      'routing offline'
+    )
+    expect(view.getComponent(OpsResourcesCard).props('error')).toBe('')
+    expect(view.getComponent(OpsResourcesCard).text()).toContain(
+      'System resources'
+    )
+    expect(
+      view
+        .getComponent(OpsStorageCards)
+        .get('[data-ops-storage="cache"]')
+        .text()
+    ).toContain('Memory hits')
+    view.getComponent(OpsQualityCard).vm.$emit('retry')
+    await flushPromises()
+    expect(view.getComponent(OpsQualityCard).props('error')).toBe('')
+    expect(view.get('[data-ops-top-models]').text()).toContain('fixture-model')
+  })
+  it('keeps independently completed feeds continuous across seconds and window changes', async () => {
+    const start = 1_800_000_000_000
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(start)
+    const defaultGet = mocks.get.getMockImplementation()!
+    let performanceCalls = 0
+    let completeRouting!: (value: ReturnType<typeof routingFixture>) => void
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/stats') {
+        const data = performanceFixture()
+        data.disk_space_info.used_percent = 40 + performanceCalls++
+        return Promise.resolve(data)
+      }
+      if (path === '/api/performance/routing')
+        return new Promise((resolve) => {
+          completeRouting = resolve
+        })
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    vi.setSystemTime(start + 1000)
+    completeRouting(routingFixture())
+    await flushPromises()
+    vi.setSystemTime(start + 30_000)
+    view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+    await flushPromises()
+    expect(
+      view.getComponent(OpsGatewayCard).props('overview')!.series.points
+    ).toHaveLength(1)
+    vi.setSystemTime(start + 31_000)
+    const routing = routingFixture()
+    routing.users[0]!.in_flight = 3
+    completeRouting(routing)
+    await flushPromises()
+    const resources = view.getComponent(OpsResourcesCard)
+    const gateway = view.getComponent(OpsGatewayCard)
+    expect(
+      resources
+        .props('overview')!
+        .series.points.map(({ ts, disk }) => [ts, disk])
+    ).toEqual([
+      [start / 1000, 40],
+      [start / 1000 + 30, 41],
     ])
     expect(
-      view.get('[data-ops-overall-status]').attributes('data-status')
-    ).toBe('warning')
+      gateway
+        .props('overview')!
+        .series.points.map(({ ts, users }) => [ts, users])
+    ).toEqual([
+      [start / 1000 + 1, 2],
+      [start / 1000 + 31, 3],
+    ])
+    view.getComponent(SegmentedToggle).vm.$emit('update:modelValue', '24h')
+    await flushPromises()
+    for (const card of [resources, gateway]) {
+      expect(card.props('overview')!.series.window).toBe('24h')
+      expect(card.props('overview')!.series.points).toHaveLength(2)
+    }
   })
-
-  it('names unmeasured checks instead of calling an idle instance fully checked', async () => {
-    vi.mocked(opsMonitorApi.overview).mockResolvedValue(
-      parseOpsOverview({
-        ...overviewFixture(),
-        status: 'ok',
-        health_score: 100,
-        checks: [
-          { key: 'cpu', status: 'ok', value: 12.5, threshold: 90 },
-          { key: 'success_rate', status: 'unknown' },
-        ],
+  it.each(['stats', 'routing'] as const)(
+    'records repeated %s failures as gaps without breaking its peer, then resumes with fresh values',
+    async (endpoint) => {
+      const start = 1_800_000_000_000
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(start)
+      const defaultGet = mocks.get.getMockImplementation()!
+      let failed = false
+      let recovered = false
+      mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+        if (path === `/api/performance/${endpoint}` && failed)
+          return Promise.reject(new Error('feed offline'))
+        if (path === '/api/performance/stats') {
+          const data = performanceFixture()
+          if (recovered) data.disk_space_info.used_percent = 50
+          return Promise.resolve(data)
+        }
+        if (path === '/api/performance/routing') {
+          const data = routingFixture()
+          if (recovered) data.users[0]!.in_flight = 3
+          return Promise.resolve(data)
+        }
+        return defaultGet(path, ...args)
       })
-    )
-    const view = await render(10)
-    const reasons = view.get('[data-ops-reasons]').text()
-    expect(reasons).toContain('Measured checks passing')
-    expect(reasons).not.toContain('All checks passing')
-    expect(view.get('[data-ops-unmeasured]').text()).toContain('Success rate')
-  })
-
-  it('does not call an instance without channels healthy', async () => {
-    vi.mocked(opsMonitorApi.channels).mockResolvedValue(
-      parseOpsChannels({
-        channels: {
-          total: 0,
-          enabled: 0,
-          manually_disabled: 0,
-          auto_disabled: 0,
-        },
-        breakers: { closed: 0, open: 0, half_open: 0 },
-        unhealthy: [],
-      })
-    )
-    const view = await render(10, true)
-    const upstream = view.get('[data-ops-section="upstream"]').text()
-    expect(upstream).toContain('No upstream channels configured')
-    expect(upstream).not.toContain('All upstream channels are healthy')
-  })
-
-  it('shows queue waits per bucket, not the cumulative counts', async () => {
-    const view = await render(10)
-    const counts = view
-      .get('[data-ops-waits]')
-      .findAll('.ops-histogram-count')
-      .map((item) => item.text())
-    expect(counts).toEqual(['1', '1', '0', '1', '0', '0', '0', '1'])
-  })
-
-  it('notes a shared log store on the main database card', async () => {
-    const view = await render(10)
-    expect(view.find('[data-ops-storage="log_database"]').exists()).toBe(false)
+      const view = setup()
+      await flushPromises()
+      failed = true
+      for (const elapsed of [30_000, 60_000]) {
+        vi.setSystemTime(start + elapsed)
+        view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+        await flushPromises()
+      }
+      failed = false
+      recovered = true
+      vi.setSystemTime(start + 90_000)
+      view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+      await flushPromises()
+      const disks = view
+        .getComponent(OpsResourcesCard)
+        .props('overview')!
+        .series.points.map(({ disk }) => disk)
+      const users = view
+        .getComponent(OpsGatewayCard)
+        .props('overview')!
+        .series.points.map(({ users }) => users)
+      expect(disks).toEqual(
+        endpoint === 'stats' ? [40, null, null, 50] : [40, 40, 40, 50]
+      )
+      expect(users).toEqual(
+        endpoint === 'routing' ? [2, null, null, 3] : [2, 2, 2, 3]
+      )
+    }
+  )
+  it('does not sample superseded or aborted routing responses', async () => {
+    const start = 1_800_000_000_000
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(start)
+    const defaultGet = mocks.get.getMockImplementation()!
+    const pending: ((value: ReturnType<typeof routingFixture>) => void)[] = []
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/routing')
+        return new Promise((resolve) => {
+          pending.push(resolve)
+        })
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    vi.setSystemTime(start + 1000)
+    view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+    await flushPromises()
+    pending[0]!(routingFixture())
+    await flushPromises()
+    expect(view.getComponent(OpsGatewayCard).props('overview')).toBeNull()
+    vi.setSystemTime(start + 2000)
+    pending[1]!(routingFixture())
+    await flushPromises()
     expect(
-      view.get('[data-ops-storage="database"] [data-ops-log-shared]').text()
-    ).toBe('Logs share the main database')
+      view
+        .getComponent(OpsGatewayCard)
+        .props('overview')!
+        .series.points.map(({ ts }) => ts)
+    ).toEqual([start / 1000 + 2])
   })
-
-  it('keeps earlier data visible only behind an explicit stale marker', async () => {
-    const view = await render(10)
-    vi.mocked(opsMonitorApi.overview).mockRejectedValueOnce(
-      new Error('overview down')
-    )
+  it('does not display latency before its independent sample threshold', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/routing') {
+        const data = routingFixture()
+        data.observations[0]!.latency_known = false
+        return Promise.resolve(data)
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    const row = view.get('[data-ops-top-models] tbody tr')
+    expect(row.findAll('td').map((cell) => cell.text())).toEqual([
+      '60',
+      '10%',
+      '--',
+    ])
+  })
+  it('requires confirmation for maintenance and keeps failures visible for retry', async () => {
+    mocks.post
+      .mockRejectedValueOnce(new Error('maintenance denied'))
+      .mockResolvedValue({})
+    const view = setup()
+    await flushPromises()
+    const storage = view.getComponent(OpsStorageCards)
+    await storage.get('.ops-maintenance-actions button').trigger('click')
+    expect(mocks.post).not.toHaveBeenCalled()
+    const confirm = storage.getComponent(ConfirmDialog)
+    confirm.vm.$emit('confirm')
+    await flushPromises()
+    expect(confirm.props('open')).toBe(true)
+    expect(storage.text()).toContain('maintenance denied')
+    confirm.vm.$emit('confirm')
+    await flushPromises()
+    expect(confirm.props('open')).toBe(false)
+    expect(mocks.post).toHaveBeenNthCalledWith(2, '/api/performance/gc')
+    expect(storage.text()).toContain('Completed: Run garbage collection')
+  })
+  it('surfaces a rejected fullscreen request', async () => {
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(new Error('fullscreen denied')),
+    })
+    const view = setup()
+    await flushPromises()
     await view
-      .get('[data-ops-section="status"] button[aria-label="Refresh"]')
+      .getComponent(OpsStatusHeader)
+      .get('button[aria-label="Fullscreen NOC"]')
       .trigger('click')
     await flushPromises()
-    const alert = view.get('[data-ops-section="status"] [role="alert"]')
-    expect(alert.text()).toContain('overview down')
-    expect(alert.text()).toContain('Retry')
-    expect(
-      view.get('[data-ops-section="resources"]').attributes('data-ops-stale')
-    ).toBe('true')
-    expect(view.get('[data-ops-gauge="memory"]').text()).toContain('40.1')
-  })
-
-  it('aborts the running overview request when the trend window changes', async () => {
-    const view = await render(10)
-    let firstSignal: AbortSignal | undefined
-    vi.mocked(opsMonitorApi.overview).mockImplementationOnce(
-      (_window, signal) => {
-        firstSignal = signal
-        return new Promise(() => {})
-      }
-    )
-    await view
-      .get('[data-ops-section="status"] button[aria-label="Refresh"]')
-      .trigger('click')
-    const sixHours = view
-      .findAll('[role="radio"]')
-      .find((option) => option.text() === '6 hours')!
-    await sixHours.trigger('click')
-    expect(firstSignal?.aborted).toBe(true)
-    expect(opsMonitorApi.overview).toHaveBeenLastCalledWith(
-      '6h',
-      expect.any(AbortSignal)
-    )
+    expect(view.text()).toContain('fullscreen denied')
   })
 })

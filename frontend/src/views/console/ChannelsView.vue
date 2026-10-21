@@ -24,7 +24,6 @@ import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import CapacityMeter from '@/components/common/CapacityMeter.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
@@ -125,6 +124,8 @@ const {
   pageSize,
   keyword,
   type,
+  lab,
+  labs,
   status,
   sortBy,
   sortOrder,
@@ -147,7 +148,6 @@ const {
   toggleStatus,
   refreshBalance,
   testChannelModel,
-  recordLabAudit,
   removeChannelModels,
   createChannel,
   updateChannelDetails,
@@ -797,6 +797,18 @@ async function runBulkStatus(
         />
         <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:flex-1">
           <FilterSelect
+            v-model="lab"
+            :options="[
+              { value: '', label: t('channels.allLabs') },
+              ...labs.map((item) => ({
+                value: item.id,
+                label: `${item.name} (${item.count})`,
+              })),
+            ]"
+            :label="t('channels.allLabs')"
+            class="w-full"
+          />
+          <FilterSelect
             v-model="type"
             :options="typeOptions"
             :label="t('channels.typeFilter')"
@@ -1211,6 +1223,8 @@ async function runBulkStatus(
                 !isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
               "
               :value="channelFromRow(row as AdminChannelTableRow).priority"
+              :min="Number.MIN_SAFE_INTEGER"
+              :max="Number.MAX_SAFE_INTEGER"
               :label="
                 t('channels.priorityFor', {
                   name: channelFromRow(row as AdminChannelTableRow).name,
@@ -1258,9 +1272,9 @@ async function runBulkStatus(
           </template>
           <template #cell-capacity="{ row }">
             <CapacityMeter
-              :used="channelFromRow(row as AdminChannelTableRow).capacity_used"
+              :used="channelFromRow(row as AdminChannelTableRow).in_flight"
               :total="
-                channelFromRow(row as AdminChannelTableRow).capacity_total
+                channelFromRow(row as AdminChannelTableRow).max_concurrency
               "
             />
           </template>
@@ -1566,11 +1580,37 @@ async function runBulkStatus(
       size="lg"
       @close="runtimeChannel = null"
     >
-      <GatewayChannelPanel
-        v-if="runtimeChannel && canRead"
-        :key="runtimeChannel.id"
-        :channel-id="runtimeChannel.id"
-      />
+      <dl
+        v-if="runtimeChannel"
+        class="grid grid-cols-2 gap-4 text-sm"
+        data-native-channel-runtime
+      >
+        <div>
+          <dt class="text-[var(--text-tertiary)]">
+            {{ t('channels.status') }}
+          </dt>
+          <dd class="mt-1"><ChannelStatusBadge :channel="runtimeChannel" /></dd>
+        </div>
+        <div>
+          <dt class="text-[var(--text-tertiary)]">
+            {{ t('channels.channelRatio') }}
+          </dt>
+          <dd class="mt-1">{{ runtimeChannel.channel_ratio }}×</dd>
+        </div>
+        <div>
+          <dt class="text-[var(--text-tertiary)]">
+            {{ t('channels.capacity') }}
+          </dt>
+          <dd class="mt-1">
+            {{ runtimeChannel.in_flight }} /
+            {{ runtimeChannel.max_concurrency || '∞' }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-[var(--text-tertiary)]">{{ t('channels.lab') }}</dt>
+          <dd class="mt-1">{{ runtimeChannel.lab.name }}</dd>
+        </div>
+      </dl>
       <ChannelProviderStatus
         v-if="runtimeChannel && [62, 63].includes(runtimeChannel.type)"
         :channel="runtimeChannel"
@@ -1627,7 +1667,6 @@ async function runBulkStatus(
       :supplier="pickingGroup?.supplier ?? ''"
       :channels="pickingGroup?.channels ?? []"
       :test-model="testChannelModel"
-      :record-audit="recordLabAudit"
       @close="closeSupplierTest"
       @start="onGroupTestStart"
       @result="onGroupTestResult"

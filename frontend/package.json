@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@vueuse/core": "^14.3.0",
+    "acorn": "8.17.0",
     "axios": "1.20.0",
     "echarts": "^6.1.0",
     "lucide-vue-next": "^1.0.0",

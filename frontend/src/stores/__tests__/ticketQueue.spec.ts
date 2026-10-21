@@ -6,7 +6,7 @@ const consoleApi = vi.hoisted(() => ({
   get: vi.fn(),
 }))
 
-vi.mock('@/api/console', () => ({ api: consoleApi }))
+vi.mock('@/api/tickets', () => ({ ticketsApi: { summary: consoleApi.get } }))
 
 import { useAuthStore } from '@/stores/auth'
 import { useTicketQueueStore } from '@/stores/ticketQueue'
@@ -66,5 +66,20 @@ describe('ticket queue summary refresh', () => {
       'Failed to refresh ticket queue summary',
       expect.any(Error)
     )
+  })
+  it('drops a late summary when read permission is revoked', async () => {
+    let resolve!: (value: unknown) => void
+    consoleApi.get.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        })
+    )
+    const store = useTicketQueueStore()
+    const pending = store.refresh()
+    vi.mocked(useAuthStore().hasPermission).mockReturnValue(false)
+    resolve({ pending: 99, unassigned: 99, mine: 99 })
+    await pending
+    expect(store.summary).toEqual({ pending: 0, unassigned: 0, mine: 0 })
   })
 })

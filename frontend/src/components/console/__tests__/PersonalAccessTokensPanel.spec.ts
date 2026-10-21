@@ -36,9 +36,11 @@ const item = {
   created_at: 1,
   last_used_at: 0,
   expires_at: 4000000000,
-  revoked_at: 0,
+  token_ref: 'ref',
+  token_hint: 'nap_****',
+  last_used_ip: '',
 }
-const token = 'pat_' + 'a'.repeat(48)
+const token = 'nap_' + 'a'.repeat(43)
 const modal = {
   props: { open: Boolean },
   emits: ['close'],
@@ -114,8 +116,8 @@ describe('PAT management', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(mocks.proof).toHaveBeenCalledWith({
-      scope: 'pat.update',
-      context: { id: 7, scopes: ['profile:read', 'tokens:read'] },
+      scope: 'access_token.update',
+      context: { token_id: 7, scopes: ['profile:read', 'tokens:read'] },
     })
     expect(mocks.update).toHaveBeenCalledWith(
       7,
@@ -137,7 +139,7 @@ describe('PAT management', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(mocks.create).toHaveBeenCalledWith(
-      { name: 'new', scopes: ['profile:read'], expires_at: 0 },
+      { name: 'new', scopes: ['profile:read'], expires_at: expect.any(Number) },
       'proof',
       expect.any(AbortSignal)
     )
@@ -204,19 +206,19 @@ describe('PAT management', () => {
     const wrapper = render()
     await flushPromises()
     await button(wrapper, 'Revoke').trigger('click')
-    mocks.list.mockResolvedValue([{ ...item, revoked_at: 2 }])
+    mocks.list.mockResolvedValue([])
     await wrapper.get('[data-testid="confirm-revoke"]').trigger('click')
     await flushPromises()
     expect(mocks.proof).toHaveBeenCalledWith({
-      scope: 'pat.revoke',
-      context: { id: 7 },
+      scope: 'access_token.revoke',
+      context: { token_id: 7 },
     })
     expect(mocks.revoke).toHaveBeenCalledWith(
       7,
       'proof',
       expect.any(AbortSignal)
     )
-    expect(wrapper.text()).toContain('Revoked')
+    expect(wrapper.text()).not.toContain('automation')
     wrapper.unmount()
   })
 

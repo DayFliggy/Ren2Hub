@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
 import { useAdminRedemption } from '@/composables/useAdminRedemption'
 import i18n from '@/i18n'
-import type { AdminRedemptionCode, AdminRedemptionPage } from '@/types/console'
+type AdminRedemptionPage = ReturnType<typeof redemptionPage>
 
 interface Deferred<T> {
   promise: Promise<T>
@@ -21,9 +21,21 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve }
 }
 
-function redemptionPage(marker: number): AdminRedemptionPage {
+function redemptionPage(marker: number) {
   return {
-    items: [{ id: marker } as AdminRedemptionCode],
+    items: [
+      {
+        id: marker + 1,
+        name: 'code',
+        key: 'code-key',
+        status: 1,
+        quota: 500000,
+        used_user_id: 0,
+        created_time: 1,
+        redeemed_time: 0,
+        expired_time: 0,
+      },
+    ],
     total: 1,
     page: 1,
     page_size: 20,
@@ -85,7 +97,7 @@ describe('admin list request ordering', () => {
     requests[1].resolve(redemptionPage(1))
     await flushPromises()
 
-    expect(state.rows.value[0]?.id).toBe(2)
+    expect(state.rows.value[0]?.id).toBe(3)
     expect(state.loading.value).toBe(false)
   })
 
@@ -105,7 +117,7 @@ describe('admin list request ordering', () => {
 
     expect(state.page.value).toBe(1)
     expect(get).toHaveBeenLastCalledWith(
-      '/api/next/admin/redemptions',
+      '/api/redemption/',
       expect.objectContaining({ p: 1, page_size: 50 }),
       expect.anything()
     )

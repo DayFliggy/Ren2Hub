@@ -1,104 +1,181 @@
-import { createPinia } from 'pinia'
 import { defineComponent } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { getTopUps } from '@/api/adminOrders'
 import { api } from '@/api/console'
+import { ApiError } from '@/api/types'
 import { useAdminOrders } from '@/composables/useAdminOrders'
-import i18n from '@/i18n'
-import type { AdminOrderPage, AdminOrderStats } from '@/types/console'
+import type { AdminOrderRange, AdminOrderStats } from '@/types/console'
 
-const page: AdminOrderPage = {
-  items: [],
-  total: 0,
-  page: 1,
-  page_size: 20,
-  status_counts: { completed: 0, pending: 0, failed: 0 },
-  method_counts: { epay: 0 },
-  type_counts: { topup: 0 },
-  filtered_epay_revenue: 0,
-}
+vi.mock('@/api/adminOrders', async (original) => ({
+  ...(await original<typeof import('@/api/adminOrders')>()),
+  getTopUps: vi.fn(),
+}))
+vi.mock('@/composables/useToast', () => ({
+  useToast: () => ({ error: vi.fn() }),
+}))
 
-const stats: AdminOrderStats = {
-  range: 30,
-  generated_at: 1_700_000_000,
-  currency: 'CNY',
-  today_revenue: 0,
-  today_orders: 0,
-  total_revenue: 0,
-  total_orders: 0,
-  average_amount: 0,
+const now = 1_792_368_000
+const initialStats: AdminOrderStats = {
+  total: 4,
+  currencies: [
+    {
+      currency: 'CNY',
+      count: 4,
+      paid_count: 3,
+      paid_amount: '73.00',
+      credited_quota: 500,
+      unknown_amount_count: 0,
+    },
+  ],
   daily: [],
-  payment_share: [],
-  top_spenders: [],
+  start_time: now - 30 * 86400,
+  end_time: now,
 }
 
-let state: ReturnType<typeof useAdminOrders> | null = null
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes
+    reject = no
+  })
+  return { promise, resolve, reject }
+}
 
-const Host = defineComponent({
-  setup() {
-    state = useAdminOrders()
-    return () => null
-  },
+let wrapper: VueWrapper | undefined
+async function setup() {
+  let state!: ReturnType<typeof useAdminOrders>
+  wrapper = mount(
+    defineComponent({
+      setup() {
+        state = useAdminOrders()
+        return () => null
+      },
+    })
+  )
+  await flushPromises()
+  return state
+}
+
+beforeEach(() => {
+  vi.spyOn(Date, 'now').mockReturnValue(now * 1000)
+  vi.mocked(getTopUps).mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 20,
+  })
 })
 
 afterEach(() => {
-  state = null
+  wrapper?.unmount()
+  wrapper = undefined
   vi.restoreAllMocks()
 })
 
-describe('useAdminOrders live endpoints', () => {
-  it('loads list and Epay statistics from the next facade', async () => {
-    const get = vi.spyOn(api, 'get').mockImplementation((path) => {
-      if (path === '/api/next/admin/orders')
-        return Promise.resolve(page as never)
-      if (path === '/api/next/admin/orders/stats') {
-        return Promise.resolve(stats as never)
-      }
-      return Promise.reject(new Error(`unexpected endpoint: ${path}`))
-    })
+describe('order statistics snapshot identity', () => {
+  it.each([7, 90] as AdminOrderRange[])(
+    'clears the 30-day snapshot immediately when switching to %s days and failing',
+    async (range) => {
+      const pending = deferred<AdminOrderStats>()
+      const get = vi
+        .spyOn(api, 'get')
+        .mockResolvedValueOnce(initialStats)
+        .mockImplementationOnce(() => pending.promise as never)
+      const state = await setup()
+      expect(state.stats.value).toEqual(initialStats)
 
-    const wrapper = mount(Host, {
-      global: { plugins: [createPinia(), i18n] },
-    })
-    await flushPromises()
+      state.range.value = range
+      expect(state.stats.value).toBeNull()
+      expect(state.statsLoading.value).toBe(true)
+      expect(get).toHaveBeenLastCalledWith(
+        '/api/user/topup/stats',
+        { start_time: now - range * 86400, end_time: now },
+        { signal: expect.any(AbortSignal) }
+      )
 
-    expect(get).toHaveBeenCalledWith(
-      '/api/next/admin/orders',
-      expect.objectContaining({ p: 1, page_size: 20 }),
-      expect.anything()
-    )
-    expect(get).toHaveBeenCalledWith(
-      '/api/next/admin/orders/stats',
-      { range: 30 },
-      expect.anything()
-    )
-    expect(
-      get.mock.calls.some(([path]) => String(path).startsWith('/api/order'))
-    ).toBe(false)
+      pending.reject(new ApiError('Statistics unavailable'))
+      await flushPromises()
+      expect(state.stats.value).toBeNull()
+      expect(state.statsError.value).toBe('Statistics unavailable')
+      expect(state.statsStale.value).toBe(false)
+      expect(state.statsLoading.value).toBe(false)
+    }
+  )
 
-    wrapper.unmount()
+  it('marks a retained same-range snapshot stale until a successful refresh', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValueOnce(initialStats)
+    const state = await setup()
+    get.mockRejectedValueOnce(new ApiError('Refresh failed'))
+
+    await state.loadStats({ background: true })
+    expect(state.stats.value).toEqual(initialStats)
+    expect(state.statsError.value).toBe('Refresh failed')
+    expect(state.statsStale.value).toBe(true)
+    expect(state.statsRefreshing.value).toBe(false)
+
+    const pending = deferred<AdminOrderStats>()
+    get.mockImplementationOnce(() => pending.promise as never)
+    const refresh = state.loadStats({ background: true })
+    expect(state.statsRefreshing.value).toBe(true)
+    expect(state.statsStale.value).toBe(true)
+    const updated = { ...initialStats, total: 5 }
+    pending.resolve(updated)
+    await refresh
+    expect(state.stats.value).toEqual(updated)
+    expect(state.statsError.value).toBe('')
+    expect(state.statsStale.value).toBe(false)
   })
 
-  it('uses the same real list endpoint for exports', async () => {
-    const get = vi.spyOn(api, 'get').mockImplementation((path) => {
-      if (path === '/api/next/admin/orders')
-        return Promise.resolve(page as never)
-      return Promise.resolve(stats as never)
-    })
-    const wrapper = mount(Host, {
-      global: { plugins: [createPinia(), i18n] },
-    })
+  it('does not restore an aborted older range when its response arrives late', async () => {
+    const oldRange = deferred<AdminOrderStats>()
+    const newRange = deferred<AdminOrderStats>()
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValueOnce(initialStats)
+      .mockImplementationOnce(() => oldRange.promise as never)
+      .mockImplementationOnce(() => newRange.promise as never)
+    const state = await setup()
+    state.range.value = 7
+    state.range.value = 90
+    expect(get.mock.calls[1]?.[2]?.signal?.aborted).toBe(true)
+
+    const current = { ...initialStats, total: 90 }
+    newRange.resolve(current)
     await flushPromises()
-    if (!state) throw new Error('expected orders composable instance')
+    oldRange.resolve({ ...initialStats, total: 7 })
+    await flushPromises()
+    expect(state.stats.value).toEqual(current)
+    expect(state.statsError.value).toBe('')
+    expect(state.statsStale.value).toBe(false)
+  })
 
-    await state.fetchAllForExport(new AbortController().signal)
+  it.each([401, 403])(
+    'clears the retained snapshot when a refresh is denied with HTTP %s',
+    async (status) => {
+      const get = vi.spyOn(api, 'get').mockResolvedValueOnce(initialStats)
+      const state = await setup()
+      get.mockRejectedValueOnce(new ApiError('Access denied', { status }))
+      await state.loadStats({ background: true })
+      expect(state.stats.value).toBeNull()
+      expect(state.statsError.value).toBe('Access denied')
+      expect(state.statsStale.value).toBe(false)
+    }
+  )
 
-    expect(get).toHaveBeenLastCalledWith(
-      '/api/next/admin/orders',
-      expect.objectContaining({ p: 1, page_size: 100 }),
-      expect.anything()
-    )
-    wrapper.unmount()
+  it('aborts an unmounted statistics request and ignores a transport that resolves anyway', async () => {
+    const pending = deferred<AdminOrderStats>()
+    const get = vi
+      .spyOn(api, 'get')
+      .mockImplementationOnce(() => pending.promise as never)
+    const state = await setup()
+    wrapper?.unmount()
+    wrapper = undefined
+    expect(get.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
+    pending.resolve(initialStats)
+    await flushPromises()
+    expect(state.stats.value).toBeNull()
   })
 })

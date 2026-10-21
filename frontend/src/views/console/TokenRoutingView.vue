@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -13,521 +13,303 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 
-import { routingApi, validRouteMaxRatio } from '@/api/routingApi'
+import {
+  tokenRoutingApi,
+  type TokenRoute,
+  type TokenRouteEntry,
+  type TokenRoutePreview,
+  type TokenRouteChannel,
+} from '@/api/tokenRouting'
 import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FormField from '@/components/common/FormField.vue'
+import IconButton from '@/components/common/IconButton.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import { useToast } from '@/composables/useToast'
 import { useLatestRequest } from '@/composables/useLatestRequest'
-import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
-import TokenGatewayPolicy from '@/components/console/gateway/TokenGatewayPolicy.vue'
-import type {
-  EligibleRouteChannel,
-  RouteEntry,
-  RouteGroup,
-  RouteHealthState,
-  RouteCatalog,
-  RoutePolicy,
-  RoutePreview,
-  RouteProfileInput,
-  RouteProfileView,
-} from '@/types/routing'
+import { useToast } from '@/composables/useToast'
+import { tokenRoutingMessages } from '@/i18n/tokenRouting'
+import { useAuthStore } from '@/stores/auth'
+import { isValidChannelRatio } from '@/utils/channelRatio'
 
-const { t, locale } = useI18n()
+const { t, te } = useI18n({ useScope: 'local', messages: tokenRoutingMessages })
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const toast = useToast()
-
 const tokenId = computed(() => Number(route.params.id))
-const profileView = ref<RouteProfileView | null>(null)
-const groups = ref<RouteGroup[]>([])
-const channels = ref<EligibleRouteChannel[]>([])
-const catalog = ref<RouteCatalog | null>(null)
-const model = ref('')
-const path = ref('/v1/chat/completions')
-const requestSample = ref('')
-const selectedChannelId = ref('')
-const preview = ref<RoutePreview | null>(null)
-const loading = ref(true)
+const canRead = computed(() => auth.hasPermission('routing', 'read'))
+const canWrite = computed(() => auth.hasPermission('routing', 'write'))
+const data = ref<TokenRoute | null>(null)
+const channels = ref<TokenRouteChannel[]>([])
+const selected = ref('')
+const maxRatio = ref('')
+const loading = ref(false)
 const saving = ref(false)
-const deletingProfile = ref(false)
-const loadingPreview = ref(false)
-const loadError = ref('')
 const conflict = ref(false)
-const draggingEntry = ref<RouteEntry | null>(null)
-const activeGroupKey = ref('')
-let loadRequestSerial = 0
+const loadError = ref('')
+const saveError = ref('')
+const candidatesLoading = ref(false)
+const candidatesError = ref('')
+const draggingChannelId = ref<number | null>(null)
+const request = useLatestRequest()
+const saveRequest = useLatestRequest()
 const previewRequest = useLatestRequest()
-
-const activeGroup = computed(() => {
-  return (
-    groups.value.find((group) => groupKey(group) === activeGroupKey.value) ??
-    groups.value[0] ??
-    null
-  )
-})
-
-const activeEntryIds = computed(
-  () =>
-    new Set(activeGroup.value?.entries.map((entry) => entry.channel_id) ?? [])
-)
-
+const previewModel = ref('')
+const previewPath = ref('/v1/chat/completions')
+const preview = ref<TokenRoutePreview | null>(null)
+const previewLoading = ref(false)
+const previewError = ref('')
+const paths = [
+  '/v1/chat/completions',
+  '/v1/responses',
+  '/v1/messages',
+  '/v1/embeddings',
+  '/v1/images/generations',
+  '/v1/audio/transcriptions',
+]
 const canEdit = computed(
   () =>
+    Boolean(data.value) &&
+    canWrite.value &&
+    canRead.value &&
     !loading.value &&
-    !loadError.value &&
-    !conflict.value &&
     !saving.value &&
-    !deletingProfile.value &&
-    (!profileView.value || profileView.value.profile.mode === 'manual') &&
-    Boolean(tokenId.value)
+    !candidatesLoading.value &&
+    !candidatesError.value &&
+    !conflict.value
 )
-
-const canSave = computed(
-  () =>
-    canEdit.value &&
-    groups.value.every((group) => validRouteMaxRatio(group.policy.max_ratio))
-)
-
-const availableChannels = computed(() =>
+const validRatio = computed(() => {
+  const value = maxRatio.value.trim()
+  return !value || isValidChannelRatio(value)
+})
+const available = computed(() =>
   channels.value.filter(
     (channel) =>
-      !activeEntryIds.value.has(channel.id) &&
-      channel.capability_state === 'eligible' &&
-      !channel.filter_reason
+      !data.value?.entries.some((entry) => entry.channel_id === channel.id)
   )
 )
+const channelById = computed(
+  () => new Map(channels.value.map((channel) => [channel.id, channel]))
+)
+const enabledCount = computed(
+  () => data.value?.entries.filter((entry) => entry.enabled).length ?? 0
+)
 
-function defaultPolicy(groupId = 0): RoutePolicy {
-  return {
-    group_id: groupId,
-    load_balance: false,
-    max_ratio: '1',
-    retry_mode: 'next_channel',
-    max_same_resource_attempts: 0,
-    max_failover_attempts: 1,
-    sticky: false,
-  }
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
-
-function groupKey(group: RouteGroup): string {
-  return group.id > 0 ? `id:${group.id}` : `new:${group.position}`
+function reasonLabel(reason?: string): string {
+  return reason && te(`routing.reasons.${reason}`)
+    ? t(`routing.reasons.${reason}`)
+    : reason || t('routing.reasons.channel_unavailable')
 }
-
-function newGroup(position: number): RouteGroup {
-  return {
-    id: 0,
-    profile_id: profileView.value?.profile.id ?? 0,
-    name: t('routing.defaultGroupName', { position: position + 1 }),
-    kind: 'manual',
-    enabled: true,
-    position,
-    entries: [],
-    policy: defaultPolicy(),
-  }
+function channelFor(entry: TokenRouteEntry): TokenRouteChannel | undefined {
+  return channelById.value.get(entry.channel_id)
 }
-
-function setView(view: RouteProfileView): void {
-  invalidatePreview()
-  profileView.value = view
-  groups.value = view.groups.map((group) => ({
-    ...group,
-    entries: group.entries.map((entry) => ({ ...entry })),
-    policy: { ...group.policy },
-  }))
-  activeGroupKey.value = view.profile.active_group_id
-    ? `id:${view.profile.active_group_id}`
-    : groups.value[0]
-      ? groupKey(groups.value[0])
-      : ''
-  conflict.value = false
+function invalidatePreview(): void {
+  previewRequest.cancel()
+  preview.value = null
+  previewLoading.value = false
+  previewError.value = ''
 }
-
 async function load(): Promise<void> {
-  const requestSerial = ++loadRequestSerial
-  const requestedTokenID = tokenId.value
+  saveRequest.cancel()
+  saving.value = false
   invalidatePreview()
-  loading.value = true
-  loadError.value = ''
-  profileView.value = null
-  groups.value = []
+  data.value = null
   channels.value = []
-  catalog.value = null
-  preview.value = null
-  draggingEntry.value = null
-  activeGroupKey.value = ''
-  selectedChannelId.value = ''
+  selected.value = ''
+  maxRatio.value = ''
+  draggingChannelId.value = null
   conflict.value = false
-  try {
-    const [profiles, eligible, capabilityCatalog] = await Promise.all([
-      routingApi.profiles(),
-      routingApi.eligibleChannels(),
-      routingApi.catalog(),
+  saveError.value = ''
+  candidatesLoading.value = false
+  candidatesError.value = ''
+  loadError.value = ''
+  if (!canRead.value) return
+  loading.value = true
+  const result = await request.run((signal) =>
+    Promise.all([
+      tokenRoutingApi.get(tokenId.value, signal),
+      tokenRoutingApi.channels(tokenId.value, signal),
     ])
-    if (
-      requestSerial !== loadRequestSerial ||
-      requestedTokenID !== tokenId.value
-    ) {
-      return
-    }
-    channels.value = eligible
-    catalog.value = capabilityCatalog
-    const existing = profiles.find(
-      (item) => item.profile.token_id === requestedTokenID
-    )
-    if (existing) setView(existing)
-    else {
-      profileView.value = null
-      groups.value = []
-      activeGroupKey.value = ''
-    }
-  } catch (error) {
-    if (
-      requestSerial !== loadRequestSerial ||
-      requestedTokenID !== tokenId.value
-    ) {
-      return
-    }
-    loadError.value = error instanceof ApiError ? error.message : String(error)
-  } finally {
-    if (requestSerial === loadRequestSerial) loading.value = false
-  }
-}
-
-function groupInput(group: RouteGroup): RouteProfileInput['groups'][number] {
-  return {
-    ...(group.id > 0 ? { id: group.id } : {}),
-    name: group.name.trim(),
-    kind: 'manual',
-    enabled: group.enabled,
-    position: group.position,
-    entries: group.entries.map((entry) => ({
-      ...(entry.id > 0 ? { id: entry.id } : {}),
-      channel_id: entry.channel_id,
-      source: 'platform',
-      enabled: entry.enabled,
-      position: entry.position,
-      weight: entry.weight,
-    })),
-    policy: {
-      load_balance: group.policy.load_balance,
-      max_ratio: group.policy.max_ratio,
-      retry_mode: group.policy.retry_mode,
-      max_same_resource_attempts: group.policy.max_same_resource_attempts,
-      max_failover_attempts: group.policy.max_failover_attempts,
-      sticky: group.policy.sticky,
-    },
-  }
-}
-
-function input(): RouteProfileInput {
-  const active = activeGroup.value
-  const activeGroupIndex = active ? groups.value.indexOf(active) : -1
-  return {
-    ...(profileView.value
-      ? { version: profileView.value.profile.version }
-      : { token_id: tokenId.value }),
-    mode: profileView.value?.profile.mode ?? 'manual',
-    active_group_id:
-      active && active.id > 0
-        ? active.id
-        : activeGroupIndex >= 0
-          ? -(activeGroupIndex + 1)
-          : null,
-    groups: groups.value.map(groupInput),
-  }
-}
-
-async function save(): Promise<void> {
-  if (!canSave.value) return
-  const requestedTokenID = tokenId.value
-  const requestedLoadSerial = loadRequestSerial
-  invalidatePreview()
-  saving.value = true
-  try {
-    const next = profileView.value
-      ? await routingApi.update(profileView.value.profile.id, input())
-      : await routingApi.create(input())
-    if (
-      requestedTokenID !== tokenId.value ||
-      requestedLoadSerial !== loadRequestSerial
-    ) {
-      return
-    }
-    setView(next)
-    toast.success(t('routing.saved'))
-  } catch (error) {
-    if (
-      requestedTokenID !== tokenId.value ||
-      requestedLoadSerial !== loadRequestSerial
-    ) {
-      return
-    }
-    if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
-      conflict.value = true
-      toast.warning(t('routing.versionConflict'))
-    } else {
-      toast.error(error instanceof ApiError ? error.message : String(error))
-    }
-  } finally {
-    saving.value = false
-  }
-}
-
-async function removeProfile(): Promise<void> {
-  const current = profileView.value
-  if (!current || !canEdit.value) return
-  const requestedTokenID = tokenId.value
-  const requestedLoadSerial = loadRequestSerial
-  invalidatePreview()
-  deletingProfile.value = true
-  draggingEntry.value = null
-  try {
-    await routingApi.remove(current.profile.id)
-    if (
-      requestedTokenID !== tokenId.value ||
-      requestedLoadSerial !== loadRequestSerial
-    ) {
-      return
-    }
-    invalidatePreview()
-    profileView.value = null
-    groups.value = []
-    activeGroupKey.value = ''
-    preview.value = null
-    conflict.value = false
-  } catch (error) {
-    if (
-      requestedTokenID !== tokenId.value ||
-      requestedLoadSerial !== loadRequestSerial
-    ) {
-      return
-    }
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
-    deletingProfile.value = false
-  }
-}
-
-function addGroup(): void {
-  if (!canEdit.value) return
-  const group = newGroup(groups.value.length)
-  groups.value = [...groups.value, group]
-  if (!activeGroupKey.value) activeGroupKey.value = groupKey(group)
-}
-
-function removeGroup(group: RouteGroup): void {
-  if (!canEdit.value) return
-  const currentActive = activeGroup.value
-  const next = groups.value.filter((item) => item !== group)
-  next.forEach((item, index) => (item.position = index))
-  groups.value = next
-  if (groupKey(group) === activeGroupKey.value) {
-    activeGroupKey.value = next[0] ? groupKey(next[0]) : ''
-  } else if (currentActive && next.includes(currentActive)) {
-    activeGroupKey.value = groupKey(currentActive)
-  }
-}
-
-function activateGroup(group: RouteGroup): void {
-  if (!canEdit.value) return
-  activeGroupKey.value = groupKey(group)
-}
-
-function addChannel(): void {
-  if (!canEdit.value) return
-  const group = activeGroup.value
-  const channelId = Number(selectedChannelId.value)
-  if (!group || !channelId || activeEntryIds.value.has(channelId)) return
-  const entry: RouteEntry = {
-    id: 0,
-    group_id: group.id,
-    channel_id: channelId,
-    source: 'platform',
-    enabled: true,
-    position: group.entries.length,
-    weight: 100,
-  }
-  group.entries.push(entry)
-  selectedChannelId.value = ''
-}
-
-function removeEntry(entry: RouteEntry): void {
-  if (!canEdit.value) return
-  const group = activeGroup.value
-  if (!group) return
-  group.entries = group.entries
-    .filter((item) => item !== entry)
-    .map((item, index) => ({ ...item, position: index }))
-}
-
-function moveEntry(entry: RouteEntry, offset: number): void {
-  if (!canEdit.value) return
-  const group = activeGroup.value
-  if (!group) return
-  const index = group.entries.indexOf(entry)
-  const target = index + offset
-  if (index < 0 || target < 0 || target >= group.entries.length) return
-  const entries = [...group.entries]
-  ;[entries[index], entries[target]] = [entries[target], entries[index]]
-  group.entries = entries.map((item, position) => ({ ...item, position }))
-}
-
-function dropEntry(target: RouteEntry): void {
-  if (!canEdit.value) return
-  const dragged = draggingEntry.value
-  draggingEntry.value = null
-  if (dragged === null || dragged === target) return
-  const group = activeGroup.value
-  if (!group) return
-  const from = group.entries.indexOf(dragged)
-  const to = group.entries.indexOf(target)
-  if (from < 0 || to < 0) return
-  const entries = [...group.entries]
-  const [moved] = entries.splice(from, 1)
-  entries.splice(to, 0, moved)
-  group.entries = entries.map((item, position) => ({ ...item, position }))
-}
-
-function clearDraggingEntry(): void {
-  draggingEntry.value = null
-}
-
-function channelFor(entry: RouteEntry): EligibleRouteChannel | undefined {
-  return channels.value.find((channel) => channel.id === entry.channel_id)
-}
-
-function normalizeRouteModel(value: string): string {
-  let normalized = value.trim().normalize('NFKC').toLowerCase()
-  for (;;) {
-    const previous = normalized
-    normalized = normalized.replace(/@default$/, '')
-    for (const suffix of [':free', ':thinking', ':low', ':medium', ':high']) {
-      normalized = normalized.replace(new RegExp(`${suffix}$`), '')
-    }
-    if (normalized === previous) return normalized
-  }
-}
-
-function capabilityFor(entry: RouteEntry) {
-  const requestedModel = normalizeRouteModel(model.value)
-  return catalog.value?.items.find(
-    (item) =>
-      item.channel_id === entry.channel_id &&
-      (!requestedModel ||
-        normalizeRouteModel(item.request_model) === requestedModel)
   )
-}
-
-function channelTone(
-  channel: EligibleRouteChannel | undefined
-): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (!channel || channel.filter_reason) return 'danger'
-  if (channel.capability_state !== 'eligible') return 'warning'
-  return 'success'
-}
-
-function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
-  if (state === 'closed') return 'success'
-  if (state === 'half_open') return 'warning'
-  return 'danger'
-}
-
-async function runPreview(): Promise<void> {
-  if (!tokenId.value || !model.value.trim() || !path.value.trim()) return
-  preview.value = null
-  let request: Record<string, unknown> | undefined
-  if (requestSample.value.trim()) {
-    try {
-      const sample: unknown = JSON.parse(requestSample.value)
-      if (!sample || typeof sample !== 'object' || Array.isArray(sample)) {
-        throw new Error('invalid request sample')
-      }
-      request = sample as Record<string, unknown>
-    } catch {
-      toast.error(t('routing.requestSampleInvalid'))
-      return
-    }
+  if (result.stale) return
+  loading.value = false
+  if (!result.ok) {
+    loadError.value = errorMessage(result.error)
+    return
   }
-  const requestedTokenID = tokenId.value
-  loadingPreview.value = true
+  ;[data.value, channels.value] = result.value
+  maxRatio.value = data.value.max_channel_ratio ?? ''
+}
+function updatePositions(): void {
+  data.value?.entries.forEach((entry, index) => {
+    entry.position = index
+  })
+}
+function add(): void {
+  const id = Number(selected.value)
+  if (
+    !canEdit.value ||
+    data.value?.mode !== 'manual' ||
+    !available.value.some((channel) => channel.id === id && channel.eligible)
+  )
+    return
+  data.value.entries.push({
+    channel_id: id,
+    enabled: true,
+    position: data.value.entries.length,
+  })
+  selected.value = ''
+}
+function remove(index: number): void {
+  if (!canEdit.value || data.value?.mode !== 'manual') return
+  data.value.entries.splice(index, 1)
+  updatePositions()
+}
+function move(index: number, offset: number): void {
+  const entries = data.value?.entries
+  const target = index + offset
+  if (!canEdit.value || !entries || target < 0 || target >= entries.length)
+    return
+  const [entry] = entries.splice(index, 1)
+  if (entry) entries.splice(target, 0, entry)
+  updatePositions()
+}
+function startDrag(event: DragEvent, entry: TokenRouteEntry): void {
+  if (!canEdit.value) {
+    event.preventDefault()
+    return
+  }
+  draggingChannelId.value = entry.channel_id
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(entry.channel_id))
+  }
+}
+function dropEntry(target: TokenRouteEntry): void {
+  const id = draggingChannelId.value
+  draggingChannelId.value = null
+  const entries = data.value?.entries
+  if (!canEdit.value || id === null || !entries) return
+  const from = entries.findIndex((entry) => entry.channel_id === id)
+  const to = entries.indexOf(target)
+  if (from < 0 || to < 0 || from === to) return
+  move(from, to - from)
+}
+async function save(): Promise<void> {
+  if (!canEdit.value || !data.value) return
+  if (!validRatio.value) {
+    saveError.value = t('routing.invalidRatio')
+    return
+  }
+  // A pending request owns a snapshot, so navigation or later edits cannot alter it.
+  const input: TokenRoute = {
+    ...data.value,
+    max_channel_ratio: maxRatio.value.trim() || null,
+    entries: data.value.entries.map((entry) => ({ ...entry })),
+  }
+  const id = tokenId.value
+  invalidatePreview()
+  saveError.value = ''
+  saving.value = true
+  const result = await saveRequest.run(() => tokenRoutingApi.save(id, input))
+  if (result.stale) return
+  saving.value = false
+  if (result.ok) {
+    data.value = result.value
+    maxRatio.value = result.value.max_channel_ratio ?? ''
+    toast.success(t('routing.saved'))
+    selected.value = ''
+    candidatesLoading.value = true
+    const refreshed = await request.run((signal) =>
+      tokenRoutingApi.channels(id, signal)
+    )
+    if (refreshed.stale) return
+    candidatesLoading.value = false
+    if (refreshed.ok) channels.value = refreshed.value
+    else candidatesError.value = errorMessage(refreshed.error)
+    return
+  }
+  conflict.value =
+    result.error instanceof ApiError && result.error.status === 409
+  saveError.value = conflict.value
+    ? t('routing.conflict')
+    : errorMessage(result.error)
+}
+async function loadPreview(): Promise<void> {
+  if (
+    !canRead.value ||
+    !data.value ||
+    loading.value ||
+    saving.value ||
+    !previewModel.value.trim() ||
+    previewLoading.value
+  )
+    return
   preview.value = null
+  previewLoading.value = true
+  previewError.value = ''
   const result = await previewRequest.run((signal) =>
-    routingApi.previewToken(
-      requestedTokenID,
-      {
-        model: model.value.trim(),
-        path: path.value.trim(),
-        ...(request ? { request } : {}),
-      },
+    tokenRoutingApi.preview(
+      tokenId.value,
+      previewModel.value.trim(),
+      previewPath.value,
       signal
     )
   )
   if (result.stale) return
-  loadingPreview.value = false
-  if (result.ok) {
-    preview.value = result.value
-  } else {
-    toast.error(
-      result.error instanceof ApiError
-        ? result.error.message
-        : String(result.error)
-    )
-  }
+  previewLoading.value = false
+  if (result.ok) preview.value = result.value
+  else previewError.value = errorMessage(result.error)
 }
-
-function reloadAfterConflict(): void {
-  invalidatePreview()
-  void load()
-}
-
-function invalidatePreview(): void {
-  previewRequest.cancel()
-  preview.value = null
-  loadingPreview.value = false
-}
-
-watch([model, path, requestSample], invalidatePreview)
+watch([tokenId, previewModel, previewPath], invalidatePreview)
+watch(canWrite, () => {
+  saveRequest.cancel()
+  saving.value = false
+  draggingChannelId.value = null
+})
 watch(
-  () => route.params.id,
+  [tokenId, canRead],
   () => {
+    request.cancel()
+    loading.value = false
     void load()
-  }
+  },
+  { immediate: true }
 )
-
-onMounted(() => void load())
 </script>
 
 <template>
   <div class="sibling-space-y-6" data-handdrawn-page="token-routing">
-    <PageBreadcrumb :crumbs="[t('keys.breadcrumb.0'), t('routing.title')]">
+    <PageBreadcrumb :crumbs="[t('routing.keys'), t('routing.title')]">
       <template #action>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <ConsoleButton
             variant="secondary"
             @click="router.push({ name: 'keys' })"
           >
-            <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-            {{ t('common.back') }}
-          </ConsoleButton>
-          <ConsoleButton :loading="saving" :disabled="!canSave" @click="save">
-            <Save class="h-4 w-4" aria-hidden="true" />
-            {{ t('common.save') }}
+            <ArrowLeft class="h-4 w-4" aria-hidden="true" />{{
+              t('routing.back')
+            }}
           </ConsoleButton>
           <ConsoleButton
-            v-if="profileView"
-            variant="danger"
-            :loading="deletingProfile"
-            :disabled="!canEdit"
-            @click="removeProfile"
+            variant="secondary"
+            :disabled="loading || saving || !canRead"
+            @click="load"
           >
-            <Trash2 class="h-4 w-4" aria-hidden="true" />
-            {{ t('routing.removeProfile') }}
+            <RefreshCw class="h-4 w-4" aria-hidden="true" />{{
+              t('routing.reload')
+            }}
+          </ConsoleButton>
+          <ConsoleButton :loading="saving" :disabled="!canEdit" @click="save">
+            <Save class="h-4 w-4" aria-hidden="true" />{{ t('routing.save') }}
           </ConsoleButton>
         </div>
       </template>
@@ -538,634 +320,439 @@ onMounted(() => void load())
         {{ t('routing.title') }}
       </h1>
       <p class="mt-1 text-sm text-[var(--text-tertiary)]">
-        {{ t('routing.subtitle') }}
+        {{ t('routing.description') }}
       </p>
     </header>
 
-    <GatewayUserPanel />
-    <TokenGatewayPolicy :token-id="tokenId" @updated="invalidatePreview" />
-    <p
-      v-if="canEdit && !canSave"
+    <div
+      v-if="saveError"
       role="alert"
-      class="mt-3 text-sm text-[var(--status-danger-text)]"
+      class="flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 text-sm"
+      :class="
+        conflict
+          ? 'border-[var(--status-warning)] bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]'
+          : 'border-[var(--status-danger)] bg-[var(--status-danger-soft)] text-[var(--status-danger-text)]'
+      "
     >
-      {{ t('routing.invalidMaxRatio') }}
+      <span>{{ saveError }}</span>
+      <ConsoleButton
+        v-if="conflict"
+        variant="secondary"
+        size="sm"
+        @click="load"
+      >
+        <RefreshCw class="h-4 w-4" aria-hidden="true" />{{
+          t('routing.reload')
+        }}
+      </ConsoleButton>
+    </div>
+    <div
+      v-if="candidatesError"
+      role="alert"
+      class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
+    >
+      <span>{{
+        t('routing.savedCandidatesFailed', { error: candidatesError })
+      }}</span>
+      <ConsoleButton variant="secondary" size="sm" @click="load">
+        <RefreshCw class="h-4 w-4" aria-hidden="true" />{{
+          t('routing.reload')
+        }}
+      </ConsoleButton>
+    </div>
+    <p
+      v-else-if="candidatesLoading"
+      role="status"
+      class="text-sm text-[var(--text-tertiary)]"
+    >
+      {{ t('routing.refreshingCandidates') }}
+    </p>
+    <p
+      v-if="!canRead"
+      role="alert"
+      class="py-16 text-center text-sm text-[var(--status-danger-text)]"
+    >
+      {{ t('routing.readDenied') }}
     </p>
     <div
-      v-if="conflict"
-      class="flex items-center justify-between gap-4 border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm"
-    >
-      <span>{{ t('routing.versionConflictHint') }}</span>
-      <ConsoleButton variant="secondary" size="sm" @click="reloadAfterConflict">
-        <RefreshCw class="h-4 w-4" aria-hidden="true" />
-        {{ t('common.retry') }}
-      </ConsoleButton>
-    </div>
-
-    <div
-      v-if="loading"
+      v-else-if="loading"
+      role="status"
       class="py-16 text-center text-sm text-[var(--text-tertiary)]"
     >
-      {{ t('common.loading') }}
+      {{ t('routing.loading') }}
     </div>
-    <div v-else-if="loadError" class="py-16 text-center">
+    <div v-else-if="loadError" role="alert" class="py-16 text-center">
       <p class="text-sm text-[var(--status-danger-text)]">{{ loadError }}</p>
-      <ConsoleButton class="mt-5" variant="secondary" @click="load">
-        <RefreshCw class="h-4 w-4" aria-hidden="true" />
-        {{ t('common.retry') }}
-      </ConsoleButton>
+      <ConsoleButton class="mt-5" variant="secondary" @click="load"
+        ><RefreshCw class="h-4 w-4" aria-hidden="true" />{{
+          t('routing.reload')
+        }}</ConsoleButton
+      >
     </div>
-    <template v-else>
-      <ConsoleCard :title="t('routing.groupsTitle')">
-        <template #action>
-          <ConsoleButton
-            variant="secondary"
-            size="sm"
-            :disabled="!canEdit"
-            @click="addGroup"
-          >
-            <Plus class="h-4 w-4" aria-hidden="true" />
-            {{ t('routing.addGroup') }}
-          </ConsoleButton>
-        </template>
-        <div v-if="!groups.length" class="py-4">
-          <EmptyState
-            :title="t('routing.noGroups')"
-            :hint="t('routing.noGroupsHint')"
-          />
-        </div>
-        <div v-else class="sibling-space-y-3">
-          <div
-            v-for="group in groups"
-            :key="group.id || `new-${group.position}`"
-            class="rounded-xl border p-4 transition-colors"
+    <template v-else-if="data">
+      <ConsoleCard :title="t('routing.modeTitle')">
+        <template #action
+          ><StatusChip tone="info">{{
+            t('routing.keyNumber', { id: tokenId })
+          }}</StatusChip></template
+        >
+        <fieldset class="grid gap-3 sm:grid-cols-2" :disabled="!canEdit">
+          <legend class="sr-only">{{ t('routing.modeTitle') }}</legend>
+          <label
+            v-for="mode in ['auto', 'manual'] as const"
+            :key="mode"
+            class="flex min-w-0 items-start gap-3 rounded-xl border p-4 transition-colors"
             :class="
-              activeGroup === group
+              data.mode === mode
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                 : 'border-[var(--border-subtle)]'
             "
           >
-            <div class="flex flex-wrap items-center gap-3">
-              <input
-                v-model="group.name"
-                class="min-w-40 flex-1 border-0 border-b bg-transparent px-1 py-2 text-sm font-semibold text-[var(--text-primary)] focus:outline-hidden"
-                style="border-color: var(--border-default)"
-                :aria-label="t('routing.groupName')"
-                :disabled="!canEdit"
+            <input
+              v-model="data.mode"
+              class="mt-1 shrink-0"
+              type="radio"
+              name="token-route-mode"
+              :value="mode"
+              :aria-label="
+                mode === 'auto' ? t('routing.automatic') : t('routing.manual')
+              "
+            />
+            <span class="min-w-0"
+              ><span
+                class="block text-sm font-semibold text-[var(--text-primary)]"
+                >{{
+                  mode === 'auto' ? t('routing.automatic') : t('routing.manual')
+                }}</span
+              ><span
+                class="mt-1 block text-xs leading-relaxed text-[var(--text-tertiary)]"
+                >{{
+                  t(
+                    mode === 'auto'
+                      ? 'routing.automaticHint'
+                      : 'routing.manualHint'
+                  )
+                }}</span
+              ></span
+            >
+          </label>
+        </fieldset>
+        <p v-if="!canWrite" class="mt-4 text-sm text-[var(--text-tertiary)]">
+          {{ t('routing.readOnly') }}
+        </p>
+      </ConsoleCard>
+
+      <ConsoleCard
+        :title="
+          data.mode === 'manual'
+            ? t('routing.entriesTitle')
+            : t('routing.automatic')
+        "
+      >
+        <template #action
+          ><StatusChip
+            :tone="
+              data.mode === 'manual' && !enabledCount ? 'warning' : 'neutral'
+            "
+            >{{
+              data.mode === 'manual'
+                ? t('routing.selectedCount', { count: enabledCount })
+                : t('routing.platform')
+            }}</StatusChip
+          ></template
+        >
+        <div
+          v-if="data.mode === 'manual'"
+          class="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
+        >
+          <FormField :label="t('routing.add')">
+            <select
+              v-model="selected"
+              :aria-label="t('routing.select')"
+              class="h-11 w-full min-w-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring sm:h-10"
+              :disabled="!canEdit"
+            >
+              <option value="">{{ t('routing.select') }}</option>
+              <option
+                v-for="channel in available"
+                :key="channel.id"
+                :value="String(channel.id)"
+                :disabled="!channel.eligible"
+              >
+                #{{ channel.id }} {{ channel.name }} · ×{{
+                  channel.channel_ratio
+                }}{{
+                  channel.eligible
+                    ? ''
+                    : ` · ${reasonLabel(channel.filter_reason)}`
+                }}
+              </option>
+            </select>
+            <p
+              v-if="!channels.length"
+              class="mt-2 text-xs text-[var(--text-tertiary)]"
+            >
+              {{ t('routing.noChannels') }}
+            </p>
+          </FormField>
+          <ConsoleButton
+            variant="secondary"
+            :disabled="!canEdit || !selected"
+            @click="add"
+            ><Plus class="h-4 w-4" aria-hidden="true" />{{
+              t('routing.add')
+            }}</ConsoleButton
+          >
+        </div>
+
+        <div
+          class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]"
+          :class="
+            data.mode === 'manual'
+              ? 'border-t border-[var(--border-subtle)] pt-4'
+              : ''
+          "
+        >
+          <div class="min-w-0">
+            <template v-if="data.mode === 'manual'">
+              <p
+                class="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
+              >
+                {{ t('routing.orderHint') }}
+              </p>
+              <EmptyState
+                v-if="!data.entries.length"
+                :title="t('routing.empty')"
+                :hint="t('routing.emptyHint')"
               />
-              <label
-                class="flex items-center gap-2 text-sm text-[var(--text-secondary)]"
+              <ol
+                v-else
+                class="sibling-space-y-2"
+                :aria-label="t('routing.entriesTitle')"
               >
-                <input
-                  v-model="group.enabled"
-                  type="checkbox"
-                  :disabled="!canEdit"
-                />
-                {{ t('routing.enabled') }}
-              </label>
-              <label
-                class="flex items-center gap-2 text-sm text-[var(--text-secondary)]"
-              >
-                <input
-                  :checked="activeGroup === group"
-                  type="radio"
-                  name="active-route-group"
-                  :disabled="!canEdit"
-                  @change="activateGroup(group)"
-                />
-                {{ t('routing.activeGroup') }}
-              </label>
-              <button
-                type="button"
-                class="text-[var(--status-danger-text)] hover:opacity-70"
-                :aria-label="t('routing.removeGroup')"
-                :title="t('routing.removeGroup')"
-                :disabled="!canEdit"
-                @click="removeGroup(group)"
-              >
-                <Trash2 class="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div v-if="activeGroup === group" class="mt-4 sibling-space-y-4">
-              <div
-                class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
-              >
-                <FormField :label="t('routing.addChannel')">
-                  <select
-                    v-model="selectedChannelId"
-                    class="h-11 sm:h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
-                    :disabled="!canEdit"
-                  >
-                    <option value="">{{ t('routing.selectChannel') }}</option>
-                    <option
-                      v-for="channel in availableChannels"
-                      :key="channel.id"
-                      :value="String(channel.id)"
-                    >
-                      #{{ channel.id }} {{ channel.name }}
-                    </option>
-                  </select>
-                </FormField>
-                <ConsoleButton
-                  variant="secondary"
-                  :disabled="!canEdit || !selectedChannelId"
-                  @click="addChannel"
+                <li
+                  v-for="(entry, index) in data.entries"
+                  :key="entry.channel_id"
+                  :draggable="canEdit"
+                  :data-channel-id="entry.channel_id"
+                  class="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border-subtle)] p-3"
+                  :class="
+                    draggingChannelId === entry.channel_id ? 'opacity-50' : ''
+                  "
+                  @dragstart="startDrag($event, entry)"
+                  @dragend="draggingChannelId = null"
+                  @dragover.prevent
+                  @drop.prevent="dropEntry(entry)"
                 >
-                  <Plus class="h-4 w-4" aria-hidden="true" />
-                  {{ t('routing.addChannel') }}
-                </ConsoleButton>
-              </div>
-
-              <div
-                class="grid gap-4 border-t pt-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]"
-                style="border-color: var(--border-subtle)"
-              >
-                <div>
-                  <p
-                    class="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
+                  <GripVertical
+                    class="h-4 w-4 shrink-0 text-[var(--text-tertiary)]"
+                    aria-hidden="true"
+                  />
+                  <span
+                    class="text-xs tabular-nums text-[var(--text-tertiary)]"
+                    >{{ index + 1 }}</span
                   >
-                    {{ t('routing.entriesTitle') }}
-                  </p>
-                  <div
-                    v-if="!group.entries.length"
-                    class="border border-dashed p-6 text-center text-sm text-[var(--text-tertiary)]"
-                  >
-                    {{ t('routing.noEntries') }}
-                  </div>
-                  <div v-else class="sibling-space-y-2">
-                    <div
-                      v-for="entry in group.entries"
-                      :key="entry.id || `new-entry-${entry.channel_id}`"
-                      :draggable="canEdit"
-                      class="flex flex-wrap items-center gap-2 border p-3"
-                      style="border-color: var(--border-subtle)"
-                      @dragstart="draggingEntry = entry"
-                      @dragend="clearDraggingEntry"
-                      @dragover.prevent
-                      @drop="dropEntry(entry)"
+                  <div class="min-w-0 basis-36 flex-1">
+                    <p
+                      class="break-words text-sm font-medium text-[var(--text-primary)]"
                     >
-                      <GripVertical
-                        class="h-4 w-4 shrink-0 text-[var(--text-tertiary)]"
-                        aria-hidden="true"
-                      />
-                      <div class="min-w-36 flex-1">
-                        <p
-                          class="text-sm font-medium text-[var(--text-primary)]"
-                        >
-                          #{{ entry.channel_id }}
-                          {{
-                            channelFor(entry)?.name ||
-                            t('routing.unavailableChannel')
-                          }}
-                        </p>
-                        <div
-                          class="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-tertiary)]"
-                        >
-                          <StatusChip :tone="channelTone(channelFor(entry))">
-                            {{
-                              channelFor(entry)?.capability_state ||
-                              t('routing.unavailable')
-                            }}
-                          </StatusChip>
-                          <span v-if="channelFor(entry)?.filter_reason">{{
-                            channelFor(entry)?.filter_reason
-                          }}</span>
-                          <span v-if="capabilityFor(entry)">
-                            {{
-                              capabilityFor(entry)?.lab_slug ||
-                              t('routing.unknownLab')
-                            }}
-                          </span>
-                        </div>
-                      </div>
-                      <label
-                        class="flex items-center gap-1 text-xs text-[var(--text-secondary)]"
+                      #{{ entry.channel_id }}
+                      {{
+                        channelFor(entry)?.name ||
+                        t('routing.unavailable', { id: entry.channel_id })
+                      }}
+                    </p>
+                    <div
+                      class="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-tertiary)]"
+                    >
+                      <StatusChip
+                        :tone="
+                          channelFor(entry)?.eligible ? 'success' : 'warning'
+                        "
+                        >{{
+                          channelFor(entry)?.eligible
+                            ? t('routing.reasons.eligible')
+                            : reasonLabel(channelFor(entry)?.filter_reason)
+                        }}</StatusChip
                       >
-                        {{ t('routing.weight') }}
-                        <input
-                          v-model.number="entry.weight"
-                          type="number"
-                          min="0"
-                          max="1000000"
-                          class="w-20 border bg-transparent px-2 py-1 text-sm"
-                          style="border-color: var(--border-default)"
-                          :disabled="!canEdit"
-                        />
-                      </label>
-                      <label
-                        class="flex items-center gap-1 text-xs text-[var(--text-secondary)]"
-                      >
-                        <input
-                          v-model="entry.enabled"
-                          type="checkbox"
-                          :disabled="!canEdit"
-                        />
-                        {{ t('routing.enabled') }}
-                      </label>
-                      <button
-                        type="button"
-                        class="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-                        :aria-label="t('routing.moveUp')"
-                        :title="t('routing.moveUp')"
-                        :disabled="!canEdit"
-                        @click="moveEntry(entry, -1)"
-                      >
-                        <ArrowUp class="h-4 w-4" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-                        :aria-label="t('routing.moveDown')"
-                        :title="t('routing.moveDown')"
-                        :disabled="!canEdit"
-                        @click="moveEntry(entry, 1)"
-                      >
-                        <ArrowDown class="h-4 w-4" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="p-1 text-[var(--status-danger-text)]"
-                        :aria-label="t('routing.removeEntry')"
-                        :title="t('routing.removeEntry')"
-                        :disabled="!canEdit"
-                        @click="removeEntry(entry)"
-                      >
-                        <Trash2 class="h-4 w-4" aria-hidden="true" />
-                      </button>
+                      <span v-if="channelFor(entry)">{{
+                        t('routing.channelMetrics', {
+                          ratio: channelFor(entry)!.channel_ratio,
+                          active: channelFor(entry)!.in_flight,
+                        })
+                      }}</span>
                     </div>
                   </div>
-                </div>
-
-                <div class="sibling-space-y-3">
-                  <p
-                    class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
-                  >
-                    {{ t('routing.policyTitle') }}
-                  </p>
-                  <label
-                    class="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]"
-                  >
-                    {{ t('routing.loadBalance') }}
-                    <input
-                      v-model="group.policy.load_balance"
-                      type="checkbox"
-                      :disabled="!canEdit"
-                    />
-                  </label>
-                  <label
-                    class="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]"
-                  >
-                    {{ t('routing.sticky') }}
-                    <input
-                      v-model="group.policy.sticky"
-                      type="checkbox"
-                      :disabled="!canEdit"
-                    />
-                  </label>
-                  <label
-                    class="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]"
-                  >
-                    {{ t('routing.maxRatio') }}
-                    <input
-                      v-model="group.policy.max_ratio"
-                      inputmode="decimal"
-                      maxlength="64"
-                      :aria-invalid="
-                        !validRouteMaxRatio(group.policy.max_ratio)
-                      "
-                      class="min-h-11 sm:min-h-8 w-24 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 py-1 text-sm text-[var(--text-primary)] focus-ring"
-                      :disabled="!canEdit"
-                    />
-                  </label>
-                  <label class="block text-sm text-[var(--text-secondary)]">
-                    {{ t('routing.retryMode') }}
-                    <select
-                      v-model="group.policy.retry_mode"
-                      class="mt-1 min-h-11 sm:min-h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-sm text-[var(--text-primary)] focus-ring"
-                      :disabled="!canEdit"
+                  <div class="flex flex-wrap items-center gap-1">
+                    <label
+                      class="mr-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+                      ><ConsoleToggle
+                        v-model="entry.enabled"
+                        :label="t('routing.enabled')"
+                        size="sm"
+                        :disabled="!canEdit"
+                      />{{ t('routing.enabled') }}</label
                     >
-                      <option value="none">none</option>
-                      <option value="same_channel">same_channel</option>
-                      <option value="next_channel">next_channel</option>
-                      <option value="same_then_next">same_then_next</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
+                    <IconButton
+                      :label="t('routing.up')"
+                      :disabled="!canEdit || index === 0"
+                      @click="move(index, -1)"
+                      ><ArrowUp class="h-4 w-4" aria-hidden="true"
+                    /></IconButton>
+                    <IconButton
+                      :label="t('routing.down')"
+                      :disabled="!canEdit || index === data.entries.length - 1"
+                      @click="move(index, 1)"
+                      ><ArrowDown class="h-4 w-4" aria-hidden="true"
+                    /></IconButton>
+                    <IconButton
+                      :label="t('routing.remove')"
+                      tone="danger"
+                      :disabled="!canEdit"
+                      @click="remove(index)"
+                      ><Trash2 class="h-4 w-4" aria-hidden="true"
+                    /></IconButton>
+                  </div>
+                </li>
+              </ol>
+            </template>
+            <div v-else class="sibling-space-y-3">
+              <p class="text-sm leading-relaxed text-[var(--text-secondary)]">
+                {{ t('routing.automaticHint') }}
+              </p>
+              <p
+                class="rounded-xl border border-dashed border-[var(--border-subtle)] p-4 text-sm text-[var(--text-tertiary)]"
+              >
+                {{ t('routing.autoHint') }}
+              </p>
             </div>
           </div>
+          <aside
+            class="sibling-space-y-3 rounded-xl bg-[var(--surface-muted)] p-4"
+          >
+            <p
+              class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
+            >
+              {{ t('routing.policyTitle') }}
+            </p>
+            <FormField
+              :label="t('routing.maxRatio')"
+              :hint="t('routing.ratioHint')"
+            >
+              <TextInput
+                v-model="maxRatio"
+                inputmode="decimal"
+                maxlength="24"
+                :aria-label="t('routing.maxRatio')"
+                :aria-invalid="!validRatio"
+                :placeholder="t('routing.unlimitedRatio')"
+                :disabled="!canEdit"
+              />
+            </FormField>
+            <p
+              v-if="!validRatio"
+              role="alert"
+              class="text-xs text-[var(--status-danger-text)]"
+            >
+              {{ t('routing.invalidRatio') }}
+            </p>
+          </aside>
         </div>
       </ConsoleCard>
 
-      <ConsoleCard :title="t('routing.previewTitle')">
-        <div
-          v-if="!profileView && groups.length"
-          class="mb-4 sibling-space-y-4"
-        >
-          <p class="text-sm text-[var(--text-tertiary)]">
-            {{ t('routing.createHint') }}
-          </p>
-          <ConsoleButton :disabled="!canSave" @click="save">
-            <Save class="h-4 w-4" aria-hidden="true" />
-            {{ t('routing.createProfile') }}
-          </ConsoleButton>
+      <ConsoleCard :title="t('routing.preview')">
+        <p class="mb-4 text-sm text-[var(--text-tertiary)]">
+          {{ t('routing.previewHint') }}
+        </p>
+        <div class="grid gap-4 md:grid-cols-2">
+          <FormField :label="t('routing.model')"
+            ><TextInput
+              v-model="previewModel"
+              :aria-label="t('routing.model')"
+              :placeholder="t('routing.model')"
+              :disabled="loading || saving"
+          /></FormField>
+          <FormField :label="t('routing.path')"
+            ><select
+              v-model="previewPath"
+              class="h-11 w-full min-w-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+              :aria-label="t('routing.path')"
+              :disabled="loading || saving"
+            >
+              <option v-for="path in paths" :key="path" :value="path">
+                {{ path }}
+              </option>
+            </select></FormField
+          >
         </div>
-        <template v-if="!loading">
-          <p class="mb-4 text-sm text-[var(--text-tertiary)]">
-            {{ t('routing.previewSnapshotHint') }}
-          </p>
-          <div class="grid gap-4 md:grid-cols-2">
-            <FormField :label="t('routing.modelLabel')">
-              <TextInput v-model="model" placeholder="gpt-5" />
-            </FormField>
-            <FormField :label="t('routing.pathLabel')">
-              <TextInput v-model="path" placeholder="/v1/chat/completions" />
-            </FormField>
-          </div>
-          <FormField class="mt-4" :label="t('routing.requestSample')">
-            <textarea
-              v-model="requestSample"
-              data-testid="route-preview-request"
-              rows="4"
-              spellcheck="false"
-              class="w-full resize-y border bg-transparent p-3 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-hidden"
-              style="border-color: var(--border-default)"
-            />
-          </FormField>
-          <ConsoleButton
-            class="mt-4"
-            variant="secondary"
-            :loading="loadingPreview"
-            :disabled="loadingPreview || !model.trim() || !path.trim()"
-            @click="runPreview"
-          >
-            <RefreshCw class="h-4 w-4" aria-hidden="true" />
-            {{ t('routing.runPreview') }}
-          </ConsoleButton>
-
-          <div
-            v-if="preview"
-            class="mt-6 sibling-space-y-4 border-t pt-4"
-            style="border-color: var(--border-subtle)"
-          >
-            <div class="flex flex-wrap items-center gap-2 text-sm">
-              <span v-if="preview.generated_at">{{
-                t('routing.snapshotTime', {
-                  time: new Date(preview.generated_at).toLocaleTimeString(
-                    locale
-                  ),
-                })
-              }}</span>
-              <StatusChip tone="info">{{ preview.selection_mode }}</StatusChip>
-              <StatusChip v-if="preview.preferred_channel_id" tone="success">{{
-                t('routing.preferred', { id: preview.preferred_channel_id })
-              }}</StatusChip>
-              <StatusChip v-if="preview.has_mixed" tone="warning">{{
-                t('routing.mixedDetected')
-              }}</StatusChip>
-              <span
-                v-if="preview.runtime_recheck_required"
-                class="text-xs text-[var(--text-tertiary)]"
-                >{{ t('routing.runtimeRecheck') }}</span
-              >
-            </div>
-            <dl
-              class="grid gap-3 text-xs sm:grid-cols-3"
-              data-testid="route-preview-requirements"
+        <ConsoleButton
+          class="mt-4"
+          variant="secondary"
+          :loading="previewLoading"
+          :disabled="!previewModel.trim() || previewLoading || saving"
+          @click="loadPreview"
+          ><RefreshCw class="h-4 w-4" aria-hidden="true" />{{
+            t('routing.preview')
+          }}</ConsoleButton
+        >
+        <p
+          v-if="previewError"
+          role="alert"
+          class="mt-4 text-sm text-[var(--status-danger-text)]"
+        >
+          {{ previewError }}
+        </p>
+        <div
+          v-if="preview"
+          class="mt-6 sibling-space-y-4 border-t border-[var(--border-subtle)] pt-4"
+        >
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="text-[var(--text-secondary)]">{{
+              t('routing.previewVersion', { version: preview.version })
+            }}</span
+            ><StatusChip tone="info">{{
+              preview.mode === 'auto'
+                ? t('routing.automatic')
+                : t('routing.manual')
+            }}</StatusChip
+            ><span class="break-all text-xs text-[var(--text-tertiary)]"
+              >{{ preview.model }} · {{ preview.path }}</span
             >
-              <div>
-                <dt class="text-[var(--text-tertiary)]">
-                  {{ t('routing.requestProtocol') }}
-                </dt>
-                <dd class="mt-1 break-words text-[var(--text-primary)]">
-                  {{ preview.request_requirements.format }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-[var(--text-tertiary)]">
-                  {{ t('routing.conversionPolicy') }}
-                </dt>
-                <dd class="mt-1 text-[var(--text-primary)]">
-                  {{ preview.conversion_policy }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-[var(--text-tertiary)]">
-                  {{ t('routing.responseMode') }}
-                </dt>
-                <dd class="mt-1 text-[var(--text-primary)]">
-                  {{
-                    t(
-                      preview.request_requirements.stream
-                        ? 'routing.streamResponse'
-                        : 'routing.completeResponse'
-                    )
-                  }}
-                </dd>
-              </div>
-              <div
-                v-if="
-                  preview.request_requirements.features.length ||
-                  preview.request_requirements.tools.length
-                "
-                class="sm:col-span-3"
-              >
-                <dt class="text-[var(--text-tertiary)]">
-                  {{ t('routing.requestFeatures') }}
-                </dt>
-                <dd class="mt-1 break-words text-[var(--text-primary)]">
-                  {{
-                    [
-                      ...preview.request_requirements.features,
-                      ...preview.request_requirements.tools.map(
-                        (tool) => tool.type
-                      ),
-                    ].join(', ')
-                  }}
-                </dd>
-              </div>
-              <div
-                v-if="preview.request_requirements.native_required"
-                class="sm:col-span-3"
-              >
-                <dt class="text-[var(--text-tertiary)]">
-                  {{ t('routing.nativeState') }}
-                </dt>
-                <dd class="mt-1 break-all text-[var(--text-primary)]">
-                  {{ preview.request_requirements.native_state.join(', ') }}
-                </dd>
-              </div>
-            </dl>
+          </div>
+          <EmptyState
+            v-if="!preview.entries.length"
+            :title="t('routing.emptyPreview')"
+          />
+          <div v-else class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div
-              v-if="!preview.entries.length"
-              class="flex flex-wrap gap-2"
-              data-testid="route-preview-rejections"
+              v-for="item in preview.entries"
+              :key="item.channel_id"
+              class="min-w-0 rounded-xl border border-[var(--border-subtle)] p-4"
             >
+              <p
+                class="break-words text-sm font-medium text-[var(--text-primary)]"
+              >
+                #{{ item.channel_id }} {{ item.name }}
+              </p>
               <StatusChip
-                v-for="(count, reason) in preview.filter_reason_counts"
-                :key="reason"
-                tone="danger"
+                class="mt-2"
+                :tone="item.eligible ? 'success' : 'warning'"
+                >{{ reasonLabel(item.reason) }}</StatusChip
               >
-                {{ reason }} · {{ count }}
-              </StatusChip>
-            </div>
-            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <div
-                v-for="entry in preview.entries"
-                :key="entry.channel_id"
-                class="min-w-0 border p-3"
-                style="border-color: var(--border-subtle)"
+              <p
+                v-if="item.channel_ratio"
+                class="mt-2 text-xs text-[var(--text-tertiary)]"
               >
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-sm font-medium text-[var(--text-primary)]"
-                    >#{{ entry.channel_id }}</span
-                  >
-                  <StatusChip
-                    :tone="entry.filter_reason ? 'danger' : 'success'"
-                  >
-                    {{
-                      entry.filter_reason === 'conversion_unavailable'
-                        ? t('routing.conversionUnavailable')
-                        : entry.filter_reason || t('routing.eligible')
-                    }}
-                  </StatusChip>
-                </div>
-                <p class="mt-2 text-xs text-[var(--text-tertiary)]">
-                  {{
-                    t('routing.selectionLayer', {
-                      priority: entry.priority ?? 0,
-                      position: entry.position,
-                    })
-                  }}
-                </p>
-                <p
-                  v-if="
-                    preview.candidate_channel_ids.includes(entry.channel_id)
-                  "
-                  class="mt-1 text-xs text-[var(--text-tertiary)]"
-                >
-                  {{
-                    t('routing.snapshotRank', {
-                      rank:
-                        preview.candidate_channel_ids.indexOf(
-                          entry.channel_id
-                        ) + 1,
-                      weight:
-                        entry.score_breakdown?.effective_weight ?? entry.weight,
-                    })
-                  }}
-                </p>
-                <p
-                  v-if="entry.score_breakdown"
-                  class="mt-1 text-xs text-[var(--text-tertiary)]"
-                >
-                  {{
-                    t('routing.loadRatio', {
-                      value: Math.round(entry.score_breakdown.load_ratio * 100),
-                    })
-                  }}
-                </p>
-                <div
-                  v-if="entry.conversion_plan"
-                  class="mt-3 border-t pt-3 text-xs"
-                  style="border-color: var(--border-subtle)"
-                  data-testid="route-preview-conversion"
-                >
-                  <p class="break-words text-[var(--text-primary)]">
-                    {{ entry.conversion_plan.from }} →
-                    {{
-                      entry.conversion_plan.to ||
-                      t('routing.protocolUnavailable')
-                    }}
-                  </p>
-                  <p
-                    v-if="entry.conversion_plan.to"
-                    class="mt-1 text-[var(--text-tertiary)]"
-                  >
-                    {{
-                      t(
-                        entry.conversion_plan.native
-                          ? 'routing.nativeProtocol'
-                          : 'routing.convertedProtocol'
-                      )
-                    }}
-                  </p>
-                  <ol
-                    v-if="entry.conversion_plan.steps.length"
-                    class="mt-2 sibling-space-y-1 text-[var(--text-tertiary)]"
-                  >
-                    <li
-                      v-for="(step, index) in entry.conversion_plan.steps"
-                      :key="`${index}:${step.converter}`"
-                      class="break-all"
-                    >
-                      {{ step.converter }}
-                    </li>
-                  </ol>
-                  <p
-                    v-if="entry.conversion_plan.request_projection"
-                    class="mt-2 break-all text-[var(--text-tertiary)]"
-                  >
-                    {{ entry.conversion_plan.request_projection }}
-                  </p>
-                </div>
-                <ul
-                  v-if="entry.diagnostics.length"
-                  class="mt-3 sibling-space-y-2 text-xs"
-                  data-testid="route-preview-diagnostics"
-                >
-                  <li
-                    v-for="(diagnostic, index) in entry.diagnostics"
-                    :key="`${index}:${diagnostic.code}`"
-                    class="break-words"
-                  >
-                    <StatusChip
-                      :tone="
-                        diagnostic.severity === 'error' ? 'danger' : 'warning'
-                      "
-                      >{{
-                        t(`routing.diagnosticSeverity.${diagnostic.severity}`)
-                      }}</StatusChip
-                    >
-                    <span
-                      v-if="diagnostic.path"
-                      class="ml-1 break-all text-[var(--text-secondary)]"
-                      >{{ diagnostic.path }}</span
-                    >
-                    <p class="mt-1 text-[var(--text-secondary)]">
-                      {{ diagnostic.message }}
-                    </p>
-                  </li>
-                </ul>
-                <p class="mt-2 text-xs text-[var(--text-tertiary)]">
-                  {{ entry.lab_slug || t('routing.unknownLab') }} ·
-                  {{ entry.actual_model || entry.request_model }}
-                </p>
-                <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-                  snapshot {{ entry.snapshot_version }} ·
-                  {{ entry.catalog_version || '-' }}
-                </p>
-                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <StatusChip :tone="healthTone(entry.health.state)">
-                    {{ t(`routing.healthState.${entry.health.state}`) }}
-                  </StatusChip>
-                  <span
-                    class="text-[var(--text-tertiary)]"
-                    data-testid="route-preview-health"
-                  >
-                    {{
-                      t('routing.healthSummary', {
-                        failures: entry.health.failure_count,
-                        latency: entry.health.last_latency_ms,
-                      })
-                    }}
-                  </span>
-                </div>
-              </div>
+                {{
+                  t('routing.channelMetrics', {
+                    ratio: item.channel_ratio,
+                    active: item.in_flight,
+                  })
+                }}
+              </p>
             </div>
           </div>
-        </template>
+        </div>
       </ConsoleCard>
     </template>
   </div>

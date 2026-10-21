@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import InviteAffiliateCard from '@/components/console/invite/InviteAffiliateCard.vue'
@@ -22,8 +22,16 @@ const {
   info,
   loadError,
   inviteLink,
+  invitees,
+  inviteesPage,
+  inviteesTotal,
+  inviteesPageCount,
+  inviteesOrder,
+  inviteesLoading,
+  inviteesError,
+  loadInvitees,
+  sortInvitees,
   transferOpen,
-  transferDollars,
   canTransfer,
   transferring,
   readOnly,
@@ -36,24 +44,10 @@ const {
   transfer,
 } = useInvite()
 
-type SortMode = 'recent' | 'early'
-const sort = ref<SortMode>('recent')
-
-const sortedRecords = computed(() => {
-  const rows = info.value?.records ?? []
-  return sort.value === 'recent' ? rows : [...rows].reverse()
-})
-
-/** Anonymize the invitee handle: user_1042 → u***2 (contract: no raw id). */
-function maskInvitee(handle: string): string {
-  if (handle.length <= 2) return handle
-  return `${handle[0]}***${handle[handle.length - 1]}`
-}
-
 const howSteps = [1, 2, 3, 4]
 const faqs = [1, 2, 3, 4]
 
-onMounted(load)
+onMounted(() => Promise.all([load(), loadInvitees()]))
 </script>
 
 <template>
@@ -109,7 +103,7 @@ onMounted(load)
           </div>
           <ConsoleButton
             size="sm"
-            :disabled="readOnly || BigInt(info?.transferable ?? '0') <= 0n"
+            :disabled="!canTransfer"
             @click="transferOpen = true"
           >
             {{ t('invite.transfer') }}
@@ -178,59 +172,98 @@ onMounted(load)
             >
               {{ t('invite.invitees') }}
               <StatusChip tone="neutral">{{
-                t('invite.people', { count: info?.invited ?? 0 })
+                t('invite.people', { count: inviteesTotal })
               }}</StatusChip>
             </h3>
             <SegmentedToggle
-              :model-value="sort"
+              :model-value="inviteesOrder"
               size="sm"
               :options="[
-                { value: 'recent', label: t('invite.sortRecent') },
-                { value: 'early', label: t('invite.sortEarly') },
+                { value: 'desc', label: t('invite.sortRecent') },
+                { value: 'asc', label: t('invite.sortEarly') },
               ]"
               :label="t('invite.invitees')"
-              @update:model-value="sort = $event as SortMode"
+              @update:model-value="sortInvitees"
             />
           </div>
 
+          <ErrorBanner
+            v-if="inviteesError"
+            class="mx-5 mt-3"
+            :message="inviteesError"
+            @retry="loadInvitees()"
+          />
+          <p
+            v-if="inviteesLoading"
+            class="px-5 py-3 text-xs text-[var(--text-tertiary)]"
+            role="status"
+          >
+            {{ t('common.loading') }}
+          </p>
           <ul
             class="subtle-scroll mt-2 sibling-divide-y sibling-divide-[var(--border-subtle)] px-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
           >
             <li
-              v-for="record in sortedRecords"
-              :key="record.id"
+              v-for="(invitee, index) in invitees"
+              :key="`${inviteesPage}-${index}`"
               class="flex items-center justify-between gap-3 py-3"
             >
               <div class="flex min-w-0 items-center gap-2.5">
                 <span
                   class="inline-flex shrink-0 items-center rounded-md bg-[var(--surface-muted)] px-2.5 py-0.5 font-mono text-xs tracking-wide text-[var(--text-secondary)]"
                 >
-                  {{ maskInvitee(record.invitee) }}
+                  {{ invitee.masked_name }}
                 </span>
               </div>
               <div class="text-right">
                 <div class="mb-1 flex items-center justify-end gap-2">
-                  <StatusChip :tone="record.paid ? 'success' : 'neutral'">
-                    {{ record.paid ? t('invite.paid') : t('invite.unpaid') }}
-                  </StatusChip>
                   <span
                     class="text-xs font-medium text-[var(--text-secondary)]"
                   >
-                    {{ formatQuota(record.reward_total) }}
+                    {{ formatQuota(invitee.reward_quota) }}
                   </span>
                 </div>
                 <p class="text-xs text-[var(--text-tertiary)]">
-                  {{ formatDate(record.created) }}
+                  {{ formatDate(invitee.invited_at) }}
                 </p>
               </div>
             </li>
             <li
-              v-if="info && info.records.length === 0"
+              v-if="!inviteesLoading && !inviteesError && invitees.length === 0"
               class="py-10 text-center text-sm text-[var(--text-tertiary)]"
             >
               {{ t('common.none') }}
             </li>
           </ul>
+          <div
+            v-if="inviteesPageCount > 1"
+            class="flex shrink-0 items-center justify-between gap-2 px-5 py-2"
+          >
+            <ConsoleButton
+              size="sm"
+              variant="ghost"
+              :disabled="inviteesLoading || inviteesPage <= 1"
+              @click="loadInvitees(inviteesPage - 1)"
+              >{{ t('common.prevPage') }}</ConsoleButton
+            >
+            <span
+              class="text-xs text-[var(--text-tertiary)]"
+              aria-live="polite"
+              >{{
+                t('common.pageProgress', {
+                  page: inviteesPage,
+                  count: inviteesPageCount,
+                })
+              }}</span
+            >
+            <ConsoleButton
+              size="sm"
+              variant="ghost"
+              :disabled="inviteesLoading || inviteesPage >= inviteesPageCount"
+              @click="loadInvitees(inviteesPage + 1)"
+              >{{ t('common.nextPage') }}</ConsoleButton
+            >
+          </div>
 
           <p
             class="shrink-0 border-t border-[var(--border-subtle)] px-5 py-3 text-xs text-[var(--text-tertiary)]"
@@ -334,13 +367,6 @@ onMounted(load)
       @close="transferOpen = false"
     >
       <div class="sibling-space-y-3">
-        <input
-          v-model="transferDollars"
-          inputmode="decimal"
-          class="w-full rounded-lg bg-[var(--surface-muted)] p-3 font-mono focus-ring"
-          :placeholder="formatQuota(info?.transferable ?? 0)"
-          :min="1"
-        />
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.transferable') }}:
           {{ formatQuota(info?.transferable ?? 0) }}

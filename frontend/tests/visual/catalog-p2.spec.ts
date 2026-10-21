@@ -1,16 +1,7 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
-const card = {
-  reasoning_efforts: [],
-  input_modalities: null,
-  output_modalities: ['text'],
-  context_limit: 32000,
-  output_limit: null,
-  tool_call: false,
-  source: 'local-test',
-  updated_at: 1,
-}
 const model = {
   id: 71,
   model_name: 'p2-local',
@@ -22,16 +13,14 @@ const model = {
   status: 1,
   sync_official: 0,
   name_rule: 0,
-  capabilities: card,
   bound_channels: [],
-  enable_groups: [],
   matched_models: [],
   quota_types: [],
 }
 
 for (const theme of ['light', 'dark'] as const) {
   for (const mobile of [false, true]) {
-    test(`catalog P2 ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    test(`native client configuration and metadata save ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
       page,
     }) => {
       await page.setViewportSize(
@@ -40,44 +29,79 @@ for (const theme of ['light', 'dark'] as const) {
       await configureStablePage(page, { theme, authenticated: true })
       const failures: string[] = []
       page.on('pageerror', (error) => failures.push(error.message))
-      await page.route('**/api/token/7/client-config?*', (route) => {
-        const format = new URL(route.request().url()).searchParams.get('format')
-        return route.fulfill({
-          json: {
-            success: true,
-            data: {
-              format,
-              filename:
-                format === 'pi' ? 'ren2hub.models.json' : 'ren2hub.config.toml',
-              media_type: 'text/plain',
-              content:
-                format === 'pi'
-                  ? '{"apiKey":"${REN2HUB_API_KEY}"}'
-                  : 'model = "gpt-4.1"\nenv_key = "REN2HUB_API_KEY"',
-              models: ['gpt-4.1'],
-              diagnostics: [{ code: 'prices_omitted' }],
-            },
-          },
-        })
-      })
       await page.goto('/keys')
       await page
         .getByRole('button', { name: '客户端配置', exact: true })
         .filter({ visible: true })
+        .first()
         .click()
-      const dialog = page.getByRole('dialog')
-      await expect(dialog.getByLabel('配置预览')).toHaveValue(/REN2HUB_API_KEY/)
-      await dialog.getByLabel('客户端', { exact: true }).selectOption('pi')
-      await expect(dialog.getByLabel('配置预览')).toHaveValue(
-        '{"apiKey":"${REN2HUB_API_KEY}"}'
+      const config = page.getByRole('dialog', {
+        name: '客户端配置',
+        exact: true,
+      })
+      const preview = config.getByRole('textbox', { name: '配置预览' })
+      await expect(preview).toHaveValue(/env_key = "REN2HUB_API_KEY"/)
+      await expect(preview).not.toHaveValue(/sk-/)
+      await page
+        .context()
+        .grantPermissions(['clipboard-read', 'clipboard-write'])
+      await config
+        .getByRole('button', { name: '复制配置', exact: true })
+        .click()
+      await expect(
+        config.getByRole('button', { name: '已复制', exact: true })
+      ).toBeVisible()
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        await preview.inputValue()
       )
-      await expect(dialog).toContainText('配置未填写客户端价格')
-      const download = page.waitForEvent('download')
-      await dialog.getByRole('button', { name: '下载', exact: true }).click()
-      expect((await download).suggestedFilename()).toBe('ren2hub.models.json')
+      await config
+        .getByRole('combobox', { name: '客户端', exact: true })
+        .selectOption('pi')
+      await expect(preview).toHaveCount(0)
+      await config
+        .getByRole('button', { name: '生成配置', exact: true })
+        .click()
+      await expect(config.getByRole('alert')).toContainText('请填写正整数')
+      await config
+        .getByRole('spinbutton', { name: '上下文上限（Token）' })
+        .fill('128000')
+      await config
+        .getByRole('spinbutton', { name: '最大输出（Token）' })
+        .fill('4096')
+      await config
+        .getByRole('combobox', { name: '推理能力' })
+        .selectOption('no')
+      await config
+        .getByRole('combobox', { name: '输入类型' })
+        .selectOption('text')
+      await config
+        .getByRole('button', { name: '生成配置', exact: true })
+        .click()
+      await expect(preview).toBeVisible()
+      const expected = JSON.parse(await preview.inputValue())
+      expect(expected.providers.ren2hub).toMatchObject({
+        apiKey: '${REN2HUB_API_KEY}',
+        api: 'openai-completions',
+        models: [
+          {
+            id: 'gpt-native',
+            contextWindow: 128000,
+            maxTokens: 4096,
+            reasoning: false,
+            input: ['text'],
+          },
+        ],
+      })
+      const downloading = page.waitForEvent('download')
+      await config.getByRole('button', { name: '下载', exact: true }).click()
+      const downloaded = await downloading
+      expect(downloaded.suggestedFilename()).toBe('ren2hub.models.json')
+      expect(
+        JSON.parse(await readFile((await downloaded.path())!, 'utf8'))
+      ).toEqual(expected)
       await assertNoHorizontalOverflow(page)
-      await page.keyboard.press('Escape')
-      await expect(dialog).toHaveCount(0)
+      await config.getByRole('button', { name: '关闭', exact: true }).click()
+      await expect(config).toHaveCount(0)
 
       await page.route('**/api/models/search?*', (route) =>
         route.fulfill({
@@ -104,10 +128,17 @@ for (const theme of ['light', 'dark'] as const) {
       await page.route('**/api/models/71', (route) =>
         route.fulfill({ json: { success: true, data: model } })
       )
-      let saved: unknown
+      const saves: Record<string, unknown>[] = []
+      let failSave = true
       await page.route('**/api/models/', (route) => {
-        saved = route.request().postDataJSON()
-        return route.fulfill({ json: { success: true, data: model } })
+        expect(route.request().method()).toBe('PUT')
+        const body = route.request().postDataJSON()
+        saves.push(body)
+        return route.fulfill({
+          json: failSave
+            ? { success: false, message: 'Metadata save unavailable' }
+            : { success: true, data: { ...model, ...body } },
+        })
       })
       await page.goto('/models/metadata')
       await page
@@ -115,28 +146,36 @@ for (const theme of ['light', 'dark'] as const) {
         .filter({ visible: true })
         .first()
         .click()
-      const editor = page
-        .getByRole('dialog')
-        .locator('[data-model-capabilities]')
-      await expect(editor.getByLabel('工具调用')).toHaveValue('false')
-      await expect(
-        editor.locator('#capability-reasoning_efforts-state')
-      ).toHaveValue('known')
-      await expect(
-        editor.locator('#capability-input_modalities-state')
-      ).toHaveValue('unknown')
-      await editor.getByLabel('工具调用').selectOption('true')
-      await assertNoHorizontalOverflow(page)
-      await page.getByRole('button', { name: '保存资料', exact: true }).click()
-      await expect(page.getByRole('dialog')).toHaveCount(0)
-      expect(saved).toMatchObject({
-        capabilities: {
-          reasoning_efforts: [],
-          input_modalities: null,
-          tool_call: true,
-          context_limit: 32000,
-        },
+      const dialog = page.getByRole('dialog')
+      await expect(dialog.locator('[data-model-capabilities]')).toHaveCount(0)
+      const description = dialog.getByLabel('说明信息', { exact: true })
+      await description.fill('Native metadata <literal>')
+      await dialog
+        .getByRole('button', { name: '保存资料', exact: true })
+        .click()
+      await expect(dialog.getByRole('alert')).toContainText(
+        'Metadata save unavailable'
+      )
+      await expect(description).toHaveValue('Native metadata <literal>')
+      failSave = false
+      await dialog
+        .getByRole('button', { name: '保存资料', exact: true })
+        .click()
+      await expect(dialog).toHaveCount(0)
+      expect(saves).toHaveLength(2)
+      expect(saves[1]).toEqual({
+        id: 71,
+        model_name: 'p2-local',
+        description: 'Native metadata <literal>',
+        icon: '',
+        tags: '',
+        vendor_id: 0,
+        endpoints: '',
+        status: 1,
+        sync_official: 0,
+        name_rule: 0,
       })
+      await assertNoHorizontalOverflow(page)
       expect(failures).toEqual([])
     })
   }

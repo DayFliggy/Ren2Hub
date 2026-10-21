@@ -1,74 +1,64 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import type { Activity } from '@/types/console'
+import CheckinCalendar from './CheckinCalendar.vue'
+import type { CheckinStatus } from '@/composables/useActivity'
+import { activityRestorationMessages } from '@/i18n/activityRestoration'
+import { nativeAccountMessages } from '@/i18n/nativeAccount'
 import { formatQuota } from '@/utils/format'
 
 const props = defineProps<{
-  activity: Extract<Activity, { kind: 'checkin' }>
+  status: CheckinStatus
+  month: string
   claiming: boolean
+  disabled: boolean
 }>()
-
-const emit = defineEmits<{ checkin: [id: number] }>()
-
-const { t } = useI18n()
-
-// Today's potential reward = next unclaimed slot in the 7-day cycle
-const todayReward = computed(
-  () =>
-    props.activity.checkin.days[
-      props.activity.checkin.streak % props.activity.checkin.days.length
-    ]
-)
-
-// Week total (sum of claimed entries)
-const weekTotal = computed(() =>
-  props.activity.checkin.week_entries.reduce(
-    (sum, e) => sum + (e.claimed ? BigInt(e.reward) : 0n),
-    0n
+const emit = defineEmits<{
+  checkin: []
+  'update:month': [month: string]
+}>()
+const { t } = useI18n({
+  useScope: 'local',
+  messages: {
+    en: { ...nativeAccountMessages.en, ...activityRestorationMessages.en },
+    'zh-CN': {
+      ...nativeAccountMessages['zh-CN'],
+      ...activityRestorationMessages['zh-CN'],
+    },
+  },
+})
+const monthReward = computed(() =>
+  props.status.stats.records.reduce(
+    (sum, record) => sum + record.quota_awarded,
+    0
   )
 )
-
-// Month progress 0–100
-const monthPct = computed(() => {
-  const { month_days, month_days_total } = props.activity.checkin
-  return month_days_total > 0
-    ? Math.min(100, Math.round((month_days / month_days_total) * 100))
+const monthDays = computed(() => {
+  if (!/^\d{4}-\d{2}$/.test(props.month)) return 0
+  const [year, month] = props.month.split('-').map(Number) as [number, number]
+  return month >= 1 && month <= 12
+    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
     : 0
 })
-
-// Today's week entry for date display
-const todayEntry = computed(
-  () => props.activity.checkin.week_entries.find((e) => e.today) ?? null
+const monthPct = computed(() =>
+  monthDays.value
+    ? Math.min(
+        100,
+        Math.round((props.status.stats.checkin_count / monthDays.value) * 100)
+      )
+    : 0
 )
-
-// e.g. "2026 · 07 · 23 · THU"
-const dateDisplay = computed(() => {
-  const e = todayEntry.value
-  if (!e) return ''
-  const [mm, dd] = e.date.split('/')
-  return `2026 · ${mm} · ${dd} · ${e.weekday}`
-})
-
-// Week label e.g. "WEEK 4 · JUL"
-const weekLabel = computed(() => {
-  const now = new Date()
-  const week = Math.ceil(now.getDate() / 7)
-  const mon = now.toLocaleString('en-US', { month: 'short' }).toUpperCase()
-  return `WEEK ${week} · ${mon}`
-})
 </script>
 
 <template>
   <article
     class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
     data-handdrawn="surface-clipped"
+    data-checkin-card
   >
-    <!-- ─── header ─── -->
     <div
-      class="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 py-4"
+      class="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 py-4"
     >
       <div class="flex min-w-0 flex-1 items-center gap-2.5">
         <span
@@ -82,183 +72,122 @@ const weekLabel = computed(() => {
             fill="none"
             stroke="var(--accent-text)"
             stroke-width="1.8"
+            aria-hidden="true"
           >
-            <path :d="activity.icon" />
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M16 3v4M8 3v4M3 11h18m-11 5 2 2 4-4" />
           </svg>
         </span>
         <div class="min-w-0">
-          <p class="text-sm font-bold tracking-wide text-[var(--text-primary)]">
-            {{ t('activity.checkin.signInLabel') }}
-            <span
-              class="ml-1.5 font-mono text-[0.625rem] font-normal tracking-widest text-[var(--text-tertiary)]"
-              >SIGN-IN</span
-            >
-          </p>
+          <h3
+            class="text-sm font-bold tracking-wide text-[var(--text-primary)]"
+          >
+            {{ t('nativeAccount.checkin') }}
+          </h3>
           <p class="text-[0.625rem] text-[var(--text-tertiary)]">
-            {{ t('activity.checkin.signInSub') }}
+            {{ t('activityRestoration.randomReward') }}
           </p>
         </div>
       </div>
-
-      <div class="flex shrink-0 items-center gap-2 whitespace-nowrap">
-        <!-- streak fire badge -->
-        <span
-          v-if="activity.checkin.streak > 0"
-          class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
-          style="
-            background: var(--status-warning-soft);
-            color: var(--status-warning-text);
-          "
-        >
-          🔥
-          {{ t('activity.checkin.streak', { count: activity.checkin.streak }) }}
-        </span>
-        <!-- month total -->
-        <span class="text-xs text-[var(--text-tertiary)]">
-          {{ t('activity.checkin.monthIncome') }}
-          <span class="ml-1 font-semibold text-[var(--accent-text)]">
-            {{ formatQuota(activity.checkin.month_reward) }}
-          </span>
-        </span>
-      </div>
+      <span class="text-xs text-[var(--text-tertiary)]">
+        {{ t('activityRestoration.monthReward') }}
+        <span class="ml-1 font-semibold text-[var(--accent-text)]">{{
+          formatQuota(monthReward)
+        }}</span>
+      </span>
     </div>
 
-    <!-- ─── two-panel body ─── -->
     <div
-      class="flex flex-col sm:flex-row sm:sibling-divide-x sm:sibling-divide-[var(--border-subtle)]"
+      class="flex flex-col xl:flex-row xl:sibling-divide-x xl:sibling-divide-[var(--border-subtle)]"
     >
-      <!-- LEFT: today's receipt -->
       <div
-        class="relative flex flex-col items-center justify-center gap-3 px-6 py-6 sm:w-56 sm:shrink-0"
+        class="relative flex flex-col items-center justify-center gap-3 px-6 py-6 xl:w-56 xl:shrink-0"
       >
-        <!-- date -->
-        <p
-          class="font-mono text-[0.6875rem] tracking-widest text-[var(--text-tertiary)]"
-        >
-          {{ dateDisplay }}
-        </p>
-
-        <!-- big amount -->
-        <p
-          class="text-5xl font-bold tracking-tighter text-[var(--text-primary)]"
-        >
-          {{ formatQuota(todayReward.reward, 2) }}
-        </p>
         <p class="text-xs text-[var(--text-tertiary)]">
-          {{ t('activity.checkin.todayIncome') }}
+          {{ t('nativeAccount.rewardRange') }}
         </p>
-
-        <!-- claimed / unclaimed stamp -->
+        <p
+          class="break-all text-center text-3xl font-bold tracking-tighter text-[var(--text-primary)]"
+        >
+          {{ formatQuota(status.min_quota) }} –
+          {{ formatQuota(status.max_quota) }}
+        </p>
+        <p class="text-center text-xs leading-5 text-[var(--text-tertiary)]">
+          {{ t('nativeAccount.checkinHint') }}
+        </p>
         <div
           class="checkin-stamp mt-1 rotate-[-14deg] rounded-md border-2 px-3 py-1 text-xs font-bold uppercase tracking-widest"
           :style="
-            activity.checkin.todayClaimed
+            status.stats.checked_in_today
               ? 'border-color:var(--status-danger);color:var(--status-danger-text)'
               : 'border-color:var(--accent);color:var(--accent-text)'
           "
         >
           {{
-            activity.checkin.todayClaimed
-              ? t('activity.checkin.creditedStamp')
-              : t('activity.checkin.pendingStamp')
+            status.stats.checked_in_today
+              ? t('nativeAccount.checked')
+              : t('activityRestoration.notChecked')
           }}
         </div>
-
-        <!-- streak + next -->
-        <p
-          class="mt-1 text-center text-[0.6875rem] text-[var(--text-tertiary)]"
-        >
-          <span class="font-medium text-[var(--text-secondary)]">
-            {{
-              t('activity.checkin.streakLong', {
-                count: activity.checkin.streak,
-              })
-            }}
-          </span>
-        </p>
-
-        <!-- dashed perforated divider (mobile: bottom) -->
         <div
-          class="checkin-perforation absolute bottom-0 left-5 right-5 h-px border-b border-dashed border-[var(--border-default)] sm:hidden"
+          class="checkin-perforation absolute bottom-0 left-5 right-5 h-px border-b border-dashed border-[var(--border-default)] xl:hidden"
         />
       </div>
 
-      <!-- RIGHT: weekly log -->
-      <div class="flex-1 px-5 py-5">
-        <div class="mb-3 flex items-center justify-between">
-          <p class="text-xs font-semibold text-[var(--text-secondary)]">
-            {{ t('activity.checkin.weekIncome') }}
-          </p>
-          <p
-            class="font-mono text-[0.625rem] tracking-widest text-[var(--text-tertiary)]"
-          >
-            {{ weekLabel }}
-          </p>
-        </div>
-
-        <div class="sibling-space-y-1">
-          <div
-            v-for="entry in activity.checkin.week_entries"
-            :key="entry.date"
-            class="flex items-center gap-3 rounded-lg px-2 py-1 text-xs transition-colors"
-            :class="{ 'bg-[var(--accent-soft)]': entry.today }"
-          >
-            <span
-              class="w-7 font-mono font-medium"
-              :class="
-                entry.today
-                  ? 'text-[var(--accent-text)]'
-                  : 'text-[var(--text-tertiary)]'
-              "
-            >
-              {{ entry.weekday }}
-            </span>
-            <span class="w-10 text-[var(--text-tertiary)]">{{
-              entry.date
-            }}</span>
-            <span class="flex-1 text-right font-semibold">
-              <template v-if="entry.claimed">
-                <span style="color: var(--accent-text)">{{
-                  formatQuota(entry.reward)
-                }}</span>
-              </template>
-              <template
-                v-else-if="entry.today && !activity.checkin.todayClaimed"
-              >
-                <span class="text-[var(--text-tertiary)]">—</span>
-              </template>
-              <template v-else>
-                <span class="text-[var(--text-tertiary)]">—</span>
-              </template>
-            </span>
-          </div>
-        </div>
-
-        <!-- week total -->
-        <div
-          class="mt-3 flex items-center justify-between border-t border-[var(--border-subtle)] pt-2 text-xs"
+      <div class="min-w-0 flex-1 px-5 py-5">
+        <label
+          class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-[var(--text-secondary)]"
         >
-          <span class="text-[var(--text-tertiary)]">{{
-            t('activity.checkin.weekTotal')
-          }}</span>
-          <span class="font-semibold text-[var(--text-primary)]">{{
-            formatQuota(weekTotal)
-          }}</span>
-        </div>
+          {{ t('nativeAccount.month') }}
+          <input
+            :value="month"
+            type="month"
+            class="console-input min-w-0 max-w-full text-xs"
+            @input="
+              emit('update:month', ($event.target as HTMLInputElement).value)
+            "
+          />
+        </label>
+        <CheckinCalendar :month="month" :records="status.stats.records" />
+        <details class="mt-4 text-sm">
+          <summary class="cursor-pointer">
+            {{ t('activityRestoration.records') }}
+          </summary>
+          <table class="mt-3 w-full text-left">
+            <thead>
+              <tr>
+                <th>{{ t('nativeAccount.date') }}</th>
+                <th>{{ t('nativeAccount.quota') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="record in status.stats.records"
+                :key="record.checkin_date"
+              >
+                <td>{{ record.checkin_date }}</td>
+                <td>{{ formatQuota(record.quota_awarded) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p
+            v-if="!status.stats.records.length"
+            class="mt-2 text-[var(--text-tertiary)]"
+          >
+            {{ t('activityRestoration.noRecords') }}
+          </p>
+        </details>
       </div>
     </div>
 
-    <!-- ─── bottom stats + claim ─── -->
     <div class="border-t border-[var(--border-subtle)] px-5 py-4">
-      <!-- month progress bar -->
       <div class="mb-3">
         <div
           class="mb-1.5 flex items-center justify-between text-[0.625rem] text-[var(--text-tertiary)]"
         >
-          <span>{{ t('activity.checkin.monthProgress') }}</span>
+          <span>{{ t('activityRestoration.monthProgress') }}</span>
           <span class="font-medium"
-            >{{ activity.checkin.month_days }} /
-            {{ activity.checkin.month_days_total }}</span
+            >{{ status.stats.checkin_count }} / {{ monthDays }}</span
           >
         </div>
         <div
@@ -271,54 +200,40 @@ const weekLabel = computed(() => {
           />
         </div>
       </div>
-
-      <!-- stats row + button -->
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div class="flex items-center gap-1.5">
           <span class="text-xs text-[var(--text-tertiary)]">{{
-            t('activity.checkin.totalDays')
-          }}</span>
-          <span class="text-sm font-bold text-[var(--text-primary)]">{{
-            activity.checkin.total_days
-          }}</span>
-          <span class="text-xs text-[var(--text-tertiary)]">{{
-            t('activity.checkin.dayUnit')
+            t('nativeAccount.days')
+          }}</span
+          ><span class="text-sm font-bold text-[var(--text-primary)]">{{
+            status.stats.total_checkins
           }}</span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="text-xs text-[var(--text-tertiary)]">{{
-            t('activity.checkin.monthIncome')
-          }}</span>
-          <span class="text-sm font-bold" style="color: var(--accent-text)">
-            {{ formatQuota(activity.checkin.month_reward) }}
-          </span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <span class="text-xs text-[var(--text-tertiary)]">{{
-            t('activity.checkin.bestStreak')
-          }}</span>
-          <span class="text-sm font-bold text-[var(--text-primary)]">{{
-            activity.checkin.best_streak
-          }}</span>
-          <span class="text-xs text-[var(--text-tertiary)]">{{
-            t('activity.checkin.dayUnit')
+            t('nativeAccount.rewards')
+          }}</span
+          ><span class="text-sm font-bold text-[var(--accent-text)]">{{
+            formatQuota(status.stats.total_quota)
           }}</span>
         </div>
-
         <ConsoleButton
           size="sm"
           :loading="claiming"
-          :disabled="activity.checkin.todayClaimed"
+          :disabled="
+            disabled || !status.enabled || status.stats.checked_in_today
+          "
           class="ml-auto"
-          @click="emit('checkin', activity.id)"
+          data-checkin-action
+          @click="emit('checkin')"
+          >{{
+            status.stats.checked_in_today
+              ? t('nativeAccount.checked')
+              : t('nativeAccount.checkinNow')
+          }}</ConsoleButton
         >
-          {{
-            activity.checkin.todayClaimed
-              ? t('activity.checkin.claimed')
-              : t('activity.checkin.claim')
-          }}
-        </ConsoleButton>
       </div>
+      <slot />
     </div>
   </article>
 </template>

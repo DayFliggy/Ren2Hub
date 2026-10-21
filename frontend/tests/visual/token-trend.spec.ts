@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { nativeUsageSummary } from './channel-core-fixtures'
 
 import {
   assertNoHorizontalOverflow,
@@ -8,11 +9,12 @@ import {
 
 const EMPTY_TOKEN_TREND = Array.from({ length: 30 }, (_, index) => ({
   date: `2026-07-${String(index + 1).padStart(2, '0')}`,
+  total: 0,
   input: 0,
   output: 0,
   cache_create: 0,
   cache_read: 0,
-  hit_rate: 0,
+  hit_rate: null,
 }))
 
 for (const theme of ['light', 'dark'] as const) {
@@ -26,18 +28,24 @@ for (const theme of ['light', 'dark'] as const) {
           : { width: 390, height: 844 }
       )
       await configureStablePage(page, { theme, authenticated: true })
-      await page.route(
-        /\/api\/next\/dashboard\/token-trend(?:\?.*)?$/,
-        (route) =>
-          route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-              success: true,
-              message: '',
-              data: EMPTY_TOKEN_TREND,
-            }),
-          })
+      await page.route(/\/api\/data\/self\/summary(?:\?.*)?$/, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            message: '',
+            data: {
+              ...nativeUsageSummary(
+                1785124800,
+                new URL(route.request().url()).searchParams.get(
+                  'include_comparison'
+                ) !== 'false'
+              ),
+              token_trend: EMPTY_TOKEN_TREND,
+            },
+          }),
+        })
       )
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)

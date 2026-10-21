@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
@@ -35,26 +35,19 @@ const {
   share,
   flow,
   tokenTrend,
+  cacheCoverage,
   system,
   limits,
   discounts,
   error: dashboardError,
-  loadSystem,
   load,
 } = useDashboard()
 const statsComposable = useDashboardStats()
 const distribution = useUsageDistribution()
 
-let systemRefreshTimer: ReturnType<typeof setInterval> | undefined
-
 onMounted(() => {
   void load()
   void distribution.load()
-  systemRefreshTimer = setInterval(() => void loadSystem(), 30_000)
-})
-
-onBeforeUnmount(() => {
-  if (systemRefreshTimer) clearInterval(systemRefreshTimer)
 })
 
 /**
@@ -203,6 +196,7 @@ const rangeOptions = computed(() => [
             class="min-w-0 xl:col-span-2"
             :points="distribution.points.value"
             :loading="distribution.loading.value"
+            :error="distribution.error.value"
           />
 
           <!-- 系统状态 -->
@@ -211,6 +205,7 @@ const rangeOptions = computed(() => [
           <TokenTrendCard
             class="min-w-0 xl:col-span-2"
             :points="tokenTrend"
+            :cache-coverage="cacheCoverage"
             :loading="loading"
           />
 

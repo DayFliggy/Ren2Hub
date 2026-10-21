@@ -101,9 +101,11 @@ func UpdateAffiliateUserPolicy(id, operatorRole int, request AffiliatePolicyUpda
 }
 
 type AffiliateMonth struct {
-	Month  string `json:"month"`
-	Reward int    `json:"reward"`
-	Quota  int    `json:"quota"`
+	Month      string `json:"month"`
+	NewCount   int    `json:"new_count"`
+	Cumulative int    `json:"cumulative"`
+	Reward     int    `json:"reward"`
+	Quota      int    `json:"quota"`
 }
 type AffiliateInfo struct {
 	Code                 string                             `json:"code"`
@@ -147,17 +149,33 @@ func GetAffiliateInfo(userID int) (*AffiliateInfo, error) {
 	// Chart has a bounded twelve-month window; history remains available separately.
 	now := time.Now().UTC()
 	start := time.Date(now.Year(), now.Month()-11, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 12, 0)
 	var rows []AffiliateRecord
-	if err = DB.Select("created_at", "reward_quota").Where("user_id = ? AND kind = ? AND created_at >= ?", userID, "accrue", start.Unix()).Find(&rows).Error; err != nil {
+	if err = DB.Select("created_at", "reward_quota").Where("user_id = ? AND kind = ? AND created_at >= ? AND created_at < ?", userID, "accrue", start.Unix(), end.Unix()).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	sums := map[string]int{}
 	for _, r := range rows {
 		sums[time.Unix(r.CreatedAt, 0).UTC().Format("2006-01")] += r.RewardQuota
 	}
+	// Bindings remain historical facts after an invitee is soft-deleted. The
+	// opening balance includes older bindings without loading lifetime users.
+	var cumulative int64
+	if err = DB.Unscoped().Model(&User{}).Where("inviter_id = ? AND invited_at > 0 AND invited_at < ?", userID, start.Unix()).Count(&cumulative).Error; err != nil {
+		return nil, err
+	}
+	var invitedAt []int64
+	if err = DB.Unscoped().Model(&User{}).Where("inviter_id = ? AND invited_at >= ? AND invited_at < ?", userID, start.Unix(), end.Unix()).Pluck("invited_at", &invitedAt).Error; err != nil {
+		return nil, err
+	}
+	newCounts := map[string]int{}
+	for _, timestamp := range invitedAt {
+		newCounts[time.Unix(timestamp, 0).UTC().Format("2006-01")]++
+	}
 	for i := 0; i < 12; i++ {
 		month := start.AddDate(0, i, 0).Format("2006-01")
-		result.MonthlySeries = append(result.MonthlySeries, AffiliateMonth{month, sums[month], sums[month]})
+		cumulative += int64(newCounts[month])
+		result.MonthlySeries = append(result.MonthlySeries, AffiliateMonth{Month: month, NewCount: newCounts[month], Cumulative: int(cumulative), Reward: sums[month], Quota: sums[month]})
 	}
 	return result, nil
 }

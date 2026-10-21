@@ -3,6 +3,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { AdminOrder } from '@/types/console'
+import { nativeTopUp } from '@/api/__tests__/topupFixtures'
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ isAdmin: true, hasPermission: () => true }),
+}))
 import OrderDetailModal from '../OrderDetailModal.vue'
 
 beforeAll(async () => {
@@ -54,10 +58,10 @@ function render() {
 describe('GMPay order details', () => {
   it('separates requested network and creation details from actual settlement evidence', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
-      ...order,
-      status: 'completed',
-      quota: '5000000',
-      paid_at: 2,
+      ...nativeTopUp,
+      status: 'success',
+      credited_quota: 5000000,
+      complete_time: 2,
       gmpay: evidence,
     })
     const wrapper = render()
@@ -85,8 +89,8 @@ describe('GMPay order details', () => {
           })
       )
       .mockResolvedValueOnce({
-        ...order,
-        order_no: 'GPnew',
+        ...nativeTopUp,
+        trade_no: 'GPnew',
         gmpay: { ...evidence, gateway_trade_no: 'new-gateway-id' },
       })
     const wrapper = render()
@@ -94,7 +98,7 @@ describe('GMPay order details', () => {
     await flushPromises()
     expect(get.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
     finish({
-      ...order,
+      ...nativeTopUp,
       gmpay: { ...evidence, gateway_trade_no: 'stale-gateway-id' },
     })
     await flushPromises()
@@ -106,7 +110,7 @@ describe('GMPay order details', () => {
   it('reports detail failures and retries explicitly', async () => {
     vi.spyOn(api, 'get')
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ ...order, gmpay: evidence })
+      .mockResolvedValueOnce({ ...nativeTopUp, gmpay: evidence })
     const wrapper = render()
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain(

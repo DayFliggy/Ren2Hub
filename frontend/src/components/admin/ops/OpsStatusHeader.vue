@@ -17,7 +17,6 @@ import {
   formatCount,
   formatLatencyMs,
   formatPercent,
-  formatRate,
 } from '@/utils/opsFormat'
 
 const props = withDefaults(
@@ -44,18 +43,20 @@ const healthColor = computed(() => {
 })
 
 const isFullscreen = ref(false)
-function toggleFullscreen() {
-  if (typeof document === 'undefined') return
-  if (!document.fullscreenElement) {
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {})
+const fullscreenError = ref('')
+async function toggleFullscreen() {
+  fullscreenError.value = ''
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else {
+      if (!document.documentElement.requestFullscreen)
+        throw new Error(t('hud.unavailable'))
+      await document.documentElement.requestFullscreen()
     }
-    isFullscreen.value = true
-  } else {
-    if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {})
-    }
-    isFullscreen.value = false
+    onFullscreenChange()
+  } catch (cause) {
+    fullscreenError.value =
+      cause instanceof Error ? cause.message : String(cause)
   }
 }
 function onFullscreenChange() {
@@ -122,13 +123,7 @@ const unmeasured = computed(() => {
 })
 /** Check values carry the unit of their key. */
 function checkValue(check: OpsCheck, value: number): string {
-  if (check.key === 'admission')
-    return `${formatRate(value / 60, locale.value)} ${t('gateway.perSecond')}`
-  if (
-    check.key === 'database' ||
-    check.key === 'log_database' ||
-    check.key === 'redis'
-  ) {
+  if (check.key === 'database' || check.key === 'redis') {
     const latency = formatLatencyMs(value, locale.value)
     return `${latency.value} ${latency.unit}`
   }
@@ -136,9 +131,6 @@ function checkValue(check: OpsCheck, value: number): string {
 }
 
 function checkDetail(check: OpsCheck): string {
-  if (check.key === 'draining' || check.key === 'master')
-    return t(`checkDetail.${check.key}`)
-  if (check.error) return t(`errors.${check.error}`)
   if (check.value === null) return t(`status.${check.status}`)
   const value = checkValue(check, check.value)
   if (check.threshold === null) return value
@@ -146,45 +138,38 @@ function checkDetail(check: OpsCheck): string {
   return `${value} / ${checkValue(check, check.threshold)}`
 }
 
-/** The API reports per-minute rates; the header reads them per second. */
-function perSecond(perMinute: number | null): string {
-  if (perMinute === null) return '--'
-  return `${formatRate(perMinute / 60, locale.value)} ${t('gateway.perSecond')}`
-}
-
 const tiles = computed(() => {
   const gateway = props.overview?.gateway
-  if (!gateway) return []
-  const admission = gateway.admission
-  const success = formatPercent(gateway.success_rate, locale.value)
+  const total = (rows: { in_flight: number }[] | undefined) =>
+    rows ? rows.reduce((sum, row) => sum + row.in_flight, 0) : null
   return [
     {
-      label: t('kpi.inFlight'),
-      value: formatCount(admission.in_flight, locale.value),
-      sub: t('kpi.queued', {
-        queued: formatCount(admission.queued, locale.value),
-        limit: formatCount(admission.total_queue_size, locale.value),
-      }),
+      label: t('native.userInFlight'),
+      value: formatCount(total(gateway?.users), locale.value),
+      sub: t('native.logicalRequests'),
     },
     {
-      label: t('kpi.granted'),
-      value: perSecond(gateway.granted_per_minute),
-      sub: t('kpi.grantedSub', {
-        total: formatCount(admission.granted_total, locale.value),
-      }),
+      label: t('native.channelInFlight'),
+      value: formatCount(total(gateway?.channels), locale.value),
+      sub: t('native.upstreamAttempts'),
     },
     {
-      label: t('kpi.rejected'),
-      value: perSecond(gateway.rejected_per_minute),
-      sub: t('kpi.rejectedSub'),
+      label: t('native.sampleCount'),
+      value: formatCount(
+        gateway
+          ? gateway.observations.reduce((sum, row) => sum + row.samples, 0)
+          : null,
+        locale.value
+      ),
+      sub: t('native.rollingSamples'),
     },
     {
-      label: t('kpi.successRate'),
-      value: gateway.success_rate === null ? '--' : `${success.value}%`,
-      sub:
-        gateway.success_rate === null
-          ? t('kpi.noSamples')
-          : t('kpi.successRateSub'),
+      label: t('native.knownObservations'),
+      value: formatCount(
+        gateway ? gateway.observations.filter((row) => row.known).length : null,
+        locale.value
+      ),
+      sub: t('native.minimumSamples'),
     },
   ]
 })
@@ -288,6 +273,9 @@ const tiles = computed(() => {
       >
     </div>
 
+    <p v-if="fullscreenError" class="ops-inline-error" role="alert">
+      {{ fullscreenError }}
+    </p>
     <template v-if="overview">
       <ul
         class="ops-reasons"

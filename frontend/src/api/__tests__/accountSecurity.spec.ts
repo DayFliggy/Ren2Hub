@@ -1,45 +1,91 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-import { authApi } from '@/api/auth'
-import { api } from '@/api/client'
-import { parseLoginSessions } from '@/api/contracts'
-import { ApiError } from '@/api/types'
-
-beforeEach(() => vi.restoreAllMocks())
-
-describe('account security API', () => {
-  it('loads and revokes login sessions with encoded session ids', async () => {
-    const get = vi.spyOn(api, 'get').mockResolvedValue([
-      {
-        sid: 'current/session',
-        current: true,
-        login_method: 'password',
-        ip: '127.0.0.1',
-        user_agent: 'Test Browser',
-        created_at: 1,
-        last_active_at: 2,
-        expires_at: 3,
-      },
-    ])
-    const del = vi.spyOn(api, 'delete').mockResolvedValue({
-      revoked_sid: 'current/session',
-      current: true,
-    })
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ revoked_count: 2 })
-
-    await expect(authApi.getLoginSessions()).resolves.toHaveLength(1)
-    await authApi.revokeLoginSession('current/session')
-    await authApi.revokeOtherLoginSessions()
-
-    expect(get).toHaveBeenCalledWith('/api/user/sessions')
-    expect(del).toHaveBeenCalledWith('/api/user/sessions/current%2Fsession')
-    expect(post).toHaveBeenCalledWith('/api/user/sessions/revoke-others')
+const client = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  delete: vi.fn(),
+}))
+vi.mock('../client', () => ({ api: client }))
+import { accountSecurityApi } from '../accountSecurity'
+beforeEach(() => vi.resetAllMocks())
+describe('account security domain contracts', () => {
+  it('only accepts recovery codes returned by regeneration', async () => {
+    client.post.mockResolvedValueOnce({})
+    expect(
+      await accountSecurityApi.changeTwoFactor('disable', 'proof')
+    ).toEqual({ action: 'disable' })
+    client.post.mockResolvedValueOnce({})
+    await expect(
+      accountSecurityApi.changeTwoFactor('regenerate', 'proof')
+    ).rejects.toThrow()
+    client.post.mockResolvedValueOnce({ backup_codes: ['one-use-code'] })
+    expect(
+      await accountSecurityApi.changeTwoFactor('regenerate', 'proof')
+    ).toEqual({ action: 'regenerate', backup_codes: ['one-use-code'] })
   })
-
-  it('rejects malformed login session payloads', () => {
-    expect(() => parseLoginSessions([{ sid: 'missing-fields' }])).toThrow(
-      ApiError
+  it('distinguishes disabled 2FA and an unavailable recovery-code count', async () => {
+    client.get.mockResolvedValueOnce({ enabled: false, locked: false })
+    expect(await accountSecurityApi.twoFactorStatus()).toEqual({
+      enabled: false,
+      backup_codes_remaining: null,
+    })
+    client.get.mockResolvedValueOnce({ enabled: true })
+    expect(
+      (await accountSecurityApi.twoFactorStatus()).backup_codes_remaining
+    ).toBeNull()
+    client.get.mockResolvedValueOnce({
+      enabled: true,
+      backup_codes_remaining: 0,
+    })
+    expect(
+      (await accountSecurityApi.twoFactorStatus()).backup_codes_remaining
+    ).toBe(0)
+  })
+  it('rejects malformed security statuses and dates', async () => {
+    client.get.mockResolvedValueOnce({ enabled: 'false' })
+    await expect(accountSecurityApi.passkeyStatus()).rejects.toThrow(
+      'Invalid API response'
     )
-    expect(() => parseLoginSessions({})).toThrow(ApiError)
+    client.get.mockResolvedValueOnce({
+      enabled: true,
+      last_used_at: 'not-a-date',
+    })
+    await expect(accountSecurityApi.passkeyStatus()).rejects.toThrow()
+    client.get.mockResolvedValueOnce({
+      enabled: true,
+      backup_codes_remaining: '8',
+    })
+    await expect(accountSecurityApi.twoFactorStatus()).rejects.toThrow()
+  })
+  it('requires complete enrollment data before showing recovery codes', async () => {
+    client.post.mockResolvedValueOnce({
+      flow_token: 'flow',
+      qr_code_data: 'qr',
+    })
+    await expect(accountSecurityApi.setupTwoFactor('proof')).rejects.toThrow()
+    expect(client.post).toHaveBeenCalledWith('/api/user/2fa/setup', undefined, {
+      headers: { 'X-Security-Proof': 'proof' },
+    })
+  })
+  it('preserves email enrollment and resends using the existing flow', async () => {
+    const flow = {
+      flow_token: 'flow',
+      old_email_required: true,
+      resend_at: 100,
+    }
+    client.post.mockResolvedValue(flow)
+    expect(
+      await accountSecurityApi.startEmailBinding('new@example.test', 'proof')
+    ).toEqual(flow)
+    expect(await accountSecurityApi.resendEmailBinding('flow')).toEqual(flow)
+    expect(client.post).toHaveBeenLastCalledWith(
+      '/api/oauth/email/bind/resend',
+      { flow_token: 'flow' }
+    )
+  })
+  it('does not turn a missing binding list into an empty successful list', async () => {
+    client.get.mockResolvedValueOnce(undefined)
+    await expect(accountSecurityApi.oauthBindings()).rejects.toThrow()
+    client.get.mockResolvedValueOnce([])
+    expect(await accountSecurityApi.oauthBindings()).toEqual([])
   })
 })

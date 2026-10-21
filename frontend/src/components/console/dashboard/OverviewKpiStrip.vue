@@ -35,7 +35,7 @@ const flowWindow = computed(() => (props.flow ?? []).slice(-WINDOW))
 const tokenWindow = computed(() => (props.tokenTrend ?? []).slice(-WINDOW))
 
 function pointTotal(point: TokenTrendPoint): number {
-  return point.input + point.output + point.cache_create + point.cache_read
+  return point.total
 }
 
 /** All token classes billed today, from the last point of the trend series. */
@@ -75,6 +75,7 @@ interface Cell {
   icon: string
   value: string
   color: string
+  textColor?: string
   /** widens the loading skeleton to roughly match the real value */
   skeleton: string
   /** trend series; the RPM cell uses a ring instead */
@@ -88,7 +89,11 @@ const cells = computed<Cell[]>(() => [
     key: 'spend',
     label: t('dashboard.statTodaySpend'),
     icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
-    value: hidden.value ? '••••' : formatQuota(props.stats?.today_quota ?? 0),
+    value: hidden.value
+      ? '••••'
+      : props.stats
+        ? formatQuota(props.stats.today_quota)
+        : '—',
     color: 'var(--accent-text)',
     skeleton: 'w-24',
     series: flowWindow.value.map((f) => quotaForChart(f.consume)),
@@ -98,8 +103,9 @@ const cells = computed<Cell[]>(() => [
     key: 'requests',
     label: t('dashboard.statTodayRequests'),
     icon: 'M4 17h4l3-9 3 14 3-11 2 6h3',
-    value: formatNumber(props.stats?.today_requests ?? 0),
+    value: props.stats ? formatNumber(props.stats.today_requests) : '—',
     color: 'var(--signal)',
+    textColor: 'var(--signal-text)',
     skeleton: 'w-20',
     series: flowWindow.value.map((f) => f.requests),
     drillDown: true,
@@ -108,7 +114,7 @@ const cells = computed<Cell[]>(() => [
     key: 'tokens',
     label: t('dashboard.statTodayTokens'),
     icon: 'M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5',
-    value: formatCompact(todayTokens.value),
+    value: props.stats ? formatCompact(todayTokens.value) : '—',
     color: 'var(--text-primary)',
     skeleton: 'w-20',
     series: tokenWindow.value.map(pointTotal),
@@ -125,8 +131,9 @@ const cells = computed<Cell[]>(() => [
     key: 'tpm',
     label: t('dashboard.statAvgTpm'),
     icon: 'M13 2 3 14h7l-1 8 10-12h-7l1-8Z',
-    value: formatCompact(avgTpm.value),
+    value: props.stats ? formatCompact(avgTpm.value) : '—',
     color: 'var(--support)',
+    textColor: 'var(--support-text)',
     skeleton: 'w-16',
     series: tpmSeries.value,
   },
@@ -204,7 +211,7 @@ const rpmCaption = computed(() => {
             <p
               v-else
               class="display-number mt-1 truncate text-2xl leading-tight tabular-nums tracking-tight"
-              :style="{ color: cell.color }"
+              :style="{ color: cell.textColor ?? cell.color }"
             >
               {{ cell.value }}
             </p>

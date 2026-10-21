@@ -7,680 +7,376 @@ import {
   requiredStrictNumber,
   requiredString,
 } from './contracts'
-
-/**
- * Contract for the admin ops monitor (`/api/ops/*`). `null` always means
- * "not measured"; parsers keep it so the UI can render "--" instead of zero.
- */
-export const OPS_STATUSES = ['ok', 'warning', 'critical', 'unknown'] as const
-export type OpsStatus = (typeof OPS_STATUSES)[number]
+export interface RoutingObservation {
+  channel_id: number
+  model: string
+  stream: boolean
+  samples: number
+  error_rate: number
+  latency_ms: number
+  known: boolean
+  /** Unix milliseconds, as supplied by the routing observer. */
+  updated_at: number
+  operation: number | null
+  latency_samples: number | null
+  latency_known: boolean
+}
+export interface RoutingSnapshot {
+  users: { id: number; limit: number; in_flight: number }[]
+  channels: { id: number; limit: number; in_flight: number }[]
+  observations: RoutingObservation[]
+}
+export interface PerformanceStats {
+  memory_stats: {
+    alloc: number
+    total_alloc: number
+    sys: number
+    num_gc: number
+    num_goroutine: number
+  }
+  cache_stats: Record<string, unknown>
+  disk_cache_info: Record<string, unknown>
+  disk_space_info: Record<string, unknown>
+  config: Record<string, unknown>
+}
+export function parseRoutingSnapshot(value: unknown): RoutingSnapshot {
+  const endpoint = '/api/performance/routing'
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const rows = (key: string) => {
+    const result = value[key]
+    if (!Array.isArray(result) || result.some((row) => !isRecord(row)))
+      invalidResponse(endpoint)
+    return result as Record<string, unknown>[]
+  }
+  const limits = (key: string) =>
+    rows(key).map((row) => ({
+      id: nonnegative(row.id, endpoint, true),
+      limit: nonnegative(row.limit, endpoint, true),
+      in_flight: nonnegative(row.in_flight, endpoint, true),
+    }))
+  return {
+    users: limits('users'),
+    channels: limits('channels'),
+    observations: rows('observations').map((row) => {
+      const samples = nonnegative(row.samples, endpoint, true)
+      const latencySamples = optionalNumber(row.latency_samples, endpoint, true)
+      const known = requiredBoolean(row.known, endpoint)
+      const latencyKnown =
+        row.latency_known === undefined
+          ? false
+          : requiredBoolean(row.latency_known, endpoint)
+      return {
+        channel_id: requiredStrictInteger(row.channel_id, endpoint),
+        model: requiredString(row.model, endpoint),
+        stream: requiredBoolean(row.stream, endpoint),
+        samples,
+        error_rate: probability(row.error_rate, endpoint),
+        latency_ms: nonnegative(row.latency_ms, endpoint),
+        known: known && samples > 0,
+        updated_at: nonnegative(row.updated_at, endpoint, true),
+        operation: optionalNumber(row.operation, endpoint, true),
+        latency_samples: latencySamples,
+        latency_known:
+          latencyKnown && latencySamples !== null && latencySamples > 0,
+      }
+    }),
+  }
+}
+export function parsePerformanceStats(value: unknown): PerformanceStats {
+  const endpoint = '/api/performance/stats'
+  if (
+    !isRecord(value) ||
+    !isRecord(value.memory_stats) ||
+    !isRecord(value.cache_stats) ||
+    !isRecord(value.disk_cache_info) ||
+    !isRecord(value.disk_space_info) ||
+    !isRecord(value.config)
+  )
+    invalidResponse(endpoint)
+  const memory = value.memory_stats
+  // Validate the native optional metrics at the boundary, so malformed data
+  // follows the feed's error path instead of throwing during rendering.
+  for (const key of [
+    'current_memory_usage_bytes',
+    'current_disk_usage_bytes',
+    'active_memory_buffers',
+    'active_disk_files',
+    'memory_cache_hits',
+    'disk_cache_hits',
+  ]) {
+    optionalNumber(value.cache_stats[key], endpoint)
+  }
+  for (const key of ['total', 'used', 'used_percent']) {
+    const metric = optionalNumber(value.disk_space_info[key], endpoint)
+    if (key === 'used_percent' && metric !== null && metric > 100)
+      invalidResponse(endpoint)
+  }
+  for (const key of [
+    'monitor_cpu_threshold',
+    'monitor_memory_threshold',
+    'monitor_disk_threshold',
+  ]) {
+    const threshold = optionalNumber(value.config[key], endpoint)
+    if (threshold !== null && threshold > 100) invalidResponse(endpoint)
+  }
+  performanceBoolean(value.config, 'monitor_enabled')
+  const path = value.config.disk_cache_path
+  if (path !== undefined && path !== null && typeof path !== 'string')
+    invalidResponse(endpoint)
+  return {
+    memory_stats: {
+      alloc: nonnegative(memory.alloc, endpoint),
+      total_alloc: nonnegative(memory.total_alloc, endpoint),
+      sys: nonnegative(memory.sys, endpoint),
+      num_gc: nonnegative(memory.num_gc, endpoint, true),
+      num_goroutine: nonnegative(memory.num_goroutine, endpoint, true),
+    },
+    cache_stats: value.cache_stats,
+    disk_cache_info: value.disk_cache_info,
+    disk_space_info: value.disk_space_info,
+    config: value.config,
+  }
+}
+export type PerformanceAction = 'gc' | 'disk_cache' | 'reset_stats'
+export const opsMonitorApi = {
+  execute: (action: PerformanceAction) =>
+    action === 'disk_cache'
+      ? api.delete('/api/performance/disk_cache')
+      : api.post(`/api/performance/${action}`),
+  stats: async (signal?: AbortSignal) =>
+    parsePerformanceStats(
+      await api.get('/api/performance/stats', undefined, { signal })
+    ),
+  routing: async (signal?: AbortSignal) =>
+    parseRoutingSnapshot(
+      await api.get('/api/performance/routing', undefined, { signal })
+    ),
+}
 
 export const OPS_WINDOWS = ['1h', '6h', '24h'] as const
 export type OpsWindow = (typeof OPS_WINDOWS)[number]
 export const OPS_WINDOW_SECONDS: Record<OpsWindow, number> = {
   '1h': 3600,
-  '6h': 21_600,
-  '24h': 86_400,
+  '6h': 21600,
+  '24h': 86400,
 }
-
-export const OPS_CHECK_KEYS = [
-  'cpu',
-  'memory',
-  'disk',
-  'success_rate',
-  'admission',
-  'draining',
-  'master',
-  'database',
-  'log_database',
-  'redis',
-] as const
-export type OpsCheckKey = (typeof OPS_CHECK_KEYS)[number]
-
-export const OPS_PROBE_ERRORS = ['timeout', 'unavailable'] as const
-export type OpsProbeError = (typeof OPS_PROBE_ERRORS)[number]
-
-export const OPS_BREAKER_STATES = ['open', 'half_open'] as const
-export type OpsBreakerState = (typeof OPS_BREAKER_STATES)[number]
-
+export type OpsStatus = 'ok' | 'warning' | 'critical' | 'unknown'
 export interface OpsCheck {
-  key: OpsCheckKey
+  key: 'cpu' | 'memory' | 'disk' | 'database' | 'redis'
   status: OpsStatus
   value: number | null
-  /** 0 means the limit is disabled. */
   threshold: number | null
-  error: OpsProbeError | null
 }
-
-export interface OpsRuntime {
-  version: string
-  go_version: string
-  goos: string
-  goarch: string
-  node_name: string
-  started_at: number
-  uptime_seconds: number
-  master: boolean
-  draining: boolean
+export interface OpsSeriesPoint {
+  ts: number
+  cpu: null
+  memory: null
+  disk: number | null
+  users: number | null
+  channels: number | null
 }
-
-export interface OpsUsage {
-  percent: number | null
-  used_bytes: number | null
-  total_bytes: number | null
-  threshold: number
-}
-
-export interface OpsResources {
-  monitor_enabled: boolean
-  cpu: { percent: number | null; threshold: number }
-  memory: OpsUsage
-  disk: OpsUsage & { path: string }
-  network: { up_mbps: number | null; down_mbps: number | null }
-  process: {
-    goroutines: number
-    heap_alloc_bytes: number
-    heap_sys_bytes: number
-    gc_count: number
-    last_gc_pause_ms: number
-  }
-}
-
-export interface OpsQueue {
-  active: number
-  entered_total: number
-  completed_total: number
-  failed_total: number
-  wait_ms_total: number
-}
-
-export interface OpsGateway {
-  admission: {
-    in_flight: number
-    queued: number
-    total_queue_size: number
-    pools: number
-    granted_total: number
-    released_total: number
-    draining: boolean
-    queue_full_total: number
-    total_queue_full_total: number
-    wait_timeout_total: number
-    canceled_total: number
-    /** Cumulative counts: bucket i holds waits <= wait_bucket_bounds_ms[i]. */
-    wait_duration_ms_buckets: number[]
-  }
-  /** Ascending upper bounds; the final `null` is +Inf. */
-  wait_bucket_bounds_ms: Array<number | null>
-  retry_budget: {
-    enabled: boolean
-    available_hundredths: number
-    reserved: number
-    first_sends_total: number
-    retry_sends_total: number
-    rejected_total: number
-  }
-  user_queue: OpsQueue
-  channel_queue: OpsQueue
-  success_rate: number | null
-  granted_per_minute: number | null
-  rejected_per_minute: number | null
-}
-
-export interface OpsDatabaseProbe {
-  kind: string
-  status: OpsStatus
-  latency_ms: number | null
-  error: OpsProbeError | null
-  open: number
-  in_use: number
-  idle: number
-  max_open: number
-  wait_count: number
-}
-
-export interface OpsRedisProbe {
-  enabled: boolean
-  status: OpsStatus
-  latency_ms: number | null
-  error: OpsProbeError | null
-  total_conns: number
-  idle_conns: number
-  stale_conns: number
-}
-
-export interface OpsStorage {
-  database: OpsDatabaseProbe
-  /** `null` when logs share the main database. */
-  log_database: OpsDatabaseProbe | null
-  redis: OpsRedisProbe
-}
-
-export const OPS_SERIES_FIELDS = [
-  'cpu',
-  'memory',
-  'disk',
-  'net_up_mbps',
-  'net_down_mbps',
-  'goroutines',
-  'heap_alloc_bytes',
-  'in_flight',
-  'queued',
-  'requests_per_minute',
-  'success_rate',
-  'granted_per_minute',
-  'rejected_per_minute',
-] as const
-export type OpsSeriesField = (typeof OPS_SERIES_FIELDS)[number]
-export type OpsSeriesPoint = { ts: number } & Record<
-  OpsSeriesField,
-  number | null
->
-
-export interface OpsSeries {
-  window: OpsWindow
-  bucket_seconds: number
-  points: OpsSeriesPoint[]
-}
-
+export type OpsSeriesField = Exclude<keyof OpsSeriesPoint, 'ts'>
 export interface OpsOverview {
-  schema_version: 1
   sampled_at: number
+  health_score: null
   status: OpsStatus
-  /** Display-only score derived by the backend from the measured checks. */
-  health_score: number | null
   checks: OpsCheck[]
-  runtime: OpsRuntime
-  resources: OpsResources
-  gateway: OpsGateway
-  storage: OpsStorage
-  series: OpsSeries
-}
-
-export interface OpsTraffic {
-  requests: number
-  /** `null` when there were no requests. */
-  success_rate: number | null
-  avg_latency_ms: number
-  avg_tps: number
-}
-
-export interface OpsRequests {
-  enabled: boolean
-  hours: number
-  bucket_seconds: number
-  summary: OpsTraffic
-  series: Array<OpsTraffic & { ts: number }>
-  top_models: Array<OpsTraffic & { model_name: string }>
-}
-
-export interface OpsUnhealthyChannel {
-  channel_id: number
-  channel_name: string
-  model: string
-  state: OpsBreakerState
-  failure_count: number
-  cooldown_until: number | null
-  last_latency_ms: number | null
-  first_token_latency_ms: number | null
-  updated_at: number
-}
-
-export interface OpsChannels {
-  channels: {
-    total: number
-    enabled: number
-    manually_disabled: number
-    auto_disabled: number
-  }
-  breakers: { closed: number; open: number; half_open: number }
-  unhealthy: OpsUnhealthyChannel[]
-}
-
-export const OPS_SETTLEMENT_BASES = [
-  'confirmed',
-  'estimated',
-  'frozen_estimate',
-] as const
-
-/** Root-only projection of the gateway metrics contract. */
-export interface OpsBillingMetrics {
-  schema_version: 2
-  recovery_scope: 'database'
-  billing_recovery: { pending: number; oldest_updated_at: number }
-  billing: {
-    counter_scope: 'instance'
-    started_at: number
-    calculation_total: number
-    calculation_failures_total: number
-    missing_price_total: number
-    settlements_total: Record<(typeof OPS_SETTLEMENT_BASES)[number], number>
-  }
-}
-
-function record(value: unknown, endpoint: string): Record<string, unknown> {
-  if (!isRecord(value)) invalidResponse(endpoint)
-  return value
-}
-
-function oneOf<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  endpoint: string
-): T {
-  if (!allowed.includes(value as T)) invalidResponse(endpoint)
-  return value as T
-}
-
-function count(value: unknown, endpoint: string): number {
-  const parsed = requiredStrictInteger(value, endpoint)
-  if (parsed < 0) invalidResponse(endpoint)
-  return parsed
-}
-
-function amount(value: unknown, endpoint: string): number {
-  const parsed = requiredStrictNumber(value, endpoint)
-  if (parsed < 0) invalidResponse(endpoint)
-  return parsed
-}
-
-/** A present field whose `null` value means "not measured". */
-function measured(value: unknown, endpoint: string): number | null {
-  if (value === null) return null
-  return amount(value, endpoint)
-}
-
-function measuredCount(value: unknown, endpoint: string): number | null {
-  if (value === null) return null
-  return count(value, endpoint)
-}
-
-function healthScore(value: unknown, endpoint: string): number | null {
-  if (value === null) return null
-  const parsed = requiredStrictInteger(value, endpoint)
-  if (parsed < 0 || parsed > 100) invalidResponse(endpoint)
-  return parsed
-}
-
-/** Healthy probes report "" and failed probes name the failure. */
-function probeError(value: unknown, endpoint: string): OpsProbeError | null {
-  if (value === '') return null
-  return oneOf(value, OPS_PROBE_ERRORS, endpoint)
-}
-
-function parseCheck(value: unknown, endpoint: string): OpsCheck {
-  const row = record(value, endpoint)
-  return {
-    key: oneOf(row.key, OPS_CHECK_KEYS, endpoint),
-    status: oneOf(row.status, OPS_STATUSES, endpoint),
-    // The backend omits these when they do not apply to the check.
-    value: row.value == null ? null : requiredStrictNumber(row.value, endpoint),
-    threshold: row.threshold == null ? null : amount(row.threshold, endpoint),
-    error:
-      row.error == null ? null : oneOf(row.error, OPS_PROBE_ERRORS, endpoint),
-  }
-}
-
-function parseRuntime(value: unknown, endpoint: string): OpsRuntime {
-  const row = record(value, endpoint)
-  return {
-    version: requiredString(row.version, endpoint),
-    go_version: requiredString(row.go_version, endpoint),
-    goos: requiredString(row.goos, endpoint),
-    goarch: requiredString(row.goarch, endpoint),
-    node_name: requiredString(row.node_name, endpoint),
-    started_at: count(row.started_at, endpoint),
-    uptime_seconds: count(row.uptime_seconds, endpoint),
-    master: requiredBoolean(row.master, endpoint),
-    draining: requiredBoolean(row.draining, endpoint),
-  }
-}
-
-function parseUsage(value: unknown, endpoint: string): OpsUsage {
-  const row = record(value, endpoint)
-  return {
-    percent: measured(row.percent, endpoint),
-    used_bytes: measuredCount(row.used_bytes, endpoint),
-    total_bytes: measuredCount(row.total_bytes, endpoint),
-    threshold: amount(row.threshold, endpoint),
-  }
-}
-
-function parseResources(value: unknown, endpoint: string): OpsResources {
-  const row = record(value, endpoint)
-  const cpu = record(row.cpu, endpoint)
-  const disk = record(row.disk, endpoint)
-  const network = record(row.network, endpoint)
-  const process = record(row.process, endpoint)
-  return {
-    monitor_enabled: requiredBoolean(row.monitor_enabled, endpoint),
-    cpu: {
-      percent: measured(cpu.percent, endpoint),
-      threshold: amount(cpu.threshold, endpoint),
-    },
-    memory: parseUsage(row.memory, endpoint),
+  gateway: RoutingSnapshot | null
+  resources: {
+    monitor_enabled: boolean | null
+    cpu: { percent: null; threshold: number | null }
+    memory: {
+      percent: null
+      threshold: number | null
+      used_bytes: null
+      total_bytes: null
+    }
     disk: {
-      ...parseUsage(disk, endpoint),
-      // The backend omits an empty path.
-      path: disk.path === undefined ? '' : requiredString(disk.path, endpoint),
-    },
-    network: {
-      up_mbps: measured(network.up_mbps, endpoint),
-      down_mbps: measured(network.down_mbps, endpoint),
-    },
+      percent: number | null
+      threshold: number | null
+      used_bytes: number | null
+      total_bytes: number | null
+      path: string | null
+    }
+    network: { up_mbps: null; down_mbps: null }
     process: {
-      goroutines: count(process.goroutines, endpoint),
-      heap_alloc_bytes: count(process.heap_alloc_bytes, endpoint),
-      heap_sys_bytes: count(process.heap_sys_bytes, endpoint),
-      gc_count: count(process.gc_count, endpoint),
-      last_gc_pause_ms: amount(process.last_gc_pause_ms, endpoint),
-    },
-  }
-}
-function parseQueue(value: unknown, endpoint: string): OpsQueue {
-  const row = record(value, endpoint)
-  return {
-    active: count(row.active, endpoint),
-    entered_total: count(row.entered_total, endpoint),
-    completed_total: count(row.completed_total, endpoint),
-    failed_total: count(row.failed_total, endpoint),
-    wait_ms_total: count(row.wait_ms_total, endpoint),
+      goroutines: number
+      heap_alloc_bytes: number
+      runtime_sys_bytes: number
+      gc_count: number
+      last_gc_pause_ms: null
+    }
+  } | null
+  cache: PerformanceStats | null
+  series: {
+    window: OpsWindow
+    bucket_seconds: number
+    points: OpsSeriesPoint[]
   }
 }
 
-function parseGateway(value: unknown, endpoint: string): OpsGateway {
-  const row = record(value, endpoint)
-  const admission = record(row.admission, endpoint)
-  const retry = record(row.retry_budget, endpoint)
-  const bounds = row.wait_bucket_bounds_ms
-  const buckets = admission.wait_duration_ms_buckets
-  if (
-    !Array.isArray(bounds) ||
-    !Array.isArray(buckets) ||
-    bounds.length < 2 ||
-    buckets.length !== bounds.length ||
-    bounds.at(-1) !== null
+function nonnegative(value: unknown, endpoint: string, integer = false) {
+  const parsed = integer
+    ? requiredStrictInteger(value, endpoint)
+    : requiredStrictNumber(value, endpoint)
+  if (parsed < 0) invalidResponse(endpoint)
+  return parsed
+}
+function probability(value: unknown, endpoint: string) {
+  const parsed = nonnegative(value, endpoint)
+  if (parsed > 1) invalidResponse(endpoint)
+  return parsed
+}
+function optionalNumber(
+  value: unknown,
+  endpoint: string,
+  integer = false
+): number | null {
+  return value === undefined || value === null
+    ? null
+    : nonnegative(value, endpoint, integer)
+}
+export function performanceNumber(
+  record: Record<string, unknown>,
+  key: string
+) {
+  return optionalNumber(record[key], '/api/performance/stats')
+}
+function performanceBoolean(record: Record<string, unknown>, key: string) {
+  return record[key] === undefined || record[key] === null
+    ? null
+    : requiredBoolean(record[key], '/api/performance/stats')
+}
+export function concurrencyTotal(rows: RoutingSnapshot['channels']): number {
+  return rows.reduce((sum, row) => sum + row.in_flight, 0)
+}
+export function seriesRange(overview: OpsOverview): [number, number] {
+  return [
+    overview.sampled_at - OPS_WINDOW_SECONDS[overview.series.window],
+    overview.sampled_at,
+  ]
+}
+export function checkStatus(
+  overview: OpsOverview | null,
+  key: OpsCheck['key']
+): OpsStatus {
+  return (
+    overview?.checks.find((check) => check.key === key)?.status ?? 'unknown'
   )
-    invalidResponse(endpoint)
-  const finiteBounds = bounds
-    .slice(0, -1)
-    .map((bound) => amount(bound, endpoint))
-  const cumulative = buckets.map((bucket) => count(bucket, endpoint))
-  if (
-    finiteBounds.some((bound, i) => i > 0 && bound <= finiteBounds[i - 1]!) ||
-    cumulative.some((bucket, i) => i > 0 && bucket < cumulative[i - 1]!)
-  )
-    invalidResponse(endpoint)
-  return {
-    admission: {
-      in_flight: count(admission.in_flight, endpoint),
-      queued: count(admission.queued, endpoint),
-      total_queue_size: count(admission.total_queue_size, endpoint),
-      pools: count(admission.pools, endpoint),
-      granted_total: count(admission.granted_total, endpoint),
-      released_total: count(admission.released_total, endpoint),
-      draining: requiredBoolean(admission.draining, endpoint),
-      queue_full_total: count(admission.queue_full_total, endpoint),
-      total_queue_full_total: count(admission.total_queue_full_total, endpoint),
-      wait_timeout_total: count(admission.wait_timeout_total, endpoint),
-      canceled_total: count(admission.canceled_total, endpoint),
-      wait_duration_ms_buckets: cumulative,
+}
+/** This projection adapts measured native facts to the historical card layout.
+ * Unavailable host probes stay null; Go heap is never relabelled host memory.
+ */
+export function projectOpsOverview(
+  stats: PerformanceStats | null,
+  routing: RoutingSnapshot | null,
+  window: OpsWindow,
+  points: OpsSeriesPoint[],
+  sampledAt: number
+): OpsOverview | null {
+  if (!stats && !routing) return null
+  const config = stats?.config ?? {}
+  const disk = stats?.disk_space_info ?? {}
+  const total = performanceNumber(disk, 'total')
+  const used = performanceNumber(disk, 'used')
+  const measuredDisk = total !== null && total > 0 && used !== null
+  const percent = measuredDisk ? performanceNumber(disk, 'used_percent') : null
+  if (percent !== null && percent > 100)
+    invalidResponse('/api/performance/stats')
+  const monitor = performanceBoolean(config, 'monitor_enabled')
+  const diskThreshold = performanceNumber(config, 'monitor_disk_threshold')
+  const diskStatus: OpsStatus =
+    percent === null || monitor !== true || !diskThreshold
+      ? 'unknown'
+      : percent >= diskThreshold
+        ? 'critical'
+        : percent >= diskThreshold * 0.9
+          ? 'warning'
+          : 'ok'
+  const checks: OpsCheck[] = [
+    {
+      key: 'cpu',
+      status: 'unknown',
+      value: null,
+      threshold: performanceNumber(config, 'monitor_cpu_threshold'),
     },
-    wait_bucket_bounds_ms: [...finiteBounds, null],
-    retry_budget: {
-      enabled: requiredBoolean(retry.enabled, endpoint),
-      available_hundredths: count(retry.available_hundredths, endpoint),
-      reserved: count(retry.reserved, endpoint),
-      first_sends_total: count(retry.first_sends_total, endpoint),
-      retry_sends_total: count(retry.retry_sends_total, endpoint),
-      rejected_total: count(retry.rejected_total, endpoint),
+    {
+      key: 'memory',
+      status: 'unknown',
+      value: null,
+      threshold: performanceNumber(config, 'monitor_memory_threshold'),
     },
-    user_queue: parseQueue(row.user_queue, endpoint),
-    channel_queue: parseQueue(row.channel_queue, endpoint),
-    success_rate: measured(row.success_rate, endpoint),
-    granted_per_minute: measured(row.granted_per_minute, endpoint),
-    rejected_per_minute: measured(row.rejected_per_minute, endpoint),
-  }
-}
-
-function parseDatabaseProbe(
-  value: unknown,
-  endpoint: string
-): OpsDatabaseProbe {
-  const row = record(value, endpoint)
-  return {
-    kind: requiredString(row.kind, endpoint, false),
-    status: oneOf(row.status, OPS_STATUSES, endpoint),
-    latency_ms: measured(row.latency_ms, endpoint),
-    error: probeError(row.error, endpoint),
-    open: count(row.open, endpoint),
-    in_use: count(row.in_use, endpoint),
-    idle: count(row.idle, endpoint),
-    max_open: count(row.max_open, endpoint),
-    wait_count: count(row.wait_count, endpoint),
-  }
-}
-
-function parseRedisProbe(value: unknown, endpoint: string): OpsRedisProbe {
-  const row = record(value, endpoint)
-  return {
-    enabled: requiredBoolean(row.enabled, endpoint),
-    status: oneOf(row.status, OPS_STATUSES, endpoint),
-    latency_ms: measured(row.latency_ms, endpoint),
-    error: probeError(row.error, endpoint),
-    total_conns: count(row.total_conns, endpoint),
-    idle_conns: count(row.idle_conns, endpoint),
-    stale_conns: count(row.stale_conns, endpoint),
-  }
-}
-
-function parseSeries(value: unknown, endpoint: string): OpsSeries {
-  const row = record(value, endpoint)
-  if (!Array.isArray(row.points)) invalidResponse(endpoint)
-  const bucketSeconds = count(row.bucket_seconds, endpoint)
-  if (bucketSeconds === 0) invalidResponse(endpoint)
-  const points = row.points.map((raw) => {
-    const point = record(raw, endpoint)
-    const parsed = { ts: count(point.ts, endpoint) } as OpsSeriesPoint
-    for (const field of OPS_SERIES_FIELDS)
-      parsed[field] = measured(point[field], endpoint)
-    return parsed
-  })
-  if (points.some((point, i) => i > 0 && point.ts <= points[i - 1]!.ts))
-    invalidResponse(endpoint)
-  return {
-    window: oneOf(row.window, OPS_WINDOWS, endpoint),
-    bucket_seconds: bucketSeconds,
-    points,
-  }
-}
-
-export function parseOpsOverview(
-  value: unknown,
-  endpoint = '/api/ops/overview'
-): OpsOverview {
-  const row = record(value, endpoint)
-  if (row.schema_version !== 1 || !Array.isArray(row.checks))
-    invalidResponse(endpoint)
-  const storage = record(row.storage, endpoint)
-  return {
-    schema_version: 1,
-    sampled_at: count(row.sampled_at, endpoint),
-    status: oneOf(row.status, OPS_STATUSES, endpoint),
-    health_score: healthScore(row.health_score, endpoint),
-    checks: row.checks.map((check) => parseCheck(check, endpoint)),
-    runtime: parseRuntime(row.runtime, endpoint),
-    resources: parseResources(row.resources, endpoint),
-    gateway: parseGateway(row.gateway, endpoint),
-    storage: {
-      database: parseDatabaseProbe(storage.database, endpoint),
-      log_database:
-        storage.log_database === null
-          ? null
-          : parseDatabaseProbe(storage.log_database, endpoint),
-      redis: parseRedisProbe(storage.redis, endpoint),
+    {
+      key: 'disk',
+      status: diskStatus,
+      value: percent,
+      threshold: diskThreshold,
     },
-    series: parseSeries(row.series, endpoint),
-  }
-}
-
-function parseTraffic(
-  row: Record<string, unknown>,
-  endpoint: string
-): OpsTraffic {
+    { key: 'database', status: 'unknown', value: null, threshold: null },
+    { key: 'redis', status: 'unknown', value: null, threshold: null },
+  ]
+  const path = config.disk_cache_path
+  if (path !== undefined && path !== null && typeof path !== 'string')
+    invalidResponse('/api/performance/stats')
   return {
-    requests: count(row.requests, endpoint),
-    success_rate: measured(row.success_rate, endpoint),
-    avg_latency_ms: amount(row.avg_latency_ms, endpoint),
-    avg_tps: amount(row.avg_tps, endpoint),
-  }
-}
-
-export function parseOpsRequests(
-  value: unknown,
-  endpoint = '/api/ops/requests'
-): OpsRequests {
-  const row = record(value, endpoint)
-  if (
-    !Array.isArray(row.series) ||
-    !Array.isArray(row.top_models) ||
-    row.top_models.length > 6
-  )
-    invalidResponse(endpoint)
-  const hours = count(row.hours, endpoint)
-  const bucketSeconds = count(row.bucket_seconds, endpoint)
-  if (hours < 1 || hours > 168 || bucketSeconds === 0) invalidResponse(endpoint)
-  const series = row.series.map((raw) => {
-    const bucket = record(raw, endpoint)
-    return { ts: count(bucket.ts, endpoint), ...parseTraffic(bucket, endpoint) }
-  })
-  if (series.some((bucket, i) => i > 0 && bucket.ts <= series[i - 1]!.ts))
-    invalidResponse(endpoint)
-  return {
-    enabled: requiredBoolean(row.enabled, endpoint),
-    hours,
-    bucket_seconds: bucketSeconds,
-    summary: parseTraffic(record(row.summary, endpoint), endpoint),
-    series,
-    top_models: row.top_models.map((raw) => {
-      const model = record(raw, endpoint)
-      return {
-        model_name: requiredString(model.model_name, endpoint),
-        ...parseTraffic(model, endpoint),
-      }
-    }),
-  }
-}
-
-export function parseOpsChannels(
-  value: unknown,
-  endpoint = '/api/ops/channels'
-): OpsChannels {
-  const row = record(value, endpoint)
-  const channels = record(row.channels, endpoint)
-  const breakers = record(row.breakers, endpoint)
-  if (!Array.isArray(row.unhealthy) || row.unhealthy.length > 50)
-    invalidResponse(endpoint)
-  return {
-    channels: {
-      total: count(channels.total, endpoint),
-      enabled: count(channels.enabled, endpoint),
-      manually_disabled: count(channels.manually_disabled, endpoint),
-      auto_disabled: count(channels.auto_disabled, endpoint),
-    },
-    breakers: {
-      closed: count(breakers.closed, endpoint),
-      open: count(breakers.open, endpoint),
-      half_open: count(breakers.half_open, endpoint),
-    },
-    unhealthy: row.unhealthy.map((raw) => {
-      const item = record(raw, endpoint)
-      return {
-        channel_id: count(item.channel_id, endpoint),
-        channel_name: requiredString(item.channel_name, endpoint),
-        model: requiredString(item.model, endpoint),
-        state: oneOf(item.state, OPS_BREAKER_STATES, endpoint),
-        failure_count: count(item.failure_count, endpoint),
-        cooldown_until: measuredCount(item.cooldown_until, endpoint),
-        last_latency_ms: measured(item.last_latency_ms, endpoint),
-        first_token_latency_ms: measured(item.first_token_latency_ms, endpoint),
-        updated_at: count(item.updated_at, endpoint),
-      }
-    }),
-  }
-}
-
-export function parseOpsBillingMetrics(
-  value: unknown,
-  endpoint = '/api/gateway/metrics'
-): OpsBillingMetrics {
-  const row = record(value, endpoint)
-  const recovery = record(row.billing_recovery, endpoint)
-  const billing = record(row.billing, endpoint)
-  const settlements = record(billing.settlements_total, endpoint)
-  if (
-    row.schema_version !== 2 ||
-    row.recovery_scope !== 'database' ||
-    billing.counter_scope !== 'instance'
-  )
-    invalidResponse(endpoint)
-  return {
-    schema_version: 2,
-    recovery_scope: 'database',
-    billing_recovery: {
-      pending: count(recovery.pending, endpoint),
-      oldest_updated_at: count(recovery.oldest_updated_at, endpoint),
-    },
-    billing: {
-      counter_scope: 'instance',
-      started_at: count(billing.started_at, endpoint),
-      calculation_total: count(billing.calculation_total, endpoint),
-      calculation_failures_total: count(
-        billing.calculation_failures_total,
-        endpoint
+    sampled_at: sampledAt,
+    health_score: null,
+    // An unmeasured check prevents an "all healthy" roll-up.
+    status: checks.some((check) => check.status === 'critical')
+      ? 'critical'
+      : checks.some((check) => check.status === 'warning')
+        ? 'warning'
+        : 'unknown',
+    checks,
+    gateway: routing,
+    cache: stats,
+    resources: stats
+      ? {
+          monitor_enabled: monitor,
+          cpu: { percent: null, threshold: checks[0]!.threshold },
+          memory: {
+            percent: null,
+            threshold: checks[1]!.threshold,
+            used_bytes: null,
+            total_bytes: null,
+          },
+          disk: {
+            percent,
+            threshold: diskThreshold,
+            used_bytes: measuredDisk ? used : null,
+            total_bytes: measuredDisk ? total : null,
+            path: typeof path === 'string' ? path : null,
+          },
+          network: { up_mbps: null, down_mbps: null },
+          process: {
+            goroutines: stats.memory_stats.num_goroutine,
+            heap_alloc_bytes: stats.memory_stats.alloc,
+            runtime_sys_bytes: stats.memory_stats.sys,
+            gc_count: stats.memory_stats.num_gc,
+            last_gc_pause_ms: null,
+          },
+        }
+      : null,
+    series: {
+      window,
+      bucket_seconds: 30,
+      points: points.filter(
+        (point) => point.ts >= sampledAt - OPS_WINDOW_SECONDS[window]
       ),
-      missing_price_total: count(billing.missing_price_total, endpoint),
-      settlements_total: {
-        confirmed: count(settlements.confirmed, endpoint),
-        estimated: count(settlements.estimated, endpoint),
-        frozen_estimate: count(settlements.frozen_estimate, endpoint),
-      },
     },
   }
 }
-
-export const opsMonitorApi = {
-  async billing(signal?: AbortSignal) {
-    const endpoint = '/api/gateway/metrics'
-    return parseOpsBillingMetrics(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-  },
-  async overview(window: OpsWindow, signal?: AbortSignal) {
-    const endpoint = '/api/ops/overview'
-    const overview = parseOpsOverview(
-      await api.get(endpoint, { window }, { signal }),
-      endpoint
-    )
-    // A mismatched series would be labelled with the wrong window.
-    if (overview.series.window !== window) invalidResponse(endpoint)
-    return overview
-  },
-  async requests(hours: number, signal?: AbortSignal) {
-    const endpoint = '/api/ops/requests'
-    const requests = parseOpsRequests(
-      await api.get(endpoint, { hours }, { signal }),
-      endpoint
-    )
-    if (requests.hours !== hours) invalidResponse(endpoint)
-    return requests
-  },
-  async channels(signal?: AbortSignal) {
-    const endpoint = '/api/ops/channels'
-    return parseOpsChannels(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-  },
+/** A feed records measured values or an explicit failed-poll gap. Retain by
+ * time, so manual refreshes do not shorten the visible 24-hour history.
+ */
+export function appendOpsSample(
+  points: OpsSeriesPoint[],
+  point: OpsSeriesPoint
+): OpsSeriesPoint[] {
+  return [
+    ...points.filter(
+      (previous) => previous.ts !== point.ts && previous.ts >= point.ts - 86400
+    ),
+    point,
+  ]
 }

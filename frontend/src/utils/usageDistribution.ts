@@ -62,6 +62,16 @@ function addDays(date: Date, amount: number): Date {
   return next
 }
 
+export function usageDistributionRange(
+  period: UsageDistributionPeriod,
+  referenceDate = new Date()
+): { start: string; end: string } {
+  return {
+    start: localDateKey(addDays(referenceDate, -(PERIOD_DAYS[period] - 1))),
+    end: localDateKey(referenceDate),
+  }
+}
+
 function mondayOf(date: Date): Date {
   return addDays(date, -((date.getDay() + 6) % 7))
 }
@@ -106,8 +116,9 @@ export function buildUsageDistributionView(
 ): UsageDistributionView {
   const today = new Date(referenceDate)
   today.setHours(0, 0, 0, 0)
-  const rangeEnd = today
-  const rangeStart = addDays(today, -(PERIOD_DAYS[period] - 1))
+  const range = usageDistributionRange(period, today)
+  const rangeEnd = fromDateKey(range.end)
+  const rangeStart = fromDateKey(range.start)
   const gridStart = mondayOf(rangeStart)
   const gridEnd = sundayOf(rangeEnd)
   const pointMap = new Map(points.map((point) => [point.date, point]))

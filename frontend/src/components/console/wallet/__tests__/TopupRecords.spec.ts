@@ -4,22 +4,7 @@ import { api } from '@/api/console'
 import TopupRecords from '@/components/console/wallet/TopupRecords.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
-const order = {
-  id: 1,
-  order_no: 'USR1NOtest',
-  user_id: 1,
-  username: '',
-  email: '',
-  amount: 73,
-  quota: '0',
-  type: 'topup',
-  currency: 'CNY',
-  method: 'epay',
-  payment_method: 'alipay',
-  status: 'pending',
-  created: 1785114000,
-  paid_at: 0,
-}
+import { nativeTopUp as order } from '@/api/__tests__/topupFixtures'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
@@ -32,7 +17,7 @@ async function render() {
     items: [order],
     total: 1,
     page: 1,
-    pageSize: 6,
+    page_size: 6,
   })
   const wrapper = mount(TopupRecords, {
     props: { refreshKey: 0 },
@@ -47,7 +32,7 @@ describe('TopupRecords', () => {
     const post = vi.spyOn(api, 'post')
     const wrapper = await render()
     expect(api.get).toHaveBeenCalledWith(
-      '/api/next/wallet/topups',
+      '/api/user/topup/self',
       { p: 1, page_size: 6 },
       { signal: expect.any(AbortSignal) }
     )
@@ -57,10 +42,10 @@ describe('TopupRecords', () => {
     expect(post).not.toHaveBeenCalled()
 
     vi.mocked(api.get).mockResolvedValueOnce({
-      items: [{ ...order, status: 'completed', quota: '5000000' }],
+      items: [{ ...order, status: 'success', credited_quota: 5000000 }],
       total: 1,
       page: 1,
-      pageSize: 6,
+      page_size: 6,
     })
     await wrapper.setProps({ refreshKey: 1 })
     await flushPromises()

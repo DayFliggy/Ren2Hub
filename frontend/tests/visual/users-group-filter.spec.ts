@@ -1,125 +1,96 @@
 import { expect, test } from '@playwright/test'
+import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
+import { nativeUser } from './native-core-fixture'
 
-import {
-  assertNoHorizontalOverflow,
-  configureStablePage,
-  waitForStablePage,
-  type VisualTheme,
-} from './fixtures'
-
-const viewports = [
-  { name: 'desktop', width: 1440, height: 900 },
-  { name: 'tablet', width: 768, height: 1024 },
-  { name: 'mobile', width: 390, height: 844 },
-] as const
-
-function listedUser(id: number, username: string, group: string) {
-  return {
-    id,
-    username,
-    display_name: '',
-    email: `${username}@example.test`,
-    role: 1,
-    status: 1,
-    group,
-    available_quota: '2500000',
-    reserved_quota: '0',
-    quota_version: 1,
-    used_quota: '0',
-    request_count: 0,
-    invited_count: 0,
-    affiliate_quota: '0',
-    inviter_id: 0,
-    created_time: 1_780_000_000,
-    last_login_time: 0,
-  }
-}
-
-for (const theme of ['light', 'dark'] as VisualTheme[]) {
-  for (const viewport of viewports) {
-    test(`${theme} ${viewport.name} users group filter`, async ({ page }) => {
-      const errors: string[] = []
-      page.on('pageerror', (error) => errors.push(error.message))
-      await page.setViewportSize(viewport)
-      await configureStablePage(page, { theme, authenticated: true })
-      const requestedGroups: string[] = []
-      await page.route(/\/api\/next\/admin\/users(?:\?.*)?$/, (route) => {
-        const group = new URL(route.request().url()).searchParams.get('group')
-        requestedGroups.push(group ?? '')
-        const items =
-          group === 'premium'
-            ? [listedUser(43, 'premium.member', 'premium')]
-            : [
-                listedUser(42, 'default.member', 'default'),
-                listedUser(43, 'premium.member', 'premium'),
-              ]
+// Business groups were removed; keep responsive user filtering and replace the
+// retired group editor with the actual per-user concurrency field.
+for (const theme of ['light', 'dark'] as const)
+  for (const width of [1440, 768, 390]) {
+    test(`users keyword and concurrency ${theme} ${width}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const state = await configureStablePage(page, { theme })
+      const users = [
+        nativeUser({
+          id: 42,
+          username: 'first.member',
+          display_name: 'First member',
+          role: 1,
+          max_concurrency: 3,
+          inviter_id: 0,
+          last_login_at: 1781928000,
+        }),
+        nativeUser({
+          id: 43,
+          username: 'second.member',
+          display_name: 'Second member',
+          role: 1,
+          max_concurrency: 7,
+          inviter_id: 0,
+          last_login_at: 1781928000,
+        }),
+      ]
+      const queries: URLSearchParams[] = []
+      let saved: Record<string, unknown> | undefined
+      await page.route(/\/api\/user\/(?:search)?(?:\?.*)?$/, (route) => {
+        if (route.request().method() === 'PUT') {
+          saved = route.request().postDataJSON()
+          return route.fulfill({ json: { success: true } })
+        }
+        const query = new URL(route.request().url()).searchParams
+        queries.push(query)
+        const keyword = query.get('keyword') ?? ''
+        const items = users.filter((user) =>
+          String(user.username).includes(keyword)
+        )
         return route.fulfill({
           json: {
             success: true,
-            data: {
-              items,
-              total: items.length,
-              page: 1,
-              page_size: 20,
-              role_counts: { '1': 2 },
-              status_counts: { enabled: 2, disabled: 0 },
-              group_counts: { default: 1, premium: 1 },
-            },
+            data: { items, total: items.length, page: 1, page_size: 20 },
           },
         })
       })
-
+      await page.route('**/api/user/43', (route) =>
+        route.fulfill({ json: { success: true, data: users[1] } })
+      )
       await page.goto('/users')
-      await waitForStablePage(page)
-      const filter = page.getByRole('combobox', {
-        name: '用户分组',
-        exact: true,
-      })
-      await expect(filter).toBeVisible()
+      const search = page.locator('[name="admin-user-search"]')
+      await expect(page.getByLabel('用户分组', { exact: true })).toHaveCount(0)
+      await search.fill('second')
       await expect(
-        page.getByText('default.member').filter({ visible: true }).first()
-      ).toBeVisible()
-      if (viewport.name === 'tablet') {
-        // Dormant referral cells contain screen-reader text. It must remain
-        // inside the horizontal table scroller even when its column is hidden.
-        const table = page.locator('.data-table-body-viewport')
-        await expect(
-          table.locator('[data-user-invite="dormant"] .sr-only').first()
-        ).toContainText('无邀请记录')
-        await assertNoHorizontalOverflow(page)
-        await table.evaluate((element) => {
-          element.scrollLeft = element.scrollWidth
-        })
-        await expect
-          .poll(() => table.evaluate((element) => element.scrollLeft))
-          .toBeGreaterThan(0)
-        await assertNoHorizontalOverflow(page)
-      }
-
-      await filter.click()
-      await page.getByRole('option', { name: 'premium (1)' }).click()
-      await expect(filter).toContainText('premium')
-      await expect(
-        page.getByText('default.member').filter({ visible: true })
+        page
+          .getByText('first.member', { exact: true })
+          .filter({ visible: true })
       ).toHaveCount(0)
       await expect(
-        page.getByText('premium.member').filter({ visible: true }).first()
+        page
+          .getByText('second.member', { exact: true })
+          .filter({ visible: true })
+          .first()
       ).toBeVisible()
-      expect(requestedGroups.at(-1)).toBe('premium')
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: test
-          .info()
-          .outputPath(`users-group-${theme}-${viewport.name}.png`),
-      })
-
-      await filter.click()
-      await page.getByRole('option', { name: '全部分组' }).click()
+      await page
+        .getByRole('button', { name: '编辑用户', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const dialog = page.getByRole('dialog', { name: '编辑用户', exact: true })
+      await dialog.getByRole('spinbutton').fill('9')
+      await dialog
+        .getByRole('button', { name: '保存用户', exact: true })
+        .click()
+      await expect.poll(() => saved?.max_concurrency).toBe(9)
+      expect(saved).not.toHaveProperty('group')
+      expect(queries.every((query) => !query.has('group'))).toBe(true)
+      await expect(dialog).toHaveCount(0)
+      await search.fill('')
       await expect(
-        page.getByText('default.member').filter({ visible: true }).first()
+        page
+          .getByText('first.member', { exact: true })
+          .filter({ visible: true })
+          .first()
       ).toBeVisible()
-      expect(requestedGroups.at(-1)).toBe('')
-      expect(errors).toEqual([])
+      await assertNoHorizontalOverflow(page)
+      expect(state.errors).toEqual([])
     })
   }
-}

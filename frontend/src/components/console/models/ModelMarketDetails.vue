@@ -329,7 +329,10 @@ const usageFields = computed(() =>
               : t('benchmarkNote')
           }}
         </p>
-        <p class="market-detail-variant">
+        <p
+          v-if="selectedPricing.pluginKey || selectedPricing.pluginName"
+          class="market-detail-variant"
+        >
           {{ t('plugin') }} ·
           {{ pricingVariantLabel(selectedPricing, t('defaultVariant')) }}
         </p>

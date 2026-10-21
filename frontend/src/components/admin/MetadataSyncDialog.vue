@@ -11,32 +11,22 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import {
-  isMetadataLocalChanged,
-  isMetadataSourceChanged,
   metadataApi,
   type SyncPreview,
   type SyncResult,
+  type SyncCandidate,
 } from '@/api/adminManagement'
 import { modelMetadataSyncMessages } from '@/i18n/modelMetadataSync'
 
-type Conflict = SyncPreview['conflicts'][number]
-type ConflictField = Conflict['fields'][number]
-// The apply request lists every previewed missing model with the preview's
-// catalog version; the backend creates only those and rejects a stale
-// preview. So only `update` candidates carry a selection; `create` rows are
-// informational.
-type Candidate =
-  | { kind: 'create'; model_name: string }
-  | { kind: 'update'; model_name: string; fields: ConflictField[] }
+type Candidate = SyncCandidate
 
-// The backend ignores `source`; the official repository is the only source.
-const SOURCE = 'official'
 const STEPS = ['stepSelect', 'stepPreview', 'stepConfirm', 'stepResult']
 const FIELD_LABELS: Record<string, string> = {
   description: 'fieldDescription',
   icon: 'fieldIcon',
   tags: 'fieldTags',
   vendor: 'fieldVendor',
+  endpoints: 'fieldEndpoints',
   name_rule: 'fieldNameRule',
   status: 'fieldStatus',
 }
@@ -55,15 +45,17 @@ const result = ref<SyncResult | null>(null)
 // model_name -> overwrite fields; presence of a key means the model is chosen.
 const selection = ref<Record<string, string[]>>({})
 const search = ref('')
+const scope = ref('site')
+const scopeOptions = computed(() => [
+  { value: 'site', label: t('scopeSite') },
+  { value: 'all', label: t('scopeAll') },
+])
 const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const syncError = ref('')
-// The upstream catalog changed after the preview; the selection was discarded.
-const sourceChanged = ref(false)
-const localChanged = ref(false)
 let controller: AbortController | undefined
 
 const languageOptions = computed(() => [
@@ -71,46 +63,44 @@ const languageOptions = computed(() => [
   { value: 'en', label: t('localeEn') },
   { value: 'ja', label: t('localeJa') },
 ])
-const candidates = computed<Candidate[]>(() => [
-  ...(preview.value?.missing ?? []).map((model_name) => ({
-    kind: 'create' as const,
-    model_name,
-  })),
-  ...(preview.value?.conflicts ?? []).map((conflict) => ({
-    kind: 'update' as const,
-    ...conflict,
-  })),
-])
+const candidates = computed(() =>
+  [...(preview.value?.candidates ?? [])].sort(
+    (a, b) => Number(syncable(b)) - Number(syncable(a))
+  )
+)
+function syncable(item: Candidate) {
+  return item.kind === 'create' || item.kind === 'update'
+}
 const filtered = computed(() => {
   const keyword = search.value.trim().toLocaleLowerCase()
-  return candidates.value.filter((item) =>
-    item.model_name.toLocaleLowerCase().includes(keyword)
+  return candidates.value.filter(
+    (item) =>
+      (scope.value === 'all' || item.scope === 'site') &&
+      item.model_name.toLocaleLowerCase().includes(keyword)
   )
 })
-const filteredUpdates = computed(() =>
-  filtered.value.filter((item) => item.kind === 'update')
-)
+const filteredSyncable = computed(() => filtered.value.filter(syncable))
 const visible = computed(() =>
   filtered.value.slice(
     (page.value - 1) * pageSize.value,
     page.value * pageSize.value
   )
 )
-const pageUpdates = computed(() =>
-  visible.value.filter((item) => item.kind === 'update')
-)
+const pageSyncable = computed(() => visible.value.filter(syncable))
 const pageChosenCount = computed(
-  () => pageUpdates.value.filter(isSelected).length
+  () => pageSyncable.value.filter(isSelected).length
 )
-const missingNames = computed(() => preview.value?.missing ?? [])
+const selected = computed(() => candidates.value.filter(isSelected))
+const chosenCreates = computed(() =>
+  selected.value.filter((item) => item.kind === 'create')
+)
+const missingNames = computed(() =>
+  chosenCreates.value.map((item) => item.model_name)
+)
 const chosenUpdates = computed(() =>
-  (preview.value?.conflicts ?? []).filter((item) =>
-    Object.hasOwn(selection.value, item.model_name)
-  )
+  selected.value.filter((item) => item.kind === 'update')
 )
-const selectedCount = computed(
-  () => missingNames.value.length + chosenUpdates.value.length
-)
+const selectedCount = computed(() => selected.value.length)
 const hiddenSelectedCount = computed(
   () => selectedCount.value - filtered.value.filter(isSelected).length
 )
@@ -122,7 +112,8 @@ const overwrite = computed(() =>
   chosenUpdates.value
     .map((item) => ({
       model_name: item.model_name,
-      local_version: item.local_version,
+      record_version: item.record_version,
+      create: false,
       fields: item.fields
         .map((field) => field.field)
         .filter((field) => selection.value[item.model_name].includes(field)),
@@ -132,6 +123,26 @@ const overwrite = computed(() =>
 const selectedFieldCount = computed(() =>
   overwrite.value.reduce((total, item) => total + item.fields.length, 0)
 )
+const createSelections = computed(() =>
+  chosenCreates.value.map((item) => ({
+    model_name: item.model_name,
+    record_version: item.record_version,
+    create: true,
+    fields: item.fields.map((field) => field.field),
+  }))
+)
+const createdVendors = computed(() => [
+  ...new Set(
+    selected.value
+      .filter(
+        (item) =>
+          item.kind === 'create' ||
+          selection.value[item.model_name]?.includes('vendor')
+      )
+      .map((item) => item.vendor_to_create)
+      .filter(Boolean)
+  ),
+])
 const planCount = computed(
   () => missingNames.value.length + overwrite.value.length
 )
@@ -146,7 +157,7 @@ const primaryLabel = computed(() => {
   return t('applyChanges', { count: planCount.value })
 })
 
-watch([search, pageSize], () => {
+watch([search, scope, pageSize], () => {
   page.value = 1
 })
 watch(
@@ -169,8 +180,6 @@ function reset() {
   pageSize.value = 20
   loadError.value = ''
   syncError.value = ''
-  sourceChanged.value = false
-  localChanged.value = false
 }
 async function load() {
   controller?.abort()
@@ -178,16 +187,11 @@ async function load() {
   controller = current
   loading.value = true
   loadError.value = ''
-  sourceChanged.value = false
   preview.value = null
   selection.value = {}
   page.value = 1
   try {
-    const data = await metadataApi.preview(
-      SOURCE,
-      language.value,
-      current.signal
-    )
+    const data = await metadataApi.preview(language.value, current.signal)
     if (!current.signal.aborted) preview.value = data
   } catch (cause) {
     if (!current.signal.aborted) loadError.value = messageOf(cause)
@@ -201,22 +205,14 @@ async function synchronize() {
   saving.value = true
   syncError.value = ''
   try {
-    result.value = await metadataApi.sync(SOURCE, language.value, {
+    result.value = await metadataApi.sync(plan.locale, {
       source_version: plan.version,
-      create_models: plan.missing,
-      overwrite: overwrite.value,
+      selections: [...createSelections.value, ...overwrite.value],
     })
     step.value = 3
     emit('saved')
   } catch (cause) {
-    if (!isMetadataSourceChanged(cause) && !isMetadataLocalChanged(cause)) {
-      syncError.value = messageOf(cause)
-      return
-    }
-    // Nothing was written; the old selection no longer matches the upstream.
-    reset()
-    if (isMetadataLocalChanged(cause)) localChanged.value = true
-    else sourceChanged.value = true
+    syncError.value = messageOf(cause)
   } finally {
     saving.value = false
   }
@@ -234,14 +230,10 @@ function messageOf(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause)
 }
 function isSelected(item: Candidate) {
-  return (
-    item.kind === 'create' || Object.hasOwn(selection.value, item.model_name)
-  )
+  return syncable(item) && Object.hasOwn(selection.value, item.model_name)
 }
 function chooseModels(items: Candidate[], checked: boolean) {
-  const names = items
-    .filter((item) => item.kind === 'update')
-    .map((item) => item.model_name)
+  const names = items.filter(syncable).map((item) => item.model_name)
   const rest = Object.entries(selection.value).filter(
     ([name]) => !names.includes(name)
   )
@@ -285,7 +277,8 @@ function impact(field: string) {
   if (field === 'status') return t('statusImpact')
   return ''
 }
-function display(field: string, value: string | number) {
+function display(field: string, value: string | number | null) {
+  if (value === null) return '—'
   if (field === 'status') return value === 1 ? t('shown') : t('notShown')
   const rule = NAME_RULES[Number(value)]
   if (field === 'name_rule' && rule) return t(rule)
@@ -372,23 +365,13 @@ function display(field: string, value: string | number) {
           {{ t('retry') }}
         </ConsoleButton>
       </div>
-      <div
-        v-else-if="sourceChanged || localChanged"
-        class="flex flex-col items-center justify-center px-6 py-8 text-center"
-        role="alert"
-      >
-        <AlertTriangle :size="28" class="text-[var(--status-warning-text)]" />
-        <p class="mt-3 font-semibold text-[var(--text-primary)]">
-          {{ t(localChanged ? 'localChangedTitle' : 'sourceChangedTitle') }}
-        </p>
-        <p class="mt-1 max-w-md text-sm text-[var(--text-tertiary)]">
-          {{ t(localChanged ? 'localChangedHint' : 'sourceChangedHint') }}
-        </p>
-        <ConsoleButton class="mt-5" variant="secondary" @click="load">
-          {{ t('previewAgain') }}
-        </ConsoleButton>
-      </div>
       <template v-else-if="preview">
+        <FilterSelect
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('scopeLabel')"
+          class="w-64"
+        />
         <SearchInput
           v-model="search"
           :placeholder="t('searchModels')"
@@ -401,23 +384,25 @@ function display(field: string, value: string | number) {
             {{
               t('candidateStats', {
                 total: filtered.length,
-                create: filtered.length - filteredUpdates.length,
-                update: filteredUpdates.length,
+                create: filtered.filter((item) => item.kind === 'create')
+                  .length,
+                update: filtered.filter((item) => item.kind === 'update')
+                  .length,
               })
             }}
           </p>
           <ConsoleButton
             variant="secondary"
             size="sm"
-            :disabled="busy || !filteredUpdates.length"
-            @click="chooseModels(filteredUpdates, true)"
+            :disabled="busy || !filteredSyncable.length"
+            @click="chooseModels(filteredSyncable, true)"
           >
-            {{ t('selectAllSyncable', { count: filtered.length }) }}
+            {{ t('selectAllSyncable', { count: filteredSyncable.length }) }}
           </ConsoleButton>
           <ConsoleButton
             variant="ghost"
             size="sm"
-            :disabled="busy || !chosenUpdates.length"
+            :disabled="busy || !selected.length"
             @click="selection = {}"
           >
             {{ t('clearSelection') }}
@@ -442,16 +427,16 @@ function display(field: string, value: string | number) {
                       type="checkbox"
                       class="checkbox-round"
                       :checked="
-                        pageUpdates.length > 0 &&
-                        pageChosenCount === pageUpdates.length
+                        pageSyncable.length > 0 &&
+                        pageChosenCount === pageSyncable.length
                       "
                       :indeterminate="
                         pageChosenCount > 0 &&
-                        pageChosenCount < pageUpdates.length
+                        pageChosenCount < pageSyncable.length
                       "
-                      :disabled="busy || !pageUpdates.length"
+                      :disabled="busy || !pageSyncable.length"
                       :aria-label="t('selectPageSyncable')"
-                      @change="chooseModels(pageUpdates, checkedOf($event))"
+                      @change="chooseModels(pageSyncable, checkedOf($event))"
                     />
                   </th>
                   <th class="px-3 py-2 font-medium">{{ t('model') }}</th>
@@ -464,15 +449,7 @@ function display(field: string, value: string | number) {
                 <tr v-for="item in visible" :key="item.model_name">
                   <td class="px-3 py-2">
                     <input
-                      v-if="item.kind === 'create'"
-                      type="checkbox"
-                      class="checkbox-round"
-                      checked
-                      disabled
-                      :aria-label="t('autoIncluded', { name: item.model_name })"
-                    />
-                    <input
-                      v-else
+                      v-if="syncable(item)"
                       type="checkbox"
                       class="checkbox-round"
                       :checked="isSelected(item)"
@@ -488,11 +465,7 @@ function display(field: string, value: string | number) {
                   </td>
                   <td class="px-3 py-2">
                     <StatusChip>
-                      {{
-                        item.kind === 'create'
-                          ? t('kindCreate')
-                          : t('kindUpdate')
-                      }}
+                      {{ t('kinds.' + item.kind) }}
                     </StatusChip>
                   </td>
                 </tr>
@@ -560,13 +533,13 @@ function display(field: string, value: string | number) {
         </ul>
       </section>
       <section
-        v-for="item in chosenUpdates"
+        v-for="item in selected"
         :key="item.model_name"
         class="grid gap-2"
       >
         <h3 class="break-all text-sm font-semibold text-[var(--text-primary)]">
           <span class="font-mono">{{ item.model_name }}</span> ·
-          {{ t('kindUpdate') }}
+          {{ t('kinds.' + item.kind) }}
         </h3>
         <div
           class="overflow-x-auto rounded-lg border border-[var(--border-subtle)]"
@@ -588,8 +561,11 @@ function display(field: string, value: string | number) {
                   <input
                     type="checkbox"
                     class="checkbox-round"
-                    :checked="fieldChosen(item.model_name, field.field)"
-                    :disabled="busy"
+                    :checked="
+                      item.kind === 'create' ||
+                      fieldChosen(item.model_name, field.field)
+                    "
+                    :disabled="busy || item.kind === 'create'"
                     :aria-label="
                       t('applyField', {
                         field: fieldLabel(field.field),
@@ -670,6 +646,9 @@ function display(field: string, value: string | number) {
           </tbody>
         </table>
       </div>
+      <p v-if="createdVendors.length" class="text-sm">
+        {{ t('vendorsToCreate', { names: createdVendors.join(', ') }) }}
+      </p>
       <p class="text-sm text-[var(--text-tertiary)]">{{ t('importNote') }}</p>
       <div
         v-if="syncError"
@@ -700,30 +679,12 @@ function display(field: string, value: string | number) {
       <p class="text-sm text-[var(--text-primary)]">
         {{
           t('syncSummary', {
-            created: result.created_models,
-            updated: result.updated_models,
-            vendors: result.created_vendors,
+            created: result.created_models.length,
+            updated: result.updated_models.length,
+            vendors: result.created_vendors.length,
           })
         }}
       </p>
-      <section v-if="result.skipped_models.length" class="grid gap-2">
-        <h4 class="text-sm font-medium text-[var(--text-secondary)]">
-          {{ t('skippedModels') }}
-        </h4>
-        <ul class="flex flex-wrap gap-2">
-          <li
-            v-for="name in result.skipped_models"
-            :key="name"
-            class="max-w-full"
-          >
-            <StatusChip class="max-w-full">
-              <span class="break-all font-mono text-[var(--text-primary)]">{{
-                name
-              }}</span>
-            </StatusChip>
-          </li>
-        </ul>
-      </section>
     </div>
     <template #footer>
       <div class="flex flex-wrap items-center justify-end gap-2">

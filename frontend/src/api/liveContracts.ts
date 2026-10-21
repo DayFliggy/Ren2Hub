@@ -19,6 +19,7 @@ import {
   parseStringArray,
   requiredInteger,
   requiredStrictInteger,
+  requiredStrictNumber,
   requiredBoolean,
   requiredQuota,
   requiredNumber,
@@ -26,11 +27,6 @@ import {
 } from './contracts'
 import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
 import { ApiError, type PageResult } from './types'
-import { parseConversionPolicy } from './gateway'
-import { parsePricingValues, type PricingValues } from './pricingConfig'
-import { parseUsageReference } from './pricingReference'
-import type { UsageReference } from '@/types/pricingReference'
-import { isDecimal } from '@/utils/decimal'
 
 export interface UsageRow {
   model_name: string
@@ -38,45 +34,6 @@ export interface UsageRow {
   count: number
   quota: string
   token_used: number
-}
-
-export interface PaymentMethodInfo {
-  name: string
-  type: string
-  color?: string
-  min_topup?: number
-  /**
-   * Crypto assets carry the requested token and network. Epay methods leave
-   * these unset, and the pair is never inferred from the display name.
-   */
-  token?: string
-  network?: string
-  icon?: string
-}
-
-export interface TopupInfo {
-  enable_online_topup: boolean
-  enable_redemption: boolean
-  pay_methods: PaymentMethodInfo[]
-  min_topup: number
-  amount_options: number[]
-}
-
-export interface GmpayTopupInfo {
-  enable_gmpay_topup: boolean
-  pay_methods: PaymentMethodInfo[]
-  min_topup: number
-  amount_options: number[]
-}
-
-/** Optional payment metadata uses an empty string when not configured. */
-function optionalMethodField(
-  value: unknown,
-  endpoint: string
-): string | undefined {
-  if (value === undefined) return undefined
-  const parsed = requiredString(value, endpoint)
-  return parsed === '' ? undefined : parsed
 }
 
 function optionalBoolean(value: unknown, endpoint: string): boolean {
@@ -95,9 +52,6 @@ export function parseUserModels(value: unknown): string[] {
 }
 
 export interface PricingModelContract {
-  pricing_values?: PricingValues
-  pricing_version?: string
-  usage_reference?: UsageReference
   model_name: string
   description: string
   icon: string
@@ -122,7 +76,6 @@ export interface PricingModelContract {
     plugin_name: string
     billing_expr: string
     billing_mode: 'ratio' | 'tiered_expr' | 'unconfigured'
-    usage_reference?: UsageReference
   }>
 }
 export interface PerfModelSummaryContract {
@@ -151,21 +104,6 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
       ),
       quota_type: quotaType,
     }
-    if (item.pricing_values !== undefined) {
-      const values = parsePricingValues(item.pricing_values, endpoint)
-      for (const [key, value] of Object.entries(values)) {
-        if (
-          key === 'billing_setting.billing_mode' ||
-          key === 'billing_setting.billing_expr'
-        )
-          requiredString(value, endpoint)
-        else if (!isDecimal(value)) invalidResponse(endpoint)
-      }
-      result.pricing_values = values
-    }
-    if (item.pricing_version !== undefined)
-      result.pricing_version = requiredString(item.pricing_version, endpoint)
-    result.usage_reference = parseUsageReference(item.usage_reference, endpoint)
     for (const key of [
       'model_ratio',
       'model_price',
@@ -177,7 +115,7 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
       'audio_completion_ratio',
     ] as const) {
       if (item[key] !== undefined) {
-        const number = requiredNumber(item[key], endpoint)
+        const number = requiredStrictNumber(item[key], endpoint)
         if (number < 0) invalidResponse(endpoint)
         result[key] = number
       }
@@ -221,7 +159,6 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
             plugin_name: requiredString(raw.plugin_name, endpoint),
             billing_expr: expression,
             billing_mode: mode,
-            usage_reference: parseUsageReference(raw.usage_reference, endpoint),
           }
         }
       )
@@ -279,20 +216,17 @@ export function parsePerfMetricsSummary(
 }
 
 export interface LogStatContract {
-  total_requests: number
-  total_quota: string
-  today_requests: number
-  today_quota: string
+  quota: string
+  rpm: number
+  tpm: number
 }
-
 export function parseLogStat(value: unknown): LogStatContract {
   const endpoint = '/api/log/self/stat'
   if (!isRecord(value)) invalidResponse(endpoint)
   return {
-    total_requests: requiredInteger(value.total_requests, endpoint),
-    total_quota: requiredQuota(value.total_quota, endpoint),
-    today_requests: requiredInteger(value.today_requests, endpoint),
-    today_quota: requiredQuota(value.today_quota, endpoint),
+    quota: requiredQuota(value.quota, endpoint),
+    rpm: requiredInteger(value.rpm, endpoint),
+    tpm: requiredInteger(value.tpm, endpoint),
   }
 }
 
@@ -310,26 +244,18 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
   }
   const limits = requiredString(value.model_limits ?? '', endpoint)
   const unlimited = requiredBoolean(value.unlimited_quota, endpoint)
-  if (unlimited && value.available_quota !== null) invalidResponse(endpoint)
-  const version = requiredStrictInteger(value.quota_version, endpoint)
-  if (version < 0) invalidResponse(endpoint)
   return {
     id: requiredInteger(value.id, endpoint),
     name: requiredString(value.name, endpoint, false),
     key_preview: requiredString(value.key, endpoint),
     type,
-    conversion_policy: parseConversionPolicy(value.conversion_policy ?? 'safe'),
     allow_user_quota_query:
       value.allow_user_quota_query === undefined
         ? false
         : requiredBoolean(value.allow_user_quota_query, endpoint),
-    status: requiredInteger(value.status, endpoint) === 1 ? 1 : 2,
+    status: requiredInteger(value.status, endpoint),
     used_quota: requiredQuota(value.used_quota, endpoint),
-    reserved_quota: requiredQuota(value.reserved_quota, endpoint),
-    quota_version: version,
-    available_quota: unlimited
-      ? null
-      : requiredQuota(value.available_quota, endpoint),
+    remain_quota: requiredStrictInteger(value.remain_quota, endpoint),
     unlimited,
     model_limits: optionalBoolean(value.model_limits_enabled, endpoint)
       ? limits
@@ -344,9 +270,6 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
             .map((item) => item.trim())
             .filter(Boolean)
         : [],
-    rate_limit: 0,
-    load_balance: false,
-    channels: [],
     expired_time: requiredInteger(value.expired_time, endpoint),
     created_time: requiredInteger(value.created_time, endpoint),
   }
@@ -372,88 +295,9 @@ export function parseUsageRows(value: unknown): UsageRow[] {
   })
 }
 
-export function parseTopupInfo(value: unknown): TopupInfo {
-  const endpoint = '/api/next/wallet/config'
-  if (!isRecord(value) || !Array.isArray(value.pay_methods)) {
-    invalidResponse(endpoint)
-  }
-  const payMethods = value.pay_methods.map((item) => {
-    if (!isRecord(item)) invalidResponse(endpoint)
-    const minTopup = requiredStrictInteger(item.min_topup, endpoint)
-    const type = requiredString(item.type, endpoint, false)
-    if (minTopup <= 0 || type.includes(':')) {
-      invalidResponse(endpoint)
-    }
-    return {
-      name: requiredString(item.name, endpoint, false),
-      type,
-      color: optionalMethodField(item.color, endpoint),
-      min_topup: minTopup,
-    }
-  })
-  return {
-    enable_online_topup: requiredBoolean(value.enable_online_topup, endpoint),
-    enable_redemption: requiredBoolean(value.enable_redemption, endpoint),
-    pay_methods: payMethods,
-    ...parseTopupAmounts(value, endpoint),
-  }
-}
-
-export function parseGmpayTopupInfo(value: unknown): GmpayTopupInfo {
-  const endpoint = '/api/next/wallet/gmpay/config'
-  if (!isRecord(value) || !Array.isArray(value.pay_methods))
-    invalidResponse(endpoint)
-  const payMethods = value.pay_methods.map((item) => {
-    if (!isRecord(item)) invalidResponse(endpoint)
-    const token = requiredString(item.token, endpoint, false)
-    const network = requiredString(item.network, endpoint, false)
-    const type = requiredString(item.type, endpoint, false)
-    const minimum = requiredString(item.min_topup, endpoint, false)
-    const minTopup = Number(minimum)
-    if (
-      type !== `gmpay:${token}.${network}` ||
-      !/^[a-z0-9_-]+$/.test(token) ||
-      !/^[a-z0-9_-]+$/.test(network) ||
-      !/^[1-9]\d*$/.test(minimum) ||
-      !Number.isSafeInteger(minTopup)
-    ) {
-      invalidResponse(endpoint)
-    }
-    return {
-      name: requiredString(item.name, endpoint, false),
-      type,
-      token,
-      network,
-      min_topup: minTopup,
-      color: optionalMethodField(item.color, endpoint),
-      icon: optionalMethodField(item.icon, endpoint),
-    }
-  })
-  return {
-    enable_gmpay_topup: requiredBoolean(value.enable_gmpay_topup, endpoint),
-    pay_methods: payMethods,
-    ...parseTopupAmounts(value, endpoint),
-  }
-}
-
-function parseTopupAmounts(value: Record<string, unknown>, endpoint: string) {
-  const amountOptions = value.amount_options
-  if (!Array.isArray(amountOptions)) invalidResponse(endpoint)
-  const parsedAmounts = amountOptions.map((item) =>
-    requiredStrictInteger(item, endpoint)
-  )
-  if (parsedAmounts.some((amount) => amount <= 0)) invalidResponse(endpoint)
-  const minTopup = requiredStrictInteger(value.min_topup, endpoint)
-  if (minTopup <= 0) invalidResponse(endpoint)
-  return {
-    min_topup: minTopup,
-    amount_options: parsedAmounts,
-  }
-}
-
 export function parseRedeemedQuota(value: unknown): string {
   const endpoint = '/api/user/topup'
-  if (typeof value === 'string') return requiredQuota(value, endpoint)
+  if (typeof value === 'number') return requiredQuota(value, endpoint)
   if (isRecord(value) && value.quota !== undefined) {
     return requiredQuota(value.quota, endpoint)
   }
@@ -493,8 +337,7 @@ function parseLog(value: unknown, endpoint: string): LogItem {
   const firstToken = isRecord(other) ? Number(other.frt) : Number.NaN
   const promptTokens = requiredInteger(value.prompt_tokens, endpoint)
   const completionTokens = requiredInteger(value.completion_tokens, endpoint)
-  const latencyMs = requiredInteger(value.use_time, endpoint)
-  const latency = latencyMs / 1000
+  const latency = requiredInteger(value.use_time, endpoint)
   return {
     id: requiredInteger(value.id, endpoint),
     type,

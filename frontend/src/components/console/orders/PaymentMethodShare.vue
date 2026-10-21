@@ -14,9 +14,11 @@ import type { AdminOrderMethodShare } from '@/types/console'
 const props = withDefaults(
   defineProps<{
     items: AdminOrderMethodShare[]
+    currency?: string
+    unavailable?: boolean
     loading?: boolean
   }>(),
-  { loading: false }
+  { loading: false, unavailable: false, currency: '' }
 )
 
 const { t } = useI18n()
@@ -36,7 +38,12 @@ function share(amount: number): number {
 
 <template>
   <ConsoleCard :title="t('orders.paymentShare')">
-    <ul v-if="loading" class="sibling-space-y-4" aria-hidden="true">
+    <EmptyState
+      v-if="unavailable && !loading"
+      :title="t('orders.summaryUnavailable')"
+      :hint="t('orders.summaryUnavailableHint')"
+    />
+    <ul v-else-if="loading" class="sibling-space-y-4" aria-hidden="true">
       <li v-for="i in 3" :key="i">
         <div class="h-5 animate-pulse rounded-sm bg-[var(--surface-muted)]" />
         <div class="mt-2 h-1 rounded-full bg-[var(--surface-muted)]" />
@@ -57,7 +64,7 @@ function share(amount: number): number {
           </span>
           <span class="shrink-0 tabular-nums">
             <span class="font-semibold text-[var(--text-primary)]">
-              {{ formatAdminOrderAmount(item.amount, 'CNY') }}
+              {{ formatAdminOrderAmount(item.amount, currency) }}
             </span>
             <span class="ml-1.5 text-xs text-[var(--text-tertiary)]">
               ({{ item.count }})

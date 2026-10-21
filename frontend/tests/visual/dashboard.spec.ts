@@ -1,4 +1,5 @@
 import { test as base, expect, type Locator, type Page } from '@playwright/test'
+import { nativeUsageSummary } from './channel-core-fixtures'
 
 import {
   assertInteractiveCentersVisible,
@@ -40,16 +41,41 @@ test.beforeEach(async ({ page, dashboardTheme, emptyAccount }) => {
   await configureStablePage(page, {
     theme: dashboardTheme,
     authenticated: true,
-    user: emptyAccount ? { used_quota: '0' } : {},
+    user: emptyAccount ? { used_quota: 0 } : {},
   })
-  if (emptyAccount) {
-    // Registered after the fixture routes, so it takes precedence.
-    await page.route(
-      /\/api\/next\/dashboard\/distribution(?:\?.*)?$/,
-      (route) =>
-        route.fulfill({ json: { success: true, message: '', data: [] } })
+  await page.route(/\/api\/data\/self\/summary(?:\?.*)?$/, (route) => {
+    const url = new URL(route.request().url())
+    const data = nativeUsageSummary(
+      Math.floor(new Date('2026-07-27T12:00:00+08:00').getTime() / 1000),
+      url.searchParams.get('include_comparison') !== 'false'
     )
-  }
+    if (emptyAccount) {
+      data.kpi = {
+        totalTokens: 0,
+        totalQuota: 0,
+        totalRequests: 0,
+        avgLatency: 0,
+        successRate: null,
+      }
+      data.models = []
+      data.distribution = data.distribution.map((row) => ({
+        ...row,
+        requests: 0,
+        consume: 0,
+        tokens: 0,
+      }))
+      data.flow = data.flow.map((row) => ({ ...row, requests: 0, consume: 0 }))
+      data.hourly = data.hourly.map((row) => ({ ...row, requests: 0 }))
+      data.token_trend = data.token_trend.map((row) => ({
+        ...row,
+        total: 0,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+      }))
+    }
+    return route.fulfill({ json: { success: true, data } })
+  })
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 })
@@ -501,13 +527,19 @@ test('weekday labels stay under their rhythm slots when weekends are quiet', asy
     return {
       date,
       requests: weekend ? 0 : 900 + ((index * 37) % 400),
-      consume: weekend ? '0' : String(120_000 + index),
+      consume: weekend ? 0 : 120_000 + index,
       tokens: weekend ? 0 : 400_000 + index,
     }
   })
-  await page.route(/\/api\/next\/dashboard\/distribution(?:\?.*)?$/, (route) =>
-    route.fulfill({ json: { success: true, message: '', data: quietWeekends } })
-  )
+  await page.route(/\/api\/data\/self\/summary(?:\?.*)?$/, (route) => {
+    const data = nativeUsageSummary(
+      Math.floor(new Date('2026-07-27T12:00:00+08:00').getTime() / 1000),
+      new URL(route.request().url()).searchParams.get('include_comparison') !==
+        'false'
+    )
+    data.distribution = quietWeekends
+    return route.fulfill({ json: { success: true, data } })
+  })
   await page.reload({ waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 
@@ -811,29 +843,26 @@ test('all dashboard panels remain contained at compact width', async ({
   await page.getByRole('tab', { name: '自动路由', exact: true }).click()
   await waitForStablePage(page)
   const routeGroups = page.locator('[data-route-group]')
-  await expect(routeGroups).toHaveCount(7)
+  await expect(routeGroups).toHaveCount(1)
   const firstGroup = routeGroups.first()
   await expect(firstGroup).toContainText('OpenAI')
   await expect(firstGroup.locator('[data-route-lab-logo] img')).toHaveAttribute(
     'src',
     '/models/openai.svg'
   )
-  await expect(
-    page.locator('[data-route-group-slug="azure"] [data-route-lab-fallback]')
-  ).toBeVisible()
   await expect(firstGroup.locator('button[aria-expanded]')).toHaveAttribute(
     'aria-expanded',
     'false'
   )
   await firstGroup.locator('button[aria-expanded]').first().click()
-  // Seven channels (six ranked, one disabled) collapse to the top three.
+  // Native catalog channels preserve API order and collapse to the first three.
   const visibleChannels = firstGroup.locator('[data-route-channel]:visible')
   await expect(visibleChannels).toHaveCount(3)
-  await expect(visibleChannels.first()).toContainText('OpenAI')
+  await expect(visibleChannels.first()).toContainText('Native channel')
   await expect(firstGroup.locator('[data-route-channel] img')).toHaveCount(0)
 
   const moreToggle = firstGroup.locator('[data-route-more-toggle]')
-  await expect(moreToggle).toHaveText('展开余下 4 条渠道')
+  await expect(moreToggle).toHaveText('展开余下 1 条渠道')
   await expect(moreToggle).toHaveAttribute('aria-expanded', 'false')
   const controlsId = await moreToggle.getAttribute('aria-controls')
   expect(controlsId).toBeTruthy()
@@ -844,12 +873,11 @@ test('all dashboard panels remain contained at compact width', async ({
 
   await moreToggle.click()
   await expect(moreToggle).toHaveAttribute('aria-expanded', 'true')
-  await expect(visibleChannels).toHaveCount(7)
+  await expect(visibleChannels).toHaveCount(4)
   await expect(
     page.locator(`[id="${controlsId}"] [data-route-channel]`)
-  ).toHaveCount(4)
-  // The disabled channel keeps its upstream place after the ranked ones.
-  await expect(visibleChannels.last()).toContainText('已手动禁用')
+  ).toHaveCount(1)
+  await expect(visibleChannels.last()).toContainText('长文专线')
 
   await moreToggle.click()
   await expect(visibleChannels).toHaveCount(3)

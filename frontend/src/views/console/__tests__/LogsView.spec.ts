@@ -24,16 +24,17 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.spyOn(api, 'get').mockImplementation((path: string) => {
-    if (path === '/api/log/self/groups') return Promise.resolve(['default'])
+    if (path === '/api/user/self/groups')
+      return Promise.resolve({ default: { ratio: 1, desc: 'Default' } })
     if (path === '/api/log/self') {
       return Promise.resolve({ page: 1, page_size: 10, total: 0, items: [] })
     }
     if (path === '/api/log/self/stat') {
       return Promise.resolve({
         total_requests: 0,
-        total_quota: '0',
+        total_quota: 0,
         today_requests: 0,
-        today_quota: '0',
+        today_quota: 0,
       })
     }
     return Promise.reject(new Error(`Unexpected API request: ${path}`))
@@ -77,13 +78,14 @@ describe('LogsView log content', () => {
         '渠道测试 {{model}} 用时 {{seconds}} 秒',
     })
     vi.mocked(api.get).mockImplementation((path: string) => {
-      if (path === '/api/log/self/groups') return Promise.resolve(['default'])
+      if (path === '/api/user/self/groups')
+        return Promise.resolve({ default: { ratio: 1, desc: 'Default' } })
       if (path === '/api/log/self/stat') {
         return Promise.resolve({
           total_requests: 1,
-          total_quota: '0',
+          total_quota: 0,
           today_requests: 1,
-          today_quota: '0',
+          today_quota: 0,
         })
       }
       return Promise.resolve({
@@ -108,7 +110,7 @@ describe('LogsView log content', () => {
                 },
               ],
             }),
-            quota: '0',
+            quota: 0,
             use_time: 1500,
             is_stream: false,
             content: 'Channel test for gpt-4o took 1.5s',
@@ -132,4 +134,19 @@ describe('LogsView log content', () => {
     expect(text).not.toContain('Channel test for gpt-4o')
     expect(text).not.toContain('Model test')
   })
+})
+
+it('filters native logs by request_id without sending the retired keyword parameter', async () => {
+  wrapper = mount(LogsView, {
+    global: { plugins: [createPinia(), i18n], stubs: { LogsNavTabs: true } },
+  })
+  await flushPromises()
+  await wrapper.get('input[name="log-search"]').setValue('native-request')
+  await new Promise((resolve) => setTimeout(resolve, 350))
+  await flushPromises()
+  const calls = vi
+    .mocked(api.get)
+    .mock.calls.filter((call) => call[0] === '/api/log/self')
+  expect(calls.at(-1)?.[1]).toMatchObject({ request_id: 'native-request' })
+  expect(calls.at(-1)?.[1]).not.toHaveProperty('keyword')
 })

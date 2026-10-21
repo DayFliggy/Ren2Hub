@@ -56,9 +56,10 @@ const channelOptions = computed(() => [
 ])
 const billingOptions = computed(() => [
   { value: '', label: t('allBilling') },
-  ...(['token', 'per_call', 'dynamic', 'unconfigured'] as const).map(
-    (value) => ({ value, label: t(`billingModes.${value}`) })
-  ),
+  ...(['token', 'per_call', 'unconfigured'] as const).map((value) => ({
+    value,
+    label: t(`billingModes.${value}`),
+  })),
 ])
 const sortOptions = computed(() =>
   PRICE_SORTS.map((value) => ({

@@ -126,12 +126,6 @@ const keyValue = (
   defaultValue = '{}',
   description?: string
 ) => field('key-value', key, label, defaultValue, description)
-const ratio = (
-  key: string,
-  label: string,
-  defaultValue = '{}',
-  description?: string
-) => field('ratio', key, label, defaultValue, description)
 const option = (value: string, label: string): SystemSettingOption => ({
   value,
   labelKey: `systemSettings.options.${label}`,
@@ -246,9 +240,9 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('discord.enabled', 'discordEnabled'),
           text('discord.client_id', 'discordClientId'),
           secret('discord.client_secret', 'discordClientSecret'),
-          toggle('TelegramOAuthEnabled', 'telegramEnabled'),
           text('telegram.client_id', 'telegramClientId'),
           secret('telegram.client_secret', 'telegramClientSecret'),
+          toggle('TelegramOAuthEnabled', 'telegramEnabled'),
           secret('TelegramBotToken', 'telegramBotToken'),
           text('TelegramBotName', 'telegramBotName'),
           toggle('WeChatAuthEnabled', 'wechatEnabled'),
@@ -320,13 +314,66 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     defaultSection: 'quota',
     sections: [
       {
+        id: 'affiliate',
+        titleKey: 'systemSettings.sections.affiliate',
+        descriptionKey: 'systemSettings.sections.affiliateDescription',
+        fields: [
+          toggle('affiliate_setting.enabled', 'affiliateEnabled'),
+          {
+            ...number('affiliate_setting.rate_bps', 'affiliateRateBps', 2000),
+            min: 0,
+            max: 10000,
+            integer: true,
+          },
+          {
+            ...number(
+              'affiliate_setting.freeze_hours',
+              'affiliateFreezeHours',
+              0
+            ),
+            min: 0,
+            max: 720,
+            integer: true,
+          },
+          {
+            ...number(
+              'affiliate_setting.duration_days',
+              'affiliateDurationDays',
+              0
+            ),
+            min: 0,
+            max: 3650,
+            integer: true,
+          },
+          {
+            ...number(
+              'affiliate_setting.per_invitee_cap_quota',
+              'affiliateCapQuota',
+              0
+            ),
+            min: 0,
+            integer: true,
+          },
+          toggle(
+            'affiliate_setting.admin_recharge_enabled',
+            'affiliateAdminRecharge'
+          ),
+        ],
+      },
+      {
         id: 'quota',
         titleKey: 'systemSettings.sections.quota',
         descriptionKey: 'systemSettings.sections.quotaDescription',
         fields: [
           text('QuotaForNewUser', 'newUserQuota', '0'),
-          text('QuotaForInviter', 'inviterReward', '0'),
-          text('QuotaForInvitee', 'inviteeReward', '0'),
+          {
+            ...number(
+              'quota_setting.pre_consume_multiplier',
+              'preConsumeMultiplier',
+              1
+            ),
+            descriptionKey: fieldKey('preConsumeMultiplierHint'),
+          },
           url('TopUpLink', 'topUpLink'),
           number('USDExchangeRate', 'usdExchangeRate', 1),
           toggle('DisplayInCurrencyEnabled', 'displayInCurrency'),
@@ -334,12 +381,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           select(
             'general_setting.quota_display_type',
             'quotaDisplayType',
-            'quota',
+            'USD',
             [
-              option('quota', 'quota'),
+              option('CNY', 'cny'),
               option('USD', 'usd'),
               option('TOKENS', 'tokens'),
-              option('custom', 'customCurrency'),
+              option('CUSTOM', 'customCurrency'),
             ]
           ),
           text(
@@ -360,7 +407,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         descriptionKey: 'systemSettings.sections.paymentDescription',
         fields: [
           url('CustomCallbackAddress', 'callbackAddress', 'callbackHint'),
-          ratio('TopupGroupRatio', 'groupRatio', '{}', 'groupRatioHint'),
           secret('StripeApiSecret', 'stripeApiSecret'),
           secret('StripeWebhookSecret', 'stripeWebhookSecret'),
           text('StripePriceId', 'stripePriceId'),
@@ -407,12 +453,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('PayAddress', 'epayAddress'),
           text('EpayId', 'merchantId'),
           secret('EpayKey', 'merchantSecret', 'secretHint'),
-          toggle(
-            'payment_setting.epay_settlement_enabled',
-            'epaySettlement',
-            true,
-            'epaySettlementHint'
-          ),
           { ...number('Price', 'epayPrice', 7.3), min: 0 },
           {
             ...number('MinTopUp', 'minimumUsd', 1),
@@ -427,23 +467,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         id: 'gmpay',
         titleKey: 'systemSettings.gmpayPanel.title',
         descriptionKey: 'systemSettings.gmpayPanel.description',
-        fields: [
-          toggle(
-            'payment_setting.gmpay_settlement_enabled',
-            'gmpaySettlement',
-            true,
-            'gmpaySettlementHint'
-          ),
-        ],
-        managedKeys: [
-          'GmpayPayAddress',
-          'GmpayId',
-          'GmpayKey',
-          'GmpayAssets',
-          'GmpayPrice',
-          'GmpayMinTopUp',
-          'GmpayGroupRatio',
-        ],
+        fields: [],
         integration: 'gmpay',
       },
       {
@@ -634,7 +658,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             'rateLimitDuration',
             1
           ),
-          json('ModelRequestRateLimitGroup', 'rateLimitGroups', '{}'),
         ],
       },
       {

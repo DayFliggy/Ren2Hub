@@ -8,7 +8,7 @@ import {
 } from './contracts'
 import { proofOptions } from './security'
 
-const endpoint = '/api/user/self/personal-access-tokens'
+const endpoint = '/api/user/access_tokens'
 
 export interface PersonalAccessToken {
   id: number
@@ -17,7 +17,9 @@ export interface PersonalAccessToken {
   created_at: number
   last_used_at: number
   expires_at: number
-  revoked_at: number
+  token_ref: string
+  token_hint: string
+  last_used_ip: string
 }
 
 export interface PATScopeCatalog {
@@ -35,17 +37,16 @@ export function parsePersonalAccessToken(value: unknown): PersonalAccessToken {
     created_at: requiredStrictInteger(value.created_at, endpoint),
     last_used_at: requiredStrictInteger(value.last_used_at, endpoint),
     expires_at: requiredStrictInteger(value.expires_at, endpoint),
-    revoked_at: requiredStrictInteger(value.revoked_at, endpoint),
+    token_ref: requiredString(value.token_ref, endpoint, false),
+    token_hint: requiredString(value.token_hint, endpoint),
+    last_used_ip: requiredString(value.last_used_ip, endpoint),
   }
   if (
     result.id <= 0 ||
     result.scopes.length === 0 ||
-    [
-      result.created_at,
-      result.last_used_at,
-      result.expires_at,
-      result.revoked_at,
-    ].some((v) => v < 0)
+    [result.created_at, result.last_used_at, result.expires_at].some(
+      (v) => v < 0
+    )
   )
     invalidResponse(endpoint)
   return result
@@ -54,19 +55,37 @@ export function parsePersonalAccessToken(value: unknown): PersonalAccessToken {
 export const personalAccessTokensApi = {
   async list(signal?: AbortSignal) {
     const result = await api.get<unknown>(endpoint, undefined, { signal })
-    if (!Array.isArray(result)) invalidResponse(endpoint)
-    return result.map(parsePersonalAccessToken)
+    if (!isRecord(result) || !Array.isArray(result.items))
+      invalidResponse(endpoint)
+    return result.items.map(parsePersonalAccessToken)
   },
   async scopes(signal?: AbortSignal): Promise<PATScopeCatalog> {
-    const result = await api.get<unknown>(`${endpoint}/scopes`, undefined, {
+    const result = await api.get<unknown>(`${endpoint}/catalog`, undefined, {
       signal,
     })
-    if (!isRecord(result)) invalidResponse(endpoint)
+    if (!isRecord(result) || !Array.isArray(result.groups))
+      invalidResponse(endpoint)
+    const scopes: string[] = []
+    for (const group of result.groups) {
+      if (!isRecord(group) || !Array.isArray(group.resources))
+        invalidResponse(endpoint)
+      for (const resource of group.resources) {
+        if (!isRecord(resource) || !Array.isArray(resource.actions))
+          invalidResponse(endpoint)
+        const name = requiredString(resource.resource, endpoint, false)
+        for (const action of resource.actions) {
+          if (!isRecord(action)) invalidResponse(endpoint)
+          scopes.push(
+            `${name}:${requiredString(action.action, endpoint, false)}`
+          )
+        }
+      }
+    }
     const catalog = {
-      scopes: parseStringArray(result.scopes, endpoint),
-      limit: requiredStrictInteger(result.limit, endpoint),
+      scopes,
+      limit: requiredStrictInteger(result.max_tokens, endpoint),
       default_lifetime_days: requiredStrictInteger(
-        result.default_lifetime_days,
+        result.default_expiry_days,
         endpoint
       ),
     }
@@ -85,10 +104,10 @@ export const personalAccessTokensApi = {
     })
     if (!isRecord(result)) invalidResponse(endpoint)
     const token = requiredString(result.token, endpoint, false)
-    if (!/^pat_[A-Za-z0-9]{48}$/.test(token)) invalidResponse(endpoint)
+    if (!/^nap_[A-Za-z0-9]{43}$/.test(token)) invalidResponse(endpoint)
     return {
       token,
-      item: parsePersonalAccessToken(result.personal_access_token),
+      item: parsePersonalAccessToken(result.item),
     }
   },
   async update(

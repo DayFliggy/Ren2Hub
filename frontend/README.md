@@ -64,7 +64,15 @@ Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；
 
 旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不转换也不加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
 
-`/api/next/*` 是已有业务 API 门面，保留接口契约；`/api/models` 和 `/api/models/` 的不同语义也保留。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
+前端按领域直接调用原生 API，不使用 `/api/next/*` 兼容层。用户模型目录为 `/api/user/model-catalog`，管理元数据为 `/api/models/`，不合并其语义。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
+
+## 领域接口
+
+`src/api/` 集中认证与安全、工单、充值订单、返利、模型目录、Token 路由、统计、管理和运维的请求与 DTO 校验。普通接口校验 `success/data`，支付模块单独校验原生 `message/url/data`。缺字段、未知状态、超出 JavaScript 安全整数的原生额度和业务错误不转换为零、空列表或成功；请求取消和会话版本保护防止迟到响应覆盖当前页面。
+
+用户额度使用 `quota/used_quota`，Token 使用 `remain_quota/used_quota/unlimited_quota`。工单调用 `/api/tickets` 与 `/api/admin/tickets`，返利概览、邀请名单、流水分开读取；转入只提交稳定的 `operation_id`，由后端全额转入。GMPay 使用人民币法币金额和完整加密资产标识，未知创建结果进入订单查询，不自动重新创建。完整回归范围和来源见[本批记录](../docs/upstream/API_REGRESSION_20261021.md)。
+
+`tests/live/` 使用独立真实候选验证页面和按钮，不拦截业务 API；`tests/visual/` 的受控接口夹具只承担视觉及错误交互验证。两类结果分别记录。
 
 ## 用量日志导出
 
@@ -72,7 +80,7 @@ Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；
 
 ## 源码结构
 
-共享弹窗、命令面板、渠道模型输入与工单回复在输入法组合期间不截获选词按键；正常 Enter 提交、Shift+Enter 换行及 Escape 关闭沿用原行为。活动倒计时按绝对截止时间计算，页面恢复可见立即校时，共享计时器和监听器在最后实例卸载时释放。模型供应商识别将 `meta/`、`muse-` 归入 Meta，`spark-` 仍属于讯飞。
+共享弹窗、命令面板、渠道模型输入与工单回复在输入法组合期间不截获选词按键；正常 Enter 提交、Shift+Enter 换行及 Escape 关闭沿用原行为。活动页保留基础签到，不展示新人任务和阶梯奖励。模型供应商识别将 `meta/`、`muse-` 归入 Meta，`spark-` 仍属于讯飞。
 
 ```text
 src/
@@ -93,7 +101,7 @@ src/
   __tests__/    全局测试设置
 ```
 
-顶部导航的“炼金室”是禁用的占位入口，背后没有页面和路由。Token 农场、小游戏、开票和市场暂未接入。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
+顶部导航的“炼金室”是禁用的占位入口，背后没有页面和路由。Token 农场、小游戏、开票和独立市场不属于当前产品范围，入口及失效业务请求已移除。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
 
 `common` 和 `home` 语言包随首屏加载，`auth`、`console`、`setup` 按路由和当前语言延迟加载。`public/` 保存直接发布的资源，`src/assets/` 保存构建管理的图片和自托管字体。`dist/`、`embed-dist/` 与 `output/` 分别是构建产物、Go 嵌入产物和本地测试输出。
 

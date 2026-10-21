@@ -23,6 +23,7 @@ import {
   parseAuthBundle,
   parseAuthRotation,
   parseTwoFactorChallenge,
+  parseUserInfo,
   setAuthBundleIfCurrent,
 } from './authSession'
 
@@ -46,6 +47,14 @@ async function refreshSession(): Promise<AuthBundle> {
 }
 
 export const authApi = {
+  sendVerification: (email: string, turnstileToken?: string) =>
+    api.get(
+      '/api/verification',
+      { email },
+      turnstileToken
+        ? { headers: { 'X-Turnstile-Token': turnstileToken } }
+        : undefined
+    ),
   async login(
     username: string,
     password: string,
@@ -75,6 +84,7 @@ export const authApi = {
       email: string
       password: string
       aff_code?: string
+      verification_code?: string
     },
     turnstileToken?: string
   ) =>
@@ -84,11 +94,6 @@ export const authApi = {
       turnstileToken
         ? { headers: { 'X-Turnstile-Token': turnstileToken } }
         : undefined
-    ),
-  validateAffiliate: (code: string) =>
-    api.post<{ valid: boolean; attribution_days: number }>(
-      '/api/next/invite/validate',
-      { code }
     ),
   resetPassword: (email: string) =>
     api.get<unknown>('/api/reset_password', { email }),
@@ -134,7 +139,12 @@ export const authApi = {
     }
     await api.post('/api/user/auth/logout')
   },
-  self: () => api.get<UserInfo>('/api/user/self'),
+  async self(): Promise<UserInfo> {
+    return (
+      parseUserInfo(await api.get<unknown>('/api/user/self')) ??
+      invalidAuthResponse('/api/user/self')
+    )
+  },
   deleteSelf: (proof: string) =>
     api.delete<{ message: string }>(
       '/api/user/self',

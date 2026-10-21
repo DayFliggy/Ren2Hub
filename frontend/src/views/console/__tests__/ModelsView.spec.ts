@@ -10,211 +10,68 @@ import {
 } from 'vitest'
 import { api } from '@/api/client'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-import ModelsView from '@/views/console/ModelsView.vue'
-import { createModelMarketFixture } from '../../../../tests/fixtures/modelMarket'
-
-const wrappers: VueWrapper[] = []
+import ModelsView from '../ModelsView.vue'
+import { modelCatalogFixture } from '@/api/__tests__/modelCatalogFixture'
+vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
+let wrapper: VueWrapper | undefined
 function render() {
-  const wrapper = mount(ModelsView, {
+  wrapper = mount(ModelsView, {
     attachTo: document.body,
     global: { plugins: [i18n] },
   })
-  wrappers.push(wrapper)
   return wrapper
 }
-function dialog() {
-  return document.body.querySelector<HTMLElement>('[role="dialog"]')!
-}
-
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('zh-CN')
 })
-beforeEach(() => {
-  vi.spyOn(api, 'get').mockResolvedValue(createModelMarketFixture())
-})
+beforeEach(() => vi.mocked(api.get).mockResolvedValue(modelCatalogFixture()))
 afterEach(() => {
-  wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
-  vi.restoreAllMocks()
+  wrapper?.unmount()
+  vi.resetAllMocks()
+  localStorage.clear()
 })
-
-describe('ModelsView authenticated market integration', () => {
-  it('loads a single catalog and keeps the current search through all three modes', async () => {
-    const wrapper = render()
+describe('native model catalog page', () => {
+  it('loads one catalog and preserves search through all historical visual modes', async () => {
+    const view = render()
     await flushPromises()
-    expect(api.get).toHaveBeenCalledWith('/api/user/model-market', undefined, {
+    expect(api.get).toHaveBeenCalledWith('/api/user/model-catalog', undefined, {
       signal: expect.any(AbortSignal),
     })
-    expect(wrapper.findAll('[data-model-card]')).toHaveLength(7)
-    await wrapper.get('input[name="model-search"]').setValue('gpt-4.1')
-    expect(wrapper.findAll('[data-model-card]')).toHaveLength(1)
+    expect(view.findAll('[data-model-card]')).toHaveLength(1)
+    await view.get('input[name="model-search"]').setValue('fixture-model')
     for (const label of ['渠道货架', '比价矩阵', '模型聚合']) {
-      await wrapper
-        .get(`[role="radio"][aria-label="${label}"]`)
-        .trigger('click')
+      await view.get(`[role="radio"][aria-label="${label}"]`).trigger('click')
       expect(
-        (wrapper.get('input[name="model-search"]').element as HTMLInputElement)
+        (view.get('input[name="model-search"]').element as HTMLInputElement)
           .value
-      ).toBe('gpt-4.1')
-      expect(wrapper.text()).toContain('1 个模型')
+      ).toBe('fixture-model')
+      expect(view.text()).toContain('1 个模型')
     }
     expect(api.get).toHaveBeenCalledTimes(1)
   })
-
-  it('keeps full baseline/cache prices separate from channel statistics in details', async () => {
-    const wrapper = render()
+  it('opens native channel and baseline prices with their supplied endpoint paths', async () => {
+    const view = render()
     await flushPromises()
-    await wrapper
-      .get('[data-model-name="gpt-4.1"] button[aria-label*="模型详情"]')
+    await view
+      .get('[data-model-name="fixture-model"] button[aria-label*="模型详情"]')
       .trigger('click')
     await flushPromises()
-    const popup = dialog()
-    expect(popup).not.toBeNull()
-    expect(
-      popup.querySelector('[data-price-dimension="cacheRead"]')!.textContent
-    ).toContain('$0.125')
-    expect(
-      popup.querySelector('[data-price-dimension="cacheWrite"]')!.textContent
-    ).toContain('$0.625')
-    expect(popup.textContent).toContain('/v1/chat/completions')
+    const popup = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(popup.textContent).toContain('/v1/responses')
+    expect(popup.textContent).toContain('$0.250')
+    expect(popup.textContent).toContain('$1.250')
     expect(
       popup.querySelector('[data-market-baseline] [data-market-telemetry]')
     ).toBeNull()
-    expect(
-      popup.querySelector('[data-market-telemetry]')!.textContent
-    ).toContain('统计')
-    popup
-      .querySelector<HTMLButtonElement>('[data-market-baseline] button')!
-      .click()
-    await flushPromises()
-    expect(
-      dialog().querySelector('[data-price-dimension="cacheRead"]')!.textContent
-    ).toContain('$0.625')
-    expect(
-      dialog().querySelector('[data-price-dimension="cacheWrite"]')!.textContent
-    ).toContain('$3.125')
-    dialog()
-      .querySelector<HTMLButtonElement>('button[aria-label="关闭模型详情"]')!
-      .click()
-    await flushPromises()
-    await vi.waitFor(() =>
-      expect(document.body.querySelector('[role="dialog"]')).toBeNull()
-    )
+    expect(popup.querySelector('.market-detail-variant')).toBeNull()
+    expect(popup.textContent).toContain('未提供')
   })
-
-  it('switches plugin variants with matching platform and channel pricing and exposes the full expression', async () => {
-    const wrapper = render()
+  it('does not render permission-scoped prices after a catalog failure', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('denied'))
+    const view = render()
     await flushPromises()
-    await wrapper
-      .get('[data-model-name="video-preview"] button[aria-label*="模型详情"]')
-      .trigger('click')
-    await flushPromises()
-    expect(dialog().querySelector('pre')!.textContent).toBe(
-      'u("seconds") * 0.2'
-    )
-    expect(dialog().textContent).toContain('seconds')
-    expect(dialog().textContent).toContain('/v1/videos')
-    const fixedOffer = createModelMarketFixture().offers.find(
-      (offer) =>
-        offer.model_id === 'video-preview' &&
-        offer.channel_id === 11 &&
-        offer.pricing_id === 'video-preview:fixed'
-    )!
-    dialog()
-      .querySelector<HTMLButtonElement>(
-        `button[data-offer-id="${fixedOffer.id}"]`
-      )!
-      .click()
-    await flushPromises()
-    expect(dialog().querySelector('pre')).toBeNull()
-    expect(
-      dialog().querySelector(
-        '.market-detail-price-panel [data-price-dimension="request"]'
-      )!.textContent
-    ).toContain('$0.016')
-  })
-
-  it('describes real prices and billing modes on A/B/C and detail actions', async () => {
-    const fixture = createModelMarketFixture()
-    fixture.offers[0]!.id = 'opaque offer ID with spaces'
-    vi.mocked(api.get).mockResolvedValueOnce(fixture)
-    const wrapper = render()
-    await flushPromises()
-    const description = (button: Element) =>
-      (button.getAttribute('aria-describedby') ?? '')
-        .split(/\s+/)
-        .map((id) => {
-          const content = document.getElementById(id)
-          expect(content, `missing description ${id}`).not.toBeNull()
-          return content!.textContent
-        })
-        .join(' ')
-    const cardButton = wrapper.get(
-      '[data-model-name="gpt-4.1"] button[aria-label*="模型详情"]'
-    )
-    expect(description(cardButton.element)).toContain('$2.500')
-    expect(description(cardButton.element)).toContain('$0.500')
-    for (const mode of ['渠道货架', '比价矩阵']) {
-      await wrapper.get(`[role="radio"][aria-label="${mode}"]`).trigger('click')
-      const button = wrapper.get(
-        'button[aria-label="查看 gpt-4.1 在 雾桥中转 的报价"]'
-      )
-      const text = description(button.element)
-      expect(text).toContain('0.2×')
-      expect(text).toContain('按量')
-      expect(text).toContain('$0.500')
-      expect(text).toContain('/ 1M tokens')
-      expect(wrapper.findAll('button dl')).toHaveLength(0)
-    }
-    await wrapper
-      .get('button[aria-label="查看 gpt-4.1 在 雾桥中转 的报价"]')
-      .trigger('click')
-    await flushPromises()
-    const button = dialog().querySelector('button[data-offer-id]')!
-    expect(description(button)).toContain('$0.500')
-    expect(description(button)).toContain('统计暂未提供')
-    expect(dialog().querySelectorAll('button dl')).toHaveLength(0)
-    const baseline = dialog().querySelector<HTMLButtonElement>(
-      '[data-market-baseline] button'
-    )!
-    expect(description(baseline)).not.toContain('统计')
-    baseline.click()
-    await flushPromises()
-    expect(baseline.getAttribute('aria-pressed')).toBe('true')
-    expect(
-      dialog().querySelector('[aria-live="polite"]')!.textContent
-    ).toContain('平台基准价')
-  })
-
-  it('distinguishes an empty supply catalog from a search with no matches', async () => {
-    const empty = createModelMarketFixture()
-    empty.offers = []
-    vi.mocked(api.get).mockResolvedValueOnce(empty)
-    const wrapper = render()
-    await flushPromises()
-    expect(wrapper.text()).toContain('暂无模型供给')
-    expect(wrapper.text()).not.toContain('清除筛选')
-    wrapper.unmount()
-    const loaded = render()
-    await flushPromises()
-    await loaded.get('input[name="model-search"]').setValue('no matching model')
-    expect(loaded.text()).toContain('没有匹配的模型')
-    expect(loaded.text()).toContain('清除筛选')
-  })
-
-  it('reports loading failure and restores catalog content through retry', async () => {
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('unavailable'))
-    const wrapper = render()
-    await flushPromises()
-    expect(wrapper.text()).toContain('模型广场加载失败')
-    expect(wrapper.findAll('[data-model-card]')).toHaveLength(0)
-    const retry = wrapper
-      .findAll('button')
-      .find((button) => button.text() === '重新加载')!
-    await retry.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('模型广场加载失败')
-    expect(wrapper.findAll('[data-model-card]')).toHaveLength(7)
-    expect(api.get).toHaveBeenCalledTimes(2)
+    expect(view.find('[data-model-card]').exists()).toBe(false)
+    expect(view.find('[data-offer-id]').exists()).toBe(false)
   })
 })

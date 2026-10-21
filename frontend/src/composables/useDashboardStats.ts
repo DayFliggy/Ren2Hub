@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { api } from '@/api/console'
+import { getUsageSummary } from '@/api/dashboard'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
@@ -13,8 +13,8 @@ export interface StatsKpi {
   totalTokens: number
   totalQuota: string
   totalRequests: number
-  avgLatency: number
-  successRate: number
+  avgLatency: number | null
+  successRate: number | null
 }
 
 export interface StatsModelRow {
@@ -23,7 +23,7 @@ export interface StatsModelRow {
   quota: string
   requests: number
   share: number
-  avgLatency: number
+  avgLatency: number | null
 }
 
 export interface HourlyPoint {
@@ -38,7 +38,7 @@ export interface StatsComparison {
 
 export interface StatsPeriod {
   kpi: StatsKpi
-  comparison: StatsComparison
+  comparison: StatsComparison | null
   models: StatsModelRow[]
   hourly: HourlyPoint[]
   flow: FlowPoint[]
@@ -58,9 +58,9 @@ export function useDashboardStats() {
   async function load() {
     loading.value = true
     error.value = null
+    data.value = null
     const params: Record<string, string> = {
       range: range.value,
-      tz_offset: String(-new Date().getTimezoneOffset()),
     }
     if (range.value === 'custom') {
       params.start = customStart.value
@@ -69,7 +69,7 @@ export function useDashboardStats() {
     // Serialized via useLatestRequest: rapid range switches abort the older
     // request, and a late response can never overwrite the newer period.
     const result = await statsRequest.run((signal) =>
-      api.get<StatsPeriod>('/api/next/dashboard/stats', params, { signal })
+      getUsageSummary(params, signal)
     )
     if (result.stale) return
     loading.value = false
@@ -80,6 +80,10 @@ export function useDashboardStats() {
           : t('common.failed')
       error.value = message
       toast.error(message)
+      return
+    }
+    if (!result.value.meta.available) {
+      error.value = t('dashboard.stats.unavailable')
       return
     }
     data.value = result.value

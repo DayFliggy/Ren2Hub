@@ -1,69 +1,44 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CircleDollarSign, CircleOff, Crown, Timer } from 'lucide-vue-next'
+import {
+  CircleCheck,
+  CircleDollarSign,
+  CircleOff,
+  Gauge,
+  Users,
+} from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
-import type { RouteChannelRow } from '@/composables/useAutoRoute'
-import { scoreBand, WEIGHTS } from '@/utils/routeScore'
+import type { CatalogChannel } from '@/api/modelCatalog'
+import { tokenRoutingMessages } from '@/i18n/tokenRouting'
 
 const props = withDefaults(
-  defineProps<{
-    entry: RouteChannelRow
-    compact?: boolean
-  }>(),
+  defineProps<{ entry: CatalogChannel; compact?: boolean }>(),
   { compact: false }
 )
-
 const { t } = useI18n()
-function latencyLabel(ms: number): string {
-  if (ms === 0) return t('dashboard.autoRoute.untested')
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-  return `${ms}ms`
-}
-
-const isRanked = computed(
-  () =>
-    props.entry.rank !== null &&
-    props.entry.score !== null &&
-    props.entry.breakdown !== null
-)
-const scoreColor = computed(() =>
-  props.entry.score === null
-    ? 'var(--text-tertiary)'
-    : `var(--status-${scoreBand(props.entry.score)})`
-)
-const inactiveLabel = computed(() =>
-  props.entry.status === 3
-    ? t('dashboard.autoRoute.autoDisabled')
-    : t('dashboard.autoRoute.manuallyDisabled')
-)
-
-const FACTORS = [
-  { key: 'latency', label: 'factorLatency', opacity: 1 },
-  { key: 'quota', label: 'factorQuota', opacity: 0.75 },
-  { key: 'weight', label: 'factorWeight', opacity: 0.5 },
-  { key: 'priority', label: 'factorPriority', opacity: 0.3 },
-] as const
-
-const segments = computed(() => {
-  if (!props.entry.breakdown) return []
-  return FACTORS.map((factor) => {
-    const value = props.entry.breakdown![factor.key]
-    const points = value * WEIGHTS[factor.key] * 100
-    return {
-      key: factor.key,
-      points,
-      opacity: factor.opacity,
-      title: t('dashboard.autoRoute.factorContribution', {
-        factor: t(`dashboard.autoRoute.${factor.label}`),
-        value: value.toFixed(2),
-        weight: Math.round(WEIGHTS[factor.key] * 100),
-        points: points.toFixed(1),
-      }),
-    }
-  })
+const { t: routingText, te: hasRoutingText } = useI18n({
+  useScope: 'local',
+  messages: tokenRoutingMessages,
 })
+const exclusionReason = computed(() => {
+  const key = `routing.reasons.${props.entry.filter_reason}`
+  return hasRoutingText(key)
+    ? routingText(key)
+    : t('dashboard.autoRoute.excluded')
+})
+const occupancy = computed(() =>
+  props.entry.max_concurrency > 0
+    ? Math.min(100, (props.entry.in_flight / props.entry.max_concurrency) * 100)
+    : null
+)
+const capacityLabel = computed(() =>
+  t('dashboard.autoRoute.channelOccupancy', {
+    active: props.entry.in_flight,
+    limit: props.entry.max_concurrency || '∞',
+  })
+)
 </script>
 
 <template>
@@ -74,30 +49,21 @@ const segments = computed(() => {
     :data-route-channel-compact="compact ? '' : undefined"
   >
     <span
-      v-if="entry.rank === 1"
-      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-text)]"
-      :title="t('dashboard.autoRoute.groupBest')"
+      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+      :class="
+        entry.eligible
+          ? 'bg-[var(--status-success-soft)] text-[var(--status-success-text)]'
+          : 'bg-[var(--status-danger-soft)] text-[var(--status-danger-text)]'
+      "
     >
-      <Crown :size="13" aria-hidden="true" />
-      <span class="sr-only">{{ t('dashboard.autoRoute.groupBest') }}</span>
+      <component
+        :is="entry.eligible ? CircleCheck : CircleOff"
+        :size="13"
+        aria-hidden="true"
+      />
     </span>
-    <span
-      v-else-if="entry.rank !== null"
-      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-tertiary)]"
-    >
-      {{ entry.rank }}
-    </span>
-    <span
-      v-else
-      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--status-danger-soft)] text-[var(--status-danger-text)]"
-      :title="inactiveLabel"
-    >
-      <CircleOff :size="13" aria-hidden="true" />
-      <span class="sr-only">{{ inactiveLabel }}</span>
-    </span>
-
     <div class="min-w-0 flex-1" :class="{ 'sibling-space-y-2': !compact }">
-      <div class="flex min-w-0 items-center justify-between gap-2">
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div class="min-w-0">
           <p
             class="truncate text-sm font-medium text-[var(--text-primary)]"
@@ -107,78 +73,68 @@ const segments = computed(() => {
           </p>
           <p
             class="truncate text-[0.625rem] leading-tight text-[var(--text-tertiary)]"
-            :title="entry.supplier"
           >
-            {{ entry.supplier }}
+            {{ entry.lab.name }}
           </p>
         </div>
         <span class="flex shrink-0 items-center gap-2">
           <span
             class="flex items-center gap-1 text-[0.6875rem] tabular-nums text-[var(--text-tertiary)] sm:text-xs"
-            :title="t('dashboard.autoRoute.factorLatency')"
+            :title="t('dashboard.autoRoute.concurrency')"
           >
-            <Timer :size="12" aria-hidden="true" />
-            {{ latencyLabel(entry.latency) }}
+            <Users :size="12" aria-hidden="true" />{{ entry.in_flight }} /
+            {{ entry.max_concurrency || '∞' }}
           </span>
           <span
             class="flex items-center gap-1 font-mono text-[0.6875rem] text-[var(--text-tertiary)] sm:text-xs"
-            :title="t('dashboard.autoRoute.factorQuota')"
-            data-route-balance
+            :title="t('channels.channelRatio')"
+            data-route-ratio
           >
-            <CircleDollarSign :size="12" aria-hidden="true" />
-            {{ entry.quota.toFixed(2) }}
+            <CircleDollarSign :size="12" aria-hidden="true" />×{{
+              entry.channel_ratio
+            }}
           </span>
         </span>
       </div>
-
       <template v-if="!compact">
         <div
-          v-if="isRanked"
-          class="pencil-progress flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-[var(--surface-muted)]"
+          class="pencil-progress h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]"
           role="img"
-          :aria-label="`${t('dashboard.autoRoute.breakdownLabel')} ${entry.score}`"
+          :aria-label="capacityLabel"
         >
           <div
-            v-for="segment in segments"
-            :key="segment.key"
-            class="h-full shrink-0"
-            :style="{
-              width: `${segment.points}%`,
-              background: 'var(--accent)',
-              opacity: segment.opacity,
-            }"
-            :title="segment.title"
+            v-if="occupancy !== null"
+            class="h-full bg-[var(--accent)]"
+            :style="{ width: `${occupancy}%` }"
           />
         </div>
-        <p
-          v-else
-          class="text-[0.625rem] font-medium text-[var(--text-tertiary)]"
-        >
-          {{ inactiveLabel }} · {{ t('dashboard.autoRoute.excluded') }}
+        <p class="text-[0.625rem] font-medium text-[var(--text-tertiary)]">
+          {{
+            entry.eligible
+              ? t('dashboard.autoRoute.catalogEligible')
+              : exclusionReason
+          }}
         </p>
       </template>
     </div>
-
     <MiniRing
-      v-if="entry.score !== null"
-      :percent="entry.score"
-      :color="scoreColor"
+      v-if="occupancy !== null"
+      :percent="occupancy"
+      color="var(--accent)"
       :size="compact ? 32 : 40"
-      :aria-label="`${t('dashboard.autoRoute.score')} ${entry.score}`"
+      :aria-label="capacityLabel"
     >
       <span
-        class="font-bold tabular-nums"
+        class="font-bold tabular-nums text-[var(--accent-text)]"
         :class="compact ? 'text-[0.6875rem]' : 'text-xs'"
-        :style="{ color: scoreColor }"
+        >{{ Math.round(occupancy) }}%</span
       >
-        {{ entry.score }}
-      </span>
     </MiniRing>
-    <span
+    <Gauge
       v-else
-      class="max-w-20 shrink-0 text-right text-[0.625rem] font-semibold text-[var(--status-danger-text)]"
-    >
-      {{ inactiveLabel }}
-    </span>
+      :size="compact ? 28 : 32"
+      class="shrink-0 text-[var(--text-tertiary)]"
+      :aria-label="capacityLabel"
+    />
   </div>
 </template>

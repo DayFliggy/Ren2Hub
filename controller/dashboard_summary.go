@@ -11,6 +11,15 @@ import (
 )
 
 func GetDashboardSummary(c *gin.Context) {
+	includeComparison := true
+	if value := c.Query("include_comparison"); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("invalid include_comparison"))
+			return
+		}
+		includeComparison = parsed
+	}
 	offset := 0
 	if value := c.Query("tz_offset"); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -25,18 +34,21 @@ func GetDashboardSummary(c *gin.Context) {
 		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
 	}
-	// Include the comparison interval in the same retention/permission boundary.
-	previous := start.Add(-end.Sub(start)).Unix()
-	bounded, err := limitLogTimeRange(previous, end.Unix()-1)
+	// Every queried interval stays inside the same retention/permission boundary.
+	queryStart := start.Unix()
+	if includeComparison {
+		queryStart = start.Add(-end.Sub(start)).Unix()
+	}
+	bounded, err := limitLogTimeRange(queryStart, end.Unix()-1)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if bounded != previous {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("dashboard range including comparison exceeds the allowed log range"))
+	if bounded != queryStart {
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("dashboard query exceeds the allowed log range"))
 		return
 	}
-	result, err := service.Dashboard(c.Request.Context(), c.GetInt("id"), start, end, offset)
+	result, err := service.Dashboard(c.Request.Context(), c.GetInt("id"), start, end, offset, includeComparison)
 	if err != nil {
 		common.ApiError(c, err)
 		return

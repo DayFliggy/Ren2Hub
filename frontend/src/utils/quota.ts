@@ -1,4 +1,4 @@
-/** Exact account amounts. Wire values are canonical signed int64 decimal strings. */
+/** Exact display arithmetic. Native numeric API values must be safe integers. */
 export type Quota = string
 export const QUOTA_PER_USD = 500_000n
 export const MAX_QUOTA = 9_223_372_036_854_775_807n

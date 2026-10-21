@@ -20,7 +20,12 @@ import {
 
 describe('admin order contract', () => {
   it('exposes the real top-up lifecycle and read-only providers', () => {
-    expect(ADMIN_ORDER_STATUSES).toEqual(['completed', 'pending', 'failed'])
+    expect(ADMIN_ORDER_STATUSES).toEqual([
+      'completed',
+      'pending',
+      'failed',
+      'expired',
+    ])
     expect(ADMIN_ORDER_TYPES).toEqual(['topup'])
     expect(ADMIN_ORDER_METHODS).toEqual([
       'epay',

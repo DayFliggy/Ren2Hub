@@ -1,7 +1,4 @@
-// Follows upstream lib/plugin-meta-preview.ts, but Ren2Hub reads metadata on
-// the server (POST /api/plugin/task/preview) instead of parsing JavaScript in
-// the browser. The server returns literal properties and names the ones it
-// could not resolve; this module maps that onto the same field states.
+// Maps literal source metadata onto field states without executing plugin code.
 import type {
   MarketplaceIndexVersion,
   MarketplacePlugin,
@@ -120,7 +117,7 @@ export function unavailablePreview(): PluginMetaPreview {
   return { status: 'unavailable', fields: unknownFields() }
 }
 
-/** Maps the server preview onto value / missing / unknown per field. */
+/** Maps a literal preview onto value / missing / unknown per field. */
 export function previewFromServer(
   preview: TaskPluginPreview
 ): PluginMetaPreview {

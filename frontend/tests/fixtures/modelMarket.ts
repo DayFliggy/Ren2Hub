@@ -1,158 +1,63 @@
 import type {
-  MarketModelContract,
-  MarketPricingContract,
-  ModelMarketResponse,
-} from '../../src/types/modelMarket'
+  ModelCatalog,
+  CatalogModel,
+  CatalogPrices,
+} from '../../src/api/modelCatalog'
 
-function baseline(
-  id: string,
-  values: MarketPricingContract['values'],
-  endpoints = ['openai'],
-  extra: Partial<MarketPricingContract> = {}
-): MarketPricingContract {
-  return {
-    id,
-    version: 'fixture-v1',
-    configured: true,
-    values,
-    supported_endpoint_types: endpoints,
-    ...extra,
-  }
-}
-
-function model(
-  id: string,
-  vendor: string,
-  baselines: MarketPricingContract[],
-  extra: Partial<MarketModelContract> = {}
-): MarketModelContract {
-  return {
-    id,
-    vendor,
-    description: `${vendor} model for market contract checks`,
+/** Native shared model catalog: server prices already include each channel multiplier. */
+export function createModelMarketFixture(): ModelCatalog {
+  const model = (
+    model_name: string,
+    vendor_id: number,
+    pricing_values: CatalogPrices,
+    endpoints = ['openai']
+  ): CatalogModel => ({
+    model_name,
+    vendor_id,
+    description: 'Native model catalog fixture',
     icon: '',
-    capabilities: {
-      context_limit: 128000,
-      output_limit: 8192,
-      tool_call: true,
-      input_modalities: ['text'],
-      output_modalities: ['text'],
-      reasoning_efforts: null,
-      source: null,
-      updated_at: 0,
-    },
-    supported_endpoint_types: [
-      ...new Set(baselines.flatMap((price) => price.supported_endpoint_types)),
-    ],
-    baselines,
-    ...extra,
-  }
-}
-
-/** Fixture mirrors the authenticated, decimal-string market contract. */
-export function createModelMarketFixture(): ModelMarketResponse {
+    supported_endpoint_types: endpoints,
+    capabilities: null,
+    price_status: Object.keys(pricing_values).length
+      ? 'configured'
+      : 'unavailable',
+    pricing_values,
+  })
   const models = [
-    model('gpt-4.1', 'OpenAI', [
-      baseline('gpt-4.1:default', {
-        ModelRatio: '1.25',
-        CompletionRatio: '4',
-        CacheRatio: '0.25',
-        CreateCacheRatio: '1.25',
-      }),
-    ]),
-    model('claude-sonnet-4', 'Anthropic', [
-      baseline(
-        'claude-sonnet-4:default',
-        {
-          ModelRatio: '1.5',
-          CompletionRatio: '5',
-          CacheRatio: '0.1',
-          CreateCacheRatio: '0',
-        },
-        ['anthropic']
-      ),
-    ]),
-    model('gemini-2.5-pro', 'Google', [
-      baseline(
-        'gemini-2.5-pro:default',
-        {
-          ModelRatio: '0.625',
-          CompletionRatio: '8',
-        },
-        ['gemini']
-      ),
-    ]),
-    model(
-      'audio-preview',
-      'OpenAI',
-      [
-        baseline(
-          'audio-preview:default',
-          {
-            ModelRatio: '2.5',
-            CompletionRatio: '4',
-            AudioRatio: '8',
-            AudioCompletionRatio: '2',
-          },
-          ['openai-audio']
-        ),
-      ],
-      {
-        capabilities: {
-          context_limit: null,
-          output_limit: null,
-          tool_call: false,
-          input_modalities: ['audio', 'text'],
-          output_modalities: ['audio', 'text'],
-          reasoning_efforts: null,
-          source: null,
-          updated_at: 0,
-        },
-      }
-    ),
-    model('image-preview', 'OpenAI', [
-      baseline(
-        'image-preview:default',
-        {
-          ModelPrice: '0.04',
-        },
-        ['image-generation']
-      ),
-    ]),
-    model('video-preview', 'Platform', [
-      baseline(
-        'video-preview:seconds',
-        {
-          'billing_setting.billing_mode': 'tiered_expr',
-          'billing_setting.billing_expr': 'u("seconds") * 0.2',
-        },
-        ['openai-video'],
-        {
-          plugin_key: 'seconds',
-          plugin_name: 'Video seconds',
-          usage_schema: { seconds: { type: 'number', unit: 'second' } },
-        }
-      ),
-      baseline('video-preview:fixed', { ModelPrice: '0.08' }, ['video-task'], {
-        plugin_key: 'fixed',
-        plugin_name: 'Fixed video',
-      }),
-    ]),
-    model('unpriced-preview', '', [
-      baseline('unpriced-preview:default', {}, ['openai'], {
-        configured: false,
-      }),
-    ]),
+    model('gpt-4.1', 1, { input: '2.5', output: '10' }),
+    model('claude-sonnet-4', 2, { input: '3', output: '15' }, ['anthropic']),
+    model('gemini-2.5-pro', 3, { input: '1.25', output: '10' }, ['gemini']),
+    model('audio-preview', 1, { input: '40', output: '80' }, ['openai-audio']),
+    model('image-preview', 1, { request: '0.04' }, ['image-generation']),
+    model('video-preview', 0, { request: '0.08' }, ['openai-video']),
+    model('unpriced-preview', 0, {}),
   ]
   const channels = [
     { id: 11, name: '雾桥中转', ratio: '0.2' },
     { id: 12, name: '原生专线', ratio: '1' },
     { id: 13, name: '长文专线', ratio: '0.6' },
-  ]
+  ].map(({ ratio, ...row }) => ({
+    ...row,
+    type: 1,
+    status: 1,
+    channel_ratio: ratio,
+    max_concurrency: 8,
+    in_flight: 0,
+    eligible: true,
+    filter_reason: '',
+    lab: { id: 'mixed', name: 'Mixed', source: 'mapping' },
+  }))
   return {
     schema_version: 1,
     models,
     channels,
+    vendors: [
+      { id: 1, name: 'OpenAI' },
+      { id: 2, name: 'Anthropic' },
+      { id: 3, name: 'Google' },
+    ],
+    server_address: 'https://api.example.test',
+    generated_at: 1785124800,
     supported_endpoints: {
       openai: { path: '/v1/chat/completions', method: 'POST' },
       anthropic: { path: '/v1/messages', method: 'POST' },
@@ -162,23 +67,28 @@ export function createModelMarketFixture(): ModelMarketResponse {
       'openai-video': { path: '/v1/videos', method: 'POST' },
     },
     offers: models.flatMap((entry) =>
-      entry.baselines.flatMap((price) =>
-        channels
-          .filter(
-            (channel) => channel.id !== 13 || entry.id === 'claude-sonnet-4'
-          )
-          .map((channel) => ({
-            id: `${entry.id}:${channel.id}:${price.id}`,
-            model_id: entry.id,
-            channel_id: channel.id,
-            pricing_id: price.id,
-            supported_endpoint_types: price.supported_endpoint_types,
-          }))
-      )
+      channels
+        .filter(
+          (channel) =>
+            channel.id !== 13 || entry.model_name === 'claude-sonnet-4'
+        )
+        .map((channel) => ({
+          model_id: entry.model_name,
+          channel_id: channel.id,
+          channel_ratio: channel.channel_ratio,
+          supported_endpoint_types: entry.supported_endpoint_types,
+          price_status: entry.price_status,
+          pricing_values: Object.fromEntries(
+            Object.entries(entry.pricing_values).map(([key, value]) => [
+              key,
+              String(
+                Number(
+                  (Number(value) * Number(channel.channel_ratio)).toFixed(8)
+                )
+              ),
+            ])
+          ),
+        }))
     ),
-    telemetry: {
-      status: 'unavailable',
-      reason: 'channel_metrics_not_collected',
-    },
   }
 }

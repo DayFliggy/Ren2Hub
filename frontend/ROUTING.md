@@ -1,17 +1,17 @@
 # Ren2Hub 路由约定
 
-Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`。路由定义以 `src/router/` 为准，控制台侧边栏菜单与访问条件统一维护在 `src/constants/navigation/consoleNav.ts`，顶部导航（含仅 Admin 可见的“运维监控”）维护在 `src/constants/navigation/topNav.ts`；API 路径与鉴权遵循现有 Go 接口。
+Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`。路由定义以 `src/router/` 为准，控制台侧边栏菜单与访问条件统一维护在 `src/constants/navigation/consoleNav.ts`，顶部导航（含仅 Root 可见的“运维监控”）维护在 `src/constants/navigation/topNav.ts`；API 路径与鉴权遵循现有 Go 接口。
 
-| 域       | 规范路径                                                                                                                           | 访问约束                                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                                                                                         |
-| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                                                                                      |
-| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                                         |
-| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                                         |
-| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                          |
-| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                                      |
-| 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Admin，admin capability；其中系统任务仅 Root，上游健康需 `channel:read` |
-| 延期模块 | 市场、发票、Farm、Bigame                                                                                                           | 保留源码，capability 未开放时拒绝进入                                                                         |
+| 域       | 规范路径                                                                                                                           | 访问约束                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                                                                               |
+| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                                                                            |
+| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                               |
+| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                               |
+| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                |
+| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                            |
+| 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Root，admin capability；按原生 performance 与系统任务权限读取 |
+| 排除模块 | 独立市场、发票、Farm、Bigame                                                                                                       | 不注册功能路由，移除旧页面及 API 调用                                                               |
 
 顶部导航的“炼金室”是禁用的占位入口，不注册路由也没有页面；`/lab/*` 进入标准 404。
 
@@ -25,9 +25,9 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 
 - `src/router/legacyRoutes.ts` 集中转换旧书签、日志 tab 和设置 section，守卫保留 query/hash。未知页面落入 404，不将未知控制台路径当作首页。
 - 系统实例页的旧路径 `/system-info`、`/admin/system-info` 及其 `/console/` 前缀进入 `/ops`。
-- 旧账号审计 `/audit` 进入 `/usage-logs/audit`；旧操作日志 `/usage-logs/operations`、`/logs/operations` 进入 `/usage-logs/audit?scope=all`。无 `audit:read` 权限时页面仍只读取本人记录。
+- 旧账号审计 `/audit` 进入 `/usage-logs/audit`；旧操作日志 `/usage-logs/operations`、`/logs/operations` 进入 `/usage-logs/audit?scope=all`。守卫与请求均遵循当前 `audit:read` 和 capability，不能以旧书签扩大授权。
 - `/next` 和 `/next/*`：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不转换为其他页面。
-- `/api`、`/api/next`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。绝不清理 API 尾斜杠：`/api/models` 是用户目录，`/api/models/` 是管理 metadata。
+- `/api`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。`/api/next` 已退役，前端不请求也不实现兼容层。绝不统一清理 API 尾斜杠；用户授权目录为 `/api/user/model-catalog`，管理 metadata 为 `/api/models/`。
 - Playground、Chat、Chat2Link、Chat Presets、模型部署及其旧前缀路径返回 404；Vue 内部导航也拒绝进入。
 - 本站没有订阅与套餐管理：`/subscription`、`/plan-management`、`/plans` 及其 `/console/` 前缀路径进入标准 404，不注册功能路由，也不请求订阅接口。
 - 缺失 capability 按禁用处理；后端不可达时不挂载业务页面。服务端鉴权仍为最终权限边界。

@@ -20,10 +20,12 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { api } from '@/api/console'
+import {
+  accountSecurityApi,
+  type PasskeyCreationOptions,
+} from '@/api/accountSecurity'
 import { applyAuthRotation, parseAuthRotation } from '@/api/authSession'
 import { completeOAuth } from '@/api/oauth'
-import { proofOptions } from '@/api/security'
 import { publicApi, type PublicStatus } from '@/api/public'
 import { ApiError } from '@/api/types'
 import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
@@ -65,7 +67,7 @@ let emailTimer: ReturnType<typeof setInterval> | null = null
 const passkeyEnabled = ref<boolean | null>(null)
 const passkeyLastUsedAt = ref<string | null>(null)
 const twoFAEnabled = ref<boolean | null>(null)
-const backupCodesRemaining = ref(0)
+const backupCodesRemaining = ref<number | null>(null)
 const loadError = ref('')
 let loadSequence = 0
 const setupQRCode = ref('')
@@ -231,25 +233,6 @@ function applyRotation(data: unknown): void {
   if (rotation) applyAuthRotation(rotation)
 }
 
-type CredentialCreateOptions = NonNullable<
-  Parameters<typeof navigator.credentials.create>[0]
->
-type PasskeyCreationOptions = NonNullable<CredentialCreateOptions['publicKey']>
-type PasskeyCredentialDescriptor = NonNullable<
-  PasskeyCreationOptions['excludeCredentials']
->[number]
-type WireCredentialDescriptor = Omit<PasskeyCredentialDescriptor, 'id'> & {
-  id: string
-}
-type WirePasskeyCreationOptions = Omit<
-  PasskeyCreationOptions,
-  'challenge' | 'user' | 'excludeCredentials'
-> & {
-  challenge: string
-  user: Omit<PasskeyCreationOptions['user'], 'id'> & { id: string }
-  excludeCredentials?: WireCredentialDescriptor[]
-}
-
 function base64urlBuffer(value: string): ArrayBuffer {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
   const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
@@ -297,22 +280,10 @@ function errorMessage(error: unknown): string {
 async function loadSecurity(): Promise<void> {
   const sequence = ++loadSequence
   const [passkey, twoFA, status, oauth] = await Promise.allSettled([
-    api.get<{ enabled: boolean; last_used_at?: string | null }>(
-      '/api/user/passkey'
-    ),
-    api.get<{ enabled: boolean; backup_codes_remaining?: number }>(
-      '/api/user/2fa/status'
-    ),
+    accountSecurityApi.passkeyStatus(),
+    accountSecurityApi.twoFactorStatus(),
     publicApi.status(),
-    api.get<
-      Array<{
-        provider_id: number
-        provider_name: string
-        provider_slug: string
-        provider_icon?: string
-        provider_user_id: string
-      }>
-    >('/api/user/oauth/bindings'),
+    accountSecurityApi.oauthBindings(),
   ])
   if (sequence !== loadSequence) return
 
@@ -329,7 +300,7 @@ async function loadSecurity(): Promise<void> {
   }
   if (twoFA.status === 'fulfilled') {
     twoFAEnabled.value = twoFA.value.enabled
-    backupCodesRemaining.value = twoFA.value.backup_codes_remaining ?? 0
+    backupCodesRemaining.value = twoFA.value.backup_codes_remaining
   } else {
     twoFAEnabled.value = null
   }
@@ -487,19 +458,13 @@ async function sendEmailCode(): Promise<void> {
       resend_at: number
     }
     if (emailFlow.value) {
-      data = await api.post('/api/oauth/email/bind/resend', {
-        flow_token: emailFlow.value,
-      })
+      data = await accountSecurityApi.resendEmailBinding(emailFlow.value)
     } else {
       const proof = await proofDialog.value!.request({
         scope: 'account.binding.bind',
         context: { provider: 'email', email },
       })
-      data = await api.post(
-        '/api/oauth/email/bind/start',
-        { email },
-        proofOptions(proof)
-      )
+      data = await accountSecurityApi.startEmailBinding(email, proof)
     }
     emailFlow.value = data.flow_token
     emailOldRequired.value = data.old_email_required
@@ -517,11 +482,7 @@ async function registerPasskey(): Promise<void> {
     const proof = await proofDialog.value!.request({
       scope: 'passkey.register',
     })
-    const headers = proof ? { 'X-Security-Proof': proof } : undefined
-    const begin = await api.post<{
-      options: { publicKey: WirePasskeyCreationOptions }
-      flow_token: string
-    }>('/api/user/passkey/register/begin', undefined, { headers })
+    const begin = await accountSecurityApi.beginPasskeyRegistration(proof)
     const wirePublicKey = begin.options.publicKey
     const publicKey: PasskeyCreationOptions = {
       ...wirePublicKey,
@@ -556,13 +517,10 @@ async function registerPasskey(): Promise<void> {
       toast.error(t('security.page.passkeyCancelled'))
       return
     }
-    const finish = await api.post<unknown>(
-      '/api/user/passkey/register/finish',
-      {
-        flow_token: begin.flow_token,
-        credential: credentialJSON(credential),
-      },
-      { headers }
+    const finish = await accountSecurityApi.finishPasskeyRegistration(
+      begin.flow_token,
+      credentialJSON(credential),
+      proof
     )
     applyRotation(finish)
     passkeyRegisterOpen.value = false
@@ -576,9 +534,7 @@ async function registerPasskey(): Promise<void> {
 async function removePasskey(): Promise<void> {
   try {
     const proof = await proofDialog.value!.request({ scope: 'passkey.delete' })
-    const result = await api.delete<unknown>('/api/user/passkey', undefined, {
-      headers: proof ? { 'X-Security-Proof': proof } : undefined,
-    })
+    const result = await accountSecurityApi.removePasskey(proof)
     applyRotation(result)
     passkeyRemoveOpen.value = false
     toast.success(t('settings.passkeyRemoved'))
@@ -591,11 +547,7 @@ async function removePasskey(): Promise<void> {
 async function openTwoFASetup(): Promise<void> {
   try {
     const proof = await proofDialog.value!.request({ scope: '2fa.setup' })
-    const result = await api.post<{
-      qr_code_data: string
-      backup_codes: string[]
-      flow_token: string
-    }>('/api/user/2fa/setup', undefined, proofOptions(proof))
+    const result = await accountSecurityApi.setupTwoFactor(proof)
     enrollmentFlow.value = result.flow_token
     setupQRCode.value = result.qr_code_data
     setupBackupCodes.value = result.backup_codes
@@ -609,10 +561,10 @@ async function openTwoFASetup(): Promise<void> {
 async function confirmTwoFASetup(): Promise<void> {
   if (!/^\d{6}$/.test(twoFACode.value)) return
   try {
-    const result = await api.post<unknown>('/api/user/2fa/enable', {
-      flow_token: enrollmentFlow.value,
-      code: twoFACode.value,
-    })
+    const result = await accountSecurityApi.enableTwoFactor(
+      enrollmentFlow.value,
+      twoFACode.value
+    )
     applyRotation(result)
     visibleBackupCodes.value = setupBackupCodes.value
     twoFASetupOpen.value = false
@@ -631,10 +583,6 @@ function openTwoFAAction(action: 'regenerate' | 'disable'): void {
 
 async function confirmTwoFAAction(): Promise<void> {
   if (!twoFAAction.value) return
-  const endpoint =
-    twoFAAction.value === 'regenerate'
-      ? '/api/user/2fa/backup_codes'
-      : '/api/user/2fa/disable'
   try {
     const proof = await proofDialog.value!.request({
       scope:
@@ -642,12 +590,13 @@ async function confirmTwoFAAction(): Promise<void> {
           ? '2fa.backup_codes.regenerate'
           : '2fa.disable',
     })
-    const result = await api.post<
-      { backup_codes?: string[] } & Record<string, unknown>
-    >(endpoint, undefined, proofOptions(proof))
+    const result = await accountSecurityApi.changeTwoFactor(
+      twoFAAction.value,
+      proof
+    )
     applyRotation(result)
-    if (twoFAAction.value === 'regenerate') {
-      visibleBackupCodes.value = result.backup_codes ?? []
+    if (result.action === 'regenerate') {
+      visibleBackupCodes.value = result.backup_codes
       backupCodesOpen.value = true
       toast.success(t('settings.backupCodesRegenerated'))
     } else {
@@ -695,11 +644,11 @@ async function confirmBinding(): Promise<void> {
       return
     }
     try {
-      await api.post('/api/oauth/email/bind', {
-        flow_token: emailFlow.value,
-        new_code: bindingCode.value,
-        old_code: emailOldCode.value,
-      })
+      await accountSecurityApi.bindEmail(
+        emailFlow.value,
+        bindingCode.value,
+        emailOldCode.value
+      )
       await auth.fetchSelf(false)
       toast.success(t('settings.bindingSaved'))
       bindTarget.value = null
@@ -714,7 +663,7 @@ async function confirmBinding(): Promise<void> {
         scope: 'account.binding.bind',
         context: { provider: 'wechat', code },
       })
-      await api.post('/api/oauth/wechat/bind', { code }, proofOptions(proof))
+      await accountSecurityApi.bindWechat(code, proof)
       await auth.fetchSelf(false)
       await loadSecurity()
       bindTarget.value = null
@@ -739,11 +688,7 @@ async function confirmUnbind(): Promise<void> {
       scope: 'account.binding.unbind',
       context: { provider_id: binding.providerId },
     })
-    await api.delete(
-      `/api/user/oauth/bindings/${binding.providerId}`,
-      undefined,
-      proofOptions(proof)
-    )
+    await accountSecurityApi.unbindOauth(binding.providerId, proof)
     await loadSecurity()
     toast.success(t('settings.bindingRemoved'))
   } catch (error) {
@@ -1109,7 +1054,7 @@ onBeforeUnmount(() => {
                   {{
                     twoFAEnabled
                       ? t('settings.backupCodesRemaining', {
-                          count: backupCodesRemaining,
+                          count: backupCodesRemaining ?? '—',
                         })
                       : t('settings.twoFADesc')
                   }}

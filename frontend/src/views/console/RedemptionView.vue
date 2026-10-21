@@ -39,6 +39,7 @@ import {
   ADMIN_REDEMPTION_DEFAULT_VISIBLE_FIELDS,
   ADMIN_REDEMPTION_OPTIONAL_FIELDS,
   ADMIN_REDEMPTION_SORT_FIELDS,
+  ADMIN_REDEMPTION_STATUSES,
   ADMIN_REDEMPTION_VISIBLE_FIELDS_STORAGE_KEY,
   type AdminRedemptionOptionalField,
   adminRedemptionStatusLabelKey,
@@ -60,7 +61,6 @@ const { t } = useI18n()
 const {
   rows,
   total,
-  statusCounts,
   page,
   pageSize,
   keyword,
@@ -196,16 +196,14 @@ const minTableWidth = computed(() => {
 // Filter options
 const statusOptions = computed<SelectOption[]>(() => [
   { value: '', label: t('redemption.allStatuses') },
-  ...(['unused', 'used', 'expired', 'disabled'] as const)
-    .filter((st) => (statusCounts.value[st] ?? 0) > 0)
-    .map((st): SelectOption => {
-      const rawTone = adminRedemptionStatusTone(st)
-      return {
-        value: st,
-        label: `${t(adminRedemptionStatusLabelKey(st))} (${statusCounts.value[st] ?? 0})`,
-        tone: rawTone === 'neutral' ? undefined : rawTone,
-      }
-    }),
+  ...ADMIN_REDEMPTION_STATUSES.map((st): SelectOption => {
+    const rawTone = adminRedemptionStatusTone(st)
+    return {
+      value: st,
+      label: t(adminRedemptionStatusLabelKey(st)),
+      tone: rawTone === 'neutral' ? undefined : rawTone,
+    }
+  }),
 ])
 
 const sortOptions = computed(() =>
@@ -519,10 +517,10 @@ function exportCsv() {
           <template #cell-redeemer="{ row }">
             <span
               class="max-w-[160px] truncate text-xs text-[var(--text-secondary)]"
-              :title="(row as AdminRedemptionCode).redeemer_email"
+              :title="String((row as AdminRedemptionCode).redeemer_id || '')"
             >
               {{
-                (row as AdminRedemptionCode).redeemer_email ||
+                String((row as AdminRedemptionCode).redeemer_id || '') ||
                 t('redemption.notRedeemed')
               }}
             </span>

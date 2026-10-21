@@ -30,12 +30,9 @@ beforeEach(() => {
     email: 'tester@example.com',
     role: 1,
     status: 1,
-    available_quota: '500000',
-    reserved_quota: '0',
-    used_quota: '0',
-    quota_version: 0,
+    quota: 500000,
+    used_quota: 0,
     request_count: 0,
-    created_at: 1000,
   })
 })
 

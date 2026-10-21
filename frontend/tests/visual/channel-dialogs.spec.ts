@@ -18,17 +18,17 @@ const channels = [
     id: 101,
     name: 'Anthropic Primary',
     type: 14,
-    supplier: 'Anthropic',
+    lab: { id: 'anthropic', name: 'Anthropic', source: 'vendor' },
+    max_concurrency: 100,
+    in_flight: 0,
     status: 1,
     priority: 10,
     weight: 100,
-    capacity_used: 24,
-    capacity_total: 100,
     channel_ratio: '1',
 
     used_quota: 245_000,
     balance: 92.5,
-    response_time: 0.42,
+    response_time: 420,
     test_time: 1_786_742_400,
     base_url: 'https://api.anthropic.com',
     models: models.join(','),
@@ -38,17 +38,17 @@ const channels = [
     id: 102,
     name: 'Anthropic Reserve',
     type: 14,
-    supplier: 'Anthropic',
+    lab: { id: 'anthropic', name: 'Anthropic', source: 'vendor' },
+    max_concurrency: 100,
+    in_flight: 0,
     status: 1,
     priority: 5,
     weight: 50,
-    capacity_used: 10,
-    capacity_total: 100,
     channel_ratio: '1',
 
     used_quota: 120_000,
     balance: 48.25,
-    response_time: 0.63,
+    response_time: 630,
     test_time: 1_786_742_400,
     base_url: 'https://api.anthropic.com',
     models: models.slice(0, 8).join(','),
@@ -57,7 +57,7 @@ const channels = [
 ]
 
 async function configureChannels(page: Page): Promise<() => void> {
-  await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -83,7 +83,7 @@ async function configureChannels(page: Page): Promise<() => void> {
     })
   }
 
-  await page.route('**/api/next/admin/channels/test/*', async (route) => {
+  await page.route('**/api/channel/test/*', async (route) => {
     await testGate
     await route.fulfill({
       status: 200,
@@ -91,20 +91,10 @@ async function configureChannels(page: Page): Promise<() => void> {
       body: JSON.stringify({
         success: true,
         message: '',
-        data: { time: 0.123 },
+        time: 0.123,
       }),
     })
   })
-
-  // Group model tests write an audit record before the batch starts; a failed
-  // audit aborts the run, so the fixture must acknowledge it.
-  await page.route('**/api/next/admin/channels/lab-audit', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true, message: '', data: null }),
-    })
-  )
 
   holdTests()
   return () => {

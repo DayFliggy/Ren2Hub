@@ -55,7 +55,7 @@ func GmpayPay(c *gin.Context) {
 	}, config)
 	if err != nil {
 		logger.LogWarn(c.Request.Context(), common.LogText("GMPay order creation failed reason=%s", service.GmpayFailureCode(err)))
-		paymentError(c, common.NewMessage("Failed to create the payment order"))
+		gmpayCreationError(c, order)
 		return
 	}
 	url, err := gmpay.ValidatePaymentURL(order.PaymentURL)
@@ -64,6 +64,21 @@ func GmpayPay(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "url": url, "data": gin.H{"trade_no": order.Order.TradeNo, "payment_method": request.PaymentMethod, "currency": "CNY", "pay_amount": gmpay.FormatFiatAmount(order.Payment.AmountMinor), "expected_quota": quota, "token": order.Payment.Token, "network": order.Payment.Network}})
+}
+
+func gmpayCreationError(c *gin.Context, order *service.GmpayCreatedOrder) {
+	message := common.NewMessage("Failed to create the payment order")
+	body := gin.H{"message": "error", "data": message.Error()}
+	for key, value := range message.Fields() {
+		body[key] = value
+	}
+	if order != nil && order.Order != nil {
+		body["trade_no"] = order.Order.TradeNo
+		if order.Payment != nil {
+			body["creation_status"] = order.Payment.Status
+		}
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 func GmpayNotify(c *gin.Context) {
@@ -102,7 +117,11 @@ func GetGmpayConfig(c *gin.Context) {
 		common.ApiErrorT(c, "Failed to read the payment configuration")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"pay_address": config.PayAddress, "merchant_id": config.MerchantID, "has_secret": config.SecretKey != "", "assets": config.Assets, "enabled": config.Enabled})
+	assets := config.Assets
+	if assets == nil {
+		assets = []setting.GmpayAsset{}
+	}
+	common.ApiSuccess(c, gin.H{"pay_address": config.PayAddress, "merchant_id": config.MerchantID, "has_secret": config.SecretKey != "", "assets": assets, "enabled": config.Enabled})
 }
 
 func SaveGmpayConfig(c *gin.Context) {

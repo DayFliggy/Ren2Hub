@@ -1,376 +1,317 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-
-import { api } from '@/api/console'
+import {
+  checkoutTarget,
+  enabledPayMethods,
+  parseCreationFailure,
+  parseCreemProducts,
+  rememberGmpayOrder,
+  topupApi,
+  type CreemProduct,
+  type TopupInfo,
+} from '@/api/topup'
 import { ApiError } from '@/api/types'
-import { parseGmpayTopupInfo, parseTopupInfo } from '@/api/liveContracts'
 import AmountInput from '@/components/common/AmountInput.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import FormField from '@/components/common/FormField.vue'
 import PaymentMethods from '@/components/console/wallet/PaymentMethods.vue'
 import { useToast } from '@/composables/useToast'
-import { addQuota, decimalToQuota, isQuota } from '@/utils/quota'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { nativePaymentMessages } from '@/i18n/nativePayment'
+import { addQuota } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
+import { topupInputAmounts, validTopupAmount } from '@/utils/topupAmount'
 
 const props = withDefaults(
-  defineProps<{
-    balanceQuota?: string | null
-    paymentMethod?: string
-  }>(),
-  { balanceQuota: null, paymentMethod: 'epay' }
+  defineProps<{ balanceQuota?: string | null; paymentMethod?: string }>(),
+  { balanceQuota: null, paymentMethod: '' }
 )
-
 const emit = defineEmits<{
   done: []
   'update:paymentMethod': [method: string]
+  'track-order': [tradeNo: string]
+  capabilities: [info: TopupInfo]
 }>()
-
 const { t } = useI18n()
+const { t: paymentT } = useI18n({
+  useScope: 'local',
+  messages: nativePaymentMessages,
+})
 const toast = useToast()
-
+const app = useAppStore()
+const auth = useAuthStore()
+const info = ref<TopupInfo | null>(null)
+const configState = ref<'idle' | 'ready' | 'failed'>('idle')
 const amount = ref<number | null>(10)
 const submittingTopup = ref(false)
-type PaymentProvider = 'epay' | 'gmpay'
-interface SelectablePaymentMethod {
-  value: string
-  label: string
-  minTopup: number
-  amountOptions: number[]
-}
-const providerMethods = reactive<
-  Record<PaymentProvider, SelectablePaymentMethod[]>
->({ epay: [], gmpay: [] })
-const configStates = reactive<
-  Record<PaymentProvider, 'idle' | 'ready' | 'failed'>
->({ epay: 'idle', gmpay: 'idle' })
-const configControllers: Record<PaymentProvider, AbortController | null> = {
-  epay: null,
-  gmpay: null,
-}
-const paymentMethods = computed(() => [
-  ...providerMethods.epay,
-  ...providerMethods.gmpay,
-])
-let initialSelectionApplied = false
-/**
- * One server-priced offer. Epay settles in CNY and GMPay in USD, so the
- * currency travels with the quote instead of being assumed by the panel.
- */
-interface TopupQuote {
-  amount: number
-  amount_unit: 'USD'
-  payment_method: string
-  currency: 'CNY' | 'USD'
-  amount_minor: string
-  pay_amount: string
-  expected_quota: string
-  min_topup: number
-  quote_fingerprint: string
-  token?: string
-  network?: string
-}
-const quote = ref<TopupQuote | null>(null)
-const quoteLoading = ref(false)
-const quoteError = ref('')
-const quoteChanged = ref(false)
-let quoteSequence = 0
-let quoteController: AbortController | null = null
-let disposed = false
+const paymentError = ref('')
+const paymentBlocked = ref(false)
+const product = ref('')
+const submethod = ref('')
+const products = ref<CreemProduct[]>([])
 const method = computed({
   get: () => props.paymentMethod,
   set: (value: string) => emit('update:paymentMethod', value),
 })
-
-const selectableMethods = computed(() => paymentMethods.value)
+const tokens = computed(() => app.status.quota_display_type === 'TOKENS')
+const paymentMethods = computed(() =>
+  info.value
+    ? enabledPayMethods(info.value).filter(
+        (item) => !(tokens.value && item.type === 'stripe')
+      )
+    : []
+)
+const selectableMethods = computed(() =>
+  paymentMethods.value.map((item) => ({ value: item.type, label: item.name }))
+)
 const isCrypto = computed(() => method.value.startsWith('gmpay:'))
 const submitLabel = computed(() =>
   isCrypto.value ? t('wallet.gmpaySubmit') : t('wallet.topupNow')
 )
-/** The cashier currency symbol, taken from the server quote and never guessed. */
-const quoteSymbol = computed(() =>
-  quote.value?.currency === 'USD' ? '$' : '\u00a5'
+const amounts = computed(() =>
+  info.value ? topupInputAmounts(info.value, method.value, app.status) : null
 )
-const orderEndpoint = computed(() =>
-  isCrypto.value ? '/api/next/wallet/gmpay/topup' : '/api/next/wallet/topup'
-)
-/** Both rails take the bare provider method; the prefix is a UI concern only. */
-function providerMethod(value: string): string {
-  return value.replace(/^(?:epay|gmpay):/, '')
-}
-const selectedMethod = computed(() =>
-  paymentMethods.value.find((item) => item.value === method.value)
-)
-const selectedMinimumTopup = computed(() => selectedMethod.value?.minTopup ?? 1)
-const presets = computed(() => {
-  if (!selectedMethod.value) return []
-  const valid = selectedMethod.value.amountOptions.filter(
+const selectedMinimumTopup = computed(() => amounts.value?.minimum ?? 1)
+const presets = computed(() =>
+  (amounts.value?.presets ?? []).filter(
     (value) => value >= selectedMinimumTopup.value
   )
-  return valid.length ? valid : [selectedMinimumTopup.value]
-})
-const invalidAmount = computed(() => {
-  if (amount.value === null) return false
-  if (!Number.isSafeInteger(amount.value) || amount.value <= 0) return true
-  try {
-    decimalToQuota(String(amount.value))
-    return false
-  } catch (error) {
-    if (!(error instanceof RangeError)) throw error
-    return true
-  }
-})
+)
+const selectedProduct = computed(() =>
+  products.value.find((item) => item.productId === product.value)
+)
+const invalidAmount = computed(
+  () =>
+    method.value !== 'creem' &&
+    amount.value !== null &&
+    !validTopupAmount(amount.value, amounts.value)
+)
+const quote = ref<{
+  pay_amount: string
+  currency: string
+  expected_quota: string | null
+} | null>(null)
+const quoteLoading = ref(false)
+const quoteError = ref('')
+const quoteSymbol = computed(() =>
+  quote.value?.currency === 'CNY'
+    ? '¥'
+    : quote.value?.currency === 'USD'
+      ? '$'
+      : ''
+)
+let quoteSequence = 0
+let quoteController: AbortController | null = null
+let configController: AbortController | null = null
+let disposed = false
 const balanceProjection = computed(() => {
-  if (!quote.value) return { quota: null, invalid: false }
+  if (!quote.value?.expected_quota || props.balanceQuota == null)
+    return { quota: null, invalid: false }
   try {
-    return {
-      quota:
-        props.balanceQuota == null
-          ? null
-          : addQuota(props.balanceQuota, quote.value.expected_quota),
-      invalid: false,
-    }
-  } catch (error) {
-    if (!(error instanceof RangeError)) throw error
+    const quota = addQuota(props.balanceQuota, quote.value.expected_quota)
+    return { quota, invalid: BigInt(quota) > BigInt(Number.MAX_SAFE_INTEGER) }
+  } catch {
     return { quota: null, invalid: true }
   }
 })
-const canSubmit = computed(
-  () =>
-    amount.value !== null &&
-    !invalidAmount.value &&
-    !balanceProjection.value.invalid &&
-    amount.value >= selectedMinimumTopup.value &&
-    selectedMethod.value !== undefined &&
-    quote.value !== null &&
-    !quoteLoading.value
-)
-
 const balanceAfter = computed(() =>
   balanceProjection.value.quota === null
     ? '—'
     : formatQuota(balanceProjection.value.quota)
 )
-
+const canSubmit = computed(
+  () =>
+    configState.value === 'ready' &&
+    !paymentBlocked.value &&
+    !balanceProjection.value.invalid &&
+    paymentMethods.value.some((item) => item.type === method.value) &&
+    (method.value === 'creem'
+      ? !!selectedProduct.value
+      : amount.value !== null && !invalidAmount.value && !!quote.value) &&
+    !quoteLoading.value
+)
+function trackOrder(tradeNo: string) {
+  if (auth.user) rememberGmpayOrder(auth.user.id, tradeNo)
+  emit('track-order', tradeNo)
+}
 async function topup(): Promise<void> {
   if (!canSubmit.value || submittingTopup.value) return
   submittingTopup.value = true
-  let navigating = false
+  paymentError.value = ''
+  const selected = method.value
   try {
-    const value = amount.value
-    const payload = {
-      amount: value,
-      amount_unit: 'USD',
-      payment_method: providerMethod(method.value),
-      quote_fingerprint: quote.value?.quote_fingerprint,
+    const response = await topupApi.pay(
+      selected,
+      selected === 'creem'
+        ? { product_id: product.value }
+        : {
+            amount: amount.value!,
+            ...(selected === 'waffo' && submethod.value !== ''
+              ? { pay_method_index: Number(submethod.value) }
+              : {}),
+            ...(selected === 'stripe'
+              ? {
+                  success_url: `${window.location.origin}/wallet`,
+                  cancel_url: `${window.location.origin}/wallet`,
+                }
+              : {}),
+          }
+    )
+    if (selected.startsWith('gmpay:')) {
+      const tracked = parseCreationFailure(response.data)
+      if (!tracked) throw new ApiError(t('wallet.paymentMethodsUnavailable'))
+      trackOrder(tracked.trade_no)
+      paymentBlocked.value = true
     }
-    if (isCrypto.value) {
-      // A crypto checkout leaves the site for the gateway cashier, which is the
-      // only place the deposit address is shown.
-      const response = await api.post<{ url: string; trade_no: string }>(
-        orderEndpoint.value,
-        payload
-      )
-      if (disposed) return
-      let cashier: URL
-      try {
-        cashier = new URL(response.url)
-      } catch {
-        throw new ApiError(t('wallet.paymentMethodsUnavailable'))
-      }
-      if (
-        cashier.protocol !== 'https:' ||
-        cashier.username ||
-        cashier.password
-      ) {
-        throw new ApiError(t('wallet.paymentMethodsUnavailable'))
-      }
-      toast.success(t('wallet.callbackNote'))
-      window.location.href = cashier.href
-      navigating = true
-      emit('done')
-      return
-    }
-    const response = await api.post<{
-      url: string
-      data: Record<string, unknown>
-    }>(orderEndpoint.value, payload)
     if (disposed) return
-    if (!response.url || !response.data) {
-      throw new ApiError(t('wallet.paymentMethodsUnavailable'))
-    }
-    const form = document.createElement('form')
-    form.method = 'POST'
-    form.action = response.url
-    form.style.display = 'none'
-    for (const [key, raw] of Object.entries(response.data)) {
-      const input = document.createElement('input')
-      input.type = 'hidden'
-      input.name = key
-      input.value = String(raw)
-      form.append(input)
-    }
-    document.body.append(form)
-    form.submit()
-    navigating = true
-    form.remove()
+    const target = checkoutTarget(selected, response)
+    if (target.form) {
+      const form = document.createElement('form')
+      form.method = 'POST'
+      form.action = target.url
+      form.style.display = 'none'
+      for (const [name, value] of Object.entries(target.form)) {
+        const input = document.createElement('input')
+        input.type = 'hidden'
+        input.name = name
+        input.value = value
+        form.append(input)
+      }
+      document.body.append(form)
+      try {
+        form.submit()
+      } finally {
+        form.remove()
+      }
+    } else window.location.assign(target.url)
     toast.success(t('wallet.callbackNote'))
     emit('done')
   } catch (error) {
-    if (disposed) return
-    if (error instanceof ApiError && error.code === 'QUOTE_CHANGED') {
-      quoteChanged.value = true
-      await refreshQuote()
-      return
+    const failure =
+      error instanceof ApiError ? parseCreationFailure(error.data) : undefined
+    if (selected.startsWith('gmpay:')) {
+      if (failure) trackOrder(failure.trade_no)
+      // A timeout or malformed creation response does not prove rejection.
+      paymentBlocked.value = failure
+        ? failure.creation_status !== 'failed'
+        : !(error instanceof ApiError && error.business)
     }
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (!disposed)
+      paymentError.value =
+        error instanceof Error ? error.message : String(error)
   } finally {
-    if (!navigating) submittingTopup.value = false
+    submittingTopup.value = false
   }
 }
-
 async function refreshQuote(): Promise<void> {
   const sequence = ++quoteSequence
   quoteController?.abort()
   quote.value = null
   quoteError.value = ''
   quoteLoading.value = false
-  const currentAmount = amount.value
-  const currentMethod = method.value
-  if (
-    !selectedMethod.value ||
-    currentAmount === null ||
-    invalidAmount.value ||
-    currentAmount < selectedMinimumTopup.value ||
-    !paymentMethods.value.some((item) => item.value === currentMethod)
-  ) {
+  if (method.value === 'creem') {
+    if (selectedProduct.value)
+      quote.value = {
+        pay_amount: String(selectedProduct.value.price),
+        currency: selectedProduct.value.currency,
+        expected_quota: null,
+      }
     return
   }
+  if (
+    !paymentMethods.value.some((item) => item.type === method.value) ||
+    amount.value === null ||
+    invalidAmount.value
+  )
+    return
   const controller = new AbortController()
   quoteController = controller
   quoteLoading.value = true
+  const currentAmount = amount.value
   try {
-    const crypto = currentMethod.startsWith('gmpay:')
-    const expectedCurrency = crypto ? 'USD' : 'CNY'
-    const expectedMethod = providerMethod(currentMethod)
-    const response = await api.post<TopupQuote>(
-      crypto ? '/api/next/wallet/gmpay/quote' : '/api/next/wallet/topup/quote',
-      {
-        amount: currentAmount,
-        amount_unit: 'USD',
-        payment_method: expectedMethod,
-      },
-      { signal: controller.signal }
+    const due = await topupApi.quote(
+      method.value,
+      currentAmount,
+      controller.signal
     )
     if (sequence !== quoteSequence || controller.signal.aborted) return
     if (
-      !response ||
-      response.amount !== currentAmount ||
-      response.amount_unit !== 'USD' ||
-      response.payment_method !== expectedMethod ||
-      response.currency !== expectedCurrency ||
-      !isQuota(response.amount_minor) ||
-      BigInt(response.amount_minor) <= 0n ||
-      !isQuota(response.expected_quota) ||
-      BigInt(response.expected_quota) <= 0n ||
-      !Number.isSafeInteger(response.min_topup) ||
-      response.min_topup < 1 ||
-      typeof response.quote_fingerprint !== 'string' ||
-      !response.quote_fingerprint ||
-      response.pay_amount !==
-        `${BigInt(response.amount_minor) / 100n}.${(BigInt(response.amount_minor) % 100n).toString().padStart(2, '0')}` ||
-      (crypto &&
-        (!response.token ||
-          !response.network ||
-          `gmpay:${response.token}.${response.network}` !== currentMethod))
-    ) {
-      throw new Error('Invalid payment quote')
+      typeof due !== 'string' ||
+      !/^\d+(?:\.\d+)?$/.test(due) ||
+      Number(due) <= 0 ||
+      !Number.isFinite(Number(due))
+    )
+      throw new Error(t('wallet.quoteFailed'))
+    const scale = app.status.quota_per_unit
+    const credited =
+      typeof scale === 'number' && Number.isSafeInteger(scale) && scale > 0
+        ? tokens.value
+          ? currentAmount
+          : currentAmount * scale
+        : null
+    quote.value = {
+      pay_amount: due,
+      currency:
+        isCrypto.value ||
+        !['stripe', 'waffo', 'waffo_pancake'].includes(method.value)
+          ? 'CNY'
+          : method.value === 'waffo_pancake'
+            ? 'USD'
+            : '',
+      expected_quota:
+        credited !== null && Number.isSafeInteger(credited)
+          ? String(credited)
+          : null,
     }
-    quote.value = response
   } catch (error) {
-    if (sequence === quoteSequence && !controller.signal.aborted) {
+    if (sequence === quoteSequence && !controller.signal.aborted)
       quoteError.value =
         error instanceof ApiError ? error.message : t('wallet.quoteFailed')
-    }
   } finally {
     if (sequence === quoteSequence) quoteLoading.value = false
   }
 }
-
-async function loadPaymentConfig(provider: PaymentProvider): Promise<void> {
-  configControllers[provider]?.abort()
+async function loadPaymentConfig(): Promise<void> {
+  configController?.abort()
   const controller = new AbortController()
-  configControllers[provider] = controller
-  configStates[provider] = 'idle'
-  providerMethods[provider] = []
+  configController = controller
+  configState.value = 'idle'
   try {
-    const raw = await api.get<unknown>(
-      provider === 'gmpay'
-        ? '/api/next/wallet/gmpay/config'
-        : '/api/next/wallet/config',
-      undefined,
-      { signal: controller.signal }
-    )
-    if (controller.signal.aborted) return
-    const info =
-      provider === 'gmpay' ? parseGmpayTopupInfo(raw) : parseTopupInfo(raw)
-    const enabled =
-      'enable_gmpay_topup' in info
-        ? info.enable_gmpay_topup
-        : info.enable_online_topup
-    providerMethods[provider] = enabled
-      ? info.pay_methods.map((item) => ({
-          value: provider === 'gmpay' ? item.type : `epay:${item.type}`,
-          label: item.name,
-          minTopup: Math.max(item.min_topup ?? info.min_topup, info.min_topup),
-          amountOptions: info.amount_options,
-        }))
+    const value = await topupApi.info(controller.signal)
+    const catalog = value.enable_creem_topup
+      ? parseCreemProducts(value.creem_products)
       : []
-    configStates[provider] = 'ready'
+    if (controller.signal.aborted) return
+    info.value = value
+    products.value = catalog
+    product.value = catalog[0]?.productId ?? ''
+    configState.value = 'ready'
+    emit('capabilities', value)
+    if (!paymentMethods.value.some((item) => item.type === method.value))
+      method.value = paymentMethods.value[0]?.type ?? ''
+    amount.value = presets.value[0] ?? selectedMinimumTopup.value
+    void refreshQuote()
   } catch {
-    if (!controller.signal.aborted) configStates[provider] = 'failed'
+    if (!controller.signal.aborted) configState.value = 'failed'
   }
 }
-
-onMounted(() => {
-  void loadPaymentConfig('epay')
-  void loadPaymentConfig('gmpay')
-})
-
 watch(
-  [paymentMethods, method, () => configStates.epay, () => configStates.gmpay],
-  () => {
-    if (!selectedMethod.value) {
-      const preferred = method.value.startsWith('gmpay:') ? 'gmpay' : 'epay'
-      if (method.value.includes(':') && configStates[preferred] === 'idle')
-        return
-      const first = paymentMethods.value[0]
-      if (first) method.value = first.value
-      return
-    }
-    if (!initialSelectionApplied) {
-      initialSelectionApplied = true
-      if (amount.value === null || amount.value < selectedMinimumTopup.value) {
-        amount.value = presets.value[0] ?? selectedMinimumTopup.value
-      }
-    }
-  },
-  { flush: 'sync' }
+  [
+    amount,
+    method,
+    product,
+    () => app.status.quota_per_unit,
+    () => app.status.quota_display_type,
+  ],
+  () => void refreshQuote()
 )
-
-watch(
-  [amount, selectedMethod],
-  () => {
-    quoteChanged.value = false
-    void refreshQuote()
-  },
-  { flush: 'sync' }
-)
-
+onMounted(() => void loadPaymentConfig())
 onUnmounted(() => {
   disposed = true
-  configControllers.epay?.abort()
-  configControllers.gmpay?.abort()
+  configController?.abort()
   ++quoteSequence
   quoteController?.abort()
 })
@@ -379,7 +320,7 @@ onUnmounted(() => {
 <template>
   <ConsoleCard :title="t('wallet.quickTopup')">
     <fieldset :disabled="submittingTopup" class="min-w-0 border-0 p-0">
-      <div class="grid grid-cols-3 gap-2">
+      <div v-if="method !== 'creem'" class="grid grid-cols-3 gap-2">
         <button
           v-for="preset in presets"
           :key="preset"
@@ -394,15 +335,17 @@ onUnmounted(() => {
           :aria-pressed="amount === preset"
           @click="amount = preset"
         >
-          ${{ preset }}
+          {{ tokens ? '' : '$' }}{{ preset }}
         </button>
       </div>
 
-      <div class="mt-4">
+      <div v-if="method !== 'creem'" class="mt-4">
         <AmountInput
           v-model="amount"
           :placeholder="t('wallet.amountPlaceholder')"
           :min="selectedMinimumTopup"
+          :prefix="tokens ? '' : '$'"
+          integer
         />
         <p
           v-if="invalidAmount || balanceProjection.invalid"
@@ -416,7 +359,7 @@ onUnmounted(() => {
       <div class="mt-4">
         <PaymentMethods v-model="method" :methods="selectableMethods" />
         <p
-          v-if="configStates.epay === 'failed'"
+          v-if="configState === 'failed'"
           role="alert"
           class="mt-2 text-xs text-[var(--status-danger-text)]"
         >
@@ -425,46 +368,64 @@ onUnmounted(() => {
             class="mt-2"
             variant="secondary"
             size="sm"
-            @click="loadPaymentConfig('epay')"
-            >{{ t('wallet.retryEpayMethods') }}</ConsoleButton
+            @click="loadPaymentConfig"
+            >{{ t('common.retry') }}</ConsoleButton
           >
         </p>
         <p
-          v-if="configStates.gmpay === 'failed'"
-          role="alert"
-          class="mt-2 text-xs text-[var(--status-danger-text)]"
-        >
-          {{ t('wallet.gmpayMethodsLoadFailed') }}
-          <ConsoleButton
-            class="mt-2"
-            variant="secondary"
-            size="sm"
-            @click="loadPaymentConfig('gmpay')"
-            >{{ t('wallet.retryGmpayMethods') }}</ConsoleButton
-          >
-        </p>
-        <p
-          v-if="
-            configStates.epay === 'ready' &&
-            configStates.gmpay === 'ready' &&
-            !paymentMethods.length
-          "
+          v-if="configState === 'ready' && !paymentMethods.length"
           class="mt-2 text-xs text-[var(--text-tertiary)]"
         >
           {{ t('wallet.paymentMethodsUnavailable') }}
         </p>
+        <p v-if="tokens" class="mt-2 text-xs text-[var(--text-tertiary)]">
+          {{ t('wallet.nativeTokenUnit', { units: amounts?.scale ?? '—' }) }}
+        </p>
       </div>
 
+      <FormField
+        v-if="method === 'creem'"
+        :label="t('wallet.nativeProduct')"
+        class="mt-4"
+      >
+        <select v-model="product" class="console-input w-full">
+          <option
+            v-for="item in products"
+            :key="item.productId"
+            :value="item.productId"
+          >
+            {{ item.name }} · {{ item.price }} {{ item.currency }}
+          </option>
+        </select>
+      </FormField>
+      <FormField
+        v-if="method === 'waffo' && info?.waffo_pay_methods?.length"
+        :label="t('wallet.payMethodLabel')"
+        class="mt-4"
+      >
+        <select v-model="submethod" class="console-input w-full">
+          <option value="">{{ paymentT('nativePayment.automatic') }}</option>
+          <option
+            v-for="(item, index) in info.waffo_pay_methods"
+            :key="index"
+            :value="String(index)"
+          >
+            {{ item.name }}
+          </option>
+        </select>
+      </FormField>
       <div
         class="mt-5 sibling-space-y-2 border-t border-[var(--border-subtle)] pt-4"
       >
         <div class="flex items-center justify-between text-sm">
           <span class="text-[var(--text-secondary)]">{{
-            t(
-              quote?.currency === 'USD'
-                ? 'wallet.summaryPayNowUsd'
-                : 'wallet.summaryPayNow'
-            )
+            !quote?.currency
+              ? paymentT('nativePayment.due')
+              : t(
+                  quote?.currency === 'USD'
+                    ? 'wallet.summaryPayNowUsd'
+                    : 'wallet.summaryPayNow'
+                )
           }}</span>
           <span class="font-semibold tabular-nums text-[var(--text-primary)]">
             {{ quote?.pay_amount ? `${quoteSymbol}${quote.pay_amount}` : '—' }}
@@ -475,7 +436,9 @@ onUnmounted(() => {
             t('wallet.summaryCredit')
           }}</span>
           <span class="font-semibold tabular-nums text-[var(--text-primary)]">
-            {{ quote ? formatQuota(quote.expected_quota, 3) : '—' }}
+            {{
+              quote?.expected_quota ? formatQuota(quote.expected_quota, 3) : '—'
+            }}
           </span>
         </div>
         <div class="flex items-center justify-between gap-3 text-sm">
@@ -511,11 +474,18 @@ onUnmounted(() => {
         </ConsoleButton>
       </div>
       <p
-        v-if="quoteChanged"
+        v-if="paymentError"
+        role="alert"
+        class="mt-3 text-xs text-[var(--status-danger-text)]"
+      >
+        {{ paymentError }}
+      </p>
+      <p
+        v-if="paymentBlocked"
         role="status"
         class="mt-3 text-xs text-[var(--text-secondary)]"
       >
-        {{ t('wallet.quoteChanged') }}
+        {{ t('wallet.creationUncertain') }}
       </p>
 
       <ConsoleButton
@@ -537,6 +507,7 @@ onUnmounted(() => {
       </p>
       <p class="mt-3 text-xs text-[var(--text-tertiary)]">
         {{ t('wallet.callbackNote') }}
+        {{ t('wallet.nativeCurrencyNote') }}
       </p>
     </fieldset>
   </ConsoleCard>

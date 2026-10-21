@@ -83,7 +83,8 @@ function configure() {
   )
   return { loaded, loading, saving, rawOptions, load, saveOptions }
 }
-beforeEach(() => {
+beforeEach(async () => {
+  await setLocale('en')
   state = configure()
 })
 
@@ -113,6 +114,63 @@ async function render(
 }
 
 describe('EPay settings page', () => {
+  it.each([
+    {
+      locale: 'en',
+      settlementLabel: 'Enable Epay settlement',
+      settlementPromise: 'settlement switch',
+      availability:
+        'New orders and payment notifications require payment compliance confirmation, complete merchant credentials, and at least one payment method.',
+      emptyMethods:
+        'An empty list disables EPay orders and payment notifications.',
+      saveLabel: 'Save changes',
+    },
+    {
+      locale: 'zh-CN',
+      settlementLabel: '启用易支付结算',
+      settlementPromise: '结算开关',
+      availability:
+        '创建新单和处理支付回调均需完成支付合规确认、填写完整商户凭据，并配置至少一种支付方式。',
+      emptyMethods: '清空列表后停用 EPay 新单及支付回调。',
+      saveLabel: '保存更改',
+    },
+  ])(
+    'does not promise or resubmit independent EPay settlement in $locale',
+    async ({
+      locale,
+      settlementLabel,
+      settlementPromise,
+      availability,
+      emptyMethods,
+      saveLabel,
+    }) => {
+      await setLocale(locale)
+      state.rawOptions.value['payment_setting.epay_settlement_enabled'] =
+        'false'
+      const wrapper = await render()
+      expect(
+        wrapper
+          .find(`[role="switch"][aria-label="${settlementLabel}"]`)
+          .exists()
+      ).toBe(false)
+      expect(wrapper.text()).not.toContain(settlementLabel)
+      expect(wrapper.text()).not.toContain(settlementPromise)
+      expect(wrapper.text()).toContain(availability)
+      expect(wrapper.text()).toContain(emptyMethods)
+      await wrapper.get('[id="setting-Price"]').setValue('8')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === saveLabel)!
+        .trigger('click')
+      await flushPromises()
+      expect(state.saveOptions).toHaveBeenCalledExactlyOnceWith(
+        { Price: 8 },
+        expect.objectContaining({ onApplied: expect.any(Function) })
+      )
+      wrapper.unmount()
+    }
+  )
+
   it('disables failed-load drafts and enables fields only after retrying authoritative settings', async () => {
     state.load.mockResolvedValueOnce(false)
     const wrapper = await render()
@@ -133,7 +191,7 @@ describe('EPay settings page', () => {
     wrapper.unmount()
   })
 
-  it('preserves unsaved credentials on failure and clears them only after a successful atomic save', async () => {
+  it('preserves credentials without a confirmed write and clears them after successful saving', async () => {
     const wrapper = await render()
     await wrapper.get('[id="setting-EpayKey"]').setValue('new-secret')
     await wrapper.get('[id="setting-Price"]').setValue('8')
@@ -146,10 +204,13 @@ describe('EPay settings page', () => {
     expect(
       wrapper.get<HTMLInputElement>('[id="setting-EpayKey"]').element.value
     ).toBe('new-secret')
-    expect(state.saveOptions).toHaveBeenCalledWith({
-      EpayKey: 'new-secret',
-      Price: 8,
-    })
+    expect(state.saveOptions).toHaveBeenCalledWith(
+      {
+        EpayKey: 'new-secret',
+        Price: 8,
+      },
+      expect.objectContaining({ onApplied: expect.any(Function) })
+    )
     await save.trigger('click')
     await flushPromises()
     expect(
@@ -215,7 +276,10 @@ describe('EPay settings page', () => {
       .find((button) => button.text() === 'Save changes')!
       .trigger('click')
     await flushPromises()
-    expect(state.saveOptions).toHaveBeenCalledWith({ Price: 9 })
+    expect(state.saveOptions).toHaveBeenCalledWith(
+      { Price: 9 },
+      expect.objectContaining({ onApplied: expect.any(Function) })
+    )
     wrapper.unmount()
   })
 
@@ -231,6 +295,35 @@ describe('EPay settings page', () => {
     )
     wrapper.unmount()
   })
+})
+
+describe('GMPay settings page', () => {
+  it.each([
+    ['en', 'Enable crypto settlement', 'Enable GMPay', 'Save changes'],
+    ['zh-CN', '启用虚拟币结算', '启用 GMPay', '保存更改'],
+  ])(
+    'does not expose or resubmit the retired settlement option in %s',
+    async (locale, retiredLabel, newOrdersLabel, saveLabel) => {
+      await setLocale(locale)
+      state.rawOptions.value['payment_setting.gmpay_settlement_enabled'] =
+        'false'
+      const wrapper = await render('billing', 'gmpay')
+      expect(wrapper.text()).not.toContain(retiredLabel)
+      expect(
+        wrapper
+          .find('[id="setting-payment_setting.gmpay_settlement_enabled"]')
+          .exists()
+      ).toBe(false)
+      expect(wrapper.text()).toContain(newOrdersLabel)
+      const save = wrapper
+        .findAll('button')
+        .find((button) => button.text() === saveLabel)!
+      expect(save.attributes('disabled')).toBeDefined()
+      await save.trigger('click')
+      expect(state.saveOptions).not.toHaveBeenCalled()
+      wrapper.unmount()
+    }
+  )
 })
 
 describe('system settings in English', () => {

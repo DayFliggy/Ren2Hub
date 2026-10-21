@@ -5,14 +5,14 @@ const active = {
   id: 101,
   name: 'OpenAI Codex Model',
   type: 1,
-  supplier: 'OpenAI',
+  lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
+  max_concurrency: 20,
+  in_flight: 0,
   status: 1,
   priority: 0,
   weight: 10,
-  capacity_used: 0,
-  capacity_total: 20,
   channel_ratio: '1',
-  used_quota: '0',
+  used_quota: 0,
   balance: 0,
   response_time: 0,
   test_time: 0,
@@ -41,7 +41,7 @@ for (const theme of ['light', 'dark'] as const) {
         if (/\/api\/channel\/157\/(?:codex|provider-usage)/.test(request.url()))
           unexpected.push(request.url())
       })
-      await page.route(/\/api\/next\/admin\/channels(?:\?.*)?$/, (route) =>
+      await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) =>
         route.fulfill({
           json: {
             success: true,
@@ -60,28 +60,6 @@ for (const theme of ['light', 'dark'] as const) {
         removed = true
         return route.fulfill({ json: { success: true, data: { id: 157 } } })
       })
-      await page.route('**/api/gateway/channels/101/credentials', (route) =>
-        route.fulfill({ json: { success: true, data: [] } })
-      )
-      await page.route('**/api/gateway/runtime/channels/101', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              channel_id: 101,
-              in_flight: 0,
-              queued: 0,
-              capacity: 20,
-              rate_status: 'unavailable',
-              rate: null,
-              config_version: 1,
-              revision: 1,
-              started_at: 0,
-              draining: false,
-            },
-          },
-        })
-      )
       await page.goto('/channels')
       const row =
         width > 640
@@ -94,8 +72,9 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(row.getByRole('checkbox')).toBeDisabled()
       for (const name of [
         '编辑渠道',
-        '测试渠道',
-        '同步模型',
+        '测试响应',
+        '预览模型更新',
+        '同步上游额度',
         '启用渠道',
         '禁用渠道',
         '渠道运行状态',

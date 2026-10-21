@@ -171,6 +171,38 @@ func TestGmpayOrderAndConfigPrivacy(t *testing.T) {
 	assert.EqualValues(t, 1, count)
 }
 
+func TestGmpayCreationFailureResponsePreservesDurableIdentity(t *testing.T) {
+	for _, status := range []string{model.GmpayStatusUnknown, model.GmpayStatusFailed, model.GmpayStatusSettled} {
+		t.Run(status, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(response)
+			gmpayCreationError(c, &service.GmpayCreatedOrder{
+				Order:   &model.TopUp{TradeNo: "GPtest", UserId: 42},
+				Payment: &model.GmpayOrder{Status: status, MerchantVersionID: "private-version", LastFailure: "TRANSPORT"},
+			})
+			var payload map[string]any
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
+			assert.Equal(t, "error", payload["message"], "a settled callback does not turn failed creation into success")
+			assert.Equal(t, "GPtest", payload["trade_no"])
+			assert.Equal(t, status, payload["creation_status"])
+			assert.Equal(t, "Failed to create the payment order", payload["data"])
+			assert.NotContains(t, response.Body.String(), "private-version")
+			assert.NotContains(t, payload, "user_id")
+		})
+	}
+	for _, order := range []*service.GmpayCreatedOrder{nil, {Order: &model.TopUp{TradeNo: "GPtest"}}} {
+		response := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(response)
+		gmpayCreationError(c, order)
+		var payload map[string]any
+		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
+		assert.NotContains(t, payload, "creation_status", "do not fabricate a state when its read failed")
+		if order == nil {
+			assert.NotContains(t, payload, "trade_no")
+		}
+	}
+}
+
 func TestTicketAttachmentsValidateAndCleanStagedFiles(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("TICKET_UPLOAD_DIR", directory)

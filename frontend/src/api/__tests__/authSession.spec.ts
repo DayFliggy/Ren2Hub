@@ -37,18 +37,37 @@ const bundle: AuthBundle = {
     email: 'demo@example.com',
     role: 10,
     status: 1,
-    available_quota: '100',
-    reserved_quota: '0',
-    quota_version: 0,
-    used_quota: '5',
+    quota: 100,
+    used_quota: 5,
     request_count: 12,
-    created_at: 1_700_000_000,
   },
 }
 
 beforeEach(clearAuthBundle)
 
 describe('authentication response boundary', () => {
+  it.each([
+    { quota: '500' },
+    { quota: Number.MAX_SAFE_INTEGER + 1 },
+    { used_quota: 0.5 },
+    { aff_quota: '100' },
+    { request_count: -1 },
+    { role: 101 },
+    { status: 3 },
+    { id: Number.MAX_SAFE_INTEGER + 1 },
+    { permissions: { admin_permissions: { ticket: { manage: 'true' } } } },
+  ])('rejects malformed native user fields %o', (patch) => {
+    expect(
+      parseAuthBundle({ ...bundle, user: { ...bundle.user, ...patch } })
+    ).toBeNull()
+  })
+  it('preserves negative native wallet balances', () => {
+    expect(
+      parseAuthBundle({ ...bundle, user: { ...bundle.user, quota: -10 } })?.user
+        .quota
+    ).toBe(-10)
+  })
+
   it('accepts complete bundles and rejects malformed token responses', () => {
     expect(parseAuthBundle(bundle)).toEqual(bundle)
     expect(parseAuthBundle({ ...bundle, token_type: 'Basic' })).toBeNull()
@@ -61,7 +80,7 @@ describe('authentication response boundary', () => {
     })
   })
 
-  it.each(['status', 'request_count', 'created_at'] as const)(
+  it.each(['status', 'request_count'] as const)(
     'rejects bundles missing required user field %s',
     (field) => {
       expect(

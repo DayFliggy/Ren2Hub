@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { api } from '@/api/console'
+import { ticketsApi, type TicketRow } from '@/api/tickets'
 import { ApiError } from '@/api/types'
-import type { TicketItem, TicketMessage } from '@/types/console'
+import type { TicketMessage } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -22,7 +22,7 @@ import { ticketStatusTone } from '@/constants/console'
 import { useTicketQueueStore } from '@/stores/ticketQueue'
 import { formatTime } from '@/utils/format'
 
-type TicketMeta = Omit<TicketItem, 'messages'>
+type TicketMeta = TicketRow
 
 const { t } = useI18n()
 const route = useRoute()
@@ -45,16 +45,21 @@ const detailRequest = useLatestRequest()
 // Mutations (reply / status change) have their own guard so a route change
 // mid-flight can't apply a reply to the wrong ticket.
 let mutationSequence = 0
+onScopeDispose(() => {
+  mutationSequence += 1
+})
 
 const ticketId = computed(() => Number(route.params.id))
 
 async function load(id = ticketId.value) {
   mutationSequence += 1
+  detailRequest.cancel()
   ticket.value = null
   messages.value = []
   replying.value = false
   statusChanging.value = false
   confirmClose.value = false
+  loadFailed.value = false
   if (!Number.isSafeInteger(id) || id <= 0) {
     loading.value = false
     notFound.value = true
@@ -65,15 +70,12 @@ async function load(id = ticketId.value) {
   notFound.value = false
   loadFailed.value = false
   const result = await detailRequest.run((signal) =>
-    api.get<{
-      ticket: TicketMeta
-      messages: TicketMessage[]
-    }>(`/api/next/tickets/${id}`, undefined, { signal })
+    ticketsApi.detail(id, signal)
   )
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
-    if (result.error instanceof ApiError && result.error.business) {
+    if (result.error instanceof ApiError && result.error.code === 'NOT_FOUND') {
       notFound.value = true
     } else {
       loadFailed.value = true
@@ -95,19 +97,14 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
   const sequence = ++mutationSequence
   replying.value = true
   try {
-    const body = new FormData()
-    body.set('content', payload.content)
-    for (const file of payload.attachments) body.append('attachments', file)
-    const data = await api.post<{ message: TicketMessage }>(
-      `/api/next/tickets/${id}/messages`,
-      body
-    )
+    const data = await ticketsApi.reply(id, payload)
     if (sequence !== mutationSequence || ticket.value?.id !== id) return
     messages.value.push(data.message)
     ticket.value.status = 'open'
     ticket.value.reply_count = messages.value.length
     ticket.value.message_count = messages.value.length
     ticket.value.updated = data.message.created
+    ticket.value.last_reply_role = 'user'
     replyBox.value?.reset()
     toast.success(t('tickets.replied'))
     void ticketQueue.refresh()
@@ -126,10 +123,7 @@ async function changeStatus(next: 'open' | 'closed') {
   const sequence = ++mutationSequence
   statusChanging.value = true
   try {
-    const data = await api.patch<{ ticket: TicketMeta }>(
-      `/api/next/tickets/${id}/status`,
-      { status: next }
-    )
+    const data = await ticketsApi.changeStatus(id, next)
     if (sequence !== mutationSequence || ticket.value?.id !== id) return
     ticket.value = data.ticket
     toast.success(

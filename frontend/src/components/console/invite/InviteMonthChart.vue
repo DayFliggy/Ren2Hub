@@ -4,12 +4,12 @@ import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
 import { lineMood } from '@/charts/themePreset'
-import type { InviteMonthPoint } from '@/types/console'
+import type { AffiliateMonth } from '@/api/affiliate'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
-  series: InviteMonthPoint[]
+  series: AffiliateMonth[]
 }>()
 
 const { t } = useI18n()

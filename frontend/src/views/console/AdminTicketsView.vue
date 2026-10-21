@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, RefreshCw, UserRoundCheck } from 'lucide-vue-next'
 
-import { api } from '@/api/console'
-import { ApiError, type PageResult } from '@/api/types'
+import { ticketsApi } from '@/api/tickets'
+import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
@@ -26,7 +26,6 @@ import type {
   AdminTicketItem,
   TicketAgent,
   TicketMessage,
-  TicketStatus,
 } from '@/types/console'
 import { formatTime, relativeTime } from '@/utils/format'
 
@@ -38,6 +37,8 @@ const auth = useAuthStore()
 const ticketQueue = useTicketQueueStore()
 const queueRequest = useLatestRequest()
 const detailRequest = useLatestRequest()
+const agentsRequest = useLatestRequest()
+let mutationSequence = 0
 
 const canReply = computed(() => auth.hasPermission('ticket', 'reply'))
 const canManage = computed(() => auth.hasPermission('ticket', 'manage'))
@@ -142,8 +143,7 @@ async function loadQueue(): Promise<void> {
   queueLoading.value = true
   queueFailed.value = false
   const result = await queueRequest.run((signal) =>
-    api.get<PageResult<AdminTicketItem>>(
-      '/api/next/admin/tickets',
+    ticketsApi.adminList(
       {
         page: page.value,
         page_size: pageSize,
@@ -153,7 +153,7 @@ async function loadQueue(): Promise<void> {
         priority: priority.value,
         assignee: assignee.value,
       },
-      { signal }
+      signal
     )
   )
   if (result.stale) return
@@ -172,20 +172,20 @@ async function loadQueue(): Promise<void> {
 }
 
 async function loadDetail(id: number): Promise<void> {
+  mutationSequence += 1
+  mutating.value = false
+  detailRequest.cancel()
+  ticket.value = null
+  messages.value = []
   if (!id) {
-    ticket.value = null
-    messages.value = []
+    detailLoading.value = false
     detailFailed.value = false
     return
   }
   detailLoading.value = true
   detailFailed.value = false
   const result = await detailRequest.run((signal) =>
-    api.get<{ ticket: AdminTicketItem; messages: TicketMessage[] }>(
-      `/api/next/admin/tickets/${id}`,
-      undefined,
-      { signal }
-    )
+    ticketsApi.adminDetail(id, signal)
   )
   if (result.stale) return
   detailLoading.value = false
@@ -209,10 +209,12 @@ async function loadAgents(): Promise<void> {
   if (!canManage.value) return
   agentsLoading.value = true
   try {
-    const data = await api.get<{ items: TicketAgent[] }>(
-      '/api/next/admin/tickets/agents'
+    const result = await agentsRequest.run((signal) =>
+      ticketsApi.agents(signal)
     )
-    agents.value = data.items
+    if (result.stale) return
+    if (!result.ok) throw result.error
+    agents.value = result.value
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
@@ -244,26 +246,22 @@ async function refreshAfterMutation(reloadDetail = false): Promise<void> {
 async function sendReply(payload: { content: string; attachments: File[] }) {
   if (!ticket.value || !canReply.value || mutating.value) return
   const id = ticket.value.id
+  const sequence = ++mutationSequence
   mutating.value = true
   try {
-    const body = new FormData()
-    body.set('content', payload.content)
-    for (const file of payload.attachments) body.append('attachments', file)
-    const data = await api.post<{
-      message: TicketMessage
-      ticket: {
-        status: TicketStatus
-        assignee_id: number | null
-        assigned_at: number
-        updated: number
-      }
-    }>(`/api/next/admin/tickets/${id}/messages`, body)
-    if (ticket.value?.id !== id) return
+    const data = await ticketsApi.adminReply(id, payload)
+    if (
+      sequence !== mutationSequence ||
+      ticket.value?.id !== id ||
+      selectedID.value !== id
+    )
+      return
     messages.value.push(data.message)
     ticket.value.status = data.ticket.status
     ticket.value.assignee_id = data.ticket.assignee_id
     ticket.value.assigned_at = data.ticket.assigned_at
     ticket.value.updated = data.ticket.updated
+    ticket.value.last_reply_role = 'support'
     ticket.value.message_count = messages.value.length
     ticket.value.reply_count = messages.value.length
     if (data.ticket.assignee_id === auth.user?.id) {
@@ -274,21 +272,26 @@ async function sendReply(payload: { content: string; attachments: File[] }) {
     toast.success(t('tickets.replied'))
     await refreshAfterMutation()
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence)
+      toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    mutating.value = false
+    if (sequence === mutationSequence) mutating.value = false
   }
 }
 
 async function changeStatus(next: 'open' | 'closed'): Promise<void> {
   if (!ticket.value || !canManage.value || mutating.value) return
   const id = ticket.value.id
+  const sequence = ++mutationSequence
   mutating.value = true
   try {
-    const data = await api.patch<{
-      ticket: { id: number; status: TicketStatus; updated: number }
-    }>(`/api/next/admin/tickets/${id}/status`, { status: next })
-    if (ticket.value?.id !== id) return
+    const data = await ticketsApi.adminChangeStatus(id, next)
+    if (
+      sequence !== mutationSequence ||
+      ticket.value?.id !== id ||
+      selectedID.value !== id
+    )
+      return
     ticket.value.status = data.ticket.status
     ticket.value.updated = data.ticket.updated
     toast.success(
@@ -296,9 +299,10 @@ async function changeStatus(next: 'open' | 'closed'): Promise<void> {
     )
     await refreshAfterMutation()
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence)
+      toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    mutating.value = false
+    if (sequence === mutationSequence) mutating.value = false
   }
 }
 
@@ -306,17 +310,16 @@ async function saveAssignment(value = assignmentValue.value): Promise<void> {
   if (!ticket.value || !canManage.value || mutating.value) return
   const id = ticket.value.id
   const nextID = value ? Number(value) : null
+  const sequence = ++mutationSequence
   mutating.value = true
   try {
-    const data = await api.patch<{
-      ticket: {
-        id: number
-        assignee_id: number | null
-        assigned_at: number
-        updated: number
-      }
-    }>(`/api/next/admin/tickets/${id}/assignee`, { assignee_id: nextID })
-    if (ticket.value?.id !== id) return
+    const data = await ticketsApi.assign(id, nextID)
+    if (
+      sequence !== mutationSequence ||
+      ticket.value?.id !== id ||
+      selectedID.value !== id
+    )
+      return
     ticket.value.assignee_id = data.ticket.assignee_id
     ticket.value.assigned_at = data.ticket.assigned_at
     ticket.value.updated = data.ticket.updated
@@ -330,9 +333,10 @@ async function saveAssignment(value = assignmentValue.value): Promise<void> {
     toast.success(t('tickets.admin.assigneeSaved'))
     await refreshAfterMutation()
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence)
+      toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    mutating.value = false
+    if (sequence === mutationSequence) mutating.value = false
   }
 }
 
@@ -369,7 +373,10 @@ onMounted(() => {
   void loadQueue()
   void loadAgents()
 })
-onBeforeUnmount(() => window.clearTimeout(searchTimer))
+onBeforeUnmount(() => {
+  mutationSequence += 1
+  window.clearTimeout(searchTimer)
+})
 </script>
 
 <template>

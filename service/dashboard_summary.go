@@ -59,14 +59,14 @@ type DashboardMeta struct {
 	CacheCoverage map[string]int64 `json:"cache_coverage"`
 }
 type DashboardSummary struct {
-	KPI          DashboardKPI        `json:"kpi"`
-	Comparison   DashboardComparison `json:"comparison"`
-	Models       []DashboardModel    `json:"models"`
-	Hourly       []DashboardHour     `json:"hourly"`
-	Flow         []DashboardDay      `json:"flow"`
-	TokenTrend   []DashboardTokenDay `json:"token_trend"`
-	Distribution []DashboardDay      `json:"distribution"`
-	Meta         DashboardMeta       `json:"meta"`
+	KPI          DashboardKPI         `json:"kpi"`
+	Comparison   *DashboardComparison `json:"comparison"`
+	Models       []DashboardModel     `json:"models"`
+	Hourly       []DashboardHour      `json:"hourly"`
+	Flow         []DashboardDay       `json:"flow"`
+	TokenTrend   []DashboardTokenDay  `json:"token_trend"`
+	Distribution []DashboardDay       `json:"distribution"`
+	Meta         DashboardMeta        `json:"meta"`
 }
 
 // ParseDashboardRange uses the browser's Date.getTimezoneOffset convention.
@@ -104,17 +104,16 @@ func ParseDashboardRange(rangeName, startDate, endDate string, offset int, now t
 	return start, end, nil
 }
 
-func Dashboard(ctx context.Context, userID int, start, end time.Time, offset int) (DashboardSummary, error) {
+func Dashboard(ctx context.Context, userID int, start, end time.Time, offset int, includeComparison bool) (DashboardSummary, error) {
 	result := DashboardSummary{Models: []DashboardModel{}, Hourly: []DashboardHour{}, Flow: []DashboardDay{}, TokenTrend: []DashboardTokenDay{}, Distribution: []DashboardDay{}, Meta: DashboardMeta{Start: start.Unix(), End: end.Unix(), TZOffset: offset, GeneratedAt: time.Now().Unix(), Available: common.LogConsumeEnabled, Source: "consume_logs", Coverage: map[string]bool{"consume_logs": common.LogConsumeEnabled, "cache_usage": false, "latency": common.LogConsumeEnabled, "success_rate": false}}}
+	if includeComparison {
+		result.Comparison = &DashboardComparison{}
+	}
 	result.Meta.CacheCoverage = map[string]int64{"records": 0, "read_records": 0, "write_records": 0, "invalid_records": 0}
 	if !result.Meta.Available {
 		return result, nil
 	}
 	rows, err := model.ReadDashboardUsage(ctx, userID, start.Unix(), end.Unix())
-	if err != nil {
-		return result, err
-	}
-	prior, err := model.ReadDashboardUsage(ctx, userID, start.Add(-end.Sub(start)).Unix(), start.Unix())
 	if err != nil {
 		return result, err
 	}
@@ -124,12 +123,19 @@ func Dashboard(ctx context.Context, userID int, start, end time.Time, offset int
 		return result, err
 	}
 	applyDashboardCache(&result, cacheRows, start)
+	if !includeComparison {
+		return result, nil
+	}
+	prior, err := model.ReadDashboardUsage(ctx, userID, start.Add(-end.Sub(start)).Unix(), start.Unix())
+	if err != nil {
+		return result, err
+	}
 	var previousQuota, previousRequests int64
 	for _, row := range prior {
 		previousQuota += row.Quota
 		previousRequests += row.Requests
 	}
-	result.Comparison = DashboardComparison{QuotaDelta: percentageChange(result.KPI.TotalQuota, previousQuota), RequestsDelta: percentageChange(result.KPI.TotalRequests, previousRequests)}
+	result.Comparison = &DashboardComparison{QuotaDelta: percentageChange(result.KPI.TotalQuota, previousQuota), RequestsDelta: percentageChange(result.KPI.TotalRequests, previousRequests)}
 	return result, nil
 }
 

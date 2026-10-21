@@ -1,164 +1,72 @@
-import { describe, expect, it } from 'vitest'
-import { parseModelMarket } from '@/api/modelMarket'
-import { createModelMarketFixture } from '../../../tests/fixtures/modelMarket'
-
-describe('authenticated model market contract', () => {
-  it('preserves decimal values, channel identity, endpoint variants and unavailable telemetry', () => {
-    const input = createModelMarketFixture()
-    input.channels[0]!.ratio = '0.1234567890123456789'
-    input.models[0]!.baselines[0]!.values.ModelRatio = '0.1234567890123456789'
-    const parsed = parseModelMarket(input)
-    expect(parsed.channels[0]!.ratio).toBe('0.1234567890123456789')
-    expect(parsed.models[0]!.baselines[0]!.values.ModelRatio).toBe(
-      '0.1234567890123456789'
-    )
-    expect(
-      parsed.models.find((model) => model.id === 'video-preview')!.baselines
-    ).toMatchObject([
-      { plugin_key: 'seconds', supported_endpoint_types: ['openai-video'] },
-      { plugin_key: 'fixed', supported_endpoint_types: ['video-task'] },
-    ])
-    expect(parsed.telemetry).toEqual({
-      status: 'unavailable',
-      reason: 'channel_metrics_not_collected',
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { api } from '@/api/client'
+import { getModelMarket, parseModelMarket } from '@/api/modelMarket'
+import { modelCatalogFixture } from './modelCatalogFixture'
+vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
+beforeEach(() => vi.resetAllMocks())
+describe('native model catalog', () => {
+  it('reads the native catalog and retains exact prices and synthetic vendors', async () => {
+    const input = modelCatalogFixture()
+    input.models[0]!.pricing_values.input = '0.1234567890123456789'
+    vi.mocked(api.get).mockResolvedValue(input)
+    const signal = new AbortController().signal
+    const result = await getModelMarket(signal)
+    expect(api.get).toHaveBeenCalledWith('/api/user/model-catalog', undefined, {
+      signal,
     })
+    expect(result.models[0]!.vendor_id).toBe(-10)
+    expect(result.models[0]!.pricing_values.input).toBe('0.1234567890123456789')
+    expect(result.models[0]!.capabilities).toBeNull()
   })
-
-  it('preserves localized usage labels and exact request multipliers', () => {
-    const fixture = createModelMarketFixture()
-    const price = fixture.models.find((model) => model.id === 'video-preview')!
-      .baselines[0]!
-    price.usage_schema = {
-      seconds: {
-        type: 'number',
-        unit: 'second',
-        unitLabel: { en: 'seconds', 'zh-CN': '秒' },
-        description: { en: 'Duration' },
-        enum: ['5', '10'],
-      },
-    }
-    price.billing_details = {
-      image_count: false,
-      audio_text_branches: false,
-      request_rules: [
-        { condition: 'quality=hd', multiplier: '1.234567890123456789' },
-      ],
-    }
-    const parsed = parseModelMarket(fixture).models.find(
-      (model) => model.id === 'video-preview'
-    )!.baselines[0]!
-    expect(parsed.usage_schema).toEqual(price.usage_schema)
-    expect(parsed.billing_details).toEqual(price.billing_details)
+  it('distinguishes configured zero prices from unavailable prices', () => {
+    const input = modelCatalogFixture()
+    input.models[0]!.price_status = 'zero'
+    input.models[0]!.pricing_values = { input: '0', output: '0' }
+    input.offers[0]!.price_status = 'unavailable'
+    input.offers[0]!.pricing_values = {}
+    const result = parseModelMarket(input)
+    expect(result.models[0]!.pricing_values.input).toBe('0')
+    expect(result.offers[0]!.price_status).toBe('unavailable')
+    expect(result.offers[0]!.pricing_values).toEqual({})
   })
-
   it.each([
     [
-      'null usage field',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        Object.assign(input.models[0]!.baselines[0]!, {
-          usage_schema: { seconds: null },
-        })
+      'duplicate model',
+      (input: ReturnType<typeof modelCatalogFixture>) =>
+        input.models.push({ ...input.models[0]! }),
+    ],
+    [
+      'duplicate channel',
+      (input: ReturnType<typeof modelCatalogFixture>) =>
+        input.channels.push({ ...input.channels[0]! }),
+    ],
+    [
+      'unknown channel',
+      (input: ReturnType<typeof modelCatalogFixture>) => {
+        input.offers[0]!.channel_id = 42
       },
     ],
     [
-      'invalid localized usage label',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        Object.assign(input.models[0]!.baselines[0]!, {
-          usage_schema: { seconds: { unitLabel: { en: 7 } } },
-        })
+      'unknown model',
+      (input: ReturnType<typeof modelCatalogFixture>) => {
+        input.offers[0]!.model_id = 'forbidden'
       },
     ],
     [
-      'invalid usage choices',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        Object.assign(input.models[0]!.baselines[0]!, {
-          usage_schema: { seconds: { enum: [5] } },
-        })
+      'negative price',
+      (input: ReturnType<typeof modelCatalogFixture>) => {
+        input.models[0]!.pricing_values.input = '-1'
       },
     ],
     [
-      'numeric request rule multiplier',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.models[0]!.baselines[0]!.billing_details = {
-          request_rules: [{ condition: 'quality=hd', multiplier: 1.2 }],
-        }
+      'missing configured price',
+      (input: ReturnType<typeof modelCatalogFixture>) => {
+        input.models[0]!.pricing_values = {}
       },
     ],
-    [
-      'null request rule',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.models[0]!.baselines[0]!.billing_details = {
-          request_rules: [null],
-        }
-      },
-    ],
-    [
-      'invalid image count rule',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.models[0]!.baselines[0]!.billing_details = { image_count: 'true' }
-      },
-    ],
-    [
-      'unknown cache-write meaning',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.models[0]!.baselines[0]!.cache_write_mode = 'unknown'
-      },
-    ],
-    [
-      'numeric multiplier',
-      (input: ReturnType<typeof createModelMarketFixture>) =>
-        Object.assign(input.channels[0]!, { ratio: 0.2 }),
-    ],
-    [
-      'negative multiplier',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.channels[0]!.ratio = '-1'
-      },
-    ],
-    [
-      'numeric price',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.models[0]!.baselines[0]!.values.ModelRatio = 0.1
-      },
-    ],
-    [
-      'missing price on configured row',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.models[0]!.baselines[0]!.values = {}
-      },
-    ],
-    [
-      'unavailable channel reference',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.offers[0]!.channel_id = 999
-      },
-    ],
-    [
-      'cross-model price reference',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.offers[0]!.pricing_id = input.models[1]!.baselines[0]!.id
-      },
-    ],
-    [
-      'unauthorized endpoint',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.offers[0]!.supported_endpoint_types = ['private-endpoint']
-      },
-    ],
-    [
-      'duplicate offer',
-      (input: ReturnType<typeof createModelMarketFixture>) => {
-        input.offers.push({ ...input.offers[0]! })
-      },
-    ],
-    [
-      'model-wide metrics masquerading as channel telemetry',
-      (input: ReturnType<typeof createModelMarketFixture>) =>
-        Object.assign(input.telemetry, { status: 'available' }),
-    ],
-  ])('rejects %s instead of displaying an invented quote', (_label, mutate) => {
-    const fixture = createModelMarketFixture()
-    mutate(fixture)
-    expect(() => parseModelMarket(fixture)).toThrow()
+  ])('rejects %s instead of inventing a price', (_label, mutate) => {
+    const input = modelCatalogFixture()
+    mutate(input)
+    expect(() => parseModelMarket(input)).toThrow('Invalid API response')
   })
 })
