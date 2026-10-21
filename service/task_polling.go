@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -287,15 +286,9 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 	}
 	info.ApiKey = ch.Key
 	adaptor.Init(info)
-	resp, err := DoChannelRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchBatchTasks(ctx, baseURL, ch.Key, tasks, proxy) })
-	if errors.Is(err, ErrConcurrencyFull) {
-		return nil
-	}
-	if ctx.Err() != nil {
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-		return ctx.Err()
+	resp, skip, err := doPollRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchBatchTasks(ctx, baseURL, ch.Key, tasks, proxy) })
+	if skip {
+		return err
 	}
 	if err != nil {
 		common.SysLog(common.LogText("Get Task Do req error: %v", err))
@@ -517,15 +510,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		key = privateData.Key
 	}
 	snap := task.Snapshot()
-	resp, err := DoChannelRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchTask(ctx, baseURL, key, task, proxy) })
-	if errors.Is(err, ErrConcurrencyFull) {
-		return nil
-	}
-	if ctx.Err() != nil {
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-		return ctx.Err()
+	resp, skip, err := doPollRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchTask(ctx, baseURL, key, task, proxy) })
+	if skip {
+		return err
 	}
 	if err != nil {
 		return recordPollFailure(ctx, adaptor, task, snap.Status, pollClassTransport, 0, err.Error())
