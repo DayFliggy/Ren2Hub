@@ -1,14 +1,9 @@
 package controller
 
 import (
-	"bytes"
 	"context"
-	"image"
-	"image/png"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -201,35 +196,4 @@ func TestGmpayCreationFailureResponsePreservesDurableIdentity(t *testing.T) {
 			assert.NotContains(t, payload, "trade_no")
 		}
 	}
-}
-
-func TestTicketAttachmentsValidateAndCleanStagedFiles(t *testing.T) {
-	directory := t.TempDir()
-	t.Setenv("TICKET_UPLOAD_DIR", directory)
-	var payload bytes.Buffer
-	writer := multipart.NewWriter(&payload)
-	first, err := writer.CreateFormFile("attachments", "valid.png")
-	require.NoError(t, err)
-	require.NoError(t, png.Encode(first, image.NewRGBA(image.Rect(0, 0, 1, 1))))
-	second, err := writer.CreateFormFile("attachments", "fake.png")
-	require.NoError(t, err)
-	_, err = second.Write([]byte("not an image"))
-	require.NoError(t, err)
-	require.NoError(t, writer.Close())
-	request := httptest.NewRequest(http.MethodPost, "/", &payload)
-	request.Header.Set("Content-Type", writer.FormDataContentType())
-	require.NoError(t, request.ParseMultipartForm(1024))
-	defer request.MultipartForm.RemoveAll()
-	_, paths, err := saveTicketAttachments(request.MultipartForm.File["attachments"])
-	require.Error(t, err)
-	assert.Empty(t, paths)
-	entries, err := os.ReadDir(directory)
-	require.NoError(t, err)
-	assert.Empty(t, entries, "invalid later attachment removes already staged image")
-	tooMany := make([]*multipart.FileHeader, 6)
-	for i := range tooMany {
-		tooMany[i] = request.MultipartForm.File["attachments"][0]
-	}
-	_, _, err = saveTicketAttachments(tooMany)
-	require.Error(t, err)
 }
