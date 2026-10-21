@@ -2893,7 +2893,7 @@
       "path": "model/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "597149b26ca2cce3c9d6deb438d11cd7ea90e05d88007763844a3aeadc6a338f"
+      "local_sha256": "f90c1d836531e4f273c3821004ebc8abfd2e0b9f22bd7baaee830b7e00e19cc8"
     },
     {
       "path": "model/route_candidates_test.go",

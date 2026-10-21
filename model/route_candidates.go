@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -38,15 +39,19 @@ func RouteChannelRows(ctx context.Context, modelName string, filters []dto.Chann
 			names = append(names, normalized)
 		}
 		var abilities []Ability
-		if err := DB.WithContext(ctx).Select("channel_id").Where("model IN ? AND enabled = ?", names, true).Find(&abilities).Error; err != nil {
+		if err := DB.WithContext(ctx).Select("channel_id", "model").Where("model IN ? AND enabled = ?", names, true).Find(&abilities).Error; err != nil {
 			return nil, err
 		}
-		if len(abilities) == 0 {
-			return rows, nil
-		}
+		// MySQL 默认排序规则不区分大小写，IN 会命中只差大小写的模型名；在 Go 侧
+		// 精确比对，使三种数据库与上游内存缓存的精确查找一致。
 		ids := make([]int, 0, len(abilities))
 		for _, ability := range abilities {
-			ids = append(ids, ability.ChannelId)
+			if slices.Contains(names, ability.Model) {
+				ids = append(ids, ability.ChannelId)
+			}
+		}
+		if len(ids) == 0 {
+			return rows, nil
 		}
 		q = q.Where("id IN ?", ids)
 	}
