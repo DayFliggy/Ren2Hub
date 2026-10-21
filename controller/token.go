@@ -386,7 +386,6 @@ func UpdateToken(c *gin.Context) {
 		if request.AllowUserQuotaQuery != nil {
 			cleanToken.AllowUserQuotaQuery = *request.AllowUserQuotaQuery
 		}
-
 	}
 	err = cleanToken.Update()
 	if err != nil {
