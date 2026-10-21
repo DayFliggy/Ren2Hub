@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -14,13 +13,12 @@ var catalogDimensions = map[string]string{
 	"cache_write": "cc", "cacheWrite": "cc", "input_audio": "ai", "output_audio": "ao", "reasoning": "reasoning",
 }
 
-func parseProviderCatalog(id string, root object) ([]Model, error) {
-	if id == "axonhub" {
-		var err error
-		root, err = readObject(root["providers"])
-		if err != nil {
-			return nil, fmt.Errorf("missing providers object")
-		}
+// AxonHub 使用 PublicProviderConf 的 all.json：providers.<provider>.models，
+// models 可以是数组或以模型名为键的对象。
+func parseAxonHub(document object) ([]Model, error) {
+	root, err := readObject(document["providers"])
+	if err != nil {
+		return nil, fmt.Errorf("missing providers object")
 	}
 	var result []Model
 	for _, provider := range keys(root) {
@@ -141,77 +139,4 @@ func catalogExpression(cost object, embedding bool) (string, error) {
 		}
 	}
 	return scheduleExpression(s, embedding)
-}
-
-var upstreamFields = map[string]string{
-	"model_price": "ModelPrice", "model_ratio": "ModelRatio", "completion_ratio": "CompletionRatio",
-	"cache_ratio": "CacheRatio", "create_cache_ratio": "CreateCacheRatio", "image_ratio": "ImageRatio",
-	"audio_ratio": "AudioRatio", "audio_completion_ratio": "AudioCompletionRatio",
-	"billing_mode": "billing_setting.billing_mode", "billing_expr": "billing_setting.billing_expr",
-}
-
-func parseBasellm(root object) ([]Model, error) {
-	var success bool
-	if common.Unmarshal(root["success"], &success) != nil || !success {
-		return nil, fmt.Errorf("source did not report success")
-	}
-	data, err := readObject(root["data"])
-	if err != nil {
-		return nil, err
-	}
-	byModel := make(map[string]*Model)
-	for _, key := range keys(data) {
-		field, supported := upstreamFields[key]
-		if !supported {
-			return nil, fmt.Errorf("unsupported pricing field: %s", key)
-		}
-		values, err := readObject(data[key])
-		if err != nil {
-			return nil, fmt.Errorf("invalid %s price map", key)
-		}
-		for _, name := range keys(values) {
-			model := byModel[name]
-			if model == nil {
-				model = &Model{ModelName: name, Provider: "", Pricing: map[string]any{}}
-				byModel[name] = model
-			}
-			if key == "billing_mode" || key == "billing_expr" {
-				value := stringValue(values[name])
-				if value == "" || (key == "billing_mode" && value != "ratio" && value != "tiered_expr") {
-					model.UnsupportedReason = "invalid billing mode or expression"
-					continue
-				}
-				model.Pricing[field] = value
-				continue
-			}
-			value, err := price(values[name], 0)
-			if err != nil {
-				model.UnsupportedReason = err.Error()
-				continue
-			}
-			// Drafts cross a JavaScript JSON boundary before they are saved.
-			// A numeric JSON literal would lose precision in the browser.
-			model.Pricing[field] = value.String()
-		}
-	}
-	result := make([]Model, 0, len(byModel))
-	for _, model := range byModel {
-		if model.Pricing["billing_setting.billing_mode"] == "tiered_expr" {
-			expression, ok := model.Pricing["billing_setting.billing_expr"].(string)
-			if !ok || strings.TrimSpace(expression) == "" {
-				model.UnsupportedReason = "missing price expression"
-			} else {
-				model.Pricing = expressionPricing(expression)
-			}
-		} else if _, fixed := model.Pricing["ModelPrice"]; fixed {
-			model.Pricing = map[string]any{"ModelPrice": model.Pricing["ModelPrice"], "billing_setting.billing_mode": "ratio"}
-		} else if _, input := model.Pricing["ModelRatio"]; !input {
-			model.UnsupportedReason = "missing model input price"
-		} else {
-			delete(model.Pricing, "billing_setting.billing_expr")
-			model.Pricing["billing_setting.billing_mode"] = "ratio"
-		}
-		result = append(result, *model)
-	}
-	return result, nil
 }

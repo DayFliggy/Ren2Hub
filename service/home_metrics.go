@@ -10,12 +10,16 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// homeMetricsQueryTimeout bounds the shared query, which no single caller owns.
+const homeMetricsQueryTimeout = 10 * time.Second
+
 var homeMetricsCache struct {
 	sync.Mutex
 	value   model.HomeRequestMetrics
 	expires time.Time
 }
 var homeMetricsRefresh singleflight.Group
+var readHomeMetrics = model.GetHomeRequestMetricsWithContext
 
 func HomeMetrics(ctx context.Context) (model.HomeRequestMetrics, error) {
 	read := func() (model.HomeRequestMetrics, bool) {
@@ -26,13 +30,15 @@ func HomeMetrics(ctx context.Context) (model.HomeRequestMetrics, error) {
 	if value, ok := read(); ok {
 		return value, nil
 	}
-	// Sharing the query prevents each anonymous visitor from scanning logs. The
-	// first caller's cancellation propagates as an error; errors never populate cache.
+	// 合并查询避免每个匿名访客各扫一次日志。查询使用独立 context：第一个调用方
+	// 取消只让它自己返回，同批等待者仍拿到结果；错误不写入缓存。
 	result := homeMetricsRefresh.DoChan("home", func() (any, error) {
 		if value, ok := read(); ok {
 			return value, nil
 		}
-		value, err := model.GetHomeRequestMetricsWithContext(ctx, time.Now())
+		queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), homeMetricsQueryTimeout)
+		defer cancel()
+		value, err := readHomeMetrics(queryCtx, time.Now())
 		if err != nil {
 			return nil, err
 		}

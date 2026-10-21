@@ -1,13 +1,8 @@
 package controller
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,19 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
-
-const (
-	maxTicketAttachmentSize  = 10 * 1024 * 1024
-	maxTicketAttachmentCount = 5
-	maxTicketRequestSize     = maxTicketAttachmentCount*maxTicketAttachmentSize + 1024*1024
-)
-
-var ticketAttachmentExtensions = map[string]string{
-	"image/png":  ".png",
-	"image/jpeg": ".jpg",
-	"image/webp": ".webp",
-	"image/gif":  ".gif",
-}
 
 type ticketDTO struct {
 	ID            int    `json:"id"`
@@ -188,80 +170,6 @@ func validateTicketReferences(modelID, requestID string) error {
 	return nil
 }
 
-func saveTicketAttachments(headers []*multipart.FileHeader) ([]model.TicketAttachment, []string, error) {
-	if len(headers) > maxTicketAttachmentCount {
-		return nil, nil, common.NewMessage("At most {{count}} attachments are allowed", map[string]any{"count": maxTicketAttachmentCount})
-	}
-	if len(headers) == 0 {
-		return nil, nil, nil
-	}
-	dir := ticketStorageDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return nil, nil, err
-	}
-	attachments := make([]model.TicketAttachment, 0, len(headers))
-	paths := make([]string, 0, len(headers))
-	for _, header := range headers {
-		if header.Size > maxTicketAttachmentSize {
-			removeTicketFiles(paths)
-			return nil, nil, common.NewMessage("Attachment {{name}} exceeds 10 MB", map[string]any{"name": filepath.Base(header.Filename)})
-		}
-		file, err := header.Open()
-		if err != nil {
-			removeTicketFiles(paths)
-			return nil, nil, err
-		}
-		content, readErr := io.ReadAll(io.LimitReader(file, maxTicketAttachmentSize+1))
-		closeErr := file.Close()
-		if readErr != nil || closeErr != nil {
-			removeTicketFiles(paths)
-			if readErr != nil {
-				return nil, nil, readErr
-			}
-			return nil, nil, closeErr
-		}
-		if len(content) > maxTicketAttachmentSize {
-			removeTicketFiles(paths)
-			return nil, nil, common.NewMessage("Attachment {{name}} exceeds 10 MB", map[string]any{"name": filepath.Base(header.Filename)})
-		}
-		mimeType := http.DetectContentType(content)
-		extension, allowed := ticketAttachmentExtensions[mimeType]
-		if !allowed {
-			removeTicketFiles(paths)
-			return nil, nil, common.NewMessage("Attachment {{name}} has an unsupported image type", map[string]any{"name": filepath.Base(header.Filename)})
-		}
-		keyBytes := make([]byte, 24)
-		if _, err := rand.Read(keyBytes); err != nil {
-			removeTicketFiles(paths)
-			return nil, nil, err
-		}
-		storageKey := hex.EncodeToString(keyBytes) + extension
-		path := filepath.Join(dir, storageKey)
-		if err := os.WriteFile(path, content, 0600); err != nil {
-			removeTicketFiles(paths)
-			return nil, nil, err
-		}
-		digest := sha256.Sum256(content)
-		paths = append(paths, path)
-		attachments = append(attachments, model.TicketAttachment{
-			StorageKey:   storageKey,
-			OriginalName: filepath.Base(header.Filename),
-			MimeType:     mimeType,
-			Size:         int64(len(content)),
-			SHA256:       hex.EncodeToString(digest[:]),
-		})
-	}
-	return attachments, paths, nil
-}
-
-func removeTicketFiles(paths []string) {
-	for _, path := range paths {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			common.SysError(common.LogText("failed to remove ticket attachment: %s", err.Error()))
-		}
-	}
-}
-
 func ListTickets(c *gin.Context) {
 	page := 1
 	pageSize := 10
@@ -289,29 +197,23 @@ func ListTickets(c *gin.Context) {
 }
 
 func CreateTicket(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
-	form, err := c.MultipartForm()
+	form, err := readTicketForm(c)
 	if err != nil {
-		ticketBusinessError(c, common.NewMessage("Invalid multipart request"), "VALIDATION_ERROR")
+		respondTicketFormError(c, err)
 		return
 	}
-	defer form.RemoveAll()
-	title := strings.TrimSpace(c.PostForm("title"))
-	category := strings.TrimSpace(c.PostForm("category"))
-	priority := strings.TrimSpace(c.PostForm("priority"))
-	content := strings.TrimSpace(c.PostForm("content"))
+	defer form.discard()
+	title := form.value("title")
+	category := form.value("category")
+	priority := form.value("priority")
+	content := form.value("content")
 	if err := validateTicketFields(title, category, priority, content); err != nil {
 		ticketBusinessError(c, err, "VALIDATION_ERROR")
 		return
 	}
-	modelID := strings.TrimSpace(c.PostForm("model_id"))
-	requestID := strings.TrimSpace(c.PostForm("request_id"))
+	modelID := form.value("model_id")
+	requestID := form.value("request_id")
 	if err := validateTicketReferences(modelID, requestID); err != nil {
-		ticketBusinessError(c, err, "VALIDATION_ERROR")
-		return
-	}
-	attachments, paths, err := saveTicketAttachments(form.File["attachments"])
-	if err != nil {
 		ticketBusinessError(c, err, "VALIDATION_ERROR")
 		return
 	}
@@ -324,12 +226,16 @@ func CreateTicket(c *gin.Context) {
 		ModelID:   modelID,
 		RequestID: requestID,
 	}
-	if _, err := model.CreateTicket(ticket, content, userID, attachments); err != nil {
-		removeTicketFiles(paths)
+	if _, err := model.CreateTicket(ticket, content, userID, form.attachments()); err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	storeErr := form.commit()
 	service.NotifyNewTicket(*ticket)
+	if storeErr != nil {
+		respondTicketStorageFailure(c, ticket.ID, storeErr)
+		return
+	}
 	messages, err := model.ListTicketMessages(ticket.ID)
 	if err != nil {
 		common.ApiError(c, err)
@@ -387,40 +293,36 @@ func AddTicketMessage(c *gin.Context) {
 		ticketBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 		return
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
-	form, err := c.MultipartForm()
+	form, err := readTicketForm(c)
 	if err != nil {
-		ticketBusinessError(c, common.NewMessage("Invalid multipart request"), "VALIDATION_ERROR")
+		respondTicketFormError(c, err)
 		return
 	}
-	defer form.RemoveAll()
-	content := strings.TrimSpace(c.PostForm("content"))
+	defer form.discard()
+	content := form.value("content")
 	if content == "" || len([]rune(content)) > 2000 {
 		ticketBusinessError(c, common.NewMessage("Ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
 		return
 	}
-	attachments, paths, err := saveTicketAttachments(form.File["attachments"])
-	if err != nil {
-		ticketBusinessError(c, err, "VALIDATION_ERROR")
-		return
-	}
-	message, updatedTicket, err := model.AddTicketMessage(ticketID, userID, content, attachments)
+	message, updatedTicket, err := model.AddTicketMessage(ticketID, userID, content, form.attachments())
 	if errors.Is(err, model.ErrTicketClosed) {
-		removeTicketFiles(paths)
 		ticketBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		removeTicketFiles(paths)
 		ticketNotFound(c)
 		return
 	}
 	if err != nil {
-		removeTicketFiles(paths)
 		common.ApiError(c, err)
 		return
 	}
+	storeErr := form.commit()
 	service.NotifyTicketUserReply(*updatedTicket)
+	if storeErr != nil {
+		respondTicketStorageFailure(c, ticketID, storeErr)
+		return
+	}
 	storedAttachments, err := model.ListTicketAttachments(ticketID)
 	if err != nil {
 		common.ApiError(c, err)
@@ -474,9 +376,5 @@ func DownloadTicketAttachment(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	path := filepath.Join(ticketStorageDir(), filepath.Base(attachment.StorageKey))
-	c.Header("Content-Type", attachment.MimeType)
-	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", attachment.OriginalName))
-	c.Header("Cache-Control", "private, max-age=300")
-	c.File(path)
+	serveTicketAttachment(c, attachment)
 }

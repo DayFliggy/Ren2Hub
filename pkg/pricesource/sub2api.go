@@ -21,6 +21,20 @@ var subDimensions = map[string]string{
 }
 var contextSuffix = regexp.MustCompile(`_above_([0-9]+)k_tokens$`)
 
+// Sub2API 认识、但 NewAPI 计费表达式没有对应维度的计价字段。导入时跳过，
+// 非零或无法解析时在草稿里警告：导入后的价格不包含这部分费用。
+// 不在此表也不在 subDimensions 里的计价字段仍然整条拒收。
+var subUnbilledFields = map[string]bool{
+	"cache_storage_cost_per_token_per_hour": true,
+}
+
+func subUnbilledWarning(key string, raw common.RawMessage) string {
+	if value, err := price(raw, 0); err == nil && value.IsZero() {
+		return ""
+	}
+	return key + " is not billed locally; imported prices exclude it"
+}
+
 func parseSub2API(root object) ([]Model, error) {
 	var result []Model
 	for _, name := range keys(root) {
@@ -61,6 +75,12 @@ func subExpression(entry object) (string, []string, error) {
 				return "", warnings, fmt.Errorf("%s has a non-zero or invalid tool fee that cannot be imported", key)
 			}
 			warnings = append(warnings, key+" is explicitly zero; tool pricing is not synchronized")
+			continue
+		}
+		if subUnbilledFields[key] {
+			if warning := subUnbilledWarning(key, entry[key]); warning != "" {
+				warnings = append(warnings, warning)
+			}
 			continue
 		}
 		baseKey, service := key, ""

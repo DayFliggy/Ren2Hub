@@ -2,9 +2,6 @@ package controller
 
 import (
 	"errors"
-	"fmt"
-	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -206,26 +203,19 @@ func AddAdminTicketMessage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
-	form, err := c.MultipartForm()
+	form, err := readTicketForm(c)
 	if err != nil {
-		ticketBusinessError(c, common.NewMessage("Invalid multipart request"), "VALIDATION_ERROR")
+		respondTicketFormError(c, err)
 		return
 	}
-	defer form.RemoveAll()
-	content := strings.TrimSpace(c.PostForm("content"))
+	defer form.discard()
+	content := form.value("content")
 	if content == "" || len([]rune(content)) > 2000 {
 		ticketBusinessError(c, common.NewMessage("Ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
 		return
 	}
-	attachments, paths, err := saveTicketAttachments(form.File["attachments"])
+	message, updatedTicket, err := model.AddSupportTicketMessage(ticketID, c.GetInt("id"), content, form.attachments())
 	if err != nil {
-		ticketBusinessError(c, err, "VALIDATION_ERROR")
-		return
-	}
-	message, updatedTicket, err := model.AddSupportTicketMessage(ticketID, c.GetInt("id"), content, attachments)
-	if err != nil {
-		removeTicketFiles(paths)
 		if errors.Is(err, model.ErrTicketClosed) {
 			ticketBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
 			return
@@ -237,16 +227,21 @@ func AddAdminTicketMessage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	storedAttachments, err := model.ListTicketAttachments(ticketID)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
+	storeErr := form.commit()
 	recordManageAudit(c, "ticket.reply", map[string]interface{}{
 		"ticket_id":     ticketID,
 		"auto_assigned": before.AssigneeID == nil,
 	})
 	service.NotifyTicketSupportReply(*updatedTicket)
+	if storeErr != nil {
+		respondTicketStorageFailure(c, ticketID, storeErr)
+		return
+	}
+	storedAttachments, err := model.ListTicketAttachments(ticketID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	items := buildTicketMessages([]model.TicketMessage{*message}, storedAttachments, "/api/admin/tickets/attachments")
 	common.ApiSuccess(c, gin.H{"message": items[0], "ticket": gin.H{
 		"status":      updatedTicket.Status,
@@ -348,9 +343,5 @@ func DownloadAdminTicketAttachment(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	path := filepath.Join(ticketStorageDir(), filepath.Base(attachment.StorageKey))
-	c.Header("Content-Type", attachment.MimeType)
-	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", attachment.OriginalName))
-	c.Header("Cache-Control", "private, max-age=300")
-	c.File(path)
+	serveTicketAttachment(c, attachment)
 }
