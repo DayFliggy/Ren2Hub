@@ -112,7 +112,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	topUp := &model.TopUp{
-		Currency: strings.ToUpper(string(checkout.Currency)), PayAmount: stripePaymentAmount(checkout.AmountTotal, string(checkout.Currency)),
+		Currency: strings.ToUpper(string(checkout.Currency)), PayAmount: stripePaymentAmount(checkout.AmountSubtotal, string(checkout.Currency)),
 		UserId:          id,
 		Amount:          req.Amount,
 		Money:           chargedMoney,
@@ -184,11 +184,13 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
+	callerIp := c.ClientIP()
 	if event.GetObjectValue("mode") == "subscription" {
-		c.AbortWithStatus(http.StatusBadRequest)
+		// 订阅已退役：确认收到，不让 Stripe 重试一个永远不会成功的回调。
+		model.RecordTopUpCallbackRejection(callerIp, model.PaymentProviderStripe, event.GetObjectValue("client_reference_id"), 0, model.ErrTopUpTypeUnsupported)
+		c.Status(http.StatusOK)
 		return
 	}
-	callerIp := c.ClientIP()
 	logger.LogInfo(ctx, common.LogText("Stripe webhook signature verified event_type=%s client_ip=%s path=%q", string(event.Type), callerIp, c.Request.RequestURI))
 	switch event.Type {
 	case stripe.EventTypeCheckoutSessionCompleted:
@@ -203,7 +205,7 @@ func StripeWebhook(c *gin.Context) {
 		logger.LogInfo(ctx, common.LogText("Stripe webhook ignored event event_type=%s client_ip=%s", string(event.Type), callerIp))
 	}
 
-	if err != nil {
+	if err != nil && model.TopUpCallbackRetryable(err) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -279,25 +281,38 @@ func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp
 // fulfillOrder is the shared logic for crediting quota after payment is confirmed.
 func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, customerId string, callerIp string) error {
 	if len(referenceId) == 0 {
+		// Checkout Session 不是本站创建的，没有可完成的订单。
 		logger.LogWarn(ctx, common.LogText("Stripe order completion missing order number client_ip=%s", callerIp))
-		return errors.New("missing Stripe order number")
+		return nil
 	}
 
 	LockOrder(referenceId)
 	defer UnlockOrder(referenceId)
-	currency := strings.ToUpper(event.GetObjectValue("currency"))
-	minor, parseErr := strconv.ParseInt(event.GetObjectValue("amount_total"), 10, 64)
-	if currency == "" || parseErr != nil || minor < 0 {
-		logger.LogError(ctx, "Stripe payment receipt has no valid currency or amount")
-		return errors.New("invalid Stripe payment receipt")
-	}
-	err := model.RechargeWithPayment(referenceId, customerId, callerIp, currency, stripePaymentAmount(minor, currency))
+	currency, amount := stripeReceipt(event)
+	err := model.RechargeWithPayment(referenceId, customerId, callerIp, currency, amount)
 	if err != nil {
 		logger.LogError(ctx, common.LogText("Stripe top-up processing failed trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
 		return err
 	}
-	logger.LogInfo(ctx, common.LogText("Stripe top-up succeeded trade_no=%s amount_total=%s currency=%s event_type=%s client_ip=%s", referenceId, stripePaymentAmount(minor, currency), currency, string(event.Type), callerIp))
+	logger.LogInfo(ctx, common.LogText("Stripe top-up succeeded trade_no=%s amount=%s currency=%s event_type=%s client_ip=%s", referenceId, amount, currency, string(event.Type), callerIp))
 	return nil
+}
+
+// stripeReceipt 返回已验签 Checkout Session 中、可与订单冻结值比对的币种和金额。
+// amount_subtotal 不含折扣和税费，促销码只降低实付，不改变到账额度；
+// Adaptive Pricing 把会话换成买家币种时，currency_conversion 保留创建时的原币种金额。
+// 解析失败返回空值，由入账时的金额核对拒绝。
+func stripeReceipt(event stripe.Event) (string, string) {
+	var session stripe.CheckoutSession
+	if err := common.Unmarshal(event.Data.Raw, &session); err != nil {
+		return "", ""
+	}
+	currency, minor := string(session.Currency), session.AmountSubtotal
+	if conversion := session.CurrencyConversion; conversion != nil && conversion.SourceCurrency != "" {
+		currency, minor = string(conversion.SourceCurrency), conversion.AmountSubtotal
+	}
+	currency = strings.ToUpper(currency)
+	return currency, stripePaymentAmount(minor, currency)
 }
 
 func sessionExpired(ctx context.Context, event stripe.Event) {

@@ -314,25 +314,12 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	// 验证订单类型，目前只处理一次性付款（充值）
 	if event.Object.Order.Type != "onetime" {
 		logger.LogInfo(c.Request.Context(), common.LogText("Creem order type not supported, ignored request_id=%s creem_order_id=%s order_type=%s", referenceId, event.Object.Order.Id, event.Object.Order.Type))
-		c.AbortWithStatus(http.StatusBadRequest)
+		model.RecordTopUpCallbackRejection(c.ClientIP(), model.PaymentProviderCreem, referenceId, 0, model.ErrTopUpTypeUnsupported)
+		c.Status(http.StatusOK)
 		return
 	}
 
 	logger.LogInfo(c.Request.Context(), common.LogText("Creem payment completed callback trade_no=%s creem_order_id=%s amount_paid=%d currency=%s product_name=%q customer_email=%q customer_name=%q", referenceId, event.Object.Order.Id, event.Object.Order.AmountPaid, event.Object.Order.Currency, event.Object.Product.Name, event.Object.Customer.Email, event.Object.Customer.Name))
-
-	// 查询本地订单确认存在
-	topUp := model.GetTopUpByTradeNo(referenceId)
-	if topUp == nil {
-		logger.LogWarn(c.Request.Context(), common.LogText("Creem top-up order not found trade_no=%s creem_order_id=%s", referenceId, event.Object.Order.Id))
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-
-	if topUp.Status != common.TopUpStatusPending {
-		logger.LogInfo(c.Request.Context(), common.LogText("Creem top-up order not pending, ignored trade_no=%s status=%s creem_order_id=%s", referenceId, topUp.Status, event.Object.Order.Id))
-		c.Status(http.StatusOK) // 已处理过的订单，返回成功避免重复处理
-		return
-	}
 
 	// 处理充值，传入客户邮箱和姓名信息
 	customerEmail := event.Object.Customer.Email
@@ -349,11 +336,15 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	err := model.RechargeCreem(referenceId, customerEmail, customerName, c.ClientIP())
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Creem top-up processing failed trade_no=%s creem_order_id=%s client_ip=%s error=%q", referenceId, event.Object.Order.Id, c.ClientIP(), err.Error()))
-		c.AbortWithStatus(http.StatusInternalServerError)
+		if model.TopUpCallbackRetryable(err) {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusOK)
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), common.LogText("Creem top-up succeeded trade_no=%s creem_order_id=%s quota=%d money=%.2f client_ip=%s", referenceId, event.Object.Order.Id, topUp.Amount, topUp.Money, c.ClientIP()))
+	logger.LogInfo(c.Request.Context(), common.LogText("Creem top-up succeeded trade_no=%s creem_order_id=%s client_ip=%s", referenceId, event.Object.Order.Id, c.ClientIP()))
 	c.Status(http.StatusOK)
 }
 

@@ -125,10 +125,14 @@ func TestRechargeGmpayRejectsMismatchedReceiptBeforeAndAfterSuccess(t *testing.T
 			_, err := RechargeGmpay(payment, "")
 			require.NoError(t, err)
 		}
+		// The fiat amount is checked by the shared receipt check in settleTopUp.
+		amountChanged := payment
+		amountChanged.AmountMinor++
+		_, err := RechargeGmpay(amountChanged, "")
+		require.ErrorIs(t, err, ErrTopUpReceiptMismatch)
 		for _, mutate := range []func(*GmpayPayment){
 			func(p *GmpayPayment) { p.MerchantID = "other-merchant" },
 			func(p *GmpayPayment) { p.MerchantVersionID = "other-version" },
-			func(p *GmpayPayment) { p.AmountMinor++ },
 			func(p *GmpayPayment) { p.GatewayTradeNo = "" },
 			func(p *GmpayPayment) { p.Token = "" },
 			func(p *GmpayPayment) { p.Token = "usdc" },

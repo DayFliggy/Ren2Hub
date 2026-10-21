@@ -376,7 +376,9 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	// OrderID is Pancake's internal ORD_* (logs only).
 	rawTradeNo := strings.TrimSpace(event.Data.OrderMerchantExternalID)
 	if strings.HasPrefix(rawTradeNo, "WAFFO_PANCAKE_SUB-") {
-		c.String(http.StatusBadRequest, "unsupported order type")
+		// 订阅已退役：确认收到，不让 Pancake 重试一个永远不会成功的回调。
+		model.RecordTopUpCallbackRejection(c.ClientIP(), model.PaymentProviderWaffoPancake, rawTradeNo, 0, model.ErrTopUpTypeUnsupported)
+		c.String(http.StatusOK, "OK")
 		return
 	}
 
@@ -398,7 +400,11 @@ func WaffoPancakeWebhook(c *gin.Context) {
 
 	if err := model.RechargeWaffoPancake(tradeNo); err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake top-up processing failed trade_no=%s event_id=%s order_id=%s client_ip=%s error=%q", tradeNo, event.ID, event.Data.OrderID, c.ClientIP(), err.Error()))
-		c.String(http.StatusInternalServerError, "retry")
+		if model.TopUpCallbackRetryable(err) {
+			c.String(http.StatusInternalServerError, "retry")
+			return
+		}
+		c.String(http.StatusOK, "OK")
 		return
 	}
 

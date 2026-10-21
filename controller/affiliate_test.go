@@ -118,7 +118,7 @@ func TestStripeWebhookRetriesFailedAtomicCredit(t *testing.T) {
 	require.NoError(t, db.Create(&user).Error)
 	order := model.TopUp{UserId: user.Id, TradeNo: "stripe-retry-order", PaymentProvider: model.PaymentProviderStripe, PaymentMethod: model.PaymentMethodStripe, Status: common.TopUpStatusPending, ExpectedQuota: 1000, Amount: 1, Money: 1, Currency: "USD", PayAmount: "1"}
 	require.NoError(t, order.Insert())
-	payload := []byte(`{"id":"evt_local","type":"checkout.session.completed","data":{"object":{"id":"cs_local","object":"checkout.session","mode":"payment","status":"complete","payment_status":"paid","customer":"cus_local","client_reference_id":"stripe-retry-order","amount_total":99,"currency":"usd"}}}`)
+	payload := []byte(`{"id":"evt_local","type":"checkout.session.completed","data":{"object":{"id":"cs_local","object":"checkout.session","mode":"payment","status":"complete","payment_status":"paid","customer":"cus_local","client_reference_id":"stripe-retry-order","amount_subtotal":100,"amount_total":99,"currency":"usd"}}}`)
 	signature := webhook.GenerateTestSignedPayload(&webhook.UnsignedPayload{Payload: payload, Secret: setting.StripeWebhookSecret})
 	router := gin.New()
 	router.POST("/stripe", StripeWebhook)
@@ -142,7 +142,7 @@ func TestStripeWebhookRetriesFailedAtomicCredit(t *testing.T) {
 	assert.Equal(t, 1000, user.Quota)
 	saved := model.GetTopUpByTradeNo(order.TradeNo)
 	assert.Equal(t, "USD", saved.Currency)
-	assert.Equal(t, "0.99", saved.PayAmount)
+	assert.Equal(t, "1", saved.PayAmount, "the frozen pre-discount amount is never overwritten by the callback")
 	assert.Equal(t, 1000, saved.CreditedQuota)
 }
 

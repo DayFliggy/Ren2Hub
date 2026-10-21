@@ -272,6 +272,7 @@ func MarkGmpayOrderResult(ctx context.Context, topUpID int, result GmpayOrderRes
 func RechargeGmpay(payment GmpayPayment, callerIp string) (alreadyDone bool, err error) {
 	_, quota, err := settleTopUp(topUpSettlement{
 		tradeNo: payment.OrderNo, provider: PaymentProviderGmpay, callerIP: callerIp, logMethod: PaymentProviderGmpay,
+		receipt: &TopUpReceipt{Currency: "CNY", Amount: gmpay.FormatFiatAmount(payment.AmountMinor)},
 		mutate: func(tx *gorm.DB, order *TopUp) (map[string]any, error) {
 			return nil, bindGmpayReceipt(tx, order, payment)
 		},
@@ -297,10 +298,10 @@ func bindGmpayReceipt(tx *gorm.DB, order *TopUp, payment GmpayPayment) error {
 	if err != nil {
 		return err
 	}
+	// The fiat amount is checked against the order's frozen pay amount by the
+	// shared receipt check in settleTopUp.
 	if payment.MerchantVersionID != merchant.ID || payment.MerchantID != merchant.MerchantID ||
-		payment.AmountMinor != snapshot.AmountMinor || payment.AmountMinor <= 0 ||
-		payment.GatewayTradeNo == "" || len(payment.GatewayTradeNo) > 128 ||
-		snapshot.ExpectedQuota <= 0 || snapshot.Currency != "CNY" {
+		payment.GatewayTradeNo == "" || len(payment.GatewayTradeNo) > 128 {
 		return ErrGmpayPaymentMismatch
 	}
 	if payment.Token == "" || payment.Token != snapshot.Token {

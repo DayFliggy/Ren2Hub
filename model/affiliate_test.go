@@ -40,7 +40,11 @@ func TestAffiliateEveryProviderAndManualShareSuccessfulTransaction(t *testing.T)
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
 			db, inviter, invitee := affiliateTestDB(t)
-			order := TopUp{UserId: invitee.Id, TradeNo: "provider-" + provider, PaymentProvider: provider, PaymentMethod: provider, Status: common.TopUpStatusPending, ExpectedQuota: 100003, Money: 1, Currency: "USD", PayAmount: "1", Amount: 1, CreateTime: common.GetTimestamp()}
+			currency := "USD"
+			if provider == PaymentProviderEpay {
+				currency = "CNY"
+			}
+			order := TopUp{UserId: invitee.Id, TradeNo: "provider-" + provider, PaymentProvider: provider, PaymentMethod: provider, Status: common.TopUpStatusPending, ExpectedQuota: 100003, Money: 1, Currency: currency, PayAmount: "1", Amount: 1, CreateTime: common.GetTimestamp()}
 			var receipt GmpayPayment
 			if provider == PaymentProviderGmpay {
 				receipt = insertGmpaySnapshotTestOrder(t, &order, 100003, "test-key")
@@ -50,10 +54,10 @@ func TestAffiliateEveryProviderAndManualShareSuccessfulTransaction(t *testing.T)
 			credit := func() error {
 				switch provider {
 				case PaymentProviderEpay:
-					_, err := RechargeEpay(order.TradeNo, "", "")
+					_, err := RechargeEpay(order.TradeNo, "", "", "1.00")
 					return err
 				case PaymentProviderStripe:
-					return Recharge(order.TradeNo, "customer", "")
+					return RechargeWithPayment(order.TradeNo, "customer", "", "USD", "1.00")
 				case PaymentProviderCreem:
 					return RechargeCreem(order.TradeNo, "", "", "")
 				case PaymentProviderWaffo:
@@ -96,7 +100,7 @@ func TestAffiliateCallbackAdminCompletionConcurrentExactlyOnce(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%2 == 0 {
-				_, err := RechargeEpay(order.TradeNo, "", "")
+				_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 				errs <- err
 			} else {
 				errs <- ManualCompleteTopUp(order.TradeNo, "")
@@ -124,7 +128,7 @@ func TestAffiliateFailureRollsBackWalletAndOrder(t *testing.T) {
 			tx.AddError(errors.New("simulated referral storage failure"))
 		}
 	}))
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.ErrorContains(t, err, "simulated referral")
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
@@ -132,7 +136,7 @@ func TestAffiliateFailureRollsBackWalletAndOrder(t *testing.T) {
 	assert.Zero(t, inviter.AffQuota)
 	assert.Equal(t, common.TopUpStatusPending, GetTopUpByTradeNo(order.TradeNo).Status)
 	require.NoError(t, db.Callback().Create().Remove("reject_referral"))
-	_, err = RechargeEpay(order.TradeNo, "", "")
+	_, err = RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 }
 func TestAffiliateSuccessTimeRulesFreezeCapAndExpiry(t *testing.T) {
@@ -142,10 +146,10 @@ func TestAffiliateSuccessTimeRulesFreezeCapAndExpiry(t *testing.T) {
 	settings.RateBps = 3333
 	settings.FreezeHours = 1
 	settings.PerInviteeCapQuota = 400
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	order2 := testAffiliateTopUp(t, invitee.Id, "policy-cap", 1000)
-	_, err = RechargeEpay(order2.TradeNo, "", "")
+	_, err = RechargeEpay(order2.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffQuota)
@@ -161,7 +165,7 @@ func TestAffiliateSuccessTimeRulesFreezeCapAndExpiry(t *testing.T) {
 	settings.DurationDays = 1
 	require.NoError(t, db.Model(&User{}).Where("id = ?", invitee.Id).Update("invited_at", common.GetTimestamp()-86401).Error)
 	order3 := testAffiliateTopUp(t, invitee.Id, "policy-expired", 1000)
-	_, err = RechargeEpay(order3.TradeNo, "", "")
+	_, err = RechargeEpay(order3.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Equal(t, 400, inviter.AffHistoryQuota)
@@ -169,14 +173,14 @@ func TestAffiliateSuccessTimeRulesFreezeCapAndExpiry(t *testing.T) {
 func TestAffiliateFullTransferIsIdempotentAndKeepsLaterAccrual(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	order := testAffiliateTopUp(t, invitee.Id, "transfer-one", 500)
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	first, replayed, err := TransferAffiliateQuota(inviter.Id, "operation-transfer-1")
 	require.NoError(t, err)
 	assert.False(t, replayed)
 	assert.Equal(t, 100, first.RewardQuota)
 	order2 := testAffiliateTopUp(t, invitee.Id, "transfer-two", 250)
-	_, err = RechargeEpay(order2.TradeNo, "", "")
+	_, err = RechargeEpay(order2.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	again, replayed, err := TransferAffiliateQuota(inviter.Id, "operation-transfer-1")
 	require.NoError(t, err)
@@ -265,7 +269,7 @@ func TestAffiliateGmpayValidationPrecedesCredit(t *testing.T) {
 	receipt := insertGmpaySnapshotTestOrder(t, &order, 500, "private-test")
 	receipt.AmountMinor++
 	_, err := RechargeGmpay(receipt, "")
-	require.ErrorIs(t, err, ErrGmpayPaymentMismatch)
+	require.ErrorIs(t, err, ErrTopUpReceiptMismatch)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Zero(t, inviter.AffQuota)
 	require.Error(t, CreateGmpayOrder(context.Background(), nil, nil, nil))
@@ -321,7 +325,7 @@ func TestAffiliatePerUserOverrideAndDisabledCodeOnlyAffectNewBindings(t *testing
 	_, err := UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, AffiliatePolicyUpdate{RateBps: &rate, Enabled: &disabled, Code: &custom})
 	require.NoError(t, err)
 	order := testAffiliateTopUp(t, invitee.Id, "disabled-code-existing-binding", 10000)
-	_, err = RechargeEpay(order.TradeNo, "", "")
+	_, err = RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Equal(t, 1234, inviter.AffQuota)
@@ -358,7 +362,7 @@ func TestTopUpTerminalStatusCannotRevertOrSkipSettlement(t *testing.T) {
 	_, _, invitee := affiliateTestDB(t)
 	order := testAffiliateTopUp(t, invitee.Id, "terminal-order", 100)
 	require.ErrorIs(t, UpdatePendingTopUpStatus(order.TradeNo, PaymentProviderEpay, common.TopUpStatusSuccess), ErrTopUpStatusInvalid)
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	order.Status = common.TopUpStatusFailed
 	require.ErrorIs(t, order.Update(), ErrTopUpStatusInvalid)
@@ -437,7 +441,7 @@ func TestAffiliateDisabledOrderPersistsSkipAndNeverBackfills(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	operation_setting.GetAffiliateSetting().Enabled = false
 	order := testAffiliateTopUp(t, invitee.Id, "disabled-paid-order", 1000)
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	var record AffiliateRecord
 	require.NoError(t, db.Where("source_key = ?", fmt.Sprintf("topup:%d", order.Id)).First(&record).Error)
@@ -446,7 +450,7 @@ func TestAffiliateDisabledOrderPersistsSkipAndNeverBackfills(t *testing.T) {
 	assert.Equal(t, 2000, record.RateBps)
 	operation_setting.GetAffiliateSetting().Enabled = true
 	require.NoError(t, ManualCompleteTopUp(order.TradeNo, ""))
-	_, err = RechargeEpay(order.TradeNo, "", "")
+	_, err = RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.NoError(t, err)
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
@@ -467,7 +471,7 @@ func TestAffiliateSkipStorageFailureRollsBackPaidOrder(t *testing.T) {
 		}
 	}))
 	t.Cleanup(func() { _ = db.Callback().Create().Remove("reject_skip") })
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	_, err := RechargeEpay(order.TradeNo, "", "", "2.00")
 	require.ErrorContains(t, err, "skip decision storage unavailable")
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
 	assert.Zero(t, invitee.Quota)

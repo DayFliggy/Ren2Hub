@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -184,9 +183,11 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 // 在同一个事务内完成，因此同一订单的并发/重复回调（包括多实例部署下）最多充值一次。
 // alreadyDone=true 表示订单此前已完成，本次为幂等重复回调。
 // 进程内的 LockOrder 只是优化，正确性由本函数的数据库行锁保证。
-func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (alreadyDone bool, err error) {
+// paidMoney 是回调中已验签的 money（人民币元），必须等于下单时冻结的应付金额。
+func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string, paidMoney string) (alreadyDone bool, err error) {
 	_, quota, err := settleTopUp(topUpSettlement{
 		tradeNo: tradeNo, provider: PaymentProviderEpay, callerIP: callerIp, logMethod: PaymentProviderEpay,
+		receipt: &TopUpReceipt{Currency: "CNY", Amount: paidMoney},
 		mutate: func(_ *gorm.DB, order *TopUp) (map[string]any, error) {
 			if actualPaymentMethod != "" {
 				order.PaymentMethod = actualPaymentMethod
@@ -200,27 +201,13 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 	return err == nil && quota == 0, err
 }
 
-func Recharge(referenceId string, customerId string, callerIp string) error {
-	return RechargeWithPayment(referenceId, customerId, callerIp, "", "")
-}
+// RechargeWithPayment 完成 Stripe 订单。currency/payAmount 是回调中已验签的应付币种和
+// 折扣、税费之前的金额，必须等于下单时冻结的值；冻结值不被回调改写。
 func RechargeWithPayment(referenceId string, customerId string, callerIp string, currency string, payAmount string) (err error) {
 	_, _, err = settleTopUp(topUpSettlement{
 		tradeNo: referenceId, provider: PaymentProviderStripe, callerIP: callerIp, logMethod: PaymentMethodStripe,
-		mutate: func(_ *gorm.DB, order *TopUp) (map[string]any, error) {
-			if currency != "" {
-				if order.Currency != "" && order.Currency != currency {
-					return nil, errors.New("payment currency mismatch")
-				}
-				if !validTopUpCurrency(currency) {
-					return nil, errors.New("invalid payment currency")
-				}
-				value, parseErr := decimal.NewFromString(payAmount)
-				if parseErr != nil || value.IsNegative() {
-					return nil, errors.New("invalid payment amount")
-				}
-				order.Currency = currency
-				order.PayAmount = value.String()
-			}
+		receipt: &TopUpReceipt{Currency: currency, Amount: payAmount},
+		mutate: func(_ *gorm.DB, _ *TopUp) (map[string]any, error) {
 			return map[string]any{"stripe_customer": customerId}, nil
 		},
 		message: func(order *TopUp, quota int) *common.Message {
