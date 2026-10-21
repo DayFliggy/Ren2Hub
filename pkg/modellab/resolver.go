@@ -1,9 +1,9 @@
-// Package modellab classifies display metadata. It never authorizes or routes a request.
+// Package modellab 只作为 NewAPI 厂商词表的补充：原生 defaultVendorRules 认不出的
+// 模型名，用这里的目录和前缀推断厂商，结果仍是 NewAPI 厂商名。它不参与鉴权和选路。
 package modellab
 
 import (
 	_ "embed"
-	"sort"
 	"strings"
 	"sync"
 
@@ -24,10 +24,25 @@ var catalog struct {
 	Aliases map[string]string `json:"aliases"`
 }
 
+// Classification 是渠道或模型的展示分类。ID 是稳定的分组键，Name 是 NewAPI 厂商名。
 type Classification struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Source string `json:"source"`
+}
+
+// newAPIVendorNames 把目录里的实验室映射到原生 defaultVendorRules 使用的厂商名。
+// 不在表中的实验室使用目录显示名，只有数据库里存在同名厂商时才会被采用。
+var newAPIVendorNames = map[string]string{
+	"openai": "OpenAI", "anthropic": "Anthropic", "google": "Google", "deepseek": "DeepSeek",
+	"alibaba": "阿里巴巴", "moonshotai": "Moonshot", "zhipuai": "智谱", "minimax": "MiniMax",
+	"mistral": "Mistral", "xai": "xAI", "meta": "Meta", "cohere": "Cohere",
+	"bytedance-seed": "字节跳动", "tencent": "腾讯", "microsoft": "微软",
+}
+
+var prefixLabs = []struct{ Prefix, ID string }{
+	{"gpt-", "openai"}, {"o1", "openai"}, {"o3", "openai"}, {"o4", "openai"}, {"chatgpt-", "openai"}, {"dall-e", "openai"}, {"whisper-", "openai"}, {"text-embedding-", "openai"},
+	{"claude-", "anthropic"}, {"gemini-", "google"}, {"gemma-", "google"}, {"imagen-", "google"}, {"veo-", "google"}, {"deepseek-", "deepseek"}, {"grok-", "xai"}, {"qwen", "alibaba"}, {"glm-", "zhipuai"}, {"kimi-", "moonshotai"}, {"moonshot-", "moonshotai"}, {"minimax-", "minimax"},
 }
 
 func load() {
@@ -37,94 +52,59 @@ func load() {
 		}
 	})
 }
-func label(id, source string) Classification {
-	load()
-	for _, lab := range catalog.Labs {
-		if lab.Slug == id {
-			return Classification{ID: id, Name: lab.Name, Source: source}
-		}
-	}
-	return Classification{ID: id, Name: id, Source: source}
-}
+
 func normalize(value string) string {
 	return norm.NFKC.String(strings.ToLower(strings.TrimSpace(value)))
 }
 
-func ResolveModel(name, vendor string) Classification {
-	load()
-	if strings.TrimSpace(vendor) != "" {
-		for _, lab := range catalog.Labs {
-			if normalize(vendor) == normalize(lab.Name) || normalize(vendor) == lab.Slug {
-				return label(lab.Slug, "vendor")
-			}
-		}
-		return Classification{ID: "vendor:" + normalize(vendor), Name: vendor, Source: "vendor"}
+// VendorName 返回补充推断出的 NewAPI 厂商名；推断不出时返回空串。
+func VendorName(modelName string) string {
+	slug := labSlug(modelName)
+	if slug == "" {
+		return ""
 	}
-	normalized := normalize(name)
+	if name := newAPIVendorNames[slug]; name != "" {
+		return name
+	}
+	for _, lab := range catalog.Labs {
+		if lab.Slug == slug {
+			return lab.Name
+		}
+	}
+	return ""
+}
+
+func labSlug(modelName string) string {
+	load()
+	normalized := normalize(modelName)
 	if canonical, ok := catalog.Aliases[normalized]; ok {
 		normalized = normalize(canonical)
 	}
 	if id, ok := catalog.Models[normalized]; ok {
-		return label(id, "canonical")
+		return id
 	}
-	for _, prefix := range []struct{ Prefix, ID string }{
-		{"gpt-", "openai"}, {"o1", "openai"}, {"o3", "openai"}, {"o4", "openai"}, {"chatgpt-", "openai"}, {"dall-e", "openai"}, {"whisper-", "openai"}, {"text-embedding-", "openai"},
-		{"claude-", "anthropic"}, {"gemini-", "google"}, {"gemma-", "google"}, {"imagen-", "google"}, {"veo-", "google"}, {"deepseek-", "deepseek"}, {"grok-", "xai"}, {"qwen", "alibaba"}, {"glm-", "zhipuai"}, {"kimi-", "moonshotai"}, {"moonshot-", "moonshotai"}, {"minimax-", "minimax"},
-	} {
+	for _, prefix := range prefixLabs {
 		if normalized == prefix.Prefix || strings.HasPrefix(normalized, strings.TrimSuffix(prefix.Prefix, "-")+"-") || (prefix.Prefix == "qwen" && strings.HasPrefix(normalized, "qwen") && len(normalized) > 4 && normalized[4] >= '0' && normalized[4] <= '9') {
-			return label(prefix.ID, "alias")
+			return prefix.ID
 		}
 	}
-	return label("unknown", "unknown")
+	return ""
 }
 
-// Only advertised names are classified. Mapping keys cannot add models to a
-// directory, and a cycle or malformed map is reported rather than guessed.
-func ResolveChannel(names []string, mapping string, vendors map[string]string) (Classification, error) {
-	aliases := map[string]string{}
-	if strings.TrimSpace(mapping) != "" {
-		if err := common.UnmarshalJsonStr(mapping, &aliases); err != nil {
-			return Classification{}, err
-		}
-	}
-	found := map[string]Classification{}
-	for _, name := range names {
-		actual := name
-		seen := map[string]bool{}
-		for aliases[actual] != "" && aliases[actual] != actual {
-			if seen[actual] {
-				return label("unknown", "invalid_mapping"), nil
-			}
-			seen[actual] = true
-			actual = aliases[actual]
-		}
-		vendor := vendors[name]
-		if vendor == "" {
-			vendor = vendors[actual]
-		}
-		item := ResolveModel(actual, vendor)
-		if vendor == "" && actual != name && item.ID != "unknown" {
-			item.Source = "mapping"
-		}
-		found[item.ID] = item
-	}
-	if len(found) == 0 {
-		return label("unknown", "unknown"), nil
-	}
-	if len(found) > 1 {
-		return label("mixed", "models"), nil
-	}
-	for _, item := range found {
-		return item, nil
-	}
-	panic("unreachable model classification")
-}
-func Labs() []Classification {
+// VendorID 给 NewAPI 厂商名一个稳定的分组键：与目录实验室对应的厂商沿用实验室 slug，
+// 前端按它取图标；其他厂商为 "vendor:" 加规范化名称。
+func VendorID(vendorName string) string {
 	load()
-	items := make([]Classification, 0, len(catalog.Labs))
-	for _, lab := range catalog.Labs {
-		items = append(items, label(lab.Slug, "catalog"))
+	normalized := normalize(vendorName)
+	for slug, name := range newAPIVendorNames {
+		if normalize(name) == normalized {
+			return slug
+		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
-	return items
+	for _, lab := range catalog.Labs {
+		if normalize(lab.Name) == normalized || lab.Slug == normalized {
+			return lab.Slug
+		}
+	}
+	return "vendor:" + normalized
 }

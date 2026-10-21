@@ -1,27 +1,27 @@
 package modellab
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestExplicitVendorPrecedesAlias(t *testing.T) {
-	require.Equal(t, "google", ResolveModel("gpt-4o", "Google").ID)
-	require.Equal(t, "vendor:independent lab", ResolveModel("gpt-4o", "Independent Lab").ID)
-	require.Equal(t, "unknown", ResolveModel("my-unknown-model", "").ID)
-	require.Equal(t, "openai", ResolveModel("ＧＰＴ-4o", "").ID)
+// 补充推断只返回 NewAPI 厂商名，不产生第二套词表。
+func TestVendorNameReturnsNewAPIVendorNames(t *testing.T) {
+	require.Equal(t, "OpenAI", VendorName("o4-mini"))
+	require.Equal(t, "OpenAI", VendorName("ＧＰＴ-4o"))
+	require.Equal(t, "Google", VendorName("gemma-3-27b-it"))
+	require.Equal(t, "阿里巴巴", VendorName("qwen3-max"))
+	require.Equal(t, "Moonshot", VendorName("kimi-k2"))
+	require.Equal(t, "OpenAI", VendorName("openai/gpt-4o"), "provider-prefixed catalog entries resolve too")
+	require.Empty(t, VendorName("house-model"))
 }
-func TestChannelMappingClassifiesOnlyAdvertisedModels(t *testing.T) {
-	lab, err := ResolveChannel([]string{"public-model"}, `{"public-model":"intermediate","intermediate":"claude-sonnet-4","hidden":"gpt-4o"}`, nil)
-	require.NoError(t, err)
-	require.Equal(t, "anthropic", lab.ID)
-	require.Equal(t, "mapping", lab.Source)
-	mixed, err := ResolveChannel([]string{"gpt-4o", "claude-sonnet-4"}, "", nil)
-	require.NoError(t, err)
-	require.Equal(t, "mixed", mixed.ID)
-	_, err = ResolveChannel([]string{"name"}, "invalid", nil)
-	require.Error(t, err)
-	cyclic, err := ResolveChannel([]string{"a"}, `{"a":"b","b":"a"}`, nil)
-	require.NoError(t, err)
-	require.Equal(t, "invalid_mapping", cyclic.Source)
+
+func TestVendorIDKeepsLabSlugsForKnownVendors(t *testing.T) {
+	require.Equal(t, "alibaba", VendorID("阿里巴巴"))
+	require.Equal(t, "zhipuai", VendorID("智谱"))
+	require.Equal(t, "openai", VendorID("OpenAI"))
+	require.Equal(t, "nvidia", VendorID("NVIDIA"))
+	require.Equal(t, "vendor:百度", VendorID("百度"))
+	require.Equal(t, "vendor:independent lab", VendorID("Independent Lab"))
 }
