@@ -2,12 +2,14 @@ import { api } from './client'
 import { isDecimal } from '@/utils/decimal'
 import type {
   AdminOrder,
+  AdminOrderSpender,
   AdminOrderStats,
   GmpayOrderEvidence,
 } from '@/types/console'
 import {
   invalidResponse,
   isRecord,
+  requiredQuota,
   requiredStrictInteger,
   requiredString,
 } from './contracts'
@@ -150,6 +152,7 @@ export function parseTopUpStatistics(value: unknown): AdminOrderStats {
   if (
     !isRecord(value) ||
     !Array.isArray(value.currencies) ||
+    !Array.isArray(value.methods) ||
     !Array.isArray(value.daily)
   )
     invalidResponse(endpoint)
@@ -179,6 +182,10 @@ export function parseTopUpStatistics(value: unknown): AdminOrderStats {
   return {
     total: requiredStrictInteger(value.total, endpoint),
     currencies: value.currencies.map(total),
+    methods: value.methods.map((raw) => {
+      if (!isRecord(raw)) invalidResponse(endpoint)
+      return { ...total(raw), method: requiredString(raw.method, endpoint) }
+    }),
     daily: value.daily.map((raw) => {
       if (!isRecord(raw)) invalidResponse(endpoint)
       return { ...total(raw), date: requiredString(raw.date, endpoint, false) }
@@ -186,4 +193,21 @@ export function parseTopUpStatistics(value: unknown): AdminOrderStats {
     start_time: requiredStrictInteger(value.start_time, endpoint),
     end_time: requiredStrictInteger(value.end_time, endpoint),
   }
+}
+
+export const TOP_UP_RANKING_LIMIT = 10
+export function parseTopUpRanking(value: unknown): AdminOrderSpender[] {
+  const endpoint = '/api/user/topup/ranking'
+  if (!isRecord(value) || !Array.isArray(value.items)) invalidResponse(endpoint)
+  return value.items.map((raw) => {
+    if (!isRecord(raw)) invalidResponse(endpoint)
+    const paid = requiredStrictInteger(raw.paid_count, endpoint)
+    if (paid < 0) invalidResponse(endpoint)
+    return {
+      user_id: requiredStrictInteger(raw.user_id, endpoint),
+      username: requiredString(raw.username, endpoint),
+      paid_count: paid,
+      credited_quota: requiredQuota(raw.credited_quota, endpoint),
+    }
+  })
 }

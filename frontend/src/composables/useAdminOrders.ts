@@ -1,6 +1,11 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { getTopUps, parseTopUpStatistics } from '@/api/adminOrders'
+import {
+  TOP_UP_RANKING_LIMIT,
+  getTopUps,
+  parseTopUpRanking,
+  parseTopUpStatistics,
+} from '@/api/adminOrders'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
@@ -8,6 +13,7 @@ import { ADMIN_ORDER_DEFAULT_RANGE } from '@/constants/adminOrders'
 import type {
   AdminOrder,
   AdminOrderRange,
+  AdminOrderSpender,
   AdminOrderStats,
 } from '@/types/console'
 
@@ -36,6 +42,9 @@ export function useAdminOrders() {
   const statsRefreshing = ref(false)
   const statsError = ref('')
   const statsStale = ref(false)
+  // The ranking is a separate admin read; its failure must not hide the stats.
+  const ranking = ref<AdminOrderSpender[] | null>(null)
+  const rankingError = ref('')
 
   let listController: AbortController | null = null
   let statsController: AbortController | null = null
@@ -95,6 +104,8 @@ export function useAdminOrders() {
     const requestedRange = range.value
     if (statsRange !== requestedRange) {
       stats.value = null
+      ranking.value = null
+      rankingError.value = ''
       statsRange = null
       statsStale.value = false
       statsError.value = ''
@@ -105,18 +116,32 @@ export function useAdminOrders() {
     statsLoading.value = !background
     if (!stats.value) statsError.value = ''
 
-    try {
-      const endTime = Math.floor(Date.now() / 1000)
-      const data = await api.get<unknown>(
-        '/api/user/topup/stats',
-        {
-          start_time: endTime - requestedRange * 86400,
-          end_time: endTime,
-        },
+    const endTime = Math.floor(Date.now() / 1000)
+    const window = {
+      start_time: endTime - requestedRange * 86400,
+      end_time: endTime,
+    }
+    const rankingRequest = api
+      .get<unknown>(
+        '/api/user/topup/ranking',
+        { ...window, limit: TOP_UP_RANKING_LIMIT },
         { signal: controller.signal }
       )
+      .then((data) => ({ items: parseTopUpRanking(data), error: '' }))
+      .catch((error: unknown) => ({
+        items: null,
+        error: error instanceof ApiError ? error.message : String(error),
+      }))
+    try {
+      const data = await api.get<unknown>('/api/user/topup/stats', window, {
+        signal: controller.signal,
+      })
       if (controller.signal.aborted || sequence !== statsSequence) return
       stats.value = parseTopUpStatistics(data)
+      const rankingResult = await rankingRequest
+      if (controller.signal.aborted || sequence !== statsSequence) return
+      ranking.value = rankingResult.items
+      rankingError.value = rankingResult.error
       statsRange = requestedRange
       statsError.value = ''
       statsStale.value = false
@@ -127,6 +152,7 @@ export function useAdminOrders() {
         (error.status === 401 || error.status === 403)
       ) {
         stats.value = null
+        ranking.value = null
         statsRange = null
       }
       statsError.value =
@@ -215,6 +241,8 @@ export function useAdminOrders() {
     statsRefreshing,
     statsError,
     statsStale,
+    ranking,
+    rankingError,
     load,
     loadStats,
     fetchAllForExport,

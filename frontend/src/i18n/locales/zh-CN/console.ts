@@ -1689,6 +1689,7 @@ export default {
     paymentShareOf: '{method} 占比 {percent}%',
     topSpenders: '充值排行',
     spenderOrders: '{count} 笔订单',
+    topSpendersScope: '按到账额度排列成功订单，额度跨币种可比。',
     noRevenue: '该区间暂无成交',
     statsFailed: '统计数据加载失败',
     chart: {
@@ -1699,7 +1700,7 @@ export default {
       ordersAxis: '订单数',
       date: '日期',
     },
-    searchPlaceholder: '搜索订单号、邮箱、用户名或 ID',
+    searchPlaceholder: '精确订单号，或用 % 模糊匹配',
     statusFilter: '订单状态',
     methodFilter: '支付服务商',
     allStatuses: '全部状态',

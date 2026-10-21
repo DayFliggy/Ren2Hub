@@ -786,18 +786,19 @@ export interface AdminOrderDailyPoint {
   orders: number
 }
 
+/** One payment provider (or legacy payment_method) within one currency. */
 export interface AdminOrderMethodShare {
-  method: AdminOrderPaymentRail
+  method: string
   amount: number
   count: number
 }
 
+/** Ranked by credited quota, which is comparable across currencies. */
 export interface AdminOrderSpender {
   user_id: number
   username: string
-  email: string
-  amount: number
-  orders: number
+  paid_count: number
+  credited_quota: string
 }
 
 export interface AdminOrderCurrencyStats {
@@ -811,6 +812,7 @@ export interface AdminOrderCurrencyStats {
 export interface AdminOrderStats {
   total: number
   currencies: AdminOrderCurrencyStats[]
+  methods: (AdminOrderCurrencyStats & { method: string })[]
   daily: (AdminOrderCurrencyStats & { date: string })[]
   start_time: number
   end_time: number

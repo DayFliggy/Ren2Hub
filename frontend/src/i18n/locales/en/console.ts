@@ -1749,6 +1749,8 @@ export default {
     paymentShareOf: '{method} accounts for {percent}%',
     topSpenders: 'Top spenders',
     spenderOrders: '{count} order(s)',
+    topSpendersScope:
+      'Successful orders ranked by credited quota across all currencies.',
     noRevenue: 'No sales in this range',
     statsFailed: 'Could not load statistics',
     chart: {
@@ -1759,7 +1761,7 @@ export default {
       ordersAxis: 'Orders',
       date: 'Date',
     },
-    searchPlaceholder: 'Search order no., email, username or ID',
+    searchPlaceholder: 'Exact order no., or use % for partial match',
     statusFilter: 'Order status',
     methodFilter: 'Payment provider',
     allStatuses: 'All statuses',

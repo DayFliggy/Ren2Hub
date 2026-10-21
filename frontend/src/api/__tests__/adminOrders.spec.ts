@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parseTopUp,
   parseTopUpDetail,
+  parseTopUpRanking,
   parseTopUpStatistics,
 } from '../adminOrders'
 import { nativeTopUp, nativeGmpayEvidence } from './topupFixtures'
@@ -73,16 +74,65 @@ describe('native order contracts', () => {
         total,
         { ...total, currency: '', paid_amount: '0', unknown_amount_count: 1 },
       ],
+      methods: [
+        { ...total, method: 'epay' },
+        { ...total, method: 'alipay', paid_amount: '5.00' },
+      ],
       daily: [],
       start_time: 1,
       end_time: 2,
     })
     expect(stats.currencies.map((value) => value.currency)).toEqual(['CNY', ''])
     expect(stats.currencies[1]?.unknown_amount_count).toBe(1)
+    expect(
+      stats.methods.map((value) => [value.method, value.paid_amount])
+    ).toEqual([
+      ['epay', '73.00'],
+      ['alipay', '5.00'],
+    ])
     expect(() =>
       parseTopUpStatistics({
         ...stats,
         currencies: [{ ...total, paid_amount: 73 }],
+      })
+    ).toThrow()
+    const withoutMethods: Record<string, unknown> = { ...stats }
+    delete withoutMethods.methods
+    expect(() => parseTopUpStatistics(withoutMethods)).toThrow()
+  })
+  it('reads the quota ranking without payment credentials and rejects malformed rows', () => {
+    const ranking = parseTopUpRanking({
+      items: [
+        {
+          user_id: 2,
+          username: 'alice',
+          paid_count: 3,
+          credited_quota: 5000000,
+        },
+      ],
+      start_time: 1,
+      end_time: 2,
+    })
+    expect(ranking).toEqual([
+      {
+        user_id: 2,
+        username: 'alice',
+        paid_count: 3,
+        credited_quota: '5000000',
+      },
+    ])
+    expect(() =>
+      parseTopUpRanking({
+        items: [
+          { user_id: 2, username: 'a', paid_count: -1, credited_quota: 1 },
+        ],
+      })
+    ).toThrow()
+    expect(() =>
+      parseTopUpRanking({
+        items: [
+          { user_id: 2, username: 'a', paid_count: 1, credited_quota: '1' },
+        ],
       })
     ).toThrow()
   })
