@@ -381,6 +381,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 
 	billing := task.PrivateData.BillingContext
 	if billing == nil || billing.ChannelRatio <= 0 {
+		logger.LogWarn(ctx, common.LogText("task %s has no valid channel ratio in its billing context, keeping the pre-consumed quota", task.TaskID))
 		return false
 	}
 	finalChannelRatio := billing.ChannelRatio

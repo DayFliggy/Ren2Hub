@@ -232,6 +232,8 @@ func newTaskSubmitContext(t *testing.T, originalModel, mapping string) (*gin.Con
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 	common.SetContextKey(c, constant.ContextKeyOriginalModel, originalModel)
 	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://provider.example")
+	// 选路后 route_candidates 总会写入渠道倍率；倍率缺失的情况由专门的测试覆盖。
+	c.Set("channel_ratio", "1")
 	if mapping != "" {
 		c.Set("model_mapping", mapping)
 	}
@@ -617,7 +619,6 @@ export function extractUsage() { return {seconds:2}; }
 			defer server.Close()
 
 			c, info := newTaskSubmitContext(t, "declared-model", "")
-			c.Set("channel_ratio", "1")
 			info.OriginModelName = "declared-model"
 			info.Billing = billing
 			var result *TaskSubmitResult

@@ -37,13 +37,27 @@ func modelPriceNotConfiguredError(c *gin.Context, modelName string, userId int) 
 const claudeCacheCreation1hMultiplier = 6 / 3.75
 
 // HandleChannelRatio uses the selected channel's validated decimal multiplier.
-func HandleChannelRatio(ctx *gin.Context) hosttypes.ChannelRatioInfo {
+// Every pricing entry must stop on the error: an invalid ratio never bills as 0.
+func HandleChannelRatio(ctx *gin.Context) (hosttypes.ChannelRatioInfo, error) {
 	value, err := model.NormalizeChannelRatio(ctx.GetString("channel_ratio"))
 	if err != nil {
-		return hosttypes.ChannelRatioInfo{}
+		return hosttypes.ChannelRatioInfo{}, fmt.Errorf("selected channel ratio is invalid: %w", err)
 	}
 	ratio, _ := decimal.NewFromString(value)
-	return hosttypes.ChannelRatioInfo{ChannelRatio: ratio.InexactFloat64()}
+	return hosttypes.ChannelRatioInfo{ChannelRatio: ratio.InexactFloat64()}, nil
+}
+
+// isFreeModel is the single free-model rule. Channel ratios are always
+// positive, so only a zero model price or model ratio can make a model free,
+// and only when the operator disabled free-model pre-consumption.
+func isFreeModel(usePrice bool, modelPrice, modelRatio float64) bool {
+	if operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+		return false
+	}
+	if usePrice {
+		return modelPrice == 0
+	}
+	return modelRatio == 0
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
@@ -55,9 +69,9 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	billingModelName := info.GetBillingModelName()
 	modelPrice, usePrice := ratio_setting.GetModelPrice(billingModelName, false)
 
-	channelRatioInfo := HandleChannelRatio(c)
-	if channelRatioInfo.ChannelRatio <= 0 {
-		return hosttypes.PriceData{}, errors.New("selected channel ratio is invalid")
+	channelRatioInfo, err := HandleChannelRatio(c)
+	if err != nil {
+		return hosttypes.PriceData{}, err
 	}
 
 	// Check if this model uses tiered_expr billing
@@ -121,23 +135,10 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 	}
 
-	// check if free model pre-consume is disabled
-	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-		// if model price or ratio is 0, do not pre-consume quota
-		if channelRatioInfo.ChannelRatio == 0 {
-			preConsumedQuota = 0
-			freeModel = true
-		} else if usePrice {
-			if modelPrice == 0 {
-				preConsumedQuota = 0
-				freeModel = true
-			}
-		} else {
-			if modelRatio == 0 {
-				preConsumedQuota = 0
-				freeModel = true
-			}
-		}
+	// if model price or ratio is 0 and free model pre-consume is disabled, do not pre-consume quota
+	freeModel = isFreeModel(usePrice, modelPrice, modelRatio)
+	if freeModel {
+		preConsumedQuota = 0
 	}
 
 	priceData := hosttypes.PriceData{
@@ -195,9 +196,9 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
-	channelRatioInfo := HandleChannelRatio(c)
-	if channelRatioInfo.ChannelRatio <= 0 {
-		return hosttypes.PriceData{}, errors.New("selected channel ratio is invalid")
+	channelRatioInfo, err := HandleChannelRatio(c)
+	if err != nil {
+		return hosttypes.PriceData{}, err
 	}
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
@@ -224,34 +225,23 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 	}
 
 	var quota int
-	freeModel := false
 
 	if usePrice {
-		var err error
 		quota, err = common.QuotaFromFloatStrict(modelPrice * common.QuotaPerUnit * channelRatioInfo.ChannelRatio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
 		}
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if channelRatioInfo.ChannelRatio == 0 || modelPrice == 0 {
-				quota = 0
-				freeModel = true
-			}
-		}
 	} else {
 		// 按量计费：以模型倍率的一半作为预扣额度
-		var err error
 		quota, err = common.QuotaFromFloatStrict(modelRatio / 2 * common.QuotaPerUnit * channelRatioInfo.ChannelRatio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
 		}
 		modelPrice = -1
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if channelRatioInfo.ChannelRatio == 0 || modelRatio == 0 {
-				quota = 0
-				freeModel = true
-			}
-		}
+	}
+	freeModel := isFreeModel(usePrice, modelPrice, modelRatio)
+	if freeModel {
+		quota = 0
 	}
 
 	priceData := hosttypes.PriceData{
@@ -375,14 +365,6 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		return hosttypes.PriceData{}, err
 	}
 
-	freeModel := false
-	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-		if channelRatioInfo.ChannelRatio == 0 {
-			preConsumedQuota = 0
-			freeModel = true
-		}
-	}
-
 	snapshot := &billingexpr.BillingSnapshot{
 		EstimatedImageCount:         trace.ImageCount,
 		BillingMode:                 billing_setting.BillingModeTieredExpr,
@@ -405,7 +387,6 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	info.BillingRequestInput = &requestInput
 
 	priceData := hosttypes.PriceData{
-		FreeModel:         freeModel,
 		ChannelRatioInfo:  channelRatioInfo,
 		QuotaToPreConsume: preConsumedQuota,
 	}
