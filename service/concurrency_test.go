@@ -461,3 +461,19 @@ func TestDeleteCleanupWaitsForInFlightLimitPublication(t *testing.T) {
 		defer permit.Release()
 	}
 }
+
+// 硬删除用户后不留并发表项；仍有在途许可时等最后一个许可释放再移除。
+func TestReleaseDeletedUserForgetsConcurrency(t *testing.T) {
+	setupRouteTest(t)
+	ctx := context.Background()
+	idle, err := AcquireUserConcurrency(ctx, 31, 1)
+	require.NoError(t, err)
+	idle.Release()
+	busy, err := AcquireUserConcurrency(ctx, 32, 1)
+	require.NoError(t, err)
+	ReleaseDeletedUser(31)
+	ReleaseDeletedUser(32)
+	require.Equal(t, []ConcurrencySnapshot{{ID: 32, Limit: 1, InFlight: 1}}, gatewayConcurrency.snapshot("user"))
+	busy.Release()
+	require.Empty(t, gatewayConcurrency.snapshot("user"))
+}

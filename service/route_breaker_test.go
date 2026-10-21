@@ -237,3 +237,27 @@ func TestMidjourneyRetryAfterStartsCooldown(t *testing.T) {
 	health, _ := routeObservations.routeHealth(11, "")
 	require.Equal(t, routeWorstHealth, health)
 }
+
+// epoch 变更表有上限：满容量时清空并抬高过期下限，之前开始的尝试对所有渠道都不再写入。
+func TestRouteEpochTableIsBounded(t *testing.T) {
+	resetRouteObservations(t)
+	previous := routeObservationCapacity
+	routeObservationCapacity = 3
+	t.Cleanup(func() { routeObservationCapacity = previous })
+	routeObservations.mu.Lock()
+	before := routeObservations.epoch
+	routeObservations.mu.Unlock()
+	for id := 1; id <= 10; id++ {
+		routeObservations.invalidate(id)
+	}
+	require.LessOrEqual(t, len(routeObservations.changed), 3)
+	recordRouteObservation(before, 50, "m", 1, false, true, 100)
+	require.Zero(t, routeObservations.get(50, "m", 1, false).Samples, "an attempt older than the floor is stale for every channel")
+	routeObservations.mu.Lock()
+	current := routeObservations.epoch
+	routeObservations.mu.Unlock()
+	recordRouteObservation(current, 50, "m", 1, false, true, 100)
+	require.Equal(t, 1, routeObservations.get(50, "m", 1, false).Samples)
+	recordRouteObservation(current-1, 10, "m", 1, false, true, 100)
+	require.Zero(t, routeObservations.get(10, "m", 1, false).Samples, "the latest invalidation still rejects older attempts on its channel")
+}

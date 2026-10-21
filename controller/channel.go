@@ -887,18 +887,12 @@ func DeleteChannel(c *gin.Context) {
 }
 
 func DeleteDisabledChannel(c *gin.Context) {
-	var ids []int
-	if err := model.DB.Model(&model.Channel{}).
-		Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).
-		Pluck("id", &ids).Error; err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	rows, err := model.DeleteDisabledChannel()
+	ids, err := model.DeleteDisabledChannelIDs()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	rows := int64(len(ids))
 	model.InitChannelCache()
 	service.ReleaseDeletedChannels(c.Request.Context(), ids)
 	if rows > 0 {

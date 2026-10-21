@@ -167,6 +167,14 @@ func ReleaseDeletedChannels(ctx context.Context, channelIDs []int) {
 	}
 }
 
+// ReleaseDeletedUser 是硬删除用户后的并发清理，规则与 ReleaseDeletedChannels 相同：空闲表项
+// 移除，仍有在途许可的标记为 retired，并与上限发布串行。
+func ReleaseDeletedUser(userID int) {
+	concurrencyPublishMu.Lock()
+	defer concurrencyPublishMu.Unlock()
+	gatewayConcurrency.forget("user", []int{userID})
+}
+
 // forget 移除空闲的资源表项；仍有在途许可的表项标记为 retired，同 ID 再准入时继续共用
 // 计数，最后一个许可释放时移除。
 func (m *ConcurrencyManager) forget(kind string, ids []int) {

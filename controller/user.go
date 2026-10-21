@@ -824,6 +824,7 @@ func DeleteUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	service.ReleaseDeletedUser(id)
 	recordManageAuditFor(c, originUser.Id, "user.delete", map[string]any{
 		"username":              originUser.Username,
 		"id":                    originUser.Id,

@@ -47,7 +47,7 @@ func recordRouteBreaker(epoch uint64, channelID int, model string, success bool)
 	key := routeBreakerKey{channelID, model}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.changed[channelID] > epoch {
+	if s.staleLocked(epoch, channelID) {
 		return
 	}
 	s.pruneLocked(now)
@@ -106,7 +106,7 @@ func (s *routeObservationStore) routeHealth(channelID int, model string) (int, f
 func (s *routeObservationStore) coolDown(epoch uint64, channelID int, until int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if channelID <= 0 || s.changed[channelID] > epoch || until <= s.cooldowns[channelID] {
+	if channelID <= 0 || s.staleLocked(epoch, channelID) || until <= s.cooldowns[channelID] {
 		return
 	}
 	s.cooldowns[channelID] = until

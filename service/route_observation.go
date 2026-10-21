@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-gonic/gin"
 )
 
@@ -38,6 +39,9 @@ type routeObservationStore struct {
 	lastPrune int64
 	epoch     uint64
 	changed   map[int]uint64
+	// staleFloor 是 changed 满容量清空时的 epoch：更早开始的尝试对所有渠道都按过期处理，
+	// changed 因此有上限，不随删除或发布的渠道 ID 无限增长。
+	staleFloor uint64
 	// evicted 统计上次日志之后因容量淘汰的键数。
 	evicted         int
 	lastEvictionLog int64
@@ -62,6 +66,11 @@ func BeginRouteObservation(c *gin.Context) {
 func (s *routeObservationStore) invalidate(channelID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, present := s.changed[channelID]; !present && len(s.changed) >= routeObservationCapacity {
+		s.staleFloor = s.epoch
+		clear(s.changed)
+		common.SysLog(common.LogText("route observation epoch table reached %d channels: attempts started before epoch %d are treated as stale", routeObservationCapacity, s.staleFloor))
+	}
 	s.epoch++
 	s.changed[channelID] = s.epoch
 	for key := range s.rows {
@@ -75,6 +84,11 @@ func (s *routeObservationStore) invalidate(channelID int) {
 		}
 	}
 	delete(s.cooldowns, channelID)
+}
+
+// staleLocked 判断从 epoch 开始的尝试对该渠道是否已过期。调用方持有 s.mu。
+func (s *routeObservationStore) staleLocked(epoch uint64, channelID int) bool {
+	return epoch < s.staleFloor || s.changed[channelID] > epoch
 }
 
 // pruneLocked 每个过期周期最多清理一次过期的样本、熔断状态和 429 冷却。调用方持有 s.mu。
@@ -118,7 +132,7 @@ func recordRouteObservation(epoch uint64, channelID int, model string, operation
 	key := routeObservationKey{channelID, model, operation, stream}
 	routeObservations.mu.Lock()
 	defer routeObservations.mu.Unlock()
-	if routeObservations.changed[channelID] > epoch {
+	if routeObservations.staleLocked(epoch, channelID) {
 		return
 	}
 	routeObservations.pruneLocked(now)
