@@ -29,7 +29,6 @@ export interface TokenRouteChannel {
   models: string[]
   channel_ratio: string
   max_concurrency: number
-  in_flight: number
   eligible: boolean
   filter_reason?: string
 }
@@ -73,7 +72,6 @@ export interface TokenRoutePreview {
     eligible: boolean
     reason: string
     channel_ratio: string
-    in_flight: number
   }>
 }
 export const tokenRoutingApi = {
@@ -107,7 +105,6 @@ export const tokenRoutingApi = {
           eligible: requiredBoolean(item.eligible, url),
           reason: requiredString(item.reason, url),
           channel_ratio: requiredString(item.channel_ratio, url),
-          in_flight: requiredStrictInteger(item.in_flight, url),
         }
       }),
     }
@@ -160,7 +157,6 @@ export const tokenRoutingApi = {
           item.max_concurrency,
           endpoint(id)
         ),
-        in_flight: requiredStrictInteger(item.in_flight, endpoint(id)),
         eligible: requiredBoolean(item.eligible, endpoint(id)),
         filter_reason:
           item.filter_reason === undefined

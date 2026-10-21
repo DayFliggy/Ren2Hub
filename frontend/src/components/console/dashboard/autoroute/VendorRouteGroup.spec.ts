@@ -13,7 +13,6 @@ function channel(id: number, limit = 8): CatalogChannel {
     status: 1,
     channel_ratio: '0.25',
     max_concurrency: limit,
-    in_flight: 2,
     eligible: true,
     filter_reason: '',
     lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
@@ -43,12 +42,15 @@ it('keeps historical expandable cards while displaying native capacity, ratio an
   expect(
     wrapper.findAll('[data-route-channel]').filter((row) => row.isVisible())
   ).toHaveLength(3)
-  expect(wrapper.get('[data-route-channel]').text()).toContain('2 / 8')
+  // The user catalog has no live occupancy: only the configured limit shows.
+  const rows = wrapper.findAll('[data-route-channel]')
+  const limit = (index: number) =>
+    rows[index]!.get('[title="Channel concurrency"]').text()
+  expect(limit(0)).toBe('8')
+  expect(limit(2)).toBe('∞')
+  expect(rows[0]!.text()).not.toContain('/')
+  expect(rows[0]!.find('[role="img"]').exists()).toBe(false)
   expect(wrapper.get('[data-route-ratio]').text()).toContain('×0.25')
-  expect(wrapper.findAll('[data-route-channel]')[2]!.text()).toContain('2 / ∞')
-  expect(
-    wrapper.get('[data-route-channel] [role="img"]').attributes('aria-label')
-  ).toContain('2')
   await wrapper.get('[data-route-more-toggle]').trigger('click')
   expect(
     wrapper.findAll('[data-route-channel]').filter((row) => row.isVisible())

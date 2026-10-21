@@ -578,7 +578,7 @@ watch(
                       <span v-if="channelFor(entry)">{{
                         t('routing.channelMetrics', {
                           ratio: channelFor(entry)!.channel_ratio,
-                          active: channelFor(entry)!.in_flight,
+                          limit: channelFor(entry)!.max_concurrency || '∞',
                         })
                       }}</span>
                     </div>
@@ -743,12 +743,7 @@ watch(
                 v-if="item.channel_ratio"
                 class="mt-2 text-xs text-[var(--text-tertiary)]"
               >
-                {{
-                  t('routing.channelMetrics', {
-                    ratio: item.channel_ratio,
-                    active: item.in_flight,
-                  })
-                }}
+                {{ t('routing.previewMetrics', { ratio: item.channel_ratio }) }}
               </p>
             </div>
           </div>

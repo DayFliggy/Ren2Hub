@@ -9,7 +9,6 @@ import {
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
-import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import type { CatalogChannel } from '@/api/modelCatalog'
 import { tokenRoutingMessages } from '@/i18n/tokenRouting'
 
@@ -28,14 +27,9 @@ const exclusionReason = computed(() => {
     ? routingText(key)
     : t('dashboard.autoRoute.excluded')
 })
-const occupancy = computed(() =>
-  props.entry.max_concurrency > 0
-    ? Math.min(100, (props.entry.in_flight / props.entry.max_concurrency) * 100)
-    : null
-)
+// The user catalog carries the configured limit only; live occupancy is admin data.
 const capacityLabel = computed(() =>
-  t('dashboard.autoRoute.channelOccupancy', {
-    active: props.entry.in_flight,
+  t('dashboard.autoRoute.channelLimit', {
     limit: props.entry.max_concurrency || '∞',
   })
 )
@@ -82,8 +76,9 @@ const capacityLabel = computed(() =>
             class="flex items-center gap-1 text-[0.6875rem] tabular-nums text-[var(--text-tertiary)] sm:text-xs"
             :title="t('dashboard.autoRoute.concurrency')"
           >
-            <Users :size="12" aria-hidden="true" />{{ entry.in_flight }} /
-            {{ entry.max_concurrency || '∞' }}
+            <Users :size="12" aria-hidden="true" />{{
+              entry.max_concurrency || '∞'
+            }}
           </span>
           <span
             class="flex items-center gap-1 font-mono text-[0.6875rem] text-[var(--text-tertiary)] sm:text-xs"
@@ -97,17 +92,6 @@ const capacityLabel = computed(() =>
         </span>
       </div>
       <template v-if="!compact">
-        <div
-          class="pencil-progress h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]"
-          role="img"
-          :aria-label="capacityLabel"
-        >
-          <div
-            v-if="occupancy !== null"
-            class="h-full bg-[var(--accent)]"
-            :style="{ width: `${occupancy}%` }"
-          />
-        </div>
         <p class="text-[0.625rem] font-medium text-[var(--text-tertiary)]">
           {{
             entry.eligible
@@ -117,21 +101,7 @@ const capacityLabel = computed(() =>
         </p>
       </template>
     </div>
-    <MiniRing
-      v-if="occupancy !== null"
-      :percent="occupancy"
-      color="var(--accent)"
-      :size="compact ? 32 : 40"
-      :aria-label="capacityLabel"
-    >
-      <span
-        class="font-bold tabular-nums text-[var(--accent-text)]"
-        :class="compact ? 'text-[0.6875rem]' : 'text-xs'"
-        >{{ Math.round(occupancy) }}%</span
-      >
-    </MiniRing>
     <Gauge
-      v-else
       :size="compact ? 28 : 32"
       class="shrink-0 text-[var(--text-tertiary)]"
       :aria-label="capacityLabel"

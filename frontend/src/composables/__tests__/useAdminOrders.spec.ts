@@ -29,6 +29,7 @@ const initialStats: AdminOrderStats = {
       unknown_amount_count: 0,
     },
   ],
+  methods: [],
   daily: [],
   start_time: now - 30 * 86400,
   end_time: now,
@@ -42,6 +43,28 @@ function deferred<T>() {
     reject = no
   })
   return { promise, resolve, reject }
+}
+
+const rankingFixture = {
+  items: [
+    { user_id: 2, username: 'alice', paid_count: 3, credited_quota: 500 },
+  ],
+  start_time: now - 30 * 86400,
+  end_time: now,
+}
+// The ranking loads beside the stats; answer it by path so each test can queue
+// stats responses with mockResolvedValueOnce / mockImplementationOnce.
+function statsGet() {
+  const stats = vi.fn()
+  const ranking = vi.fn(async () => rankingFixture as unknown)
+  const get = vi
+    .spyOn(api, 'get')
+    .mockImplementation((path: string, ...args: unknown[]) =>
+      path === '/api/user/topup/ranking'
+        ? (ranking(...(args as [])) as never)
+        : (stats(path, ...args) as never)
+    )
+  return { get, stats, ranking }
 }
 
 let wrapper: VueWrapper | undefined
@@ -80,8 +103,8 @@ describe('order statistics snapshot identity', () => {
     'clears the 30-day snapshot immediately when switching to %s days and failing',
     async (range) => {
       const pending = deferred<AdminOrderStats>()
-      const get = vi
-        .spyOn(api, 'get')
+      const { stats: get } = statsGet()
+      get
         .mockResolvedValueOnce(initialStats)
         .mockImplementationOnce(() => pending.promise as never)
       const state = await setup()
@@ -106,7 +129,8 @@ describe('order statistics snapshot identity', () => {
   )
 
   it('marks a retained same-range snapshot stale until a successful refresh', async () => {
-    const get = vi.spyOn(api, 'get').mockResolvedValueOnce(initialStats)
+    const { stats: get } = statsGet()
+    get.mockResolvedValueOnce(initialStats)
     const state = await setup()
     get.mockRejectedValueOnce(new ApiError('Refresh failed'))
 
@@ -132,8 +156,8 @@ describe('order statistics snapshot identity', () => {
   it('does not restore an aborted older range when its response arrives late', async () => {
     const oldRange = deferred<AdminOrderStats>()
     const newRange = deferred<AdminOrderStats>()
-    const get = vi
-      .spyOn(api, 'get')
+    const { stats: get } = statsGet()
+    get
       .mockResolvedValueOnce(initialStats)
       .mockImplementationOnce(() => oldRange.promise as never)
       .mockImplementationOnce(() => newRange.promise as never)
@@ -155,21 +179,46 @@ describe('order statistics snapshot identity', () => {
   it.each([401, 403])(
     'clears the retained snapshot when a refresh is denied with HTTP %s',
     async (status) => {
-      const get = vi.spyOn(api, 'get').mockResolvedValueOnce(initialStats)
+      const { stats: get } = statsGet()
+      get.mockResolvedValueOnce(initialStats)
       const state = await setup()
       get.mockRejectedValueOnce(new ApiError('Access denied', { status }))
       await state.loadStats({ background: true })
       expect(state.stats.value).toBeNull()
+      expect(state.ranking.value).toBeNull()
       expect(state.statsError.value).toBe('Access denied')
       expect(state.statsStale.value).toBe(false)
     }
   )
 
+  it('loads the quota ranking for the same window as the statistics', async () => {
+    const { stats: get, get: transport } = statsGet()
+    get.mockResolvedValueOnce(initialStats)
+    const state = await setup()
+    expect(transport).toHaveBeenCalledWith(
+      '/api/user/topup/ranking',
+      { start_time: now - 30 * 86400, end_time: now, limit: 10 },
+      { signal: expect.any(AbortSignal) }
+    )
+    expect(state.ranking.value).toEqual([
+      { user_id: 2, username: 'alice', paid_count: 3, credited_quota: '500' },
+    ])
+    expect(state.rankingError.value).toBe('')
+  })
+  it('keeps the statistics when only the ranking fails', async () => {
+    const { stats: get, ranking } = statsGet()
+    get.mockResolvedValueOnce(initialStats)
+    ranking.mockRejectedValueOnce(new ApiError('Ranking unavailable'))
+    const state = await setup()
+    expect(state.stats.value).toEqual(initialStats)
+    expect(state.statsError.value).toBe('')
+    expect(state.ranking.value).toBeNull()
+    expect(state.rankingError.value).toBe('Ranking unavailable')
+  })
   it('aborts an unmounted statistics request and ignores a transport that resolves anyway', async () => {
     const pending = deferred<AdminOrderStats>()
-    const get = vi
-      .spyOn(api, 'get')
-      .mockImplementationOnce(() => pending.promise as never)
+    const { stats: get } = statsGet()
+    get.mockImplementationOnce(() => pending.promise as never)
     const state = await setup()
     wrapper?.unmount()
     wrapper = undefined

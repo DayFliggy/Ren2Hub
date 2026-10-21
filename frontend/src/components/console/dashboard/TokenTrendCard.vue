@@ -5,14 +5,14 @@ import { useI18n } from 'vue-i18n'
 import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import type { UsageSummary } from '@/api/dashboard'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import { formatCompact } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
   points: TokenTrendPoint[]
-  cacheCoverage?: UsageSummary['meta']['cache_coverage'] | null
+  /** quota_data flush interval; null until a summary has loaded. */
+  flushIntervalMinutes?: number | null
   loading?: boolean
 }>()
 
@@ -31,11 +31,8 @@ function defaultPoints(days = 30): TokenTrendPoint[] {
     return {
       date: `${year}-${month}-${day}`,
       total: 0,
-      input: null,
-      output: null,
-      cache_create: null,
-      cache_read: null,
-      hit_rate: null,
+      cache_create: 0,
+      cache_read: 0,
     }
   })
 }
@@ -57,33 +54,24 @@ useEChart(
   (p, scale = 1) => {
     const mood = lineMood(p)
     const dates = displayPoints.value.map((d) => d.date)
-    const labels = {
-      input: t('dashboard.tokenTrend.input'),
-      output: t('dashboard.tokenTrend.output'),
-      cacheCreate: t('dashboard.tokenTrend.cacheCreate'),
-      cacheRead: t('dashboard.tokenTrend.cacheRead'),
-      hitRate: t('dashboard.tokenTrend.hitRate'),
-    }
-
-    // Token series share the left axis; the hit-rate percentage gets its own.
+    // quota_data records total and cache tokens only; there is no input/output
+    // split or hit rate to plot.
     const tokenSeries = [
-      ...(props.points.some((point) => point.input === null)
-        ? [
-            {
-              name: t('dashboard.stats.totalTokens'),
-              key: 'total' as const,
-              color: p.signal,
-            },
-          ]
-        : []),
-      { name: labels.input, key: 'input' as const, color: p.signal },
-      { name: labels.output, key: 'output' as const, color: p.success },
       {
-        name: labels.cacheCreate,
+        name: t('dashboard.stats.totalTokens'),
+        key: 'total' as const,
+        color: p.signal,
+      },
+      {
+        name: t('dashboard.tokenTrend.cacheCreate'),
         key: 'cache_create' as const,
         color: p.warning,
       },
-      { name: labels.cacheRead, key: 'cache_read' as const, color: p.accent },
+      {
+        name: t('dashboard.tokenTrend.cacheRead'),
+        key: 'cache_read' as const,
+        color: p.accent,
+      },
     ].map((s) => ({
       name: s.name,
       type: 'line' as const,
@@ -141,14 +129,7 @@ useEChart(
           if (!params.length) return ''
           const rows = params
             .map((s) => {
-              const value =
-                s.seriesName === labels.hitRate
-                  ? s.value === null
-                    ? '—'
-                    : `${s.value}%`
-                  : s.value === null
-                    ? '—'
-                    : formatCompact(s.value)
+              const value = s.value === null ? '—' : formatCompact(s.value)
               return `<div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.1875rem">
                 <span style="width:0.5rem;height:0.5rem;border-radius:0.125rem;background:${s.color}"></span>
                 <span style="color:${p.textSecondary}">${escapeHtml(s.seriesName)}:</span>
@@ -174,53 +155,17 @@ useEChart(
           interval: Math.max(0, Math.floor(dates.length / 5) - 1),
         },
       },
-      yAxis: [
-        {
-          type: 'value',
-          minInterval: 1,
-          splitLine: mood.splitLine,
-          axisLabel: {
-            color: p.textTertiary,
-            fontSize: 9 * scale,
-            formatter: (v: number) => formatCompact(v),
-          },
+      yAxis: {
+        type: 'value',
+        minInterval: 1,
+        splitLine: mood.splitLine,
+        axisLabel: {
+          color: p.textTertiary,
+          fontSize: 9 * scale,
+          formatter: (v: number) => formatCompact(v),
         },
-        {
-          type: 'value',
-          min: 0,
-          max: 100,
-          splitLine: { show: false },
-          axisLabel: {
-            color: p.support,
-            fontSize: 9 * scale,
-            formatter: (v: number) => `${v}%`,
-          },
-        },
-      ],
-      series: [
-        ...tokenSeries,
-        {
-          name: labels.hitRate,
-          type: 'line',
-          smooth: mood.line.smooth,
-          yAxisIndex: 1,
-          showSymbol: !p.isDark,
-          symbol: mood.line.symbol,
-          symbolSize: mood.line.symbolSize * scale,
-          data: displayPoints.value.map((d) => d.hit_rate),
-          lineStyle: {
-            color: p.support,
-            ...mood.line.lineStyle,
-            width: mood.line.lineStyle.width * scale,
-            type: p.isDark ? 'solid' : 'dashed',
-          },
-          itemStyle: {
-            color: p.surfaceSolid,
-            borderColor: p.support,
-            borderWidth: 2 * scale,
-          },
-        },
-      ],
+      },
+      series: tokenSeries,
     }
   },
   () => displayPoints.value
@@ -233,25 +178,13 @@ useEChart(
     stretch
     data-token-trend-card
   >
-    <template #action>
-      <div class="flex items-center gap-3 text-xs">
-        <span class="text-[var(--text-tertiary)]">
-          {{ t('dashboard.tokenTrend.avgHitRate') }}
-          <span class="font-semibold text-[var(--support)]">—</span>
-        </span>
-      </div>
-    </template>
-
     <p class="mb-3 text-xs text-[var(--text-tertiary)]" data-cache-coverage>
       {{
-        cacheCoverage
-          ? t('dashboard.tokenTrend.cacheCoverage', {
-              records: cacheCoverage.records,
-              read: cacheCoverage.read_records,
-              write: cacheCoverage.write_records,
-              invalid: cacheCoverage.invalid_records,
+        flushIntervalMinutes == null
+          ? t('dashboard.tokenTrend.cacheUnknown')
+          : t('dashboard.tokenTrend.cacheCoverage', {
+              minutes: flushIntervalMinutes,
             })
-          : t('dashboard.tokenTrend.cacheUnknown')
       }}
     </p>
     <div

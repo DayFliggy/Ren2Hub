@@ -7,6 +7,7 @@ import { lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import type { HourlyPoint } from '@/composables/useDashboardStats'
+import { formatTime } from '@/utils/format'
 
 const props = defineProps<{
   hourly: HourlyPoint[]
@@ -17,16 +18,35 @@ const props = defineProps<{
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
 
+// Placeholder axis for an empty response: today's 24 local hours at zero.
 function defaultHourly(): HourlyPoint[] {
+  const midnight = new Date()
+  midnight.setHours(0, 0, 0, 0)
+  const start = midnight.getTime() / 1000
   return Array.from({ length: 24 }, (_, i) => ({
-    hour: `${String(i).padStart(2, '0')}:00`,
+    ts: start + i * 3600,
     requests: 0,
+    tokens: 0,
+    quota: '0',
   }))
 }
 
 const data = computed(() =>
   props.hourly.length > 0 ? props.hourly : defaultHourly()
 )
+
+// The series is a real timeline over the whole range, so multi-day ranges
+// keep the date in each label; formatTime renders "YYYY-MM-DD HH:mm".
+const multiDay = computed(() => {
+  const points = data.value
+  return (
+    formatTime(points[0]!.ts).slice(0, 10) !==
+    formatTime(points.at(-1)!.ts).slice(0, 10)
+  )
+})
+function hourLabel(ts: number): string {
+  return formatTime(ts).slice(multiDay.value ? 5 : 11)
+}
 
 const peakHour = computed(() => {
   if (!props.hourly.length) return null
@@ -64,14 +84,13 @@ useEChart(
       },
       xAxis: {
         type: 'category',
-        data: data.value.map((h) => h.hour),
+        data: data.value.map((h) => hourLabel(h.ts)),
         axisLine: { lineStyle: { color: p.borderSubtle } },
         axisTick: { show: false },
         axisLabel: {
           color: p.textTertiary,
           fontSize: 9 * scale,
-          interval: 2,
-          formatter: (v: string) => v.replace(':00', ''),
+          interval: Math.max(2, Math.floor(data.value.length / 8) - 1),
         },
       },
       yAxis: {
@@ -108,7 +127,7 @@ useEChart(
         v-if="peakHour && peakHour.requests > 0"
         class="rounded-lg bg-[var(--accent-soft)] px-2.5 py-1 text-xs text-[var(--accent-text)]"
       >
-        {{ t('dashboard.stats.peakAt', { hour: peakHour.hour }) }}
+        {{ t('dashboard.stats.peakAt', { hour: formatTime(peakHour.ts) }) }}
       </span>
     </template>
 

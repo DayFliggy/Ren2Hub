@@ -798,6 +798,18 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('SMTPStartTLSEnabled', 'smtpStartTls'),
           toggle('SMTPInsecureSkipVerify', 'smtpSkipVerify'),
           toggle('SMTPForceAuthLogin', 'smtpForceAuthLogin'),
+          text('ResendFrom', 'resendFrom', '', 'resendFromHint'),
+          secret('ResendApiKey', 'resendApiKey'),
+          // Declared after the Resend fields so a save switches the method
+          // only after its credentials; the backend validates the stored
+          // Resend settings when the method becomes resend.
+          select(
+            'EmailProvider',
+            'emailProvider',
+            'smtp',
+            [option('smtp', 'emailSmtp'), option('resend', 'emailResend')],
+            'emailProviderHint'
+          ),
         ],
       },
       {
@@ -805,6 +817,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         titleKey: 'systemSettings.sections.monitoring',
         descriptionKey: 'systemSettings.sections.monitoringDescription',
         fields: [
+          toggle(
+            'QuotaRemindEnabled',
+            'quotaRemindEnabled',
+            true,
+            'quotaRemindEnabledHint'
+          ),
           text('QuotaRemindThreshold', 'quotaRemindThreshold', '1000'),
           toggle('perf_metrics_setting.enabled', 'perfMetricsEnabled', true),
           number(

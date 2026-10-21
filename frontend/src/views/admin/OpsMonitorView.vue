@@ -68,8 +68,8 @@ function recordPerformance(data: PerformanceStats | null) {
   )
   performancePoints.value = appendOpsSample(performancePoints.value, {
     ts: now,
-    cpu: null,
-    memory: null,
+    cpu: projected?.resources?.cpu.percent ?? null,
+    memory: projected?.resources?.memory.percent ?? null,
     disk: projected?.resources?.disk.percent ?? null,
     users: null,
     channels: null,
@@ -88,6 +88,10 @@ function recordRouting(data: RoutingSnapshot | null) {
 }
 const performance = sampleFeed(opsMonitorApi.stats, recordPerformance)
 const routing = sampleFeed(opsMonitorApi.routing, recordRouting)
+const quality = usePolledFeed(
+  (signal) => opsMonitorApi.quality(signal),
+  () => OVERVIEW_INTERVAL_MS
+)
 const catalog = usePolledFeed(
   (signal) => getModelCatalog(undefined, signal),
   () => OVERVIEW_INTERVAL_MS
@@ -138,12 +142,16 @@ const gatewayState = computed(() => ({
   error: routing.error.value,
   updatedAt: routing.updatedAt.value,
 }))
-const routingState = computed(() => ({
+const qualityState = computed(() => ({
+  quality: quality.data.value,
   snapshot: routing.data.value,
-  loading: routing.loading.value,
-  error: routing.error.value,
-  updatedAt: routing.updatedAt.value,
+  loading: quality.loading.value || routing.loading.value,
+  error: [quality.error.value, routing.error.value].filter(Boolean).join(' · '),
+  updatedAt: Math.min(quality.updatedAt.value, routing.updatedAt.value),
 }))
+function refreshQuality() {
+  return Promise.all([quality.refresh(), routing.refresh()])
+}
 const catalogState = computed(() => ({
   catalog: catalog.data.value,
   snapshot: routing.data.value,
@@ -155,6 +163,7 @@ async function refreshAll() {
   await Promise.all([
     performance.refresh(),
     routing.refresh(),
+    quality.refresh(),
     catalog.refresh(),
   ])
 }
@@ -174,8 +183,8 @@ const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
     <OpsQualityCard
       class="ops-area ops-area--quality"
       :class="{ 'ops-area--full': !canReadChannels }"
-      v-bind="routingState"
-      @retry="routing.refresh"
+      v-bind="qualityState"
+      @retry="refreshQuality"
     />
     <OpsUpstreamCard
       v-if="canReadChannels"

@@ -38,7 +38,10 @@ const {
   offerCount,
   hasResults,
   pricingIssues,
+  performanceFor,
+  performanceError,
   load,
+  loadPerformance,
   resetFilters,
 } = useModelMarket()
 const channelValue = computed({
@@ -212,6 +215,17 @@ onMounted(load)
         </li>
       </ul>
     </details>
+    <div
+      v-if="performanceError && !loading && !error && view === 'models'"
+      class="market-performance-error"
+      role="alert"
+      data-model-performance-error
+    >
+      <p>{{ t('modelStats.loadError', { message: performanceError }) }}</p>
+      <ConsoleButton variant="secondary" size="sm" @click="loadPerformance">{{
+        t('retry')
+      }}</ConsoleButton>
+    </div>
 
     <div v-if="loading" class="market-model-grid" aria-busy="true">
       <SkeletonBlock v-for="index in 6" :key="index" bordered class="h-72" />
@@ -246,6 +260,7 @@ onMounted(load)
         v-for="model in filtered"
         :key="model.id"
         :model="model"
+        :performance="performanceFor(model.name)"
         @detail="openDetails"
       />
     </div>
@@ -391,6 +406,20 @@ onMounted(load)
 }
 .market-pricing-issues summary {
   cursor: pointer;
+}
+.market-performance-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--shape-control);
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  color: var(--status-danger-text);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 .market-pricing-issues ul {
   margin-top: 0.5rem;

@@ -473,16 +473,12 @@ export default {
     },
     tokenTrend: {
       title: 'Token usage trend',
-      input: 'Input',
-      output: 'Output',
       cacheCreate: 'Cache Creation',
       cacheRead: 'Cache Read',
-      hitRate: 'Cache Hit Rate',
       cacheCoverage:
-        'Recorded cache usage only: {read} read, {write} write and {invalid} invalid records out of {records} consumption records. Cross-protocol hit rate is unknown.',
+        'Totals come from hourly usage records written every {minutes} minutes, so the latest hour may be incomplete. Cross-protocol hit rate is unknown.',
       cacheUnknown:
-        'Cache totals include recorded usage only. Missing usage and cross-protocol hit rate remain unknown.',
-      avgHitRate: 'Avg hit',
+        'Totals come from hourly usage records. Cross-protocol hit rate is unknown.',
       emptyHint: 'No token usage recorded in the last 30 days',
     },
     systemStatus: {
@@ -506,7 +502,7 @@ export default {
     },
     stats: {
       unavailable:
-        'Usage statistics are unavailable because consumption logging is disabled.',
+        'Usage statistics are unavailable because data export is disabled.',
       totalTokens: 'Total tokens',
       totalSpend: 'Total spend',
       totalRequests: 'Total requests',
@@ -519,7 +515,7 @@ export default {
       spend: 'Spend',
       requests: 'Requests',
       share: 'Share',
-      hourlyDist: '24h request distribution',
+      hourlyDist: 'Hourly requests',
       peakAt: 'Peak at {hour}',
       trendTitle: 'Spend & requests dual trend',
       noData: 'No data',
@@ -562,7 +558,7 @@ export default {
     autoRoute: {
       stale: 'Refresh failed; the cards show the last successful catalog.',
       concurrency: 'Channel concurrency',
-      channelOccupancy: 'In flight {active} / limit {limit}',
+      channelLimit: 'Concurrency limit {limit}',
       catalogEligible:
         'Eligible in this catalog; requests still follow the current routing rules.',
       historyUnavailable:
@@ -884,6 +880,10 @@ export default {
     },
     created: 'Ticket created successfully',
     replied: 'Reply sent',
+    attachmentsNotStored:
+      'The ticket was saved, but its attachments could not be stored. The list has been refreshed; do not submit it again.',
+    replyAttachmentsNotStored:
+      'The reply was saved, but its attachments could not be stored. The thread has been refreshed; do not send it again.',
     closed: 'Ticket closed',
     reopened: 'Ticket reopened',
     notFound: 'Ticket not found',
@@ -1140,6 +1140,8 @@ export default {
     allLabs: 'All labs',
     priorityConflict: 'Channel priority changed. Reload before editing.',
     channelRatio: 'Channel multiplier',
+    channelRatioReadOnly:
+      'Changing the multiplier changes what users pay and requires sensitive channel write permission.',
     maxConcurrency: 'Concurrent requests',
     maxConcurrencyHint: '0 means no limit.',
 
@@ -1747,6 +1749,8 @@ export default {
     paymentShareOf: '{method} accounts for {percent}%',
     topSpenders: 'Top spenders',
     spenderOrders: '{count} order(s)',
+    topSpendersScope:
+      'Successful orders ranked by credited quota across all currencies.',
     noRevenue: 'No sales in this range',
     statsFailed: 'Could not load statistics',
     chart: {
@@ -1757,7 +1761,7 @@ export default {
       ordersAxis: 'Orders',
       date: 'Date',
     },
-    searchPlaceholder: 'Search order no., email, username or ID',
+    searchPlaceholder: 'Exact order no., or use % for partial match',
     statusFilter: 'Order status',
     methodFilter: 'Payment provider',
     allStatuses: 'All statuses',
@@ -2458,7 +2462,7 @@ export default {
     notifyGotify: 'Gotify',
     quotaWarningThreshold: 'Quota warning threshold',
     quotaWarningHint:
-      'Show a notification when the balance falls below this value.',
+      'Remind once when the balance drops below this quota. Leave empty to use the site default.',
     notificationEmail: 'Notification email',
     notificationEmailPlaceholder: 'Leave empty to use the login email',
     webhookUrl: 'Webhook URL',
@@ -2467,9 +2471,12 @@ export default {
     gotifyUrl: 'Gotify server URL',
     gotifyToken: 'Gotify application token',
     gotifyPriority: 'Gotify priority (0-10)',
-    walletQuotaReminder: 'Wallet quota reminder',
+    walletQuotaReminder: 'Low balance reminder',
     walletQuotaReminderDesc:
-      'Send a notification when wallet balance falls below the threshold.',
+      'Remind me once when my balance drops below the threshold.',
+    channelNotifications: 'Channel notifications',
+    channelNotificationsDesc:
+      'When a channel is disabled or re-enabled automatically, or a test of all channels finishes.',
     saveNotificationSettings: 'Save notification settings',
     notificationSaved: 'Notification settings saved',
     loadFailed: 'Failed to load settings',
@@ -2483,7 +2490,8 @@ export default {
     recordIpAddress: 'Record IP address',
     recordIpAddressDesc: 'Include the IP address in usage and error logs.',
     editDisplayName: 'Edit display name',
-    errorPositiveThreshold: 'Enter a threshold greater than 0.',
+    errorThresholdInteger:
+      'Enter a whole quota of 0 or more, or leave it empty for the site default.',
     errorEmail: 'Enter a valid email address.',
     errorHttpUrl: 'Enter a valid HTTP or HTTPS URL.',
     errorRequired: 'This field is required.',
@@ -3003,8 +3011,9 @@ export default {
       drawingDescription: 'Midjourney proxy features and callback behavior.',
       behavior: 'System behavior',
       behaviorDescription: 'Console defaults and operating modes.',
-      email: 'SMTP email',
-      emailDescription: 'Outbound mail server and TLS policy.',
+      email: 'Email sending',
+      emailDescription:
+        'Outbound mail through SMTP or Resend. Only the selected method sends email; the other keeps its settings.',
       monitoring: 'Monitoring and alerts',
       monitoringDescription:
         'User balance alerts and performance metrics collection.',
@@ -3247,6 +3256,16 @@ export default {
       smtpStartTls: 'Enable STARTTLS',
       smtpSkipVerify: 'Skip TLS certificate verification',
       smtpForceAuthLogin: 'Force AUTH LOGIN',
+      resendFrom: 'Resend sender',
+      resendFromHint:
+        "Use address{'@'}example.com or Name <address{'@'}example.com>. The domain must be verified in Resend; a blank name uses the site name.",
+      resendApiKey: 'Resend API key',
+      emailProvider: 'Email sending method',
+      emailProviderHint:
+        'Switching to Resend requires a saved API key and sender.',
+      quotaRemindEnabled: 'Low balance reminders',
+      quotaRemindEnabledHint:
+        'Remind users through their chosen notification method when their balance drops below the threshold.',
       quotaRemindThreshold: 'Quota reminder threshold',
       perfMetricsEnabled: 'Enable performance metrics',
       perfMetricsFlushInterval: 'Metrics flush interval (minutes)',
@@ -3288,6 +3307,8 @@ export default {
       week: 'Week',
       minute: 'Minute',
       fiveMinutes: '5 minutes',
+      emailSmtp: 'SMTP',
+      emailResend: 'Resend',
     },
     customOAuth: {
       title: 'Custom OAuth providers',
@@ -3332,7 +3353,8 @@ export default {
       title: 'Runtime status and maintenance',
       loadingStats: 'Fetching the latest runtime status…',
       affinitySummary: '{total} cached entries, capacity {capacity}.',
-      performanceSummary: 'Cache hit rate {rate}, {count} log files.',
+      performanceSummary:
+        '{memoryCount} active memory buffers ({memorySize}), {diskCount} active disk files ({diskSize}), {logCount} log files.',
       cacheEntries: 'Cached entries',
       unknownEntries: 'Unknown entries',
       cacheAlgorithm: 'Cache algorithm',
@@ -3354,7 +3376,7 @@ export default {
       clearCache: 'Clear disk cache',
       clearCacheMessage: 'Inactive disk cache files will be deleted.',
       resetStats: 'Reset cache statistics',
-      resetStatsMessage: 'Disk cache hit and miss counts will be reset.',
+      resetStatsMessage: 'Memory and disk cache hit counts will be reset.',
       gc: 'Run garbage collection',
       gcMessage: 'The Go runtime garbage collector will run now.',
       cleanupLogs: 'Clean up log files',

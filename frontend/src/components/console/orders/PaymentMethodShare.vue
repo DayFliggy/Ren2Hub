@@ -6,10 +6,13 @@ import { SERIES_TOKENS } from '@/charts/palette'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import {
+  ADMIN_ORDER_METHODS,
+  adminOrderMethodLabelKey,
   adminOrderPaymentRailLabelKey,
   formatAdminOrderAmount,
+  isAdminOrderPaymentRail,
 } from '@/constants/adminOrders'
-import type { AdminOrderMethodShare } from '@/types/console'
+import type { AdminOrderMethod, AdminOrderMethodShare } from '@/types/console'
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +33,18 @@ const colors = SERIES_TOKENS
 const total = computed(() =>
   props.items.reduce((sum, item) => sum + item.amount, 0)
 )
+
+// method is payment_provider, or payment_method for orders without a provider.
+function methodLabel(method: string): string {
+  if (
+    method !== 'other' &&
+    ADMIN_ORDER_METHODS.includes(method as AdminOrderMethod)
+  )
+    return t(adminOrderMethodLabelKey(method as AdminOrderMethod))
+  if (isAdminOrderPaymentRail(method))
+    return t(adminOrderPaymentRailLabelKey(method))
+  return method || t('orders.notRecorded')
+}
 
 function share(amount: number): number {
   return total.value > 0 ? Math.round((amount / total.value) * 100) : 0
@@ -59,7 +74,7 @@ function share(amount: number): number {
               aria-hidden="true"
             />
             <span class="truncate text-[var(--text-secondary)]">
-              {{ t(adminOrderPaymentRailLabelKey(item.method)) }}
+              {{ methodLabel(item.method) }}
             </span>
           </span>
           <span class="shrink-0 tabular-nums">
@@ -86,7 +101,7 @@ function share(amount: number): number {
             aria-valuemax="100"
             :aria-label="
               t('orders.paymentShareOf', {
-                method: t(adminOrderPaymentRailLabelKey(item.method)),
+                method: methodLabel(item.method),
                 percent: share(item.amount),
               })
             "

@@ -1,11 +1,12 @@
+/** C2 /api/data/self/summary: counts from quota_data, latency from own logs. */
 export function dashboardFixture(marker = 10) {
   return {
     kpi: {
       totalTokens: marker,
       totalQuota: 25,
       totalRequests: 2,
-      avgLatency: null,
-      successRate: null,
+      avgLatency: 820 as number | null,
+      successRate: 50 as number | null,
     },
     comparison: { quotaDelta: null, requestsDelta: null },
     models: [
@@ -15,21 +16,16 @@ export function dashboardFixture(marker = 10) {
         quota: 25,
         requests: 2,
         share: 1,
-        avgLatency: null,
+        avgLatency: 820 as number | null,
       },
     ],
-    hourly: [],
-    flow: [{ date: '2026-10-21', consume: 25, requests: 2 }],
+    hourly: [
+      { ts: 1792537200, requests: 0, tokens: 0, quota: 0 },
+      { ts: 1792540800, requests: 2, tokens: marker, quota: 25 },
+    ],
+    flow: [{ date: '2026-10-21', consume: 25, requests: 2, tokens: marker }],
     token_trend: [
-      {
-        date: '2026-10-21',
-        total: marker,
-        input: null,
-        output: null,
-        cache_create: null,
-        cache_read: null,
-        hit_rate: null,
-      },
+      { date: '2026-10-21', total: marker, cache_read: 4, cache_create: 1 },
     ],
     distribution: [
       { date: '2026-10-21', consume: 25, requests: 2, tokens: marker },
@@ -40,19 +36,10 @@ export function dashboardFixture(marker = 10) {
       tz_offset: -480,
       generated_at: 1792584000,
       available: true,
-      source: 'consume_logs',
-      cache_coverage: {
-        records: 2,
-        read_records: 0,
-        write_records: 0,
-        invalid_records: 0,
-      },
-      coverage: {
-        consume_logs: true,
-        cache_usage: false,
-        latency: true,
-        success_rate: false,
-      },
+      source: 'quota_data',
+      bucket_seconds: 3600,
+      flush_interval_minutes: 5,
+      coverage: { latency: true, success_rate: true },
     },
   }
 }

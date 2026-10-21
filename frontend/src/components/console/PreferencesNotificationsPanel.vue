@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
   Webhook,
 } from 'lucide-vue-next'
-import { onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
@@ -28,11 +28,9 @@ import { useLocaleChoice } from '@/composables/useAccountLanguage'
 import { isLocaleCode } from '@/i18n'
 import type { NotificationSettings, SettingsNotifyType } from '@/types/settings'
 
-import { isQuota } from '@/utils/quota'
-
 import SettingsSectionHeading from './SettingsSectionHeading.vue'
 
-defineProps<{ isAdmin: boolean }>()
+const props = defineProps<{ isAdmin: boolean }>()
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -43,7 +41,8 @@ const { hidden: balanceHidden } = useBalanceVisibility()
 
 const readonlyNotification: NotificationSettings = {
   notifyType: 'email',
-  quotaWarningThreshold: '500000',
+  quotaWarningThreshold: '',
+  acceptUnsetModelRatio: false,
   notificationEmail: '',
   webhookUrl: '',
   webhookSecret: '',
@@ -61,14 +60,34 @@ const draft = reactive<NotificationSettings>({
 })
 const errors = reactive<Record<string, string>>({})
 
+// Unset switches show the backend default without being written back.
+const quotaWarningOn = computed({
+  get: () => draft.quotaWarningEnabled ?? true,
+  set: (value: boolean) => {
+    draft.quotaWarningEnabled = value
+  },
+})
+const channelNotifyOn = computed({
+  get: () => draft.channelNotifyEnabled ?? auth.isRoot,
+  set: (value: boolean) => {
+    draft.channelNotifyEnabled = value
+  },
+})
+
 onMounted(() => {
   if (!auth.user?.setting) return
   try {
     const value = JSON.parse(auth.user.setting) as Record<string, unknown>
     if (typeof value.notify_type === 'string')
       draft.notifyType = value.notify_type as SettingsNotifyType
-    if (isQuota(value.quota_warning_threshold))
-      draft.quotaWarningThreshold = value.quota_warning_threshold
+    // The backend stores a JSON number and omits 0 (site default).
+    if (typeof value.quota_warning_threshold === 'number')
+      draft.quotaWarningThreshold = String(value.quota_warning_threshold)
+    if (typeof value.quota_warning_enabled === 'boolean')
+      draft.quotaWarningEnabled = value.quota_warning_enabled
+    if (typeof value.channel_notify_enabled === 'boolean')
+      draft.channelNotifyEnabled = value.channel_notify_enabled
+    draft.acceptUnsetModelRatio = value.accept_unset_model_ratio_model === true
     if (typeof value.notification_email === 'string')
       draft.notificationEmail = value.notification_email
     if (typeof value.webhook_url === 'string')
@@ -132,11 +151,14 @@ function isHttpUrl(value: string): boolean {
 function validate(): boolean {
   Object.keys(errors).forEach((key) => delete errors[key])
 
+  // Empty means the site default; otherwise a whole quota the backend can
+  // hold exactly in its float64 field.
+  const threshold = draft.quotaWarningThreshold
   if (
-    !isQuota(draft.quotaWarningThreshold) ||
-    BigInt(draft.quotaWarningThreshold) <= 0n
+    threshold !== '' &&
+    (!/^\d+$/.test(threshold) || !Number.isSafeInteger(Number(threshold)))
   ) {
-    errors.quotaWarningThreshold = t('settings.errorPositiveThreshold')
+    errors.quotaWarningThreshold = t('settings.errorThresholdInteger')
   }
   if (
     draft.notifyType === 'email' &&
@@ -175,7 +197,14 @@ async function saveNotification(): Promise<void> {
   try {
     await api.put('/api/user/setting', {
       notify_type: draft.notifyType,
-      quota_warning_threshold: draft.quotaWarningThreshold,
+      quota_warning_threshold: Number(draft.quotaWarningThreshold || '0'),
+      ...(draft.quotaWarningEnabled === undefined
+        ? {}
+        : { quota_warning_enabled: draft.quotaWarningEnabled }),
+      ...(props.isAdmin && draft.channelNotifyEnabled !== undefined
+        ? { channel_notify_enabled: draft.channelNotifyEnabled }
+        : {}),
+      accept_unset_model_ratio_model: draft.acceptUnsetModelRatio,
       notification_email: draft.notificationEmail,
       webhook_url: draft.webhookUrl,
       webhook_secret: draft.webhookSecret,
@@ -272,10 +301,9 @@ function changeTheme(value: string): void {
               t('settings.quotaWarningThreshold')
             }}</span>
             <input
-              v-model="draft.quotaWarningThreshold"
+              v-model.trim="draft.quotaWarningThreshold"
               type="text"
               inputmode="numeric"
-              min="1"
               :disabled="false"
               class="settings-input mt-2"
               :aria-invalid="Boolean(errors.quotaWarningThreshold)"
@@ -499,6 +527,34 @@ function changeTheme(value: string): void {
       <div
         class="sibling-divide-y sibling-divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
       >
+        <div class="settings-toggle-row">
+          <div>
+            <p class="settings-toggle-title">
+              {{ t('settings.walletQuotaReminder') }}
+            </p>
+            <p class="settings-toggle-description">
+              {{ t('settings.walletQuotaReminderDesc') }}
+            </p>
+          </div>
+          <ConsoleToggle
+            v-model="quotaWarningOn"
+            :label="t('settings.walletQuotaReminder')"
+          />
+        </div>
+        <div v-if="isAdmin" class="settings-toggle-row">
+          <div>
+            <p class="settings-toggle-title">
+              {{ t('settings.channelNotifications') }}
+            </p>
+            <p class="settings-toggle-description">
+              {{ t('settings.channelNotificationsDesc') }}
+            </p>
+          </div>
+          <ConsoleToggle
+            v-model="channelNotifyOn"
+            :label="t('settings.channelNotifications')"
+          />
+        </div>
         <div v-if="isAdmin" class="settings-toggle-row">
           <div>
             <p class="settings-toggle-title">

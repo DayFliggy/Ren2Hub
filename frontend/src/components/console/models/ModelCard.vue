@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { MarketModel } from '@/types/modelMarket'
+import type { MarketModel, ModelPerformanceState } from '@/types/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
@@ -10,7 +10,10 @@ import ModelCapabilities from './ModelCapabilities.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 import ModelStatistics from './ModelStatistics.vue'
 
-const props = defineProps<{ model: MarketModel }>()
+const props = defineProps<{
+  model: MarketModel
+  performance: ModelPerformanceState
+}>()
 const emit = defineEmits<{ detail: [modelId: string, offerId?: string] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMarketMessages })
 const cardId = useId()
@@ -99,11 +102,16 @@ const channelCount = computed(
           :id="`${quoteId}-price`"
           :pricing="representative.pricing"
         />
-        <ModelStatistics compact />
       </div>
       <div v-else :id="quoteId" class="market-quote-lane market-no-offers">
         {{ t('noSupply') }}
       </div>
+      <!-- Model-wide metrics sit outside the channel lane they do not describe. -->
+      <ModelStatistics
+        compact
+        :performance="performance"
+        class="market-card-statistics"
+      />
     </div>
     <div class="market-card-footer">
       <span>
@@ -217,6 +225,9 @@ const channelCount = computed(
   font-size: 0.75rem;
   color: var(--text-tertiary);
   padding-block: 1rem;
+}
+.market-card-statistics {
+  margin-bottom: 0.7rem;
 }
 .market-card-footer {
   display: flex;

@@ -9,6 +9,9 @@ import {
   pricingConfigApi,
   type FetchedPriceSource,
   type FetchedModelPrice,
+  type FetchedUpstreamPrices,
+  type PriceSourceFingerprint,
+  type PriceUpstream,
 } from '@/api/pricingConfig'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import type { PricingDraft } from '@/features/pricing/draft'
@@ -18,6 +21,8 @@ const props = defineProps<{ draft: PricingDraft }>()
 const emit = defineEmits<{ close: []; fill: [rows: FetchedModelPrice[]] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const sources = ref<FetchedPriceSource[]>([])
+const upstreams = ref<PriceUpstream[]>([])
+const upstreamPrices = ref<FetchedUpstreamPrices>()
 const source = ref(''),
   search = ref(''),
   selected = ref<string[]>([])
@@ -26,9 +31,27 @@ const loading = ref(false),
 const page = ref(1),
   pageSize = ref(50)
 let controller: AbortController | undefined
-const current = computed(() =>
-  sources.value.find((item) => item.id === source.value)
+const upstreamKey = (upstream: PriceUpstream) => `upstream:${upstream.id}`
+const upstream = computed(() =>
+  upstreams.value.find((item) => upstreamKey(item) === source.value)
 )
+const current = computed(() =>
+  upstream.value
+    ? upstreamPrices.value
+    : sources.value.find((item) => item.id === source.value)
+)
+const hasOpenRouter = computed(() =>
+  upstreams.value.some((item) => item.kind === 'openrouter')
+)
+function upstreamName(item: PriceUpstream) {
+  return item.kind === 'openrouter' ? item.name : t(`upstream_${item.kind}`)
+}
+// null published digest or matches means unverified, never a match.
+function fingerprintState(fingerprint: PriceSourceFingerprint | null) {
+  if (!fingerprint) return 'fingerprintMissing'
+  if (fingerprint.matches === null) return 'fingerprintUnverified'
+  return fingerprint.matches ? 'fingerprintMatched' : 'fingerprintMismatched'
+}
 const keyFor = (model: FetchedModelPrice) =>
   JSON.stringify([model.model_name, model.provider])
 const rows = computed(() =>
@@ -73,28 +96,48 @@ const duplicate = computed(
 watch(source, () => {
   selected.value = []
   search.value = ''
+  upstreamPrices.value = undefined
+  if (upstream.value) void fetchUpstream(upstream.value)
 })
 watch([source, search, pageSize], () => {
   page.value = 1
 })
-async function fetchPrices() {
+// One request at a time; a new request aborts the previous one.
+async function load(task: (signal: AbortSignal) => Promise<void>) {
   controller?.abort()
-  controller = new AbortController()
-  const request = controller
+  const request = new AbortController()
+  controller = request
   loading.value = true
   error.value = ''
-  sources.value = []
-  selected.value = []
-  source.value = ''
   try {
-    const result = await pricingConfigApi.fetch(request.signal)
-    if (!request.signal.aborted) sources.value = result
+    await task(request.signal)
   } catch (cause) {
     if (!request.signal.aborted)
       error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     if (controller === request) loading.value = false
   }
+}
+function fetchPrices() {
+  sources.value = []
+  upstreams.value = []
+  selected.value = []
+  source.value = ''
+  return load(async (signal) => {
+    const [local, native] = await Promise.all([
+      pricingConfigApi.fetch(signal),
+      pricingConfigApi.upstreams(signal),
+    ])
+    if (signal.aborted) return
+    sources.value = local
+    upstreams.value = native
+  })
+}
+function fetchUpstream(item: PriceUpstream) {
+  return load(async (signal) => {
+    const result = await pricingConfigApi.fetchUpstream(item, signal)
+    if (!signal.aborted) upstreamPrices.value = result
+  })
 }
 function selectVisible() {
   selected.value = rows.value
@@ -116,7 +159,7 @@ onBeforeUnmount(() => controller?.abort())
       <fieldset class="price-source-list">
         <legend class="sr-only">{{ t('source') }}</legend>
         <label
-          v-for="{ id, name } in sources"
+          v-for="{ id, name, status, models, fingerprint } in sources"
           :key="id"
           class="price-source"
           :data-selected="source === id"
@@ -128,35 +171,67 @@ onBeforeUnmount(() => controller?.abort())
             :value="id"
             :disabled="
               loading ||
-              !sources
-                .find((item) => item.id === id)
-                ?.models.some(
-                  (model) =>
-                    !model.unsupported_reason &&
-                    Object.keys(model.pricing).length
-                )
+              !models.some(
+                (model) =>
+                  !model.unsupported_reason && Object.keys(model.pricing).length
+              )
             "
           />
           <span>{{ name }}</span>
+          <small>{{ t(status) }}</small>
           <small>{{
-            t(
-              loading
-                ? 'loading'
-                : (sources.find((item) => item.id === id)?.status ??
-                    'unselected')
-            )
-          }}</small>
-          <small v-if="!loading">{{
             t('sourceCount', {
-              count:
-                sources
-                  .find((item) => item.id === id)
-                  ?.models.filter((model) => !model.unsupported_reason)
-                  .length ?? 0,
+              count: models.filter((model) => !model.unsupported_reason).length,
             })
+          }}</small>
+          <small :data-fingerprint="fingerprintState(fingerprint)">{{
+            t(fingerprintState(fingerprint))
+          }}</small>
+          <code v-if="fingerprint" :title="fingerprint.sha256">{{
+            t('downloadedSha256', { digest: fingerprint.sha256 })
+          }}</code>
+          <code
+            v-if="fingerprint?.matches === false"
+            :title="fingerprint.published_sha256 ?? ''"
+            >{{
+              t('publishedSha256', { digest: fingerprint.published_sha256 })
+            }}</code
+          >
+        </label>
+      </fieldset>
+      <p class="text-xs text-[var(--text-tertiary)]">{{ t('upstreamHint') }}</p>
+      <fieldset v-if="upstreams.length" class="price-source-list">
+        <legend class="sr-only">{{ t('upstreamSource') }}</legend>
+        <label
+          v-for="item in upstreams"
+          :key="item.id"
+          class="price-source"
+          :data-selected="source === upstreamKey(item)"
+        >
+          <input
+            v-model="source"
+            type="radio"
+            name="price-source"
+            :value="upstreamKey(item)"
+            :disabled="loading"
+          />
+          <span>{{ upstreamName(item) }}</span>
+          <small>{{
+            t(item.kind === 'openrouter' ? 'upstreamChannel' : 'upstreamPreset')
+          }}</small>
+          <small v-if="source === upstreamKey(item)">{{
+            loading
+              ? t('loading')
+              : t('sourceCount', { count: upstreamPrices?.models.length ?? 0 })
           }}</small>
         </label>
       </fieldset>
+      <p
+        v-if="upstreams.length && !hasOpenRouter"
+        class="text-xs text-[var(--text-tertiary)]"
+      >
+        {{ t('noOpenRouter') }}
+      </p>
       <p
         v-if="error"
         class="text-xs text-[var(--status-danger-text)]"
@@ -170,6 +245,23 @@ onBeforeUnmount(() => controller?.abort())
         class="text-xs text-[var(--status-danger-text)]"
       >
         <li v-for="message in item.errors" :key="message">
+          {{ item.name }}: {{ message }}
+        </li>
+      </ul>
+      <ul
+        v-if="upstream && upstreamPrices?.errors.length"
+        class="text-xs text-[var(--status-danger-text)]"
+      >
+        <li v-for="message in upstreamPrices.errors" :key="message">
+          {{ upstreamName(upstream) }}: {{ message }}
+        </li>
+      </ul>
+      <ul
+        v-for="item in sources.filter((item) => item.warnings.length)"
+        :key="item.id"
+        class="text-xs text-[var(--status-warning-text)]"
+      >
+        <li v-for="message in item.warnings" :key="message">
           {{ item.name }}: {{ message }}
         </li>
       </ul>
@@ -320,6 +412,20 @@ onBeforeUnmount(() => controller?.abort())
 .price-source small {
   width: 100%;
   color: var(--text-secondary);
+}
+.price-source small[data-fingerprint='fingerprintMismatched'] {
+  color: var(--status-danger-text);
+  font-weight: 600;
+}
+/* Digests are truncated visually; the full value stays in the text and title. */
+.price-source code {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
 }
 .price-fetch-tools {
   display: flex;

@@ -74,6 +74,8 @@ const {
   statsRefreshing,
   statsError,
   statsStale,
+  ranking,
+  rankingError,
   load,
   loadStats,
   fetchAllForExport,
@@ -140,6 +142,22 @@ const unknownAmounts = computed(
       (sum, entry) => sum + entry.unknown_amount_count,
       0
     ) ?? 0
+)
+// Shares stay inside the selected currency; amounts are never mixed across currencies.
+const methodShares = computed(() =>
+  (stats.value?.methods ?? [])
+    .filter(
+      (entry) =>
+        selectedCurrency.value !== '' &&
+        entry.currency === selectedCurrency.value &&
+        entry.paid_count > 0
+    )
+    .map((entry) => ({
+      method: entry.method,
+      amount: Number(entry.paid_amount),
+      count: entry.paid_count,
+    }))
+    .sort((left, right) => right.amount - left.amount)
 )
 const daily = computed(() =>
   (stats.value?.daily ?? [])
@@ -433,15 +451,14 @@ onBeforeUnmount(() => exportController?.abort())
 
           <div class="mt-5 grid gap-5 lg:grid-cols-2">
             <PaymentMethodShare
-              :items="[]"
+              :items="methodShares"
               :currency="selectedCurrency"
-              unavailable
               :loading="statsLoading"
             />
             <TopSpenders
-              :items="[]"
-              :currency="selectedCurrency"
-              unavailable
+              :items="ranking ?? []"
+              :unavailable="ranking === null"
+              :error="rankingError"
               :loading="statsLoading"
             />
           </div>

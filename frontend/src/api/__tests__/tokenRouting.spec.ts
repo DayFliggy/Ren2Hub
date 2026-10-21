@@ -61,7 +61,6 @@ describe('native token routing', () => {
           eligible: false,
           reason: 'channel_saturated',
           channel_ratio: '1.25',
-          in_flight: 2,
         },
       ],
     })

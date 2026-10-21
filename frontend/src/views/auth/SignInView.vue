@@ -136,8 +136,10 @@ async function signInPasskey() {
   loading.value = true
   try {
     const verifying = Boolean(twoFactorFlowToken.value)
+    // Second-factor verification continues the password login flow
+    // (controller/login_verification.go); primary sign-in is discoverable.
     const prefix = verifying
-      ? '/api/user/login/verify/passkey'
+      ? '/api/user/login/passkey'
       : '/api/user/passkey/login'
     const begin = await api.post<{
       options: AssertionOptions

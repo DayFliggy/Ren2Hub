@@ -4,6 +4,11 @@ import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import { api } from '@/api/console'
+import {
+  opsMonitorApi,
+  performanceNumber,
+  type PerformanceStats,
+} from '@/api/opsMonitor'
 import { useToast } from '@/composables/useToast'
 
 interface ChannelAffinityStats {
@@ -12,12 +17,6 @@ interface ChannelAffinityStats {
   unknown: number
   cache_capacity: number
   cache_algo: string
-}
-
-interface PerformanceStats {
-  cache_stats: { hit_count: number; miss_count: number }
-  memory_stats: { alloc: number; num_goroutine: number }
-  disk_cache_info: { total_size: number }
 }
 
 interface LogFiles {
@@ -81,15 +80,26 @@ const actionText = computed(() => {
   }
 })
 
-const cacheHitRate = computed(() => {
+// common.DiskCacheStats exposes usage counters, not hit/miss totals, so the
+// summary reports active cache usage instead of a hit rate.
+const cacheSummary = computed(() => {
   const stats = performanceStats.value?.cache_stats
-  if (!stats) return '—'
-  const total = stats.hit_count + stats.miss_count
-  return total === 0 ? '—' : `${Math.round((stats.hit_count / total) * 100)}%`
+  return {
+    memoryCount: formatCount(stats?.active_memory_buffers),
+    memorySize: formatBytes(stats?.current_memory_usage_bytes),
+    diskCount: formatCount(stats?.active_disk_files),
+    diskSize: formatBytes(stats?.current_disk_usage_bytes),
+    logCount: formatCount(logFiles.value?.file_count),
+  }
 })
 
-function formatBytes(bytes: number | undefined) {
-  if (!bytes) return '0 B'
+function formatCount(value: number | null | undefined) {
+  return value == null ? '—' : String(value)
+}
+
+function formatBytes(bytes: number | null | undefined) {
+  if (bytes == null) return '—'
+  if (bytes === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const index = Math.min(
     Math.floor(Math.log(bytes) / Math.log(1024)),
@@ -107,7 +117,7 @@ async function loadStats() {
       )
     } else {
       const [stats, logs] = await Promise.all([
-        api.get<PerformanceStats>('/api/performance/stats'),
+        opsMonitorApi.stats(),
         api.get<LogFiles>('/api/performance/logs'),
       ])
       performanceStats.value = stats
@@ -184,12 +194,7 @@ onMounted(loadStats)
           }}
         </p>
         <p v-else class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-          {{
-            t('systemSettings.maintenance.performanceSummary', {
-              rate: cacheHitRate,
-              count: logFiles?.file_count ?? 0,
-            })
-          }}
+          {{ t('systemSettings.maintenance.performanceSummary', cacheSummary) }}
         </p>
       </div>
       <ConsoleButton
@@ -250,7 +255,11 @@ onMounted(loadStats)
         <div
           class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
         >
-          {{ formatBytes(performanceStats.disk_cache_info.total_size) }}
+          {{
+            formatBytes(
+              performanceNumber(performanceStats.disk_cache_info, 'total_size')
+            )
+          }}
         </div>
       </div>
       <div class="rounded-xl border border-[var(--border-subtle)] p-3.5">

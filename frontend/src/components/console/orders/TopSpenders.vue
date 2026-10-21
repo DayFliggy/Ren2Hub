@@ -3,20 +3,19 @@ import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import {
-  adminOrderRankStyle,
-  formatAdminOrderAmount,
-} from '@/constants/adminOrders'
+import { adminOrderRankStyle } from '@/constants/adminOrders'
 import type { AdminOrderSpender } from '@/types/console'
+import { formatQuota } from '@/utils/format'
 
 withDefaults(
   defineProps<{
     items: AdminOrderSpender[]
-    currency?: string
     unavailable?: boolean
+    /** Why the ranking is unavailable, shown instead of the generic hint. */
+    error?: string
     loading?: boolean
   }>(),
-  { loading: false, unavailable: false, currency: '' }
+  { loading: false, unavailable: false, error: '' }
 )
 
 const { t } = useI18n()
@@ -27,7 +26,7 @@ const { t } = useI18n()
     <EmptyState
       v-if="unavailable && !loading"
       :title="t('orders.summaryUnavailable')"
-      :hint="t('orders.summaryUnavailableHint')"
+      :hint="error || t('orders.summaryUnavailableHint')"
     />
     <ul v-else-if="loading" class="sibling-space-y-3.5" aria-hidden="true">
       <li
@@ -53,22 +52,28 @@ const { t } = useI18n()
           <span class="min-w-0">
             <span
               class="block truncate text-[var(--text-secondary)]"
-              :title="item.email"
+              :title="item.username"
             >
-              {{ item.email }}
+              {{ item.username || `#${item.user_id}` }}
             </span>
             <span class="block text-xs text-[var(--text-tertiary)]">
-              {{ t('orders.spenderOrders', { count: item.orders }) }}
+              {{ t('orders.spenderOrders', { count: item.paid_count }) }}
             </span>
           </span>
         </span>
         <span
           class="shrink-0 font-semibold tabular-nums text-[var(--text-primary)]"
         >
-          {{ formatAdminOrderAmount(item.amount, currency) }}
+          {{ formatQuota(item.credited_quota) }}
         </span>
       </li>
     </ol>
+    <p
+      v-if="!unavailable && !loading && items.length > 0"
+      class="mt-4 text-xs text-[var(--text-tertiary)]"
+    >
+      {{ t('orders.topSpendersScope') }}
+    </p>
     <EmptyState v-else :title="t('orders.noRevenue')" />
   </ConsoleCard>
 </template>

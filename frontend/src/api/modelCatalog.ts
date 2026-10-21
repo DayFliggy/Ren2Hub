@@ -42,7 +42,6 @@ export interface CatalogChannel {
   status: number
   channel_ratio: string
   max_concurrency: number
-  in_flight: number
   eligible: boolean
   filter_reason: string
   lab: { id: string; name: string; source: string }
@@ -121,9 +120,7 @@ export function parseModelCatalog(value: unknown): ModelCatalog {
       invalidResponse(endpoint)
     const id = requiredStrictInteger(row.id, endpoint)
     const max_concurrency = requiredStrictInteger(row.max_concurrency, endpoint)
-    const in_flight = requiredStrictInteger(row.in_flight, endpoint)
-    if (id <= 0 || max_concurrency < 0 || in_flight < 0)
-      invalidResponse(endpoint)
+    if (id <= 0 || max_concurrency < 0) invalidResponse(endpoint)
     return {
       id,
       name: requiredString(row.name, endpoint),
@@ -131,7 +128,6 @@ export function parseModelCatalog(value: unknown): ModelCatalog {
       status: requiredStrictInteger(row.status, endpoint),
       channel_ratio: decimal(row.channel_ratio),
       max_concurrency,
-      in_flight,
       eligible: row.eligible,
       filter_reason: requiredString(row.filter_reason ?? '', endpoint),
       lab: {

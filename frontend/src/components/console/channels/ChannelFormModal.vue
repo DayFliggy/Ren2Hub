@@ -856,11 +856,16 @@ async function submit() {
             </FormField>
           </div>
 
-          <FormField :label="t('channels.channelRatio')"
+          <!-- channel_ratio sets what every user pays, so it needs
+            ChannelSensitiveWrite; an unchanged value is still accepted. -->
+          <FormField
+            :label="t('channels.channelRatio')"
+            :hint="canSensitiveWrite ? '' : t('channels.channelRatioReadOnly')"
             ><TextInput
               v-model="form.channel_ratio"
               inputmode="decimal"
               name="channel-ratio"
+              :disabled="!canSensitiveWrite"
           /></FormField>
           <FormField
             :label="t('channels.maxConcurrency')"

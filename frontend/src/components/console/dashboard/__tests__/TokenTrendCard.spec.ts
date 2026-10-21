@@ -7,34 +7,20 @@ beforeAll(async () => {
   await loadMessageDomain('console')
   setLocale('en')
 })
-it('shows known cache coverage without inferring a cross-protocol hit rate', () => {
+it('states the quota_data flush lag without inferring a cache hit rate', () => {
   const wrapper = mount(TokenTrendCard, {
     props: {
       points: [
-        {
-          date: '2026-10-18',
-          total: 150,
-          input: 100,
-          output: 50,
-          cache_create: null,
-          cache_read: 25,
-          hit_rate: null,
-        },
+        { date: '2026-10-18', total: 150, cache_create: 0, cache_read: 25 },
       ],
-      cacheCoverage: {
-        records: 3,
-        read_records: 1,
-        write_records: 0,
-        invalid_records: 1,
-      },
+      flushIntervalMinutes: 5,
     },
     global: { plugins: [i18n] },
   })
   expect(wrapper.get('[data-cache-coverage]').text()).toContain(
-    '1 read, 0 write and 1 invalid records out of 3'
+    'written every 5 minutes, so the latest hour may be incomplete'
   )
   expect(wrapper.text()).toContain('Cross-protocol hit rate is unknown')
-  expect(wrapper.text()).not.toContain('20%')
-  expect(wrapper.text()).not.toContain('0%')
+  expect(wrapper.text()).not.toContain('%')
   wrapper.unmount()
 })

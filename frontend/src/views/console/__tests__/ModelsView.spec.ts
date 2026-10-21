@@ -9,6 +9,7 @@ import {
   vi,
 } from 'vitest'
 import { api } from '@/api/client'
+import { ApiError } from '@/api/types'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import ModelsView from '../ModelsView.vue'
 import { modelCatalogFixture } from '@/api/__tests__/modelCatalogFixture'
@@ -21,11 +22,37 @@ function render() {
   })
   return wrapper
 }
+/** pkg/perf_metrics SummaryAllResult for the fixture model. */
+function performanceSummary(models: unknown[]) {
+  return {
+    summary: models.length
+      ? { avg_latency_ms: 850, success_rate: 99.5, avg_tps: 42.25 }
+      : null,
+    window_start: 1_785_038_400,
+    window_end: 1_785_124_800,
+    models,
+  }
+}
+const fixturePerformance = {
+  model_name: 'fixture-model',
+  avg_latency_ms: 850,
+  success_rate: 99.5,
+  avg_tps: 42.25,
+}
+function mockFeeds(performance: () => Promise<unknown>) {
+  vi.mocked(api.get).mockImplementation(async (url) => {
+    if (url === '/api/user/model-catalog') return modelCatalogFixture()
+    if (url === '/api/perf-metrics/summary') return performance()
+    throw new Error(`unexpected ${url}`)
+  })
+}
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('zh-CN')
 })
-beforeEach(() => vi.mocked(api.get).mockResolvedValue(modelCatalogFixture()))
+beforeEach(() =>
+  mockFeeds(async () => performanceSummary([fixturePerformance]))
+)
 afterEach(() => {
   wrapper?.unmount()
   vi.resetAllMocks()
@@ -48,7 +75,12 @@ describe('native model catalog page', () => {
       ).toBe('fixture-model')
       expect(view.text()).toContain('1 个模型')
     }
-    expect(api.get).toHaveBeenCalledTimes(1)
+    expect(
+      vi
+        .mocked(api.get)
+        .mock.calls.map(([url]) => url)
+        .sort()
+    ).toEqual(['/api/perf-metrics/summary', '/api/user/model-catalog'])
   })
   it('opens native channel and baseline prices with their supplied endpoint paths', async () => {
     const view = render()
@@ -66,12 +98,66 @@ describe('native model catalog page', () => {
     ).toBeNull()
     expect(popup.querySelector('.market-detail-variant')).toBeNull()
     expect(popup.textContent).toContain('未提供')
+    // Channel offers keep the unavailable state and explain why.
+    expect(popup.textContent).toContain('未按渠道统计')
+    expect(popup.textContent).toContain('性能统计只按模型汇总全部渠道')
   })
   it('does not render permission-scoped prices after a catalog failure', async () => {
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('denied'))
+    vi.mocked(api.get).mockRejectedValue(new Error('denied'))
     const view = render()
     await flushPromises()
     expect(view.find('[data-model-card]').exists()).toBe(false)
     expect(view.find('[data-offer-id]').exists()).toBe(false)
+  })
+})
+describe('native model performance', () => {
+  it('shows the model-wide success rate, duration and TPS from perf-metrics', async () => {
+    const view = render()
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/perf-metrics/summary',
+      { hours: 24 },
+      { signal: expect.any(AbortSignal) }
+    )
+    const stats = view.get('[data-model-statistics="ready"]')
+    expect(stats.text()).toContain('全部渠道 · 近 24 小时')
+    expect(stats.text()).toContain('99.5%')
+    expect(stats.text()).toContain('850 ms')
+    expect(stats.text()).toContain('42.25')
+    expect(view.find('[data-model-performance-error]').exists()).toBe(false)
+    await view.get('[role="radio"][aria-label="渠道货架"]').trigger('click')
+    expect(view.find('[data-model-statistics]').exists()).toBe(false)
+    expect(view.get('[data-market-shelves]').text()).toContain('未按渠道统计')
+  })
+  it('reports models without samples instead of a zero success rate', async () => {
+    mockFeeds(async () => performanceSummary([]))
+    const view = render()
+    await flushPromises()
+    const stats = view.get('[data-model-statistics="empty"]')
+    expect(stats.text()).toContain('近 24 小时无请求样本')
+    expect(view.get('[data-model-card]').text()).not.toMatch(/\d%|TPS/)
+  })
+  it('shows a load error without inventing statistics and retries on demand', async () => {
+    mockFeeds(async () => {
+      throw new ApiError('perf-metrics unavailable', { status: 500 })
+    })
+    const view = render()
+    await flushPromises()
+    expect(view.get('[data-model-statistics="error"]').text()).toContain(
+      '统计加载失败'
+    )
+    expect(view.get('[data-model-card]').text()).not.toMatch(/\d%|TPS/)
+    expect(view.get('[data-channel-quote]').text()).toContain('$0.250')
+    const alert = view.get('[data-model-performance-error]')
+    expect(alert.attributes('role')).toBe('alert')
+    expect(alert.text()).toContain('perf-metrics unavailable')
+
+    mockFeeds(async () => performanceSummary([fixturePerformance]))
+    await alert.get('button').trigger('click')
+    await flushPromises()
+    expect(view.get('[data-model-statistics="ready"]').text()).toContain(
+      '99.5%'
+    )
+    expect(view.find('[data-model-performance-error]').exists()).toBe(false)
   })
 })

@@ -26,6 +26,39 @@ export interface RoutingSnapshot {
   channels: { id: number; limit: number; in_flight: number }[]
   observations: RoutingObservation[]
 }
+/** Counters of common.DiskCacheStats; an absent counter stays null, not 0. */
+export interface DiskCacheStats {
+  current_memory_usage_bytes: number | null
+  current_disk_usage_bytes: number | null
+  active_memory_buffers: number | null
+  active_disk_files: number | null
+  memory_cache_hits: number | null
+  disk_cache_hits: number | null
+}
+/** Monitor sample shared with the overload sentinel; null when monitoring is
+ * off, not yet sampled or older than 30 seconds — never a fabricated 0%. */
+export interface SystemUsage {
+  cpu_percent: number
+  memory_percent: number
+  sampled_at: number
+}
+/** sql.DB.Stats() of one pool; null when the pool could not be read. */
+export interface DBPoolStat {
+  max_open_connections: number
+  open_connections: number
+  in_use: number
+  idle: number
+  wait_count: number
+  wait_duration_ms: number
+  max_idle_closed: number
+  max_lifetime_closed: number
+}
+export interface DBPoolStats {
+  main: DBPoolStat | null
+  log: DBPoolStat | null
+  /** True when the log database uses the main pool; `log` is then null. */
+  log_shared: boolean
+}
 export interface PerformanceStats {
   memory_stats: {
     alloc: number
@@ -34,10 +67,12 @@ export interface PerformanceStats {
     num_gc: number
     num_goroutine: number
   }
-  cache_stats: Record<string, unknown>
+  cache_stats: DiskCacheStats
   disk_cache_info: Record<string, unknown>
   disk_space_info: Record<string, unknown>
   config: Record<string, unknown>
+  system_usage: SystemUsage | null
+  db_pool: DBPoolStats
 }
 export function parseRoutingSnapshot(value: unknown): RoutingSnapshot {
   const endpoint = '/api/performance/routing'
@@ -90,21 +125,23 @@ export function parsePerformanceStats(value: unknown): PerformanceStats {
     !isRecord(value.cache_stats) ||
     !isRecord(value.disk_cache_info) ||
     !isRecord(value.disk_space_info) ||
-    !isRecord(value.config)
+    !isRecord(value.config) ||
+    !isRecord(value.db_pool)
   )
     invalidResponse(endpoint)
   const memory = value.memory_stats
+  const rawCache = value.cache_stats
+  const counter = (key: keyof DiskCacheStats) =>
+    optionalNumber(rawCache[key], endpoint)
   // Validate the native optional metrics at the boundary, so malformed data
   // follows the feed's error path instead of throwing during rendering.
-  for (const key of [
-    'current_memory_usage_bytes',
-    'current_disk_usage_bytes',
-    'active_memory_buffers',
-    'active_disk_files',
-    'memory_cache_hits',
-    'disk_cache_hits',
-  ]) {
-    optionalNumber(value.cache_stats[key], endpoint)
+  const cacheStats: DiskCacheStats = {
+    current_memory_usage_bytes: counter('current_memory_usage_bytes'),
+    current_disk_usage_bytes: counter('current_disk_usage_bytes'),
+    active_memory_buffers: counter('active_memory_buffers'),
+    active_disk_files: counter('active_disk_files'),
+    memory_cache_hits: counter('memory_cache_hits'),
+    disk_cache_hits: counter('disk_cache_hits'),
   }
   for (const key of ['total', 'used', 'used_percent']) {
     const metric = optionalNumber(value.disk_space_info[key], endpoint)
@@ -131,12 +168,118 @@ export function parsePerformanceStats(value: unknown): PerformanceStats {
       num_gc: nonnegative(memory.num_gc, endpoint, true),
       num_goroutine: nonnegative(memory.num_goroutine, endpoint, true),
     },
-    cache_stats: value.cache_stats,
+    cache_stats: cacheStats,
     disk_cache_info: value.disk_cache_info,
     disk_space_info: value.disk_space_info,
     config: value.config,
+    system_usage: parseSystemUsage(value.system_usage, endpoint),
+    db_pool: {
+      main: parseDBPool(value.db_pool.main, endpoint),
+      log: parseDBPool(value.db_pool.log, endpoint),
+      log_shared: requiredBoolean(value.db_pool.log_shared, endpoint),
+    },
   }
 }
+function percentValue(value: unknown, endpoint: string) {
+  const parsed = nonnegative(value, endpoint)
+  if (parsed > 100) invalidResponse(endpoint)
+  return parsed
+}
+function parseSystemUsage(value: unknown, endpoint: string) {
+  if (value === null) return null
+  if (!isRecord(value)) invalidResponse(endpoint)
+  return {
+    cpu_percent: percentValue(value.cpu_percent, endpoint),
+    memory_percent: percentValue(value.memory_percent, endpoint),
+    sampled_at: nonnegative(value.sampled_at, endpoint, true),
+  }
+}
+function parseDBPool(value: unknown, endpoint: string): DBPoolStat | null {
+  if (value === null) return null
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const count = (key: keyof DBPoolStat) =>
+    nonnegative(value[key], endpoint, true)
+  return {
+    max_open_connections: count('max_open_connections'),
+    open_connections: count('open_connections'),
+    in_use: count('in_use'),
+    idle: count('idle'),
+    wait_count: count('wait_count'),
+    wait_duration_ms: count('wait_duration_ms'),
+    max_idle_closed: count('max_idle_closed'),
+    max_lifetime_closed: count('max_lifetime_closed'),
+  }
+}
+/** One hour of perf_metrics summed across models; idle hours keep null rates. */
+export interface QualityPoint {
+  ts: number
+  request_count: number
+  success_count: number
+  success_rate: number | null
+  avg_latency_ms: number | null
+  avg_tps: number | null
+}
+export interface PerformanceQuality {
+  enabled: boolean
+  window_start: number
+  window_end: number
+  bucket_seconds: number
+  /** Null when the window has no request. */
+  summary: {
+    requests: number
+    success_rate: number
+    avg_latency_ms: number
+    /** Null when no hour measured output tokens and generation time. */
+    avg_tps: number | null
+  } | null
+  series: QualityPoint[]
+}
+export function parsePerformanceQuality(value: unknown): PerformanceQuality {
+  const endpoint = '/api/performance/quality'
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.series) ||
+    value.series.some((row) => !isRecord(row)) ||
+    (value.summary !== null && !isRecord(value.summary))
+  )
+    invalidResponse(endpoint)
+  const rate = (raw: unknown) =>
+    raw === null ? null : percentValue(raw, endpoint)
+  const series = (value.series as Record<string, unknown>[]).map((row) => {
+    const requests = nonnegative(row.request_count, endpoint, true)
+    const successes = nonnegative(row.success_count, endpoint, true)
+    if (successes > requests) invalidResponse(endpoint)
+    return {
+      ts: nonnegative(row.ts, endpoint, true),
+      request_count: requests,
+      success_count: successes,
+      success_rate: rate(row.success_rate),
+      avg_latency_ms: optionalNumber(row.avg_latency_ms, endpoint),
+      avg_tps: optionalNumber(row.avg_tps, endpoint),
+    }
+  })
+  const summary = value.summary
+  return {
+    enabled: requiredBoolean(value.enabled, endpoint),
+    window_start: nonnegative(value.window_start, endpoint, true),
+    window_end: nonnegative(value.window_end, endpoint, true),
+    bucket_seconds: nonnegative(value.bucket_seconds, endpoint, true),
+    summary:
+      summary === null
+        ? null
+        : {
+            requests: series.reduce((sum, row) => sum + row.request_count, 0),
+            success_rate: percentValue(summary.success_rate, endpoint),
+            avg_latency_ms: nonnegative(summary.avg_latency_ms, endpoint),
+            // The native summary reports 0 t/s when nothing was measurable.
+            avg_tps: series.some((row) => row.avg_tps !== null)
+              ? nonnegative(summary.avg_tps, endpoint)
+              : null,
+          },
+    series,
+  }
+}
+export const QUALITY_HOURS = 24
 export type PerformanceAction = 'gc' | 'disk_cache' | 'reset_stats'
 export const opsMonitorApi = {
   execute: (action: PerformanceAction) =>
@@ -150,6 +293,14 @@ export const opsMonitorApi = {
   routing: async (signal?: AbortSignal) =>
     parseRoutingSnapshot(
       await api.get('/api/performance/routing', undefined, { signal })
+    ),
+  quality: async (signal?: AbortSignal) =>
+    parsePerformanceQuality(
+      await api.get(
+        '/api/performance/quality',
+        { hours: String(QUALITY_HOURS) },
+        { signal }
+      )
     ),
 }
 
@@ -169,8 +320,8 @@ export interface OpsCheck {
 }
 export interface OpsSeriesPoint {
   ts: number
-  cpu: null
-  memory: null
+  cpu: number | null
+  memory: number | null
   disk: number | null
   users: number | null
   channels: number | null
@@ -184,9 +335,9 @@ export interface OpsOverview {
   gateway: RoutingSnapshot | null
   resources: {
     monitor_enabled: boolean | null
-    cpu: { percent: null; threshold: number | null }
+    cpu: { percent: number | null; threshold: number | null }
     memory: {
-      percent: null
+      percent: number | null
       threshold: number | null
       used_bytes: null
       total_bytes: null
@@ -284,34 +435,26 @@ export function projectOpsOverview(
   if (percent !== null && percent > 100)
     invalidResponse('/api/performance/stats')
   const monitor = performanceBoolean(config, 'monitor_enabled')
-  const diskThreshold = performanceNumber(config, 'monitor_disk_threshold')
-  const diskStatus: OpsStatus =
-    percent === null || monitor !== true || !diskThreshold
-      ? 'unknown'
-      : percent >= diskThreshold
-        ? 'critical'
-        : percent >= diskThreshold * 0.9
-          ? 'warning'
-          : 'ok'
+  const usage = stats?.system_usage ?? null
+  const measuredCheck = (
+    key: 'cpu' | 'memory' | 'disk',
+    value: number | null
+  ): OpsCheck => {
+    const threshold = performanceNumber(config, `monitor_${key}_threshold`)
+    const status: OpsStatus =
+      value === null || monitor !== true || !threshold
+        ? 'unknown'
+        : value >= threshold
+          ? 'critical'
+          : value >= threshold * 0.9
+            ? 'warning'
+            : 'ok'
+    return { key, status, value, threshold }
+  }
   const checks: OpsCheck[] = [
-    {
-      key: 'cpu',
-      status: 'unknown',
-      value: null,
-      threshold: performanceNumber(config, 'monitor_cpu_threshold'),
-    },
-    {
-      key: 'memory',
-      status: 'unknown',
-      value: null,
-      threshold: performanceNumber(config, 'monitor_memory_threshold'),
-    },
-    {
-      key: 'disk',
-      status: diskStatus,
-      value: percent,
-      threshold: diskThreshold,
-    },
+    measuredCheck('cpu', usage?.cpu_percent ?? null),
+    measuredCheck('memory', usage?.memory_percent ?? null),
+    measuredCheck('disk', percent),
     { key: 'database', status: 'unknown', value: null, threshold: null },
     { key: 'redis', status: 'unknown', value: null, threshold: null },
   ]
@@ -333,16 +476,16 @@ export function projectOpsOverview(
     resources: stats
       ? {
           monitor_enabled: monitor,
-          cpu: { percent: null, threshold: checks[0]!.threshold },
+          cpu: { percent: checks[0]!.value, threshold: checks[0]!.threshold },
           memory: {
-            percent: null,
+            percent: checks[1]!.value,
             threshold: checks[1]!.threshold,
             used_bytes: null,
             total_bytes: null,
           },
           disk: {
             percent,
-            threshold: diskThreshold,
+            threshold: checks[2]!.threshold,
             used_bytes: measuredDisk ? used : null,
             total_bytes: measuredDisk ? total : null,
             path: typeof path === 'string' ? path : null,

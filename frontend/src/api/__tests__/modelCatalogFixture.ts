@@ -27,7 +27,6 @@ export function modelCatalogFixture(): ModelCatalog {
         status: 1,
         channel_ratio: '0.2',
         max_concurrency: 3,
-        in_flight: 1,
         eligible: true,
         filter_reason: '',
         lab: { id: 'fixture', name: 'Fixture lab', source: 'vendor' },

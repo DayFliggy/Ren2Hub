@@ -3,7 +3,8 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   opsMonitorApi,
-  performanceNumber,
+  type DBPoolStat,
+  type DiskCacheStats,
   type OpsOverview,
   type PerformanceAction,
 } from '@/api/opsMonitor'
@@ -11,7 +12,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
-import { formatBytes, formatCount } from '@/utils/opsFormat'
+import { formatBytes, formatCount, formatLatencyMs } from '@/utils/opsFormat'
 import OpsCard from './OpsCard.vue'
 import OpsMetric from './OpsMetric.vue'
 
@@ -28,24 +29,47 @@ const { t, locale } = useI18n({
   useScope: 'local',
   messages: opsMonitorMessages,
 })
-const probes = [
-  { key: 'database', metrics: ['latency', 'inUse', 'idle', 'waitCount'] },
-  {
-    key: 'redis',
-    metrics: ['latency', 'totalConns', 'idleConns', 'staleConns'],
-  },
-]
+const redisMetrics = ['latency', 'totalConns', 'idleConns', 'staleConns']
+const dbPool = computed(() => props.overview?.cache?.db_pool ?? null)
+// A separate log pool only exists when the log database is not shared.
+const pools = computed(() => {
+  const pool = dbPool.value
+  if (!pool) return []
+  const rows = [{ key: 'database', stats: pool.main }]
+  if (!pool.log_shared) rows.push({ key: 'logDatabase', stats: pool.log })
+  return rows
+})
+function poolMetrics(pool: DBPoolStat) {
+  const count = (key: string, value: number) => ({
+    key,
+    value: formatCount(value, locale.value),
+    unit: '',
+  })
+  return [
+    count('inUse', pool.in_use),
+    count('idle', pool.idle),
+    count('open', pool.open_connections),
+    pool.max_open_connections === 0
+      ? { key: 'maxOpen', value: t('storage.unlimited'), unit: '' }
+      : count('maxOpen', pool.max_open_connections),
+    count('waitCount', pool.wait_count),
+    {
+      key: 'waitDuration',
+      ...formatLatencyMs(pool.wait_duration_ms, locale.value),
+    },
+  ]
+}
 const cacheMetrics = computed(() => {
   const stats = props.overview?.cache
   if (!stats) return []
-  const count = (key: string) => ({
+  const count = (key: keyof DiskCacheStats) => ({
     key,
-    value: formatCount(performanceNumber(stats.cache_stats, key), locale.value),
+    value: formatCount(stats.cache_stats[key], locale.value),
     unit: '',
   })
-  const bytes = (key: string) => ({
+  const bytes = (key: keyof DiskCacheStats) => ({
     key,
-    ...formatBytes(performanceNumber(stats.cache_stats, key), locale.value),
+    ...formatBytes(stats.cache_stats[key], locale.value),
   })
   return [
     bytes('current_memory_usage_bytes'),
@@ -101,16 +125,52 @@ async function executeAction() {
   >
     <h2 class="sr-only">{{ t('storage.title') }}</h2>
     <OpsCard
-      v-for="probe in probes"
-      :key="probe.key"
-      :title="t(`storage.${probe.key}`)"
+      v-for="pool in pools"
+      :key="pool.key"
+      :title="t(`storage.${pool.key}`)"
+      :scope="t('scope.instant')"
+      :loading="loading"
+      :loaded="dbPool !== null"
+      :error="error"
+      :updated-at="updatedAt"
+      :retryable="false"
+      :data-ops-storage="pool.key"
+    >
+      <template #action
+        ><StatusChip tone="neutral">{{
+          t('status.unknown')
+        }}</StatusChip></template
+      >
+      <p class="ops-storage-kind">{{ t('native.poolScope') }}</p>
+      <p v-if="pool.stats === null" class="ops-empty" data-ops-pool-unavailable>
+        {{ t('native.poolUnavailable') }}
+      </p>
+      <dl v-else class="ops-metric-grid ops-metric-grid--fit">
+        <OpsMetric
+          v-for="metric in poolMetrics(pool.stats)"
+          :key="metric.key"
+          :label="t(`storage.${metric.key}`)"
+          :value="metric.value"
+          :unit="metric.unit"
+          size="md"
+        />
+      </dl>
+      <p
+        v-if="pool.key === 'database' && dbPool?.log_shared"
+        class="ops-footnote"
+      >
+        {{ t('storage.sharedLogDatabase') }}
+      </p>
+    </OpsCard>
+    <OpsCard
+      :title="t('storage.redis')"
       :scope="t('scope.instant')"
       :loading="false"
       :loaded="true"
       error=""
       :updated-at="0"
       :retryable="false"
-      :data-ops-storage="probe.key"
+      data-ops-storage="redis"
     >
       <template #action
         ><StatusChip tone="neutral">{{
@@ -120,7 +180,7 @@ async function executeAction() {
       <p class="ops-storage-kind">{{ t('native.storageUnavailable') }}</p>
       <dl class="ops-metric-grid ops-metric-grid--fit">
         <OpsMetric
-          v-for="metric in probe.metrics"
+          v-for="metric in redisMetrics"
           :key="metric"
           :label="t(`storage.${metric}`)"
           value="--"

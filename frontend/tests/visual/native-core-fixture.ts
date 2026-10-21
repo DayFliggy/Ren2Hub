@@ -293,6 +293,14 @@ export async function nativeCoreFixture(
         )
       )
     if (path === '/api/user/model-catalog') return ok(nativeModelCatalog(now))
+    // A fresh install has no sampled requests yet.
+    if (path === '/api/perf-metrics/summary')
+      return ok({
+        summary: null,
+        window_start: now - 86_400,
+        window_end: now,
+        models: [],
+      })
     if (path === '/api/channel/labs')
       return ok({
         total: 1,

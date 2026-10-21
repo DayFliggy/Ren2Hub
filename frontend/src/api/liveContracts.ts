@@ -197,6 +197,8 @@ export function parsePricingModelsPartial(value: unknown): {
   return { models, issues }
 }
 
+/** pkg/perf_metrics ModelSummary: success_rate is a 0–100 percentage and
+ * avg_tps is 0 when no generation timing was sampled. */
 export function parsePerfMetricsSummary(
   value: unknown
 ): PerfModelSummaryContract[] {
@@ -206,12 +208,20 @@ export function parsePerfMetricsSummary(
   }
   return value.models.map((item) => {
     if (!isRecord(item)) invalidResponse(endpoint)
-    return {
+    const result = {
       model_name: requiredString(item.model_name, endpoint, false),
       avg_latency_ms: requiredInteger(item.avg_latency_ms, endpoint),
       success_rate: requiredNumber(item.success_rate, endpoint),
       avg_tps: requiredNumber(item.avg_tps, endpoint),
     }
+    if (
+      result.avg_latency_ms < 0 ||
+      result.success_rate < 0 ||
+      result.success_rate > 100 ||
+      result.avg_tps < 0
+    )
+      invalidResponse(endpoint)
+    return result
   })
 }
 

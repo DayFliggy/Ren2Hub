@@ -127,6 +127,26 @@ describe('live API contracts', () => {
     })
     expectInvalidResponse(() => parsePricingModels([{ model_name: 'gpt-4o' }]))
     expectInvalidResponse(() => parsePerfMetricsSummary({ models: [{}] }))
+    expect(parsePerfMetricsSummary({ summary: null, models: [] })).toEqual([])
+    for (const invalid of [
+      { success_rate: 100.5 },
+      { success_rate: -1 },
+      { avg_latency_ms: -1 },
+      { avg_tps: -0.5 },
+    ])
+      expectInvalidResponse(() =>
+        parsePerfMetricsSummary({
+          models: [
+            {
+              model_name: 'gpt-4o',
+              avg_latency_ms: 850,
+              success_rate: 99.5,
+              avg_tps: 42,
+              ...invalid,
+            },
+          ],
+        })
+      )
   })
 
   it('rejects missing and negative model prices', () => {

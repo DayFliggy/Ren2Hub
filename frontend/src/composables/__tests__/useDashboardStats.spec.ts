@@ -62,7 +62,7 @@ describe('native dashboard statistics lifecycle', () => {
       },
       { signal: expect.any(AbortSignal) }
     )
-    expect(stats.data.value?.kpi.successRate).toBeNull()
+    expect(stats.data.value?.kpi.successRate).toBe(50)
   })
   it('removes old results on a failed or unavailable period instead of showing zero use', async () => {
     const stats = setupStats()

@@ -36,6 +36,7 @@
   "Product configuration error": "产品配置错误",
   "Product does not exist": "产品不存在",
   "The payment configuration or amount does not meet the gateway requirements": "支付配置或金额不符合网关要求",
+  "The payment gateway rejected or already settled this order and it cannot be completed": "支付网关已拒绝或已结算该订单，无法补单",
   "The quote has changed. Please confirm it again.": "报价已变化，请重新确认",
   "This operation requires dashboard session authentication. API access token is not allowed.": "此操作需要控制台会话认证，不允许使用 API 访问令牌。",
   "Top-up amount cannot be less than {{min}}": "充值数量不能小于 {{min}}",
