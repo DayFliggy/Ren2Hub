@@ -262,8 +262,8 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 		return nil, errors.New("model must be provided once")
 	}
 
-	value := gjson.GetBytes(requestBody, "model")
-	model, err := getJSONStringValue(value, "model")
+	values := gjson.GetManyBytes(requestBody, "model", "stream", "stream_format")
+	model, err := getJSONStringValue(values[0], "model")
 	if err != nil {
 		return nil, err
 	}
@@ -275,8 +275,8 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 
 	return &ModelRequest{
 		Model:        model,
-		Stream:       gjson.GetBytes(requestBody, "stream").Bool(),
-		StreamFormat: gjson.GetBytes(requestBody, "stream_format").String(),
+		Stream:       values[1].Bool(),
+		StreamFormat: values[2].String(),
 	}, nil
 }
 
