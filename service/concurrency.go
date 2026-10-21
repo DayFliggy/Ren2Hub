@@ -158,6 +158,9 @@ func ReleaseDeletedChannels(ctx context.Context, channelIDs []int) {
 	if err := model.DeleteOrphanChannelRouteEntries(context.WithoutCancel(ctx)); err != nil {
 		common.SysError(common.LogText("failed to delete route entries of deleted channels: %v", err))
 	}
+	// 与上限发布串行：删除前读到的旧上限不能在清理之后写回，被复用同一 ID 的新渠道继承。
+	concurrencyPublishMu.Lock()
+	defer concurrencyPublishMu.Unlock()
 	gatewayConcurrency.forget("channel", channelIDs)
 	for _, id := range channelIDs {
 		routeObservations.invalidate(id)

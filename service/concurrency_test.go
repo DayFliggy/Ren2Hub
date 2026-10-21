@@ -417,3 +417,47 @@ func TestDeletedChannelKeepsInFlightCountAndObservationsForReusedID(t *testing.T
 		require.NotEqual(t, 22, row.ID, "a deleted channel leaves no entry once its last permit is released")
 	}
 }
+
+// 发布在删除前读到旧上限、删除清理随后执行时，旧上限不能在清理之后写回，否则复用同一 ID
+// 的新渠道会按旧上限准入。
+func TestDeleteCleanupWaitsForInFlightLimitPublication(t *testing.T) {
+	db := setupRouteTest(t)
+	createRouteChannel(t, db, 11, "route-model")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("max_concurrency", 1).Error)
+	read, unblock := make(chan struct{}), make(chan struct{})
+	var held atomic.Bool
+	// 只拦住发布的那次真实读取；删除清理里的子查询以 DryRun 构建，同样会经过 Query 回调。
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:hold-read-limit", func(tx *gorm.DB) {
+		if tx.Statement.Table == "channels" && !tx.DryRun && held.CompareAndSwap(false, true) {
+			close(read)
+			<-unblock
+		}
+	}))
+	published := make(chan error, 1)
+	go func() { published <- RefreshChannelConcurrencyLimit(context.Background(), 11) }()
+	select {
+	case <-read:
+	case <-time.After(time.Second):
+		t.Fatal("publication did not read the channel limit")
+	}
+	require.NoError(t, db.Delete(&model.Channel{}, 11).Error)
+	cleaned := make(chan struct{})
+	go func() {
+		ReleaseDeletedChannels(context.Background(), []int{11})
+		close(cleaned)
+	}()
+	select {
+	case <-cleaned:
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(unblock)
+	require.NoError(t, <-published)
+	<-cleaned
+
+	recreated := &model.Channel{Id: 11, MaxConcurrency: 2}
+	for range 2 {
+		permit, err := AcquireChannelConcurrency(context.Background(), recreated)
+		require.NoError(t, err, "the recreated channel admits up to its own limit")
+		defer permit.Release()
+	}
+}
