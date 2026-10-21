@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -32,6 +33,23 @@ func PinnedRouteError(err error) *types.NewAPIError {
 		options = append(options, types.ErrOptionWithHideErrMsg("Unable to load pinned channel"))
 	}
 	return types.NewErrorWithStatusCode(err, code, status, options...)
+}
+
+// PreferUpstreamError 在重试轮次选不到渠道时保留上一次真实的上游错误；
+// 选路失败本身只记日志。首轮没有上游错误，照常返回选路错误。
+func PreferUpstreamError(last, selection *types.NewAPIError) *types.NewAPIError {
+	if last != nil {
+		return last
+	}
+	return selection
+}
+
+// Text renders the failure for transports without their own localization.
+func (e *ChannelSelectError) Text(c *gin.Context) string {
+	if e.MessageID != "" {
+		return i18n.T(c, e.MessageID, e.Params)
+	}
+	return e.Message
 }
 
 // routeLoadFailure renders a candidate lookup or admission failure. Capacity is

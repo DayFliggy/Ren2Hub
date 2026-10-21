@@ -176,7 +176,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
 			logger.LogError(c, channelErr.Error())
-			newAPIError = channelErr
+			newAPIError = service.PreferUpstreamError(relayInfo.LastError, channelErr)
 			break
 		}
 		service.AppendUsedChannel(c, channel.Id)
@@ -302,7 +302,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		var selectionErr *service.ChannelSelectError
 		selected, selectionErr = service.SelectChannelForRequest(c, info.OriginModelName, retryParam)
 		if selectionErr != nil {
-			return nil, types.NewErrorWithStatusCode(errors.New(selectionErr.Message), types.ErrorCodeGetChannelFailed, selectionErr.StatusCode, types.ErrOptionWithSkipRetry())
+			return nil, types.NewErrorWithStatusCode(errors.New(selectionErr.Text(c)), types.ErrorCodeGetChannelFailed, selectionErr.StatusCode, types.ErrOptionWithSkipRetry())
 		}
 		if setupErr := middleware.SetupContextForSelectedChannel(c, selected, info.OriginModelName); setupErr != nil {
 			return nil, setupErr
