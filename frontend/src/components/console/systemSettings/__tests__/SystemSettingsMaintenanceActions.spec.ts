@@ -26,6 +26,9 @@ function performanceStats(cacheStats: Record<string, number>) {
     },
     disk_space_info: { total: 1000, free: 600, used: 400, used_percent: 40 },
     config: { disk_cache_enabled: true, monitor_enabled: false },
+    // C4 always sends both; this page does not render them.
+    system_usage: null,
+    db_pool: { main: null, log: null, log_shared: true },
   }
 }
 
