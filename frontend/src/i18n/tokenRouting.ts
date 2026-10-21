@@ -27,6 +27,8 @@ export const tokenRoutingMessages = {
         channel_ratio_exceeded: 'Above the multiplier limit',
         channel_concurrency_full: 'Channel concurrency limit reached',
         not_in_manual_route: 'Not in the saved manual list',
+        exact_model_preferred:
+          'Skipped: another channel serves the exact model name',
       },
       title: 'Token routing',
       keys: 'API keys',
@@ -107,6 +109,7 @@ export const tokenRoutingMessages = {
         channel_ratio_exceeded: '超过倍率上限',
         channel_concurrency_full: '渠道并发已满',
         not_in_manual_route: '不在已保存的手动列表中',
+        exact_model_preferred: '已有渠道支持完全相同的模型名，本渠道不参与',
       },
       title: 'Token 路由',
       keys: 'API 密钥',

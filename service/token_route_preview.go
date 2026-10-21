@@ -5,6 +5,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"slices"
 	"strings"
 )
 
@@ -68,9 +69,25 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 		return out, err
 	}
 	filters := []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: requestPath}}
+	reasons, exactAvailable := map[int]string{}, map[int]bool{}
+	for _, row := range rows {
+		reasons[row.Id], exactAvailable[row.Id] = previewRouteReason(row, scope, modelName, abilities[row.Id], filters)
+	}
+	// 与 routeCandidates 一致：只要有渠道以精确模型名可用，只声明归一化名的渠道不参与。
+	if slices.ContainsFunc(rows, func(row *model.Channel) bool { return exactAvailable[row.Id] }) {
+		for _, row := range rows {
+			if reasons[row.Id] == "" && !exactAvailable[row.Id] {
+				reasons[row.Id] = "exact_model_preferred"
+			}
+		}
+	}
 	project := func(id int) TokenRoutePreviewEntry {
 		row := byID[id]
-		item := TokenRoutePreviewEntry{ChannelID: id, Reason: previewRouteReason(row, scope, modelName, abilities[id], filters)}
+		reason, ok := reasons[id]
+		if !ok {
+			reason = routeReasonChannelUnavailable
+		}
+		item := TokenRoutePreviewEntry{ChannelID: id, Reason: reason}
 		if row != nil {
 			item.Name = row.Name
 			item.ChannelRatio = row.ChannelRatio

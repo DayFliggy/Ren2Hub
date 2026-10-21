@@ -33,6 +33,13 @@ func ChannelRoutable(ch *Channel) bool {
 // name win; the routing name (for example without @ modifiers) is only tried
 // when no exact channel passes the filters.
 func RouteChannelRows(ctx context.Context, modelName string, filters []dto.ChannelFilter) ([]*Channel, error) {
+	return RouteChannelRowsAccepting(ctx, modelName, filters, nil)
+}
+
+// RouteChannelRowsAccepting 与 RouteChannelRows 相同，另用 accept 判调用方的策略（例如
+// Key 的倍率上限和手动列表）。精确模型名一档要在全部规则之后仍有渠道才算命中，否则改用
+// 归一化名，避免精确渠道被后续规则滤空时整次选路无候选。accept 为 nil 表示不加限制。
+func RouteChannelRowsAccepting(ctx context.Context, modelName string, filters []dto.ChannelFilter, accept func(*Channel) bool) ([]*Channel, error) {
 	if modelName == "" {
 		rows := []*Channel{}
 		if err := DB.WithContext(ctx).Order("id asc").Find(&rows).Error; err != nil {
@@ -40,19 +47,19 @@ func RouteChannelRows(ctx context.Context, modelName string, filters []dto.Chann
 		}
 		return rows, nil
 	}
-	rows, err := routeChannelRowsForAbility(ctx, modelName, modelName, filters)
+	rows, err := routeChannelRowsForAbility(ctx, modelName, modelName, filters, accept)
 	if err != nil || len(rows) > 0 {
 		return rows, err
 	}
 	if normalized := ratio_setting.RoutingMatchModelName(modelName); normalized != "" && normalized != modelName {
-		return routeChannelRowsForAbility(ctx, normalized, modelName, filters)
+		return routeChannelRowsForAbility(ctx, normalized, modelName, filters, accept)
 	}
 	return rows, nil
 }
 
 // routeChannelRowsForAbility 返回声明了 abilityModel 且满足过滤条件的渠道；过滤仍按请求的
 // modelName 判定，与上游 filterAbilitiesByConstraints 的参数一致。
-func routeChannelRowsForAbility(ctx context.Context, abilityModel, modelName string, filters []dto.ChannelFilter) ([]*Channel, error) {
+func routeChannelRowsForAbility(ctx context.Context, abilityModel, modelName string, filters []dto.ChannelFilter, accept func(*Channel) bool) ([]*Channel, error) {
 	rows := []*Channel{}
 	var abilities []Ability
 	if err := DB.WithContext(ctx).Select("channel_id", "model").Where("model = ? AND enabled = ?", abilityModel, true).Find(&abilities).Error; err != nil {
@@ -74,7 +81,7 @@ func routeChannelRowsForAbility(ctx context.Context, abilityModel, modelName str
 	}
 	result := make([]*Channel, 0, len(rows))
 	for _, c := range rows {
-		if ok, _ := ChannelSatisfiesFilters(c, modelName, filters); ok {
+		if ok, _ := ChannelSatisfiesFilters(c, modelName, filters); ok && (accept == nil || accept(c)) {
 			result = append(result, c)
 		}
 	}

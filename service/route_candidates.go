@@ -76,22 +76,18 @@ func routePolicyReason(channel *model.Channel, route model.TokenRouting, manual 
 	return ""
 }
 
-// routeCandidates 返回当前 Key 和模型可选的渠道。RouteChannelRows 已按模型能力、
-// ChannelRoutable 和请求过滤器筛过，这里只再判 Key 侧策略；手动路由按列表顺序返回。
+// routeCandidates 返回当前 Key 和模型可选的渠道：模型能力、ChannelRoutable、请求过滤器和
+// Key 侧策略都满足，精确模型名一档优先；手动路由按列表顺序返回。
 func routeCandidates(ctx context.Context, scope routeScope, modelName string, filters []dto.ChannelFilter) ([]*model.Channel, error) {
 	if modelName == "" || !scope.allowsModel(modelName) {
 		return []*model.Channel{}, nil
 	}
-	rows, err := model.RouteChannelRows(ctx, modelName, filters)
+	route := scope.route
+	result, err := model.RouteChannelRowsAccepting(ctx, modelName, filters, func(row *model.Channel) bool {
+		return routePolicyReason(row, route, true) == ""
+	})
 	if err != nil {
 		return nil, err
-	}
-	route := scope.route
-	result := make([]*model.Channel, 0, len(rows))
-	for _, row := range rows {
-		if routePolicyReason(row, route, true) == "" {
-			result = append(result, row)
-		}
 	}
 	if route.Mode == model.TokenRouteManual {
 		positions := make(map[int]int, len(route.Entries))
@@ -346,33 +342,37 @@ func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel
 
 // previewRouteReason 只给路由预览用：预览列出全部渠道，所以要逐个说明不可选的原因，
 // 包括渠道是否服务该模型。选路走 routeCandidates，不经过这里。
-func previewRouteReason(row *model.Channel, scope routeScope, modelName string, abilities []string, filters []dto.ChannelFilter) string {
+// previewRouteReason 判单个渠道；exact 表示它声明了请求的精确模型名。精确一档的取舍由
+// PreviewTokenRouting 在所有渠道判完后统一处理，与 routeCandidates 一致。
+func previewRouteReason(row *model.Channel, scope routeScope, modelName string, abilities []string, filters []dto.ChannelFilter) (reason string, exact bool) {
 	if row == nil {
-		return routeReasonChannelUnavailable
+		return routeReasonChannelUnavailable, false
 	}
 	if !scope.allowsModel(modelName) {
-		return "model_not_allowed"
+		return "model_not_allowed", false
 	}
 	if reason := routeChannelReason(row, scope.route, true); reason != "" {
-		return reason
+		return reason, false
 	}
 	matched := false
 	for _, ability := range abilities {
+		if ability == modelName {
+			exact = true
+		}
 		if ability == modelName || ability == ratio_setting.RoutingMatchModelName(modelName) {
 			matched = true
-			break
 		}
 	}
 	if !matched {
-		return "model_unavailable"
+		return "model_unavailable", false
 	}
 	if ok, kind := model.ChannelSatisfiesFilters(row, modelName, filters); !ok {
 		if kind == dto.FilterRequestPath || kind == dto.FilterResponsesWebSocket {
-			return "protocol_unavailable"
+			return "protocol_unavailable", false
 		}
-		return string(kind)
+		return string(kind), false
 	}
-	return ""
+	return "", exact
 }
 
 func routeOperation(c *gin.Context) int {
