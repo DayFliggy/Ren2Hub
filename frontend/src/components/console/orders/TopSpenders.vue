@@ -35,45 +35,45 @@ const { t } = useI18n()
         class="h-9 animate-pulse rounded-sm bg-[var(--surface-muted)]"
       />
     </ul>
-    <ol v-else-if="items.length > 0" class="sibling-space-y-3.5">
-      <li
-        v-for="(item, index) in items"
-        :key="item.user_id"
-        class="flex items-center justify-between gap-3 text-sm"
-      >
-        <span class="flex min-w-0 items-center gap-3">
-          <span
-            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
-            :style="adminOrderRankStyle(index + 1)"
-            aria-hidden="true"
-          >
-            {{ index + 1 }}
-          </span>
-          <span class="min-w-0">
-            <span
-              class="block truncate text-[var(--text-secondary)]"
-              :title="item.username"
-            >
-              {{ item.username || `#${item.user_id}` }}
-            </span>
-            <span class="block text-xs text-[var(--text-tertiary)]">
-              {{ t('orders.spenderOrders', { count: item.paid_count }) }}
-            </span>
-          </span>
-        </span>
-        <span
-          class="shrink-0 font-semibold tabular-nums text-[var(--text-primary)]"
+    <!-- list and scope note share one branch so the empty state stays on this v-if chain -->
+    <template v-else-if="items.length > 0">
+      <ol class="sibling-space-y-3.5">
+        <li
+          v-for="(item, index) in items"
+          :key="item.user_id"
+          class="flex items-center justify-between gap-3 text-sm"
         >
-          {{ formatQuota(item.credited_quota) }}
-        </span>
-      </li>
-    </ol>
-    <p
-      v-if="!unavailable && !loading && items.length > 0"
-      class="mt-4 text-xs text-[var(--text-tertiary)]"
-    >
-      {{ t('orders.topSpendersScope') }}
-    </p>
+          <span class="flex min-w-0 items-center gap-3">
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
+              :style="adminOrderRankStyle(index + 1)"
+              aria-hidden="true"
+            >
+              {{ index + 1 }}
+            </span>
+            <span class="min-w-0">
+              <span
+                class="block truncate text-[var(--text-secondary)]"
+                :title="item.username"
+              >
+                {{ item.username || `#${item.user_id}` }}
+              </span>
+              <span class="block text-xs text-[var(--text-tertiary)]">
+                {{ t('orders.spenderOrders', { count: item.paid_count }) }}
+              </span>
+            </span>
+          </span>
+          <span
+            class="shrink-0 font-semibold tabular-nums text-[var(--text-primary)]"
+          >
+            {{ formatQuota(item.credited_quota) }}
+          </span>
+        </li>
+      </ol>
+      <p class="mt-4 text-xs text-[var(--text-tertiary)]">
+        {{ t('orders.topSpendersScope') }}
+      </p>
+    </template>
     <EmptyState v-else :title="t('orders.noRevenue')" />
   </ConsoleCard>
 </template>
