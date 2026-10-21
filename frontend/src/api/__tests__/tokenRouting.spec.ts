@@ -17,6 +17,23 @@ const route = (): TokenRoute => ({
     { channel_id: 2, enabled: false, position: 1 },
   ],
 })
+const previewQuery = { model: 'fixture', path: '/v1/responses', stream: false }
+const previewResponse = () => ({
+  mode: 'manual',
+  version: 4,
+  model: 'fixture',
+  path: '/v1/responses',
+  stream: true,
+  ordering: 'manual',
+  entries: [
+    {
+      channel_id: 9,
+      eligible: false,
+      reason: 'channel_saturated',
+      channel_ratio: '1.25',
+    },
+  ],
+})
 describe('native token routing', () => {
   it('saves the ordered manual list and version without retired groups or policies', async () => {
     vi.mocked(api.put).mockResolvedValue({ ...route(), version: 5 })
@@ -50,33 +67,39 @@ describe('native token routing', () => {
     expect(() => parseTokenRoute({ ...route(), version: '4' })).toThrow()
   })
   it('previews the saved configuration without a write', async () => {
-    vi.mocked(api.get).mockResolvedValue({
-      mode: 'manual',
-      version: 4,
-      model: 'fixture',
-      path: '/v1/responses',
-      entries: [
-        {
-          channel_id: 9,
-          eligible: false,
-          reason: 'channel_saturated',
-          channel_ratio: '1.25',
-        },
-      ],
-    })
+    vi.mocked(api.get).mockResolvedValue(previewResponse())
     const signal = new AbortController().signal
     const result = await tokenRoutingApi.preview(
       7,
-      'fixture',
-      '/v1/responses',
+      { model: 'fixture', path: '/v1/responses', stream: true },
       signal
     )
     expect(api.get).toHaveBeenCalledWith(
       '/api/token/7/routing/preview',
-      { model: 'fixture', path: '/v1/responses' },
+      { model: 'fixture', path: '/v1/responses', stream: 'true' },
       { signal }
     )
+    expect(result).toMatchObject({ stream: true, ordering: 'manual' })
     expect(result.entries[0]!.eligible).toBe(false)
     expect(api.put).not.toHaveBeenCalled()
+  })
+  it.each(['manual', 'weighted_random_per_request'] as const)(
+    'accepts the %s preview ordering',
+    async (ordering) => {
+      vi.mocked(api.get).mockResolvedValue({ ...previewResponse(), ordering })
+      const result = await tokenRoutingApi.preview(7, previewQuery)
+      expect(result.ordering).toBe(ordering)
+    }
+  )
+  it.each([
+    { ordering: 'weighted' },
+    { ordering: undefined },
+    { stream: 'true' },
+    { stream: undefined },
+  ])('rejects a preview with an invalid field %o', async (field) => {
+    vi.mocked(api.get).mockResolvedValue({ ...previewResponse(), ...field })
+    await expect(tokenRoutingApi.preview(7, previewQuery)).rejects.toThrow(
+      'Invalid API response'
+    )
   })
 })

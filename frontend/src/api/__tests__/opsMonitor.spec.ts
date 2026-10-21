@@ -111,9 +111,28 @@ describe('native ops monitoring', () => {
     data[section as string]![key as string] = value
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
   })
-  it('rejects a host usage sample above 100%', () => {
+  it('accepts a container CPU burst above 100% and still rates it critical', () => {
     const data = performanceFixture()
-    data.system_usage = { cpu_percent: 101, memory_percent: 1, sampled_at: 1 }
+    data.system_usage = { cpu_percent: 101.2, memory_percent: 1, sampled_at: 1 }
+    const result = projectOpsOverview(
+      parsePerformanceStats(data),
+      null,
+      '1h',
+      [],
+      3600
+    )!
+    expect(result.resources?.cpu.percent).toBe(101.2)
+    expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
+      'critical'
+    )
+  })
+  it.each([
+    { cpu_percent: -1, memory_percent: 1 },
+    { cpu_percent: Number.POSITIVE_INFINITY, memory_percent: 1 },
+    { cpu_percent: 1, memory_percent: 101 },
+  ])('rejects an impossible host usage sample %o', (usage) => {
+    const data = performanceFixture()
+    data.system_usage = { ...usage, sampled_at: 1 }
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
   })
   it('sums hourly quality and keeps idle hours without a rate', () => {

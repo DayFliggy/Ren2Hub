@@ -169,7 +169,7 @@ const cells = computed<Cell[]>(() => [
               :percent="kpi?.successRate ?? 0"
               :color="successColor"
               :size="30"
-              :indeterminate="!kpi || loading"
+              :indeterminate="!kpi || kpi.successRate === null || loading"
             />
           </div>
           <div v-else class="mt-2">

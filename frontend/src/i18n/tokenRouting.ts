@@ -7,6 +7,13 @@ export const tokenRoutingMessages = {
       previewVersion: 'Saved version {version}',
       model: 'Model',
       path: 'API path',
+      stream: 'Streaming request',
+      streaming: 'Streaming',
+      nonStreaming: 'Non-streaming',
+      orderingManual:
+        'Manual mode tries eligible channels in the saved order below.',
+      orderingWeighted:
+        'Automatic mode draws a new weighted random order for every request. The list below is one sample; real requests may use a different order.',
       reasons: {
         eligible: 'Eligible',
         entry_disabled: 'Disabled entry',
@@ -81,6 +88,12 @@ export const tokenRoutingMessages = {
       previewVersion: '已保存版本 {version}',
       model: '模型',
       path: 'API 路径',
+      stream: '流式请求',
+      streaming: '流式',
+      nonStreaming: '非流式',
+      orderingManual: '手动模式按下方保存的顺序尝试符合条件的渠道。',
+      orderingWeighted:
+        '自动模式为每个请求重新按权重随机排序，下方只是其中一次抽样，实际请求的顺序可能不同。',
       reasons: {
         eligible: '可用候选',
         entry_disabled: '条目已禁用',

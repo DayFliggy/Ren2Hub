@@ -38,6 +38,7 @@ export interface DiskCacheStats {
 /** Monitor sample shared with the overload sentinel; null when monitoring is
  * off, not yet sampled or older than 30 seconds — never a fabricated 0%. */
 export interface SystemUsage {
+  /** May exceed 100 during a burst; visuals cap the arc, text keeps the value. */
   cpu_percent: number
   memory_percent: number
   sampled_at: number
@@ -189,7 +190,9 @@ function parseSystemUsage(value: unknown, endpoint: string) {
   if (value === null) return null
   if (!isRecord(value)) invalidResponse(endpoint)
   return {
-    cpu_percent: percentValue(value.cpu_percent, endpoint),
+    // Container CPU is cgroup usage over the core quota and is not clamped,
+    // so a burst may legitimately read above 100%.
+    cpu_percent: nonnegative(value.cpu_percent, endpoint),
     memory_percent: percentValue(value.memory_percent, endpoint),
     sampled_at: nonnegative(value.sampled_at, endpoint, true),
   }

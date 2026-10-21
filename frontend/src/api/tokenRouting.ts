@@ -61,11 +61,19 @@ export function parseTokenRoute(value: unknown): TokenRoute {
     }),
   }
 }
+export interface TokenRoutePreviewQuery {
+  model: string
+  path: string
+  stream: boolean
+}
 export interface TokenRoutePreview {
   mode: 'auto' | 'manual'
   version: number
   model: string
   path: string
+  stream: boolean
+  /** Automatic order is drawn per request, so its preview is one sample. */
+  ordering: 'manual' | 'weighted_random_per_request'
   entries: Array<{
     channel_id: number
     name?: string
@@ -77,15 +85,20 @@ export interface TokenRoutePreview {
 export const tokenRoutingApi = {
   async preview(
     id: number,
-    model: string,
-    path: string,
+    query: TokenRoutePreviewQuery,
     signal?: AbortSignal
   ): Promise<TokenRoutePreview> {
     const url = `${endpoint(id)}/preview`
-    const value = await api.get<unknown>(url, { model, path }, { signal })
+    const value = await api.get<unknown>(
+      url,
+      { model: query.model, path: query.path, stream: String(query.stream) },
+      { signal }
+    )
     if (
       !isRecord(value) ||
       (value.mode !== 'auto' && value.mode !== 'manual') ||
+      (value.ordering !== 'manual' &&
+        value.ordering !== 'weighted_random_per_request') ||
       !Array.isArray(value.entries)
     )
       invalidResponse(url)
@@ -94,6 +107,8 @@ export const tokenRoutingApi = {
       version: requiredStrictInteger(value.version, url),
       model: requiredString(value.model, url),
       path: requiredString(value.path, url),
+      stream: requiredBoolean(value.stream, url),
+      ordering: value.ordering,
       entries: value.entries.map((item) => {
         if (!isRecord(item)) invalidResponse(url)
         return {

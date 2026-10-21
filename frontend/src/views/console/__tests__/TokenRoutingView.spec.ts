@@ -60,6 +60,8 @@ function previewResult(): TokenRoutePreview {
     version: 1,
     model: 'gpt',
     path: '/v1/chat/completions',
+    stream: false,
+    ordering: 'manual',
     entries: [
       {
         channel_id: 7,
@@ -275,12 +277,42 @@ it('keeps read-only previews separate from unsaved edits and clears superseded r
   await flushPromises()
   expect(mocks.preview).toHaveBeenLastCalledWith(
     7,
-    'other-model',
-    '/v1/chat/completions',
+    { model: 'other-model', path: '/v1/chat/completions', stream: false },
     expect.any(AbortSignal)
   )
   expect(wrapper.text()).toContain('Saved preview channel')
   expect(mocks.save).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+it('sends the stream toggle, invalidates the shown preview and explains its ordering', async () => {
+  const wrapper = await render()
+  await wrapper.find('input[aria-label="Model"]').setValue('gpt')
+  await button(wrapper, 'Preview saved routing').trigger('click')
+  await flushPromises()
+  expect(mocks.preview).toHaveBeenLastCalledWith(
+    7,
+    { model: 'gpt', path: '/v1/chat/completions', stream: false },
+    expect.any(AbortSignal)
+  )
+  expect(wrapper.text()).toContain('in the saved order below')
+  await button(wrapper, 'Streaming request').trigger('click')
+  expect(wrapper.text()).not.toContain('Saved preview channel')
+  mocks.preview.mockResolvedValueOnce({
+    ...previewResult(),
+    mode: 'auto',
+    stream: true,
+    ordering: 'weighted_random_per_request',
+  })
+  await button(wrapper, 'Preview saved routing').trigger('click')
+  await flushPromises()
+  expect(mocks.preview).toHaveBeenLastCalledWith(
+    7,
+    { model: 'gpt', path: '/v1/chat/completions', stream: true },
+    expect.any(AbortSignal)
+  )
+  expect(wrapper.text()).toContain('/v1/chat/completions · Streaming')
+  expect(wrapper.text()).toContain('The list below is one sample')
+  expect(wrapper.text()).not.toContain('in the saved order below')
   wrapper.unmount()
 })
 it('clears displayed routing and pending previews as soon as read permission is revoked', async () => {

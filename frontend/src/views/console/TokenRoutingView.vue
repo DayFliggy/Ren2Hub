@@ -61,6 +61,7 @@ const saveRequest = useLatestRequest()
 const previewRequest = useLatestRequest()
 const previewModel = ref('')
 const previewPath = ref('/v1/chat/completions')
+const previewStream = ref(false)
 const preview = ref<TokenRoutePreview | null>(null)
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -259,8 +260,11 @@ async function loadPreview(): Promise<void> {
   const result = await previewRequest.run((signal) =>
     tokenRoutingApi.preview(
       tokenId.value,
-      previewModel.value.trim(),
-      previewPath.value,
+      {
+        model: previewModel.value.trim(),
+        path: previewPath.value,
+        stream: previewStream.value,
+      },
       signal
     )
   )
@@ -269,7 +273,7 @@ async function loadPreview(): Promise<void> {
   if (result.ok) preview.value = result.value
   else previewError.value = errorMessage(result.error)
 }
-watch([tokenId, previewModel, previewPath], invalidatePreview)
+watch([tokenId, previewModel, previewPath, previewStream], invalidatePreview)
 watch(canWrite, () => {
   saveRequest.cancel()
   saving.value = false
@@ -685,6 +689,15 @@ watch(
             </select></FormField
           >
         </div>
+        <label
+          class="mt-4 flex w-fit items-center gap-2 text-sm text-[var(--text-secondary)]"
+          ><ConsoleToggle
+            v-model="previewStream"
+            :label="t('routing.stream')"
+            size="sm"
+            :disabled="loading || saving"
+          />{{ t('routing.stream') }}</label
+        >
         <ConsoleButton
           class="mt-4"
           variant="secondary"
@@ -716,9 +729,21 @@ watch(
                 : t('routing.manual')
             }}</StatusChip
             ><span class="break-all text-xs text-[var(--text-tertiary)]"
-              >{{ preview.model }} · {{ preview.path }}</span
+              >{{ preview.model }} · {{ preview.path }} ·
+              {{
+                preview.stream
+                  ? t('routing.streaming')
+                  : t('routing.nonStreaming')
+              }}</span
             >
           </div>
+          <p class="text-sm text-[var(--text-tertiary)]">
+            {{
+              preview.ordering === 'manual'
+                ? t('routing.orderingManual')
+                : t('routing.orderingWeighted')
+            }}
+          </p>
           <EmptyState
             v-if="!preview.entries.length"
             :title="t('routing.emptyPreview')"
