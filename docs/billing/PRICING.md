@@ -12,6 +12,8 @@
 
 模型编辑仍使用 `GET/PATCH /api/option/model_pricing` 和 `expected_version`。目录 `/api/user/model-catalog` 对基础价与各渠道报价提供同一展示/排序投影，区分 configured、default、zero、unavailable。只投影能静态确定的表达式单价；动态条件、上下文倍率不能猜成 1。目录十进制字符串不构成结算精度升级。
 
-价格同步在原生 `/api/ratio_sync/fetch` 增量支持固定来源纯解析，`/api/ratio_sync/sources` 列出来源。结果只进入草稿，保存后才生效；渠道上游抓取路径继续保留。抓取失败、部分不可解析和明确零价分别表达，不自动覆盖售价。
+价格同步在原生 `/api/ratio_sync/fetch` 增量支持固定来源纯解析，`/api/ratio_sync/sources` 列出来源。本地来源只有 `sub2api` 和 `axonhub` 两种格式到表达式的转换；basellm、models.dev 走原生 `ratio_sync` 预设上游，OpenRouter 走已配置 Key 的 OpenRouter 渠道。草稿给出下载内容的 SHA-256，与来源发布的 `.sha256` 比对结果作为来源级警告，不改变状态。sub2api 中已知但本地不计费的字段（如 `cache_storage_cost_per_token_per_hour`）跳过并在草稿中警告，其他未知计价字段仍然拒收。结果只进入草稿，保存后才生效；渠道上游抓取路径继续保留。抓取失败、部分不可解析和明确零价分别表达，不自动覆盖售价。
+
+渠道倍率无效时，`HandleChannelRatio` 返回错误，`ModelPriceHelper`、`ModelPriceHelperPerCall` 和任务表达式分支都拒绝请求（任务返回 400 `model_price_error`），不预扣、不发上游，也不按 0 计费。
 
 所有金额 API 沿原生数值 quota，不补造旧 `available_quota`、`reserved_quota` 或钱包版本。配置生成、公开展示和排序不能反向决定路由。实际结算以 `relay/helper/price.go`、`service/text_quota.go`、`service/tiered_settle.go`、`service/task_billing.go` 为准。

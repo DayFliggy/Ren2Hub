@@ -2,6 +2,16 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 的唯一上游。Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅为参考项目，不是并列上游，不要求追平。历史引用和作者归属保留在 Git 历史中。
 
+## 2026-10-21 修复、收敛、借鉴与上游吸收
+
+NewAPI 核心从 `09109ec315a5086366f94bcce00f177ec831dbe1` 推进到 main HEAD `206e0fa5c600127a314a97f88592c067f784f4a6`（官方 latest `v1.0.0-rc.45` 之后，含任务凭据安全修复）。参考副本为 Sub2API `a34f373973bf`、AxonHub `cbdf9a6d4a3d`，只借鉴做法，没有搬代码。用户决定保留现行裁剪、本批不建新表、Vue 不回归上游、上游代码尽量原样照搬，与上游相同且属于多扣的资金问题保持上游原样。
+
+窗口内 25 个提交的逐项处置见[批次记录](CONVERGENCE_20261021.md)阶段 1：后端全部吸收，4 个只涉及 React 的提交刻意不吸收；`5e9595190`（渠道优先级拖拽后端）已由 `87ad554d9` 逐字节带入，本批补记。阶段 2 逐文件把没有合同依据的适配差异回归上游原文，`CORE_SOURCE_DELTA.json` 每个非测试 adapted 行都带合同标签，缺标签时刷新脚本拒绝写入。
+
+阶段 3 修复研究报告确认的缺陷，并实施 3E 评估中的 12 项 do-now 重构；7 项 defer、25 项 reject 的理由和复评条件见批次记录“3E 组”。本批新增的上游偏离以 `upstream-defect` 标注，上游修复后回归上游写法：`UpdateOption` 写库失败不再报告成功（E3-2）；分发器首轮检查 `SetupContextForSelectedChannel` 的返回值（B3）；订单计数用派生表封顶，上游的 `Limit(n).Count()` 不生效（A4）；支付回调统一核对实付金额并区分永久和暂时错误（A2、A7）。A2 在 Creem、Waffo、Waffo Pancake 上没有启用，登记为待验证。Realtime WSS 逐轮直扣后结算再扣一次全额（E1-1）与上游相同，按用户决定不修。运维扩展以 `ops-metrics` 标注。
+
+截至代码完成，非测试 adapted 文件为 133 个、6,687 行差异。build、vet、全量测试（controller 分批、单包 60 秒；根包 embed 测试使用前端构建产物）、RelayKit、TokenKit 通过；隔离 SQLite、MySQL、PostgreSQL 的全量测试通过；定向 race 通过，`TestUpdateVideoTasks*` 的竞争在上游 206e0fa 上同样复现。Vue 1,256 项测试及类型、lint、格式、构建通过。Codex `gpt-6-astra` 共同审计、源码发布、候选验收和正式更新尚未执行，结果由批次记录和根工作区交付记录登记，本段不代表已部署。
+
 ## 2026-10-21 历史业务与原生接口回归
 
 以 `f96b9c516284323e2606845f1c11bab51ea3075c` 为开发基线，保留 `9a63062227c31ba54a6346e07ee8b4fd8802f22f` 的有效 Vue 视觉，按文件复用 `324dcb3bcac8f5d7fe89b63284b067f6a1658a02` 已有原生适配。NewAPI 核心仍为 `09109ec315a5086366f94bcce00f177ec831dbe1`，没有上游升级。

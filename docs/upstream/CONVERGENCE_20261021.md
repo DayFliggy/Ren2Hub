@@ -237,7 +237,51 @@ D1、D2、D3 不依赖其他组，可以先做。D4、D5、D6 要等 A 组和 C 
 
 E1-1（Realtime WSS 每轮已直扣钱包，结束时 `SettleBilling` 又按预扣 0 补扣一次全额）评估时定为 do-now；它与上游 206e0fa 相同，属于多扣，按用户决定改为 reject，保持上游原样。复评条件：上游修复这个问题，或用户另行决定。
 
-defer 8 项：E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 24 项 reject，全部在阶段 4 连同复评条件登记到账本。E1-7（没有计费会话时 `SettleBilling` 退回不预扣的直扣路径）只在 `enable_free_model_pre_consume=false` 时可达，默认值为 true；本批不读取正式库，阶段 6 把停机备份恢复到隔离库比对时核对这个选项，若存的是 false，立即升为 do-now。
+评估时定为 defer 的 8 项是 E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 24 项 reject。阶段 4 按各自的复评条件重新核对后，E3-5 改为 reject，最终为 defer 7 项、reject 25 项，逐项结论见下表。E1-7（没有计费会话时 `SettleBilling` 退回不预扣的直扣路径）只在 `enable_free_model_pre_consume=false` 时可达，默认值为 true；本批不读取正式库，阶段 6 把停机备份恢复到隔离库比对时核对这个选项，若存的是 false，立即升为 do-now。
+
+defer 项（阶段 4 复核）：
+
+| 编号 | 内容 | 阶段 4 复核 | 复评条件 |
+| --- | --- | --- | --- |
+| E1-5 | BillingSession 只剩钱包后留下的别名、单分支 switch 和重复判断 | 资金核心路径，只为可读性改动不值得 | 下次因真实缺陷修改 `billing_session.go` 时一并完成，并补回滚失败场景测试 |
+| E1-6 | 重试轮次重复做敏感词检测和 token 估算 | 默认不重试，收益没有量化 | 正式环境 `RetryTimes>0`，且性能剖析显示分词开销明显 |
+| E1-7 | 没有计费会话时 `SettleBilling` 退回直扣 | 默认配置不可达 | 阶段 6 隔离库中 `enable_free_model_pre_consume=false` 时立即升为 do-now |
+| E1-9 | 流式输出观测每个分片都做 `[]byte`→`string` 转换 | B7 只改了 `ObserveRouteStreamOutput` 的注释，没有改签名，“随 B7 顺带完成”的条件没有触发；改动要动三个原生调用点，收益没有基准数据 | 性能剖析显示这次转换明显，或因其他原因修改这三个调用点 |
+| E2-7 | `RouteChannelRows` 走渠道内存缓存 | E2-3 之后每次尝试只剩索引查询；缓存会带来倍率过期的资金风险 | 选路查询在性能数据中仍是瓶颈，或渠道数量明显增长 |
+| E2-8 | `SaveQuotaDataCache` 吞掉写库错误并在持锁期间执行全部查询 | C2 已让个人 summary 改读 `quota_data`，条件已满足；复核后仍不修：只在写库失败时丢失一轮统计，不涉及资金，与上游写法相同，本地修复会扩大 `model/usedata.go` 的差异 | 观察到 saved dashboard data 日志与 `quota_data` 行数不一致，或上游修复后原样吸收 |
+| E3-8 | legacy PAT 放行所有非 session 路由 | 真正违反合同的只有 A1，已修复；过渡期 30 天与上游 `model/user_access_token.go` 相同 | 过渡期被延长，或覆盖全部路由的测试被删除 |
+
+E3-5 改为 reject 的理由：B2、B13 合入后重新统计，`MsgDistributorChannelDisabled` 已由 B13 重新使用；其余 11 个键（7 个属于已退役的分组、Playground、订阅，4 个属于路由）仍然没有引用。`i18n/keys.go` 与上游一致，三份 locale 只差工单文案；删除这些键没有运行时收益，只会让两类文件在上游频繁改动的位置多出差异。复评条件：上游自己删除这些键，或本地重新使用。
+
+reject 项与复评条件：
+
+| 编号 | 理由 | 复评条件 |
+| --- | --- | --- |
+| E1-1 | 与上游 206e0fa 相同的多扣，按用户决定保持上游原样 | 上游修复，或用户另行决定 |
+| E1-8 | RelayInfo 退化字段，收益只有几行，同步成本高 | 上游删除这些字段 |
+| E1-10 | 中继和计费长函数拆分，上游改动频繁 | 无 |
+| E1-11 | Midjourney 两处预扣加延迟退款的重复，收益太小 | 无 |
+| E1-12 | `Reserve` 与 `ReserveBeforeSubmit` 语义已相同，合并会让与上游一致的文件产生差异 | 上游合并两者 |
+| E1-13 | `NewBillingSession` 的余额预检有读取方，不算冗余 | 无 |
+| E1-14 | `Group`→`Channel` 字段名回退会破坏已持久化的数据合同 | 无 |
+| E1-15 | 与上游逐字节相同的协议处理器和计费引擎 | 无 |
+| E1-16 | 渠道适配器与 RelayKit 没有合同下的死代码，上游 6 个月 131 次提交 | 无 |
+| E2-9 | `channel_ratio` 的重复设置起计费安全网作用 | 无 |
+| E2-10 | 用渠道缓存替代 abilities 表，长期同步成本和表结构风险高 | 无 |
+| E2-11 | `quota_data` 的 `node_name` 维度在单节点下恒定，删除风险大于收益 | 无 |
+| E2-12 | 与上游一致或只差删除分组的文件保持原样 | 无 |
+| E2-13 | 本组文件没有 `!IsMasterNode` 分支，由 E3-6 评估 | 无 |
+| E3-4 | `inviterId` 参数链恒为 0，收益只是外观 | 上游删除邀请奖励或修改签名 |
+| E3-5 | 见上文 | 上游删除这些键，或本地重新使用 |
+| E3-6 | 单节点下的 `!IsMasterNode` 分支有测试在用，不变量已在 `init.go` 只写一处 | 上游删除 `NODE_TYPE` 概念 |
+| E3-7 | `updateOptionMap` 巨型 switch，风格性重写 | 上游把配置迁到 config 注册表 |
+| E3-9 | 四个渠道各写一份支付金额和最低充值计算，属于上游原有重复 | 发现某个渠道的金额或最低充值算错 |
+| E3-10 | `createRootAccountIfNeed` 是上游自己的死代码 | 有人重新调用它，或上游删除它 |
+| E3-11 | 单节点每轮全量重载选项和授权策略，收益可以忽略 | 数据量增长到能测出开销 |
+| E3-12 | 退役选项键已满足“规则只写一处” | 无 |
+| E3-13 | `access_token_routes.go` 头部 8 条本地条目，收益太小 | 无 |
+| E3-14 | 进程内 LockOrder 在单节点 SQLite 下仍然有用 | 生产不再使用 SQLite，且所有渠道都区分暂时错误 |
+| E3-15 | 其余适配差异小且都有合同依据 | 无 |
 
 ### 实施分组（执行版）
 
@@ -367,5 +411,19 @@ defer 8 项：E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 24 
   - 验证：build、vet、RelayKit、TokenKit 通过，全量测试结果与基线相同。
   - 12 个差异最大的文件没有做逐段原文核对，改由阶段 3 各组在自己的文件范围内结合 3E 结论完成。
 - **阶段 3E 评估（2026-10-21）**：三份报告见证据目录 `phase3e-eval-*.json`，结论和分组见上文“3E 组”和“实施分组（执行版）”。
+- **阶段 3 实施与集成（2026-10-21）**：A、R、B1、B2、C、D 六组在各自工作树中以 `0585d6538` 为基点实施，交接见证据目录 `phase3-handoff-*.md`。集成顺序为 R（`943f3ebea`）、B2（`43634440b`）、C（`ad692b13e`）、A（`57ccd05e5`）、B1（`d95a4c79d`）、D（`e2b9550bd`）。
+  - 全部 do-now 条目和 A1–A7、B1–B15、C1–C9、D1–D6 已完成。只有 A2 的 Creem、Waffo、Waffo Pancake 三个渠道没有启用金额核对，原因是实付字段的单位、是否含税或折扣无法从代码和 SDK 确认，登记为待验证。
+  - R 组按评估结论实施了 E1-1，用户随后决定保持上游原样，集成时用 `5cdfc15a3` 还原，`service/quota.go` 的 `PreWssConsumeQuota` 与基点逐字相同。
+  - 集成时补做的跨组改动：`99ecc7c29` 把 Midjourney 和违规费的倍率日志改为 `service.FormatChannelRatio`；`efa715837` 为 `GET /api/performance/quality` 声明 `ops:read`；`f57afea87` 在 `doRequest` 和 `DoWssRequest` 握手失败分支调用 `service.ObserveRouteResponse`，B1 交付时 429 冷却在生产路径上没有接通，新增的 `TestRelayRetryAfter429DemotesChannelForNextRequest` 去掉这行调用就失败；同一提交让 Responses WebSocket 重试找不到候选时也保留上一次上游错误，并删除已无调用方的 `filterCandidateIDs` 等三个函数。
+  - `cde5a1892` 刷新 `CORE_SOURCE_DELTA.json`，新增 `ops-metrics`（`controller/performance.go`、`router/api-router.go`）和 `upstream-defect`（E3-2 的 `model/option.go`、B3 的 `middleware/distributor.go`、A2/A7 涉及的 `model/topup.go` 与 `controller/topup*.go` 五个支付控制器）两类标签。非测试 adapted 文件为 133 个、6,687 行差异，阶段 2 为 133 个、6,110 行（同一统计方法）。增量主要来自 E3-1 收拢的入账外壳与 A2/A7 的共享核对（`model/topup.go` 删 430 行、增 99 行，逻辑移入扩展文件 `model/topup_settlement.go`），以及 E2-1 的定价快照外壳。
+  - D 组前端：vitest 223 个文件、1,256 项通过，typecheck、lint、format、build 通过；集成分支的 `frontend/` 与前端分支逐字相同。
+- **阶段 4 验证（2026-10-21）**：
+  - `4314e6c41`：`RouteChannelRows` 用 `model IN ?` 查 abilities，MySQL 默认排序规则不区分大小写，会命中只差大小写的模型名；改为在 Go 侧精确比对，三种数据库与上游内存缓存的精确查找一致。这个失败在基点 `0585d6538` 上同样存在（`phase4-base-modeldeletion.log`）。`model/model_pricing_conversion.go` 的同类查询与上游相同，且已在 Go 侧用 `slices.Contains` 复核，不改。
+  - 三库：用 `db-environment/make-fresh-env.sh` 新建 18 个空库后运行 `run-3db.sh`。controller 分 6 批、其余 47 个包全部通过，扩展测试的 MySQL、PostgreSQL 子测试实际执行；失败的只有根包两个依赖前端构建产物的 embed 测试，放入构建产物后根包通过（`phase4-root-test.log`）。日志为 `phase4-3db-r2.log`、`phase4-3db-r2-rest.log`。
+  - `e5bd33c84`：为 A5 的排行 `SUM/GROUP BY/ORDER BY SUM`、封顶计数派生表、`ESCAPE '!'`，以及 B4/B14 的 `DeleteOrphanChannelRouteEntries`、`deleteUserTokenRouting` 补三库测试，排行额度之和超过 int32，确认 PostgreSQL 的 numeric 和 MySQL 的 DECIMAL 都能扫描进 int64。改坏排序和孤儿清理后测试在三种数据库上都失败。
+  - race：在 `golang:1.26.9-bookworm` 容器中（无网络、只读模块缓存）运行 R 组列出的三条命令，以及路由、并发、工单、支付、WebSocket 的定向 race（`race-inner.sh`、`phase4-race.log`）。`39fa7d211` 修复本地测试辅助 `setupClaudeRelayChannel` 在 Cleanup 中恢复 `common.RedisEnabled`、与 `perf_metrics` 异步 goroutine 竞争的问题。`TestUpdateVideoTasks*` 的竞争来自上游 `logger/logger.go:114` 的 `logCount++`（上游注释写明不加锁）和上游测试读 task 与 `UpdateWithStatus` 写回并发，在上游 206e0fa 上同样复现（`phase4-race-upstream-videotask*.log`），保持原样；跳过这组测试后 service 定向 race 通过。
+  - 最终 HEAD：`go build`、`go vet` 通过，RelayKit 9 个包、TokenKit 1 个包在 `GOWORK=off` 下通过（`phase4-final-*.log`）。
+  - 3E 未实施项按复评条件重新核对，结果见上文 defer 表；E3-5 改为 reject。
+  - 文档：`GATEWAY_API.md`、`UNIFIED_ROUTING.md`、`billing/API.md`、`billing/PRICING.md` 与本批接口和行为对齐；`SYNC_LEDGER.md` 登记本批。
 
 <!-- EXECUTION-LOG -->
