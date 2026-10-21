@@ -142,6 +142,8 @@
   - 路由预览接受 stream 参数，并说明加权随机是按请求计算的。
   - `RejectRetiredGroups` 不再依赖 Content-Type，没有这个头的请求也要检查。
 
+- **B11（P0，阶段 1 发现）渠道倍率无效时任务被按 0 计费。** `HandleChannelRatio` 在倍率无效时会吞掉错误、返回 0。`ModelPriceHelper` 检查了返回值，但任务表达式计费分支（`relay/relay_task.go:304`）没有检查，渠道倍率缺失时任务会按 0 额度计费。修复方式：让 `HandleChannelRatio` 返回 error，所有调用方都必须处理，以后新增的调用方也绕不过去。
+
 ### C 组：运营与可观测
 
 文件归属：`service/model_catalog.go`、`controller/model_catalog.go`、`*/dashboard_summary.go`、`*/home_metrics.go`、`controller/performance.go`、`model/ticket.go`、`controller/tickets*.go`、`model/channel_lab.go`、`pkg/modellab`、`pkg/pricesource`、`*/price_source.go`。
