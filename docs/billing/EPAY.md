@@ -1,6 +1,6 @@
 # 原生易支付充值
 
-易支付使用 NewAPI 原生 `controller/topup.go`、`model/topup.go` 和支付配置。充值金额复用 `getPayMoney`、最低充值额、分组充值倍率及预设折扣；额度换算复用原生 `getTopUpQuota`。金额展示类型为 TOKENS 时，客户端按原生单位提交。
+易支付使用 NewAPI 原生 `controller/topup.go`、`model/topup.go` 和支付配置。充值金额复用 `getPayMoney`、最低充值额及预设折扣；额度换算复用原生 `getTopUpQuota`。金额展示类型为 TOKENS 时，客户端按原生单位提交。
 
 `POST /api/user/amount` 计算金额，`POST /api/user/pay` 创建订单；`GET/POST /api/user/epay/notify` 接收原生签名通知。订单在 `top_ups` 中记录金额、方式、状态和交易号；成功回调与人工补单由原生订单锁、状态检查及数据库事务约束。人工补单入口为 `POST /api/user/topup/complete`，只允许已授权管理员操作。
 

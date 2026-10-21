@@ -6,7 +6,7 @@
 | --- | --- |
 | 浏览器会话 | 登录控制台、个人工单、GMPay下单和支付配置 |
 | 原生管理PAT | `user_access_tokens`、`nap_`凭据；按scope与当前用户角色/资源权限交集执行 |
-| API Key | 模型中继、模型限制、分组、额度和IP限制；不能代替管理会话 |
+| API Key | 模型中继、模型限制、按 Key 的渠道路由、额度和IP限制；不能代替管理会话 |
 
 PAT管理使用 `/api/user/access_tokens`、`/catalog`、`/scopes`，创建、变更scope和撤销按原生安全验证绑定执行。明文只在创建时返回；后端存储摘要和授权信息。不存在旧 `personal_access_tokens` / `pat_` 产品或 `/api/next` 管理层。具体字段以 `controller/access_token.go`、`service/access_token_scope.go` 为准。
 
