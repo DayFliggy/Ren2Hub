@@ -672,15 +672,6 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 	return nil
 }
 
-// rejectRetiredChannelType 是渠道写入和拉取上游模型共用的 type 57 退役拒绝，
-// 保证管理员 key 不会因为任何一条路径被发往已退役的订阅账号上游。
-func rejectRetiredChannelType(channelType int) error {
-	if channelType == constant.ChannelTypeCodex {
-		return errors.New("channel type 57 has been retired")
-	}
-	return nil
-}
-
 type AddChannelRequest struct {
 	Mode                      string                `json:"mode"`
 	MultiKeyMode              constant.MultiKeyMode `json:"multi_key_mode"`
@@ -2374,43 +2365,4 @@ func OllamaVersion(c *gin.Context) {
 			"version": version,
 		},
 	})
-}
-
-// channelLabFilterIDs 把 lab 查询参数解析为渠道 id。nil 表示不按 lab 筛选，
-// 空切片表示该 lab 没有任何渠道。
-func channelLabFilterIDs(c *gin.Context) ([]int, error) {
-	lab := c.Query("lab")
-	if lab == "" {
-		return nil, nil
-	}
-	labs, err := model.AllChannelLabs(c.Request.Context())
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, 0)
-	for id, value := range labs {
-		if value.ID == lab {
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
-}
-
-func applyChannelLabFilter(query *gorm.DB, labIDs []int) *gorm.DB {
-	if labIDs == nil {
-		return query
-	}
-	if len(labIDs) == 0 {
-		return query.Where("1 = 0")
-	}
-	return query.Where("id IN ?", labIDs)
-}
-
-func GetChannelLabs(c *gin.Context) {
-	items, total, err := model.ChannelLabCounts(c.Request.Context())
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	common.ApiSuccess(c, gin.H{"total": total, "items": items})
 }
