@@ -154,6 +154,7 @@
   
   这两处都改为按上游 `pinnedChannelUnavailable` 的语义返回。
 - **B14（P2）** 删除用户时的硬删除路径要清理 Key 路由表，复用 B4 的共享清理函数。任务轮询遇到满载跳过本轮时，要按限频记一条日志。
+- **B15（P1，阶段 2 发现）拉取模型列表时拒绝已退役的 type 57。** 阶段 2 保留了 type 57 的 BaseURL 置空，`FetchModels` 和 `FetchUpstreamModels` 因此不会把管理员 key 发往 chatgpt.com，但它们靠请求失败间接拒绝，错误信息也不明确。在两者共用的 `fetchChannelUpstreamModelIDs` 开头显式拒绝 type 57，返回和渠道写入一致的退役错误，并补回归测试。
 
 ### C 组：运营与可观测
 
@@ -211,6 +212,41 @@ D1、D2、D3 不依赖其他组，可以先做。D4、D5、D6 要等 A 组和 C 
 - 重复的规则实现
 
 报告结论分为 do-now、defer、reject 三种。do-now 的条目按文件归属并入 A、B、C 组实施，每项都要有回归测试，并在账本里登记重构理由和复评条件。defer 和 reject 的条目只在账本中登记。
+
+三份报告共 44 项（E1 16 项、E2 13 项、E3 15 项），其中 13 项定为 do-now：
+
+| 编号 | 内容 | 实施组 |
+|---|---|---|
+| E1-1（P0） | Realtime WSS 每轮 `response.done` 已经直扣钱包，结束时 `SettleBilling` 又按预扣 0 补扣一次全额，上游 206e0fa 同样存在。主代理已静态核对 `PreWssConsumeQuota`、`PostWssConsumeQuota` 和 `BillingSession.Settle` 的调用链；实施前先在隔离库用两轮 `response.done` 复现，再改为每轮通过 `PreConsumeBilling` 补足会话预扣 | R |
+| E1-2 | 删除 `Generate*OtherInfo` 没有读取方的 `userChannelRatio` 参数和 5 处 `-1` 实参 | R |
+| E1-3 | 与 B11 同批：删除 `ChannelRatio == 0` 的不可达分支，FreeModel 判定只留一处 | R |
+| E1-4 | 与 B14 同批：任务轮询的满载跳过和取消处理抽成一个共享函数 | R |
+| E2-1 | 定价缓存改为 `atomic.Pointer` 发布的不可变快照，`updatePricing` 函数体不动 | R |
+| E2-2 | 删除分组选路退役后留下的孤立代码（`model2channels`、两套候选过滤器、`CheckChannelEnabledForModel`、`channel_satisfy.go`） | B2 |
+| E2-3 | `RouteCandidates` 复用请求内快照，排在 B1、B2、B3、B7、B9 之后 | B1 |
+| E2-4 | 去掉 `Channel.AfterFind` 的隐式 `in_flight` 填充，管理视图显式附加 | B2 |
+| E2-5 | 渠道倍率和并发上限的校验只保留模型层一份 | B2 |
+| E2-6 | 分发器三次 gjson 扫描合并为一次 `GetManyBytes` | B1 |
+| E3-1 | 七个入账函数的外壳收拢为 `settleTopUp`，A2 的金额核对和 A7 的状态码映射各只写一处 | A |
+| E3-2 | `UpdateOption` 写库失败时返回错误，不再改写内存并报告成功；上游同样存在 | A |
+| E3-3 | 删除本地改写后没有调用方的符号（`GetUserIdByAffCode`、`TransferAffQuotaRequest`、`isPositiveOptionValue`、`GetChargedAmount`、`QuotaForInviter/QuotaForInvitee`） | A |
+
+defer 8 项：E1-5、E1-6、E1-7、E1-9、E2-7、E2-8、E3-5、E3-8，其余 23 项 reject，全部在阶段 4 连同复评条件登记到账本。E1-7（没有计费会话时 `SettleBilling` 退回不预扣的直扣路径）只在 `enable_free_model_pre_consume=false` 时可达，默认值为 true；本批不读取正式库，阶段 6 把停机备份恢复到隔离库比对时核对这个选项，若存的是 false，立即升为 do-now。
+
+### 实施分组（执行版）
+
+原 B 组的工作量拆成两组，C1 整体并入 B1，避免用户视图类型定义两份。每组在独立工作树中以本计划提交为基点实施，只改自己负责的文件。
+
+| 组 | 条目 | 文件归属 |
+|---|---|---|
+| A 资金、支付与平台 | A1–A7、E3-1、E3-2、E3-3 | `middleware/access_token_*`、`model/topup*.go`、`model/gmpay*.go`、`service/gmpay_*`、`controller/topup*.go`、`controller/gmpay.go`、`model/affiliate*.go`、`controller/affiliate.go`、`model/option.go`、`controller/option.go`、`controller/user.go`、`common/constants.go`，`model/user.go` 中的 `GetUserIdByAffCode` |
+| R 中继计费与定价 | B11、B10 中的倍率日志、B14 中的轮询日志、E1-1–E1-4、E2-1 | `relay/helper/price.go`、`relay/relay_task.go`、`relay/request_billing.go`、`service/quota.go`、`service/billing*.go`、`service/text_quota.go`、`service/log_info_generate.go`、`service/task_billing.go`、`service/task_polling.go`、新增的轮询扩展文件、`model/pricing.go`、`model/pricing_refresh.go`，`controller/channel-test.go` 中 E1-2 的调用点 |
+| B1 路由选择 | B1、B2、B3、B7、B8、B9、B13、C1、B10 中的路由预览、E2-3、E2-6 | `service/route_*.go`、`service/channel_select.go`、`service/channel_request.go`、`service/token_route.go`、`service/token_route_preview.go`、`service/model_catalog.go`、`controller/model_catalog.go`、`middleware/distributor.go`、`controller/relay.go`、`controller/token_routing.go`、`model/route_candidates.go`、`model/channel_constraint.go` |
+| B2 渠道与令牌管理 | B4、B5、B6、B10 中的优先级重排和 `RejectRetiredGroups`、B12、B14 中的硬删除清理、B15、C9、E2-2、E2-4、E2-5 | `controller/channel.go`、`controller/channel_authz.go`、`controller/channel_capacity.go`、`controller/channel_priority.go`、`controller/channel_upstream_update.go`、`controller/token.go`、`model/channel.go`、`model/channel_cache.go`、`model/channel_satisfy.go`、`model/channel_ratio.go`、`model/channel_priority.go`、`model/token_route.go`、`service/concurrency.go`、`middleware/retired_groups.go`，`model/user.go` 中的删除路径 |
+| C 运营与可观测 | C2–C8 | `*/dashboard_summary.go`、`*/home_metrics.go`、`controller/performance.go`、`controller/perf_metrics.go`、`model/perf_metric.go`、`model/ticket.go`、`controller/tickets*.go`、`model/channel_lab.go`、`pkg/modellab`、`pkg/pricesource`、`*/price_source.go`、`controller/ratio_sync.go`、`model/pricing_default.go` |
+| D Vue 接通 | D1–D6 | `frontend/` |
+
+`i18n/locales/*.yaml`、`i18n/keys.go`、`router/api-router.go`、`router/extensions.go` 和 `model/user.go` 允许多组做互不重叠的追加或局部修改，集成时由主代理合并。`docs/upstream/` 下的计划、账本和 `CORE_SOURCE_DELTA.json` 只由主代理修改，各组在交接中列出新增偏离和对应的合同标签。各组同时负责自己文件范围内的原文核对：对清单中标为 `adapted` 的非测试文件逐段对照上游 206e0fa，没有合同理由、也不属于本组 do-now 条目的差异恢复为上游原文。
 
 ### 文档与工具
 
@@ -318,5 +354,12 @@ D1、D2、D3 不依赖其他组，可以先做。D4、D5、D6 要等 A 组和 C 
   - 工单通知：改用上游新的按语言分发管理员通知的 `notifyAdmins`。
   
   非测试代码已能编译，测试适配进行中。合并明细见 `absorb-report.json`。
+- **阶段 1 完成（2026-10-21，提交 `d4583d633`）**：上游测试中引用分组和订阅的 8 个测试文件和 2 个夹具已按合同改写。build、vet、RelayKit、TokenKit 通过；全量测试的失败仍只有根包那两个依赖前端构建产物的测试，与基线相同。
+- **阶段 2 完成（2026-10-21，提交 `4d8e32a0b`）**：非测试 adapted 文件从 136 个、6,241 行降到 133 个、6,106 行，清单中每个 adapted 非测试行都带合同理由，`refresh-core-source-delta.py` 缺理由时拒绝写入。
+  - 回归上游原文：分发器 i18n 文案、百度适配器、定价缓存的加锁粒度、预扣日志；`request_billing` 的重试补扣改走 `PreConsumeBilling`，删除本地的 `Reserve` 分支；`Channel` 的本地字段移到结构体末尾；恢复上游的 `createRootAccountIfNeed`（上游同样没有调用方，E3-10 决定保持原样）。
+  - 保留：type 57 的 BaseURL 置空（否则 FetchModels 会把管理员 key 发往 chatgpt.com），`model_pricing_config.go:98` 保持现状。
+  - 验证：build、vet、RelayKit、TokenKit 通过，全量测试结果与基线相同。
+  - 12 个差异最大的文件没有做逐段原文核对，改由阶段 3 各组在自己的文件范围内结合 3E 结论完成。
+- **阶段 3E 评估（2026-10-21）**：三份报告见证据目录 `phase3e-eval-*.json`，结论和分组见上文“3E 组”和“实施分组（执行版）”。
 
 <!-- EXECUTION-LOG -->
