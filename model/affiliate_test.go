@@ -322,7 +322,7 @@ func TestAffiliatePerUserOverrideAndDisabledCodeOnlyAffectNewBindings(t *testing
 	rate := 1234
 	disabled := false
 	custom := "CUSTOM-CODE"
-	_, err := UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, AffiliatePolicyUpdate{RateBps: &rate, Enabled: &disabled, Code: &custom})
+	_, err := UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, AffiliatePolicyUpdate{RateBps: AffiliateRateUpdate{Set: true, Value: &rate}, Enabled: &disabled, Code: &custom})
 	require.NoError(t, err)
 	order := testAffiliateTopUp(t, invitee.Id, "disabled-code-existing-binding", 10000)
 	_, err = RechargeEpay(order.TradeNo, "", "", "2.00")
@@ -333,12 +333,40 @@ func TestAffiliatePerUserOverrideAndDisabledCodeOnlyAffectNewBindings(t *testing
 	require.ErrorIs(t, err, ErrAffiliateCodeInvalid)
 	_, err = UpdateAffiliateUserPolicy(inviter.Id, common.RoleCommonUser, AffiliatePolicyUpdate{})
 	require.ErrorIs(t, err, ErrUserQuotaPermission)
-	_, err = UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, AffiliatePolicyUpdate{RateBps: nil})
+	_, err = UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, AffiliatePolicyUpdate{RateBps: AffiliateRateUpdate{Set: true}})
 	require.NoError(t, err)
 	policy, err := GetAffiliateUserPolicy(inviter.Id, common.RoleRootUser)
 	require.NoError(t, err)
 	assert.Nil(t, policy.RateBps)
 	assert.Equal(t, 2000, policy.EffectiveRateBps)
+}
+
+// 只提交 enabled 或 code 时不能清空专属比例；显式 null 才清除。
+func TestAffiliatePolicyUpdateKeepsUnsubmittedFields(t *testing.T) {
+	db, inviter, _ := affiliateTestDB(t)
+	decode := func(body string) AffiliatePolicyUpdate {
+		var request AffiliatePolicyUpdate
+		require.NoError(t, common.Unmarshal([]byte(body), &request))
+		return request
+	}
+	_, err := UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, decode(`{"rate_bps":1500}`))
+	require.NoError(t, err)
+	for _, body := range []string{`{"enabled":false}`, `{"code":"KEEP-RATE"}`, `{}`} {
+		policy, err := UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, decode(body))
+		require.NoError(t, err, body)
+		require.NotNil(t, policy.RateBps, body)
+		assert.Equal(t, 1500, *policy.RateBps, body)
+	}
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.False(t, inviter.AffCodeEnabled)
+	assert.Equal(t, "KEEP-RATE", inviter.AffCode)
+	policy, err := UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, decode(`{"rate_bps":null,"enabled":true}`))
+	require.NoError(t, err)
+	assert.Nil(t, policy.RateBps)
+	assert.True(t, policy.Enabled)
+	assert.Equal(t, "KEEP-RATE", policy.Code)
+	_, err = UpdateAffiliateUserPolicy(inviter.Id, common.RoleRootUser, decode(`{"rate_bps":10001}`))
+	assert.Error(t, err)
 }
 func TestAffiliateAdminStorageFailureRollsBackEntireAddition(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
