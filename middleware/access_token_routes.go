@@ -162,6 +162,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 
 	// router/api-router.go: /api/performance, /api/system-task, /api/system-info
 	"GET /api/performance/stats":         accessTokenScopeRule("ops:read"),
+	"GET /api/performance/quality":       accessTokenScopeRule("ops:read"),
 	"DELETE /api/performance/disk_cache": accessTokenScopeRule("ops:write"),
 	"POST /api/performance/reset_stats":  accessTokenScopeRule("ops:write"),
 	"POST /api/performance/gc":           accessTokenScopeRule("ops:write"),
