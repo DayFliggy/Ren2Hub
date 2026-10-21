@@ -1343,7 +1343,7 @@
       "path": "controller/relay_stream_test.go",
       "status": "adapted",
       "upstream_sha256": "755d455067cde38c6d9940ed86f92578ce226332b74955c28c1b95427dc4fac3",
-      "local_sha256": "f93dbe6225e3c28623231004f9430c6e1734b48e551c9dcbeeba4f4aae7d7af6"
+      "local_sha256": "38b5def6c16aa1e81422f37087077633605f736c18224f8726ebe466b4d0ada2"
     },
     {
       "path": "controller/relay_task_plugin_test.go",

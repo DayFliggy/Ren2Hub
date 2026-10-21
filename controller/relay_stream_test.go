@@ -38,9 +38,9 @@ func setupClaudeRelayChannel(t *testing.T, modelName string) {
 	t.Helper()
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
-	previousRedis, previousMemory := common.RedisEnabled, common.MemoryCacheEnabled
+	previousMemory := common.MemoryCacheEnabled
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
-	common.RedisEnabled, common.MemoryCacheEnabled = false, false
+	common.MemoryCacheEnabled = false
 	dsn := "file:" + strings.ReplaceAll(t.Name(), "/", "_") + "?mode=memory&cache=shared"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
@@ -48,7 +48,7 @@ func setupClaudeRelayChannel(t *testing.T, modelName string) {
 	t.Cleanup(func() {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMain, previousLog)
-		common.RedisEnabled, common.MemoryCacheEnabled = previousRedis, previousMemory
+		common.MemoryCacheEnabled = previousMemory
 		if sqlDB, err := db.DB(); err == nil {
 			_ = sqlDB.Close()
 		}
