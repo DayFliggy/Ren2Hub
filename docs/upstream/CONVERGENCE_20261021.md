@@ -92,6 +92,10 @@
 | `catalog-stats` | 模型目录与统计 |
 | `install-guard` | 启动前拒绝旧库 |
 | `single-node` | 单节点 |
+| `branding` | Ren2Hub 品牌 |
+| `vue-frontend` | Vue 前端替代 React |
+| `ops-metrics` | 运维监控扩展：主机资源、连接池、跨模型质量序列（阶段 3 新增） |
+| `upstream-defect` | 修复上游 206e0fa 同样存在的缺陷；上游修复后回归上游写法（阶段 3 新增） |
 
 理由记录在 `CORE_SOURCE_DELTA.json` 各行的 `reasons` 数组中，清单因此仍是唯一的差异来源。刷新脚本要保留 `reasons`；`adapted` 行缺少 `reasons` 时直接报错。这样以后新增的漂移在刷新时就会暴露。
 
