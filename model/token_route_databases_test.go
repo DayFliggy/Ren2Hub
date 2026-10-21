@@ -105,6 +105,24 @@ func TestTokenRoutingDatabases(t *testing.T) {
 			var count int64
 			require.NoError(t, db.Model(&TokenRouteProfile{}).Count(&count).Error)
 			require.Zero(t, count)
+
+			// 删除渠道后的孤儿条目，以及硬删除用户时连同软删除令牌的路由，都要清干净。
+			owner := Token{UserId: 18, Key: "routing-db-owner"}
+			require.NoError(t, owner.InsertWithRouting(TokenRouteManual))
+			retired := Token{UserId: 18, Key: "routing-db-retired"}
+			require.NoError(t, retired.InsertWithRouting(TokenRouteManual))
+			require.NoError(t, db.Delete(&retired).Error)
+			require.NoError(t, db.Create(&[]TokenRouteEntry{{TokenID: owner.Id, ChannelID: 11, Enabled: true}, {TokenID: owner.Id, ChannelID: 22, Position: 1, Enabled: true}, {TokenID: retired.Id, ChannelID: 11, Enabled: true}}).Error)
+			require.NoError(t, db.Delete(&Channel{}, 22).Error)
+			require.NoError(t, DeleteOrphanChannelRouteEntries(ctx))
+			var remaining []TokenRouteEntry
+			require.NoError(t, db.Order("token_id, channel_id").Find(&remaining).Error)
+			require.Equal(t, []TokenRouteEntry{{TokenID: owner.Id, ChannelID: 11, Enabled: true}, {TokenID: retired.Id, ChannelID: 11, Enabled: true}}, remaining)
+			require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return deleteUserTokenRouting(tx, 18) }))
+			require.NoError(t, db.Model(&TokenRouteEntry{}).Count(&count).Error)
+			require.Zero(t, count)
+			require.NoError(t, db.Model(&TokenRouteProfile{}).Count(&count).Error)
+			require.Zero(t, count)
 		})
 	}
 }

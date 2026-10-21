@@ -6,7 +6,7 @@
     "upstream_equal": 858,
     "adapted": 218,
     "removed": 43,
-    "extension": 159
+    "extension": 160
   },
   "files": [
     {
@@ -3049,7 +3049,7 @@
       "path": "model/token_route_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ddaefbb209c278d1df362252c80ab25e825289adc7d040921430b09dd5dfdcf1"
+      "local_sha256": "f9296080b56d1a52fb4b7e157be4b12bb167038c42e85f9971e7976b74c6f408"
     },
     {
       "path": "model/token_route_test.go",
@@ -3074,6 +3074,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "da4c9edeaf2a764cfa279bf640634e454a8140c7b2848c999b1f9964cef5be8b"
+    },
+    {
+      "path": "model/topup_query_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "092815d7bf9e53f0b85ff1753fc28f401a998e2e6a7a2159caf4788a3c656905"
     },
     {
       "path": "model/topup_query_test.go",
