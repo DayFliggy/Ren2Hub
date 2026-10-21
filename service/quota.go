@@ -179,12 +179,12 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 			"completion_ratio":       fmt.Sprintf("%.2f", completionRatio.InexactFloat64()),
 			"audio_ratio":            fmt.Sprintf("%.2f", audioRatio.InexactFloat64()),
 			"audio_completion_ratio": fmt.Sprintf("%.2f", audioCompletionRatio.InexactFloat64()),
-			"channel_ratio":          fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio":          FormatChannelRatio(channelRatio),
 		}))
 	} else {
 		logContent = append(logContent, common.NewMessage("Model price {{model_price}}, channel ratio {{channel_ratio}}", map[string]any{
 			"model_price":   fmt.Sprintf("%.2f", modelPrice),
-			"channel_ratio": fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio": FormatChannelRatio(channelRatio),
 		}))
 	}
 
@@ -209,7 +209,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	logModel := modelName
 	logContent = append(logContent, extraContent...)
 	other := GenerateWssOtherInfo(ctx, relayInfo, usage, modelRatio, channelRatio,
-		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, -1)
+		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice)
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
@@ -318,12 +318,12 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 			"completion_ratio":       fmt.Sprintf("%.2f", completionRatio.InexactFloat64()),
 			"audio_ratio":            fmt.Sprintf("%.2f", audioRatio.InexactFloat64()),
 			"audio_completion_ratio": fmt.Sprintf("%.2f", audioCompletionRatio.InexactFloat64()),
-			"channel_ratio":          fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio":          FormatChannelRatio(channelRatio),
 		}))
 	} else {
 		logContent = append(logContent, common.NewMessage("Model price {{model_price}}, channel ratio {{channel_ratio}}", map[string]any{
 			"model_price":   fmt.Sprintf("%.2f", modelPrice),
-			"channel_ratio": fmt.Sprintf("%.2f", channelRatio),
+			"channel_ratio": FormatChannelRatio(channelRatio),
 		}))
 	}
 
@@ -347,7 +347,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	logModel := billingModelName
 	logContent = append(logContent, extraContent...)
 	other := GenerateAudioOtherInfo(ctx, relayInfo, usage, modelRatio, channelRatio,
-		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, -1)
+		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice)
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
