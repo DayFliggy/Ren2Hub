@@ -9,11 +9,12 @@ beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('zh-CN')
 })
+const noSamples = { status: 'empty' } as const
 describe('native catalog cards', () => {
   it('separates baseline and channel prices without fabricating measured performance', async () => {
     const model = buildModelMarketCatalog(modelCatalogFixture()).models[0]!
     const wrapper = mount(ModelCard, {
-      props: { model },
+      props: { model, performance: noSamples },
       global: { plugins: [i18n] },
     })
     expect(wrapper.get('[data-market-baseline]').text()).toContain('$1.250')
@@ -21,7 +22,13 @@ describe('native catalog cards', () => {
     expect(wrapper.get('[data-channel-quote]').text()).toContain(
       'Fixture channel'
     )
-    expect(wrapper.get('[data-market-telemetry]').text()).toContain('统计')
+    // Model-wide metrics never sit inside the channel lane they do not describe.
+    expect(
+      wrapper.find('[data-channel-quote] [data-market-telemetry]').exists()
+    ).toBe(false)
+    expect(wrapper.get('[data-model-statistics="empty"]').text()).toContain(
+      '模型统计'
+    )
     expect(wrapper.text()).not.toMatch(/\d+%|TPS|优惠|最低|最优/)
     await wrapper.get('button[aria-label*="模型详情"]').trigger('click')
     expect(wrapper.emitted('detail')).toEqual([
@@ -37,7 +44,7 @@ describe('native catalog cards', () => {
     fixture.offers[0]!.pricing_values = {}
     const model = buildModelMarketCatalog(fixture).models[0]!
     const wrapper = mount(ModelCard, {
-      props: { model },
+      props: { model, performance: noSamples },
       global: { plugins: [i18n] },
     })
     expect(wrapper.text()).toContain('未提供')

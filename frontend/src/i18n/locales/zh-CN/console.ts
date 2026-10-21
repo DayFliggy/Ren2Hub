@@ -3223,7 +3223,8 @@ export default {
       title: '运行状态与维护',
       loadingStats: '正在获取最新运行状态…',
       affinitySummary: '缓存 {total} 条，容量 {capacity}。',
-      performanceSummary: '缓存命中率 {rate}，日志文件 {count} 个。',
+      performanceSummary:
+        '活动内存缓冲 {memoryCount} 个（{memorySize}），活动磁盘文件 {diskCount} 个（{diskSize}），日志文件 {logCount} 个。',
       cacheEntries: '缓存条目',
       unknownEntries: '未知条目',
       cacheAlgorithm: '缓存算法',
@@ -3245,7 +3246,7 @@ export default {
       clearCache: '清理磁盘缓存',
       clearCacheMessage: '将删除不活跃的磁盘缓存文件。',
       resetStats: '重置缓存统计',
-      resetStatsMessage: '将重置磁盘缓存的命中与未命中统计。',
+      resetStatsMessage: '将重置内存与磁盘缓存的命中计数。',
       gc: '执行垃圾回收',
       gcMessage: '将立即执行 Go 运行时垃圾回收。',
       cleanupLogs: '清理日志文件',

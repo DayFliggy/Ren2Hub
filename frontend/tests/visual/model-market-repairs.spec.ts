@@ -208,7 +208,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(dialog.locator('.market-full-id')).toHaveCount(0)
       const offer = dialog.locator('button[data-offer-id]').first()
       await expect(offer).toHaveAccessibleDescription(
-        /0\.2×.*Usage.*\$0\.500.*1M tokens.*\$2\.000.*Statistics unavailable/s
+        /0\.2×.*Usage.*\$0\.500.*1M tokens.*\$2\.000.*No per-channel statistics/s
       )
       const rows = dialog.locator('.market-detail-offer')
       for (const row of await rows.all()) {

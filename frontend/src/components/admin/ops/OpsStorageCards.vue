@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   opsMonitorApi,
-  performanceNumber,
+  type DiskCacheStats,
   type OpsOverview,
   type PerformanceAction,
 } from '@/api/opsMonitor'
@@ -38,14 +38,14 @@ const probes = [
 const cacheMetrics = computed(() => {
   const stats = props.overview?.cache
   if (!stats) return []
-  const count = (key: string) => ({
+  const count = (key: keyof DiskCacheStats) => ({
     key,
-    value: formatCount(performanceNumber(stats.cache_stats, key), locale.value),
+    value: formatCount(stats.cache_stats[key], locale.value),
     unit: '',
   })
-  const bytes = (key: string) => ({
+  const bytes = (key: keyof DiskCacheStats) => ({
     key,
-    ...formatBytes(performanceNumber(stats.cache_stats, key), locale.value),
+    ...formatBytes(stats.cache_stats[key], locale.value),
   })
   return [
     bytes('current_memory_usage_bytes'),

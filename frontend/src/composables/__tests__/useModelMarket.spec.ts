@@ -20,9 +20,26 @@ function setupMarket() {
   )
   return state
 }
+function performanceSummary(successRate: number) {
+  return {
+    summary: null,
+    models: [
+      {
+        model_name: 'fixture-model',
+        avg_latency_ms: 800,
+        success_rate: successRate,
+        avg_tps: 0,
+      },
+    ],
+  }
+}
 beforeEach(() => {
   localStorage.clear()
-  vi.mocked(api.get).mockResolvedValue(modelCatalogFixture())
+  vi.mocked(api.get).mockImplementation(async (url) =>
+    url === '/api/perf-metrics/summary'
+      ? performanceSummary(99)
+      : modelCatalogFixture()
+  )
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -44,9 +61,34 @@ describe('native catalog browser', () => {
         9,
       ])
     }
-    expect(api.get).toHaveBeenCalledTimes(1)
+    expect(
+      vi
+        .mocked(api.get)
+        .mock.calls.map(([url]) => url)
+        .sort()
+    ).toEqual(['/api/perf-metrics/summary', '/api/user/model-catalog'])
     expect(api.get).toHaveBeenCalledWith('/api/user/model-catalog', undefined, {
       signal: expect.any(AbortSignal),
+    })
+  })
+  it('never lets a stale performance response overwrite a newer one', async () => {
+    let resolve!: (value: unknown) => void
+    vi.mocked(api.get)
+      .mockReturnValueOnce(
+        new Promise((done) => {
+          resolve = done
+        })
+      )
+      .mockResolvedValueOnce(performanceSummary(99))
+    const state = setupMarket()
+    const first = state.loadPerformance()
+    await state.loadPerformance()
+    expect(vi.mocked(api.get).mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
+    resolve(performanceSummary(10))
+    await first
+    expect(state.performanceFor('fixture-model')).toEqual({
+      status: 'ready',
+      summary: expect.objectContaining({ success_rate: 99 }),
     })
   })
   it('discards permission-scoped prices after a failed refresh', async () => {

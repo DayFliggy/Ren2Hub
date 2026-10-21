@@ -13,6 +13,26 @@ async function configureStablePage(
   await args[0].route('**/api/user/model-catalog*', (route) =>
     route.fulfill({ json: { success: true, data: createModelMarketFixture() } })
   )
+  await args[0].route('**/api/perf-metrics/summary*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          summary: { avg_latency_ms: 1250, success_rate: 99.5, avg_tps: 38.4 },
+          window_start: 1785038400,
+          window_end: 1785124800,
+          models: [
+            {
+              model_name: 'gpt-4.1',
+              avg_latency_ms: 1250,
+              success_rate: 99.5,
+              avg_tps: 38.4,
+            },
+          ],
+        },
+      },
+    })
+  )
 }
 
 for (const theme of ['light', 'dark'] as const) {
@@ -40,12 +60,16 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(
         card.locator('[data-market-baseline] [data-market-telemetry]')
       ).toHaveCount(0)
-      await expect(card).not.toContainText(
-        /TPS|耗时|延迟|可用率|\d+%|优惠|最优/
-      )
-      await expect(card.locator('[data-market-telemetry]')).toContainText(
-        '统计'
-      )
+      // Model-wide perf-metrics stay outside both price lanes.
+      for (const lane of ['[data-market-baseline]', '[data-channel-quote]'])
+        await expect(card.locator(lane)).not.toContainText(
+          /TPS|耗时|延迟|可用率|\d+%|优惠|最优/
+        )
+      await expect(card).not.toContainText(/优惠|最优/)
+      const statistics = card.locator('[data-model-statistics="ready"]')
+      await expect(statistics).toContainText('全部渠道 · 近 24 小时')
+      await expect(statistics).toContainText('99.5%')
+      await expect(statistics).toContainText('1.25 s')
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('models.png'),
@@ -142,7 +166,9 @@ for (const theme of ['light', 'dark'] as const) {
       expect(
         requests.filter((path) => path === '/api/user/model-catalog')
       ).toHaveLength(1)
-      expect(requests).not.toContain('/api/perf-metrics/summary')
+      expect(
+        requests.filter((path) => path === '/api/perf-metrics/summary')
+      ).toHaveLength(1)
       expect(errors).toEqual([])
     })
   }
@@ -187,7 +213,7 @@ test('market filters persist across views and translated long names remain usabl
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText(longId)
   await expect(dialog).toContainText('Platform base price')
-  await expect(dialog).toContainText('Statistics unavailable')
+  await expect(dialog).toContainText('No per-channel statistics')
   await assertNoHorizontalOverflow(page)
   await dialog
     .getByRole('button', { name: 'Close model details', exact: true })
@@ -308,7 +334,7 @@ for (const theme of ['light', 'dark'] as const) {
         .click()
       const dialog = page.getByRole('dialog')
       await expect(dialog).toContainText('Platform base price')
-      await expect(dialog).toContainText('Statistics unavailable')
+      await expect(dialog).toContainText('No per-channel statistics')
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('english-details.png'),

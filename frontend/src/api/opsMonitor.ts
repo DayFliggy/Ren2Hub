@@ -26,6 +26,15 @@ export interface RoutingSnapshot {
   channels: { id: number; limit: number; in_flight: number }[]
   observations: RoutingObservation[]
 }
+/** Counters of common.DiskCacheStats; an absent counter stays null, not 0. */
+export interface DiskCacheStats {
+  current_memory_usage_bytes: number | null
+  current_disk_usage_bytes: number | null
+  active_memory_buffers: number | null
+  active_disk_files: number | null
+  memory_cache_hits: number | null
+  disk_cache_hits: number | null
+}
 export interface PerformanceStats {
   memory_stats: {
     alloc: number
@@ -34,7 +43,7 @@ export interface PerformanceStats {
     num_gc: number
     num_goroutine: number
   }
-  cache_stats: Record<string, unknown>
+  cache_stats: DiskCacheStats
   disk_cache_info: Record<string, unknown>
   disk_space_info: Record<string, unknown>
   config: Record<string, unknown>
@@ -94,17 +103,18 @@ export function parsePerformanceStats(value: unknown): PerformanceStats {
   )
     invalidResponse(endpoint)
   const memory = value.memory_stats
+  const rawCache = value.cache_stats
+  const counter = (key: keyof DiskCacheStats) =>
+    optionalNumber(rawCache[key], endpoint)
   // Validate the native optional metrics at the boundary, so malformed data
   // follows the feed's error path instead of throwing during rendering.
-  for (const key of [
-    'current_memory_usage_bytes',
-    'current_disk_usage_bytes',
-    'active_memory_buffers',
-    'active_disk_files',
-    'memory_cache_hits',
-    'disk_cache_hits',
-  ]) {
-    optionalNumber(value.cache_stats[key], endpoint)
+  const cacheStats: DiskCacheStats = {
+    current_memory_usage_bytes: counter('current_memory_usage_bytes'),
+    current_disk_usage_bytes: counter('current_disk_usage_bytes'),
+    active_memory_buffers: counter('active_memory_buffers'),
+    active_disk_files: counter('active_disk_files'),
+    memory_cache_hits: counter('memory_cache_hits'),
+    disk_cache_hits: counter('disk_cache_hits'),
   }
   for (const key of ['total', 'used', 'used_percent']) {
     const metric = optionalNumber(value.disk_space_info[key], endpoint)
@@ -131,7 +141,7 @@ export function parsePerformanceStats(value: unknown): PerformanceStats {
       num_gc: nonnegative(memory.num_gc, endpoint, true),
       num_goroutine: nonnegative(memory.num_goroutine, endpoint, true),
     },
-    cache_stats: value.cache_stats,
+    cache_stats: cacheStats,
     disk_cache_info: value.disk_cache_info,
     disk_space_info: value.disk_space_info,
     config: value.config,

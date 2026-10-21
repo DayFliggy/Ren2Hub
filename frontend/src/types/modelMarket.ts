@@ -73,3 +73,14 @@ export interface MarketChannelShelf {
   channel: MarketChannel
   items: { model: MarketModel; offers: MarketOffer[] }[]
 }
+
+/** Per-model perf-metrics state. "empty" means the model had no sampled
+ * requests in the window; it is never rendered as a 0% success rate. */
+export type ModelPerformanceState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'empty' }
+  | {
+      status: 'ready'
+      summary: import('@/api/liveContracts').PerfModelSummaryContract
+    }

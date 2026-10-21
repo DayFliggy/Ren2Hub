@@ -3332,7 +3332,8 @@ export default {
       title: 'Runtime status and maintenance',
       loadingStats: 'Fetching the latest runtime status…',
       affinitySummary: '{total} cached entries, capacity {capacity}.',
-      performanceSummary: 'Cache hit rate {rate}, {count} log files.',
+      performanceSummary:
+        '{memoryCount} active memory buffers ({memorySize}), {diskCount} active disk files ({diskSize}), {logCount} log files.',
       cacheEntries: 'Cached entries',
       unknownEntries: 'Unknown entries',
       cacheAlgorithm: 'Cache algorithm',
@@ -3354,7 +3355,7 @@ export default {
       clearCache: 'Clear disk cache',
       clearCacheMessage: 'Inactive disk cache files will be deleted.',
       resetStats: 'Reset cache statistics',
-      resetStatsMessage: 'Disk cache hit and miss counts will be reset.',
+      resetStatsMessage: 'Memory and disk cache hit counts will be reset.',
       gc: 'Run garbage collection',
       gcMessage: 'The Go runtime garbage collector will run now.',
       cleanupLogs: 'Clean up log files',

@@ -74,11 +74,14 @@ describe('native ops monitoring', () => {
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
   })
   it('preserves zero values and missing optional metrics without filling probes', () => {
-    const data = performanceFixture()
-    data.config = {}
-    data.cache_stats = { memory_cache_hits: 0 }
+    const data: Record<string, unknown> = {
+      ...performanceFixture(),
+      config: {},
+      cache_stats: { memory_cache_hits: 0 },
+    }
     const parsed = parsePerformanceStats(data)
     expect(parsed.cache_stats.memory_cache_hits).toBe(0)
+    expect(parsed.cache_stats.current_disk_usage_bytes).toBeNull()
     expect(
       projectOpsOverview(parsed, null, '1h', [], 3600)?.resources
         ?.monitor_enabled

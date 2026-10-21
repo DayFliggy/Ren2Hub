@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-import { getModelMarket } from '@/api/modelMarket'
+import { getModelMarket, getModelPerformance } from '@/api/modelMarket'
+import type { PerfModelSummaryContract } from '@/api/liveContracts'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { ApiError } from '@/api/types'
 import {
@@ -17,7 +18,13 @@ import type {
   ModelMarketCatalog,
   ModelMarketSort,
   ModelMarketViewMode,
+  ModelPerformanceState,
 } from '@/types/modelMarket'
+
+type PerformanceFeed =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; models: Map<string, PerfModelSummaryContract> }
 
 export { PLATFORM_VENDOR } from '@/utils/modelMarket'
 export type { ModelMarketViewMode, ModelMarketSort } from '@/types/modelMarket'
@@ -41,12 +48,18 @@ export function useModelMarket() {
     },
   })
   const request = useLatestRequest()
+  const performance = ref<PerformanceFeed>({ status: 'loading' })
+  const performanceRequest = useLatestRequest()
 
   function vendorLabel(vendor: string): string {
     return vendor === PLATFORM_VENDOR ? t('models.platformVendor') : vendor
   }
 
-  async function load() {
+  function failureMessage(cause: unknown): string {
+    return cause instanceof ApiError ? cause.message : t('common.failed')
+  }
+
+  async function loadCatalog() {
     loading.value = true
     error.value = ''
     const result = await request.run(getModelMarket)
@@ -56,12 +69,40 @@ export function useModelMarket() {
     else {
       // Discard old permission-scoped data after a failed refresh.
       catalog.value = null
-      error.value =
-        result.error instanceof ApiError
-          ? result.error.message
-          : t('common.failed')
+      error.value = failureMessage(result.error)
     }
   }
+
+  /** Metrics load independently, so a failure never hides catalog prices. */
+  async function loadPerformance() {
+    performance.value = { status: 'loading' }
+    const result = await performanceRequest.run(getModelPerformance)
+    if (result.stale) return
+    performance.value = result.ok
+      ? {
+          status: 'ready',
+          models: new Map(result.value.map((row) => [row.model_name, row])),
+        }
+      : {
+          status: 'error',
+          message: failureMessage(result.error) || t('common.failed'),
+        }
+  }
+
+  async function load() {
+    await Promise.all([loadCatalog(), loadPerformance()])
+  }
+
+  function performanceFor(modelName: string): ModelPerformanceState {
+    const feed = performance.value
+    if (feed.status !== 'ready') return { status: feed.status }
+    const summary = feed.models.get(modelName)
+    return summary ? { status: 'ready', summary } : { status: 'empty' }
+  }
+
+  const performanceError = computed(() =>
+    performance.value.status === 'error' ? performance.value.message : ''
+  )
 
   const filtered = computed(() => {
     const query = keyword.value.trim().toLowerCase()
@@ -155,8 +196,11 @@ export function useModelMarket() {
     offerCount,
     hasResults,
     pricingIssues,
+    performanceFor,
+    performanceError,
     vendorLabel,
     load,
+    loadPerformance,
     resetFilters,
   }
 }
