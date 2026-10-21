@@ -2,6 +2,7 @@ package model
 
 import (
 	"bytes"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -43,4 +44,34 @@ func TestOptionDatabaseFailuresKeepMemory(t *testing.T) {
 	loadOptionsFromDatabase()
 	assert.Equal(t, "kept-name", common.OptionMap["SystemName"])
 	assert.Contains(t, logs.String(), "failed to load options from database")
+}
+
+// 键不存在时 FirstOrCreate 先插入空值行；随后 Save 失败要整体回滚，否则下一轮同步会把
+// 空值读进内存。
+func TestUpdateOptionRollsBackCreatedRowWhenSaveFails(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "options.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Option{}))
+	oldDB, oldName := DB, common.SystemName
+	common.OptionMapRWMutex.Lock()
+	oldMap := common.OptionMap
+	common.OptionMap = map[string]string{}
+	common.OptionMapRWMutex.Unlock()
+	DB, common.SystemName = db, "kept-name"
+	t.Cleanup(func() {
+		DB, common.SystemName = oldDB, oldName
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = oldMap
+		common.OptionMapRWMutex.Unlock()
+	})
+	failure := errors.New("option save unavailable")
+	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("option:save-fail", func(tx *gorm.DB) {
+		tx.AddError(failure)
+	}))
+
+	require.ErrorIs(t, UpdateOption("SystemName", "unsaved-name"), failure)
+	var count int64
+	require.NoError(t, db.Model(&Option{}).Where("key = ?", "SystemName").Count(&count).Error)
+	assert.Zero(t, count, "the row inserted by FirstOrCreate must roll back with the failed save")
+	assert.Equal(t, "kept-name", common.SystemName)
 }

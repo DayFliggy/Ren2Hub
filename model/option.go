@@ -287,15 +287,20 @@ func UpdateOption(key string, value string) error {
 	option := Option{
 		Key: key,
 	}
-	// https://gorm.io/docs/update.html#Save-All-Fields
-	if err := DB.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
-		return err
-	}
-	option.Value = value
-	// Save is a combination function.
-	// If save value does not contain primary key, it will execute Create,
-	// otherwise it will execute Update (with all fields).
-	if err := DB.Save(&option).Error; err != nil {
+	// 两步写入放在同一事务里：FirstOrCreate 插入了空值行而 Save 失败时一起回滚，
+	// 不会留下“报告失败但库里已变”的配置，下一轮同步也读不到这行空值。
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		// https://gorm.io/docs/update.html#Save-All-Fields
+		if err := tx.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
+			return err
+		}
+		option.Value = value
+		// Save is a combination function.
+		// If save value does not contain primary key, it will execute Create,
+		// otherwise it will execute Update (with all fields).
+		return tx.Save(&option).Error
+	})
+	if err != nil {
 		return err
 	}
 	// Update OptionMap

@@ -2715,7 +2715,7 @@
       "path": "model/option.go",
       "status": "adapted",
       "upstream_sha256": "07c3b32cdbf9c6bbe7804f12808f12f0c65812f10344df039725cf5640aac831",
-      "local_sha256": "da807fc29be8b586569c811d1f0fd62db046dde8308a80b6d425b116f03b14f3",
+      "local_sha256": "f4567b701209fc6468cff2ee760584aa7245f2141565b0e87cae231cb61f45dc",
       "reasons": [
         "group-removal",
         "retired",
@@ -2733,7 +2733,7 @@
       "path": "model/option_failure_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e2123600500b68323fab35a5867202136a74596662d768d541aec1e0f2a34b69"
+      "local_sha256": "9d580c82bab8382c8c4b02d9e966fa132aef4c0ec9fdb7b074dac2ebae86633b"
     },
     {
       "path": "model/option_primary_key_migration.go",
@@ -2893,13 +2893,13 @@
       "path": "model/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f90c1d836531e4f273c3821004ebc8abfd2e0b9f22bd7baaee830b7e00e19cc8"
+      "local_sha256": "59c4160edf24ca346c5ab462be6f424d61763a5383588ed5a736633eb353d1ca"
     },
     {
       "path": "model/route_candidates_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0f4d9cbd4c1e7f93a04c5da3af962bf0dc7eaab6bfa9fc59bb6fbd3660326b30"
+      "local_sha256": "952fb4bbdaaa0b0ac02dbf4924159e32fff7ad4752504907eabbed0a06758da1"
     },
     {
       "path": "model/setup.go",
@@ -4922,7 +4922,7 @@
       "path": "relay/channel/volcengine/tts.go",
       "status": "adapted",
       "upstream_sha256": "8cf39df7eabd692eac2d72ce31043803597d4372780cf7d31ad36f0ee0a1c077",
-      "local_sha256": "031dde11237e917050283617570a73190b3a9a9eee227960d52f738af53cc131",
+      "local_sha256": "e9765f68d1f99067f0604d28c6e51ce30b154abd05ff197630df95ea11452b3c",
       "reasons": [
         "token-routing",
         "concurrency"
@@ -6951,13 +6951,13 @@
       "path": "service/concurrency.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "93fd35bdd3fd915169695efd24354fdafa7e056b27aeaa78eaa2ff1a20ef44ba"
+      "local_sha256": "bdd07733b985399ef58162661abc56ac846f50ac2e9de7f8874eda01d048a308"
     },
     {
       "path": "service/concurrency_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "fb91a7547184e96442452185e73bf5f68895502a766f361852089a2a0cd7e01c"
+      "local_sha256": "194e050173ce3cd37f50ac839143631a0c017cc3cab520160b97d7fa0833b63c"
     },
     {
       "path": "service/convert.go",
@@ -7154,7 +7154,7 @@
       "path": "service/midjourney.go",
       "status": "adapted",
       "upstream_sha256": "8e07f0286d8357f756ff8ea240f5c73c935e70e19f754a882ea2c18679ba3854",
-      "local_sha256": "b342cecd1861e154b0343284d7688606212aa3502c8b51c4e86252d5aa39b9f8",
+      "local_sha256": "ed5ee055db4c79411b35f46339b5c86f02078b685280560f4a5f4e936fcfcc2a",
       "reasons": [
         "channel-ratio",
         "token-routing",
@@ -7366,7 +7366,7 @@
       "path": "service/route_breaker_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e3532fb36280d407418b30fdcc66f1055d6ad1efd2e375d4701e9df60139ec50"
+      "local_sha256": "89089c33c5d5abefdc2b9f3ab6b81ce69dba28b9d6615c8c17b7f6c775283ae7"
     },
     {
       "path": "service/route_candidates.go",
