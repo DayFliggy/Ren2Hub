@@ -3249,6 +3249,7 @@ export default {
       diskCache: '磁盘缓存',
       memory: '当前内存',
       logSize: '日志占用',
+      logDisabled: '服务器文件日志未启用（未配置日志目录）',
       clearAffinityButton: '清空亲和性缓存',
       resetStatsButton: '重置统计',
       logCleanup: '日志清理：',

@@ -3362,6 +3362,8 @@ export default {
       diskCache: 'Disk cache',
       memory: 'Memory in use',
       logSize: 'Log storage',
+      logDisabled:
+        'Server logging is not enabled (log directory not configured)',
       clearAffinityButton: 'Clear affinity cache',
       resetStatsButton: 'Reset statistics',
       logCleanup: 'Log cleanup:',

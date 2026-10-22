@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SystemSettingsMaintenanceActions from '../SystemSettingsMaintenanceActions.vue'
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
@@ -32,11 +33,29 @@ function performanceStats(cacheStats: Record<string, number>) {
   }
 }
 
-function mockFeeds(cacheStats: Record<string, number>) {
+const enabledLogs = {
+  log_dir: '/var/log/ren2hub',
+  enabled: true,
+  file_count: 4,
+  total_size: 2048,
+  files: [],
+}
+// controller.GetLogFiles answer when no log directory is configured.
+const disabledLogs = {
+  log_dir: '',
+  enabled: false,
+  file_count: 0,
+  total_size: 0,
+  files: null,
+}
+
+function mockFeeds(
+  cacheStats: Record<string, number>,
+  logs: () => unknown = () => enabledLogs
+) {
   return vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/api/performance/stats') return performanceStats(cacheStats)
-    if (url === '/api/performance/logs')
-      return { enabled: true, file_count: 4, total_size: 2048, files: [] }
+    if (url === '/api/performance/logs') return logs()
     throw new Error(`unexpected ${url}`)
   })
 }
@@ -91,6 +110,87 @@ describe('performance maintenance summary', () => {
       '活动内存缓冲 — 个（—），活动磁盘文件 — 个（—），日志文件 4 个。'
     )
     expect(wrapper.text()).not.toContain('NaN')
+    wrapper.unmount()
+  })
+})
+
+describe('log file cleanup', () => {
+  async function confirmCleanup(wrapper: Awaited<ReturnType<typeof render>>) {
+    await wrapper.getComponent(ConfirmDialog).vm.$emit('confirm')
+    await flushPromises()
+  }
+  async function clickButton(
+    wrapper: Awaited<ReturnType<typeof render>>,
+    label: string
+  ) {
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === label)!
+      .trigger('click')
+    await flushPromises()
+  }
+
+  function hasCleanupButton(wrapper: Awaited<ReturnType<typeof render>>) {
+    return wrapper
+      .findAll('button')
+      .some((button) => button.text() === '清理日志')
+  }
+
+  it('explains disabled file logging and offers no cleanup', async () => {
+    mockFeeds({}, () => disabledLogs)
+    const remove = vi.spyOn(api, 'delete')
+    const wrapper = await render()
+
+    expect(wrapper.get('[data-log-disabled]').text()).toBe(
+      '服务器文件日志未启用（未配置日志目录）'
+    )
+    expect(hasCleanupButton(wrapper)).toBe(false)
+    expect(remove).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('cleans up enabled log files with the native mode and value', async () => {
+    mockFeeds({})
+    const remove = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
+    const wrapper = await render()
+
+    expect(wrapper.find('[data-log-disabled]').exists()).toBe(false)
+    await clickButton(wrapper, '清理日志')
+    await confirmCleanup(wrapper)
+    expect(remove).toHaveBeenCalledWith('/api/performance/logs', {
+      mode: 'by_count',
+      value: 30,
+    })
+    expect(toast.success).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('hides cleanup when the first log read fails', async () => {
+    mockFeeds({}, () => Promise.reject(new Error('logs offline')))
+    const wrapper = await render()
+
+    expect(toast.error).toHaveBeenCalledWith('logs offline')
+    expect(hasCleanupButton(wrapper)).toBe(false)
+    expect(wrapper.find('[data-log-disabled]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('drops an earlier enabled state when a refresh fails', async () => {
+    let logsOnline = true
+    mockFeeds({}, () =>
+      logsOnline ? enabledLogs : Promise.reject(new Error('logs offline'))
+    )
+    const remove = vi.spyOn(api, 'delete')
+    const wrapper = await render()
+    await clickButton(wrapper, '清理日志')
+
+    logsOnline = false
+    await clickButton(wrapper, '刷新')
+    expect(toast.error).toHaveBeenCalledWith('logs offline')
+    expect(hasCleanupButton(wrapper)).toBe(false)
+    await confirmCleanup(wrapper)
+    expect(remove).not.toHaveBeenCalled()
+    expect(toast.success).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })
