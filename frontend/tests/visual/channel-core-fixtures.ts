@@ -95,8 +95,10 @@ export function nativeUsageSummary(now: number, includeComparison = true) {
       },
     ],
     hourly: Array.from({ length: 24 }, (_, index) => ({
-      hour: `${String(index).padStart(2, '0')}:00`,
+      ts: now - (23 - index) * 3600,
       requests: index % 5,
+      tokens: (index % 5) * 300,
+      quota: (index % 5) * 250000,
     })),
     flow: distribution.slice(-30).map((row) => ({
       date: row.date,
@@ -119,19 +121,11 @@ export function nativeUsageSummary(now: number, includeComparison = true) {
       tz_offset: -480,
       generated_at: now,
       available: true,
-      source: 'consume_logs',
-      cache_coverage: {
-        records: 4,
-        read_records: 3,
-        write_records: 1,
-        invalid_records: 0,
-      },
-      coverage: {
-        consume_logs: true,
-        cache_usage: true,
-        latency: true,
-        success_rate: false,
-      },
+      // C2 contract: counts come from quota_data hour buckets.
+      source: 'quota_data',
+      bucket_seconds: 3600,
+      flush_interval_minutes: 5,
+      coverage: { latency: true, success_rate: false },
     },
   }
 }
