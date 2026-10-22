@@ -13,9 +13,11 @@ import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import {
+  type AdminUserAction,
   type AdminUserOptionalField,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  adminUserStatusAction,
   adminUserStatusLabelKey,
   adminUserStatusTone,
 } from '@/constants/adminUsers'
@@ -36,7 +38,7 @@ defineProps<{
   selectionDisabled: boolean
   toggleAllSelected: () => void
   toggleSelected: (user: AdminUser) => void
-  canManage: (user: AdminUser) => boolean
+  canManage: (user: AdminUser, action?: AdminUserAction) => boolean
   isSelf: (user: AdminUser) => boolean
   isBusy: (id: number, action: UserAction) => boolean
   isRowBusy: (id: number) => boolean
@@ -81,7 +83,7 @@ const { t, locale } = useI18n()
                 type="checkbox"
                 class="checkbox-round"
                 :checked="selectedIds.includes(user.id)"
-                :disabled="selectionDisabled || !canManage(user)"
+                :disabled="selectionDisabled || !canManage(user, 'delete')"
                 :aria-label="t('users.selectUser', { name: user.username })"
                 @change="toggleSelected(user)"
               />
@@ -197,7 +199,10 @@ const { t, locale } = useI18n()
               user.status === 1 ? t('users.disableUser') : t('users.enableUser')
             "
             :tone="user.status === 1 ? 'danger' : 'default'"
-            :disabled="!canManage(user) || isRowBusy(user.id)"
+            :disabled="
+              !canManage(user, adminUserStatusAction(user)) ||
+              isRowBusy(user.id)
+            "
             @click="toggleStatus(user)"
           >
             <LoaderCircle
@@ -211,7 +216,7 @@ const { t, locale } = useI18n()
           <IconButton
             :label="t('users.deleteUser')"
             tone="danger"
-            :disabled="!canManage(user) || isRowBusy(user.id)"
+            :disabled="!canManage(user, 'delete') || isRowBusy(user.id)"
             @click="deleteUser(user)"
           >
             <Trash2 :size="16" />

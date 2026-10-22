@@ -44,7 +44,6 @@ const confirmComplete = ref(false),
 const canComplete = computed(
   () =>
     auth.isAdmin &&
-    auth.hasPermission('billing', 'write') &&
     displayOrder.value?.status === 'pending' &&
     completedOrder.value !== displayOrder.value.order_no
 )

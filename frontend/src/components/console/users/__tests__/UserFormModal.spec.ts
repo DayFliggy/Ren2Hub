@@ -21,7 +21,7 @@ beforeAll(async () => {
 function render(editing: AdminUser | null = null) {
   const save = vi.fn().mockResolvedValue(true)
   const wrapper = mount(UserFormModal, {
-    props: { open: true, editing, operatorLevel: 100, save },
+    props: { open: true, editing, operator: { id: 1, level: 100 }, save },
     global: {
       plugins: [i18n],
       stubs: {

@@ -14,9 +14,10 @@ import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import AdminUserBindings from './AdminUserBindings.vue'
 import {
-  ADMIN_USER_ASSIGNABLE_ROLES,
+  adminUserRoleChoices,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  type AdminOperator,
 } from '@/constants/adminUsers'
 import type {
   AdminUser,
@@ -29,7 +30,7 @@ const props = defineProps<{
   open: boolean
   editing: AdminUser | null
   /** Caps the role picker — an operator can never mint a peer or a superior. */
-  operatorLevel: number
+  operator: AdminOperator | null
   save: (input: AdminUserCreateInput | AdminUserUpdateInput) => Promise<boolean>
 }>()
 
@@ -72,26 +73,19 @@ const form = reactive({
 const USERNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,19}$/
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/**
- * Only roles strictly below the operator's own level are offered, so the
- * privilege ceiling is visible in the UI rather than only enforced on submit.
- */
+/** The privilege ceiling is visible in the picker, not only enforced on submit. */
+const roleChoices = computed(() =>
+  adminUserRoleChoices(props.operator, props.editing?.role)
+)
 const roleOptions = computed(() =>
-  [
-    ...ADMIN_USER_ASSIGNABLE_ROLES,
-    ...(props.editing?.role === 100 ? [100 as const] : []),
-  ]
-    .filter(
-      (role) => role < props.operatorLevel || role === props.editing?.role
-    )
-    .map((role) => {
-      const tone = adminUserRoleTone(role)
-      return {
-        value: String(role),
-        label: t(adminUserRoleLabelKey(role)),
-        tone: tone === 'neutral' ? undefined : tone,
-      }
-    })
+  roleChoices.value.map((role) => {
+    const tone = adminUserRoleTone(role)
+    return {
+      value: String(role),
+      label: t(adminUserRoleLabelKey(role)),
+      tone: tone === 'neutral' ? undefined : tone,
+    }
+  })
 )
 
 const selectedRole = computed(() => Number(form.role) as AdminUserRole)
@@ -111,11 +105,7 @@ const valid = computed(
     ((props.editing !== null && !form.password) ||
       ([...form.password].length >= 8 && [...form.password].length <= 128)) &&
     form.displayName.trim().length <= 20 &&
-    ((ADMIN_USER_ASSIGNABLE_ROLES.includes(selectedRole.value) &&
-      selectedRole.value < props.operatorLevel) ||
-      (props.editing?.role === 100 &&
-        selectedRole.value === 100 &&
-        auth.isRoot))
+    roleChoices.value.includes(selectedRole.value)
 )
 
 watch(

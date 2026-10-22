@@ -145,33 +145,73 @@ export function adminUserRoleLabelKey(
   return 'users.roleGuest'
 }
 
-/**
- * The operator's authority level, which is deliberately NOT `user.role`.
- * The level comes from server-backed capability flags instead of trusting a
- * mutable row value. The backend remains the authorization boundary.
- */
-export function adminOperatorLevel(capabilities: {
-  isRoot?: boolean
-  isAdmin?: boolean
-}): number {
-  if (capabilities.isRoot) return 100
-  if (capabilities.isAdmin) return 10
-  return 1
+export interface AdminOperator {
+  id: number
+  level: 10 | 100
 }
 
 /**
- * UI-side guard only — never an authorization boundary. The server must reject
- * the same cases independently.
- *
- * An operator may act on a target only when the target ranks strictly lower.
- * That blocks peer-on-peer administration (admin editing admin) and any action
- * on your own row; self-service edits belong on the profile page.
+ * The signed-in administrator as seen by the user-management guards. The level
+ * comes from the auth store's role flags; `null` means no admin capability at
+ * all. The backend remains the authorization boundary.
+ */
+export function adminOperator(auth: {
+  user: { id: number } | null
+  isRoot: boolean
+  isAdmin: boolean
+}): AdminOperator | null {
+  if (!auth.user || !auth.isAdmin) return null
+  return { id: auth.user.id, level: auth.isRoot ? 100 : 10 }
+}
+
+/**
+ * `edit` covers profile updates, quota, referral policy, binding clears and
+ * role changes. Enable shares its rule; disable and delete carry extra
+ * backend branches.
+ */
+export type AdminUserAction = 'edit' | 'enable' | 'disable' | 'delete'
+
+/** The manage action behind a row's status toggle. */
+export function adminUserStatusAction(
+  user: Pick<AdminUser, 'status'>
+): 'enable' | 'disable' {
+  return user.status === 1 ? 'disable' : 'enable'
+}
+
+/**
+ * UI-side guard only — never an authorization boundary. Mirrors the backend
+ * branch for each action:
+ * - edit and enable: canManageTargetRole (controller/user.go:377), so root may edit root;
+ * - disable: ManageUser also refuses a root target (controller/user.go:999);
+ * - delete: DeleteUser requires a strictly higher role (controller/user.go:814),
+ *   so not even root can delete root.
+ * Your own row is always excluded; self-service edits belong on the profile.
  */
 export function canManageAdminUser(
   target: Pick<AdminUser, 'id' | 'role'>,
-  operator: { id: number; level: number } | null | undefined
+  operator: AdminOperator | null,
+  action: AdminUserAction = 'edit'
 ): boolean {
-  if (!operator) return false
-  if (target.id === operator.id) return false
-  return target.role < operator.level
+  if (!operator || target.id === operator.id) return false
+  if (action === 'delete') return operator.level > target.role
+  if (action === 'disable' && target.role === 100) return false
+  return operator.level === 100 || operator.level > target.role
+}
+
+/**
+ * Roles the form may submit. Creating needs a strictly lower role
+ * (controller/user.go:894). Editing keeps the current role or uses one manage
+ * step: root promotes a common user to admin, and demote turns an admin into a
+ * common user. A root account has no role change.
+ */
+export function adminUserRoleChoices(
+  operator: AdminOperator | null,
+  current?: AdminUserRole
+): AdminUserRole[] {
+  if (!operator) return []
+  if (current === undefined)
+    return ADMIN_USER_ASSIGNABLE_ROLES.filter((role) => role < operator.level)
+  if (current === 100) return [100]
+  if (operator.level === 100) return [1, 10]
+  return [current]
 }

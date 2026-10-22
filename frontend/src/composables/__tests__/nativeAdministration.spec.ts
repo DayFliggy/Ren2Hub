@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createI18n } from 'vue-i18n'
@@ -12,9 +13,6 @@ const mocks = vi.hoisted(() => ({
   proof: vi.fn(),
 }))
 vi.mock('@/api/console', () => ({ api: mocks }))
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ isRoot: true, isAdmin: true, user: { role: 100 } }),
-}))
 vi.mock('@/composables/useToast', () => ({ useToast: () => mocks }))
 vi.mock('@/composables/useFeatureAccess', async () => {
   const { ref } = await import('vue')
@@ -23,9 +21,40 @@ vi.mock('@/composables/useFeatureAccess', async () => {
 import { useAdminUsers } from '../useAdminUsers'
 import { useAdminRedemption } from '../useAdminRedemption'
 import { ApiError } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
 import type { AdminUser } from '@/types/console'
 const member = { id: 2, role: 1, status: 1, username: 'member' } as AdminUser
+// authz.Capabilities output: Casbin has no user or billing resource.
+const capabilities = {
+  audit: { read: true },
+  channel: {
+    read: true,
+    operate: false,
+    write: false,
+    sensitive_write: false,
+    secret_view: false,
+  },
+  routing: { read: true, write: true },
+  task_plugin: { bind: false },
+  ticket: { read: true, reply: true, manage: false },
+}
+function signIn(id: number, role: number) {
+  useAuthStore().persist({
+    id,
+    username: `operator-${id}`,
+    display_name: '',
+    email: '',
+    role,
+    status: 1,
+    quota: 0,
+    used_quota: 0,
+    request_count: 0,
+    permissions: { admin_permissions: capabilities },
+  })
+}
 beforeEach(() => {
+  setActivePinia(createPinia())
+  signIn(1, 100)
   vi.clearAllMocks()
   mocks.get.mockResolvedValue({ items: [], total: 0 })
   mocks.proof.mockResolvedValue('proof')
@@ -56,6 +85,38 @@ function setup<T>(fn: () => T) {
   )
   return { wrapper, state }
 }
+it('lets a role-10 admin manage common users without a user permission entry', async () => {
+  signIn(5, 10)
+  const { wrapper, state } = setup(() => useAdminUsers(mocks.proof))
+  await flushPromises()
+  const peer = { ...member, id: 6, role: 10 } as AdminUser
+  const self = { ...member, id: 5, role: 10 } as AdminUser
+  expect(state.canMutate.value).toBe(true)
+  expect(state.canManage(member)).toBe(true)
+  expect(state.canManage(member, 'delete')).toBe(true)
+  expect(state.canManage(peer)).toBe(false)
+  expect(state.canManage(self)).toBe(false)
+  expect(await state.toggleStatus(member)).toBe(true)
+  expect(mocks.post).toHaveBeenCalledWith(
+    '/api/user/manage',
+    { id: 2, action: 'disable' },
+    { headers: { 'X-Security-Proof': 'proof' } }
+  )
+  wrapper.unmount()
+})
+it('lets root manage admins and edit, but not disable or delete, another root', async () => {
+  const { wrapper, state } = setup(() => useAdminUsers(mocks.proof))
+  await flushPromises()
+  const admin = { ...member, id: 6, role: 10 } as AdminUser
+  const otherRoot = { ...member, id: 7, role: 100 } as AdminUser
+  expect(state.canManage(admin, 'delete')).toBe(true)
+  expect(state.canManage(otherRoot)).toBe(true)
+  expect(state.canManage(otherRoot, 'disable')).toBe(false)
+  expect(state.canManage(otherRoot, 'delete')).toBe(false)
+  expect(await state.toggleStatus(otherRoot)).toBe(false)
+  expect(mocks.post).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
 it('uses native integer quota adjustment and rejects nonintegral quota', async () => {
   const { wrapper, state } = setup(() => useAdminUsers(mocks.proof))
   await flushPromises()

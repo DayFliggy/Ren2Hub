@@ -49,6 +49,7 @@ import {
   type AdminUserOptionalField,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  adminUserStatusAction,
   adminUserStatusLabelKey,
   adminUserStatusTone,
   sanitizeAdminUserVisibleFields,
@@ -83,7 +84,7 @@ const {
   isCrudBusy,
   isBulkBusy,
   canMutate,
-  operatorLevel,
+  operator,
   canManage,
   isSelf,
   load,
@@ -140,9 +141,9 @@ function fieldLabel(field: AdminUserOptionalField): string {
   return t(`users.${field}`)
 }
 
-/** Only manageable rows are selectable, so a bulk action can never half-apply. */
+/** Delete is the strictest rule, so every bulk action can reach a selected row. */
 const selectableIds = computed(() =>
-  rows.value.filter((user) => canManage(user)).map((user) => user.id)
+  rows.value.filter((user) => canManage(user, 'delete')).map((user) => user.id)
 )
 const selectedUsers = computed(() =>
   rows.value.filter((user) => selectedIds.value.includes(user.id))
@@ -161,7 +162,7 @@ function updateSelected(keys: Array<string | number>) {
 }
 
 function toggleSelected(user: AdminUser) {
-  if (!canManage(user)) return
+  if (!canManage(user, 'delete')) return
   selectedIds.value = selectedIds.value.includes(user.id)
     ? selectedIds.value.filter((id) => id !== user.id)
     : [...selectedIds.value, user.id]
@@ -307,7 +308,7 @@ function saveQuota(
 }
 
 function requestDelete(user: AdminUser) {
-  if (!canManage(user) || !canMutate.value) return
+  if (!canManage(user, 'delete') || !canMutate.value) return
   deleting.value = { kind: 'single', user }
 }
 
@@ -532,7 +533,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           :selected="selectedIds"
           :selection-keys="selectableIds"
           :selection-disabled="!canMutate"
-          :row-selectable="(row) => canManage(row as AdminUser)"
+          :row-selectable="(row) => canManage(row as AdminUser, 'delete')"
           :loading="loading"
           :skeleton-rows="pageSize"
           adaptive-scroll
@@ -670,8 +671,10 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
                 "
                 :tone="(row as AdminUser).status === 1 ? 'danger' : 'default'"
                 :disabled="
-                  !canManage(row as AdminUser) ||
-                  isRowBusy((row as AdminUser).id)
+                  !canManage(
+                    row as AdminUser,
+                    adminUserStatusAction(row as AdminUser)
+                  ) || isRowBusy((row as AdminUser).id)
                 "
                 @click="toggleStatus(row as AdminUser)"
               >
@@ -690,7 +693,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
                 :label="t('users.deleteUser')"
                 tone="danger"
                 :disabled="
-                  !canManage(row as AdminUser) ||
+                  !canManage(row as AdminUser, 'delete') ||
                   isRowBusy((row as AdminUser).id)
                 "
                 @click="requestDelete(row as AdminUser)"
@@ -766,7 +769,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
     <UserFormModal
       :open="formOpen"
       :editing="editing"
-      :operator-level="operatorLevel"
+      :operator="operator"
       :save="saveForm"
       @close="formOpen = false"
     />

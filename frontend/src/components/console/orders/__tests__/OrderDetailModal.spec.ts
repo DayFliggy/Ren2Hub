@@ -1,19 +1,53 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
 import type { AdminOrder } from '@/types/console'
 import { nativeTopUp } from '@/api/__tests__/topupFixtures'
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ isAdmin: true, hasPermission: () => true }),
-}))
 import OrderDetailModal from '../OrderDetailModal.vue'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('en')
 })
+beforeEach(() => {
+  setActivePinia(createPinia())
+  signIn(10)
+})
 afterEach(() => vi.restoreAllMocks())
+
+// authz.Capabilities output: Casbin has no billing resource, and the native
+// /api/user/topup/complete route only requires AdminAuth.
+function signIn(role: number) {
+  useAuthStore().persist({
+    id: 3,
+    username: 'operator',
+    display_name: '',
+    email: '',
+    role,
+    status: 1,
+    quota: 0,
+    used_quota: 0,
+    request_count: 0,
+    permissions: {
+      admin_permissions: {
+        audit: { read: true },
+        routing: { read: true, write: false },
+        ticket: { read: true, reply: true, manage: false },
+      },
+    },
+  })
+}
 
 const order: AdminOrder = {
   id: 1,
@@ -54,6 +88,53 @@ function render() {
     },
   })
 }
+
+function completeButton(wrapper: ReturnType<typeof render>) {
+  return wrapper
+    .findAll('button')
+    .find((button) => button.text() === 'Complete manually')
+}
+
+describe('manual completion', () => {
+  it('offers manual completion of a pending order to a role-10 admin', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUp)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(undefined)
+    const wrapper = render()
+    await flushPromises()
+    await completeButton(wrapper)!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Confirm')!
+      .trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith('/api/user/topup/complete', {
+      trade_no: 'GPtest',
+    })
+    wrapper.unmount()
+  })
+
+  it('hides manual completion from common users', async () => {
+    signIn(1)
+    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUp)
+    const wrapper = render()
+    await flushPromises()
+    expect(completeButton(wrapper)).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('hides manual completion once the order is no longer pending', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...nativeTopUp,
+      status: 'success',
+      credited_quota: 5000000,
+      complete_time: 2,
+    })
+    const wrapper = render()
+    await flushPromises()
+    expect(completeButton(wrapper)).toBeUndefined()
+    wrapper.unmount()
+  })
+})
 
 describe('GMPay order details', () => {
   it('separates requested network and creation details from actual settlement evidence', async () => {

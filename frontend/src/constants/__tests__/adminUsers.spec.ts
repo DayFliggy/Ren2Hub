@@ -5,10 +5,12 @@ import {
   ADMIN_USER_DEFAULT_VISIBLE_FIELDS,
   ADMIN_USER_OPTIONAL_FIELDS,
   ADMIN_USER_ROLES,
-  adminOperatorLevel,
+  adminOperator,
   adminUserQuotaMeter,
+  adminUserRoleChoices,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  adminUserStatusAction,
   adminUserStatusLabelKey,
   adminUserStatusTone,
   canManageAdminUser,
@@ -139,39 +141,81 @@ describe('admin user field visibility', () => {
   })
 })
 
-describe('operator authority level', () => {
-  it('derives level from capability flags, not from the pinned demo role', () => {
-    expect(adminOperatorLevel({ isRoot: true, isAdmin: true })).toBe(100)
-    expect(adminOperatorLevel({ isRoot: false, isAdmin: true })).toBe(10)
-    expect(adminOperatorLevel({ isRoot: false, isAdmin: false })).toBe(1)
-    expect(adminOperatorLevel({})).toBe(1)
+describe('adminOperator', () => {
+  const user = { id: 7 }
+
+  it('derives the level from the auth role flags', () => {
+    expect(adminOperator({ user, isRoot: true, isAdmin: true })).toEqual({
+      id: 7,
+      level: 100,
+    })
+    expect(adminOperator({ user, isRoot: false, isAdmin: true })).toEqual({
+      id: 7,
+      level: 10,
+    })
+  })
+
+  it('has no operator without a session or admin role', () => {
+    expect(adminOperator({ user, isRoot: false, isAdmin: false })).toBeNull()
+    expect(
+      adminOperator({ user: null, isRoot: true, isAdmin: true })
+    ).toBeNull()
   })
 })
 
 describe('canManageAdminUser', () => {
-  const operator = { id: 1, level: 10 }
+  const admin = { id: 1, level: 10 } as const
+  const root = { id: 1, level: 100 } as const
+  const actions = ['edit', 'enable', 'disable', 'delete'] as const
 
-  it('refuses without an operator', () => {
-    expect(canManageAdminUser({ id: 9, role: 1 }, null)).toBe(false)
-    expect(canManageAdminUser({ id: 9, role: 1 }, undefined)).toBe(false)
+  it('refuses without an operator and on the operator’s own row', () => {
+    for (const action of actions) {
+      expect(canManageAdminUser({ id: 9, role: 1 }, null, action)).toBe(false)
+      expect(canManageAdminUser({ id: 1, role: 1 }, admin, action)).toBe(false)
+      expect(canManageAdminUser({ id: 1, role: 10 }, root, action)).toBe(false)
+    }
   })
 
-  it('refuses the operator’s own row regardless of role', () => {
-    expect(canManageAdminUser({ id: 1, role: 1 }, operator)).toBe(false)
-    expect(canManageAdminUser({ id: 1, role: 0 }, operator)).toBe(false)
+  it('lets an admin act only on strictly lower roles', () => {
+    for (const action of actions) {
+      expect(canManageAdminUser({ id: 9, role: 1 }, admin, action)).toBe(true)
+      expect(canManageAdminUser({ id: 9, role: 10 }, admin, action)).toBe(false)
+      expect(canManageAdminUser({ id: 9, role: 100 }, admin, action)).toBe(
+        false
+      )
+    }
   })
 
-  it('refuses peers and superiors, allows strictly lower rows', () => {
-    expect(canManageAdminUser({ id: 9, role: 10 }, operator)).toBe(false)
-    expect(canManageAdminUser({ id: 9, role: 100 }, operator)).toBe(false)
-    expect(canManageAdminUser({ id: 9, role: 1 }, operator)).toBe(true)
-    expect(canManageAdminUser({ id: 9, role: 0 }, operator)).toBe(true)
+  it('lets root edit and enable another root but never disable or delete it', () => {
+    const otherRoot = { id: 9, role: 100 } as const
+    expect(canManageAdminUser(otherRoot, root)).toBe(true)
+    expect(canManageAdminUser(otherRoot, root, 'enable')).toBe(true)
+    expect(canManageAdminUser(otherRoot, root, 'disable')).toBe(false)
+    expect(canManageAdminUser(otherRoot, root, 'delete')).toBe(false)
+    for (const action of actions)
+      expect(canManageAdminUser({ id: 9, role: 10 }, root, action)).toBe(true)
   })
 
-  it('lets a root-level operator manage admins but still not itself', () => {
-    const root = { id: 1, level: 100 }
-    expect(canManageAdminUser({ id: 9, role: 10 }, root)).toBe(true)
-    expect(canManageAdminUser({ id: 9, role: 100 }, root)).toBe(false)
-    expect(canManageAdminUser({ id: 1, role: 10 }, root)).toBe(false)
+  it('maps the status toggle to the native manage action', () => {
+    expect(adminUserStatusAction({ status: 1 })).toBe('disable')
+    expect(adminUserStatusAction({ status: 2 })).toBe('enable')
+  })
+})
+
+describe('adminUserRoleChoices', () => {
+  const admin = { id: 1, level: 10 } as const
+  const root = { id: 1, level: 100 } as const
+
+  it('creates only roles strictly below the operator', () => {
+    expect(adminUserRoleChoices(admin)).toEqual([1])
+    expect(adminUserRoleChoices(root)).toEqual([1, 10])
+    expect(adminUserRoleChoices(null)).toEqual([])
+  })
+
+  it('offers only the role changes ManageUser accepts', () => {
+    expect(adminUserRoleChoices(root, 1)).toEqual([1, 10])
+    expect(adminUserRoleChoices(root, 10)).toEqual([1, 10])
+    expect(adminUserRoleChoices(root, 100)).toEqual([100])
+    expect(adminUserRoleChoices(admin, 1)).toEqual([1])
   })
 })

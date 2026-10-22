@@ -2,6 +2,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/console'
 import { parseAdminUserPage } from '@/api/adminUserContracts'
 import { proofOptions, type SecurityOperation } from '@/api/security'
+import {
+  adminOperator,
+  adminUserStatusAction,
+  canManageAdminUser,
+  type AdminUserAction,
+} from '@/constants/adminUsers'
 import { useAuthStore } from '@/stores/auth'
 import { useLatestRequest } from './useLatestRequest'
 import { useToast } from './useToast'
@@ -28,13 +34,12 @@ export function useAdminUsers(
     loading = ref(false),
     initialError = ref(''),
     busy = ref(false)
-  const operatorLevel = computed(() => auth.user?.role ?? 0)
+  const operator = computed(() => adminOperator(auth))
   const isSelf = (user: AdminUser) => auth.user?.id === user.id
-  const canManage = (user: AdminUser) =>
-    !isSelf(user) && (auth.isRoot || operatorLevel.value > user.role)
-  const canMutate = computed(
-    () => !busy.value && auth.hasPermission('user', 'write')
-  )
+  const canManage = (user: AdminUser, action: AdminUserAction = 'edit') =>
+    canManageAdminUser(user, operator.value, action)
+  // User administration is AdminAuth-only upstream; Casbin has no user resource.
+  const canMutate = computed(() => !busy.value && auth.isAdmin)
   const bulkAction = ref('')
   const activeAction = ref('')
   const activeUser = ref<number | null>(null)
@@ -99,8 +104,8 @@ export function useAdminUsers(
       busy.value = false
     }
   }
-  async function manage(user: AdminUser, action: string) {
-    if (!canManage(user)) return false
+  async function manage(user: AdminUser, action: 'enable' | 'disable') {
+    if (!canManage(user, action)) return false
     activeUser.value = user.id
     activeAction.value = action
     return mutate(async () =>
@@ -112,7 +117,7 @@ export function useAdminUsers(
     )
   }
   const toggleStatus = (user: AdminUser) =>
-    manage(user, user.status === 1 ? 'disable' : 'enable')
+    manage(user, adminUserStatusAction(user))
   async function createUser(input: AdminUserCreateInput) {
     return mutate(async () =>
       api.post(
@@ -178,7 +183,8 @@ export function useAdminUsers(
     action: 'enable' | 'disable',
     users: AdminUser[]
   ) {
-    if (busy.value || users.some((user) => !canManage(user))) return false
+    if (busy.value || users.some((user) => !canManage(user, action)))
+      return false
     bulkAction.value = action
     try {
       for (const user of users) {
@@ -190,7 +196,8 @@ export function useAdminUsers(
     }
   }
   async function deleteSelectedUsers(users: AdminUser[]) {
-    if (busy.value || users.some((user) => !canManage(user))) return false
+    if (busy.value || users.some((user) => !canManage(user, 'delete')))
+      return false
     bulkAction.value = 'delete'
     try {
       for (const user of users) {
@@ -231,7 +238,7 @@ export function useAdminUsers(
     loading,
     initialError,
     busy,
-    operatorLevel,
+    operator,
     canManage,
     load,
     toggleStatus,
