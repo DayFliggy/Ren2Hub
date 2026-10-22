@@ -4,6 +4,13 @@ import { SETTINGS_RECORD_EDITORS } from '@/constants/settingsEditors'
 
 const object = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v)
+// Amounts are divided or multiplied by these values, so zero is invalid even
+// though `min` alone would allow it.
+const positiveNumberKeys = new Set([
+  'Price',
+  'USDExchangeRate',
+  'general_setting.custom_currency_exchange_rate',
+])
 export function validSettingUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -37,7 +44,7 @@ export function validateSetting(
     if (value === '' || value === null || !Number.isFinite(Number(value)))
       return 'number'
     const n = Number(value)
-    if (field.key === 'Price' && n <= 0) return 'range'
+    if (positiveNumberKeys.has(field.key) && n <= 0) return 'range'
     if (
       (field.min !== undefined && n < field.min) ||
       (field.max !== undefined && n > field.max) ||

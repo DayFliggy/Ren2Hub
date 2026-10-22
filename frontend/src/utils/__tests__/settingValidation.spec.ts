@@ -33,6 +33,15 @@ describe('payment setting validation', () => {
   it.each([0, -1, Infinity, ''])('rejects unusable EPay price %s', (price) => {
     expect(validate('Price', price)).not.toBeNull()
   })
+  it.each(['USDExchangeRate', 'general_setting.custom_currency_exchange_rate'])(
+    'requires %s to be a finite number greater than zero like the backend',
+    (key) => {
+      for (const value of [0, -1, Infinity, ''])
+        expect(validate(key, value), String(value)).not.toBeNull()
+      expect(validate(key, 0.0001)).toBeNull()
+      expect(validate(key, 7.3)).toBeNull()
+    }
+  )
   it('accepts small positive prices and bounds minimum credits by the ledger limit', () => {
     expect(validate('Price', 1e-8)).toBeNull()
     expect(validate('MinTopUp', 18446744073709)).toBeNull()
