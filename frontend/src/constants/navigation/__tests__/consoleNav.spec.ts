@@ -1,10 +1,28 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 import {
   consoleNavGroups,
   getAccessibleConsoleNavGroups,
   getConsoleRouteAccessMeta,
 } from '@/constants/navigation/consoleNav'
+import { useAppStore } from '@/stores/app'
+
+/** Visible routes for a root administrator under one SidebarModulesAdmin. */
+function sidebarRoutes(
+  SidebarModulesAdmin: string,
+  hasPermission: (resource: string, action: string) => boolean = () => true
+): string[] {
+  setActivePinia(createPinia())
+  const app = useAppStore()
+  app.status = { SidebarModulesAdmin }
+  return getAccessibleConsoleNavGroups({
+    isAdmin: true,
+    isRoot: true,
+    hasPermission,
+    isSidebarModuleEnabled: app.isSidebarModuleEnabled,
+  }).flatMap((group) => group.items.map((item) => item.route ?? ''))
+}
 
 describe('console navigation', () => {
   it('exposes the complete administration scaffold', () => {
@@ -156,5 +174,55 @@ describe('console navigation', () => {
 
     expect(items.some((item) => item.route === 'market')).toBe(false)
     expect(items.find((item) => item.route === 'models')?.disabled).toBeFalsy()
+  })
+
+  it('hides only the modules SidebarModulesAdmin turns off', () => {
+    const channelOff = sidebarRoutes(
+      '{"admin":{"enabled":true,"channel":false}}'
+    )
+    expect(channelOff).not.toContain('channels')
+    expect(channelOff).toContain('users')
+
+    const consoleOff = sidebarRoutes('{"console":{"enabled":false}}')
+    expect(consoleOff).not.toContain('keys')
+    expect(consoleOff).not.toContain('logs')
+    expect(consoleOff).toEqual(expect.arrayContaining(['tickets', 'models']))
+    expect(consoleOff).toContain('channels')
+  })
+
+  it('fills a missing section or module from the all-on defaults', () => {
+    const all = sidebarRoutes('')
+    // Missing module: the admin section only turns user management off.
+    expect(sidebarRoutes('{"admin":{"user":false}}')).toEqual(
+      all.filter((route) => route !== 'users')
+    )
+    // Missing section: only the personal section is configured.
+    expect(
+      sidebarRoutes('{"personal":{"enabled":true,"topup":false}}')
+    ).toEqual(all.filter((route) => route !== 'wallet'))
+    expect(sidebarRoutes('{}')).toEqual(all)
+  })
+
+  it('shows every module and reports an option it cannot read', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const all = sidebarRoutes('')
+
+    expect(sidebarRoutes('not-json')).toEqual(all)
+    expect(sidebarRoutes('[]')).toEqual(all)
+    expect(error).toHaveBeenCalledTimes(2)
+    error.mockRestore()
+  })
+
+  it('never shows an entry the permission filter removed', () => {
+    const routes = sidebarRoutes(
+      '{"admin":{"enabled":true,"channel":true}}',
+      (resource) => resource !== 'channel'
+    )
+
+    expect(routes).not.toContain('channels')
+    expect(getConsoleRouteAccessMeta('channels')).toEqual({
+      requiresAdmin: true,
+      requiresPermission: { resource: 'channel', action: 'read' },
+    })
   })
 })

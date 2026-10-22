@@ -16,6 +16,7 @@ describe('public API response boundaries', () => {
         turnstile_check: true,
         turnstile_site_key: 'site-key',
         HeaderNavModules: '{"pricing":true}',
+        SidebarModulesAdmin: '{"admin":{"channel":false}}',
       })
     ).toEqual({
       system_name: 'Ren2Hub',
@@ -23,6 +24,7 @@ describe('public API response boundaries', () => {
       turnstile_check: true,
       turnstile_site_key: 'site-key',
       HeaderNavModules: '{"pricing":true}',
+      SidebarModulesAdmin: '{"admin":{"channel":false}}',
     })
     expect(parsePricingModels([{ model_name: 'gpt-4o' }])).toEqual([
       { model_name: 'gpt-4o' },
@@ -41,6 +43,9 @@ describe('public API response boundaries', () => {
     // controller/misc.go sends the option text; an object is not that contract.
     expect(() =>
       parsePublicStatus({ HeaderNavModules: { pricing: true } })
+    ).toThrow()
+    expect(() =>
+      parsePublicStatus({ SidebarModulesAdmin: { admin: { enabled: true } } })
     ).toThrow()
     expect(() => parsePublicStatus({ api_info: [{ url: 123 }] })).toThrow()
     expect(() => parsePricingModels({ model_name: 'gpt-4o' })).toThrow()

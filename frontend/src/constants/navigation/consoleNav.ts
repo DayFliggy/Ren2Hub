@@ -15,6 +15,9 @@ export interface ConsoleNavItem {
   rootOnly?: boolean
   permission?: { resource: string; action: string }
   feature?: string
+  /** Upstream SidebarModulesAdmin key. It only hides the entry; the route
+   * stays reachable, as in NewAPI. */
+  sidebarModule?: { section: string; module: string }
 }
 
 export interface ConsoleNavGroup {
@@ -29,6 +32,7 @@ export interface ConsoleNavAccessContext {
   isRoot?: boolean
   hasPermission?: (resource: string, action: string) => boolean
   featureStatus?: (feature: string) => 'live' | 'disabled'
+  isSidebarModuleEnabled?: (section: string, module: string) => boolean
 }
 
 export const consoleNavGroups: ConsoleNavGroup[] = [
@@ -47,6 +51,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'logs',
         labelKey: 'nav.logs',
         route: 'logs',
+        sidebarModule: { section: 'console', module: 'log' },
         feature: 'logs',
         icon: 'M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2ZM9 13h6M9 17h6',
       },
@@ -56,6 +61,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         // Lucide "key-round" — fits within the 0..24 viewBox (the previous path
         // extended above y=0 and was clipped at the top).
         route: 'keys',
+        sidebarModule: { section: 'console', module: 'token' },
         feature: 'api_tokens',
         icon: 'M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 0 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4zM16.5 7.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z',
       },
@@ -76,6 +82,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'wallet',
         labelKey: 'nav.wallet',
         route: 'wallet',
+        sidebarModule: { section: 'personal', module: 'topup' },
         feature: 'wallet',
         icon: 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6ZM3 10h18M8 15h4',
       },
@@ -100,6 +107,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'channel-management',
         labelKey: 'nav.channelManagement',
         route: 'channels',
+        sidebarModule: { section: 'admin', module: 'channel' },
         feature: 'admin',
         permission: { resource: 'channel', action: 'read' },
         icon: 'M4 6h16M4 12h16M4 18h16M7 3v6M17 9v6M10 15v6',
@@ -109,6 +117,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'models-admin',
         labelKey: 'nav.adminModels',
         route: 'models-admin',
+        sidebarModule: { section: 'admin', module: 'models' },
         feature: 'admin',
         // Lucide "box"
         icon: 'M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16ZM3.3 7l8.7 5 8.7-5M12 22V12',
@@ -125,6 +134,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'user-management',
         labelKey: 'nav.userManagement',
         route: 'users',
+        sidebarModule: { section: 'admin', module: 'user' },
         feature: 'admin',
         icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
       },
@@ -132,6 +142,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'redemption-management',
         labelKey: 'nav.redemptionManagement',
         route: 'redemption',
+        sidebarModule: { section: 'admin', module: 'redemption' },
         feature: 'admin',
         icon: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a2.5 2.5 0 0 0 0 5V16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a2.5 2.5 0 0 0 0-5V8ZM13 6v2m0 8v2m0-7v2',
       },
@@ -154,6 +165,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         name: 'system-settings',
         labelKey: 'nav.systemSettings',
         route: 'system-settings-site',
+        sidebarModule: { section: 'admin', module: 'setting' },
         feature: 'admin',
         rootOnly: true,
         icon: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
@@ -190,7 +202,12 @@ export function getAccessibleConsoleNavGroups(
           context.hasPermission?.(
             item.permission.resource,
             item.permission.action
-          ) === true)
+          ) === true) &&
+        (!item.sidebarModule ||
+          context.isSidebarModuleEnabled?.(
+            item.sidebarModule.section,
+            item.sidebarModule.module
+          ) !== false)
     )
     const resolvedItems = items.map((item) => ({
       ...item,

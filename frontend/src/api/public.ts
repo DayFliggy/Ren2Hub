@@ -27,6 +27,7 @@ export interface PublicStatus {
   privacy_policy_enabled?: boolean
   uptime_kuma_enabled?: boolean
   HeaderNavModules?: string
+  SidebarModulesAdmin?: string
   frontend_capabilities?: FrontendCapabilities
   turnstile_check?: boolean
   turnstile_site_key?: string
@@ -189,7 +190,11 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'oidc_client_id',
     'oidc_authorization_endpoint',
   ] as const
-  const statusStringKeys = ['turnstile_site_key', 'HeaderNavModules'] as const
+  const statusStringKeys = [
+    'turnstile_site_key',
+    'HeaderNavModules',
+    'SidebarModulesAdmin',
+  ] as const
   for (const key of oauthStringKeys) {
     if (value[key] !== undefined && typeof value[key] !== 'string') {
       invalidResponse('/api/status')

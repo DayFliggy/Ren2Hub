@@ -65,6 +65,20 @@ function headerNavAccess(
   }
 }
 
+function parseSidebarModules(raw: string | undefined): Record<string, unknown> {
+  if (!raw?.trim()) return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    console.error('Invalid SidebarModulesAdmin; showing every module', error)
+    return {}
+  }
+  if (isRecord(parsed)) return parsed
+  console.error('SidebarModulesAdmin is not an object; showing every module')
+  return {}
+}
+
 function toPlainText(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return ''
   const documentNode = new DOMParser().parseFromString(value, 'text/html')
@@ -110,6 +124,19 @@ export const useAppStore = defineStore('app', () => {
     () => moduleAccess('docs').enabled && Boolean(docsLink.value)
   )
   const showAbout = computed(() => moduleAccess('about').enabled)
+  const sidebarModules = computed(() =>
+    parseSidebarModules(status.value.SidebarModulesAdmin)
+  )
+  // Upstream web/src/hooks/use-sidebar-config.ts fills each missing section
+  // and module from defaults that are all true, then shows a module only when
+  // its section is enabled and the module is exactly true.
+  function isSidebarModuleEnabled(section: string, module: string): boolean {
+    const config = sidebarModules.value[section]
+    if (!isRecord(config)) return true
+    const enabled = config.enabled === undefined ? true : config.enabled
+    const value = config[module] === undefined ? true : config[module]
+    return Boolean(enabled) && value === true
+  }
   const userAgreementEnabled = computed(() =>
     Boolean(status.value.user_agreement_enabled)
   )
@@ -312,6 +339,7 @@ export const useAppStore = defineStore('app', () => {
     startTime,
     featureStatus,
     isFeatureEnabled,
+    isSidebarModuleEnabled,
     initialize,
     refreshStatus,
     retry,

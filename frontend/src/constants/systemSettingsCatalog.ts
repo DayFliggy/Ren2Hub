@@ -196,8 +196,8 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         titleKey: 'systemSettings.sections.navigation',
         descriptionKey: 'systemSettings.sections.navigationDescription',
         fields: [
-          json('HeaderNavModules', 'headerNavModules', '[]'),
-          json('SidebarModulesAdmin', 'sidebarModulesAdmin', '[]'),
+          json('HeaderNavModules', 'headerNavModules'),
+          json('SidebarModulesAdmin', 'sidebarModulesAdmin'),
         ],
       },
     ],
