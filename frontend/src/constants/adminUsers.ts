@@ -9,6 +9,20 @@ export const ADMIN_USER_ASSIGNABLE_ROLES: readonly AdminUserRole[] = [
   1, 10, 100,
 ]
 
+/** Upstream `validate:"max=20"` on User.Username, which counts runes. */
+export const ADMIN_USERNAME_MAX_LENGTH = 20
+
+/**
+ * Mirrors upstream CreateUser/UpdateUser: trim, reject empty, then `max=20`.
+ * The backend has no character-set rule, so none is imposed here.
+ */
+export function isValidAdminUsername(value: string): boolean {
+  const username = value.trim()
+  return (
+    username.length > 0 && [...username].length <= ADMIN_USERNAME_MAX_LENGTH
+  )
+}
+
 export const ADMIN_USER_OPTIONAL_FIELDS = [
   'id',
   'status',

@@ -1497,7 +1497,7 @@ export default {
     createTitle: '新建用户',
     editTitle: '编辑用户',
     usernamePlaceholder: '输入登录用户名',
-    usernameHint: '3-20 位字母、数字、点、下划线或连字符',
+    usernameHint: '1-20 个字符，首尾空格会被去掉',
     displayNamePlaceholder: '输入昵称，可留空',
     initialPassword: '初始密码',
     initialPasswordPlaceholder: '8-20 位，仅保存哈希',

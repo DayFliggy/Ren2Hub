@@ -17,6 +17,7 @@ import {
   adminUserRoleChoices,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  isValidAdminUsername,
   type AdminOperator,
 } from '@/constants/adminUsers'
 import type {
@@ -70,7 +71,6 @@ const form = reactive({
   role: '1',
 })
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,19}$/
 /** Upstream validates remark with `max=255`, which counts runes. */
 const REMARK_MAX_LENGTH = 255
 /** Display only: upstream `EditWithTx` never writes email; bindings own it. */
@@ -93,12 +93,9 @@ const roleOptions = computed(() =>
 
 const selectedRole = computed(() => Number(form.role) as AdminUserRole)
 const remarkLength = computed(() => [...form.remark].length)
-const usernameValid = computed(() =>
-  USERNAME_PATTERN.test(form.username.trim())
-)
 const valid = computed(
   () =>
-    usernameValid.value &&
+    isValidAdminUsername(form.username) &&
     Number.isSafeInteger(form.max_concurrency) &&
     form.max_concurrency >= 0 &&
     remarkLength.value <= REMARK_MAX_LENGTH &&

@@ -144,6 +144,39 @@ describe('native user form contract', () => {
     wrapper.unmount()
   })
 
+  it('creates users with any trimmed username of 1-20 runes like upstream', async () => {
+    const { wrapper, save, submit } = render()
+    const username = wrapper.get('[name="admin-user-username"]')
+    await wrapper.get('[name="admin-user-password"]').setValue('test-password')
+    for (const rejected of ['   ', 'a'.repeat(21), '用'.repeat(21)]) {
+      await username.setValue(rejected)
+      await submit()
+    }
+    expect(save).not.toHaveBeenCalled()
+
+    await username.setValue('  张三  ')
+    await submit()
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ username: '张三' })
+    )
+    wrapper.unmount()
+  })
+
+  it.each(['ab', '😀'.repeat(20), 'ops admin'])(
+    'saves an existing user whose native username is %s',
+    async (name) => {
+      const { wrapper, save, submit } = render({
+        ...existingUser,
+        username: name,
+      })
+      await submit()
+      expect(save).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ username: name })
+      )
+      wrapper.unmount()
+    }
+  )
+
   it('does not carry an edited account email, group or disabled state into a later creation', async () => {
     const { wrapper, save, submit } = render(existingUser)
     await wrapper.setProps({ open: false })

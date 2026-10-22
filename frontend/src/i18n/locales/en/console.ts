@@ -1549,7 +1549,7 @@ export default {
     createTitle: 'New user',
     editTitle: 'Edit user',
     usernamePlaceholder: 'Enter the login username',
-    usernameHint: '3-20 letters, digits, dot, underscore or hyphen',
+    usernameHint: '1-20 characters; surrounding spaces are trimmed',
     displayNamePlaceholder: 'Optional display name',
     initialPassword: 'Initial password',
     initialPasswordPlaceholder: '8-20 characters; only a hash is stored',
