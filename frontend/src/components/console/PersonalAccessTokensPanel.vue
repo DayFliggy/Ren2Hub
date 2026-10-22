@@ -8,6 +8,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import {
   personalAccessTokensApi,
+  type LegacyAccessToken,
   type PersonalAccessToken,
   type PATScopeCatalog,
 } from '@/api/personalAccessTokens'
@@ -22,13 +23,14 @@ const { t, locale } = useI18n({
 const toast = useToast()
 const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
 const items = ref<PersonalAccessToken[]>([])
+const legacy = ref<LegacyAccessToken | null>(null)
 const catalog = ref<PATScopeCatalog | null>(null)
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
 const editor = ref<'create' | 'rename' | 'scopes' | null>(null)
 const selected = ref<PersonalAccessToken | null>(null)
-const revokeTarget = ref<PersonalAccessToken | null>(null)
+const revokeTarget = ref<PersonalAccessToken | 'legacy' | null>(null)
 const name = ref('')
 const scopes = ref<string[]>([])
 const expires = ref('')
@@ -51,12 +53,13 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    const [tokens, choices] = await Promise.all([
+    const [list, choices] = await Promise.all([
       personalAccessTokensApi.list(controller.signal),
       personalAccessTokensApi.scopes(controller.signal),
     ])
     if (disposed || version !== epoch) return
-    items.value = tokens
+    items.value = list.items
+    legacy.value = list.legacy
     catalog.value = choices
   } catch (cause) {
     if (!disposed && version === epoch && !controller.signal.aborted)
@@ -156,12 +159,16 @@ async function revoke() {
   const version = epoch
   busy.value = true
   try {
+    // The legacy credential has no id; the backend binds its proof to {legacy:true}.
     const proof = await proofDialog.value!.request({
       scope: 'access_token.revoke',
-      context: { token_id: target.id },
+      context: target === 'legacy' ? { legacy: true } : { token_id: target.id },
     })
     if (disposed || version !== epoch) return
-    await personalAccessTokensApi.revoke(target.id, proof, controller.signal)
+    if (target === 'legacy')
+      await personalAccessTokensApi.revokeLegacy(proof, controller.signal)
+    else
+      await personalAccessTokensApi.revoke(target.id, proof, controller.signal)
     if (disposed || version !== epoch) return
     revokeTarget.value = null
     busy.value = false
@@ -175,7 +182,7 @@ async function revoke() {
   }
 }
 
-function timestamp(value: number) {
+function timestamp(value: number | null) {
   return value
     ? new Date(value * 1000).toLocaleString(locale.value)
     : t('pat.never')
@@ -200,6 +207,7 @@ watch(
     editor.value = null
     revokeTarget.value = null
     items.value = []
+    legacy.value = null
     catalog.value = null
     busy.value = false
     void reload()
@@ -253,6 +261,45 @@ onBeforeUnmount(() => {
     >
       {{ t('pat.limitReached') }}
     </p>
+    <div
+      v-if="legacy && !error"
+      class="mt-4 rounded-lg border border-[var(--border-subtle)] p-4"
+      data-testid="pat-legacy"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+          <span class="font-semibold text-[var(--text-primary)]">{{
+            t('pat.legacy')
+          }}</span
+          ><code
+            v-if="legacy.token_hint"
+            class="ml-3 font-mono text-xs text-[var(--text-secondary)]"
+            >…{{ legacy.token_hint }}</code
+          >
+        </div>
+        <ConsoleButton
+          variant="ghost"
+          :disabled="busy"
+          @click="revokeTarget = 'legacy'"
+          >{{ t('pat.revoke') }}</ConsoleButton
+        >
+      </div>
+      <p class="mt-2 text-sm text-[var(--text-secondary)]">
+        {{ t('pat.legacyRetire', { date: timestamp(legacy.retire_at) }) }}
+      </p>
+      <dl
+        class="mt-2 grid gap-x-5 gap-y-1 text-xs text-[var(--text-tertiary)] sm:grid-cols-3"
+      >
+        <div v-if="legacy.created_at">
+          <dt>{{ t('pat.created') }}</dt>
+          <dd>{{ timestamp(legacy.created_at) }}</dd>
+        </div>
+        <div>
+          <dt>{{ t('pat.lastUsed') }}</dt>
+          <dd>{{ timestamp(legacy.last_used_at) }}</dd>
+        </div>
+      </dl>
+    </div>
     <p
       v-if="error"
       role="alert"
@@ -415,7 +462,12 @@ onBeforeUnmount(() => {
     <ConfirmDialog
       :open="Boolean(revokeTarget)"
       :title="t('pat.revokeTitle')"
-      :message="t('pat.revokeMessage', { name: revokeTarget?.name })"
+      :message="
+        t('pat.revokeMessage', {
+          name:
+            revokeTarget === 'legacy' ? t('pat.legacy') : revokeTarget?.name,
+        })
+      "
       :confirm-text="t('pat.revoke')"
       :loading="busy"
       @cancel="revokeTarget = null"

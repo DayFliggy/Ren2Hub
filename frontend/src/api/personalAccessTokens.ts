@@ -22,6 +22,22 @@ export interface PersonalAccessToken {
   last_used_ip: string
 }
 
+/** The pre-scope users.access_token credential, listed until retire_at. */
+export interface LegacyAccessToken {
+  token_hint: string
+  token_ref: string
+  created_at: number | null
+  last_used_at: number | null
+  last_used_ip: string
+  /** Unix seconds after which the legacy token stops working. */
+  retire_at: number
+}
+
+export interface PersonalAccessTokenList {
+  items: PersonalAccessToken[]
+  legacy: LegacyAccessToken | null
+}
+
 export interface PATScopeCatalog {
   scopes: string[]
   limit: number
@@ -52,12 +68,38 @@ export function parsePersonalAccessToken(value: unknown): PersonalAccessToken {
   return result
 }
 
+// model.UserAccessTokenStatus keeps these as *int64: no record is null, not 0.
+function nullableTimestamp(value: unknown): number | null {
+  if (value === null) return null
+  const seconds = requiredStrictInteger(value, endpoint)
+  if (seconds < 0) invalidResponse(endpoint)
+  return seconds
+}
+
+function parseLegacyAccessToken(value: unknown): LegacyAccessToken | null {
+  if (value === null) return null
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const retireAt = requiredStrictInteger(value.retire_at, endpoint)
+  if (retireAt <= 0) invalidResponse(endpoint)
+  return {
+    token_hint: requiredString(value.token_hint, endpoint),
+    token_ref: requiredString(value.token_ref, endpoint, false),
+    created_at: nullableTimestamp(value.created_at),
+    last_used_at: nullableTimestamp(value.last_used_at),
+    last_used_ip: requiredString(value.last_used_ip, endpoint),
+    retire_at: retireAt,
+  }
+}
+
 export const personalAccessTokensApi = {
-  async list(signal?: AbortSignal) {
+  async list(signal?: AbortSignal): Promise<PersonalAccessTokenList> {
     const result = await api.get<unknown>(endpoint, undefined, { signal })
     if (!isRecord(result) || !Array.isArray(result.items))
       invalidResponse(endpoint)
-    return result.items.map(parsePersonalAccessToken)
+    return {
+      items: result.items.map(parsePersonalAccessToken),
+      legacy: parseLegacyAccessToken(result.legacy),
+    }
   },
   async scopes(signal?: AbortSignal): Promise<PATScopeCatalog> {
     const result = await api.get<unknown>(`${endpoint}/catalog`, undefined, {
@@ -125,6 +167,11 @@ export const personalAccessTokensApi = {
   },
   revoke: (id: number, proof: string, signal?: AbortSignal) =>
     api.delete(`${endpoint}/${id}`, undefined, {
+      ...proofOptions(proof),
+      signal,
+    }),
+  revokeLegacy: (proof: string, signal?: AbortSignal) =>
+    api.delete(`${endpoint}/legacy`, undefined, {
       ...proofOptions(proof),
       signal,
     }),

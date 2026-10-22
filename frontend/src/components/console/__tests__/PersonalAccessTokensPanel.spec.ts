@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   revoke: vi.fn(),
+  revokeLegacy: vi.fn(),
   proof: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
@@ -40,6 +41,15 @@ const item = {
   token_hint: 'nap_****',
   last_used_ip: '',
 }
+// ListAccessTokens legacy entry; *int64 times are null without a record.
+const legacy = {
+  token_hint: 'k9Zq',
+  token_ref: 'legacy-ref',
+  created_at: null,
+  last_used_at: null,
+  last_used_ip: '',
+  retire_at: 1_900_000_000,
+}
 const token = 'nap_' + 'a'.repeat(43)
 const modal = {
   props: { open: Boolean },
@@ -70,7 +80,7 @@ function button(wrapper: ReturnType<typeof render>, text: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.list.mockResolvedValue([{ ...item }])
+  mocks.list.mockResolvedValue({ items: [{ ...item }], legacy: null })
   mocks.scopes.mockResolvedValue({
     scopes: ['profile:read', 'tokens:read'],
     limit: 20,
@@ -85,6 +95,7 @@ beforeEach(() => {
     Promise.resolve({ ...item, id, ...input })
   )
   mocks.revoke.mockResolvedValue(undefined)
+  mocks.revokeLegacy.mockResolvedValue(undefined)
 })
 
 describe('PAT management', () => {
@@ -206,7 +217,7 @@ describe('PAT management', () => {
     const wrapper = render()
     await flushPromises()
     await button(wrapper, 'Revoke').trigger('click')
-    mocks.list.mockResolvedValue([])
+    mocks.list.mockResolvedValue({ items: [], legacy: null })
     await wrapper.get('[data-testid="confirm-revoke"]').trigger('click')
     await flushPromises()
     expect(mocks.proof).toHaveBeenCalledWith({
@@ -219,6 +230,54 @@ describe('PAT management', () => {
       expect.any(AbortSignal)
     )
     expect(wrapper.text()).not.toContain('automation')
+    wrapper.unmount()
+  })
+
+  it('lists the legacy token and revokes it with a legacy-bound proof', async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...item }], legacy })
+    const wrapper = render()
+    await flushPromises()
+    const row = wrapper.get('[data-testid="pat-legacy"]')
+    expect(row.text()).toContain('Legacy token')
+    expect(row.text()).toContain('…k9Zq')
+    expect(row.text()).toContain('Never')
+    expect(row.text()).not.toContain('Created')
+    expect(row.text()).toContain(
+      new Date(legacy.retire_at * 1000).toLocaleString('en')
+    )
+    expect(wrapper.text()).toContain('1 / 20 active tokens')
+
+    await row.get('button').trigger('click')
+    mocks.list.mockResolvedValue({ items: [{ ...item }], legacy: null })
+    await wrapper.get('[data-testid="confirm-revoke"]').trigger('click')
+    await flushPromises()
+    expect(mocks.proof).toHaveBeenCalledWith({
+      scope: 'access_token.revoke',
+      context: { legacy: true },
+    })
+    expect(mocks.revokeLegacy).toHaveBeenCalledWith(
+      'proof',
+      expect.any(AbortSignal)
+    )
+    expect(mocks.revoke).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="pat-legacy"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('automation')
+    wrapper.unmount()
+  })
+
+  it('drops a legacy token listed for the previous account', async () => {
+    let resolve!: (value: unknown) => void
+    mocks.list.mockReturnValue(
+      new Promise((done) => {
+        resolve = done
+      })
+    )
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.setProps({ userId: 0 })
+    resolve({ items: [{ ...item }], legacy })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="pat-legacy"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

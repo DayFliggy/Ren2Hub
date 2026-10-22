@@ -41,6 +41,9 @@ export const personalAccessTokenMessages = {
       unavailableScope: 'No longer grantable',
       revokeTitle: 'Revoke access token?',
       revokeMessage: 'Requests using “{name}” will stop working.',
+      legacy: 'Legacy token',
+      legacyRetire:
+        'The legacy token stops working on {date}. Create a new token to replace it.',
     },
   },
   'zh-CN': {
@@ -82,6 +85,8 @@ export const personalAccessTokenMessages = {
       unavailableScope: '当前不可授予',
       revokeTitle: '撤销访问令牌？',
       revokeMessage: '使用“{name}”的请求将失效。',
+      legacy: '旧版令牌',
+      legacyRetire: '旧版令牌将于 {date} 停用，请创建新令牌替换。',
     },
   },
 }
