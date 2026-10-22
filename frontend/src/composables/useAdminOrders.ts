@@ -17,6 +17,7 @@ import type {
   AdminOrderStats,
 } from '@/types/console'
 import { collectExportPages } from '@/utils/collectExportPages'
+import { viewerTzOffset } from '@/utils/format'
 
 const EXPORT_PAGE_SIZE = 100
 
@@ -134,9 +135,12 @@ export function useAdminOrders() {
         error: error instanceof ApiError ? error.message : String(error),
       }))
     try {
-      const data = await api.get<unknown>('/api/user/topup/stats', window, {
-        signal: controller.signal,
-      })
+      // Daily totals are bucketed by the viewer's calendar day.
+      const data = await api.get<unknown>(
+        '/api/user/topup/stats',
+        { ...window, tz_offset: viewerTzOffset() },
+        { signal: controller.signal }
+      )
       if (controller.signal.aborted || sequence !== statsSequence) return
       stats.value = parseTopUpStatistics(data)
       const rankingResult = await rankingRequest

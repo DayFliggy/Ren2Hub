@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/api/client'
+import { httpTransport } from '@/api/httpTransport'
 import { ApiError } from '@/api/types'
 
 import {
@@ -62,6 +63,39 @@ describe('task plugin API contract', () => {
       vi.spyOn(api, 'delete').mockRejectedValueOnce(error)
       await expect(deleteTaskPluginVersion('fixture', '1')).rejects.toBe(error)
     }
+  })
+
+  it('reads a raw in-use delete rejection and forces the delete on request', async () => {
+    // DeleteTaskPluginVersion answers HTTP 200 with success=false and usage data.
+    const request = vi.spyOn(httpTransport, 'request').mockResolvedValueOnce({
+      success: false,
+      message: 'task plugin is still in use',
+      data: {
+        channels: [{ id: 7, name: 'Gateway', type: 60 }],
+        in_flight_count: 0,
+      },
+    } as never)
+    const error = await deleteTaskPluginVersion('fixture/key', '1.0.0').catch(
+      (cause: unknown) => cause
+    )
+    expect(error).toBeInstanceOf(TaskPluginUsageError)
+    expect((error as TaskPluginUsageError).usage).toEqual({
+      channels: [{ id: 7, name: 'Gateway', type: 60 }],
+      in_flight_count: 0,
+    })
+    expect(request).toHaveBeenLastCalledWith(
+      'DELETE',
+      '/api/plugin/task/fixture%2Fkey/versions/1.0.0',
+      expect.anything()
+    )
+
+    request.mockResolvedValueOnce({ success: true, data: null } as never)
+    await deleteTaskPluginVersion('fixture/key', '1.0.0', true)
+    expect(request).toHaveBeenLastCalledWith(
+      'DELETE',
+      '/api/plugin/task/fixture%2Fkey/versions/1.0.0?force=true',
+      expect.anything()
+    )
   })
 
   it('reads and writes the TaskPluginEnabled master switch option', async () => {

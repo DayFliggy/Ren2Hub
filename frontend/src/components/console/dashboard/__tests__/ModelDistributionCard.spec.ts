@@ -115,6 +115,21 @@ async function renderAfterLoading(wrapper: ReturnType<typeof render>) {
 }
 
 describe('ModelDistributionCard', () => {
+  it('shows a skipped-window reason instead of an empty model distribution', async () => {
+    const wrapper = render([])
+    await wrapper.setProps({ unavailableReason: 'Log range exceeded' })
+
+    expect(
+      wrapper.get('[data-model-distribution-unavailable]').text()
+    ).toContain('Log range exceeded')
+    expect(wrapper.find('[data-model-distribution-chart]').exists()).toBe(false)
+    expect(wrapper.find('table').exists()).toBe(false)
+    await wrapper.setProps({ unavailableReason: null })
+    expect(wrapper.find('[data-model-distribution-chart]').exists()).toBe(true)
+    expect(wrapper.find('table').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('plots every model when there are ten or fewer', () => {
     render(models(10))
 

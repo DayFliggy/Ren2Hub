@@ -38,17 +38,4 @@ describe('TicketThreadMessage', () => {
     expect(userView.classes()).not.toContain('flex-row-reverse')
     expect(userView.text()).toContain('客服')
   })
-
-  it('hides support departments from the user view', () => {
-    const view = mount(TicketThreadMessage, {
-      props: {
-        message: { ...supportMessage, department: 'tech' },
-        viewer: 'user',
-      },
-      global: { plugins: [i18n] },
-    })
-
-    expect(view.text()).toContain('客服')
-    expect(view.text()).not.toContain('技术')
-  })
 })

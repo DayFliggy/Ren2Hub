@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 
@@ -126,6 +127,61 @@ func TestDashboardSummaryComparisonWindow(t *testing.T) {
 		success, _, _ := call(url.Values{"range": {"custom"}, "start": {today.AddDate(0, 0, -31).Format("2006-01-02")}, "end": {today.Format("2006-01-02")}, "include_comparison": {"false"}})
 		require.False(t, success)
 		require.Zero(t, queries)
+	})
+	// callMessage returns message_key when the error has one, else message.
+	callMessage := func(t *testing.T, params url.Values) (bool, string) {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Set("id", 1)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/api/data/self/summary?"+params.Encode(), nil)
+		GetDashboardSummary(ctx)
+		var response struct {
+			Success    bool   `json:"success"`
+			Message    string `json:"message"`
+			MessageKey string `json:"message_key"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+		if response.MessageKey != "" {
+			return response.Success, response.MessageKey
+		}
+		return response.Success, response.Message
+	}
+	// The console mirrors these limits: logged days up to today, plus the
+	// whole window again when comparing, must fit max_range_days.
+	window := func(first, last time.Time, comparison bool) url.Values {
+		return url.Values{"range": {"custom"}, "start": {first.Format("2006-01-02")}, "end": {last.Format("2006-01-02")}, "include_comparison": {strconv.FormatBool(comparison)}}
+	}
+	day := func(offset int) time.Time { return today.AddDate(0, 0, offset) }
+	t.Run("comparison counts toward the log range limit", func(t *testing.T) {
+		settings.MaxRangeDays = 30
+		cases := []struct {
+			name       string
+			params     url.Values
+			success    bool
+			messageKey string
+		}{
+			{"30 days without comparison", url.Values{"range": {"30d"}, "include_comparison": {"false"}}, true, ""},
+			{"30 days with comparison", url.Values{"range": {"30d"}, "include_comparison": {"true"}}, false, "The time range cannot exceed {{days}} days"},
+			{"15 days up to today with comparison", window(day(-14), today, true), true, ""},
+			{"16 days up to today with comparison", window(day(-15), today, true), false, "The time range cannot exceed {{days}} days"},
+			{"15 past days with comparison", window(day(-15), day(-1), true), true, ""},
+			{"16 past days with comparison", window(day(-16), day(-1), true), false, "The time range cannot exceed {{days}} days"},
+			{"31 days without comparison", window(day(-30), today, false), false, "The time range cannot exceed {{days}} days"},
+		}
+		for _, tc := range cases {
+			success, messageKey := callMessage(t, tc.params)
+			require.Equal(t, tc.success, success, tc.name)
+			require.Equal(t, tc.messageKey, messageKey, tc.name)
+		}
+	})
+	t.Run("summary keeps its 366 day cap above a larger log limit", func(t *testing.T) {
+		settings.MaxRangeDays = 1000
+		success, messageKey := callMessage(t, window(day(-365), today, false))
+		require.True(t, success)
+		require.Empty(t, messageKey)
+		success, messageKey = callMessage(t, window(day(-366), today, false))
+		require.False(t, success)
+		require.Equal(t, "dashboard range must be 1 to 366 days", messageKey)
 	})
 	t.Run("invalid comparison option is rejected before any database query", func(t *testing.T) {
 		success, _, status := call(url.Values{"range": {"today"}, "include_comparison": {"invalid"}})

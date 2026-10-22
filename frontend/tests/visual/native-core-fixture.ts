@@ -122,6 +122,7 @@ export async function nativeCoreFixture(
       display_name: 'Native Root',
       email: 'root@example.test',
     },
+    user_deleted: false,
   }
   let routing = {
     token_id: 7,
@@ -242,6 +243,7 @@ export async function nativeCoreFixture(
         HeaderNavModules: { pricing: true },
         password_login_enabled: true,
         password_login_encryption_enabled: false,
+        log_max_range_days: 365,
         ...options.status,
       })
     if (path === '/api/user/self') {

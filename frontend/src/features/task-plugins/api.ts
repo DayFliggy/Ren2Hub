@@ -161,10 +161,17 @@ export function setTaskPluginStatus(
   return enabled ? request : withUsage(request)
 }
 
-/** The backend has no force override for deletes; an in-use rejection is final. */
-export function deleteTaskPluginVersion(key: string, version: string) {
+/** force=true deletes a version that channels or in-flight tasks still use. */
+export function deleteTaskPluginVersion(
+  key: string,
+  version: string,
+  force = false
+) {
+  const query = force ? '?force=true' : ''
   return withUsage(
-    api.delete<null>(`${keyPath(key)}/versions/${encodeURIComponent(version)}`)
+    api.delete<null>(
+      `${keyPath(key)}/versions/${encodeURIComponent(version)}${query}`
+    )
   )
 }
 

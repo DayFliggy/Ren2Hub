@@ -13,7 +13,7 @@ import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import type { AdminOrder } from '@/types/console'
-import { nativeTopUp } from '@/api/__tests__/topupFixtures'
+import { nativeTopUpDetail } from '@/api/__tests__/topupFixtures'
 import OrderDetailModal from '../OrderDetailModal.vue'
 
 beforeAll(async () => {
@@ -97,7 +97,7 @@ function completeButton(wrapper: ReturnType<typeof render>) {
 
 describe('manual completion', () => {
   it('offers manual completion of a pending order to a role-10 admin', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUp)
+    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUpDetail)
     const post = vi.spyOn(api, 'post').mockResolvedValue(undefined)
     const wrapper = render()
     await flushPromises()
@@ -115,7 +115,7 @@ describe('manual completion', () => {
 
   it('hides manual completion from common users', async () => {
     signIn(1)
-    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUp)
+    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUpDetail)
     const wrapper = render()
     await flushPromises()
     expect(completeButton(wrapper)).toBeUndefined()
@@ -124,7 +124,7 @@ describe('manual completion', () => {
 
   it('hides manual completion once the order is no longer pending', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       status: 'success',
       credited_quota: 5000000,
       complete_time: 2,
@@ -139,7 +139,7 @@ describe('manual completion', () => {
 describe('GMPay order details', () => {
   it('separates requested network and creation details from actual settlement evidence', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       status: 'success',
       credited_quota: 5000000,
       complete_time: 2,
@@ -170,7 +170,7 @@ describe('GMPay order details', () => {
           })
       )
       .mockResolvedValueOnce({
-        ...nativeTopUp,
+        ...nativeTopUpDetail,
         trade_no: 'GPnew',
         gmpay: { ...evidence, gateway_trade_no: 'new-gateway-id' },
       })
@@ -179,7 +179,7 @@ describe('GMPay order details', () => {
     await flushPromises()
     expect(get.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
     finish({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       gmpay: { ...evidence, gateway_trade_no: 'stale-gateway-id' },
     })
     await flushPromises()
@@ -191,7 +191,7 @@ describe('GMPay order details', () => {
   it('reports detail failures and retries explicitly', async () => {
     vi.spyOn(api, 'get')
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ ...nativeTopUp, gmpay: evidence })
+      .mockResolvedValueOnce({ ...nativeTopUpDetail, gmpay: evidence })
     const wrapper = render()
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain(
@@ -203,6 +203,29 @@ describe('GMPay order details', () => {
       .trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('receipt-hash')
+    wrapper.unmount()
+  })
+
+  it('marks the owner as deleted only when the detail says so', async () => {
+    vi.spyOn(api, 'get')
+      .mockResolvedValueOnce({ ...nativeTopUpDetail, gmpay: evidence })
+      .mockResolvedValueOnce({
+        ...nativeTopUpDetail,
+        trade_no: 'GPgone',
+        username: '',
+        email: '',
+        user_deleted: true,
+        gmpay: evidence,
+      })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('User deleted')
+    await wrapper.setProps({
+      order: { ...order, order_no: 'GPgone', username: '' },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('User deleted')
+    expect(wrapper.text()).toContain('#7')
     wrapper.unmount()
   })
 })

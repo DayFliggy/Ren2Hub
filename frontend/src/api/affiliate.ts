@@ -9,6 +9,7 @@ import {
   requiredStrictNumber,
   requiredString,
 } from './contracts'
+import { viewerTzOffset } from '@/utils/format'
 import type { Quota } from '@/utils/quota'
 
 export interface AffiliateMonth {
@@ -82,8 +83,9 @@ function parsePolicy(value: unknown, endpoint: string): AffiliateUserPolicy {
 export const affiliateApi = {
   async info(signal?: AbortSignal): Promise<AffiliateInfo> {
     const endpoint = '/api/user/affiliate'
+    // monthly_series months follow the viewer's calendar.
     const data = record(
-      await api.get(endpoint, undefined, { signal }),
+      await api.get(endpoint, { tz_offset: viewerTzOffset() }, { signal }),
       endpoint
     )
     const policy = record(data.policy, endpoint)

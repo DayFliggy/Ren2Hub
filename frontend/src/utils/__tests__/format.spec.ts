@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  configureQuotaDisplay,
   formatBytes,
   formatCompact,
   formatContext,
@@ -8,6 +9,7 @@ import {
   formatLatency,
   formatMoney,
   formatQuota,
+  formatQuotaParts,
   formatTokenPrice,
   localDayEndMs,
   localDayStartMs,
@@ -39,6 +41,55 @@ describe('quota and money formatting', () => {
 
   it('formats money with grouping', () => {
     expect(formatMoney(1234.5)).toBe('$1,234.50')
+  })
+
+  describe('quota parts for each display mode', () => {
+    afterEach(() => configureQuotaDisplay({}))
+    const cases = [
+      {
+        status: { quota_display_type: 'USD' },
+        parts: { prefix: '$', whole: '1,234', fraction: '57' },
+        text: '$1,234.57',
+      },
+      {
+        status: { quota_display_type: 'USD', quota_per_unit: 1_000_000 },
+        parts: { prefix: '$', whole: '617', fraction: '28' },
+        text: '$617.28',
+      },
+      {
+        status: { quota_display_type: 'CNY', usd_exchange_rate: 7.3 },
+        parts: { prefix: '¥', whole: '9,012', fraction: '35' },
+        text: '¥9,012.35',
+      },
+      {
+        status: {
+          quota_display_type: 'CUSTOM',
+          custom_currency_symbol: 'Pts ',
+          custom_currency_exchange_rate: 10,
+        },
+        parts: { prefix: 'Pts ', whole: '12,345', fraction: '68' },
+        text: 'Pts 12,345.68',
+      },
+      {
+        status: { quota_display_type: 'TOKENS' },
+        parts: { prefix: '', whole: '617,283,950', fraction: '' },
+        text: '617,283,950',
+      },
+    ]
+    it.each(cases)('$status.quota_display_type splits $text', (item) => {
+      configureQuotaDisplay(item.status)
+      expect(formatQuotaParts(617_283_950)).toEqual(item.parts)
+      expect(formatQuota(617_283_950)).toBe(item.text)
+    })
+
+    it('drops the decimal part at zero digits', () => {
+      expect(formatQuotaParts(617_283_950, 0)).toEqual({
+        prefix: '$',
+        whole: '1,235',
+        fraction: '',
+      })
+      expect(formatQuota(617_283_950, 0)).toBe('$1,235')
+    })
   })
 
   it('formats token prices and missing values', () => {

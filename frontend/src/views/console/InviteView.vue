@@ -21,6 +21,8 @@ const { t } = useI18n()
 const {
   info,
   loadError,
+  shareable,
+  shareNotice,
   inviteLink,
   invitees,
   inviteesPage,
@@ -149,6 +151,8 @@ onMounted(() => Promise.all([load(), loadInvitees()]))
         :code="info?.code ?? ''"
         :invite-link="inviteLink"
         :rate-percent="info?.effective_rate_percent ?? 0"
+        :shareable="shareable"
+        :notice="shareNotice"
         @copy-code="copyCode"
         @copy-link="copyLink"
         @share-x="shareX"

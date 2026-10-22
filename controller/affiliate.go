@@ -13,7 +13,12 @@ import (
 )
 
 func GetAffiliateInfo(c *gin.Context) {
-	result, err := model.GetAffiliateInfo(c.GetInt("id"))
+	// Reject a bad tz_offset before GetAffiliateInfo runs its thaw transaction.
+	loc, ok := viewerLocation(c)
+	if !ok {
+		return
+	}
+	result, err := model.GetAffiliateInfo(c.GetInt("id"), loc)
 	if err != nil {
 		common.ApiError(c, err)
 		return

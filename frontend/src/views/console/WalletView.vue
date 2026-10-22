@@ -5,7 +5,12 @@ import { useRoute } from 'vue-router'
 
 import { ApiError } from '@/api/types'
 import { api } from '@/api/console'
-import { getUsageSummary } from '@/api/dashboard'
+import {
+  currentMonthRange,
+  getUsageSummary,
+  logRangeLimit,
+  summaryFits,
+} from '@/api/dashboard'
 import { parseTopUpDetail } from '@/api/adminOrders'
 import { rememberedGmpayOrder, type TopupInfo } from '@/api/topup'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -16,19 +21,25 @@ import FlowChart from '@/components/console/wallet/FlowChart.vue'
 import RedeemPanel from '@/components/console/wallet/RedeemPanel.vue'
 import TopupPanel from '@/components/console/wallet/TopupPanel.vue'
 import TopupRecords from '@/components/console/wallet/TopupRecords.vue'
-import type { DashboardStats, FlowPoint } from '@/composables/useDashboard'
+import type { FlowPoint } from '@/composables/useDashboard'
 import { useBalanceVisibility } from '@/composables/useDashboard'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { quotaToDecimal, sumQuota } from '@/utils/quota'
-import { formatNumber, formatQuota } from '@/utils/format'
+import { sumQuota } from '@/utils/quota'
+import { formatNumber, formatQuota, formatQuotaParts } from '@/utils/format'
 
-type WalletStats = DashboardStats
+interface WalletStats {
+  quota: string
+  /** Null when the month to date exceeds log_max_range_days. */
+  month: { quota: string; requests: number } | null
+}
 
 const { t } = useI18n()
 const route = useRoute()
 const toast = useToast()
+const app = useAppStore()
 const auth = useAuthStore()
 const { hidden, toggle } = useBalanceVisibility()
 
@@ -50,11 +61,7 @@ const activePanel = computed<'topup' | 'redeem'>(() =>
   route.query.panel === 'redeem' ? 'redeem' : 'topup'
 )
 
-const balanceParts = computed(() =>
-  quotaToDecimal(stats.value?.quota ?? '0', 2).split('.')
-)
-const balanceDollars = computed(() => balanceParts.value[0])
-const balanceCents = computed(() => balanceParts.value[1])
+const balance = computed(() => formatQuotaParts(stats.value?.quota ?? '0', 2))
 const dayCount = computed(() => flow.value.length || 30)
 
 const statCards = computed(() => {
@@ -66,16 +73,20 @@ const statCards = computed(() => {
         BigInt(flow.value.length)
       ).toString()
     : '0'
+  const { month } = current
+  const outOfRange = t('wallet.statMonthOutOfRange')
   return [
     {
       label: t('wallet.statMonthConsume'),
-      value: formatQuota(current.used_quota),
-      sub: t('wallet.statMonthConsumeSub'),
+      value: month ? formatQuota(month.quota) : '—',
+      sub: month ? t('wallet.statMonthConsumeSub') : outOfRange,
     },
     {
       label: t('wallet.statDailyAvg'),
-      value: formatQuota(average),
-      sub: t('wallet.statDailyAvgSub', { days: dayCount.value }),
+      value: month ? formatQuota(average) : '—',
+      sub: month
+        ? t('wallet.statDailyAvgSub', { days: dayCount.value })
+        : outOfRange,
     },
     {
       label: t('wallet.statTodayConsume'),
@@ -84,26 +95,25 @@ const statCards = computed(() => {
     },
     {
       label: t('wallet.statMonthRequests'),
-      value: formatNumber(current.total_requests),
-      sub: t('wallet.statMonthRequestsSub'),
+      value: month ? formatNumber(month.requests) : '—',
+      sub: month ? t('wallet.statMonthRequestsSub') : outOfRange,
     },
   ]
 })
 
 async function loadStats(): Promise<void> {
   loading.value = true
-  const now = new Date()
-  const date = (day: number) =>
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  const result = await statsRequest.run((signal) =>
-    Promise.all([
-      getUsageSummary(
-        { range: 'custom', start: date(1), end: date(now.getDate()) },
-        signal
-      ),
-      getUsageSummary({ range: 'today' }, signal),
+  const result = await statsRequest.run((signal) => {
+    // A month past the log limit is skipped; today always fits.
+    const monthRange = currentMonthRange()
+    const limit = logRangeLimit(app.status)
+    return Promise.all([
+      summaryFits(monthRange, limit, false)
+        ? getUsageSummary(monthRange, false, signal)
+        : null,
+      getUsageSummary({ range: 'today' }, false, signal),
     ])
-  )
+  })
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
@@ -115,22 +125,19 @@ async function loadStats(): Promise<void> {
     return
   }
   const [month, today] = result.value
-  if (!month.meta.available || !today.meta.available) {
+  if (month?.meta.available === false || !today.meta.available) {
     stats.value = null
     toast.error(t('dashboard.stats.unavailable'))
     return
   }
   todayConsume.value = today.kpi.totalQuota
-  flow.value = month.flow
+  flow.value = month?.flow ?? []
   stats.value = {
     quota: String(auth.user?.quota ?? 0),
-    used_quota: month.kpi.totalQuota,
-    today_quota: today.kpi.totalQuota,
-    month_quota: month.kpi.totalQuota,
-    today_requests: today.kpi.totalRequests,
-    total_requests: month.kpi.totalRequests,
-    month_quota_delta: month.comparison?.quotaDelta ?? null,
-    month_requests_delta: month.comparison?.requestsDelta ?? null,
+    month: month && {
+      quota: month.kpi.totalQuota,
+      requests: month.kpi.totalRequests,
+    },
   }
 }
 
@@ -197,15 +204,19 @@ onBeforeUnmount(() => statusController?.abort())
       <template #actions>
         <div class="flex items-center gap-3" :aria-busy="loading">
           <p class="font-mono tracking-tight text-[var(--text-primary)]">
-            <span class="text-lg text-[var(--text-tertiary)]">$</span>
+            <span
+              v-if="balance.prefix"
+              class="text-lg text-[var(--text-tertiary)]"
+              >{{ balance.prefix }}</span
+            >
             <span class="display-number text-5xl">
-              {{ hidden ? '••••••' : stats ? balanceDollars : '—' }}
+              {{ hidden ? '••••••' : stats ? balance.whole : '—' }}
             </span>
             <span
-              v-if="!hidden && stats"
+              v-if="!hidden && stats && balance.fraction"
               class="display-number text-xl text-[var(--text-secondary)]"
             >
-              .{{ balanceCents }}
+              .{{ balance.fraction }}
             </span>
           </p>
           <button

@@ -1,5 +1,6 @@
 import { api } from './client'
 import { isDecimal } from '@/utils/decimal'
+import { ADMIN_ORDER_METHODS } from '@/constants/adminOrders'
 import type {
   AdminOrder,
   AdminOrderSpender,
@@ -9,6 +10,7 @@ import type {
 import {
   invalidResponse,
   isRecord,
+  requiredBoolean,
   requiredQuota,
   requiredStrictInteger,
   requiredString,
@@ -20,11 +22,12 @@ export function parseTopUpDetail(
 ): {
   evidence: GmpayOrderEvidence | null
   state: AdminOrder
+  userDeleted: boolean
 } {
+  const endpoint = '/api/user/topup/admin/detail/:trade_no'
   const native = parseTopUp(value)
-  const projected = { ...native, gmpay: isRecord(value) ? value.gmpay : null }
-  if (native.order_no !== orderNo)
-    invalidResponse('/api/user/topup/admin/detail/:trade_no')
+  if (!isRecord(value) || native.order_no !== orderNo) invalidResponse(endpoint)
+  const projected = { ...native, gmpay: value.gmpay }
   const evidence =
     native.method === 'gmpay'
       ? parseGmpayOrderEvidence(projected, orderNo)
@@ -32,6 +35,8 @@ export function parseTopUpDetail(
   return {
     evidence,
     state: native,
+    // A deleted owner keeps the stored user_id; a hard delete also blanks the names.
+    userDeleted: requiredBoolean(value.user_deleted, endpoint),
   }
 }
 
@@ -102,16 +107,9 @@ export function parseTopUp(value: unknown): AdminOrder {
       !Number.isFinite(Number(amount)))
   )
     invalidResponse(endpoint)
-  const method = text('payment_provider') || text('payment_method')
-  const known = [
-    'epay',
-    'gmpay',
-    'stripe',
-    'creem',
-    'waffo',
-    'waffo_pancake',
-    'balance',
-  ]
+  // 与后端 topUpEffectiveMethod 相同：provider 优先，未知方式归为 other。
+  const method = (text('payment_provider') ||
+    text('payment_method')) as AdminOrder['method']
   return {
     id: integer('id'),
     order_no: requiredString(value.trade_no, endpoint, false),
@@ -122,7 +120,7 @@ export function parseTopUp(value: unknown): AdminOrder {
     quota: String(integer('credited_quota')),
     type: 'topup',
     currency: text('currency'),
-    method: (known.includes(method) ? method : 'other') as AdminOrder['method'],
+    method: ADMIN_ORDER_METHODS.includes(method) ? method : 'other',
     payment_method: text('payment_method'),
     status: (text('status') === 'success'
       ? 'completed'

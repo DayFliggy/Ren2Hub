@@ -70,7 +70,8 @@ export const taskPluginMessages = {
     // Ren2Hub: a cascade only unbinds New API gateway channels.
     newApiUnbind: 'New API：仅解除当前插件绑定，其他插件和普通流量继续可用。',
     // Ren2Hub: the delete endpoint has no force override.
-    deleteBlockedHint: '请先停用或解绑这些渠道，并等待在途任务结束后再删除。',
+    deleteBlockedHint:
+      '可以先停用或解绑渠道、等待在途任务结束后再删除，也可以强制删除。',
     copyPluginKey: '复制插件标识',
     notDeclared: '未声明',
     pluginDetails: '插件详情',
@@ -374,7 +375,7 @@ export const taskPluginMessages = {
     newApiUnbind:
       'New API: remove only this plugin binding. Other plugins and ordinary traffic remain available.',
     deleteBlockedHint:
-      'Disable or unbind these channels and wait for in-flight tasks to finish before deleting.',
+      'Disable or unbind the channels and wait for in-flight tasks to finish before deleting, or force the delete.',
     copyPluginKey: 'Copy plugin key',
     notDeclared: 'Not declared',
     pluginDetails: 'Plugin details',

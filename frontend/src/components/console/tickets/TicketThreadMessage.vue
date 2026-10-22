@@ -93,11 +93,9 @@ onBeforeUnmount(clearImages)
 const isOwn = computed(() => props.message.role === props.viewer)
 const authorLabel = computed(() => {
   if (isOwn.value) return ''
-  if (props.message.role === 'support') {
-    if (props.viewer === 'user') return t('tickets.detail.dept.support')
-    return t(`tickets.detail.dept.${props.message.department ?? 'support'}`)
-  }
-  return t('tickets.admin.requester')
+  return props.message.role === 'support'
+    ? t('tickets.detail.dept.support')
+    : t('tickets.admin.requester')
 })
 const bubbleClass = computed(() =>
   isOwn.value
@@ -107,20 +105,7 @@ const bubbleClass = computed(() =>
 </script>
 
 <template>
-  <div
-    v-if="message.role === 'system'"
-    class="flex items-center justify-center gap-3 py-1"
-  >
-    <span class="h-px flex-1 bg-[var(--dec-gold-line)]" />
-    <span
-      class="text-center text-[0.6875rem] uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
-    >
-      {{ message.content }} · {{ relativeTime(message.created, locale) }}
-    </span>
-    <span class="h-px flex-1 bg-[var(--dec-gold-line)]" />
-  </div>
-
-  <div v-else class="flex" :class="isOwn ? 'flex-row-reverse' : ''">
+  <div class="flex" :class="isOwn ? 'flex-row-reverse' : ''">
     <div class="min-w-0 max-w-[86%] sm:max-w-[80%]">
       <div
         class="mb-1 flex items-baseline gap-2"

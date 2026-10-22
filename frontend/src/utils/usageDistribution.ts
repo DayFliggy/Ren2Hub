@@ -1,9 +1,9 @@
-import { formatCompact, formatMoney, formatNumber } from '@/utils/format'
+import { formatCompact, formatNumber, formatQuota } from '@/utils/format'
 
 export interface UsageDistributionPoint {
   date: string
   requests: number
-  /** Spend in USD; callers convert API quota strings before building a view. */
+  /** Spend in quota units; callers convert API quota strings for the chart. */
   consume: number
   tokens: number
 }
@@ -16,6 +16,8 @@ export interface UsageHeatmapCell {
   value: number
   level: 0 | 1 | 2 | 3 | 4 | 5
   inRange: boolean
+  /** False for in-range days before the queried window; they are not zero. */
+  covered: boolean
   future: boolean
   monthKey: string
 }
@@ -72,6 +74,18 @@ export function usageDistributionRange(
   }
 }
 
+/** The year window, shortened to the newest days log_max_range_days allows. */
+export function usageCoverageRange(
+  limitDays: number,
+  referenceDate = new Date()
+): { start: string; end: string } {
+  const days = Math.min(PERIOD_DAYS.year, limitDays)
+  return {
+    start: localDateKey(addDays(referenceDate, -(days - 1))),
+    end: localDateKey(referenceDate),
+  }
+}
+
 function mondayOf(date: Date): Date {
   return addDays(date, -((date.getDay() + 6) % 7))
 }
@@ -112,6 +126,8 @@ export function buildUsageDistributionView(
   points: UsageDistributionPoint[],
   period: UsageDistributionPeriod,
   metric: UsageDistributionMetric,
+  /** First queried date ('YYYY-MM-DD'); earlier days are excluded, not zero. */
+  coveredFrom: string,
   referenceDate = new Date()
 ): UsageDistributionView {
   const today = new Date(referenceDate)
@@ -129,7 +145,9 @@ export function buildUsageDistributionView(
     cursor <= rangeEnd;
     cursor = addDays(cursor, 1)
   ) {
-    values.push(metricValue(pointMap.get(localDateKey(cursor)), metric))
+    const date = localDateKey(cursor)
+    if (date >= coveredFrom)
+      values.push(metricValue(pointMap.get(date), metric))
   }
   const thresholds = quantileThresholds(values)
 
@@ -138,18 +156,20 @@ export function buildUsageDistributionView(
     const date = localDateKey(cursor)
     const future = cursor > today
     const inRange = cursor >= rangeStart && cursor <= rangeEnd
-    const value = inRange ? metricValue(pointMap.get(date), metric) : 0
+    const covered = inRange && date >= coveredFrom
+    const value = covered ? metricValue(pointMap.get(date), metric) : 0
     cells.push({
       date,
       value,
-      level: inRange ? intensityLevel(value, thresholds) : 0,
+      level: covered ? intensityLevel(value, thresholds) : 0,
       inRange,
+      covered,
       future,
       monthKey: date.slice(0, 7),
     })
   }
 
-  const active = cells.filter((cell) => cell.inRange && cell.value > 0)
+  const active = cells.filter((cell) => cell.covered && cell.value > 0)
   const ranked = [...active].sort(
     (left, right) =>
       right.value - left.value || right.date.localeCompare(left.date)
@@ -157,7 +177,7 @@ export function buildUsageDistributionView(
   const weekdays = Array.from({ length: 7 }, (_, weekday) => {
     const matching = cells.filter(
       (cell) =>
-        cell.inRange && (fromDateKey(cell.date).getDay() + 6) % 7 === weekday
+        cell.covered && (fromDateKey(cell.date).getDay() + 6) % 7 === weekday
     )
     return {
       weekday,
@@ -189,7 +209,8 @@ export function formatUsageMetric(
   metric: UsageDistributionMetric,
   value: number
 ): string {
-  if (metric === 'consume') return formatMoney(value)
+  // Averages are fractional quota; the site currency setting picks the unit.
+  if (metric === 'consume') return formatQuota(Math.round(value))
   if (metric === 'tokens') return formatCompact(Math.round(value))
   return formatNumber(Math.round(value))
 }

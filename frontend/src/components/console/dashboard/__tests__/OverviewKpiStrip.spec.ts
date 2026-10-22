@@ -40,9 +40,8 @@ const stats: DashboardStats = {
   today_quota: '96402',
   month_quota: '1842600',
   today_requests: 312,
+  today_tokens: 4_000_000,
   total_requests: 18_764,
-  month_quota_delta: 16.2,
-  month_requests_delta: -5.8,
 }
 
 const flowPoints: FlowPoint[] = Array.from({ length: 14 }, (_, i) => ({
@@ -117,13 +116,20 @@ describe('OverviewKpiStrip', () => {
     expect(wrapper.text()).toContain('Unmetered')
   })
 
-  it("sums every token class for today's total", () => {
-    const wrapper = render({
-      tokenTrend: [trendPoint({ date: '2026-07-25' }), trendPoint()],
-    })
+  it("reads today's tokens from the today window when the trend is skipped", () => {
+    const wrapper = render({ tokenTrend: [] })
 
-    // 1.0M + 0.5M + 0.25M + 2.25M = 4.0M, taken from the last point only.
-    expect(wrapper.text()).toContain('4.0M')
+    expect(
+      wrapper.find('[data-kpi-cell="tokens"] .display-number').text()
+    ).toBe('4.0M')
+  })
+
+  it('keeps the today headline independent from the trend window', () => {
+    const wrapper = render({ tokenTrend: [trendPoint({ total: 123 })] })
+
+    expect(
+      wrapper.find('[data-kpi-cell="tokens"] .display-number').text()
+    ).toBe('4.0M')
   })
 
   it('marks the rate-limit cell as not connected when limits are null', () => {
@@ -158,7 +164,7 @@ describe('OverviewKpiStrip', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 6, 26, 0, 1))
 
-    const wrapper = render({ tokenTrend: [trendPoint()] })
+    const wrapper = render()
 
     // 4M tokens / 60 min = 66.7K, not 4M / 1 min.
     expect(wrapper.text()).toContain('66.7K')
@@ -168,7 +174,7 @@ describe('OverviewKpiStrip', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 6, 26, 10, 0))
 
-    const wrapper = render({ tokenTrend: [trendPoint()] })
+    const wrapper = render()
 
     // 4M / 600 min = 6.7K
     expect(wrapper.text()).toContain('6.7K')

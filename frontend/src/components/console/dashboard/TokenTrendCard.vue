@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import { formatCompact } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
@@ -14,6 +15,8 @@ const props = defineProps<{
   /** quota_data flush interval; null until a summary has loaded. */
   flushIntervalMinutes?: number | null
   loading?: boolean
+  /** Why the trend window was not queried; replaces the chart when set. */
+  unavailableReason?: string | null
 }>()
 
 const { t } = useI18n()
@@ -190,6 +193,11 @@ useEChart(
     <div
       v-if="loading"
       class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"
+    />
+    <EmptyState
+      v-else-if="unavailableReason"
+      :title="unavailableReason"
+      data-token-trend-unavailable
     />
     <div
       v-else

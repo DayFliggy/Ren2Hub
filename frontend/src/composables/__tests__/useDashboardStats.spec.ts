@@ -6,6 +6,8 @@ import { useDashboardStats } from '@/composables/useDashboardStats'
 import { dashboardFixture } from '@/api/__tests__/dashboardFixture'
 import i18n from '@/i18n'
 vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
+const app = vi.hoisted(() => ({ status: { log_max_range_days: 365 } }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => app }))
 let wrapper: VueWrapper | undefined
 function setupStats() {
   let state!: ReturnType<typeof useDashboardStats>
@@ -24,6 +26,8 @@ afterEach(() => {
   wrapper?.unmount()
   vi.restoreAllMocks()
   vi.resetAllMocks()
+  vi.useRealTimers()
+  app.status.log_max_range_days = 365
 })
 describe('native dashboard statistics lifecycle', () => {
   it('discards an old response after switching the selected period', async () => {
@@ -59,6 +63,7 @@ describe('native dashboard statistics lifecycle', () => {
         start: '2026-10-01',
         end: '2026-10-21',
         tz_offset: '-330',
+        include_comparison: 'true',
       },
       { signal: expect.any(AbortSignal) }
     )
@@ -79,5 +84,39 @@ describe('native dashboard statistics lifecycle', () => {
     await stats.load()
     expect(stats.data.value).toBeNull()
     expect(stats.error.value).toBeTruthy()
+  })
+  it('drops only the comparison when the prior window exceeds the log limit', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 22, 12))
+    app.status.log_max_range_days = 30
+    vi.mocked(api.get).mockResolvedValue({
+      ...dashboardFixture(),
+      comparison: null,
+    })
+    const stats = setupStats()
+    await stats.load()
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/data/self/summary',
+      expect.objectContaining({ range: '30d', include_comparison: 'false' }),
+      { signal: expect.any(AbortSignal) }
+    )
+    expect(stats.error.value).toBeNull()
+    expect(stats.data.value?.comparison).toBeNull()
+  })
+  it('explains a range past the log limit without sending it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 22, 12))
+    app.status.log_max_range_days = 30
+    const stats = setupStats()
+    stats.range.value = 'custom'
+    stats.customStart.value = '2026-09-01'
+    stats.customEnd.value = '2026-10-22'
+    await stats.load()
+    expect(api.get).not.toHaveBeenCalled()
+    expect(stats.loading.value).toBe(false)
+    expect(stats.data.value).toBeNull()
+    expect(stats.error.value).toBe(
+      i18n.global.t('dashboard.stats.outOfRange', { days: 30 })
+    )
   })
 })

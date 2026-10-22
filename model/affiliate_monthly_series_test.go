@@ -18,51 +18,60 @@ import (
 )
 
 func TestAffiliateMonthlySeriesDatabases(t *testing.T) {
-	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
-		t.Run(dialect, func(t *testing.T) {
-			var driver gorm.Dialector = sqlite.Open(":memory:")
-			dbType := common.DatabaseTypeSQLite
-			if dialect != "sqlite" {
-				key := "REN2HUB_EXTENSION_TEST_MYSQL_DSN"
-				if dialect == "postgres" {
-					key = "REN2HUB_EXTENSION_TEST_POSTGRES_DSN"
-				}
-				dsn := os.Getenv(key)
-				if dsn == "" {
-					t.Skip(key + " is not configured; isolated database required")
-				}
-				driver, dbType = mysql.Open(dsn), common.DatabaseTypeMySQL
-				if dialect == "postgres" {
-					driver, dbType = postgres.Open(dsn), common.DatabaseTypePostgreSQL
-				}
-			}
-			db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: fmt.Sprintf("affmonth_%d_", time.Now().UnixNano())}, Logger: logger.Default.LogMode(logger.Silent)})
-			require.NoError(t, err)
-			connection, err := db.DB()
-			require.NoError(t, err)
-			if dialect == "sqlite" {
-				connection.SetMaxOpenConns(1)
-			}
-			previousDB, previousType := DB, common.MainDatabaseType()
-			DB = db
-			common.SetMainDatabaseType(dbType)
-			t.Cleanup(func() {
-				DB = previousDB
-				common.SetMainDatabaseType(previousType)
-				require.NoError(t, db.Migrator().DropTable(&AffiliateRecord{}, &User{}))
-				require.NoError(t, connection.Close())
-			})
-			require.NoError(t, db.AutoMigrate(&User{}, &AffiliateRecord{}))
-			verifyAffiliateMonthlySeries(t, db)
-		})
+	// UTC+8 month starts are 16:00 UTC on the previous day, so the boundary rows
+	// below fall into another month and window when bucketed in UTC.
+	for _, loc := range []*time.Location{time.UTC, time.FixedZone("UTC+8", 8*3600)} {
+		for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+			t.Run(dialect+"/"+loc.String(), func(t *testing.T) { runAffiliateMonthlySeries(t, dialect, loc) })
+		}
 	}
 }
 
-func verifyAffiliateMonthlySeries(t *testing.T, db *gorm.DB) {
+func runAffiliateMonthlySeries(t *testing.T, dialect string, loc *time.Location) {
+	var driver gorm.Dialector = sqlite.Open(":memory:")
+	dbType := common.DatabaseTypeSQLite
+	if dialect != "sqlite" {
+		key := "REN2HUB_EXTENSION_TEST_MYSQL_DSN"
+		if dialect == "postgres" {
+			key = "REN2HUB_EXTENSION_TEST_POSTGRES_DSN"
+		}
+		dsn := os.Getenv(key)
+		if dsn == "" {
+			t.Skip(key + " is not configured; isolated database required")
+		}
+		driver, dbType = mysql.Open(dsn), common.DatabaseTypeMySQL
+		if dialect == "postgres" {
+			driver, dbType = postgres.Open(dsn), common.DatabaseTypePostgreSQL
+		}
+	}
+	db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: fmt.Sprintf("affmonth_%d_", time.Now().UnixNano())}, Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	connection, err := db.DB()
+	require.NoError(t, err)
+	if dialect == "sqlite" {
+		connection.SetMaxOpenConns(1)
+	}
+	previousDB, previousType := DB, common.MainDatabaseType()
+	DB = db
+	common.SetMainDatabaseType(dbType)
+	t.Cleanup(func() {
+		DB = previousDB
+		common.SetMainDatabaseType(previousType)
+		require.NoError(t, db.Migrator().DropTable(&AffiliateRecord{}, &User{}))
+		require.NoError(t, connection.Close())
+	})
+	require.NoError(t, db.AutoMigrate(&User{}, &AffiliateRecord{}))
+	verifyAffiliateMonthlySeries(t, db, loc)
+}
+
+func verifyAffiliateMonthlySeries(t *testing.T, db *gorm.DB, loc *time.Location) {
 	t.Helper()
-	now := time.Now().UTC()
-	start := time.Date(now.Year(), now.Month()-11, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month()-11, 1, 0, 0, 0, 0, loc)
 	end := start.AddDate(0, 12, 0)
+	// 23:30 UTC on a month's last day: the next month for viewers east of UTC.
+	utcMonthEnd := time.Date(start.Year(), start.Month()+6, 1, 0, 0, 0, 0, time.UTC).Add(-30 * time.Minute)
+	boundaryMonth := utcMonthEnd.In(loc).Format("2006-01")
 	inviter := User{Username: "series-owner", AffCode: "SERIES-OWNER", AffCount: 5}
 	other := User{Username: "series-other", AffCode: "SERIES-OTHER"}
 	require.NoError(t, db.Create(&inviter).Error)
@@ -99,10 +108,11 @@ func verifyAffiliateMonthlySeries(t *testing.T, db *gorm.DB) {
 		{start, inviter.Id, "transfer", 100},
 		{start.Add(-time.Second), inviter.Id, "accrue", 19},
 		{end, inviter.Id, "accrue", 23},
+		{utcMonthEnd, inviter.Id, "accrue", 13},
 	} {
 		require.NoError(t, db.Create(&AffiliateRecord{UserID: row.owner, Kind: row.kind, SourceKey: fmt.Sprintf("series-source-%d", index), RewardQuota: row.reward, CreatedAt: row.at.Unix()}).Error)
 	}
-	info, err := GetAffiliateInfo(inviter.Id)
+	info, err := GetAffiliateInfo(inviter.Id, loc)
 	require.NoError(t, err)
 	require.Len(t, info.MonthlySeries, 12)
 	assert.Equal(t, 5, info.Invited)
@@ -117,7 +127,11 @@ func verifyAffiliateMonthlySeries(t *testing.T, db *gorm.DB) {
 		case 11:
 			newCount, reward = 1, 11
 		}
+		month := start.AddDate(0, index, 0).Format("2006-01")
+		if month == boundaryMonth {
+			reward += 13
+		}
 		cumulative += newCount
-		assert.Equal(t, AffiliateMonth{Month: start.AddDate(0, index, 0).Format("2006-01"), NewCount: newCount, Cumulative: cumulative, Reward: reward, Quota: reward}, point)
+		assert.Equal(t, AffiliateMonth{Month: month, NewCount: newCount, Cumulative: cumulative, Reward: reward, Quota: reward}, point)
 	}
 }

@@ -525,6 +525,13 @@ export default {
       rangeCustom: 'Custom',
       rangeLabel: 'Stats range',
       trendMode: 'Trend metric',
+      outOfRange:
+        'The selected range exceeds the {days}-day log query limit. Choose a shorter range.',
+      recentOutOfRange:
+        'The last 30 days exceed the {days}-day log query limit',
+      comparisonUnavailable: 'No comparison',
+      comparisonUnavailableHint:
+        'Adding the previous period would exceed the log query limit.',
     },
     distribution: {
       title: 'Usage distribution',
@@ -543,6 +550,7 @@ export default {
       metricControl: 'Distribution metric',
       gridLabel: '{period} {metric} heatmap',
       cellLabel: '{date}, {metric} {value}',
+      cellUncovered: '{date}, outside the queried range',
       dragHint: 'Drag to see earlier weeks',
       topDays: 'Most active',
       weekdayRhythm: 'By weekday',
@@ -837,11 +845,7 @@ export default {
         'You will not be able to reply after closing. You can reopen it anytime.',
       dept: {
         support: 'Support',
-        tech: 'Tech',
-        finance: 'Finance',
-        legal: 'Legal',
       },
-      systemNote: 'System',
       metaCreated: 'Created',
       metaUpdated: 'Updated',
     },
@@ -868,6 +872,7 @@ export default {
       emptyQueue: 'No tickets match the current filters',
       selectHint: 'Select a ticket from the queue',
       requester: 'Requester',
+      userDeleted: 'User deleted',
       assignee: 'Assignee',
       unassigned: 'Unassigned',
       mine: 'My tickets',
@@ -1638,6 +1643,9 @@ export default {
     name: 'Name',
     generateCodes: 'Generate codes',
     exportCsv: 'Export CSV',
+    exported: 'Exported {count} redemption codes',
+    exportTruncated:
+      'Too many redemption codes; exported the first {count} (limit {limit})',
     refreshList: 'Refresh',
     deleteSelected: 'Delete selected',
     clearSelection: 'Clear selection',
@@ -1827,6 +1835,7 @@ export default {
     colCreated: 'Created',
     colPaidAt: 'Paid at',
     notRecorded: 'Not recorded',
+    userDeleted: 'User deleted',
     notCredited: 'Not credited',
     emptyTitle: 'No matching orders',
     emptyHint: 'Try adjusting the search keyword or filters.',
@@ -1946,7 +1955,7 @@ export default {
     tasksBreadcrumb: 'Task logs',
     taskIdPlaceholder: 'Search by task ID…',
     platformLabel: 'Platform',
-    platformAll: 'All platforms',
+    platformPlaceholder: 'Platform, e.g. sunoapi or a channel type number',
     colSubmitted: 'Submitted / Status',
     colTask: 'Type / Task ID',
     colPrompt: 'Prompt',
@@ -2284,6 +2293,7 @@ export default {
     statTodayConsumeSub: 'Since midnight',
     statMonthRequests: 'Month requests',
     statMonthRequestsSub: 'API calls',
+    statMonthOutOfRange: 'This month exceeds the log query limit',
     summaryPayNow: 'You pay (CNY)',
     summaryPayNowUsd: 'You pay (USD)',
     summaryCredit: 'Credit received (USD)',
@@ -2571,6 +2581,10 @@ export default {
       'Register for Ren2Hub with my link; after an eligible payment I receive platform quota at a {reward} rebate rate.',
     affiliateDisclaimer:
       'Only eligible real payments earn rebates; cash withdrawal is unavailable',
+    programDisabled:
+      'The referral program is paused, so new users cannot register with an invite right now.',
+    codeDisabled:
+      'Your invite code has been disabled. Contact an administrator.',
     invitees: 'Invited users',
     records: 'Reward records',
     sortRecent: 'Recent',
@@ -3406,7 +3420,8 @@ export default {
     },
     waffoPancake: {
       orphanStore:
-        'Store {id} was created, but product creation failed. Check the gateway catalog before creating another pair.',
+        'Store {id} was created, but product creation failed: {reason}. Check the gateway catalog before creating another pair.',
+      pairFailed: 'Failed to create the store and product: {reason}',
       label: 'Waffo Pancake configuration',
       merchantId: 'Merchant ID',
       privateKey: 'Private key',

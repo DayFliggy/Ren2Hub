@@ -50,5 +50,6 @@
   "Unsupported payment method": "不支持的支付方式",
   "Waffo Pancake configuration is incomplete": "Waffo Pancake 配置不完整",
   "Waffo Pancake credentials are not configured": "Waffo Pancake 凭证未配置",
-  "Waffo payment is not enabled": "Waffo 支付未启用"
+  "Waffo payment is not enabled": "Waffo 支付未启用",
+  "gmpay order snapshot is missing": "GMPay 订单快照缺失，无法自动补单，请人工核对支付记录"
 }

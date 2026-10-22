@@ -36,6 +36,7 @@ const {
   flow,
   tokenTrend,
   flushIntervalMinutes,
+  recentOutOfRange,
   system,
   limits,
   discounts,
@@ -195,6 +196,7 @@ const rangeOptions = computed(() => [
           <UsageDistributionCard
             class="min-w-0 xl:col-span-2"
             :points="distribution.points.value"
+            :covered-from="distribution.coveredFrom.value"
             :loading="distribution.loading.value"
             :error="distribution.error.value"
           />
@@ -207,6 +209,7 @@ const rangeOptions = computed(() => [
             :points="tokenTrend"
             :flush-interval-minutes="flushIntervalMinutes"
             :loading="loading"
+            :unavailable-reason="recentOutOfRange"
           />
 
           <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
@@ -216,6 +219,7 @@ const rangeOptions = computed(() => [
             class="min-w-0 xl:col-span-2"
             :items="share"
             :loading="loading"
+            :unavailable-reason="recentOutOfRange"
           />
         </div>
       </div>

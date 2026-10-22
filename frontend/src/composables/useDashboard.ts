@@ -3,8 +3,15 @@ import { ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
-import { getUsageSummary } from '@/api/dashboard'
+import {
+  currentMonthRange,
+  getUsageSummary,
+  logRangeLimit,
+  summaryFits,
+  type SummaryRange,
+} from '@/api/dashboard'
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 
 export interface DashboardStats {
@@ -13,9 +20,8 @@ export interface DashboardStats {
   today_quota: string
   month_quota?: string
   today_requests: number
+  today_tokens: number
   total_requests: number
-  month_quota_delta: number | null
-  month_requests_delta: number | null
 }
 
 export interface UserLimits {
@@ -80,6 +86,7 @@ export function useDashboard() {
   const { t } = useI18n(),
     toast = useToast(),
     auth = useAuthStore(),
+    app = useAppStore(),
     request = useLatestRequest()
   const loading = ref(true),
     error = ref<string | null>(null),
@@ -87,7 +94,9 @@ export function useDashboard() {
     share = ref<ModelShare[]>([]),
     flow = ref<FlowPoint[]>([]),
     tokenTrend = ref<TokenTrendPoint[]>([]),
-    flushIntervalMinutes = ref<number | null>(null)
+    flushIntervalMinutes = ref<number | null>(null),
+    // Set when the 30-day window exceeds the log limit; names that limit.
+    recentOutOfRange = ref<string | null>(null)
   // No public native endpoint exposes host metrics, account RPM limits or discounts.
   const system = ref<SystemMetrics | null>(null),
     limits = ref<UserLimits | null>(null),
@@ -100,16 +109,23 @@ export function useDashboard() {
     flow.value = []
     tokenTrend.value = []
     flushIntervalMinutes.value = null
-    const now = new Date(),
-      start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-      end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const result = await request.run((signal) =>
-      Promise.all([
-        getUsageSummary({ range: '30d' }, signal),
-        getUsageSummary({ range: 'custom', start, end }, signal),
-        getUsageSummary({ range: 'today' }, signal),
+    recentOutOfRange.value = null
+    const result = await request.run(async (signal) => {
+      const limit = logRangeLimit(app.status)
+      // No overview card shows deltas, so no window asks for a comparison.
+      // A window past the log limit is skipped rather than shortened; the
+      // today window and the balance do not depend on it.
+      const fitting = (range: SummaryRange) =>
+        summaryFits(range, limit, false)
+          ? getUsageSummary(range, false, signal)
+          : null
+      const [recent, month, today] = await Promise.all([
+        fitting({ range: '30d' }),
+        fitting(currentMonthRange()),
+        getUsageSummary({ range: 'today' }, false, signal),
       ])
-    )
+      return { limit, recent, month, today }
+    })
     if (result.stale) return
     loading.value = false
     if (!result.ok) {
@@ -120,8 +136,13 @@ export function useDashboard() {
       toast.error(error.value)
       return
     }
-    const [recent, month, today] = result.value
-    if ([recent, month, today].some((summary) => !summary.meta.available)) {
+    const { limit, recent, month, today } = result.value
+    // A skipped window is null and has no availability to report.
+    if (
+      [recent, month, today].some(
+        (summary) => summary?.meta.available === false
+      )
+    ) {
       error.value = t('dashboard.stats.unavailable')
       return
     }
@@ -130,11 +151,18 @@ export function useDashboard() {
       quota: String(auth.user.quota),
       used_quota: String(auth.user.used_quota),
       today_quota: today.kpi.totalQuota,
-      month_quota: month.kpi.totalQuota,
+      month_quota: month?.kpi.totalQuota,
       today_requests: today.kpi.totalRequests,
+      today_tokens: today.kpi.totalTokens,
       total_requests: auth.user.request_count,
-      month_quota_delta: month.comparison?.quotaDelta ?? null,
-      month_requests_delta: month.comparison?.requestsDelta ?? null,
+    }
+    // The flush interval is a server setting, the same in every window.
+    flushIntervalMinutes.value = today.meta.flush_interval_minutes
+    if (!recent) {
+      recentOutOfRange.value = t('dashboard.stats.recentOutOfRange', {
+        days: limit,
+      })
+      return
     }
     share.value = recent.models.map((row) => ({
       model: row.model,
@@ -145,7 +173,6 @@ export function useDashboard() {
     }))
     flow.value = recent.flow
     tokenTrend.value = recent.token_trend
-    flushIntervalMinutes.value = recent.meta.flush_interval_minutes
   }
   return {
     loading,
@@ -154,6 +181,7 @@ export function useDashboard() {
     flow,
     tokenTrend,
     flushIntervalMinutes,
+    recentOutOfRange,
     system,
     limits,
     discounts,

@@ -52,7 +52,7 @@ func manageUserQuota(c *gin.Context, req ManageRequest) {
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrAffiliateOperationConflict):
-			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			common.ApiErrorStatus(c, http.StatusConflict, err)
 			return
 		case errors.Is(err, model.ErrAffiliateOperation):
 			common.ApiError(c, err)

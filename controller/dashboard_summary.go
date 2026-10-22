@@ -20,16 +20,11 @@ func GetDashboardSummary(c *gin.Context) {
 		}
 		includeComparison = parsed
 	}
-	offset := 0
-	if value := c.Query("tz_offset"); value != "" {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("invalid tz_offset"))
-			return
-		}
-		offset = parsed
+	loc, ok := viewerLocation(c)
+	if !ok {
+		return
 	}
-	start, end, err := service.ParseDashboardRange(c.Query("range"), c.Query("start"), c.Query("end"), offset, time.Now())
+	start, end, err := service.ParseDashboardRange(c.Query("range"), c.Query("start"), c.Query("end"), loc, time.Now())
 	if err != nil {
 		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
@@ -39,21 +34,28 @@ func GetDashboardSummary(c *gin.Context) {
 	if includeComparison {
 		queryStart = start.Add(-end.Sub(start)).Unix()
 	}
-	bounded, err := limitLogTimeRange(queryStart, end.Unix()-1)
-	if err != nil {
+	// Only the error matters: a nonzero start comes back unchanged.
+	if _, err := limitLogTimeRange(queryStart, end.Unix()-1); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if bounded != queryStart {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("dashboard query exceeds the allowed log range"))
-		return
-	}
-	result, err := service.Dashboard(c.Request.Context(), c.GetInt("id"), start, end, offset, includeComparison)
+	result, err := service.Dashboard(c.Request.Context(), c.GetInt("id"), start, end, includeComparison)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, result)
+}
+
+// viewerLocation reads tz_offset for endpoints that bucket by the viewer's
+// calendar; it answers 400 itself when the value is invalid.
+func viewerLocation(c *gin.Context) (*time.Location, bool) {
+	loc, err := service.ParseViewerLocation(c.Query("tz_offset"))
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
+		return nil, false
+	}
+	return loc, true
 }
 
 func GetRoutingPerformance(c *gin.Context) { common.ApiSuccess(c, service.RoutingSnapshot()) }

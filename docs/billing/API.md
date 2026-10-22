@@ -19,7 +19,9 @@
 | `POST /api/option/model_pricing/{preview,convert}` | 草稿辅助操作，不创建请求预留 |
 | `GET /api/log/self`、`GET /api/log/` | 用户与管理员用量日志 |
 
-订单查询的 `keyword` 使用原生 `sanitizeLikePattern`：不带 `%` 时按订单号精确匹配；最多两个 `%`，不允许 `%%`。列表与统计共用同一套筛选和 30 天截止点，`total` 最多为 10000。`stats` 和 `ranking` 接受与列表相同的 `start_time`、`end_time`、`user_id`、`keyword`、`method`、`currency`。
+订单查询的 `keyword` 使用原生 `sanitizeLikePattern`：不带 `%` 时按订单号精确匹配；最多两个 `%`，不允许 `%%`。列表与统计共用同一套筛选，`total` 最多为 10000。30 天截止点只作用于本人查询 `/api/user/topup/self`；管理员列表、`stats` 和 `ranking`（包括带 `user_id` 的查询）与上游 `GetAllTopUps` 一致，未传 `start_time` 时不设下限。`stats` 和 `ranking` 接受与列表相同的 `start_time`、`end_time`、`user_id`、`keyword`、`method`、`currency`。`method` 按有效支付方式筛选：`payment_provider` 非空时取它，否则取 `payment_method`；不属于 `epay`、`gmpay`、`stripe`、`creem`、`waffo`、`waffo_pancake`、`balance` 的归为 `other`，`methods[]` 按同一规则分组。没有 provider 的遗留订单不按 `payment_method` 推断渠道。`method` 只接受上述值和 `other`，其余返回错误。
+
+`stats` 的 `daily`、`GET /api/user/affiliate` 的 `monthly_series` 和 `GET /api/data/self/summary` 的日界按 `tz_offset` 划分。参数沿用浏览器 `Date.getTimezoneOffset()` 约定：分钟数，UTC 以西为正，取值 -840 到 840；未传时按 UTC。非整数或超出范围返回 400 和 `message_key: "Invalid timezone offset"`，返利接口在解冻前拒绝。偏移在整个窗口内固定，窗口跨越夏令时切换时，切换后的日期或月份边界按切换前的偏移计算。
 
 支付回调入账前由 `settleTopUp` 统一核对已验签的实付金额和币种，金额按十进制值比较，订单没有冻结 Currency/PayAmount 时同样拒绝。不符时订单保持 pending，写 `payment.callback_rejected` 审计。Stripe、Creem、Waffo、Waffo Pancake 对这类永久错误返回不触发重试的响应；Epay 和 GMPay 沿用上游，入账失败一律回 `fail`，两者收到 success 才停止重投，失败留在商户后台可见，epusdt 的重投次数有上限（见 [GMPAY.md](GMPAY.md)），Epay 的重投上限由所接平台决定。验签失败保留上游的 4xx。已启用核对的渠道：Epay（`money`，CNY 元）、Stripe（`amount_subtotal`，不含折扣和税；Adaptive Pricing 取 `currency_conversion` 的原币金额）、GMPay（签名内的 `amount`）。Creem、Waffo、Waffo Pancake 的实付字段语义无法从代码和 SDK 确认，未启用核对，登记为待验证。数据库不可用等暂时性错误返回可重试的响应。
 

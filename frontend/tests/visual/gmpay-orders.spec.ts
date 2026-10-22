@@ -56,6 +56,7 @@ for (const theme of ['light', 'dark'] as const) {
             success: true,
             data: {
               ...order,
+              user_deleted: false,
               status: settled ? 'success' : 'pending',
               credited_quota: settled ? 5000000 : 0,
               complete_time: settled ? 1785114100 : 0,

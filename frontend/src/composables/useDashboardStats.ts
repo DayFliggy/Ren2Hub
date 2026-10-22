@@ -1,11 +1,18 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { getUsageSummary } from '@/api/dashboard'
+import {
+  getUsageSummary,
+  logRangeLimit,
+  SUMMARY_MAX_DAYS,
+  summaryFits,
+  type SummaryRange,
+} from '@/api/dashboard'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import type { FlowPoint } from '@/composables/useDashboard'
+import { useAppStore } from '@/stores/app'
 
 export type StatsRange = 'today' | '7d' | '30d' | 'custom'
 
@@ -50,6 +57,7 @@ export interface StatsPeriod {
 export function useDashboardStats() {
   const { t } = useI18n()
   const toast = useToast()
+  const app = useAppStore()
   const loading = ref(false)
   const range = ref<StatsRange>('30d')
   const customStart = ref<string>('')
@@ -58,22 +66,28 @@ export function useDashboardStats() {
   const error = ref<string | null>(null)
   const statsRequest = useLatestRequest()
 
+  function selectedRange(): SummaryRange {
+    if (range.value !== 'custom') return { range: range.value }
+    return { range: 'custom', start: customStart.value, end: customEnd.value }
+  }
+
   async function load() {
     loading.value = true
     error.value = null
     data.value = null
-    const params: Record<string, string> = {
-      range: range.value,
-    }
-    if (range.value === 'custom') {
-      params.start = customStart.value
-      params.end = customEnd.value
-    }
+    const request = selectedRange()
     // Serialized via useLatestRequest: rapid range switches abort the older
     // request, and a late response can never overwrite the newer period.
-    const result = await statsRequest.run((signal) =>
-      getUsageSummary(params, signal)
-    )
+    const result = await statsRequest.run((signal) => {
+      const limit = logRangeLimit(app.status)
+      if (!summaryFits(request, limit, false)) {
+        const days = Math.min(limit, SUMMARY_MAX_DAYS)
+        throw new ApiError(t('dashboard.stats.outOfRange', { days }))
+      }
+      // The prior window shares the log limit; drop it rather than the period.
+      const comparison = summaryFits(request, limit, true)
+      return getUsageSummary(request, comparison, signal)
+    })
     if (result.stale) return
     loading.value = false
     if (!result.ok) {

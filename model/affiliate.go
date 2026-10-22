@@ -13,12 +13,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// These sentinels reach the console, so they carry a message_key; errors.Is
+// still matches them by identity.
 var (
-	ErrAffiliateDisabled          = errors.New("referral program is disabled; remove the invitation code to register")
-	ErrAffiliateCodeInvalid       = errors.New("invitation code is invalid or disabled")
-	ErrAffiliateOperation         = errors.New("a valid operation_id is required")
-	ErrAffiliateOperationConflict = errors.New("operation_id was already used for a different request")
-	ErrAffiliateUnavailable       = errors.New("no available referral quota")
+	ErrAffiliateDisabled          = common.NewMessage("referral program is disabled; remove the invitation code to register")
+	ErrAffiliateCodeInvalid       = common.NewMessage("invitation code is invalid or disabled")
+	ErrAffiliateOperation         = common.NewMessage("a valid operation_id is required")
+	ErrAffiliateOperationConflict = common.NewMessage("operation_id was already used for a different request")
+	ErrAffiliateUnavailable       = common.NewMessage("no available referral quota")
 )
 var affiliateCodePattern = regexp.MustCompile(`^[A-Z0-9_-]{4,32}$`)
 var affiliateOperationPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,96}$`)

@@ -13,7 +13,8 @@ import { serverResponseMessage } from '@/i18n/serverMessages'
 export interface PayMethod {
   type: string
   name: string
-  min_topup?: string
+  /** Method minimum in recharge units; 0 adds none to the provider minimum. */
+  min_topup: number
 }
 export interface CreemProduct {
   productId: string
@@ -85,6 +86,18 @@ export function parseGmpayConfig(value: unknown): GmpayConfig {
     }),
   }
 }
+// PayMethods keeps min_topup as optional text: missing, blank and "0" add no
+// method minimum; any other value must be a whole number, as the settings
+// editor requires.
+function methodMinimum(value: unknown, endpoint: string): number {
+  if (value === undefined) return 0
+  const text = requiredString(value, endpoint).trim()
+  if (text === '') return 0
+  if (!/^[0-9]+$/.test(text)) invalidResponse(endpoint)
+  const minimum = Number(text)
+  if (!Number.isSafeInteger(minimum)) invalidResponse(endpoint)
+  return minimum
+}
 export function parseTopupInfo(value: unknown): TopupInfo {
   const endpoint = '/api/user/topup/info'
   if (
@@ -118,9 +131,7 @@ export function parseTopupInfo(value: unknown): TopupInfo {
     return {
       type: requiredString(raw.type, endpoint, false),
       name: requiredString(raw.name, endpoint, false),
-      ...(raw.min_topup === undefined
-        ? {}
-        : { min_topup: requiredString(raw.min_topup, endpoint) }),
+      min_topup: methodMinimum(raw.min_topup, endpoint),
     }
   })
   result.amount_options = value.amount_options.map((n) => {
@@ -195,7 +206,7 @@ export function enabledPayMethods(info: TopupInfo): PayMethod[] {
       : info[`enable_${provider}_topup` as keyof TopupInfo] === true
   })
   if (info.enable_creem_topup && !methods.some((m) => m.type === 'creem'))
-    methods.push({ type: 'creem', name: 'Creem' })
+    methods.push({ type: 'creem', name: 'Creem', min_topup: 0 })
   return methods
 }
 export async function paymentRequest<T>(
@@ -213,15 +224,24 @@ export async function paymentRequest<T>(
     (response.message !== 'success' && response.message !== 'error')
   )
     invalidResponse(path)
-  if (response.message === 'error' || response.success === false)
+  if (response.message === 'error' || response.success === false) {
+    // GMPay puts its order fields at the top level and the Pancake pair puts
+    // its failure inside data, so the two shapes cannot overlap.
+    const pairFailure = parseWaffoPancakePairFailure(response.data)
     throw new ApiError(
       serverResponseMessage(getLocale(), {
         ...response,
         message:
-          typeof response.data === 'string' ? response.data : response.message,
+          typeof response.data === 'string'
+            ? response.data
+            : (pairFailure?.error ?? response.message),
       }) || 'Payment failed',
-      { business: true, data: parseCreationFailure(response) }
+      {
+        business: true,
+        data: parseCreationFailure(response) ?? pairFailure,
+      }
     )
+  }
   if (
     !Object.hasOwn(response, 'data') ||
     (response.url !== undefined && typeof response.url !== 'string')
@@ -261,6 +281,32 @@ export function parseCreationFailure(
     ...(status === undefined
       ? {}
       : { creation_status: status as GmpayCreationStatus }),
+  }
+}
+
+/** controller/topup_waffo_pancake.go CreateWaffoPancakePair failure data. */
+export type WaffoPancakePairFailure =
+  | { error: string; orphan_store?: undefined }
+  | { error: string; orphan_store: true; store_id: string; store_name: string }
+export function parseWaffoPancakePairFailure(
+  value: unknown
+): WaffoPancakePairFailure | undefined {
+  if (!isRecord(value) || typeof value.error !== 'string' || !value.error)
+    return undefined
+  // A failure before the store exists carries only the reason.
+  if (value.orphan_store === undefined) return { error: value.error }
+  if (
+    value.orphan_store !== true ||
+    typeof value.store_id !== 'string' ||
+    !value.store_id ||
+    typeof value.store_name !== 'string'
+  )
+    return undefined
+  return {
+    error: value.error,
+    orphan_store: true,
+    store_id: value.store_id,
+    store_name: value.store_name,
   }
 }
 

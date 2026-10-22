@@ -9,6 +9,7 @@ import {
   vi,
 } from 'vitest'
 
+import ActionMenu from '@/components/common/ActionMenu.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
 import * as pluginApi from '../api'
@@ -132,6 +133,8 @@ describe('task plugin page', () => {
     )
     expect(wrapper!.text()).toContain('Plugin is still in use')
     expect(wrapper!.text()).toContain('#8 Shared gateway')
+    // With no in-flight task a disable is resolved by cascading, not forcing.
+    expect(button('Force operation')).toBeUndefined()
     await button('Cascade disable channels')!.trigger('click')
     await flushPromises()
     expect(pluginApi.setTaskPluginStatus).toHaveBeenLastCalledWith(
@@ -140,4 +143,43 @@ describe('task plugin page', () => {
       { cascade: true }
     )
   })
+
+  it.each([
+    [
+      'channels only',
+      {
+        channels: [{ id: 8, name: 'Shared gateway', type: 60 }],
+        in_flight_count: 0,
+      },
+    ],
+    ['in-flight tasks only', { channels: [], in_flight_count: 2 }],
+  ])(
+    'offers a forced delete when %s still use the version',
+    async (_, usage) => {
+      await mountPage()
+      vi.mocked(pluginApi.deleteTaskPluginVersion)
+        .mockRejectedValueOnce(
+          new pluginApi.TaskPluginUsageError('in use', usage)
+        )
+        .mockResolvedValue(null)
+      wrapper!.findComponent(ActionMenu).vm.$emit('select', 'delete')
+      await flushPromises()
+      await button('Delete')!.trigger('click')
+      await flushPromises()
+      expect(pluginApi.deleteTaskPluginVersion).toHaveBeenLastCalledWith(
+        'fixture',
+        '1.0.0',
+        false
+      )
+      expect(wrapper!.text()).toContain('Plugin is still in use')
+      await button('Force operation')!.trigger('click')
+      await flushPromises()
+      expect(pluginApi.deleteTaskPluginVersion).toHaveBeenLastCalledWith(
+        'fixture',
+        '1.0.0',
+        true
+      )
+      expect(wrapper!.text()).not.toContain('Plugin is still in use')
+    }
+  )
 })

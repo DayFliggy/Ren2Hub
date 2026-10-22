@@ -37,6 +37,13 @@ export const nativeTopUp = {
   credited_quota: 0,
   affiliate_base_quota: 5000000,
 }
+// model.TopUpDetail: the native row plus the owner fields; callers add gmpay.
+export const nativeTopUpDetail = {
+  ...nativeTopUp,
+  username: 'payer',
+  email: 'payer@example.test',
+  user_deleted: false,
+}
 export const nativeGmpayEvidence = {
   status: 'unknown',
   last_failure: 'TRANSPORT',

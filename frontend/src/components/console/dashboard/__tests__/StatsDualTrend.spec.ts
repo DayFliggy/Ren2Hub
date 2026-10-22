@@ -36,10 +36,10 @@ const flow: FlowPoint[] = [
 
 beforeAll(async () => {
   await loadMessageDomain('console')
-  setLocale('zh-CN')
+  await setLocale('zh-CN')
 })
 
-function render() {
+function render(overrides: Record<string, unknown> = {}) {
   return mount(StatsDualTrend, {
     props: {
       kpi: {
@@ -51,6 +51,7 @@ function render() {
       },
       comparison: { quotaDelta: 12.5, requestsDelta: -8 },
       flow,
+      ...overrides,
     },
     global: { plugins: [i18n] },
   })
@@ -64,6 +65,24 @@ describe('StatsDualTrend', () => {
     expect(wrapper.get('[data-trend-requests]').text()).toBe('30')
     expect(wrapper.get('[data-trend-spend-delta]').text()).toBe('↑12.5%')
     expect(wrapper.get('[data-trend-requests-delta]').text()).toBe('↓8%')
+    expect(wrapper.find('[data-trend-comparison-unavailable]').exists()).toBe(
+      false
+    )
+  })
+
+  it('says a skipped comparison is unavailable instead of hiding it', () => {
+    const wrapper = render({ comparison: null })
+    const notes = wrapper.findAll('[data-trend-comparison-unavailable]')
+
+    expect(notes.map((note) => note.text())).toEqual(['无法对比', '无法对比'])
+    expect(wrapper.find('[data-trend-spend-delta]').exists()).toBe(false)
+    // A zero baseline still compares; it only has no percentage.
+    const zeroBase = render({
+      comparison: { quotaDelta: null, requestsDelta: null },
+    })
+    expect(zeroBase.find('[data-trend-comparison-unavailable]').exists()).toBe(
+      false
+    )
   })
 
   it('switches between dual and single-axis chart modes', async () => {

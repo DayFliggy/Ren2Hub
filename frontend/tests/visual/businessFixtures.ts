@@ -50,7 +50,11 @@ export async function configureBusinessPage(page: Page, theme: VisualTheme) {
   return user
 }
 
-export async function configureNativeTickets(page: Page, theme: VisualTheme) {
+export async function configureNativeTickets(
+  page: Page,
+  theme: VisualTheme,
+  { userDeleted = false } = {}
+) {
   await configureBusinessPage(page, theme)
   const ticket = {
     id: 1,
@@ -92,6 +96,7 @@ export async function configureNativeTickets(page: Page, theme: VisualTheme) {
       username: 'visual.requester',
       display_name: 'Visual Requester',
     },
+    user_deleted: userDeleted,
   }
   const responses: Record<string, unknown> = {
     '/api/tickets': { items: [ticket], total: 1, page: 1, page_size: 10 },

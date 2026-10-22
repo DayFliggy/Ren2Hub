@@ -86,7 +86,7 @@ func verifyTopUpQueries(t *testing.T, db *gorm.DB) {
 		{UserID: second.Id, Username: second.Username, PaidCount: 1, CreditedQuota: 300},
 	}, ranking.Items)
 
-	stats, err := GetTopUpStatistics(TopUpFilter{})
+	stats, err := GetTopUpStatistics(TopUpFilter{}, time.UTC)
 	require.NoError(t, err)
 	assert.Equal(t, 4, stats.Total)
 	require.Len(t, stats.Currencies, 2)
@@ -98,4 +98,60 @@ func verifyTopUpQueries(t *testing.T, db *gorm.DB) {
 		require.NoError(t, err, keyword)
 		assert.Equal(t, want, total, keyword)
 	}
+	verifyTopUpMethodScope(t, db)
+}
+
+// verifyTopUpMethodScope 确认 SQL 筛选（topUpMethodScope）与 Go 归类（topUpEffectiveMethod）
+// 对同一批订单给出同一划分，包括两列为 NULL 或空串、未知 provider 覆盖已知 method 的情况。
+func verifyTopUpMethodScope(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	owner := User{Username: "topupq-methods", AffCode: "TOPUPQ-METHODS"}
+	require.NoError(t, db.Create(&owner).Error)
+	rows := []TopUp{
+		{TradeNo: "method-provider", PaymentProvider: PaymentProviderStripe, PaymentMethod: PaymentMethodStripe},
+		{TradeNo: "method-legacy-known", PaymentMethod: PaymentMethodStripe},
+		{TradeNo: "method-provider-wins", PaymentProvider: PaymentProviderEpay, PaymentMethod: "alipay"},
+		{TradeNo: "method-legacy-unknown", PaymentMethod: "alipay"},
+		{TradeNo: "method-unknown-provider", PaymentProvider: "paypal", PaymentMethod: PaymentMethodStripe},
+		{TradeNo: "method-empty"},
+		{TradeNo: "method-null-provider", PaymentMethod: PaymentMethodCreem},
+		{TradeNo: "method-null-both"},
+	}
+	for i := range rows {
+		rows[i].UserId, rows[i].CreateTime = owner.Id, common.GetTimestamp()
+		require.NoError(t, db.Create(&rows[i]).Error)
+	}
+	nullProvider := []string{"method-null-provider", "method-null-both"}
+	require.NoError(t, db.Model(&TopUp{}).Where("trade_no IN ?", nullProvider).Update("payment_provider", gorm.Expr("NULL")).Error)
+	require.NoError(t, db.Model(&TopUp{}).Where("trade_no = ?", "method-null-both").Update("payment_method", gorm.Expr("NULL")).Error)
+
+	want := map[string][]string{
+		PaymentProviderStripe: {"method-provider", "method-legacy-known"},
+		PaymentProviderEpay:   {"method-provider-wins"},
+		PaymentProviderCreem:  {"method-null-provider"},
+		TopUpMethodOther:      {"method-legacy-unknown", "method-unknown-provider", "method-empty", "method-null-both"},
+	}
+	page := &common.PageInfo{Page: 1, PageSize: 20}
+	for _, method := range append([]string{TopUpMethodOther}, topUpKnownMethods...) {
+		found, total, err := ListTopUps(TopUpFilter{UserID: owner.Id, Method: method}, page)
+		require.NoError(t, err, method)
+		got := make([]string, 0, len(found))
+		for _, row := range found {
+			assert.Equal(t, method, topUpEffectiveMethod(row.PaymentProvider, row.PaymentMethod), row.TradeNo)
+			got = append(got, row.TradeNo)
+		}
+		assert.ElementsMatch(t, want[method], got, method)
+		assert.EqualValues(t, len(want[method]), total, method)
+	}
+
+	stats, err := GetTopUpStatistics(TopUpFilter{UserID: owner.Id}, time.UTC)
+	require.NoError(t, err)
+	counts := map[string]int{}
+	for _, total := range stats.Methods {
+		counts[total.Method] += total.Count
+	}
+	assert.Equal(t, map[string]int{PaymentProviderStripe: 2, PaymentProviderEpay: 1, PaymentProviderCreem: 1, TopUpMethodOther: 4}, counts)
+
+	_, _, err = ListTopUps(TopUpFilter{Method: "alipay"}, page)
+	assert.Error(t, err, "a raw payment_method is not a filter value")
 }

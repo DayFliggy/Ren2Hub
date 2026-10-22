@@ -90,12 +90,9 @@ type dashboardWindow struct {
 	start, end int64
 }
 
-// ParseDashboardRange uses the browser's Date.getTimezoneOffset convention.
-func ParseDashboardRange(rangeName, startDate, endDate string, offset int, now time.Time) (time.Time, time.Time, error) {
-	if offset < -14*60 || offset > 14*60 {
-		return time.Time{}, time.Time{}, errors.New("invalid tz_offset")
-	}
-	loc := time.FixedZone("viewer", -offset*60)
+// ParseDashboardRange returns day boundaries in loc, the viewer location from
+// ParseViewerLocation.
+func ParseDashboardRange(rangeName, startDate, endDate string, loc *time.Location, now time.Time) (time.Time, time.Time, error) {
 	now = now.In(loc)
 	end := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 1)
 	start := end.AddDate(0, 0, -1)
@@ -127,8 +124,8 @@ func ParseDashboardRange(rangeName, startDate, endDate string, offset int, now t
 
 // Dashboard 的请求数、token 和额度来自 quota_data（与原生 /api/data/self 同源）；
 // 耗时和成功率只按本人日志计算，日志开关关闭时显式返回 null，不借用全站 perf_metrics。
-func Dashboard(ctx context.Context, userID int, start, end time.Time, offset int, includeComparison bool) (DashboardSummary, error) {
-	result := newDashboardSummary(start, end, offset, includeComparison)
+func Dashboard(ctx context.Context, userID int, start, end time.Time, includeComparison bool) (DashboardSummary, error) {
+	result := newDashboardSummary(start, end, includeComparison)
 	window := dashboardWindow{userID: userID, start: start.Unix(), end: end.Unix()}
 	if result.Meta.Available {
 		rows, err := model.ReadDashboardQuota(ctx, userID, window.start, window.end)
@@ -151,12 +148,12 @@ func Dashboard(ctx context.Context, userID int, start, end time.Time, offset int
 	return result, applyDashboardOutcome(ctx, &result, window)
 }
 
-func newDashboardSummary(start, end time.Time, offset int, includeComparison bool) DashboardSummary {
+func newDashboardSummary(start, end time.Time, includeComparison bool) DashboardSummary {
 	result := DashboardSummary{
 		Models: []DashboardModel{}, Hourly: []DashboardHour{}, Flow: []DashboardDay{},
 		TokenTrend: []DashboardTokenDay{}, Distribution: []DashboardDay{},
 		Meta: DashboardMeta{
-			Start: start.Unix(), End: end.Unix(), TZOffset: offset, GeneratedAt: time.Now().Unix(),
+			Start: start.Unix(), End: end.Unix(), TZOffset: viewerOffset(start), GeneratedAt: time.Now().Unix(),
 			Available: common.DataExportEnabled, Source: "quota_data",
 			BucketSeconds: dashboardBucketSeconds, FlushIntervalMinutes: common.DataExportInterval,
 			Coverage: DashboardCoverage{

@@ -435,17 +435,11 @@ export type TicketCategory = 'billing' | 'api' | 'model' | 'account' | 'other'
 
 export type TicketPriority = 'low' | 'normal' | 'high'
 
-export type TicketRole = 'user' | 'support' | 'system'
-
-// Which team a support reply comes from. Shown as the message author label;
-// user messages carry no department (their name is intentionally hidden).
-export type TicketDepartment = 'support' | 'tech' | 'finance' | 'legal'
+export type TicketRole = 'user' | 'support'
 
 export interface TicketMessage {
   id: number
   role: TicketRole
-  // Only meaningful when role === 'support'; falls back to 'support' (客服).
-  department?: TicketDepartment
   content: string
   images: string[]
   created: number
@@ -478,7 +472,9 @@ export interface AdminTicketItem extends Omit<TicketItem, 'messages'> {
   assignee_id: number | null
   assignee_name?: string
   assigned_at: number
+  // A soft-deleted requester keeps its name; a hard-deleted one only its id.
   user: TicketAgent
+  user_deleted: boolean
 }
 
 export interface TicketQueueSummary {

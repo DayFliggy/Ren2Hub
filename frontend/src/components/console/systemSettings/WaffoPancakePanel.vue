@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { paymentRequest } from '@/api/topup'
+import { parseWaffoPancakePairFailure, paymentRequest } from '@/api/topup'
 import { ApiError } from '@/api/types'
-import { isRecord } from '@/api/contracts'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
@@ -153,20 +152,24 @@ async function createPair() {
     form.productId = result.product_id
     toast.success(t('systemSettings.waffoPancake.paired'))
   } catch (error) {
-    if (
-      error instanceof ApiError &&
-      isRecord(error.data) &&
-      error.data.orphan_store === true &&
-      typeof error.data.store_id === 'string'
-    ) {
-      form.storeId = error.data.store_id
+    const failure =
+      error instanceof ApiError
+        ? parseWaffoPancakePairFailure(error.data)
+        : undefined
+    if (failure?.orphan_store) {
+      form.storeId = failure.store_id
       form.productId = ''
       toast.error(
         t('systemSettings.waffoPancake.orphanStore', {
-          id: error.data.store_id,
+          id: failure.store_id,
+          reason: failure.error,
         })
       )
-    } else toast.error(error instanceof Error ? error.message : String(error))
+    } else if (failure)
+      toast.error(
+        t('systemSettings.waffoPancake.pairFailed', { reason: failure.error })
+      )
+    else toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     creating.value = false
   }

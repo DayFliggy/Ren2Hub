@@ -69,7 +69,11 @@ func GetTopUpStatistics(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	result, err := model.GetTopUpStatistics(filter)
+	loc, ok := viewerLocation(c)
+	if !ok {
+		return
+	}
+	result, err := model.GetTopUpStatistics(filter, loc)
 	if err != nil {
 		common.ApiError(c, err)
 		return

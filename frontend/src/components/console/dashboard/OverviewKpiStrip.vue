@@ -38,12 +38,6 @@ function pointTotal(point: TokenTrendPoint): number {
   return point.total
 }
 
-/** All token classes billed today, from the last point of the trend series. */
-const todayTokens = computed(() => {
-  const point = props.tokenTrend?.at(-1)
-  return point ? pointTotal(point) : 0
-})
-
 /**
  * Minutes elapsed in the current day, floored at one hour: just after midnight
  * the true divisor is tiny and would send any per-minute rate through the roof.
@@ -55,8 +49,7 @@ function minutesElapsedToday(): number {
 
 /**
  * Tokens per minute for each day in the window. Past days divide by a full day;
- * today divides by the elapsed minutes, so the last point of the sparkline is
- * exactly the headline figure rather than a differently-derived number.
+ * today divides by the elapsed minutes, like the headline figure.
  */
 const tpmSeries = computed(() =>
   tokenWindow.value.map((point, i, all) => {
@@ -66,7 +59,11 @@ const tpmSeries = computed(() =>
   })
 )
 
-const avgTpm = computed(() => tpmSeries.value.at(-1) ?? 0)
+// Headlines read the today window, which loads even when the trend window
+// exceeds the log limit.
+const avgTpm = computed(() =>
+  props.stats ? Math.round(props.stats.today_tokens / minutesElapsedToday()) : 0
+)
 
 interface Cell {
   key: string
@@ -114,7 +111,7 @@ const cells = computed<Cell[]>(() => [
     key: 'tokens',
     label: t('dashboard.statTodayTokens'),
     icon: 'M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5',
-    value: props.stats ? formatCompact(todayTokens.value) : '—',
+    value: props.stats ? formatCompact(props.stats.today_tokens) : '—',
     color: 'var(--text-primary)',
     skeleton: 'w-20',
     series: tokenWindow.value.map(pointTotal),

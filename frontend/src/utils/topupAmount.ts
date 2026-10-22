@@ -21,7 +21,7 @@ export function topupInputAmounts(
   const provider = paymentProvider(method)
   // Waffo endpoints compare their configured minimum directly with the request;
   // EPay/GMPay and Stripe scale that minimum in token display mode.
-  const rawMinimum =
+  const providerMinimum =
     provider === 'stripe'
       ? info.stripe_min_topup
       : provider === 'waffo'
@@ -29,6 +29,11 @@ export function topupInputAmounts(
         : provider === 'waffo_pancake'
           ? info.waffo_pancake_min_topup
           : info.min_topup
+  // A method minimum only raises the floor in the console; the server checks
+  // the provider minimum alone, as upstream does.
+  const methodMinimum =
+    info.pay_methods.find((item) => item.type === method)?.min_topup ?? 0
+  const rawMinimum = Math.max(providerMinimum, methodMinimum)
   const serverMinimum = Math.max(
     1,
     rawMinimum *

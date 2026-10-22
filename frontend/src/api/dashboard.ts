@@ -8,6 +8,8 @@ import {
   requiredStrictNumber,
   requiredString,
 } from './contracts'
+import type { PublicStatus } from './public'
+import { dateInputValue, viewerTzOffset } from '@/utils/format'
 import type { StatsPeriod } from '@/composables/useDashboardStats'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
@@ -119,14 +121,67 @@ export function parseUsageSummary(value: unknown): UsageSummary {
     },
   }
 }
+/** A preset ending today, or inclusive local 'YYYY-MM-DD' dates. */
+export type SummaryRange =
+  | { range: 'today' | '7d' | '30d' }
+  | { range: 'custom'; start: string; end: string }
+
+const PRESET_DAYS = { today: 1, '7d': 7, '30d': 30 } as const
+/** ParseDashboardRange's own cap; it applies even when the log limit is higher. */
+export const SUMMARY_MAX_DAYS = 366
+
+// UTC day numbers keep every day 24 hours, like the backend's fixed offset.
+function dayNumber(key: string): number {
+  const [year, month, day] = key.split('-').map(Number)
+  return Date.UTC(year!, month! - 1, day!) / 86_400_000
+}
+
+/** The current calendar month up to today. */
+export function currentMonthRange(today = dateInputValue()): SummaryRange {
+  return { range: 'custom', start: `${today.slice(0, 8)}01`, end: today }
+}
+
+/** log_max_range_days from /api/status; the backend always sends it. */
+export function logRangeLimit(status: PublicStatus): number {
+  if (status.log_max_range_days === undefined) invalidResponse('/api/status')
+  return status.log_max_range_days
+}
+
+/**
+ * Mirrors GetDashboardSummary: the window spans at most 366 days, and its
+ * days up to today, plus the whole prior window when comparing, must fit
+ * log_max_range_days.
+ */
+export function summaryFits(
+  request: SummaryRange,
+  limit: number,
+  comparison: boolean,
+  today = dateInputValue()
+): boolean {
+  const now = dayNumber(today)
+  const [first, last] =
+    request.range === 'custom'
+      ? [dayNumber(request.start), dayNumber(request.end)]
+      : [now - PRESET_DAYS[request.range] + 1, now]
+  const days = last - first + 1
+  const logged = Math.min(last, now) - first + 1
+  return days <= SUMMARY_MAX_DAYS && logged + (comparison ? days : 0) <= limit
+}
+
+/** include_comparison is always explicit; the backend default would compare. */
 export async function getUsageSummary(
-  params: Record<string, string> = { range: '30d' },
+  request: SummaryRange,
+  includeComparison: boolean,
   signal?: AbortSignal
 ) {
   return parseUsageSummary(
     await api.get(
       endpoint,
-      { tz_offset: String(new Date().getTimezoneOffset()), ...params },
+      {
+        tz_offset: viewerTzOffset(),
+        ...request,
+        include_comparison: String(includeComparison),
+      },
       { signal }
     )
   )

@@ -6,6 +6,8 @@ import { useUsageDistribution } from '@/composables/useUsageDistribution'
 import { dashboardFixture } from '@/api/__tests__/dashboardFixture'
 import i18n from '@/i18n'
 vi.mock('@/api/client', () => ({ api: { get: vi.fn() } }))
+const app = vi.hoisted(() => ({ status: { log_max_range_days: 365 } }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => app }))
 let wrapper: VueWrapper | undefined
 function setupDistribution() {
   let state!: ReturnType<typeof useUsageDistribution>
@@ -24,6 +26,7 @@ afterEach(() => {
   wrapper?.unmount()
   vi.resetAllMocks()
   vi.useRealTimers()
+  app.status.log_max_range_days = 365
 })
 describe('native usage distribution', () => {
   it('requests the displayed rolling year across January and maps native data', async () => {
@@ -50,6 +53,25 @@ describe('native usage distribution', () => {
       tokens: 10,
       requests: 2,
     })
+    expect(state.coveredFrom.value).toBe('2025-01-04')
+  })
+  it('queries only the days a shorter log limit allows and reports that start', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 0, 2, 12))
+    app.status.log_max_range_days = 30
+    vi.mocked(api.get).mockResolvedValue(dashboardFixture())
+    const state = setupDistribution()
+    await state.load()
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/data/self/summary',
+      expect.objectContaining({
+        start: '2025-12-04',
+        end: '2026-01-02',
+        include_comparison: 'false',
+      }),
+      { signal: expect.any(AbortSignal) }
+    )
+    expect(state.coveredFrom.value).toBe('2025-12-04')
   })
   it('clears the heatmap and exposes an error when measurements are unavailable', async () => {
     const input = dashboardFixture()

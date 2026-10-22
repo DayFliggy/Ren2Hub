@@ -15,6 +15,10 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
+import {
+  collectExportPages,
+  type CollectedExport,
+} from '@/utils/collectExportPages'
 import type {
   AdminRedemptionCode,
   AdminRedemptionCreateInput,
@@ -72,6 +76,39 @@ export function projectRedemption(value: unknown): AdminRedemptionCode {
     used_time: raw.redeemed_time,
     expired_time: raw.expired_time === 0 ? -1 : raw.expired_time,
   }
+}
+
+// The native list caps page_size at 100.
+const EXPORT_PAGE_SIZE = 100
+export const REDEMPTION_EXPORT_MAX_ROWS = 10_000
+const STATUS_QUERY: Record<string, string | number> = {
+  unused: 1,
+  used: 3,
+  disabled: 2,
+  expired: 'expired',
+}
+
+interface RedemptionQuery {
+  url: '/api/redemption/' | '/api/redemption/search'
+  params: Record<string, string | number | undefined>
+}
+
+async function fetchRedemptionPage(
+  query: RedemptionQuery,
+  p: number,
+  pageSize: number,
+  signal: AbortSignal
+): Promise<{ items: AdminRedemptionCode[]; total: number }> {
+  const { url } = query
+  const value = await api.get<unknown>(
+    url,
+    { ...query.params, p, page_size: pageSize },
+    { signal }
+  )
+  if (!isRecord(value) || !Array.isArray(value.items)) invalidResponse(url)
+  const total = requiredStrictInteger(value.total, url)
+  if (total < 0) invalidResponse(url)
+  return { items: value.items.map(projectRedemption), total }
 }
 
 type RedemptionRowAction = 'status'
@@ -145,43 +182,43 @@ export function useAdminRedemption() {
     return bulkAction.value === action
   }
 
+  function listQuery(): RedemptionQuery {
+    const trimmed = keyword.value.trim()
+    return {
+      url:
+        trimmed || statusFilter.value
+          ? '/api/redemption/search'
+          : '/api/redemption/',
+      params: {
+        keyword: trimmed || undefined,
+        status: STATUS_QUERY[statusFilter.value],
+        sort_by: sortBy.value,
+        sort_order: sortOrder.value,
+      },
+    }
+  }
+
+  /** Exports every page for the filters and sort in effect when it starts. */
+  function fetchAllForExport(
+    signal: AbortSignal
+  ): Promise<CollectedExport<AdminRedemptionCode>> {
+    const query = listQuery()
+    return collectExportPages(
+      (p) => fetchRedemptionPage(query, p, EXPORT_PAGE_SIZE, signal),
+      EXPORT_PAGE_SIZE,
+      REDEMPTION_EXPORT_MAX_ROWS
+    )
+  }
+
   async function load(opts: { background?: boolean } = {}): Promise<void> {
     const background = opts.background === true && rows.value.length > 0
     if (background) refreshing.value = true
     else loading.value = true
     if (rows.value.length === 0) initialError.value = ''
 
-    const trimmed = keyword.value.trim()
-    const url =
-      trimmed || statusFilter.value
-        ? '/api/redemption/search'
-        : '/api/redemption/'
+    const query = listQuery()
     const result = await listRequest.run((signal) =>
-      api
-        .get<unknown>(
-          url,
-          {
-            keyword: trimmed || undefined,
-            status: (
-              { unused: 1, used: 3, disabled: 2, expired: 'expired' } as Record<
-                string,
-                string | number
-              >
-            )[statusFilter.value],
-            p: page.value,
-            page_size: pageSize.value,
-            sort_by: sortBy.value,
-            sort_order: sortOrder.value,
-          },
-          { signal }
-        )
-        .then((value) => {
-          if (!isRecord(value) || !Array.isArray(value.items))
-            invalidResponse(url)
-          const total = requiredStrictInteger(value.total, url)
-          if (total < 0) invalidResponse(url)
-          return { items: value.items.map(projectRedemption), total }
-        })
+      fetchRedemptionPage(query, page.value, pageSize.value, signal)
     )
     if (result.stale) return
 
@@ -347,6 +384,7 @@ export function useAdminRedemption() {
     canMutate,
     canManage,
     load,
+    fetchAllForExport,
     isBusy,
     isRowBusy,
     isCrudActionBusy,

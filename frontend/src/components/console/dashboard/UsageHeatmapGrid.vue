@@ -135,7 +135,23 @@ function denseWeekdayLabel(index: number): string {
   return index % 2 === 0 ? weekdays.value[index]! : ''
 }
 
+// Days before the log range limit were never queried, so they show no level.
+function cellStyle(cell: UsageHeatmapCell): CSSProperties {
+  if (cell.covered) return usageHeatStyle(cell.level, props.metricColor)
+  return {
+    background: 'transparent',
+    borderColor: 'var(--border-subtle)',
+    borderStyle: 'dashed',
+    color: 'var(--text-tertiary)',
+  }
+}
+
 function cellLabel(cell: UsageHeatmapCell): string {
+  if (!cell.covered) {
+    return t('dashboard.distribution.cellUncovered', {
+      date: formatUsageDate(cell.date, locale.value),
+    })
+  }
   return t('dashboard.distribution.cellLabel', {
     date: formatUsageDate(cell.date, locale.value),
     metric: props.metricLabel,
@@ -278,10 +294,7 @@ onMounted(() => void alignLatest())
           :key="cell.date"
           type="button"
           class="usage-month-cell focus-ring"
-          :style="[
-            usageHeatStyle(cell.level, metricColor),
-            { gridColumn: column, gridRow: row },
-          ]"
+          :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
           :tabindex="focusDate === cell.date ? 0 : -1"
           :aria-label="cellLabel(cell)"
           :aria-describedby="
@@ -289,6 +302,7 @@ onMounted(() => void alignLatest())
           "
           :data-usage-date="cell.date"
           :data-usage-level="cell.level"
+          :data-usage-uncovered="!cell.covered || undefined"
           @focus="onCellSelect($event, cell)"
           @click="onCellSelect($event, cell)"
           @blur="hideTooltip(cell.date)"
@@ -359,7 +373,7 @@ onMounted(() => void alignLatest())
                   type="button"
                   class="usage-dense-cell focus-ring"
                   :style="[
-                    usageHeatStyle(cell.level, metricColor),
+                    cellStyle(cell),
                     { gridColumn: column, gridRow: row },
                   ]"
                   :tabindex="focusDate === cell.date ? 0 : -1"
@@ -369,6 +383,7 @@ onMounted(() => void alignLatest())
                   "
                   :data-usage-date="cell.date"
                   :data-usage-level="cell.level"
+                  :data-usage-uncovered="!cell.covered || undefined"
                   @focus="onCellSelect($event, cell)"
                   @click="onCellSelect($event, cell)"
                   @blur="hideTooltip(cell.date)"
