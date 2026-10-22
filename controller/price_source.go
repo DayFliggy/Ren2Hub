@@ -12,8 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetPriceSources(c *gin.Context) { common.ApiSuccess(c, pricesource.Sources()) }
-
 // FetchUpstreamRatios 的本地钩子。请求不带 upstreams 和 channel_ids 时，按
 // source_ids 返回 sub2api/axonhub 价格草稿并返回 true；否则恢复请求体并返回
 // false，由原生 ratio_sync 流程继续绑定和处理（含 basellm、models.dev、

@@ -1,0 +1,34 @@
+{
+  "data": [
+    {
+      "base_url": "https://api.openai.com",
+      "id": 2,
+      "name": "contract-openai",
+      "status": 1,
+      "type": 1
+    },
+    {
+      "base_url": "https://openrouter.ai/api",
+      "id": 1,
+      "name": "contract-openrouter",
+      "status": 1,
+      "type": 20
+    },
+    {
+      "base_url": "https://basellm.github.io",
+      "id": -100,
+      "name": "官方倍率预设",
+      "status": 1,
+      "type": 0
+    },
+    {
+      "base_url": "https://models.dev",
+      "id": -101,
+      "name": "models.dev 价格预设",
+      "status": 1,
+      "type": 0
+    }
+  ],
+  "message": "",
+  "success": true
+}

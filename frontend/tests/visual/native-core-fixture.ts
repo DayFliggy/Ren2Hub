@@ -11,6 +11,42 @@ export function nativeFixture<T = Record<string, unknown>>(name: string): T {
   const url = new URL(`../fixtures/native/${name}`, import.meta.url)
   return JSON.parse(readFileSync(url, 'utf8')) as T
 }
+const PRICE_DIGEST = 'a'.repeat(64)
+// One fixed price source as service.PriceSourceDraft serializes it. The real
+// fetch returns only sub2api and axonhub; a failed download has no fingerprint.
+export function nativePriceSource(
+  overrides: Record<string, unknown> & { id: 'sub2api' | 'axonhub' }
+) {
+  return {
+    name: overrides.id === 'sub2api' ? 'Sub2API' : 'AxonHub',
+    status: 'success',
+    fingerprint:
+      overrides.status === 'error'
+        ? null
+        : {
+            sha256: PRICE_DIGEST,
+            published_sha256: PRICE_DIGEST,
+            matches: true,
+          },
+    models: [],
+    warnings: [],
+    errors: [],
+    ...overrides,
+  }
+}
+// The price fetch dialog loads the fixed sources and the syncable channels
+// together; the channel list is generated from the real handler.
+export async function mockPriceFetch(
+  page: Page,
+  sources: ReturnType<typeof nativePriceSource>[]
+) {
+  await page.route('**/api/ratio_sync/channels', (route) =>
+    route.fulfill({ json: nativeFixture('ratio-sync-channels.get.json') })
+  )
+  await page.route('**/api/ratio_sync/fetch', (route) =>
+    route.fulfill({ json: { success: true, data: { sources } } })
+  )
+}
 export interface NativeFixtureOptions {
   locale?: string
   authenticated?: boolean

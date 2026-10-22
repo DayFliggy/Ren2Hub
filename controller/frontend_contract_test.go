@@ -244,3 +244,31 @@ func TestFrontendContractVertexChannelUpdate(t *testing.T) {
 	assert.Equal(t, "1", current.ChannelRatio)
 	assert.Equal(t, `{"vertex_key_type":"json"}`, current.OtherSettings)
 }
+
+// The price fetch dialog lists the native presets and OpenRouter channels from
+// this response; other channels are listed by the backend but not synced.
+func TestFrontendContractSyncableChannels(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	for _, seed := range []struct {
+		kind    int
+		name    string
+		baseURL string
+	}{
+		{constant.ChannelTypeOpenRouter, "contract-openrouter", "https://openrouter.ai/api"},
+		{constant.ChannelTypeOpenAI, "contract-openai", "https://api.openai.com"},
+	} {
+		baseURL, priority, weight := seed.baseURL, int64(0), uint(0)
+		channel := model.Channel{
+			Type: seed.kind, Name: seed.name, Key: "sk-contract", Models: "gpt-4o",
+			BaseURL: &baseURL, Priority: &priority, Weight: &weight, Status: common.ChannelStatusEnabled,
+		}
+		require.NoError(t, channel.Insert())
+	}
+	engine := contractEngine(1, common.RoleRootUser)
+	engine.GET("/api/ratio_sync/channels", GetSyncableChannels)
+	recorder := contractRequest(t, engine, http.MethodGet, "/api/ratio_sync/channels", nil)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	body := decodeContractBody(t, recorder)
+	require.Equal(t, true, body["success"])
+	frontendFixture(t, "ratio-sync-channels.get.json", body)
+}

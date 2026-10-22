@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
+import { mockPriceFetch, nativePriceSource } from './native-core-fixture'
 import { PRICING_KEYS } from '../../src/api/pricingKeys'
 
 const channel = {
@@ -162,30 +163,18 @@ for (const theme of ['light', 'dark'] as const)
           })
         }
       )
-      await page.route('**/api/ratio_sync/fetch', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              sources: [
-                {
-                  id: 'sub2api',
-                  name: 'Sub2API',
-                  status: 'success',
-                  errors: [],
-                  models: [
-                    {
-                      model_name: 'precise-model',
-                      provider: 'fixture',
-                      pricing: candidate,
-                    },
-                  ],
-                },
-              ],
+      await mockPriceFetch(page, [
+        nativePriceSource({
+          id: 'sub2api',
+          models: [
+            {
+              model_name: 'precise-model',
+              provider: 'fixture',
+              pricing: candidate,
             },
-          },
-        })
-      )
+          ],
+        }),
+      ])
       await page.goto('/models/pricing')
       await page.getByRole('button', { name: '自动获取', exact: true }).click()
       const dialog = page.getByRole('dialog')
