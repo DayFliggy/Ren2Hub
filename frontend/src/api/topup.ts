@@ -13,7 +13,8 @@ import { serverResponseMessage } from '@/i18n/serverMessages'
 export interface PayMethod {
   type: string
   name: string
-  min_topup?: string
+  /** Method minimum in recharge units; 0 adds none to the provider minimum. */
+  min_topup: number
 }
 export interface CreemProduct {
   productId: string
@@ -85,6 +86,18 @@ export function parseGmpayConfig(value: unknown): GmpayConfig {
     }),
   }
 }
+// PayMethods keeps min_topup as optional text: missing, blank and "0" add no
+// method minimum; any other value must be a whole number, as the settings
+// editor requires.
+function methodMinimum(value: unknown, endpoint: string): number {
+  if (value === undefined) return 0
+  const text = requiredString(value, endpoint).trim()
+  if (text === '') return 0
+  if (!/^[0-9]+$/.test(text)) invalidResponse(endpoint)
+  const minimum = Number(text)
+  if (!Number.isSafeInteger(minimum)) invalidResponse(endpoint)
+  return minimum
+}
 export function parseTopupInfo(value: unknown): TopupInfo {
   const endpoint = '/api/user/topup/info'
   if (
@@ -118,9 +131,7 @@ export function parseTopupInfo(value: unknown): TopupInfo {
     return {
       type: requiredString(raw.type, endpoint, false),
       name: requiredString(raw.name, endpoint, false),
-      ...(raw.min_topup === undefined
-        ? {}
-        : { min_topup: requiredString(raw.min_topup, endpoint) }),
+      min_topup: methodMinimum(raw.min_topup, endpoint),
     }
   })
   result.amount_options = value.amount_options.map((n) => {
@@ -195,7 +206,7 @@ export function enabledPayMethods(info: TopupInfo): PayMethod[] {
       : info[`enable_${provider}_topup` as keyof TopupInfo] === true
   })
   if (info.enable_creem_topup && !methods.some((m) => m.type === 'creem'))
-    methods.push({ type: 'creem', name: 'Creem' })
+    methods.push({ type: 'creem', name: 'Creem', min_topup: 0 })
   return methods
 }
 export async function paymentRequest<T>(

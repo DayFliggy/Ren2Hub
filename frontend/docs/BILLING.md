@@ -29,7 +29,7 @@
 
 ## 在线充值与 GMPay
 
-先读取 `GET /api/user/topup/info` 的开关、`pay_methods`、最低充值额、预设金额及折扣，只显示服务端启用的方法。EPay 与 GMPay 均通过 `POST /api/user/amount` 获取原生金额。`amount` 为整数，GMPay 方法必须保留完整标识，例如 `gmpay:usdt.tron`。
+先读取 `GET /api/user/topup/info` 的开关、`pay_methods`、最低充值额、预设金额及折扣，只显示服务端启用的方法。选中方式的最低额取全局或渠道最低额与该方式 `min_topup` 中的较大值；`min_topup` 缺失、空串或 `"0"` 表示该方式没有额外下限，其他非整数值视为无效响应。方式级下限只在控制台生效，服务端与上游一样只校验全局或渠道最低额。EPay 与 GMPay 均通过 `POST /api/user/amount` 获取原生金额。`amount` 为整数，GMPay 方法必须保留完整标识，例如 `gmpay:usdt.tron`。
 
 普通金额展示模式按原生充值单位提交；TOKENS 模式按 `quota_per_unit` 换算最低额和预设值，并限制为完整充值单位，避免付款数额与原生截断后的到账 quota 不一致。报价是当前配置计算结果，不是冻结报价令牌；创建时服务端再次计算和校验。请求不携带旧报价指纹、账户版本或 `amount_unit`。
 
