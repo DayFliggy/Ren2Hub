@@ -35,6 +35,11 @@ const promotion: AdminUserUpdateInput = {
   max_concurrency: 0,
 }
 
+// The role write can commit before a later step fails, so the message must not
+// claim either outcome.
+const roleRequestFailed = (message: string) =>
+  `Profile saved. The role change request returned an error (${message}); check the role in the refreshed list.`
+
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('en')
@@ -85,7 +90,7 @@ it('reports a saved profile whose role change failed and reloads the list', asyn
   expect(await state.updateUserDetails(member, promotion)).toBe(true)
   expect(mocks.put).toHaveBeenCalledOnce()
   expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
-    'Profile saved; role not changed: Role change rejected'
+    roleRequestFailed('Role change rejected')
   )
   expect(mocks.get).toHaveBeenCalledOnce()
   expect(state.busy.value).toBe(false)
@@ -101,7 +106,7 @@ it('keeps the saved profile when the role verification is cancelled', async () =
   expect(await state.updateUserDetails(member, promotion)).toBe(true)
   expect(mocks.post).not.toHaveBeenCalled()
   expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
-    'Profile saved; role not changed: Cancelled'
+    roleRequestFailed('Cancelled')
   )
   expect(mocks.get).toHaveBeenCalledOnce()
   wrapper.unmount()
@@ -128,5 +133,52 @@ it('saves profile and role together with one reload and no error', async () => {
   )
   expect(mocks.error).not.toHaveBeenCalled()
   expect(mocks.get).toHaveBeenCalledOnce()
+  wrapper.unmount()
+})
+
+it('stays neutral when the demotion committed but a later step rejected', async () => {
+  const admin = { ...member, role: 10 } as AdminUser
+  const { wrapper, state } = await setup()
+  // controller/user.go commits the role, then ReloadPolicy, PublishUserAuthCache
+  // or RevokeAllUserSessions can still fail the request.
+  mocks.post.mockRejectedValue(
+    new ApiError('Failed to revoke sessions', { status: 500 })
+  )
+  mocks.get.mockResolvedValue({
+    items: [
+      {
+        ...member,
+        display_name: 'Renamed',
+        email: '',
+        quota: 0,
+        used_quota: 0,
+        request_count: 0,
+        max_concurrency: 0,
+        aff_count: 0,
+        aff_quota: 0,
+        aff_history_quota: 0,
+        aff_frozen_quota: 0,
+        inviter_id: 0,
+        created_at: 1,
+        last_login_at: 0,
+        DeletedAt: null,
+      },
+    ],
+    total: 1,
+  })
+  expect(await state.updateUserDetails(admin, { ...promotion, role: 1 })).toBe(
+    true
+  )
+  expect(mocks.post).toHaveBeenCalledWith(
+    '/api/user/manage',
+    { id: 2, action: 'demote' },
+    { headers: { 'X-Security-Proof': 'proof' } }
+  )
+  expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+    roleRequestFailed('Failed to revoke sessions')
+  )
+  // The reload shows the committed role, which the message points to.
+  expect(mocks.get).toHaveBeenCalledOnce()
+  expect(state.rows.value.map((user) => user.role)).toEqual([1])
   wrapper.unmount()
 })

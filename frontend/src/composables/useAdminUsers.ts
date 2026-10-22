@@ -152,8 +152,9 @@ export function useAdminUsers(
   }
   /**
    * Profile and role are two native writes; upstream keeps the role on its own
-   * row action. Once the profile PUT succeeds the save is reported as done, a
-   * failed role step is reported separately, and the list reloads either way.
+   * row action. Once the profile PUT succeeds the save is reported as done and
+   * the list reloads either way. A role request error is reported without
+   * claiming the outcome: the backend can commit the role and then fail.
    */
   async function updateUserDetails(
     user: AdminUser,

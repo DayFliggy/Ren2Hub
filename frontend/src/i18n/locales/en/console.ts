@@ -1614,7 +1614,8 @@ export default {
     bulkProofNotice:
       'Each user needs a separate security verification: {count} in total.',
     bulkStopped: 'Processed {done}/{total} users; {name} failed: {message}',
-    profileSavedRoleFailed: 'Profile saved; role not changed: {message}',
+    profileSavedRoleFailed:
+      'Profile saved. The role change request returned an error ({message}); check the role in the refreshed list.',
   },
 
   redemption: {
