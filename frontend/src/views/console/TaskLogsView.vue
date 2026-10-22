@@ -13,9 +13,6 @@ import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import FilterSelect, {
-  type SelectOption,
-} from '@/components/common/FilterSelect.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
@@ -59,15 +56,6 @@ const endDate = ref('')
 
 const failureRow = ref<RelayTaskLogItem | null>(null)
 
-// The backend accepts any value, so an unlisted platform still renders via fallbacks.
-const platformOptions = computed<SelectOption[]>(() => [
-  { value: 'suno', label: 'suno' },
-  { value: 'kling', label: 'kling' },
-  { value: 'runway', label: 'runway' },
-  { value: 'luma', label: 'luma' },
-  { value: 'viggle', label: 'viggle' },
-])
-
 const columns = computed<TableColumn[]>(() => [
   { key: 'submitted', label: t('relayLogs.colSubmitted'), width: '170px' },
   { key: 'task', label: t('relayLogs.colTask'), width: '210px' },
@@ -95,7 +83,9 @@ function currentParams() {
     p: page.value,
     page_size: pageSize.value,
     task_id: taskId.value.trim(),
-    platform: platform.value,
+    // Stored platforms are task plugin keys or channel type numbers, so the
+    // filter is free text matched exactly; an empty one is omitted.
+    platform: platform.value.trim() || undefined,
     start_timestamp: startTimestamp,
     end_timestamp: endTimestamp,
   }
@@ -131,11 +121,11 @@ function reload() {
   if (page.value === 1) load()
   else page.value = 1
 }
-watch(taskId, () => {
+watch([taskId, platform], () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
-watch([platform, startDate, endDate], reload)
+watch([startDate, endDate], reload)
 watch(pageSize, reload)
 watch(page, load)
 onMounted(load)
@@ -171,13 +161,12 @@ function formatDuration(row: RelayTaskLogItem): string {
         name="task-log-search"
         class="w-full sm:w-64"
       />
-      <FilterSelect
+      <SearchInput
         v-model="platform"
-        :options="platformOptions"
-        :label="t('relayLogs.platformLabel')"
-        :placeholder="t('relayLogs.platformAll')"
-        :prefix-label="t('relayLogs.platformLabel') + ':'"
-        class="w-full sm:w-48"
+        :placeholder="t('relayLogs.platformPlaceholder')"
+        :aria-label="t('relayLogs.platformLabel')"
+        name="task-log-platform"
+        class="w-full sm:w-56"
       />
       <DateRangePicker
         v-model:start="startDate"

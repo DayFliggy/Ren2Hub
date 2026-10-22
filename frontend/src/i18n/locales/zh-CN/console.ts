@@ -1875,7 +1875,7 @@ export default {
     tasksBreadcrumb: '任务日志',
     taskIdPlaceholder: '按任务 ID 搜索…',
     platformLabel: '平台',
-    platformAll: '全部平台',
+    platformPlaceholder: '按平台筛选，如 sunoapi 或渠道类型编号',
     colSubmitted: '提交时间 / 状态',
     colTask: '类型 / 任务 ID',
     colPrompt: '提示词',

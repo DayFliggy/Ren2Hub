@@ -1939,7 +1939,7 @@ export default {
     tasksBreadcrumb: 'Task logs',
     taskIdPlaceholder: 'Search by task ID…',
     platformLabel: 'Platform',
-    platformAll: 'All platforms',
+    platformPlaceholder: 'Platform, e.g. sunoapi or a channel type number',
     colSubmitted: 'Submitted / Status',
     colTask: 'Type / Task ID',
     colPrompt: 'Prompt',

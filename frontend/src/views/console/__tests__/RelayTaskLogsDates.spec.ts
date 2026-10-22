@@ -104,3 +104,33 @@ describe('relay task log date filters', () => {
     expect(lastParams(get).end_timestamp).toBe(Math.floor(OCT_2_END_MS / 1000))
   })
 })
+
+describe('task log platform filter', () => {
+  async function typePlatform(value: string) {
+    await wrapper!.find('input[name="task-log-platform"]').setValue(value)
+    vi.advanceTimersByTime(300)
+    await flushPromises()
+  }
+
+  it('sends the typed platform trimmed and exact, and omits an empty one', async () => {
+    vi.useFakeTimers()
+    try {
+      const get = await mountWithDates(TaskLogsView, '/api/task/self')
+      // Axios drops undefined params, so no platform is sent.
+      expect(lastParams(get).platform).toBeUndefined()
+
+      // A task plugin key and a channel type number are both stored values.
+      await typePlatform(' sunoapi ')
+      expect(lastParams(get).platform).toBe('sunoapi')
+      await typePlatform('45')
+      expect(lastParams(get).platform).toBe('45')
+      await typePlatform('Kling')
+      expect(lastParams(get).platform).toBe('Kling')
+
+      await typePlatform('  ')
+      expect(lastParams(get).platform).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
