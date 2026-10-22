@@ -115,6 +115,15 @@ describe('local calendar day bounds', () => {
     expect(dayLength('2026-03-08')).toBe(23 * 3_600_000)
   })
 
+  it('ends a day whose midnight is skipped at that day, not an hour later', () => {
+    // Chile starts daylight saving at 00:00 on 2026-09-06, so that day begins at 01:00.
+    vi.stubEnv('TZ', 'America/Santiago')
+    expect(localDayEndMs('2026-09-06')).toBe(1788749999999)
+    expect(
+      localDayEndMs('2026-09-06') - localDayStartMs('2026-09-06') + 1
+    ).toBe(23 * 3_600_000)
+  })
+
   it('rejects anything but a real YYYY-MM-DD date', () => {
     for (const value of ['', '2026-1-01', '2026-02-30', '2026-10-01T00:00']) {
       expect(() => localDayStartMs(value)).toThrow()

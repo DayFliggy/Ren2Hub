@@ -98,7 +98,8 @@ export function dateInputValue(offsetDays = 0): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-function parseLocalDay(value: string): Date {
+/** Validated [year, monthIndex, day] of a strict 'YYYY-MM-DD' value. */
+function parseLocalDay(value: string): [number, number, number] {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
   if (match) {
     const [year, month, day] = match.slice(1).map(Number)
@@ -108,25 +109,26 @@ function parseLocalDay(value: string): Date {
       date.getMonth() === month - 1 &&
       date.getDate() === day
     ) {
-      return date
+      return [year, month - 1, day]
     }
   }
   throw new Error(`Invalid local date: ${value}`)
 }
 
-/** Epoch milliseconds of local midnight that starts a 'YYYY-MM-DD' day. */
+/** Epoch milliseconds of the first local moment of a 'YYYY-MM-DD' day. */
 export function localDayStartMs(value: string): number {
-  return parseLocalDay(value).getTime()
+  const [year, month, day] = parseLocalDay(value)
+  return new Date(year, month, day).getTime()
 }
 
 /**
- * Epoch milliseconds of the last moment of a local 'YYYY-MM-DD' day. Using the
- * next local midnight keeps 23- and 25-hour daylight-saving days exact.
+ * Epoch milliseconds of the last moment of a local 'YYYY-MM-DD' day. The next
+ * day is built from calendar fields rather than by adding to a Date, so a
+ * daylight-saving jump at midnight cannot carry its shifted hour forward.
  */
 export function localDayEndMs(value: string): number {
-  const next = parseLocalDay(value)
-  next.setDate(next.getDate() + 1)
-  return next.getTime() - 1
+  const [year, month, day] = parseLocalDay(value)
+  return new Date(year, month, day + 1).getTime() - 1
 }
 
 export function relativeTime(epochSec: number, locale = 'zh-CN'): string {
