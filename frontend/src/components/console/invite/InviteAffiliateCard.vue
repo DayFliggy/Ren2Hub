@@ -8,6 +8,9 @@ defineProps<{
   code: string
   inviteLink: string
   ratePercent: number
+  shareable: boolean
+  // Why sharing is blocked; empty while loading or when sharing is allowed.
+  notice: string
 }>()
 
 const emit = defineEmits<{
@@ -47,6 +50,13 @@ const { t } = useI18n()
     >
       {{ t('invite.affiliateSubheadline') }}
     </p>
+    <p
+      v-if="notice"
+      role="status"
+      class="mt-4 rounded-xl bg-[var(--status-warning-soft)] px-4 py-2.5 text-sm text-[var(--status-warning-text)]"
+    >
+      {{ notice }}
+    </p>
 
     <div class="mt-6 grid gap-4 md:grid-cols-2">
       <div>
@@ -59,7 +69,11 @@ const { t } = useI18n()
           >
             {{ code || '…' }}
           </code>
-          <ConsoleButton variant="secondary" @click="emit('copyCode')">
+          <ConsoleButton
+            variant="secondary"
+            :disabled="!shareable"
+            @click="emit('copyCode')"
+          >
             {{ t('invite.copyCode') }}
           </ConsoleButton>
         </div>
@@ -73,9 +87,9 @@ const { t } = useI18n()
           <code
             class="min-w-0 flex-1 truncate rounded-xl bg-[var(--surface-muted)] px-4 py-2.5 text-sm text-[var(--text-secondary)]"
           >
-            {{ inviteLink || '…' }}
+            {{ inviteLink || (notice ? '—' : '…') }}
           </code>
-          <ConsoleButton @click="emit('copyLink')">
+          <ConsoleButton :disabled="!shareable" @click="emit('copyLink')">
             {{ t('invite.copyLink') }}
           </ConsoleButton>
         </div>
@@ -88,7 +102,11 @@ const { t } = useI18n()
       <span class="mr-1 text-xs text-[var(--text-tertiary)]">
         {{ t('invite.shareLabel') }}
       </span>
-      <IconButton :label="t('invite.shareX')" @click="emit('shareX')">
+      <IconButton
+        :label="t('invite.shareX')"
+        :disabled="!shareable"
+        @click="emit('shareX')"
+      >
         <svg
           width="15"
           height="15"
@@ -103,6 +121,7 @@ const { t } = useI18n()
       </IconButton>
       <IconButton
         :label="t('invite.shareTelegram')"
+        :disabled="!shareable"
         @click="emit('shareTelegram')"
       >
         <svg
@@ -117,7 +136,11 @@ const { t } = useI18n()
           />
         </svg>
       </IconButton>
-      <IconButton :label="t('invite.shareEmail')" @click="emit('shareEmail')">
+      <IconButton
+        :label="t('invite.shareEmail')"
+        :disabled="!shareable"
+        @click="emit('shareEmail')"
+      >
         <Mail :size="16" />
       </IconButton>
       <p class="ml-auto text-xs text-[var(--text-tertiary)]">

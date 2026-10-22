@@ -144,3 +144,84 @@ describe('native full referral transfer', () => {
     wrapper.unmount()
   })
 })
+
+describe('invite sharing follows the native registration switches', () => {
+  const originalClipboard = Object.getOwnPropertyDescriptor(
+    navigator,
+    'clipboard'
+  )
+  let writeText: ReturnType<typeof vi.fn>
+  let location: { href: string; origin: string }
+  beforeEach(() => {
+    writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    location = { href: '', origin: 'https://invite.test' }
+    vi.stubGlobal('location', location)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    if (originalClipboard)
+      Object.defineProperty(navigator, 'clipboard', originalClipboard)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  async function shareAll(state: ReturnType<typeof useInvite>) {
+    await state.copyCode()
+    await state.copyLink()
+    state.shareX()
+    state.shareTelegram()
+    state.shareEmail()
+  }
+
+  it.each([
+    {
+      name: 'program paused',
+      data: { ...info, policy: { enabled: false, freeze_hours: 0 } },
+      notice:
+        'The referral program is paused, so new users cannot register with an invite right now.',
+    },
+    {
+      name: 'code disabled',
+      data: { ...info, code_enabled: false },
+      notice: 'Your invite code has been disabled. Contact an administrator.',
+    },
+  ])('$name: no link and no copy or share action fires', async (row) => {
+    auth.user.quota = 0
+    vi.spyOn(api, 'get').mockResolvedValue(row.data)
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const { state, wrapper } = mountInvite()
+    await state.load()
+
+    expect(state.shareable.value).toBe(false)
+    expect(state.inviteLink.value).toBe('')
+    expect(state.shareNotice.value).toBe(row.notice)
+    await shareAll(state)
+    expect(writeText).not.toHaveBeenCalled()
+    expect(open).not.toHaveBeenCalled()
+    expect(location.href).toBe('')
+    // Existing rewards stay transferable while invitations are blocked.
+    expect(state.canTransfer.value).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('copies and shares the sign-up link when both switches are on', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(info)
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const { state, wrapper } = mountInvite()
+    await state.load()
+
+    const link = 'https://invite.test/auth/sign-up?aff=INVITE'
+    expect(state.shareable.value).toBe(true)
+    expect(state.shareNotice.value).toBe('')
+    expect(state.inviteLink.value).toBe(link)
+    await shareAll(state)
+    expect(writeText.mock.calls).toEqual([['INVITE'], [link]])
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(location.href).toContain(`mailto:?subject=`)
+    expect(location.href).toContain(encodeURIComponent(link))
+    wrapper.unmount()
+  })
+})

@@ -55,6 +55,8 @@ GMPay 配置仅 Root 浏览器会话使用：`GET /api/option/gmpay/config`、`P
 
 `GET /api/user/affiliate` 返回可转额度、冻结额度、累计奖励、有效比例、规则及月度统计；`GET /api/user/affiliate/invitees` 返回脱敏名单，`GET /api/user/affiliate/records` 返回本人记录。数值额度在前端边界校验后转为展示字符串。
 
+`policy.enabled` 或 `code_enabled` 任一为 false 时，带邀请码注册会被后端拒绝。`useInvite` 的 `shareable` 是唯一判断点：此时不生成邀请链接，复制邀请码、复制链接和三种分享动作都不执行，卡片显示停用原因。已有返利仍可转入钱包，转入条件不受 `shareable` 影响。
+
 `POST /api/user/affiliate/transfer` 仅提交 `{ operation_id }`，将本次可转余额全额转入原生钱包。返回 `replayed`、`transferred_quota`、`wallet_quota` 等结果；相同操作 ID 重试不再次转入。旧 `amount` 参数被拒绝，客户端不能指定任意转入金额。冻结额度不属于当前可转余额，读取或转入时由后端处理到期解冻。
 
 成功充值的返利与钱包入账在同一事务中处理，按唯一来源记录一次奖励决定。管理员增额是否产生返利由 `admin_recharge_enabled` 等规则决定；规则变更不会自动补发旧充值奖励。管理员通过 `/api/admin/affiliate/users/:id` 读取、修改邀请规则，采用现有用户管理权限。

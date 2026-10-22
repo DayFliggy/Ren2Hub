@@ -2545,6 +2545,10 @@ export default {
       'Register for Ren2Hub with my link; after an eligible payment I receive platform quota at a {reward} rebate rate.',
     affiliateDisclaimer:
       'Only eligible real payments earn rebates; cash withdrawal is unavailable',
+    programDisabled:
+      'The referral program is paused, so new users cannot register with an invite right now.',
+    codeDisabled:
+      'Your invite code has been disabled. Contact an administrator.',
     invitees: 'Invited users',
     records: 'Reward records',
     sortRecent: 'Recent',

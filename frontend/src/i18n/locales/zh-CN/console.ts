@@ -2457,6 +2457,8 @@ export default {
     shareText:
       '通过我的链接注册 Ren2Hub；完成符合条件的真实付费后，我将按 {reward} 获得平台额度返利。',
     affiliateDisclaimer: '仅符合条件的真实付费产生返利，不支持现金提现',
+    programDisabled: '邀请返利计划已停用，暂时不能邀请新用户注册。',
+    codeDisabled: '你的邀请码已被停用，请联系管理员。',
     invitees: '受邀用户',
     records: '返佣记录',
     sortRecent: '最近',

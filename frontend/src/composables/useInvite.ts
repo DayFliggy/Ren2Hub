@@ -22,7 +22,25 @@ export function useInvite() {
   const info = ref<AffiliateInfo | null>(null)
   const loading = ref(true)
   const loadError = ref<string | null>(null)
-  const inviteLink = ref('')
+  // Registration rejects the code when either switch is off, so every copy and
+  // share action is gated here. Transferring existing rewards stays allowed.
+  const shareable = computed(
+    () =>
+      info.value !== null &&
+      info.value.policy.enabled &&
+      info.value.code_enabled
+  )
+  const shareNotice = computed(() => {
+    if (!info.value || shareable.value) return ''
+    return info.value.policy.enabled
+      ? t('invite.codeDisabled')
+      : t('invite.programDisabled')
+  })
+  const inviteLink = computed(() =>
+    shareable.value && info.value
+      ? `${window.location.origin}/auth/sign-up?aff=${encodeURIComponent(info.value.code)}`
+      : ''
+  )
 
   const infoRequest = useLatestRequest()
   const inviteesRequest = useLatestRequest()
@@ -68,7 +86,6 @@ export function useInvite() {
       return
     }
     info.value = result.value
-    inviteLink.value = `${window.location.origin}/auth/sign-up?aff=${encodeURIComponent(result.value.code)}`
   }
 
   async function loadInvitees(nextPage = inviteesPage.value) {
@@ -112,11 +129,11 @@ export function useInvite() {
   }
 
   async function copyCode() {
-    if (info.value) await writeClipboard(info.value.code)
+    if (shareable.value && info.value) await writeClipboard(info.value.code)
   }
 
   async function copyLink() {
-    if (inviteLink.value) await writeClipboard(inviteLink.value)
+    if (shareable.value) await writeClipboard(inviteLink.value)
   }
 
   function shareText() {
@@ -135,6 +152,7 @@ export function useInvite() {
   }
 
   function shareX() {
+    if (!shareable.value) return
     openShare(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText())}&url=${encodeURIComponent(inviteLink.value)}`,
       'https://twitter.com'
@@ -142,6 +160,7 @@ export function useInvite() {
   }
 
   function shareTelegram() {
+    if (!shareable.value) return
     openShare(
       `https://t.me/share/url?url=${encodeURIComponent(inviteLink.value)}&text=${encodeURIComponent(shareText())}`,
       'https://t.me'
@@ -149,6 +168,7 @@ export function useInvite() {
   }
 
   function shareEmail() {
+    if (!shareable.value) return
     window.location.href = `mailto:?subject=${encodeURIComponent(shareText())}&body=${encodeURIComponent(inviteLink.value)}`
   }
 
@@ -175,6 +195,8 @@ export function useInvite() {
     info,
     loading,
     loadError,
+    shareable,
+    shareNotice,
     inviteLink,
     invitees,
     inviteesPage,
