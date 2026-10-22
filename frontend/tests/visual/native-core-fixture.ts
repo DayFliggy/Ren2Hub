@@ -122,6 +122,7 @@ export async function nativeCoreFixture(
       display_name: 'Native Root',
       email: 'root@example.test',
     },
+    user_deleted: false,
   }
   let routing = {
     token_id: 7,

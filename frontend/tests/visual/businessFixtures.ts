@@ -92,6 +92,7 @@ export async function configureNativeTickets(page: Page, theme: VisualTheme) {
       username: 'visual.requester',
       display_name: 'Visual Requester',
     },
+    user_deleted: false,
   }
   const responses: Record<string, unknown> = {
     '/api/tickets': { items: [ticket], total: 1, page: 1, page_size: 10 },

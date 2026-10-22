@@ -222,6 +222,11 @@ async function loadAgents(): Promise<void> {
   }
 }
 
+// A hard-deleted requester leaves only its id, so the id stands in for the name.
+function requesterName(user: TicketAgent): string {
+  return user.display_name || user.username || `#${user.id}`
+}
+
 function selectTicket(id: number): void {
   void router.push({
     name: 'ticket-management',
@@ -537,9 +542,10 @@ onBeforeUnmount(() => {
               <div
                 class="mb-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
               >
-                <span class="truncate">{{
-                  item.user.display_name || item.user.username
-                }}</span>
+                <span class="truncate">{{ requesterName(item.user) }}</span>
+                <StatusChip v-if="item.user_deleted" tone="neutral">
+                  {{ t('tickets.admin.userDeleted') }}
+                </StatusChip>
                 <span aria-hidden="true">·</span>
                 <span>{{ t(`tickets.category.${item.category}`) }}</span>
                 <span aria-hidden="true">·</span>
@@ -683,8 +689,13 @@ onBeforeUnmount(() => {
                 >
                   {{ t('tickets.admin.requester') }}
                 </h3>
-                <p class="font-medium text-[var(--text-primary)]">
-                  {{ ticket.user.display_name || ticket.user.username }}
+                <p
+                  class="flex flex-wrap items-center gap-2 font-medium text-[var(--text-primary)]"
+                >
+                  <span>{{ requesterName(ticket.user) }}</span>
+                  <StatusChip v-if="ticket.user_deleted" tone="neutral">
+                    {{ t('tickets.admin.userDeleted') }}
+                  </StatusChip>
                 </p>
                 <p class="mt-1 break-all text-xs text-[var(--text-secondary)]">
                   {{ ticket.user.email || '-' }}

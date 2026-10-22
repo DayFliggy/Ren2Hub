@@ -28,6 +28,7 @@ const adminTicket = {
   ...ticket,
   ...assignment,
   user: { id: 2, username: 'requester', display_name: 'Requester' },
+  user_deleted: false,
 }
 afterEach(() => vi.restoreAllMocks())
 
@@ -122,6 +123,24 @@ describe('native ticket API contracts', () => {
     expect((await ticketsApi.assign(8, null)).ticket.assignee_id).toBeNull()
     expect(patch).toHaveBeenLastCalledWith('/api/admin/tickets/8/assignee', {
       assignee_id: null,
+    })
+  })
+  it('keeps tickets of deleted requesters and requires the deleted flag', async () => {
+    // controller/tickets_admin.go keeps user.id and blanks the names once the
+    // account row is gone.
+    const orphan = {
+      ...adminTicket,
+      user: { id: 2, username: '', display_name: '' },
+      user_deleted: true,
+    }
+    const unflagged: Record<string, unknown> = { ...adminTicket }
+    delete unflagged.user_deleted
+    vi.spyOn(api, 'get')
+      .mockResolvedValueOnce({ ticket: orphan, messages: [message] })
+      .mockResolvedValueOnce({ ticket: unflagged, messages: [message] })
+    expect((await ticketsApi.adminDetail(8)).ticket).toEqual(orphan)
+    await expect(ticketsApi.adminDetail(8)).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
     })
   })
   it('rejects malformed payloads rather than rendering false success', async () => {

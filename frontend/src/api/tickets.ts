@@ -5,6 +5,7 @@ import {
   isRecord,
   parsePage,
   parseStringArray,
+  requiredBoolean,
   requiredStrictInteger,
   requiredString,
 } from './contracts'
@@ -125,6 +126,7 @@ function parseAdminTicket(value: unknown, endpoint: string): AdminTicketItem {
       ? {}
       : { assignee_name: requiredString(row.assignee_name, endpoint) }),
     user: parseAgent(row.user, endpoint),
+    user_deleted: requiredBoolean(row.user_deleted, endpoint),
   }
 }
 function parseMessage(value: unknown, endpoint: string): TicketMessage {

@@ -45,7 +45,7 @@ GMPay 配置仅 Root 浏览器会话使用：`GET /api/option/gmpay/config`、`P
 
 用户读取 `GET /api/user/topup/self`，管理员读取 `GET /api/user/topup`，采用原生分页字段。订单标识为 `trade_no`，状态为 `pending`、`success`、`failed`、`expired`；Vue 把 `success` 投影为“已完成”。`credited_quota` 才是实际入账额度，不能用请求 `amount`、`money` 或 `expected_quota` 冒充到账。
 
-详情分别使用 `GET /api/user/topup/detail/:trade_no` 和 `GET /api/user/topup/admin/detail/:trade_no`。GMPay 详情区分创建时收银台信息与结算后的实际回执，请求网络不能冒充已核验的实际支付网络。管理员通过 `POST /api/user/topup/complete` 提交 `{ trade_no }` 人工补单，受权限与后端事务控制。重复回调、并发回调及回调与补单竞争不得重复入账。
+详情分别使用 `GET /api/user/topup/detail/:trade_no` 和 `GET /api/user/topup/admin/detail/:trade_no`，两者都带 `user_deleted:boolean`。订单所属用户被删除后详情仍可读取：`user_id` 保持原值，软删除保留用户名和邮箱，硬删除两者为空串；订单详情和管理员工单队列都显示“用户已删除”，硬删除的工单用户以 `#id` 显示。GMPay 详情区分创建时收银台信息与结算后的实际回执，请求网络不能冒充已核验的实际支付网络。管理员通过 `POST /api/user/topup/complete` 提交 `{ trade_no }` 人工补单，受权限与后端事务控制。重复回调、并发回调及回调与补单竞争不得重复入账。
 
 `GET /api/user/topup/stats` 返回 `currencies`、`daily`、时间范围与计数，各币种分别汇总，`paid_amount` 保持十进制字符串。历史记录缺少支付金额或币种时显示未知，并计入 `unknown_amount_count`，不补零、不贴 USD 标签。未由接口提供的支付占比、消费榜单或分面统计不凭空生成。
 

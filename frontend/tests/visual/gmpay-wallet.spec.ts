@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 import {
   nativeTopupInfo,
-  nativeTopUp,
+  nativeTopUpDetail,
   nativeGmpayEvidence,
 } from '../../src/api/__tests__/topupFixtures'
 
@@ -74,7 +74,7 @@ for (const theme of ['light', 'dark'] as const) {
           json: {
             success: true,
             data: {
-              ...nativeTopUp,
+              ...nativeTopUpDetail,
               status: settled ? 'success' : 'pending',
               credited_quota: settled ? 10000000 : 0,
               complete_time: settled ? 1785114100 : 0,
@@ -162,7 +162,7 @@ test('unknown GMPay creation retains its number and cannot create again', async 
     route.fulfill({
       json: {
         success: true,
-        data: { ...nativeTopUp, gmpay: nativeGmpayEvidence },
+        data: { ...nativeTopUpDetail, gmpay: nativeGmpayEvidence },
       },
     })
   )

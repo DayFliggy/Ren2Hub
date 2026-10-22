@@ -3,6 +3,7 @@ import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 import {
   nativeTopupInfo,
   nativeTopUp,
+  nativeTopUpDetail,
 } from '../../src/api/__tests__/topupFixtures'
 
 for (const theme of ['light', 'dark'] as const) {
@@ -73,7 +74,10 @@ for (const theme of ['light', 'dark'] as const) {
       )
       await page.route('**/api/user/topup/detail/EPnative', (route) =>
         route.fulfill({
-          json: { success: true, data: { ...row(), gmpay: null } },
+          json: {
+            success: true,
+            data: { ...nativeTopUpDetail, ...row(), gmpay: null },
+          },
         })
       )
       await page.goto('/wallet')

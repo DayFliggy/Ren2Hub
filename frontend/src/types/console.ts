@@ -461,7 +461,9 @@ export interface AdminTicketItem extends Omit<TicketItem, 'messages'> {
   assignee_id: number | null
   assignee_name?: string
   assigned_at: number
+  // A soft-deleted requester keeps its name; a hard-deleted one only its id.
   user: TicketAgent
+  user_deleted: boolean
 }
 
 export interface TicketQueueSummary {

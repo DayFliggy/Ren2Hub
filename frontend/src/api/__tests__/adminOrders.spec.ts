@@ -52,6 +52,7 @@ describe('native order contracts', () => {
         ...nativeTopUp,
         username: 'payer',
         email: 'payer@example.test',
+        user_deleted: false,
         gmpay: {
           ...nativeGmpayEvidence,
           settled_crypto_amount: '0.123456789012345678',
@@ -61,6 +62,7 @@ describe('native order contracts', () => {
       'GPtest'
     )
     expect(detail.state.email).toBe('payer@example.test')
+    expect(detail.userDeleted).toBe(false)
     expect(detail.evidence?.settled_crypto_amount).toBe('0.123456789012345678')
     expect(detail.evidence).not.toHaveProperty('merchant_key')
     expect(() =>
@@ -69,6 +71,21 @@ describe('native order contracts', () => {
         'GPother'
       )
     ).toThrow()
+  })
+  it('keeps the order of a hard-deleted owner and requires the deleted flag', () => {
+    // model.GetTopUpDetail keeps user_id and leaves the names empty.
+    const orphan = {
+      ...nativeTopUp,
+      payment_provider: 'stripe',
+      payment_method: 'stripe',
+      username: '',
+      email: '',
+      gmpay: null,
+    }
+    const detail = parseTopUpDetail({ ...orphan, user_deleted: true }, 'GPtest')
+    expect(detail.userDeleted).toBe(true)
+    expect(detail.state.user_id).toBe(7)
+    expect(() => parseTopUpDetail(orphan, 'GPtest')).toThrow()
   })
   it.each([
     { credited_quota: '5000000' },

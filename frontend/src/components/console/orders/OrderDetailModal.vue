@@ -215,6 +215,9 @@ function paymentRailLabel(method: string): string {
               displayOrder.user_id
             }}
           </span>
+          <StatusChip v-if="detail?.userDeleted" tone="neutral" class="mt-1">
+            {{ t('orders.userDeleted') }}
+          </StatusChip>
         </dd>
       </div>
       <div class="min-w-0">

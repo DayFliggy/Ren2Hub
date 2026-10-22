@@ -40,4 +40,6 @@
 
 管理员工单前缀 `/api/admin/tickets`：读取列表/详情/summary/附件需要 `ticket:read`，回复需要 `ticket:reply`，agents、status、assignee 需要 `ticket:manage`。指派使用 PATCH `/:id/assignee` 与 `{assignee_id:number|null}`。管理员scope与当前角色权限取交集；个人接口不会因为PAT有ticket scope而开放。
 
+提交用户被删除后，工单仍出现在管理员列表、summary 计数和关键字搜索中，详情、回复与状态修改照常可用。列表和详情的每个工单都带 `user_deleted:boolean`；软删除的用户保留用户名和显示名，硬删除只保留 `user.id`（取自工单的 `user_id`），用户名、显示名为空串，详情不返回 `email`。回复不会给已删除用户发送通知。
+
 GMPay 个人下单和订单详情同样session-only；Root设置也用浏览器会话。支付完整字段见[GMPay](../billing/GMPAY.md)。其他管理、价格、日志、任务接口沿用原生路由；历史API描述不保证本地仍提供某端点。

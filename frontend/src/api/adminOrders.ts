@@ -10,6 +10,7 @@ import type {
 import {
   invalidResponse,
   isRecord,
+  requiredBoolean,
   requiredQuota,
   requiredStrictInteger,
   requiredString,
@@ -21,11 +22,12 @@ export function parseTopUpDetail(
 ): {
   evidence: GmpayOrderEvidence | null
   state: AdminOrder
+  userDeleted: boolean
 } {
+  const endpoint = '/api/user/topup/admin/detail/:trade_no'
   const native = parseTopUp(value)
-  const projected = { ...native, gmpay: isRecord(value) ? value.gmpay : null }
-  if (native.order_no !== orderNo)
-    invalidResponse('/api/user/topup/admin/detail/:trade_no')
+  if (!isRecord(value) || native.order_no !== orderNo) invalidResponse(endpoint)
+  const projected = { ...native, gmpay: value.gmpay }
   const evidence =
     native.method === 'gmpay'
       ? parseGmpayOrderEvidence(projected, orderNo)
@@ -33,6 +35,8 @@ export function parseTopUpDetail(
   return {
     evidence,
     state: native,
+    // A deleted owner keeps the stored user_id; a hard delete also blanks the names.
+    userDeleted: requiredBoolean(value.user_deleted, endpoint),
   }
 }
 

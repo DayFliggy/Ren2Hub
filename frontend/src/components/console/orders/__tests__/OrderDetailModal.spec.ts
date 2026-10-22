@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { AdminOrder } from '@/types/console'
-import { nativeTopUp } from '@/api/__tests__/topupFixtures'
+import { nativeTopUpDetail } from '@/api/__tests__/topupFixtures'
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ isAdmin: true, hasPermission: () => true }),
 }))
@@ -58,7 +58,7 @@ function render() {
 describe('GMPay order details', () => {
   it('separates requested network and creation details from actual settlement evidence', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       status: 'success',
       credited_quota: 5000000,
       complete_time: 2,
@@ -89,7 +89,7 @@ describe('GMPay order details', () => {
           })
       )
       .mockResolvedValueOnce({
-        ...nativeTopUp,
+        ...nativeTopUpDetail,
         trade_no: 'GPnew',
         gmpay: { ...evidence, gateway_trade_no: 'new-gateway-id' },
       })
@@ -98,7 +98,7 @@ describe('GMPay order details', () => {
     await flushPromises()
     expect(get.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
     finish({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       gmpay: { ...evidence, gateway_trade_no: 'stale-gateway-id' },
     })
     await flushPromises()
@@ -110,7 +110,7 @@ describe('GMPay order details', () => {
   it('reports detail failures and retries explicitly', async () => {
     vi.spyOn(api, 'get')
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ ...nativeTopUp, gmpay: evidence })
+      .mockResolvedValueOnce({ ...nativeTopUpDetail, gmpay: evidence })
     const wrapper = render()
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain(
@@ -122,6 +122,29 @@ describe('GMPay order details', () => {
       .trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('receipt-hash')
+    wrapper.unmount()
+  })
+
+  it('marks the owner as deleted only when the detail says so', async () => {
+    vi.spyOn(api, 'get')
+      .mockResolvedValueOnce({ ...nativeTopUpDetail, gmpay: evidence })
+      .mockResolvedValueOnce({
+        ...nativeTopUpDetail,
+        trade_no: 'GPgone',
+        username: '',
+        email: '',
+        user_deleted: true,
+        gmpay: evidence,
+      })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('User deleted')
+    await wrapper.setProps({
+      order: { ...order, order_no: 'GPgone', username: '' },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('User deleted')
+    expect(wrapper.text()).toContain('#7')
     wrapper.unmount()
   })
 })

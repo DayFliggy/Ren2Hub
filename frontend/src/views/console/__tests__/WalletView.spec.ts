@@ -9,7 +9,10 @@ import {
   vi,
 } from 'vitest'
 import { api } from '@/api/console'
-import { nativeTopUp, nativeGmpayEvidence } from '@/api/__tests__/topupFixtures'
+import {
+  nativeTopUpDetail,
+  nativeGmpayEvidence,
+} from '@/api/__tests__/topupFixtures'
 import WalletView from '../WalletView.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
@@ -65,7 +68,7 @@ describe('wallet payment return', () => {
   it('queries the authorized native order and refreshes the balance only after server-confirmed completion', async () => {
     state.route.query = { trade_no: 'GPtest' }
     const get = vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       status: 'success',
       credited_quota: 5000000,
       complete_time: 1792368100,
@@ -86,7 +89,7 @@ describe('wallet payment return', () => {
   it('ignores an untrusted success query and preserves the server unknown state without recreating payment', async () => {
     state.route.query = { trade_no: 'GPtest', status: 'success' }
     vi.spyOn(api, 'get').mockResolvedValue({
-      ...nativeTopUp,
+      ...nativeTopUpDetail,
       gmpay: nativeGmpayEvidence,
     })
     const post = vi.spyOn(api, 'post')
@@ -101,7 +104,7 @@ describe('wallet payment return', () => {
     sessionStorage.setItem('gmpay-order:7', 'GPtest')
     const get = vi
       .spyOn(api, 'get')
-      .mockResolvedValue({ ...nativeTopUp, gmpay: nativeGmpayEvidence })
+      .mockResolvedValue({ ...nativeTopUpDetail, gmpay: nativeGmpayEvidence })
     const wrapper = await render()
     expect(get).toHaveBeenCalledWith(
       '/api/user/topup/detail/GPtest',
