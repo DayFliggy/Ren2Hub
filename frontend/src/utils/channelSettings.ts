@@ -36,6 +36,69 @@ export function parseChannelObject(value: unknown): Record<string, unknown> {
   return structuredClone(parsed as Record<string, unknown>)
 }
 
+function storedPluginKeys(setting: Record<string, unknown>) {
+  const single =
+    typeof setting.task_plugin_key === 'string' ? setting.task_plugin_key : ''
+  const list = Array.isArray(setting.task_extend_plugin_keys)
+    ? setting.task_extend_plugin_keys.filter(
+        (key): key is string => typeof key === 'string'
+      )
+    : []
+  return { single, list }
+}
+
+/**
+ * Mirrors ChannelSettings.TaskPluginBindings in relaykit/dto/channel_settings.go:
+ * the sorted, de-duplicated set bound through either field. UpdateChannel
+ * compares this set to decide whether a save rebinds plugins.
+ */
+function taskPluginBindings(setting: Record<string, unknown>): string[] {
+  const { single, list } = storedPluginKeys(setting)
+  return [...new Set([single, ...list].filter(Boolean))].sort()
+}
+
+/**
+ * Plugin keys the channel form edits, read as upstream readTaskExtendPluginKeys
+ * does: type 61 binds task_plugin_key alone, type 60 binds the union of both
+ * fields, other types bind nothing.
+ */
+export function formTaskPluginKeys(
+  type: number,
+  setting: Record<string, unknown>
+): string[] {
+  const { single, list } = storedPluginKeys(setting)
+  const keys = [single, ...(type === 60 ? list : [])]
+    .map((key) => key.trim())
+    .filter(Boolean)
+  if (type === 61) return keys.slice(0, 1)
+  return type === 60 ? [...new Set(keys)] : []
+}
+
+/**
+ * Writes the form's plugin selection the way upstream buildSettingJSON does:
+ * type 61 keeps task_plugin_key only, type 60 keeps task_extend_plugin_keys
+ * only, other types keep neither. An unchanged binding set returns the setting
+ * as is, so a save without a rebinding never touches the binding fields.
+ */
+export function withTaskPluginKeys(
+  setting: Record<string, unknown>,
+  type: number,
+  keys: string[]
+): Record<string, unknown> {
+  const next = type === 61 ? keys.slice(0, 1) : type === 60 ? keys : []
+  const nextBindings = taskPluginBindings({ task_extend_plugin_keys: next })
+  if (
+    JSON.stringify(nextBindings) === JSON.stringify(taskPluginBindings(setting))
+  )
+    return setting
+  const result = { ...setting }
+  delete result.task_plugin_key
+  delete result.task_extend_plugin_keys
+  if (type === 61 && next[0]) result.task_plugin_key = next[0]
+  if (type === 60 && next.length) result.task_extend_plugin_keys = next
+  return result
+}
+
 export function advancedChannelPreset(type: number): AdvancedChannelConfig {
   const paths = [
     '/v1/chat/completions',

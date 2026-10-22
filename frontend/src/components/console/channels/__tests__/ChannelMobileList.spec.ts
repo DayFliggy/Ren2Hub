@@ -30,7 +30,7 @@ function channel(patch: Partial<AdminChannel>): AdminChannel {
   return { ...base, ...patch }
 }
 
-function mountList(channels: AdminChannel[]) {
+function mountList(channels: AdminChannel[], canWrite = true) {
   const refreshBalance = vi.fn().mockResolvedValue(true)
   const runSupplierBalance = vi.fn().mockResolvedValue(undefined)
   const wrapper = mount(ChannelMobileList, {
@@ -49,7 +49,7 @@ function mountList(channels: AdminChannel[]) {
       canRunBatch: true,
       canMutate: true,
       canOperate: true,
-      canWrite: true,
+      canWrite,
       canSensitiveWrite: true,
       runSupplierBalance,
       pickSupplierTest: vi.fn(),
@@ -124,5 +124,33 @@ describe('channel mobile list balance actions', () => {
 
     expect(balanceButtons(wrapper)).toHaveLength(0)
     expect(groupBalanceButton(wrapper)).toBeUndefined()
+  })
+})
+
+describe('channel mobile list edit action', () => {
+  const editButtons = (wrapper: ReturnType<typeof mount>) =>
+    wrapper
+      .findAll('button')
+      .filter(
+        (button) => button.attributes('aria-label') === 'channels.editChannel'
+      )
+
+  it('opens every non-retired type, task plugin channels included', async () => {
+    const channels = [
+      channel({ id: 1, type: 61 }),
+      channel({ id: 2, type: 57 }),
+      channel({ id: 3, type: 60 }),
+    ]
+    const { wrapper } = mountList(channels)
+    const buttons = editButtons(wrapper)
+    expect(buttons).toHaveLength(2)
+    for (const button of buttons) await button.trigger('click')
+    const editChannel = wrapper.props('editChannel') as ReturnType<typeof vi.fn>
+    expect(editChannel.mock.calls.map(([item]) => item.id)).toEqual([1, 3])
+  })
+
+  it('offers no edit entry without channel write', () => {
+    const { wrapper } = mountList([channel({ id: 1, type: 61 })], false)
+    expect(editButtons(wrapper)).toHaveLength(0)
   })
 })

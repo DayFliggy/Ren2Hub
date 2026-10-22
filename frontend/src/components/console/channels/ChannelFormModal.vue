@@ -39,6 +39,8 @@ import {
   advancedChannelPreset,
   parseAdvancedChannelConfig,
   parseChannelObject,
+  formTaskPluginKeys,
+  withTaskPluginKeys,
   CHANNEL_SETTING_FIELDS,
   type ChannelSettingField,
 } from '@/utils/channelSettings'
@@ -113,14 +115,26 @@ const validOverrides = computed(() => {
   }
 })
 const advancedConfig = ref('')
-const canSensitiveWrite = computed(() =>
-  auth.hasPermission('channel', 'sensitive_write')
+const hasTaskPluginBind = computed(() =>
+  auth.hasPermission('task_plugin', 'bind')
+)
+// UpdateChannel rejects every request that carries type 61 without
+// task_plugin.bind, so such an editor sends no sensitive group at all; the
+// stored type and setting stay as they are.
+const canSensitiveWrite = computed(
+  () =>
+    auth.hasPermission('channel', 'sensitive_write') &&
+    (form.type !== 61 || hasTaskPluginBind.value)
 )
 const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
 const supportsResponsesWebSocket = computed(() =>
   [1, 58, 59, 60].includes(form.type)
 )
-const canBindPlugin = computed(() => auth.hasPermission('task_plugin', 'bind'))
+// The binding lives in the sensitive setting field, so it needs both
+// permissions, in upstream's order.
+const canBindPlugin = computed(
+  () => canSensitiveWrite.value && hasTaskPluginBind.value
+)
 const validAdvancedConfig = computed(() => {
   if (!isAdvancedChannel.value) return true
   try {
@@ -143,7 +157,7 @@ watch(
   () => props.open,
   async (open) => {
     pluginOptionsRequest?.abort()
-    if (!open || !auth.hasPermission('task_plugin', 'bind')) return
+    if (!open || !hasTaskPluginBind.value) return
     const request = new AbortController()
     pluginOptionsRequest = request
     pluginError.value = ''
@@ -196,6 +210,7 @@ const typeOptions = computed(() =>
   Object.entries(ADMIN_CHANNEL_TYPE_META)
     .filter(([, meta]) => !meta.retired)
     .map(([value, meta]) => ({ value: Number(value), label: meta.label }))
+    .filter((option) => option.value !== 61 || hasTaskPluginBind.value)
     .sort((a, b) => a.label.localeCompare(b.label))
 )
 
@@ -538,17 +553,7 @@ watch(
         null,
         2
       )
-      pluginKeys.value =
-        ch?.type === 61
-          ? typeof setting.task_plugin_key === 'string' &&
-            setting.task_plugin_key
-            ? [setting.task_plugin_key]
-            : []
-          : Array.isArray(setting.task_extend_plugin_keys)
-            ? setting.task_extend_plugin_keys.filter(
-                (key): key is string => typeof key === 'string'
-              )
-            : []
+      pluginKeys.value = formTaskPluginKeys(form.type, setting)
     } catch {
       pluginKeys.value = []
       settingsError.value = t('channels.invalidStoredSettings')
@@ -620,14 +625,17 @@ async function submit() {
         (settings.responses_websocket_enabled === true)
     )
       settings.responses_websocket_enabled = responsesWebSocket.value
-    if (canBindPlugin.value && (form.type === 60 || form.type === 61)) {
-      settings.task_plugin_key =
-        form.type === 61 ? (pluginKeys.value[0] ?? '') : ''
-      settings.task_extend_plugin_keys =
-        form.type === 60 ? pluginKeys.value : []
-    }
-    if (JSON.stringify(settings) !== JSON.stringify(originalSetting.value))
-      base.setting = JSON.stringify(settings)
+    const nextSetting = canBindPlugin.value
+      ? withTaskPluginKeys(settings, form.type, pluginKeys.value)
+      : settings
+    // validateChannel reads task_plugin_key from the request before it loads
+    // the stored channel, so every type 61 update that carries the sensitive
+    // group resends the full setting, changed or not.
+    if (
+      JSON.stringify(nextSetting) !== JSON.stringify(originalSetting.value) ||
+      (canSensitiveWrite.value && form.type === 61)
+    )
+      base.setting = JSON.stringify(nextSetting)
     if (canSensitiveWrite.value) {
       if (paramOverride.value !== (props.editing?.param_override ?? ''))
         base.param_override = paramOverride.value.trim()

@@ -22,6 +22,7 @@ import {
   adminChannelResponseText,
   adminChannelResponseTone,
   adminChannelTypeMeta,
+  canEditChannel,
   isRetiredChannelType,
   supportsBalanceQuery,
 } from '@/constants/adminChannels'
@@ -509,7 +510,7 @@ function responseDisplay(channel: AdminChannel): {
                 ><Gauge :size="16"
               /></IconButton>
               <IconButton
-                v-if="canWrite && !isRetiredChannelType(channel.type)"
+                v-if="canEditChannel(channel, canWrite)"
                 :label="t('channels.editChannel')"
                 :disabled="isRowBusy(channel.id)"
                 @click="editChannel(channel)"

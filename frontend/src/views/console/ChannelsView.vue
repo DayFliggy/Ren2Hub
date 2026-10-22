@@ -59,6 +59,7 @@ import {
   adminChannelResponseText,
   adminChannelResponseTone,
   adminChannelTypeMeta,
+  canEditChannel,
   isRetiredChannelType,
   sanitizeAdminChannelVisibleFields,
   supportsBalanceQuery,
@@ -627,7 +628,7 @@ function openCreate() {
 }
 
 function openEdit(channel: AdminChannel) {
-  if (!canMutate.value || !canWrite.value || isReadOnlyChannel(channel)) return
+  if (!canMutate.value || !canEditChannel(channel, canWrite.value)) return
   editing.value = channel
   formOpen.value = true
 }
@@ -1426,9 +1427,9 @@ async function runBulkStatus(
               /></IconButton>
               <IconButton
                 v-if="
-                  canWrite &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
+                  canEditChannel(
+                    channelFromRow(row as AdminChannelTableRow),
+                    canWrite
                   )
                 "
                 :label="t('channels.editChannel')"

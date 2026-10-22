@@ -1,0 +1,9 @@
+{
+  "id": 1,
+  "max_concurrency": 0,
+  "model_mapping": "",
+  "models": "doc",
+  "name": "plugin-contract-admin",
+  "priority": 0,
+  "weight": 1
+}

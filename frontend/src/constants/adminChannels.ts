@@ -99,6 +99,18 @@ export function isRetiredChannelType(type: number): boolean {
   return ADMIN_CHANNEL_TYPE_META[type]?.retired === true
 }
 
+/**
+ * Every non-retired channel opens the edit form for a channel writer. The form
+ * sends only the fields the caller may write, so a missing sensitive_write or
+ * task_plugin.bind permission never hides the edit entry.
+ */
+export function canEditChannel(
+  channel: Pick<AdminChannel, 'type'>,
+  canWrite: boolean
+): boolean {
+  return canWrite && !isRetiredChannelType(channel.type)
+}
+
 // Types with a real branch in controller/channel-billing.go: Advanced Custom in
 // updateChannelBalance, the rest in updateStandardChannelBalance. Every other
 // type answers "Not implemented yet".

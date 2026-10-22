@@ -9,3 +9,5 @@
 实际可执行性由用户/Token分组、模型、端点、渠道状态、原生约束及插件声明共同决定。Token私有列表只缩小范围，见[路由](../routing/UNIFIED_ROUTING.md)。对余额查询、模型发现或错误处理的额外声明应以当前控制器及回归为依据，不能复用旧版本的验收结论。
 
 控制台只对 `controller/channel-billing.go` 有实际查询分支的类型（1、8、10、12、13、20、25、40、43、58、59、60）显示余额查询，多 Key 渠道一律不显示；其他类型后端返回“Not implemented yet”，type 61 和多 Key 渠道被 `UpdateChannelBalance` 直接拒绝。判断写在前端 `supportsBalanceQuery()`，行内按钮、分组按钮和批量查询共用。
+
+任务插件绑定需要 `channel.sensitive_write` 和 `task_plugin.bind` 两项权限，缺任一项时表单不显示绑定选择，缺 bind 时类型列表不提供 type 61。`UpdateChannel` 拒绝任何不带 bind 却携带 type 61 的请求，所以没有 bind 的管理员编辑 type 61 渠道时，表单不发送类型、`setting` 等敏感字段，存储值保持不变；有完整权限时，type 61 每次都重发完整 `setting`，因为 `validateChannel` 在读取库内渠道前就检查 `task_plugin_key`。type 60 的绑定集合是 `task_plugin_key` 与 `task_extend_plugin_keys` 的并集（`ChannelSettings.TaskPluginBindings`），表单按并集回填，只有集合变化时才改写这两个字段，并保留 `setting` 的其他键。

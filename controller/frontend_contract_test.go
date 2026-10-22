@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -243,6 +244,74 @@ func TestFrontendContractVertexChannelUpdate(t *testing.T) {
 	assert.Equal(t, constant.ChannelTypeVertexAi, current.Type)
 	assert.Equal(t, "1", current.ChannelRatio)
 	assert.Equal(t, `{"vertex_key_type":"json"}`, current.OtherSettings)
+}
+
+func TestFrontendContractTaskPluginChannelUpdate(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	const pluginKey = "contract-plugin"
+	_, err := jsplugin.DefaultRegistry.Register(`
+export const meta = {apiVersion: 1, key: "contract-plugin", name: "Contract", version: "1.0.0", author: {name: "Test"}, models: ["doc"], fetchMode: "per_task"};
+export function buildSubmitRequest() { return {}; }
+export function parseSubmitResponse() { return {}; }
+export function buildQueryRequest() { return {}; }
+export function parseTaskResult() { return {}; }
+`, jsplugin.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { jsplugin.DefaultRegistry.Unregister(pluginKey) })
+	baseURL, priority, weight := "https://plugin.example.com", int64(0), uint(1)
+	setting := `{"task_plugin_key":"contract-plugin"}`
+	channel := model.Channel{
+		Type: constant.ChannelTypeTaskPlugin, Name: "plugin-contract", Key: "sk", Models: "doc",
+		BaseURL: &baseURL, Setting: &setting, Priority: &priority, Weight: &weight,
+		ChannelRatio: "1", Status: common.ChannelStatusEnabled,
+	}
+	require.NoError(t, channel.Insert())
+	saved := func() model.Channel {
+		var current model.Channel
+		require.NoError(t, model.DB.First(&current, channel.Id).Error)
+		return current
+	}
+
+	// validateChannel reads task_plugin_key from the request, so a sensitive
+	// writer's rename must resend the unchanged setting with type 61.
+	rename := frontendFixture(t, "channel-task-plugin-rename.put.request.json", map[string]any{
+		"id": channel.Id, "name": "plugin-contract-renamed", "type": constant.ChannelTypeTaskPlugin,
+		"base_url": baseURL, "models": "doc", "model_mapping": "", "priority": 0, "weight": 1,
+		"channel_ratio": "1", "max_concurrency": 0, "setting": setting,
+	})
+	root := contractEngine(1, common.RoleRootUser)
+	root.PUT("/api/channel/", UpdateChannel)
+	var withoutSetting map[string]any
+	require.NoError(t, common.Unmarshal(rename, &withoutSetting))
+	delete(withoutSetting, "setting")
+	encoded, err := common.Marshal(withoutSetting)
+	require.NoError(t, err)
+	rejected := contractRequest(t, root, http.MethodPut, "/api/channel/", encoded)
+	assert.Contains(t, rejected.Body.String(), "task plugin key is required")
+	assert.Equal(t, "plugin-contract", saved().Name)
+
+	updated := contractRequest(t, root, http.MethodPut, "/api/channel/", rename)
+	require.Contains(t, updated.Body.String(), `"success":true`, updated.Body.String())
+	assert.Equal(t, "plugin-contract-renamed", saved().Name)
+
+	// An admin without task_plugin.bind is refused whenever type 61 is sent, so
+	// the form omits the sensitive group and the stored binding stays.
+	admin := contractEngine(2, common.RoleAdminUser)
+	admin.PUT("/api/channel/", UpdateChannel)
+	refused := contractRequest(t, admin, http.MethodPut, "/api/channel/", rename)
+	assert.Contains(t, refused.Body.String(), "task_plugin.bind")
+	writeOnly := frontendFixture(t, "channel-task-plugin-rename-write-only.put.request.json", map[string]any{
+		"id": channel.Id, "name": "plugin-contract-admin", "models": "doc",
+		"model_mapping": "", "priority": 0, "weight": 1, "max_concurrency": 0,
+	})
+	allowed := contractRequest(t, admin, http.MethodPut, "/api/channel/", writeOnly)
+	require.Contains(t, allowed.Body.String(), `"success":true`, allowed.Body.String())
+	current := saved()
+	assert.Equal(t, "plugin-contract-admin", current.Name)
+	assert.Equal(t, constant.ChannelTypeTaskPlugin, current.Type)
+	require.NotNil(t, current.Setting)
+	assert.Equal(t, setting, *current.Setting)
+	assert.Equal(t, baseURL, *current.BaseURL)
 }
 
 // The price fetch dialog lists the native presets and OpenRouter channels from
