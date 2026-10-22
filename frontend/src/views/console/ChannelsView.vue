@@ -41,6 +41,7 @@ import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSy
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
 import ChannelStatusBadge from '@/components/console/channels/ChannelStatusBadge.vue'
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
+import ChannelKeyStatus from '@/components/console/channels/ChannelKeyStatus.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
 import ChannelTestPickerDialog from '@/components/console/channels/ChannelTestPickerDialog.vue'
@@ -59,8 +60,15 @@ import {
   adminChannelResponseText,
   adminChannelResponseTone,
   adminChannelTypeMeta,
+  canEditChannel,
+  type ChannelLabGroup,
+  groupChannelsByLab,
+  hasInvalidModelMapping,
   isRetiredChannelType,
+  labDisplayName,
+  multiKeyAvailability,
   sanitizeAdminChannelVisibleFields,
+  supportsBalanceQuery,
 } from '@/constants/adminChannels'
 import type {
   AdminChannel,
@@ -73,13 +81,6 @@ import type {
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
 import { formatDecimal } from '@/utils/decimal'
 
-interface SupplierGroup {
-  groupSlug: string
-  supplier: string
-  channels: AdminChannel[]
-  labMatches: NonNullable<AdminChannel['lab_matches']>
-}
-
 interface SupplierTableRow extends Record<string, unknown> {
   key: string | number
   kind: 'supplier'
@@ -87,7 +88,6 @@ interface SupplierTableRow extends Record<string, unknown> {
   supplier: string
   count: number
   channels: AdminChannel[]
-  labMatches: NonNullable<AdminChannel['lab_matches']>
 }
 
 interface ChannelTableRow extends Record<string, unknown> {
@@ -172,7 +172,7 @@ function openRuntime(channel: AdminChannel) {
 }
 const deleting = ref<DeleteTarget | null>(null)
 const testing = ref<AdminChannel | null>(null)
-const pickingGroup = ref<SupplierGroup | null>(null)
+const pickingGroup = ref<ChannelLabGroup | null>(null)
 /** Per-channel batch-test results shown in the response column until the
     background reload replaces them with the persisted values. */
 const groupTestOverrides = ref<
@@ -347,35 +347,9 @@ const minTableWidth = computed(() => {
   return `${Math.max(860, width + 40)}px`
 })
 
-const supplierGroups = computed<SupplierGroup[]>(() => {
-  const groups = new Map<string, SupplierGroup>()
-  rows.value.forEach((channel) => {
-    const groupSlug = channel.lab_group_slug || channel.supplier || 'unknown'
-    const supplier =
-      channel.lab_group_name ||
-      channel.supplier ||
-      'Unknown / Provider-specific'
-    const group = groups.get(groupSlug)
-    if (group) {
-      group.channels.push(channel)
-      for (const match of channel.lab_matches ?? []) {
-        if (
-          !group.labMatches.some((existing) => existing.slug === match.slug)
-        ) {
-          group.labMatches.push(match)
-        }
-      }
-      return
-    }
-    groups.set(groupSlug, {
-      groupSlug,
-      supplier,
-      channels: [channel],
-      labMatches: [...(channel.lab_matches ?? [])],
-    })
-  })
-  return [...groups.values()]
-})
+const supplierGroups = computed<ChannelLabGroup[]>(() =>
+  groupChannelsByLab(rows.value)
+)
 
 const tableRows = computed<AdminChannelTableRow[]>(() =>
   supplierGroups.value.flatMap((group) => {
@@ -386,7 +360,6 @@ const tableRows = computed<AdminChannelTableRow[]>(() =>
       supplier: group.supplier,
       count: group.channels.length,
       channels: group.channels,
-      labMatches: group.labMatches,
     }
     if (collapsedSuppliers.value.includes(group.supplier)) return [groupRow]
     return [
@@ -497,7 +470,9 @@ function balanceButtonLabel(): string {
       total: batchProgress.value.total,
     })
   }
-  return t('channels.batchBalanceLabel', { count: mutableRows.value.length })
+  return t('channels.batchBalanceLabel', {
+    count: rows.value.filter(supportsBalanceQuery).length,
+  })
 }
 
 function isPageBalance(): boolean {
@@ -533,7 +508,7 @@ function openTest(channel: AdminChannel) {
   testing.value = channel
 }
 
-function openSupplierTest(group: SupplierGroup) {
+function openSupplierTest(group: ChannelLabGroup) {
   if (!canOperate.value) return
   groupTestOverrides.value = {}
   const channels = group.channels.filter(
@@ -624,7 +599,7 @@ function openCreate() {
 }
 
 function openEdit(channel: AdminChannel) {
-  if (!canMutate.value || !canWrite.value || isReadOnlyChannel(channel)) return
+  if (!canMutate.value || !canEditChannel(channel, canWrite.value)) return
   editing.value = channel
   formOpen.value = true
 }
@@ -668,7 +643,7 @@ function requestBulkDelete() {
   }
 }
 
-function requestClearSupplier(group: SupplierGroup) {
+function requestClearSupplier(group: ChannelLabGroup) {
   if (!canMutate.value || !canSensitiveWrite.value) return
   const channels = group.channels.filter(
     (channel) => !isReadOnlyChannel(channel)
@@ -1030,19 +1005,6 @@ async function runBulkStatus(
                   {{ (row as SupplierTableRow).supplier }}
                 </span>
                 <span
-                  v-if="(row as SupplierTableRow).labMatches.length > 1"
-                  class="flex min-w-0 flex-wrap items-center gap-1"
-                >
-                  <StatusChip
-                    v-for="match in (row as SupplierTableRow).labMatches"
-                    :key="match.slug"
-                    tone="info"
-                    class="text-[0.625rem]"
-                  >
-                    {{ match.name }}
-                  </StatusChip>
-                </span>
-                <span
                   class="shrink-0 text-xs font-normal text-[var(--text-tertiary)]"
                 >
                   {{
@@ -1066,7 +1028,9 @@ async function runBulkStatus(
                 <IconButton
                   v-if="
                     canOperate &&
-                    hasMutableChannels((row as SupplierTableRow).channels)
+                    (row as SupplierTableRow).channels.some(
+                      supportsBalanceQuery
+                    )
                   "
                   :label="
                     supplierBalanceLabel((row as SupplierTableRow).supplier)
@@ -1102,7 +1066,6 @@ async function runBulkStatus(
                       groupSlug: (row as SupplierTableRow).groupSlug,
                       supplier: (row as SupplierTableRow).supplier,
                       channels: (row as SupplierTableRow).channels,
-                      labMatches: (row as SupplierTableRow).labMatches,
                     })
                   "
                 >
@@ -1125,7 +1088,6 @@ async function runBulkStatus(
                       groupSlug: (row as SupplierTableRow).groupSlug,
                       supplier: (row as SupplierTableRow).supplier,
                       channels: (row as SupplierTableRow).channels,
-                      labMatches: (row as SupplierTableRow).labMatches,
                     })
                   "
                 >
@@ -1180,6 +1142,18 @@ async function runBulkStatus(
             >
               {{ channelFromRow(row as AdminChannelTableRow).name }}
             </span>
+            <StatusChip
+              v-if="
+                hasInvalidModelMapping(
+                  channelFromRow(row as AdminChannelTableRow).lab
+                )
+              "
+              class="mt-1"
+              tone="warning"
+              data-channel-invalid-mapping
+            >
+              {{ t('channels.labInvalidMapping') }}
+            </StatusChip>
             <p
               v-if="
                 isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
@@ -1192,7 +1166,11 @@ async function runBulkStatus(
           <template #cell-type="{ row }">
             <div class="flex min-w-0 items-center gap-2">
               <VendorLogo
-                :vendor="channelFromRow(row as AdminChannelTableRow).supplier"
+                :vendor="
+                  labDisplayName(
+                    channelFromRow(row as AdminChannelTableRow).lab
+                  )
+                "
                 :size="28"
               />
               <span
@@ -1212,9 +1190,14 @@ async function runBulkStatus(
             </div>
           </template>
           <template #cell-status="{ row }">
-            <ChannelStatusBadge
-              :channel="channelFromRow(row as AdminChannelTableRow)"
-            />
+            <div class="flex flex-wrap items-center gap-1">
+              <ChannelStatusBadge
+                :channel="channelFromRow(row as AdminChannelTableRow)"
+              />
+              <ChannelKeyStatus
+                :channel="channelFromRow(row as AdminChannelTableRow)"
+              />
+            </div>
           </template>
           <template #cell-priority="{ row }">
             <ChannelInlineNumber
@@ -1312,7 +1295,7 @@ async function runBulkStatus(
               <IconButton
                 v-if="
                   canOperate &&
-                  !isReadOnlyChannel(
+                  supportsBalanceQuery(
                     channelFromRow(row as AdminChannelTableRow)
                   ) &&
                   isFieldVisible('rowUpstreamAction')
@@ -1421,9 +1404,9 @@ async function runBulkStatus(
               /></IconButton>
               <IconButton
                 v-if="
-                  canWrite &&
-                  !isReadOnlyChannel(
-                    channelFromRow(row as AdminChannelTableRow)
+                  canEditChannel(
+                    channelFromRow(row as AdminChannelTableRow),
+                    canWrite
                   )
                 "
                 :label="t('channels.editChannel')"
@@ -1608,7 +1591,19 @@ async function runBulkStatus(
         </div>
         <div>
           <dt class="text-[var(--text-tertiary)]">{{ t('channels.lab') }}</dt>
-          <dd class="mt-1">{{ runtimeChannel.lab.name }}</dd>
+          <dd class="mt-1">{{ labDisplayName(runtimeChannel.lab) }}</dd>
+        </div>
+        <div
+          v-if="multiKeyAvailability(runtimeChannel)"
+          class="col-span-2"
+          data-channel-runtime-keys
+        >
+          <dt class="text-[var(--text-tertiary)]">
+            {{ t('channels.keyStatus') }}
+          </dt>
+          <dd class="mt-1">
+            <ChannelKeyStatus :channel="runtimeChannel" detailed />
+          </dd>
         </div>
       </dl>
       <ChannelProviderStatus

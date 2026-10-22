@@ -1,5 +1,6 @@
 import { expect, test, type Locator } from '@playwright/test'
 import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
+import { mockPriceFetch, nativePriceSource } from './native-core-fixture'
 import { PRICING_KEYS } from '../../src/api/pricingKeys'
 import type {
   ModelPricingChange,
@@ -196,7 +197,7 @@ for (const theme of ['light', 'dark'] as const)
             json: {
               success: true,
               data: {
-                effective: { ModelPrice: '0.2' },
+                effective: { ModelPrice: 0.2 },
                 expression: 'fixed(0.2)',
               },
             },
@@ -232,74 +233,32 @@ for (const theme of ['light', 'dark'] as const)
           },
         })
       })
-      await page.route('**/api/ratio_sync/fetch', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              sources: [
-                {
-                  id: 'sub2api',
-                  name: 'Sub2API',
-                  status: 'partial',
-                  errors: [],
-                  models: [
-                    {
-                      model_name: 'test-model',
-                      provider: 'provider',
-                      pricing: {
-                        'billing_setting.billing_mode': 'tiered_expr',
-                        'billing_setting.billing_expr':
-                          'tier("base", p * 2 + c * 4)',
-                      },
-                    },
-                    {
-                      model_name: 'unsupported',
-                      provider: 'provider',
-                      pricing: {},
-                      unsupported_reason: 'Unsupported tier',
-                    },
-                  ],
-                },
-                {
-                  id: 'axonhub',
-                  name: 'AxonHub',
-                  status: 'error',
-                  models: [],
-                  errors: ['Unavailable source'],
-                },
-                {
-                  id: 'basellm',
-                  name: 'basellm',
-                  status: 'success',
-                  models: [
-                    {
-                      model_name: 'second-model',
-                      provider: '',
-                      pricing: { ModelPrice: '0.3' },
-                    },
-                  ],
-                  errors: [],
-                },
-                {
-                  id: 'models_dev',
-                  name: 'models.dev',
-                  status: 'success',
-                  models: [],
-                  errors: [],
-                },
-                {
-                  id: 'openrouter',
-                  name: 'OpenRouter',
-                  status: 'success',
-                  models: [],
-                  errors: [],
-                },
-              ],
+      await mockPriceFetch(page, [
+        nativePriceSource({
+          id: 'sub2api',
+          status: 'partial',
+          models: [
+            {
+              model_name: 'test-model',
+              provider: 'provider',
+              pricing: {
+                'billing_setting.billing_mode': 'tiered_expr',
+                'billing_setting.billing_expr': 'tier("base", p * 2 + c * 4)',
+              },
             },
-          },
-        })
-      )
+            {
+              model_name: 'unsupported',
+              provider: 'provider',
+              pricing: {},
+              unsupported_reason: 'Unsupported tier',
+            },
+          ],
+        }),
+        nativePriceSource(
+          { id: 'axonhub', errors: ['Unavailable source'] },
+          'download-error'
+        ),
+      ])
       await page.goto('/models/pricing')
       await expect(
         page.getByRole('tab', { name: 'Pricing', exact: true })
@@ -462,7 +421,7 @@ test('model pricing is a model management section that guards its draft', async 
   await page.setViewportSize({ width: 1024, height: 900 })
   await configureStablePage(page, { theme: 'light' })
   await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-  const pricing = { ModelPrice: '0.2' }
+  const pricing = { ModelPrice: 0.2 }
   await page.route('**/api/channel/models_enabled', (route) =>
     route.fulfill({ json: { success: true, data: ['test-model'] } })
   )

@@ -139,6 +139,7 @@ describe('channel model prefill integration', () => {
         is_multi_key: true,
         multi_key_mode: 'random',
         multi_key_size: 2,
+        multi_key_status_list: null,
       },
     })
     expect(

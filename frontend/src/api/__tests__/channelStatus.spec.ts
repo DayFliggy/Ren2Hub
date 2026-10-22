@@ -8,6 +8,8 @@ import { clearAuthBundle } from '../authSession'
 import { setApiUnauthorizedHandler } from '../client'
 import { httpTransport } from '../httpTransport'
 import { ApiError } from '../types'
+import channelList from '../../../tests/fixtures/native/channel-list.get.json'
+import multiKeyList from '../../../tests/fixtures/native/channel-multi-key-list.get.json'
 
 const channel = {
   id: 1,
@@ -16,7 +18,6 @@ const channel = {
   channel_ratio: '1',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'OpenAI',
   lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
   status: 3,
   priority: null,
@@ -160,5 +161,70 @@ describe('native channel contract', () => {
       channelOperation('/api/channel/update_balance/1')
     ).rejects.toMatchObject({ status: 401 })
     expect(onUnauthorized).toHaveBeenCalledOnce()
+  })
+})
+describe('native channel list fixture', () => {
+  it('keeps the backend lab and adds no supplier or lab group fields', () => {
+    const page = parseChannelPage(channelList.data)
+    expect(page.total).toBe(4)
+    for (const [index, item] of page.items.entries()) {
+      expect(item.lab).toEqual(channelList.data.items[index]!.lab)
+      expect(item).not.toHaveProperty('supplier')
+      expect(item).not.toHaveProperty('lab_group_slug')
+      expect(item).not.toHaveProperty('lab_group_name')
+    }
+  })
+})
+
+describe('native multi-key channel info', () => {
+  const items = () => structuredClone(multiKeyList.data.items)
+  const byName = (name: string) =>
+    parseChannelPage(multiKeyList.data).items.find(
+      (item) => item.name === name
+    )!
+
+  it('parses the disabled-key list the backend returns', () => {
+    expect(byName('contract-single').channel_info).toEqual({
+      is_multi_key: false,
+      multi_key_mode: '',
+      multi_key_size: 0,
+      multi_key_status_list: null,
+    })
+    expect(
+      byName('contract-multi-new').channel_info?.multi_key_status_list
+    ).toBeNull()
+    expect(
+      byName('contract-multi-restored').channel_info?.multi_key_status_list
+    ).toEqual({})
+    expect(byName('contract-multi-partial').channel_info).toEqual({
+      is_multi_key: true,
+      multi_key_mode: 'random',
+      multi_key_size: 3,
+      multi_key_status_list: { 1: 2, 2: 3 },
+    })
+  })
+
+  it('rejects key states the backend never stores in the list', () => {
+    for (const statusList of [{ 0: 1 }, { 0: 4 }, { 0: '2' }, { a: 2 }]) {
+      const [item] = items()
+      item!.channel_info.multi_key_status_list = statusList as never
+      expect(() => parseChannelStatusDetails(item)).toThrow(
+        'Invalid API response'
+      )
+    }
+  })
+
+  it('rejects a channel_info without its native fields', () => {
+    const [item] = items()
+    const { multi_key_size: _size, ...withoutSize } = item!.channel_info
+    expect(() =>
+      parseChannelStatusDetails({ ...item, channel_info: withoutSize })
+    ).toThrow('Invalid API response')
+    expect(() =>
+      parseChannelStatusDetails({
+        ...item,
+        channel_info: { ...item!.channel_info, multi_key_size: -1 },
+      })
+    ).toThrow('Invalid API response')
   })
 })

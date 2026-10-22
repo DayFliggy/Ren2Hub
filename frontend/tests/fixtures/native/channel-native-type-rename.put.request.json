@@ -1,0 +1,12 @@
+{
+  "base_url": "https://library.example.com",
+  "channel_ratio": "1",
+  "id": 1,
+  "max_concurrency": 0,
+  "model_mapping": "",
+  "models": "gpt-4o",
+  "name": "native-contract-renamed",
+  "priority": 0,
+  "type": 21,
+  "weight": 1
+}

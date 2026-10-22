@@ -28,7 +28,6 @@ const channel: AdminChannel = {
   channel_ratio: '1',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'OpenAI',
   lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
   status: 1,
   priority: 0,
@@ -187,6 +186,51 @@ describe('native channel management', () => {
       ok: false,
       message: 'provider failed',
     })
+  })
+  it('queries balances only for channel types with a backend balance branch', async () => {
+    const multiKey = {
+      ...channel,
+      id: 102,
+      channel_info: {
+        is_multi_key: true,
+        multi_key_mode: 'random' as const,
+        multi_key_size: 2,
+        multi_key_status_list: null,
+      },
+    }
+    const unsupported = [
+      { ...channel, id: 103, type: 3 },
+      { ...channel, id: 104, type: 14 },
+      { ...channel, id: 105, type: 61 },
+      multiKey,
+    ]
+    const supported = [
+      channel,
+      { ...channel, id: 106, type: 43 },
+      { ...channel, id: 107, type: 58 },
+    ]
+    vi.spyOn(api, 'get').mockResolvedValue({
+      items: [...unsupported, ...supported],
+      total: 7,
+      type_counts: {},
+    })
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValue({ success: true, balance: 1 } as never)
+    const state = await setup()
+
+    for (const item of unsupported)
+      expect(await state.refreshBalance(item)).toBe(false)
+    expect(request).not.toHaveBeenCalled()
+
+    await state.runVisibleBalance()
+    expect(
+      request.mock.calls.map(([method, path]) => `${method} ${path}`)
+    ).toEqual([
+      'GET /api/channel/update_balance/101',
+      'GET /api/channel/update_balance/106',
+      'GET /api/channel/update_balance/107',
+    ])
   })
   it('refuses retired type 57 without blocking Codex model names on ordinary API channels', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)

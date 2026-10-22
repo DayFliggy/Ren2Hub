@@ -156,7 +156,6 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/custom-oauth-provider/":          accessTokenScopeRule("option:write"),
 	"PUT /api/custom-oauth-provider/:id":        accessTokenScopeRule("option:write"),
 	"DELETE /api/custom-oauth-provider/:id":     accessTokenScopeRule("option:write"),
-	"GET /api/ratio_sync/sources":               accessTokenScopeRule("option:read"),
 	"GET /api/ratio_sync/channels":              accessTokenScopeRule("option:read"),
 	"POST /api/ratio_sync/fetch":                accessTokenScopeRule("option:write"),
 

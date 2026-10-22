@@ -31,36 +31,22 @@ export type AdminChannelSortBy =
 
 export type AdminChannelSortOrder = 'asc' | 'desc'
 
+/** Native model.ChannelInfo as the channel list returns it. */
+export interface AdminChannelInfo {
+  is_multi_key: boolean
+  /** random or polling on multi-key channels; empty on single-key channels. */
+  multi_key_mode: string
+  multi_key_size: number
+  /** Disabled keys only: key index -> 2 (manual) or 3 (automatic). */
+  multi_key_status_list: Record<string, 2 | 3> | null
+}
+
 export interface AdminChannel extends Record<string, unknown> {
   channel_ratio: string
   max_concurrency: number
   in_flight: number
   lab: { id: string; name: string; source: string }
-  supplier: string
-  lab_group_slug?: string
-  lab_group_name?: string
-  lab_matches?: {
-    slug: string
-    name: string
-    confidence: number
-    source: string
-  }[]
-  lab_models?: {
-    input_model: string
-    real_model: string
-    canonical_id?: string
-    lab_slug?: string
-    confidence: number
-    source: string
-  }[]
-  lab_unresolved_count?: number
-  lab_catalog_version?: string
-
-  channel_info?: {
-    is_multi_key: boolean
-    multi_key_mode: 'random' | 'polling'
-    multi_key_size?: number
-  }
+  channel_info?: AdminChannelInfo
   id: number
   name: string
   type: number
@@ -108,11 +94,19 @@ export interface AdminChannelCreateOptions {
   multiKeyMode?: 'random' | 'polling'
 }
 
+/**
+ * Sensitive fields (CHANNEL_SENSITIVE_UPDATE_FIELDS) are optional: an editor
+ * without ChannelSensitiveWrite omits them and the backend keeps the stored
+ * values.
+ */
 export type AdminChannelUpdateInput = Omit<
   AdminChannelCreateInput,
-  'status' | 'key'
+  'status' | 'key' | 'type' | 'base_url' | 'channel_ratio'
 > & {
-  /** Sensitive field: include only when replacing the stored key. */
+  type?: number
+  base_url?: string
+  channel_ratio?: string
+  /** Include only when replacing the stored key. */
   key?: string
 }
 

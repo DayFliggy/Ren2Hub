@@ -6,19 +6,47 @@ import {
   requiredStrictInteger,
   requiredString,
 } from './contracts'
-import { PRICING_KEYS, type PricingKey } from './pricingKeys'
+import {
+  NUMERIC_PRICING_KEYS,
+  PRICING_KEYS,
+  type NumericPricingKey,
+  type PricingKey,
+} from './pricingKeys'
 import type {
   BillingUsageSchema,
   BillingUsageExample,
 } from '@/features/pricing/types'
+import { isDecimal } from '@/utils/decimal'
 
-export { PRICING_KEYS, type PricingKey }
+export { NUMERIC_PRICING_KEYS, PRICING_KEYS, type PricingKey }
+// Drafts keep the exact decimal text typed in the editor; serializePricing
+// turns it into the JSON numbers the backend accepts.
 export type PricingValues = Partial<
-  Record<
-    Exclude<PricingKey, 'billing_setting.plugin_billing_expr'>,
-    number | string
-  >
-> & { 'billing_setting.plugin_billing_expr'?: Record<string, string> }
+  Record<NumericPricingKey, number | string>
+> & {
+  'billing_setting.billing_mode'?: string
+  'billing_setting.billing_expr'?: string
+  'billing_setting.plugin_billing_expr'?: Record<string, string>
+}
+export function isNumericPricingKey(key: string): key is NumericPricingKey {
+  return (NUMERIC_PRICING_KEYS as readonly string[]).includes(key)
+}
+// Absorbed from upstream pricingFromDraft: a price is a finite, non-negative
+// number; blank or non-decimal text is rejected instead of meaning free.
+export function pricingNumber(value: number | string): number {
+  const number =
+    typeof value === 'number' ? value : isDecimal(value) ? Number(value) : NaN
+  if (!Number.isFinite(number) || number < 0) throw new Error('invalid')
+  return number
+}
+export function serializePricing(value: PricingValues): PricingValues {
+  const result: PricingValues = { ...value }
+  for (const key of NUMERIC_PRICING_KEYS) {
+    const field = value[key]
+    if (field !== undefined) result[key] = pricingNumber(field)
+  }
+  return result
+}
 export interface PluginPriceVariant {
   plugin_key: string
   plugin_name: string
@@ -57,10 +85,11 @@ export interface PricingPreview {
   expression?: string
   unsupported_reason?: string
 }
-// Local price sources only. basellm, models.dev and OpenRouter go through the
+// The backend owns the local fixed sources (pkg/pricesource.Sources) and
+// returns their id and name. basellm, models.dev and OpenRouter go through the
 // native ratio_sync upstreams below.
-export const PRICE_SOURCES = ['sub2api', 'axonhub'] as const
-export type PriceSourceId = (typeof PRICE_SOURCES)[number]
+// The fixed sources are downloaded one after another, each limited to 15s.
+const FIXED_PRICE_FETCH_TIMEOUT_MS = 45_000
 export interface FetchedModelPrice {
   model_name: string
   provider: string
@@ -76,7 +105,7 @@ export interface PriceSourceFingerprint {
   matches: boolean | null
 }
 export interface FetchedPriceSource {
-  id: PriceSourceId
+  id: string
   name: string
   status: 'success' | 'partial' | 'error'
   // null only when the price document could not be downloaded.
@@ -139,15 +168,13 @@ export function parsePricingValues(
       )
         invalidResponse(endpoint)
       result[key] = field as Record<string, string>
-    } else {
-      if (
-        typeof field !== 'string' &&
-        (typeof field !== 'number' || !Number.isFinite(field))
-      )
+    } else if (isNumericPricingKey(key)) {
+      if (typeof field !== 'number' || !Number.isFinite(field) || field < 0)
         invalidResponse(endpoint)
-      result[
-        key as Exclude<PricingKey, 'billing_setting.plugin_billing_expr'>
-      ] = field as string | number
+      result[key] = field
+    } else {
+      if (typeof field !== 'string') invalidResponse(endpoint)
+      result[key as 'billing_setting.billing_mode'] = field
     }
   }
   return result
@@ -224,13 +251,12 @@ export function parseFetchedPrices(value: unknown): FetchedPriceSource[] {
   return value.sources.map((raw) => {
     if (
       !isRecord(raw) ||
-      !(PRICE_SOURCES as readonly unknown[]).includes(raw.id) ||
       !['success', 'partial', 'error'].includes(String(raw.status)) ||
       !Array.isArray(raw.models)
     )
       invalidResponse(endpoint)
     return {
-      id: raw.id as PriceSourceId,
+      id: requiredString(raw.id, endpoint, false),
       name: requiredString(raw.name, endpoint),
       status: raw.status as FetchedPriceSource['status'],
       fingerprint: parseFingerprint(raw.fingerprint, endpoint),
@@ -240,8 +266,8 @@ export function parseFetchedPrices(value: unknown): FetchedPriceSource[] {
     }
   })
 }
-// Only the native presets and OpenRouter channels replace the removed local
-// sources; other channels stay with the native ratio sync settings.
+// Only the native presets and OpenRouter channels take part in price sync;
+// other syncable channels are dropped here on purpose.
 export function parsePriceUpstreams(value: unknown): PriceUpstream[] {
   const endpoint = '/api/ratio_sync/channels'
   if (!Array.isArray(value)) invalidResponse(endpoint)
@@ -307,24 +333,33 @@ export const pricingConfigApi = {
     )
   },
   save(changes: ModelPricingChange[]) {
-    return api.patch('/api/option/model_pricing', { changes })
+    return api.patch('/api/option/model_pricing', {
+      changes: changes.map((change) => ({
+        ...change,
+        pricing: serializePricing(change.pricing),
+      })),
+    })
   },
   preview(model_name: string, pricing: PricingValues, signal?: AbortSignal) {
     return api.post<PricingPreview>(
       '/api/option/model_pricing/preview',
-      { model_name, pricing },
+      { model_name, pricing: serializePricing(pricing) },
       { signal }
     )
   },
   convert(model_name: string, pricing: PricingValues) {
     return api.post<PricingPreview>('/api/option/model_pricing/convert', {
       model_name,
-      pricing,
+      pricing: serializePricing(pricing),
     })
   },
   async fetch(signal?: AbortSignal) {
     return parseFetchedPrices(
-      await api.post('/api/ratio_sync/fetch', {}, { signal })
+      await api.post(
+        '/api/ratio_sync/fetch',
+        {},
+        { signal, timeoutMs: FIXED_PRICE_FETCH_TIMEOUT_MS }
+      )
     )
   },
   async upstreams(signal?: AbortSignal) {

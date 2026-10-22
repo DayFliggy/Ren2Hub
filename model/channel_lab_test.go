@@ -32,6 +32,7 @@ func TestChannelLabsUseNewAPIVendorVocabulary(t *testing.T) {
 	require.NoError(t, db.Create(&Model{ModelName: "gpt-4o", VendorID: azure.Id, Status: 1, NameRule: NameRuleExact}).Error)
 	mapping := `{"public":"claude-sonnet-4"}`
 	cyclic := `{"a":"b","b":"a"}`
+	nonString := `{"a":1}`
 	channels := []Channel{
 		{Id: 1, Name: "baidu", Key: "k1", Models: "ernie-4.0"},
 		{Id: 2, Name: "doubao", Key: "k2", Models: "doubao-pro-32k"},
@@ -42,9 +43,10 @@ func TestChannelLabsUseNewAPIVendorVocabulary(t *testing.T) {
 		{Id: 7, Name: "cycle", Key: "k7", Models: "a", ModelMapping: &cyclic},
 		{Id: 8, Name: "unknown", Key: "k8", Models: "house-model"},
 		{Id: 9, Name: "qwen", Key: "k9", Models: "qwen-max"},
+		{Id: 10, Name: "non-string mapping", Key: "k10", Models: "a", ModelMapping: &nonString},
 	}
 	require.NoError(t, db.Create(&channels).Error)
-	labs, err := ChannelLabs(context.Background(), []int{1, 2, 3, 4, 5, 6, 7, 8, 9})
+	labs, err := ChannelLabs(context.Background(), []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 	require.NoError(t, err)
 
 	require.Equal(t, "百度", labs[1].Name)
@@ -62,6 +64,18 @@ func TestChannelLabsUseNewAPIVendorVocabulary(t *testing.T) {
 	require.Equal(t, "unknown", labs[8].ID)
 	require.Equal(t, "阿里巴巴", labs[9].Name)
 	require.Equal(t, "alibaba", labs[9].ID)
+	require.Equal(t, "invalid_mapping", labs[10].Source, "a mapping the relay cannot decode only invalidates its own channel")
+
+	counts, total, err := ChannelLabCounts(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 10, total)
+	unknown := 0
+	for _, item := range counts {
+		if item.ID == "unknown" {
+			unknown = item.Count
+		}
+	}
+	require.Equal(t, 3, unknown, "cycle, unknown model and undecodable mapping share the unknown bucket")
 }
 
 func TestPricingDefaultVendorUsesNativeRulesThenSupplement(t *testing.T) {

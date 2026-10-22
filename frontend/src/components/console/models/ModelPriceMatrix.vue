@@ -6,7 +6,6 @@ import { formatMarketRatio } from '@/utils/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelIdentity from './ModelIdentity.vue'
-import ModelCapabilities from './ModelCapabilities.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 
 const props = defineProps<{
@@ -163,10 +162,6 @@ function onFocusOut(event: FocusEvent) {
                 clickable
                 @detail="emit('detail', row.model.id)"
               />
-              <ModelCapabilities
-                :capabilities="row.model.capabilities"
-                class="matrix-model-capabilities"
-              />
             </th>
             <td
               v-for="column in row.columns"
@@ -262,7 +257,6 @@ function onFocusOut(event: FocusEvent) {
             clickable
             @detail="emit('detail', row.model.id)"
           />
-          <ModelCapabilities :capabilities="row.model.capabilities" />
         </div>
         <section
           class="matrix-mobile-baseline"
@@ -390,9 +384,6 @@ function onFocusOut(event: FocusEvent) {
   border-left: 2px solid var(--border-strong);
   border-right: 0;
   box-shadow: -3px 0 10px var(--shadow-color);
-}
-.matrix-model-capabilities {
-  margin-top: 0.75rem;
 }
 .market-matrix-groups {
   color: var(--text-tertiary);
@@ -528,9 +519,6 @@ function onFocusOut(event: FocusEvent) {
   }
   .matrix-mobile-heading {
     padding: 1rem 1rem 0.7rem;
-  }
-  .matrix-mobile-heading :deep(.market-capabilities) {
-    margin-top: 0.6rem;
   }
   .matrix-mobile-baseline {
     margin: 0 1rem 0.5rem;

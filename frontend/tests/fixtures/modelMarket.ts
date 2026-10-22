@@ -17,7 +17,6 @@ export function createModelMarketFixture(): ModelCatalog {
     description: 'Native model catalog fixture',
     icon: '',
     supported_endpoint_types: endpoints,
-    capabilities: null,
     price_status: Object.keys(pricing_values).length
       ? 'configured'
       : 'unavailable',

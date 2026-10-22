@@ -34,7 +34,6 @@ export function nativeModelCatalog(now: number): ModelCatalog {
       supported_endpoint_types: ['openai', 'openai-response'],
       price_status: 'configured',
       pricing_values: { input, output },
-      capabilities: null,
     })),
     channels: channels.map(({ id, name, ratio }) => ({
       id,

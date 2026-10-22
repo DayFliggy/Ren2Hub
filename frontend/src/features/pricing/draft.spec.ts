@@ -24,8 +24,8 @@ const config: ModelPricingConfig = {
     {
       model_name: 'model',
       version: 'v1',
-      configured: { ModelRatio: '1', CompletionRatio: '2' },
-      effective: { ModelRatio: '1', CompletionRatio: '2' },
+      configured: { ModelRatio: 1, CompletionRatio: 2 },
+      effective: { ModelRatio: 1, CompletionRatio: 2 },
     },
   ],
   options: Object.fromEntries(
@@ -39,23 +39,23 @@ describe('model pricing draft contracts', () => {
     const source = {
       model_name: 'new',
       provider: 'provider',
-      pricing: { ModelPrice: '0' },
+      pricing: { ModelPrice: 0 },
     }
     const before = initialPricingDraft(config)
     const after = fillPriceDraft(before, [source])
     expect(before.new).toBeUndefined()
-    expect(after.new).toEqual({ ModelPrice: '0' })
+    expect(after.new).toEqual({ ModelPrice: 0 })
     expect(pricingChanges(config, after)).toEqual([
       {
         model_name: 'new',
         expected_version: 'empty',
-        pricing: { ModelPrice: '0' },
+        pricing: { ModelPrice: 0 },
       },
     ])
   })
   it('treats arbitrary model IDs as data without mutating object prototypes', () => {
     const raw = pricingJSON({})
-    raw.ModelPrice = '{"__proto__":"1","constructor":"0"}'
+    raw.ModelPrice = '{"__proto__":1,"constructor":0}'
     const result = parsePricingJSON(raw)
     expect(Object.hasOwn(result, '__proto__')).toBe(true)
     expect(Object.hasOwn(result, 'constructor')).toBe(true)
@@ -72,7 +72,7 @@ describe('model pricing draft contracts', () => {
       source = {
         model_name: 'a',
         provider: 'one',
-        pricing: { ModelPrice: '1' },
+        pricing: { ModelPrice: 1 },
       }
     expect(() =>
       fillPriceDraft(draft, [source, { ...source, provider: 'two' }])
@@ -85,16 +85,41 @@ describe('model pricing draft contracts', () => {
     ).toThrow('unsupportedPrice')
     expect(draft).toEqual(initialPricingDraft(config))
   })
-  it('round trips JSON and preserves plugin maps and exact coefficients', () => {
+  it('round trips JSON as numbers and preserves plugin expression source', () => {
+    const plugins = { plugin: 'v2:u("seconds") * 0.123456789012345678' }
     const draft = {
       model: {
         ModelPrice: '0.000000123456789012',
-        'billing_setting.plugin_billing_expr': {
-          plugin: 'v2:u("seconds") * 0.123456789012345678',
-        },
+        'billing_setting.plugin_billing_expr': plugins,
       },
     }
-    expect(parsePricingJSON(pricingJSON(draft))).toEqual(draft)
+    const raw = pricingJSON(draft)
+    expect(JSON.parse(raw.ModelPrice)).toEqual({ model: 1.23456789012e-7 })
+    expect(parsePricingJSON(raw)).toEqual({
+      model: {
+        ModelPrice: 1.23456789012e-7,
+        'billing_setting.plugin_billing_expr': plugins,
+      },
+    })
+  })
+  it('rejects JSON prices the backend would refuse', () => {
+    for (const value of ['"1"', '-1', 'null']) {
+      const raw = pricingJSON({})
+      raw.ModelRatio = `{"model":${value}}`
+      expect(() => parsePricingJSON(raw)).toThrow('invalid')
+    }
+  })
+  it('compares draft decimal text with stored numbers by value', () => {
+    expect(
+      pricingChanges(config, {
+        model: { ModelRatio: '1.0', CompletionRatio: '2' },
+      })
+    ).toEqual([])
+    expect(
+      pricingChanges(config, {
+        model: { ModelRatio: '1.5', CompletionRatio: '2' },
+      })
+    ).toHaveLength(1)
   })
   it('distinguishes empty expressions from explicit free pricing', () => {
     expect(() =>
@@ -110,7 +135,8 @@ describe('model pricing draft contracts', () => {
       })
     ).not.toThrow()
     expect(() => validatePricing({ ModelPrice: '0' })).not.toThrow()
-    expect(() => validatePricing({ ModelPrice: '-1' })).toThrow()
+    for (const ModelPrice of ['-1', ' ', '', 'abc', Infinity, -1])
+      expect(() => validatePricing({ ModelPrice })).toThrow('invalid')
   })
   it('round trips token dimensions, zero cache, and dependent audio prices', () => {
     const value = {

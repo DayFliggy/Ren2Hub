@@ -4,9 +4,13 @@ import { expressionDiff, pricingDiff } from '../diff'
 describe('pricing source differences', () => {
   it('keeps absence distinct from exact zero and marks removed fields', () => {
     const fields = pricingDiff(
-      { ModelPrice: '0', CacheRatio: '0.123456789012345678' },
-      { ModelRatio: '0', CacheRatio: '0.123456789012345679' }
+      { ModelPrice: '0', CacheRatio: '0.123', CompletionRatio: '2.50' },
+      { ModelRatio: 0, CacheRatio: 0.124, CompletionRatio: 2.5 }
     )
+    // Draft text and fetched numbers compare by the value the backend stores.
+    expect(
+      fields.find((field) => field.key === 'CompletionRatio')
+    ).toMatchObject({ change: 'unchanged' })
     expect(fields.find((field) => field.key === 'ModelPrice')).toMatchObject({
       change: 'removed',
       candidate: null,
@@ -19,7 +23,7 @@ describe('pricing source differences', () => {
     })
     expect(
       fields.find((field) => field.key === 'CacheRatio')?.candidate
-    ).toEqual([{ text: '0.123456789012345679', changed: true }])
+    ).toEqual([{ text: '0.124', changed: true }])
   })
   it('highlights separated expression edits without modifying surrounding source', () => {
     const before = 'tier("first", p * 0.000000000000001 + c * 2)'

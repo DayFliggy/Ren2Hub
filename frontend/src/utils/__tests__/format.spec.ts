@@ -4,7 +4,6 @@ import {
   configureQuotaDisplay,
   formatBytes,
   formatCompact,
-  formatContext,
   formatDuration,
   formatLatency,
   formatMoney,
@@ -16,6 +15,8 @@ import {
   maskKey,
   passwordStrength,
   relativeTime,
+  fromDateTimeLocal,
+  toDateTimeLocal,
 } from '@/utils/format'
 
 describe('maskKey', () => {
@@ -105,13 +106,6 @@ describe('compact numeric labels', () => {
     expect(formatCompact(1_500_000)).toBe('1.5M')
   })
 
-  it('labels context windows', () => {
-    expect(formatContext(0)).toBe('—')
-    expect(formatContext(128_000)).toBe('128K')
-    expect(formatContext(1_000_000)).toBe('1M')
-    expect(formatContext(1_500_000)).toBe('1.5M')
-  })
-
   it('labels byte sizes', () => {
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(12_800)).toBe('12.5 KB')
@@ -179,6 +173,36 @@ describe('local calendar day bounds', () => {
     for (const value of ['', '2026-1-01', '2026-02-30', '2026-10-01T00:00']) {
       expect(() => localDayStartMs(value)).toThrow()
       expect(() => localDayEndMs(value)).toThrow()
+    }
+  })
+})
+
+describe('datetime-local conversion', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('round-trips a local instant to the second', () => {
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    // 2026-10-12 23:00:30 in UTC+8.
+    const epoch = Date.UTC(2026, 9, 12, 15, 0, 30) / 1000
+    expect(toDateTimeLocal(epoch)).toBe('2026-10-12T23:00:30')
+    expect(fromDateTimeLocal('2026-10-12T23:00:30')).toBe(epoch)
+    // Browsers drop ':00' seconds even with step=1; fractions are truncated.
+    expect(fromDateTimeLocal('2026-10-12T23:00')).toBe(epoch - 30)
+    expect(fromDateTimeLocal('2026-10-12T23:00:30.900')).toBe(epoch)
+  })
+
+  it('rejects text that is not a real local date and time', () => {
+    vi.stubEnv('TZ', 'America/New_York')
+    for (const value of [
+      '',
+      '2026-10-12',
+      '2026-02-30T10:00:00',
+      '2026-10-12T24:00:00',
+      '2026-10-12 10:00:00',
+      // Skipped by the 2026-03-08 spring-forward jump.
+      '2026-03-08T02:30:00',
+    ]) {
+      expect(fromDateTimeLocal(value)).toBeNull()
     }
   })
 })

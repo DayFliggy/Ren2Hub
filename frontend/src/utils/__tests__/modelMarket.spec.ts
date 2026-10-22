@@ -20,7 +20,6 @@ describe('native model catalog projection', () => {
       amount: '0.25',
       unit: 'per_million_tokens',
     })
-    expect(model.capabilities).toBeNull()
     expect(model.endpoints[1]!.path).toBe('/v1/responses')
     expect(model.vendor).toBe('Fixture vendor')
   })

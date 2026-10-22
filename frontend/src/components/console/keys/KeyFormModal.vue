@@ -12,7 +12,7 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import { useToast } from '@/composables/useToast'
-import { formatDate } from '@/utils/format'
+import { fromDateTimeLocal, toDateTimeLocal } from '@/utils/format'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
 
 const props = defineProps<{
@@ -37,8 +37,10 @@ const form = reactive({
   quotaDollars: '',
   unlimited: false,
   ipText: '',
-  expireDate: '',
+  expireAt: '',
 })
+/** The datetime-local text backfilled from the token being edited. */
+let loadedExpireAt = ''
 const saving = ref(false)
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
@@ -60,9 +62,11 @@ watch(
     form.quotaDollars = e && !e.unlimited ? quotaToDecimal(e.remain_quota) : ''
     form.unlimited = e?.unlimited ?? true
     form.ipText = e?.ip_limits?.join('\n') ?? ''
-    form.expireDate = e && e.expired_time > 0 ? formatDate(e.expired_time) : ''
+    form.expireAt =
+      e && e.expired_time > 0 ? toDateTimeLocal(e.expired_time) : ''
+    loadedExpireAt = form.expireAt
 
-    vis.expiry = form.expireDate.length > 0
+    vis.expiry = form.expireAt.length > 0
     advancedOpen.value = Boolean(
       e && (form.model_limits.length > 0 || form.ipText.trim().length > 0)
     )
@@ -82,6 +86,18 @@ const typeCards = computed(() => [
     desc: t('keys.type.autoDesc'),
   },
 ])
+
+/** Native expired_time: -1 never expires, otherwise epoch seconds. */
+function expiredTime(): number {
+  if (!vis.expiry) return -1
+  // Local text carries no UTC offset, so an untouched value keeps the stored
+  // instant instead of being re-parsed (a repeated DST hour would shift it).
+  if (props.editing && loadedExpireAt && form.expireAt === loadedExpireAt)
+    return props.editing.expired_time
+  const seconds = fromDateTimeLocal(form.expireAt)
+  if (seconds === null) throw new Error(t('keys.expireInvalid'))
+  return seconds
+}
 
 const advancedConfiguredCount = computed(() => {
   let count = 0
@@ -107,12 +123,7 @@ async function save() {
       unlimited_quota: form.unlimited,
       remain_quota: remainQuota,
       allow_ips: form.ipText.trim(),
-      // The date is a local calendar day, as the key list shows it; a bare
-      // YYYY-MM-DD would parse as UTC midnight.
-      expired_time:
-        vis.expiry && form.expireDate
-          ? Math.floor(new Date(`${form.expireDate}T00:00`).getTime() / 1000)
-          : -1,
+      expired_time: expiredTime(),
     }
     if (props.editing) {
       payload.id = props.editing.id
@@ -211,8 +222,9 @@ async function save() {
             class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
           >
             <input
-              v-model="form.expireDate"
-              type="date"
+              v-model="form.expireAt"
+              type="datetime-local"
+              step="1"
               name="token-expiration"
               :aria-label="t('keys.expireLabel')"
               class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-primary)] focus-ring"

@@ -6,7 +6,6 @@ import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelIdentity from './ModelIdentity.vue'
-import ModelCapabilities from './ModelCapabilities.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 import ModelStatistics from './ModelStatistics.vue'
 
@@ -71,10 +70,6 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
             compact
             clickable
             @detail="emit('detail', item.model.id, item.offers[0]?.id)"
-          />
-          <ModelCapabilities
-            :capabilities="item.model.capabilities"
-            class="market-shelf-capabilities"
           />
           <div class="market-shelf-offers">
             <div
@@ -200,13 +195,11 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
   padding: 1.05rem 0;
   border-bottom: 1px dashed var(--border-subtle);
 }
-.market-shelf-capabilities {
-  margin: 0.7rem 0 0.8rem;
-}
 .market-shelf-offers {
   display: flex;
   flex-direction: column;
   flex: 1;
+  margin-top: 0.8rem;
 }
 .market-shelf-offer {
   position: relative;

@@ -1,0 +1,13 @@
+{
+  "base_url": "https://plugin.example.com",
+  "channel_ratio": "1",
+  "id": 1,
+  "max_concurrency": 0,
+  "model_mapping": "",
+  "models": "doc",
+  "name": "plugin-contract-renamed",
+  "priority": 0,
+  "setting": "{\"task_plugin_key\":\"contract-plugin\"}",
+  "type": 61,
+  "weight": 1
+}

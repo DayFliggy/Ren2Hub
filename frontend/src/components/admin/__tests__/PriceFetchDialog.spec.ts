@@ -9,6 +9,9 @@ import {
   type FetchedPriceSource,
 } from '@/api/pricingConfig'
 import type { PricingDraft } from '@/features/pricing/draft'
+import fixedSuccess from '../../../../tests/fixtures/native/ratio-sync-fixed-sources.success.post.json'
+import fixedDownloadError from '../../../../tests/fixtures/native/ratio-sync-fixed-sources.download-error.post.json'
+import fixedParseError from '../../../../tests/fixtures/native/ratio-sync-fixed-sources.parse-error.post.json'
 afterEach(() => vi.restoreAllMocks())
 const digest = 'a'.repeat(64)
 const published = 'b'.repeat(64)
@@ -16,13 +19,9 @@ function localSource(
   overrides: Partial<FetchedPriceSource> = {}
 ): FetchedPriceSource {
   return {
-    id: 'sub2api',
-    name: 'Sub2API',
-    status: 'success',
-    fingerprint: { sha256: digest, published_sha256: digest, matches: true },
-    warnings: [],
-    errors: [],
-    models: [],
+    ...parseFetchedPrices(fixedSuccess.data).find(
+      (source) => source.id === (overrides.id ?? 'sub2api')
+    )!,
     ...overrides,
   }
 }
@@ -68,7 +67,7 @@ describe('price source confirmation', () => {
             model_name: 'a',
             provider: 'p',
             pricing: {
-              ModelRatio: '0',
+              ModelRatio: 0,
               'billing_setting.billing_expr': newExpression,
             },
           },
@@ -76,7 +75,7 @@ describe('price source confirmation', () => {
       }),
     ])
     const wrapper = mountDialog({
-      a: { ModelPrice: '0', 'billing_setting.billing_expr': oldExpression },
+      a: { ModelPrice: 0, 'billing_setting.billing_expr': oldExpression },
     })
     await flushPromises()
     await wrapper.get('input[value=sub2api]').setValue(true)
@@ -93,20 +92,16 @@ describe('price source confirmation', () => {
     mockSources([
       localSource({
         models: [
-          { model_name: 'a', provider: 'p', pricing: { ModelPrice: '1' } },
-          { model_name: 'b', provider: 'p', pricing: { ModelPrice: '2' } },
+          { model_name: 'a', provider: 'p', pricing: { ModelPrice: 1 } },
+          { model_name: 'b', provider: 'p', pricing: { ModelPrice: 2 } },
         ],
       }),
-      localSource({
-        id: 'axonhub',
-        name: 'AxonHub',
-        status: 'error',
-        fingerprint: null,
-        errors: ['price source: remote returned HTTP 503'],
-      }),
+      parseFetchedPrices(fixedDownloadError.data).find(
+        (source) => source.id === 'axonhub'
+      )!,
     ])
     const save = vi.spyOn(pricingConfigApi, 'save')
-    const wrapper = mountDialog({ a: { ModelPrice: '4' } })
+    const wrapper = mountDialog({ a: { ModelPrice: 4 } })
     await flushPromises()
     expect(wrapper.find('input[type=checkbox]').exists()).toBe(false)
     expect(wrapper.text()).toContain('price source: remote returned HTTP 503')
@@ -118,38 +113,63 @@ describe('price source confirmation', () => {
     expect(wrapper.text()).toContain('1 models already have prices')
     await fillButton(wrapper).trigger('click')
     expect(wrapper.emitted('fill')?.[0]?.[0]).toEqual([
-      { model_name: 'a', provider: 'p', pricing: { ModelPrice: '1' } },
+      { model_name: 'a', provider: 'p', pricing: { ModelPrice: 1 } },
     ])
     expect(save).not.toHaveBeenCalled()
     wrapper.unmount()
   })
-  it('accepts only local sources with a consistent fingerprint contract', () => {
+  it('keeps the fingerprint when downloading succeeds but parsing fails', async () => {
+    const sources = parseFetchedPrices(fixedParseError.data)
+    expect(sources).toHaveLength(2)
+    for (const source of sources) {
+      expect(source.status).toBe('error')
+      expect(source.fingerprint).not.toBeNull()
+      expect(source.models).toEqual([])
+    }
+    mockSources(sources)
+    const wrapper = mountDialog()
+    await flushPromises()
+    for (const source of sources) {
+      const sourceCard = card(wrapper, source.name)
+      expect(sourceCard.get('code').attributes('title')).toBe(
+        source.fingerprint!.sha256
+      )
+      expect(sourceCard.text()).not.toContain('Download failed; no fingerprint')
+      for (const error of source.errors) expect(wrapper.text()).toContain(error)
+    }
+    expect(fillButton(wrapper).attributes('disabled')).toBeDefined()
+    expect(wrapper.emitted('fill')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('takes source ids from the backend and checks the fingerprint contract', () => {
     const raw = (overrides: Record<string, unknown>) => ({
       sources: [
         {
-          id: 'axonhub',
-          name: 'AxonHub',
-          status: 'success',
-          fingerprint: {
-            sha256: digest,
-            published_sha256: null,
-            matches: null,
-          },
-          models: [],
-          warnings: ['source does not publish a sha256 fingerprint'],
-          errors: [],
+          ...fixedSuccess.data.sources.find(
+            (source) => source.id === 'axonhub'
+          ),
           ...overrides,
         },
       ],
     })
     expect(parseFetchedPrices(raw({}))[0]).toMatchObject({
-      fingerprint: { sha256: digest, published_sha256: null, matches: null },
+      fingerprint: {
+        sha256: fixedSuccess.data.sources.find(
+          (source) => source.id === 'axonhub'
+        )!.fingerprint.sha256,
+        published_sha256: null,
+        matches: null,
+      },
       warnings: ['source does not publish a sha256 fingerprint'],
     })
+    // A source added in pkg/pricesource needs no frontend list change.
+    expect(
+      parseFetchedPrices(raw({ id: 'new-source', name: 'New Source' }))[0]
+    ).toMatchObject({ id: 'new-source', name: 'New Source' })
     const invalid = [
-      { id: 'basellm' },
-      { id: 'models_dev' },
-      { id: 'openrouter' },
+      { id: '' },
+      { id: 1 },
+      { name: undefined },
       { fingerprint: { sha256: 'abc', published_sha256: null, matches: null } },
       {
         fingerprint: {
@@ -179,7 +199,7 @@ describe('price source confirmation', () => {
         },
         warnings: ['published sha256 does not match the downloaded document'],
         models: [
-          { model_name: 'a', provider: 'p', pricing: { ModelPrice: '1' } },
+          { model_name: 'a', provider: 'p', pricing: { ModelPrice: 1 } },
         ],
       }),
       localSource({
@@ -188,7 +208,7 @@ describe('price source confirmation', () => {
         fingerprint: { sha256: digest, published_sha256: null, matches: null },
         warnings: ['source does not publish a sha256 fingerprint'],
         models: [
-          { model_name: 'b', provider: 'p', pricing: { ModelPrice: '2' } },
+          { model_name: 'b', provider: 'p', pricing: { ModelPrice: 2 } },
         ],
       }),
     ])
@@ -213,7 +233,7 @@ describe('price source confirmation', () => {
     await wrapper.get('input[type=checkbox]').setValue(true)
     await fillButton(wrapper).trigger('click')
     expect(wrapper.emitted('fill')?.[0]?.[0]).toEqual([
-      { model_name: 'a', provider: 'p', pricing: { ModelPrice: '1' } },
+      { model_name: 'a', provider: 'p', pricing: { ModelPrice: 1 } },
     ])
     wrapper.unmount()
   })
@@ -289,6 +309,12 @@ describe('price source confirmation', () => {
       })
     const wrapper = mountDialog()
     await flushPromises()
+    // Fixed sources download one after another, so they get a longer timeout.
+    expect(post).toHaveBeenCalledWith(
+      '/api/ratio_sync/fetch',
+      {},
+      { signal: expect.any(AbortSignal), timeoutMs: 45_000 }
+    )
     expect(wrapper.find('input[value="upstream:3"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('basellm official ratio preset')
     expect(wrapper.text()).toContain('models.dev price preset')

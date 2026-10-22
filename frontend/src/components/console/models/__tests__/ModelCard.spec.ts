@@ -36,7 +36,7 @@ describe('native catalog cards', () => {
     ])
     wrapper.unmount()
   })
-  it('shows unknown capabilities and unavailable prices without fake zero prices', () => {
+  it('shows unavailable prices without fake zero prices or capability placeholders', () => {
     const fixture = modelCatalogFixture()
     fixture.models[0]!.price_status = 'unavailable'
     fixture.models[0]!.pricing_values = {}
@@ -47,8 +47,9 @@ describe('native catalog cards', () => {
       props: { model, performance: noSamples },
       global: { plugins: [i18n] },
     })
-    expect(wrapper.text()).toContain('未提供')
+    expect(wrapper.text()).toContain('价格不可静态确定')
     expect(wrapper.text()).not.toContain('$0.000')
+    expect(wrapper.text()).not.toMatch(/未提供|上下文|工具调用/)
     wrapper.unmount()
   })
   it('retains an explicitly zero price and omits unsupported billing dimensions', () => {

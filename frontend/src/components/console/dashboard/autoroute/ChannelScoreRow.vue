@@ -10,6 +10,7 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import type { CatalogChannel } from '@/api/modelCatalog'
+import { labDisplayName } from '@/constants/adminChannels'
 import { tokenRoutingMessages } from '@/i18n/tokenRouting'
 
 const props = withDefaults(
@@ -68,7 +69,7 @@ const capacityLabel = computed(() =>
           <p
             class="truncate text-[0.625rem] leading-tight text-[var(--text-tertiary)]"
           >
-            {{ entry.lab.name }}
+            {{ labDisplayName(entry.lab) }}
           </p>
         </div>
         <span class="flex shrink-0 items-center gap-2">

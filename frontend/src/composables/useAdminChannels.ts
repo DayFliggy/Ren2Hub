@@ -15,7 +15,10 @@ import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
-import { isRetiredChannelType } from '@/constants/adminChannels'
+import {
+  isRetiredChannelType,
+  supportsBalanceQuery,
+} from '@/constants/adminChannels'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
@@ -105,12 +108,7 @@ export function useAdminChannels() {
   const canRunBatch = computed(
     () =>
       allowed('operate') &&
-      rows.value.some(
-        (channel) =>
-          !isRetiredChannelType(channel.type) &&
-          channel.type !== 61 &&
-          !channel.channel_info?.is_multi_key
-      ) &&
+      rows.value.some(supportsBalanceQuery) &&
       canMutate.value
   )
 
@@ -320,7 +318,7 @@ export function useAdminChannels() {
   }
 
   function refreshBalance(channel: AdminChannel): Promise<boolean> {
-    if (isRetiredChannelType(channel.type)) return Promise.resolve(false)
+    if (!supportsBalanceQuery(channel)) return Promise.resolve(false)
     return runChannelAction(
       channel.id,
       'balance',
@@ -469,7 +467,11 @@ export function useAdminChannels() {
     channel: AdminChannel,
     input: AdminChannelUpdateInput
   ): Promise<boolean> {
-    if (isRetiredChannelType(channel.type) || isRetiredChannelType(input.type))
+    // input.type is absent when the editor lacks ChannelSensitiveWrite.
+    if (
+      isRetiredChannelType(channel.type) ||
+      (input.type !== undefined && isRetiredChannelType(input.type))
+    )
       return Promise.resolve(false)
     return runCrudAction('edit', channel.id, async (signal) => {
       await api.put<unknown>(
@@ -629,12 +631,7 @@ export function useAdminChannels() {
     if (!canMutate.value || !allowed('operate') || channels.length === 0) return
 
     const targets = channels
-      .filter(
-        (channel) =>
-          !isRetiredChannelType(channel.type) &&
-          channel.type !== 61 &&
-          !channel.channel_info?.is_multi_key
-      )
+      .filter(supportsBalanceQuery)
       .map((channel) => ({ ...channel }))
     if (targets.length === 0) return
     const controller = new AbortController()

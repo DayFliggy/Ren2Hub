@@ -29,9 +29,10 @@ func supplementVendorID(modelName string, vendorID int, vendorMap map[int]*Vendo
 }
 
 type labChannel struct {
-	id      int
-	models  []string
-	mapping map[string]string
+	id             int
+	models         []string
+	mapping        map[string]string
+	invalidMapping bool
 }
 
 // labResolver 以 NewAPI 厂商为唯一词表：显式模型元数据优先，其次原生默认规则和补充推断。
@@ -75,8 +76,10 @@ func loadLabChannels(ctx context.Context, ids []int) ([]labChannel, []string, er
 	for _, row := range rows {
 		channel := labChannel{id: row.Id, models: strings.Split(row.Models, ","), mapping: map[string]string{}}
 		if row.ModelMapping != nil && strings.TrimSpace(*row.ModelMapping) != "" {
+			// 原生转发对无法解析的映射直接报错；这里只把该渠道标为无效，不拖垮其他渠道和模型目录。
 			if err := common.UnmarshalJsonStr(*row.ModelMapping, &channel.mapping); err != nil {
-				return nil, nil, err
+				channel.mapping = map[string]string{}
+				channel.invalidMapping = true
 			}
 		}
 		names = append(names, channel.models...)
@@ -121,8 +124,11 @@ func (r labResolver) classify(name, source string) modellab.Classification {
 	return modellab.Classification{ID: modellab.VendorID(vendor.Name), Name: vendor.Name, Source: source}
 }
 
-// channel 只分类渠道公开的模型名；映射键不会给渠道增加模型，成环的映射报告为无效。
+// channel 只分类渠道公开的模型名；映射键不会给渠道增加模型，无法解析或成环的映射报告为无效。
 func (r labResolver) channel(channel labChannel) modellab.Classification {
+	if channel.invalidMapping {
+		return labInvalidMapping
+	}
 	found := map[string]modellab.Classification{}
 	for _, name := range channel.models {
 		actual, ok := followMapping(name, channel.mapping)

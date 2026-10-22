@@ -1,4 +1,8 @@
-import { PRICING_KEYS, type PricingValues } from '@/api/pricingConfig'
+import {
+  PRICING_KEYS,
+  serializePricing,
+  type PricingValues,
+} from '@/api/pricingConfig'
 
 export interface PriceDiffSegment {
   text: string
@@ -106,6 +110,9 @@ export function pricingDiff(
       candidate: after === undefined ? null : right,
     })
   }
+  // Draft decimal text and fetched numbers compare as the serialized request.
+  const serializedCurrent = serializePricing(current),
+    serializedCandidate = serializePricing(candidate)
   for (const key of PRICING_KEYS) {
     if (!(key in current) && !(key in candidate)) continue
     if (key === 'billing_setting.plugin_billing_expr') {
@@ -115,7 +122,7 @@ export function pricingDiff(
         ...new Set([...Object.keys(before), ...Object.keys(after)]),
       ].sort())
         add(`${key}.${plugin}`, before[plugin], after[plugin])
-    } else add(key, current[key], candidate[key])
+    } else add(key, serializedCurrent[key], serializedCandidate[key])
   }
   return fields
 }

@@ -25,6 +25,7 @@ import type { TaskPluginOption } from '@/features/task-plugins/types'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
 import { isValidChannelRatio } from '@/utils/channelRatio'
+import { parseModelMapping } from '@/utils/modelMapping'
 import { useAuthStore } from '@/stores/auth'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -38,6 +39,8 @@ import {
   advancedChannelPreset,
   parseAdvancedChannelConfig,
   parseChannelObject,
+  formTaskPluginKeys,
+  withTaskPluginKeys,
   CHANNEL_SETTING_FIELDS,
   type ChannelSettingField,
 } from '@/utils/channelSettings'
@@ -46,7 +49,11 @@ import { useToast } from '@/composables/useToast'
 import {
   ADMIN_CHANNEL_TYPE_META,
   adminChannelTypeMeta,
+  adminChannelTypeVendor,
+  isCreatableChannelType,
+  isKnownChannelType,
   isRetiredChannelType,
+  withoutSensitiveChannelFields,
 } from '@/constants/adminChannels'
 import type {
   AdminChannel,
@@ -111,14 +118,26 @@ const validOverrides = computed(() => {
   }
 })
 const advancedConfig = ref('')
-const canSensitiveWrite = computed(() =>
-  auth.hasPermission('channel', 'sensitive_write')
+const hasTaskPluginBind = computed(() =>
+  auth.hasPermission('task_plugin', 'bind')
+)
+// UpdateChannel rejects every request that carries type 61 without
+// task_plugin.bind, so such an editor sends no sensitive group at all; the
+// stored type and setting stay as they are.
+const canSensitiveWrite = computed(
+  () =>
+    auth.hasPermission('channel', 'sensitive_write') &&
+    (form.type !== 61 || hasTaskPluginBind.value)
 )
 const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
 const supportsResponsesWebSocket = computed(() =>
   [1, 58, 59, 60].includes(form.type)
 )
-const canBindPlugin = computed(() => auth.hasPermission('task_plugin', 'bind'))
+// The binding lives in the sensitive setting field, so it needs both
+// permissions, in upstream's order.
+const canBindPlugin = computed(
+  () => canSensitiveWrite.value && hasTaskPluginBind.value
+)
 const validAdvancedConfig = computed(() => {
   if (!isAdvancedChannel.value) return true
   try {
@@ -141,7 +160,7 @@ watch(
   () => props.open,
   async (open) => {
     pluginOptionsRequest?.abort()
-    if (!open || !auth.hasPermission('task_plugin', 'bind')) return
+    if (!open || !hasTaskPluginBind.value) return
     const request = new AbortController()
     pluginOptionsRequest = request
     pluginError.value = ''
@@ -192,8 +211,9 @@ const typeDropdownOpen = ref(false)
 
 const typeOptions = computed(() =>
   Object.entries(ADMIN_CHANNEL_TYPE_META)
-    .filter(([, meta]) => !meta.retired)
+    .filter(([, meta]) => meta.creatable === true)
     .map(([value, meta]) => ({ value: Number(value), label: meta.label }))
+    .filter((option) => option.value !== 61 || hasTaskPluginBind.value)
     .sort((a, b) => a.label.localeCompare(b.label))
 )
 
@@ -204,7 +224,7 @@ const filteredTypeOptions = computed(() => {
 })
 
 function selectType(typeId: number) {
-  if (isRetiredChannelType(typeId)) return
+  if (!isCreatableChannelType(typeId)) return
   form.type = typeId
   if ([58, 62, 63].includes(typeId))
     advancedConfig.value = JSON.stringify(
@@ -241,7 +261,6 @@ const form = reactive({
   baseUrl: '',
   // Models
   models: '',
-  modelMapping: '',
   // Advanced
   priority: 0,
   weight: 0,
@@ -254,27 +273,28 @@ const mappingRows = ref<Array<{ from: string; to: string }>>([])
 const modelMappingTab = ref<'visual' | 'json'>('visual')
 const modelMappingJson = ref('')
 
+// modelMappingJson is the submitted text. Visual rows always serialize to a
+// valid mapping, so only JSON-tab edits can make it invalid.
+const mappingError = computed(() => {
+  const parsed = parseModelMapping(modelMappingJson.value)
+  return parsed.ok ? '' : t(parsed.error.key, parsed.error.params ?? {})
+})
+
 function syncJsonFromRows() {
   const obj: Record<string, string> = {}
   for (const row of mappingRows.value) {
     if (row.from.trim()) obj[row.from.trim()] = row.to.trim()
   }
-  const json = Object.keys(obj).length ? JSON.stringify(obj, null, 2) : ''
-  modelMappingJson.value = json
-  form.modelMapping = json
+  modelMappingJson.value = Object.keys(obj).length
+    ? JSON.stringify(obj, null, 2)
+    : ''
 }
 
-function syncRowsFromJson() {
-  try {
-    const parsed = JSON.parse(modelMappingJson.value || '{}')
-    mappingRows.value = Object.entries(parsed).map(([from, to]) => ({
-      from,
-      to: String(to),
-    }))
-    form.modelMapping = modelMappingJson.value
-  } catch {
-    // keep current rows on parse error
-  }
+function syncRowsFromJson(): boolean {
+  const parsed = parseModelMapping(modelMappingJson.value)
+  if (!parsed.ok) return false
+  mappingRows.value = parsed.rows
+  return true
 }
 
 function addMappingRow() {
@@ -287,13 +307,13 @@ function removeMappingRow(index: number) {
   syncJsonFromRows()
 }
 
+// Invalid JSON keeps the JSON tab open so switching never overwrites the text.
 function onSwitchToVisual() {
-  syncRowsFromJson()
-  modelMappingTab.value = 'visual'
+  if (syncRowsFromJson()) modelMappingTab.value = 'visual'
 }
 
 function onSwitchToJson() {
-  syncJsonFromRows()
+  if (modelMappingTab.value === 'visual') syncJsonFromRows()
   modelMappingTab.value = 'json'
 }
 
@@ -451,9 +471,18 @@ async function copyAllModels() {
 
 // ── Computed helpers ───────────────────────────────────────────────────────
 const selectedTypeMeta = computed(() => adminChannelTypeMeta(form.type))
+const unknownType = computed(() => !isKnownChannelType(form.type))
+// The form edits a type outside the create list through its common fields
+// only, so it never offers a switch to another type's settings.
+const typeLocked = computed(
+  () =>
+    props.editing !== null &&
+    (!canSensitiveWrite.value || !isCreatableChannelType(props.editing.type))
+)
 const valid = computed(
   () =>
     !settingsError.value &&
+    !mappingError.value &&
     validAdvancedConfig.value &&
     validOverrides.value &&
     form.name.trim().length > 0 &&
@@ -461,7 +490,7 @@ const valid = computed(
     (props.editing !== null || form.key.trim().length > 0) &&
     (props.editing !== null || modelTags.value.length > 0) &&
     Number.isSafeInteger(form.type) &&
-    Object.hasOwn(ADMIN_CHANNEL_TYPE_META, form.type) &&
+    !unknownType.value &&
     !isRetiredChannelType(form.type) &&
     !isRetiredChannelType(props.editing?.type ?? form.type) &&
     Number.isSafeInteger(form.priority) &&
@@ -496,8 +525,6 @@ watch(
       typeof ch?.header_override === 'string' ? ch.header_override : ''
     form.baseUrl = ch?.base_url ?? ''
     form.models = ch?.models ?? ''
-    form.modelMapping =
-      typeof ch?.model_mapping === 'string' ? (ch.model_mapping ?? '') : ''
     form.priority = ch?.priority ?? 0
     form.weight = ch?.weight ?? 0
     form.channel_ratio = ch?.channel_ratio ?? '1'
@@ -537,34 +564,19 @@ watch(
         null,
         2
       )
-      pluginKeys.value =
-        ch?.type === 61
-          ? typeof setting.task_plugin_key === 'string' &&
-            setting.task_plugin_key
-            ? [setting.task_plugin_key]
-            : []
-          : Array.isArray(setting.task_extend_plugin_keys)
-            ? setting.task_extend_plugin_keys.filter(
-                (key): key is string => typeof key === 'string'
-              )
-            : []
+      pluginKeys.value = formTaskPluginKeys(form.type, setting)
     } catch {
       pluginKeys.value = []
       settingsError.value = t('channels.invalidStoredSettings')
     }
     boundKeyBeforeChange = pluginKeys.value[0]
-    // parse mapping
-    modelMappingJson.value = form.modelMapping
-    try {
-      const parsed = form.modelMapping ? JSON.parse(form.modelMapping) : {}
-      mappingRows.value = Object.entries(parsed).map(([from, to]) => ({
-        from,
-        to: String(to),
-      }))
-    } catch {
-      mappingRows.value = []
-    }
-    modelMappingTab.value = 'visual'
+    // A stored mapping the relay cannot decode stays verbatim in the JSON tab
+    // with its error, so saving can neither clear nor rewrite it.
+    modelMappingJson.value =
+      typeof ch?.model_mapping === 'string' ? ch.model_mapping : ''
+    const mapping = parseModelMapping(modelMappingJson.value)
+    mappingRows.value = mapping.ok ? mapping.rows : []
+    modelMappingTab.value = mapping.ok ? 'visual' : 'json'
     typeSearch.value = ''
     typeDropdownOpen.value = false
     advancedOpen.value = false
@@ -588,24 +600,24 @@ async function submit() {
   saving.value = true
   try {
     if (modelMappingTab.value === 'visual') syncJsonFromRows()
-    const base: AdminChannelUpdateInput = {
+    const base: Omit<AdminChannelCreateInput, 'status' | 'key'> & {
+      key?: string
+    } = {
       name: form.name.trim(),
       type: form.type,
       base_url: form.baseUrl.trim(),
       models: form.models.trim(),
-      model_mapping: form.modelMapping.trim(),
+      model_mapping: modelMappingJson.value.trim(),
       priority: Number(form.priority),
       weight: Number(form.weight),
       channel_ratio: form.channel_ratio,
       max_concurrency: form.max_concurrency,
     }
     const settings = { ...originalSetting.value }
-    if (canSensitiveWrite.value) {
-      if (form.type === 41) {
-        if (vertexRegion.value.trim() !== (props.editing?.other ?? ''))
-          base.other = vertexRegion.value.trim()
-      }
-    }
+    // validateChannel requires the Vertex region on every type 41 update that
+    // carries the sensitive group, even when the region is unchanged.
+    if (canSensitiveWrite.value && form.type === 41)
+      base.other = vertexRegion.value.trim()
     if (
       canSensitiveWrite.value &&
       passThroughBody.value !== (settings.pass_through_body_enabled === true)
@@ -624,14 +636,22 @@ async function submit() {
         (settings.responses_websocket_enabled === true)
     )
       settings.responses_websocket_enabled = responsesWebSocket.value
-    if (canBindPlugin.value && (form.type === 60 || form.type === 61)) {
-      settings.task_plugin_key =
-        form.type === 61 ? (pluginKeys.value[0] ?? '') : ''
-      settings.task_extend_plugin_keys =
-        form.type === 60 ? pluginKeys.value : []
-    }
-    if (JSON.stringify(settings) !== JSON.stringify(originalSetting.value))
-      base.setting = JSON.stringify(settings)
+    const nextSetting = canBindPlugin.value
+      ? withTaskPluginKeys(
+          settings,
+          form.type,
+          pluginKeys.value,
+          props.editing?.type
+        )
+      : settings
+    // validateChannel reads task_plugin_key from the request before it loads
+    // the stored channel, so every type 61 update that carries the sensitive
+    // group resends the full setting, changed or not.
+    if (
+      JSON.stringify(nextSetting) !== JSON.stringify(originalSetting.value) ||
+      (canSensitiveWrite.value && form.type === 61)
+    )
+      base.setting = JSON.stringify(nextSetting)
     if (canSensitiveWrite.value) {
       if (paramOverride.value !== (props.editing?.param_override ?? ''))
         base.param_override = paramOverride.value.trim()
@@ -700,7 +720,10 @@ async function submit() {
     if (canSensitiveWrite.value && replacementKey) base.key = replacementKey
     if (canSensitiveWrite.value && replacementKey && existingMultiKey.value)
       base.key_mode = keyMode.value
-    if (await props.save(base)) emit('close')
+    const update = canSensitiveWrite.value
+      ? base
+      : withoutSensitiveChannelFields(base)
+    if (await props.save(update)) emit('close')
   } finally {
     saving.value = false
   }
@@ -782,10 +805,13 @@ async function submit() {
                   type="button"
                   class="flex h-10 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
                   :aria-expanded="typeDropdownOpen"
-                  :disabled="editing !== null && !canSensitiveWrite"
+                  :disabled="typeLocked"
                   @click="typeDropdownOpen = !typeDropdownOpen"
                 >
-                  <VendorLogo :vendor="selectedTypeMeta.supplier" :size="20" />
+                  <VendorLogo
+                    :vendor="adminChannelTypeVendor(form.type)"
+                    :size="20"
+                  />
                   <span
                     class="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]"
                   >
@@ -830,7 +856,7 @@ async function submit() {
                       @click="selectType(opt.value)"
                     >
                       <VendorLogo
-                        :vendor="adminChannelTypeMeta(opt.value).supplier"
+                        :vendor="adminChannelTypeVendor(opt.value)"
                         :size="20"
                       />
                       {{ opt.label }}
@@ -844,6 +870,21 @@ async function submit() {
                   </ul>
                 </div>
               </div>
+              <p
+                v-if="unknownType"
+                role="alert"
+                class="mt-1.5 text-xs text-[var(--status-danger)]"
+              >
+                {{ t('channels.unknownTypeCannotSave', { type: form.type }) }}
+              </p>
+              <p
+                v-else-if="
+                  editing !== null && !isCreatableChannelType(editing.type)
+                "
+                class="mt-1.5 text-xs text-[var(--text-tertiary)]"
+              >
+                {{ t('channels.typeNotCreatable') }}
+              </p>
             </div>
 
             <FormField :label="t('channels.channelName') + ' *'">
@@ -1367,11 +1408,25 @@ async function submit() {
             <template v-else>
               <textarea
                 v-model="modelMappingJson"
+                name="admin-channel-model-mapping"
                 rows="5"
                 class="channel-form-textarea focus-ring font-mono text-xs"
                 placeholder='{"gpt-4": "gpt-4-turbo"}'
+                :aria-label="t('channels.modelMapping')"
+                :aria-invalid="mappingError ? 'true' : undefined"
+                :aria-describedby="
+                  mappingError ? 'admin-channel-model-mapping-error' : undefined
+                "
                 @blur="syncRowsFromJson"
               />
+              <p
+                v-if="mappingError"
+                id="admin-channel-model-mapping-error"
+                role="alert"
+                class="mt-1 text-xs text-[var(--status-danger)]"
+              >
+                {{ mappingError }}
+              </p>
             </template>
           </div>
         </div>

@@ -47,7 +47,6 @@ async function form(
         channel_ratio: '1',
         max_concurrency: 0,
         in_flight: 0,
-        supplier: 'OpenAI',
         lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
         used_quota: 0,
         balance: 0,

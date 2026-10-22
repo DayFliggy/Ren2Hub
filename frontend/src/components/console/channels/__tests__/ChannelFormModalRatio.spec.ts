@@ -31,7 +31,6 @@ const channel: AdminChannel = {
   channel_ratio: '1.5',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'OpenAI',
   lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
   status: 1,
   priority: 0,
@@ -80,7 +79,7 @@ afterEach(() => {
 })
 
 describe('channel multiplier permission', () => {
-  it('is read-only without sensitive write and saves the stored value unchanged', async () => {
+  it('is read-only without sensitive write and leaves the multiplier out of the update', async () => {
     const { wrapper, save } = mountForm()
     try {
       await flushPromises()
@@ -91,7 +90,7 @@ describe('channel multiplier permission', () => {
       saveButton().click()
       await flushPromises()
       expect(save).toHaveBeenCalledOnce()
-      expect(save.mock.calls[0]![0]).toMatchObject({ channel_ratio: '1.5' })
+      expect(save.mock.calls[0]![0]).not.toHaveProperty('channel_ratio')
     } finally {
       wrapper.unmount()
     }

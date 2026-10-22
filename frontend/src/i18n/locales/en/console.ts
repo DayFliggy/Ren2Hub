@@ -667,6 +667,7 @@ export default {
     ipPlaceholder: '120.244.0.0/16',
     expireLabel: 'Expires',
     neverExpire: 'Never',
+    expireInvalid: 'Enter a valid expiration time or turn expiration off.',
     revealTitle: 'Full key',
     revealNote:
       'The full key is shown only once. Reads are rate-limited and never cached.',
@@ -1282,6 +1283,17 @@ export default {
     statusRetired: 'Retired',
     retiredHint:
       'This channel type is retired. Delete it and create an OpenAI API channel with an official API key; subscription credentials cannot be reused.',
+    unknownType: 'Unknown type {type}',
+    unknownTypeCannotSave:
+      'The console does not recognize channel type {type}, so this channel cannot be saved here.',
+    typeNotCreatable:
+      'This type cannot be changed or created here; only the common fields can be edited.',
+    labUnknown: 'Unknown vendor',
+    labMixed: 'Multiple vendors',
+    labInvalidMapping: 'Invalid model mapping',
+    keysAvailable: '{enabled}/{total} keys available',
+    keyStatus: 'Key status',
+    keyPosition: 'Key #{position}',
     priorityFor: 'Priority for {name}',
     weightFor: 'Weight for {name}',
     notTested: 'Untested',
@@ -1424,6 +1436,9 @@ export default {
     modelMappingFillTemplate: 'Fill template',
     modelMappingEmpty:
       'No model mapping configured. Click "Add mapping" to get started.',
+    modelMappingInvalidJson: 'Model mapping is not valid JSON',
+    modelMappingNotObject: 'Model mapping must be a JSON object',
+    modelMappingValueNotString: 'Model mapping values must be strings: {key}',
     addMapping: '+ Add mapping',
     // Advanced section
     channelRatioHint: 'Channel billing ratio. 1.0 = normal, 0.5 = half price.',

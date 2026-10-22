@@ -1,0 +1,54 @@
+{
+  "data": {
+    "sources": [
+      {
+        "errors": [],
+        "fingerprint": {
+          "matches": true,
+          "published_sha256": "4dbab80d40f43105a8434195a5de0e2127fae8eb76ee6c3e6ac475b29fa78994",
+          "sha256": "4dbab80d40f43105a8434195a5de0e2127fae8eb76ee6c3e6ac475b29fa78994"
+        },
+        "id": "sub2api",
+        "models": [
+          {
+            "model_name": "contract-chat",
+            "pricing": {
+              "billing_setting.billing_expr": "tier(\"base\", p * 1 + c * 2)",
+              "billing_setting.billing_mode": "tiered_expr"
+            },
+            "provider": ""
+          }
+        ],
+        "name": "Sub2API",
+        "status": "success",
+        "warnings": []
+      },
+      {
+        "errors": [],
+        "fingerprint": {
+          "matches": null,
+          "published_sha256": null,
+          "sha256": "9b932536fe490c4e372b1eabe33f828c528151daaf307fc511d0308288572313"
+        },
+        "id": "axonhub",
+        "models": [
+          {
+            "model_name": "contract-chat",
+            "pricing": {
+              "billing_setting.billing_expr": "tier(\"base\", p * 1 + c * 2)",
+              "billing_setting.billing_mode": "tiered_expr"
+            },
+            "provider": "contract"
+          }
+        ],
+        "name": "AxonHub",
+        "status": "success",
+        "warnings": [
+          "source does not publish a sha256 fingerprint"
+        ]
+      }
+    ]
+  },
+  "message": "",
+  "success": true
+}
