@@ -49,6 +49,9 @@ import { useToast } from '@/composables/useToast'
 import {
   ADMIN_CHANNEL_TYPE_META,
   adminChannelTypeMeta,
+  adminChannelTypeVendor,
+  isCreatableChannelType,
+  isKnownChannelType,
   isRetiredChannelType,
   withoutSensitiveChannelFields,
 } from '@/constants/adminChannels'
@@ -208,7 +211,7 @@ const typeDropdownOpen = ref(false)
 
 const typeOptions = computed(() =>
   Object.entries(ADMIN_CHANNEL_TYPE_META)
-    .filter(([, meta]) => !meta.retired)
+    .filter(([, meta]) => meta.creatable === true)
     .map(([value, meta]) => ({ value: Number(value), label: meta.label }))
     .filter((option) => option.value !== 61 || hasTaskPluginBind.value)
     .sort((a, b) => a.label.localeCompare(b.label))
@@ -221,7 +224,7 @@ const filteredTypeOptions = computed(() => {
 })
 
 function selectType(typeId: number) {
-  if (isRetiredChannelType(typeId)) return
+  if (!isCreatableChannelType(typeId)) return
   form.type = typeId
   if ([58, 62, 63].includes(typeId))
     advancedConfig.value = JSON.stringify(
@@ -468,6 +471,14 @@ async function copyAllModels() {
 
 // ── Computed helpers ───────────────────────────────────────────────────────
 const selectedTypeMeta = computed(() => adminChannelTypeMeta(form.type))
+const unknownType = computed(() => !isKnownChannelType(form.type))
+// The form edits a type outside the create list through its common fields
+// only, so it never offers a switch to another type's settings.
+const typeLocked = computed(
+  () =>
+    props.editing !== null &&
+    (!canSensitiveWrite.value || !isCreatableChannelType(props.editing.type))
+)
 const valid = computed(
   () =>
     !settingsError.value &&
@@ -479,7 +490,7 @@ const valid = computed(
     (props.editing !== null || form.key.trim().length > 0) &&
     (props.editing !== null || modelTags.value.length > 0) &&
     Number.isSafeInteger(form.type) &&
-    Object.hasOwn(ADMIN_CHANNEL_TYPE_META, form.type) &&
+    !unknownType.value &&
     !isRetiredChannelType(form.type) &&
     !isRetiredChannelType(props.editing?.type ?? form.type) &&
     Number.isSafeInteger(form.priority) &&
@@ -789,10 +800,13 @@ async function submit() {
                   type="button"
                   class="flex h-10 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
                   :aria-expanded="typeDropdownOpen"
-                  :disabled="editing !== null && !canSensitiveWrite"
+                  :disabled="typeLocked"
                   @click="typeDropdownOpen = !typeDropdownOpen"
                 >
-                  <VendorLogo :vendor="selectedTypeMeta.supplier" :size="20" />
+                  <VendorLogo
+                    :vendor="adminChannelTypeVendor(form.type)"
+                    :size="20"
+                  />
                   <span
                     class="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]"
                   >
@@ -837,7 +851,7 @@ async function submit() {
                       @click="selectType(opt.value)"
                     >
                       <VendorLogo
-                        :vendor="adminChannelTypeMeta(opt.value).supplier"
+                        :vendor="adminChannelTypeVendor(opt.value)"
                         :size="20"
                       />
                       {{ opt.label }}
@@ -851,6 +865,21 @@ async function submit() {
                   </ul>
                 </div>
               </div>
+              <p
+                v-if="unknownType"
+                role="alert"
+                class="mt-1.5 text-xs text-[var(--status-danger)]"
+              >
+                {{ t('channels.unknownTypeCannotSave', { type: form.type }) }}
+              </p>
+              <p
+                v-else-if="
+                  editing !== null && !isCreatableChannelType(editing.type)
+                "
+                class="mt-1.5 text-xs text-[var(--text-tertiary)]"
+              >
+                {{ t('channels.typeNotCreatable') }}
+              </p>
             </div>
 
             <FormField :label="t('channels.channelName') + ' *'">

@@ -1234,6 +1234,9 @@ export default {
     statusRetired: '已退役',
     retiredHint:
       '该渠道类型已退役。请删除后使用官方 API Key 新建 OpenAI 渠道，订阅凭据不能直接复用。',
+    unknownType: '未知类型 {type}',
+    unknownTypeCannotSave: '前端无法识别渠道类型 {type}，不能在此保存。',
+    typeNotCreatable: '该类型不能在此新建或更改，只能编辑通用字段。',
     priorityFor: '{name} 的优先级',
     weightFor: '{name} 的权重',
     notTested: '未测试',

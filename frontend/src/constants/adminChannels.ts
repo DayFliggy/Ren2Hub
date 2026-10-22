@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import type {
   AdminChannel,
   AdminChannelSortBy,
@@ -47,35 +48,83 @@ export function sanitizeAdminChannelVisibleFields(
 
 export interface AdminChannelTypeMeta {
   label: string
-  supplier: string
+  /** Vendor logo key; only the types the create form offers carry one. */
+  supplier?: string
+  /** The create form offers this type and its type-specific settings. */
+  creatable?: boolean
   retired?: boolean
 }
 
+/**
+ * Every channel type the backend knows (constant/channel.go). Names follow
+ * upstream web CHANNEL_TYPES, including the ids it leaves commented out.
+ * Types without `creatable` are shown by name and allow common-field edits
+ * only; the create list stays the set Ren2Hub configures end to end.
+ */
 export const ADMIN_CHANNEL_TYPE_META: Record<number, AdminChannelTypeMeta> = {
-  1: { label: 'OpenAI', supplier: 'OpenAI' },
-  3: { label: 'Azure', supplier: 'OpenAI' },
-  4: { label: 'Ollama', supplier: 'Ollama' },
-  14: { label: 'Anthropic', supplier: 'Anthropic' },
-  17: { label: 'Ali', supplier: '阿里通义' },
-  20: { label: 'OpenRouter', supplier: 'OpenAI' },
-  24: { label: 'Gemini', supplier: 'Google' },
-  25: { label: 'Moonshot', supplier: 'Moonshot' },
-  33: { label: 'AWS Bedrock', supplier: 'Anthropic' },
-  40: { label: 'SiliconFlow', supplier: 'DeepSeek' },
-  41: { label: 'Vertex AI', supplier: 'Google' },
-  43: { label: 'DeepSeek', supplier: 'DeepSeek' },
-  48: { label: 'xAI', supplier: 'xAI' },
+  1: { label: 'OpenAI', supplier: 'OpenAI', creatable: true },
+  2: { label: 'MjProxy' },
+  3: { label: 'Azure', supplier: 'OpenAI', creatable: true },
+  4: { label: 'Ollama', supplier: 'Ollama', creatable: true },
+  5: { label: 'MjProxyPlus' },
+  6: { label: 'OpenAIMax' },
+  7: { label: 'OhMyGPT' },
+  8: { label: 'Custom' },
+  9: { label: 'AILS' },
+  10: { label: 'AI Proxy' },
+  11: { label: 'PaLM' },
+  12: { label: 'API2GPT' },
+  13: { label: 'AIGC2D' },
+  14: { label: 'Anthropic', supplier: 'Anthropic', creatable: true },
+  15: { label: 'Baidu' },
+  16: { label: 'Zhipu' },
+  17: { label: 'Ali', supplier: '阿里通义', creatable: true },
+  18: { label: 'Xunfei' },
+  19: { label: '360' },
+  20: { label: 'OpenRouter', supplier: 'OpenAI', creatable: true },
+  21: { label: 'AI Proxy Library' },
+  22: { label: 'FastGPT' },
+  23: { label: 'Tencent' },
+  24: { label: 'Gemini', supplier: 'Google', creatable: true },
+  25: { label: 'Moonshot', supplier: 'Moonshot', creatable: true },
+  26: { label: 'Zhipu GLM' },
+  27: { label: 'Perplexity' },
+  31: { label: 'LingYiWanWu' },
+  33: { label: 'AWS Bedrock', supplier: 'Anthropic', creatable: true },
+  34: { label: 'Cohere' },
+  35: { label: 'MiniMax' },
+  36: { label: 'SunoAPI' },
+  37: { label: 'Dify' },
+  38: { label: 'Jina' },
+  39: { label: 'Cloudflare' },
+  40: { label: 'SiliconFlow', supplier: 'DeepSeek', creatable: true },
+  41: { label: 'Vertex AI', supplier: 'Google', creatable: true },
+  42: { label: 'Mistral' },
+  43: { label: 'DeepSeek', supplier: 'DeepSeek', creatable: true },
+  44: { label: 'MokaAI' },
+  45: { label: 'VolcEngine' },
+  46: { label: 'Baidu V2' },
+  47: { label: 'Xinference' },
+  48: { label: 'xAI', supplier: 'xAI', creatable: true },
+  49: { label: 'Coze' },
+  50: { label: 'Kling' },
+  51: { label: 'Jimeng' },
+  52: { label: 'Vidu' },
+  53: { label: 'Submodel' },
+  54: { label: 'Doubao' },
+  55: { label: 'Sora' },
+  56: { label: 'Replicate' },
   57: {
     label: 'ChatGPT Subscription (Codex)',
     supplier: 'OpenAI',
     retired: true,
   },
-  58: { label: 'Advanced Custom', supplier: 'Custom' },
-  59: { label: 'Sub2API', supplier: 'Sub2API' },
-  60: { label: 'New API', supplier: 'New API' },
-  61: { label: 'Task Plugin', supplier: 'Plugin' },
-  62: { label: 'vLLM', supplier: 'vLLM' },
-  63: { label: 'SGLang', supplier: 'SGLang' },
+  58: { label: 'Advanced Custom', supplier: 'Custom', creatable: true },
+  59: { label: 'Sub2API', supplier: 'Sub2API', creatable: true },
+  60: { label: 'New API', supplier: 'New API', creatable: true },
+  61: { label: 'Task Plugin', supplier: 'Plugin', creatable: true },
+  62: { label: 'vLLM', supplier: 'vLLM', creatable: true },
+  63: { label: 'SGLang', supplier: 'SGLang', creatable: true },
 }
 
 export const ADMIN_CHANNEL_SORT_FIELDS: AdminChannelSortBy[] = [
@@ -89,10 +138,23 @@ export const ADMIN_CHANNEL_SORT_FIELDS: AdminChannelSortBy[] = [
 export function adminChannelTypeMeta(type: number): AdminChannelTypeMeta {
   return (
     ADMIN_CHANNEL_TYPE_META[type] ?? {
-      label: `Type ${type}`,
-      supplier: `Type ${type}`,
+      label: i18n.global.t('channels.unknownType', { type }),
     }
   )
+}
+
+/** Logo key for a type; types without a vendor reuse their name. */
+export function adminChannelTypeVendor(type: number): string {
+  const meta = adminChannelTypeMeta(type)
+  return meta.supplier ?? meta.label
+}
+
+export function isKnownChannelType(type: number): boolean {
+  return Object.hasOwn(ADMIN_CHANNEL_TYPE_META, type)
+}
+
+export function isCreatableChannelType(type: number): boolean {
+  return ADMIN_CHANNEL_TYPE_META[type]?.creatable === true
 }
 
 export function isRetiredChannelType(type: number): boolean {

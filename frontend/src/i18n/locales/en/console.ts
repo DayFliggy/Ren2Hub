@@ -1277,6 +1277,11 @@ export default {
     statusRetired: 'Retired',
     retiredHint:
       'This channel type is retired. Delete it and create an OpenAI API channel with an official API key; subscription credentials cannot be reused.',
+    unknownType: 'Unknown type {type}',
+    unknownTypeCannotSave:
+      'The console does not recognize channel type {type}, so this channel cannot be saved here.',
+    typeNotCreatable:
+      'This type cannot be changed or created here; only the common fields can be edited.',
     priorityFor: 'Priority for {name}',
     weightFor: 'Weight for {name}',
     notTested: 'Untested',

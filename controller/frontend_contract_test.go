@@ -314,6 +314,51 @@ export function parseTaskResult() { return {}; }
 	assert.Equal(t, baseURL, *current.BaseURL)
 }
 
+// The edit form keeps types outside its create list (here AI Proxy Library,
+// which upstream web also leaves out) and edits only their common fields.
+func TestFrontendContractNativeTypeChannelUpdate(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	baseURL, priority, weight := "https://library.example.com", int64(0), uint(1)
+	const other, otherSettings = "contract-library", `{"allow_service_tier":true}`
+	channel := model.Channel{
+		Type: constant.ChannelTypeAIProxyLibrary, Name: "native-contract", Key: "sk", Models: "gpt-4o",
+		Other: other, OtherSettings: otherSettings, BaseURL: &baseURL, Priority: &priority,
+		Weight: &weight, ChannelRatio: "1", Status: common.ChannelStatusEnabled,
+	}
+	require.NoError(t, channel.Insert())
+
+	rename := frontendFixture(t, "channel-native-type-rename.put.request.json", map[string]any{
+		"id": channel.Id, "name": "native-contract-renamed", "type": constant.ChannelTypeAIProxyLibrary,
+		"base_url": baseURL, "models": "gpt-4o", "model_mapping": "", "priority": 0, "weight": 1,
+		"channel_ratio": "1", "max_concurrency": 0,
+	})
+	root := contractEngine(1, common.RoleRootUser)
+	root.PUT("/api/channel/", UpdateChannel)
+	updated := contractRequest(t, root, http.MethodPut, "/api/channel/", rename)
+	require.Contains(t, updated.Body.String(), `"success":true`, updated.Body.String())
+
+	var current model.Channel
+	require.NoError(t, model.DB.First(&current, channel.Id).Error)
+	assert.Equal(t, "native-contract-renamed", current.Name)
+	assert.Equal(t, constant.ChannelTypeAIProxyLibrary, current.Type)
+	assert.Equal(t, other, current.Other)
+	assert.Equal(t, otherSettings, current.OtherSettings)
+	assert.Nil(t, current.Setting)
+}
+
+// The console names every channel type the backend accepts; a new native type
+// changes this fixture and fails the frontend catalog test until it is named.
+func TestFrontendContractChannelTypeIds(t *testing.T) {
+	ids := make([]int, 0, len(constant.ChannelTypeNames))
+	for id := range constant.ChannelTypeNames {
+		if id != constant.ChannelTypeUnknown {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	frontendFixture(t, "channel-type-ids.json", map[string]any{"ids": ids})
+}
+
 // The price fetch dialog lists the native presets and OpenRouter channels from
 // this response; other channels are listed by the backend but not synced.
 func TestFrontendContractSyncableChannels(t *testing.T) {
