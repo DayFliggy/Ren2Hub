@@ -10,6 +10,7 @@ const positiveNumberKeys = new Set([
   'Price',
   'USDExchangeRate',
   'general_setting.custom_currency_exchange_rate',
+  'quota_setting.pre_consume_multiplier',
 ])
 export function validSettingUrl(value: string): boolean {
   try {

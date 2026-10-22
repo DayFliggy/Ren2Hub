@@ -112,6 +112,7 @@
   "The fixed inviter reward is retired once the invite rebate program is active": "邀请返利计划激活后固定邀请人奖励已废弃",
   "The invite rebate activation time cannot be changed directly": "邀请返利激活时间不允许直接修改",
   "The local metadata has changed. Preview again.": "本地资料已变化，请重新预览",
+  "The longest log time range must be at least 1 day": "日志最长查询范围至少为 1 天",
   "The ratio config API is not enabled": "倍率配置接口未启用",
   "The rebate cap per invitee must be a finite non-negative number": "单个受邀用户返利上限必须是非负有限数值",
   "The rebate rate must be between 0 and 10000 basis points": "返利比例必须在 0 到 10000 基点之间",

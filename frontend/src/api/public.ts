@@ -168,8 +168,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     if (
       typeof value.log_max_range_days !== 'number' ||
       !Number.isInteger(value.log_max_range_days) ||
-      value.log_max_range_days < 1 ||
-      value.log_max_range_days > 36500
+      value.log_max_range_days < 1
     )
       invalidResponse('/api/status')
     result.log_max_range_days = value.log_max_range_days

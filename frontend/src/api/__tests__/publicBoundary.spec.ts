@@ -46,6 +46,15 @@ describe('public API response boundaries', () => {
     ).toThrow()
   })
 
+  it('accepts any positive integer log range the backend allows', () => {
+    for (const days of [1, 365, 36501])
+      expect(parsePublicStatus({ log_max_range_days: days })).toEqual({
+        log_max_range_days: days,
+      })
+    for (const days of [0, -1, 1.5, '365'])
+      expect(() => parsePublicStatus({ log_max_range_days: days })).toThrow()
+  })
+
   it('accepts only a consistent 24-hour metrics snapshot', () => {
     const hourly = Array.from({ length: 24 }, (_, index) => index)
     expect(

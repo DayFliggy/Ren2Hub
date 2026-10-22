@@ -513,7 +513,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         titleKey: 'systemSettings.sections.routing',
         descriptionKey: 'systemSettings.sections.routingDescription',
         fields: [
-          number('RetryTimes', 'retryTimes'),
+          { ...number('RetryTimes', 'retryTimes'), min: 0, integer: true },
           number('ChannelDisableThreshold', 'channelDisableThreshold', 5),
           toggle('AutomaticDisableChannelEnabled', 'autoDisableChannel'),
           toggle('AutomaticEnableChannelEnabled', 'autoEnableChannel'),
@@ -786,7 +786,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
               'logMaxRangeDaysHint'
             ),
             min: 1,
-            max: 36500,
             integer: true,
           },
         ],
@@ -832,11 +831,15 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           ),
           text('QuotaRemindThreshold', 'quotaRemindThreshold', '1000'),
           toggle('perf_metrics_setting.enabled', 'perfMetricsEnabled', true),
-          number(
-            'perf_metrics_setting.flush_interval',
-            'perfMetricsFlushInterval',
-            5
-          ),
+          {
+            ...number(
+              'perf_metrics_setting.flush_interval',
+              'perfMetricsFlushInterval',
+              5
+            ),
+            min: 1,
+            integer: true,
+          },
           select(
             'perf_metrics_setting.bucket_time',
             'perfMetricsBucket',
@@ -847,7 +850,14 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
               option('hour', 'hour'),
             ]
           ),
-          number('perf_metrics_setting.retention_days', 'perfMetricsRetention'),
+          {
+            ...number(
+              'perf_metrics_setting.retention_days',
+              'perfMetricsRetention'
+            ),
+            min: 0,
+            integer: true,
+          },
         ],
       },
       {
@@ -866,16 +876,24 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         descriptionKey: 'systemSettings.sections.performanceDescription',
         fields: [
           toggle('performance_setting.disk_cache_enabled', 'diskCacheEnabled'),
-          number(
-            'performance_setting.disk_cache_threshold_mb',
-            'diskCacheThreshold',
-            10
-          ),
-          number(
-            'performance_setting.disk_cache_max_size_mb',
-            'diskCacheMaxSize',
-            1024
-          ),
+          {
+            ...number(
+              'performance_setting.disk_cache_threshold_mb',
+              'diskCacheThreshold',
+              10
+            ),
+            min: 1,
+            integer: true,
+          },
+          {
+            ...number(
+              'performance_setting.disk_cache_max_size_mb',
+              'diskCacheMaxSize',
+              1024
+            ),
+            min: 100,
+            integer: true,
+          },
           text('performance_setting.disk_cache_path', 'diskCachePath'),
           toggle('performance_setting.monitor_enabled', 'resourceMonitor'),
           number(

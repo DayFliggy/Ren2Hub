@@ -66,3 +66,46 @@ describe('payment setting validation', () => {
     ).toBeNull()
   })
 })
+
+// Backend-validated keys follow the backend rule; UI-only keys follow the
+// upstream web form minimums. None may be stricter than either source.
+describe('numeric setting bounds', () => {
+  it.each([
+    {
+      key: 'quota_setting.pre_consume_multiplier',
+      rejected: [0, -0.5, ''],
+      accepted: [0.0001, 1, 2.5],
+    },
+    { key: 'RetryTimes', rejected: [-1, 1.5], accepted: [0, 3, 100, 1000] },
+    {
+      key: 'log_setting.max_range_days',
+      rejected: [0, 1.5],
+      accepted: [1, 365, 36501, 100000],
+    },
+    {
+      key: 'perf_metrics_setting.flush_interval',
+      rejected: [0, 1.5],
+      accepted: [1, 5],
+    },
+    {
+      key: 'perf_metrics_setting.retention_days',
+      rejected: [-1, 0.5],
+      accepted: [0, 30],
+    },
+    {
+      key: 'performance_setting.disk_cache_threshold_mb',
+      rejected: [0, 1.5],
+      accepted: [1, 10],
+    },
+    {
+      key: 'performance_setting.disk_cache_max_size_mb',
+      rejected: [99, 100.5],
+      accepted: [100, 1024],
+    },
+  ])('bounds $key', ({ key, rejected, accepted }) => {
+    for (const value of rejected)
+      expect(validate(key, value), String(value)).not.toBeNull()
+    for (const value of accepted)
+      expect(validate(key, value), String(value)).toBeNull()
+  })
+})
