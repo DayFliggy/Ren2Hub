@@ -8,6 +8,7 @@ for (const theme of ['light', 'dark'] as const)
       let removed = false
       let emailRemoved = false
       const deletes: string[] = []
+      const proofContexts: unknown[] = []
       await page.route('**/api/user/2', (route) =>
         route.fulfill({
           json: {
@@ -50,7 +51,7 @@ for (const theme of ['light', 'dark'] as const)
           json: {
             success: true,
             data: {
-              scope: 'admin.user.change',
+              scope: 'admin.user.binding.clear',
               methods: [{ method: '2fa', available: true }],
               oauth_providers: [],
               password_encryption_enabled: false,
@@ -59,10 +60,9 @@ for (const theme of ['light', 'dark'] as const)
         })
       )
       await page.route('**/api/verify', (route) => {
-        expect(route.request().postDataJSON()).toMatchObject({
-          scope: 'admin.user.change',
-          context: { ids: [2], action: 'clear_binding' },
-        })
+        const body = route.request().postDataJSON()
+        expect(body.scope).toBe('admin.user.binding.clear')
+        proofContexts.push(body.context)
         return route.fulfill({
           json: {
             success: true,
@@ -70,7 +70,7 @@ for (const theme of ['light', 'dark'] as const)
               proof_token: 'visual-proof',
               expires_at: Math.floor(Date.now() / 1000) + 300,
               method: '2fa',
-              scope: 'admin.user.change',
+              scope: 'admin.user.binding.clear',
             },
           },
         })
@@ -129,6 +129,10 @@ for (const theme of ['light', 'dark'] as const)
         .getByRole('button', { name: '确认', exact: true })
         .click()
       await expect(confirmation).toHaveCount(0)
+      expect(proofContexts).toEqual([
+        { user_id: 2, binding_type: 'github' },
+        { user_id: 2, binding_type: 'email' },
+      ])
       await page.keyboard.press('Escape')
       await expect(bindings).toHaveCount(0)
       await expect(
