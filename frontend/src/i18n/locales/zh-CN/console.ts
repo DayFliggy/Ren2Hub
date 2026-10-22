@@ -630,6 +630,7 @@ export default {
     ipPlaceholder: '120.244.0.0/16',
     expireLabel: '过期时间',
     neverExpire: '永不过期',
+    expireInvalid: '请填写有效的过期时间，或关闭过期时间。',
     revealTitle: '完整密钥',
     revealNote: '完整密钥仅本次展示，请妥善保管。读取已限流且禁用缓存。',
     created: '令牌已创建',

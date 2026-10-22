@@ -659,6 +659,7 @@ export default {
     ipPlaceholder: '120.244.0.0/16',
     expireLabel: 'Expires',
     neverExpire: 'Never',
+    expireInvalid: 'Enter a valid expiration time or turn expiration off.',
     revealTitle: 'Full key',
     revealNote:
       'The full key is shown only once. Reads are rate-limited and never cached.',

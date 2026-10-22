@@ -144,15 +144,16 @@ describe('KeyFormModal', () => {
       put.mockRestore()
     }
   })
+})
 
-  it('backfills and saves the expiry as the local calendar day', async () => {
-    vi.stubEnv('TZ', 'Asia/Shanghai')
-    // 2026-10-12 00:00 in UTC+8, which is still 2026-10-11 in UTC.
-    const localMidnight = Date.UTC(2026, 9, 11, 16) / 1000
-    const put = vi
-      .spyOn(api, 'put')
-      .mockRejectedValue(new Error('lost response'))
-    const editing = {
+describe('KeyFormModal expiry', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+    vi.unstubAllEnvs()
+  })
+
+  function expiringToken(expiredTime: number): TokenSummary {
+    return {
       id: 3,
       name: 'expiring',
       type: 'auto',
@@ -161,26 +162,93 @@ describe('KeyFormModal', () => {
       unlimited: true,
       model_limits: [],
       ip_limits: [],
-      expired_time: localMidnight,
+      expired_time: expiredTime,
     } as unknown as TokenSummary
-    const wrapper = mountForm(editing)
-    try {
-      await flushPromises()
-      expect(
-        document.querySelector<HTMLInputElement>('[name="token-expiration"]')
-          ?.value
-      ).toBe('2026-10-12')
-      const button = [...document.body.querySelectorAll('button')].find(
-        (item) => item.textContent?.trim() === i18n.global.t('common.confirm')
-      )!
-      button.click()
-      await flushPromises()
-      const payload = put.mock.calls[0][1] as Record<string, unknown>
-      expect(payload.expired_time).toBe(localMidnight)
-    } finally {
-      wrapper.unmount()
-      put.mockRestore()
-      vi.unstubAllEnvs()
+  }
+
+  const expiryInput = () =>
+    document.querySelector<HTMLInputElement>('[name="token-expiration"]')
+
+  async function submit() {
+    const button = [...document.body.querySelectorAll('button')].find(
+      (item) => item.textContent?.trim() === i18n.global.t('common.confirm')
+    )!
+    button.click()
+    await flushPromises()
+  }
+
+  async function editExpiry(expiredTime: number, change?: string) {
+    const put = vi.spyOn(api, 'put').mockResolvedValue({})
+    const wrapper = mountForm(expiringToken(expiredTime))
+    await flushPromises()
+    if (change !== undefined) {
+      expiryInput()!.value = change
+      expiryInput()!.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+    }
+    await submit()
+    wrapper.unmount()
+    return put.mock.calls.map(([, body]) => body as Record<string, unknown>)
+  }
+
+  it('keeps the stored instant when only the name changes', async () => {
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    // 2026-10-12 23:00:30 in UTC+8; a date-only field would move it to 00:00.
+    const lateEvening = Date.UTC(2026, 9, 12, 15, 0, 30) / 1000
+    const put = vi.spyOn(api, 'put').mockResolvedValue({})
+    const wrapper = mountForm(expiringToken(lateEvening))
+    await flushPromises()
+    // jsdom normalizes the value with milliseconds; browsers omit them.
+    expect(expiryInput()?.value).toMatch(/^2026-10-12T23:00:30(\.000)?$/)
+    expect(expiryInput()?.getAttribute('step')).toBe('1')
+    const name = document.querySelector<HTMLInputElement>(
+      '[name="token-name"]'
+    )!
+    name.value = 'renamed'
+    name.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    await submit()
+    wrapper.unmount()
+    expect(put.mock.calls[0]![1]).toMatchObject({
+      name: 'renamed',
+      expired_time: lateEvening,
+    })
+  })
+
+  it('keeps the second occurrence of a repeated daylight-saving hour', async () => {
+    vi.stubEnv('TZ', 'America/New_York')
+    // 2026-11-01 01:30:00 EST; the same local text also names 01:30 EDT.
+    const secondOccurrence = Date.UTC(2026, 10, 1, 6, 30) / 1000
+    const [payload] = await editExpiry(secondOccurrence)
+    expect(payload!.expired_time).toBe(secondOccurrence)
+  })
+
+  it('sends the chosen local time to the second after a change', async () => {
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    const stored = Date.UTC(2026, 9, 12, 15, 0, 30) / 1000
+    const [payload] = await editExpiry(stored, '2026-10-20T08:15:45')
+    expect(payload!.expired_time).toBe(Date.UTC(2026, 9, 20, 0, 15, 45) / 1000)
+  })
+
+  it('sends -1 when expiry is turned off', async () => {
+    const put = vi.spyOn(api, 'put').mockResolvedValue({})
+    const wrapper = mountForm(expiringToken(1_900_000_000))
+    await flushPromises()
+    const toggle = document.querySelector<HTMLButtonElement>(
+      `[role="switch"][aria-label="${i18n.global.t('keys.expireLabel')}"]`
+    )!
+    toggle.click()
+    await nextTick()
+    await submit()
+    wrapper.unmount()
+    expect(put.mock.calls[0]![1]).toMatchObject({ expired_time: -1 })
+  })
+
+  it('sends nothing while expiry is on but the time is invalid', async () => {
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    const stored = Date.UTC(2026, 9, 12, 15, 0, 30) / 1000
+    for (const value of ['', '2026-02-30T10:00:00']) {
+      expect(await editExpiry(stored, value)).toEqual([])
     }
   })
 })

@@ -13,6 +13,7 @@ import {
 } from '@/api/personalAccessTokens'
 import { personalAccessTokenMessages } from '@/i18n/personalAccessTokens'
 import { useToast } from '@/composables/useToast'
+import { fromDateTimeLocal } from '@/utils/format'
 
 const props = defineProps<{ userId: number }>()
 const { t, locale } = useI18n({
@@ -83,10 +84,11 @@ async function save() {
   if (!mode || busy.value || !catalog.value) return
   const requestedScopes = [...new Set(scopes.value)].sort()
   const expiry = expires.value
-    ? Math.floor(new Date(expires.value).getTime() / 1000)
+    ? fromDateTimeLocal(expires.value)
     : Math.floor(Date.now() / 1000) +
       catalog.value.default_lifetime_days * 86400
   if (
+    expiry === null ||
     !name.value.trim() ||
     Array.from(name.value.trim()).length > 64 ||
     (mode !== 'rename' &&
@@ -94,9 +96,7 @@ async function save() {
         requestedScopes.some(
           (scope) => !catalog.value!.scopes.includes(scope)
         ))) ||
-    (mode === 'create' &&
-      expires.value &&
-      (!Number.isFinite(expiry) || expiry < Date.now() / 1000 + 3600))
+    (mode === 'create' && expires.value && expiry < Date.now() / 1000 + 3600)
   ) {
     toast.error(t('pat.invalid'))
     return

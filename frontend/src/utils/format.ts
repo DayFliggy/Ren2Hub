@@ -204,3 +204,42 @@ export function passwordStrength(pw: string): 0 | 1 | 2 | 3 {
   if (score <= 4) return 2
   return 3
 }
+
+/**
+ * Epoch seconds as a datetime-local value ('YYYY-MM-DDTHH:mm:ss') in the
+ * browser time zone, keeping the full instant like upstream's date picker.
+ */
+export function toDateTimeLocal(epochSec: number): string {
+  const d = new Date(epochSec * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/**
+ * Parses a datetime-local value as browser-local time into whole epoch
+ * seconds; optional seconds and fractions follow the HTML value format.
+ * Returns null for text that is not a real local date and time, including
+ * times skipped by a daylight-saving jump. A repeated local hour resolves to
+ * its first occurrence, so callers keep the stored epoch when the text is
+ * unchanged.
+ */
+export function fromDateTimeLocal(value: string): number | null {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/.exec(
+      value
+    )
+  if (!match) return null
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number)
+  const second = Number(match[6] ?? 0)
+  const date = new Date(year, month - 1, day, hour, minute, second)
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hour ||
+    date.getMinutes() !== minute ||
+    date.getSeconds() !== second
+  )
+    return null
+  return Math.floor(date.getTime() / 1000)
+}
