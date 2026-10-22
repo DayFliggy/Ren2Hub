@@ -1,5 +1,6 @@
 import { api } from './client'
 import { isDecimal } from '@/utils/decimal'
+import { ADMIN_ORDER_METHODS } from '@/constants/adminOrders'
 import type {
   AdminOrder,
   AdminOrderSpender,
@@ -102,16 +103,9 @@ export function parseTopUp(value: unknown): AdminOrder {
       !Number.isFinite(Number(amount)))
   )
     invalidResponse(endpoint)
-  const method = text('payment_provider') || text('payment_method')
-  const known = [
-    'epay',
-    'gmpay',
-    'stripe',
-    'creem',
-    'waffo',
-    'waffo_pancake',
-    'balance',
-  ]
+  // 与后端 topUpEffectiveMethod 相同：provider 优先，未知方式归为 other。
+  const method = (text('payment_provider') ||
+    text('payment_method')) as AdminOrder['method']
   return {
     id: integer('id'),
     order_no: requiredString(value.trade_no, endpoint, false),
@@ -122,7 +116,7 @@ export function parseTopUp(value: unknown): AdminOrder {
     quota: String(integer('credited_quota')),
     type: 'topup',
     currency: text('currency'),
-    method: (known.includes(method) ? method : 'other') as AdminOrder['method'],
+    method: ADMIN_ORDER_METHODS.includes(method) ? method : 'other',
     payment_method: text('payment_method'),
     status: (text('status') === 'success'
       ? 'completed'

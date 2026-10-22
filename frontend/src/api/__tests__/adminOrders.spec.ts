@@ -27,6 +27,25 @@ describe('native order contracts', () => {
     expect(legacy.currency).toBe('')
     expect(legacy.amount).toBeNaN()
   })
+  it.each([
+    ['stripe', 'stripe', 'stripe'],
+    ['', 'stripe', 'stripe'],
+    ['epay', 'alipay', 'epay'],
+    ['', 'alipay', 'other'],
+    ['paypal', 'stripe', 'other'],
+    ['', '', 'other'],
+  ])(
+    'classifies provider %j with payment_method %j as %s like the backend filter',
+    (provider, method, expected) => {
+      const order = parseTopUp({
+        ...nativeTopUp,
+        payment_provider: provider,
+        payment_method: method,
+      })
+      expect(order.method).toBe(expected)
+      expect(order.payment_method).toBe(method)
+    }
+  )
   it('validates the order identity, excludes merchant fields, and keeps exact crypto receipts', () => {
     const detail = parseTopUpDetail(
       {
@@ -76,7 +95,7 @@ describe('native order contracts', () => {
       ],
       methods: [
         { ...total, method: 'epay' },
-        { ...total, method: 'alipay', paid_amount: '5.00' },
+        { ...total, method: 'other', paid_amount: '5.00' },
       ],
       daily: [],
       start_time: 1,
@@ -88,7 +107,7 @@ describe('native order contracts', () => {
       stats.methods.map((value) => [value.method, value.paid_amount])
     ).toEqual([
       ['epay', '73.00'],
-      ['alipay', '5.00'],
+      ['other', '5.00'],
     ])
     expect(() =>
       parseTopUpStatistics({

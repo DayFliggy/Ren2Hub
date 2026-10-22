@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +19,43 @@ type TopUpFilter struct {
 	SelfView                          bool
 	Keyword, Status, Method, Currency string
 	StartTime, EndTime                int64
+}
+
+// TopUpMethodOther 汇总未知或缺失的支付方式。
+const TopUpMethodOther = "other"
+
+// topUpKnownMethods 是订单筛选和统计共用的已知支付方式集合。
+var topUpKnownMethods = []string{
+	PaymentProviderEpay, PaymentProviderGmpay, PaymentProviderStripe, PaymentProviderCreem,
+	PaymentProviderWaffo, PaymentProviderWaffoPancake, PaymentProviderBalance,
+}
+
+// topUpEffectiveMethodSQL 与 topUpEffectiveMethod 表达同一规则：payment_provider 非空时取它，
+// 否则取 payment_method；两列都可能是 NULL 或空串。
+const topUpEffectiveMethodSQL = "COALESCE(NULLIF(payment_provider, ''), payment_method, '')"
+
+// topUpEffectiveMethod 返回订单的有效支付方式，不在已知集合内的归为 other。
+// 不按 payment_method 推断渠道：没有 provider 的遗留订单保持 other，不猜成 epay。
+func topUpEffectiveMethod(provider, method string) string {
+	effective := provider
+	if effective == "" {
+		effective = method
+	}
+	if slices.Contains(topUpKnownMethods, effective) {
+		return effective
+	}
+	return TopUpMethodOther
+}
+
+// topUpMethodScope 按有效支付方式筛选；只接受已知方式和 other。
+func topUpMethodScope(query *gorm.DB, method string) (*gorm.DB, error) {
+	if method == TopUpMethodOther {
+		return query.Where(topUpEffectiveMethodSQL+" NOT IN ?", topUpKnownMethods), nil
+	}
+	if !slices.Contains(topUpKnownMethods, method) {
+		return nil, errors.New("invalid payment method")
+	}
+	return query.Where(topUpEffectiveMethodSQL+" = ?", method), nil
 }
 
 // topUpQueryStart 返回生效的起始时间，0 表示不限制。
@@ -47,7 +85,10 @@ func topUpFilteredQuery(filter TopUpFilter) (*gorm.DB, error) {
 		query = query.Where("status = ?", filter.Status)
 	}
 	if filter.Method != "" {
-		query = query.Where("(payment_method = ? OR payment_provider = ?)", filter.Method, filter.Method)
+		var err error
+		if query, err = topUpMethodScope(query, filter.Method); err != nil {
+			return nil, err
+		}
 	}
 	if filter.Currency != "" {
 		query = query.Where("currency = ?", strings.ToUpper(filter.Currency))
@@ -130,7 +171,7 @@ type TopUpDailyTotal struct {
 	TopUpCurrencyTotal
 }
 
-// TopUpMethodTotal 按支付渠道和币种汇总；method 取 payment_provider，旧订单没有渠道时取 payment_method。
+// TopUpMethodTotal 按有效支付方式（见 topUpEffectiveMethod）和币种汇总。
 type TopUpMethodTotal struct {
 	Method string `json:"method"`
 	TopUpCurrencyTotal
@@ -168,10 +209,7 @@ func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
 			if daily[key] == nil {
 				daily[key] = &TopUpDailyTotal{Date: date, TopUpCurrencyTotal: TopUpCurrencyTotal{Currency: currency, PaidAmount: "0"}}
 			}
-			method := row.PaymentProvider
-			if method == "" {
-				method = row.PaymentMethod
-			}
+			method := topUpEffectiveMethod(row.PaymentProvider, row.PaymentMethod)
 			methodKey := method + ":" + currency
 			if methods[methodKey] == nil {
 				methods[methodKey] = &TopUpMethodTotal{Method: method, TopUpCurrencyTotal: TopUpCurrencyTotal{Currency: currency, PaidAmount: "0"}}
