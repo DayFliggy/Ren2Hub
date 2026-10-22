@@ -52,7 +52,13 @@ async function mountAuditLogs() {
   wrapper = mount(AuditLogsView, {
     global: {
       plugins: [i18n, router],
-      stubs: { LogsNavTabs: true },
+      stubs: {
+        LogsNavTabs: true,
+        ConsoleModal: {
+          props: ['open'],
+          template: '<div v-if="open"><slot/><slot name="footer"/></div>',
+        },
+      },
     },
   })
   await flushPromises()
@@ -74,6 +80,30 @@ it('filters by the native exact request_id and never sends keyword', async () =>
     expect(lastParams()).toHaveProperty('request_id', 'req-45')
   )
   expect(lastParams()).not.toHaveProperty('keyword')
+})
+
+it('exports with the same request_id filter as the list', async () => {
+  const { wrapper, get, lastParams } = await mountAuditLogs()
+  // jsdom implements neither object URLs nor download navigation.
+  URL.createObjectURL = vi.fn(() => 'blob:audit')
+  URL.revokeObjectURL = vi.fn()
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  await wrapper.get('[name="audit-log-request-id"]').setValue('req-45')
+  await vi.waitFor(() =>
+    expect(lastParams()).toHaveProperty('request_id', 'req-45')
+  )
+  const listCalls = get.mock.calls.length
+
+  const button = (label: string) =>
+    wrapper.findAll('button').find((node) => node.text() === label)!
+  await button(i18n.global.t('common.export')).trigger('click')
+  await button(i18n.global.t('common.confirm')).trigger('click')
+  await flushPromises()
+
+  expect(get.mock.calls.length).toBe(listCalls + 1)
+  expect(lastParams()).toMatchObject({ request_id: 'req-45', p: 1 })
+  expect(lastParams()).not.toHaveProperty('keyword')
+  expect(URL.createObjectURL).toHaveBeenCalledOnce()
 })
 
 it('offers only the categories model.ValidAuditCategory accepts', async () => {
