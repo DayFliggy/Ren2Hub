@@ -13,6 +13,7 @@ const { backend, toast } = vi.hoisted(() => ({
   backend: {
     options: {} as Record<string, string>,
     puts: [] as Array<{ key: string; value: string }>,
+    patches: [] as Array<Record<string, string>>,
     offline: false,
     failKey: '',
     gate: null as Promise<void> | null,
@@ -27,7 +28,25 @@ vi.mock('@/composables/useToast', () => ({ useToast: () => toast }))
 vi.mock('@/api/client', async (importOriginal) => {
   const offline = () => Promise.reject(new Error('offline'))
   const hidden = /(?:Token|Secret|Key|secret|api_key)$/
+  // GetRequestPolicy answers GET and PATCH with the full stored snapshot.
+  const policyKey = /^(?:RetryTimes|CheckSensitive\w*Enabled|SensitiveWords)$/
+  const policy = () => ({
+    options: Object.fromEntries(
+      Object.entries(backend.options).filter(([key]) => policyKey.test(key))
+    ),
+  })
+  async function patch(
+    path: string,
+    body: { options: Record<string, string> }
+  ) {
+    if (path !== '/api/option/request_policy') return offline()
+    backend.patches.push(body.options)
+    Object.assign(backend.options, body.options)
+    return policy()
+  }
   async function get(path: string) {
+    if (path === '/api/option/request_policy' && !backend.offline)
+      return policy()
     if (path !== '/api/option/' || backend.offline) return offline()
     return [
       ...Object.entries(backend.options)
@@ -49,7 +68,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
   return {
     ...(await importOriginal<typeof import('@/api/client')>()),
-    api: { get, post: offline, put, delete: offline },
+    api: { get, post: offline, put, patch, delete: offline },
   }
 })
 
@@ -75,6 +94,7 @@ beforeEach(async () => {
       PayMethods: '[]',
     },
     puts: [],
+    patches: [],
     offline: false,
     failKey: '',
     gate: null,
@@ -369,6 +389,35 @@ describe('Email settings page', () => {
       { key: 'TurnstileCheckEnabled', value: 'true' },
     ])
     expect(backend.options.TurnstileSiteKey).toBe('site-key')
+    wrapper.unmount()
+  })
+})
+
+describe('request policy panel', () => {
+  it('shows a policy saved in the panel on the settings form', async () => {
+    await serve({
+      CheckSensitiveEnabled: 'false',
+      SensitiveWords: 'old',
+      RetryTimes: '2',
+    })
+    const wrapper = await render('security', 'sensitive')
+    const sensitiveCheck = () =>
+      wrapper.get(
+        '[role="switch"][aria-label="Enable sensitive word detection"]'
+      )
+    expect(sensitiveCheck().attributes('aria-checked')).toBe('false')
+    const policy = wrapper.get('textarea[aria-label="Request policy"]')
+    const draft = JSON.parse((policy.element as HTMLTextAreaElement).value)
+    await policy.setValue(
+      JSON.stringify({ ...draft, CheckSensitiveEnabled: 'true' })
+    )
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save request policy')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.patches).toEqual([{ CheckSensitiveEnabled: 'true' }])
+    expect(sensitiveCheck().attributes('aria-checked')).toBe('true')
     wrapper.unmount()
   })
 })
