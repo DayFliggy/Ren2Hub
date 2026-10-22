@@ -1282,6 +1282,9 @@ export default {
       'The console does not recognize channel type {type}, so this channel cannot be saved here.',
     typeNotCreatable:
       'This type cannot be changed or created here; only the common fields can be edited.',
+    labUnknown: 'Unknown vendor',
+    labMixed: 'Multiple vendors',
+    labInvalidMapping: 'Invalid model mapping',
     priorityFor: 'Priority for {name}',
     weightFor: 'Weight for {name}',
     notTested: 'Untested',

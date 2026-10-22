@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { getModelCatalog, type CatalogChannel } from '@/api/modelCatalog'
+import { labDisplayName } from '@/constants/adminChannels'
 import { useLatestRequest } from './useLatestRequest'
 export interface RouteGroupList {
   groupSlug: string
@@ -14,7 +15,7 @@ export function buildRouteGroupList(
   for (const channel of channels) {
     const group = groups.get(channel.lab.id) ?? {
       groupSlug: channel.lab.id,
-      groupName: channel.lab.name,
+      groupName: labDisplayName(channel.lab),
       channels: [],
       activeCount: 0,
     }

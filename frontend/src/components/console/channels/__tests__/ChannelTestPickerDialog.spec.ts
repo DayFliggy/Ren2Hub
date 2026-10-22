@@ -26,7 +26,6 @@ function makeChannel(id: number, name: string, models: string): AdminChannel {
     id,
     name,
     type: 1,
-    supplier: 'OpenAI',
     status: 1,
     priority: 0,
     weight: 0,

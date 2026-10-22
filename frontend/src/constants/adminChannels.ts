@@ -157,6 +157,49 @@ export function isCreatableChannelType(type: number): boolean {
   return ADMIN_CHANNEL_TYPE_META[type]?.creatable === true
 }
 
+type ChannelLab = AdminChannel['lab']
+
+/**
+ * Display name for a backend lab (model/channel_lab.go). The ids unknown and
+ * mixed are classifications whose names are lowercase identifiers.
+ */
+export function labDisplayName(lab: Pick<ChannelLab, 'id' | 'name'>): string {
+  if (lab.id === 'unknown') return i18n.global.t('channels.labUnknown')
+  if (lab.id === 'mixed') return i18n.global.t('channels.labMixed')
+  return lab.name
+}
+
+/** The backend could not read or follow this channel's model mapping. */
+export function hasInvalidModelMapping(lab: ChannelLab): boolean {
+  return lab.source === 'invalid_mapping'
+}
+
+export interface ChannelLabGroup {
+  groupSlug: string
+  supplier: string
+  channels: AdminChannel[]
+}
+
+/** Groups channels by backend lab id, keeping first-seen order. */
+export function groupChannelsByLab(
+  channels: readonly AdminChannel[]
+): ChannelLabGroup[] {
+  const groups = new Map<string, ChannelLabGroup>()
+  for (const channel of channels) {
+    const group = groups.get(channel.lab.id)
+    if (group) {
+      group.channels.push(channel)
+      continue
+    }
+    groups.set(channel.lab.id, {
+      groupSlug: channel.lab.id,
+      supplier: labDisplayName(channel.lab),
+      channels: [channel],
+    })
+  }
+  return [...groups.values()]
+}
+
 export function isRetiredChannelType(type: number): boolean {
   return ADMIN_CHANNEL_TYPE_META[type]?.retired === true
 }

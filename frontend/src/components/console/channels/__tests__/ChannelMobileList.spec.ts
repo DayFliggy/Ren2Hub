@@ -2,8 +2,12 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 
+import { parseChannelPage } from '@/api/channelStatus'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
+import VendorLogo from '@/components/console/models/VendorLogo.vue'
+import type { AdminChannelOptionalField } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
+import channelList from '../../../../../tests/fixtures/native/channel-list.get.json'
 
 const base: AdminChannel = {
   id: 1,
@@ -12,7 +16,6 @@ const base: AdminChannel = {
   channel_ratio: '1',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'OpenAI',
   lab: { id: 'openai', name: 'OpenAI', source: 'default' },
   status: 1,
   priority: 0,
@@ -30,13 +33,17 @@ function channel(patch: Partial<AdminChannel>): AdminChannel {
   return { ...base, ...patch }
 }
 
-function mountList(channels: AdminChannel[], canWrite = true) {
+function mountList(
+  channels: AdminChannel[],
+  canWrite = true,
+  visibleFields: AdminChannelOptionalField[] = ['upstream', 'rowUpstreamAction']
+) {
   const refreshBalance = vi.fn().mockResolvedValue(true)
   const runSupplierBalance = vi.fn().mockResolvedValue(undefined)
   const wrapper = mount(ChannelMobileList, {
     props: {
-      groups: [{ groupSlug: 'g', supplier: 'Group', channels, labMatches: [] }],
-      visibleFields: ['upstream', 'rowUpstreamAction'],
+      groups: [{ groupSlug: 'g', supplier: 'Group', channels }],
+      visibleFields,
       selectedIds: [],
       allSelected: false,
       selectionDisabled: false,
@@ -152,5 +159,32 @@ describe('channel mobile list edit action', () => {
   it('offers no edit entry without channel write', () => {
     const { wrapper } = mountList([channel({ id: 1, type: 61 })], false)
     expect(editButtons(wrapper)).toHaveLength(0)
+  })
+})
+
+describe('channel mobile list backend labs', () => {
+  const { items } = parseChannelPage(channelList.data)
+
+  it('names each row logo from the backend lab classification', () => {
+    const { wrapper } = mountList(items, true, ['type'])
+    const rowLogos = wrapper
+      .findAll('[data-channel-mobile-row]')
+      .map((row) => row.findComponent(VendorLogo).props('vendor'))
+    expect(rowLogos).toEqual([
+      'channels.labUnknown',
+      'channels.labUnknown',
+      'channels.labMixed',
+      'OpenAI',
+    ])
+  })
+
+  it('labels only the row whose model mapping the backend rejected', () => {
+    const { wrapper } = mountList(items)
+    const flagged = wrapper
+      .findAll('[data-channel-mobile-row]')
+      .filter((row) => row.find('[data-channel-invalid-mapping]').exists())
+    expect(flagged).toHaveLength(1)
+    expect(flagged[0]!.text()).toContain('contract-invalid')
+    expect(flagged[0]!.text()).toContain('channels.labInvalidMapping')
   })
 })

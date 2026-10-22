@@ -29,7 +29,6 @@ function channel(modelMapping: string): AdminChannel {
     channel_ratio: '1',
     max_concurrency: 0,
     in_flight: 0,
-    supplier: 'OpenAI',
     lab: { id: 'openai', name: 'OpenAI', source: 'default' },
     status: 1,
     priority: 0,

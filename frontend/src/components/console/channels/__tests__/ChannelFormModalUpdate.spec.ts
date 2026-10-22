@@ -38,7 +38,6 @@ const vertex: AdminChannel = {
   channel_ratio: '1',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'Google',
   lab: { id: 'google', name: 'Google', source: 'vendor' },
   status: 1,
   priority: 5,

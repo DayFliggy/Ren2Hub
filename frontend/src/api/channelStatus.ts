@@ -42,9 +42,6 @@ export function parseChannelStatusDetails(value: unknown): AdminChannel {
   return {
     ...value,
     lab,
-    supplier: lab.name,
-    lab_group_slug: lab.id,
-    lab_group_name: lab.name,
     in_flight: requiredStrictInteger(value.in_flight, endpoint),
     id: requiredStrictInteger(value.id, endpoint),
     name: requiredString(value.name, endpoint),

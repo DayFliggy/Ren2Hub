@@ -36,26 +36,6 @@ export interface AdminChannel extends Record<string, unknown> {
   max_concurrency: number
   in_flight: number
   lab: { id: string; name: string; source: string }
-  supplier: string
-  lab_group_slug?: string
-  lab_group_name?: string
-  lab_matches?: {
-    slug: string
-    name: string
-    confidence: number
-    source: string
-  }[]
-  lab_models?: {
-    input_model: string
-    real_model: string
-    canonical_id?: string
-    lab_slug?: string
-    confidence: number
-    source: string
-  }[]
-  lab_unresolved_count?: number
-  lab_catalog_version?: string
-
   channel_info?: {
     is_multi_key: boolean
     multi_key_mode: 'random' | 'polling'

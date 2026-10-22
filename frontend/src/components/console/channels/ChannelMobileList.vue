@@ -23,7 +23,9 @@ import {
   adminChannelResponseTone,
   adminChannelTypeMeta,
   canEditChannel,
+  hasInvalidModelMapping,
   isRetiredChannelType,
+  labDisplayName,
   supportsBalanceQuery,
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
@@ -47,7 +49,6 @@ const props = defineProps<{
     groupSlug: string
     supplier: string
     channels: AdminChannel[]
-    labMatches: NonNullable<AdminChannel['lab_matches']>
   }>
   visibleFields: AdminChannelOptionalField[]
   selectedIds: number[]
@@ -75,13 +76,11 @@ const props = defineProps<{
     groupSlug: string
     supplier: string
     channels: AdminChannel[]
-    labMatches: NonNullable<AdminChannel['lab_matches']>
   }) => void
   clearSupplier: (group: {
     groupSlug: string
     supplier: string
     channels: AdminChannel[]
-    labMatches: NonNullable<AdminChannel['lab_matches']>
   }) => void
   isBusy: (id: number, action: ChannelAction) => boolean
   isRowBusy: (id: number) => boolean
@@ -202,19 +201,6 @@ function responseDisplay(channel: AdminChannel): {
               >
                 {{ group.supplier }}
               </span>
-              <span
-                v-if="(group.labMatches?.length ?? 0) > 1"
-                class="flex min-w-0 flex-wrap gap-1"
-              >
-                <StatusChip
-                  v-for="match in group.labMatches"
-                  :key="match.slug"
-                  tone="info"
-                  class="text-[0.625rem]"
-                >
-                  {{ match.name }}
-                </StatusChip>
-              </span>
               <span class="block text-[0.625rem] text-[var(--text-tertiary)]">
                 {{
                   batchProgress?.scope === 'supplier' &&
@@ -325,7 +311,7 @@ function responseDisplay(channel: AdminChannel): {
                 </label>
                 <VendorLogo
                   v-if="visibleFields.includes('type')"
-                  :vendor="channel.supplier"
+                  :vendor="labDisplayName(channel.lab)"
                   :size="32"
                 />
                 <div class="min-w-0">
@@ -335,6 +321,14 @@ function responseDisplay(channel: AdminChannel): {
                   >
                     {{ channel.name }}
                   </h2>
+                  <StatusChip
+                    v-if="hasInvalidModelMapping(channel.lab)"
+                    class="mt-1"
+                    tone="warning"
+                    data-channel-invalid-mapping
+                  >
+                    {{ t('channels.labInvalidMapping') }}
+                  </StatusChip>
                   <p
                     v-if="
                       visibleFields.includes('id') ||

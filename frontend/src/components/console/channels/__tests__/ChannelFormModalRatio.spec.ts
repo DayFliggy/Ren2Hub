@@ -31,7 +31,6 @@ const channel: AdminChannel = {
   channel_ratio: '1.5',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'OpenAI',
   lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
   status: 1,
   priority: 0,

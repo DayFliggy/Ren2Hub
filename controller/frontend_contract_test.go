@@ -346,6 +346,42 @@ func TestFrontendContractNativeTypeChannelUpdate(t *testing.T) {
 	assert.Nil(t, current.Setting)
 }
 
+// The channel list groups rows by lab; it covers every lab the backend emits:
+// one vendor, mixed vendors, no known vendor and an unreadable model mapping.
+func TestFrontendContractChannelList(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.Model{}, &model.Vendor{}))
+	for _, seed := range []struct{ name, models, mapping string }{
+		{"contract-openai", "gpt-4o", ""},
+		{"contract-mixed", "gpt-4o,claude-3-5-sonnet", ""},
+		{"contract-unknown", "contract-model-x", ""},
+		{"contract-invalid", "gpt-4o", `{"gpt-4o":`},
+	} {
+		baseURL, priority, weight, mapping := "https://api.example.com", int64(0), uint(1), seed.mapping
+		channel := model.Channel{
+			Type: constant.ChannelTypeOpenAI, Name: seed.name, Key: "sk-contract", Models: seed.models,
+			ModelMapping: &mapping, BaseURL: &baseURL, Priority: &priority, Weight: &weight,
+			ChannelRatio: "1", Status: common.ChannelStatusEnabled,
+		}
+		require.NoError(t, channel.Insert())
+	}
+	engine := contractEngine(1, common.RoleRootUser)
+	engine.GET("/api/channel/", GetAllChannels)
+	recorder := contractRequest(t, engine, http.MethodGet, "/api/channel/?p=1&page_size=20&id_sort=true", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body := decodeContractBody(t, recorder)
+	frontendFixture(t, "channel-list.get.json", body)
+
+	labs := map[string]any{}
+	for _, raw := range body["data"].(map[string]any)["items"].([]any) {
+		item := raw.(map[string]any)
+		labs[item["name"].(string)] = item["lab"]
+	}
+	assert.Equal(t, map[string]any{"id": "mixed", "name": "mixed", "source": "models"}, labs["contract-mixed"])
+	assert.Equal(t, map[string]any{"id": "unknown", "name": "unknown", "source": "unknown"}, labs["contract-unknown"])
+	assert.Equal(t, map[string]any{"id": "unknown", "name": "unknown", "source": "invalid_mapping"}, labs["contract-invalid"])
+}
+
 // The console names every channel type the backend accepts; a new native type
 // changes this fixture and fails the frontend catalog test until it is named.
 func TestFrontendContractChannelTypeIds(t *testing.T) {

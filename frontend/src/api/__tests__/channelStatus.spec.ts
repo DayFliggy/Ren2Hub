@@ -5,6 +5,7 @@ import {
   parseChannelStatusDetails,
 } from '../channelStatus'
 import { httpTransport } from '../httpTransport'
+import channelList from '../../../tests/fixtures/native/channel-list.get.json'
 
 const channel = {
   id: 1,
@@ -13,7 +14,6 @@ const channel = {
   channel_ratio: '1',
   max_concurrency: 0,
   in_flight: 0,
-  supplier: 'OpenAI',
   lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
   status: 3,
   priority: null,
@@ -88,5 +88,17 @@ describe('native channel contract', () => {
       { message: 'provider failed', code: 'bad_key' }
     )
     expect(request).toHaveBeenCalledTimes(2)
+  })
+})
+describe('native channel list fixture', () => {
+  it('keeps the backend lab and adds no supplier or lab group fields', () => {
+    const page = parseChannelPage(channelList.data)
+    expect(page.total).toBe(4)
+    for (const [index, item] of page.items.entries()) {
+      expect(item.lab).toEqual(channelList.data.items[index]!.lab)
+      expect(item).not.toHaveProperty('supplier')
+      expect(item).not.toHaveProperty('lab_group_slug')
+      expect(item).not.toHaveProperty('lab_group_name')
+    }
   })
 })
