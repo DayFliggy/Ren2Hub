@@ -65,6 +65,7 @@ export function nativeModelCatalog(now: number): ModelCatalog {
 }
 
 export function nativeUsageSummary(now: number, includeComparison = true) {
+  const lastHour = (Math.ceil(now / 3600) - 1) * 3600
   const distribution = Array.from({ length: 366 }, (_, index) => ({
     date: new Date((now - (365 - index) * 86400) * 1000)
       .toISOString()
@@ -95,7 +96,7 @@ export function nativeUsageSummary(now: number, includeComparison = true) {
       },
     ],
     hourly: Array.from({ length: 24 }, (_, index) => ({
-      ts: now - (23 - index) * 3600,
+      ts: lastHour - (23 - index) * 3600,
       requests: index % 5,
       tokens: (index % 5) * 300,
       quota: (index % 5) * 250000,
