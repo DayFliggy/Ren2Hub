@@ -82,6 +82,9 @@ export const proofOptions = (proof: string) => ({
   headers: { 'X-Security-Proof': proof },
 })
 
+/** Native TurnstileCheck reads the token only from the `turnstile` query. */
+export const turnstileParams = (token: string) => ({ turnstile: token })
+
 export const securityApi = {
   requirements: (scope: string) =>
     api.get<VerificationRequirements>('/api/verify/methods', { scope }),

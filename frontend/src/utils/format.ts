@@ -98,6 +98,37 @@ export function dateInputValue(offsetDays = 0): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+function parseLocalDay(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (match) {
+    const [year, month, day] = match.slice(1).map(Number)
+    const date = new Date(year, month - 1, day)
+    if (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    ) {
+      return date
+    }
+  }
+  throw new Error(`Invalid local date: ${value}`)
+}
+
+/** Epoch milliseconds of local midnight that starts a 'YYYY-MM-DD' day. */
+export function localDayStartMs(value: string): number {
+  return parseLocalDay(value).getTime()
+}
+
+/**
+ * Epoch milliseconds of the last moment of a local 'YYYY-MM-DD' day. Using the
+ * next local midnight keeps 23- and 25-hour daylight-saving days exact.
+ */
+export function localDayEndMs(value: string): number {
+  const next = parseLocalDay(value)
+  next.setDate(next.getDate() + 1)
+  return next.getTime() - 1
+}
+
 export function relativeTime(epochSec: number, locale = 'zh-CN'): string {
   const diff = Math.floor(Date.now() / 1000) - epochSec
   const absolute = Math.abs(diff)

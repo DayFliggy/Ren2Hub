@@ -10,6 +10,9 @@ export interface ApiResponse<T> {
   total?: number
 }
 
+/** A success envelope read as a whole; some native endpoints omit data. */
+export type ApiEnvelope<T> = Omit<ApiResponse<T>, 'data'> & { data?: T }
+
 /**
  * Distinguishes transport-level HTTP errors from HTTP 200 responses
  * carrying { success: false } (integration contract §4 / §7).

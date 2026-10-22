@@ -91,6 +91,37 @@ describe('API client request scope', () => {
     })
   })
 
+  it('accepts a dataless success only when the caller reads the envelope', async () => {
+    // GET /api/verification and /api/reset_password answer {success, message}.
+    const dataless = { success: true, message: '' }
+    const client = createApiClient({
+      request: vi.fn().mockResolvedValue(dataless),
+    } as ApiTransport)
+
+    await expect(client.getEnvelope('/api/verification')).resolves.toEqual(
+      dataless
+    )
+    await expect(client.get('/api/verification')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
+  })
+
+  it('forwards POST query params and timeout through the transport', async () => {
+    const request = vi.fn().mockResolvedValue({ success: true, data: null })
+    const client = createApiClient({ request } as ApiTransport)
+
+    await client.post(
+      '/api/user/login',
+      { username: 'demo' },
+      { params: { turnstile: 'token' }, timeoutMs: 120_000 }
+    )
+    expect(request).toHaveBeenCalledWith('POST', '/api/user/login', {
+      data: { username: 'demo' },
+      params: { turnstile: 'token' },
+      timeoutMs: 120_000,
+    })
+  })
+
   it('rejects nonstandard response envelopes for every endpoint', async () => {
     const endpoints = ['/api/user/self', '/api/user/pay']
     for (const url of endpoints) {

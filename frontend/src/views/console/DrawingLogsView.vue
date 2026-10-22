@@ -26,7 +26,12 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { getLocale } from '@/i18n'
 import { translateServerText } from '@/i18n/serverMessages'
-import { formatQuota, formatTime } from '@/utils/format'
+import {
+  formatQuota,
+  formatTime,
+  localDayEndMs,
+  localDayStartMs,
+} from '@/utils/format'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
 const { t } = useI18n()
@@ -59,13 +64,12 @@ const columns = computed<TableColumn[]>(() => [
 ])
 
 function currentParams() {
-  // /api/mj filters compare against millisecond submit_time values.
+  // /api/mj filters compare against millisecond submit_time values and treat
+  // any sent value, including 0, as a bound; an unset date is omitted.
   const startTimestamp = startDate.value
-    ? new Date(startDate.value).getTime()
-    : 0
-  const endTimestamp = endDate.value
-    ? new Date(endDate.value).getTime() + 86_399_999
-    : 0
+    ? localDayStartMs(startDate.value)
+    : undefined
+  const endTimestamp = endDate.value ? localDayEndMs(endDate.value) : undefined
   return {
     p: page.value,
     page_size: pageSize.value,

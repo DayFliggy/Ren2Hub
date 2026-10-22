@@ -86,6 +86,89 @@ describe('HTTP authentication transport', () => {
     })
   })
 
+  it('passes a per-request timeout and otherwise keeps the instance default', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue({ data: { success: true, data: { ok: true } } })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+
+    await transport.request('POST', '/api/tickets', {
+      data: { title: 'x' },
+      timeoutMs: 120_000,
+    })
+    await transport.request('GET', '/api/tickets')
+    expect(request.mock.calls[0]?.[0]).toMatchObject({ timeout: 120_000 })
+    expect(request.mock.calls[1]?.[0].timeout).toBeUndefined()
+
+    // axios merges an undefined request timeout with the instance default.
+    const client = axios.create({ timeout: 15_000 })
+    const adapter = vi.fn(async (config) => ({
+      data: { success: true, data: config.timeout },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+    }))
+    client.defaults.adapter = adapter
+    const real = createHttpTransport(client)
+    await expect(real.request('GET', '/api/x')).resolves.toMatchObject({
+      data: 15_000,
+    })
+    await expect(
+      real.request('POST', '/api/x', { timeoutMs: 120_000 })
+    ).resolves.toMatchObject({ data: 120_000 })
+  })
+
+  it('keeps query params and timeout on the retry after a token refresh', async () => {
+    setAuthBundle(bundle)
+    const signal = new AbortController().signal
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(unauthorized())
+      .mockResolvedValueOnce({
+        data: { success: true, data: { ...bundle, access_token: 'new-token' } },
+      })
+      .mockResolvedValueOnce({ data: { success: true, data: { id: 1 } } })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+
+    await transport.request('POST', '/api/tickets', {
+      data: { title: 'x' },
+      params: { turnstile: 'a+b' },
+      signal,
+      timeoutMs: 120_000,
+    })
+    expect(request).toHaveBeenCalledTimes(3)
+    expect(request.mock.calls[2]?.[0]).toMatchObject({
+      method: 'POST',
+      params: { turnstile: 'a+b' },
+      signal,
+      timeout: 120_000,
+      headers: { Authorization: 'Bearer new-token' },
+    })
+  })
+
+  it('passes the per-request timeout on the public transport too', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue({ data: { success: true, data: null } })
+    const transport = createPublicHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+
+    await transport.request('POST', '/api/user/register', {
+      params: { turnstile: 'token' },
+      timeoutMs: 120_000,
+    })
+    expect(request.mock.calls[0]?.[0]).toMatchObject({
+      params: { turnstile: 'token' },
+      timeout: 120_000,
+    })
+  })
+
   it('refuses a downloaded log file after the current session changes', async () => {
     setAuthBundle(bundle)
     const request = vi.fn().mockImplementation(async () => {

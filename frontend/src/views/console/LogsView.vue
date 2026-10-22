@@ -51,7 +51,12 @@ import LogPerformanceCell from '@/components/console/log-ui/LogPerformanceCell.v
 import LogUsageCell from '@/components/console/log-ui/LogUsageCell.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
-import { formatQuota, formatTime } from '@/utils/format'
+import {
+  formatQuota,
+  formatTime,
+  localDayEndMs,
+  localDayStartMs,
+} from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
@@ -278,12 +283,8 @@ function currentParams(start = startDate.value, end = endDate.value) {
     error: 5,
     refund: 6,
   }
-  const requestedStart = start
-    ? Math.floor(new Date(`${start}T00:00:00`).getTime() / 1000)
-    : 0
-  const endTimestamp = end
-    ? Math.floor(new Date(`${end}T23:59:59`).getTime() / 1000)
-    : 0
+  const requestedStart = start ? Math.floor(localDayStartMs(start) / 1000) : 0
+  const endTimestamp = end ? Math.floor(localDayEndMs(end) / 1000) : 0
   return {
     p: page.value,
     page_size: pageSize.value,

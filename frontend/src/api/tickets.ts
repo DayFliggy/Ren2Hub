@@ -19,6 +19,10 @@ import type {
 
 export type TicketRow = Omit<TicketItem, 'messages'>
 
+// Multipart bodies may carry up to 5 x 10 MB attachments, far beyond what the
+// 15 s transport default allows on a slow uplink; matches log exports.
+export const TICKET_UPLOAD_TIMEOUT_MS = 120_000
+
 /**
  * The ticket or reply was committed but its attachment files were not stored.
  * Submitting again would duplicate it, so callers refresh instead of retrying.
@@ -191,7 +195,12 @@ export const ticketsApi = {
       body.set(key, input[key])
     return {
       ticket: parseTicket(
-        record(await api.post(endpoint, body), endpoint).ticket,
+        record(
+          await api.post(endpoint, body, {
+            timeoutMs: TICKET_UPLOAD_TIMEOUT_MS,
+          }),
+          endpoint
+        ).ticket,
         endpoint
       ),
     }
@@ -200,7 +209,12 @@ export const ticketsApi = {
     const endpoint = `/api/tickets/${id}/messages`
     return {
       message: parseMessage(
-        record(await api.post(endpoint, replyBody(input)), endpoint).message,
+        record(
+          await api.post(endpoint, replyBody(input), {
+            timeoutMs: TICKET_UPLOAD_TIMEOUT_MS,
+          }),
+          endpoint
+        ).message,
         endpoint
       ),
     }
@@ -253,7 +267,12 @@ export const ticketsApi = {
   },
   async adminReply(id: number, input: TicketReplyInput) {
     const endpoint = `/api/admin/tickets/${id}/messages`
-    const data = record(await api.post(endpoint, replyBody(input)), endpoint)
+    const data = record(
+      await api.post(endpoint, replyBody(input), {
+        timeoutMs: TICKET_UPLOAD_TIMEOUT_MS,
+      }),
+      endpoint
+    )
     const ticket = record(data.ticket, endpoint)
     return {
       message: parseMessage(data.message, endpoint),

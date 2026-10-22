@@ -228,6 +228,8 @@ export function createHttpTransport(client: AxiosInstance): ApiTransport {
         data: options.data,
         signal: options.signal,
         headers,
+        // undefined keeps the instance default; only long uploads pass one.
+        timeout: options.timeoutMs,
       })
       if (!isAuthSessionIdentityCurrent(snapshot)) {
         throw staleSessionError()
@@ -341,6 +343,7 @@ export function createPublicHttpTransport(client: AxiosInstance): ApiTransport {
           data: options.data,
           signal: options.signal,
           headers: options.headers,
+          timeout: options.timeoutMs,
         })
         return response.data
       } catch (error) {
@@ -355,6 +358,7 @@ export function createPublicHttpTransport(client: AxiosInstance): ApiTransport {
           signal: options.signal,
           headers: options.headers,
           responseType: 'blob',
+          timeout: options.timeoutMs,
         })
         return response.data
       } catch (error) {

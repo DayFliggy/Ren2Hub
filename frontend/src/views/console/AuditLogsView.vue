@@ -38,7 +38,12 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import type { AuditLogCategory, AuditLogItem } from '@/types/console'
-import { dateInputValue, formatTime } from '@/utils/format'
+import {
+  dateInputValue,
+  formatTime,
+  localDayEndMs,
+  localDayStartMs,
+} from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
@@ -164,10 +169,10 @@ function currentParams() {
     token_ref: readingAll.value ? tokenRef.value.trim() : '',
     keyword: keyword.value.trim(),
     start_timestamp: startDate.value
-      ? Math.floor(new Date(startDate.value).getTime() / 1000)
+      ? Math.floor(localDayStartMs(startDate.value) / 1000)
       : 0,
     end_timestamp: endDate.value
-      ? Math.floor(new Date(endDate.value).getTime() / 1000) + 86_399
+      ? Math.floor(localDayEndMs(endDate.value) / 1000)
       : 0,
   }
 }

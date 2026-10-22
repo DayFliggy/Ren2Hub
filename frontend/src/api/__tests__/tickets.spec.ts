@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../client'
-import { ticketsApi } from '../tickets'
+import { TICKET_UPLOAD_TIMEOUT_MS, ticketsApi } from '../tickets'
 
 const ticket = {
   id: 8,
@@ -95,6 +95,10 @@ describe('native ticket API contracts', () => {
         .ticket.status
     ).toBe('replied')
     expect(post.mock.calls[2]![0]).toBe('/api/admin/tickets/8/messages')
+    for (const call of post.mock.calls) {
+      expect(call[2]).toEqual({ timeoutMs: TICKET_UPLOAD_TIMEOUT_MS })
+    }
+    expect(TICKET_UPLOAD_TIMEOUT_MS).toBe(120_000)
   })
   it('accepts native partial mutation payloads and null assignment', async () => {
     const patch = vi

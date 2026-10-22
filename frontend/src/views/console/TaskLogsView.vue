@@ -31,7 +31,12 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { getLocale } from '@/i18n'
 import { translateServerText } from '@/i18n/serverMessages'
-import { formatQuota, formatTime } from '@/utils/format'
+import {
+  formatQuota,
+  formatTime,
+  localDayEndMs,
+  localDayStartMs,
+} from '@/utils/format'
 
 const { t } = useI18n()
 
@@ -78,13 +83,14 @@ const columns = computed<TableColumn[]>(() => [
 ])
 
 function currentParams() {
-  // /api/task filters compare against second-precision submit_time values.
+  // /api/task filters compare against second-precision submit_time values;
+  // an unset date is omitted, matching the drawing log page.
   const startTimestamp = startDate.value
-    ? Math.floor(new Date(startDate.value).getTime() / 1000)
-    : 0
+    ? Math.floor(localDayStartMs(startDate.value) / 1000)
+    : undefined
   const endTimestamp = endDate.value
-    ? Math.floor(new Date(endDate.value).getTime() / 1000) + 86_399
-    : 0
+    ? Math.floor(localDayEndMs(endDate.value) / 1000)
+    : undefined
   return {
     p: page.value,
     page_size: pageSize.value,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   formatBytes,
@@ -9,6 +9,8 @@ import {
   formatMoney,
   formatQuota,
   formatTokenPrice,
+  localDayEndMs,
+  localDayStartMs,
   maskKey,
   passwordStrength,
   relativeTime,
@@ -90,5 +92,33 @@ describe('passwordStrength', () => {
     expect(passwordStrength('abc')).toBe(1)
     expect(passwordStrength('Abcdef12')).toBe(2)
     expect(passwordStrength('Abcdef12345!')).toBe(3)
+  })
+})
+
+describe('local calendar day bounds', () => {
+  // Node re-reads the zone whenever the TZ variable is assigned.
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('uses local midnight instead of UTC midnight', () => {
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    expect(localDayStartMs('2026-10-01') / 1000).toBe(1790784000)
+    expect(Math.floor(localDayEndMs('2026-10-01') / 1000)).toBe(1790870399)
+  })
+
+  it('keeps daylight-saving days exact', () => {
+    vi.stubEnv('TZ', 'America/New_York')
+    const dayLength = (day: string) =>
+      localDayEndMs(day) - localDayStartMs(day) + 1
+    expect(dayLength('2026-11-01')).toBe(25 * 3_600_000)
+    expect(dayLength('2026-03-08')).toBe(23 * 3_600_000)
+  })
+
+  it('rejects anything but a real YYYY-MM-DD date', () => {
+    for (const value of ['', '2026-1-01', '2026-02-30', '2026-10-01T00:00']) {
+      expect(() => localDayStartMs(value)).toThrow()
+      expect(() => localDayEndMs(value)).toThrow()
+    }
   })
 })

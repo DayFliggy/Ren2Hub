@@ -16,6 +16,7 @@ import type {
   AdminOrderSpender,
   AdminOrderStats,
 } from '@/types/console'
+import { collectExportPages } from '@/utils/collectExportPages'
 
 const EXPORT_PAGE_SIZE = 100
 
@@ -185,27 +186,12 @@ export function useAdminOrders() {
     signal: AbortSignal
   ): Promise<{ items: AdminOrder[]; truncated: boolean }> {
     const filters = filterParams()
-    const first = await getTopUps(
-      { ...filters, p: 1, page_size: EXPORT_PAGE_SIZE },
-      signal
+    // The native order total is a capped count, so it cannot signal truncation.
+    return collectExportPages(
+      (p) => getTopUps({ ...filters, p, page_size: EXPORT_PAGE_SIZE }, signal),
+      EXPORT_PAGE_SIZE,
+      ORDER_EXPORT_MAX_ROWS
     )
-
-    const items = [...first.items]
-    const reachable = Math.min(first.total, ORDER_EXPORT_MAX_ROWS)
-    const pages = Math.ceil(reachable / EXPORT_PAGE_SIZE)
-
-    for (let p = 2; p <= pages; p++) {
-      const next = await getTopUps(
-        { ...filters, p, page_size: EXPORT_PAGE_SIZE },
-        signal
-      )
-      items.push(...next.items)
-    }
-
-    return {
-      items: items.slice(0, ORDER_EXPORT_MAX_ROWS),
-      truncated: first.total > ORDER_EXPORT_MAX_ROWS,
-    }
   }
 
   function refreshAll() {

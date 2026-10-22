@@ -1,7 +1,7 @@
 import { getLocale } from '@/i18n'
 import { serverResponseMessage } from '@/i18n/serverMessages'
 
-import { ApiError, type ApiResponse } from './types'
+import { ApiError, type ApiEnvelope } from './types'
 import type { ApiTransport, RequestOptions } from './transport'
 import { AuthSessionInvalidatedError } from './authSession'
 
@@ -10,7 +10,7 @@ export interface ApiClient {
     url: string,
     params?: Record<string, unknown>,
     options?: Pick<RequestOptions, 'signal' | 'headers'>
-  ): Promise<ApiResponse<T>>
+  ): Promise<ApiEnvelope<T>>
   get<T>(
     url: string,
     params?: Record<string, unknown>,
@@ -19,7 +19,10 @@ export interface ApiClient {
   post<T>(
     url: string,
     data?: unknown,
-    options?: Pick<RequestOptions, 'signal' | 'headers'>
+    options?: Pick<
+      RequestOptions,
+      'signal' | 'headers' | 'params' | 'timeoutMs'
+    >
   ): Promise<T>
   put<T>(
     url: string,
@@ -100,6 +103,7 @@ export function createApiClient(
           typeof payload.success !== 'boolean' ||
           (payload.success &&
             method === 'GET' &&
+            !includeEnvelope &&
             !Object.hasOwn(payload, 'data'))
         ) {
           throw new ApiError('Invalid API response envelope', {
