@@ -24,3 +24,19 @@ it('states the quota_data flush lag without inferring a cache hit rate', () => {
   expect(wrapper.text()).not.toContain('%')
   wrapper.unmount()
 })
+
+it('shows a skipped-window reason instead of a zero-value chart', async () => {
+  const wrapper = mount(TokenTrendCard, {
+    props: { points: [], unavailableReason: 'Log range exceeded' },
+    global: { plugins: [i18n] },
+  })
+
+  expect(wrapper.get('[data-token-trend-unavailable]').text()).toContain(
+    'Log range exceeded'
+  )
+  expect(wrapper.find('[role="img"]').exists()).toBe(false)
+  await wrapper.setProps({ unavailableReason: null })
+  expect(wrapper.find('[data-token-trend-unavailable]').exists()).toBe(false)
+  expect(wrapper.find('[role="img"]').exists()).toBe(true)
+  wrapper.unmount()
+})

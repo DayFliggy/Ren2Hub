@@ -96,6 +96,38 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
       expect(queries.at(-1)?.get('include_comparison')).toBe('true')
     })
 
+    test(`${name} dashboard keeps today and the balance past a 20-day log range`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport)
+      await configureStablePage(page, {
+        theme,
+        authenticated: true,
+        status: { log_max_range_days: 20 },
+      })
+      const queries = await recordSummaries(page)
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+      await waitForStablePage(page)
+
+      // The 30-day window is skipped, not shortened; its cards name the limit.
+      const notice = '近 30 天超出 20 天的日志查询范围'
+      await expect(
+        page.locator('[data-token-trend-unavailable]')
+      ).toContainText(notice)
+      await expect(
+        page.locator('[data-model-distribution-unavailable]')
+      ).toContainText(notice)
+      await expect(
+        page.locator('[data-kpi-cell="tokens"] .display-number')
+      ).toHaveText('1.2K')
+      await expect(page.locator('[data-balance-card]')).toBeVisible()
+      await expect(page.getByText('仪表盘数据加载失败')).toHaveCount(0)
+      const ranges = queries.map((query) => query.get('range'))
+      expect(ranges).toContain('today')
+      expect(ranges).not.toContain('30d')
+      await assertNoHorizontalOverflow(page)
+    })
+
     test(`${name} wallet shows the display currency and skips an out-of-range month`, async ({
       page,
     }) => {

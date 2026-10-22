@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { SERIES_TOKENS } from '@/charts/palette'
 import { useEChart } from '@/charts/useEChart'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import { useTableScrollFade } from '@/composables/useTableScrollFade'
 import type { ModelShare } from '@/composables/useDashboard'
 import { quotaForChart, quotaRatio, sumQuota } from '@/utils/quota'
@@ -22,6 +23,8 @@ const TOP_N = 10
 const props = defineProps<{
   items: ModelShare[]
   loading?: boolean
+  /** Why the share window was not queried; replaces the chart when set. */
+  unavailableReason?: string | null
 }>()
 
 const { t } = useI18n()
@@ -207,6 +210,12 @@ watch(
         />
       </div>
     </div>
+
+    <EmptyState
+      v-else-if="unavailableReason"
+      :title="unavailableReason"
+      data-model-distribution-unavailable
+    />
 
     <div
       v-else

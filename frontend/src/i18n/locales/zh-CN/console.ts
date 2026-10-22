@@ -501,6 +501,7 @@ export default {
       rangeLabel: '统计区间',
       trendMode: '趋势显示指标',
       outOfRange: '所选区间超出 {days} 天的日志查询范围，请缩短区间。',
+      recentOutOfRange: '近 30 天超出 {days} 天的日志查询范围',
       comparisonUnavailable: '无法对比',
       comparisonUnavailableHint: '加入上一周期会超出日志查询范围。',
     },

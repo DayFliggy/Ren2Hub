@@ -10,7 +10,6 @@ import {
   summaryFits,
   type SummaryRange,
 } from '@/api/dashboard'
-import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -21,6 +20,7 @@ export interface DashboardStats {
   today_quota: string
   month_quota?: string
   today_requests: number
+  today_tokens: number
   total_requests: number
 }
 
@@ -94,7 +94,9 @@ export function useDashboard() {
     share = ref<ModelShare[]>([]),
     flow = ref<FlowPoint[]>([]),
     tokenTrend = ref<TokenTrendPoint[]>([]),
-    flushIntervalMinutes = ref<number | null>(null)
+    flushIntervalMinutes = ref<number | null>(null),
+    // Set when the 30-day window exceeds the log limit; names that limit.
+    recentOutOfRange = ref<string | null>(null)
   // No public native endpoint exposes host metrics, account RPM limits or discounts.
   const system = ref<SystemMetrics | null>(null),
     limits = ref<UserLimits | null>(null),
@@ -107,22 +109,22 @@ export function useDashboard() {
     flow.value = []
     tokenTrend.value = []
     flushIntervalMinutes.value = null
-    const result = await request.run((signal) => {
+    recentOutOfRange.value = null
+    const result = await request.run(async (signal) => {
       const limit = logRangeLimit(app.status)
-      const recentRange: SummaryRange = { range: '30d' }
-      if (!summaryFits(recentRange, limit, false)) {
-        throw new ApiError(t('dashboard.stats.outOfRange', { days: limit }))
-      }
       // No overview card shows deltas, so no window asks for a comparison.
-      // A month past the log limit is skipped and its card shows no figure.
-      const month = currentMonthRange()
-      return Promise.all([
-        getUsageSummary(recentRange, false, signal),
-        summaryFits(month, limit, false)
-          ? getUsageSummary(month, false, signal)
-          : null,
+      // A window past the log limit is skipped rather than shortened; the
+      // today window and the balance do not depend on it.
+      const fitting = (range: SummaryRange) =>
+        summaryFits(range, limit, false)
+          ? getUsageSummary(range, false, signal)
+          : null
+      const [recent, month, today] = await Promise.all([
+        fitting({ range: '30d' }),
+        fitting(currentMonthRange()),
         getUsageSummary({ range: 'today' }, false, signal),
       ])
+      return { limit, recent, month, today }
     })
     if (result.stale) return
     loading.value = false
@@ -134,7 +136,8 @@ export function useDashboard() {
       toast.error(error.value)
       return
     }
-    const [recent, month, today] = result.value
+    const { limit, recent, month, today } = result.value
+    // A skipped window is null and has no availability to report.
     if (
       [recent, month, today].some(
         (summary) => summary?.meta.available === false
@@ -150,7 +153,16 @@ export function useDashboard() {
       today_quota: today.kpi.totalQuota,
       month_quota: month?.kpi.totalQuota,
       today_requests: today.kpi.totalRequests,
+      today_tokens: today.kpi.totalTokens,
       total_requests: auth.user.request_count,
+    }
+    // The flush interval is a server setting, the same in every window.
+    flushIntervalMinutes.value = today.meta.flush_interval_minutes
+    if (!recent) {
+      recentOutOfRange.value = t('dashboard.stats.recentOutOfRange', {
+        days: limit,
+      })
+      return
     }
     share.value = recent.models.map((row) => ({
       model: row.model,
@@ -161,7 +173,6 @@ export function useDashboard() {
     }))
     flow.value = recent.flow
     tokenTrend.value = recent.token_trend
-    flushIntervalMinutes.value = recent.meta.flush_interval_minutes
   }
   return {
     loading,
@@ -170,6 +181,7 @@ export function useDashboard() {
     flow,
     tokenTrend,
     flushIntervalMinutes,
+    recentOutOfRange,
     system,
     limits,
     discounts,

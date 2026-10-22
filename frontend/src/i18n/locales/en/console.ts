@@ -527,6 +527,8 @@ export default {
       trendMode: 'Trend metric',
       outOfRange:
         'The selected range exceeds the {days}-day log query limit. Choose a shorter range.',
+      recentOutOfRange:
+        'The last 30 days exceed the {days}-day log query limit',
       comparisonUnavailable: 'No comparison',
       comparisonUnavailableHint:
         'Adding the previous period would exceed the log query limit.',
