@@ -240,18 +240,22 @@ describe('capability route guard', () => {
     }
   })
 
+  // Only root bypasses permissions, so a user and an admin share one matrix.
   it.each([
-    [false, 'dashboard'],
-    [true, 'token-routing'],
+    [1, false, 'dashboard'],
+    [1, true, 'token-routing'],
+    [10, false, 'dashboard'],
+    [10, true, 'token-routing'],
   ])(
-    'opens token routing only with routing:read %s',
-    async (read, routeName) => {
+    'opens token routing for role %i only with routing:read %s',
+    async (role, read, routeName) => {
       publicApi.status.mockResolvedValue({
         frontend_capabilities: {
           dashboard_basic: 'live',
           token_private_routing: 'live',
         },
       })
+      useAuthStore().user!.role = role
       // authz.Capabilities lists every registered resource for the user.
       useAuthStore().user!.permissions = {
         admin_permissions: { routing: { read, write: read } },
