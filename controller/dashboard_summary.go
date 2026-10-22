@@ -34,13 +34,9 @@ func GetDashboardSummary(c *gin.Context) {
 	if includeComparison {
 		queryStart = start.Add(-end.Sub(start)).Unix()
 	}
-	bounded, err := limitLogTimeRange(queryStart, end.Unix()-1)
-	if err != nil {
+	// Only the error matters: a nonzero start comes back unchanged.
+	if _, err := limitLogTimeRange(queryStart, end.Unix()-1); err != nil {
 		common.ApiError(c, err)
-		return
-	}
-	if bounded != queryStart {
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("dashboard query exceeds the allowed log range"))
 		return
 	}
 	result, err := service.Dashboard(c.Request.Context(), c.GetInt("id"), start, end, includeComparison)
