@@ -4,8 +4,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import { api } from '@/api/console'
-import { parsePublicStatus, publicApi } from '@/api/public'
+import { httpTransport, publicHttpTransport } from '@/api/httpTransport'
+import { parsePublicStatus } from '@/api/public'
+import type { HttpMethod, RequestOptions } from '@/api/transport'
+import type { ApiResponse } from '@/api/types'
 import CommandPaletteModal from '@/components/console/CommandPaletteModal.vue'
 import ConsoleNavStrip from '@/components/console/ConsoleNavStrip.vue'
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
@@ -76,7 +78,7 @@ describe('SidebarModulesAdmin in the console navigation', () => {
     ['mobile strip', ConsoleNavStrip, {}],
     ['command palette', CommandPaletteModal, { open: true }],
   ])(
-    'updates the mounted %s after navigation settings are saved',
+    'keeps the mounted %s current when pre-save status reads finish last',
     async (_, navigation, props) => {
       vi.stubGlobal('CSS', { escape: (value: string) => value })
       await loadMessageDomain('console')
@@ -95,27 +97,90 @@ describe('SidebarModulesAdmin in the console navigation', () => {
               .exists()
       expect(hasChannel()).toBe(true)
       expect(app.showPricing).toBe(true)
-      vi.spyOn(api, 'get').mockResolvedValue([])
-      vi.spyOn(api, 'put').mockResolvedValue(null)
-      vi.spyOn(publicApi, 'status').mockResolvedValue({
-        ...app.status,
-        HeaderNavModules: '{"pricing":false}',
-        SidebarModulesAdmin: '{"admin":{"channel":false}}',
-      })
+      const options: Record<string, string> = {
+        HeaderNavModules: '{"pricing":true}',
+        SidebarModulesAdmin: '{}',
+      }
+      const finishStatusReads: Array<() => void> = []
+      const pending: Array<Promise<unknown>> = []
+      const statusRequest = vi
+        .spyOn(publicHttpTransport, 'request')
+        .mockImplementation(<T>(method: HttpMethod, url: string) => {
+          expect([method, url]).toEqual(['GET', '/api/status'])
+          // Capture at request time, as a pre-save HTTP response would.
+          const snapshot = { ...app.status, ...options }
+          return new Promise<ApiResponse<T>>((resolve) => {
+            finishStatusReads.push(() =>
+              resolve({ success: true, data: snapshot as T })
+            )
+          })
+        })
+      const optionRequest = vi
+        .spyOn(httpTransport, 'request')
+        .mockImplementation(
+          async <T>(
+            method: HttpMethod,
+            url: string,
+            request?: RequestOptions
+          ) => {
+            expect(url).toBe('/api/option/')
+            if (method === 'PUT') {
+              const { key, value } = request?.data as {
+                key: string
+                value: string
+              }
+              options[key] = value
+              return { success: true, data: null as T }
+            }
+            expect(method).toBe('GET')
+            return {
+              success: true,
+              data: Object.entries(options).map(([key, value]) => ({
+                key,
+                value,
+              })) as T,
+            }
+          }
+        )
       expect(await settings.load(true)).toBe(true)
 
-      expect(
-        await settings.saveOptions({
+      try {
+        const older = app.refreshStatus()
+        pending.push(older)
+        expect(statusRequest).toHaveBeenCalledTimes(1)
+        const saving = settings.saveOptions({
           HeaderNavModules: '{"pricing":false}',
           SidebarModulesAdmin: '{"admin":{"channel":false}}',
         })
-      ).toBe(true)
-      await flushPromises()
+        pending.push(saving)
+        await flushPromises()
+        expect(
+          optionRequest.mock.calls.filter(([method]) => method === 'PUT')
+        ).toHaveLength(2)
+        expect(statusRequest).toHaveBeenCalledTimes(2)
+        finishStatusReads[1]!()
+        expect(await saving).toBe(true)
+        await flushPromises()
+        expect(app.showPricing).toBe(false)
+        expect(hasChannel()).toBe(false)
 
-      expect(publicApi.status).toHaveBeenCalledOnce()
-      expect(app.showPricing).toBe(false)
-      expect(hasChannel()).toBe(false)
-      wrapper.unmount()
+        // A later route refresh must not rejoin the still-pending old GET
+        // and give its stale payload a newer store request number.
+        const latest = app.refreshStatus()
+        pending.push(latest)
+        expect(statusRequest).toHaveBeenCalledTimes(3)
+        finishStatusReads[2]!()
+        await latest
+        finishStatusReads[0]!()
+        await older
+        await flushPromises()
+        expect(app.showPricing).toBe(false)
+        expect(hasChannel()).toBe(false)
+      } finally {
+        for (const finish of finishStatusReads) finish()
+        await Promise.allSettled(pending)
+        wrapper.unmount()
+      }
     }
   )
   it.each([

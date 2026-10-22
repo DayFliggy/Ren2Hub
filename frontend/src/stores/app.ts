@@ -200,7 +200,9 @@ export const useAppStore = defineStore('app', () => {
   // a newer one.
   async function refreshStatus(): Promise<void> {
     const request = ++statusRequested
-    const next = await publicApi.status()
+    // A refresh must not reuse a GET started before an option was saved.
+    // Give every call its own signal to bypass the API client's GET sharing.
+    const next = await publicApi.status(new AbortController().signal)
     if (request < statusApplied) return
     statusApplied = request
     status.value = next
