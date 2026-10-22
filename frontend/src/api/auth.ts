@@ -81,7 +81,8 @@ export const authApi = {
   register: (
     payload: {
       username: string
-      email: string
+      /** Sent only when email verification is enabled. */
+      email?: string
       password: string
       aff_code?: string
       verification_code?: string

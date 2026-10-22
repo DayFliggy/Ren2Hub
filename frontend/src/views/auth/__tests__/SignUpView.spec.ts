@@ -37,6 +37,7 @@ describe('SignUpView affiliate attribution', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     localStorage.clear()
+    route.query.aff = 'INVALID'
     const pinia = createPinia()
     setActivePinia(pinia)
     const app = useAppStore()
@@ -244,6 +245,94 @@ describe('SignUpView Turnstile requests', () => {
     expect(register).toHaveBeenCalledWith(expect.anything(), 'register-token')
     expect(turnstileReset).toHaveBeenCalledTimes(3)
     expect(push).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+function mountSignUp(emailVerification: boolean) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const app = useAppStore()
+  app.phase = 'ready'
+  app.status = { email_verification: emailVerification }
+  return mount(SignUpView, {
+    global: {
+      plugins: [pinia, i18n],
+      stubs: {
+        AuthLayout: { template: '<div><slot /></div>' },
+        PasswordStrengthMeter: true,
+        RouterLink: true,
+      },
+    },
+  })
+}
+
+describe('SignUpView email verification', () => {
+  beforeEach(async () => {
+    vi.resetAllMocks()
+    localStorage.clear()
+    route.query.aff = ''
+    await loadMessageDomain('auth')
+    await setLocale('zh-CN')
+  })
+
+  it('registers without email fields when verification is off', async () => {
+    register.mockResolvedValue(undefined)
+    const wrapper = mountSignUp(false)
+    await flushPromises()
+    expect(wrapper.find('input[autocomplete="email"]').exists()).toBe(false)
+    expect(wrapper.find('input[autocomplete="one-time-code"]').exists()).toBe(
+      false
+    )
+
+    await wrapper.find('input[autocomplete="username"]').setValue('demo')
+    for (const input of wrapper.findAll('input[autocomplete="new-password"]'))
+      await input.setValue('password-123')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(register).toHaveBeenCalledTimes(1)
+    const payload = register.mock.calls[0][0]
+    expect(Object.keys(payload)).not.toContain('email')
+    expect(Object.keys(payload)).not.toContain('verification_code')
+    expect(payload).toMatchObject({
+      username: 'demo',
+      password: 'password-123',
+    })
+    expect(push).toHaveBeenCalledWith({ name: 'sign-in' })
+    wrapper.unmount()
+  })
+
+  it('requires a valid email and sends the code when verification is on', async () => {
+    register.mockResolvedValue(undefined)
+    const wrapper = mountSignUp(true)
+    await flushPromises()
+    const inputs = wrapper.findAll('input').map((input) => input.attributes())
+    const emailIndex = inputs.findIndex((a) => a.autocomplete === 'email')
+    expect(inputs[emailIndex + 1]?.autocomplete).toBe('one-time-code')
+    expect(wrapper.text()).toContain('邮箱验证码')
+    expect(wrapper.text()).toContain('发送验证码')
+
+    await wrapper.find('input[autocomplete="username"]').setValue('demo')
+    for (const input of wrapper.findAll('input[autocomplete="new-password"]'))
+      await input.setValue('password-123')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(register).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('邮箱格式不正确')
+
+    await wrapper
+      .find('input[autocomplete="email"]')
+      .setValue('demo@example.com')
+    await wrapper.find('input[autocomplete="one-time-code"]').setValue('123456')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(register.mock.calls[0][0]).toEqual({
+      username: 'demo',
+      password: 'password-123',
+      email: 'demo@example.com',
+      verification_code: '123456',
+    })
     wrapper.unmount()
   })
 })

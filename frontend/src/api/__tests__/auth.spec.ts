@@ -84,6 +84,24 @@ describe('authentication API', () => {
       ['GET', '/api/reset_password', { email: 'reset@example.com' }],
     ])
   })
+  it('accepts the dataless native register success without an email', async () => {
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValue({ success: true, message: '' } as never)
+
+    await expect(
+      authApi.register({ username: 'demo', password: 'password-123' })
+    ).resolves.toBeUndefined()
+
+    expect(request).toHaveBeenCalledWith(
+      'POST',
+      '/api/user/register',
+      expect.objectContaining({
+        data: { username: 'demo', password: 'password-123' },
+        params: {},
+      })
+    )
+  })
   it('rejects a native mail business failure', async () => {
     vi.spyOn(httpTransport, 'request').mockResolvedValue({
       success: false,
