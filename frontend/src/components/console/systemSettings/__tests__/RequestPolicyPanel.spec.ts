@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, expect, it, onTestFinished, vi } from 'vitest'
 import { ApiError } from '@/api/types'
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
@@ -158,6 +158,32 @@ it.each([
     RetryTimes: '4',
     SensitiveWords: 'new',
   })
+  expect(draft(wrapper).SensitiveWords).toBe('new')
+  wrapper.unmount()
+})
+it('locks the draft while a reload after a form save is in flight', async () => {
+  const settings = useSystemSettings()
+  expect(await settings.load(true)).toBe(true)
+  const wrapper = await render()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  const defaultGet = api.get.getMockImplementation()!
+  api.get.mockImplementation(async (path: string) => {
+    if (path === '/api/option/request_policy') await gate
+    return defaultGet(path)
+  })
+  onTestFinished(() => {
+    release()
+    api.get.mockImplementation(defaultGet)
+  })
+  expect(await settings.saveOptions({ SensitiveWords: 'new' })).toBe(true)
+  await flushPromises()
+  // Input is blocked until the snapshot lands, so the reload cannot replace
+  // text typed after it started.
+  expect(wrapper.get('textarea').attributes('disabled')).toBeDefined()
+  release()
+  await flushPromises()
+  expect(wrapper.get('textarea').attributes('disabled')).toBeUndefined()
   expect(draft(wrapper).SensitiveWords).toBe('new')
   wrapper.unmount()
 })
