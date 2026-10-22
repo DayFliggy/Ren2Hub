@@ -137,7 +137,7 @@ type AffiliateInfo struct {
 	Policy               operation_setting.AffiliateSetting `json:"policy"`
 }
 
-func GetAffiliateInfo(userID int) (*AffiliateInfo, error) {
+func GetAffiliateInfo(userID int, loc *time.Location) (*AffiliateInfo, error) {
 	var user User
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var err error
@@ -160,9 +160,10 @@ func GetAffiliateInfo(userID int) (*AffiliateInfo, error) {
 	if err = DB.Where("user_id = ?", userID).Order("id DESC").Limit(100).Find(&result.Records).Error; err != nil {
 		return nil, err
 	}
-	// Chart has a bounded twelve-month window; history remains available separately.
-	now := time.Now().UTC()
-	start := time.Date(now.Year(), now.Month()-11, 1, 0, 0, 0, 0, time.UTC)
+	// Chart has a bounded twelve-month window of the viewer's calendar months in
+	// loc; history remains available separately.
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month()-11, 1, 0, 0, 0, 0, loc)
 	end := start.AddDate(0, 12, 0)
 	var rows []AffiliateRecord
 	if err = DB.Select("created_at", "reward_quota").Where("user_id = ? AND kind = ? AND created_at >= ? AND created_at < ?", userID, "accrue", start.Unix(), end.Unix()).Find(&rows).Error; err != nil {
@@ -170,7 +171,7 @@ func GetAffiliateInfo(userID int) (*AffiliateInfo, error) {
 	}
 	sums := map[string]int{}
 	for _, r := range rows {
-		sums[time.Unix(r.CreatedAt, 0).UTC().Format("2006-01")] += r.RewardQuota
+		sums[time.Unix(r.CreatedAt, 0).In(loc).Format("2006-01")] += r.RewardQuota
 	}
 	// Bindings remain historical facts after an invitee is soft-deleted. The
 	// opening balance includes older bindings without loading lifetime users.
@@ -184,7 +185,7 @@ func GetAffiliateInfo(userID int) (*AffiliateInfo, error) {
 	}
 	newCounts := map[string]int{}
 	for _, timestamp := range invitedAt {
-		newCounts[time.Unix(timestamp, 0).UTC().Format("2006-01")]++
+		newCounts[time.Unix(timestamp, 0).In(loc).Format("2006-01")]++
 	}
 	for i := 0; i < 12; i++ {
 		month := start.AddDate(0, i, 0).Format("2006-01")

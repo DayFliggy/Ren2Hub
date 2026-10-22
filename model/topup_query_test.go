@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ func TestTopUpQueryFiltersOwnershipAndCurrencyTotals(t *testing.T) {
 	assert.Len(t, result, 2)
 	_, err = GetTopUpDetail("cny-success", invitee.Id)
 	require.Error(t, err)
-	stats, err := GetTopUpStatistics(TopUpFilter{})
+	stats, err := GetTopUpStatistics(TopUpFilter{}, time.UTC)
 	require.NoError(t, err)
 	assert.Equal(t, 5, stats.Total)
 	require.Len(t, stats.Currencies, 3)
@@ -40,6 +41,19 @@ func TestTopUpQueryFiltersOwnershipAndCurrencyTotals(t *testing.T) {
 	assert.Equal(t, "USD", stats.Currencies[2].Currency)
 	assert.Equal(t, "0.3", stats.Currencies[2].PaidAmount)
 	assert.Equal(t, 2, stats.Currencies[2].PaidCount)
+}
+
+func TestTopUpDailyTotalsUseViewerCalendarDay(t *testing.T) {
+	db, _, invitee := affiliateTestDB(t)
+	order := TopUp{UserId: invitee.Id, TradeNo: "late-utc", PaymentMethod: "stripe", Currency: "USD", PayAmount: "1", Status: common.TopUpStatusSuccess, CreateTime: time.Date(2026, 10, 20, 23, 30, 0, 0, time.UTC).Unix()}
+	require.NoError(t, db.Create(&order).Error)
+	for loc, want := range map[*time.Location]string{time.UTC: "2026-10-20", time.FixedZone("viewer", 480*60): "2026-10-21"} {
+		stats, err := GetTopUpStatistics(TopUpFilter{}, loc)
+		require.NoError(t, err)
+		require.Len(t, stats.Daily, 1)
+		assert.Equal(t, want, stats.Daily[0].Date)
+		assert.Equal(t, "1", stats.Daily[0].PaidAmount)
+	}
 }
 
 // 关键词沿用原生 sanitizeLikePattern：不带 % 时精确匹配，_ 不是通配符，非法模式直接报错。
@@ -91,7 +105,7 @@ func TestTopUpMethodTotalsAndRanking(t *testing.T) {
 		rows[i].CreateTime = common.GetTimestamp()
 		require.NoError(t, db.Create(&rows[i]).Error)
 	}
-	stats, err := GetTopUpStatistics(TopUpFilter{})
+	stats, err := GetTopUpStatistics(TopUpFilter{}, time.UTC)
 	require.NoError(t, err)
 	require.Len(t, stats.Methods, 3)
 	assert.Equal(t, PaymentProviderEpay, stats.Methods[0].Method)

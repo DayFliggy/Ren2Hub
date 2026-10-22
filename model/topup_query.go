@@ -187,7 +187,8 @@ type TopUpStatistics struct {
 
 // Totals deliberately never combine different currencies. Unknown legacy
 // payment facts remain explicit instead of being silently labelled USD.
-func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
+// Daily totals use the viewer's calendar days in loc.
+func GetTopUpStatistics(filter TopUpFilter, loc *time.Location) (*TopUpStatistics, error) {
 	query, err := topUpFilteredQuery(filter)
 	if err != nil {
 		return nil, err
@@ -204,7 +205,7 @@ func GetTopUpStatistics(filter TopUpFilter) (*TopUpStatistics, error) {
 			if currencies[currency] == nil {
 				currencies[currency] = &TopUpCurrencyTotal{Currency: currency, PaidAmount: "0"}
 			}
-			date := time.Unix(row.CreateTime, 0).UTC().Format("2006-01-02")
+			date := time.Unix(row.CreateTime, 0).In(loc).Format("2006-01-02")
 			key := date + ":" + currency
 			if daily[key] == nil {
 				daily[key] = &TopUpDailyTotal{Date: date, TopUpCurrencyTotal: TopUpCurrencyTotal{Currency: currency, PaidAmount: "0"}}

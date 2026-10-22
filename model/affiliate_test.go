@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -157,7 +158,7 @@ func TestAffiliateSuccessTimeRulesFreezeCapAndExpiry(t *testing.T) {
 	_, _, err = TransferAffiliateQuota(inviter.Id, "freeze-transfer")
 	require.ErrorIs(t, err, ErrAffiliateUnavailable)
 	require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ?", inviter.Id).Update("frozen_until", common.GetTimestamp()-1).Error)
-	info, err := GetAffiliateInfo(inviter.Id)
+	info, err := GetAffiliateInfo(inviter.Id, time.UTC)
 	require.NoError(t, err)
 	assert.Equal(t, 400, info.AvailableReward)
 	assert.Zero(t, info.FrozenReward)

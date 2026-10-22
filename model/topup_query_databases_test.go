@@ -86,7 +86,7 @@ func verifyTopUpQueries(t *testing.T, db *gorm.DB) {
 		{UserID: second.Id, Username: second.Username, PaidCount: 1, CreditedQuota: 300},
 	}, ranking.Items)
 
-	stats, err := GetTopUpStatistics(TopUpFilter{})
+	stats, err := GetTopUpStatistics(TopUpFilter{}, time.UTC)
 	require.NoError(t, err)
 	assert.Equal(t, 4, stats.Total)
 	require.Len(t, stats.Currencies, 2)
@@ -144,7 +144,7 @@ func verifyTopUpMethodScope(t *testing.T, db *gorm.DB) {
 		assert.EqualValues(t, len(want[method]), total, method)
 	}
 
-	stats, err := GetTopUpStatistics(TopUpFilter{UserID: owner.Id})
+	stats, err := GetTopUpStatistics(TopUpFilter{UserID: owner.Id}, time.UTC)
 	require.NoError(t, err)
 	counts := map[string]int{}
 	for _, total := range stats.Methods {
