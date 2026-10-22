@@ -155,6 +155,5 @@ export default {
     rights: 'All rights reserved.',
     copyright: '© 2026 DayFliggy. All rights reserved.',
     designBy: 'Designed and developed by',
-    updated: 'Updated 2026.07.17',
   },
 }

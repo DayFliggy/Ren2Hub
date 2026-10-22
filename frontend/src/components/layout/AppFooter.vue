@@ -15,7 +15,6 @@ const { t } = useI18n()
       <strong class="font-semibold text-[var(--footer-text-primary)]">
         DayFliggy
       </strong>
-      {{ t('footer.updated') }}
     </p>
   </footer>
 </template>
