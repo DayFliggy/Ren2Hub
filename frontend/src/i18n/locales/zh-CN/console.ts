@@ -1557,6 +1557,7 @@ export default {
     bulkProofHint: '批量操作会为每位用户单独发起一次安全验证。',
     bulkProofNotice: '每位用户需要单独完成一次安全验证，共 {count} 次。',
     bulkStopped: '已处理 {done}/{total} 位用户，{name} 处理失败：{message}',
+    profileSavedRoleFailed: '用户资料已保存，角色未变更：{message}',
   },
 
   redemption: {

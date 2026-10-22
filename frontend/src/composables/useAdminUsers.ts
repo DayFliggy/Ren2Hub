@@ -150,22 +150,45 @@ export function useAdminUsers(
       )
     )
   }
+  /**
+   * Profile and role are two native writes; upstream keeps the role on its own
+   * row action. Once the profile PUT succeeds the save is reported as done, a
+   * failed role step is reported separately, and the list reloads either way.
+   */
   async function updateUserDetails(
     user: AdminUser,
     input: AdminUserUpdateInput
   ) {
-    return mutate(async () => {
+    if (busy.value) return false
+    busy.value = true
+    try {
       const { role, ...patch } = input
-      await api.put(
-        '/api/user/',
-        { id: user.id, ...patch },
-        patch.password || patch.admin_permissions
-          ? await authorize('admin.user.update', { user_id: user.id })
-          : undefined
-      )
+      try {
+        await api.put(
+          '/api/user/',
+          { id: user.id, ...patch },
+          patch.password || patch.admin_permissions
+            ? await authorize('admin.user.update', { user_id: user.id })
+            : undefined
+        )
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e))
+        return false
+      }
       if (role !== user.role)
-        await manageRequest(user, role >= 10 ? 'promote' : 'demote')
-    })
+        await manageRequest(user, role >= 10 ? 'promote' : 'demote').catch(
+          (e: unknown) =>
+            toast.error(
+              t('users.profileSavedRoleFailed', {
+                message: e instanceof Error ? e.message : String(e),
+              })
+            )
+        )
+      await load()
+      return true
+    } finally {
+      busy.value = false
+    }
   }
   async function deleteUser(user: AdminUser) {
     return mutate(() => deleteRequest(user))
