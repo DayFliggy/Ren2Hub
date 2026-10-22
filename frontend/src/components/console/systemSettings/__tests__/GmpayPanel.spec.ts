@@ -108,7 +108,7 @@ describe('GMPay native configuration', () => {
     wrapper.unmount()
   })
   it('shows the translated backend reason when saving fails', async () => {
-    // Real Go envelope from SaveGmpayConfig; the client must surface it as is.
+    // The transport returns the Go SaveGmpayConfig envelope unchanged (no data).
     const request = vi
       .spyOn(httpTransport, 'request')
       .mockResolvedValueOnce({ success: true, message: '', data: config })
@@ -116,7 +116,7 @@ describe('GMPay native configuration', () => {
         success: false,
         message: 'Duplicate GMPay asset',
         message_key: 'Duplicate GMPay asset',
-      })
+      } as never)
     const wrapper = await render()
     await setLocale('zh-CN')
     try {
