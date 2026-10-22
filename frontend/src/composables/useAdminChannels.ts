@@ -469,7 +469,11 @@ export function useAdminChannels() {
     channel: AdminChannel,
     input: AdminChannelUpdateInput
   ): Promise<boolean> {
-    if (isRetiredChannelType(channel.type) || isRetiredChannelType(input.type))
+    // input.type is absent when the editor lacks ChannelSensitiveWrite.
+    if (
+      isRetiredChannelType(channel.type) ||
+      (input.type !== undefined && isRetiredChannelType(input.type))
+    )
       return Promise.resolve(false)
     return runCrudAction('edit', channel.id, async (signal) => {
       await api.put<unknown>(

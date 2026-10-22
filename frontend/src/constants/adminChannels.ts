@@ -1,4 +1,8 @@
-import type { AdminChannelSortBy, AdminChannelStatus } from '@/types/console'
+import type {
+  AdminChannelSortBy,
+  AdminChannelStatus,
+  AdminChannelUpdateInput,
+} from '@/types/console'
 
 export const ADMIN_CHANNEL_OPTIONAL_FIELDS = [
   'id',
@@ -92,6 +96,37 @@ export function adminChannelTypeMeta(type: number): AdminChannelTypeMeta {
 
 export function isRetiredChannelType(type: number): boolean {
   return ADMIN_CHANNEL_TYPE_META[type]?.retired === true
+}
+
+/**
+ * Mirrors channelSensitiveFields in controller/channel_authz.go: the upstream
+ * edit-form list plus channel_ratio and key_mode. Without ChannelSensitiveWrite
+ * the edit form sends none of them, so UpdateChannel keeps the stored values
+ * and skips the type-specific validation they would trigger.
+ */
+export const CHANNEL_SENSITIVE_UPDATE_FIELDS: readonly string[] = [
+  'type',
+  'key',
+  'base_url',
+  'openai_organization',
+  'param_override',
+  'header_override',
+  'setting',
+  'settings',
+  'other',
+  'channel_ratio',
+  'key_mode',
+]
+
+export function withoutSensitiveChannelFields(
+  input: AdminChannelUpdateInput
+): AdminChannelUpdateInput {
+  // Every listed field is optional in AdminChannelUpdateInput.
+  return Object.fromEntries(
+    Object.entries(input).filter(
+      ([field]) => !CHANNEL_SENSITIVE_UPDATE_FIELDS.includes(field)
+    )
+  ) as AdminChannelUpdateInput
 }
 
 export function adminChannelStatusTone(

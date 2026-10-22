@@ -47,6 +47,7 @@ import {
   ADMIN_CHANNEL_TYPE_META,
   adminChannelTypeMeta,
   isRetiredChannelType,
+  withoutSensitiveChannelFields,
 } from '@/constants/adminChannels'
 import type {
   AdminChannel,
@@ -588,7 +589,9 @@ async function submit() {
   saving.value = true
   try {
     if (modelMappingTab.value === 'visual') syncJsonFromRows()
-    const base: AdminChannelUpdateInput = {
+    const base: Omit<AdminChannelCreateInput, 'status' | 'key'> & {
+      key?: string
+    } = {
       name: form.name.trim(),
       type: form.type,
       base_url: form.baseUrl.trim(),
@@ -600,12 +603,10 @@ async function submit() {
       max_concurrency: form.max_concurrency,
     }
     const settings = { ...originalSetting.value }
-    if (canSensitiveWrite.value) {
-      if (form.type === 41) {
-        if (vertexRegion.value.trim() !== (props.editing?.other ?? ''))
-          base.other = vertexRegion.value.trim()
-      }
-    }
+    // validateChannel requires the Vertex region on every type 41 update that
+    // carries the sensitive group, even when the region is unchanged.
+    if (canSensitiveWrite.value && form.type === 41)
+      base.other = vertexRegion.value.trim()
     if (
       canSensitiveWrite.value &&
       passThroughBody.value !== (settings.pass_through_body_enabled === true)
@@ -700,7 +701,10 @@ async function submit() {
     if (canSensitiveWrite.value && replacementKey) base.key = replacementKey
     if (canSensitiveWrite.value && replacementKey && existingMultiKey.value)
       base.key_mode = keyMode.value
-    if (await props.save(base)) emit('close')
+    const update = canSensitiveWrite.value
+      ? base
+      : withoutSensitiveChannelFields(base)
+    if (await props.save(update)) emit('close')
   } finally {
     saving.value = false
   }

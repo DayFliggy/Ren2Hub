@@ -108,11 +108,19 @@ export interface AdminChannelCreateOptions {
   multiKeyMode?: 'random' | 'polling'
 }
 
+/**
+ * Sensitive fields (CHANNEL_SENSITIVE_UPDATE_FIELDS) are optional: an editor
+ * without ChannelSensitiveWrite omits them and the backend keeps the stored
+ * values.
+ */
 export type AdminChannelUpdateInput = Omit<
   AdminChannelCreateInput,
-  'status' | 'key'
+  'status' | 'key' | 'type' | 'base_url' | 'channel_ratio'
 > & {
-  /** Sensitive field: include only when replacing the stored key. */
+  type?: number
+  base_url?: string
+  channel_ratio?: string
+  /** Include only when replacing the stored key. */
   key?: string
 }
 
