@@ -1,6 +1,9 @@
 import {
   PRICING_KEYS,
+  isNumericPricingKey,
   parsePricingValues,
+  pricingNumber,
+  serializePricing,
   type ModelPricingConfig,
   type ModelPricingChange,
   type PricingValues,
@@ -41,15 +44,18 @@ export function pricingMode(value: PricingValues): PricingMode {
       ? 'per-request'
       : 'per-token'
 }
+// Drafts may hold decimal text while the backend returns numbers, so change
+// detection compares the serialized request values.
 export function priceFingerprint(value: PricingValues): string {
+  const serialized = serializePricing(value)
   return JSON.stringify(
     PRICING_KEYS.map((key) => [
       key,
       key === 'billing_setting.plugin_billing_expr'
-        ? Object.entries(value[key] ?? {}).sort(([a], [b]) =>
+        ? Object.entries(serialized[key] ?? {}).sort(([a], [b]) =>
             a.localeCompare(b)
           )
-        : value[key],
+        : serialized[key],
     ])
   )
 }
@@ -105,13 +111,17 @@ export function fillPriceDraft(
     ),
   }
 }
+// JSON mode shows the same numbers the save request sends.
 export function pricingJSON(draft: PricingDraft): Record<PricingKey, string> {
+  const serialized = Object.entries(draft).map(
+    ([name, pricing]) => [name, serializePricing(pricing)] as const
+  )
   return Object.fromEntries(
     PRICING_KEYS.map((key) => [
       key,
       JSON.stringify(
         Object.fromEntries(
-          Object.entries(draft)
+          serialized
             .filter(([, pricing]) => pricing[key] !== undefined)
             .map(([name, pricing]) => [name, pricing[key]])
         ),
@@ -130,6 +140,9 @@ export function parsePricingJSON(
     if (!isRecord(values)) throw new Error('badJson')
     for (const [name, value] of Object.entries(values)) {
       if (!name.trim()) throw new Error('unknownModel')
+      // Prices must be finite, non-negative JSON numbers, as in the save request.
+      if (isNumericPricingKey(key))
+        pricingNumber(typeof value === 'number' ? value : Number.NaN)
       Object.assign((result[name] ??= {}), parsePricingValues({ [key]: value }))
     }
   }
@@ -179,7 +192,5 @@ export function validatePricing(value: PricingValues): void {
     if (!Object.keys(value['billing_setting.plugin_billing_expr'] ?? {}).length)
       throw new Error('invalid')
   }
-  for (const key of PRICING_KEYS.slice(0, 8))
-    if (value[key] !== undefined && !isDecimal(String(value[key])))
-      throw new Error('invalid')
+  serializePricing(value)
 }

@@ -196,7 +196,7 @@ for (const theme of ['light', 'dark'] as const)
             json: {
               success: true,
               data: {
-                effective: { ModelPrice: '0.2' },
+                effective: { ModelPrice: 0.2 },
                 expression: 'fixed(0.2)',
               },
             },
@@ -276,7 +276,7 @@ for (const theme of ['light', 'dark'] as const)
                     {
                       model_name: 'second-model',
                       provider: '',
-                      pricing: { ModelPrice: '0.3' },
+                      pricing: { ModelPrice: 0.3 },
                     },
                   ],
                   errors: [],
@@ -462,7 +462,7 @@ test('model pricing is a model management section that guards its draft', async 
   await page.setViewportSize({ width: 1024, height: 900 })
   await configureStablePage(page, { theme: 'light' })
   await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-  const pricing = { ModelPrice: '0.2' }
+  const pricing = { ModelPrice: 0.2 }
   await page.route('**/api/channel/models_enabled', (route) =>
     route.fulfill({ json: { success: true, data: ['test-model'] } })
   )
