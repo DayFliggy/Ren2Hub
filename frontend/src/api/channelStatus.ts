@@ -5,11 +5,47 @@ import { ApiError } from './types'
 import {
   invalidResponse,
   isRecord,
+  requiredBoolean,
   requiredStrictInteger,
   requiredStrictNumber,
   requiredString,
 } from './contracts'
-import type { AdminChannel, AdminChannelPage } from '@/types/console'
+import type {
+  AdminChannel,
+  AdminChannelInfo,
+  AdminChannelPage,
+} from '@/types/console'
+
+/** null and an empty map both mean every key is enabled. */
+function parseKeyStatusList(
+  value: unknown,
+  endpoint: string
+): AdminChannelInfo['multi_key_status_list'] {
+  if (value === null) return null
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const list: Record<string, 2 | 3> = {}
+  for (const [index, status] of Object.entries(value)) {
+    if (!/^\d+$/.test(index)) invalidResponse(endpoint)
+    if (status !== 2 && status !== 3) invalidResponse(endpoint)
+    list[index] = status
+  }
+  return list
+}
+
+function parseChannelInfo(value: unknown, endpoint: string): AdminChannelInfo {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const size = requiredStrictInteger(value.multi_key_size, endpoint)
+  if (size < 0) invalidResponse(endpoint)
+  return {
+    is_multi_key: requiredBoolean(value.is_multi_key, endpoint),
+    multi_key_mode: requiredString(value.multi_key_mode, endpoint),
+    multi_key_size: size,
+    multi_key_status_list: parseKeyStatusList(
+      value.multi_key_status_list,
+      endpoint
+    ),
+  }
+}
 
 export function parseChannelStatusDetails(value: unknown): AdminChannel {
   const endpoint = '/api/channel/'
@@ -42,6 +78,11 @@ export function parseChannelStatusDetails(value: unknown): AdminChannel {
   return {
     ...value,
     lab,
+    // Older mocks omit channel_info; the native list always sends it.
+    channel_info:
+      value.channel_info === undefined
+        ? undefined
+        : parseChannelInfo(value.channel_info, endpoint),
     in_flight: requiredStrictInteger(value.in_flight, endpoint),
     id: requiredStrictInteger(value.id, endpoint),
     name: requiredString(value.name, endpoint),

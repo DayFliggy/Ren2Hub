@@ -283,6 +283,33 @@ export function adminChannelStatusLabelKey(
   return 'channels.statusAutoDisabled'
 }
 
+export interface MultiKeyAvailability {
+  enabled: number
+  total: number
+  /** 1-based key positions, matching the native key numbering. */
+  disabled: Array<{ position: number; status: 2 | 3 }>
+}
+
+/**
+ * Native multi_key_status_list stores disabled keys only, so the enabled
+ * count is the key total minus its entries. Returns null for single-key
+ * channels, which have no per-key state to show.
+ */
+export function multiKeyAvailability(
+  channel: Pick<AdminChannel, 'channel_info'>
+): MultiKeyAvailability | null {
+  const info = channel.channel_info
+  if (!info?.is_multi_key || info.multi_key_size <= 0) return null
+  const disabled = Object.entries(info.multi_key_status_list ?? {})
+    .map(([index, status]) => ({ position: Number(index) + 1, status }))
+    .sort((left, right) => left.position - right.position)
+  return {
+    enabled: Math.max(0, info.multi_key_size - disabled.length),
+    total: info.multi_key_size,
+    disabled,
+  }
+}
+
 export function adminChannelResponseTone(
   responseTime: number
 ): 'neutral' | 'success' | 'warning' | 'danger' {

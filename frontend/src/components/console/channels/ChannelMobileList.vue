@@ -32,6 +32,7 @@ import type { AdminChannel } from '@/types/console'
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
 
 import ChannelInlineNumber from './ChannelInlineNumber.vue'
+import ChannelKeyStatus from './ChannelKeyStatus.vue'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 
 type ChannelAction = 'priority' | 'weight' | 'status' | 'balance'
@@ -354,14 +355,20 @@ function responseDisplay(channel: AdminChannel): {
                   </p>
                 </div>
               </div>
-              <ChannelStatusBadge
-                v-if="
-                  visibleFields.includes('status') ||
-                  isRetiredChannelType(channel.type)
-                "
-                :channel="channel"
-                mobile
-              />
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                <ChannelStatusBadge
+                  v-if="
+                    visibleFields.includes('status') ||
+                    isRetiredChannelType(channel.type)
+                  "
+                  :channel="channel"
+                  mobile
+                />
+                <ChannelKeyStatus
+                  v-if="visibleFields.includes('status')"
+                  :channel="channel"
+                />
+              </div>
             </header>
             <p
               v-if="isRetiredChannelType(channel.type)"

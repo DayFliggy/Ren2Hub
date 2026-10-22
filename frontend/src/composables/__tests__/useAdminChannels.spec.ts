@@ -178,6 +178,7 @@ describe('native channel management', () => {
         is_multi_key: true,
         multi_key_mode: 'random' as const,
         multi_key_size: 2,
+        multi_key_status_list: null,
       },
     }
     const unsupported = [

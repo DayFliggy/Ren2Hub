@@ -382,6 +382,56 @@ func TestFrontendContractChannelList(t *testing.T) {
 	assert.Equal(t, map[string]any{"id": "unknown", "name": "unknown", "source": "invalid_mapping"}, labs["contract-invalid"])
 }
 
+// multi_key_status_list records disabled keys only (index -> 2 manual or 3
+// auto). The seeds are the states the native paths leave behind: a new channel
+// has no list, enable_all_keys leaves an empty map, disable_key and automatic
+// disabling add entries, and losing the last key auto-disables the channel.
+func TestFrontendContractMultiKeyChannelList(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.Model{}, &model.Vendor{}))
+	exhausted := `{"status_reason":"All keys are disabled","status_time":1700000000}`
+	for _, seed := range []struct {
+		name, key, otherInfo string
+		status               int
+		info                 model.ChannelInfo
+	}{
+		{"contract-single", "sk-single", "", common.ChannelStatusEnabled, model.ChannelInfo{}},
+		{"contract-multi-new", "sk-a\nsk-b", "", common.ChannelStatusEnabled, model.ChannelInfo{
+			IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModeRandom}},
+		{"contract-multi-restored", "sk-a\nsk-b", "", common.ChannelStatusEnabled, model.ChannelInfo{
+			IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling, MultiKeyStatusList: map[int]int{}}},
+		{"contract-multi-partial", "sk-a\nsk-b\nsk-c", "", common.ChannelStatusEnabled, model.ChannelInfo{
+			IsMultiKey: true, MultiKeySize: 3, MultiKeyMode: constant.MultiKeyModeRandom,
+			MultiKeyStatusList: map[int]int{1: common.ChannelStatusManuallyDisabled, 2: common.ChannelStatusAutoDisabled}}},
+		{"contract-multi-exhausted", "sk-a\nsk-b", exhausted, common.ChannelStatusAutoDisabled, model.ChannelInfo{
+			IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModeRandom,
+			MultiKeyStatusList: map[int]int{0: common.ChannelStatusAutoDisabled, 1: common.ChannelStatusManuallyDisabled}}},
+	} {
+		baseURL, priority, weight, mapping := "https://api.example.com", int64(0), uint(1), ""
+		channel := model.Channel{
+			Type: constant.ChannelTypeOpenAI, Name: seed.name, Key: seed.key, Models: "gpt-4o",
+			ModelMapping: &mapping, BaseURL: &baseURL, Priority: &priority, Weight: &weight,
+			ChannelRatio: "1", Status: seed.status, OtherInfo: seed.otherInfo, ChannelInfo: seed.info,
+		}
+		require.NoError(t, channel.Insert())
+	}
+	engine := contractEngine(1, common.RoleRootUser)
+	engine.GET("/api/channel/", GetAllChannels)
+	recorder := contractRequest(t, engine, http.MethodGet, "/api/channel/?p=1&page_size=20&id_sort=true", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body := decodeContractBody(t, recorder)
+	frontendFixture(t, "channel-multi-key-list.get.json", body)
+
+	lists := map[string]any{}
+	for _, raw := range body["data"].(map[string]any)["items"].([]any) {
+		item := raw.(map[string]any)
+		lists[item["name"].(string)] = item["channel_info"].(map[string]any)["multi_key_status_list"]
+	}
+	assert.Nil(t, lists["contract-multi-new"])
+	assert.Equal(t, map[string]any{}, lists["contract-multi-restored"])
+	assert.Equal(t, map[string]any{"1": float64(2), "2": float64(3)}, lists["contract-multi-partial"])
+}
+
 // The console names every channel type the backend accepts; a new native type
 // changes this fixture and fails the frontend catalog test until it is named.
 func TestFrontendContractChannelTypeIds(t *testing.T) {

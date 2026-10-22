@@ -15,3 +15,5 @@
 前端类型目录 `ADMIN_CHANNEL_TYPE_META` 覆盖 `constant/channel.go` 的全部已知类型，名称取上游 web `CHANNEL_TYPES`（上游注释掉的 6、9–13、21 也保留名称），由 `channel-type-ids.json` 契约夹具防止遗漏。新建只提供带 `creatable` 的 19 种类型（1、3、4、14、17、20、24、25、33、40、41、43、48、58–63）；其他已知类型可以查看并编辑通用字段，表单锁定类型选择，不发送 `other`、`settings` 等类型专属字段。前端不认识的类型显示“未知类型”，表单禁止保存。
 
 渠道列表按后端 `lab.id`（`model/channel_lab.go`）分组，前端不再派生 `supplier` 或 `lab_*` 字段；`labDisplayName()` 把 `unknown`、`mixed` 两个分类显示为“未识别厂商”“多个厂商”，渠道列表、自动路由面板和运行详情共用它。`lab.source` 为 `invalid_mapping` 的渠道归入“未识别厂商”，行内另标“模型映射无效”。契约夹具 `channel-list.get.json` 由真实 `/api/channel/` 处理器生成。
+
+多 Key 渠道在状态列和移动端卡片上显示“可用 Key 数 / 总数”，运行详情逐个列出被禁用的 Key（编号从 1 开始，区分手动禁用和自动禁用）。原生 `channel_info.multi_key_status_list` 只记录被禁用的 Key，`null` 和空对象都表示全部可用，可用数按 `multi_key_size` 减去条目数计算，写在 `multiKeyAvailability()`。通过 `/status` 手动启用渠道不会清除 Key 状态，所以已启用的渠道也可能显示 0 个可用 Key。前端只读，不提供多 Key 管理操作；契约夹具 `channel-multi-key-list.get.json` 覆盖新建、全部恢复、部分禁用和全部禁用四种状态。

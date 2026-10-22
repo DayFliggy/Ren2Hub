@@ -31,16 +31,22 @@ export type AdminChannelSortBy =
 
 export type AdminChannelSortOrder = 'asc' | 'desc'
 
+/** Native model.ChannelInfo as the channel list returns it. */
+export interface AdminChannelInfo {
+  is_multi_key: boolean
+  /** random or polling on multi-key channels; empty on single-key channels. */
+  multi_key_mode: string
+  multi_key_size: number
+  /** Disabled keys only: key index -> 2 (manual) or 3 (automatic). */
+  multi_key_status_list: Record<string, 2 | 3> | null
+}
+
 export interface AdminChannel extends Record<string, unknown> {
   channel_ratio: string
   max_concurrency: number
   in_flight: number
   lab: { id: string; name: string; source: string }
-  channel_info?: {
-    is_multi_key: boolean
-    multi_key_mode: 'random' | 'polling'
-    multi_key_size?: number
-  }
+  channel_info?: AdminChannelInfo
   id: number
   name: string
   type: number

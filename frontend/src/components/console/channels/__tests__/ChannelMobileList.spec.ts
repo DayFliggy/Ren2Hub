@@ -111,7 +111,12 @@ describe('channel mobile list balance actions', () => {
       channel({
         id: 4,
         type: 1,
-        channel_info: { is_multi_key: true, multi_key_mode: 'random' },
+        channel_info: {
+          is_multi_key: true,
+          multi_key_mode: 'random',
+          multi_key_size: 2,
+          multi_key_status_list: null,
+        },
       }),
       channel({ id: 5, type: 58 }),
     ])
