@@ -261,3 +261,40 @@ func TestRouteEpochTableIsBounded(t *testing.T) {
 	recordRouteObservation(current-1, 10, "m", 1, false, true, 100)
 	require.Zero(t, routeObservations.get(10, "m", 1, false).Samples, "the latest invalidation still rejects older attempts on its channel")
 }
+
+// 满容量清空必须精确：清空前判为过期的 (epoch, 渠道) 清空后仍过期；清空时的当前 epoch
+// 开始于所有已清除的失效之后，对没有再变更的渠道仍然有效。
+func TestRouteEpochTableClearKeepsEveryStaleAttemptStale(t *testing.T) {
+	resetRouteObservations(t)
+	previous := routeObservationCapacity
+	routeObservationCapacity = 3
+	t.Cleanup(func() { routeObservationCapacity = previous })
+	for _, id := range []int{1, 2, 3, 2} {
+		routeObservations.invalidate(id)
+	}
+	routeObservations.mu.Lock()
+	current := routeObservations.epoch
+	before := map[[2]uint64]bool{}
+	for epoch := uint64(0); epoch <= current; epoch++ {
+		for id := 1; id <= 5; id++ {
+			before[[2]uint64{epoch, uint64(id)}] = routeObservations.staleLocked(epoch, id)
+		}
+	}
+	routeObservations.mu.Unlock()
+
+	routeObservations.invalidate(4)
+	routeObservations.mu.Lock()
+	defer routeObservations.mu.Unlock()
+	require.Len(t, routeObservations.changed, 1, "the full table was cleared")
+	for key, stale := range before {
+		epoch, id := key[0], int(key[1])
+		after := routeObservations.staleLocked(epoch, id)
+		if stale {
+			require.True(t, after, "epoch %d on channel %d was stale before the clear", epoch, id)
+		}
+		if epoch == current && id != 4 {
+			require.False(t, after, "epoch %d started after every cleared invalidation of channel %d", epoch, id)
+		}
+	}
+	require.True(t, routeObservations.staleLocked(current, 4), "the channel invalidated by the clearing call rejects older attempts")
+}

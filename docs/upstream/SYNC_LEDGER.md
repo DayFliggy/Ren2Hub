@@ -10,7 +10,9 @@ NewAPI 核心从 `09109ec315a5086366f94bcce00f177ec831dbe1` 推进到 main HEAD 
 
 阶段 3 修复研究报告确认的缺陷，并实施 3E 评估中的 12 项 do-now 重构；7 项 defer、25 项 reject 的理由和复评条件见批次记录“3E 组”。本批新增的上游偏离以 `upstream-defect` 标注，上游修复后回归上游写法：`UpdateOption` 写库失败不再报告成功（E3-2）；分发器首轮检查 `SetupContextForSelectedChannel` 的返回值（B3）；订单计数用派生表封顶，上游的 `Limit(n).Count()` 不生效（A4）；支付回调统一核对实付金额并区分永久和暂时错误（A2、A7）。A2 在 Creem、Waffo、Waffo Pancake 上没有启用，登记为待验证。Realtime WSS 逐轮直扣后结算再扣一次全额（E1-1）与上游相同，按用户决定不修。运维扩展以 `ops-metrics` 标注。
 
-截至代码完成，非测试 adapted 文件为 133 个、6,687 行差异。build、vet、全量测试（controller 分批、单包 60 秒；根包 embed 测试使用前端构建产物）、RelayKit、TokenKit 通过；隔离 SQLite、MySQL、PostgreSQL 的全量测试通过；定向 race 通过，`TestUpdateVideoTasks*` 的竞争在上游 206e0fa 上同样复现。Vue 1,256 项测试及类型、lint、格式、构建通过。Codex `gpt-6-astra` 共同审计、源码发布、候选验收和正式更新尚未执行，结果由批次记录和根工作区交付记录登记，本段不代表已部署。
+截至阶段 4，非测试 adapted 文件为 133 个、6,687 行差异。build、vet、全量测试（controller 分批、单包 60 秒；根包 embed 测试使用前端构建产物）、RelayKit、TokenKit 通过；隔离 SQLite、MySQL、PostgreSQL 的全量测试通过；定向 race 通过，`TestUpdateVideoTasks*` 的竞争在上游 206e0fa 上同样复现。
+
+Codex `gpt-6-astra` 共同审计 6 轮，按资金与权限、路由与并发、上游合并、前端合同四个方向进行，确认项全部修复并由下一轮复核，不成立与延期项写明理由，见批次记录执行记录。审计修复集中在路由与并发：精确模型优先在 Key 策略之后判定、删除渠道与用户的并发清理（与上限发布串行、拒绝删除前取得旧数据的请求、准入失败统一分类）、直接写流发出器的首输出观察，以及 Vue 的预览参数、监控读数、Resend 状态和充值排行空态。最终 Vue 225 个文件、1,273 项测试通过。源码发布、候选验收和正式更新由根工作区交付记录登记，本段不代表已部署。
 
 ## 2026-10-21 历史业务与原生接口回归
 

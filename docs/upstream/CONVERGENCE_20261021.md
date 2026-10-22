@@ -425,5 +425,26 @@ reject 项与复评条件：
   - 最终 HEAD：`go build`、`go vet` 通过，RelayKit 9 个包、TokenKit 1 个包在 `GOWORK=off` 下通过（`phase4-final-*.log`）。
   - 3E 未实施项按复评条件重新核对，结果见上文 defer 表；E3-5 改为 reject。
   - 文档：`GATEWAY_API.md`、`UNIFIED_ROUTING.md`、`billing/API.md`、`billing/PRICING.md` 与本批接口和行为对齐；`SYNC_LEDGER.md` 登记本批。
+- **阶段 5 Codex 审计第 1 轮（2026-10-21）**：`codex-audit/run.sh round1` 对 `4c7c12c0f..c1529ba93` 按资金与权限、路由与并发、上游合并、前端合同四个方向并行审计（`gpt-6-astra`，只读沙箱），报告在证据目录 `codex-audit/round1/`。共 11 条发现，主代理逐条回代码核实：
+  - 确认并修复 8 条。`90044ced6`：`RouteChannelRows` 先按精确模型查能力、过滤后为空才用归一化名（上游 `GetChannel` 的顺序，基点已存在偏差）；Volcengine TTS 握手失败和 `service/midjourney.go` 提交响应接入 `ObserveRouteResponse`；`ReleaseDeletedChannels` 同时使观察 epoch 失效；删除仍有在途许可的渠道时把并发资源标为 retired，复用 ID 沿用同一计数，最后一个许可释放时删除。`4e7b67d7e`：`UpdateOption` 的 `FirstOrCreate` 与 `Save` 放进同一事务，避免报错后留下空值行被 `SyncOptions` 读入。`d065df73e`：选路预览发送 `stream` 并展示 `stream`、`ordering`；运维监控接受容器 CPU 超过 100% 的读数，图环封顶；成功率为 null 时图环显示未知。每项都有新测试，去掉修复后测试失败。
+  - 只改文档 1 条：Epay 已验签回调金额不符时回 `fail`。阶段 3 A7 已决定 Epay、GMPay 沿用上游，入账失败一律回 `fail`（两者收到 success 才停止重投，失败在商户后台可见），代码不改；`billing/API.md` 原文写成所有渠道都返回不触发重试的响应，已改正。
+  - 不成立 1 条：429 冷却表无容量上限。冷却键是已派发尝试实际选中的渠道 ID，规模受渠道数约束，删除渠道时清除，不随请求模型名增长，不需要 B8 的容量淘汰。
+  - 延期 1 条：部分服务端错误没有 zh-CN 译文。所列文案在本批基点已存在，`Invalid request parameter format` 只在请求体格式错误时出现，前端正常输入不会触发。
+  - 验证：model、service、relay、controller、middleware、router 测试通过；新建 r3 空库的三库全量（`phase5-3db-r3.log`）只剩根包两个依赖前端构建产物的 embed 测试；service、model 定向 race 通过（`phase5-race.log`）；Vue 224 个文件、1,269 项通过，typecheck、lint、format 通过。`CORE_SOURCE_DELTA.json` 已刷新，计数不变。
+- **阶段 5 Codex 审计第 2 轮（2026-10-21）**：`run.sh round2` 对第 1 轮处置和 `c1529ba93..d065df73e` 复核，提示文件 `codex-audit/round2/extra-*.md` 列出第 1 轮处置。资金方向没有发现，第 1 轮两条处置复核通过。其余 10 条发现（上游方向和路由方向各报了同一条并发竞态，按 1 条计）：
+  - 确认并修复 8 条。`5814ecfde`：上限发布在删除前读到旧值、删除清理随后执行时，旧上限会在清理后写回，同 ID 新渠道继承旧上限；`ReleaseDeletedChannels` 改为在 `concurrencyPublishMu` 下清理。`f571696dd`：第 1 轮的精确优先在 Key 倍率上限和手动列表之前就确定了精确一档，精确渠道被 Key 策略滤掉后不再回退；`model.RouteChannelRowsAccepting` 接收 Key 策略谓词，预览按同一规则给出 `exact_model_preferred`。`3ec0fe45b`：删除全部禁用渠道改用 `model.DeleteDisabledChannelIDs`，在同一事务内加锁读取并删除同一批渠道和它们的能力行，清理集合与实际删除一致；epoch 变更表满容量时清空并抬高过期下限；硬删除用户后清理并发表项（基点即存在）。`a220875dc`：转 Gemini 输出的三个发出器、PaLM、Cohere、讯飞、智谱的直接写出点，以及火山 TTS 的二进制音频，都报告首个输出，这些流此前没有延迟样本，已发出内容后中断会被熔断计为失败。前端：设置页按 `ResendKeyConfigured` 显示 Resend 密钥已配置。每项都有新测试，去掉修复后失败。
+  - 不成立 2 条：前端对超过 2^53 的 int64 计数整份拒绝、订单金额字符串转 Number 可能失真。两者都要到约 9×10^15 的 token、额度或金额才会出现，在本站不可达；严格整数校验是有意暴露后端合同错误，金额汇总由后端 decimal 完成。
+  - 验证：新建 r4 空库的三库全量（`phase5-3db-r4.log`）只剩根包两个 embed 测试；`DeleteDisabledChannelIDs` 的三库测试实际在 MySQL、PostgreSQL 上执行；service 定向 race 通过（`phase5-race-round2*.log`）。`86fb46beb` 刷新 `CORE_SOURCE_DELTA.json`：七个原本与上游相同的流式发出器各加一行观察调用，标为 `token-routing`；计数为 upstream_equal 851、adapted 225、removed 43、extension 168。
+- **阶段 5 Codex 审计第 3 轮（2026-10-21）**：`run.sh round3` 对第 2 轮处置和 `d065df73e..b992ffe84` 复核。资金、上游方向没有发现，第 2 轮的处置复核通过。另两个方向各 1 条，均确认并修复：
+  - `c18a9ee06`：删除清理之后，删除前取得旧数据的请求仍能准入，`tryAcquire` 会把 retired 表项改回在用，或为已移除的 ID 重建表项，已删除的渠道或用户从此留在运行状态里。`forget` 改为给每个删除的 ID 留下待确认的发布标记，之后的准入先读数据库，记录不存在就拒绝且不建立表项，选路跳过该渠道；读取成功才确认同 ID 重新存在并清除 retired。去掉标记、跳过、加锁或清除 retired 中任一处，新增或扩展的测试都会失败。
+  - `8f5cff7ab`：`TopSpenders.vue` 的范围说明插在列表和末尾空态之间，排行请求失败或加载中时会同时显示“该区间暂无成交”。列表和说明放进同一个分支，新增组件测试覆盖四种状态，还原组件后两项失败。
+  - 验证：service、controller、middleware、router、relay、model 测试通过；service 定向 race 通过（`phase5-race-round3.log`）；Vue 225 个文件、1,273 项通过（`phase5-frontend-vitest-round3.log`），typecheck、lint、format 通过。`CORE_SOURCE_DELTA.json` 已刷新，计数不变。
+- **阶段 5 Codex 审计第 4 轮（2026-10-21）**：`run.sh round4 routing frontend` 只复核第 3 轮修复涉及的两个方向。前端方向没有发现，并确认本批改动的其他 Vue 文件没有同类打断条件链的写法。路由方向 1 条，确认并修复：
+  - `80cdda369`：第 3 轮新增的删除标记错误只在普通选路里按“跳过”处理，prefer 会话亲和绑定的渠道在候选读出后被删除时，亲和分支把它当作存储故障返回 500，不回退到其他可用渠道。改为在 `acquireRouteChannel` 一处把它包装成 `ErrTokenRouteForbidden`，与读不到渠道的其他分支一致：prefer 回退，strict 仍拒绝，钉选续接返回 403。新增 prefer 回退与 strict 拒绝两项回归，去掉包装后 prefer 回归失败。
+  - 验证：service、controller、middleware、router、relay 测试通过；service 定向 race 通过（`phase5-race-round4.log`）。
+- **阶段 5 Codex 审计第 5 轮（2026-10-22）**：`run.sh round5 routing` 复核第 4 轮修复，确认包装后的错误在选路、亲和与钉选路径上分类正确。另报 1 条，确认并修复：
+  - `19497c9db`：distributor、Responses WebSocket、渠道测试和渠道管理入口各自把准入失败映射成状态码，删除后的用户或渠道、读取上限失败都会被报成并发已满（Responses WebSocket 和渠道测试为 429，distributor 为 503 但错误码仍是 `user_concurrency_exceeded`）。新增 `service.ConcurrencyAdmissionError` 作为唯一映射：满载 429 `<kind>_concurrency_exceeded`，资源已删除 403 `<kind>_unavailable`，其他失败 503 `<kind>_concurrency_unavailable`，四个入口都改用它。distributor 读取上限失败时的错误码因此从 `user_concurrency_exceeded` 改为 `user_concurrency_unavailable`。
+  - 验证：service、controller、middleware、router、relay 测试通过。
+- **阶段 5 Codex 审计第 6 轮（2026-10-22）**：`run.sh round6 routing` 复核第 5 轮修复，确认四个准入入口都改用统一映射，没有调用方再把删除或读库失败报成满载。另报 1 条 P1，回代码核实后不成立：报告认为 epoch 表满容量清空时 `staleFloor` 取当前 epoch E 会放行恰好取得 E 的旧尝试，建议改为 E+1。epoch 为 E 的尝试开始于所有 epoch 不大于 E 的失效之后，只有该渠道之后又有大于 E 的失效时才算过期；被清空的条目都不大于 E，所以 floor 取 E 正好不多不少，取 E+1 会丢掉清空那一刻已开始、渠道并未再变更的有效尝试。新增 `TestRouteEpochTableClearKeepsEveryStaleAttemptStale` 锁定这个不变量，floor 改成 E+1 或 E−1 都会失败，生产代码不改。至此没有未处理的确认项，审计结束。六轮报告在证据目录 `codex-audit/round1/` 至 `round6/`。
 
 <!-- EXECUTION-LOG -->
