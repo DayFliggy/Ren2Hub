@@ -9,7 +9,7 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import UsageHeatmapGrid from '@/components/console/dashboard/UsageHeatmapGrid.vue'
 import UsageSegmentBar from '@/components/console/dashboard/UsageSegmentBar.vue'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
-import { quotaForChart } from '@/utils/quota'
+import { quotaInteger } from '@/utils/quota'
 import {
   USAGE_TOP_DAY_LIMIT,
   buildUsageDistributionView,
@@ -38,7 +38,8 @@ const view = computed(() =>
   buildUsageDistributionView(
     props.points.map((point) => ({
       ...point,
-      consume: quotaForChart(point.consume),
+      // Lossy at the chart boundary only; formatQuota applies the currency.
+      consume: Number(quotaInteger(point.consume)),
     })),
     period.value,
     metric.value

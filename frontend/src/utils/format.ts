@@ -23,12 +23,26 @@ export function configureQuotaDisplay(status: {
   quotaDisplay.customRate = status.custom_currency_exchange_rate ?? 1
 }
 
-export function formatQuota(
+export interface QuotaParts {
+  /** Currency symbol; empty in TOKENS mode. */
+  prefix: string
+  /** Integer part with thousands separators. */
+  whole: string
+  /** Decimal digits without the point; empty when there are none. */
+  fraction: string
+}
+
+/** formatQuota split for layouts that size the integer and decimals apart. */
+export function formatQuotaParts(
   quota: string | bigint | number,
   digits = 2
-): string {
+): QuotaParts {
   if (quotaDisplay.type === 'TOKENS')
-    return BigInt(quota).toLocaleString('en-US')
+    return {
+      prefix: '',
+      whole: BigInt(quota).toLocaleString('en-US'),
+      fraction: '',
+    }
   if (quotaDisplay.type !== 'USD' || quotaDisplay.perUnit !== 500000) {
     const rate =
       quotaDisplay.type === 'CNY'
@@ -42,19 +56,34 @@ export function formatQuota(
         : quotaDisplay.type === 'CUSTOM'
           ? quotaDisplay.symbol
           : '$'
-    return (
-      symbol +
-      ((Number(quota) / quotaDisplay.perUnit) * rate).toLocaleString('en-US', {
+    const [whole = '0', fraction = ''] = (
+      (Number(quota) / quotaDisplay.perUnit) *
+      rate
+    )
+      .toLocaleString('en-US', {
         minimumFractionDigits: Math.min(digits, 3),
         maximumFractionDigits: Math.min(digits, 3),
       })
-    )
+      .split('.')
+    return { prefix: symbol, whole, fraction }
   }
-  const [whole = '0', fraction] = quotaToDecimal(
+  const [whole = '0', fraction = ''] = quotaToDecimal(
     quota,
     Math.min(digits, 3)
   ).split('.')
-  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction === undefined ? '' : `.${fraction}`}`
+  return {
+    prefix: '$',
+    whole: whole.replace(/\B(?=(\d{3})+(?!\d))/g, ','),
+    fraction,
+  }
+}
+
+export function formatQuota(
+  quota: string | bigint | number,
+  digits = 2
+): string {
+  const { prefix, whole, fraction } = formatQuotaParts(quota, digits)
+  return `${prefix}${whole}${fraction ? `.${fraction}` : ''}`
 }
 
 export function formatMoney(amount: number, digits = 2): string {

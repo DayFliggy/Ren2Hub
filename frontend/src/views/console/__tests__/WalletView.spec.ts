@@ -15,6 +15,7 @@ import {
 } from '@/api/__tests__/topupFixtures'
 import WalletView from '../WalletView.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { configureQuotaDisplay, formatQuota } from '@/utils/format'
 
 const state = vi.hoisted(() => ({
   route: { query: {} as Record<string, string> },
@@ -41,18 +42,20 @@ beforeEach(() => {
   sessionStorage.clear()
   state.route.query = {}
   state.auth.user.id = 7
+  state.auth.user.quota = 500000
   state.auth.fetchSelf.mockResolvedValue(undefined)
 })
 afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
+  configureQuotaDisplay({})
 })
 async function render() {
   const wrapper = mount(WalletView, {
     global: {
       plugins: [i18n],
       stubs: {
-        PageHero: true,
+        PageHero: { template: '<div><slot name="actions" /></div>' },
         StatTileGrid: true,
         TopupPanel: true,
         RedeemPanel: true,
@@ -117,5 +120,26 @@ describe('wallet payment return', () => {
     const other = await render()
     expect(get).not.toHaveBeenCalled()
     other.unmount()
+  })
+})
+describe('wallet balance header', () => {
+  const headerText = (wrapper: Awaited<ReturnType<typeof render>>) =>
+    wrapper.get('p.font-mono').text().replace(/\s+/g, '')
+  it('uses the configured currency and the same text as formatQuota', async () => {
+    configureQuotaDisplay({ quota_display_type: 'CNY', usd_exchange_rate: 7.3 })
+    state.auth.user.quota = 617_283_950
+    const wrapper = await render()
+    expect(headerText(wrapper)).toBe('¥9,012.35')
+    expect(headerText(wrapper)).toBe(formatQuota(617_283_950))
+    expect(wrapper.text()).not.toContain('$')
+    wrapper.unmount()
+  })
+  it('shows grouped raw tokens without a currency symbol or decimals', async () => {
+    configureQuotaDisplay({ quota_display_type: 'TOKENS' })
+    state.auth.user.quota = 617_283_950
+    const wrapper = await render()
+    expect(headerText(wrapper)).toBe('617,283,950')
+    expect(headerText(wrapper)).toBe(formatQuota(617_283_950))
+    wrapper.unmount()
   })
 })

@@ -1,9 +1,9 @@
-import { formatCompact, formatMoney, formatNumber } from '@/utils/format'
+import { formatCompact, formatNumber, formatQuota } from '@/utils/format'
 
 export interface UsageDistributionPoint {
   date: string
   requests: number
-  /** Spend in USD; callers convert API quota strings before building a view. */
+  /** Spend in quota units; callers convert API quota strings for the chart. */
   consume: number
   tokens: number
 }
@@ -189,7 +189,8 @@ export function formatUsageMetric(
   metric: UsageDistributionMetric,
   value: number
 ): string {
-  if (metric === 'consume') return formatMoney(value)
+  // Averages are fractional quota; the site currency setting picks the unit.
+  if (metric === 'consume') return formatQuota(Math.round(value))
   if (metric === 'tokens') return formatCompact(Math.round(value))
   return formatNumber(Math.round(value))
 }

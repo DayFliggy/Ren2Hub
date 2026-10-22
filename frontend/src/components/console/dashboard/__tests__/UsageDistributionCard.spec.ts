@@ -12,6 +12,7 @@ import {
 import UsageDistributionCard from '@/components/console/dashboard/UsageDistributionCard.vue'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { configureQuotaDisplay } from '@/utils/format'
 
 function dateKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -46,6 +47,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.useRealTimers()
   document.body.innerHTML = ''
+  configureQuotaDisplay({})
 })
 
 function render(overrides: Record<string, unknown> = {}) {
@@ -116,6 +118,27 @@ describe('UsageDistributionCard', () => {
     ).toContain('$2.96')
     expect(wrapper.get('[data-usage-segment-bar="ranked"]').text()).toContain(
       '$2.96'
+    )
+  })
+
+  it.each([
+    [{ quota_display_type: 'CNY', usd_exchange_rate: 7.3 }, '¥21.61'],
+    [{ quota_display_type: 'TOKENS' }, '1,480,000'],
+  ])('formats spend with the configured display %o', async (display, text) => {
+    configureQuotaDisplay(display)
+    const wrapper = render({
+      points: [
+        { date: '2026-07-27', requests: 1, consume: '1480000', tokens: 1 },
+      ],
+    })
+    await metric(wrapper, '消费').trigger('click')
+
+    expect(wrapper.get('[data-usage-total]').text()).toBe(text)
+    expect(
+      wrapper.get('[data-usage-date="2026-07-27"]').attributes('aria-label')
+    ).toContain(text)
+    expect(wrapper.get('[data-usage-segment-bar="ranked"]').text()).toContain(
+      text
     )
   })
 

@@ -21,8 +21,8 @@ import { useBalanceVisibility } from '@/composables/useDashboard'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { quotaToDecimal, sumQuota } from '@/utils/quota'
-import { formatNumber, formatQuota } from '@/utils/format'
+import { sumQuota } from '@/utils/quota'
+import { formatNumber, formatQuota, formatQuotaParts } from '@/utils/format'
 
 type WalletStats = DashboardStats
 
@@ -50,11 +50,7 @@ const activePanel = computed<'topup' | 'redeem'>(() =>
   route.query.panel === 'redeem' ? 'redeem' : 'topup'
 )
 
-const balanceParts = computed(() =>
-  quotaToDecimal(stats.value?.quota ?? '0', 2).split('.')
-)
-const balanceDollars = computed(() => balanceParts.value[0])
-const balanceCents = computed(() => balanceParts.value[1])
+const balance = computed(() => formatQuotaParts(stats.value?.quota ?? '0', 2))
 const dayCount = computed(() => flow.value.length || 30)
 
 const statCards = computed(() => {
@@ -197,15 +193,19 @@ onBeforeUnmount(() => statusController?.abort())
       <template #actions>
         <div class="flex items-center gap-3" :aria-busy="loading">
           <p class="font-mono tracking-tight text-[var(--text-primary)]">
-            <span class="text-lg text-[var(--text-tertiary)]">$</span>
+            <span
+              v-if="balance.prefix"
+              class="text-lg text-[var(--text-tertiary)]"
+              >{{ balance.prefix }}</span
+            >
             <span class="display-number text-5xl">
-              {{ hidden ? '••••••' : stats ? balanceDollars : '—' }}
+              {{ hidden ? '••••••' : stats ? balance.whole : '—' }}
             </span>
             <span
-              v-if="!hidden && stats"
+              v-if="!hidden && stats && balance.fraction"
               class="display-number text-xl text-[var(--text-secondary)]"
             >
-              .{{ balanceCents }}
+              .{{ balance.fraction }}
             </span>
           </p>
           <button

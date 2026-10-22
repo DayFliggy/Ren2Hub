@@ -6,7 +6,7 @@
 
 钱包 `quota`、`used_quota`，Token `remain_quota`、`used_quota`，充值到账及返利额度使用原生 JSON number。客户端在 API 边界要求安全整数，随后可转为十进制字符串供 BigInt 展示、比较和输入换算。内部字符串不是 wire contract；不能把数字额度接口改成字符串接口，也不能接受已经丢失精度的数字。
 
-当前额度展示按 `500000 quota = 1 USD` 换算；充值输入另受 `/api/status` 的 `quota_display_type`、`quota_per_unit` 与支付配置控制。钱包入账容量上限为 `2^53 - 1`。原生结算可能产生负余额，不能静默显示为零。前端工具支持更宽的 BigInt 范围，不表示后端接受该范围的资金写入。USD 输入必须能精确换算为整数 quota，发送数值前再次检查安全整数；图表的 Number 投影不能作为资金更新输入。
+`formatQuota` 按 `/api/status` 的 `quota_display_type`、`quota_per_unit` 和汇率换算额度，默认 `500000 quota = 1 USD`；钱包余额头部用同一函数拆出的 `formatQuotaParts`，用量分布的消费指标也走 `formatQuota`。TOKENS 模式显示千分位原始 quota，不带货币符号和小数。充值输入另受 `/api/status` 的 `quota_display_type`、`quota_per_unit` 与支付配置控制。钱包入账容量上限为 `2^53 - 1`。原生结算可能产生负余额，不能静默显示为零。前端工具支持更宽的 BigInt 范围，不表示后端接受该范围的资金写入。USD 输入必须能精确换算为整数 quota，发送数值前再次检查安全整数；图表的 Number 投影不能作为资金更新输入。
 
 普通业务接口使用 `{ success, data, message? }`。原生金额、下单及部分支付管理接口使用 `{ message: "success" | "error", data, url? }`；HTTP 200 不等于业务成功。支付适配由 `src/api/topup.ts` 处理，不能用宽松的通用客户端把失败当成功。人民币支付金额、加密资产数量与 quota 是不同单位。
 
