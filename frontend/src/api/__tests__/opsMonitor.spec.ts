@@ -86,6 +86,44 @@ describe('native ops monitoring', () => {
       )
     }
   )
+  it.each([
+    { value: 89.9, status: 'warning' },
+    { value: 90, status: 'warning' },
+    { value: 90.5, status: 'warning' },
+    { value: 90.99, status: 'warning' },
+    { value: 91, status: 'critical' },
+  ])(
+    'uses the Go integer threshold boundary for a sample of $value',
+    ({ value, status }) => {
+      const data = performanceFixture()
+      data.config.monitor_cpu_threshold = 90
+      data.config.monitor_memory_threshold = 90
+      data.config.monitor_disk_threshold = 90
+      data.system_usage = {
+        cpu_percent: value,
+        memory_percent: value,
+        sampled_at: 1,
+      }
+      data.disk_space_info = {
+        total: 1000,
+        used: value * 10,
+        used_percent: value,
+      }
+      const result = projectOpsOverview(
+        parsePerformanceStats(data),
+        null,
+        '1h',
+        [],
+        3600
+      )!
+      for (const key of ['cpu', 'memory', 'disk']) {
+        expect(result.checks.find((check) => check.key === key)?.status).toBe(
+          status
+        )
+      }
+      expect(result.status).toBe(status)
+    }
+  )
   it('reads DB pool counters and keeps an unreadable pool null', () => {
     const data = JSON.parse(JSON.stringify(performanceFixture()))
     data.db_pool.main = null

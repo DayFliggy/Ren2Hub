@@ -453,7 +453,7 @@ export function projectOpsOverview(
     const status: OpsStatus =
       value === null || monitor !== true || threshold === null || threshold <= 0
         ? 'unknown'
-        : value >= threshold
+        : Math.trunc(value) > threshold
           ? 'critical'
           : value >= threshold * 0.9
             ? 'warning'
