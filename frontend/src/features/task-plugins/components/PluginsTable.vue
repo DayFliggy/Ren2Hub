@@ -135,11 +135,11 @@ async function setStatus(
   }
 }
 
-async function deleteActive(plugin: TaskPluginListItem) {
+async function deleteActive(plugin: TaskPluginListItem, force = false) {
   if (busy.value) return
   busy.value = true
   try {
-    await deleteTaskPluginVersion(plugin.meta.key, plugin.meta.version)
+    await deleteTaskPluginVersion(plugin.meta.key, plugin.meta.version, force)
     deleteTarget.value = null
     closeBlocked()
     toast.success(t('taskPlugins.versionDeleted'))
@@ -156,7 +156,11 @@ async function deleteActive(plugin: TaskPluginListItem) {
   }
 }
 
-function forceDisable() {
+function forceBlocked() {
+  if (blockedAction.value === 'delete') {
+    if (deleteTarget.value) void deleteActive(deleteTarget.value, true)
+    return
+  }
   if (!statusTarget.value || !blockedUsage.value) return
   void setStatus(statusTarget.value, false, {
     cascade: blockedUsage.value.channels.length > 0,
@@ -346,11 +350,11 @@ function channelSummary(plugin: TaskPluginListItem) {
       destructive
       :loading="busy"
       :hide-confirm="
-        blockedAction === 'delete' || blockedUsage?.in_flight_count === 0
+        blockedAction === 'disable' && blockedUsage?.in_flight_count === 0
       "
       :confirm-text="t('taskPlugins.forceOperation')"
       @cancel="!busy && ((deleteTarget = null), closeBlocked())"
-      @confirm="forceDisable"
+      @confirm="forceBlocked"
     >
       <template v-if="blockedUsage">
         <p>
