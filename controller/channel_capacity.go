@@ -16,10 +16,7 @@ func acquireChannelManagement(c *gin.Context, ch *model.Channel) (*service.Concu
 	if err == nil {
 		return permit, true
 	}
-	status := http.StatusServiceUnavailable
-	if errors.Is(err, service.ErrConcurrencyFull) {
-		status = http.StatusTooManyRequests
-	}
+	status, _ := service.ConcurrencyAdmissionError("channel", err)
 	c.JSON(status, gin.H{"success": false, "message": err.Error()})
 	return nil, false
 }

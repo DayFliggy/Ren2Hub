@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"gorm.io/gorm"
 )
 
@@ -116,6 +118,19 @@ func (m *ConcurrencyManager) release(key concurrencyKey, r *concurrencyResource)
 	r.active--
 	if r.retired && r.active == 0 && m.resources[key] == r {
 		delete(m.resources, key)
+	}
+}
+
+// ConcurrencyAdmissionError 是并发准入失败的唯一状态映射，kind 为 "user" 或 "channel"：满载 429；
+// 资源已删除 403；读取上限等其他失败 503。
+func ConcurrencyAdmissionError(kind string, err error) (int, types.ErrorCode) {
+	switch {
+	case errors.Is(err, ErrConcurrencyFull):
+		return http.StatusTooManyRequests, types.ErrorCode(kind + "_concurrency_exceeded")
+	case errors.Is(err, errConcurrencyResourceDeleted):
+		return http.StatusForbidden, types.ErrorCode(kind + "_unavailable")
+	default:
+		return http.StatusServiceUnavailable, types.ErrorCode(kind + "_concurrency_unavailable")
 	}
 }
 

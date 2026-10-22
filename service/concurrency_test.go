@@ -7,6 +7,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -515,4 +516,29 @@ func TestReleaseDeletedUserForgetsConcurrency(t *testing.T) {
 	}
 	busy.Release()
 	require.Empty(t, gatewayConcurrency.snapshot("user"))
+}
+
+// 各准入入口共用这一映射：只有满载报并发超限，删除和存储故障各自有明确结果。
+func TestConcurrencyAdmissionErrorClassifiesRealFailures(t *testing.T) {
+	db := setupRouteTest(t)
+	ctx := context.Background()
+	held, err := AcquireUserConcurrency(ctx, 41, 1)
+	require.NoError(t, err)
+	defer held.Release()
+	_, full := AcquireUserConcurrency(ctx, 41, 1)
+	status, code := ConcurrencyAdmissionError("user", full)
+	require.Equal(t, http.StatusTooManyRequests, status)
+	require.EqualValues(t, "user_concurrency_exceeded", code)
+
+	ReleaseDeletedUser(42)
+	_, unreadable := AcquireUserConcurrency(ctx, 42, 1)
+	status, code = ConcurrencyAdmissionError("user", unreadable)
+	require.Equal(t, http.StatusServiceUnavailable, status, "the users table is missing, so the limit read fails")
+	require.EqualValues(t, "user_concurrency_unavailable", code)
+
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+	_, deleted := AcquireUserConcurrency(ctx, 42, 1)
+	status, code = ConcurrencyAdmissionError("user", deleted)
+	require.Equal(t, http.StatusForbidden, status)
+	require.EqualValues(t, "user_unavailable", code)
 }

@@ -259,7 +259,8 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	}()
 	userPermit, err := service.AcquireUserConcurrency(c.Request.Context(), c.GetInt("id"), c.GetInt("user_max_concurrency"))
 	if err != nil {
-		return types.NewErrorWithStatusCode(err, "user_concurrency_exceeded", http.StatusTooManyRequests, types.ErrOptionWithSkipRetry())
+		status, code := service.ConcurrencyAdmissionError("user", err)
+		return types.NewErrorWithStatusCode(err, code, status, types.ErrOptionWithSkipRetry())
 	}
 	defer userPermit.Release()
 

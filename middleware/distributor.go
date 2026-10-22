@@ -86,11 +86,8 @@ func Distribute() func(c *gin.Context) {
 		}
 		userPermit, admissionErr := service.AcquireUserConcurrency(c.Request.Context(), c.GetInt("id"), c.GetInt("user_max_concurrency"))
 		if admissionErr != nil {
-			status := http.StatusServiceUnavailable
-			if errors.Is(admissionErr, service.ErrConcurrencyFull) {
-				status = http.StatusTooManyRequests
-			}
-			abortWithOpenAiMessage(c, status, admissionErr.Error(), "user_concurrency_exceeded")
+			status, code := service.ConcurrencyAdmissionError("user", admissionErr)
+			abortWithOpenAiMessage(c, status, admissionErr.Error(), code)
 			return
 		}
 		defer userPermit.Release()

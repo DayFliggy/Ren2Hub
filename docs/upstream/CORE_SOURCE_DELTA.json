@@ -709,7 +709,7 @@
       "path": "controller/channel-test.go",
       "status": "adapted",
       "upstream_sha256": "a42f4db76aec756eaefed5075c62e1d615eb85a95be6923a1e68ac37c1e3bce0",
-      "local_sha256": "d65cd05bb665a41e51fde9119dd3e1730df3f415ba8e3b2a89c832dc0d681f54",
+      "local_sha256": "743f2523ac702887d5776cc2f3fc6b5c318067e72c3df6986847c11e5f170ca5",
       "reasons": [
         "token-routing",
         "concurrency",
@@ -775,7 +775,7 @@
       "path": "controller/channel_capacity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c7e8d68e6d3e327bd0f0297ba9b9ae073761f2a8067f430798ae10fdf4e18292"
+      "local_sha256": "d661504f9f0c4a5ee3861689eadfe44ced8ced60eb60c9f092659fb724ac3879"
     },
     {
       "path": "controller/channel_inference.go",
@@ -2019,7 +2019,7 @@
       "path": "middleware/distributor.go",
       "status": "adapted",
       "upstream_sha256": "7dbeec0991bfa409e661270a341645bc716252ba52e79295e68a052d2f1f68d1",
-      "local_sha256": "a5b92cbc8179f618e5cd5482e71a09ecd475ca261834d76545abd5cd793914bc",
+      "local_sha256": "1aa461b6d70c857e33ea06c15b4ddb91e91068b7aa2c34964960a8ae3e55d1bc",
       "reasons": [
         "group-removal",
         "retired",
@@ -5548,7 +5548,7 @@
       "path": "relay/responses_websocket.go",
       "status": "adapted",
       "upstream_sha256": "042b16b72bf783ec971ef8ed97a3dc8fe4be4dab98a1456e032d40c117763947",
-      "local_sha256": "95d40fe5da6572742ba8bdfafcda22a67fc232c3d305b5216b0df4dae9bf73ed",
+      "local_sha256": "27aea74800085409bcb6cf117e580be1ec29dc24a3e19630c20400f68cebca47",
       "reasons": [
         "concurrency",
         "token-routing",
@@ -7020,13 +7020,13 @@
       "path": "service/concurrency.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b22e9b5ef2b8536d932bf9ad246a4e2457e42fe582db42b848df9bebd0f0b881"
+      "local_sha256": "2b690207df795523a58c50e61355bdf9d46773807f60f7eae04b9f9a235390cd"
     },
     {
       "path": "service/concurrency_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5438d34f15b345b42f007eb13f617d28a52b39669259648c8c77fa988da6b718"
+      "local_sha256": "0f98539e6bee71ff275506ad2e3c4faae372d2c5f1f32d3fa103bd145ba5acfa"
     },
     {
       "path": "service/convert.go",

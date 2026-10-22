@@ -165,12 +165,14 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	c.Set("id", testUserID)
 	userPermit, err := service.AcquireUserConcurrency(ctx, testUserID, cache.MaxConcurrency)
 	if err != nil {
-		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, "user_concurrency_exceeded", http.StatusTooManyRequests)}
+		status, code := service.ConcurrencyAdmissionError("user", err)
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, code, status)}
 	}
 	defer userPermit.Release()
 	channelPermit, err := service.AcquireChannelConcurrency(ctx, channel)
 	if err != nil {
-		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, "channel_concurrency_exceeded", http.StatusTooManyRequests)}
+		status, code := service.ConcurrencyAdmissionError("channel", err)
+		return testResult{context: c, localErr: err, newAPIError: types.NewErrorWithStatusCode(err, code, status)}
 	}
 	c.Set("route_channel_permit", channelPermit)
 	defer service.ReleaseRouteChannel(c)
