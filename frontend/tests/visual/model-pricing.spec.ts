@@ -254,11 +254,10 @@ for (const theme of ['light', 'dark'] as const)
             },
           ],
         }),
-        nativePriceSource({
-          id: 'axonhub',
-          status: 'error',
-          errors: ['Unavailable source'],
-        }),
+        nativePriceSource(
+          { id: 'axonhub', errors: ['Unavailable source'] },
+          'download-error'
+        ),
       ])
       await page.goto('/models/pricing')
       await expect(

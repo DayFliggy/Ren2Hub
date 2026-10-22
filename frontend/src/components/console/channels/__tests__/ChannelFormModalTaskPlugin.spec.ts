@@ -9,6 +9,7 @@ import type { AdminChannel } from '@/types/console'
 // UpdateChannel handler accepts.
 import rootRename from '../../../../../tests/fixtures/native/channel-task-plugin-rename.put.request.json'
 import adminRename from '../../../../../tests/fixtures/native/channel-task-plugin-rename-write-only.put.request.json'
+import convert from '../../../../../tests/fixtures/native/channel-new-api-to-task-plugin.put.request.json'
 
 const permissions = vi.hoisted(() => ({ sensitive: true, bind: true }))
 vi.mock('@/api/adminManagement', () => ({
@@ -171,6 +172,28 @@ describe('task plugin channel edits', () => {
     const save = await openForm(newApi)
     expect(selectedPlugins()).toEqual(['alpha', 'beta'])
     expect(await saveAs('renamed', save)).not.toHaveProperty('setting')
+  })
+
+  it('converts the binding fields when New API becomes Task Plugin', async () => {
+    const save = await openForm(
+      channel({
+        type: 60,
+        setting:
+          '{"force_format":true,"task_extend_plugin_keys":["contract-plugin"]}',
+      })
+    )
+    expect(selectedPlugins()).toEqual(['contract-plugin'])
+    query<HTMLButtonElement>('button[aria-expanded]')!.click()
+    await flushPromises()
+    ;[
+      ...document.body.querySelectorAll<HTMLElement>(
+        '[role="listbox"] [role="option"]'
+      ),
+    ]
+      .find((option) => /Task Plugin$/.test(option.textContent?.trim() ?? ''))!
+      .click()
+    await flushPromises()
+    expect(await saveAs(convert.name, save)).toEqual(convert)
   })
 
   it('rewrites only the binding fields when the New API set changes', async () => {

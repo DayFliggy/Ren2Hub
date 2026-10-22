@@ -1,0 +1,40 @@
+{
+  "data": {
+    "sources": [
+      {
+        "errors": [
+          "source contains no model prices"
+        ],
+        "fingerprint": {
+          "matches": true,
+          "published_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "id": "sub2api",
+        "models": [],
+        "name": "Sub2API",
+        "status": "error",
+        "warnings": []
+      },
+      {
+        "errors": [
+          "missing providers object"
+        ],
+        "fingerprint": {
+          "matches": null,
+          "published_sha256": null,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "id": "axonhub",
+        "models": [],
+        "name": "AxonHub",
+        "status": "error",
+        "warnings": [
+          "source does not publish a sha256 fingerprint"
+        ]
+      }
+    ]
+  },
+  "message": "",
+  "success": true
+}

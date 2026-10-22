@@ -2,9 +2,12 @@ package controller
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/pkg/pricesource"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -219,6 +223,13 @@ func TestFrontendContractVertexChannelUpdate(t *testing.T) {
 	assert.Contains(t, rejected.Body.String(), `"success":false`)
 	assert.Contains(t, rejected.Body.String(), "Deployment region cannot be empty")
 	assert.Equal(t, "vertex-contract", saved().Name)
+	withoutRegion["other"] = "us-central1"
+	encoded, err = common.Marshal(withoutRegion)
+	require.NoError(t, err)
+	rejected = contractRequest(t, root, http.MethodPut, "/api/channel/", encoded)
+	assert.Contains(t, rejected.Body.String(), `"success":false`)
+	assert.Contains(t, rejected.Body.String(), "Deployment region must be valid JSON")
+	assert.Equal(t, "vertex-contract", saved().Name)
 
 	updated := contractRequest(t, root, http.MethodPut, "/api/channel/", rename)
 	require.Contains(t, updated.Body.String(), `"success":true`, updated.Body.String())
@@ -312,6 +323,33 @@ export function parseTaskResult() { return {}; }
 	require.NotNil(t, current.Setting)
 	assert.Equal(t, setting, *current.Setting)
 	assert.Equal(t, baseURL, *current.BaseURL)
+
+	// Changing type must also convert the binding fields, even if the plugin
+	// set is unchanged. Type 61 validates task_plugin_key before loading the row.
+	newAPISetting := `{"force_format":true,"task_extend_plugin_keys":["contract-plugin"]}`
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{
+		"type": constant.ChannelTypeNewAPI, "setting": newAPISetting,
+	}).Error)
+	convertedSetting := `{"force_format":true,"task_plugin_key":"contract-plugin"}`
+	convert := frontendFixture(t, "channel-new-api-to-task-plugin.put.request.json", map[string]any{
+		"id": channel.Id, "name": "plugin-contract-converted", "type": constant.ChannelTypeTaskPlugin,
+		"base_url": baseURL, "models": "doc", "model_mapping": "", "priority": 0, "weight": 1,
+		"channel_ratio": "1", "max_concurrency": 0, "setting": convertedSetting,
+	})
+	var unconverted map[string]any
+	require.NoError(t, common.Unmarshal(convert, &unconverted))
+	unconverted["setting"] = newAPISetting
+	encoded, err = common.Marshal(unconverted)
+	require.NoError(t, err)
+	rejected = contractRequest(t, root, http.MethodPut, "/api/channel/", encoded)
+	assert.Contains(t, rejected.Body.String(), "task plugin key is required")
+	assert.Equal(t, constant.ChannelTypeNewAPI, saved().Type)
+	updated = contractRequest(t, root, http.MethodPut, "/api/channel/", convert)
+	require.Contains(t, updated.Body.String(), `"success":true`, updated.Body.String())
+	current = saved()
+	assert.Equal(t, constant.ChannelTypeTaskPlugin, current.Type)
+	require.NotNil(t, current.Setting)
+	assert.Equal(t, convertedSetting, *current.Setting)
 }
 
 // The edit form keeps types outside its create list (here AI Proxy Library,
@@ -471,4 +509,90 @@ func TestFrontendContractSyncableChannels(t *testing.T) {
 	body := decodeContractBody(t, recorder)
 	require.Equal(t, true, body["success"])
 	frontendFixture(t, "ratio-sync-channels.get.json", body)
+}
+
+type frontendContractTransport func(*http.Request) (*http.Response, error)
+
+func (transport frontendContractTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+// Exercise the real HTTP handler and price fetcher, redirecting only its fixed
+// source URLs to a local server. Unexpected URLs fail without external traffic.
+func TestFrontendContractFixedPriceSources(t *testing.T) {
+	documents := map[string]string{
+		"sub2api": `{"contract-chat":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`,
+		"axonhub": `{"providers":{"contract":{"models":{"contract-chat":{"cost":{"input":1,"output":2}}}}}}`,
+	}
+	for _, outcome := range []string{"success", "download-error", "parse-error"} {
+		t.Run(outcome, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if outcome == "download-error" {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				document := documents[r.URL.Query().Get("source")]
+				if outcome == "parse-error" {
+					document = `{}`
+				}
+				if r.URL.Path == "/hash" {
+					fmt.Fprintf(w, "%x  prices.json\n", sha256.Sum256([]byte(document)))
+					return
+				}
+				fmt.Fprint(w, document)
+			}))
+			defer server.Close()
+			targets := map[string]string{}
+			for _, source := range pricesource.Sources() {
+				targets[source.URL] = server.URL + "/document?source=" + source.ID
+				if source.HashURL != "" {
+					targets[source.HashURL] = server.URL + "/hash?source=" + source.ID
+				}
+			}
+			originalTransport := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = originalTransport })
+			http.DefaultTransport = frontendContractTransport(func(request *http.Request) (*http.Response, error) {
+				target, exists := targets[request.URL.String()]
+				if !exists {
+					return nil, fmt.Errorf("unexpected price source URL: %s", request.URL)
+				}
+				local := request.Clone(request.Context())
+				var err error
+				local.URL, err = url.Parse(target)
+				if err != nil {
+					return nil, err
+				}
+				local.Host = local.URL.Host
+				return originalTransport.RoundTrip(local)
+			})
+			engine := contractEngine(1, common.RoleRootUser)
+			engine.POST("/api/ratio_sync/fetch", func(c *gin.Context) {
+				defer common.CleanupBodyStorage(c)
+				FetchUpstreamRatios(c)
+			})
+			recorder := contractRequest(t, engine, http.MethodPost, "/api/ratio_sync/fetch", []byte(`{}`))
+			require.Equal(t, http.StatusOK, recorder.Code)
+			body := decodeContractBody(t, recorder)
+			require.Equal(t, true, body["success"])
+			sources := body["data"].(map[string]any)["sources"].([]any)
+			require.Len(t, sources, 2)
+			for _, raw := range sources {
+				source := raw.(map[string]any)
+				if outcome == "success" {
+					require.Equal(t, "success", source["status"])
+					require.NotEmpty(t, source["models"])
+				} else {
+					require.Equal(t, "error", source["status"])
+					require.Empty(t, source["models"])
+					require.NotEmpty(t, source["errors"])
+				}
+				if outcome == "download-error" {
+					require.Nil(t, source["fingerprint"])
+				} else {
+					require.NotNil(t, source["fingerprint"])
+				}
+			}
+			frontendFixture(t, "ratio-sync-fixed-sources."+outcome+".post.json", body)
+		})
+	}
 }

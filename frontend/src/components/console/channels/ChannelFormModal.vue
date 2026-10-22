@@ -637,7 +637,12 @@ async function submit() {
     )
       settings.responses_websocket_enabled = responsesWebSocket.value
     const nextSetting = canBindPlugin.value
-      ? withTaskPluginKeys(settings, form.type, pluginKeys.value)
+      ? withTaskPluginKeys(
+          settings,
+          form.type,
+          pluginKeys.value,
+          props.editing?.type
+        )
       : settings
     // validateChannel reads task_plugin_key from the request before it loads
     // the stored channel, so every type 61 update that carries the sensitive

@@ -77,17 +77,19 @@ export function formTaskPluginKeys(
 /**
  * Writes the form's plugin selection the way upstream buildSettingJSON does:
  * type 61 keeps task_plugin_key only, type 60 keeps task_extend_plugin_keys
- * only, other types keep neither. An unchanged binding set returns the setting
- * as is, so a save without a rebinding never touches the binding fields.
+ * only, other types keep neither. An unchanged type and binding set keep the
+ * original fields; changing type converts them to the destination's schema.
  */
 export function withTaskPluginKeys(
   setting: Record<string, unknown>,
   type: number,
-  keys: string[]
+  keys: string[],
+  originalType?: number
 ): Record<string, unknown> {
   const next = type === 61 ? keys.slice(0, 1) : type === 60 ? keys : []
   const nextBindings = taskPluginBindings({ task_extend_plugin_keys: next })
   if (
+    type === originalType &&
     JSON.stringify(nextBindings) === JSON.stringify(taskPluginBindings(setting))
   )
     return setting

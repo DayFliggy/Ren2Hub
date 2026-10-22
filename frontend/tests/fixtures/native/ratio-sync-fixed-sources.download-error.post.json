@@ -1,0 +1,30 @@
+{
+  "data": {
+    "sources": [
+      {
+        "errors": [
+          "price source: remote returned HTTP 503"
+        ],
+        "fingerprint": null,
+        "id": "sub2api",
+        "models": [],
+        "name": "Sub2API",
+        "status": "error",
+        "warnings": []
+      },
+      {
+        "errors": [
+          "price source: remote returned HTTP 503"
+        ],
+        "fingerprint": null,
+        "id": "axonhub",
+        "models": [],
+        "name": "AxonHub",
+        "status": "error",
+        "warnings": []
+      }
+    ]
+  },
+  "message": "",
+  "success": true
+}

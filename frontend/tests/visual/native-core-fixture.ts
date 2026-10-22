@@ -11,26 +11,19 @@ export function nativeFixture<T = Record<string, unknown>>(name: string): T {
   const url = new URL(`../fixtures/native/${name}`, import.meta.url)
   return JSON.parse(readFileSync(url, 'utf8')) as T
 }
-const PRICE_DIGEST = 'a'.repeat(64)
-// One fixed price source as service.PriceSourceDraft serializes it. The real
-// fetch returns only sub2api and axonhub; a failed download has no fingerprint.
+// Use the real fetch response as the base; download errors have no fingerprint,
+// while parse errors retain the downloaded document's fingerprint.
 export function nativePriceSource(
-  overrides: Record<string, unknown> & { id: 'sub2api' | 'axonhub' }
+  overrides: Record<string, unknown> & { id: 'sub2api' | 'axonhub' },
+  outcome: 'success' | 'download-error' | 'parse-error' = 'success'
 ) {
+  const response = nativeFixture<{
+    data: { sources: Array<Record<string, unknown>> }
+  }>(`ratio-sync-fixed-sources.${outcome}.post.json`)
+  const source = response.data.sources.find((item) => item.id === overrides.id)
+  if (!source) throw new Error(`Missing price source fixture: ${overrides.id}`)
   return {
-    name: overrides.id === 'sub2api' ? 'Sub2API' : 'AxonHub',
-    status: 'success',
-    fingerprint:
-      overrides.status === 'error'
-        ? null
-        : {
-            sha256: PRICE_DIGEST,
-            published_sha256: PRICE_DIGEST,
-            matches: true,
-          },
-    models: [],
-    warnings: [],
-    errors: [],
+    ...source,
     ...overrides,
   }
 }
@@ -40,11 +33,16 @@ export async function mockPriceFetch(
   page: Page,
   sources: ReturnType<typeof nativePriceSource>[]
 ) {
+  const response = nativeFixture<{ data: { sources: unknown[] } }>(
+    'ratio-sync-fixed-sources.success.post.json'
+  )
   await page.route('**/api/ratio_sync/channels', (route) =>
     route.fulfill({ json: nativeFixture('ratio-sync-channels.get.json') })
   )
   await page.route('**/api/ratio_sync/fetch', (route) =>
-    route.fulfill({ json: { success: true, data: { sources } } })
+    route.fulfill({
+      json: { ...response, data: { ...response.data, sources } },
+    })
   )
 }
 export interface NativeFixtureOptions {

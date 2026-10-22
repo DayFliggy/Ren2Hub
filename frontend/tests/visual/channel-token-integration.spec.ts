@@ -11,6 +11,9 @@ const generated = nativeFixture<{ data: { items: Channel[] } }>(
   'channel-multi-key-list.get.json'
 ).data.items
 const single = generated.find((item) => item.name === 'contract-single')!
+const vertexRename = nativeFixture<Channel>(
+  'channel-vertex-rename.put.request.json'
+)
 // Extra rows reuse the handler-generated single-key shape, so only the
 // type-specific fields differ from real list output.
 const channels: Channel[] = [
@@ -20,7 +23,7 @@ const channels: Channel[] = [
     id: 41,
     name: 'Vertex Fixture',
     type: 41,
-    other: 'us-central1',
+    other: vertexRename.other,
     settings: JSON.stringify({ vertex_key_type: 'json' }),
   },
   {
@@ -135,7 +138,10 @@ for (const theme of ['light', 'dark'] as const) {
       await editAndSave(page, 'New API Fixture')
       await editAndSave(page, 'Plugin Fixture')
       expect(saved.map((body) => body.id)).toEqual([41, 60, 61])
-      expect(saved[0]).toMatchObject({ other: 'us-central1' })
+      expect(saved[0]).toMatchObject({
+        type: vertexRename.type,
+        other: vertexRename.other,
+      })
       expect(saved[1]).not.toHaveProperty('setting')
       expect(saved[2]).toMatchObject({
         setting: JSON.stringify({ task_plugin_key: 'video-plugin' }),
