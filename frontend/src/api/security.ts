@@ -82,8 +82,13 @@ export const proofOptions = (proof: string) => ({
   headers: { 'X-Security-Proof': proof },
 })
 
-/** Native TurnstileCheck reads the token only from the `turnstile` query. */
-export const turnstileParams = (token: string) => ({ turnstile: token })
+/**
+ * Native TurnstileCheck reads the token only from the `turnstile` query.
+ * Without a token nothing is sent, so the server reports a missing token
+ * whenever Turnstile is enabled.
+ */
+export const turnstileParams = (token?: string): Record<string, string> =>
+  token ? { turnstile: token } : {}
 
 export const securityApi = {
   requirements: (scope: string) =>

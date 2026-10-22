@@ -1,4 +1,4 @@
-import { passwordPayload, proofOptions } from './security'
+import { passwordPayload, proofOptions, turnstileParams } from './security'
 import type {
   AuthBundle,
   AuthTokenRotation,
@@ -52,13 +52,10 @@ export const authApi = {
     email: string,
     turnstileToken?: string
   ): Promise<void> {
-    await api.getEnvelope<unknown>(
-      '/api/verification',
-      { email },
-      turnstileToken
-        ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-        : undefined
-    )
+    await api.getEnvelope<unknown>('/api/verification', {
+      email,
+      ...turnstileParams(turnstileToken),
+    })
   },
   async login(
     username: string,
@@ -69,9 +66,7 @@ export const authApi = {
       await api.post<unknown>(
         '/api/user/login',
         { username, ...(await passwordPayload(password)) },
-        turnstileToken
-          ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-          : undefined
+        { params: turnstileParams(turnstileToken) }
       ),
       '/api/user/login'
     )
@@ -93,16 +88,15 @@ export const authApi = {
     },
     turnstileToken?: string
   ) =>
-    api.post<{ message: string }>(
-      '/api/user/register',
-      payload,
-      turnstileToken
-        ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-        : undefined
-    ),
+    api.post<{ message: string }>('/api/user/register', payload, {
+      params: turnstileParams(turnstileToken),
+    }),
   /** Native success carries only success and message, so read the envelope. */
-  async resetPassword(email: string): Promise<void> {
-    await api.getEnvelope<unknown>('/api/reset_password', { email })
+  async resetPassword(email: string, turnstileToken?: string): Promise<void> {
+    await api.getEnvelope<unknown>('/api/reset_password', {
+      email,
+      ...turnstileParams(turnstileToken),
+    })
   },
   async confirmPasswordReset(email: string, token: string): Promise<string> {
     const value = await api.post<unknown>('/api/user/reset', { email, token })

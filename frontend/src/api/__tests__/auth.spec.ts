@@ -98,15 +98,55 @@ describe('authentication API', () => {
       message: 'Email address is already in use',
     })
   })
-  it('sends Turnstile tokens in request headers', async () => {
+  it('sends Turnstile tokens in the native turnstile query', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(bundle)
+      .mockResolvedValueOnce(undefined)
+    const getEnvelope = vi
+      .spyOn(api, 'getEnvelope')
+      .mockResolvedValue({ success: true, message: '' })
+
+    await authApi.login('demo', 'password', 'login-token')
+    await authApi.register(
+      { username: 'demo', email: 'new@example.com', password: 'password' },
+      'register-token'
+    )
+    await authApi.sendVerification('new@example.com', 'mail-token')
+    await authApi.resetPassword('reset@example.com', 'reset-token')
+
+    expect(post.mock.calls).toEqual([
+      [
+        '/api/user/login',
+        { username: 'demo', password: 'password' },
+        { params: { turnstile: 'login-token' } },
+      ],
+      [
+        '/api/user/register',
+        { username: 'demo', email: 'new@example.com', password: 'password' },
+        { params: { turnstile: 'register-token' } },
+      ],
+    ])
+    expect(getEnvelope.mock.calls).toEqual([
+      [
+        '/api/verification',
+        { email: 'new@example.com', turnstile: 'mail-token' },
+      ],
+      [
+        '/api/reset_password',
+        { email: 'reset@example.com', turnstile: 'reset-token' },
+      ],
+    ])
+  })
+  it('omits the turnstile query when Turnstile is not in use', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(bundle)
 
-    await authApi.login('demo', 'password', 'turnstile-token')
+    await authApi.login('demo', 'password')
 
     expect(post).toHaveBeenCalledWith(
       '/api/user/login',
       { username: 'demo', password: 'password' },
-      { headers: { 'X-Turnstile-Token': 'turnstile-token' } }
+      { params: {} }
     )
   })
 
