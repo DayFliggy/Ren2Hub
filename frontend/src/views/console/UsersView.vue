@@ -97,8 +97,8 @@ const {
   createUser,
   updateUserDetails,
   deleteUser,
-  updateUsersStatus,
-  deleteSelectedUsers,
+  runBulk,
+  bulkProgress,
 } = useAdminUsers((operation) => proofDialog.value!.request(operation))
 
 const formOpen = ref(false)
@@ -325,15 +325,19 @@ function requestBulkDelete() {
 
 async function confirmDelete() {
   const target = deleting.value
-  if (!target) return
-  const deleted =
-    target.kind === 'single'
-      ? await deleteUser(target.user)
-      : await deleteSelectedUsers(target.users)
-  if (deleted) {
-    deleting.value = null
-    clearSelection()
+  if (!target || !canMutate.value) return
+  if (target.kind === 'single') {
+    if (await deleteUser(target.user)) {
+      deleting.value = null
+      clearSelection()
+    }
+    return
   }
+  // A stopped batch has still changed users; the toast reports how far it
+  // got and the list is already refreshed, so the old selection is stale.
+  await runBulk('delete', target.users)
+  deleting.value = null
+  clearSelection()
 }
 
 function cancelDelete() {
@@ -351,14 +355,21 @@ const deleteDialogTitle = computed(() =>
 const deleteDialogMessage = computed(() => {
   const target = deleting.value
   if (!target) return ''
-  return target.kind === 'single'
-    ? t('users.deleteMessage', { name: target.user.username })
-    : t('users.bulkDeleteMessage', { count: target.users.length })
+  if (target.kind === 'single')
+    return t('users.deleteMessage', { name: target.user.username })
+  const message = [
+    t('users.bulkDeleteMessage', { count: target.users.length }),
+    t('users.bulkProofNotice', { count: target.users.length }),
+  ]
+  if (bulkProgress.value)
+    message.push(t('users.bulkProgress', bulkProgress.value))
+  return message.join(' ')
 })
 
 async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
   if (!canMutate.value) return
-  if (await updateUsersStatus(action, selectedUsers.value)) clearSelection()
+  await runBulk(action, selectedUsers.value)
+  clearSelection()
 }
 </script>
 
@@ -456,12 +467,18 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
         data-user-bulk-actions
         class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
       >
-        <span
-          class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"
-          aria-live="polite"
-        >
-          {{ t('users.selectedCount', { count: selectedIds.length }) }}
-        </span>
+        <div class="mr-auto min-w-0" aria-live="polite">
+          <p class="text-xs font-semibold text-[var(--text-secondary)]">
+            {{
+              bulkProgress
+                ? t('users.bulkProgress', bulkProgress)
+                : t('users.selectedCount', { count: selectedIds.length })
+            }}
+          </p>
+          <p class="text-[0.6875rem] text-[var(--text-tertiary)]">
+            {{ t('users.bulkProofHint') }}
+          </p>
+        </div>
         <IconButton
           :label="t('users.bulkEnable')"
           :disabled="

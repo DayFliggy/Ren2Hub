@@ -1553,6 +1553,10 @@ export default {
     bulkEnabled: '已启用 {count} 位用户',
     bulkDisabled: '已禁用 {count} 位用户',
     bulkDeleted: '已删除 {count} 位用户',
+    bulkProgress: '正在批量处理，已完成 {done}/{total} 位用户',
+    bulkProofHint: '批量操作会为每位用户单独发起一次安全验证。',
+    bulkProofNotice: '每位用户需要单独完成一次安全验证，共 {count} 次。',
+    bulkStopped: '已处理 {done}/{total} 位用户，{name} 处理失败：{message}',
   },
 
   redemption: {

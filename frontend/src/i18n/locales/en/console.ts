@@ -1608,6 +1608,12 @@ export default {
     bulkEnabled: 'Enabled {count} users',
     bulkDisabled: 'Disabled {count} users',
     bulkDeleted: 'Deleted {count} users',
+    bulkProgress: 'Working: {done}/{total} users done',
+    bulkProofHint:
+      'Bulk actions ask for a separate security verification for each user.',
+    bulkProofNotice:
+      'Each user needs a separate security verification: {count} in total.',
+    bulkStopped: 'Processed {done}/{total} users; {name} failed: {message}',
   },
 
   redemption: {
