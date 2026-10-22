@@ -159,17 +159,6 @@ export function formatLatency(sec: number): string {
   return sec >= 10 ? `${sec.toFixed(1)}s` : `${sec.toFixed(2)}s`
 }
 
-/** Context window as a compact label: 1_000_000 → "1M", 128_000 → "128K". */
-export function formatContext(tokens: number): string {
-  if (tokens <= 0) return '—'
-  if (tokens >= 1_000_000) {
-    const m = tokens / 1_000_000
-    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`
-  }
-  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`
-  return String(tokens)
-}
-
 /** Human byte size: 2_205_000 → "2.1 MB", 12_800 → "12.5 KB". */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

@@ -16,7 +16,6 @@ describe('native model catalog', () => {
     })
     expect(result.models[0]!.vendor_id).toBe(-10)
     expect(result.models[0]!.pricing_values.input).toBe('0.1234567890123456789')
-    expect(result.models[0]!.capabilities).toBeNull()
   })
   it('distinguishes configured zero prices from unavailable prices', () => {
     const input = modelCatalogFixture()

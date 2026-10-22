@@ -34,6 +34,12 @@ func TestModelCatalogSharesRoutingConstraintsAndPublicPrices(t *testing.T) {
 	require.NotContains(t, string(encoded), "SECRET")
 	require.NotContains(t, string(encoded), "private-host")
 	require.NotContains(t, string(encoded), "hidden-model")
+	var decoded struct {
+		Models []map[string]any `json:"models"`
+	}
+	require.NoError(t, common.Unmarshal(encoded, &decoded))
+	require.Len(t, decoded.Models, 1)
+	require.NotContains(t, decoded.Models[0], "capabilities", "the catalog has no capability source and must not publish a placeholder")
 	_, err = BuildModelCatalog(context.Background(), 18, 7)
 	require.Error(t, err)
 	saveRouteTest(t) // Empty manual mode remains an explicit deny-all route.

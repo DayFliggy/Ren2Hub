@@ -97,7 +97,8 @@ describe('native model catalog page', () => {
       popup.querySelector('[data-market-baseline] [data-market-telemetry]')
     ).toBeNull()
     expect(popup.querySelector('.market-detail-variant')).toBeNull()
-    expect(popup.textContent).toContain('未提供')
+    // The catalog has no capability source, so no placeholder fields are shown.
+    expect(popup.textContent).not.toMatch(/上下文|最大输出|工具调用|推理强度/)
     // Channel offers keep the unavailable state and explain why.
     expect(popup.textContent).toContain('未按渠道统计')
     expect(popup.textContent).toContain('性能统计只按模型汇总全部渠道')

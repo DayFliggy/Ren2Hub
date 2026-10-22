@@ -16,7 +16,6 @@ import (
 type CatalogModel struct {
 	model.Pricing
 	model.CatalogPrice
-	Capabilities any `json:"capabilities"`
 }
 type CatalogChannel struct {
 	RouteChannel

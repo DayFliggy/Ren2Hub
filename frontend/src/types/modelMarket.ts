@@ -1,5 +1,4 @@
 import type { PriceSort, ReferencePrice } from './pricingReference'
-import type { ModelCapabilities } from '@/api/modelCatalog'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 
 export type ModelMarketViewMode = 'models' | 'channels' | 'comparison'
@@ -56,7 +55,6 @@ export interface MarketModel {
   icon: string
   description: string
   type: MarketModelType
-  capabilities: ModelCapabilities | null
   endpointTypes: string[]
   endpoints: { type: string; path: string; method: string }[]
   baselines: MarketPricing[]

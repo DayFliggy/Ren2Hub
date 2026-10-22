@@ -85,7 +85,6 @@ export function buildModelMarketCatalog(
         response.vendors.find((vendor) => vendor.id === model.vendor_id)
           ?.name || PLATFORM_VENDOR,
       type: modelType(model.supported_endpoint_types),
-      capabilities: model.capabilities,
       endpointTypes: model.supported_endpoint_types,
       endpoints: model.supported_endpoint_types.map((type) => ({
         type,

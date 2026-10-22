@@ -14,16 +14,6 @@ export interface CatalogPrices {
   output?: string
   request?: string
 }
-export interface ModelCapabilities {
-  reasoning_efforts: string[] | null
-  input_modalities: string[] | null
-  output_modalities: string[] | null
-  context_limit: number | null
-  output_limit: number | null
-  tool_call: boolean | null
-  source: string | null
-  updated_at: number
-}
 export interface CatalogModel {
   model_name: string
   description: string
@@ -33,7 +23,6 @@ export interface CatalogModel {
   price_status: PriceStatus
   pricing_values: CatalogPrices
   price_reason?: string
-  capabilities: ModelCapabilities | null
 }
 export interface CatalogChannel {
   id: number
@@ -113,7 +102,6 @@ export function parseModelCatalog(value: unknown): ModelCatalog {
     ...(row.price_reason == null
       ? {}
       : { price_reason: requiredString(row.price_reason, endpoint) }),
-    capabilities: row.capabilities === null ? null : invalidResponse(endpoint),
   }))
   const channels = records(value.channels).map((row): CatalogChannel => {
     if (!isRecord(row.lab) || typeof row.eligible !== 'boolean')

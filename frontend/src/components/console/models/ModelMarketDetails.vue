@@ -6,7 +6,6 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { modelMarketMessages } from '@/i18n/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
-import ModelCapabilities from './ModelCapabilities.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 import ModelStatistics from './ModelStatistics.vue'
 import VendorLogo from './VendorLogo.vue'
@@ -219,7 +218,6 @@ const usageFields = computed(() =>
         </summary>
         <code>{{ model.name }}</code>
       </details>
-      <ModelCapabilities :capabilities="model.capabilities" expanded />
       <section class="market-detail-quotes">
         <div class="market-detail-section-heading">
           <h3>{{ t('detailsTitle') }}</h3>

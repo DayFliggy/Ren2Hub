@@ -11,7 +11,6 @@ export function modelCatalogFixture(): ModelCatalog {
         supported_endpoint_types: ['openai', 'openai-response'],
         price_status: 'configured',
         pricing_values: { input: '1.25', output: '5' },
-        capabilities: null,
       },
     ],
     vendors: [{ id: -10, name: 'Fixture vendor' }],

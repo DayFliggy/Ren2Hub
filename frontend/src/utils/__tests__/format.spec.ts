@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   formatBytes,
   formatCompact,
-  formatContext,
   formatDuration,
   formatLatency,
   formatMoney,
@@ -52,13 +51,6 @@ describe('compact numeric labels', () => {
     expect(formatCompact(999)).toBe('999')
     expect(formatCompact(1_000)).toBe('1.0K')
     expect(formatCompact(1_500_000)).toBe('1.5M')
-  })
-
-  it('labels context windows', () => {
-    expect(formatContext(0)).toBe('—')
-    expect(formatContext(128_000)).toBe('128K')
-    expect(formatContext(1_000_000)).toBe('1M')
-    expect(formatContext(1_500_000)).toBe('1.5M')
   })
 
   it('labels byte sizes', () => {

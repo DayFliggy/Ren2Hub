@@ -6,7 +6,6 @@ import { modelMarketMessages } from '@/i18n/modelMarket'
 import { formatMarketRatio } from '@/utils/modelMarket'
 import { pricingVariantLabel } from './pricingVariantLabel'
 import ModelIdentity from './ModelIdentity.vue'
-import ModelCapabilities from './ModelCapabilities.vue'
 import ModelPriceDisplay from './ModelPriceDisplay.vue'
 import ModelStatistics from './ModelStatistics.vue'
 
@@ -47,9 +46,6 @@ const channelCount = computed(
         :vendor="model.vendor"
         :type-label="t(`types.${model.type}`)"
       />
-    </div>
-    <div class="market-card-capabilities">
-      <ModelCapabilities :capabilities="model.capabilities" />
     </div>
     <div class="market-card-quotes">
       <div
@@ -170,10 +166,7 @@ const channelCount = computed(
   outline-offset: -3px;
 }
 .market-card-heading {
-  padding: 1.1rem 1rem 0;
-}
-.market-card-capabilities {
-  padding: 0.7rem 1rem 0.8rem;
+  padding: 1.1rem 1rem 0.8rem;
 }
 .market-card-quotes {
   padding: 0 1rem;
@@ -249,7 +242,6 @@ const channelCount = computed(
   color: var(--text-secondary);
 }
 .market-card-heading,
-.market-card-capabilities,
 .market-card-quotes,
 .market-card-footer {
   pointer-events: none;
