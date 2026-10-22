@@ -142,7 +142,7 @@ it('binds sensitive user changes to native verification contexts and separates r
   await state.updateUserDetails(member, {
     username: 'member',
     display_name: 'Member',
-    email: '',
+    remark: 'Billing contact',
     password: 'new-password',
     role: 10,
     max_concurrency: 0,
@@ -155,7 +155,14 @@ it('binds sensitive user changes to native verification contexts and separates r
     scope: 'admin.user.manage',
     context: { user_id: 2, action: 'promote' },
   })
-  expect(mocks.put.mock.calls[0]![1]).not.toHaveProperty('role')
+  expect(mocks.put.mock.calls[0]![1]).toEqual({
+    id: 2,
+    username: 'member',
+    display_name: 'Member',
+    remark: 'Billing contact',
+    password: 'new-password',
+    max_concurrency: 0,
+  })
   expect(mocks.post).toHaveBeenCalledWith(
     '/api/user/manage',
     { id: 2, action: 'promote' },

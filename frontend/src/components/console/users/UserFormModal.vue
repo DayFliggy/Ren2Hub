@@ -65,13 +65,16 @@ const form = reactive({
   max_concurrency: 0,
   username: '',
   displayName: '',
-  email: '',
+  remark: '',
   password: '',
   role: '1',
 })
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,19}$/
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** Upstream validates remark with `max=255`, which counts runes. */
+const REMARK_MAX_LENGTH = 255
+/** Display only: upstream `EditWithTx` never writes email; bindings own it. */
+const boundEmail = ref('')
 
 /** The privilege ceiling is visible in the picker, not only enforced on submit. */
 const roleChoices = computed(() =>
@@ -89,9 +92,7 @@ const roleOptions = computed(() =>
 )
 
 const selectedRole = computed(() => Number(form.role) as AdminUserRole)
-const emailValid = computed(
-  () => form.email.trim() === '' || EMAIL_PATTERN.test(form.email.trim())
-)
+const remarkLength = computed(() => [...form.remark].length)
 const usernameValid = computed(() =>
   USERNAME_PATTERN.test(form.username.trim())
 )
@@ -100,8 +101,7 @@ const valid = computed(
     usernameValid.value &&
     Number.isSafeInteger(form.max_concurrency) &&
     form.max_concurrency >= 0 &&
-    (props.editing === null ||
-      (emailValid.value && form.email.trim().length <= 50)) &&
+    remarkLength.value <= REMARK_MAX_LENGTH &&
     ((props.editing !== null && !form.password) ||
       ([...form.password].length >= 8 && [...form.password].length <= 128)) &&
     form.displayName.trim().length <= 20 &&
@@ -121,7 +121,8 @@ watch(
     form.max_concurrency = user?.max_concurrency ?? 0
     form.username = user?.username ?? ''
     form.displayName = user?.display_name ?? ''
-    form.email = user?.email ?? ''
+    form.remark = user?.remark ?? ''
+    boundEmail.value = user?.email ?? ''
     form.password = ''
     form.role = String(user?.role ?? 1)
   },
@@ -133,7 +134,7 @@ function close() {
 }
 
 function bindingRemoved(key: string) {
-  if (key === 'email' && form.email === props.editing?.email) form.email = ''
+  if (key === 'email') boundEmail.value = ''
 }
 
 async function submit() {
@@ -151,7 +152,7 @@ async function submit() {
         ? { ...base, password: form.password }
         : {
             ...base,
-            email: form.email.trim(),
+            remark: form.remark,
             ...(form.password ? { password: form.password } : {}),
           }
     if (
@@ -207,16 +208,40 @@ async function submit() {
             autocomplete="off"
           />
         </FormField>
-        <FormField v-if="editing !== null" :label="t('users.email')">
+        <FormField
+          v-if="editing !== null"
+          :label="t('users.email')"
+          :hint="t('users.emailManagedByBinding')"
+        >
           <TextInput
-            v-model="form.email"
+            :model-value="boundEmail"
             type="email"
             name="admin-user-email"
-            :placeholder="t('users.emailPlaceholder')"
-            autocomplete="off"
+            :placeholder="t('users.emailUnbound')"
+            readonly
           />
         </FormField>
       </div>
+
+      <FormField
+        v-if="editing !== null"
+        :label="t('users.remark')"
+        :hint="
+          t('users.remarkHint', {
+            count: remarkLength,
+            max: REMARK_MAX_LENGTH,
+          })
+        "
+      >
+        <textarea
+          v-model="form.remark"
+          rows="3"
+          name="admin-user-remark"
+          :aria-invalid="remarkLength > REMARK_MAX_LENGTH"
+          :placeholder="t('users.remarkPlaceholder')"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
+        />
+      </FormField>
 
       <FormField v-if="editing === null" :label="t('users.initialPassword')">
         <TextInput

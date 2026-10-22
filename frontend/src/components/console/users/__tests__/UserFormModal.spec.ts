@@ -48,6 +48,7 @@ const existingUser = {
   username: 'existing-user',
   display_name: 'Existing user',
   email: 'existing@example.com',
+  remark: 'VIP contact',
   role: 1,
   status: 2,
   max_concurrency: 0,
@@ -85,29 +86,61 @@ describe('native user form contract', () => {
     }
   )
 
-  it('keeps email and group in edits and preserves the draft when saving fails', async () => {
+  it('shows the bound email read-only and never sends it', async () => {
+    const { wrapper, save, submit } = render(existingUser)
+    const email = wrapper.get<HTMLInputElement>('[name="admin-user-email"]')
+    expect(email.element.value).toBe('existing@example.com')
+    expect(email.element.readOnly).toBe(true)
+    await wrapper
+      .get('[name="admin-user-display-name"]')
+      .setValue('Renamed user')
+    await submit()
+
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      username: 'existing-user',
+      display_name: 'Renamed user',
+      remark: 'VIP contact',
+      max_concurrency: 0,
+      role: 1,
+    })
+    wrapper.unmount()
+  })
+
+  it('sends the edited remark and preserves the draft when saving fails', async () => {
     const { wrapper, save, submit } = render(existingUser)
     save.mockResolvedValueOnce(false)
-    await wrapper
-      .get('[name="admin-user-email"]')
-      .setValue('updated@example.com')
+    await wrapper.get('[name="admin-user-remark"]').setValue('Renewed contract')
     await submit()
 
     const expected = {
       username: 'existing-user',
       display_name: 'Existing user',
-      email: 'updated@example.com',
+      remark: 'Renewed contract',
       max_concurrency: 0,
       role: 1,
     }
     expect(save).toHaveBeenCalledExactlyOnceWith(expected)
     expect(wrapper.emitted('close')).toBeUndefined()
     expect(
-      wrapper.get<HTMLInputElement>('[name="admin-user-email"]').element.value
-    ).toBe('updated@example.com')
+      wrapper.get<HTMLTextAreaElement>('[name="admin-user-remark"]').element
+        .value
+    ).toBe('Renewed contract')
     await submit()
     expect(save).toHaveBeenLastCalledWith(expected)
     expect(wrapper.emitted('close')).toEqual([[]])
+    wrapper.unmount()
+  })
+
+  it('limits remark to 255 characters counted like upstream runes', async () => {
+    const { wrapper, save, submit } = render(existingUser)
+    const remark = wrapper.get('[name="admin-user-remark"]')
+    await remark.setValue('😀'.repeat(255))
+    await submit()
+    expect(save).toHaveBeenCalledOnce()
+
+    await remark.setValue('a'.repeat(256))
+    await submit()
+    expect(save).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 

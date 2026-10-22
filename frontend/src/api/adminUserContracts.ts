@@ -47,6 +47,8 @@ export function parseAdminUserPage(value: unknown): {
         invalidResponse(endpoint)
       for (const key of ['username', 'display_name', 'email'])
         result[key] = requiredString(value[key], endpoint)
+      result.remark =
+        value.remark === undefined ? '' : requiredString(value.remark, endpoint)
       if (value.admin_permissions !== undefined) {
         if (
           !isRecord(value.admin_permissions) ||

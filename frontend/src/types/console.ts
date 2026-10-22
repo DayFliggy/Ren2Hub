@@ -155,6 +155,8 @@ export interface AdminUser extends Record<string, unknown> {
   username: string
   display_name: string
   email: string
+  /** Upstream omits an empty remark (`omitempty`); the parser restores ''. */
+  remark: string
   role: AdminUserRole
   status: AdminUserStatus
   quota: number
@@ -178,9 +180,13 @@ export interface AdminUserCreateInput {
   role: AdminUserRole
 }
 
-/** Status is owned by the dedicated toggle route, not by the edit form. */
+/**
+ * Status is owned by the dedicated toggle route, and email by account
+ * bindings. Upstream `EditWithTx` rewrites remark on every save, so the form
+ * always sends it.
+ */
 export type AdminUserUpdateInput = Omit<AdminUserCreateInput, 'password'> & {
-  email: string
+  remark: string
   password?: string
 }
 

@@ -1552,7 +1552,12 @@ export default {
     displayNamePlaceholder: 'Optional display name',
     initialPassword: 'Initial password',
     initialPasswordPlaceholder: '8-20 characters; only a hash is stored',
-    emailPlaceholder: "name{'@'}example.com",
+    emailUnbound: 'No email bound',
+    emailManagedByBinding:
+      'Email is managed by account bindings; clear it below.',
+    remark: 'Remark',
+    remarkPlaceholder: 'Visible to administrators only; optional',
+    remarkHint: '{count}/{max} characters',
     roleCeilingHint: 'You can only assign roles below your own level',
     saveUser: 'Save user',
     quotaTitle: 'Adjust quota',
