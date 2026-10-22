@@ -3201,7 +3201,6 @@ export default {
       geminiRemoveFunctionResponseId: 'Remove Gemini function response IDs',
       grokViolationDeduction: 'Grok violation charge',
       grokViolationDeductionAmount: 'Grok violation charge amount',
-      qwenImageModels: 'Qwen image models',
       rateLimitEnabled: 'Enable request rate limiting',
       rateLimitCount: 'Request limit per window',
       rateLimitSuccessCount: 'Successful request limit',

@@ -174,4 +174,14 @@ describe('system settings catalog', () => {
     expect(field?.kind).toBe('boolean')
     expect(field?.defaultValue).toBe(true)
   })
+  // The Grok deduction is a float64 fee; Qwen has no backend image-model option.
+  it('edits the Grok deduction as a non-negative number without a Qwen placeholder', () => {
+    const fields = SYSTEM_SETTINGS_DOMAINS.flatMap((domain) =>
+      domain.sections.flatMap((section) => section.fields)
+    )
+    expect(
+      fields.find((field) => field.key === 'grok.violation_deduction_amount')
+    ).toMatchObject({ kind: 'number', defaultValue: 0.05, min: 0 })
+    expect(fields.some((field) => field.key.startsWith('qwen.'))).toBe(false)
+  })
 })

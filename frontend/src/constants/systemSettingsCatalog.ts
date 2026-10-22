@@ -630,12 +630,14 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             'geminiRemoveFunctionResponseId'
           ),
           toggle('grok.violation_deduction_enabled', 'grokViolationDeduction'),
-          text(
-            'grok.violation_deduction_amount',
-            'grokViolationDeductionAmount',
-            '0.05'
-          ),
-          list('qwen.sync_image_models', 'qwenImageModels', '[]'),
+          {
+            ...number(
+              'grok.violation_deduction_amount',
+              'grokViolationDeductionAmount',
+              0.05
+            ),
+            min: 0,
+          },
         ],
       },
     ],

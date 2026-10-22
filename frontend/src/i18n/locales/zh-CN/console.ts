@@ -3093,7 +3093,6 @@ export default {
       geminiRemoveFunctionResponseId: '移除 Gemini 函数响应 ID',
       grokViolationDeduction: 'Grok 违规扣费',
       grokViolationDeductionAmount: 'Grok 违规扣费金额',
-      qwenImageModels: 'Qwen 图片模型',
       rateLimitEnabled: '启用请求限流',
       rateLimitCount: '时间窗口请求上限',
       rateLimitSuccessCount: '成功请求上限',
