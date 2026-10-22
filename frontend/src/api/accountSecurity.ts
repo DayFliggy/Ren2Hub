@@ -136,10 +136,13 @@ export const accountSecurityApi = {
       await api.post(endpoint, undefined, proofOptions(proof)),
       endpoint
     )
+    // Mirrors service.TwoFASetup; qr_code_data is an otpauth:// URI, not an image.
     return {
-      flow_token: requiredString(row.flow_token, endpoint, false),
+      secret: requiredString(row.secret, endpoint, false),
       qr_code_data: requiredString(row.qr_code_data, endpoint, false),
       backup_codes: parseStringArray(row.backup_codes, endpoint),
+      flow_token: requiredString(row.flow_token, endpoint, false),
+      expires_at: requiredStrictInteger(row.expires_at, endpoint),
     }
   },
   enableTwoFactor: (flowToken: string, code: string) =>

@@ -44,6 +44,9 @@ vi.mock('@/api/public', () => ({
   },
 }))
 
+import { QrcodeSvg } from 'qrcode.vue'
+
+import { useToast } from '@/composables/useToast'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import SecurityAccessView from '@/views/console/SecurityAccessView.vue'
@@ -126,6 +129,38 @@ function buttonByText(
     .findAll('button')
     .map((button) => button.element as HTMLButtonElement)
     .find((button) => button.textContent?.trim() === text)
+}
+
+const twoFASetup = {
+  secret: 'JBSWY3DPEHPK3PXP',
+  qr_code_data:
+    'otpauth://totp/Ren2Hub:alice?secret=JBSWY3DPEHPK3PXP&issuer=Ren2Hub',
+  backup_codes: ['AAAA-1111', 'BBBB-2222', 'CCCC-3333', 'DDDD-4444'],
+  flow_token: 'setup-flow',
+  expires_at: 1_800_000_600,
+}
+
+async function openTwoFASetupDialog() {
+  apiGet.mockImplementation((url: string) =>
+    url === '/api/user/2fa/status'
+      ? Promise.resolve({ enabled: false, locked: false })
+      : securityGet(url)
+  )
+  apiPost.mockImplementation((url: string) =>
+    Promise.resolve(url === '/api/user/2fa/setup' ? twoFASetup : {})
+  )
+  const wrapper = renderView()
+  await flushPromises()
+  buttonByText(wrapper, '启用两步验证')?.click()
+  await flushPromises()
+  return wrapper
+}
+
+function stubClipboard(writeText: (text: string) => Promise<void>) {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
 }
 
 describe('SecurityAccessView', () => {
@@ -228,6 +263,53 @@ describe('SecurityAccessView', () => {
       document.body.querySelector('[role="dialog"]')?.textContent
     ).toContain('修改密码')
     wrapper.unmount()
+  })
+
+  it('renders the 2FA QR from the otpauth URI and copies the secret', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    stubClipboard(writeText)
+    const toast = useToast()
+    toast.toasts.splice(0)
+    const wrapper = await openTwoFASetupDialog()
+
+    expect(requestProof).toHaveBeenCalledWith({ scope: '2fa.setup' })
+    expect(wrapper.findComponent(QrcodeSvg).props('value')).toBe(
+      twoFASetup.qr_code_data
+    )
+    const dialog = document.body.querySelector('[role="dialog"]')!
+    expect(dialog.querySelector('svg')).not.toBeNull()
+    expect(dialog.querySelector('img[src^="otpauth:"]')).toBeNull()
+    expect(
+      dialog.querySelector('[data-twofa-secret]')?.textContent?.trim()
+    ).toBe(twoFASetup.secret)
+
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === '复制密钥')
+      ?.click()
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith(twoFASetup.secret)
+    expect(toast.toasts.at(-1)).toMatchObject({
+      type: 'success',
+      message: '密钥已复制',
+    })
+    wrapper.unmount()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  it('reports a failed secret copy instead of claiming success', async () => {
+    stubClipboard(vi.fn().mockRejectedValue(new Error('denied')))
+    const toast = useToast()
+    toast.toasts.splice(0)
+    const wrapper = await openTwoFASetupDialog()
+
+    Array.from(document.body.querySelectorAll('[role="dialog"] button'))
+      .find((button) => button.textContent?.trim() === '复制密钥')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(toast.toasts.at(-1)?.type).toBe('error')
+    expect(toast.toasts.some((item) => item.type === 'success')).toBe(false)
+    wrapper.unmount()
+    Reflect.deleteProperty(navigator, 'clipboard')
   })
 
   it('closes its OAuth popup and removes window handlers when unmounted', async () => {

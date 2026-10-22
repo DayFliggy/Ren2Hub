@@ -2302,7 +2302,11 @@ export default {
     backupCodesCopied: '备用码已复制',
     sixDigitHint: '请输入 6 位验证码。',
     twoFAQRCodeAlt: '两步验证二维码',
-    twoFASecretHint: '请使用验证器应用扫描此二维码。',
+    twoFASecretHint:
+      '请使用验证器应用（如 Google Authenticator、Microsoft Authenticator）扫描此二维码。',
+    twoFAManualKey: '或手动输入此密钥：',
+    copyTwoFASecret: '复制密钥',
+    twoFASecretCopied: '密钥已复制',
     securityProofCodeHint: '请使用当前 2FA 验证码确认此敏感操作。',
     securityProofCodeRequired: '请先输入当前 6 位 2FA 验证码。',
     accessToken: '访问密钥',

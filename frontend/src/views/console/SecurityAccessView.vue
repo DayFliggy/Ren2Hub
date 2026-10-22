@@ -16,6 +16,7 @@ import {
   Terminal,
   Trash2,
 } from 'lucide-vue-next'
+import { QrcodeSvg } from 'qrcode.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -71,6 +72,7 @@ const backupCodesRemaining = ref<number | null>(null)
 const loadError = ref('')
 let loadSequence = 0
 const setupQRCode = ref('')
+const setupSecret = ref('')
 const setupBackupCodes = ref<string[]>([])
 
 const passkeyRegisterOpen = ref(false)
@@ -550,6 +552,7 @@ async function openTwoFASetup(): Promise<void> {
     const result = await accountSecurityApi.setupTwoFactor(proof)
     enrollmentFlow.value = result.flow_token
     setupQRCode.value = result.qr_code_data
+    setupSecret.value = result.secret
     setupBackupCodes.value = result.backup_codes
     twoFACode.value = ''
     twoFASetupOpen.value = true
@@ -606,6 +609,15 @@ async function confirmTwoFAAction(): Promise<void> {
     await loadSecurity()
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
+  }
+}
+
+async function copySetupSecret(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(setupSecret.value)
+    toast.success(t('settings.twoFASecretCopied'))
+  } catch {
+    toast.error(t('common.failed'))
   }
 }
 
@@ -1233,16 +1245,40 @@ onBeforeUnmount(() => {
       @close="twoFASetupOpen = false"
     >
       <div class="flex flex-col items-center gap-5">
-        <img
-          v-if="setupQRCode"
-          :src="setupQRCode"
-          :alt="t('settings.twoFAQRCodeAlt')"
-          class="size-36 rounded-lg border border-[var(--border-subtle)] bg-[#ffffff] p-3"
-        />
-        <div
-          class="w-full rounded-lg bg-[var(--surface-muted)] px-4 py-3 text-center font-mono text-xs text-[var(--text-secondary)]"
-        >
+        <p class="text-center text-sm text-[var(--text-secondary)]">
           {{ t('settings.twoFASecretHint') }}
+        </p>
+        <div
+          v-if="setupQRCode"
+          role="img"
+          :aria-label="t('settings.twoFAQRCodeAlt')"
+          class="rounded-lg border border-[var(--border-subtle)] bg-[#ffffff] p-3"
+        >
+          <!-- Encodes the otpauth:// URI locally; the secret never leaves the page. -->
+          <QrcodeSvg :value="setupQRCode" :size="168" level="M" />
+        </div>
+        <div
+          class="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3"
+        >
+          <div class="min-w-0">
+            <p class="text-xs text-[var(--text-tertiary)]">
+              {{ t('settings.twoFAManualKey') }}
+            </p>
+            <code
+              data-twofa-secret
+              class="block break-all font-mono text-sm text-[var(--text-primary)]"
+              >{{ setupSecret }}</code
+            >
+          </div>
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            class="shrink-0"
+            :disabled="!setupSecret"
+            @click="copySetupSecret"
+          >
+            {{ t('settings.copyTwoFASecret') }}
+          </ConsoleButton>
         </div>
         <FormField
           :label="t('settings.twoFACode')"

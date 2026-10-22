@@ -36,6 +36,8 @@ export default defineConfig(({ mode }) => {
               return 'i18n-server-zh-CN'
             if (!id.includes('node_modules')) return undefined
             if (id.includes('echarts')) return 'vendor-chart'
+            // Only the 2FA setup dialog needs it; keep it off the eager vendor chunk.
+            if (id.includes('/qrcode.vue/')) return 'vendor-qrcode'
             if (
               id.includes('/vue/') ||
               id.includes('/vue-router/') ||

@@ -2377,7 +2377,11 @@ export default {
     backupCodesCopied: 'Backup codes copied',
     sixDigitHint: 'Enter the six-digit verification code.',
     twoFAQRCodeAlt: 'Two-factor authentication QR code',
-    twoFASecretHint: 'Scan this code with your authenticator app.',
+    twoFASecretHint:
+      'Scan this QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.).',
+    twoFAManualKey: 'Or enter this key manually:',
+    copyTwoFASecret: 'Copy secret key',
+    twoFASecretCopied: 'Secret key copied',
     securityProofCodeHint:
       'Confirm this sensitive action with your current 2FA code.',
     securityProofCodeRequired: 'Enter the current six-digit 2FA code first.',

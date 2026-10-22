@@ -56,15 +56,32 @@ describe('account security domain contracts', () => {
     })
     await expect(accountSecurityApi.twoFactorStatus()).rejects.toThrow()
   })
-  it('requires complete enrollment data before showing recovery codes', async () => {
-    client.post.mockResolvedValueOnce({
+  it('parses the native 2FA setup and requires every enrollment field', async () => {
+    const setup = {
+      secret: 'JBSWY3DPEHPK3PXP',
+      qr_code_data:
+        'otpauth://totp/Ren2Hub:demo?secret=JBSWY3DPEHPK3PXP&issuer=Ren2Hub',
+      backup_codes: ['AAAA-1111', 'BBBB-2222', 'CCCC-3333', 'DDDD-4444'],
       flow_token: 'flow',
-      qr_code_data: 'qr',
-    })
-    await expect(accountSecurityApi.setupTwoFactor('proof')).rejects.toThrow()
+      expires_at: 1_800_000_600,
+    }
+    client.post.mockResolvedValueOnce(setup)
+    await expect(accountSecurityApi.setupTwoFactor('proof')).resolves.toEqual(
+      setup
+    )
     expect(client.post).toHaveBeenCalledWith('/api/user/2fa/setup', undefined, {
       headers: { 'X-Security-Proof': 'proof' },
     })
+
+    for (const field of ['secret', 'expires_at'] as const) {
+      const { [field]: _omitted, ...incomplete } = setup
+      client.post.mockResolvedValueOnce(incomplete)
+      await expect(
+        accountSecurityApi.setupTwoFactor('proof')
+      ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    }
+    client.post.mockResolvedValueOnce({ ...setup, expires_at: '1800000600' })
+    await expect(accountSecurityApi.setupTwoFactor('proof')).rejects.toThrow()
   })
   it('preserves email enrollment and resends using the existing flow', async () => {
     const flow = {
