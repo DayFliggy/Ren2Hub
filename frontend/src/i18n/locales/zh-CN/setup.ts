@@ -39,7 +39,7 @@ export default {
     showPassword: '显示密码',
     hidePassword: '隐藏密码',
     usernameRequired: '请输入管理员用户名。',
-    usernameTooLong: '用户名不能超过 12 个字符。',
+    usernameTooLong: '用户名不能超过 12 字节（一个汉字通常占 3 字节）。',
     passwordTooShort: '密码至少需要 8 个字符。',
     passwordsMismatch: '两次输入的密码不一致。',
     chooseMode: '你将如何使用 Ren2Hub？',
