@@ -128,9 +128,10 @@ func ListTopUps(filter TopUpFilter, page *common.PageInfo) ([]TopUp, int64, erro
 
 type TopUpDetail struct {
 	*TopUp
-	Username string      `json:"username"`
-	Email    string      `json:"email"`
-	Gmpay    *GmpayOrder `json:"gmpay"`
+	Username    string      `json:"username"`
+	Email       string      `json:"email"`
+	UserDeleted bool        `json:"user_deleted"`
+	Gmpay       *GmpayOrder `json:"gmpay"`
 }
 
 func GetTopUpDetail(tradeNo string, userID int) (*TopUpDetail, error) {
@@ -143,11 +144,15 @@ func GetTopUpDetail(tradeNo string, userID int) (*TopUpDetail, error) {
 		return nil, err
 	}
 	result := &TopUpDetail{TopUp: &row}
-	var user User
-	if err := DB.Unscoped().Select("id", "username", "email").First(&user, row.UserId).Error; err != nil {
+	// Orders outlive their account; a deleted owner keeps the stored user_id.
+	user, err := GetOwnerIncludingDeleted(row.UserId)
+	if err != nil {
 		return nil, err
 	}
-	result.Username, result.Email = user.Username, user.Email
+	result.UserDeleted = OwnerDeleted(user)
+	if user != nil {
+		result.Username, result.Email = user.Username, user.Email
+	}
 	if row.PaymentProvider == PaymentProviderGmpay {
 		var snapshot GmpayOrder
 		if err := DB.First(&snapshot, row.Id).Error; err != nil {

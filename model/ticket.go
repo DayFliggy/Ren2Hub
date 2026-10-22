@@ -69,6 +69,7 @@ type TicketSummary struct {
 	UserName        string `json:"user_name" gorm:"column:user_name"`
 	UserDisplayName string `json:"user_display_name" gorm:"column:user_display_name"`
 	AssigneeName    string `json:"assignee_name" gorm:"column:assignee_name"`
+	UserDeleted     bool   `json:"user_deleted" gorm:"column:user_deleted"`
 }
 
 type AdminTicketFilter struct {
@@ -100,9 +101,19 @@ func ticketSummarySelect(includeUsers bool) string {
 		`(SELECT COUNT(*) FROM ticket_messages tm WHERE tm.ticket_id = t.id) AS message_count, ` +
 		`COALESCE((SELECT tm.role FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC, tm.id DESC LIMIT 1), 'user') AS last_reply_role`
 	if includeUsers {
-		columns += `, u.username AS user_name, u.display_name AS user_display_name, a.username AS assignee_name`
+		columns += `, u.username AS user_name, u.display_name AS user_display_name, a.username AS assignee_name, ` +
+			`CASE WHEN u.id IS NULL OR u.deleted_at IS NOT NULL THEN 1 ELSE 0 END AS user_deleted`
 	}
 	return columns
+}
+
+// adminTicketScope is the one ticket set behind the admin queue and its badge
+// counts. The LEFT JOIN keeps tickets whose requester was soft- or hard-deleted,
+// so every counted ticket can still be opened and closed from the list.
+func adminTicketScope() *gorm.DB {
+	return DB.Table("tickets AS t").
+		Joins("LEFT JOIN users AS u ON u.id = t.user_id").
+		Where("t.deleted_at IS NULL")
 }
 
 func ListUserTickets(userID int, keyword, status string, page, pageSize int) ([]TicketSummary, int64, error) {
@@ -128,10 +139,8 @@ func ListUserTickets(userID int, keyword, status string, page, pageSize int) ([]
 }
 
 func ListAdminTickets(filter AdminTicketFilter) ([]TicketSummary, int64, error) {
-	query := DB.Table("tickets AS t").
-		Joins("JOIN users AS u ON u.id = t.user_id").
-		Joins("LEFT JOIN users AS a ON a.id = t.assignee_id").
-		Where("t.deleted_at IS NULL")
+	query := adminTicketScope().
+		Joins("LEFT JOIN users AS a ON a.id = t.assignee_id")
 	if filter.Keyword = strings.TrimSpace(filter.Keyword); filter.Keyword != "" {
 		like := "%" + filter.Keyword + "%"
 		query = query.Where("(t.title LIKE ? OR t.request_id LIKE ? OR u.username LIKE ? OR u.display_name LIKE ?)", like, like, like, like)
@@ -167,17 +176,18 @@ func ListAdminTickets(filter AdminTicketFilter) ([]TicketSummary, int64, error) 
 
 func GetTicketQueueSummary(userID int) (TicketQueueSummary, error) {
 	var summary TicketQueueSummary
-	err := DB.Table("tickets").
+	// users shares status and deleted_at column names, so every column is
+	// qualified with the ticket alias.
+	err := adminTicketScope().
 		Select(
-			"SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS pending, "+
-				"SUM(CASE WHEN status = ? AND assignee_id IS NULL THEN 1 ELSE 0 END) AS unassigned, "+
-				"SUM(CASE WHEN status <> ? AND assignee_id = ? THEN 1 ELSE 0 END) AS mine",
+			"COALESCE(SUM(CASE WHEN t.status = ? THEN 1 ELSE 0 END), 0) AS pending, "+
+				"COALESCE(SUM(CASE WHEN t.status = ? AND t.assignee_id IS NULL THEN 1 ELSE 0 END), 0) AS unassigned, "+
+				"COALESCE(SUM(CASE WHEN t.status <> ? AND t.assignee_id = ? THEN 1 ELSE 0 END), 0) AS mine",
 			TicketStatusOpen,
 			TicketStatusOpen,
 			TicketStatusClosed,
 			userID,
 		).
-		Where("deleted_at IS NULL").
 		Scan(&summary).Error
 	return summary, err
 }

@@ -26,6 +26,9 @@ type adminTicketDTO struct {
 	AssigneeName string             `json:"assignee_name,omitempty"`
 	AssignedAt   int64              `json:"assigned_at"`
 	User         adminTicketUserDTO `json:"user"`
+	// UserDeleted marks a requester that was soft- or hard-deleted; the ticket
+	// stays readable and closable.
+	UserDeleted bool `json:"user_deleted"`
 }
 
 func buildAdminTicketSummaryDTO(summary *model.TicketSummary) adminTicketDTO {
@@ -39,22 +42,26 @@ func buildAdminTicketSummaryDTO(summary *model.TicketSummary) adminTicketDTO {
 			Username:    summary.UserName,
 			DisplayName: summary.UserDisplayName,
 		},
+		UserDeleted: summary.UserDeleted,
 	}
 }
 
-func buildAdminTicketDTO(ticket *model.Ticket, messages []model.TicketMessage, user *model.User, assigneeName string) adminTicketDTO {
-	return adminTicketDTO{
+// buildAdminTicketDTO accepts a nil owner for a hard-deleted requester.
+func buildAdminTicketDTO(ticket *model.Ticket, messages []model.TicketMessage, owner *model.User, assigneeName string) adminTicketDTO {
+	result := adminTicketDTO{
 		ticketDTO:    buildTicketDTO(ticket, messages),
 		AssigneeID:   ticket.AssigneeID,
 		AssigneeName: assigneeName,
 		AssignedAt:   ticket.AssignedAt,
-		User: adminTicketUserDTO{
-			ID:          user.Id,
-			Username:    user.Username,
-			DisplayName: user.DisplayName,
-			Email:       user.Email,
-		},
+		User:         adminTicketUserDTO{ID: ticket.UserID},
+		UserDeleted:  model.OwnerDeleted(owner),
 	}
+	if owner != nil {
+		result.User.Username = owner.Username
+		result.User.DisplayName = owner.DisplayName
+		result.User.Email = owner.Email
+	}
+	return result
 }
 
 func ListAdminTickets(c *gin.Context) {
@@ -172,7 +179,7 @@ func GetAdminTicket(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	user, err := model.GetUserById(ticket.UserID, false)
+	owner, err := model.GetOwnerIncludingDeleted(ticket.UserID)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -184,7 +191,7 @@ func GetAdminTicket(c *gin.Context) {
 		}
 	}
 	common.ApiSuccess(c, gin.H{
-		"ticket":   buildAdminTicketDTO(ticket, messages, user, assigneeName),
+		"ticket":   buildAdminTicketDTO(ticket, messages, owner, assigneeName),
 		"messages": buildTicketMessages(messages, attachments, "/api/admin/tickets/attachments"),
 	})
 }
