@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
 const toast = vi.hoisted(() => ({ error: vi.fn() }))
+const app = vi.hoisted(() => ({ refreshStatus: vi.fn() }))
 vi.mock('@/api/console', () => ({ api: { get: vi.fn(), put: vi.fn() } }))
 vi.mock('@/composables/useToast', () => ({ useToast: () => toast }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => app }))
 beforeEach(() => {
   vi.resetModules()
   vi.resetAllMocks()
@@ -134,6 +136,88 @@ describe('native per-key settings', () => {
     expect(await settings.saveOptions({ EpayKey: ' ' })).toBe(true)
     expect(api.put).not.toHaveBeenCalled()
   })
+  it.each(['HeaderNavModules', 'SidebarModulesAdmin'])(
+    'refreshes the shared navigation after saving %s',
+    async (key) => {
+      const settings = await setup()
+      vi.mocked(api.put).mockResolvedValue(null)
+      expect(await settings.saveOptions({ [key]: '{}' })).toBe(true)
+      expect(app.refreshStatus).toHaveBeenCalledOnce()
+      expect(settings.rawValue(key)).toBe('{}')
+    }
+  )
+  it('refreshes navigation once after both options commit', async () => {
+    const settings = await setup()
+    vi.mocked(api.put).mockResolvedValue(null)
+    app.refreshStatus.mockImplementationOnce(async () => {
+      expect(api.put).toHaveBeenCalledTimes(2)
+      expect(settings.saving.value).toBe(true)
+    })
+    expect(
+      await settings.saveOptions({
+        HeaderNavModules: '{"pricing":false}',
+        SidebarModulesAdmin: '{"admin":{"channel":false}}',
+      })
+    ).toBe(true)
+    expect(app.refreshStatus).toHaveBeenCalledOnce()
+    expect(settings.saving.value).toBe(false)
+  })
+  it('refreshes committed navigation even when a later option fails', async () => {
+    const settings = await setup()
+    vi.mocked(api.put)
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('rejected'))
+    expect(
+      await settings.saveOptions({ HeaderNavModules: '{}', RetryTimes: 3 })
+    ).toBe(false)
+    expect(settings.rawValue('HeaderNavModules')).toBe('{}')
+    expect(settings.rawValue('RetryTimes')).toBe('')
+    expect(app.refreshStatus).toHaveBeenCalledOnce()
+  })
+  it.each([
+    { HeaderNavModules: '{}' },
+    { RetryTimes: 3, HeaderNavModules: '{}' },
+  ])('does not refresh uncommitted navigation options', async (patch) => {
+    const settings = await setup()
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('rejected'))
+    expect(await settings.saveOptions(patch)).toBe(false)
+    expect(app.refreshStatus).not.toHaveBeenCalled()
+  })
+  it('does not refresh navigation for unrelated saved options', async () => {
+    const settings = await setup()
+    vi.mocked(api.put).mockResolvedValue(null)
+    expect(await settings.saveOptions({ RetryTimes: 3 })).toBe(true)
+    expect(app.refreshStatus).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['en', 'Navigation settings were saved', 'Reload the page'],
+    ['zh-CN', '导航设置已保存', '请重新加载页面'],
+  ] as const)(
+    'reports a failed navigation refresh in %s without rolling back the saved option',
+    async (locale, savedMessage, retryMessage) => {
+      const settings = await setup()
+      const { loadMessageDomain, setLocale } = await import('@/i18n')
+      await loadMessageDomain('console')
+      await setLocale(locale)
+      const onApplied = vi.fn()
+      vi.mocked(api.put).mockResolvedValue(null)
+      app.refreshStatus.mockRejectedValueOnce(new Error('offline'))
+      expect(
+        await settings.saveOptions({ HeaderNavModules: '{}' }, { onApplied })
+      ).toBe(false)
+      expect(settings.rawValue('HeaderNavModules')).toBe('{}')
+      expect(onApplied).toHaveBeenCalledExactlyOnceWith(
+        'HeaderNavModules',
+        '{}',
+        false
+      )
+      expect(toast.error).toHaveBeenCalledOnce()
+      expect(toast.error.mock.calls[0]![0]).toContain(savedMessage)
+      expect(toast.error.mock.calls[0]![0]).toContain('offline')
+      expect(toast.error.mock.calls[0]![0]).toContain(retryMessage)
+      expect(settings.saving.value).toBe(false)
+    }
+  )
   it('blocks overlapping saves and refreshes only after an outstanding write', async () => {
     const settings = await setup()
     let finish!: (value: null) => void

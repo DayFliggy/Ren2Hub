@@ -3368,6 +3368,8 @@ export default {
     saved: '已保存',
     partialSaveFailed:
       '已保存 {count} 项设置，随后发生错误：{error}。剩余更改已保留，可重试；已保存的设置没有回滚。',
+    navigationRefreshFailed:
+      '导航设置已保存，但导航刷新失败：{error}。请重新加载页面使其生效。',
     oidcDiscoveryInvalid:
       'OIDC 发现结果必须包含有效的 HTTP 或 HTTPS 授权、令牌和用户信息端点。本次没有保存任何设置。',
     saveFailed: '保存失败',

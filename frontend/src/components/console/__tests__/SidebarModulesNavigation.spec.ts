@@ -1,21 +1,33 @@
 import { defineComponent, type Component } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import { parsePublicStatus } from '@/api/public'
+import { api } from '@/api/console'
+import { parsePublicStatus, publicApi } from '@/api/public'
 import CommandPaletteModal from '@/components/console/CommandPaletteModal.vue'
 import ConsoleNavStrip from '@/components/console/ConsoleNavStrip.vue'
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
 import { consoleNavGroups } from '@/constants/navigation/consoleNav'
+import { useSystemSettings } from '@/composables/useSystemSettings'
 import i18n, { loadMessageDomain } from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 
 const EmptyRoute = defineComponent({ template: '<div />' })
+const originalCSS = globalThis.CSS
 
-async function mountNavigation(navigation: Component, props = {}) {
+afterEach(() => {
+  vi.restoreAllMocks()
+  globalThis.CSS = originalCSS
+})
+
+async function mountNavigation(
+  navigation: Component,
+  props = {},
+  sidebarModules = '{"admin":{"enabled":true,"channel":false}}'
+) {
   const pinia = createPinia()
   setActivePinia(pinia)
   // An administrator without ticket:read, so the ticket queue stays idle.
@@ -34,7 +46,7 @@ async function mountNavigation(navigation: Component, props = {}) {
   // controller/misc.go publishes the stored option text as is.
   useAppStore().status = parsePublicStatus({
     frontend_capabilities: { admin: 'live', logs: 'live', api_tokens: 'live' },
-    SidebarModulesAdmin: '{"admin":{"enabled":true,"channel":false}}',
+    SidebarModulesAdmin: sidebarModules,
   })
   const router = createRouter({
     history: createMemoryHistory(),
@@ -59,6 +71,53 @@ async function mountNavigation(navigation: Component, props = {}) {
 }
 
 describe('SidebarModulesAdmin in the console navigation', () => {
+  it.each([
+    ['sidebar', ConsoleSidebar, {}],
+    ['mobile strip', ConsoleNavStrip, {}],
+    ['command palette', CommandPaletteModal, { open: true }],
+  ])(
+    'updates the mounted %s after navigation settings are saved',
+    async (_, navigation, props) => {
+      vi.stubGlobal('CSS', { escape: (value: string) => value })
+      await loadMessageDomain('console')
+      const wrapper = await mountNavigation(navigation, props, '{}')
+      const app = useAppStore()
+      const settings = useSystemSettings()
+      const hasChannel = () =>
+        navigation === CommandPaletteModal
+          ? [...document.body.querySelectorAll('[role="option"]')].some(
+              (option) =>
+                option.textContent?.trim() ===
+                i18n.global.t('nav.channelManagement')
+            )
+          : wrapper
+              .find('[data-console-nav-item="channel-management"]')
+              .exists()
+      expect(hasChannel()).toBe(true)
+      expect(app.showPricing).toBe(true)
+      vi.spyOn(api, 'get').mockResolvedValue([])
+      vi.spyOn(api, 'put').mockResolvedValue(null)
+      vi.spyOn(publicApi, 'status').mockResolvedValue({
+        ...app.status,
+        HeaderNavModules: '{"pricing":false}',
+        SidebarModulesAdmin: '{"admin":{"channel":false}}',
+      })
+      expect(await settings.load(true)).toBe(true)
+
+      expect(
+        await settings.saveOptions({
+          HeaderNavModules: '{"pricing":false}',
+          SidebarModulesAdmin: '{"admin":{"channel":false}}',
+        })
+      ).toBe(true)
+      await flushPromises()
+
+      expect(publicApi.status).toHaveBeenCalledOnce()
+      expect(app.showPricing).toBe(false)
+      expect(hasChannel()).toBe(false)
+      wrapper.unmount()
+    }
+  )
   it.each([
     ['sidebar', ConsoleSidebar],
     ['mobile strip', ConsoleNavStrip],
@@ -87,6 +146,5 @@ describe('SidebarModulesAdmin in the console navigation', () => {
     expect(labels).toContain(i18n.global.t('nav.userManagement'))
     expect(labels).not.toContain(i18n.global.t('nav.channelManagement'))
     wrapper.unmount()
-    vi.unstubAllGlobals()
   })
 })

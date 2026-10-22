@@ -2,6 +2,7 @@ import { ref, readonly } from 'vue'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 import i18n from '@/i18n'
 import type { SystemOption } from '@/types/systemSettings'
 
@@ -131,6 +132,8 @@ export function useSystemSettings() {
     _saving.value = true
     _savePromise = (async () => {
       let applied = 0
+      let saved = true
+      let refreshNavigation = false
       try {
         for (const [key, value] of entries) {
           await api.put('/api/option/', { key, value: String(value) })
@@ -142,10 +145,12 @@ export function useSystemSettings() {
             _rawOptions.value = { ..._rawOptions.value, [key]: String(value) }
           }
           applied++
+          if (key === 'HeaderNavModules' || key === 'SidebarModulesAdmin')
+            refreshNavigation = true
           callbacks.onApplied?.(key, value, isSensitiveOption(key))
         }
-        return true
       } catch (err) {
+        saved = false
         const error = err instanceof Error ? err.message : String(err)
         toast.error(
           applied
@@ -155,11 +160,23 @@ export function useSystemSettings() {
               })
             : error
         )
-        return false
+      }
+      try {
+        // A navigation option can commit before a later option fails. Refresh
+        // the shared status for every committed navigation change either way.
+        if (refreshNavigation) await useAppStore().refreshStatus()
+      } catch (err) {
+        saved = false
+        toast.error(
+          i18n.global.t('systemSettings.navigationRefreshFailed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        )
       } finally {
         _saving.value = false
         _savePromise = null
       }
+      return saved
     })()
     return _savePromise
   }

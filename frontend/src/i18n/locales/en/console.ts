@@ -3495,6 +3495,8 @@ export default {
     saved: 'Saved',
     partialSaveFailed:
       '{count} settings were saved before an error: {error}. The remaining changes are kept for retry; saved settings were not rolled back.',
+    navigationRefreshFailed:
+      'Navigation settings were saved, but navigation could not refresh: {error}. Reload the page to apply them.',
     oidcDiscoveryInvalid:
       'OIDC discovery must return valid HTTP or HTTPS authorization, token and user info endpoints. No settings were saved.',
     saveFailed: 'Save failed',
