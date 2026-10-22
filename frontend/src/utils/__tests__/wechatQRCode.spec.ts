@@ -14,6 +14,12 @@ describe('wechatQRCode', () => {
     })
   })
 
+  it('accepts a base64 PNG data URI through the shared image rules', () => {
+    const src =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg=='
+    expect(wechatQRCode(` ${src} `)).toEqual({ state: 'ready', src })
+  })
+
   it('reports an empty value as not configured', () => {
     expect(wechatQRCode(undefined)).toEqual({ state: 'missing' })
     expect(wechatQRCode('   ')).toEqual({ state: 'missing' })

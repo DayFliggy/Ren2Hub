@@ -4,10 +4,11 @@ export type WeChatQRCode =
   { state: 'missing' } | { state: 'invalid' } | { state: 'ready'; src: string }
 
 /**
- * The QR image URL is set by an administrator and is often hosted elsewhere,
- * so the configured URL's own HTTP(S) origin is trusted for this one image.
- * Other protocols still fail the shared image check and are reported as
- * invalid rather than as not configured.
+ * The QR image is set by an administrator and is often hosted elsewhere. The
+ * shared safeImageUrl rules apply unchanged (base64 raster and sanitized SVG
+ * data URIs, same-origin blob: URLs, HTTP(S) URLs from trusted origins); the
+ * only extra trust added is the configured URL's own HTTP(S) origin. A
+ * non-empty value those rules reject is reported as invalid, not as missing.
  */
 export function wechatQRCode(value: string | undefined): WeChatQRCode {
   const configured = value?.trim() ?? ''
