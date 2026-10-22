@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authApi } from '@/api/auth'
 import { api } from '@/api/client'
+import { httpTransport } from '@/api/httpTransport'
 import {
   clearAuthBundle,
   getAuthBundle,
@@ -60,15 +61,110 @@ describe('authentication API', () => {
       authApi.confirmPasswordReset('reset@example.com', 'example-code')
     ).rejects.toThrow('Invalid authentication response')
   })
-  it('sends Turnstile tokens in request headers', async () => {
+  it('accepts the dataless native success of verification and reset mail', async () => {
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValue({ success: true, message: '' } as never)
+
+    await expect(
+      authApi.sendVerification('new@example.com')
+    ).resolves.toBeUndefined()
+    await expect(
+      authApi.resetPassword('reset@example.com')
+    ).resolves.toBeUndefined()
+
+    expect(
+      request.mock.calls.map(([method, url, options]) => [
+        method,
+        url,
+        options?.params,
+      ])
+    ).toEqual([
+      ['GET', '/api/verification', { email: 'new@example.com' }],
+      ['GET', '/api/reset_password', { email: 'reset@example.com' }],
+    ])
+  })
+  it('accepts the dataless native register success without an email', async () => {
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValue({ success: true, message: '' } as never)
+
+    await expect(
+      authApi.register({ username: 'demo', password: 'password-123' })
+    ).resolves.toBeUndefined()
+
+    expect(request).toHaveBeenCalledWith(
+      'POST',
+      '/api/user/register',
+      expect.objectContaining({
+        data: { username: 'demo', password: 'password-123' },
+        params: {},
+      })
+    )
+  })
+  it('rejects a native mail business failure', async () => {
+    vi.spyOn(httpTransport, 'request').mockResolvedValue({
+      success: false,
+      message: 'Email address is already in use',
+      message_key: 'Email address is already in use',
+    } as never)
+
+    await expect(
+      authApi.sendVerification('used@example.com')
+    ).rejects.toMatchObject({
+      business: true,
+      message: 'Email address is already in use',
+    })
+  })
+  it('sends Turnstile tokens in the native turnstile query', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(bundle)
+      .mockResolvedValueOnce(undefined)
+    const getEnvelope = vi
+      .spyOn(api, 'getEnvelope')
+      .mockResolvedValue({ success: true, message: '' })
+
+    await authApi.login('demo', 'password', 'login-token')
+    await authApi.register(
+      { username: 'demo', email: 'new@example.com', password: 'password' },
+      'register-token'
+    )
+    await authApi.sendVerification('new@example.com', 'mail-token')
+    await authApi.resetPassword('reset@example.com', 'reset-token')
+
+    expect(post.mock.calls).toEqual([
+      [
+        '/api/user/login',
+        { username: 'demo', password: 'password' },
+        { params: { turnstile: 'login-token' } },
+      ],
+      [
+        '/api/user/register',
+        { username: 'demo', email: 'new@example.com', password: 'password' },
+        { params: { turnstile: 'register-token' } },
+      ],
+    ])
+    expect(getEnvelope.mock.calls).toEqual([
+      [
+        '/api/verification',
+        { email: 'new@example.com', turnstile: 'mail-token' },
+      ],
+      [
+        '/api/reset_password',
+        { email: 'reset@example.com', turnstile: 'reset-token' },
+      ],
+    ])
+  })
+  it('omits the turnstile query when Turnstile is not in use', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(bundle)
 
-    await authApi.login('demo', 'password', 'turnstile-token')
+    await authApi.login('demo', 'password')
 
     expect(post).toHaveBeenCalledWith(
       '/api/user/login',
       { username: 'demo', password: 'password' },
-      { headers: { 'X-Turnstile-Token': 'turnstile-token' } }
+      { params: {} }
     )
   })
 
@@ -98,5 +194,35 @@ describe('authentication API', () => {
       '/api/user/auth/logout',
     ])
     expect(getAuthBundle()?.session.sid).toBe('session-2')
+  })
+
+  it('returns the token rotation together with the notification warning', async () => {
+    const { user: _user, ...rotation } = bundle
+    // controller/user.go password branch: authRotationData + has_password + flag.
+    const changed = {
+      ...rotation,
+      access_token: 'rotated-token',
+      has_password: true,
+      notification_warning: true,
+    }
+    const put = vi.spyOn(api, 'put').mockResolvedValueOnce(changed)
+
+    const result = await authApi.changePassword('old-pass', 'new-pass', 'proof')
+
+    expect(result).toMatchObject({
+      access_token: 'rotated-token',
+      session: rotation.session,
+      notification_warning: true,
+    })
+    expect(put).toHaveBeenCalledWith(
+      '/api/user/self',
+      { original_password: 'old-pass', password: 'new-pass' },
+      { headers: { 'X-Security-Proof': 'proof' } }
+    )
+    const { notification_warning: _flag, ...unflagged } = changed
+    put.mockResolvedValueOnce(unflagged)
+    await expect(
+      authApi.changePassword('old-pass', 'new-pass', 'proof')
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
   })
 })

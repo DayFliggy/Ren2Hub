@@ -2244,6 +2244,7 @@ export default {
     profileSaved: '资料已更新',
     changePassword: '修改密码',
     passwordChanged: '密码已更新',
+    securityNotificationFailed: '变更已完成，但通知邮件发送失败。',
     oldPassword: '当前密码',
     twoFA: '两步验证（2FA）',
     twoFADesc: '登录时除密码外还需输入动态验证码',
@@ -2302,7 +2303,11 @@ export default {
     backupCodesCopied: '备用码已复制',
     sixDigitHint: '请输入 6 位验证码。',
     twoFAQRCodeAlt: '两步验证二维码',
-    twoFASecretHint: '请使用验证器应用扫描此二维码。',
+    twoFASecretHint:
+      '请使用验证器应用（如 Google Authenticator、Microsoft Authenticator）扫描此二维码。',
+    twoFAManualKey: '或手动输入此密钥：',
+    copyTwoFASecret: '复制密钥',
+    twoFASecretCopied: '密钥已复制',
     securityProofCodeHint: '请使用当前 2FA 验证码确认此敏感操作。',
     securityProofCodeRequired: '请先输入当前 6 位 2FA 验证码。',
     accessToken: '访问密钥',
@@ -2362,6 +2367,10 @@ export default {
     bindProvider: '绑定 {provider}',
     unbindProvider: '解绑 {provider}',
     oauthPrompt: '将在第三方窗口中继续绑定 {provider} 账户。',
+    wechatQRCodeAlt: '微信公众号二维码',
+    wechatScanHint: '使用微信扫描二维码关注公众号，输入收到的验证码完成绑定。',
+    wechatQRCodeMissing: '管理员尚未配置微信二维码，请联系管理员。',
+    wechatQRCodeInvalid: '微信二维码地址无效，请联系管理员检查配置。',
     oauthUnavailable: '该 OAuth 提供商尚未配置。',
     oauthPopupBlocked: '请允许弹窗后再绑定 OAuth 账户。',
     emailCodeHint: '请输入发送到邮箱的 6 位验证码。',
@@ -2696,11 +2705,6 @@ export default {
     concurrency: '并发上限',
     never: '永不过期',
     quickNav: '快速导航',
-  },
-
-  toast: {
-    loginSuccess: '登录成功',
-    registerSuccess: '注册成功，请查收验证邮件',
   },
 
   farm: {

@@ -2314,6 +2314,8 @@ export default {
     profileSaved: 'Profile updated',
     changePassword: 'Change password',
     passwordChanged: 'Password updated',
+    securityNotificationFailed:
+      'The change succeeded, but the notification email could not be sent.',
     oldPassword: 'Current password',
     twoFA: 'Two-factor auth (2FA)',
     twoFADesc: 'Require a one-time code in addition to the password',
@@ -2377,7 +2379,11 @@ export default {
     backupCodesCopied: 'Backup codes copied',
     sixDigitHint: 'Enter the six-digit verification code.',
     twoFAQRCodeAlt: 'Two-factor authentication QR code',
-    twoFASecretHint: 'Scan this code with your authenticator app.',
+    twoFASecretHint:
+      'Scan this QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.).',
+    twoFAManualKey: 'Or enter this key manually:',
+    copyTwoFASecret: 'Copy secret key',
+    twoFASecretCopied: 'Secret key copied',
     securityProofCodeHint:
       'Confirm this sensitive action with your current 2FA code.',
     securityProofCodeRequired: 'Enter the current six-digit 2FA code first.',
@@ -2444,6 +2450,13 @@ export default {
     unbindProvider: 'Unlink {provider}',
     oauthPrompt:
       'Continue in the provider window to link your {provider} account.',
+    wechatQRCodeAlt: 'WeChat official account QR code',
+    wechatScanHint:
+      'Scan the QR code with WeChat, follow the account, and enter the code you receive.',
+    wechatQRCodeMissing:
+      'The WeChat QR code is not configured. Please contact the administrator.',
+    wechatQRCodeInvalid:
+      'The WeChat QR code URL is invalid. Please ask the administrator to check it.',
     oauthUnavailable: 'This OAuth provider is not configured.',
     oauthPopupBlocked: 'Allow pop-ups to link an OAuth account.',
     emailCodeHint: 'Enter the six-digit code sent to the email address.',
@@ -2796,11 +2809,6 @@ export default {
     concurrency: 'Concurrency',
     never: 'Never',
     quickNav: 'Quick Navigation',
-  },
-
-  toast: {
-    loginSuccess: 'Signed in',
-    registerSuccess: 'Registered. Check your inbox.',
   },
 
   farm: {

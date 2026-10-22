@@ -44,7 +44,7 @@ export default {
     showPassword: 'Show password',
     hidePassword: 'Hide password',
     usernameRequired: 'Enter an administrator username.',
-    usernameTooLong: 'Username must be 12 characters or fewer.',
+    usernameTooLong: 'Username must be 12 bytes or fewer.',
     passwordTooShort: 'Password must be at least 8 characters.',
     passwordsMismatch: 'Passwords do not match.',
     chooseMode: 'How will you use Ren2Hub?',

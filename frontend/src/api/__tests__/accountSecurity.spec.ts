@@ -56,31 +56,101 @@ describe('account security domain contracts', () => {
     })
     await expect(accountSecurityApi.twoFactorStatus()).rejects.toThrow()
   })
-  it('requires complete enrollment data before showing recovery codes', async () => {
-    client.post.mockResolvedValueOnce({
+  it('parses the native 2FA setup and requires every enrollment field', async () => {
+    const setup = {
+      secret: 'JBSWY3DPEHPK3PXP',
+      qr_code_data:
+        'otpauth://totp/Ren2Hub:demo?secret=JBSWY3DPEHPK3PXP&issuer=Ren2Hub',
+      backup_codes: ['AAAA-1111', 'BBBB-2222', 'CCCC-3333', 'DDDD-4444'],
       flow_token: 'flow',
-      qr_code_data: 'qr',
-    })
-    await expect(accountSecurityApi.setupTwoFactor('proof')).rejects.toThrow()
+      expires_at: 1_800_000_600,
+    }
+    client.post.mockResolvedValueOnce(setup)
+    await expect(accountSecurityApi.setupTwoFactor('proof')).resolves.toEqual(
+      setup
+    )
     expect(client.post).toHaveBeenCalledWith('/api/user/2fa/setup', undefined, {
       headers: { 'X-Security-Proof': 'proof' },
     })
+
+    for (const field of ['secret', 'expires_at'] as const) {
+      const { [field]: _omitted, ...incomplete } = setup
+      client.post.mockResolvedValueOnce(incomplete)
+      await expect(
+        accountSecurityApi.setupTwoFactor('proof')
+      ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    }
+    client.post.mockResolvedValueOnce({ ...setup, expires_at: '1800000600' })
+    await expect(accountSecurityApi.setupTwoFactor('proof')).rejects.toThrow()
   })
   it('preserves email enrollment and resends using the existing flow', async () => {
+    // service.EmailBindingData as unwrapped by the client.
     const flow = {
+      flow_token: 'flow',
+      email: 'new@example.test',
+      current_email: 'old@example.test',
+      old_email_required: true,
+      expires_at: 1_800_000_600,
+      resend_at: 100,
+      notification_warning: true,
+    }
+    const parsed = {
       flow_token: 'flow',
       old_email_required: true,
       resend_at: 100,
+      notification_warning: true,
     }
     client.post.mockResolvedValue(flow)
     expect(
       await accountSecurityApi.startEmailBinding('new@example.test', 'proof')
-    ).toEqual(flow)
-    expect(await accountSecurityApi.resendEmailBinding('flow')).toEqual(flow)
+    ).toEqual(parsed)
+    client.post.mockResolvedValue({ ...flow, notification_warning: false })
+    expect(await accountSecurityApi.resendEmailBinding('flow')).toEqual({
+      ...parsed,
+      notification_warning: false,
+    })
     expect(client.post).toHaveBeenLastCalledWith(
       '/api/oauth/email/bind/resend',
       { flow_token: 'flow' }
     )
+    const { notification_warning: _, ...unflagged } = flow
+    client.post.mockResolvedValue(unflagged)
+    await expect(
+      accountSecurityApi.resendEmailBinding('flow')
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+  it('returns the notification warning of every binding change', async () => {
+    client.post.mockResolvedValueOnce({ notification_warning: true })
+    expect(await accountSecurityApi.bindEmail('flow', '123456', '')).toEqual({
+      notification_warning: true,
+    })
+    client.post.mockResolvedValueOnce({ notification_warning: false })
+    expect(await accountSecurityApi.bindWechat('wx-code', 'proof')).toEqual({
+      notification_warning: false,
+    })
+    client.delete.mockResolvedValueOnce({ notification_warning: true })
+    expect(await accountSecurityApi.unbindOauth(7, 'proof')).toEqual({
+      notification_warning: true,
+    })
+    expect(client.delete).toHaveBeenCalledWith(
+      '/api/user/oauth/bindings/7',
+      undefined,
+      { headers: { 'X-Security-Proof': 'proof' } }
+    )
+  })
+  it('rejects a binding change without the notification flag', async () => {
+    client.post.mockResolvedValueOnce({})
+    await expect(
+      accountSecurityApi.bindEmail('flow', '123456', '')
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    client.post.mockResolvedValueOnce({ notification_warning: 'false' })
+    await expect(
+      accountSecurityApi.bindWechat('wx-code', 'proof')
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    client.delete.mockResolvedValueOnce(undefined)
+    await expect(
+      accountSecurityApi.unbindOauth(7, 'proof')
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
   })
   it('does not turn a missing binding list into an empty successful list', async () => {
     client.get.mockResolvedValueOnce(undefined)

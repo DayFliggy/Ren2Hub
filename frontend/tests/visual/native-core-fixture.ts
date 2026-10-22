@@ -607,7 +607,21 @@ export async function nativeCoreFixture(
       return ok({
         groups: [
           {
-            resources: [{ resource: 'profile', actions: [{ action: 'read' }] }],
+            group: 'personal',
+            resources: [
+              {
+                resource: 'profile',
+                label_key: 'Profile',
+                actions: [
+                  {
+                    action: 'read',
+                    label_key: 'View',
+                    description_key:
+                      'View your profile, groups, and available models.',
+                  },
+                ],
+              },
+            ],
           },
         ],
         max_tokens: 10,

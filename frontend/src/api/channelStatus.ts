@@ -1,7 +1,4 @@
-import { getLocale } from '@/i18n'
-import { serverResponseMessage } from '@/i18n/serverMessages'
-import { httpTransport } from './httpTransport'
-import { ApiError } from './types'
+import { api } from './client'
 import {
   invalidResponse,
   isRecord,
@@ -91,28 +88,15 @@ export function parseChannelPage(value: unknown): AdminChannelPage {
   }
 }
 
-/** Native test/balance endpoints place their results beside success, not in data. */
+/**
+ * Native test/balance endpoints place their results (time, balance,
+ * raw_response) beside success, not in data, so callers read the envelope.
+ */
 export async function channelOperation(
   endpoint: string,
   params?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<Record<string, unknown>> {
-  const response: unknown = await httpTransport.request('GET', endpoint, {
-    params,
-    signal,
-  })
-  if (!isRecord(response) || typeof response.success !== 'boolean')
-    invalidResponse(endpoint)
-  if (!response.success)
-    throw new ApiError(
-      serverResponseMessage(getLocale(), response) || 'Request failed',
-      {
-        business: true,
-        code:
-          typeof response.error_code === 'string'
-            ? response.error_code
-            : undefined,
-      }
-    )
-  return response
+  const envelope = await api.getEnvelope<unknown>(endpoint, params, { signal })
+  return envelope as Record<string, unknown>
 }

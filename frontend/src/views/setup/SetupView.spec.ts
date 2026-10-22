@@ -83,6 +83,26 @@ describe('SetupView', () => {
     wrapper.unmount()
   })
 
+  it('stops at the account step when the username exceeds 12 bytes', async () => {
+    const { wrapper, setup } = await mountSetup()
+    setup.currentStep = 1
+    await wrapper.vm.$nextTick()
+    // Five CJK characters are 15 UTF-8 bytes, which the backend rejects.
+    await wrapper.get('#setup-username').setValue('管理员账户')
+    await wrapper.get('#setup-password').setValue('secret123')
+    await wrapper.get('#setup-confirm-password').setValue('secret123')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '继续')!
+      .trigger('click')
+
+    expect(setup.currentStep).toBe(1)
+    expect(wrapper.text()).toContain(
+      '用户名不能超过 12 字节（一个汉字通常占 3 字节）。'
+    )
+    wrapper.unmount()
+  })
+
   it('skips account inputs when a root administrator already exists', async () => {
     const { wrapper } = await mountSetup(true)
     await wrapper

@@ -1,3 +1,6 @@
+import { getLocale } from '@/i18n'
+import { serverResponseMessage } from '@/i18n/serverMessages'
+
 import { ApiError } from './types'
 import { publicHttpTransport } from './httpTransport'
 
@@ -24,14 +27,19 @@ export interface SetupPayload {
   confirmPassword?: string
 }
 
-const SETUP_USERNAME_MAX_CHARACTERS = 12
+// controller/setup.go checks len(req.Username), which counts UTF-8 bytes.
+const SETUP_USERNAME_MAX_BYTES = 12
 
+const utf8 = new TextEncoder()
+
+// The backend counts password length in runes, so the password check uses
+// characters while the username check uses bytes.
 export function setupCharacterLength(value: string): number {
   return Array.from(value).length
 }
 
 export function isSetupUsernameWithinLimit(username: string): boolean {
-  return setupCharacterLength(username) <= SETUP_USERNAME_MAX_CHARACTERS
+  return utf8.encode(username).length <= SETUP_USERNAME_MAX_BYTES
 }
 
 const DEFAULT_SETUP_ERROR = 'Invalid setup API response'
@@ -80,9 +88,8 @@ export function parseSetupSubmitEnvelope(value: unknown): void {
   }
   if (!value.success) {
     throw new ApiError(
-      typeof value.message === 'string' && value.message
-        ? value.message
-        : 'Setup initialization failed',
+      serverResponseMessage(getLocale(), value) ||
+        'Setup initialization failed',
       { status: 200, business: true }
     )
   }

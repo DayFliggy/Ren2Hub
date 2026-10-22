@@ -1,4 +1,4 @@
-import { passwordPayload, proofOptions } from './security'
+import { passwordPayload, proofOptions, turnstileParams } from './security'
 import type {
   AuthBundle,
   AuthTokenRotation,
@@ -10,6 +10,7 @@ import type {
   UserProfilePatch,
 } from '@/types/auth'
 
+import { parseSecurityChange, type SecurityChange } from './accountSecurity'
 import { api } from './client'
 import {
   parseLoginSessionBulkRevokeResult,
@@ -47,14 +48,16 @@ async function refreshSession(): Promise<AuthBundle> {
 }
 
 export const authApi = {
-  sendVerification: (email: string, turnstileToken?: string) =>
-    api.get(
-      '/api/verification',
-      { email },
-      turnstileToken
-        ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-        : undefined
-    ),
+  /** Native success carries only success and message, so read the envelope. */
+  async sendVerification(
+    email: string,
+    turnstileToken?: string
+  ): Promise<void> {
+    await api.getEnvelope<unknown>('/api/verification', {
+      email,
+      ...turnstileParams(turnstileToken),
+    })
+  },
   async login(
     username: string,
     password: string,
@@ -64,9 +67,7 @@ export const authApi = {
       await api.post<unknown>(
         '/api/user/login',
         { username, ...(await passwordPayload(password)) },
-        turnstileToken
-          ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-          : undefined
+        { params: turnstileParams(turnstileToken) }
       ),
       '/api/user/login'
     )
@@ -81,22 +82,24 @@ export const authApi = {
   register: (
     payload: {
       username: string
-      email: string
+      /** Sent only when email verification is enabled. */
+      email?: string
       password: string
       aff_code?: string
       verification_code?: string
     },
     turnstileToken?: string
   ) =>
-    api.post<{ message: string }>(
-      '/api/user/register',
-      payload,
-      turnstileToken
-        ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-        : undefined
-    ),
-  resetPassword: (email: string) =>
-    api.get<unknown>('/api/reset_password', { email }),
+    api.post<{ message: string }>('/api/user/register', payload, {
+      params: turnstileParams(turnstileToken),
+    }),
+  /** Native success carries only success and message, so read the envelope. */
+  async resetPassword(email: string, turnstileToken?: string): Promise<void> {
+    await api.getEnvelope<unknown>('/api/reset_password', {
+      email,
+      ...turnstileParams(turnstileToken),
+    })
+  },
   async confirmPasswordReset(email: string, token: string): Promise<string> {
     const value = await api.post<unknown>('/api/user/reset', { email, token })
     if (typeof value !== 'string' || !value)
@@ -159,16 +162,18 @@ export const authApi = {
     originalPassword: string,
     password: string,
     proof: string
-  ): Promise<AuthTokenRotation> {
+  ): Promise<AuthTokenRotation & SecurityChange> {
+    const endpoint = '/api/user/self'
     const value = await api.put<unknown>(
-      '/api/user/self',
+      endpoint,
       {
         original_password: originalPassword,
         password,
       },
       proofOptions(proof)
     )
-    return parseAuthRotation(value) ?? invalidAuthResponse('/api/user/self')
+    const rotation = parseAuthRotation(value) ?? invalidAuthResponse(endpoint)
+    return { ...rotation, ...parseSecurityChange(value, endpoint) }
   },
   async getLoginSessions(): Promise<LoginSession[]> {
     return parseLoginSessions(await api.get<unknown>('/api/user/sessions'))

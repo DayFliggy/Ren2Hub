@@ -2,6 +2,8 @@ import { securityMessages } from '../../security'
 export default {
   security: securityMessages['en'],
   auth: {
+    verificationCode: 'Email verification code',
+    sendCode: 'Send code',
     resetConfirm: 'Confirm password reset',
     resetInvalid: 'The reset link is invalid or incomplete.',
     resetCompleted: 'Password reset. Keep your new password before signing in.',
@@ -39,6 +41,7 @@ export default {
     passwordHint: 'A mix of 12+ letters and digits',
     strength: ['Weak', 'Medium', 'Strong'],
     resetSent: 'Reset link sent. Check your inbox.',
+    registerSuccess: 'Account created. Please sign in.',
     mismatch: 'Passwords do not match',
     usernameRequired: 'Username is required',
     inviteCode: 'Invite code',

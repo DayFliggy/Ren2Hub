@@ -4,7 +4,10 @@ import {
   parseChannelPage,
   parseChannelStatusDetails,
 } from '../channelStatus'
+import { clearAuthBundle } from '../authSession'
+import { setApiUnauthorizedHandler } from '../client'
 import { httpTransport } from '../httpTransport'
+import { ApiError } from '../types'
 
 const channel = {
   id: 1,
@@ -27,7 +30,10 @@ const channel = {
   model_mapping: null,
   other_info: '',
 }
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  setApiUnauthorizedHandler(null)
+  vi.restoreAllMocks()
+})
 describe('native channel contract', () => {
   it('reads disabled reason from other_info and retains integer usage', () => {
     expect(parseChannelStatusDetails(channel)).toMatchObject({
@@ -72,21 +78,87 @@ describe('native channel contract', () => {
       parseChannelStatusDetails({ ...channel, used_quota: '1.00' })
     ).toThrow('Invalid API response')
   })
-  it('handles top-level native operation results and rejects business failures', async () => {
+  it('reads top-level native operation results through the unified client', async () => {
     const request = vi
       .spyOn(httpTransport, 'request')
-      .mockResolvedValueOnce({ success: true, time: 0.125 } as never)
+      .mockResolvedValueOnce({
+        success: true,
+        message: '',
+        time: 0.125,
+      } as never)
+      .mockResolvedValueOnce({
+        success: true,
+        message: '',
+        balance: 7.5,
+      } as never)
+    const controller = new AbortController()
+    await expect(
+      channelOperation(
+        '/api/channel/test/1',
+        { model: 'fixture' },
+        controller.signal
+      )
+    ).resolves.toMatchObject({ success: true, time: 0.125 })
+    await expect(
+      channelOperation('/api/channel/update_balance/1')
+    ).resolves.toMatchObject({ balance: 7.5 })
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      'GET',
+      '/api/channel/test/1',
+      expect.objectContaining({
+        params: { model: 'fixture' },
+        signal: controller.signal,
+      })
+    )
+  })
+  it('maps the native top-level error_code of a failed channel test', async () => {
+    vi.spyOn(httpTransport, 'request')
       .mockResolvedValueOnce({
         success: false,
         message: 'provider failed',
-        error_code: 'bad_key',
+        time: 1.5,
+        error_code: 'bad_response_status_code',
       } as never)
-    expect(await channelOperation('/api/channel/test/1')).toMatchObject({
-      time: 0.125,
-    })
+      .mockResolvedValueOnce({
+        success: false,
+        message: 'Task Plugin channels do not support balance queries',
+      } as never)
     await expect(channelOperation('/api/channel/test/1')).rejects.toMatchObject(
-      { message: 'provider failed', code: 'bad_key' }
+      {
+        message: 'provider failed',
+        business: true,
+        code: 'bad_response_status_code',
+      }
     )
-    expect(request).toHaveBeenCalledTimes(2)
+    await expect(
+      channelOperation('/api/channel/update_balance/1')
+    ).rejects.toMatchObject({ business: true, code: undefined })
+  })
+  it('rejects a result that arrives after the authentication session changed', async () => {
+    let finish!: (value: unknown) => void
+    vi.spyOn(httpTransport, 'request').mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }) as never
+    )
+    const pending = channelOperation('/api/channel/test/1')
+    clearAuthBundle()
+    finish({ success: true, message: '', time: 0.125 })
+    await expect(pending).rejects.toMatchObject({
+      status: 409,
+      code: 'AUTH_SESSION_CHANGED',
+    })
+  })
+  it('reports an unauthorized channel operation to the session handler', async () => {
+    const onUnauthorized = vi.fn()
+    setApiUnauthorizedHandler(onUnauthorized)
+    vi.spyOn(httpTransport, 'request').mockRejectedValue(
+      new ApiError('Unauthorized', { status: 401 })
+    )
+    await expect(
+      channelOperation('/api/channel/update_balance/1')
+    ).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).toHaveBeenCalledOnce()
   })
 })

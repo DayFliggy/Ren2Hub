@@ -2,6 +2,8 @@ import { securityMessages } from '../../security'
 export default {
   security: securityMessages['zh-CN'],
   auth: {
+    verificationCode: '邮箱验证码',
+    sendCode: '发送验证码',
     resetConfirm: '确认重置密码',
     resetInvalid: '重置链接无效或不完整。',
     resetCompleted: '密码已重置。请妥善保存新密码后登录。',
@@ -38,6 +40,7 @@ export default {
     passwordHint: '12 个字母和数字组合',
     strength: ['弱密码', '中等', '强密码'],
     resetSent: '重置链接已发送，请查收邮箱',
+    registerSuccess: '账户已创建，请登录。',
     mismatch: '两次输入的密码不一致',
     usernameRequired: '请输入用户名',
     inviteCode: '邀请码',

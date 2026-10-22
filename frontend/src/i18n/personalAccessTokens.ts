@@ -39,8 +39,17 @@ export const personalAccessTokenMessages = {
       scopeHint:
         'Only your current permissions are available. Changing scopes requires security verification.',
       unavailableScope: 'No longer grantable',
+      groups: {
+        personal: 'Personal',
+        admin: 'Administration',
+        system: 'System',
+      },
+      otherResources: '+{count} more',
       revokeTitle: 'Revoke access token?',
       revokeMessage: 'Requests using “{name}” will stop working.',
+      legacy: 'Legacy token',
+      legacyRetire:
+        'The legacy token stops working on {date}. Create a new token to replace it.',
     },
   },
   'zh-CN': {
@@ -80,8 +89,16 @@ export const personalAccessTokenMessages = {
       revokedNotice: '访问令牌已撤销。',
       scopeHint: '只能授予您当前拥有的权限。修改作用域需要安全验证。',
       unavailableScope: '当前不可授予',
+      groups: {
+        personal: '个人',
+        admin: '管理',
+        system: '系统',
+      },
+      otherResources: '另有 {count} 项',
       revokeTitle: '撤销访问令牌？',
       revokeMessage: '使用“{name}”的请求将失效。',
+      legacy: '旧版令牌',
+      legacyRetire: '旧版令牌将于 {date} 停用，请创建新令牌替换。',
     },
   },
 }

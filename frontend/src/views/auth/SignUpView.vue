@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -42,18 +42,51 @@ const errors = reactive({
   confirm: '',
   affiliate: '',
 })
+const busy = computed(() => loading.value || verificationSending.value)
+// Native Register reads email and code only when email verification is on.
+const emailRequired = computed(() => app.status.email_verification === true)
+const turnstileSatisfied = computed(
+  () =>
+    !app.turnstileEnabled ||
+    (Boolean(turnstileToken.value) && !turnstileUnavailable.value)
+)
+
+function turnstileReady(): boolean {
+  if (!app.turnstileEnabled) return true
+  if (!app.turnstileSiteKey || turnstileUnavailable.value) {
+    toast.error(t('common.turnstileUnavailable'))
+    return false
+  }
+  if (!turnstileToken.value) {
+    toast.error(t('common.turnstileRequired'))
+    return false
+  }
+  return true
+}
+
+// A Turnstile token is single-use: each request takes the current one and the
+// widget is reset when the request ends, whatever its outcome.
+function takeTurnstileToken(): string | undefined {
+  const token = turnstileToken.value
+  turnstileToken.value = ''
+  return token || undefined
+}
+
+function resetTurnstile() {
+  if (app.turnstileEnabled) turnstileWidget.value?.reset()
+}
+
 async function sendVerification() {
+  if (busy.value || !turnstileReady()) return
   verificationSending.value = true
   try {
-    await authApi.sendVerification(
-      email.value,
-      turnstileToken.value || undefined
-    )
+    await authApi.sendVerification(email.value.trim(), takeTurnstileToken())
     toast.success(t('common.success'))
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     verificationSending.value = false
+    resetTurnstile()
   }
 }
 
@@ -70,7 +103,7 @@ function validate(): boolean {
     errors.username = t('auth.usernameRequired')
     valid = false
   }
-  if (!/^\S+@\S+\.\S+$/.test(email.value.trim())) {
+  if (emailRequired.value && !/^\S+@\S+\.\S+$/.test(email.value.trim())) {
     errors.email = t('auth.emailInvalid')
     valid = false
   }
@@ -87,38 +120,33 @@ function validate(): boolean {
 }
 
 async function submit() {
-  if (loading.value || !validate()) return
-  await app.initialize()
-  if (app.turnstileEnabled) {
-    if (!app.turnstileSiteKey || turnstileUnavailable.value) {
-      toast.error(t('common.turnstileUnavailable'))
-      return
-    }
-    if (!turnstileToken.value) {
-      toast.error(t('common.turnstileRequired'))
-      return
-    }
-  }
+  if (busy.value || !validate()) return
   loading.value = true
   try {
+    await app.initialize()
+    if (!turnstileReady()) return
     await authApi.register(
       {
         username: username.value.trim(),
-        email: email.value.trim(),
         password: password.value,
         aff_code: affiliateCode.value.trim() || undefined,
-        verification_code: verificationCode.value || undefined,
+        ...(emailRequired.value
+          ? {
+              email: email.value.trim(),
+              verification_code: verificationCode.value || undefined,
+            }
+          : {}),
       },
-      turnstileToken.value || undefined
+      takeTurnstileToken()
     )
     clearAffiliateAttribution()
-    toast.success(t('toast.registerSuccess'))
+    toast.success(t('auth.registerSuccess'))
     await router.push({ name: 'sign-in' })
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
-    if (app.turnstileEnabled) turnstileWidget.value?.reset()
   } finally {
     loading.value = false
+    resetTurnstile()
   }
 }
 
@@ -147,20 +175,6 @@ onMounted(async () => {
     </div>
 
     <form class="mt-8 sibling-space-y-4" @submit.prevent="submit">
-      <FormField
-        v-if="app.status.email_verification"
-        :label="t('auth.verificationCode')"
-        ><TextInput
-          v-model="verificationCode"
-          autocomplete="one-time-code"
-        /><ConsoleButton
-          type="button"
-          variant="secondary"
-          :disabled="verificationSending || !email"
-          @click="sendVerification"
-          >{{ t('auth.sendCode') }}</ConsoleButton
-        ></FormField
-      >
       <FormField :label="t('auth.username')">
         <TextInput
           v-model="username"
@@ -174,20 +188,35 @@ onMounted(async () => {
           {{ errors.username }}
         </span>
       </FormField>
-      <FormField :label="t('auth.email')">
-        <TextInput
-          v-model="email"
-          type="email"
-          :placeholder="t('auth.email')"
-          autocomplete="email"
-        />
-        <span
-          v-if="errors.email"
-          class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
+      <template v-if="emailRequired">
+        <FormField :label="t('auth.email')">
+          <TextInput
+            v-model="email"
+            type="email"
+            :placeholder="t('auth.email')"
+            autocomplete="email"
+          />
+          <span
+            v-if="errors.email"
+            class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
+          >
+            {{ errors.email }}
+          </span>
+        </FormField>
+        <FormField :label="t('auth.verificationCode')"
+          ><TextInput
+            v-model="verificationCode"
+            autocomplete="one-time-code"
+          /><ConsoleButton
+            type="button"
+            variant="secondary"
+            :loading="verificationSending"
+            :disabled="busy || !email.trim() || !turnstileSatisfied"
+            @click="sendVerification"
+            >{{ t('auth.sendCode') }}</ConsoleButton
+          ></FormField
         >
-          {{ errors.email }}
-        </span>
-      </FormField>
+      </template>
       <FormField :label="t('auth.newPassword')" :hint="t('auth.passwordHint')">
         <TextInput
           v-model="password"
@@ -247,9 +276,7 @@ onMounted(async () => {
         size="lg"
         block
         :loading="loading"
-        :disabled="
-          app.turnstileEnabled && (!turnstileToken || turnstileUnavailable)
-        "
+        :disabled="verificationSending || !turnstileSatisfied"
       >
         {{ t('auth.continue') }}
       </ConsoleButton>

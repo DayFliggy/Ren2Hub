@@ -97,11 +97,9 @@ it('loads the native status when enabled and preserves the reward action', async
   )
   await wrapper.get('[data-checkin-action]').trigger('click')
   await flushPromises()
-  expect(mocks.post).toHaveBeenCalledWith(
-    '/api/user/checkin',
-    undefined,
-    undefined
-  )
+  expect(mocks.post).toHaveBeenCalledWith('/api/user/checkin', undefined, {
+    params: {},
+  })
   expect(mocks.fetchSelf).toHaveBeenCalledOnce()
   wrapper.unmount()
 })
@@ -205,7 +203,7 @@ it('requires Turnstile verification and clears it after a native check-in', asyn
   await wrapper.get('[data-checkin-action]').trigger('click')
   await flushPromises()
   expect(mocks.post).toHaveBeenCalledWith('/api/user/checkin', undefined, {
-    headers: { 'X-Turnstile-Token': 'verified-token' },
+    params: { turnstile: 'verified-token' },
   })
   expect(wrapper.get('[data-checkin-action]').attributes('disabled')).toBe('')
   wrapper.unmount()

@@ -44,6 +44,16 @@ vi.mock('@/api/public', () => ({
   },
 }))
 
+import { QrcodeSvg } from 'qrcode.vue'
+
+import {
+  clearAuthBundle,
+  getAuthBundle,
+  setAuthBundle,
+} from '@/api/authSession'
+import { ApiError } from '@/api/types'
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
+import { useToast } from '@/composables/useToast'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import SecurityAccessView from '@/views/console/SecurityAccessView.vue'
@@ -70,8 +80,12 @@ function securityGet(url: string): Promise<unknown> {
   return Promise.resolve({})
 }
 
+const toast = useToast()
+
 beforeEach(() => {
   setActivePinia(createPinia())
+  clearAuthBundle()
+  toast.toasts.splice(0)
   routerPush.mockReset()
   requestProof.mockReset().mockResolvedValue('test-proof')
   apiGet.mockReset().mockImplementation(securityGet)
@@ -105,6 +119,34 @@ beforeEach(() => {
   })
 })
 
+const sessionBundle = {
+  access_token: 'session-token',
+  token_type: 'Bearer' as const,
+  access_expires_at: 2_000_000_000,
+  session: {
+    sid: 'session-1',
+    current: true,
+    login_method: 'password',
+    ip: '127.0.0.1',
+    user_agent: 'vitest',
+    created_at: 1,
+    last_active_at: 2,
+    expires_at: 2_000_000_000,
+  },
+  user: {
+    id: 1,
+    username: 'alice',
+    display_name: 'Alice',
+    email: 'alice@example.com',
+    role: 1,
+    status: 1,
+    quota: 1000,
+    used_quota: 0,
+    request_count: 0,
+    has_password: true,
+  },
+}
+
 function renderView() {
   return mount(SecurityAccessView, {
     attachTo: document.body,
@@ -126,6 +168,64 @@ function buttonByText(
     .findAll('button')
     .map((button) => button.element as HTMLButtonElement)
     .find((button) => button.textContent?.trim() === text)
+}
+
+const twoFASetup = {
+  secret: 'JBSWY3DPEHPK3PXP',
+  qr_code_data:
+    'otpauth://totp/Ren2Hub:alice?secret=JBSWY3DPEHPK3PXP&issuer=Ren2Hub',
+  backup_codes: ['AAAA-1111', 'BBBB-2222', 'CCCC-3333', 'DDDD-4444'],
+  flow_token: 'setup-flow',
+  expires_at: 1_800_000_600,
+}
+
+async function openTwoFASetupDialog() {
+  apiGet.mockImplementation((url: string) =>
+    url === '/api/user/2fa/status'
+      ? Promise.resolve({ enabled: false, locked: false })
+      : securityGet(url)
+  )
+  apiPost.mockImplementation((url: string) =>
+    Promise.resolve(url === '/api/user/2fa/setup' ? twoFASetup : {})
+  )
+  const wrapper = renderView()
+  await flushPromises()
+  buttonByText(wrapper, '启用两步验证')?.click()
+  await flushPromises()
+  return wrapper
+}
+
+function stubClipboard(writeText: (text: string) => Promise<void>) {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
+}
+
+const wechatStatus = {
+  github_oauth: false,
+  discord_oauth: false,
+  linuxdo_oauth: false,
+  oidc_enabled: false,
+  wechat_login: true,
+  telegram_oauth: false,
+  telegram_oauth_configured: false,
+  custom_oauth_providers: [],
+}
+
+async function openWeChatBindDialog(wechatQRCode: string) {
+  publicStatus.mockResolvedValue({
+    ...wechatStatus,
+    wechat_qrcode: wechatQRCode,
+  })
+  const wrapper = renderView()
+  await flushPromises()
+  buttonByText(wrapper, '绑定')?.click()
+  await flushPromises()
+  return {
+    wrapper,
+    dialog: document.body.querySelector('[role="dialog"]')!,
+  }
 }
 
 describe('SecurityAccessView', () => {
@@ -228,6 +328,187 @@ describe('SecurityAccessView', () => {
       document.body.querySelector('[role="dialog"]')?.textContent
     ).toContain('修改密码')
     wrapper.unmount()
+  })
+
+  it('renders the 2FA QR from the otpauth URI and copies the secret', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    stubClipboard(writeText)
+    const toast = useToast()
+    toast.toasts.splice(0)
+    const wrapper = await openTwoFASetupDialog()
+
+    expect(requestProof).toHaveBeenCalledWith({ scope: '2fa.setup' })
+    expect(wrapper.findComponent(QrcodeSvg).props('value')).toBe(
+      twoFASetup.qr_code_data
+    )
+    const dialog = document.body.querySelector('[role="dialog"]')!
+    expect(dialog.querySelector('svg')).not.toBeNull()
+    expect(dialog.querySelector('img[src^="otpauth:"]')).toBeNull()
+    expect(
+      dialog.querySelector('[data-twofa-secret]')?.textContent?.trim()
+    ).toBe(twoFASetup.secret)
+
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === '复制密钥')
+      ?.click()
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith(twoFASetup.secret)
+    expect(toast.toasts.at(-1)).toMatchObject({
+      type: 'success',
+      message: '密钥已复制',
+    })
+    wrapper.unmount()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  it('reports a failed secret copy instead of claiming success', async () => {
+    stubClipboard(vi.fn().mockRejectedValue(new Error('denied')))
+    const toast = useToast()
+    toast.toasts.splice(0)
+    const wrapper = await openTwoFASetupDialog()
+
+    Array.from(document.body.querySelectorAll('[role="dialog"] button'))
+      .find((button) => button.textContent?.trim() === '复制密钥')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(toast.toasts.at(-1)?.type).toBe('error')
+    expect(toast.toasts.some((item) => item.type === 'success')).toBe(false)
+    wrapper.unmount()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  it('shows the configured WeChat QR and binds with the entered code', async () => {
+    apiPost.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/oauth/wechat/bind' ? { notification_warning: false } : {}
+      )
+    )
+    const { wrapper, dialog } = await openWeChatBindDialog(
+      'https://cdn.example.com/wechat.png'
+    )
+
+    const image = dialog.querySelector('[data-wechat-qrcode] img')
+    expect(image?.getAttribute('src')).toBe(
+      'https://cdn.example.com/wechat.png'
+    )
+    expect(image?.getAttribute('alt')).toBe('微信公众号二维码')
+    expect(dialog.textContent).not.toContain('将在第三方窗口中继续绑定')
+    const input = dialog.querySelector<HTMLInputElement>(
+      'input[autocomplete="one-time-code"]'
+    )!
+    input.value = ' wx-code '
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    Array.from(dialog.querySelectorAll('button'))
+      .filter((button) => button.textContent?.trim() === '绑定')
+      .at(-1)
+      ?.click()
+    await flushPromises()
+
+    expect(requestProof).toHaveBeenCalledWith({
+      scope: 'account.binding.bind',
+      context: { provider: 'wechat', code: 'wx-code' },
+    })
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/oauth/wechat/bind',
+      { code: 'wx-code' },
+      { headers: { 'X-Security-Proof': 'test-proof' } }
+    )
+    expect(toast.toasts.map((item) => item.type)).not.toContain('warning')
+    wrapper.unmount()
+  })
+
+  it('warns about a failed notification email even when the refresh fails', async () => {
+    apiPost.mockImplementation((url: string) =>
+      url === '/api/oauth/wechat/bind'
+        ? Promise.resolve({ notification_warning: true })
+        : Promise.reject(new Error('refresh failed'))
+    )
+    const { wrapper, dialog } = await openWeChatBindDialog(
+      'https://cdn.example.com/wechat.png'
+    )
+    const input = dialog.querySelector<HTMLInputElement>(
+      'input[autocomplete="one-time-code"]'
+    )!
+    input.value = 'wx-code'
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    Array.from(dialog.querySelectorAll('button'))
+      .filter((button) => button.textContent?.trim() === '绑定')
+      .at(-1)
+      ?.click()
+    await flushPromises()
+
+    expect(apiPost).toHaveBeenCalledWith('/api/user/auth/refresh')
+    expect(toast.toasts.map(({ type, message }) => [type, message])).toEqual([
+      ['success', '账户绑定已更新'],
+      ['warning', '变更已完成，但通知邮件发送失败。'],
+      ['error', 'refresh failed'],
+    ])
+    wrapper.unmount()
+  })
+
+  it('keeps the password rotation and warns before refreshing the profile', async () => {
+    const { user: _user, ...rotation } = sessionBundle
+    setAuthBundle(sessionBundle)
+    apiPut.mockResolvedValue({
+      ...rotation,
+      access_token: 'rotated-token',
+      has_password: true,
+      notification_warning: true,
+    })
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/user/self'
+        ? Promise.reject(new ApiError('refresh failed', { status: 500 }))
+        : securityGet(url)
+    )
+    const wrapper = renderView()
+    await flushPromises()
+    buttonByText(wrapper, '修改密码')?.click()
+    await flushPromises()
+    const dialog = document.body.querySelector('[role="dialog"]')!
+    for (const [selector, value] of [
+      ['input[autocomplete="current-password"]', 'old-password'],
+      ['input[autocomplete="new-password"]', 'new-password-123'],
+    ]) {
+      const input = dialog.querySelector<HTMLInputElement>(selector)!
+      input.value = value
+      input.dispatchEvent(new Event('input'))
+    }
+    await flushPromises()
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === '保存')
+      ?.click()
+    await flushPromises()
+
+    expect(requestProof).toHaveBeenCalledWith({
+      scope: 'account.password.change',
+    })
+    expect(getAuthBundle()?.access_token).toBe('rotated-token')
+    expect(Object.keys(getAuthBundle()!)).not.toContain('notification_warning')
+    expect(toast.toasts.map(({ type, message }) => [type, message])).toEqual([
+      ['success', '密码已更新'],
+      ['warning', '变更已完成，但通知邮件发送失败。'],
+      ['error', 'refresh failed'],
+    ])
+    const passwordModal = wrapper
+      .findAllComponents(ConsoleModal)
+      .find((modal) => modal.props('title') === '修改密码')
+    expect(passwordModal?.props('open')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('tells a missing WeChat QR apart from a rejected one', async () => {
+    const missing = await openWeChatBindDialog('')
+    expect(missing.dialog.querySelector('[data-wechat-qrcode] img')).toBeNull()
+    expect(missing.dialog.textContent).toContain('管理员尚未配置微信二维码')
+    missing.wrapper.unmount()
+
+    const invalid = await openWeChatBindDialog('javascript:alert(1)')
+    expect(invalid.dialog.querySelector('[data-wechat-qrcode] img')).toBeNull()
+    expect(invalid.dialog.textContent).toContain('微信二维码地址无效')
+    expect(invalid.dialog.textContent).not.toContain('管理员尚未配置')
+    invalid.wrapper.unmount()
   })
 
   it('closes its OAuth popup and removes window handlers when unmounted', async () => {

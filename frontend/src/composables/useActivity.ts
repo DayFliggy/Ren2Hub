@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { api } from '@/api/console'
+import { turnstileParams } from '@/api/security'
 import { useLatestRequest } from './useLatestRequest'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -58,13 +59,9 @@ export function useActivity() {
     claiming.value = true
     loadError.value = null
     try {
-      await api.post(
-        '/api/user/checkin',
-        undefined,
-        turnstileToken
-          ? { headers: { 'X-Turnstile-Token': turnstileToken } }
-          : undefined
-      )
+      await api.post('/api/user/checkin', undefined, {
+        params: turnstileParams(turnstileToken),
+      })
       await Promise.all([load(), auth.fetchSelf()])
     } catch (error) {
       loadError.value = error instanceof Error ? error.message : String(error)

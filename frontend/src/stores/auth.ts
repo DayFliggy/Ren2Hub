@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import type { SecurityChange } from '@/api/accountSecurity'
 import { setApiUnauthorizedHandler } from '@/api/client'
 import {
   applyAuthRotation,
@@ -177,11 +178,16 @@ export const useAuthStore = defineStore('auth', () => {
     originalPassword: string,
     password: string,
     proof: string
-  ): Promise<void> {
+  ): Promise<SecurityChange> {
     const api = await getAuthApi()
-    const rotation = await api.changePassword(originalPassword, password, proof)
+    const { notification_warning, ...rotation } = await api.changePassword(
+      originalPassword,
+      password,
+      proof
+    )
     applyAuthRotation(rotation)
     publishCurrentSession('authenticated', rotation.session.sid)
+    return { notification_warning }
   }
 
   async function deleteAccount(proof: string): Promise<void> {

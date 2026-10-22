@@ -50,6 +50,16 @@ export interface ApiClientOptions {
   getRequestScope?: () => number
 }
 
+/** Native channel tests report relay failures as a top-level error_code. */
+function businessErrorCode(payload: {
+  code?: unknown
+  error_code?: unknown
+}): string | undefined {
+  if (typeof payload.code === 'string') return payload.code
+  if (typeof payload.error_code === 'string') return payload.error_code
+  return undefined
+}
+
 export function createApiClient(
   transport: ApiTransport,
   clientOptions: ApiClientOptions = {}
@@ -95,6 +105,7 @@ export function createApiClient(
           success?: boolean
           message?: string
           code?: string
+          error_code?: string
           data?: unknown
         }
         if (
@@ -118,7 +129,7 @@ export function createApiClient(
             status: 200,
             business: true,
             data: payload.data,
-            code: typeof payload.code === 'string' ? payload.code : undefined,
+            code: businessErrorCode(payload),
           })
         }
         return includeEnvelope ? (envelope as unknown as T) : envelope.data

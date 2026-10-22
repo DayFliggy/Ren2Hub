@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
+import { setLocale } from '@/i18n'
 import { ApiError } from './types'
 import {
   buildSetupPayload,
@@ -11,6 +12,10 @@ import {
 } from './setup'
 
 describe('setup API contract', () => {
+  afterEach(async () => {
+    await setLocale('en')
+  })
+
   it('strictly parses setup status', () => {
     expect(
       parseSetupStatusEnvelope({
@@ -36,6 +41,18 @@ describe('setup API contract', () => {
     expect(() =>
       parseSetupSubmitEnvelope({ success: false, message: '密码错误' })
     ).toThrow('密码错误')
+  })
+
+  it('renders the backend message key in the current locale', async () => {
+    await setLocale('zh-CN')
+    expect(() =>
+      parseSetupSubmitEnvelope({
+        success: false,
+        message: 'Username must be 12 characters or fewer',
+        message_key: 'Username must be {{max}} characters or fewer',
+        message_params: { max: 12 },
+      })
+    ).toThrow('用户名长度不能超过12字节')
   })
 
   it('maps usage modes and omits account fields for existing roots', () => {
@@ -82,9 +99,19 @@ describe('setup API contract', () => {
     }
   )
 
-  it('uses Unicode character counts for setup validation', () => {
+  // controller/setup.go rejects len(username) > 12, which counts UTF-8 bytes.
+  it.each([
+    ['a'.repeat(12), true],
+    ['a'.repeat(13), false],
+    ['管理员账', true],
+    ['管理员账户', false],
+    ['admin管理', true],
+    ['admin管理员', false],
+  ])('limits the setup username %s by UTF-8 bytes', (username, allowed) => {
+    expect(isSetupUsernameWithinLimit(username)).toBe(allowed)
+  })
+
+  it('counts password length in characters like the backend', () => {
     expect(setupCharacterLength('管理员账户')).toBe(5)
-    expect(isSetupUsernameWithinLimit('一二三四五六七八九十甲乙')).toBe(true)
-    expect(isSetupUsernameWithinLimit('一二三四五六七八九十甲乙丙')).toBe(false)
   })
 })
