@@ -20,6 +20,7 @@ import { ApiError } from '@/api/types'
 import router from '@/router'
 import { sanitizeSetupRedirect, sanitizeRedirect } from '@/router'
 import { navigationError } from '@/router/navigationState'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
 
@@ -239,6 +240,34 @@ describe('capability route guard', () => {
     }
   })
 
+  // Only root bypasses permissions, so a user and an admin share one matrix.
+  it.each([
+    [1, false, 'dashboard'],
+    [1, true, 'token-routing'],
+    [10, false, 'dashboard'],
+    [10, true, 'token-routing'],
+  ])(
+    'opens token routing for role %i only with routing:read %s',
+    async (role, read, routeName) => {
+      publicApi.status.mockResolvedValue({
+        frontend_capabilities: {
+          dashboard_basic: 'live',
+          token_private_routing: 'live',
+        },
+      })
+      useAuthStore().user!.role = role
+      // authz.Capabilities lists every registered resource for the user.
+      useAuthStore().user!.permissions = {
+        admin_permissions: { routing: { read, write: read } },
+      }
+
+      await router.push('/keys/11/routing')
+
+      expect(router.currentRoute.value.name).toBe(routeName)
+    },
+    15000
+  )
+
   it('keeps canonical routes at the root and preserves legacy queries and anchors', async () => {
     for (const [source, target] of [
       ['/console/token', '/keys'],
@@ -436,5 +465,44 @@ describe('capability route guard', () => {
     await router.push('/models/pricing')
     expect(router.currentRoute.value.path).toBe('/models/pricing')
     expect(router.currentRoute.value.meta.nav).toBe('models-admin')
+  })
+})
+
+describe('public module guard', () => {
+  it('sends a module the option disables to 404 like the navigation', async () => {
+    publicApi.status.mockResolvedValue({
+      HeaderNavModules: '{"rankings":{"enabled":" false "}}',
+    })
+
+    await router.push('/rankings')
+
+    expect(router.currentRoute.value.name).toBe('status-404')
+    expect(useAppStore().moduleAccess('rankings').enabled).toBe(false)
+  })
+
+  it('asks a visitor to sign in for a module that requires it', async () => {
+    useAuthStore().persist(null)
+    publicApi.status.mockResolvedValue({
+      HeaderNavModules: '{"rankings":{"requireAuth":1}}',
+    })
+
+    await router.push('/rankings')
+
+    expect(router.currentRoute.value.name).toBe('sign-in')
+    expect(router.currentRoute.value.query.redirect).toBe('/rankings')
+  })
+
+  it('updates the navigation when the guard reads a changed option', async () => {
+    const app = useAppStore()
+    await app.initialize()
+    expect(app.showPricing).toBe(true)
+    publicApi.status.mockResolvedValue({
+      HeaderNavModules: '{"pricing":false}',
+    })
+
+    await router.push('/pricing')
+
+    expect(router.currentRoute.value.name).toBe('status-404')
+    expect(app.showPricing).toBe(false)
   })
 })

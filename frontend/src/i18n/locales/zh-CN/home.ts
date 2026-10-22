@@ -151,6 +151,5 @@ export default {
     rights: '保留所有权利。',
     copyright: '© 2026 DayFliggy. All rights reserved.',
     designBy: '设计与开发由',
-    updated: '更新于 2026.07.17',
   },
 }

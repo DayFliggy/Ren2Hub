@@ -25,6 +25,7 @@ const allItems = computed(() =>
     isRoot: auth.isRoot,
     hasPermission: auth.hasPermission,
     featureStatus: (feature) => app.featureStatus(feature),
+    isSidebarModuleEnabled: app.isSidebarModuleEnabled,
   }).flatMap((group) => group.items)
 )
 

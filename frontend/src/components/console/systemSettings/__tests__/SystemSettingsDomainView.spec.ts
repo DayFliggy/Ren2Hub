@@ -1,7 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { readonly, ref } from 'vue'
 import SystemSettingsDomainView from '../SystemSettingsDomainView.vue'
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import {
@@ -10,19 +9,66 @@ import {
 } from '@/constants/systemSettingsCatalog'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
-vi.mock('@/composables/useSystemSettings', () => ({
-  useSystemSettings: vi.fn(),
+const { backend, toast } = vi.hoisted(() => ({
+  backend: {
+    options: {} as Record<string, string>,
+    puts: [] as Array<{ key: string; value: string }>,
+    patches: [] as Array<Record<string, string>>,
+    offline: false,
+    failKey: '',
+    gate: null as Promise<void> | null,
+  },
+  toast: { error: vi.fn(), success: vi.fn() },
 }))
-vi.mock('@/composables/useToast', () => ({
-  useToast: () => ({ error: vi.fn(), success: vi.fn() }),
-}))
-// Integration panels load their own data; an offline API keeps them on their
-// empty or failed states, which still render their static copy.
+
+vi.mock('@/composables/useToast', () => ({ useToast: () => toast }))
+// GET /api/option/ mirrors controller.GetOptions: credential suffixes are
+// withheld and Resend key availability is reported as ResendKeyConfigured.
+// Integration panels load their own data and stay on their offline states.
 vi.mock('@/api/client', async (importOriginal) => {
   const offline = () => Promise.reject(new Error('offline'))
+  const hidden = /(?:Token|Secret|Key|secret|api_key)$/
+  // GetRequestPolicy answers GET and PATCH with the full stored snapshot.
+  const policyKey = /^(?:RetryTimes|CheckSensitive\w*Enabled|SensitiveWords)$/
+  const policy = () => ({
+    options: Object.fromEntries(
+      Object.entries(backend.options).filter(([key]) => policyKey.test(key))
+    ),
+  })
+  async function patch(
+    path: string,
+    body: { options: Record<string, string> }
+  ) {
+    if (path !== '/api/option/request_policy') return offline()
+    backend.patches.push(body.options)
+    Object.assign(backend.options, body.options)
+    return policy()
+  }
+  async function get(path: string) {
+    if (path === '/api/option/request_policy' && !backend.offline)
+      return policy()
+    if (path !== '/api/option/' || backend.offline) return offline()
+    return [
+      ...Object.entries(backend.options)
+        .filter(([key]) => !hidden.test(key))
+        .map(([key, value]) => ({ key, value })),
+      {
+        key: 'ResendKeyConfigured',
+        value: String(Boolean(backend.options.ResendApiKey)),
+      },
+    ]
+  }
+  async function put(path: string, body: { key: string; value: string }) {
+    if (path !== '/api/option/') return offline()
+    backend.puts.push(body)
+    if (backend.gate) await backend.gate
+    if (body.key === backend.failKey) throw new Error('Option save failed')
+    backend.options[body.key] = body.value
+    return undefined
+  }
   return {
     ...(await importOriginal<typeof import('@/api/client')>()),
-    api: { get: offline, post: offline, put: offline, delete: offline },
+    api: { get, post: offline, put, patch, delete: offline },
   }
 })
 
@@ -31,61 +77,31 @@ beforeAll(async () => {
   await setLocale('en')
 })
 
-let state: ReturnType<typeof configure>
-function configure() {
-  const loaded = ref(false)
-  const loading = ref(false)
-  const saving = ref(false)
-  const rawOptions = ref<Record<string, string>>({
-    EpayId: '000123',
-    Price: '7.3',
-    MinTopUp: '1',
-    PayAddress: 'https://pay.example',
-    PayMethods: '[]',
-  })
-  const load = vi.fn(async () => {
-    loaded.value = true
-    return true
-  })
-  const saveOptions = vi.fn(
-    async (patch: Record<string, string | number | boolean>) => {
-      rawOptions.value = {
-        ...rawOptions.value,
-        ...Object.fromEntries(
-          Object.entries(patch)
-            .filter(([key]) => key !== 'EpayKey')
-            .map(([key, value]) => [key, String(value)])
-        ),
-      }
-      return true
-    }
-  )
-  const value = {
-    loaded: readonly(loaded),
-    loading: readonly(loading),
-    saving: readonly(saving),
-    rawOptions: readonly(rawOptions),
-    load,
-    saveOptions,
-    rawValue: (key: string, fallback: unknown) => {
-      const raw = rawOptions.value[key]
-      if (raw === undefined) return fallback
-      return typeof fallback === 'number'
-        ? Number(raw)
-        : typeof fallback === 'boolean'
-          ? raw === 'true'
-          : raw
-    },
-    isSecretConfigured: () => true,
-  }
-  vi.mocked(useSystemSettings).mockReturnValue(
-    value as unknown as ReturnType<typeof useSystemSettings>
-  )
-  return { loaded, loading, saving, rawOptions, load, saveOptions }
+// Publishes stored options through the shared composable, as a refresh would.
+async function serve(options: Record<string, string>) {
+  backend.options = { ...backend.options, ...options }
+  expect(await useSystemSettings().load(true)).toBe(true)
 }
+
 beforeEach(async () => {
   await setLocale('en')
-  state = configure()
+  Object.assign(backend, {
+    options: {
+      EpayId: '000123',
+      Price: '7.3',
+      MinTopUp: '1',
+      PayAddress: 'https://pay.example',
+      PayMethods: '[]',
+    },
+    puts: [],
+    patches: [],
+    offline: false,
+    failKey: '',
+    gate: null,
+  })
+  await serve({})
+  toast.error.mockClear()
+  toast.success.mockClear()
 })
 
 async function render(
@@ -145,8 +161,7 @@ describe('EPay settings page', () => {
       saveLabel,
     }) => {
       await setLocale(locale)
-      state.rawOptions.value['payment_setting.epay_settlement_enabled'] =
-        'false'
+      await serve({ 'payment_setting.epay_settlement_enabled': 'false' })
       const wrapper = await render()
       expect(
         wrapper
@@ -163,21 +178,20 @@ describe('EPay settings page', () => {
         .find((button) => button.text() === saveLabel)!
         .trigger('click')
       await flushPromises()
-      expect(state.saveOptions).toHaveBeenCalledExactlyOnceWith(
-        { Price: 8 },
-        expect.objectContaining({ onApplied: expect.any(Function) })
-      )
+      expect(backend.puts).toEqual([{ key: 'Price', value: '8' }])
       wrapper.unmount()
     }
   )
 
   it('disables failed-load drafts and enables fields only after retrying authoritative settings', async () => {
-    state.load.mockResolvedValueOnce(false)
+    backend.offline = true
+    expect(await useSystemSettings().load(true)).toBe(false)
     const wrapper = await render()
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[role="alert"]').text()).toContain(
       'could not be loaded'
     )
+    backend.offline = false
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Reload settings')!
@@ -187,7 +201,7 @@ describe('EPay settings page', () => {
     expect(
       wrapper.get<HTMLInputElement>('[id="setting-EpayId"]').element.value
     ).toBe('000123')
-    expect(state.saveOptions).not.toHaveBeenCalled()
+    expect(backend.puts).toEqual([])
     wrapper.unmount()
   })
 
@@ -195,7 +209,7 @@ describe('EPay settings page', () => {
     const wrapper = await render()
     await wrapper.get('[id="setting-EpayKey"]').setValue('new-secret')
     await wrapper.get('[id="setting-Price"]').setValue('8')
-    state.saveOptions.mockResolvedValueOnce(false)
+    backend.failKey = 'EpayKey'
     const save = wrapper
       .findAll('button')
       .find((button) => button.text() === 'Save changes')!
@@ -204,13 +218,8 @@ describe('EPay settings page', () => {
     expect(
       wrapper.get<HTMLInputElement>('[id="setting-EpayKey"]').element.value
     ).toBe('new-secret')
-    expect(state.saveOptions).toHaveBeenCalledWith(
-      {
-        EpayKey: 'new-secret',
-        Price: 8,
-      },
-      expect.objectContaining({ onApplied: expect.any(Function) })
-    )
+    expect(backend.puts).toEqual([{ key: 'EpayKey', value: 'new-secret' }])
+    backend.failKey = ''
     await save.trigger('click')
     await flushPromises()
     expect(
@@ -219,28 +228,27 @@ describe('EPay settings page', () => {
     expect(
       wrapper.get<HTMLInputElement>('[id="setting-Price"]').element.value
     ).toBe('8')
+    expect(backend.options).toMatchObject({ EpayKey: 'new-secret', Price: '8' })
     expect(save.attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
 
   it('sends only one request while saving and keeps inputs locked until completion', async () => {
     const wrapper = await render()
-    let finish!: (value: boolean) => void
-    state.saveOptions.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve
-        })
-    )
+    let finish!: () => void
+    backend.gate = new Promise((resolve) => {
+      finish = resolve
+    })
+    backend.failKey = 'EpayId'
     await wrapper.get('[id="setting-EpayId"]').setValue('merchant-2')
     const save = wrapper
       .findAll('button')
       .find((button) => button.text() === 'Save changes')!
     await save.trigger('click')
     await save.trigger('click')
-    expect(state.saveOptions).toHaveBeenCalledOnce()
+    expect(backend.puts).toEqual([{ key: 'EpayId', value: 'merchant-2' }])
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
-    finish(false)
+    finish()
     await flushPromises()
     expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
     expect(
@@ -251,19 +259,13 @@ describe('EPay settings page', () => {
 
   it('refreshes an untouched form but preserves an edited draft during shared refreshes', async () => {
     const wrapper = await render()
-    state.rawOptions.value = {
-      ...state.rawOptions.value,
-      EpayId: 'server-change',
-    }
+    await serve({ EpayId: 'server-change' })
     await flushPromises()
     expect(
       wrapper.get<HTMLInputElement>('[id="setting-EpayId"]').element.value
     ).toBe('server-change')
     await wrapper.get('[id="setting-Price"]').setValue('9')
-    state.rawOptions.value = {
-      ...state.rawOptions.value,
-      EpayId: 'newer-server-change',
-    }
+    await serve({ EpayId: 'newer-server-change' })
     await flushPromises()
     expect(
       wrapper.get<HTMLInputElement>('[id="setting-Price"]').element.value
@@ -276,10 +278,25 @@ describe('EPay settings page', () => {
       .find((button) => button.text() === 'Save changes')!
       .trigger('click')
     await flushPromises()
-    expect(state.saveOptions).toHaveBeenCalledWith(
-      { Price: 9 },
-      expect.objectContaining({ onApplied: expect.any(Function) })
+    expect(backend.puts).toEqual([{ key: 'Price', value: '9' }])
+    wrapper.unmount()
+  })
+
+  it('shows invalid stored values as field errors and refuses to save them', async () => {
+    await serve({ Price: 'bad' })
+    const wrapper = await render()
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.settings-error').text()).toBe('Enter a finite number')
+    await wrapper.get('[id="setting-EpayId"]').setValue('merchant-2')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      'Correct invalid settings before saving.'
     )
+    expect(backend.puts).toEqual([])
     wrapper.unmount()
   })
 
@@ -305,8 +322,7 @@ describe('GMPay settings page', () => {
     'does not expose or resubmit the retired settlement option in %s',
     async (locale, retiredLabel, newOrdersLabel, saveLabel) => {
       await setLocale(locale)
-      state.rawOptions.value['payment_setting.gmpay_settlement_enabled'] =
-        'false'
+      await serve({ 'payment_setting.gmpay_settlement_enabled': 'false' })
       const wrapper = await render('billing', 'gmpay')
       expect(wrapper.text()).not.toContain(retiredLabel)
       expect(
@@ -320,7 +336,8 @@ describe('GMPay settings page', () => {
         .find((button) => button.text() === saveLabel)!
       expect(save.attributes('disabled')).toBeDefined()
       await save.trigger('click')
-      expect(state.saveOptions).not.toHaveBeenCalled()
+      await flushPromises()
+      expect(backend.puts).toEqual([])
       wrapper.unmount()
     }
   )
@@ -341,13 +358,66 @@ describe('Email settings page', () => {
       .find((button) => button.text() === 'Save changes')!
       .trigger('click')
     await flushPromises()
-    const patch = state.saveOptions.mock.calls[0]?.[0] ?? {}
-    expect(Object.keys(patch)).toEqual([
-      'ResendFrom',
-      'ResendApiKey',
-      'EmailProvider',
+    expect(backend.puts).toEqual([
+      { key: 'ResendFrom', value: '"Site" <noreply@example.com>' },
+      { key: 'ResendApiKey', value: 're_test' },
+      { key: 'EmailProvider', value: 'resend' },
     ])
-    expect(patch.EmailProvider).toBe('resend')
+    wrapper.unmount()
+  })
+
+  it('keeps the hidden Turnstile site key when saving it empty', async () => {
+    await serve({
+      TurnstileSiteKey: 'site-key',
+      TurnstileCheckEnabled: 'false',
+    })
+    const wrapper = await render('auth', 'bot-protection')
+    const siteKey = wrapper.get('[id="setting-TurnstileSiteKey"]')
+    expect((siteKey.element as HTMLInputElement).value).toBe('')
+    expect(wrapper.text()).toContain(
+      'The saved Site Key is not shown here; saving it empty keeps the current value.'
+    )
+    await wrapper
+      .get('[role="switch"][aria-label="Enable Turnstile"]')
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.puts).toEqual([
+      { key: 'TurnstileCheckEnabled', value: 'true' },
+    ])
+    expect(backend.options.TurnstileSiteKey).toBe('site-key')
+    wrapper.unmount()
+  })
+})
+
+describe('request policy panel', () => {
+  it('shows a policy saved in the panel on the settings form', async () => {
+    await serve({
+      CheckSensitiveEnabled: 'false',
+      SensitiveWords: 'old',
+      RetryTimes: '2',
+    })
+    const wrapper = await render('security', 'sensitive')
+    const sensitiveCheck = () =>
+      wrapper.get(
+        '[role="switch"][aria-label="Enable sensitive word detection"]'
+      )
+    expect(sensitiveCheck().attributes('aria-checked')).toBe('false')
+    const policy = wrapper.get('textarea[aria-label="Request policy"]')
+    const draft = JSON.parse((policy.element as HTMLTextAreaElement).value)
+    await policy.setValue(
+      JSON.stringify({ ...draft, CheckSensitiveEnabled: 'true' })
+    )
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save request policy')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.patches).toEqual([{ CheckSensitiveEnabled: 'true' }])
+    expect(sensitiveCheck().attributes('aria-checked')).toBe('true')
     wrapper.unmount()
   })
 })

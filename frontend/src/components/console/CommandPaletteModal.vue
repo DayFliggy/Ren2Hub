@@ -27,6 +27,7 @@ const entries = computed(() =>
       isAdmin: auth.isAdmin,
       isRoot: auth.isRoot,
       featureStatus: (feature) => app.featureStatus(feature),
+      isSidebarModuleEnabled: app.isSidebarModuleEnabled,
       hasPermission: auth.hasPermission,
     }).flatMap((group) => group.items),
     ...consoleNavTools,

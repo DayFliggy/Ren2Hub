@@ -60,4 +60,38 @@ describe('payment setting field drafts', () => {
     )
     wrapper.unmount()
   })
+
+  it('edits the Creem product quota as a positive integer JSON number', async () => {
+    const wrapper = mount(SystemSettingsField, {
+      props: {
+        field: {
+          key: 'CreemProducts',
+          labelKey: 'systemSettings.fields.creemProducts',
+          kind: 'json',
+          defaultValue: '[]',
+        },
+        modelValue:
+          '[{"name":"Basic","productId":"prod_1","price":4.99,"quota":100000,"currency":"USD"}]',
+      },
+      global: { plugins: [i18n] },
+    })
+    const quota = wrapper.findAll('.collection-field input')[3]!
+    expect(quota.attributes('type')).toBe('number')
+    await quota.setValue('250000')
+    expect(wrapper.emitted('validity')?.at(-1)).toEqual([true])
+    expect(
+      JSON.parse(String(wrapper.emitted('update:modelValue')?.at(-1)?.[0]))
+    ).toEqual([
+      {
+        name: 'Basic',
+        productId: 'prod_1',
+        price: 4.99,
+        quota: 250000,
+        currency: 'USD',
+      },
+    ])
+    await quota.setValue('1.5')
+    expect(wrapper.emitted('validity')?.at(-1)).toEqual([false])
+    wrapper.unmount()
+  })
 })

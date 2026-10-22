@@ -23,11 +23,11 @@ export interface PublicStatus {
   logo?: string
   docs_link?: string
   register_enabled?: boolean
-  affiliate_registration_required?: boolean
   user_agreement_enabled?: boolean
   privacy_policy_enabled?: boolean
   uptime_kuma_enabled?: boolean
-  HeaderNavModules?: unknown
+  HeaderNavModules?: string
+  SidebarModulesAdmin?: string
   frontend_capabilities?: FrontendCapabilities
   turnstile_check?: boolean
   turnstile_site_key?: string
@@ -130,7 +130,6 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'password_login_enabled',
     'password_login_encryption_enabled',
     'register_enabled',
-    'affiliate_registration_required',
     'user_agreement_enabled',
     'privacy_policy_enabled',
     'uptime_kuma_enabled',
@@ -172,8 +171,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     if (
       typeof value.log_max_range_days !== 'number' ||
       !Number.isInteger(value.log_max_range_days) ||
-      value.log_max_range_days < 1 ||
-      value.log_max_range_days > 36500
+      value.log_max_range_days < 1
     )
       invalidResponse('/api/status')
     result.log_max_range_days = value.log_max_range_days
@@ -194,7 +192,12 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'oidc_client_id',
     'oidc_authorization_endpoint',
   ] as const
-  const statusStringKeys = ['turnstile_site_key', 'wechat_qrcode'] as const
+  const statusStringKeys = [
+    'turnstile_site_key',
+    'wechat_qrcode',
+    'HeaderNavModules',
+    'SidebarModulesAdmin',
+  ] as const
   for (const key of oauthStringKeys) {
     if (value[key] !== undefined && typeof value[key] !== 'string') {
       invalidResponse('/api/status')
@@ -220,9 +223,6 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     )
       invalidResponse('/api/status')
     result.passkey_rp_ids = value.passkey_rp_ids
-  }
-  if (value.HeaderNavModules !== undefined) {
-    result.HeaderNavModules = value.HeaderNavModules
   }
   if (value.frontend_capabilities !== undefined) {
     if (!isRecord(value.frontend_capabilities)) invalidResponse('/api/status')

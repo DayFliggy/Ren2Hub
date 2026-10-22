@@ -3,6 +3,7 @@ export interface RecordField {
   kind: 'text' | 'number' | 'boolean' | 'url' | 'datetime' | 'select' | 'json'
   required?: boolean
   min?: number
+  integer?: boolean
   maxLength?: number
   choices?: readonly string[]
   defaultValue?: unknown
@@ -96,7 +97,8 @@ export const SETTINGS_RECORD_EDITORS: Record<string, RecordEditorSchema> = {
       { key: 'name', kind: 'text', required: true },
       { key: 'productId', kind: 'text', required: true },
       { key: 'price', kind: 'number', min: 0.01, required: true },
-      { key: 'quota', kind: 'text', required: true },
+      // Go decodes Creem quota into int64, so it is stored as a JSON number.
+      { key: 'quota', kind: 'number', min: 1, integer: true, required: true },
       {
         key: 'currency',
         kind: 'select',

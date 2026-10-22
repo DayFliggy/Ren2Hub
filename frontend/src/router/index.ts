@@ -7,7 +7,10 @@ import {
 } from 'vue-router'
 
 import HomeView from '@/views/HomeView.vue'
-import { getConsoleRouteAccessMeta } from '@/constants/navigation/consoleNav'
+import {
+  getConsoleRouteAccessMeta,
+  tokenRoutingAccess,
+} from '@/constants/navigation/consoleNav'
 import { getTopNavRouteMeta } from '@/constants/navigation/topNav'
 import { loadMessageDomain } from '@/i18n'
 import { useAppStore } from '@/stores'
@@ -186,8 +189,7 @@ const router = createRouter({
             wide: true,
             noPageScroll: true,
             protected: true,
-            feature: 'token_private_routing',
-            capability: 'token_private_routing',
+            ...tokenRoutingAccess,
           },
         },
         {

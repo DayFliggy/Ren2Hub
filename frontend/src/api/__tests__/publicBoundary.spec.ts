@@ -17,6 +17,7 @@ describe('public API response boundaries', () => {
         turnstile_site_key: 'site-key',
         wechat_qrcode: 'https://cdn.example.com/wechat.png',
         HeaderNavModules: '{"pricing":true}',
+        SidebarModulesAdmin: '{"admin":{"channel":false}}',
       })
     ).toEqual({
       system_name: 'Ren2Hub',
@@ -25,6 +26,7 @@ describe('public API response boundaries', () => {
       turnstile_site_key: 'site-key',
       wechat_qrcode: 'https://cdn.example.com/wechat.png',
       HeaderNavModules: '{"pricing":true}',
+      SidebarModulesAdmin: '{"admin":{"channel":false}}',
     })
     expect(parsePricingModels([{ model_name: 'gpt-4o' }])).toEqual([
       { model_name: 'gpt-4o' },
@@ -41,12 +43,28 @@ describe('public API response boundaries', () => {
     expect(() => parsePublicStatus({ server_address: 123 })).toThrow()
     expect(() => parsePublicStatus({ wechat_qrcode: 123 })).toThrow()
     expect(() => parsePublicStatus({ api_info: {} })).toThrow()
+    // controller/misc.go sends the option text; an object is not that contract.
+    expect(() =>
+      parsePublicStatus({ HeaderNavModules: { pricing: true } })
+    ).toThrow()
+    expect(() =>
+      parsePublicStatus({ SidebarModulesAdmin: { admin: { enabled: true } } })
+    ).toThrow()
     expect(() => parsePublicStatus({ api_info: [{ url: 123 }] })).toThrow()
     expect(() => parsePricingModels({ model_name: 'gpt-4o' })).toThrow()
     expect(() => parsePricingModels([{ id: 1 }])).toThrow()
     expect(() =>
       parseUptimeGroups([{ monitors: [{ uptime: 'offline', status: 0 }] }])
     ).toThrow()
+  })
+
+  it('accepts any positive integer log range the backend allows', () => {
+    for (const days of [1, 365, 36501])
+      expect(parsePublicStatus({ log_max_range_days: days })).toEqual({
+        log_max_range_days: days,
+      })
+    for (const days of [0, -1, 1.5, '365'])
+      expect(() => parsePublicStatus({ log_max_range_days: days })).toThrow()
   })
 
   it('accepts only a consistent 24-hour metrics snapshot', () => {

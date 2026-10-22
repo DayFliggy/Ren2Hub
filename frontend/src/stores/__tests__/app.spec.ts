@@ -11,7 +11,8 @@ const publicApi = vi.hoisted(() => ({
 vi.mock('@/api/public', () => ({ publicApi }))
 
 import { useAuthStore } from '@/stores/auth'
-import { parseHeaderModules, useAppStore } from '@/stores/app'
+import type { PublicStatus } from '@/api/public'
+import { useAppStore } from '@/stores/app'
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -29,11 +30,72 @@ describe('public application state', () => {
     expect(useAppStore().systemName).toBe('Ren2Hub')
   })
 
-  it('normalizes HeaderNavModules objects and JSON strings', () => {
-    expect(parseHeaderModules('{"pricing":{"enabled":false}}')).toEqual({
-      pricing: { enabled: false },
-    })
-    expect(parseHeaderModules('{bad json')).toEqual({})
+  const open = { enabled: true, requireAuth: false }
+  const closed = { enabled: false, requireAuth: false }
+
+  // Expected values follow middleware/header_nav.go, which the backend uses
+  // to enforce the same option.
+  it.each([
+    ['{"pricing":" FALSE "}', 'pricing', closed],
+    ['{"pricing":" TRUE "}', 'pricing', open],
+    ['{"pricing":{"enabled":"0"}}', 'pricing', closed],
+    [
+      '{"pricing":{"enabled":true,"requireAuth":1}}',
+      'pricing',
+      { enabled: true, requireAuth: true },
+    ],
+    [
+      '{"pricing":{"requireAuth":" True "}}',
+      'pricing',
+      { enabled: true, requireAuth: true },
+    ],
+    ['{"pricing":2}', 'pricing', open],
+    ['{"docs":{"enabled":false}}', 'docs', closed],
+    ['{"about":{"enabled":" false "}}', 'about', closed],
+    ['[]', 'pricing', open],
+    ['null', 'pricing', open],
+    ['not-json', 'pricing', open],
+    ['', 'pricing', open],
+  ])('reads HeaderNavModules %s for %s', (raw, module, access) => {
+    const store = useAppStore()
+    store.status = { HeaderNavModules: raw }
+
+    expect(store.moduleAccess(module)).toEqual(access)
+  })
+
+  it('hides docs and about entries the option disables', () => {
+    const store = useAppStore()
+    store.status = {
+      HeaderNavModules: '{"docs":{"enabled":false},"about":{"enabled":"0"}}',
+      docs_link: '/docs',
+    }
+    expect(store.showDocs).toBe(false)
+    expect(store.showAbout).toBe(false)
+
+    store.status = {
+      HeaderNavModules: '[]',
+      docs_link: '/docs',
+    }
+    expect(store.showDocs).toBe(true)
+    expect(store.showAbout).toBe(true)
+  })
+
+  it('keeps the newest status when an earlier refresh resolves last', async () => {
+    const pending: Array<(value: PublicStatus) => void> = []
+    publicApi.status.mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve))
+    )
+    const store = useAppStore()
+    const older = store.refreshStatus()
+    const newer = store.refreshStatus()
+
+    pending[1]!({ HeaderNavModules: '{"pricing":false}' })
+    await newer
+    pending[0]!({ HeaderNavModules: '' })
+    await older
+
+    expect(store.moduleAccess('pricing')).toEqual(closed)
+    expect(store.statusReachable).toBe(true)
   })
 
   it('distinguishes reachable status from degraded summaries', async () => {
@@ -81,9 +143,7 @@ describe('public application state', () => {
   it('enforces registration and authenticated-pricing flags', async () => {
     publicApi.status.mockResolvedValueOnce({
       register_enabled: false,
-      HeaderNavModules: {
-        pricing: { enabled: true, requireAuth: true },
-      },
+      HeaderNavModules: '{"pricing":{"enabled":true,"requireAuth":true}}',
     })
     const store = useAppStore()
 
@@ -107,9 +167,7 @@ describe('public application state', () => {
       request_count: 0,
     })
     publicApi.status.mockResolvedValueOnce({
-      HeaderNavModules: {
-        pricing: { enabled: true, requireAuth: true },
-      },
+      HeaderNavModules: '{"pricing":{"enabled":true,"requireAuth":true}}',
     })
     const store = useAppStore()
 
@@ -128,13 +186,11 @@ describe('public application state', () => {
         })
     )
     publicApi.status.mockResolvedValueOnce({
-      HeaderNavModules: {
-        pricing: { enabled: true, requireAuth: true },
-      },
+      HeaderNavModules: '{"pricing":{"enabled":true,"requireAuth":true}}',
     })
     const store = useAppStore()
     const initialization = store.initialize()
-    await vi.waitFor(() => expect(publicApi.status).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(publicApi.notice).toHaveBeenCalledTimes(1))
 
     useAuthStore().persist({
       id: 1,

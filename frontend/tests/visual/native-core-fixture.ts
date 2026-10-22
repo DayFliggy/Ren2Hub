@@ -172,6 +172,10 @@ export async function nativeCoreFixture(
     entries: [{ channel_id: 2, enabled: true, position: 0 }],
   }
   let checked = false
+  let requestPolicy: Record<string, string> = {
+    RetryTimes: '2',
+    CheckSensitiveEnabled: 'false',
+  }
   const features = Object.fromEntries(
     [
       'registration',
@@ -280,7 +284,7 @@ export async function nativeCoreFixture(
         custom_currency_exchange_rate: 1,
         frontend_capabilities: features,
         start_time: now - 86400,
-        HeaderNavModules: { pricing: true },
+        HeaderNavModules: '{"pricing":true}',
         password_login_enabled: true,
         password_login_encryption_enabled: false,
         log_max_range_days: 365,
@@ -627,13 +631,13 @@ export async function nativeCoreFixture(
         { key: 'SystemName', value: 'Ren2Hub' },
         { key: 'general_setting.quota_display_type', value: 'USD' },
       ])
-    if (path === '/api/option/request_policy')
-      return ok({
-        options:
-          method === 'PATCH'
-            ? req.postDataJSON().options
-            : { RetryTimes: '2', CheckSensitiveEnabled: 'false' },
-      })
+    if (path === '/api/option/request_policy') {
+      // controller.UpdateRequestPolicy merges the delta and answers with the
+      // full policy snapshot, the same body GET returns.
+      if (method === 'PATCH')
+        requestPolicy = { ...requestPolicy, ...req.postDataJSON().options }
+      return ok({ options: requestPolicy })
+    }
     if (path === '/api/option/gmpay/config')
       return ok({
         pay_address: 'https://pay.example',

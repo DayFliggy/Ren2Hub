@@ -8,7 +8,7 @@
       "commit": "6fb512461350fd62274e07ecc159f1208a062262",
       "disposition": "重构",
       "target": "model/affiliate.go; model/topup_settlement.go; model/user_quota_adjustment.go",
-      "excluded": "schema 5、任务奖励与账务事件不采用",
+      "excluded": "schema 5、任务奖励与账务事件不采用；changed_code_paths 中的 frontend/src/views/console/systemSettings/*SettingsView.vue 已于 2026-10-22 作为无引用死代码删除，现行设置页由 SystemSettingsDomainView 与 systemSettingsCatalog 承载",
       "patch_sha256": "e4f51ac6efdf76f729141a75acee488791ce61f4c515f9014ccaf2ae37b84af9",
       "changed_code_paths": [
         "common/constants.go",
@@ -76,7 +76,7 @@
       "commit": "325c4ce40550570b5f3389022112ecbf1fe8ea03",
       "disposition": "重构",
       "target": "model/affiliate.go; model/topup_settlement.go; model/user_quota_adjustment.go",
-      "excluded": "schema 5、任务奖励与账务事件不采用",
+      "excluded": "schema 5、任务奖励与账务事件不采用；changed_code_paths 中的 frontend/src/views/console/systemSettings/*SettingsView.vue 已于 2026-10-22 作为无引用死代码删除，现行设置页由 SystemSettingsDomainView 与 systemSettingsCatalog 承载",
       "patch_sha256": "b6857a6a4ae4dc7d61ca6a344ff04a01dbafb884aef3c8e9c78339df81c348db",
       "changed_code_paths": [
         "common/constants.go",

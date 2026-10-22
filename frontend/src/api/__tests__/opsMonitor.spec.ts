@@ -63,6 +63,67 @@ describe('native ops monitoring', () => {
     expect(result.checks.find((row) => row.key === 'memory')?.status).toBe('ok')
     expect(result.status).toBe('critical')
   })
+  it.each([
+    { threshold: -1, status: 'unknown' },
+    { threshold: 0, status: 'unknown' },
+    { threshold: 150, status: 'ok' },
+  ])(
+    'accepts the backend CPU threshold $threshold and rates it $status',
+    ({ threshold, status }) => {
+      const data = performanceFixture()
+      data.config.monitor_cpu_threshold = threshold
+      data.system_usage = { cpu_percent: 120, memory_percent: 1, sampled_at: 1 }
+      const result = projectOpsOverview(
+        parsePerformanceStats(data),
+        null,
+        '1h',
+        [],
+        3600
+      )!
+      expect(result.resources?.cpu.threshold).toBe(threshold)
+      expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
+        status
+      )
+    }
+  )
+  it.each([
+    { value: 89.9, status: 'warning' },
+    { value: 90, status: 'warning' },
+    { value: 90.5, status: 'warning' },
+    { value: 90.99, status: 'warning' },
+    { value: 91, status: 'critical' },
+  ])(
+    'uses the Go integer threshold boundary for a sample of $value',
+    ({ value, status }) => {
+      const data = performanceFixture()
+      data.config.monitor_cpu_threshold = 90
+      data.config.monitor_memory_threshold = 90
+      data.config.monitor_disk_threshold = 90
+      data.system_usage = {
+        cpu_percent: value,
+        memory_percent: value,
+        sampled_at: 1,
+      }
+      data.disk_space_info = {
+        total: 1000,
+        used: value * 10,
+        used_percent: value,
+      }
+      const result = projectOpsOverview(
+        parsePerformanceStats(data),
+        null,
+        '1h',
+        [],
+        3600
+      )!
+      for (const key of ['cpu', 'memory', 'disk']) {
+        expect(result.checks.find((check) => check.key === key)?.status).toBe(
+          status
+        )
+      }
+      expect(result.status).toBe(status)
+    }
+  )
   it('reads DB pool counters and keeps an unreadable pool null', () => {
     const data = JSON.parse(JSON.stringify(performanceFixture()))
     data.db_pool.main = null
@@ -98,7 +159,8 @@ describe('native ops monitoring', () => {
     ['disk_space_info', 'used_percent', 101],
     ['disk_space_info', 'total', -1],
     ['config', 'monitor_enabled', 'true'],
-    ['config', 'monitor_disk_threshold', 101],
+    ['config', 'monitor_disk_threshold', 90.5],
+    ['config', 'monitor_cpu_threshold', '90'],
     ['config', 'disk_cache_path', 9],
     ['memory_stats', 'alloc', -1],
     ['db_pool', 'log_shared', 'true'],

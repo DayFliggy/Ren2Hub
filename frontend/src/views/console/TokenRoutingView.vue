@@ -33,6 +33,7 @@ import TextInput from '@/components/common/TextInput.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { tokenRoutingMessages } from '@/i18n/tokenRouting'
+import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
 import { useAuthStore } from '@/stores/auth'
 import { isValidChannelRatio } from '@/utils/channelRatio'
 
@@ -42,7 +43,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const toast = useToast()
 const tokenId = computed(() => Number(route.params.id))
-const canRead = computed(() => auth.hasPermission('routing', 'read'))
+const canRead = computed(() =>
+  auth.hasPermission(
+    tokenRoutingAccess.requiresPermission.resource,
+    tokenRoutingAccess.requiresPermission.action
+  )
+)
 const canWrite = computed(() => auth.hasPermission('routing', 'write'))
 const data = ref<TokenRoute | null>(null)
 const channels = ref<TokenRouteChannel[]>([])

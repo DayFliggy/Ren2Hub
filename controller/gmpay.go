@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"math"
 	"net/http"
 	"strconv"
@@ -131,11 +132,26 @@ func SaveGmpayConfig(c *gin.Context) {
 		return
 	}
 	if err := service.SaveGmpayConfig(c.Request.Context(), config); err != nil {
-		common.ApiErrorT(c, "Failed to save configuration")
+		common.ApiError(c, gmpaySaveError(c, err))
 		return
 	}
 	recordManageAudit(c, "payment.gmpay_config_update", map[string]any{"enabled": config.Enabled, "asset_count": len(config.Assets)})
 	GetGmpayConfig(c)
+}
+
+// gmpaySaveError names validation failures and logs only unexpected errors.
+// The request body carries the merchant secret, so it is never logged.
+func gmpaySaveError(c *gin.Context, err error) *common.Message {
+	switch {
+	case errors.Is(err, gmpay.ErrInvalidConfig):
+		return common.NewMessage("Invalid GMPay merchant settings")
+	case errors.Is(err, setting.ErrGmpayInvalidAsset):
+		return common.NewMessage("Invalid GMPay asset")
+	case errors.Is(err, setting.ErrGmpayDuplicateAsset):
+		return common.NewMessage("Duplicate GMPay asset")
+	}
+	logger.LogError(c.Request.Context(), common.LogText("GMPay failed to save config error=%q", err.Error()))
+	return common.NewMessage("Failed to save configuration")
 }
 
 func ProbeGmpay(c *gin.Context) {

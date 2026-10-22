@@ -13,8 +13,8 @@ const { t, locale } = useI18n()
 const toast = useToast()
 const open = ref(false)
 const loading = ref(false)
-const confirmed = computed(() =>
-  Boolean(rawValue('payment_setting.compliance_confirmed', false))
+const confirmed = computed(
+  () => rawValue('payment_setting.compliance_confirmed', false) === true
 )
 const termsVersion = computed(() =>
   String(rawValue('payment_setting.compliance_terms_version', 'v1'))

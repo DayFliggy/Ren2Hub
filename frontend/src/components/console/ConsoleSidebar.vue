@@ -27,6 +27,7 @@ const visibleNavGroups = computed(() =>
     isRoot: auth.isRoot,
     hasPermission: auth.hasPermission,
     featureStatus: (feature) => app.featureStatus(feature),
+    isSidebarModuleEnabled: app.isSidebarModuleEnabled,
   })
 )
 

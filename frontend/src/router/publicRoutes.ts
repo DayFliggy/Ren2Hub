@@ -3,43 +3,19 @@ import type {
   RouteLocationRaw,
   RouteRecordRaw,
 } from 'vue-router'
-import { publicApi, type PublicStatus } from '@/api/public'
-import { isRecord } from '@/api/contracts'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { parseHeaderModules } from '@/stores/app'
-
-export function publicModuleAccess(value: unknown): {
-  enabled: boolean
-  requireAuth: boolean
-} {
-  const bool = (item: unknown, fallback: boolean) => {
-    if (typeof item === 'string') item = item.trim().toLowerCase()
-    if (item === true || item === 1 || item === '1' || item === 'true')
-      return true
-    if (item === false || item === 0 || item === '0' || item === 'false')
-      return false
-    return fallback
-  }
-  return isRecord(value)
-    ? {
-        enabled: bool(value.enabled, true),
-        requireAuth: bool(value.requireAuth, false),
-      }
-    : { enabled: bool(value, true), requireAuth: false }
-}
 
 export async function guardPublicModule(
   to: RouteLocationNormalized
 ): Promise<true | RouteLocationRaw> {
-  let status: PublicStatus
+  const app = useAppStore()
   try {
-    status = await publicApi.status()
+    await app.refreshStatus()
   } catch {
     return { name: 'status-503' }
   }
-  const access = publicModuleAccess(
-    parseHeaderModules(status.HeaderNavModules)[String(to.meta.publicModule)]
-  )
+  const access = app.moduleAccess(String(to.meta.publicModule))
   if (!access.enabled) return { name: 'status-404' }
   // A failed session check (for example a rate-limited refresh) propagates to
   // the router's navigation error state like every other guarded route, so the
@@ -54,16 +30,17 @@ export async function guardPublicModule(
 export async function guardLegalDocument(
   to: RouteLocationNormalized
 ): Promise<true | RouteLocationRaw> {
+  const app = useAppStore()
   try {
-    const status = await publicApi.status()
-    const enabled =
-      to.name === 'privacy-policy'
-        ? status.privacy_policy_enabled
-        : status.user_agreement_enabled
-    return enabled ? true : { name: 'status-404' }
+    await app.refreshStatus()
   } catch {
     return { name: 'status-503' }
   }
+  const enabled =
+    to.name === 'privacy-policy'
+      ? app.privacyPolicyEnabled
+      : app.userAgreementEnabled
+  return enabled ? true : { name: 'status-404' }
 }
 
 export const publicRoutes: RouteRecordRaw[] = [

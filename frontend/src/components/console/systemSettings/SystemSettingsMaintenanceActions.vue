@@ -42,6 +42,9 @@ const performanceStats = ref<PerformanceStats | null>(null)
 const logFiles = ref<LogFiles | null>(null)
 const logCleanupMode = ref<'by_count' | 'by_days'>('by_count')
 const logCleanupValue = ref(30)
+// GET /api/performance/logs answers enabled:false when no log directory is
+// configured; null means the status is unknown because the read failed.
+const logEnabled = computed(() => logFiles.value?.enabled === true)
 
 const actionText = computed(() => {
   switch (pendingAction.value) {
@@ -124,6 +127,8 @@ async function loadStats() {
       logFiles.value = logs
     }
   } catch (error) {
+    // A failed refresh must not leave an earlier cleanable state in place.
+    logFiles.value = null
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     loadingStats.value = false
@@ -132,6 +137,10 @@ async function loadStats() {
 
 async function runAction() {
   if (!pendingAction.value) return
+  if (pendingAction.value === 'cleanup-logs' && !logEnabled.value) {
+    pendingAction.value = null
+    return
+  }
   loading.value = true
   try {
     switch (pendingAction.value) {
@@ -286,7 +295,15 @@ onMounted(loadStats)
         <div class="text-xs font-medium text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.logSize') }}
         </div>
+        <p
+          v-if="logFiles?.enabled === false"
+          data-log-disabled
+          class="mt-1 text-xs text-[var(--text-secondary)]"
+        >
+          {{ t('systemSettings.maintenance.logDisabled') }}
+        </p>
         <div
+          v-else
           class="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]"
         >
           {{ formatBytes(logFiles?.total_size) }}
@@ -326,6 +343,7 @@ onMounted(loadStats)
         </ConsoleButton>
       </div>
       <div
+        v-if="logEnabled"
         class="mt-4 flex flex-wrap items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] p-3"
       >
         <span class="text-xs font-medium text-[var(--text-secondary)]">{{

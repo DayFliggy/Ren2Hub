@@ -33,6 +33,15 @@ describe('payment setting validation', () => {
   it.each([0, -1, Infinity, ''])('rejects unusable EPay price %s', (price) => {
     expect(validate('Price', price)).not.toBeNull()
   })
+  it.each(['USDExchangeRate', 'general_setting.custom_currency_exchange_rate'])(
+    'requires %s to be a finite number greater than zero like the backend',
+    (key) => {
+      for (const value of [0, -1, Infinity, ''])
+        expect(validate(key, value), String(value)).not.toBeNull()
+      expect(validate(key, 0.0001)).toBeNull()
+      expect(validate(key, 7.3)).toBeNull()
+    }
+  )
   it('accepts small positive prices and bounds minimum credits by the ledger limit', () => {
     expect(validate('Price', 1e-8)).toBeNull()
     expect(validate('MinTopUp', 18446744073709)).toBeNull()
@@ -56,4 +65,85 @@ describe('payment setting validation', () => {
       )
     ).toBeNull()
   })
+})
+
+// Backend-validated keys follow the backend rule; UI-only keys follow the
+// upstream web form minimums. None may be stricter than either source.
+describe('numeric setting bounds', () => {
+  it.each([
+    {
+      key: 'quota_setting.pre_consume_multiplier',
+      rejected: [0, -0.5, ''],
+      accepted: [0.0001, 1, 2.5],
+    },
+    { key: 'RetryTimes', rejected: [-1, 1.5], accepted: [0, 3, 100, 1000] },
+    {
+      key: 'log_setting.max_range_days',
+      rejected: [0, 1.5],
+      accepted: [1, 365, 36501, 100000],
+    },
+    {
+      key: 'perf_metrics_setting.flush_interval',
+      rejected: [0, 1.5],
+      accepted: [1, 5],
+    },
+    {
+      key: 'perf_metrics_setting.retention_days',
+      rejected: [-1, 0.5],
+      accepted: [0, 30],
+    },
+    {
+      key: 'performance_setting.disk_cache_threshold_mb',
+      rejected: [0, 1.5],
+      accepted: [1, 10],
+    },
+    {
+      key: 'performance_setting.disk_cache_max_size_mb',
+      rejected: [99, 100.5],
+      accepted: [100, 1024],
+    },
+    {
+      key: 'performance_setting.monitor_cpu_threshold',
+      rejected: [-1, 90.5],
+      accepted: [0, 90, 150],
+    },
+    {
+      key: 'performance_setting.monitor_memory_threshold',
+      rejected: [-1, 101, 90.5],
+      accepted: [0, 90, 100],
+    },
+    {
+      key: 'performance_setting.monitor_disk_threshold',
+      rejected: [-1, 101, 95.5],
+      accepted: [0, 95, 100],
+    },
+  ])('bounds $key', ({ key, rejected, accepted }) => {
+    for (const value of rejected)
+      expect(validate(key, value), String(value)).not.toBeNull()
+    for (const value of accepted)
+      expect(validate(key, value), String(value)).toBeNull()
+  })
+})
+
+describe('Creem product validation', () => {
+  const product = (quota: unknown) =>
+    JSON.stringify([
+      {
+        name: 'Basic',
+        productId: 'prod_1',
+        price: 4.99,
+        quota,
+        currency: 'USD',
+      },
+    ])
+  it('accepts positive integer quota numbers like the Go int64 contract', () => {
+    expect(validate('CreemProducts', product(1))).toBeNull()
+    expect(validate('CreemProducts', product(100000))).toBeNull()
+  })
+  it.each(['100000', 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects quota %s in raw JSON',
+    (quota) => {
+      expect(validate('CreemProducts', product(quota))).not.toBeNull()
+    }
+  )
 })

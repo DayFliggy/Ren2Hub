@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { api } from '@/api/client'
+import { useSystemSettings } from '@/composables/useSystemSettings'
+import { useToast } from '@/composables/useToast'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
@@ -26,12 +28,16 @@ const { t } = useI18n({
     },
   },
 })
+const { t: globalT } = useI18n({ useScope: 'global' })
+const settings = useSystemSettings()
+const toast = useToast()
 const draft = ref(''),
   error = ref(''),
   loading = ref(false),
-  baseline = ref(''),
+  baseline = ref<Record<string, string>>({}),
   ready = ref(false),
   request = useLatestRequest()
+const baselineText = computed(() => JSON.stringify(baseline.value, null, 2))
 function validOptions(value: unknown): Record<string, string> {
   if (
     !value ||
@@ -42,6 +48,13 @@ function validOptions(value: unknown): Record<string, string> {
     throw new Error(t('policy.hint'))
   return value as Record<string, string>
 }
+// Only edited keys are sent, so a stale draft never rewrites values that the
+// settings form saved after this panel loaded (upstream web sends the delta).
+function changedOptions(next: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(next).filter(([key, value]) => baseline.value[key] !== value)
+  )
+}
 async function run(save: boolean) {
   if (loading.value) return
   let payload: Record<string, string> | undefined
@@ -49,10 +62,14 @@ async function run(save: boolean) {
   try {
     if (save) {
       if (!ready.value) return
-      payload = validOptions(JSON.parse(draft.value))
+      payload = changedOptions(validOptions(JSON.parse(draft.value)))
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
+    return
+  }
+  if (payload && Object.keys(payload).length === 0) {
+    toast.info(globalT('systemSettings.noChanges'))
     return
   }
   loading.value = true
@@ -72,19 +89,26 @@ async function run(save: boolean) {
   })
   if (result.stale) return
   loading.value = false
-  if (result.ok) {
-    draft.value = JSON.stringify(result.value, null, 2)
-    baseline.value = draft.value
-    ready.value = true
-  } else
+  if (!result.ok) {
     error.value =
       result.error instanceof Error
         ? result.error.message
         : String(result.error)
+    return
+  }
+  baseline.value = result.value
+  draft.value = baselineText.value
+  ready.value = true
+  // The settings form shares these keys; load reports its own failure.
+  if (save) await settings.load(true)
 }
 const load = () => run(false),
   save = () => run(true)
 onMounted(load)
+// Pick up saves from the settings form unless the admin is editing here.
+watch(settings.rawOptions, () => {
+  if (ready.value && draft.value === baselineText.value) void load()
+})
 </script>
 <template>
   <ConsoleCard :title="t('policy.title')" class="mt-6"
@@ -99,7 +123,7 @@ onMounted(load)
     />
     <div class="mt-4 flex gap-3">
       <ConsoleButton
-        :disabled="loading || !ready || draft === baseline"
+        :disabled="loading || !ready || draft === baselineText"
         @click="save"
         >{{ t('policy.save') }}</ConsoleButton
       ><ConsoleButton variant="secondary" :disabled="loading" @click="load">{{
