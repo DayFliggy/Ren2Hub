@@ -13,9 +13,10 @@ import {
   Trash2,
   X,
 } from 'lucide-vue-next'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { ApiError } from '@/api/types'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -34,7 +35,11 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import RedemptionCodeCell from '@/components/console/redemption/RedemptionCodeCell.vue'
 import RedemptionGenerateModal from '@/components/console/redemption/RedemptionGenerateModal.vue'
 import RedemptionSuccessModal from '@/components/console/redemption/RedemptionSuccessModal.vue'
-import { useAdminRedemption } from '@/composables/useAdminRedemption'
+import {
+  REDEMPTION_EXPORT_MAX_ROWS,
+  useAdminRedemption,
+} from '@/composables/useAdminRedemption'
+import { useToast } from '@/composables/useToast'
 import {
   ADMIN_REDEMPTION_DEFAULT_VISIBLE_FIELDS,
   ADMIN_REDEMPTION_OPTIONAL_FIELDS,
@@ -75,6 +80,7 @@ const {
   canMutate,
   canManage,
   load,
+  fetchAllForExport,
   isBusy,
   isRowBusy,
   isCrudActionBusy,
@@ -84,6 +90,7 @@ const {
   deleteCode,
   deleteSelected,
 } = useAdminRedemption()
+const toast = useToast()
 
 const generateOpen = ref(false)
 const successCodes = ref<string[]>([])
@@ -278,31 +285,41 @@ function cancelBulkDelete() {
   }
 }
 
-// CSV export (client-side, current filtered dataset)
-function exportCsv() {
+// CSV export of every page matching the current filters and sort.
+const exporting = ref(false)
+let exportController: AbortController | null = null
+
+function redemptionExportRow(c: AdminRedemptionCode) {
+  return [
+    c.id,
+    c.code,
+    c.type,
+    formatRedemptionValue(c),
+    c.status,
+    c.redeemer_id || '',
+    c.used_time > 0 ? formatTime(c.used_time) : '',
+    formatTime(c.created_time),
+    c.expired_time === -1 ? 'never' : formatTime(c.expired_time),
+  ]
+}
+
+function downloadCsv(items: AdminRedemptionCode[]) {
   const headers = [
     'ID',
     'Code',
     'Type',
     'Value',
     'Status',
-    'Redeemer',
+    'RedeemerID',
     'UsedTime',
     'CreatedTime',
     'ExpiredTime',
   ]
-  const exportRows = rows.value.map((c) => [
-    c.id,
-    c.code,
-    c.type,
-    formatRedemptionValue(c),
-    c.status,
-    c.redeemer_email || '',
-    c.used_time > 0 ? formatTime(c.used_time) : '',
-    formatTime(c.created_time),
-    c.expired_time === -1 ? 'never' : formatTime(c.expired_time),
-  ])
-  const [content, mime, ext] = serializeSpreadsheet(headers, exportRows, 'csv')
+  const [content, mime, ext] = serializeSpreadsheet(
+    headers,
+    items.map(redemptionExportRow),
+    'csv'
+  )
   const blob = new Blob([content], { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -313,6 +330,36 @@ function exportCsv() {
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+
+async function exportCsv() {
+  exportController?.abort()
+  const controller = new AbortController()
+  exportController = controller
+  exporting.value = true
+  try {
+    const { items, truncated } = await fetchAllForExport(controller.signal)
+    downloadCsv(items)
+    if (truncated) {
+      toast.warning(
+        t('redemption.exportTruncated', {
+          count: items.length,
+          limit: REDEMPTION_EXPORT_MAX_ROWS,
+        })
+      )
+    } else {
+      toast.success(t('redemption.exported', { count: items.length }))
+    }
+  } catch (error) {
+    // An unmount mid-export is a cancellation, not a failure to report.
+    if (controller.signal.aborted) return
+    toast.error(error instanceof ApiError ? error.message : String(error))
+  } finally {
+    if (exportController === controller) exportController = null
+    exporting.value = false
+  }
+}
+
+onBeforeUnmount(() => exportController?.abort())
 </script>
 
 <template>
@@ -343,6 +390,7 @@ function exportCsv() {
             <ConsoleButton
               variant="secondary"
               size="sm"
+              :loading="exporting"
               :disabled="rows.length === 0"
               @click="exportCsv"
             >

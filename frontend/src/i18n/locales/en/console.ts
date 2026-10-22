@@ -1627,6 +1627,9 @@ export default {
     name: 'Name',
     generateCodes: 'Generate codes',
     exportCsv: 'Export CSV',
+    exported: 'Exported {count} redemption codes',
+    exportTruncated:
+      'Too many redemption codes; exported the first {count} (limit {limit})',
     refreshList: 'Refresh',
     deleteSelected: 'Delete selected',
     clearSelection: 'Clear selection',

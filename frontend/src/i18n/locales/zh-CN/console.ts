@@ -1571,6 +1571,8 @@ export default {
     name: '名称',
     generateCodes: '生成兑换码',
     exportCsv: '导出 CSV',
+    exported: '已导出 {count} 个兑换码',
+    exportTruncated: '兑换码超出上限，仅导出前 {count} 个（上限 {limit}）',
     refreshList: '刷新',
     deleteSelected: '删除所选',
     clearSelection: '取消选择',
