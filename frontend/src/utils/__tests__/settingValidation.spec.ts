@@ -124,3 +124,26 @@ describe('numeric setting bounds', () => {
       expect(validate(key, value), String(value)).toBeNull()
   })
 })
+
+describe('Creem product validation', () => {
+  const product = (quota: unknown) =>
+    JSON.stringify([
+      {
+        name: 'Basic',
+        productId: 'prod_1',
+        price: 4.99,
+        quota,
+        currency: 'USD',
+      },
+    ])
+  it('accepts positive integer quota numbers like the Go int64 contract', () => {
+    expect(validate('CreemProducts', product(1))).toBeNull()
+    expect(validate('CreemProducts', product(100000))).toBeNull()
+  })
+  it.each(['100000', 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects quota %s in raw JSON',
+    (quota) => {
+      expect(validate('CreemProducts', product(quota))).not.toBeNull()
+    }
+  )
+})

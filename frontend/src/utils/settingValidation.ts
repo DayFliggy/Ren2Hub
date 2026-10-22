@@ -135,12 +135,11 @@ export function validateSetting(
           )
             return 'range'
         }
-        if (column.key === 'quota' && (!isQuota(item) || BigInt(item) <= 0n))
-          return 'range'
         if (
           column.kind === 'number' &&
           (typeof item !== 'number' ||
             !Number.isFinite(item) ||
+            (column.integer && !Number.isSafeInteger(item)) ||
             (column.min !== undefined && item < column.min))
         )
           return 'range'
