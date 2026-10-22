@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -335,6 +336,10 @@ func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int) (*model.Channe
 
 func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel, error) {
 	permit, err := AcquireChannelConcurrency(c.Request.Context(), channel)
+	if errors.Is(err, errConcurrencyResourceDeleted) {
+		// 候选读出后渠道被删除：与读不到渠道相同，按对这个 Key 不可选处理，prefer 亲和据此退回正常选路。
+		return nil, fmt.Errorf("%w: %w", model.ErrTokenRouteForbidden, err)
+	}
 	if err != nil {
 		return nil, err
 	}

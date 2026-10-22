@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -56,6 +57,20 @@ func setupAffinityChannels(t *testing.T) *gorm.DB {
 	return db
 }
 
+// deleteAfterCandidateRead 在第一次读出候选渠道之后、准入之前删除渠道 id 并完成并发清理，
+// 与管理员删除和选路交错的时序相同。返回值报告删除是否已经发生。
+func deleteAfterCandidateRead(t *testing.T, db *gorm.DB, id int) *atomic.Bool {
+	t.Helper()
+	var deleted atomic.Bool
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:delete-after-candidates", func(tx *gorm.DB) {
+		if tx.Statement.Table == "channels" && !tx.DryRun && deleted.CompareAndSwap(false, true) {
+			require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Delete(&model.Channel{}, id).Error)
+			gatewayConcurrency.forget("channel", []int{id})
+		}
+	}))
+	return &deleted
+}
+
 func TestPreferAffinityUsesBoundChannelAndFallsBackWhenUnqualified(t *testing.T) {
 	t.Run("bound channel wins over priority", func(t *testing.T) {
 		setupAffinityChannels(t)
@@ -93,6 +108,18 @@ func TestPreferAffinityUsesBoundChannelAndFallsBackWhenUnqualified(t *testing.T)
 		require.True(t, found, "capacity is transient and must not drop the session binding")
 		require.Equal(t, 22, bound)
 	})
+	t.Run("bound channel deleted after the candidate read falls back", func(t *testing.T) {
+		db := setupAffinityChannels(t)
+		c, key := enableRouteAffinity(t, "prefer", 22)
+		deleted := deleteAfterCandidateRead(t, db, 22)
+		selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+		require.Nil(t, selectErr)
+		require.True(t, deleted.Load())
+		require.Equal(t, 11, selected.Id)
+		require.Zero(t, ChannelInFlight(22), "the deleted channel received no permit")
+		_, found := affinityBinding(t, key)
+		require.False(t, found)
+	})
 	t.Run("storage failure is reported, not treated as unqualified", func(t *testing.T) {
 		db := setupAffinityChannels(t)
 		require.NoError(t, db.Callback().Query().Before("gorm:query").Register("routing:affinity-error", func(tx *gorm.DB) {
@@ -110,11 +137,20 @@ func TestPreferAffinityUsesBoundChannelAndFallsBackWhenUnqualified(t *testing.T)
 }
 
 func TestStrictAffinityStillRejectsUnavailableBoundChannel(t *testing.T) {
-	db := setupAffinityChannels(t)
-	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Update("status", common.ChannelStatusManuallyDisabled).Error)
-	c, _ := enableRouteAffinity(t, "strict", 22)
-	_, selectErr := SelectChannelForRequest(c, "route-model", nil)
-	require.NotNil(t, selectErr)
-	require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
-	require.EqualValues(t, "session_channel_unavailable", selectErr.Code)
+	for name, unavailable := range map[string]func(*testing.T, *gorm.DB){
+		"disabled": func(t *testing.T, db *gorm.DB) {
+			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Update("status", common.ChannelStatusManuallyDisabled).Error)
+		},
+		"deleted after the candidate read": func(t *testing.T, db *gorm.DB) { deleteAfterCandidateRead(t, db, 22) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			db := setupAffinityChannels(t)
+			c, _ := enableRouteAffinity(t, "strict", 22)
+			unavailable(t, db)
+			_, selectErr := SelectChannelForRequest(c, "route-model", nil)
+			require.NotNil(t, selectErr)
+			require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
+			require.EqualValues(t, "session_channel_unavailable", selectErr.Code)
+		})
+	}
 }

@@ -444,14 +444,7 @@ func TestSelectionSkipsChannelDeletedAfterCandidateRead(t *testing.T) {
 		createRouteChannel(t, db, id, "route-model")
 	}
 	saveRouteTest(t, 11, 22)
-	var deleted atomic.Bool
-	// 候选读出之后、准入之前删除渠道 11，与管理员删除和选路交错的时序相同。
-	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:delete-after-candidates", func(tx *gorm.DB) {
-		if tx.Statement.Table == "channels" && !tx.DryRun && deleted.CompareAndSwap(false, true) {
-			require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).Delete(&model.Channel{}, 11).Error)
-			gatewayConcurrency.forget("channel", []int{11})
-		}
-	}))
+	deleted := deleteAfterCandidateRead(t, db, 11)
 	selected, err := selectQualifiedChannel(routeTestContext(t), "route-model")
 	require.NoError(t, err)
 	require.True(t, deleted.Load())

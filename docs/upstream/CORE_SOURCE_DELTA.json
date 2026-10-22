@@ -7026,7 +7026,7 @@
       "path": "service/concurrency_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a2bb042159b2db296b30556cca3ab0ebda1b9cd36d1c2a04102897275af59376"
+      "local_sha256": "5438d34f15b345b42f007eb13f617d28a52b39669259648c8c77fa988da6b718"
     },
     {
       "path": "service/convert.go",
@@ -7411,7 +7411,7 @@
       "path": "service/route_affinity_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e42312e7bd44011c56d3f40ecb92de0acf833a267ff4519981a15525411386b7"
+      "local_sha256": "a606f4445c304f71194b48ce44c64e4e6a399f60c33bcd18ea0e021714960eb9"
     },
     {
       "path": "service/route_attempt.go",
@@ -7441,7 +7441,7 @@
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6141f69f4c06a2f03727b1d7591df94ba5baf48b5eed8915a05a1c65e15685da"
+      "local_sha256": "db5778e3385421a0aca2f7d5b762ded32cc242d69c19d3095ab164855b793d54"
     },
     {
       "path": "service/route_endpoint_test.go",
