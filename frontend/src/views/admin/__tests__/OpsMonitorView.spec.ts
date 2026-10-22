@@ -172,6 +172,30 @@ describe('historical ops layout with native data', () => {
         .text()
     ).toContain('could not be read')
   })
+  it('treats a negative backend threshold as a disabled check', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/stats') {
+        const data = performanceFixture()
+        data.config.monitor_cpu_threshold = -1
+        data.system_usage = {
+          cpu_percent: 99,
+          memory_percent: 40,
+          sampled_at: 1,
+        }
+        return Promise.resolve(data)
+      }
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    expect(view.find('[data-ops-error]').exists()).toBe(false)
+    expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('Threshold off')
+    expect(view.get('[data-ops-unmeasured]').text()).toContain('CPU')
+    expect(view.findAll('[data-ops-reason]').map((row) => row.text())).toEqual(
+      []
+    )
+  })
   it('shows a CPU burst above 100% while capping its ring at a full arc', async () => {
     const defaultGet = mocks.get.getMockImplementation()!
     mocks.get.mockImplementation((path: string, ...args: unknown[]) => {

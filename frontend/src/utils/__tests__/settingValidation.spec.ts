@@ -102,6 +102,21 @@ describe('numeric setting bounds', () => {
       rejected: [99, 100.5],
       accepted: [100, 1024],
     },
+    {
+      key: 'performance_setting.monitor_cpu_threshold',
+      rejected: [-1, 90.5],
+      accepted: [0, 90, 150],
+    },
+    {
+      key: 'performance_setting.monitor_memory_threshold',
+      rejected: [-1, 101, 90.5],
+      accepted: [0, 90, 100],
+    },
+    {
+      key: 'performance_setting.monitor_disk_threshold',
+      rejected: [-1, 101, 95.5],
+      accepted: [0, 95, 100],
+    },
   ])('bounds $key', ({ key, rejected, accepted }) => {
     for (const value of rejected)
       expect(validate(key, value), String(value)).not.toBeNull()

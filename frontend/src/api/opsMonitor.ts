@@ -153,10 +153,8 @@ export function parsePerformanceStats(value: unknown): PerformanceStats {
     'monitor_cpu_threshold',
     'monitor_memory_threshold',
     'monitor_disk_threshold',
-  ]) {
-    const threshold = optionalNumber(value.config[key], endpoint)
-    if (threshold !== null && threshold > 100) invalidResponse(endpoint)
-  }
+  ])
+    monitorThreshold(value.config, key)
   performanceBoolean(value.config, 'monitor_enabled')
   const path = value.config.disk_cache_path
   if (path !== undefined && path !== null && typeof path !== 'string')
@@ -396,6 +394,14 @@ export function performanceNumber(
 ) {
   return optionalNumber(record[key], '/api/performance/stats')
 }
+/** Go stores monitor thresholds as signed ints; any value <= 0 disables the
+ * check (common/system_monitor.go exceedsThreshold), so it is not invalid. */
+function monitorThreshold(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  return value === undefined || value === null
+    ? null
+    : requiredStrictInteger(value, '/api/performance/stats')
+}
 function performanceBoolean(record: Record<string, unknown>, key: string) {
   return record[key] === undefined || record[key] === null
     ? null
@@ -443,9 +449,9 @@ export function projectOpsOverview(
     key: 'cpu' | 'memory' | 'disk',
     value: number | null
   ): OpsCheck => {
-    const threshold = performanceNumber(config, `monitor_${key}_threshold`)
+    const threshold = monitorThreshold(config, `monitor_${key}_threshold`)
     const status: OpsStatus =
-      value === null || monitor !== true || !threshold
+      value === null || monitor !== true || threshold === null || threshold <= 0
         ? 'unknown'
         : value >= threshold
           ? 'critical'

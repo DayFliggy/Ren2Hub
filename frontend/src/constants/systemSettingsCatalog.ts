@@ -896,21 +896,35 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           },
           text('performance_setting.disk_cache_path', 'diskCachePath'),
           toggle('performance_setting.monitor_enabled', 'resourceMonitor'),
-          number(
-            'performance_setting.monitor_cpu_threshold',
-            'cpuThreshold',
-            90
-          ),
-          number(
-            'performance_setting.monitor_memory_threshold',
-            'memoryThreshold',
-            90
-          ),
-          number(
-            'performance_setting.monitor_disk_threshold',
-            'diskThreshold',
-            95
-          ),
+          {
+            ...number(
+              'performance_setting.monitor_cpu_threshold',
+              'cpuThreshold',
+              90
+            ),
+            min: 0,
+            integer: true,
+          },
+          {
+            ...number(
+              'performance_setting.monitor_memory_threshold',
+              'memoryThreshold',
+              90
+            ),
+            min: 0,
+            max: 100,
+            integer: true,
+          },
+          {
+            ...number(
+              'performance_setting.monitor_disk_threshold',
+              'diskThreshold',
+              95
+            ),
+            min: 0,
+            max: 100,
+            integer: true,
+          },
         ],
         integration: 'performance',
       },

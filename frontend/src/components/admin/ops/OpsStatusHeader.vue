@@ -134,7 +134,7 @@ function checkDetail(check: OpsCheck): string {
   if (check.value === null) return t(`status.${check.status}`)
   const value = checkValue(check, check.value)
   if (check.threshold === null) return value
-  if (check.threshold === 0) return `${value} · ${t('disabledLimit')}`
+  if (check.threshold <= 0) return `${value} · ${t('disabledLimit')}`
   return `${value} / ${checkValue(check, check.threshold)}`
 }
 
