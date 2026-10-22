@@ -13,19 +13,19 @@ import (
 
 type TopUpFilter struct {
 	UserID int
-	// SelfView 表示普通用户查看自己的订单，起始时间不能早于 30 天截止点。
+	// SelfView 表示普通用户查看自己的订单：起始时间不早于 30 天截止点。
+	// 管理员查询（包括带 user_id 的查询）与上游 GetAllTopUps 一致，没有默认下限。
 	SelfView                          bool
 	Keyword, Status, Method, Currency string
 	StartTime, EndTime                int64
 }
 
-// topUpQueryStart 返回生效的起始时间：未指定时取 30 天截止点，普通用户不能早于截止点。
+// topUpQueryStart 返回生效的起始时间，0 表示不限制。
 func topUpQueryStart(filter TopUpFilter) int64 {
-	cutoff := topUpQueryCutoff()
-	if filter.StartTime == 0 || (filter.SelfView && filter.StartTime < cutoff) {
-		return cutoff
+	if !filter.SelfView {
+		return filter.StartTime
 	}
-	return filter.StartTime
+	return max(filter.StartTime, topUpQueryCutoff())
 }
 
 func topUpFilteredQuery(filter TopUpFilter) (*gorm.DB, error) {
@@ -53,7 +53,9 @@ func topUpFilteredQuery(filter TopUpFilter) (*gorm.DB, error) {
 		query = query.Where("currency = ?", strings.ToUpper(filter.Currency))
 	}
 	start := topUpQueryStart(filter)
-	query = query.Where("create_time >= ?", start)
+	if start > 0 {
+		query = query.Where("create_time >= ?", start)
+	}
 	if filter.EndTime > 0 {
 		if filter.EndTime < start {
 			return nil, errors.New("end_time precedes start_time")
