@@ -2314,6 +2314,8 @@ export default {
     profileSaved: 'Profile updated',
     changePassword: 'Change password',
     passwordChanged: 'Password updated',
+    securityNotificationFailed:
+      'The change succeeded, but the notification email could not be sent.',
     oldPassword: 'Current password',
     twoFA: 'Two-factor auth (2FA)',
     twoFADesc: 'Require a one-time code in addition to the password',

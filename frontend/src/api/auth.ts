@@ -10,6 +10,7 @@ import type {
   UserProfilePatch,
 } from '@/types/auth'
 
+import { parseSecurityChange, type SecurityChange } from './accountSecurity'
 import { api } from './client'
 import {
   parseLoginSessionBulkRevokeResult,
@@ -161,16 +162,18 @@ export const authApi = {
     originalPassword: string,
     password: string,
     proof: string
-  ): Promise<AuthTokenRotation> {
+  ): Promise<AuthTokenRotation & SecurityChange> {
+    const endpoint = '/api/user/self'
     const value = await api.put<unknown>(
-      '/api/user/self',
+      endpoint,
       {
         original_password: originalPassword,
         password,
       },
       proofOptions(proof)
     )
-    return parseAuthRotation(value) ?? invalidAuthResponse('/api/user/self')
+    const rotation = parseAuthRotation(value) ?? invalidAuthResponse(endpoint)
+    return { ...rotation, ...parseSecurityChange(value, endpoint) }
   },
   async getLoginSessions(): Promise<LoginSession[]> {
     return parseLoginSessions(await api.get<unknown>('/api/user/sessions'))

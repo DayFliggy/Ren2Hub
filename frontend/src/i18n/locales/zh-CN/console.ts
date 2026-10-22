@@ -2244,6 +2244,7 @@ export default {
     profileSaved: '资料已更新',
     changePassword: '修改密码',
     passwordChanged: '密码已更新',
+    securityNotificationFailed: '变更已完成，但通知邮件发送失败。',
     oldPassword: '当前密码',
     twoFA: '两步验证（2FA）',
     twoFADesc: '登录时除密码外还需输入动态验证码',

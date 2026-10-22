@@ -195,4 +195,34 @@ describe('authentication API', () => {
     ])
     expect(getAuthBundle()?.session.sid).toBe('session-2')
   })
+
+  it('returns the token rotation together with the notification warning', async () => {
+    const { user: _user, ...rotation } = bundle
+    // controller/user.go password branch: authRotationData + has_password + flag.
+    const changed = {
+      ...rotation,
+      access_token: 'rotated-token',
+      has_password: true,
+      notification_warning: true,
+    }
+    const put = vi.spyOn(api, 'put').mockResolvedValueOnce(changed)
+
+    const result = await authApi.changePassword('old-pass', 'new-pass', 'proof')
+
+    expect(result).toMatchObject({
+      access_token: 'rotated-token',
+      session: rotation.session,
+      notification_warning: true,
+    })
+    expect(put).toHaveBeenCalledWith(
+      '/api/user/self',
+      { original_password: 'old-pass', password: 'new-pass' },
+      { headers: { 'X-Security-Proof': 'proof' } }
+    )
+    const { notification_warning: _flag, ...unflagged } = changed
+    put.mockResolvedValueOnce(unflagged)
+    await expect(
+      authApi.changePassword('old-pass', 'new-pass', 'proof')
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
 })

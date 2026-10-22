@@ -23,6 +23,7 @@ import { useRouter } from 'vue-router'
 
 import {
   accountSecurityApi,
+  parseSecurityChange,
   type PasskeyCreationOptions,
 } from '@/api/accountSecurity'
 import { applyAuthRotation, parseAuthRotation } from '@/api/authSession'
@@ -43,6 +44,7 @@ import LoginSessionsPanel from '@/components/console/LoginSessionsPanel.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import PersonalAccessTokensPanel from '@/components/console/PersonalAccessTokensPanel.vue'
 import SettingsSectionHeading from '@/components/console/SettingsSectionHeading.vue'
+import { useSecurityNotice } from '@/composables/useSecurityNotice'
 import { useToast } from '@/composables/useToast'
 import { wechatQRCode } from '@/utils/wechatQRCode'
 import { useAuthStore } from '@/stores/auth'
@@ -53,6 +55,7 @@ const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToast()
+const notifySecurityChange = useSecurityNotice()
 
 const oauthAbort = new AbortController()
 
@@ -393,10 +396,15 @@ async function changePassword(): Promise<void> {
         ? 'account.password.change'
         : 'account.password.set',
     })
-    await auth.changePassword(oldPassword.value, newPassword.value, proof)
-    await auth.fetchSelf(false)
-    toast.success(t('settings.passwordChanged'))
+    const result = await auth.changePassword(
+      oldPassword.value,
+      newPassword.value,
+      proof
+    )
     passwordOpen.value = false
+    toast.success(t('settings.passwordChanged'))
+    notifySecurityChange(result)
+    await auth.fetchSelf(false)
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
@@ -432,18 +440,23 @@ async function openOAuthPopup(provider: string): Promise<void> {
     })
     const status = await publicApi.status()
     popupTransferred = true
-    await completeOAuth(
-      status,
-      provider,
-      'bind',
-      undefined,
-      proof,
-      oauthAbort.signal,
-      popup
+    // Only the bind intent carries notification_warning (controller/oauth.go).
+    const result = parseSecurityChange(
+      await completeOAuth<unknown>(
+        status,
+        provider,
+        'bind',
+        undefined,
+        proof,
+        oauthAbort.signal,
+        popup
+      ),
+      `/api/oauth/${provider}`
     )
+    toast.success(t('settings.bindingSaved'))
+    notifySecurityChange(result)
     await auth.fetchSelf(false)
     await loadSecurity()
-    toast.success(t('settings.bindingSaved'))
   } catch (error) {
     if (!popupTransferred) popup.close()
     toast.error(error instanceof Error ? error.message : String(error))
@@ -462,6 +475,7 @@ async function sendEmailCode(): Promise<void> {
       flow_token: string
       old_email_required: boolean
       resend_at: number
+      notification_warning: boolean
     }
     if (emailFlow.value) {
       data = await accountSecurityApi.resendEmailBinding(emailFlow.value)
@@ -476,6 +490,7 @@ async function sendEmailCode(): Promise<void> {
     emailOldRequired.value = data.old_email_required
     emailResendAt.value = data.resend_at
     toast.success(t('settings.emailCodeSent'))
+    notifySecurityChange(data)
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
@@ -660,14 +675,15 @@ async function confirmBinding(): Promise<void> {
       return
     }
     try {
-      await accountSecurityApi.bindEmail(
+      const result = await accountSecurityApi.bindEmail(
         emailFlow.value,
         bindingCode.value,
         emailOldCode.value
       )
-      await auth.fetchSelf(false)
-      toast.success(t('settings.bindingSaved'))
       bindTarget.value = null
+      toast.success(t('settings.bindingSaved'))
+      notifySecurityChange(result)
+      await auth.fetchSelf(false)
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error))
     }
@@ -679,10 +695,12 @@ async function confirmBinding(): Promise<void> {
         scope: 'account.binding.bind',
         context: { provider: 'wechat', code },
       })
-      await accountSecurityApi.bindWechat(code, proof)
+      const result = await accountSecurityApi.bindWechat(code, proof)
+      bindTarget.value = null
+      toast.success(t('settings.bindingSaved'))
+      notifySecurityChange(result)
       await auth.fetchSelf(false)
       await loadSecurity()
-      bindTarget.value = null
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
@@ -704,9 +722,13 @@ async function confirmUnbind(): Promise<void> {
       scope: 'account.binding.unbind',
       context: { provider_id: binding.providerId },
     })
-    await accountSecurityApi.unbindOauth(binding.providerId, proof)
-    await loadSecurity()
+    const result = await accountSecurityApi.unbindOauth(
+      binding.providerId,
+      proof
+    )
     toast.success(t('settings.bindingRemoved'))
+    notifySecurityChange(result)
+    await loadSecurity()
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {

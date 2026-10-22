@@ -46,6 +46,13 @@ vi.mock('@/api/public', () => ({
 
 import { QrcodeSvg } from 'qrcode.vue'
 
+import {
+  clearAuthBundle,
+  getAuthBundle,
+  setAuthBundle,
+} from '@/api/authSession'
+import { ApiError } from '@/api/types'
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import { useToast } from '@/composables/useToast'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -73,8 +80,12 @@ function securityGet(url: string): Promise<unknown> {
   return Promise.resolve({})
 }
 
+const toast = useToast()
+
 beforeEach(() => {
   setActivePinia(createPinia())
+  clearAuthBundle()
+  toast.toasts.splice(0)
   routerPush.mockReset()
   requestProof.mockReset().mockResolvedValue('test-proof')
   apiGet.mockReset().mockImplementation(securityGet)
@@ -107,6 +118,34 @@ beforeEach(() => {
     setting: JSON.stringify({ record_ip_log: false }),
   })
 })
+
+const sessionBundle = {
+  access_token: 'session-token',
+  token_type: 'Bearer' as const,
+  access_expires_at: 2_000_000_000,
+  session: {
+    sid: 'session-1',
+    current: true,
+    login_method: 'password',
+    ip: '127.0.0.1',
+    user_agent: 'vitest',
+    created_at: 1,
+    last_active_at: 2,
+    expires_at: 2_000_000_000,
+  },
+  user: {
+    id: 1,
+    username: 'alice',
+    display_name: 'Alice',
+    email: 'alice@example.com',
+    role: 1,
+    status: 1,
+    quota: 1000,
+    used_quota: 0,
+    request_count: 0,
+    has_password: true,
+  },
+}
 
 function renderView() {
   return mount(SecurityAccessView, {
@@ -375,6 +414,87 @@ describe('SecurityAccessView', () => {
       { code: 'wx-code' },
       { headers: { 'X-Security-Proof': 'test-proof' } }
     )
+    expect(toast.toasts.map((item) => item.type)).not.toContain('warning')
+    wrapper.unmount()
+  })
+
+  it('warns about a failed notification email even when the refresh fails', async () => {
+    apiPost.mockImplementation((url: string) =>
+      url === '/api/oauth/wechat/bind'
+        ? Promise.resolve({ notification_warning: true })
+        : Promise.reject(new Error('refresh failed'))
+    )
+    const { wrapper, dialog } = await openWeChatBindDialog(
+      'https://cdn.example.com/wechat.png'
+    )
+    const input = dialog.querySelector<HTMLInputElement>(
+      'input[autocomplete="one-time-code"]'
+    )!
+    input.value = 'wx-code'
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    Array.from(dialog.querySelectorAll('button'))
+      .filter((button) => button.textContent?.trim() === '绑定')
+      .at(-1)
+      ?.click()
+    await flushPromises()
+
+    expect(apiPost).toHaveBeenCalledWith('/api/user/auth/refresh')
+    expect(toast.toasts.map(({ type, message }) => [type, message])).toEqual([
+      ['success', '账户绑定已更新'],
+      ['warning', '变更已完成，但通知邮件发送失败。'],
+      ['error', 'refresh failed'],
+    ])
+    wrapper.unmount()
+  })
+
+  it('keeps the password rotation and warns before refreshing the profile', async () => {
+    const { user: _user, ...rotation } = sessionBundle
+    setAuthBundle(sessionBundle)
+    apiPut.mockResolvedValue({
+      ...rotation,
+      access_token: 'rotated-token',
+      has_password: true,
+      notification_warning: true,
+    })
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/user/self'
+        ? Promise.reject(new ApiError('refresh failed', { status: 500 }))
+        : securityGet(url)
+    )
+    const wrapper = renderView()
+    await flushPromises()
+    buttonByText(wrapper, '修改密码')?.click()
+    await flushPromises()
+    const dialog = document.body.querySelector('[role="dialog"]')!
+    for (const [selector, value] of [
+      ['input[autocomplete="current-password"]', 'old-password'],
+      ['input[autocomplete="new-password"]', 'new-password-123'],
+    ]) {
+      const input = dialog.querySelector<HTMLInputElement>(selector)!
+      input.value = value
+      input.dispatchEvent(new Event('input'))
+    }
+    await flushPromises()
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === '保存')
+      ?.click()
+    await flushPromises()
+
+    expect(requestProof).toHaveBeenCalledWith({
+      scope: 'account.password.change',
+    })
+    expect(getAuthBundle()?.access_token).toBe('rotated-token')
+    expect(Object.keys(getAuthBundle()!)).not.toContain('notification_warning')
+    expect(toast.toasts.map(({ type, message }) => [type, message])).toEqual([
+      ['success', '密码已更新'],
+      ['warning', '变更已完成，但通知邮件发送失败。'],
+      ['error', 'refresh failed'],
+    ])
+    const passwordModal = wrapper
+      .findAllComponents(ConsoleModal)
+      .find((modal) => modal.props('title') === '修改密码')
+    expect(passwordModal?.props('open')).toBe(false)
     wrapper.unmount()
   })
 

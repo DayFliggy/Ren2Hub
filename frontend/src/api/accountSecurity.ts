@@ -30,13 +30,29 @@ function record(value: unknown, endpoint: string): Record<string, unknown> {
   return value
 }
 
-function emailFlow(value: unknown) {
-  const endpoint = '/api/oauth/email/bind'
+export interface SecurityChange {
+  notification_warning: boolean
+}
+
+/** Every successful account-security change reports whether the security
+ * notification email failed; a missing flag is a broken response, not "sent". */
+export function parseSecurityChange(
+  value: unknown,
+  endpoint: string
+): SecurityChange {
+  const row = record(value, endpoint)
+  return {
+    notification_warning: requiredBoolean(row.notification_warning, endpoint),
+  }
+}
+
+function emailFlow(value: unknown, endpoint: string) {
   const row = record(value, endpoint)
   return {
     flow_token: requiredString(row.flow_token, endpoint, false),
     old_email_required: requiredBoolean(row.old_email_required, endpoint),
     resend_at: requiredStrictInteger(row.resend_at, endpoint),
+    ...parseSecurityChange(row, endpoint),
   }
 }
 
@@ -89,17 +105,17 @@ export const accountSecurityApi = {
     })
   },
   async startEmailBinding(email: string, proof: string) {
+    const endpoint = '/api/oauth/email/bind/start'
     return emailFlow(
-      await api.post(
-        '/api/oauth/email/bind/start',
-        { email },
-        proofOptions(proof)
-      )
+      await api.post(endpoint, { email }, proofOptions(proof)),
+      endpoint
     )
   },
   async resendEmailBinding(flowToken: string) {
+    const endpoint = '/api/oauth/email/bind/resend'
     return emailFlow(
-      await api.post('/api/oauth/email/bind/resend', { flow_token: flowToken })
+      await api.post(endpoint, { flow_token: flowToken }),
+      endpoint
     )
   },
   async beginPasskeyRegistration(proof: string) {
@@ -164,18 +180,29 @@ export const accountSecurityApi = {
       }
     return { ...row, action: 'disable' as const }
   },
-  bindEmail: (flowToken: string, newCode: string, oldCode: string) =>
-    api.post('/api/oauth/email/bind', {
-      flow_token: flowToken,
-      new_code: newCode,
-      old_code: oldCode,
-    }),
-  bindWechat: (code: string, proof: string) =>
-    api.post('/api/oauth/wechat/bind', { code }, proofOptions(proof)),
-  unbindOauth: (id: number, proof: string) =>
-    api.delete(
-      `/api/user/oauth/bindings/${id}`,
-      undefined,
-      proofOptions(proof)
-    ),
+  async bindEmail(flowToken: string, newCode: string, oldCode: string) {
+    const endpoint = '/api/oauth/email/bind'
+    return parseSecurityChange(
+      await api.post(endpoint, {
+        flow_token: flowToken,
+        new_code: newCode,
+        old_code: oldCode,
+      }),
+      endpoint
+    )
+  },
+  async bindWechat(code: string, proof: string) {
+    const endpoint = '/api/oauth/wechat/bind'
+    return parseSecurityChange(
+      await api.post(endpoint, { code }, proofOptions(proof)),
+      endpoint
+    )
+  },
+  async unbindOauth(id: number, proof: string) {
+    const endpoint = `/api/user/oauth/bindings/${id}`
+    return parseSecurityChange(
+      await api.delete(endpoint, undefined, proofOptions(proof)),
+      endpoint
+    )
+  },
 }
