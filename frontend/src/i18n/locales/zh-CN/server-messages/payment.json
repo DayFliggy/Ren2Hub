@@ -1,5 +1,6 @@
 {
   "Cannot reach the gateway, or the gateway returned no available assets": "无法连接网关或网关未返回可用资产",
+  "Duplicate GMPay asset": "GMPay 资产重复",
   "Enter the gateway address first": "请先填写网关地址",
   "Failed to create order": "创建订单失败",
   "Failed to create the payment order": "创建支付订单失败",
@@ -13,6 +14,8 @@
   "Failed to save configuration": "保存配置失败",
   "Failed to search top-up records": "搜索充值记录失败",
   "Failed to start payment": "拉起支付失败",
+  "Invalid GMPay asset": "GMPay 资产无效",
+  "Invalid GMPay merchant settings": "GMPay 商户配置无效",
   "Invalid payment method configuration": "支付方式配置无效",
   "Invalid statistics range": "统计范围无效",
   "Invalid top-up amount": "充值数量无效",

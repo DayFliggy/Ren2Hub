@@ -10,6 +10,13 @@ import (
 // The suffix keeps the persisted credential out of the generic options API.
 const GmpayConfigKey = "GmpayConfigSecret"
 
+// Asset errors are distinct so the save API can name the rejected field;
+// gateway and credential problems stay gmpay.ErrInvalidConfig.
+var (
+	ErrGmpayInvalidAsset   = errors.New("invalid gmpay asset")
+	ErrGmpayDuplicateAsset = errors.New("duplicate gmpay asset")
+)
+
 type GmpayAsset struct {
 	Name    string `json:"name"`
 	Token   string `json:"token"`
@@ -52,10 +59,10 @@ func (c *GmpayConfig) Validate() error {
 		a.Token = strings.ToLower(strings.TrimSpace(a.Token))
 		a.Network = strings.ToLower(strings.TrimSpace(a.Network))
 		if a.Name == "" || len(a.Name) > 128 || !validGmpayIdentifier(a.Token) || !validGmpayIdentifier(a.Network) || len(a.Icon) > 256 || len(a.Color) > 64 {
-			return errors.New("invalid gmpay asset")
+			return ErrGmpayInvalidAsset
 		}
 		if seen[a.Method()] {
-			return errors.New("duplicate gmpay asset")
+			return ErrGmpayDuplicateAsset
 		}
 		seen[a.Method()] = true
 	}

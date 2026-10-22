@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
+import { httpTransport } from '@/api/httpTransport'
 import GmpayPanel from '../GmpayPanel.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
@@ -104,6 +105,39 @@ describe('GMPay native configuration', () => {
     )
     expect(wrapper.text()).toContain('USDC')
     expect(wrapper.text()).toContain('USDT')
+    wrapper.unmount()
+  })
+  it('shows the translated backend reason when saving fails', async () => {
+    // Real Go envelope from SaveGmpayConfig; the client must surface it as is.
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValueOnce({ success: true, message: '', data: config })
+      .mockResolvedValueOnce({
+        success: false,
+        message: 'Duplicate GMPay asset',
+        message_key: 'Duplicate GMPay asset',
+      })
+    const wrapper = await render()
+    await setLocale('zh-CN')
+    try {
+      await wrapper
+        .findAll('button')
+        .find(
+          (button) =>
+            button.text() === i18n.global.t('systemSettings.gmpayPanel.save')
+        )!
+        .trigger('click')
+      await flushPromises()
+    } finally {
+      await setLocale('en')
+    }
+    expect(request).toHaveBeenLastCalledWith(
+      'POST',
+      '/api/option/gmpay/save',
+      expect.anything()
+    )
+    expect(toast.error).toHaveBeenCalledWith('GMPay 资产重复')
+    expect(toast.success).not.toHaveBeenCalled()
     wrapper.unmount()
   })
   it('reloads after a failed read without silently replacing the stored catalog', async () => {
