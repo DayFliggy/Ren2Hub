@@ -177,10 +177,9 @@ export function auditLogCategoryKey(category: AuditLogCategory): string {
 
 export function auditLogCategoryTone(
   category: AuditLogCategory
-): 'accent' | 'info' | 'warning' | 'success' {
+): 'accent' | 'info' | 'warning' {
   if (category === 'operation') return 'accent'
   if (category === 'login') return 'info'
-  if (category === 'system') return 'success'
   return 'warning'
 }
 

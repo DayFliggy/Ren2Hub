@@ -17,6 +17,67 @@ function auditPaths(page: Page): string[] {
   return paths
 }
 
+const LONG_ACCOUNT =
+  'administrator.with.an.extremely.long.account.name@example.test'
+
+function auditRow(row: Record<string, unknown>) {
+  return {
+    user_id: 1,
+    username: 'native.root',
+    actor_role: 100,
+    created_at: 1_781_928_000,
+    category: 'operation',
+    token_ref: '',
+    auth_method: 'session',
+    ip: '198.51.100.9',
+    user_agent: 'Playwright',
+    method: 'PUT',
+    status: 200,
+    success: true,
+    ...row,
+  }
+}
+
+// The shared native fixture has one short successful row; the layout checks
+// need long values and a failed request in the native /api/audit shape.
+const AUDIT_PAGE = {
+  page: 1,
+  page_size: 10,
+  total: 2,
+  items: [
+    auditRow({
+      event_id: 'visual-audit-101',
+      request_id: 'visual-request-101',
+      username: LONG_ACCOUNT,
+      action: 'user.update',
+      ip: '203.0.113.25',
+      user_agent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Visual Audit Browser',
+      route: '/api/user/',
+      content: 'Updated user account',
+      other: {
+        op: {
+          action: 'user.update',
+          params: {
+            username: LONG_ACCOUNT,
+            changed_fields: ['status', 'group', 'quota'],
+          },
+        },
+      },
+    }),
+    auditRow({
+      event_id: 'visual-audit-100',
+      request_id: 'visual-request-100',
+      action: 'channel.update',
+      route: '/api/channel/',
+      status: 500,
+      success: false,
+      content: 'Updated channel OpenAI Route 1',
+      other: {},
+    }),
+  ],
+}
+
 async function inspectAuditLogs(
   page: Page,
   theme: VisualTheme,
@@ -28,6 +89,11 @@ async function inspectAuditLogs(
       : { width: 390, height: 844 }
   )
   await configureStablePage(page, { theme, authenticated: true })
+  await page.route(
+    (url) => url.pathname === '/api/audit',
+    (route) =>
+      route.fulfill({ json: { success: true, message: '', data: AUDIT_PAGE } })
+  )
   const paths = auditPaths(page)
   await page.goto('/usage-logs/audit?scope=all', {
     waitUntil: 'domcontentloaded',
@@ -77,6 +143,40 @@ for (const theme of ['light', 'dark'] as const) {
     })
   }
 }
+
+test('audit filters use the native request_id and categories', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await configureStablePage(page, { theme: 'light', authenticated: true })
+  await page.goto('/usage-logs/audit?scope=all', {
+    waitUntil: 'domcontentloaded',
+  })
+  await waitForStablePage(page)
+
+  await page.getByRole('combobox', { name: '事件类别' }).click()
+  await expect(page.getByRole('option')).toHaveText([
+    '全部类别',
+    '管理操作',
+    '账号安全',
+    '登录',
+    '访问令牌请求',
+  ])
+  await page.keyboard.press('Escape')
+
+  const search = page.getByRole('searchbox', { name: '按完整请求 ID 筛选' })
+  await expect(search).toHaveAttribute('maxlength', '64')
+  const filtered = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return (
+      url.pathname === '/api/audit' &&
+      url.searchParams.get('request_id') === 'req-45'
+    )
+  })
+  await search.fill('req-45')
+  const params = new URL((await filtered).url()).searchParams
+  expect(params.has('keyword')).toBe(false)
+})
 
 test('members read only their own audit events', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })

@@ -388,7 +388,6 @@ const AUDIT_LOG_CATEGORIES = new Set<AuditLogCategory>([
   'security',
   'operation',
   'access_token',
-  'system',
 ])
 
 const AUDIT_ACTOR_ROLES = new Set([1, 10, 100])

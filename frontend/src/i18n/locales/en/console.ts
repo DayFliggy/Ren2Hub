@@ -1992,7 +1992,7 @@ export default {
 
   auditLogs: {
     breadcrumb: 'Audit logs',
-    keywordPlaceholder: 'Filter by exact request ID',
+    requestIdPlaceholder: 'Filter by exact request ID',
     categoryLabel: 'Event category',
     scopeLabel: 'Scope',
     resultLabel: 'Result',
@@ -2023,7 +2023,6 @@ export default {
       security: 'Account security',
       operation: 'Management',
       accessToken: 'Access token request',
-      system: 'System grant',
     },
     scope: { self: 'My records', all: 'All accounts' },
     result: { all: 'All results', success: 'Success', failed: 'Failed' },

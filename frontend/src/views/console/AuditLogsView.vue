@@ -64,7 +64,7 @@ const pageSize = ref(10)
 const loading = ref(true)
 const loadError = ref(false)
 
-const keyword = ref('')
+const requestId = ref('')
 const category = ref<'all' | AuditLogCategory>('all')
 const outcome = ref<'all' | 'true' | 'false'>('all')
 const tokenRef = ref('')
@@ -116,11 +116,6 @@ const categoryOptions = computed(() => [
     tone: 'info' as const,
   },
   {
-    value: 'system',
-    label: t('auditLogs.category.system'),
-    tone: 'success' as const,
-  },
-  {
     value: 'access_token',
     label: t('auditLogs.category.accessToken'),
     tone: 'warning' as const,
@@ -167,7 +162,8 @@ function currentParams() {
     // The token filter is only shown on the all-accounts view; a value left
     // over from it must not silently narrow the personal view.
     token_ref: readingAll.value ? tokenRef.value.trim() : '',
-    keyword: keyword.value.trim(),
+    // The audit API matches request_id exactly (varchar 64); it has no keyword.
+    request_id: requestId.value.trim(),
     start_timestamp: startDate.value
       ? Math.floor(localDayStartMs(startDate.value) / 1000)
       : 0,
@@ -210,7 +206,7 @@ function reload(): void {
   else page.value = 1
 }
 
-watch([keyword, tokenRef], () => {
+watch([requestId, tokenRef], () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
@@ -401,11 +397,11 @@ onBeforeUnmount(() => {
       class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
     >
       <SearchInput
-        v-model="keyword"
-        maxlength="128"
-        :placeholder="t('auditLogs.keywordPlaceholder')"
-        :aria-label="t('auditLogs.keywordPlaceholder')"
-        name="audit-log-search"
+        v-model="requestId"
+        maxlength="64"
+        :placeholder="t('auditLogs.requestIdPlaceholder')"
+        :aria-label="t('auditLogs.requestIdPlaceholder')"
+        name="audit-log-request-id"
         class="w-full sm:w-64"
       />
       <FilterSelect

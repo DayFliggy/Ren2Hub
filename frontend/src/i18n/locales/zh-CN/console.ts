@@ -1927,7 +1927,7 @@ export default {
 
   auditLogs: {
     breadcrumb: '审计日志',
-    keywordPlaceholder: '按完整请求 ID 筛选',
+    requestIdPlaceholder: '按完整请求 ID 筛选',
     categoryLabel: '事件类别',
     scopeLabel: '查看范围',
     resultLabel: '结果',
@@ -1958,7 +1958,6 @@ export default {
       security: '账号安全',
       operation: '管理操作',
       accessToken: '访问令牌请求',
-      system: '系统发放',
     },
     scope: { self: '我的记录', all: '全部账号' },
     result: { all: '全部结果', success: '成功', failed: '失败' },

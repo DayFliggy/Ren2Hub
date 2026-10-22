@@ -81,7 +81,6 @@ describe('audit log labels resolve in both locales', () => {
       'security',
       'operation',
       'access_token',
-      'system',
     ]
     const methods = ['session', 'access_token', 'password', '2fa', 'passkey']
     expect(

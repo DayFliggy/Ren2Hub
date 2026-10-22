@@ -240,8 +240,9 @@ export interface LogItem {
   created: number
 }
 
+/** model.ValidAuditCategory: the native audit ledger has exactly these four. */
 export type AuditLogCategory =
-  'login' | 'security' | 'operation' | 'access_token' | 'system'
+  'login' | 'security' | 'operation' | 'access_token'
 
 export interface AuditLogActor {
   id: number

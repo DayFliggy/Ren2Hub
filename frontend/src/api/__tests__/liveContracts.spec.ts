@@ -438,7 +438,7 @@ describe('live API contracts', () => {
           user_id: 3,
           actor_role: 0,
           created_at: 1,
-          category: 'system',
+          category: 'login',
           status: 0,
           success: true,
         },
@@ -453,6 +453,8 @@ describe('live API contracts', () => {
 
     for (const broken of [
       { ...row, category: 'consume' },
+      // model.ValidAuditCategory has no system category.
+      { ...row, category: 'system' },
       { ...row, event_id: undefined },
       { ...row, success: 'true' },
       { ...row, actor_role: undefined },
