@@ -10,7 +10,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
-import { adminOperatorLevel, canManageAdminUser } from '@/constants/adminUsers'
+import { adminOperator, canManageAdminUser } from '@/constants/adminUsers'
 import { useAuthStore } from '@/stores/auth'
 import type { AdminUser } from '@/types/console'
 
@@ -21,13 +21,7 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const { readOnly } = useFeatureAccess('admin', 'disabled')
 const allowed = computed(
-  () =>
-    !readOnly.value &&
-    auth.isAdmin &&
-    canManageAdminUser(
-      props.user,
-      auth.user ? { id: auth.user.id, level: adminOperatorLevel(auth) } : null
-    )
+  () => !readOnly.value && canManageAdminUser(props.user, adminOperator(auth))
 )
 const open = ref(false)
 const loading = ref(false)
@@ -70,8 +64,8 @@ async function remove() {
   try {
     const binding = pending.value
     const proof = await proofDialog.value!.request({
-      scope: 'admin.user.change',
-      context: { ids: [props.user.id], action: 'clear_binding' },
+      scope: 'admin.user.binding.clear',
+      context: binding.proofContext,
     })
     if (run !== epoch) return
     await adminUserBindingsApi.remove(binding, proof)

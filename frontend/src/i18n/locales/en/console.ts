@@ -1517,6 +1517,7 @@ export default {
     },
     statusEnabled: 'Enabled',
     statusDisabled: 'Disabled',
+    statusDeleted: 'Deleted',
     roleRoot: 'Root administrator',
     roleAdmin: 'Administrator',
     roleUser: 'Member',
@@ -1548,11 +1549,16 @@ export default {
     createTitle: 'New user',
     editTitle: 'Edit user',
     usernamePlaceholder: 'Enter the login username',
-    usernameHint: '3-20 letters, digits, dot, underscore or hyphen',
+    usernameHint: '1-20 characters; surrounding spaces are trimmed',
     displayNamePlaceholder: 'Optional display name',
     initialPassword: 'Initial password',
     initialPasswordPlaceholder: '8-20 characters; only a hash is stored',
-    emailPlaceholder: "name{'@'}example.com",
+    emailUnbound: 'No email bound',
+    emailManagedByBinding:
+      'Email is managed by account bindings; clear it below.',
+    remark: 'Remark',
+    remarkPlaceholder: 'Visible to administrators only; optional',
+    remarkHint: '{count}/{max} characters',
     roleCeilingHint: 'You can only assign roles below your own level',
     saveUser: 'Save user',
     quotaTitle: 'Adjust quota',
@@ -1602,6 +1608,14 @@ export default {
     bulkEnabled: 'Enabled {count} users',
     bulkDisabled: 'Disabled {count} users',
     bulkDeleted: 'Deleted {count} users',
+    bulkProgress: 'Working: {done}/{total} users done',
+    bulkProofHint:
+      'Bulk actions ask for a separate security verification for each user.',
+    bulkProofNotice:
+      'Each user needs a separate security verification: {count} in total.',
+    bulkStopped: 'Processed {done}/{total} users; {name} failed: {message}',
+    profileSavedRoleFailed:
+      'Profile saved. The role change request returned an error ({message}); check the role in the refreshed list.',
   },
 
   redemption: {
@@ -1979,7 +1993,7 @@ export default {
 
   auditLogs: {
     breadcrumb: 'Audit logs',
-    keywordPlaceholder: 'Filter by exact request ID',
+    requestIdPlaceholder: 'Filter by exact request ID',
     categoryLabel: 'Event category',
     scopeLabel: 'Scope',
     resultLabel: 'Result',
@@ -2010,7 +2024,6 @@ export default {
       security: 'Account security',
       operation: 'Management',
       accessToken: 'Access token request',
-      system: 'System grant',
     },
     scope: { self: 'My records', all: 'All accounts' },
     result: { all: 'All results', success: 'Success', failed: 'Failed' },

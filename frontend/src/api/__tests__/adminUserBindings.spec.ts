@@ -26,14 +26,32 @@ it('uses the administrator endpoints and never returns identity values', async (
     ])
   const bindings = await adminUserBindingsApi.list(42)
   expect(bindings).toEqual([
-    { key: 'github', name: 'GitHub', path: '/api/user/42/bindings/github' },
-    { key: 'oauth-9', name: 'Company', path: '/api/user/42/oauth/bindings/9' },
+    {
+      key: 'github',
+      name: 'GitHub',
+      path: '/api/user/42/bindings/github',
+      proofContext: { user_id: 42, binding_type: 'github' },
+    },
+    {
+      key: 'oauth-9',
+      name: 'Company',
+      path: '/api/user/42/oauth/bindings/9',
+      proofContext: { user_id: 42, provider_id: 9 },
+    },
   ])
   const remove = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
-  await adminUserBindingsApi.remove(bindings[1]!, 'one-use-proof')
-  expect(remove).toHaveBeenCalledWith(
-    '/api/user/42/oauth/bindings/9',
-    undefined,
-    { headers: { 'X-Security-Proof': 'one-use-proof' } }
-  )
+  await adminUserBindingsApi.remove(bindings[0]!, 'builtin-proof')
+  await adminUserBindingsApi.remove(bindings[1]!, 'custom-proof')
+  expect(remove.mock.calls).toEqual([
+    [
+      '/api/user/42/bindings/github',
+      undefined,
+      { headers: { 'X-Security-Proof': 'builtin-proof' } },
+    ],
+    [
+      '/api/user/42/oauth/bindings/9',
+      undefined,
+      { headers: { 'X-Security-Proof': 'custom-proof' } },
+    ],
+  ])
 })

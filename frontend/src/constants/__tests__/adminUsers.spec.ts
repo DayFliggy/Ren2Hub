@@ -5,14 +5,18 @@ import {
   ADMIN_USER_DEFAULT_VISIBLE_FIELDS,
   ADMIN_USER_OPTIONAL_FIELDS,
   ADMIN_USER_ROLES,
-  adminOperatorLevel,
+  adminOperator,
   adminUserQuotaMeter,
+  adminUserRoleChoices,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  adminUserStatusAction,
   adminUserStatusLabelKey,
   adminUserStatusTone,
   canManageAdminUser,
+  isValidAdminUsername,
   sanitizeAdminUserVisibleFields,
+  trimGoSpace,
 } from '@/constants/adminUsers'
 
 describe('admin user role ladder', () => {
@@ -51,10 +55,17 @@ describe('admin user role ladder', () => {
 
 describe('admin user status', () => {
   it('pairs each status with a tone and a label', () => {
-    expect(adminUserStatusTone(1)).toBe('success')
-    expect(adminUserStatusTone(2)).toBe('danger')
-    expect(adminUserStatusLabelKey(1)).toBe('users.statusEnabled')
-    expect(adminUserStatusLabelKey(2)).toBe('users.statusDisabled')
+    const enabled = { status: 1, deleted: false } as const
+    const disabled = { status: 2, deleted: false } as const
+    expect(adminUserStatusTone(enabled)).toBe('success')
+    expect(adminUserStatusTone(disabled)).toBe('danger')
+    expect(adminUserStatusLabelKey(enabled)).toBe('users.statusEnabled')
+    expect(adminUserStatusLabelKey(disabled)).toBe('users.statusDisabled')
+    // A soft-deleted account keeps its last status; deletion wins the label.
+    expect(adminUserStatusTone({ ...enabled, deleted: true })).toBe('danger')
+    expect(adminUserStatusLabelKey({ ...enabled, deleted: true })).toBe(
+      'users.statusDeleted'
+    )
   })
 })
 
@@ -139,39 +150,120 @@ describe('admin user field visibility', () => {
   })
 })
 
-describe('operator authority level', () => {
-  it('derives level from capability flags, not from the pinned demo role', () => {
-    expect(adminOperatorLevel({ isRoot: true, isAdmin: true })).toBe(100)
-    expect(adminOperatorLevel({ isRoot: false, isAdmin: true })).toBe(10)
-    expect(adminOperatorLevel({ isRoot: false, isAdmin: false })).toBe(1)
-    expect(adminOperatorLevel({})).toBe(1)
+describe('adminOperator', () => {
+  const user = { id: 7 }
+
+  it('derives the level from the auth role flags', () => {
+    expect(adminOperator({ user, isRoot: true, isAdmin: true })).toEqual({
+      id: 7,
+      level: 100,
+    })
+    expect(adminOperator({ user, isRoot: false, isAdmin: true })).toEqual({
+      id: 7,
+      level: 10,
+    })
+  })
+
+  it('has no operator without a session or admin role', () => {
+    expect(adminOperator({ user, isRoot: false, isAdmin: false })).toBeNull()
+    expect(
+      adminOperator({ user: null, isRoot: true, isAdmin: true })
+    ).toBeNull()
   })
 })
 
 describe('canManageAdminUser', () => {
-  const operator = { id: 1, level: 10 }
+  const admin = { id: 1, level: 10 } as const
+  const root = { id: 1, level: 100 } as const
+  const actions = ['edit', 'enable', 'disable', 'delete'] as const
 
-  it('refuses without an operator', () => {
-    expect(canManageAdminUser({ id: 9, role: 1 }, null)).toBe(false)
-    expect(canManageAdminUser({ id: 9, role: 1 }, undefined)).toBe(false)
+  it('refuses without an operator and on the operator’s own row', () => {
+    for (const action of actions) {
+      expect(
+        canManageAdminUser({ id: 9, role: 1, deleted: false }, null, action)
+      ).toBe(false)
+      expect(
+        canManageAdminUser({ id: 1, role: 1, deleted: false }, admin, action)
+      ).toBe(false)
+      expect(
+        canManageAdminUser({ id: 1, role: 10, deleted: false }, root, action)
+      ).toBe(false)
+    }
   })
 
-  it('refuses the operator’s own row regardless of role', () => {
-    expect(canManageAdminUser({ id: 1, role: 1 }, operator)).toBe(false)
-    expect(canManageAdminUser({ id: 1, role: 0 }, operator)).toBe(false)
+  it('lets an admin act only on strictly lower roles', () => {
+    for (const action of actions) {
+      expect(
+        canManageAdminUser({ id: 9, role: 1, deleted: false }, admin, action)
+      ).toBe(true)
+      expect(
+        canManageAdminUser({ id: 9, role: 10, deleted: false }, admin, action)
+      ).toBe(false)
+      expect(
+        canManageAdminUser({ id: 9, role: 100, deleted: false }, admin, action)
+      ).toBe(false)
+    }
   })
 
-  it('refuses peers and superiors, allows strictly lower rows', () => {
-    expect(canManageAdminUser({ id: 9, role: 10 }, operator)).toBe(false)
-    expect(canManageAdminUser({ id: 9, role: 100 }, operator)).toBe(false)
-    expect(canManageAdminUser({ id: 9, role: 1 }, operator)).toBe(true)
-    expect(canManageAdminUser({ id: 9, role: 0 }, operator)).toBe(true)
+  it('lets root edit and enable another root but never disable or delete it', () => {
+    const otherRoot = { id: 9, role: 100, deleted: false } as const
+    expect(canManageAdminUser(otherRoot, root)).toBe(true)
+    expect(canManageAdminUser(otherRoot, root, 'enable')).toBe(true)
+    expect(canManageAdminUser(otherRoot, root, 'disable')).toBe(false)
+    expect(canManageAdminUser(otherRoot, root, 'delete')).toBe(false)
+    for (const action of actions)
+      expect(
+        canManageAdminUser({ id: 9, role: 10, deleted: false }, root, action)
+      ).toBe(true)
   })
 
-  it('lets a root-level operator manage admins but still not itself', () => {
-    const root = { id: 1, level: 100 }
-    expect(canManageAdminUser({ id: 9, role: 10 }, root)).toBe(true)
-    expect(canManageAdminUser({ id: 9, role: 100 }, root)).toBe(false)
-    expect(canManageAdminUser({ id: 1, role: 10 }, root)).toBe(false)
+  it('treats a soft-deleted user as read-only for every action, even for root', () => {
+    for (const action of actions)
+      expect(
+        canManageAdminUser({ id: 9, role: 1, deleted: true }, root, action)
+      ).toBe(false)
+  })
+
+  it('maps the status toggle to the native manage action', () => {
+    expect(adminUserStatusAction({ status: 1 })).toBe('disable')
+    expect(adminUserStatusAction({ status: 2 })).toBe('enable')
+  })
+})
+
+describe('adminUserRoleChoices', () => {
+  const admin = { id: 1, level: 10 } as const
+  const root = { id: 1, level: 100 } as const
+
+  it('creates only roles strictly below the operator', () => {
+    expect(adminUserRoleChoices(admin)).toEqual([1])
+    expect(adminUserRoleChoices(root)).toEqual([1, 10])
+    expect(adminUserRoleChoices(null)).toEqual([])
+  })
+
+  it('offers only the role changes ManageUser accepts', () => {
+    expect(adminUserRoleChoices(root, 1)).toEqual([1, 10])
+    expect(adminUserRoleChoices(root, 10)).toEqual([1, 10])
+    expect(adminUserRoleChoices(root, 100)).toEqual([100])
+    expect(adminUserRoleChoices(admin, 1)).toEqual([1])
+  })
+})
+
+describe('trimGoSpace', () => {
+  // Every rune Go's unicode.IsSpace accepts, and look-alikes it rejects.
+  const goSpace =
+    '\t\n\v\f\r \u0085\u00A0\u1680\u2000\u200A\u2028\u2029\u202F\u205F\u3000'
+  const notGoSpace = ['\uFEFF', '\u200B', '\u180E', '\u001C']
+
+  it('trims exactly the runes strings.TrimSpace trims', () => {
+    expect(trimGoSpace(`${goSpace}ops admin${goSpace}`)).toBe('ops admin')
+    for (const rune of notGoSpace)
+      expect(trimGoSpace(`${rune}member${rune}`)).toBe(`${rune}member${rune}`)
+  })
+
+  it('validates the trimmed username like the backend', () => {
+    expect(isValidAdminUsername('\u0085\u3000')).toBe(false)
+    expect(isValidAdminUsername('\uFEFF')).toBe(true)
+    expect(isValidAdminUsername(`\u0085${'a'.repeat(20)}\u0085`)).toBe(true)
+    expect(isValidAdminUsername(`\uFEFF${'a'.repeat(20)}`)).toBe(false)
   })
 })

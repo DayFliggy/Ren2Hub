@@ -511,7 +511,9 @@ export async function nativeCoreFixture(
     if (path === '/api/user/' || path === '/api/user/search')
       return ok({
         ...emptyPage,
-        total: 1,
+        total: 2,
+        // The upstream list query is unscoped: soft-deleted users come back
+        // with their gorm `DeletedAt` time, everyone else with null.
         items: [
           {
             ...user,
@@ -522,6 +524,18 @@ export async function nativeCoreFixture(
             created_at: now,
             last_login_at: now,
             inviter_id: 0,
+            DeletedAt: null,
+          },
+          {
+            ...user,
+            id: 3,
+            role: 1,
+            username: 'removed.member',
+            display_name: 'Removed Member',
+            created_at: now,
+            last_login_at: now,
+            inviter_id: 0,
+            DeletedAt: new Date(now * 1000).toISOString(),
           },
         ],
       })

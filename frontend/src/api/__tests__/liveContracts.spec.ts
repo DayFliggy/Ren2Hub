@@ -438,7 +438,7 @@ describe('live API contracts', () => {
           user_id: 3,
           actor_role: 0,
           created_at: 1,
-          category: 'system',
+          category: 'login',
           status: 0,
           success: true,
         },
@@ -451,8 +451,20 @@ describe('live API contracts', () => {
       request: { method: '', route: '', status: null, success: true },
     })
 
+    // Rows written before the NewAPI-core rebuild keep their stored category.
+    for (const category of ['system', 'consume']) {
+      const legacy = parseAuditLogPage({
+        page: 1,
+        page_size: 20,
+        total: 1,
+        items: [{ ...row, category }],
+      })
+      expect(legacy.items[0].category).toBe(category)
+    }
+
     for (const broken of [
-      { ...row, category: 'consume' },
+      { ...row, category: '' },
+      { ...row, category: 3 },
       { ...row, event_id: undefined },
       { ...row, success: 'true' },
       { ...row, actor_role: undefined },

@@ -2,7 +2,6 @@ import type {
   DrawingLogItem,
   LogItem,
   LogType,
-  AuditLogCategory,
   AuditLogItem,
   RelayTaskLogItem,
   TaskArtifact,
@@ -383,14 +382,6 @@ export function parseLogPage(value: unknown): PageResult<LogItem> {
   return parsePage(value, endpoint, parseLog)
 }
 
-const AUDIT_LOG_CATEGORIES = new Set<AuditLogCategory>([
-  'login',
-  'security',
-  'operation',
-  'access_token',
-  'system',
-])
-
 const AUDIT_ACTOR_ROLES = new Set([1, 10, 100])
 
 function optionalAuditString(value: unknown, endpoint: string): string {
@@ -400,8 +391,9 @@ function optionalAuditString(value: unknown, endpoint: string): string {
 
 function parseAuditLog(value: unknown, endpoint: string): AuditLogItem {
   if (!isRecord(value)) invalidResponse(endpoint)
-  const category = requiredString(value.category, endpoint) as AuditLogCategory
-  if (!AUDIT_LOG_CATEGORIES.has(category)) invalidResponse(endpoint)
+  // Like upstream, the category is an open string: historical rows keep
+  // categories the filter no longer offers.
+  const category = requiredString(value.category, endpoint, false)
   const other = value.other ?? {}
   if (!isRecord(other)) invalidResponse(endpoint)
   const op = other.op ?? {}

@@ -13,9 +13,11 @@ import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import {
+  type AdminUserAction,
   type AdminUserOptionalField,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  adminUserStatusAction,
   adminUserStatusLabelKey,
   adminUserStatusTone,
 } from '@/constants/adminUsers'
@@ -36,7 +38,7 @@ defineProps<{
   selectionDisabled: boolean
   toggleAllSelected: () => void
   toggleSelected: (user: AdminUser) => void
-  canManage: (user: AdminUser) => boolean
+  canManage: (user: AdminUser, action?: AdminUserAction) => boolean
   isSelf: (user: AdminUser) => boolean
   isBusy: (id: number, action: UserAction) => boolean
   isRowBusy: (id: number) => boolean
@@ -72,16 +74,26 @@ const { t, locale } = useI18n()
         :key="user.id"
         data-user-mobile-row
         class="min-w-0 px-4 py-4 transition-colors"
-        :class="user.status === 1 ? '' : 'bg-[var(--surface-muted)] opacity-75'"
+        :class="
+          user.deleted
+            ? 'bg-[var(--surface-muted)] opacity-50'
+            : user.status === 1
+              ? ''
+              : 'bg-[var(--surface-muted)] opacity-75'
+        "
       >
         <header class="flex min-w-0 items-start justify-between gap-3">
           <div class="flex min-w-0 items-start gap-2.5">
-            <label class="-mx-1 -mb-1 mt-1 flex shrink-0 p-1" @click.stop>
+            <label
+              v-if="!user.deleted"
+              class="-mx-1 -mb-1 mt-1 flex shrink-0 p-1"
+              @click.stop
+            >
               <input
                 type="checkbox"
                 class="checkbox-round"
                 :checked="selectedIds.includes(user.id)"
-                :disabled="selectionDisabled || !canManage(user)"
+                :disabled="selectionDisabled || !canManage(user, 'delete')"
                 :aria-label="t('users.selectUser', { name: user.username })"
                 @change="toggleSelected(user)"
               />
@@ -112,9 +124,9 @@ const { t, locale } = useI18n()
           <div class="flex shrink-0 flex-col items-end gap-1">
             <StatusChip
               v-if="visibleFields.includes('status')"
-              :tone="adminUserStatusTone(user.status)"
+              :tone="adminUserStatusTone(user)"
             >
-              {{ t(adminUserStatusLabelKey(user.status)) }}
+              {{ t(adminUserStatusLabelKey(user)) }}
             </StatusChip>
             <span
               v-if="isSelf(user)"
@@ -169,6 +181,7 @@ const { t, locale } = useI18n()
         </dl>
 
         <footer
+          v-if="!user.deleted"
           class="mt-4 flex items-center justify-end gap-1 border-t border-[var(--border-subtle)] pt-3"
         >
           <IconButton
@@ -197,7 +210,10 @@ const { t, locale } = useI18n()
               user.status === 1 ? t('users.disableUser') : t('users.enableUser')
             "
             :tone="user.status === 1 ? 'danger' : 'default'"
-            :disabled="!canManage(user) || isRowBusy(user.id)"
+            :disabled="
+              !canManage(user, adminUserStatusAction(user)) ||
+              isRowBusy(user.id)
+            "
             @click="toggleStatus(user)"
           >
             <LoaderCircle
@@ -211,7 +227,7 @@ const { t, locale } = useI18n()
           <IconButton
             :label="t('users.deleteUser')"
             tone="danger"
-            :disabled="!canManage(user) || isRowBusy(user.id)"
+            :disabled="!canManage(user, 'delete') || isRowBusy(user.id)"
             @click="deleteUser(user)"
           >
             <Trash2 :size="16" />

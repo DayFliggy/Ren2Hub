@@ -49,6 +49,7 @@ import {
   type AdminUserOptionalField,
   adminUserRoleLabelKey,
   adminUserRoleTone,
+  adminUserStatusAction,
   adminUserStatusLabelKey,
   adminUserStatusTone,
   sanitizeAdminUserVisibleFields,
@@ -83,7 +84,7 @@ const {
   isCrudBusy,
   isBulkBusy,
   canMutate,
-  operatorLevel,
+  operator,
   canManage,
   isSelf,
   load,
@@ -96,8 +97,8 @@ const {
   createUser,
   updateUserDetails,
   deleteUser,
-  updateUsersStatus,
-  deleteSelectedUsers,
+  runBulk,
+  bulkProgress,
 } = useAdminUsers((operation) => proofDialog.value!.request(operation))
 
 const formOpen = ref(false)
@@ -140,9 +141,9 @@ function fieldLabel(field: AdminUserOptionalField): string {
   return t(`users.${field}`)
 }
 
-/** Only manageable rows are selectable, so a bulk action can never half-apply. */
+/** Delete is the strictest rule, so every bulk action can reach a selected row. */
 const selectableIds = computed(() =>
-  rows.value.filter((user) => canManage(user)).map((user) => user.id)
+  rows.value.filter((user) => canManage(user, 'delete')).map((user) => user.id)
 )
 const selectedUsers = computed(() =>
   rows.value.filter((user) => selectedIds.value.includes(user.id))
@@ -161,7 +162,7 @@ function updateSelected(keys: Array<string | number>) {
 }
 
 function toggleSelected(user: AdminUser) {
-  if (!canManage(user)) return
+  if (!canManage(user, 'delete')) return
   selectedIds.value = selectedIds.value.includes(user.id)
     ? selectedIds.value.filter((id) => id !== user.id)
     : [...selectedIds.value, user.id]
@@ -241,6 +242,8 @@ const statusOptions = computed(() => [
   { value: '', label: t('users.allStatuses') },
   { value: '1', label: t('users.statusEnabled') },
   { value: '2', label: t('users.statusDisabled') },
+  // Native filter value: upstream maps -1 to `deleted_at IS NOT NULL`.
+  { value: '-1', label: t('users.statusDeleted') },
 ])
 const sortOptions = computed(() =>
   ADMIN_USER_SORT_FIELDS.map((field) => ({
@@ -263,6 +266,7 @@ function toggleSortOrder() {
 }
 
 function rowClass(user: AdminUser): string | undefined {
+  if (user.deleted) return 'opacity-50'
   return user.status === 1 ? undefined : 'opacity-75'
 }
 
@@ -307,7 +311,7 @@ function saveQuota(
 }
 
 function requestDelete(user: AdminUser) {
-  if (!canManage(user) || !canMutate.value) return
+  if (!canManage(user, 'delete') || !canMutate.value) return
   deleting.value = { kind: 'single', user }
 }
 
@@ -321,15 +325,19 @@ function requestBulkDelete() {
 
 async function confirmDelete() {
   const target = deleting.value
-  if (!target) return
-  const deleted =
-    target.kind === 'single'
-      ? await deleteUser(target.user)
-      : await deleteSelectedUsers(target.users)
-  if (deleted) {
-    deleting.value = null
-    clearSelection()
+  if (!target || !canMutate.value) return
+  if (target.kind === 'single') {
+    if (await deleteUser(target.user)) {
+      deleting.value = null
+      clearSelection()
+    }
+    return
   }
+  // A stopped batch has still changed users; the toast reports how far it
+  // got and the list is already refreshed, so the old selection is stale.
+  await runBulk('delete', target.users)
+  deleting.value = null
+  clearSelection()
 }
 
 function cancelDelete() {
@@ -347,14 +355,21 @@ const deleteDialogTitle = computed(() =>
 const deleteDialogMessage = computed(() => {
   const target = deleting.value
   if (!target) return ''
-  return target.kind === 'single'
-    ? t('users.deleteMessage', { name: target.user.username })
-    : t('users.bulkDeleteMessage', { count: target.users.length })
+  if (target.kind === 'single')
+    return t('users.deleteMessage', { name: target.user.username })
+  const message = [
+    t('users.bulkDeleteMessage', { count: target.users.length }),
+    t('users.bulkProofNotice', { count: target.users.length }),
+  ]
+  if (bulkProgress.value)
+    message.push(t('users.bulkProgress', bulkProgress.value))
+  return message.join(' ')
 })
 
 async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
   if (!canMutate.value) return
-  if (await updateUsersStatus(action, selectedUsers.value)) clearSelection()
+  await runBulk(action, selectedUsers.value)
+  clearSelection()
 }
 </script>
 
@@ -452,12 +467,18 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
         data-user-bulk-actions
         class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
       >
-        <span
-          class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"
-          aria-live="polite"
-        >
-          {{ t('users.selectedCount', { count: selectedIds.length }) }}
-        </span>
+        <div class="mr-auto min-w-0" aria-live="polite">
+          <p class="text-xs font-semibold text-[var(--text-secondary)]">
+            {{
+              bulkProgress
+                ? t('users.bulkProgress', bulkProgress)
+                : t('users.selectedCount', { count: selectedIds.length })
+            }}
+          </p>
+          <p class="text-[0.6875rem] text-[var(--text-tertiary)]">
+            {{ t('users.bulkProofHint') }}
+          </p>
+        </div>
         <IconButton
           :label="t('users.bulkEnable')"
           :disabled="
@@ -532,7 +553,8 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           :selected="selectedIds"
           :selection-keys="selectableIds"
           :selection-disabled="!canMutate"
-          :row-selectable="(row) => canManage(row as AdminUser)"
+          :row-selectable="(row) => canManage(row as AdminUser, 'delete')"
+          :row-selection-hidden="(row) => (row as AdminUser).deleted"
           :loading="loading"
           :skeleton-rows="pageSize"
           adaptive-scroll
@@ -590,8 +612,8 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           </template>
 
           <template #cell-status="{ row }">
-            <StatusChip :tone="adminUserStatusTone((row as AdminUser).status)">
-              {{ t(adminUserStatusLabelKey((row as AdminUser).status)) }}
+            <StatusChip :tone="adminUserStatusTone(row as AdminUser)">
+              {{ t(adminUserStatusLabelKey(row as AdminUser)) }}
             </StatusChip>
           </template>
 
@@ -626,7 +648,10 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center justify-end gap-0.5">
+            <div
+              v-if="!(row as AdminUser).deleted"
+              class="flex items-center justify-end gap-0.5"
+            >
               <IconButton
                 :label="t('users.editUser')"
                 :disabled="
@@ -670,8 +695,10 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
                 "
                 :tone="(row as AdminUser).status === 1 ? 'danger' : 'default'"
                 :disabled="
-                  !canManage(row as AdminUser) ||
-                  isRowBusy((row as AdminUser).id)
+                  !canManage(
+                    row as AdminUser,
+                    adminUserStatusAction(row as AdminUser)
+                  ) || isRowBusy((row as AdminUser).id)
                 "
                 @click="toggleStatus(row as AdminUser)"
               >
@@ -690,7 +717,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
                 :label="t('users.deleteUser')"
                 tone="danger"
                 :disabled="
-                  !canManage(row as AdminUser) ||
+                  !canManage(row as AdminUser, 'delete') ||
                   isRowBusy((row as AdminUser).id)
                 "
                 @click="requestDelete(row as AdminUser)"
@@ -766,7 +793,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
     <UserFormModal
       :open="formOpen"
       :editing="editing"
-      :operator-level="operatorLevel"
+      :operator="operator"
       :save="saveForm"
       @close="formOpen = false"
     />

@@ -12,10 +12,17 @@ const builtins = [
   ['linuxdo', 'linux_do_id', 'Linux DO'],
 ] as const
 
+/** admin.user.binding.clear context: exactly one of binding_type or provider_id. */
+export type AdminUserBindingProofContext =
+  | { user_id: number; binding_type: string }
+  | { user_id: number; provider_id: number }
+
 export interface AdminUserBinding {
   key: string
   name: string
   path: string
+  /** Built next to `path` so the proof always names the binding being cleared. */
+  proofContext: AdminUserBindingProofContext
 }
 
 export const adminUserBindingsApi = {
@@ -48,11 +55,13 @@ export const adminUserBindingsApi = {
           key,
           name,
           path: `${base}/bindings/${key}`,
+          proofContext: { user_id: id, binding_type: key },
         })),
       ...providers.map((item) => ({
         key: `oauth-${item.provider_id}`,
         name: item.provider_name,
         path: `${base}/oauth/bindings/${item.provider_id}`,
+        proofContext: { user_id: id, provider_id: item.provider_id },
       })),
     ]
   },

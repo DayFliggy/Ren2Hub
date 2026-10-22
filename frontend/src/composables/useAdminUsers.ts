@@ -1,7 +1,14 @@
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import { parseAdminUserPage } from '@/api/adminUserContracts'
 import { proofOptions, type SecurityOperation } from '@/api/security'
+import {
+  adminOperator,
+  adminUserStatusAction,
+  canManageAdminUser,
+  type AdminUserAction,
+} from '@/constants/adminUsers'
 import { useAuthStore } from '@/stores/auth'
 import { useLatestRequest } from './useLatestRequest'
 import { useToast } from './useToast'
@@ -10,11 +17,18 @@ import type {
   AdminUserCreateInput,
   AdminUserUpdateInput,
 } from '@/types/console'
+const BULK_DONE_KEYS = {
+  enable: 'users.bulkEnabled',
+  disable: 'users.bulkDisabled',
+  delete: 'users.bulkDeleted',
+} as const
+
 export function useAdminUsers(
   requestProof: (operation: SecurityOperation) => Promise<string>
 ) {
   const auth = useAuthStore(),
     toast = useToast(),
+    { t } = useI18n(),
     request = useLatestRequest()
   const rows = ref<AdminUser[]>([]),
     total = ref(0),
@@ -28,14 +42,14 @@ export function useAdminUsers(
     loading = ref(false),
     initialError = ref(''),
     busy = ref(false)
-  const operatorLevel = computed(() => auth.user?.role ?? 0)
+  const operator = computed(() => adminOperator(auth))
   const isSelf = (user: AdminUser) => auth.user?.id === user.id
-  const canManage = (user: AdminUser) =>
-    !isSelf(user) && (auth.isRoot || operatorLevel.value > user.role)
-  const canMutate = computed(
-    () => !busy.value && auth.hasPermission('user', 'write')
-  )
+  const canManage = (user: AdminUser, action: AdminUserAction = 'edit') =>
+    canManageAdminUser(user, operator.value, action)
+  // User administration is AdminAuth-only upstream; Casbin has no user resource.
+  const canMutate = computed(() => !busy.value && auth.isAdmin)
   const bulkAction = ref('')
+  const bulkProgress = ref<{ done: number; total: number } | null>(null)
   const activeAction = ref('')
   const activeUser = ref<number | null>(null)
   const refreshing = ref(false)
@@ -99,20 +113,32 @@ export function useAdminUsers(
       busy.value = false
     }
   }
-  async function manage(user: AdminUser, action: string) {
-    if (!canManage(user)) return false
-    activeUser.value = user.id
-    activeAction.value = action
-    return mutate(async () =>
-      api.post(
-        '/api/user/manage',
-        { id: user.id, action },
-        await authorize('admin.user.manage', { user_id: user.id, action })
-      )
+  // Native proofs bind one user each, so every write below asks for its own.
+  async function manageRequest(
+    user: AdminUser,
+    action: 'enable' | 'disable' | 'promote' | 'demote'
+  ) {
+    await api.post(
+      '/api/user/manage',
+      { id: user.id, action },
+      await authorize('admin.user.manage', { user_id: user.id, action })
     )
   }
+  async function deleteRequest(user: AdminUser) {
+    await api.delete(
+      `/api/user/${user.id}`,
+      undefined,
+      await authorize('admin.user.delete', { user_id: user.id })
+    )
+  }
+  async function manage(user: AdminUser, action: 'enable' | 'disable') {
+    if (!canManage(user, action)) return false
+    activeUser.value = user.id
+    activeAction.value = action
+    return mutate(() => manageRequest(user, action))
+  }
   const toggleStatus = (user: AdminUser) =>
-    manage(user, user.status === 1 ? 'disable' : 'enable')
+    manage(user, adminUserStatusAction(user))
   async function createUser(input: AdminUserCreateInput) {
     return mutate(async () =>
       api.post(
@@ -124,37 +150,49 @@ export function useAdminUsers(
       )
     )
   }
+  /**
+   * Profile and role are two native writes; upstream keeps the role on its own
+   * row action. Once the profile PUT succeeds the save is reported as done and
+   * the list reloads either way. A role request error is reported without
+   * claiming the outcome: the backend can commit the role and then fail.
+   */
   async function updateUserDetails(
     user: AdminUser,
     input: AdminUserUpdateInput
   ) {
-    return mutate(async () => {
+    if (busy.value) return false
+    busy.value = true
+    try {
       const { role, ...patch } = input
-      await api.put(
-        '/api/user/',
-        { id: user.id, ...patch },
-        patch.password || patch.admin_permissions
-          ? await authorize('admin.user.update', { user_id: user.id })
-          : undefined
-      )
-      if (role !== user.role) {
-        const action = role >= 10 ? 'promote' : 'demote'
-        await api.post(
-          '/api/user/manage',
-          { id: user.id, action },
-          await authorize('admin.user.manage', { user_id: user.id, action })
+      try {
+        await api.put(
+          '/api/user/',
+          { id: user.id, ...patch },
+          patch.password || patch.admin_permissions
+            ? await authorize('admin.user.update', { user_id: user.id })
+            : undefined
         )
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e))
+        return false
       }
-    })
+      if (role !== user.role)
+        await manageRequest(user, role >= 10 ? 'promote' : 'demote').catch(
+          (e: unknown) =>
+            toast.error(
+              t('users.profileSavedRoleFailed', {
+                message: e instanceof Error ? e.message : String(e),
+              })
+            )
+        )
+      await load()
+      return true
+    } finally {
+      busy.value = false
+    }
   }
   async function deleteUser(user: AdminUser) {
-    return mutate(async () =>
-      api.delete(
-        `/api/user/${user.id}`,
-        undefined,
-        await authorize('admin.user.delete', { user_id: user.id })
-      )
-    )
+    return mutate(() => deleteRequest(user))
   }
   async function adjustQuota(
     user: AdminUser,
@@ -174,32 +212,62 @@ export function useAdminUsers(
       })
     )
   }
-  async function updateUsersStatus(
-    action: 'enable' | 'disable',
+  /**
+   * Runs one verified request per user under a single busy lock. Users already
+   * in the target state are skipped; the first failure or cancelled
+   * verification stops the rest. The list refreshes once, and a refresh
+   * failure surfaces as the page load error, not as a user's failure.
+   * Resolves true when every target succeeded.
+   */
+  async function runBulk(
+    action: 'enable' | 'disable' | 'delete',
     users: AdminUser[]
   ) {
-    if (busy.value || users.some((user) => !canManage(user))) return false
+    if (busy.value) return false
+    const targets = users.filter(
+      (user) =>
+        canManage(user, action) &&
+        (action === 'delete' || adminUserStatusAction(user) === action)
+    )
+    if (targets.length === 0) return true
+    busy.value = true
     bulkAction.value = action
+    const progress = { done: 0, total: targets.length }
+    bulkProgress.value = { ...progress }
+    let failure: { user: AdminUser; error: unknown } | null = null
     try {
-      for (const user of users) {
-        if (!(await manage(user, action))) return false
+      for (const user of targets) {
+        try {
+          if (action === 'delete') await deleteRequest(user)
+          else await manageRequest(user, action)
+        } catch (error) {
+          failure = { user, error }
+          break
+        }
+        progress.done += 1
+        bulkProgress.value = { ...progress }
       }
-      return true
+      await load()
     } finally {
+      busy.value = false
       bulkAction.value = ''
+      bulkProgress.value = null
     }
-  }
-  async function deleteSelectedUsers(users: AdminUser[]) {
-    if (busy.value || users.some((user) => !canManage(user))) return false
-    bulkAction.value = 'delete'
-    try {
-      for (const user of users) {
-        if (!(await deleteUser(user))) return false
-      }
+    if (!failure) {
+      toast.success(t(BULK_DONE_KEYS[action], { count: progress.done }))
       return true
-    } finally {
-      bulkAction.value = ''
     }
+    toast.error(
+      t('users.bulkStopped', {
+        ...progress,
+        name: failure.user.username,
+        message:
+          failure.error instanceof Error
+            ? failure.error.message
+            : String(failure.error),
+      })
+    )
+    return false
   }
   watch([page, pageSize], () => void load())
   watch([keyword, role, status, sortBy, sortOrder], () => {
@@ -217,8 +285,8 @@ export function useAdminUsers(
     isRowBusy,
     isCrudActionBusy,
     isBulkActionBusy,
-    updateUsersStatus,
-    deleteSelectedUsers,
+    runBulk,
+    bulkProgress,
     rows,
     total,
     page,
@@ -231,7 +299,7 @@ export function useAdminUsers(
     loading,
     initialError,
     busy,
-    operatorLevel,
+    operator,
     canManage,
     load,
     toggleStatus,

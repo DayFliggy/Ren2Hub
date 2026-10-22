@@ -3,12 +3,14 @@ import { computed } from 'vue'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import AdminUserBindings from '../AdminUserBindings.vue'
 import { adminUserBindingsApi } from '@/api/adminUserBindings'
+import { api } from '@/api/client'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { AdminUser } from '@/types/console'
+const proof = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('@/components/auth/SecurityProofDialog.vue', () => ({
   default: {
     setup(_: unknown, { expose }: { expose: (value: unknown) => void }) {
-      expose({ request: vi.fn().mockResolvedValue('one-use-proof') })
+      expose({ request: proof.request })
       return () => null
     },
   },
@@ -29,6 +31,7 @@ beforeAll(async () => {
 })
 beforeEach(() => {
   vi.restoreAllMocks()
+  proof.request.mockReset().mockResolvedValue('one-use-proof')
   state.isAdmin = true
   state.isRoot = false
   state.readOnly = false
@@ -69,6 +72,7 @@ describe('admin identity unbinding', () => {
       key: 'github',
       name: 'GitHub',
       path: '/api/user/42/bindings/github',
+      proofContext: { user_id: 42, binding_type: 'github' },
     }
     const read = vi
       .spyOn(adminUserBindingsApi, 'list')
@@ -94,6 +98,53 @@ describe('admin identity unbinding', () => {
     expect(remove).toHaveBeenLastCalledWith(binding, 'one-use-proof')
     expect(wrapper.emitted('removed')).toEqual([['github']])
     expect(wrapper.text()).toContain('No bound sign-in')
+    wrapper.unmount()
+  })
+  it('proves each clear with the native binding scope and context', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (path: string) =>
+      path === '/api/user/42'
+        ? { id: 42, github_id: 'private-identity', email: '' }
+        : [{ provider_id: 9, provider_name: 'Company SSO' }]
+    )
+    const remove = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
+    proof.request
+      .mockResolvedValueOnce('builtin-proof')
+      .mockResolvedValueOnce('custom-proof')
+    const wrapper = setup()
+    await wrapper.get('[data-admin-bindings]').trigger('click')
+    await flushPromises()
+    for (const name of ['GitHub', 'Company SSO']) {
+      await wrapper.get(`button[aria-label="Unbind ${name}"]`).trigger('click')
+      await wrapper.findComponent({ name: 'ConfirmDialog' }).vm.$emit('confirm')
+      await flushPromises()
+    }
+    expect(proof.request.mock.calls).toEqual([
+      [
+        {
+          scope: 'admin.user.binding.clear',
+          context: { user_id: 42, binding_type: 'github' },
+        },
+      ],
+      [
+        {
+          scope: 'admin.user.binding.clear',
+          context: { user_id: 42, provider_id: 9 },
+        },
+      ],
+    ])
+    expect(remove.mock.calls).toEqual([
+      [
+        '/api/user/42/bindings/github',
+        undefined,
+        { headers: { 'X-Security-Proof': 'builtin-proof' } },
+      ],
+      [
+        '/api/user/42/oauth/bindings/9',
+        undefined,
+        { headers: { 'X-Security-Proof': 'custom-proof' } },
+      ],
+    ])
+    expect(wrapper.emitted('removed')).toEqual([['github'], ['oauth-9']])
     wrapper.unmount()
   })
   it('aborts profile reads when closed', async () => {

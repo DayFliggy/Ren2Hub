@@ -155,8 +155,12 @@ export interface AdminUser extends Record<string, unknown> {
   username: string
   display_name: string
   email: string
+  /** Upstream omits an empty remark (`omitempty`); the parser restores ''. */
+  remark: string
   role: AdminUserRole
   status: AdminUserStatus
+  /** From upstream `DeletedAt`: the list query is unscoped, so it includes soft-deleted users. */
+  deleted: boolean
   quota: number
   used_quota: number
   request_count: number
@@ -178,9 +182,13 @@ export interface AdminUserCreateInput {
   role: AdminUserRole
 }
 
-/** Status is owned by the dedicated toggle route, not by the edit form. */
+/**
+ * Status is owned by the dedicated toggle route, and email by account
+ * bindings. Upstream `EditWithTx` rewrites remark on every save, so the form
+ * always sends it.
+ */
 export type AdminUserUpdateInput = Omit<AdminUserCreateInput, 'password'> & {
-  email: string
+  remark: string
   password?: string
 }
 
@@ -232,8 +240,9 @@ export interface LogItem {
   created: number
 }
 
+/** model.ValidAuditCategory: the four categories the audit filter accepts. */
 export type AuditLogCategory =
-  'login' | 'security' | 'operation' | 'access_token' | 'system'
+  'login' | 'security' | 'operation' | 'access_token'
 
 export interface AuditLogActor {
   id: number
@@ -254,7 +263,9 @@ export interface AuditLogRequest {
 export interface AuditLogItem extends Record<string, unknown> {
   event_id: string
   created_at: number
-  category: AuditLogCategory
+  /** Any non-empty string: rows from before the NewAPI-core rebuild may carry
+   * categories outside AuditLogCategory (for example `system`). */
+  category: string
   action: string
   params: Record<string, unknown>
   content: string
