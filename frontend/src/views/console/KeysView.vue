@@ -26,7 +26,9 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
+import { tokenRoutingAccess } from '@/constants/navigation/consoleNav'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import { formatDate, formatQuota } from '@/utils/format'
 import { tokenStatusLabel } from '@/utils/tokenStatus'
 
@@ -37,8 +39,14 @@ const { t: clientText } = useI18n({
 })
 const toast = useToast()
 const app = useAppStore()
-const routingEnabled = computed(() =>
-  app.isFeatureEnabled('token_private_routing')
+const auth = useAuthStore()
+const routingEnabled = computed(
+  () =>
+    app.isFeatureEnabled(tokenRoutingAccess.feature) &&
+    auth.hasPermission(
+      tokenRoutingAccess.requiresPermission.resource,
+      tokenRoutingAccess.requiresPermission.action
+    )
 )
 
 const rows = ref<TokenSummary[]>([])

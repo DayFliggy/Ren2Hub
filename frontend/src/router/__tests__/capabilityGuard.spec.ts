@@ -239,6 +239,30 @@ describe('capability route guard', () => {
     }
   })
 
+  it.each([
+    [false, 'dashboard'],
+    [true, 'token-routing'],
+  ])(
+    'opens token routing only with routing:read %s',
+    async (read, routeName) => {
+      publicApi.status.mockResolvedValue({
+        frontend_capabilities: {
+          dashboard_basic: 'live',
+          token_private_routing: 'live',
+        },
+      })
+      // authz.Capabilities lists every registered resource for the user.
+      useAuthStore().user!.permissions = {
+        admin_permissions: { routing: { read, write: read } },
+      }
+
+      await router.push('/keys/11/routing')
+
+      expect(router.currentRoute.value.name).toBe(routeName)
+    },
+    15000
+  )
+
   it('keeps canonical routes at the root and preserves legacy queries and anchors', async () => {
     for (const [source, target] of [
       ['/console/token', '/keys'],

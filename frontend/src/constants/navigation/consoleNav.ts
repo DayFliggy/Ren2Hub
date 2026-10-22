@@ -203,6 +203,13 @@ export function getAccessibleConsoleNavGroups(
   })
 }
 
+/** The Keys page entry and the token-routing route share one rule; the
+ * backend gates every routing API with routing:read. */
+export const tokenRoutingAccess = {
+  feature: 'token_private_routing',
+  requiresPermission: { resource: 'routing', action: 'read' },
+}
+
 /** Route metadata and visible navigation derive from the same access rule. */
 export function getConsoleRouteAccessMeta(routeName: string): {
   requiresAdmin?: true

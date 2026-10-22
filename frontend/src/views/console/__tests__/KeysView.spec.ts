@@ -11,8 +11,11 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { api } from '@/api/console'
+import { parsePublicStatus } from '@/api/public'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { TokenSummary } from '@/types/console'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import KeysView from '@/views/console/KeysView.vue'
 
 const tokens: TokenSummary[] = Array.from({ length: 10 }, (_, index) => ({
@@ -106,4 +109,62 @@ describe('KeysView mobile loading contract', () => {
     ).toBe('true')
     expect(document.activeElement).toBe(nextPageButton)
   })
+})
+
+describe('KeysView token routing entry', () => {
+  async function mountWithAccess(routing: string, read: boolean) {
+    useAppStore().status = parsePublicStatus({
+      frontend_capabilities: { token_private_routing: routing },
+    })
+    // controller.buildSelfUserData sends authz.Capabilities for every role.
+    useAuthStore().persist({
+      id: 7,
+      username: 'user',
+      display_name: 'User',
+      email: 'user@example.com',
+      role: 1,
+      status: 1,
+      quota: 100,
+      used_quota: 0,
+      request_count: 0,
+      permissions: {
+        admin_permissions: { routing: { read, write: read } },
+      },
+    })
+    vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path === '/api/user/models') return Promise.resolve({ models: [] })
+      if (path === '/api/token/')
+        return Promise.resolve({
+          items: backendTokens,
+          total: backendTokens.length,
+          page: 1,
+          page_size: 10,
+        })
+      return Promise.reject(new Error(`Unexpected API request: ${path}`))
+    })
+    wrapper = mount(KeysView, {
+      global: {
+        plugins: [i18n],
+        stubs: {
+          RouterLink: {
+            props: ['to'],
+            template: '<a :data-route="to.name"><slot /></a>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    return wrapper.findAll('a[data-route="token-routing"]')
+  }
+
+  it.each([
+    ['live', true, backendTokens.length * 2],
+    ['live', false, 0],
+    ['disabled', true, 0],
+  ])(
+    'shows desktop and mobile routing links for %s with read %s',
+    async (routing, read, count) => {
+      expect(await mountWithAccess(routing, read)).toHaveLength(count)
+    }
+  )
 })
