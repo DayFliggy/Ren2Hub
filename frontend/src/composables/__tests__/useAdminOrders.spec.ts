@@ -84,6 +84,7 @@ async function setup() {
 
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(now * 1000)
+  vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-480)
   vi.mocked(getTopUps).mockResolvedValue({
     items: [],
     total: 0,
@@ -115,7 +116,7 @@ describe('order statistics snapshot identity', () => {
       expect(state.statsLoading.value).toBe(true)
       expect(get).toHaveBeenLastCalledWith(
         '/api/user/topup/stats',
-        { start_time: now - range * 86400, end_time: now },
+        { start_time: now - range * 86400, end_time: now, tz_offset: '-480' },
         { signal: expect.any(AbortSignal) }
       )
 

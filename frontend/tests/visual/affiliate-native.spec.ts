@@ -19,7 +19,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
       let available = 250000
       let transferBody: unknown
       const orders: string[] = []
-      await page.route('**/api/user/affiliate', (route) =>
+      await page.route('**/api/user/affiliate?*', (route) =>
         route.fulfill({
           json: {
             success: true,

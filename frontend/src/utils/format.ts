@@ -129,6 +129,15 @@ export function localDayEndMs(value: string): number {
   return next.getTime() - 1
 }
 
+/**
+ * The browser's current UTC offset as the tz_offset query value (minutes,
+ * positive west of UTC). Endpoints that bucket by calendar day or month use it
+ * as one fixed offset for the whole window.
+ */
+export function viewerTzOffset(): string {
+  return String(new Date().getTimezoneOffset())
+}
+
 export function relativeTime(epochSec: number, locale = 'zh-CN'): string {
   const diff = Math.floor(Date.now() / 1000) - epochSec
   const absolute = Math.abs(diff)

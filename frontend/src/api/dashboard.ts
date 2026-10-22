@@ -8,6 +8,7 @@ import {
   requiredStrictNumber,
   requiredString,
 } from './contracts'
+import { viewerTzOffset } from '@/utils/format'
 import type { StatsPeriod } from '@/composables/useDashboardStats'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
@@ -126,7 +127,7 @@ export async function getUsageSummary(
   return parseUsageSummary(
     await api.get(
       endpoint,
-      { tz_offset: String(new Date().getTimezoneOffset()), ...params },
+      { tz_offset: viewerTzOffset(), ...params },
       { signal }
     )
   )

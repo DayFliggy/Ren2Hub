@@ -49,6 +49,8 @@ GMPay 配置仅 Root 浏览器会话使用：`GET /api/option/gmpay/config`、`P
 
 `GET /api/user/topup/stats` 返回 `currencies`、`daily`、时间范围与计数，各币种分别汇总，`paid_amount` 保持十进制字符串。历史记录缺少支付金额或币种时显示未知，并计入 `unknown_amount_count`，不补零、不贴 USD 标签。未由接口提供的支付占比、消费榜单或分面统计不凭空生成。
 
+订单统计、返利信息和用量概览请求都由 `viewerTzOffset()`（`src/utils/format.ts`）附带浏览器当前的 `tz_offset`，服务端按访问者所在的日历日和月份分桶。偏移在整个窗口内固定，跨夏令时切换的窗口按请求时的偏移划界。
+
 ## 邀请返利
 
 `GET /api/user/affiliate` 返回可转额度、冻结额度、累计奖励、有效比例、规则及月度统计；`GET /api/user/affiliate/invitees` 返回脱敏名单，`GET /api/user/affiliate/records` 返回本人记录。数值额度在前端边界校验后转为展示字符串。

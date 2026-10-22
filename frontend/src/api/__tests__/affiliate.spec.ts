@@ -29,6 +29,17 @@ const info = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('native affiliate API contracts', () => {
+  it('asks for monthly series in the viewer timezone', async () => {
+    vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-480)
+    const get = vi.spyOn(api, 'get').mockResolvedValue(info)
+    const signal = new AbortController().signal
+    await affiliateApi.info(signal)
+    expect(get).toHaveBeenCalledWith(
+      '/api/user/affiliate',
+      { tz_offset: '-480' },
+      { signal }
+    )
+  })
   it('validates native numeric quota and chart data at the API boundary', async () => {
     vi.spyOn(api, 'get')
       .mockResolvedValueOnce(info)
