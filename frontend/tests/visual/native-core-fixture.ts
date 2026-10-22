@@ -239,7 +239,7 @@ export async function nativeCoreFixture(
         custom_currency_exchange_rate: 1,
         frontend_capabilities: features,
         start_time: now - 86400,
-        HeaderNavModules: { pricing: true },
+        HeaderNavModules: '{"pricing":true}',
         password_login_enabled: true,
         password_login_encryption_enabled: false,
         ...options.status,

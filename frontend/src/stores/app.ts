@@ -2,6 +2,7 @@ import { configureQuotaDisplay } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
+import { isRecord } from '@/api/contracts'
 import { publicApi, type FeatureStatus, type PublicStatus } from '@/api/public'
 import { BRAND_LOGO_PATH, BRAND_NAME } from '@/constants/branding'
 import { useAuthStore } from '@/stores/auth'
@@ -22,28 +23,45 @@ function parseBoolean(value: unknown, fallback: boolean): boolean {
   return fallback
 }
 
-function parseModuleAccess(value: unknown): ModuleAccess {
-  if (!value || typeof value !== 'object') {
-    return { enabled: parseBoolean(value, true), requireAuth: false }
+function headerNavBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const text = value.trim().toLowerCase()
+    if (text === 'true' || text === '1') return true
+    if (text === 'false' || text === '0') return false
+    return fallback
   }
-  const record = value as Record<string, unknown>
-  return {
-    enabled: parseBoolean(record.enabled, true),
-    requireAuth: parseBoolean(record.requireAuth, false),
-  }
+  if (value === 1) return true
+  if (value === 0) return false
+  return fallback
 }
 
-export function parseHeaderModules(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object')
-    return value as Record<string, unknown>
-  if (typeof value !== 'string' || !value.trim()) return {}
+/**
+ * Reads one module from the HeaderNavModules option exactly as
+ * middleware/header_nav.go does, so the navigation never hides or shows a
+ * page differently from what the backend enforces.
+ */
+function headerNavAccess(
+  raw: string | undefined,
+  module: string
+): ModuleAccess {
+  const open: ModuleAccess = { enabled: true, requireAuth: false }
+  if (!raw?.trim()) return open
+  let modules: unknown
   try {
-    const parsed: unknown = JSON.parse(value)
-    return parsed && typeof parsed === 'object'
-      ? (parsed as Record<string, unknown>)
-      : {}
+    modules = JSON.parse(raw)
   } catch {
-    return {}
+    // header_nav.go treats an option it cannot decode as unset (all open).
+    return open
+  }
+  if (!isRecord(modules)) return open
+  const value = modules[module]
+  if (['boolean', 'string', 'number'].includes(typeof value))
+    return { enabled: headerNavBool(value, true), requireAuth: false }
+  if (!isRecord(value)) return open
+  return {
+    enabled: headerNavBool(value.enabled, true),
+    requireAuth: headerNavBool(value.requireAuth, false),
   }
 }
 
@@ -63,6 +81,8 @@ export const useAppStore = defineStore('app', () => {
   const uptimePercent = ref<number | null>(null)
   const lastError = ref<unknown>(null)
   let initializationPromise: Promise<void> | null = null
+  let statusRequested = 0
+  let statusApplied = 0
 
   const initialized = computed(
     () => phase.value === 'ready' || phase.value === 'degraded'
@@ -78,24 +98,18 @@ export const useAppStore = defineStore('app', () => {
   const docsLink = computed(() => safeExternalUrl(status.value.docs_link) || '')
   const version = computed(() => status.value.version?.trim() || '')
   const startTime = computed(() => status.value.start_time ?? null)
-  const headerModules = computed(() =>
-    parseHeaderModules(status.value.HeaderNavModules)
-  )
-  const pricingAccess = computed(() =>
-    parseModuleAccess(headerModules.value.pricing)
-  )
+  const moduleAccess = (module: string) =>
+    headerNavAccess(status.value.HeaderNavModules, module)
+  const pricingAccess = computed(() => moduleAccess('pricing'))
   const showPricing = computed(
     () =>
       pricingAccess.value.enabled &&
       (!pricingAccess.value.requireAuth || auth.isAuthenticated)
   )
   const showDocs = computed(
-    () =>
-      parseBoolean(headerModules.value.docs, true) && Boolean(docsLink.value)
+    () => moduleAccess('docs').enabled && Boolean(docsLink.value)
   )
-  const showAbout = computed(() =>
-    parseBoolean(headerModules.value.about, true)
-  )
+  const showAbout = computed(() => moduleAccess('about').enabled)
   const userAgreementEnabled = computed(() =>
     Boolean(status.value.user_agreement_enabled)
   )
@@ -154,16 +168,27 @@ export const useAppStore = defineStore('app', () => {
     favicon.href = customLogo
   }
 
+  // Every /api/status read publishes here, so the navigation and the public
+  // route guards share one snapshot. A slower earlier response never replaces
+  // a newer one.
+  async function refreshStatus(): Promise<void> {
+    const request = ++statusRequested
+    const next = await publicApi.status()
+    if (request < statusApplied) return
+    statusApplied = request
+    status.value = next
+    configureQuotaDisplay(next)
+    statusReachable.value = true
+    applyBranding()
+  }
+
   async function runInitialization(): Promise<void> {
     phase.value = 'loading'
     lastError.value = null
     modelCount.value = null
     uptimePercent.value = null
     try {
-      status.value = (await publicApi.status()) || {}
-      configureQuotaDisplay(status.value)
-      statusReachable.value = true
-      applyBranding()
+      await refreshStatus()
 
       const canLoadPricing =
         pricingAccess.value.enabled &&
@@ -273,6 +298,7 @@ export const useAppStore = defineStore('app', () => {
     showPricing,
     showDocs,
     showAbout,
+    moduleAccess,
     registerEnabled,
     checkinEnabled,
     turnstileEnabled,
@@ -287,6 +313,7 @@ export const useAppStore = defineStore('app', () => {
     featureStatus,
     isFeatureEnabled,
     initialize,
+    refreshStatus,
     retry,
   }
 })

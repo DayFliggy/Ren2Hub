@@ -26,7 +26,7 @@ export interface PublicStatus {
   user_agreement_enabled?: boolean
   privacy_policy_enabled?: boolean
   uptime_kuma_enabled?: boolean
-  HeaderNavModules?: unknown
+  HeaderNavModules?: string
   frontend_capabilities?: FrontendCapabilities
   turnstile_check?: boolean
   turnstile_site_key?: string
@@ -189,7 +189,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'oidc_client_id',
     'oidc_authorization_endpoint',
   ] as const
-  const statusStringKeys = ['turnstile_site_key'] as const
+  const statusStringKeys = ['turnstile_site_key', 'HeaderNavModules'] as const
   for (const key of oauthStringKeys) {
     if (value[key] !== undefined && typeof value[key] !== 'string') {
       invalidResponse('/api/status')
@@ -215,9 +215,6 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     )
       invalidResponse('/api/status')
     result.passkey_rp_ids = value.passkey_rp_ids
-  }
-  if (value.HeaderNavModules !== undefined) {
-    result.HeaderNavModules = value.HeaderNavModules
   }
   if (value.frontend_capabilities !== undefined) {
     if (!isRecord(value.frontend_capabilities)) invalidResponse('/api/status')

@@ -38,6 +38,10 @@ describe('public API response boundaries', () => {
     expect(() => parsePublicStatus({ api_info_enabled: 'true' })).toThrow()
     expect(() => parsePublicStatus({ server_address: 123 })).toThrow()
     expect(() => parsePublicStatus({ api_info: {} })).toThrow()
+    // controller/misc.go sends the option text; an object is not that contract.
+    expect(() =>
+      parsePublicStatus({ HeaderNavModules: { pricing: true } })
+    ).toThrow()
     expect(() => parsePublicStatus({ api_info: [{ url: 123 }] })).toThrow()
     expect(() => parsePricingModels({ model_name: 'gpt-4o' })).toThrow()
     expect(() => parsePricingModels([{ id: 1 }])).toThrow()
