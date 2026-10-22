@@ -3094,6 +3094,8 @@ export default {
       passkeyAttachment: 'Authenticator preference',
       turnstileEnabled: 'Enable Turnstile',
       turnstileSiteKey: 'Turnstile Site Key',
+      turnstileSiteKeyHint:
+        'The saved Site Key is not shown here; saving it empty keeps the current value.',
       turnstileSecretKey: 'Turnstile Secret Key',
       preConsumeMultiplier: 'Input cost reservation multiplier',
       preConsumeMultiplierHint:

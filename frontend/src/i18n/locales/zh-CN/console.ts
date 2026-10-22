@@ -2987,6 +2987,8 @@ export default {
       passkeyAttachment: '认证器偏好',
       turnstileEnabled: '启用 Turnstile',
       turnstileSiteKey: 'Turnstile Site Key',
+      turnstileSiteKeyHint:
+        '已保存的 Site Key 不在此回显；留空保存不会修改现有值。',
       turnstileSecretKey: 'Turnstile Secret Key',
       preConsumeMultiplier: '输入费用预扣倍率',
       preConsumeMultiplierHint:

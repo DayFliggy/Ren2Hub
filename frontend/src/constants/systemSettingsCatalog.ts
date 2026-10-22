@@ -295,7 +295,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         descriptionKey: 'systemSettings.sections.botProtectionDescription',
         fields: [
           toggle('TurnstileCheckEnabled', 'turnstileEnabled'),
-          text('TurnstileSiteKey', 'turnstileSiteKey'),
+          text(
+            'TurnstileSiteKey',
+            'turnstileSiteKey',
+            '',
+            'turnstileSiteKeyHint'
+          ),
           secret('TurnstileSecretKey', 'turnstileSecretKey'),
         ],
       },

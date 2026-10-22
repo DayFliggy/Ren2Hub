@@ -345,6 +345,32 @@ describe('Email settings page', () => {
     ])
     wrapper.unmount()
   })
+
+  it('keeps the hidden Turnstile site key when saving it empty', async () => {
+    await serve({
+      TurnstileSiteKey: 'site-key',
+      TurnstileCheckEnabled: 'false',
+    })
+    const wrapper = await render('auth', 'bot-protection')
+    const siteKey = wrapper.get('[id="setting-TurnstileSiteKey"]')
+    expect((siteKey.element as HTMLInputElement).value).toBe('')
+    expect(wrapper.text()).toContain(
+      'The saved Site Key is not shown here; saving it empty keeps the current value.'
+    )
+    await wrapper
+      .get('[role="switch"][aria-label="Enable Turnstile"]')
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.puts).toEqual([
+      { key: 'TurnstileCheckEnabled', value: 'true' },
+    ])
+    expect(backend.options.TurnstileSiteKey).toBe('site-key')
+    wrapper.unmount()
+  })
 })
 
 describe('system settings in English', () => {
