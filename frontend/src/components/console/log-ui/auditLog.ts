@@ -169,18 +169,40 @@ export function auditLogSummary(log: AuditLogItem, t: Translate): string {
   return log.content || log.action || t('auditLogs.unknownAction')
 }
 
-export function auditLogCategoryKey(category: AuditLogCategory): string {
-  return `auditLogs.category.${
-    category === 'access_token' ? 'accessToken' : category
-  }`
+const AUDIT_LOG_CATEGORY_LABEL_KEYS: Record<AuditLogCategory, string> = {
+  operation: 'auditLogs.category.operation',
+  security: 'auditLogs.category.security',
+  login: 'auditLogs.category.login',
+  access_token: 'auditLogs.category.accessToken',
+}
+
+function isKnownAuditLogCategory(
+  category: string
+): category is AuditLogCategory {
+  return Object.hasOwn(AUDIT_LOG_CATEGORY_LABEL_KEYS, category)
+}
+
+/** i18n keys for the four categories model.ValidAuditCategory accepts. */
+export function auditLogCategoryKey(category: string): string | null {
+  return isKnownAuditLogCategory(category)
+    ? AUDIT_LOG_CATEGORY_LABEL_KEYS[category]
+    : null
+}
+
+/** Rows written before the NewAPI-core rebuild may carry other categories
+ * (for example `system`); like upstream they show the stored string. */
+export function auditLogCategoryLabel(category: string, t: Translate): string {
+  const key = auditLogCategoryKey(category)
+  return key ? t(key) : category
 }
 
 export function auditLogCategoryTone(
-  category: AuditLogCategory
-): 'accent' | 'info' | 'warning' {
+  category: string
+): 'accent' | 'info' | 'warning' | 'neutral' {
   if (category === 'operation') return 'accent'
   if (category === 'login') return 'info'
-  return 'warning'
+  if (isKnownAuditLogCategory(category)) return 'warning'
+  return 'neutral'
 }
 
 export function auditLogResultKey(log: AuditLogItem): string {

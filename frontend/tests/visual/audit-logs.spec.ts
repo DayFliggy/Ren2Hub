@@ -39,11 +39,12 @@ function auditRow(row: Record<string, unknown>) {
 }
 
 // The shared native fixture has one short successful row; the layout checks
-// need long values and a failed request in the native /api/audit shape.
+// need long values, a failed request, and a historical `system` row written
+// before the NewAPI-core rebuild, all in the native /api/audit shape.
 const AUDIT_PAGE = {
   page: 1,
   page_size: 10,
-  total: 2,
+  total: 3,
   items: [
     auditRow({
       event_id: 'visual-audit-101',
@@ -73,6 +74,16 @@ const AUDIT_PAGE = {
       status: 500,
       success: false,
       content: 'Updated channel OpenAI Route 1',
+      other: {},
+    }),
+    auditRow({
+      event_id: 'visual-audit-99',
+      request_id: 'visual-request-99',
+      category: 'system',
+      action: 'legacy.system_grant',
+      route: '',
+      method: '',
+      content: 'Historical system grant',
       other: {},
     }),
   ],
@@ -117,6 +128,9 @@ async function inspectAuditLogs(
   await expect(
     page.getByText('失败', { exact: true }).filter({ visible: true }).first()
   ).toBeVisible()
+  await expect(
+    page.getByText('system', { exact: true }).filter({ visible: true })
+  ).toHaveCount(1)
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)
 

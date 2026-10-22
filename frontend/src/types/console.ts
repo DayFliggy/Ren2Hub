@@ -240,7 +240,7 @@ export interface LogItem {
   created: number
 }
 
-/** model.ValidAuditCategory: the native audit ledger has exactly these four. */
+/** model.ValidAuditCategory: the four categories the audit filter accepts. */
 export type AuditLogCategory =
   'login' | 'security' | 'operation' | 'access_token'
 
@@ -263,7 +263,9 @@ export interface AuditLogRequest {
 export interface AuditLogItem extends Record<string, unknown> {
   event_id: string
   created_at: number
-  category: AuditLogCategory
+  /** Any non-empty string: rows from before the NewAPI-core rebuild may carry
+   * categories outside AuditLogCategory (for example `system`). */
+  category: string
   action: string
   params: Record<string, unknown>
   content: string

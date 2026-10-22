@@ -5,6 +5,8 @@ import {
   AUDIT_LOG_PARAM_LABEL_KEYS,
   auditLogAuthMethodKey,
   auditLogCategoryKey,
+  auditLogCategoryLabel,
+  auditLogCategoryTone,
   auditLogParamLabel,
   auditLogParamValue,
   auditLogRoleKey,
@@ -85,7 +87,7 @@ describe('audit log labels resolve in both locales', () => {
     const methods = ['session', 'access_token', 'password', '2fa', 'passkey']
     expect(
       missingIn([
-        ...categories.map(auditLogCategoryKey),
+        ...categories.map((category) => auditLogCategoryKey(category)!),
         ...[null, 1, 10, 100].map(auditLogRoleKey),
         ...[...methods, 'oauth:github'].map((method) =>
           auditLogAuthMethodKey(method)!
@@ -108,6 +110,25 @@ describe('audit log labels resolve in both locales', () => {
     expect(referenced.size).toBeGreaterThan(40)
     expect(missingIn(referenced)).toEqual([])
   })
+})
+
+describe('audit log categories', () => {
+  it('keeps translated labels and tones for the four native categories', () => {
+    expect(auditLogCategoryLabel('login', t)).toBe('登录')
+    expect(auditLogCategoryTone('operation')).toBe('accent')
+    expect(auditLogCategoryTone('login')).toBe('info')
+    expect(auditLogCategoryTone('security')).toBe('warning')
+    expect(auditLogCategoryTone('access_token')).toBe('warning')
+  })
+
+  it.each(['system', 'future_category', 'constructor'])(
+    'shows the stored %s category as its raw string with a neutral tone',
+    (category) => {
+      expect(auditLogCategoryKey(category)).toBeNull()
+      expect(auditLogCategoryLabel(category, t)).toBe(category)
+      expect(auditLogCategoryTone(category)).toBe('neutral')
+    }
+  )
 })
 
 describe('audit log summaries', () => {

@@ -24,7 +24,7 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
   auditLogAuthMethodKey,
-  auditLogCategoryKey,
+  auditLogCategoryLabel,
   auditLogCategoryTone,
   auditLogParamLabel,
   auditLogParamValue,
@@ -178,8 +178,11 @@ const listRequest = useLatestRequest()
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
+  // Parse inside the request so an invalid page takes the error branch.
   const result = await listRequest.run((signal) =>
-    api.get<PageResult<AuditLogItem>>(endpoint(), currentParams(), { signal })
+    api
+      .get<unknown>(endpoint(), currentParams(), { signal })
+      .then(parseAuditLogPage)
   )
   if (result.stale) return
   loading.value = false
@@ -194,9 +197,8 @@ async function load(): Promise<void> {
     )
     return
   }
-  const resultPage = parseAuditLogPage(result.value as unknown)
-  rows.value = resultPage.items
-  total.value = resultPage.total
+  rows.value = result.value.items
+  total.value = result.value.total
 }
 
 let searchTimer = 0
@@ -287,7 +289,7 @@ function exportValues(log: AuditLogItem): readonly unknown[] {
     formatTime(log.created_at),
     actorName(log),
     t(auditLogRoleKey(log.actor.role)),
-    t(auditLogCategoryKey(log.category)),
+    auditLogCategoryLabel(log.category, t),
     t(auditLogResultKey(log)),
     auditLogSummary(log, t),
     log.ip,
@@ -500,7 +502,7 @@ onBeforeUnmount(() => {
             <StatusChip
               :tone="auditLogCategoryTone((row as AuditLogItem).category)"
             >
-              {{ t(auditLogCategoryKey((row as AuditLogItem).category)) }}
+              {{ auditLogCategoryLabel((row as AuditLogItem).category, t) }}
             </StatusChip>
             <StatusChip :tone="auditLogResultTone(row as AuditLogItem)">
               {{ t(auditLogResultKey(row as AuditLogItem)) }}
@@ -589,7 +591,7 @@ onBeforeUnmount(() => {
         >
           <div class="flex flex-wrap items-center gap-1.5">
             <StatusChip :tone="auditLogCategoryTone(row.category)">
-              {{ t(auditLogCategoryKey(row.category)) }}
+              {{ auditLogCategoryLabel(row.category, t) }}
             </StatusChip>
             <StatusChip :tone="auditLogResultTone(row)">
               {{ t(auditLogResultKey(row)) }}
@@ -696,7 +698,7 @@ onBeforeUnmount(() => {
           </h3>
           <div class="mt-3 flex flex-wrap items-center gap-1.5">
             <StatusChip :tone="auditLogCategoryTone(detailLog.category)">
-              {{ t(auditLogCategoryKey(detailLog.category)) }}
+              {{ auditLogCategoryLabel(detailLog.category, t) }}
             </StatusChip>
           </div>
           <p
