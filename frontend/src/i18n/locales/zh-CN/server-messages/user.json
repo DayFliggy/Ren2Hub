@@ -116,9 +116,14 @@
   "WeChat ID is empty!": "WeChat id 为空！",
   "Webhook URL cannot be empty": "Webhook地址不能为空",
   "a dashboard login session is required": "需要控制台登录会话",
+  "a valid operation_id is required": "缺少有效的 operation_id",
   "invalid personal access token name, scopes or expiry": "个人访问令牌的名称、作用域或有效期无效",
+  "invitation code is invalid or disabled": "邀请码无效或已停用",
+  "no available referral quota": "没有可用的返利额度",
+  "operation_id was already used for a different request": "该 operation_id 已用于另一笔不同的请求",
   "operation_id, expected_version and reason are required": "operation_id、expected_version 和 reason 为必填项",
   "personal access token is invalid": "个人访问令牌无效",
   "personal access token limit reached": "个人访问令牌数量已达上限",
-  "personal access token was not found or is no longer active": "个人访问令牌不存在或已失效"
+  "personal access token was not found or is no longer active": "个人访问令牌不存在或已失效",
+  "referral program is disabled; remove the invitation code to register": "邀请返利计划已停用，请去掉邀请码后再注册"
 }

@@ -31,8 +31,9 @@ const (
 )
 
 var (
-	ErrGmpayPaymentMismatch     = errors.New("payment does not match the order")
-	ErrGmpaySnapshotMissing     = errors.New("gmpay order snapshot is missing")
+	ErrGmpayPaymentMismatch = errors.New("payment does not match the order")
+	// Reaches the console when an administrator completes the order by hand.
+	ErrGmpaySnapshotMissing     = common.NewMessage("gmpay order snapshot is missing")
 	ErrGmpayMerchantUnavailable = errors.New("gmpay merchant version is unavailable")
 	ErrGmpayStateConflict       = errors.New("gmpay order state conflict")
 )

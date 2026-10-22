@@ -23,7 +23,7 @@
 
 无限 Token 由 `unlimited_quota: true` 表达，编辑时发送数值 `remain_quota: 0`；它仍受钱包及其他请求规则约束，不代表免费消费。Token 更新没有钱包版本号和额度操作 ID，提交的是原生 Token 预算字段。
 
-管理员界面把 USD 增减额转换为 quota，发送 `mode: "add" | "subtract"` 与正整数 `value`。服务端也支持 `override`，当前增减对话框不使用它。相同 `operation_id` 和请求内容重试返回已记录结果，变更内容复用同一 ID 返回冲突。权限、目标角色、容量和返利资格由后端核验；不要通过普通用户资料更新代替额度接口。该接口没有 `expected_version` 或独立调账理由字段。
+管理员界面把 USD 增减额转换为 quota，发送 `mode: "add" | "subtract"` 与正整数 `value`。服务端也支持 `override`，当前增减对话框不使用它。相同 `operation_id` 和请求内容重试返回已记录结果，变更内容复用同一 ID 返回 409 和 `message_key: "operation_id was already used for a different request"`。权限、目标角色、容量和返利资格由后端核验；不要通过普通用户资料更新代替额度接口。该接口没有 `expected_version` 或独立调账理由字段。
 
 兑换码表单的 USD 字符串只是输入表示，提交时使用数值 `quota`；`count` 是生成数量，不是金额。钱包按原生能力开关显示兑换入口。
 
@@ -55,7 +55,7 @@ GMPay 配置仅 Root 浏览器会话使用：`GET /api/option/gmpay/config`、`P
 
 `GET /api/user/affiliate` 返回可转额度、冻结额度、累计奖励、有效比例、规则及月度统计；`GET /api/user/affiliate/invitees` 返回脱敏名单，`GET /api/user/affiliate/records` 返回本人记录。数值额度在前端边界校验后转为展示字符串。
 
-`policy.enabled` 或 `code_enabled` 任一为 false 时，带邀请码注册会被后端拒绝。`useInvite` 的 `shareable` 是唯一判断点：此时不生成邀请链接，复制邀请码、复制链接和三种分享动作都不执行，卡片显示停用原因。已有返利仍可转入钱包，转入条件不受 `shareable` 影响。
+`policy.enabled` 或 `code_enabled` 任一为 false 时，带邀请码注册会被后端拒绝；返利相关错误都带 `message_key`，控制台按 zh-CN 服务端消息目录翻译。`useInvite` 的 `shareable` 是唯一判断点：此时不生成邀请链接，复制邀请码、复制链接和三种分享动作都不执行，卡片显示停用原因。已有返利仍可转入钱包，转入条件不受 `shareable` 影响。
 
 `POST /api/user/affiliate/transfer` 仅提交 `{ operation_id }`，将本次可转余额全额转入原生钱包。返回 `replayed`、`transferred_quota`、`wallet_quota` 等结果；相同操作 ID 重试不再次转入。旧 `amount` 参数被拒绝，客户端不能指定任意转入金额。冻结额度不属于当前可转余额，读取或转入时由后端处理到期解冻。
 

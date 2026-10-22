@@ -15,8 +15,9 @@ import (
 )
 
 // The admin ticket SQL names tickets, users and ticket_messages directly, so
-// these tables cannot take a per-test prefix. The run refuses to touch a
-// database that already holds them instead of dropping someone else's data.
+// these tables cannot take a per-test prefix. Other isolated-database tests
+// leave these tables empty; the run refuses any table that still holds rows
+// instead of dropping someone else's data.
 var ticketOwnerTables = []any{&TicketAttachment{}, &TicketMessage{}, &Ticket{}, &TopUp{}, &User{}}
 
 // The LEFT JOIN, the CASE flag scanned into bool and COALESCE(SUM) differ per
@@ -56,7 +57,12 @@ func openTicketOwnerDatabase(t *testing.T, dialect string) *gorm.DB {
 		connection.SetMaxOpenConns(1)
 	}
 	for _, table := range ticketOwnerTables {
-		require.False(t, db.Migrator().HasTable(table), "isolated test database already has %T", table)
+		if !db.Migrator().HasTable(table) {
+			continue
+		}
+		var rows int64
+		require.NoError(t, db.Unscoped().Model(table).Count(&rows).Error)
+		require.Zero(t, rows, "isolated test database already has %T rows", table)
 	}
 	previousDB, previousType := DB, common.MainDatabaseType()
 	DB = db

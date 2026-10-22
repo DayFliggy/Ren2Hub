@@ -19,8 +19,9 @@ const (
 )
 
 var (
-	ErrTicketClosed        = errors.New("ticket is closed")
-	ErrTicketStatusInvalid = errors.New("ticket status is invalid")
+	ErrTicketClosed = errors.New("ticket is closed")
+	// Reaches the console from status changes and replies, so it carries a message_key.
+	ErrTicketStatusInvalid = common.NewMessage("Invalid ticket status")
 	ErrTicketRoleInvalid   = errors.New("ticket message role is invalid")
 )
 
@@ -354,7 +355,7 @@ func UpdateAdminTicketStatus(ticketID, userID int, status string) (*Ticket, erro
 func updateTicketStatus(ticketID, userID int, status string, requireOwner bool) (*Ticket, error) {
 	status = strings.TrimSpace(status)
 	if status != TicketStatusOpen && status != TicketStatusClosed {
-		return nil, errors.New("invalid ticket status")
+		return nil, ErrTicketStatusInvalid
 	}
 	var ticket Ticket
 	err := DB.Transaction(func(tx *gorm.DB) error {
