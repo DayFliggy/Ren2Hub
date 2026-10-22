@@ -21,6 +21,8 @@ const message = {
   images: ['/api/tickets/attachments/7'],
   created: 123,
 }
+// controller/tickets.go adds a fixed department to every support message.
+const supportMessage = { ...message, role: 'support', department: 'support' }
 const assignment = { assignee_id: null, assigned_at: 0, updated: 123 }
 const adminTicket = {
   ...ticket,
@@ -39,7 +41,7 @@ describe('native ticket API contracts', () => {
         page_size: 10,
         total: 11,
       })
-      .mockResolvedValueOnce({ ticket, messages: [message] })
+      .mockResolvedValueOnce({ ticket, messages: [message, supportMessage] })
       .mockResolvedValueOnce({
         items: [adminTicket],
         page: 1,
@@ -59,7 +61,10 @@ describe('native ticket API contracts', () => {
       { page: 2, page_size: 10 },
       { signal }
     )
-    expect((await ticketsApi.detail(8, signal)).messages).toEqual([message])
+    expect((await ticketsApi.detail(8, signal)).messages).toEqual([
+      message,
+      { ...message, role: 'support' },
+    ])
     expect(
       (await ticketsApi.adminList({ page: 1, page_size: 20 })).items
     ).toEqual([adminTicket])
@@ -71,7 +76,7 @@ describe('native ticket API contracts', () => {
       .mockResolvedValueOnce({ ticket })
       .mockResolvedValueOnce({ message })
       .mockResolvedValueOnce({
-        message: { ...message, role: 'support' },
+        message: supportMessage,
         ticket: { ...assignment, status: 'replied' },
       })
     const file = new File(['image'], 'receipt.png', { type: 'image/png' })
@@ -131,10 +136,18 @@ describe('native ticket API contracts', () => {
         ticket,
         messages: [{ ...message, images: null }],
       })
+      .mockResolvedValueOnce({
+        ticket,
+        messages: [{ ...message, role: 'system' }],
+      })
       .mockResolvedValueOnce({ pending: '3', unassigned: 0, mine: 0 })
     await expect(
       ticketsApi.list({ page: 1, page_size: 20 })
     ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    await expect(ticketsApi.detail(8)).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
+    // The backend never writes system messages; one in a thread is a bad payload.
     await expect(ticketsApi.detail(8)).rejects.toMatchObject({
       code: 'INVALID_RESPONSE',
     })

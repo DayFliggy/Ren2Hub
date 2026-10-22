@@ -135,13 +135,13 @@ async function changeStatus(next: 'open' | 'closed') {
   try {
     const data = await ticketsApi.changeStatus(id, next)
     if (sequence !== mutationSequence || ticket.value?.id !== id) return
+    // The status response carries the updated ticket and a status change adds
+    // no message, so the loaded thread stays as it is.
     ticket.value = data.ticket
     toast.success(
       next === 'closed' ? t('tickets.closed') : t('tickets.reopened')
     )
     void ticketQueue.refresh()
-    // Refresh the thread to pick up the system note the backend appended.
-    await load(id)
   } catch (error) {
     if (sequence === mutationSequence) {
       toast.error(error instanceof ApiError ? error.message : String(error))

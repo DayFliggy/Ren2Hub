@@ -837,11 +837,7 @@ export default {
         'You will not be able to reply after closing. You can reopen it anytime.',
       dept: {
         support: 'Support',
-        tech: 'Tech',
-        finance: 'Finance',
-        legal: 'Legal',
       },
-      systemNote: 'System',
       metaCreated: 'Created',
       metaUpdated: 'Updated',
     },

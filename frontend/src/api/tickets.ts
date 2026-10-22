@@ -131,19 +131,12 @@ function parseMessage(value: unknown, endpoint: string): TicketMessage {
   const row = record(value, endpoint)
   return {
     id: count(row.id, endpoint),
-    role: choice(row.role, ['user', 'support', 'system'], endpoint),
+    // Native threads only hold user and support messages. Support rows also
+    // carry a fixed department "support", which the UI does not need.
+    role: choice(row.role, ['user', 'support'], endpoint),
     content: requiredString(row.content, endpoint),
     images: parseStringArray(row.images, endpoint),
     created: count(row.created, endpoint),
-    ...(row.department === undefined
-      ? {}
-      : {
-          department: choice(
-            row.department,
-            ['support', 'tech', 'finance', 'legal'],
-            endpoint
-          ),
-        }),
   }
 }
 function parseDetail<T>(

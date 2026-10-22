@@ -800,11 +800,7 @@ export default {
       confirmCloseMessage: '关闭后将无法继续回复，可随时重新开启。',
       dept: {
         support: '客服',
-        tech: '技术',
-        finance: '财务',
-        legal: '法务',
       },
-      systemNote: '系统消息',
       metaCreated: '创建于',
       metaUpdated: '更新于',
     },
