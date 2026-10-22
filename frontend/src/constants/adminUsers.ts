@@ -1,10 +1,5 @@
 import { quotaInteger, quotaRatio } from '@/utils/quota'
-import type {
-  AdminUser,
-  AdminUserRole,
-  AdminUserSortBy,
-  AdminUserStatus,
-} from '@/types/console'
+import type { AdminUser, AdminUserRole, AdminUserSortBy } from '@/types/console'
 
 /** Backend role ladder (common/constants.go). Ascending privilege. */
 export const ADMIN_USER_ROLES: readonly AdminUserRole[] = [0, 1, 10, 100]
@@ -52,10 +47,13 @@ export const ADMIN_USER_SORT_FIELDS: AdminUserSortBy[] = [
   'last_login_time',
 ]
 
+type AdminUserStatusView = Pick<AdminUser, 'status' | 'deleted'>
+
+/** A soft-deleted row keeps its last status, but deletion is what it shows. */
 export function adminUserStatusTone(
-  status: AdminUserStatus
+  user: AdminUserStatusView
 ): 'success' | 'danger' {
-  return status === 1 ? 'success' : 'danger'
+  return user.status === 1 && !user.deleted ? 'success' : 'danger'
 }
 
 export type AdminUserQuotaState = 'normal' | 'low' | 'exhausted'
@@ -118,9 +116,10 @@ export function adminUserQuotaMeter(
 }
 
 export function adminUserStatusLabelKey(
-  status: AdminUserStatus
-): 'users.statusEnabled' | 'users.statusDisabled' {
-  return status === 1 ? 'users.statusEnabled' : 'users.statusDisabled'
+  user: AdminUserStatusView
+): 'users.statusEnabled' | 'users.statusDisabled' | 'users.statusDeleted' {
+  if (user.deleted) return 'users.statusDeleted'
+  return user.status === 1 ? 'users.statusEnabled' : 'users.statusDisabled'
 }
 
 /**
@@ -186,13 +185,16 @@ export function adminUserStatusAction(
  * - delete: DeleteUser requires a strictly higher role (controller/user.go:814),
  *   so not even root can delete root.
  * Your own row is always excluded; self-service edits belong on the profile.
+ * Soft-deleted rows are read-only, as in upstream web: edits load the target
+ * through the scoped `GetUserById` and fail, and although `ManageUser` finds
+ * them unscoped, a status change on a deleted account means nothing.
  */
 export function canManageAdminUser(
-  target: Pick<AdminUser, 'id' | 'role'>,
+  target: Pick<AdminUser, 'id' | 'role' | 'deleted'>,
   operator: AdminOperator | null,
   action: AdminUserAction = 'edit'
 ): boolean {
-  if (!operator || target.id === operator.id) return false
+  if (!operator || target.deleted || target.id === operator.id) return false
   if (action === 'delete') return operator.level > target.role
   if (action === 'disable' && target.role === 100) return false
   return operator.level === 100 || operator.level > target.role

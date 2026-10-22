@@ -22,12 +22,18 @@ function rawUser(overrides: Record<string, unknown> = {}) {
     inviter_id: 0,
     created_at: 1,
     last_login_at: 0,
+    DeletedAt: null,
     ...overrides,
   }
 }
 
 function parseOne(overrides: Record<string, unknown>) {
   return parseAdminUserPage({ items: [rawUser(overrides)], total: 1 }).items[0]!
+}
+
+function withoutDeletedAt() {
+  const { DeletedAt: _omitted, ...rest } = rawUser()
+  return rest
 }
 
 describe('admin user page contract', () => {
@@ -39,5 +45,20 @@ describe('admin user page contract', () => {
   it('rejects a remark that is not a string', () => {
     expect(() => parseOne({ remark: null })).toThrow()
     expect(() => parseOne({ remark: 1 })).toThrow()
+  })
+
+  it('reads soft deletion from the unscoped list DeletedAt field', () => {
+    expect(parseOne({}).deleted).toBe(false)
+    expect(
+      parseOne({ DeletedAt: '2026-10-20T08:00:00.123+08:00' }).deleted
+    ).toBe(true)
+  })
+
+  it('rejects a missing or malformed DeletedAt', () => {
+    expect(() =>
+      parseAdminUserPage({ items: [withoutDeletedAt()], total: 1 })
+    ).toThrow()
+    for (const DeletedAt of [0, 1, '', 'yesterday', true])
+      expect(() => parseOne({ DeletedAt })).toThrow()
   })
 })

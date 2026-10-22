@@ -242,6 +242,8 @@ const statusOptions = computed(() => [
   { value: '', label: t('users.allStatuses') },
   { value: '1', label: t('users.statusEnabled') },
   { value: '2', label: t('users.statusDisabled') },
+  // Native filter value: upstream maps -1 to `deleted_at IS NOT NULL`.
+  { value: '-1', label: t('users.statusDeleted') },
 ])
 const sortOptions = computed(() =>
   ADMIN_USER_SORT_FIELDS.map((field) => ({
@@ -264,6 +266,7 @@ function toggleSortOrder() {
 }
 
 function rowClass(user: AdminUser): string | undefined {
+  if (user.deleted) return 'opacity-50'
   return user.status === 1 ? undefined : 'opacity-75'
 }
 
@@ -534,6 +537,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           :selection-keys="selectableIds"
           :selection-disabled="!canMutate"
           :row-selectable="(row) => canManage(row as AdminUser, 'delete')"
+          :row-selection-hidden="(row) => (row as AdminUser).deleted"
           :loading="loading"
           :skeleton-rows="pageSize"
           adaptive-scroll
@@ -591,8 +595,8 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           </template>
 
           <template #cell-status="{ row }">
-            <StatusChip :tone="adminUserStatusTone((row as AdminUser).status)">
-              {{ t(adminUserStatusLabelKey((row as AdminUser).status)) }}
+            <StatusChip :tone="adminUserStatusTone(row as AdminUser)">
+              {{ t(adminUserStatusLabelKey(row as AdminUser)) }}
             </StatusChip>
           </template>
 
@@ -627,7 +631,10 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center justify-end gap-0.5">
+            <div
+              v-if="!(row as AdminUser).deleted"
+              class="flex items-center justify-end gap-0.5"
+            >
               <IconButton
                 :label="t('users.editUser')"
                 :disabled="

@@ -159,6 +159,8 @@ export interface AdminUser extends Record<string, unknown> {
   remark: string
   role: AdminUserRole
   status: AdminUserStatus
+  /** From upstream `DeletedAt`: the list query is unscoped, so it includes soft-deleted users. */
+  deleted: boolean
   quota: number
   used_quota: number
   request_count: number

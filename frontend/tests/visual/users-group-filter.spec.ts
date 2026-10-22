@@ -20,6 +20,7 @@ for (const theme of ['light', 'dark'] as const)
           max_concurrency: 3,
           inviter_id: 0,
           last_login_at: 1781928000,
+          DeletedAt: null,
         }),
         nativeUser({
           id: 43,
@@ -29,6 +30,7 @@ for (const theme of ['light', 'dark'] as const)
           max_concurrency: 7,
           inviter_id: 0,
           last_login_at: 1781928000,
+          DeletedAt: null,
         }),
       ]
       const queries: URLSearchParams[] = []

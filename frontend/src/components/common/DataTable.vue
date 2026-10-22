@@ -45,6 +45,8 @@ const props = withDefaults(
      * would have to silently drop when acting on it.
      */
     rowSelectable?: (row: T) => boolean
+    /** Rows that offer no selection at all render an empty cell, not a disabled checkbox. */
+    rowSelectionHidden?: (row: T) => boolean
     /** Checkbox visual: default square native look, or round custom-drawn. */
     checkboxShape?: 'square' | 'round'
     /** Emit row-click on tbody rows. */
@@ -96,6 +98,7 @@ const props = withDefaults(
     rowClickable: false,
     rowClass: undefined,
     rowSelectable: undefined,
+    rowSelectionHidden: undefined,
     isGroupRow: undefined,
     emptyTitle: '',
     emptyHint: '',
@@ -636,7 +639,10 @@ onBeforeUnmount(() => {
                 @click.stop
                 @dblclick.stop
               >
-                <label :class="checkboxTargetClass">
+                <label
+                  v-if="!rowSelectionHidden?.(row)"
+                  :class="checkboxTargetClass"
+                >
                   <input
                     type="checkbox"
                     :class="checkboxClass"

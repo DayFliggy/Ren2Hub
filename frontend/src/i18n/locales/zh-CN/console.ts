@@ -1465,6 +1465,7 @@ export default {
     },
     statusEnabled: '已启用',
     statusDisabled: '已禁用',
+    statusDeleted: '已删除',
     roleRoot: '超级管理员',
     roleAdmin: '管理员',
     roleUser: '普通用户',

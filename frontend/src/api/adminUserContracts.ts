@@ -49,6 +49,14 @@ export function parseAdminUserPage(value: unknown): {
         result[key] = requiredString(value[key], endpoint)
       result.remark =
         value.remark === undefined ? '' : requiredString(value.remark, endpoint)
+      // gorm.DeletedAt always serializes: null, or the RFC 3339 deletion time.
+      if (
+        value.DeletedAt !== null &&
+        (typeof value.DeletedAt !== 'string' ||
+          Number.isNaN(Date.parse(value.DeletedAt)))
+      )
+        invalidResponse(endpoint)
+      result.deleted = value.DeletedAt !== null
       if (value.admin_permissions !== undefined) {
         if (
           !isRecord(value.admin_permissions) ||

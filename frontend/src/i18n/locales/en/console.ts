@@ -1517,6 +1517,7 @@ export default {
     },
     statusEnabled: 'Enabled',
     statusDisabled: 'Disabled',
+    statusDeleted: 'Deleted',
     roleRoot: 'Root administrator',
     roleAdmin: 'Administrator',
     roleUser: 'Member',

@@ -53,10 +53,17 @@ describe('admin user role ladder', () => {
 
 describe('admin user status', () => {
   it('pairs each status with a tone and a label', () => {
-    expect(adminUserStatusTone(1)).toBe('success')
-    expect(adminUserStatusTone(2)).toBe('danger')
-    expect(adminUserStatusLabelKey(1)).toBe('users.statusEnabled')
-    expect(adminUserStatusLabelKey(2)).toBe('users.statusDisabled')
+    const enabled = { status: 1, deleted: false } as const
+    const disabled = { status: 2, deleted: false } as const
+    expect(adminUserStatusTone(enabled)).toBe('success')
+    expect(adminUserStatusTone(disabled)).toBe('danger')
+    expect(adminUserStatusLabelKey(enabled)).toBe('users.statusEnabled')
+    expect(adminUserStatusLabelKey(disabled)).toBe('users.statusDisabled')
+    // A soft-deleted account keeps its last status; deletion wins the label.
+    expect(adminUserStatusTone({ ...enabled, deleted: true })).toBe('danger')
+    expect(adminUserStatusLabelKey({ ...enabled, deleted: true })).toBe(
+      'users.statusDeleted'
+    )
   })
 })
 
@@ -170,30 +177,49 @@ describe('canManageAdminUser', () => {
 
   it('refuses without an operator and on the operator’s own row', () => {
     for (const action of actions) {
-      expect(canManageAdminUser({ id: 9, role: 1 }, null, action)).toBe(false)
-      expect(canManageAdminUser({ id: 1, role: 1 }, admin, action)).toBe(false)
-      expect(canManageAdminUser({ id: 1, role: 10 }, root, action)).toBe(false)
+      expect(
+        canManageAdminUser({ id: 9, role: 1, deleted: false }, null, action)
+      ).toBe(false)
+      expect(
+        canManageAdminUser({ id: 1, role: 1, deleted: false }, admin, action)
+      ).toBe(false)
+      expect(
+        canManageAdminUser({ id: 1, role: 10, deleted: false }, root, action)
+      ).toBe(false)
     }
   })
 
   it('lets an admin act only on strictly lower roles', () => {
     for (const action of actions) {
-      expect(canManageAdminUser({ id: 9, role: 1 }, admin, action)).toBe(true)
-      expect(canManageAdminUser({ id: 9, role: 10 }, admin, action)).toBe(false)
-      expect(canManageAdminUser({ id: 9, role: 100 }, admin, action)).toBe(
-        false
-      )
+      expect(
+        canManageAdminUser({ id: 9, role: 1, deleted: false }, admin, action)
+      ).toBe(true)
+      expect(
+        canManageAdminUser({ id: 9, role: 10, deleted: false }, admin, action)
+      ).toBe(false)
+      expect(
+        canManageAdminUser({ id: 9, role: 100, deleted: false }, admin, action)
+      ).toBe(false)
     }
   })
 
   it('lets root edit and enable another root but never disable or delete it', () => {
-    const otherRoot = { id: 9, role: 100 } as const
+    const otherRoot = { id: 9, role: 100, deleted: false } as const
     expect(canManageAdminUser(otherRoot, root)).toBe(true)
     expect(canManageAdminUser(otherRoot, root, 'enable')).toBe(true)
     expect(canManageAdminUser(otherRoot, root, 'disable')).toBe(false)
     expect(canManageAdminUser(otherRoot, root, 'delete')).toBe(false)
     for (const action of actions)
-      expect(canManageAdminUser({ id: 9, role: 10 }, root, action)).toBe(true)
+      expect(
+        canManageAdminUser({ id: 9, role: 10, deleted: false }, root, action)
+      ).toBe(true)
+  })
+
+  it('treats a soft-deleted user as read-only for every action, even for root', () => {
+    for (const action of actions)
+      expect(
+        canManageAdminUser({ id: 9, role: 1, deleted: true }, root, action)
+      ).toBe(false)
   })
 
   it('maps the status toggle to the native manage action', () => {
