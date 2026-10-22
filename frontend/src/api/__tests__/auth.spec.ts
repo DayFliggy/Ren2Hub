@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authApi } from '@/api/auth'
 import { api } from '@/api/client'
+import { httpTransport } from '@/api/httpTransport'
 import {
   clearAuthBundle,
   getAuthBundle,
@@ -59,6 +60,43 @@ describe('authentication API', () => {
     await expect(
       authApi.confirmPasswordReset('reset@example.com', 'example-code')
     ).rejects.toThrow('Invalid authentication response')
+  })
+  it('accepts the dataless native success of verification and reset mail', async () => {
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValue({ success: true, message: '' } as never)
+
+    await expect(
+      authApi.sendVerification('new@example.com')
+    ).resolves.toBeUndefined()
+    await expect(
+      authApi.resetPassword('reset@example.com')
+    ).resolves.toBeUndefined()
+
+    expect(
+      request.mock.calls.map(([method, url, options]) => [
+        method,
+        url,
+        options?.params,
+      ])
+    ).toEqual([
+      ['GET', '/api/verification', { email: 'new@example.com' }],
+      ['GET', '/api/reset_password', { email: 'reset@example.com' }],
+    ])
+  })
+  it('rejects a native mail business failure', async () => {
+    vi.spyOn(httpTransport, 'request').mockResolvedValue({
+      success: false,
+      message: 'Email address is already in use',
+      message_key: 'Email address is already in use',
+    } as never)
+
+    await expect(
+      authApi.sendVerification('used@example.com')
+    ).rejects.toMatchObject({
+      business: true,
+      message: 'Email address is already in use',
+    })
   })
   it('sends Turnstile tokens in request headers', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(bundle)

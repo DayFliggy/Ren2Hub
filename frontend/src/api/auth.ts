@@ -47,14 +47,19 @@ async function refreshSession(): Promise<AuthBundle> {
 }
 
 export const authApi = {
-  sendVerification: (email: string, turnstileToken?: string) =>
-    api.get(
+  /** Native success carries only success and message, so read the envelope. */
+  async sendVerification(
+    email: string,
+    turnstileToken?: string
+  ): Promise<void> {
+    await api.getEnvelope<unknown>(
       '/api/verification',
       { email },
       turnstileToken
         ? { headers: { 'X-Turnstile-Token': turnstileToken } }
         : undefined
-    ),
+    )
+  },
   async login(
     username: string,
     password: string,
@@ -95,8 +100,10 @@ export const authApi = {
         ? { headers: { 'X-Turnstile-Token': turnstileToken } }
         : undefined
     ),
-  resetPassword: (email: string) =>
-    api.get<unknown>('/api/reset_password', { email }),
+  /** Native success carries only success and message, so read the envelope. */
+  async resetPassword(email: string): Promise<void> {
+    await api.getEnvelope<unknown>('/api/reset_password', { email })
+  },
   async confirmPasswordReset(email: string, token: string): Promise<string> {
     const value = await api.post<unknown>('/api/user/reset', { email, token })
     if (typeof value !== 'string' || !value)

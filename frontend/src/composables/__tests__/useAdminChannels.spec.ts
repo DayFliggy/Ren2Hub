@@ -122,7 +122,7 @@ describe('native channel management', () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
     const put = vi.spyOn(api, 'put').mockResolvedValue(null)
     const post = vi.spyOn(api, 'post').mockResolvedValue(null)
-    const request = vi.spyOn(httpTransport, 'request')
+    const getEnvelope = vi.spyOn(api, 'getEnvelope')
     const state = await setup()
     permissions.sensitive_write = false
     expect(await state.createChannel(input)).toBe(false)
@@ -130,7 +130,7 @@ describe('native channel management', () => {
     permissions.operate = false
     expect(await state.toggleStatus(channel)).toBe(false)
     expect((await state.testChannelModel(channel, 'fixture')).ok).toBe(false)
-    expect(request).not.toHaveBeenCalled()
+    expect(getEnvelope).not.toHaveBeenCalled()
     expect(post).not.toHaveBeenCalled()
     expect(await state.updateNumber(channel, 'weight', 8)).toBe(true)
     expect(put).toHaveBeenCalledWith('/api/channel/', { id: 101, weight: 8 })
@@ -141,12 +141,17 @@ describe('native channel management', () => {
   })
   it('reads native top-level time and balance output without accepting fake zero latency', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
-    const request = vi
-      .spyOn(httpTransport, 'request')
-      .mockResolvedValueOnce({ success: true, time: 0.125 } as never)
-      .mockResolvedValueOnce({ success: true } as never)
+    const getEnvelope = vi
+      .spyOn(api, 'getEnvelope')
       .mockResolvedValueOnce({
         success: true,
+        message: '',
+        time: 0.125,
+      } as never)
+      .mockResolvedValueOnce({ success: true, message: '' })
+      .mockResolvedValueOnce({
+        success: true,
+        message: '',
         raw_response: '{"credits":12.5}',
       } as never)
     const state = await setup()
@@ -156,25 +161,37 @@ describe('native channel management', () => {
         stream: true,
       })
     ).toEqual({ ok: true, timeMs: 125 })
-    expect(request).toHaveBeenCalledWith(
-      'GET',
+    expect(getEnvelope).toHaveBeenCalledWith(
       '/api/channel/test/101',
-      expect.objectContaining({
-        params: {
-          model: 'gpt-5-codex',
-          endpoint_type: 'openai-response',
-          stream: 'true',
-        },
-      })
+      {
+        model: 'gpt-5-codex',
+        endpoint_type: 'openai-response',
+        stream: 'true',
+      },
+      { signal: undefined }
     )
     expect((await state.testChannelModel(channel, 'fixture')).ok).toBe(false)
     expect(await state.refreshBalance(channel)).toBe(true)
     expect(state.balanceResponse.value?.rawResponse).toBe('{"credits":12.5}')
   })
+  it('returns a failed channel test as a per-model result with the native message', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(page)
+    vi.spyOn(httpTransport, 'request').mockResolvedValueOnce({
+      success: false,
+      message: 'provider failed',
+      time: 1.5,
+      error_code: 'bad_response_status_code',
+    } as never)
+    const state = await setup()
+    expect(await state.testChannelModel(channel, 'fixture')).toEqual({
+      ok: false,
+      message: 'provider failed',
+    })
+  })
   it('refuses retired type 57 without blocking Codex model names on ordinary API channels', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(page)
     const post = vi.spyOn(api, 'post')
-    const request = vi.spyOn(httpTransport, 'request')
+    const getEnvelope = vi.spyOn(api, 'getEnvelope')
     const state = await setup()
     const retired = { ...channel, type: 57 }
     expect(await state.createChannel({ ...input, type: 57 })).toBe(false)
@@ -186,7 +203,7 @@ describe('native channel management', () => {
       state.fetchUpstreamModels({ type: 57, key: 'fixture', baseUrl: '' })
     ).rejects.toThrow('channels.retiredHint')
     expect(post).not.toHaveBeenCalled()
-    expect(request).not.toHaveBeenCalled()
+    expect(getEnvelope).not.toHaveBeenCalled()
   })
   it('does not apply a late list result after access is revoked', async () => {
     let finish!: (value: unknown) => void
