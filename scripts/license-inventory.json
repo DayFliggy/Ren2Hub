@@ -514,6 +514,13 @@
     "area": "frontend",
     "scope": "production",
     "ecosystem": "npm",
+    "name": "acorn",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
     "name": "axios",
     "license": "MIT"
   },
@@ -543,6 +550,13 @@
     "scope": "production",
     "ecosystem": "npm",
     "name": "pinia",
+    "license": "MIT"
+  },
+  {
+    "area": "frontend",
+    "scope": "production",
+    "ecosystem": "npm",
+    "name": "qrcode.vue",
     "license": "MIT"
   },
   {
