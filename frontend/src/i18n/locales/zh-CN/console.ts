@@ -1369,6 +1369,9 @@ export default {
     modelMappingJson: 'JSON',
     modelMappingFillTemplate: '填入模板',
     modelMappingEmpty: '未配置模型映射，点击"添加映射"即可开始使用。',
+    modelMappingInvalidJson: '模型映射不是合法的 JSON',
+    modelMappingNotObject: '模型映射必须是 JSON 对象',
+    modelMappingValueNotString: '模型映射的值必须是字符串：{key}',
     addMapping: '+ 添加映射',
     // Advanced section
     channelRatioHint: '渠道计费倍率，1.0 = 正常计费，0.5 = 半价。',

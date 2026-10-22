@@ -25,6 +25,7 @@ import type { TaskPluginOption } from '@/features/task-plugins/types'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
 import { isValidChannelRatio } from '@/utils/channelRatio'
+import { parseModelMapping } from '@/utils/modelMapping'
 import { useAuthStore } from '@/stores/auth'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -242,7 +243,6 @@ const form = reactive({
   baseUrl: '',
   // Models
   models: '',
-  modelMapping: '',
   // Advanced
   priority: 0,
   weight: 0,
@@ -255,27 +255,28 @@ const mappingRows = ref<Array<{ from: string; to: string }>>([])
 const modelMappingTab = ref<'visual' | 'json'>('visual')
 const modelMappingJson = ref('')
 
+// modelMappingJson is the submitted text. Visual rows always serialize to a
+// valid mapping, so only JSON-tab edits can make it invalid.
+const mappingError = computed(() => {
+  const parsed = parseModelMapping(modelMappingJson.value)
+  return parsed.ok ? '' : t(parsed.error.key, parsed.error.params ?? {})
+})
+
 function syncJsonFromRows() {
   const obj: Record<string, string> = {}
   for (const row of mappingRows.value) {
     if (row.from.trim()) obj[row.from.trim()] = row.to.trim()
   }
-  const json = Object.keys(obj).length ? JSON.stringify(obj, null, 2) : ''
-  modelMappingJson.value = json
-  form.modelMapping = json
+  modelMappingJson.value = Object.keys(obj).length
+    ? JSON.stringify(obj, null, 2)
+    : ''
 }
 
-function syncRowsFromJson() {
-  try {
-    const parsed = JSON.parse(modelMappingJson.value || '{}')
-    mappingRows.value = Object.entries(parsed).map(([from, to]) => ({
-      from,
-      to: String(to),
-    }))
-    form.modelMapping = modelMappingJson.value
-  } catch {
-    // keep current rows on parse error
-  }
+function syncRowsFromJson(): boolean {
+  const parsed = parseModelMapping(modelMappingJson.value)
+  if (!parsed.ok) return false
+  mappingRows.value = parsed.rows
+  return true
 }
 
 function addMappingRow() {
@@ -288,13 +289,13 @@ function removeMappingRow(index: number) {
   syncJsonFromRows()
 }
 
+// Invalid JSON keeps the JSON tab open so switching never overwrites the text.
 function onSwitchToVisual() {
-  syncRowsFromJson()
-  modelMappingTab.value = 'visual'
+  if (syncRowsFromJson()) modelMappingTab.value = 'visual'
 }
 
 function onSwitchToJson() {
-  syncJsonFromRows()
+  if (modelMappingTab.value === 'visual') syncJsonFromRows()
   modelMappingTab.value = 'json'
 }
 
@@ -455,6 +456,7 @@ const selectedTypeMeta = computed(() => adminChannelTypeMeta(form.type))
 const valid = computed(
   () =>
     !settingsError.value &&
+    !mappingError.value &&
     validAdvancedConfig.value &&
     validOverrides.value &&
     form.name.trim().length > 0 &&
@@ -497,8 +499,6 @@ watch(
       typeof ch?.header_override === 'string' ? ch.header_override : ''
     form.baseUrl = ch?.base_url ?? ''
     form.models = ch?.models ?? ''
-    form.modelMapping =
-      typeof ch?.model_mapping === 'string' ? (ch.model_mapping ?? '') : ''
     form.priority = ch?.priority ?? 0
     form.weight = ch?.weight ?? 0
     form.channel_ratio = ch?.channel_ratio ?? '1'
@@ -554,18 +554,13 @@ watch(
       settingsError.value = t('channels.invalidStoredSettings')
     }
     boundKeyBeforeChange = pluginKeys.value[0]
-    // parse mapping
-    modelMappingJson.value = form.modelMapping
-    try {
-      const parsed = form.modelMapping ? JSON.parse(form.modelMapping) : {}
-      mappingRows.value = Object.entries(parsed).map(([from, to]) => ({
-        from,
-        to: String(to),
-      }))
-    } catch {
-      mappingRows.value = []
-    }
-    modelMappingTab.value = 'visual'
+    // A stored mapping the relay cannot decode stays verbatim in the JSON tab
+    // with its error, so saving can neither clear nor rewrite it.
+    modelMappingJson.value =
+      typeof ch?.model_mapping === 'string' ? ch.model_mapping : ''
+    const mapping = parseModelMapping(modelMappingJson.value)
+    mappingRows.value = mapping.ok ? mapping.rows : []
+    modelMappingTab.value = mapping.ok ? 'visual' : 'json'
     typeSearch.value = ''
     typeDropdownOpen.value = false
     advancedOpen.value = false
@@ -596,7 +591,7 @@ async function submit() {
       type: form.type,
       base_url: form.baseUrl.trim(),
       models: form.models.trim(),
-      model_mapping: form.modelMapping.trim(),
+      model_mapping: modelMappingJson.value.trim(),
       priority: Number(form.priority),
       weight: Number(form.weight),
       channel_ratio: form.channel_ratio,
@@ -1371,11 +1366,25 @@ async function submit() {
             <template v-else>
               <textarea
                 v-model="modelMappingJson"
+                name="admin-channel-model-mapping"
                 rows="5"
                 class="channel-form-textarea focus-ring font-mono text-xs"
                 placeholder='{"gpt-4": "gpt-4-turbo"}'
+                :aria-label="t('channels.modelMapping')"
+                :aria-invalid="mappingError ? 'true' : undefined"
+                :aria-describedby="
+                  mappingError ? 'admin-channel-model-mapping-error' : undefined
+                "
                 @blur="syncRowsFromJson"
               />
+              <p
+                v-if="mappingError"
+                id="admin-channel-model-mapping-error"
+                role="alert"
+                class="mt-1 text-xs text-[var(--status-danger)]"
+              >
+                {{ mappingError }}
+              </p>
             </template>
           </div>
         </div>

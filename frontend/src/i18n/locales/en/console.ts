@@ -1419,6 +1419,9 @@ export default {
     modelMappingFillTemplate: 'Fill template',
     modelMappingEmpty:
       'No model mapping configured. Click "Add mapping" to get started.',
+    modelMappingInvalidJson: 'Model mapping is not valid JSON',
+    modelMappingNotObject: 'Model mapping must be a JSON object',
+    modelMappingValueNotString: 'Model mapping values must be strings: {key}',
     addMapping: '+ Add mapping',
     // Advanced section
     channelRatioHint: 'Channel billing ratio. 1.0 = normal, 0.5 = half price.',

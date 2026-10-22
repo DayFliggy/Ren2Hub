@@ -16,6 +16,7 @@ func TestModelCatalogSharesRoutingConstraintsAndPublicPrices(t *testing.T) {
 	createRouteChannel(t, db, 2, "gpt-4o")
 	privateURL := "https://private-host.test"
 	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 1).Updates(map[string]any{"channel_ratio": "1.25", "base_url": privateURL, "key": "SECRET-never-public"}).Error)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 2).Update("model_mapping", `{"a":1}`).Error)
 	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", 7).Updates(map[string]any{"model_limits_enabled": true, "model_limits": "gpt-4o"}).Error)
 	require.NoError(t, db.Create(&model.Option{Key: "ModelRatio", Value: `{"gpt-4o":1.5}`}).Error)
 	require.NoError(t, db.Create(&model.Option{Key: "CompletionRatio", Value: `{"gpt-4o":4}`}).Error)
@@ -27,6 +28,9 @@ func TestModelCatalogSharesRoutingConstraintsAndPublicPrices(t *testing.T) {
 	require.Equal(t, "gpt-4o", view.Models[0].ModelName)
 	require.Equal(t, "configured", view.Models[0].PriceStatus)
 	require.Len(t, view.Offers, 2)
+	require.Len(t, view.Channels, 2)
+	require.Equal(t, 2, view.Channels[1].ID)
+	require.Equal(t, "invalid_mapping", view.Channels[1].Lab.Source, "an undecodable mapping marks its channel instead of failing the catalog")
 	require.Equal(t, "3.75", view.Offers[0].PricingValues["input"])
 	require.Equal(t, "15", view.Offers[0].PricingValues["output"])
 	encoded, err := common.Marshal(view)
