@@ -177,6 +177,19 @@ describe('native user form contract', () => {
     }
   )
 
+  it('keeps an edge U+FEFF in an existing username when only the remark changes', async () => {
+    // Go strings.TrimSpace keeps U+FEFF; String.prototype.trim would drop it
+    // and silently rename the user.
+    const username = '\uFEFFmember\uFEFF'
+    const { wrapper, save, submit } = render({ ...existingUser, username })
+    await wrapper.get('[name="admin-user-remark"]').setValue('Renewed contract')
+    await submit()
+    expect(save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ username, remark: 'Renewed contract' })
+    )
+    wrapper.unmount()
+  })
+
   it('does not carry an edited account email, group or disabled state into a later creation', async () => {
     const { wrapper, save, submit } = render(existingUser)
     await wrapper.setProps({ open: false })

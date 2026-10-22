@@ -18,6 +18,7 @@ import {
   adminUserRoleLabelKey,
   adminUserRoleTone,
   isValidAdminUsername,
+  trimGoSpace,
   type AdminOperator,
 } from '@/constants/adminUsers'
 import type {
@@ -140,7 +141,7 @@ async function submit() {
   try {
     const base = {
       max_concurrency: form.max_concurrency,
-      username: form.username.trim(),
+      username: trimGoSpace(form.username),
       display_name: form.displayName.trim(),
       role: selectedRole.value,
     }

@@ -14,7 +14,9 @@ import {
   adminUserStatusLabelKey,
   adminUserStatusTone,
   canManageAdminUser,
+  isValidAdminUsername,
   sanitizeAdminUserVisibleFields,
+  trimGoSpace,
 } from '@/constants/adminUsers'
 
 describe('admin user role ladder', () => {
@@ -243,5 +245,25 @@ describe('adminUserRoleChoices', () => {
     expect(adminUserRoleChoices(root, 10)).toEqual([1, 10])
     expect(adminUserRoleChoices(root, 100)).toEqual([100])
     expect(adminUserRoleChoices(admin, 1)).toEqual([1])
+  })
+})
+
+describe('trimGoSpace', () => {
+  // Every rune Go's unicode.IsSpace accepts, and look-alikes it rejects.
+  const goSpace =
+    '\t\n\v\f\r \u0085\u00A0\u1680\u2000\u200A\u2028\u2029\u202F\u205F\u3000'
+  const notGoSpace = ['\uFEFF', '\u200B', '\u180E', '\u001C']
+
+  it('trims exactly the runes strings.TrimSpace trims', () => {
+    expect(trimGoSpace(`${goSpace}ops admin${goSpace}`)).toBe('ops admin')
+    for (const rune of notGoSpace)
+      expect(trimGoSpace(`${rune}member${rune}`)).toBe(`${rune}member${rune}`)
+  })
+
+  it('validates the trimmed username like the backend', () => {
+    expect(isValidAdminUsername('\u0085\u3000')).toBe(false)
+    expect(isValidAdminUsername('\uFEFF')).toBe(true)
+    expect(isValidAdminUsername(`\u0085${'a'.repeat(20)}\u0085`)).toBe(true)
+    expect(isValidAdminUsername(`\uFEFF${'a'.repeat(20)}`)).toBe(false)
   })
 })

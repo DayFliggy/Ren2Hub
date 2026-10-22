@@ -12,12 +12,26 @@ export const ADMIN_USER_ASSIGNABLE_ROLES: readonly AdminUserRole[] = [
 /** Upstream `validate:"max=20"` on User.Username, which counts runes. */
 export const ADMIN_USERNAME_MAX_LENGTH = 20
 
+/** Go unicode.IsSpace: these Latin-1 characters plus \p{Z}. Every member is a
+ * single UTF-16 code unit. Unlike String.prototype.trim, U+FEFF is not one of
+ * them and U+0085 is. */
+const GO_SPACE = /[\t\n\v\f\r \u0085\u00A0\p{Z}]/u
+
+/** strings.TrimSpace, which upstream applies to usernames before saving. */
+export function trimGoSpace(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && GO_SPACE.test(value.charAt(start))) start++
+  while (end > start && GO_SPACE.test(value.charAt(end - 1))) end--
+  return value.slice(start, end)
+}
+
 /**
- * Mirrors upstream CreateUser/UpdateUser: trim, reject empty, then `max=20`.
- * The backend has no character-set rule, so none is imposed here.
+ * Mirrors upstream CreateUser/UpdateUser: TrimSpace, reject empty, then
+ * `max=20`. The backend has no character-set rule, so none is imposed here.
  */
 export function isValidAdminUsername(value: string): boolean {
-  const username = value.trim()
+  const username = trimGoSpace(value)
   return (
     username.length > 0 && [...username].length <= ADMIN_USERNAME_MAX_LENGTH
   )
