@@ -3387,7 +3387,8 @@ export default {
     },
     waffoPancake: {
       orphanStore:
-        'Store {id} was created, but product creation failed. Check the gateway catalog before creating another pair.',
+        'Store {id} was created, but product creation failed: {reason}. Check the gateway catalog before creating another pair.',
+      pairFailed: 'Failed to create the store and product: {reason}',
       label: 'Waffo Pancake configuration',
       merchantId: 'Merchant ID',
       privateKey: 'Private key',

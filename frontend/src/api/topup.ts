@@ -224,15 +224,24 @@ export async function paymentRequest<T>(
     (response.message !== 'success' && response.message !== 'error')
   )
     invalidResponse(path)
-  if (response.message === 'error' || response.success === false)
+  if (response.message === 'error' || response.success === false) {
+    // GMPay puts its order fields at the top level and the Pancake pair puts
+    // its failure inside data, so the two shapes cannot overlap.
+    const pairFailure = parseWaffoPancakePairFailure(response.data)
     throw new ApiError(
       serverResponseMessage(getLocale(), {
         ...response,
         message:
-          typeof response.data === 'string' ? response.data : response.message,
+          typeof response.data === 'string'
+            ? response.data
+            : (pairFailure?.error ?? response.message),
       }) || 'Payment failed',
-      { business: true, data: parseCreationFailure(response) }
+      {
+        business: true,
+        data: parseCreationFailure(response) ?? pairFailure,
+      }
     )
+  }
   if (
     !Object.hasOwn(response, 'data') ||
     (response.url !== undefined && typeof response.url !== 'string')
@@ -272,6 +281,32 @@ export function parseCreationFailure(
     ...(status === undefined
       ? {}
       : { creation_status: status as GmpayCreationStatus }),
+  }
+}
+
+/** controller/topup_waffo_pancake.go CreateWaffoPancakePair failure data. */
+export type WaffoPancakePairFailure =
+  | { error: string; orphan_store?: undefined }
+  | { error: string; orphan_store: true; store_id: string; store_name: string }
+export function parseWaffoPancakePairFailure(
+  value: unknown
+): WaffoPancakePairFailure | undefined {
+  if (!isRecord(value) || typeof value.error !== 'string' || !value.error)
+    return undefined
+  // A failure before the store exists carries only the reason.
+  if (value.orphan_store === undefined) return { error: value.error }
+  if (
+    value.orphan_store !== true ||
+    typeof value.store_id !== 'string' ||
+    !value.store_id ||
+    typeof value.store_name !== 'string'
+  )
+    return undefined
+  return {
+    error: value.error,
+    orphan_store: true,
+    store_id: value.store_id,
+    store_name: value.store_name,
   }
 }
 

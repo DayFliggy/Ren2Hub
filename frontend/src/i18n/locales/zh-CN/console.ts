@@ -3272,7 +3272,8 @@ export default {
     },
     waffoPancake: {
       orphanStore:
-        '店铺 {id} 已创建，但产品创建失败。请先检查网关目录，避免重复创建店铺。',
+        '店铺 {id} 已创建，但产品创建失败：{reason}。请先检查网关目录，避免重复创建店铺。',
+      pairFailed: '创建店铺和商品失败：{reason}',
       label: 'Waffo Pancake 配置',
       merchantId: '商户 ID',
       privateKey: '私钥',

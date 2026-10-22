@@ -5,6 +5,7 @@ import {
   parseCreationFailure,
   parseGmpayConfig,
   parseTopupInfo,
+  parseWaffoPancakePairFailure,
   paymentRequest,
   topupApi,
 } from '../topup'
@@ -58,17 +59,19 @@ describe('native payment contracts', () => {
     expect(request).toHaveBeenCalledTimes(2)
   })
   it('preserves a durable failed order while retaining business failure', async () => {
+    // controller/gmpay.go gmpayCreationError
     vi.spyOn(httpTransport, 'request').mockResolvedValue({
       message: 'error',
-      data: 'Creation failed',
+      data: 'Failed to create the payment order',
+      message_key: 'Failed to create the payment order',
       trade_no: 'GPtest',
       creation_status: 'unknown',
-      merchant_id: 'private',
     } as never)
     await expect(
       paymentRequest('/api/user/gmpay/pay', {})
     ).rejects.toMatchObject({
       business: true,
+      message: 'Failed to create the payment order',
       data: { trade_no: 'GPtest', creation_status: 'unknown' },
     })
     expect(
@@ -78,6 +81,48 @@ describe('native payment contracts', () => {
         secret: 'private',
       })
     ).toEqual({ trade_no: 'GPtest', creation_status: 'settled' })
+  })
+  it('passes the Pancake pair failure reason and orphan store through', async () => {
+    // controller/topup_waffo_pancake.go CreateWaffoPancakePair
+    const request = vi.spyOn(httpTransport, 'request').mockResolvedValue({
+      message: 'error',
+      data: {
+        error: 'product create failed',
+        store_id: 'store-1',
+        store_name: 'Ren2Hub',
+        orphan_store: true,
+      },
+    } as never)
+    await expect(
+      paymentRequest('/api/option/waffo-pancake/pair', {})
+    ).rejects.toMatchObject({
+      business: true,
+      message: 'product create failed',
+      data: {
+        error: 'product create failed',
+        orphan_store: true,
+        store_id: 'store-1',
+        store_name: 'Ren2Hub',
+      },
+    })
+    request.mockResolvedValue({
+      message: 'error',
+      data: { error: 'store create failed' },
+    } as never)
+    const failure = await paymentRequest(
+      '/api/option/waffo-pancake/pair',
+      {}
+    ).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ message: 'store create failed' })
+    expect((failure as { data: unknown }).data).toEqual({
+      error: 'store create failed',
+    })
+    for (const data of [
+      { error: '' },
+      { error: 'failed', orphan_store: false },
+      { error: 'failed', orphan_store: true, store_name: 'Ren2Hub' },
+    ])
+      expect(parseWaffoPancakePairFailure(data)).toBeUndefined()
   })
   it.each([{}, { success: true, data: '73.00' }, { message: 'success' }, null])(
     'rejects a non-payment envelope %j',

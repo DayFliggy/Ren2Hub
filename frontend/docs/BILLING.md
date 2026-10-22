@@ -41,6 +41,8 @@ GMPay 创建前持久化原生 TopUp 与支付快照，记录 CNY 分额、预�
 
 GMPay 配置仅 Root 浏览器会话使用：`GET /api/option/gmpay/config`、`POST /api/option/gmpay/save`、`POST /api/option/gmpay/probe`。配置包含 `pay_address`、`merchant_id`、`enabled`、数组 `assets` 与只读 `has_secret`；保存 `secret_key: ""` 保留已有密钥。没有独立 USD 单价、业务分组倍率或每资产最低金额。个人 GMPay 下单与查询同样限定浏览器会话。
 
+Waffo Pancake 设置的“创建店铺和商品”失败时，原生响应在 `data` 中给出 `error`；店铺已建而商品失败时另带 `orphan_store: true`、`store_id` 和 `store_name`。面板显示失败原因，孤儿店铺还会回填店铺 ID 并清空商品 ID，避免重复建店。
+
 ## TopUp 记录与订单管理
 
 用户读取 `GET /api/user/topup/self`，管理员读取 `GET /api/user/topup`，采用原生分页字段。订单标识为 `trade_no`，状态为 `pending`、`success`、`failed`、`expired`；Vue 把 `success` 投影为“已完成”。`credited_quota` 才是实际入账额度，不能用请求 `amount`、`money` 或 `expected_quota` 冒充到账。
