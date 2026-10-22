@@ -506,9 +506,9 @@
 | `src/components/console/systemSettings/PaymentCompliancePanel.vue` | 原已一致 |
 | `src/components/console/systemSettings/RequestPolicyPanel.vue` | 移除后加文件 |
 | `src/components/console/systemSettings/SettingsCollectionEditor.vue` | 原已一致 |
-| `src/components/console/systemSettings/SysInputRow.vue` | 原已一致 |
+| `src/components/console/systemSettings/SysInputRow.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
 | `src/components/console/systemSettings/SysSettingsFormCard.vue` | 原已一致 |
-| `src/components/console/systemSettings/SysToggleRow.vue` | 原已一致 |
+| `src/components/console/systemSettings/SysToggleRow.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
 | `src/components/console/systemSettings/SystemSettingsDomainView.vue` | 历史覆盖 |
 | `src/components/console/systemSettings/SystemSettingsField.vue` | 原已一致 |
 | `src/components/console/systemSettings/SystemSettingsMaintenanceActions.vue` | 原已一致 |
@@ -899,13 +899,13 @@
 | `src/views/console/__tests__/TicketsView.spec.ts` | 移除后加文件 |
 | `src/views/console/__tests__/TokenRoutingView.spec.ts` | 历史覆盖 |
 | `src/views/console/__tests__/UsersView.spec.ts` | 恢复历史文件 |
-| `src/views/console/systemSettings/AuthSettingsView.vue` | 原已一致 |
-| `src/views/console/systemSettings/BillingSettingsView.vue` | 原已一致 |
-| `src/views/console/systemSettings/ContentSettingsView.vue` | 原已一致 |
-| `src/views/console/systemSettings/ModelSettingsView.vue` | 原已一致 |
-| `src/views/console/systemSettings/OperationsSettingsView.vue` | 原已一致 |
-| `src/views/console/systemSettings/SecuritySettingsView.vue` | 原已一致 |
-| `src/views/console/systemSettings/SiteSettingsView.vue` | 原已一致 |
+| `src/views/console/systemSettings/AuthSettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
+| `src/views/console/systemSettings/BillingSettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
+| `src/views/console/systemSettings/ContentSettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
+| `src/views/console/systemSettings/ModelSettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
+| `src/views/console/systemSettings/OperationsSettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
+| `src/views/console/systemSettings/SecuritySettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
+| `src/views/console/systemSettings/SiteSettingsView.vue` | 原已一致；2026-10-22 作为无引用死代码删除 |
 | `src/views/public/PricingView.vue` | 原已一致 |
 | `src/views/public/PublicDocumentView.vue` | 原已一致 |
 | `src/views/public/RankingsView.vue` | 原已一致 |

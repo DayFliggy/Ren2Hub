@@ -60,13 +60,13 @@
 | `console/TokenRoutingView.vue` | 本批 Git 覆盖：三项模式/倍率卡、渠道列表与侧栏；保留当前渠道路由接口 |
 | `console/UsersView.vue` | 保留用户管理布局及当前原生额度、权限、并发和操作幂等 |
 | `console/WalletView.vue` | 保留钱包记录布局；本批子组件恢复充值预设、方式、摘要与 GMPay 资产编辑 |
-| `console/systemSettings/AuthSettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
-| `console/systemSettings/BillingSettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
-| `console/systemSettings/ContentSettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
-| `console/systemSettings/ModelSettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
-| `console/systemSettings/OperationsSettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
-| `console/systemSettings/SecuritySettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
-| `console/systemSettings/SiteSettingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
+| `console/systemSettings/AuthSettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
+| `console/systemSettings/BillingSettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
+| `console/systemSettings/ContentSettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
+| `console/systemSettings/ModelSettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
+| `console/systemSettings/OperationsSettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
+| `console/systemSettings/SecuritySettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
+| `console/systemSettings/SiteSettingsView.vue` | 页面源码曾与 9a63062227 字节相同；没有路由或组件引用，2026-10-22 作为死代码删除，现行设置页由 `SystemSettingsDomainView` 承载 |
 | `public/PricingView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
 | `public/PublicDocumentView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |
 | `public/RankingsView.vue` | 页面源码与 9a63062227 字节相同；相关子组件按本批及现行合同核对 |

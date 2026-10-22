@@ -112,9 +112,6 @@ export const useAppStore = defineStore('app', () => {
   const uptimeEnabled = computed(() =>
     parseBoolean(status.value.uptime_kuma_enabled, true)
   )
-  const affiliateRegistrationRequired = computed(() =>
-    parseBoolean(status.value.affiliate_registration_required, false)
-  )
   const turnstileEnabled = computed(() =>
     parseBoolean(status.value.turnstile_check, false)
   )
@@ -278,7 +275,6 @@ export const useAppStore = defineStore('app', () => {
     showAbout,
     registerEnabled,
     checkinEnabled,
-    affiliateRegistrationRequired,
     turnstileEnabled,
     turnstileSiteKey,
     userAgreementEnabled,

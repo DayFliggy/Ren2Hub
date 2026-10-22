@@ -25,8 +25,6 @@ export function validateSetting(
   if (
     [
       'QuotaForNewUser',
-      'QuotaForInviter',
-      'QuotaForInvitee',
       'QuotaRemindThreshold',
       'checkin_setting.min_quota',
       'checkin_setting.max_quota',

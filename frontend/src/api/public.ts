@@ -23,7 +23,6 @@ export interface PublicStatus {
   logo?: string
   docs_link?: string
   register_enabled?: boolean
-  affiliate_registration_required?: boolean
   user_agreement_enabled?: boolean
   privacy_policy_enabled?: boolean
   uptime_kuma_enabled?: boolean
@@ -128,7 +127,6 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'password_login_enabled',
     'password_login_encryption_enabled',
     'register_enabled',
-    'affiliate_registration_required',
     'user_agreement_enabled',
     'privacy_policy_enabled',
     'uptime_kuma_enabled',

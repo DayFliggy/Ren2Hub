@@ -3,12 +3,7 @@ import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
 import i18n from '@/i18n'
-import {
-  SYSTEM_SETTINGS_DEFAULTS,
-  type AllSystemSettings,
-  type SystemOption,
-  type SystemOptionDescriptor,
-} from '@/types/systemSettings'
+import type { SystemOption } from '@/types/systemSettings'
 
 export type SystemSettingValue = string | boolean | number
 export type SystemSettingsRawOptions = Record<string, string>
@@ -42,71 +37,18 @@ interface SaveOptionsCallbacks {
   ) => void
 }
 
-/** Parse a raw string value into boolean / number / string based on the default key type. */
-function castValue(
-  key: string,
-  raw: string,
-  defaults: AllSystemSettings
-): string | boolean | number {
-  const expected = defaults[key as keyof AllSystemSettings]
-  if (typeof expected === 'boolean') {
-    if (!['true', 'false', '1', '0'].includes(raw))
-      throw new Error(`Invalid boolean option: ${key}`)
-    return raw === 'true' || raw === '1'
-  }
-  if (typeof expected === 'number') {
-    const n = Number(raw)
-    if (!raw.trim() || !Number.isFinite(n))
-      throw new Error(`Invalid numeric option: ${key}`)
-    return n
-  }
-  return raw
-}
-
-/** Merge a flat array of SystemOption into the typed settings object. */
-function parseOptions(
-  options: SystemOption[],
-  defaults: AllSystemSettings,
-  descriptors: SystemOptionDescriptor[] = []
-): AllSystemSettings {
-  const result = { ...defaults }
-  const descriptorKeys = new Set(
-    descriptors.map((descriptor) => descriptor.key)
-  )
-  for (const opt of options) {
-    // Keep descriptor-backed options even when the Vue type snapshot has not
-    // declared a dedicated property yet. This lets integration and plugin
-    // settings retain their authoritative runtime value instead of silently
-    // disappearing from the shared settings cache.
-    if (
-      Object.prototype.hasOwnProperty.call(defaults, opt.key) ||
-      descriptorKeys.has(opt.key)
-    ) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(result as any)[opt.key] = castValue(opt.key, opt.value, defaults)
-    }
-  }
-  return result
-}
-
 // Module-level singleton so multiple consumers share the same fetch
-const _settings = ref<AllSystemSettings>({ ...SYSTEM_SETTINGS_DEFAULTS })
 const _rawOptions = ref<SystemSettingsRawOptions>({})
 const _configuredSecrets = ref<string[]>([])
-const _catalog = ref<SystemOptionDescriptor[]>([])
 const _loading = ref(false)
 const _loaded = ref(false)
 const _saving = ref(false)
 let _fetchPromise: Promise<boolean> | null = null
 let _savePromise: Promise<boolean> | null = null
 
-function isSensitiveOption(
-  key: string,
-  descriptors: readonly SystemOptionDescriptor[] = _catalog.value
-): boolean {
-  return (
-    descriptors.some((item) => item.key === key && item.sensitive) ||
-    /(?:Token|Secret|Key|Cert|Certificate|Password|secret|api_key)$/.test(key)
+function isSensitiveOption(key: string): boolean {
+  return /(?:Token|Secret|Key|Cert|Certificate|Password|secret|api_key)$/.test(
+    key
   )
 }
 
@@ -129,7 +71,6 @@ export function useSystemSettings() {
     _fetchPromise = api
       .get<SystemOption[]>('/api/option/')
       .then(async (data) => {
-        const descriptors: SystemOptionDescriptor[] = []
         if (
           !Array.isArray(data) ||
           data.some(
@@ -150,23 +91,11 @@ export function useSystemSettings() {
             if (option.value === 'true') configuredSecrets.push(secretKey)
             continue
           }
-          if (!isSensitiveOption(option.key, descriptors))
-            raw[option.key] = option.value
+          if (!isSensitiveOption(option.key)) raw[option.key] = option.value
         }
         // Publish options and credential availability together. A failed
         // refresh must not pair new values with stale secret status.
-        const settings = parseOptions(
-          Object.entries(raw).map(([key, value]) => ({ key, value })),
-          SYSTEM_SETTINGS_DEFAULTS,
-          descriptors
-        )
         _rawOptions.value = raw
-        _catalog.value = descriptors.map((item) =>
-          isSensitiveOption(item.key, descriptors)
-            ? { ...item, default_value: '' }
-            : item
-        )
-        _settings.value = settings
         _configuredSecrets.value = configuredSecrets
         _loaded.value = true
         return true
@@ -183,13 +112,6 @@ export function useSystemSettings() {
       })
 
     return _fetchPromise
-  }
-
-  async function updateOption(
-    key: string,
-    value: SystemSettingValue
-  ): Promise<boolean> {
-    return saveOptions({ [key]: value })
   }
 
   /** Native options save independently; retain successful writes if a later key fails. */
@@ -222,13 +144,6 @@ export function useSystemSettings() {
           applied++
           callbacks.onApplied?.(key, value, isSensitiveOption(key))
         }
-        _settings.value = parseOptions(
-          Object.entries(_rawOptions.value).map(([key, value]) => ({
-            key,
-            value,
-          })),
-          SYSTEM_SETTINGS_DEFAULTS
-        )
         return true
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
@@ -242,13 +157,6 @@ export function useSystemSettings() {
         )
         return false
       } finally {
-        _settings.value = parseOptions(
-          Object.entries(_rawOptions.value).map(([key, value]) => ({
-            key,
-            value,
-          })),
-          SYSTEM_SETTINGS_DEFAULTS
-        )
         _saving.value = false
         _savePromise = null
       }
@@ -262,27 +170,17 @@ export function useSystemSettings() {
   ): SystemSettingValue {
     if (isSensitiveOption(key)) return ''
     const value = _rawOptions.value[key]
-    const descriptor = _catalog.value.find((item) => item.key === key)
-    if (value === undefined) {
-      const defaultValue = descriptor?.default_value
-      if (
-        typeof fallback === 'string' &&
-        descriptor?.value_type === 'json' &&
-        defaultValue !== undefined
-      ) {
-        return typeof defaultValue === 'string'
-          ? defaultValue
-          : JSON.stringify(defaultValue)
-      }
-      if (typeof defaultValue === typeof fallback) {
-        return defaultValue as SystemSettingValue
-      }
-      return fallback
+    if (value === undefined) return fallback
+    // Invalid stored values stay raw so field validation reports them instead
+    // of hiding them behind the default.
+    if (typeof fallback === 'boolean') {
+      if (value === 'true' || value === '1') return true
+      if (value === 'false' || value === '0') return false
+      return value
     }
-    if (typeof fallback === 'boolean') return value === 'true' || value === '1'
     if (typeof fallback === 'number') {
       const parsed = Number(value)
-      return Number.isFinite(parsed) ? parsed : fallback
+      return value.trim() && Number.isFinite(parsed) ? parsed : value
     }
     return value
   }
@@ -292,15 +190,11 @@ export function useSystemSettings() {
   }
 
   return {
-    settings: readonly(_settings),
     rawOptions: readonly(_rawOptions),
-    configuredSecrets: readonly(_configuredSecrets),
-    catalog: readonly(_catalog),
     loading: readonly(_loading),
     loaded: readonly(_loaded),
     saving: readonly(_saving),
     load,
-    updateOption,
     saveOptions,
     rawValue,
     isSecretConfigured,

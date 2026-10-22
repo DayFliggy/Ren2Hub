@@ -25,20 +25,42 @@ describe('native per-key settings', () => {
     expect(settings.rawValue('QuotaForNewUser')).toBe('9007199254740993')
     expect(settings.isSecretConfigured('EpayKey')).toBe(false)
   })
-  it('does not replace the last valid snapshot with malformed values or mark them loaded', async () => {
+  it('loads invalid stored option values raw instead of replacing them with defaults', async () => {
+    const settings = await setup([
+      { key: 'Price', value: 'bad' },
+      { key: 'CheckSensitiveEnabled', value: 'maybe' },
+      { key: 'RetryTimes', value: '' },
+    ])
+    expect(settings.loaded.value).toBe(true)
+    expect(settings.rawValue('Price', 7.3)).toBe('bad')
+    expect(settings.rawValue('CheckSensitiveEnabled', false)).toBe('maybe')
+    expect(settings.rawValue('RetryTimes', 0)).toBe('')
+    expect(settings.rawValue('QuotaPerUnit', 500000)).toBe(500000)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+  it('parses valid stored scalars against the field default type', async () => {
+    const settings = await setup([
+      { key: 'Price', value: '8' },
+      { key: 'CheckSensitiveEnabled', value: 'true' },
+      { key: 'DrawingEnabled', value: '0' },
+    ])
+    expect(settings.rawValue('Price', 7.3)).toBe(8)
+    expect(settings.rawValue('CheckSensitiveEnabled', false)).toBe(true)
+    expect(settings.rawValue('DrawingEnabled', true)).toBe(false)
+  })
+  it('does not replace the last valid snapshot with a malformed response or mark it loaded', async () => {
     const settings = await setup([{ key: 'Price', value: '7.3' }])
     for (const data of [
-      [{ key: 'Price', value: 'bad' }],
-      [{ key: 'CheckSensitiveEnabled', value: 'maybe' }],
       [{ key: 'ResendKeyConfigured', value: 'maybe' }],
       { data: [] },
+      [{ key: 'Price', value: 7 }],
     ]) {
       vi.mocked(api.get).mockResolvedValueOnce(data)
       expect(await settings.load(true)).toBe(false)
       expect(settings.loaded.value).toBe(false)
       expect(settings.rawValue('Price')).toBe('7.3')
     }
-    expect(toast.error).toHaveBeenCalledTimes(4)
+    expect(toast.error).toHaveBeenCalledTimes(3)
   })
   it('writes parameters before enabling a dependent provider and keeps secrets out of caches', async () => {
     const settings = await setup()
