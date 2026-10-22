@@ -23,6 +23,7 @@ import {
   adminChannelResponseTone,
   adminChannelTypeMeta,
   isRetiredChannelType,
+  supportsBalanceQuery,
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
@@ -233,12 +234,7 @@ function responseDisplay(channel: AdminChannel): {
             class="flex shrink-0 items-center gap-0.5"
           >
             <IconButton
-              v-if="
-                canOperate &&
-                group.channels.some(
-                  (channel) => !isRetiredChannelType(channel.type)
-                )
-              "
+              v-if="canOperate && group.channels.some(supportsBalanceQuery)"
               :label="t('channels.syncSupplier', { supplier: group.supplier })"
               :disabled="!canRunBatch"
               class="h-7 w-7"
@@ -445,7 +441,7 @@ function responseDisplay(channel: AdminChannel): {
                   <IconButton
                     v-if="
                       canOperate &&
-                      !isRetiredChannelType(channel.type) &&
+                      supportsBalanceQuery(channel) &&
                       visibleFields.includes('rowUpstreamAction')
                     "
                     :label="t('channels.refreshBalance')"

@@ -61,6 +61,7 @@ import {
   adminChannelTypeMeta,
   isRetiredChannelType,
   sanitizeAdminChannelVisibleFields,
+  supportsBalanceQuery,
 } from '@/constants/adminChannels'
 import type {
   AdminChannel,
@@ -497,7 +498,9 @@ function balanceButtonLabel(): string {
       total: batchProgress.value.total,
     })
   }
-  return t('channels.batchBalanceLabel', { count: mutableRows.value.length })
+  return t('channels.batchBalanceLabel', {
+    count: rows.value.filter(supportsBalanceQuery).length,
+  })
 }
 
 function isPageBalance(): boolean {
@@ -1066,7 +1069,9 @@ async function runBulkStatus(
                 <IconButton
                   v-if="
                     canOperate &&
-                    hasMutableChannels((row as SupplierTableRow).channels)
+                    (row as SupplierTableRow).channels.some(
+                      supportsBalanceQuery
+                    )
                   "
                   :label="
                     supplierBalanceLabel((row as SupplierTableRow).supplier)
@@ -1312,7 +1317,7 @@ async function runBulkStatus(
               <IconButton
                 v-if="
                   canOperate &&
-                  !isReadOnlyChannel(
+                  supportsBalanceQuery(
                     channelFromRow(row as AdminChannelTableRow)
                   ) &&
                   isFieldVisible('rowUpstreamAction')

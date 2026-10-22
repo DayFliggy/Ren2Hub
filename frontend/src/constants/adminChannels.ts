@@ -1,4 +1,5 @@
 import type {
+  AdminChannel,
   AdminChannelSortBy,
   AdminChannelStatus,
   AdminChannelUpdateInput,
@@ -96,6 +97,23 @@ export function adminChannelTypeMeta(type: number): AdminChannelTypeMeta {
 
 export function isRetiredChannelType(type: number): boolean {
   return ADMIN_CHANNEL_TYPE_META[type]?.retired === true
+}
+
+// Types with a real branch in controller/channel-billing.go: Advanced Custom in
+// updateChannelBalance, the rest in updateStandardChannelBalance. Every other
+// type answers "Not implemented yet".
+const BALANCE_QUERY_TYPES: ReadonlySet<number> = new Set([
+  1, 8, 10, 12, 13, 20, 25, 40, 43, 58, 59, 60,
+])
+
+/** UpdateChannelBalance also rejects every multi-key channel. */
+export function supportsBalanceQuery(
+  channel: Pick<AdminChannel, 'type' | 'channel_info'>
+): boolean {
+  return (
+    BALANCE_QUERY_TYPES.has(channel.type) &&
+    channel.channel_info?.is_multi_key !== true
+  )
 }
 
 /**
