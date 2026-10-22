@@ -1,0 +1,12 @@
+{
+  "changes": [
+    {
+      "expected_version": "7dc00326c6f0e9443a078c6d171ff865c479ccb5bc4a2d25b306292d5d12a468",
+      "model_name": "contract-chat",
+      "pricing": {
+        "CompletionRatio": 4,
+        "ModelRatio": 3
+      }
+    }
+  ]
+}
