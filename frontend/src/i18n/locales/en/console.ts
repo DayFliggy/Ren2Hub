@@ -2448,6 +2448,13 @@ export default {
     unbindProvider: 'Unlink {provider}',
     oauthPrompt:
       'Continue in the provider window to link your {provider} account.',
+    wechatQRCodeAlt: 'WeChat official account QR code',
+    wechatScanHint:
+      'Scan the QR code with WeChat, follow the account, and enter the code you receive.',
+    wechatQRCodeMissing:
+      'The WeChat QR code is not configured. Please contact the administrator.',
+    wechatQRCodeInvalid:
+      'The WeChat QR code URL is invalid. Please ask the administrator to check it.',
     oauthUnavailable: 'This OAuth provider is not configured.',
     oauthPopupBlocked: 'Allow pop-ups to link an OAuth account.',
     emailCodeHint: 'Enter the six-digit code sent to the email address.',

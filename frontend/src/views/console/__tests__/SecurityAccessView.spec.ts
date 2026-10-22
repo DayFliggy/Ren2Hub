@@ -163,6 +163,32 @@ function stubClipboard(writeText: (text: string) => Promise<void>) {
   })
 }
 
+const wechatStatus = {
+  github_oauth: false,
+  discord_oauth: false,
+  linuxdo_oauth: false,
+  oidc_enabled: false,
+  wechat_login: true,
+  telegram_oauth: false,
+  telegram_oauth_configured: false,
+  custom_oauth_providers: [],
+}
+
+async function openWeChatBindDialog(wechatQRCode: string) {
+  publicStatus.mockResolvedValue({
+    ...wechatStatus,
+    wechat_qrcode: wechatQRCode,
+  })
+  const wrapper = renderView()
+  await flushPromises()
+  buttonByText(wrapper, '绑定')?.click()
+  await flushPromises()
+  return {
+    wrapper,
+    dialog: document.body.querySelector('[role="dialog"]')!,
+  }
+}
+
 describe('SecurityAccessView', () => {
   it('renders profile, credentials, bindings, passkey and 2fa', async () => {
     const wrapper = renderView()
@@ -310,6 +336,59 @@ describe('SecurityAccessView', () => {
     expect(toast.toasts.some((item) => item.type === 'success')).toBe(false)
     wrapper.unmount()
     Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  it('shows the configured WeChat QR and binds with the entered code', async () => {
+    apiPost.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/oauth/wechat/bind' ? { notification_warning: false } : {}
+      )
+    )
+    const { wrapper, dialog } = await openWeChatBindDialog(
+      'https://cdn.example.com/wechat.png'
+    )
+
+    const image = dialog.querySelector('[data-wechat-qrcode] img')
+    expect(image?.getAttribute('src')).toBe(
+      'https://cdn.example.com/wechat.png'
+    )
+    expect(image?.getAttribute('alt')).toBe('微信公众号二维码')
+    expect(dialog.textContent).not.toContain('将在第三方窗口中继续绑定')
+    const input = dialog.querySelector<HTMLInputElement>(
+      'input[autocomplete="one-time-code"]'
+    )!
+    input.value = ' wx-code '
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    Array.from(dialog.querySelectorAll('button'))
+      .filter((button) => button.textContent?.trim() === '绑定')
+      .at(-1)
+      ?.click()
+    await flushPromises()
+
+    expect(requestProof).toHaveBeenCalledWith({
+      scope: 'account.binding.bind',
+      context: { provider: 'wechat', code: 'wx-code' },
+    })
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/oauth/wechat/bind',
+      { code: 'wx-code' },
+      { headers: { 'X-Security-Proof': 'test-proof' } }
+    )
+    wrapper.unmount()
+  })
+
+  it('tells a missing WeChat QR apart from a rejected one', async () => {
+    const missing = await openWeChatBindDialog('')
+    expect(missing.dialog.querySelector('[data-wechat-qrcode] img')).toBeNull()
+    expect(missing.dialog.textContent).toContain('管理员尚未配置微信二维码')
+    missing.wrapper.unmount()
+
+    const invalid = await openWeChatBindDialog('javascript:alert(1)')
+    expect(invalid.dialog.querySelector('[data-wechat-qrcode] img')).toBeNull()
+    expect(invalid.dialog.textContent).toContain('微信二维码地址无效')
+    expect(invalid.dialog.textContent).not.toContain('管理员尚未配置')
+    invalid.wrapper.unmount()
   })
 
   it('closes its OAuth popup and removes window handlers when unmounted', async () => {

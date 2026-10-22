@@ -44,6 +44,7 @@ import PageHero from '@/components/console/PageHero.vue'
 import PersonalAccessTokensPanel from '@/components/console/PersonalAccessTokensPanel.vue'
 import SettingsSectionHeading from '@/components/console/SettingsSectionHeading.vue'
 import { useToast } from '@/composables/useToast'
+import { wechatQRCode } from '@/utils/wechatQRCode'
 import { useAuthStore } from '@/stores/auth'
 import type { SettingsBinding, SettingsBindingId } from '@/types/settings'
 import { formatTime } from '@/utils/format'
@@ -90,6 +91,9 @@ const bindingCode = ref('')
 const emailSending = ref(false)
 const customBindings = ref<SettingsBinding[]>([])
 const publicStatus = ref<PublicStatus | null>(null)
+const wechatBindQRCode = computed(() =>
+  wechatQRCode(publicStatus.value?.wechat_qrcode)
+)
 
 // 显示名称
 const profileOpen = ref(false)
@@ -1376,8 +1380,38 @@ onBeforeUnmount(() => {
           </ConsoleButton>
         </FormField>
       </div>
+      <div
+        v-if="bindTarget === 'wechat'"
+        class="flex flex-col items-center gap-3"
+        data-wechat-qrcode
+      >
+        <img
+          v-if="wechatBindQRCode.state === 'ready'"
+          :src="wechatBindQRCode.src"
+          :alt="t('settings.wechatQRCodeAlt')"
+          class="size-40 rounded-lg border border-[var(--border-subtle)] bg-[#ffffff] object-contain p-2"
+        />
+        <p
+          v-else
+          role="status"
+          class="w-full rounded-lg bg-[var(--surface-muted)] px-4 py-3 text-center text-sm text-[var(--text-secondary)]"
+        >
+          {{
+            wechatBindQRCode.state === 'invalid'
+              ? t('settings.wechatQRCodeInvalid')
+              : t('settings.wechatQRCodeMissing')
+          }}
+        </p>
+        <p class="text-center text-sm text-[var(--text-tertiary)]">
+          {{ t('settings.wechatScanHint') }}
+        </p>
+      </div>
       <FormField v-if="bindTarget === 'wechat'" :label="t('security.code')">
-        <TextInput v-model="bindingCode" maxlength="128" />
+        <TextInput
+          v-model="bindingCode"
+          autocomplete="one-time-code"
+          maxlength="128"
+        />
       </FormField>
       <FormField
         v-if="bindTarget === 'email' && emailOldRequired"
@@ -1389,7 +1423,10 @@ onBeforeUnmount(() => {
           maxlength="6"
         />
       </FormField>
-      <div v-if="bindTarget !== 'email'" class="settings-context-callout">
+      <div
+        v-if="bindTarget !== 'email' && bindTarget !== 'wechat'"
+        class="settings-context-callout"
+      >
         <AtSign :size="20" aria-hidden="true" />
         <p>
           {{ t('settings.oauthPrompt', { provider: currentBindLabel }) }}

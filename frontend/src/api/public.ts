@@ -42,6 +42,8 @@ export interface PublicStatus {
   oidc_client_id?: string
   oidc_authorization_endpoint?: string
   wechat_login?: boolean
+  /** Admin-configured image URL shown in the WeChat bind dialog. */
+  wechat_qrcode?: string
   telegram_oauth?: boolean
   telegram_oauth_configured?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
@@ -192,7 +194,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'oidc_client_id',
     'oidc_authorization_endpoint',
   ] as const
-  const statusStringKeys = ['turnstile_site_key'] as const
+  const statusStringKeys = ['turnstile_site_key', 'wechat_qrcode'] as const
   for (const key of oauthStringKeys) {
     if (value[key] !== undefined && typeof value[key] !== 'string') {
       invalidResponse('/api/status')

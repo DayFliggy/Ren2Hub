@@ -15,6 +15,7 @@ describe('public API response boundaries', () => {
         register_enabled: false,
         turnstile_check: true,
         turnstile_site_key: 'site-key',
+        wechat_qrcode: 'https://cdn.example.com/wechat.png',
         HeaderNavModules: '{"pricing":true}',
       })
     ).toEqual({
@@ -22,6 +23,7 @@ describe('public API response boundaries', () => {
       register_enabled: false,
       turnstile_check: true,
       turnstile_site_key: 'site-key',
+      wechat_qrcode: 'https://cdn.example.com/wechat.png',
       HeaderNavModules: '{"pricing":true}',
     })
     expect(parsePricingModels([{ model_name: 'gpt-4o' }])).toEqual([
@@ -37,6 +39,7 @@ describe('public API response boundaries', () => {
     expect(() => parsePublicStatus({ turnstile_check: 'true' })).toThrow()
     expect(() => parsePublicStatus({ api_info_enabled: 'true' })).toThrow()
     expect(() => parsePublicStatus({ server_address: 123 })).toThrow()
+    expect(() => parsePublicStatus({ wechat_qrcode: 123 })).toThrow()
     expect(() => parsePublicStatus({ api_info: {} })).toThrow()
     expect(() => parsePublicStatus({ api_info: [{ url: 123 }] })).toThrow()
     expect(() => parsePricingModels({ model_name: 'gpt-4o' })).toThrow()
