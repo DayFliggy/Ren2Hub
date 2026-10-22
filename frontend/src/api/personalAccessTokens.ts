@@ -38,10 +38,38 @@ export interface PersonalAccessTokenList {
   legacy: LegacyAccessToken | null
 }
 
+export type PATScopeGroupName = 'personal' | 'admin' | 'system'
+
+/** One grantable action; label_key and description_key are backend English text. */
+export interface PATScopeAction {
+  action: string
+  scope: string
+  label_key: string
+  description_key: string
+}
+
+export interface PATScopeResource {
+  resource: string
+  label_key: string
+  actions: PATScopeAction[]
+}
+
+export interface PATScopeGroup {
+  group: PATScopeGroupName
+  resources: PATScopeResource[]
+}
+
+/** GET /api/user/access_tokens/catalog: the scopes this user may grant now. */
 export interface PATScopeCatalog {
+  groups: PATScopeGroup[]
+  /** Every `resource:action` scope in groups. */
   scopes: string[]
   limit: number
   default_lifetime_days: number
+}
+
+function isScopeGroupName(value: unknown): value is PATScopeGroupName {
+  return value === 'personal' || value === 'admin' || value === 'system'
 }
 
 export function parsePersonalAccessToken(value: unknown): PersonalAccessToken {
@@ -91,6 +119,63 @@ function parseLegacyAccessToken(value: unknown): LegacyAccessToken | null {
   }
 }
 
+/** The resource a `resource:action` scope names. */
+export function scopeResource(scope: string): string {
+  return scope.split(':')[0]
+}
+
+function parseScopeResource(value: unknown): PATScopeResource {
+  if (!isRecord(value) || !Array.isArray(value.actions))
+    invalidResponse(endpoint)
+  const resource = requiredString(value.resource, endpoint, false)
+  return {
+    resource,
+    label_key: requiredString(value.label_key, endpoint, false),
+    actions: value.actions.map((action: unknown) => {
+      if (!isRecord(action)) invalidResponse(endpoint)
+      const name = requiredString(action.action, endpoint, false)
+      return {
+        action: name,
+        scope: `${resource}:${name}`,
+        label_key: requiredString(action.label_key, endpoint, false),
+        description_key: requiredString(action.description_key, endpoint),
+      }
+    }),
+  }
+}
+
+function parseScopeGroup(value: unknown): PATScopeGroup {
+  if (!isRecord(value) || !Array.isArray(value.resources))
+    invalidResponse(endpoint)
+  if (!isScopeGroupName(value.group)) invalidResponse(endpoint)
+  return {
+    group: value.group,
+    resources: value.resources.map(parseScopeResource),
+  }
+}
+
+export function parsePATScopeCatalog(value: unknown): PATScopeCatalog {
+  if (!isRecord(value) || !Array.isArray(value.groups))
+    invalidResponse(endpoint)
+  const groups = value.groups.map(parseScopeGroup)
+  const catalog = {
+    groups,
+    scopes: groups.flatMap((group) =>
+      group.resources.flatMap((resource) =>
+        resource.actions.map((action) => action.scope)
+      )
+    ),
+    limit: requiredStrictInteger(value.max_tokens, endpoint),
+    default_lifetime_days: requiredStrictInteger(
+      value.default_expiry_days,
+      endpoint
+    ),
+  }
+  if (catalog.limit < 1 || catalog.default_lifetime_days < 1)
+    invalidResponse(endpoint)
+  return catalog
+}
+
 export const personalAccessTokensApi = {
   async list(signal?: AbortSignal): Promise<PersonalAccessTokenList> {
     const result = await api.get<unknown>(endpoint, undefined, { signal })
@@ -102,38 +187,9 @@ export const personalAccessTokensApi = {
     }
   },
   async scopes(signal?: AbortSignal): Promise<PATScopeCatalog> {
-    const result = await api.get<unknown>(`${endpoint}/catalog`, undefined, {
-      signal,
-    })
-    if (!isRecord(result) || !Array.isArray(result.groups))
-      invalidResponse(endpoint)
-    const scopes: string[] = []
-    for (const group of result.groups) {
-      if (!isRecord(group) || !Array.isArray(group.resources))
-        invalidResponse(endpoint)
-      for (const resource of group.resources) {
-        if (!isRecord(resource) || !Array.isArray(resource.actions))
-          invalidResponse(endpoint)
-        const name = requiredString(resource.resource, endpoint, false)
-        for (const action of resource.actions) {
-          if (!isRecord(action)) invalidResponse(endpoint)
-          scopes.push(
-            `${name}:${requiredString(action.action, endpoint, false)}`
-          )
-        }
-      }
-    }
-    const catalog = {
-      scopes,
-      limit: requiredStrictInteger(result.max_tokens, endpoint),
-      default_lifetime_days: requiredStrictInteger(
-        result.default_expiry_days,
-        endpoint
-      ),
-    }
-    if (catalog.limit < 1 || catalog.default_lifetime_days < 1)
-      invalidResponse(endpoint)
-    return catalog
+    return parsePATScopeCatalog(
+      await api.get<unknown>(`${endpoint}/catalog`, undefined, { signal })
+    )
   },
   async create(
     input: { name: string; scopes: string[]; expires_at: number },

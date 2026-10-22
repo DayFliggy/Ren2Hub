@@ -8,11 +8,13 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import {
   personalAccessTokensApi,
+  scopeResource,
   type LegacyAccessToken,
   type PersonalAccessToken,
   type PATScopeCatalog,
 } from '@/api/personalAccessTokens'
 import { personalAccessTokenMessages } from '@/i18n/personalAccessTokens'
+import { useServerText } from '@/composables/useServerText'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{ userId: number }>()
@@ -44,6 +46,41 @@ const activeCount = computed(
       (item) => item.expires_at === 0 || item.expires_at > Date.now() / 1000
     ).length
 )
+
+// Catalog labels and descriptions are backend English text; zh-CN reads them
+// from server-messages/permissions.json.
+const serverText = useServerText()
+const resourceLabels = computed(
+  () =>
+    new Map(
+      catalog.value?.groups.flatMap((group) =>
+        group.resources.map((resource) => [
+          resource.resource,
+          resource.label_key,
+        ])
+      )
+    )
+)
+// Stored grants the catalog no longer offers stay listed by key so they can
+// be cleared; saving still rejects them.
+const unavailableScopes = computed(() =>
+  (selected.value?.scopes ?? [])
+    .filter((scope) => !catalog.value?.scopes.includes(scope))
+    .sort()
+)
+// A token lists the catalog labels of the resources it covers; resources the
+// catalog does not name are only counted, never shown by key.
+function resourceBadges(item: PersonalAccessToken) {
+  const resources = [...new Set(item.scopes.map(scopeResource))]
+  const labels = resources.flatMap((resource) => {
+    const label = resourceLabels.value.get(resource)
+    return label ? [serverText(label)] : []
+  })
+  const hidden = resources.length - labels.length
+  return hidden
+    ? [...labels, t('pat.otherResources', { count: hidden })]
+    : labels
+}
 
 async function reload() {
   const version = ++epoch
@@ -347,9 +384,15 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <p
-          class="mt-2 break-all font-mono text-xs text-[var(--text-secondary)]"
+          class="mt-2 flex flex-wrap gap-1 text-xs text-[var(--text-secondary)]"
+          data-testid="pat-resources"
         >
-          {{ item.scopes.join(', ') }}
+          <span
+            v-for="(badge, index) in resourceBadges(item)"
+            :key="index"
+            class="rounded border border-[var(--border-subtle)] px-1.5 py-0.5"
+            >{{ badge }}</span
+          >
         </p>
         <dl
           class="mt-2 grid gap-x-5 gap-y-1 text-xs text-[var(--text-tertiary)] sm:grid-cols-3"
@@ -391,27 +434,61 @@ onBeforeUnmount(() => {
           <p class="my-2 text-xs text-[var(--text-secondary)]">
             {{ t('pat.scopeHint') }}
           </p>
-          <div class="grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
-            <label
-              v-for="scope in [
-                ...new Set([...(catalog?.scopes ?? []), ...scopes]),
-              ].sort()"
-              :key="scope"
-              class="flex min-w-0 items-start gap-2 text-xs"
-              ><input
-                v-model="scopes"
-                type="checkbox"
-                :value="scope"
-                class="mt-0.5"
-              /><span class="break-all"
-                >{{ scope
-                }}<span
-                  v-if="!catalog?.scopes.includes(scope)"
-                  class="block text-[var(--status-warning-text)]"
-                  >{{ t('pat.unavailableScope') }}</span
-                ></span
-              ></label
+          <div class="max-h-80 space-y-4 overflow-y-auto pr-1">
+            <section
+              v-for="group in catalog?.groups ?? []"
+              :key="group.group"
+              :data-testid="`pat-group-${group.group}`"
             >
+              <h4 class="text-xs font-semibold text-[var(--text-tertiary)]">
+                {{ t(`pat.groups.${group.group}`) }}
+              </h4>
+              <div
+                v-for="resource in group.resources"
+                :key="resource.resource"
+                class="mt-2"
+              >
+                <p class="text-sm font-medium text-[var(--text-primary)]">
+                  {{ serverText(resource.label_key) }}
+                </p>
+                <label
+                  v-for="action in resource.actions"
+                  :key="action.scope"
+                  class="mt-1 flex min-w-0 items-start gap-2 text-xs"
+                  ><input
+                    v-model="scopes"
+                    type="checkbox"
+                    :value="action.scope"
+                    class="mt-0.5"
+                  /><span class="min-w-0"
+                    >{{ serverText(action.label_key)
+                    }}<span
+                      v-if="action.description_key"
+                      class="block text-[var(--text-secondary)]"
+                      >{{ serverText(action.description_key) }}</span
+                    ></span
+                  ></label
+                >
+              </div>
+            </section>
+            <section v-if="unavailableScopes.length">
+              <h4
+                class="text-xs font-semibold text-[var(--status-warning-text)]"
+              >
+                {{ t('pat.unavailableScope') }}
+              </h4>
+              <label
+                v-for="scope in unavailableScopes"
+                :key="scope"
+                class="mt-1 flex min-w-0 items-start gap-2 text-xs"
+                ><input
+                  v-model="scopes"
+                  type="checkbox"
+                  :value="scope"
+                  class="mt-0.5"
+                /><span class="break-all font-mono">{{ scope }}</span></label
+              >
+            </section>
           </div>
         </fieldset>
         <label v-if="editor === 'create'" class="block text-sm"

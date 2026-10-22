@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
 }))
-vi.mock('@/api/personalAccessTokens', () => ({
+vi.mock('@/api/personalAccessTokens', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   personalAccessTokensApi: mocks,
 }))
 vi.mock('@/composables/useToast', () => ({
@@ -29,6 +30,9 @@ vi.mock('@/components/auth/SecurityProofDialog.vue', () => ({
   }),
 }))
 import PersonalAccessTokensPanel from '../PersonalAccessTokensPanel.vue'
+import { parsePATScopeCatalog } from '@/api/personalAccessTokens'
+import { accessTokenCatalogFixture } from '@/api/__tests__/accessTokenCatalogFixture'
+import { loadServerMessages } from '@/i18n/serverMessages'
 
 const item = {
   id: 7,
@@ -63,11 +67,11 @@ const confirm = {
     '<button v-if="open" data-testid="confirm-revoke" @click="$emit(\'confirm\')">Confirm revoke</button>',
 }
 
-function render() {
+function render(locale = 'en') {
   return mount(PersonalAccessTokensPanel, {
     props: { userId: 1 },
     global: {
-      plugins: [createI18n({ legacy: false, locale: 'en' })],
+      plugins: [createI18n({ legacy: false, locale })],
       stubs: { ConsoleModal: modal, ConfirmDialog: confirm },
     },
   })
@@ -81,11 +85,9 @@ function button(wrapper: ReturnType<typeof render>, text: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.list.mockResolvedValue({ items: [{ ...item }], legacy: null })
-  mocks.scopes.mockResolvedValue({
-    scopes: ['profile:read', 'tokens:read'],
-    limit: 20,
-    default_lifetime_days: 30,
-  })
+  mocks.scopes.mockResolvedValue(
+    parsePATScopeCatalog(accessTokenCatalogFixture())
+  )
   mocks.proof.mockResolvedValue('proof')
   mocks.create.mockResolvedValue({
     token,
@@ -122,20 +124,79 @@ describe('PAT management', () => {
     await flushPromises()
     await button(wrapper, 'Permissions').trigger('click')
     await wrapper
-      .get('input[type="checkbox"][value="tokens:read"]')
+      .get('input[type="checkbox"][value="api_key:read"]')
       .setValue(true)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(mocks.proof).toHaveBeenCalledWith({
       scope: 'access_token.update',
-      context: { token_id: 7, scopes: ['profile:read', 'tokens:read'] },
+      context: { token_id: 7, scopes: ['api_key:read', 'profile:read'] },
     })
     expect(mocks.update).toHaveBeenCalledWith(
       7,
-      { name: 'automation', scopes: ['profile:read', 'tokens:read'] },
+      { name: 'automation', scopes: ['api_key:read', 'profile:read'] },
       'proof',
       expect.any(AbortSignal)
     )
+    wrapper.unmount()
+  })
+
+  it('renders the catalog by group with zh-CN labels instead of scope keys', async () => {
+    await loadServerMessages('zh-CN')
+    mocks.list.mockResolvedValue({
+      items: [
+        {
+          ...item,
+          scopes: ['ops:read', 'ops:write', 'profile:read', 'wallet:read'],
+        },
+      ],
+      legacy: null,
+    })
+    const wrapper = render('zh-CN')
+    await flushPromises()
+    expect(
+      wrapper
+        .findAll('[data-testid="pat-resources"] span')
+        .map((badge) => badge.text())
+    ).toEqual(['个人资料', '钱包', '另有 1 项'])
+    await button(wrapper, '创建访问令牌').trigger('click')
+    const personal = wrapper.get('[data-testid="pat-group-personal"]').text()
+    expect(personal).toContain('个人')
+    expect(personal).toContain('钱包')
+    expect(personal).toContain('查看余额、充值记录和邀请码。')
+    const admin = wrapper.get('[data-testid="pat-group-admin"]').text()
+    expect(admin).toContain('管理')
+    expect(admin).toContain('查看渠道密钥')
+    expect(admin).toContain('预留用于在安全验证后查看完整渠道密钥。')
+    expect(wrapper.text()).not.toMatch(/wallet|ops|View channel secrets/)
+    wrapper.unmount()
+  })
+
+  it('lists stored scopes the catalog no longer offers until they are cleared', async () => {
+    mocks.list.mockResolvedValue({
+      items: [{ ...item, scopes: ['ops:read', 'profile:read'] }],
+      legacy: null,
+    })
+    const wrapper = render()
+    await flushPromises()
+    await button(wrapper, 'Permissions').trigger('click')
+    const stale = wrapper.get('input[type="checkbox"][value="ops:read"]')
+    expect(stale.element.closest('section')?.textContent).toContain(
+      'No longer grantable'
+    )
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.error).toHaveBeenCalledWith(
+      'Enter a name, choose at least one available scope, and use a future expiry.'
+    )
+    expect(mocks.proof).not.toHaveBeenCalled()
+    await stale.setValue(false)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.proof).toHaveBeenCalledWith({
+      scope: 'access_token.update',
+      context: { token_id: 7, scopes: ['profile:read'] },
+    })
     wrapper.unmount()
   })
 
@@ -282,11 +343,9 @@ describe('PAT management', () => {
   })
 
   it('disables creation at the returned active limit and reports load failures', async () => {
-    mocks.scopes.mockResolvedValue({
-      scopes: ['profile:read'],
-      limit: 1,
-      default_lifetime_days: 30,
-    })
+    mocks.scopes.mockResolvedValue(
+      parsePATScopeCatalog({ ...accessTokenCatalogFixture(), max_tokens: 1 })
+    )
     const wrapper = render()
     await flushPromises()
     expect(

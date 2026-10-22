@@ -66,8 +66,8 @@ var accessTokenStaticResources = []AccessTokenResource{
 		accessTokenView("View your usage logs, statistics, tasks, and audit logs."),
 	}},
 	{Resource: "wallet", LabelKey: "Wallet", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
-		accessTokenView("View balance, top-up records, and referral information."),
-		accessTokenEdit("Top up, check in, and transfer referral rewards."),
+		accessTokenView("View balance, top-up records, and referral code."),
+		accessTokenEdit("Top up and check in."),
 	}},
 	{Resource: "account_security", LabelKey: "Account security", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View Passkey, two-factor, and sign-in binding status."),

@@ -10,6 +10,18 @@ import {
   parsePersonalAccessToken,
   personalAccessTokensApi,
 } from '../personalAccessTokens'
+import { accessTokenCatalogFixture } from './accessTokenCatalogFixture'
+
+// The catalog as plain records, so a test can drop any field.
+type CatalogData = {
+  groups: Array<{
+    group: string
+    resources: Array<
+      Record<string, unknown> & { actions: Array<Record<string, unknown>> }
+    >
+  }>
+  max_tokens: number
+}
 const item = {
   id: 1,
   name: 'ci',
@@ -90,24 +102,55 @@ describe('PAT response contract', () => {
       { headers: { 'X-Security-Proof': 'proof' }, signal: undefined }
     )
   })
-  it('requires a valid server scope catalog', async () => {
-    mocks.get.mockResolvedValue({
-      groups: [
-        { resources: [{ resource: 'profile', actions: [{ action: 'read' }] }] },
-      ],
-      max_tokens: 20,
-      default_expiry_days: 30,
-    })
-    expect((await personalAccessTokensApi.scopes()).scopes).toEqual([
-      'profile:read',
+  it('keeps the catalog groups, labels and descriptions with derived scopes', async () => {
+    mocks.get.mockResolvedValue(accessTokenCatalogFixture())
+    const catalog = await personalAccessTokensApi.scopes()
+    expect(mocks.get).toHaveBeenCalledWith(
+      '/api/user/access_tokens/catalog',
+      undefined,
+      { signal: undefined }
+    )
+    expect(catalog.groups.map((group) => group.group)).toEqual([
+      'personal',
+      'admin',
     ])
-    mocks.get.mockResolvedValue({
-      groups: [
-        { resources: [{ resource: 'profile', actions: [{ action: 'read' }] }] },
+    expect(catalog.groups[0].resources[2]).toEqual({
+      resource: 'wallet',
+      label_key: 'Wallet',
+      actions: [
+        {
+          action: 'read',
+          scope: 'wallet:read',
+          label_key: 'View',
+          description_key: 'View balance, top-up records, and referral code.',
+        },
       ],
-      max_tokens: 0,
-      default_expiry_days: 30,
     })
-    await expect(personalAccessTokensApi.scopes()).rejects.toThrow()
+    expect(catalog.scopes).toEqual([
+      'profile:read',
+      'profile:write',
+      'api_key:read',
+      'wallet:read',
+      'channel:secret_view',
+    ])
+    expect(catalog.limit).toBe(20)
+    expect(catalog.default_lifetime_days).toBe(30)
+  })
+  it('rejects a catalog with missing labels, unknown groups or limits', async () => {
+    const broken = [
+      (data: CatalogData) => (data.groups[0].group = 'billing'),
+      (data: CatalogData) => delete data.groups[1].resources[0].label_key,
+      (data: CatalogData) =>
+        delete data.groups[0].resources[0].actions[0].label_key,
+      (data: CatalogData) =>
+        delete data.groups[0].resources[0].actions[0].description_key,
+      (data: CatalogData) => (data.max_tokens = 0),
+    ]
+    for (const breakData of broken) {
+      const data = accessTokenCatalogFixture() as CatalogData
+      breakData(data)
+      mocks.get.mockResolvedValue(data)
+      await expect(personalAccessTokensApi.scopes()).rejects.toThrow()
+    }
   })
 })
