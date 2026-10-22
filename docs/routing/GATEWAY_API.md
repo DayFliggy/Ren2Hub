@@ -34,6 +34,8 @@
 
 `summary` 不含个人以外的数据。`meta.source` 为 `"quota_data"`，`meta.available` 等于 `DataExportEnabled`；为 false 时计数为 0、序列为空数组，表示没有数据来源，不表示用量为 0。耗时和成功率按本人消费日志计算，`meta.coverage.latency`、`meta.coverage.success_rate` 为 false 或区间内没有样本时对应值为 `null`，不拿全站 `perf_metrics` 代替。`quota_data` 每 `meta.flush_interval_minutes` 分钟落库一次，最近的小时可能尚未写入。
 
+`summary` 的区间最长 366 天。实际读取的跨度从窗口起点算到 `min(现在, 窗口终点)`；`include_comparison` 默认 `true`，此时起点前移一个窗口长度。跨度超过 `/api/status` 的 `log_max_range_days` 时返回 HTTP 200、`success: false` 和 `The time range cannot exceed {{days}} days`。前端按同一公式预判：本窗口自身超限时不发请求并提示缩短区间；只有加上上一窗口才超限时传 `include_comparison=false`，KPI 标注“无法对比”；钱包本月统计超限时显示“—”；热图只查询 `min(364, log_max_range_days)` 天，范围外的日期标为未覆盖，不计入合计和均值。
+
 `quality` 的窗口与原生 `/api/perf-metrics/summary` 相同，最后一个点是当前未满的小时；窗口内没有请求时 `summary` 为 `null`，没有请求的小时三个比率都为 `null`。`stats.system_usage` 在监控关闭、尚未采样或采样超过 30 秒时为 `null`，不返回 0；`db_pool.log` 为 `null` 且 `log_shared=true` 表示日志库与主库共用连接池。
 
 个人工单 `/api/tickets` 全部要求浏览器会话：GET列表、POST创建、GET `/:id`、POST `/:id/messages`、PATCH `/:id/status`、GET `/attachments/:attachment_id`。创建与回复为multipart，附件字段 `attachments`，最多五张、每张10MiB；详情返回 `{ticket,messages}`，列表返回 `{items,total,page,page_size}`。表单按流式解析，第一次越界就停止读取，返回 HTTP 200、`success:false` 和 `code`：`ATTACHMENT_TOO_MANY`、`ATTACHMENT_TOO_LARGE`、`ATTACHMENT_TYPE_UNSUPPORTED`、`REQUEST_TOO_LARGE`、`VALIDATION_ERROR`。`ATTACHMENT_STORAGE_FAILED` 表示工单或回复已经写库、附件没有存好，客户端应刷新而不是重新提交。附件先写临时文件，事务提交后再改名；下载响应带 `X-Content-Type-Options: nosniff`。

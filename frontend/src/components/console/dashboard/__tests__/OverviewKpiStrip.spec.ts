@@ -41,8 +41,6 @@ const stats: DashboardStats = {
   month_quota: '1842600',
   today_requests: 312,
   total_requests: 18_764,
-  month_quota_delta: 16.2,
-  month_requests_delta: -5.8,
 }
 
 const flowPoints: FlowPoint[] = Array.from({ length: 14 }, (_, i) => ({

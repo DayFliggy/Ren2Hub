@@ -9,6 +9,7 @@ import {
   vi,
 } from 'vitest'
 import { api } from '@/api/console'
+import { getUsageSummary } from '@/api/dashboard'
 import {
   nativeTopUpDetail,
   nativeGmpayEvidence,
@@ -20,13 +21,16 @@ import { configureQuotaDisplay, formatQuota } from '@/utils/format'
 const state = vi.hoisted(() => ({
   route: { query: {} as Record<string, string> },
   auth: { user: { id: 7, quota: 500000 }, fetchSelf: vi.fn() },
+  app: { status: { log_max_range_days: 365 } },
 }))
 vi.mock('vue-router', () => ({ useRoute: () => state.route }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => state.auth }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => state.app }))
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }))
-vi.mock('@/api/dashboard', () => ({
+vi.mock('@/api/dashboard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/dashboard')>()),
   getUsageSummary: vi.fn(async () => ({
     kpi: { totalQuota: '0', totalRequests: 0 },
     flow: [],
@@ -44,6 +48,7 @@ beforeEach(() => {
   state.auth.user.id = 7
   state.auth.user.quota = 500000
   state.auth.fetchSelf.mockResolvedValue(undefined)
+  state.app.status.log_max_range_days = 365
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -140,6 +145,51 @@ describe('wallet balance header', () => {
     const wrapper = await render()
     expect(headerText(wrapper)).toBe('617,283,950')
     expect(headerText(wrapper)).toBe(formatQuota(617_283_950))
+    wrapper.unmount()
+  })
+})
+describe('wallet month statistics', () => {
+  afterEach(() => vi.useRealTimers())
+  const tiles = (wrapper: Awaited<ReturnType<typeof render>>) =>
+    wrapper.findComponent({ name: 'StatTileGrid' }).props('tiles') as {
+      value: string
+      sub: string
+    }[]
+  it('asks for the month to date without a comparison', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 31, 12))
+    const wrapper = await render()
+    expect(getUsageSummary).toHaveBeenCalledWith(
+      { range: 'custom', start: '2026-10-01', end: '2026-10-31' },
+      false,
+      expect.any(AbortSignal)
+    )
+    expect(getUsageSummary).toHaveBeenCalledWith(
+      { range: 'today' },
+      false,
+      expect.any(AbortSignal)
+    )
+    wrapper.unmount()
+  })
+  it('marks month figures out of range when the month exceeds the log limit', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 31, 12))
+    state.app.status.log_max_range_days = 30
+    const wrapper = await render()
+    expect(getUsageSummary).toHaveBeenCalledOnce()
+    expect(getUsageSummary).toHaveBeenCalledWith(
+      { range: 'today' },
+      false,
+      expect.any(AbortSignal)
+    )
+    const [month, average, today, requests] = tiles(wrapper)
+    for (const tile of [month!, average!, requests!]) {
+      expect(tile).toMatchObject({
+        value: '—',
+        sub: 'This month exceeds the log query limit',
+      })
+    }
+    expect(today!.value).not.toBe('—')
     wrapper.unmount()
   })
 })

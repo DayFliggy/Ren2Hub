@@ -3,8 +3,16 @@ import { ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
-import { getUsageSummary } from '@/api/dashboard'
+import {
+  currentMonthRange,
+  getUsageSummary,
+  logRangeLimit,
+  summaryFits,
+  type SummaryRange,
+} from '@/api/dashboard'
+import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 
 export interface DashboardStats {
@@ -14,8 +22,6 @@ export interface DashboardStats {
   month_quota?: string
   today_requests: number
   total_requests: number
-  month_quota_delta: number | null
-  month_requests_delta: number | null
 }
 
 export interface UserLimits {
@@ -80,6 +86,7 @@ export function useDashboard() {
   const { t } = useI18n(),
     toast = useToast(),
     auth = useAuthStore(),
+    app = useAppStore(),
     request = useLatestRequest()
   const loading = ref(true),
     error = ref<string | null>(null),
@@ -100,16 +107,23 @@ export function useDashboard() {
     flow.value = []
     tokenTrend.value = []
     flushIntervalMinutes.value = null
-    const now = new Date(),
-      start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-      end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const result = await request.run((signal) =>
-      Promise.all([
-        getUsageSummary({ range: '30d' }, signal),
-        getUsageSummary({ range: 'custom', start, end }, signal),
-        getUsageSummary({ range: 'today' }, signal),
+    const result = await request.run((signal) => {
+      const limit = logRangeLimit(app.status)
+      const recentRange: SummaryRange = { range: '30d' }
+      if (!summaryFits(recentRange, limit, false)) {
+        throw new ApiError(t('dashboard.stats.outOfRange', { days: limit }))
+      }
+      // No overview card shows deltas, so no window asks for a comparison.
+      // A month past the log limit is skipped and its card shows no figure.
+      const month = currentMonthRange()
+      return Promise.all([
+        getUsageSummary(recentRange, false, signal),
+        summaryFits(month, limit, false)
+          ? getUsageSummary(month, false, signal)
+          : null,
+        getUsageSummary({ range: 'today' }, false, signal),
       ])
-    )
+    })
     if (result.stale) return
     loading.value = false
     if (!result.ok) {
@@ -121,7 +135,11 @@ export function useDashboard() {
       return
     }
     const [recent, month, today] = result.value
-    if ([recent, month, today].some((summary) => !summary.meta.available)) {
+    if (
+      [recent, month, today].some(
+        (summary) => summary?.meta.available === false
+      )
+    ) {
       error.value = t('dashboard.stats.unavailable')
       return
     }
@@ -130,11 +148,9 @@ export function useDashboard() {
       quota: String(auth.user.quota),
       used_quota: String(auth.user.used_quota),
       today_quota: today.kpi.totalQuota,
-      month_quota: month.kpi.totalQuota,
+      month_quota: month?.kpi.totalQuota,
       today_requests: today.kpi.totalRequests,
       total_requests: auth.user.request_count,
-      month_quota_delta: month.comparison?.quotaDelta ?? null,
-      month_requests_delta: month.comparison?.requestsDelta ?? null,
     }
     share.value = recent.models.map((row) => ({
       model: row.model,

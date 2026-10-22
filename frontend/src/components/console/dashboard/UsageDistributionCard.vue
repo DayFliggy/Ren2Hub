@@ -24,6 +24,8 @@ import {
 const props = withDefaults(
   defineProps<{
     points: UsageDistributionPoint[]
+    /** First queried date; earlier days render as not covered. */
+    coveredFrom: string
     loading?: boolean
     error?: string
   }>(),
@@ -42,7 +44,8 @@ const view = computed(() =>
       consume: Number(quotaInteger(point.consume)),
     })),
     period.value,
-    metric.value
+    metric.value,
+    props.coveredFrom
   )
 )
 

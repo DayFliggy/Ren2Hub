@@ -52,7 +52,8 @@ afterEach(() => {
 
 function render(overrides: Record<string, unknown> = {}) {
   return mount(UsageDistributionCard, {
-    props: { points: points(), ...overrides },
+    // The default 365-day log limit covers the whole 364-day year.
+    props: { points: points(), coveredFrom: '2025-07-29', ...overrides },
     attachTo: document.body,
     global: { plugins: [i18n] },
   })
@@ -92,6 +93,20 @@ describe('UsageDistributionCard', () => {
         .findAll('[data-usage-date]')
         .filter((cell) => cell.attributes('tabindex') === '0')
     ).toHaveLength(1)
+  })
+
+  it('marks days before a short log limit as outside the range', () => {
+    const wrapper = render({ coveredFrom: '2026-07-18' })
+    const uncovered = wrapper.findAll('[data-usage-uncovered]')
+
+    expect(wrapper.findAll('[data-usage-date]')).toHaveLength(30)
+    expect(uncovered).toHaveLength(20)
+    expect(uncovered[0]!.attributes('aria-label')).toBe('6月28日，不在范围内')
+    expect(uncovered[0]!.attributes('data-usage-level')).toBe('0')
+    expect(
+      wrapper.get('[data-usage-date="2026-07-18"]').attributes('aria-label')
+    ).toContain('调用')
+    expect(wrapper.get('[data-usage-footer]').text()).toContain('活跃 10 天')
   })
 
   it('keeps six calendar weeks when the month spans only five', () => {

@@ -525,6 +525,11 @@ export default {
       rangeCustom: 'Custom',
       rangeLabel: 'Stats range',
       trendMode: 'Trend metric',
+      outOfRange:
+        'The selected range exceeds the {days}-day log query limit. Choose a shorter range.',
+      comparisonUnavailable: 'No comparison',
+      comparisonUnavailableHint:
+        'Adding the previous period would exceed the log query limit.',
     },
     distribution: {
       title: 'Usage distribution',
@@ -543,6 +548,7 @@ export default {
       metricControl: 'Distribution metric',
       gridLabel: '{period} {metric} heatmap',
       cellLabel: '{date}, {metric} {value}',
+      cellUncovered: '{date}, outside the queried range',
       dragHint: 'Drag to see earlier weeks',
       topDays: 'Most active',
       weekdayRhythm: 'By weekday',
@@ -2269,6 +2275,7 @@ export default {
     statTodayConsumeSub: 'Since midnight',
     statMonthRequests: 'Month requests',
     statMonthRequestsSub: 'API calls',
+    statMonthOutOfRange: 'This month exceeds the log query limit',
     summaryPayNow: 'You pay (CNY)',
     summaryPayNowUsd: 'You pay (USD)',
     summaryCredit: 'Credit received (USD)',

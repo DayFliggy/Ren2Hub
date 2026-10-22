@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { UsageDistributionPoint } from '@/utils/usageDistribution'
-import { buildUsageDistributionView } from '@/utils/usageDistribution'
+import {
+  buildUsageDistributionView,
+  usageCoverageRange,
+} from '@/utils/usageDistribution'
 
 function dateKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -24,13 +27,21 @@ function history(days: number, end = new Date(2026, 6, 27)) {
 describe('buildUsageDistributionView', () => {
   const today = new Date(2026, 6, 27)
   const points = history(365, today)
+  // A full year of coverage: the default 365-day log limit.
+  const covered = usageCoverageRange(365, today).start
 
   it.each([
     ['month', 30],
     ['quarter', 91],
     ['year', 364],
   ] as const)('selects the %s window', (period, expectedDays) => {
-    const view = buildUsageDistributionView(points, period, 'requests', today)
+    const view = buildUsageDistributionView(
+      points,
+      period,
+      'requests',
+      covered,
+      today
+    )
 
     expect(view.cells.filter((cell) => cell.inRange)).toHaveLength(expectedDays)
     expect(view.cells).toHaveLength(view.weekCount * 7)
@@ -41,6 +52,7 @@ describe('buildUsageDistributionView', () => {
       points,
       'quarter',
       'requests',
+      covered,
       today
     )
     const first = new Date(`${view.cells[0]!.date}T00:00:00`)
@@ -56,7 +68,13 @@ describe('buildUsageDistributionView', () => {
       ...point,
       requests: index % 6,
     }))
-    const view = buildUsageDistributionView(sparse, 'month', 'requests', today)
+    const view = buildUsageDistributionView(
+      sparse,
+      'month',
+      'requests',
+      covered,
+      today
+    )
     const levels = new Set(
       view.cells.filter((cell) => cell.inRange).map((cell) => cell.level)
     )
@@ -66,7 +84,13 @@ describe('buildUsageDistributionView', () => {
   })
 
   it('ranks peak days and averages every weekday for the selected metric', () => {
-    const view = buildUsageDistributionView(points, 'month', 'consume', today)
+    const view = buildUsageDistributionView(
+      points,
+      'month',
+      'consume',
+      covered,
+      today
+    )
 
     expect(view.topDays).toHaveLength(3)
     expect(view.topDays[0]!.date).toBe('2026-07-27')
@@ -80,11 +104,51 @@ describe('buildUsageDistributionView', () => {
       ...point,
       requests: 0,
     }))
-    const view = buildUsageDistributionView(zeroes, 'month', 'requests', today)
+    const view = buildUsageDistributionView(
+      zeroes,
+      'month',
+      'requests',
+      covered,
+      today
+    )
 
     expect(view.total).toBe(0)
     expect(view.activeDays).toBe(0)
     expect(view.peak).toBeNull()
     expect(view.topDays).toEqual([])
+  })
+
+  it('shortens the queried year to the log range limit', () => {
+    expect(usageCoverageRange(365, today)).toEqual({
+      start: '2025-07-29',
+      end: '2026-07-27',
+    })
+    expect(usageCoverageRange(10, today)).toEqual({
+      start: '2026-07-18',
+      end: '2026-07-27',
+    })
+  })
+
+  it('leaves days before the queried window out instead of counting zero', () => {
+    // A 10-day log limit: the backend only returns 2026-07-18 through 07-27,
+    // with requests 1..10 (Saturday the 18th through Monday the 27th).
+    const view = buildUsageDistributionView(
+      history(10, today),
+      'month',
+      'requests',
+      usageCoverageRange(10, today).start,
+      today
+    )
+    const inRange = view.cells.filter((cell) => cell.inRange)
+    const uncovered = inRange.filter((cell) => !cell.covered)
+
+    expect(inRange).toHaveLength(30)
+    expect(uncovered).toHaveLength(20)
+    expect(uncovered.every((cell) => cell.level === 0)).toBe(true)
+    expect(view.total).toBe(55)
+    expect(view.activeDays).toBe(10)
+    // Mondays 07-20 and 07-27; zero-filled June and early July Mondays would
+    // pull this down to 2.6.
+    expect(view.weekdays[0]!.value).toBe(6.5)
   })
 })

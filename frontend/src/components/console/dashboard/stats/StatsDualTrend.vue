@@ -58,6 +58,12 @@ const modes = computed(() => [
   { key: 'requests' as const, label: t('dashboard.requestsShort') },
 ])
 
+// The stats tab leaves out the prior window only when it would exceed the
+// log range limit; a null delta inside a comparison means a zero baseline.
+const comparisonUnavailable = computed(
+  () => !props.loading && props.kpi !== null && props.comparison === null
+)
+
 function deltaStyle(value: number): string {
   return value >= 0
     ? 'background:var(--status-danger-soft);color:var(--status-danger-text)'
@@ -284,6 +290,14 @@ useEChart(
             >
               {{ deltaLabel(comparison.quotaDelta) }}
             </span>
+            <span
+              v-else-if="comparisonUnavailable"
+              class="shrink-0 rounded-sm bg-[var(--surface-muted)] px-1 py-0.5 text-[0.625rem] text-[var(--text-tertiary)] sm:px-1.5 sm:text-xs"
+              :title="t('dashboard.stats.comparisonUnavailableHint')"
+              data-trend-comparison-unavailable
+            >
+              {{ t('dashboard.stats.comparisonUnavailable') }}
+            </span>
           </div>
         </div>
 
@@ -316,6 +330,14 @@ useEChart(
               data-trend-requests-delta
             >
               {{ deltaLabel(comparison.requestsDelta) }}
+            </span>
+            <span
+              v-else-if="comparisonUnavailable"
+              class="shrink-0 rounded-sm bg-[var(--surface-muted)] px-1 py-0.5 text-[0.625rem] text-[var(--text-tertiary)] sm:px-1.5 sm:text-xs"
+              :title="t('dashboard.stats.comparisonUnavailableHint')"
+              data-trend-comparison-unavailable
+            >
+              {{ t('dashboard.stats.comparisonUnavailable') }}
             </span>
           </div>
         </div>

@@ -15,7 +15,7 @@
 | 操作             | 原生接口与字段                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------------- |
 | 当前钱包         | `GET /api/user/self`：`quota`、`used_quota`、`request_count`                                            |
-| 用量概览         | `GET /api/data/self/summary`：服务端范围聚合；没有比较数据时不伪造增幅                                  |
+| 用量概览         | `GET /api/data/self/summary`：服务端范围聚合；不伪造增幅；本月超出日志范围时钱包显示 —                  |
 | Token 列表及编辑 | `GET/POST/PUT /api/token/`：`remain_quota`、`used_quota`、`unlimited_quota`，以及模型、IP、有效期等限制 |
 | 管理员增减额度   | `POST /api/user/manage`：`id`、`action: "add_quota"`、`mode`、数值 `value`、`operation_id`              |
 | 兑换码创建       | `POST /api/redemption/`：`name`、数值 `quota`、`count`、`expired_time`                                  |

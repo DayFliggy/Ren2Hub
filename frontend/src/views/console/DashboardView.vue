@@ -195,6 +195,7 @@ const rangeOptions = computed(() => [
           <UsageDistributionCard
             class="min-w-0 xl:col-span-2"
             :points="distribution.points.value"
+            :covered-from="distribution.coveredFrom.value"
             :loading="distribution.loading.value"
             :error="distribution.error.value"
           />
