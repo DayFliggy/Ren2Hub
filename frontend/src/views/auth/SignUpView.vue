@@ -140,7 +140,7 @@ async function submit() {
       takeTurnstileToken()
     )
     clearAffiliateAttribution()
-    toast.success(t('toast.registerSuccess'))
+    toast.success(t('auth.registerSuccess'))
     await router.push({ name: 'sign-in' })
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))

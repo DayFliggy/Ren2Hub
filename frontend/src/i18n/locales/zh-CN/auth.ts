@@ -40,6 +40,7 @@ export default {
     passwordHint: '12 个字母和数字组合',
     strength: ['弱密码', '中等', '强密码'],
     resetSent: '重置链接已发送，请查收邮箱',
+    registerSuccess: '账户已创建，请登录。',
     mismatch: '两次输入的密码不一致',
     usernameRequired: '请输入用户名',
     inviteCode: '邀请码',

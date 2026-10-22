@@ -2811,11 +2811,6 @@ export default {
     quickNav: 'Quick Navigation',
   },
 
-  toast: {
-    loginSuccess: 'Signed in',
-    registerSuccess: 'Registered. Check your inbox.',
-  },
-
   farm: {
     title: 'RT Farm',
     subtitle: 'Consume tokens to run your own farm',

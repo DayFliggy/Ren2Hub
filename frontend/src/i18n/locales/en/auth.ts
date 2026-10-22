@@ -41,6 +41,7 @@ export default {
     passwordHint: 'A mix of 12+ letters and digits',
     strength: ['Weak', 'Medium', 'Strong'],
     resetSent: 'Reset link sent. Check your inbox.',
+    registerSuccess: 'Account created. Please sign in.',
     mismatch: 'Passwords do not match',
     usernameRequired: 'Username is required',
     inviteCode: 'Invite code',

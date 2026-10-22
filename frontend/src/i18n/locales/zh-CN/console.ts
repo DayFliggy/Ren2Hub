@@ -2707,11 +2707,6 @@ export default {
     quickNav: '快速导航',
   },
 
-  toast: {
-    loginSuccess: '登录成功',
-    registerSuccess: '注册成功，请查收验证邮件',
-  },
-
   farm: {
     title: 'RT农家乐',
     subtitle: '消耗 Token，经营你的专属农场',
