@@ -54,6 +54,73 @@ for (const [theme, viewport] of [
   ['light', viewports[0]],
   ['dark', viewports[1]],
 ] as const) {
+  test(`saved navigation updates the current console ${theme} ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    const options: Record<string, string> = {
+      HeaderNavModules: '{"pricing":true}',
+      SidebarModulesAdmin: '{}',
+    }
+    const fixture = await configureStablePage(page, { theme, status: options })
+    const writes: Array<{ key: string; value: string }> = []
+    await page.route('**/api/option/', async (route) => {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON() as {
+          key: string
+          value: string
+        }
+        writes.push(body)
+        options[body.key] = body.value
+        return route.fulfill({ json: { success: true, message: '' } })
+      }
+      return route.fulfill({
+        json: {
+          success: true,
+          message: '',
+          data: Object.entries(options).map(([key, value]) => ({ key, value })),
+        },
+      })
+    })
+    await page.goto('/system-settings/site/navigation')
+    await waitForStablePage(page)
+    const nav = page.locator(
+      viewport.name === 'desktop'
+        ? 'aside[data-handdrawn="navigation"]'
+        : '[data-handdrawn="navigation-strip"]'
+    )
+    const channel = nav.locator('[data-console-nav-item="channel-management"]')
+    await expect(channel).toHaveCount(1)
+    await page.locator('#setting-HeaderNavModules').fill('{"pricing":false}')
+    await page
+      .locator('#setting-SidebarModulesAdmin')
+      .fill('{"admin":{"channel":false}}')
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/status'
+    )
+    await page.getByRole('button', { name: '保存更改', exact: true }).click()
+    await refreshed
+
+    expect(writes).toEqual([
+      { key: 'HeaderNavModules', value: '{"pricing":false}' },
+      {
+        key: 'SidebarModulesAdmin',
+        value: '{"admin":{"channel":false}}',
+      },
+    ])
+    await expect(channel).toHaveCount(0)
+    await expect(
+      nav.locator('[data-console-nav-item="user-management"]')
+    ).toHaveCount(1)
+    await expect(page).toHaveURL(/\/system-settings\/site\/navigation$/)
+    await expect(
+      page.getByRole('button', { name: '保存更改', exact: true })
+    ).toBeDisabled()
+    await assertNoHorizontalOverflow(page)
+    expect(fixture.errors).toEqual([])
+    expect(fixture.missingMessages).toEqual([])
+  })
+
   test(`request policy saves only the edited key ${theme} ${viewport.name}`, async ({
     page,
   }) => {
@@ -98,13 +165,13 @@ for (const [theme, viewport] of [
 }
 
 // Go stores monitor_*_threshold as a signed int; -1 and 0 disable the check.
-async function mockOpsMonitor(page: Page) {
+async function mockOpsMonitor(page: Page, cpuThreshold = -1, cpuPercent = 99) {
   const stats = performanceFixture()
-  stats.config.monitor_cpu_threshold = -1
+  stats.config.monitor_cpu_threshold = cpuThreshold
   stats.config.monitor_memory_threshold = 150
   stats.config.monitor_disk_threshold = 0
   stats.system_usage = {
-    cpu_percent: 99,
+    cpu_percent: cpuPercent,
     memory_percent: 40,
     sampled_at: Math.floor(Date.parse('2026-07-27T11:59:50+08:00') / 1000),
   }
@@ -124,6 +191,28 @@ async function mockOpsMonitor(page: Page) {
         },
       })
   )
+}
+
+for (const [theme, viewport, cpuPercent] of [
+  ['light', viewports[0], 90],
+  ['dark', viewports[1], 90.5],
+] as const) {
+  test(`monitor honors Go threshold boundary ${theme} ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    const fixture = await configureStablePage(page, { theme })
+    await mockOpsMonitor(page, 90, cpuPercent)
+    await page.goto('/ops')
+    await waitForStablePage(page)
+
+    const reason = page.locator('[data-ops-reason]').filter({ hasText: 'CPU' })
+    await expect(reason).toContainText('警告')
+    await expect(reason).not.toContainText('严重')
+    await assertNoHorizontalOverflow(page)
+    expect(fixture.errors).toEqual([])
+    expect(fixture.missingMessages).toEqual([])
+  })
 }
 
 for (const theme of ['light', 'dark'] as const) {
