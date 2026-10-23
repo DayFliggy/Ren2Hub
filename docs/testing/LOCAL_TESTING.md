@@ -49,7 +49,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 ## 隔离、证据与失败
 
-产物默认进入 `.local-tests/run-*`，可用 `--output-parent` 放到仓库外；每轮新目录，禁止覆盖旧证据。记录源码 base SHA、干净时的 candidate SHA、未提交时的内容指纹、工具版本、每层报告、日志哈希与失败原因。私有目录 0700、凭据 0600；不把密钥和生产数据写进仓库。候选 SDK 依赖必须从调用者显式提供的、仓库外的只读路径加载，`.test-tools/` 不属于源码身份。
+产物默认进入 `.local-tests/run-*`，可用 `--output-parent` 放到仓库外；每轮新目录，禁止覆盖旧证据。记录源码 base SHA、干净时的 candidate SHA、未提交时的内容指纹、工具版本、每层报告、日志哈希与失败原因。私有目录 0700、凭据 0600；不把密钥和生产数据写进仓库。候选 SDK 可通过 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`、`GATEWAY_SDK_NODE_MODULE` 指定现有依赖；未指定时使用仓库内 `.test-tools/` 默认路径。runner 校验运行时版本并记录包元数据哈希，但不保证依赖目录只读或位于仓库外；`.test-tools/` 被 Git 忽略，不属于源码身份。
 
 数据库和候选 runner 自己创建目标，不接收用户提供的 DSN，不继承生产数据库环境变量。容器均带本轮随机 label，清理前核验确切 ID 和 label，不用名称通配符、全局 prune、FLUSHDB 或清空旧库。失败退出非零，保留报告与日志；清理失败也不能算通过。`browser` profile 的真实浏览器实例在只有回环接口的独立 network/PID namespace 内运行，外网请求直接失败；`ui-contracts` 使用同源模拟 API 和独立 loopback Vite 端口，不把这层当作真实网络隔离。
 
@@ -70,3 +70,5 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 | 工作区 scripts/tests | 发布/安装/核验/Nginx/密钥断言迁入 scripts/testing/infra；旧独立入口删除。Windows专用测试未在Linux运行，不声称连接层完整验证 |
 
 数据库 runner 发现读取 DSN/dialect 的测试及其 helper 使用者；明确清单覆盖的项目必须执行，未分类新项目使门槛失败。共享 helper 的其他原生用例单列为 SQLite 覆盖，不能宣称全部三方。当前矩阵使用 MySQL 8.4 与 PostgreSQL 15.19，并记录实际镜像 ID、digest 和服务器版本；不覆盖历史 MySQL 5.7、PostgreSQL 9.6 或 ClickHouse，亦不证明现有生产 PostgreSQL 15.18 的所有版本差异。浏览器网络 namespace 隔离 IP 网络，不是完整文件系统沙箱；不得用不可信二进制或不可信浏览器测试。
+
+插件候选当前只验证同版本重启。旧驱动的 preparing 状态恢复后不重新提交（`--resume-state`）及 usage-quantity `p` 选项没有迁入；这些崩溃恢复/计量分支明确未覆盖。下次普通更新需要另外恢复跨版本迁移与重启合同，不能复用本次全新安装结果。
