@@ -38,6 +38,6 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 
 `prepare-frontend-embed.mjs` 校验完整 manifest 依赖和文件，`TestProductionEmbeddedAssetGraph` 检查最终 Go 嵌入资源，Docker 冷构建执行该测试。只检查 index 或入口 JS 的 HTTP 200 不足以验证页面可用；还需检查懒加载模块、字体和页面交互。初次导航不显示全屏加载提示，初始化检查完成后显示页面；导航失败会显示错误和重试入口。
 
-`bun run test:visual` 默认启动或复用本地 Vite 服务。若验证 Go 产物，先准备 embed、构建并启动本地独立测试实例，再将 `PLAYWRIGHT_PORT` 设为该实例端口；Playwright 会复用该服务。`PLAYWRIGHT_THEME=light` 选择浅色。模拟 API 的用例验证界面与请求契约，不能替代使用真实 API 的浏览器冒烟验证。
+浏览器验收使用[本地统一方案](../docs/testing/LOCAL_TESTING.md)，每轮创建真实后端和独立空库，禁止复用已有服务。
 
 Vue 登录页按服务端配置显示密码、Passkey 和 OAuth 登录入口；需要额外验证时进入 2FA challenge。OAuth 弹窗与回调同时用于登录、账号绑定和二次验证，支持已配置的 GitHub、Discord、Linux DO、OIDC、Telegram 与自定义 provider；没有独立 WeChat 登录入口。模块 capability 表示接口已接入，不能代替供应商配置或后端请求校验。会话和绑定规则见[认证契约](../docs/authentication.md)，Relay 边界见[统一路由](../docs/routing/UNIFIED_ROUTING.md)。

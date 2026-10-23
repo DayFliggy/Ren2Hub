@@ -44,8 +44,12 @@ describe('explicit referral attribution choices', () => {
   })
   it('updates storage when edited and removes both query and form value when explicitly cleared', async () => {
     const { wrapper, router } = await render('/sign-up?aff=ORIGINAL')
-    expect(wrapper.get<HTMLInputElement>('input[type="text"]').element.value).toBe('ORIGINAL')
-    expect(wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked).toBe(false)
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="text"]').element.value
+    ).toBe('ORIGINAL')
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked
+    ).toBe(false)
     await wrapper.get('input').setValue('REPLACED')
     expect(getAffiliateAttribution()).toBe('REPLACED')
     await wrapper.get('button').trigger('click')

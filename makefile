@@ -41,12 +41,7 @@ dev-web:
 dev: dev-api dev-web
 
 test:
-	@echo "Testing root Go module..."
-	@node scripts/test-go.mjs
-	@echo "Testing relaykit Go module..."
-	@cd relaykit && GOWORK=off go test -timeout 60s ./...
-	@echo "Testing tokenkit Go module..."
-	@cd tokenkit && GOWORK=off go test -timeout 60s ./...
+	@python3 -B scripts/testing/run.py unit
 
 reset-setup:
 	@echo "Resetting local setup wizard state..."

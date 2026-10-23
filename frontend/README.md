@@ -28,7 +28,7 @@ bun run format:check
 bun run build
 ```
 
-Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Playwright 页面审计，覆盖桌面/移动端、明暗主题和相关错误状态；它不替代真实后端与生产产物的验证，具体边界见[路由约定](ROUTING.md)。
+浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。
 
 依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已迁移到 Tailwind CSS 4.3.3 的官方 `@tailwindcss/vite` 集成，移除 Tailwind 3 引入的 braces 和 postcss-selector-parser 6.x 依赖链。`autoprefixer`、直接 `postcss` 依赖、旧 JavaScript Tailwind/PostCSS 配置及三项不再必要的 override 已删除；Vue/Vite 自身使用的 PostCSS 和 ESLint Vue 插件使用的安全版 selector parser 仍保留，详见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。
 
@@ -38,7 +38,7 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 
 样式保持原有层级优先级、字体、阴影、边框默认色、按钮指针、键盘焦点和 reduced-motion。`sibling-space-y-*` 与 `sibling-divide-*` 保留既有兄弟元素及隐藏节点的间距/分隔线行为；旧版无效的 `shadow-xs` 已改为无阴影，旧版有效的 `shadow-sm` 对应新版 `shadow-xs`。旧版无法生成有效阴影的 `shadow-[var(...)]` 类已删除，保留 `sketch-card` 等 CSS 自身的既有阴影，避免升级后额外产生阴影。全局规则和 Vue scoped CSS 不因引入 CSS 层而改变优先级。
 
-所有响应断点统一在 CSS `@theme` 定义为 640/768/1024/1280/1536px，与既有 CSS 和 JavaScript 的像素判断一致；浏览器默认字号改为 20px 时仍按原宽度切换布局，不固定或覆盖用户的根字号。`tests/visual/responsive-breakpoints.spec.ts` 在 16/20px、明暗主题下验证首页导航间距、移动菜单 resize 与控制台侧栏切换。
+所有响应断点统一在 CSS `@theme` 定义为 640/768/1024/1280/1536px，与既有 CSS 和 JavaScript 的像素判断一致；浏览器默认字号改为 20px 时仍按原宽度切换布局，不固定或覆盖用户的根字号。历史断点测试（已归档） 在 16/20px、明暗主题下验证首页导航间距、移动菜单 resize 与控制台侧栏切换。
 
 公共页面容器在 utilities 前按旧版 components 展开后的顺序输出，保留居中与内边距。字号工具类保留旧版固定行高、任意字号的嵌套继承及响应字号对行高的重置；同断点的显式 `leading-*` 仍优先，避免徽标、表格、标题和首页内容因升级改变布局。
 
@@ -46,7 +46,7 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 
 带 transform 的入场动画、按钮按压和深色签到取消旧 transform 时，同时取消新版独立 translate/rotate/scale；取消值使用 CSS-wide `initial`，避免生产压缩删除 `none` 后重新叠加 utility。旧版未生成规则的变量阴影及颜色透明度类已删除，不借迁移新增外观。
 
-日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；只有实际横向位置偏移才保护用户位置，点击、Tab/Enter 或未造成横移的滚轮事件不会禁止字体校正。切换页面清除上个页面的保护状态，选页后的真实横向滚动仍受保护；组件卸载后不再校正，从桌面隐藏状态重新显示时仍定位当前项。`tests/visual/style-compatibility.spec.ts` 保护容器、字号和交互状态；导航生命周期有组件测试，`tests/visual/navigation-fonts.spec.ts` 用实际延迟字体和明暗主题验证点击、键盘选页及手动横移。
+日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；只有实际横向位置偏移才保护用户位置，点击、Tab/Enter 或未造成横移的滚轮事件不会禁止字体校正。切换页面清除上个页面的保护状态，选页后的真实横向滚动仍受保护；组件卸载后不再校正，从桌面隐藏状态重新显示时仍定位当前项。历史样式测试（已归档） 保护容器、字号和交互状态；导航生命周期有组件测试，`tests/visual/navigation-fonts.spec.ts` 用实际延迟字体和明暗主题验证点击、键盘选页及手动横移。
 
 Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；不提供低于这些版本的兼容构建。升级与浏览器要求依据[官方升级指南](https://tailwindcss.com/docs/upgrade-guide)，构建方式依据[官方 Vite 集成说明](https://tailwindcss.com/docs/installation/using-vite)。
 
@@ -72,7 +72,7 @@ Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；
 
 用户额度使用 `quota/used_quota`，Token 使用 `remain_quota/used_quota/unlimited_quota`。工单调用 `/api/tickets` 与 `/api/admin/tickets`，返利概览、邀请名单、流水分开读取；转入只提交稳定的 `operation_id`，由后端全额转入。GMPay 使用人民币法币金额和完整加密资产标识，未知创建结果进入订单查询，不自动重新创建。完整回归范围和来源见[本批记录](../docs/upstream/API_REGRESSION_20261021.md)。
 
-`tests/live/` 使用独立真实候选验证页面和按钮，不拦截业务 API；`tests/visual/` 的受控接口夹具只承担视觉及错误交互验证。两类结果分别记录。
+浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。
 
 ## 用量日志导出
 

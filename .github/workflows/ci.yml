@@ -1,218 +1,50 @@
-name: CI
-
+name: Local test contracts
 on:
   pull_request:
-    types: [opened, synchronize, closed]
-
+  workflow_dispatch:
 permissions:
   contents: read
-
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: test-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  backend:
-    name: Backend vet, build, and test
-    needs: frontend
-    if: github.event.action != 'closed' || github.event.pull_request.merged == true
+  local:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      GOWORK: 'off'
-
+    timeout-minutes: 45
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
-          repository: ${{ github.event.pull_request.base.repo.full_name }}
-          ref: ${{ github.sha }}
-
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          # go.mod states the minimum language version; tests run on the patched
-          # toolchain the release image builds with (Dockerfile golang:1.26.9).
           go-version: '1.26.9'
-          cache-dependency-path: |
-            go.sum
-            relaykit/go.sum
-            tokenkit/go.sum
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: '24'
-
-      - name: Download Vue build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: vue-frontend
-          path: frontend/dist
-
-      - name: Prepare Vue embed assets
-        run: node scripts/prepare-frontend-embed.mjs
-
-      - name: Vet root module
-        run: go vet ./...
-
-      - name: Vet relaykit independently
-        working-directory: relaykit
-        run: go vet ./...
-
-      - name: Vet tokenkit independently
-        working-directory: tokenkit
-        run: go vet ./...
-
-      - name: Build root module
-        run: go build ./...
-
-      - name: Build relaykit independently
-        working-directory: relaykit
-        run: go build ./...
-
-      - name: Build tokenkit independently
-        working-directory: tokenkit
-        run: go build ./...
-
-      - name: Test root, relaykit, and tokenkit modules
-        run: |
-          node scripts/test-go.mjs -count=1
-          (cd relaykit && go test ./... -timeout 60s -count=1)
-          (cd tokenkit && go test ./... -timeout 60s -count=1)
-
-  routing-integration:
-    name: Routing and GMPay database integration (${{ matrix.database }})
-    if: github.event.action != 'closed' || github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - database: mysql
-            dsn: root:root@tcp(127.0.0.1:3306)/new_api?parseTime=true
-          - database: postgres
-            dsn: postgres://postgres:postgres@127.0.0.1:5432/new_api?sslmode=disable
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: new_api
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: new_api
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d new_api"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-    env:
-      GOWORK: 'off'
-      TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      ROUTING_TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      ROUTING_TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      CORE_STARTUP_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      CORE_STARTUP_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      REN2HUB_EXTENSION_TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
-      REN2HUB_EXTENSION_TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
-      REQUIRE_DATABASE_DIALECT: ${{ matrix.database }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ github.event.pull_request.base.repo.full_name }}
-          ref: ${{ github.sha }}
-
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          # Same toolchain as the test job and the release image.
-          go-version: '1.26.9'
-          cache-dependency-path: |
-            go.sum
-            relaykit/go.sum
-            tokenkit/go.sum
-
-      - name: Run routing migration integration
-        run: go test ./model -run '^TestTokenRoutingDatabases$' -timeout 60s -count=1
-
-      - name: Run GMPay and ticket concurrent settlement contracts
-        run: go test ./model -run '^TestGmpayAndTicketDatabaseContracts$' -timeout 60s -count=1
-
-      - name: Initialize fresh core database and reject the old schema
-        run: |
-          # Extensions above share the default database. Startup uses a separate empty database.
-          docker exec -e MYSQL_PWD=root '${{ job.services.mysql.id }}' mysql -uroot -e 'CREATE DATABASE core_startup;'
-          docker exec '${{ job.services.postgres.id }}' psql -U postgres -c 'CREATE DATABASE core_startup;'
-          export CORE_STARTUP_MYSQL_DSN='root:root@tcp(127.0.0.1:3306)/core_startup?parseTime=true'
-          export CORE_STARTUP_POSTGRES_DSN='postgres://postgres:postgres@127.0.0.1:5432/core_startup?sslmode=disable'
-          go test ./model -run '^TestCoreEmptyDatabaseInitialization$' -timeout 60s -count=1
-
-  frontend:
-    name: Vue frontend test, typecheck, lint, format, and build
-    if: github.event.action != 'closed' || github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ github.event.pull_request.base.repo.full_name }}
-          ref: ${{ github.sha }}
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: '1.4.0'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Prepare dependencies explicitly
+        run: |
+          (cd frontend && bun install --frozen-lockfile)
+          go mod download
+          (cd relaykit && GOWORK=off go mod download)
+          (cd tokenkit && GOWORK=off go mod download)
+          docker pull mysql:8.4
+          docker pull postgres:15.19
+      - name: Runner safety contracts
+        run: python3 -B -m unittest discover -s scripts/testing -p 'test_*.py'
+      - name: Native Go and Vue contracts
+        run: python3 -B scripts/testing/run.py unit
+      - name: Fresh database matrix
+        run: python3 -B scripts/testing/run.py databases
+      - name: Static checks
+        run: python3 -B scripts/testing/run.py static
+      - name: Production build and embedded assets
+        run: python3 -B scripts/testing/run.py build
+      - name: Preserve evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          node-version: '24'
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Test
-        run: bun run test:run
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Format check
-        run: bun run format:check
-
-      - name: Build
-        run: bun run build
-
-      - name: Validate embed assets
-        run: node ../scripts/prepare-frontend-embed.mjs
-
-      - name: Upload Vue build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: vue-frontend
-          path: frontend/dist
+          name: local-test-evidence
+          path: .local-tests/
           include-hidden-files: true
           if-no-files-found: error

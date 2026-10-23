@@ -89,11 +89,6 @@ func TestRouteChannelRowsQualifiesAllBeforeSelection(t *testing.T) {
 // B14：硬删除用户时清理该用户全部令牌（含已软删除的）的 Key 路由，其他用户的路由不受影响。
 func TestHardDeleteUserRemovesTokenRouting(t *testing.T) {
 	truncateTables(t)
-	require.NoError(t, DB.AutoMigrate(&TokenRouteProfile{}, &TokenRouteEntry{}))
-	t.Cleanup(func() {
-		DB.Exec("DELETE FROM token_route_entries")
-		DB.Exec("DELETE FROM token_route_profiles")
-	})
 	owner := User{Username: "route-owner", Password: "password", AffCode: "route-owner"}
 	other := User{Username: "route-other", Password: "password", AffCode: "route-other"}
 	require.NoError(t, DB.Create(&owner).Error)

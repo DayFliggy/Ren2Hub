@@ -71,8 +71,13 @@ const form = reactive({
 })
 
 const baseline = ref('')
-const dirty = computed(() => dialogOpen.value && JSON.stringify(form) !== baseline.value)
-registerSettingsDraft({ dirty: () => dirty.value, busy: () => saving.value || discovering.value })
+const dirty = computed(
+  () => dialogOpen.value && JSON.stringify(form) !== baseline.value
+)
+registerSettingsDraft({
+  dirty: () => dirty.value,
+  busy: () => saving.value || discovering.value,
+})
 const { refreshStatus } = useSystemSettings()
 function closeEditor() {
   if (saving.value || discovering.value) return
@@ -299,102 +304,104 @@ onMounted(loadProviders)
     @close="closeEditor"
   >
     <fieldset :disabled="saving || discovering" class="min-w-0 border-0 p-0">
-    <div class="grid gap-4 sm:grid-cols-2">
-      <FormField :label="t('systemSettings.customOAuth.name')"
-        ><TextInput v-model="form.name"
-      /></FormField>
-      <FormField label="Slug"><TextInput v-model="form.slug" /></FormField>
-      <FormField :label="t('systemSettings.customOAuth.icon')"
-        ><TextInput v-model="form.icon"
-      /></FormField>
-      <FormField label="Client ID"
-        ><TextInput v-model="form.client_id"
-      /></FormField>
-      <FormField label="Client Secret">
-        <TextInput
-          v-model="form.client_secret"
-          type="password"
-          autocomplete="new-password"
-        />
-      </FormField>
-      <FormField
-        :label="t('systemSettings.customOAuth.authorizationEndpoint')"
-        class="sm:col-span-2"
-        ><TextInput v-model="form.authorization_endpoint" type="url"
-      /></FormField>
-      <FormField
-        :label="t('systemSettings.customOAuth.tokenEndpoint')"
-        class="sm:col-span-2"
-        ><TextInput v-model="form.token_endpoint" type="url"
-      /></FormField>
-      <FormField
-        :label="t('systemSettings.customOAuth.userInfoEndpoint')"
-        class="sm:col-span-2"
-        ><TextInput v-model="form.user_info_endpoint" type="url"
-      /></FormField>
-      <FormField label="Scopes"><TextInput v-model="form.scopes" /></FormField>
-      <FormField :label="t('systemSettings.customOAuth.wellKnown')">
-        <div class="flex gap-2">
-          <TextInput v-model="form.well_known" type="url" />
-          <ConsoleButton
-            variant="secondary"
-            size="sm"
-            :loading="discovering"
-            @click="discoverEndpoints"
-          >
-            Discovery
-          </ConsoleButton>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <FormField :label="t('systemSettings.customOAuth.name')"
+          ><TextInput v-model="form.name"
+        /></FormField>
+        <FormField label="Slug"><TextInput v-model="form.slug" /></FormField>
+        <FormField :label="t('systemSettings.customOAuth.icon')"
+          ><TextInput v-model="form.icon"
+        /></FormField>
+        <FormField label="Client ID"
+          ><TextInput v-model="form.client_id"
+        /></FormField>
+        <FormField label="Client Secret">
+          <TextInput
+            v-model="form.client_secret"
+            type="password"
+            autocomplete="new-password"
+          />
+        </FormField>
+        <FormField
+          :label="t('systemSettings.customOAuth.authorizationEndpoint')"
+          class="sm:col-span-2"
+          ><TextInput v-model="form.authorization_endpoint" type="url"
+        /></FormField>
+        <FormField
+          :label="t('systemSettings.customOAuth.tokenEndpoint')"
+          class="sm:col-span-2"
+          ><TextInput v-model="form.token_endpoint" type="url"
+        /></FormField>
+        <FormField
+          :label="t('systemSettings.customOAuth.userInfoEndpoint')"
+          class="sm:col-span-2"
+          ><TextInput v-model="form.user_info_endpoint" type="url"
+        /></FormField>
+        <FormField label="Scopes"
+          ><TextInput v-model="form.scopes"
+        /></FormField>
+        <FormField :label="t('systemSettings.customOAuth.wellKnown')">
+          <div class="flex gap-2">
+            <TextInput v-model="form.well_known" type="url" />
+            <ConsoleButton
+              variant="secondary"
+              size="sm"
+              :loading="discovering"
+              @click="discoverEndpoints"
+            >
+              Discovery
+            </ConsoleButton>
+          </div>
+        </FormField>
+        <FormField :label="t('systemSettings.customOAuth.userIdField')"
+          ><TextInput v-model="form.user_id_field"
+        /></FormField>
+        <FormField :label="t('systemSettings.customOAuth.usernameField')"
+          ><TextInput v-model="form.username_field"
+        /></FormField>
+        <FormField :label="t('systemSettings.customOAuth.displayNameField')"
+          ><TextInput v-model="form.display_name_field"
+        /></FormField>
+        <FormField :label="t('systemSettings.customOAuth.emailField')"
+          ><TextInput v-model="form.email_field"
+        /></FormField>
+        <FormField :label="t('systemSettings.customOAuth.authStyle')">
+          <select v-model.number="form.auth_style" class="custom-oauth-select">
+            <option :value="0">
+              {{ t('systemSettings.customOAuth.authStyleAuto') }}
+            </option>
+            <option :value="1">
+              {{ t('systemSettings.customOAuth.authStyleParams') }}
+            </option>
+            <option :value="2">Basic Auth Header</option>
+          </select>
+        </FormField>
+        <FormField :label="t('systemSettings.customOAuth.accessDeniedMessage')"
+          ><TextInput v-model="form.access_denied_message"
+        /></FormField>
+        <FormField
+          :label="t('systemSettings.customOAuth.accessPolicy')"
+          class="sm:col-span-2"
+        >
+          <textarea
+            v-model="form.access_policy"
+            rows="4"
+            class="custom-oauth-textarea"
+            spellcheck="false"
+          />
+        </FormField>
+        <div
+          class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 sm:col-span-2"
+        >
+          <span class="text-sm font-semibold text-[var(--text-primary)]">{{
+            t('systemSettings.customOAuth.enableProvider')
+          }}</span>
+          <ConsoleToggle
+            v-model="form.enabled"
+            :label="t('systemSettings.customOAuth.enableProvider')"
+          />
         </div>
-      </FormField>
-      <FormField :label="t('systemSettings.customOAuth.userIdField')"
-        ><TextInput v-model="form.user_id_field"
-      /></FormField>
-      <FormField :label="t('systemSettings.customOAuth.usernameField')"
-        ><TextInput v-model="form.username_field"
-      /></FormField>
-      <FormField :label="t('systemSettings.customOAuth.displayNameField')"
-        ><TextInput v-model="form.display_name_field"
-      /></FormField>
-      <FormField :label="t('systemSettings.customOAuth.emailField')"
-        ><TextInput v-model="form.email_field"
-      /></FormField>
-      <FormField :label="t('systemSettings.customOAuth.authStyle')">
-        <select v-model.number="form.auth_style" class="custom-oauth-select">
-          <option :value="0">
-            {{ t('systemSettings.customOAuth.authStyleAuto') }}
-          </option>
-          <option :value="1">
-            {{ t('systemSettings.customOAuth.authStyleParams') }}
-          </option>
-          <option :value="2">Basic Auth Header</option>
-        </select>
-      </FormField>
-      <FormField :label="t('systemSettings.customOAuth.accessDeniedMessage')"
-        ><TextInput v-model="form.access_denied_message"
-      /></FormField>
-      <FormField
-        :label="t('systemSettings.customOAuth.accessPolicy')"
-        class="sm:col-span-2"
-      >
-        <textarea
-          v-model="form.access_policy"
-          rows="4"
-          class="custom-oauth-textarea"
-          spellcheck="false"
-        />
-      </FormField>
-      <div
-        class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 sm:col-span-2"
-      >
-        <span class="text-sm font-semibold text-[var(--text-primary)]">{{
-          t('systemSettings.customOAuth.enableProvider')
-        }}</span>
-        <ConsoleToggle
-          v-model="form.enabled"
-          :label="t('systemSettings.customOAuth.enableProvider')"
-        />
       </div>
-    </div>
     </fieldset>
     <template #footer>
       <div class="flex justify-end gap-3">

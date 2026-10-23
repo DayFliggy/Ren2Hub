@@ -1,5 +1,7 @@
 # 主题与样式结构
 
+当前测试入口已调整，见[本地方案](../../docs/testing/LOCAL_TESTING.md)；下述旧测试覆盖说明属于历史审计，不能当作新 runner 的通过记录。
+
 前端只维护一套语义令牌和两种视觉主题：浅色 `Desert Ledger` 与深色“炭蓝星金”。夜间以 Elegant + Material 为主体，手绘表达控制在约 25–30%；浅色继续保持现有 Desert Ledger 视觉。
 
 ## 文件职责
@@ -67,7 +69,7 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 
 有上限的资源读数（仪表盘系统状态的 CPU、内存、磁盘和 CPU 负载格）统一用 `--load-{idle,normal,notice,warning,danger}` 五档色阶，分界为 30% / 60% / 75% / 90%；API 成功率复用其中的正常、警告、危险三档。每档有图形色和 `-text` 文字色：图形色对磁贴底不低于 3:1，文字色对磁贴底和 14% 徽章底不低于 4.5:1。色相从青经绿、黄、橙单调走到红，彩度逐档升高，危险档在两套主题里都最醒目。正常档与 `--status-success` 同源，日间危险档沿用 `--status-danger`，其余取值见 `tokens.css` 的注释。
 
-负载档位只表达占上限的比例，不要用来给方向、类别或品牌强调着色，各档文字色也要和金额数字用的 `--accent-text` 明显区分（夜间关注档因此避开星辉金）。没有上限的读数（如应用流量）保持中性文字色，数值与对应折线同色，用箭头和虚实线区分方向。同一档位不叠加透明度阶梯区分时间窗口，透明度会让相邻档位混淆。夜间各主仪表的已填充部分统一带同色 3px 微光，日间不发光。`tests/visual/system-status.spec.ts` 在两套主题下复核对比度、相邻档位色差和与 `--accent-text` 的色差，调整色阶须保持这些阈值。
+负载档位只表达占上限的比例，不要用来给方向、类别或品牌强调着色，各档文字色也要和金额数字用的 `--accent-text` 明显区分（夜间关注档因此避开星辉金）。没有上限的读数（如应用流量）保持中性文字色，数值与对应折线同色，用箭头和虚实线区分方向。同一档位不叠加透明度阶梯区分时间窗口，透明度会让相邻档位混淆。夜间各主仪表的已填充部分统一带同色 3px 微光，日间不发光。`旧版已归档：tests/visual/system-status.spec.ts` 在两套主题下复核对比度、相邻档位色差和与 `--accent-text` 的色差，调整色阶须保持这些阈值。
 
 ## 品牌与媒体例外
 
@@ -103,6 +105,6 @@ Tailwind 4 通过 `vite.config.ts` 中的官方 `@tailwindcss/vite` 插件构建
 
 视觉回归仅在本地手动运行，不接入 GitHub Actions：
 
-- `bun run test:visual`
+- `python3 -B scripts/testing/run.py browser`（应用根目录）
 
 该命令审计当前页面，不与历史截图基线比较。默认只在失败时保存截图；设置 `PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 可保留本次页面截图，输出位于 `output/playwright/`。测试环境使用 `Asia/Shanghai`、符合真实 wire contract 的认证与 API 夹具、本地字体和 `reduced-motion`；需要固定时间的用例由浏览器 fixture 控制。审计覆盖运行错误、DOM 状态、响应式布局、横向溢出、交互遮挡、主题与字体契约。服务启动和 Go 产物验证方式见[路由约定](../ROUTING.md)。

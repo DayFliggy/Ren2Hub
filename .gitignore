@@ -42,3 +42,8 @@ go.work.sum
 
 # Python acceptance runner bytecode.
 /scripts/acceptance/__pycache__/
+
+# Unified local runner artifacts.
+/scripts/testing/__pycache__/
+/scripts/testing/contracts/__pycache__/
+/.test-tools/

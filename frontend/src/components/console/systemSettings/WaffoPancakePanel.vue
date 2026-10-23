@@ -49,7 +49,10 @@ const form = reactive({
 
 const baseline = ref('')
 const snapshot = () => JSON.stringify(form)
-registerSettingsDraft({ dirty: () => baseline.value !== '' && snapshot() !== baseline.value, busy: () => saving.value || creating.value || loadingCatalog.value })
+registerSettingsDraft({
+  dirty: () => baseline.value !== '' && snapshot() !== baseline.value,
+  busy: () => saving.value || creating.value || loadingCatalog.value,
+})
 
 const selectedStore = computed(() =>
   catalog.value?.stores.find((store) => store.id === form.storeId)
@@ -96,17 +99,20 @@ async function saveConfiguration(loadCatalogAfterSave = false) {
     baseline.value = JSON.stringify(committedForm)
     await refreshStatus(true)
     if (
-      !(await saveOptions({
-        WaffoPancakeUnitPrice: form.unitPrice,
-        WaffoPancakeMinTopUp: form.minTopUp,
-      }, {
-        onApplied(key, value) {
-          const saved = JSON.parse(baseline.value)
-          if (key === 'WaffoPancakeUnitPrice') saved.unitPrice = Number(value)
-          if (key === 'WaffoPancakeMinTopUp') saved.minTopUp = Number(value)
-          baseline.value = JSON.stringify(saved)
+      !(await saveOptions(
+        {
+          WaffoPancakeUnitPrice: form.unitPrice,
+          WaffoPancakeMinTopUp: form.minTopUp,
         },
-      }))
+        {
+          onApplied(key, value) {
+            const saved = JSON.parse(baseline.value)
+            if (key === 'WaffoPancakeUnitPrice') saved.unitPrice = Number(value)
+            if (key === 'WaffoPancakeMinTopUp') saved.minTopUp = Number(value)
+            baseline.value = JSON.stringify(saved)
+          },
+        }
+      ))
     )
       return false
     emit('saved')
@@ -204,109 +210,112 @@ onMounted(async () => {
     class="waffo-pancake-panel"
     :aria-label="t('systemSettings.waffoPancake.label')"
   >
-    <fieldset :disabled="saving || creating || loadingCatalog" class="min-w-0 border-0 p-0">
-    <div class="grid gap-4 sm:grid-cols-2">
-      <FormField :label="t('systemSettings.waffoPancake.merchantId')">
-        <TextInput v-model="form.merchantId" autocomplete="off" />
-      </FormField>
-      <FormField :label="t('systemSettings.waffoPancake.privateKey')">
-        <TextInput
-          v-model="form.privateKey"
-          type="password"
-          autocomplete="new-password"
-        />
-        <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-          {{ t('systemSettings.waffoPancake.keepPrivateKey') }}
-        </p>
-      </FormField>
-      <FormField
-        :label="t('systemSettings.waffoPancake.returnUrl')"
-        class="sm:col-span-2"
-      >
-        <TextInput v-model="form.returnUrl" type="url" autocomplete="off" />
-      </FormField>
-      <FormField :label="t('systemSettings.waffoPancake.unitPrice')">
-        <TextInput
-          :model-value="String(form.unitPrice)"
-          type="number"
-          min="0.0001"
-          step="0.01"
-          autocomplete="off"
-          @update:model-value="form.unitPrice = Number($event)"
-        />
-      </FormField>
-      <FormField :label="t('systemSettings.waffoPancake.minTopUp')">
-        <TextInput
-          :model-value="String(form.minTopUp)"
-          type="number"
-          min="1"
-          step="1"
-          autocomplete="off"
-          @update:model-value="form.minTopUp = Number($event)"
-        />
-      </FormField>
-    </div>
-
-    <div class="waffo-actions">
-      <ConsoleButton
-        variant="secondary"
-        size="sm"
-        :loading="creating"
-        @click="createPair"
-      >
-        {{ t('systemSettings.waffoPancake.createPair') }}
-      </ConsoleButton>
-      <ConsoleButton
-        variant="secondary"
-        size="sm"
-        :loading="saving || loadingCatalog"
-        @click="saveConfiguration(true)"
-      >
-        {{ t('systemSettings.waffoPancake.saveAndLoad') }}
-      </ConsoleButton>
-      <ConsoleButton size="sm" :loading="saving" @click="saveConfiguration()">
-        {{ t('systemSettings.waffoPancake.save') }}
-      </ConsoleButton>
-    </div>
-
-    <div v-if="catalog" class="mt-5 grid gap-4 sm:grid-cols-2">
-      <FormField :label="t('systemSettings.waffoPancake.store')">
-        <select
-          v-model="form.storeId"
-          class="waffo-select"
-          @change="ensureProductBelongsToStore"
+    <fieldset
+      :disabled="saving || creating || loadingCatalog"
+      class="min-w-0 border-0 p-0"
+    >
+      <div class="grid gap-4 sm:grid-cols-2">
+        <FormField :label="t('systemSettings.waffoPancake.merchantId')">
+          <TextInput v-model="form.merchantId" autocomplete="off" />
+        </FormField>
+        <FormField :label="t('systemSettings.waffoPancake.privateKey')">
+          <TextInput
+            v-model="form.privateKey"
+            type="password"
+            autocomplete="new-password"
+          />
+          <p class="mt-1 text-xs text-[var(--text-tertiary)]">
+            {{ t('systemSettings.waffoPancake.keepPrivateKey') }}
+          </p>
+        </FormField>
+        <FormField
+          :label="t('systemSettings.waffoPancake.returnUrl')"
+          class="sm:col-span-2"
         >
-          <option value="">
-            {{ t('systemSettings.waffoPancake.selectStore') }}
-          </option>
-          <option
-            v-for="store in catalog.stores"
-            :key="store.id"
-            :value="store.id"
-          >
-            {{ store.name }} ({{ store.id }})
-          </option>
-        </select>
-      </FormField>
-      <FormField :label="t('systemSettings.waffoPancake.product')">
-        <select
-          v-model="form.productId"
-          class="waffo-select"
-          :disabled="!selectedStore"
+          <TextInput v-model="form.returnUrl" type="url" autocomplete="off" />
+        </FormField>
+        <FormField :label="t('systemSettings.waffoPancake.unitPrice')">
+          <TextInput
+            :model-value="String(form.unitPrice)"
+            type="number"
+            min="0.0001"
+            step="0.01"
+            autocomplete="off"
+            @update:model-value="form.unitPrice = Number($event)"
+          />
+        </FormField>
+        <FormField :label="t('systemSettings.waffoPancake.minTopUp')">
+          <TextInput
+            :model-value="String(form.minTopUp)"
+            type="number"
+            min="1"
+            step="1"
+            autocomplete="off"
+            @update:model-value="form.minTopUp = Number($event)"
+          />
+        </FormField>
+      </div>
+
+      <div class="waffo-actions">
+        <ConsoleButton
+          variant="secondary"
+          size="sm"
+          :loading="creating"
+          @click="createPair"
         >
-          <option value="">
-            {{ t('systemSettings.waffoPancake.selectProduct') }}
-          </option>
-          <option
-            v-for="product in selectedStore?.onetimeProducts ?? []"
-            :key="product.id"
-            :value="product.id"
+          {{ t('systemSettings.waffoPancake.createPair') }}
+        </ConsoleButton>
+        <ConsoleButton
+          variant="secondary"
+          size="sm"
+          :loading="saving || loadingCatalog"
+          @click="saveConfiguration(true)"
+        >
+          {{ t('systemSettings.waffoPancake.saveAndLoad') }}
+        </ConsoleButton>
+        <ConsoleButton size="sm" :loading="saving" @click="saveConfiguration()">
+          {{ t('systemSettings.waffoPancake.save') }}
+        </ConsoleButton>
+      </div>
+
+      <div v-if="catalog" class="mt-5 grid gap-4 sm:grid-cols-2">
+        <FormField :label="t('systemSettings.waffoPancake.store')">
+          <select
+            v-model="form.storeId"
+            class="waffo-select"
+            @change="ensureProductBelongsToStore"
           >
-            {{ product.name }} ({{ product.id }})
-          </option>
-        </select>
-      </FormField>
-    </div>
+            <option value="">
+              {{ t('systemSettings.waffoPancake.selectStore') }}
+            </option>
+            <option
+              v-for="store in catalog.stores"
+              :key="store.id"
+              :value="store.id"
+            >
+              {{ store.name }} ({{ store.id }})
+            </option>
+          </select>
+        </FormField>
+        <FormField :label="t('systemSettings.waffoPancake.product')">
+          <select
+            v-model="form.productId"
+            class="waffo-select"
+            :disabled="!selectedStore"
+          >
+            <option value="">
+              {{ t('systemSettings.waffoPancake.selectProduct') }}
+            </option>
+            <option
+              v-for="product in selectedStore?.onetimeProducts ?? []"
+              :key="product.id"
+              :value="product.id"
+            >
+              {{ product.name }} ({{ product.id }})
+            </option>
+          </select>
+        </FormField>
+      </div>
     </fieldset>
   </section>
 </template>

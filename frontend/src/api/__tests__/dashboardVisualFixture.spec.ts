@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { nativeUsageSummary } from '../../../tests/visual/channel-core-fixtures'
+import { nativeUsageSummary } from '../../../tests/contracts/channel-core-fixtures'
 
 it.each(['2026-07-27T12:00:00+08:00', '2026-07-27T12:23:45+08:00'])(
   'keeps usage fixture hours aligned and inside [start,end) at %s',

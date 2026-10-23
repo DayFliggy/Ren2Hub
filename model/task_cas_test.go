@@ -43,6 +43,8 @@ func TestMain(m *testing.M) {
 		&AuthFlow{},
 		&ExternalIdentityClaim{},
 		&Token{},
+		&TokenRouteProfile{},
+		&TokenRouteEntry{},
 		&PasskeyCredential{},
 		&TwoFA{},
 		&TwoFABackupCode{},
@@ -73,6 +75,8 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM passkey_credentials")
 		DB.Exec("DELETE FROM two_fa_backup_codes")
 		DB.Exec("DELETE FROM two_fas")
+		require.NoError(t, DB.Exec("DELETE FROM token_route_entries").Error)
+		require.NoError(t, DB.Exec("DELETE FROM token_route_profiles").Error)
 		DB.Exec("DELETE FROM tokens")
 		DB.Exec("DELETE FROM user_access_tokens")
 		DB.Exec("DELETE FROM user_oauth_bindings")

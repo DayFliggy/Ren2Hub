@@ -1,0 +1,4 @@
+{
+  "python": {"package": "openai", "version": "3.13.0"},
+  "node": {"package": "openai", "version": "7.15.0"}
+}
