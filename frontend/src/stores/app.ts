@@ -146,6 +146,9 @@ export const useAppStore = defineStore('app', () => {
   const registerEnabled = computed(() =>
     parseBoolean(status.value.register_enabled, true)
   )
+  const passwordRegisterEnabled = computed(() =>
+    parseBoolean(status.value.password_register_enabled, true)
+  )
   const checkinEnabled = computed(() => status.value.checkin_enabled === true)
   // The backend serves /api/uptime/status whenever groups are configured, so
   // the administrator's panel switch is enforced here. A missing field keeps
@@ -329,6 +332,7 @@ export const useAppStore = defineStore('app', () => {
     showAbout,
     moduleAccess,
     registerEnabled,
+    passwordRegisterEnabled,
     checkinEnabled,
     turnstileEnabled,
     turnstileSiteKey,

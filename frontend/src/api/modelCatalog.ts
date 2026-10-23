@@ -9,11 +9,7 @@ import {
 import { isDecimal } from '@/utils/decimal'
 
 export type PriceStatus = 'configured' | 'default' | 'zero' | 'unavailable'
-export interface CatalogPrices {
-  input?: string
-  output?: string
-  request?: string
-}
+export type CatalogPrices = Record<string, string>
 export interface CatalogModel {
   model_name: string
   description: string
@@ -42,6 +38,7 @@ export interface CatalogOffer {
   channel_ratio: string
   price_status: PriceStatus
   pricing_values: CatalogPrices
+  price_reason?: string
 }
 export interface ModelCatalog {
   schema_version: 1
@@ -72,15 +69,20 @@ function price(value: Record<string, unknown>) {
   )
     invalidResponse(endpoint)
   const pricing_values: CatalogPrices = {}
-  for (const key of ['input', 'output', 'request'] as const)
-    if (value.pricing_values[key] != null)
-      pricing_values[key] = decimal(value.pricing_values[key])
+  for (const [key, amount] of Object.entries(value.pricing_values))
+    pricing_values[key] = decimal(amount)
   if (
     value.price_status !== 'unavailable' &&
     !Object.keys(pricing_values).length
   )
     invalidResponse(endpoint)
-  return { price_status: value.price_status as PriceStatus, pricing_values }
+  return {
+    price_status: value.price_status as PriceStatus,
+    pricing_values,
+    ...(value.price_reason == null
+      ? {}
+      : { price_reason: requiredString(value.price_reason, endpoint) }),
+  }
 }
 export function parseModelCatalog(value: unknown): ModelCatalog {
   if (
@@ -99,9 +101,6 @@ export function parseModelCatalog(value: unknown): ModelCatalog {
       endpoint
     ),
     ...price(row),
-    ...(row.price_reason == null
-      ? {}
-      : { price_reason: requiredString(row.price_reason, endpoint) }),
   }))
   const channels = records(value.channels).map((row): CatalogChannel => {
     if (!isRecord(row.lab) || typeof row.eligible !== 'boolean')

@@ -3,7 +3,6 @@ import {
   invalidResponse,
   isRecord,
   requiredBoolean,
-  requiredQuota,
   requiredStrictInteger,
   requiredStrictNumber,
   requiredString,
@@ -39,6 +38,19 @@ const list = (value: unknown): Record<string, unknown>[] => {
 }
 const number = (value: unknown) => requiredStrictNumber(value, endpoint)
 const integer = (value: unknown) => requiredStrictInteger(value, endpoint)
+function quota(value: unknown): string {
+  if (typeof value === 'number' && Number.isSafeInteger(value))
+    return String(value)
+  if (typeof value === 'string' && /^-?(0|[1-9]\d*)$/.test(value)) {
+    try {
+      const parsed = BigInt(value)
+      if (parsed >= -(1n << 63n) && parsed <= (1n << 63n) - 1n) return value
+    } catch {
+      // Fall through to the endpoint-specific invalid-response error.
+    }
+  }
+  invalidResponse(endpoint)
+}
 const nullable = (value: unknown) => (value === null ? null : number(value))
 // A dimension whose log source is off must stay unknown; a number would be fabricated.
 function measured(value: unknown, covered: boolean) {
@@ -65,7 +77,7 @@ export function parseUsageSummary(value: unknown): UsageSummary {
   return {
     kpi: {
       totalTokens: integer(value.kpi.totalTokens),
-      totalQuota: requiredQuota(value.kpi.totalQuota, endpoint),
+      totalQuota: quota(value.kpi.totalQuota),
       totalRequests: integer(value.kpi.totalRequests),
       avgLatency: measured(value.kpi.avgLatency, latency),
       successRate: successRate(value.kpi.successRate, success),
@@ -80,7 +92,7 @@ export function parseUsageSummary(value: unknown): UsageSummary {
     models: list(value.models).map((row) => ({
       model: requiredString(row.model, endpoint),
       tokens: integer(row.tokens),
-      quota: requiredQuota(row.quota, endpoint),
+      quota: quota(row.quota),
       requests: integer(row.requests),
       share: number(row.share),
       avgLatency: measured(row.avgLatency, latency),
@@ -89,11 +101,11 @@ export function parseUsageSummary(value: unknown): UsageSummary {
       ts: integer(row.ts),
       requests: integer(row.requests),
       tokens: integer(row.tokens),
-      quota: requiredQuota(row.quota, endpoint),
+      quota: quota(row.quota),
     })),
     flow: list(value.flow).map((row) => ({
       date: requiredString(row.date, endpoint),
-      consume: requiredQuota(row.consume, endpoint),
+      consume: quota(row.consume),
       requests: integer(row.requests),
     })),
     token_trend: list(value.token_trend).map((row) => ({
@@ -105,7 +117,7 @@ export function parseUsageSummary(value: unknown): UsageSummary {
     distribution: list(value.distribution).map((row) => ({
       date: requiredString(row.date, endpoint),
       requests: integer(row.requests),
-      consume: requiredQuota(row.consume, endpoint),
+      consume: quota(row.consume),
       tokens: integer(row.tokens),
     })),
     meta: {

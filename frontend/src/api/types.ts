@@ -11,7 +11,11 @@ export interface ApiResponse<T> {
 }
 
 /** A success envelope read as a whole; some native endpoints omit data. */
-export type ApiEnvelope<T> = Omit<ApiResponse<T>, 'data'> & { data?: T }
+export type ApiEnvelope<T> = Omit<ApiResponse<T>, 'data'> & {
+  data?: T
+  /** A committed mutation awaiting runtime publication; batches return a count. */
+  publication_pending?: boolean | number
+}
 
 /**
  * Distinguishes transport-level HTTP errors from HTTP 200 responses

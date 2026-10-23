@@ -8,7 +8,7 @@ func IsRetiredBusinessOption(key string) bool {
 		return true
 	}
 	switch key {
-	case "GroupRatio", "GroupGroupRatio", "GroupSpecialUsableGroup", "UserUsableGroups", "AutoGroups", "DefaultUseAutoGroup", "MaxTokenAutoGroups", "TopupGroupRatio", "ModelRequestRateLimitGroup", "QuotaForInviter", "QuotaForInvitee":
+	case "GroupRatio", "GroupGroupRatio", "GroupSpecialUsableGroup", "UserUsableGroups", "AutoGroups", "DefaultUseAutoGroup", "MaxTokenAutoGroups", "TopupGroupRatio", "ModelRequestRateLimitGroup", "QuotaForInviter", "QuotaForInvitee", "quota_setting.trust_quota_usd":
 		return true
 	default:
 		return false

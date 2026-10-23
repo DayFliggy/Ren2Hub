@@ -5,6 +5,7 @@ import {
   affiliateApi,
   type AffiliateInfo,
   type AffiliateInvitee,
+  type AffiliateRecord,
 } from '@/api/affiliate'
 import { ApiError } from '@/api/types'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
@@ -44,6 +45,12 @@ export function useInvite() {
 
   const infoRequest = useLatestRequest()
   const inviteesRequest = useLatestRequest()
+  const recordsRequest = useLatestRequest()
+  const records = ref<AffiliateRecord[]>([])
+  const recordsPage = ref(1)
+  const recordsTotal = ref(0)
+  const recordsLoading = ref(false)
+  const recordsError = ref('')
   const invitees = ref<AffiliateInvitee[]>([])
   const inviteesPage = ref(1)
   const inviteesTotal = ref(0)
@@ -64,6 +71,7 @@ export function useInvite() {
     () =>
       !readOnly.value &&
       info.value !== null &&
+      info.value.transfer_enabled &&
       BigInt(info.value.transferable) > 0n &&
       BigInt(auth.user?.quota ?? 0) + BigInt(info.value.transferable) <=
         BigInt(Number.MAX_SAFE_INTEGER)
@@ -88,7 +96,9 @@ export function useInvite() {
     info.value = result.value
   }
 
-  async function loadInvitees(nextPage = inviteesPage.value) {
+  let requestedInviteesPage = 1
+  async function loadInvitees(nextPage = requestedInviteesPage) {
+    requestedInviteesPage = nextPage
     inviteesLoading.value = true
     inviteesError.value = ''
     const result = await inviteesRequest.run((signal) =>
@@ -102,6 +112,9 @@ export function useInvite() {
     if (result.stale) return
     inviteesLoading.value = false
     if (!result.ok) {
+      invitees.value = []
+      inviteesPage.value = 1
+      inviteesTotal.value = 0
       inviteesError.value =
         result.error instanceof ApiError
           ? result.error.message
@@ -117,6 +130,28 @@ export function useInvite() {
     if (order !== 'asc' && order !== 'desc') return
     inviteesOrder.value = order
     void loadInvitees(1)
+  }
+
+  async function loadRecords(nextPage = recordsPage.value) {
+    recordsLoading.value = true
+    recordsError.value = ''
+    const result = await recordsRequest.run((signal) =>
+      affiliateApi.records(nextPage, 20, signal)
+    )
+    if (result.stale) return
+    recordsLoading.value = false
+    if (!result.ok) {
+      records.value = []
+      recordsTotal.value = 0
+      recordsError.value =
+        result.error instanceof ApiError
+          ? result.error.message
+          : t('common.failed')
+      return
+    }
+    records.value = result.value.items
+    recordsPage.value = result.value.page
+    recordsTotal.value = result.value.total
   }
 
   async function writeClipboard(text: string) {
@@ -182,7 +217,7 @@ export function useInvite() {
       transferOperation = null
       transferOpen.value = false
       toast.success(t('invite.transferSuccess'))
-      await Promise.all([auth.fetchSelf(), load()])
+      await Promise.all([auth.fetchSelf(), load(), loadRecords(1)])
     } catch (error) {
       if (!disposed)
         toast.error(error instanceof ApiError ? error.message : String(error))
@@ -206,6 +241,12 @@ export function useInvite() {
     inviteesLoading,
     inviteesError,
     loadInvitees,
+    records,
+    recordsPage,
+    recordsTotal,
+    recordsLoading,
+    recordsError,
+    loadRecords,
     sortInvitees,
     transferOpen,
     canTransfer,

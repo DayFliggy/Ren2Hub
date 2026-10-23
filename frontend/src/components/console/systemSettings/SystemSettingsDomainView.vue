@@ -24,6 +24,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import RequestPolicyPanel from '@/components/console/systemSettings/RequestPolicyPanel.vue'
 import { discoverOidcEndpoints } from '@/api/oidcDiscovery'
 import { ApiError } from '@/api/types'
+import { provideSettingsDraftGuard } from './settingsDraftGuard'
 
 const props = defineProps<{ domain: SystemSettingsDomainId }>()
 
@@ -40,6 +41,9 @@ const {
   rawValue,
   isSecretConfigured,
   saveOptions,
+  statusRefreshing,
+  statusRefreshError,
+  refreshStatus,
 } = useSystemSettings()
 
 const domainConfig = computed(() => getSystemSettingsDomain(props.domain))
@@ -113,6 +117,11 @@ const dirty = computed(() => {
     return serialize(next) !== serialize(baseline[field.key])
   })
 })
+
+provideSettingsDraftGuard(
+  { dirty: () => dirty.value, busy: () => saving.value || sharedSaving.value },
+  () => t('systemSettings.discardDraft')
+)
 
 function toSection(section: string) {
   router.push({
@@ -261,6 +270,22 @@ onMounted(() => load())
     </aside>
 
     <div class="min-w-0 flex-1">
+      <div
+        v-if="statusRefreshError"
+        role="alert"
+        class="mb-4 text-sm text-[var(--status-warning-text)]"
+      >
+        <p>{{ statusRefreshError }}</p>
+        <ConsoleButton
+          class="mt-2"
+          size="sm"
+          variant="secondary"
+          :loading="statusRefreshing"
+          @click="refreshStatus()"
+        >
+          {{ t('systemSettings.retryStatusRefresh') }}
+        </ConsoleButton>
+      </div>
       <SysSettingsFormCard
         :title="t(activeSection.titleKey)"
         :description="t(activeSection.descriptionKey)"

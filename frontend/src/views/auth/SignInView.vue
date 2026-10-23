@@ -9,6 +9,7 @@ import type { TwoFactorChallenge } from '@/types/auth'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
+import AffiliateAttributionField from '@/components/auth/AffiliateAttributionField.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
@@ -19,7 +20,10 @@ import { useToast } from '@/composables/useToast'
 import { ApiError } from '@/api/types'
 import { sanitizeRedirect } from '@/router'
 import { useAppStore } from '@/stores'
-import { clearAffiliateAttribution } from '@/utils/affiliate'
+import {
+  clearAffiliateAttribution,
+  storeAffiliateAttribution,
+} from '@/utils/affiliate'
 
 const oauthAbort = new AbortController()
 onBeforeUnmount(() => oauthAbort.abort())
@@ -32,6 +36,9 @@ const toast = useToast()
 
 const challengeMethods = ref<TwoFactorChallenge['methods']>([])
 const rpID = ref('')
+const affiliateCode = ref('')
+const affiliateConfirmed = ref(false)
+const affiliateError = ref('')
 const providers = computed(() => oauthProviders(app.status))
 const passwordEnabled = computed(
   () =>
@@ -170,6 +177,9 @@ async function signInPasskey() {
 async function signInOAuth(provider: string) {
   if (loading.value) return
   loading.value = true
+  if (affiliateConfirmed.value && affiliateCode.value.trim())
+    storeAffiliateAttribution(affiliateCode.value)
+  else clearAffiliateAttribution()
   try {
     await finishAlternateLogin(
       await completeOAuth(
@@ -182,6 +192,13 @@ async function signInOAuth(provider: string) {
       )
     )
   } catch (error) {
+    if (
+      error instanceof ApiError &&
+      ['AFFILIATE_DISABLED', 'AFFILIATE_CODE_INVALID'].includes(
+        error.code ?? ''
+      )
+    )
+      affiliateError.value = error.message
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     loading.value = false
@@ -303,6 +320,15 @@ async function signInOAuth(provider: string) {
         {{ t('auth.backToPassword') }}
       </button>
     </form>
+
+    <AffiliateAttributionField
+      v-if="providers.length && !twoFactorFlowToken"
+      v-model="affiliateCode"
+      v-model:confirmed="affiliateConfirmed"
+      :disabled="loading"
+      :error="affiliateError"
+      @changed="affiliateError = ''"
+    />
 
     <div class="mt-4 sibling-space-y-3">
       <FormField

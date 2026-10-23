@@ -37,11 +37,15 @@ func TransferAffiliateQuota(c *gin.Context) {
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		common.ApiError(c, errors.New("expected a single JSON object"))
+		common.ApiError(c, common.NewMessage("expected a single JSON object"))
 		return
 	}
 	result, replayed, err := model.TransferAffiliateQuota(c.GetInt("id"), request.OperationID)
 	if err != nil {
+		if errors.Is(err, model.ErrAffiliateOperationConflict) {
+			common.ApiErrorStatus(c, http.StatusConflict, err)
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -54,7 +58,7 @@ func GetAffiliateRecords(c *gin.Context) {
 		var err error
 		userID, err = strconv.Atoi(value)
 		if err != nil || userID < 1 {
-			common.ApiError(c, errors.New("invalid user_id"))
+			common.ApiError(c, common.NewMessage("invalid user id"))
 			return
 		}
 	}
@@ -70,7 +74,7 @@ func GetAffiliateRecords(c *gin.Context) {
 func GetAffiliateUserPolicy(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id < 1 {
-		common.ApiError(c, errors.New("invalid user id"))
+		common.ApiError(c, common.NewMessage("invalid user id"))
 		return
 	}
 	result, err := model.GetAffiliateUserPolicy(id, c.GetInt("role"))
@@ -83,7 +87,7 @@ func GetAffiliateUserPolicy(c *gin.Context) {
 func UpdateAffiliateUserPolicy(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id < 1 {
-		common.ApiError(c, errors.New("invalid user id"))
+		common.ApiError(c, common.NewMessage("invalid user id"))
 		return
 	}
 	var request model.AffiliatePolicyUpdate

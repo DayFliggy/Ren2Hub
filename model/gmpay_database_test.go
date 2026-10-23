@@ -23,7 +23,11 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 	policy := operation_setting.GetAffiliateSetting()
 	previousPolicy := *policy
 	*policy = operation_setting.AffiliateSetting{Enabled: true, RateBps: 2000, AdminRechargeEnabled: true}
-	t.Cleanup(func() { *policy = previousPolicy })
+	payment := operation_setting.GetPaymentSetting()
+	previousPayment := *payment
+	payment.ComplianceConfirmed = true
+	payment.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	t.Cleanup(func() { *policy = previousPolicy; *payment = previousPayment })
 	for _, kind := range []string{"sqlite", "mysql", "postgres"} {
 		t.Run(kind, func(t *testing.T) {
 			var db *gorm.DB
@@ -156,10 +160,25 @@ func TestGmpayAndTicketDatabaseContracts(t *testing.T) {
 			assert.Equal(t, 200000, invitees[0].RewardQuota)
 			var referrals int64
 			require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ?", inviter.Id).Count(&referrals).Error)
-			assert.EqualValues(t, 3, referrals)
+			assert.EqualValues(t, 4, referrals)
 			var logs int64
 			require.NoError(t, db.Model(&Log{}).Where("user_id = ? AND type = ?", user.Id, LogTypeTopup).Count(&logs).Error)
 			assert.EqualValues(t, 1, logs)
+			// The same reversal/repayment transaction contract must hold on each
+			// configured dialect, after the tracked reward has left affiliate quota.
+			correctionID := "correction-" + name
+			for attempt := range 2 {
+				adjusted, err := AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "subtract", 250000, correctionID)
+				require.NoError(t, err)
+				assert.Equal(t, attempt == 1, adjusted.Replayed)
+			}
+			require.NoError(t, db.First(&inviter, inviter.Id).Error)
+			assert.Equal(t, 50000, inviter.AffOffsetDebtQuota)
+			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 250000, "repayment-"+name)
+			require.NoError(t, err)
+			require.NoError(t, db.First(&inviter, inviter.Id).Error)
+			assert.Zero(t, inviter.AffOffsetDebtQuota)
+			assert.Zero(t, inviter.AffQuota)
 			policy.Enabled = false
 			_, err = AdjustUserQuotaWithOperation(user.Id, 99, common.RoleRootUser, "add", 500, "skipped-"+name)
 			require.NoError(t, err)

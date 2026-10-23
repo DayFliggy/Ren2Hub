@@ -1,6 +1,6 @@
 # NewAPI 任务插件
 
-Ren2Hub沿用NewAPI `09109ec315a5086366f94bcce00f177ec831dbe1` 的JS任务插件运行时、元数据、用量表达式、协议绑定及管理API。插件能力不是本地独有。ABI正文、类型和schema从该上游版本同步：
+Ren2Hub沿用NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6` 的JS任务插件运行时、元数据、用量表达式、协议绑定及管理API。插件能力不是本地独有。ABI正文、类型和schema按该上游核心校验：
 
 - [v1文档](v1.md)
 - [TypeScript类型](v1.d.ts)

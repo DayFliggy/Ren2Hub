@@ -110,7 +110,7 @@ func useTicketTestDatabase(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Ticket{}, &model.TicketMessage{}, &model.TicketAttachment{}))
 }
 
-func TestCreateTicketRenamesAttachmentsOnlyAfterCommit(t *testing.T) {
+func TestCreateTicketCompensatesFilesWhenDatabaseCommitFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	useTicketTestDatabase(t)
 	dir := t.TempDir()
@@ -144,6 +144,46 @@ func TestCreateTicketRenamesAttachmentsOnlyAfterCommit(t *testing.T) {
 	after, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	require.Len(t, after, 2)
+}
+
+func TestTicketFormCommitFailureRemovesPromotedAndTemporaryFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TICKET_UPLOAD_DIR", dir)
+	body, contentType := ticketMultipart(t, map[string]string{"content": "hello"}, tinyPNG(t), tinyPNG(t))
+	ctx, _ := ticketContext(bytes.NewReader(body), contentType)
+	form, err := readTicketForm(ctx)
+	require.NoError(t, err)
+	previous := renameTicketFile
+	calls := 0
+	renameTicketFile = func(oldPath, newPath string) error {
+		calls++
+		if calls == 2 {
+			return errors.New("forced rename failure")
+		}
+		return previous(oldPath, newPath)
+	}
+	t.Cleanup(func() { renameTicketFile = previous })
+	require.Error(t, form.commit())
+	requireEmptyDir(t, dir)
+}
+
+func TestTicketAttachmentFilenameCharacterLimit(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TICKET_UPLOAD_DIR", dir)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("attachments", strings.Repeat("界", 256)+".png")
+	require.NoError(t, err)
+	_, err = part.Write(tinyPNG(t))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	ctx, _ := ticketContext(bytes.NewReader(body.Bytes()), writer.FormDataContentType())
+	form, err := readTicketForm(ctx)
+	require.Nil(t, form)
+	var formErr *ticketFormError
+	require.ErrorAs(t, err, &formErr)
+	require.Equal(t, "ATTACHMENT_NAME_TOO_LONG", formErr.code)
+	requireEmptyDir(t, dir)
 }
 
 func TestTicketAttachmentDownloadForbidsSniffing(t *testing.T) {

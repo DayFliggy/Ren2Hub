@@ -8,7 +8,7 @@ import { useSystemSettings } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
 
 const emit = defineEmits<{ confirmed: [] }>()
-const { rawValue } = useSystemSettings()
+const { rawValue, refreshStatus } = useSystemSettings()
 const { t, locale } = useI18n()
 const toast = useToast()
 const open = ref(false)
@@ -40,6 +40,7 @@ async function confirm() {
     open.value = false
     toast.success(t('systemSettings.paymentCompliance.saved'))
     emit('confirmed')
+    await refreshStatus(true)
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {

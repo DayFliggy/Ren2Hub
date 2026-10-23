@@ -40,6 +40,20 @@ describe('native per-key settings', () => {
     expect(settings.rawValue('QuotaPerUnit', 500000)).toBe(500000)
     expect(toast.error).not.toHaveBeenCalled()
   })
+  it('normalizes legacy empty console-content JSON options to empty lists', async () => {
+    const settings = await setup([
+      { key: 'console_setting.announcements', value: '' },
+      { key: 'console_setting.api_info', value: '   ' },
+      { key: 'console_setting.faq', value: '[]' },
+      { key: 'console_setting.uptime_kuma_groups', value: '' },
+    ])
+    expect(settings.rawValue('console_setting.announcements', '[]')).toBe('[]')
+    expect(settings.rawValue('console_setting.api_info', '[]')).toBe('[]')
+    expect(settings.rawValue('console_setting.faq', '[]')).toBe('[]')
+    expect(settings.rawValue('console_setting.uptime_kuma_groups', '[]')).toBe(
+      '[]'
+    )
+  })
   it('parses valid stored scalars against the field default type', async () => {
     const settings = await setup([
       { key: 'Price', value: '8' },
@@ -183,17 +197,17 @@ describe('native per-key settings', () => {
     expect(await settings.saveOptions(patch)).toBe(false)
     expect(app.refreshStatus).not.toHaveBeenCalled()
   })
-  it('does not refresh navigation for unrelated saved options', async () => {
+  it('refreshes authoritative status after any saved options', async () => {
     const settings = await setup()
     vi.mocked(api.put).mockResolvedValue(null)
     expect(await settings.saveOptions({ RetryTimes: 3 })).toBe(true)
-    expect(app.refreshStatus).not.toHaveBeenCalled()
+    expect(app.refreshStatus).toHaveBeenCalledOnce()
   })
   it.each([
-    ['en', 'Navigation settings were saved', 'Reload the page'],
-    ['zh-CN', '导航设置已保存', '请重新加载页面'],
+    ['en', 'Settings were saved', 'Retry the refresh'],
+    ['zh-CN', '配置已保存', '请重试刷新'],
   ] as const)(
-    'reports a failed navigation refresh in %s without rolling back the saved option',
+    'separates saved writes from a failed status refresh in %s and retries only the refresh',
     async (locale, savedMessage, retryMessage) => {
       const settings = await setup()
       const { loadMessageDomain, setLocale } = await import('@/i18n')
@@ -204,7 +218,7 @@ describe('native per-key settings', () => {
       app.refreshStatus.mockRejectedValueOnce(new Error('offline'))
       expect(
         await settings.saveOptions({ HeaderNavModules: '{}' }, { onApplied })
-      ).toBe(false)
+      ).toBe(true)
       expect(settings.rawValue('HeaderNavModules')).toBe('{}')
       expect(onApplied).toHaveBeenCalledExactlyOnceWith(
         'HeaderNavModules',
@@ -216,6 +230,12 @@ describe('native per-key settings', () => {
       expect(toast.error.mock.calls[0]![0]).toContain('offline')
       expect(toast.error.mock.calls[0]![0]).toContain(retryMessage)
       expect(settings.saving.value).toBe(false)
+      expect(settings.statusRefreshError.value).toContain('offline')
+      app.refreshStatus.mockResolvedValueOnce(undefined)
+      expect(await settings.refreshStatus()).toBe(true)
+      expect(settings.statusRefreshError.value).toBe('')
+      expect(api.put).toHaveBeenCalledOnce()
+      expect(app.refreshStatus).toHaveBeenCalledTimes(2)
     }
   )
   it('blocks overlapping saves and refreshes only after an outstanding write', async () => {
@@ -247,5 +267,43 @@ describe('native per-key settings', () => {
     expect(await settings.load()).toBe(true)
     expect(await settings.load()).toBe(true)
     expect(api.get).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('committed settings status propagation', () => {
+  it('refreshes once after saving branding and registration switches', async () => {
+    const settings = await setup()
+    vi.mocked(api.put).mockResolvedValue(null)
+    expect(
+      await settings.saveOptions({
+        SystemName: 'Updated site',
+        Logo: 'https://example.test/logo.svg',
+        PasswordRegisterEnabled: false,
+      })
+    ).toBe(true)
+    expect(api.put).toHaveBeenCalledTimes(3)
+    expect(app.refreshStatus).toHaveBeenCalledOnce()
+    expect(settings.statusRefreshError.value).toBe('')
+  })
+
+  it('does not reuse a retry read started before a new committed save', async () => {
+    const settings = await setup()
+    let finishOld!: () => void
+    app.refreshStatus.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOld = resolve
+        })
+    )
+    const oldRefresh = settings.refreshStatus()
+    vi.mocked(api.put).mockResolvedValue(null)
+    const save = settings.saveOptions({ SystemName: 'After old read' })
+    await Promise.resolve()
+    expect(app.refreshStatus).toHaveBeenCalledOnce()
+    finishOld()
+    expect(await oldRefresh).toBe(true)
+    expect(await save).toBe(true)
+    expect(app.refreshStatus).toHaveBeenCalledTimes(2)
+    expect(settings.rawValue('SystemName')).toBe('After old read')
   })
 })

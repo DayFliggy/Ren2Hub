@@ -286,7 +286,9 @@ func Register(c *gin.Context) {
 			common.ApiErrorT(c, "Email address is already in use")
 			return
 		}
-		common.ApiError(c, err)
+		if !writeAffiliateRegistrationError(c, err) {
+			common.ApiError(c, err)
+		}
 		return
 	}
 
@@ -404,12 +406,12 @@ func GetUser(c *gin.Context) {
 }
 
 func GetAffCode(c *gin.Context) {
-	user, err := model.GetUserById(c.GetInt("id"), false)
+	code, err := model.EnsureAffiliateCode(c.GetInt("id"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, user.AffCode)
+	common.ApiSuccess(c, code)
 }
 
 func GetSelf(c *gin.Context) {
@@ -575,35 +577,7 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	// Limit publication must run before other fallible post-commit work, but its
-	// failure must not skip publication of a committed authentication change.
-	concurrencyErr := service.RefreshUserConcurrencyLimit(c.Request.Context(), updatedUser.Id)
-	if authzTouched {
-		if err := authz.ReloadPolicy(); err != nil {
-			common.ApiError(c, err)
-			return
-		}
-	}
-	if updatedUser.AuthVersion > originUser.AuthVersion {
-		if _, err := model.RevokeAllUserSessions(updatedUser.Id, "admin_user_update"); err != nil {
-			common.ApiError(c, err)
-			return
-		}
-	}
-	if err := model.PublishUserAuthCache(updatedUser.Id); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if concurrencyErr != nil {
-		common.ApiError(c, concurrencyErr)
-		return
-	}
-	recordManageAuditFor(c, updatedUser.Id, "user.update", auditParams)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
+	finishCommittedUserUpdate(c, originUser, &updatedUser, authzTouched, auditParams)
 }
 
 func AdminClearUserBinding(c *gin.Context) {

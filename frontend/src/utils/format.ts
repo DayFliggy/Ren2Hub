@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { formatDecimalUSD } from './decimal'
-import { quotaToDecimal } from './quota'
+import { configureQuotaPerUnit, quotaToDecimal } from './quota'
 
 const quotaDisplay = reactive({
   type: 'USD',
@@ -17,7 +17,8 @@ export function configureQuotaDisplay(status: {
   custom_currency_exchange_rate?: number
 }) {
   quotaDisplay.type = status.quota_display_type ?? 'USD'
-  quotaDisplay.perUnit = status.quota_per_unit ?? 500000
+  quotaDisplay.perUnit = status.quota_per_unit ?? 500_000
+  configureQuotaPerUnit(quotaDisplay.perUnit)
   quotaDisplay.cnyRate = status.usd_exchange_rate ?? 7.3
   quotaDisplay.symbol = status.custom_currency_symbol || '¤'
   quotaDisplay.customRate = status.custom_currency_exchange_rate ?? 1
@@ -43,7 +44,7 @@ export function formatQuotaParts(
       whole: BigInt(quota).toLocaleString('en-US'),
       fraction: '',
     }
-  if (quotaDisplay.type !== 'USD' || quotaDisplay.perUnit !== 500000) {
+  if (quotaDisplay.type !== 'USD') {
     const rate =
       quotaDisplay.type === 'CNY'
         ? quotaDisplay.cnyRate
@@ -69,7 +70,8 @@ export function formatQuotaParts(
   }
   const [whole = '0', fraction = ''] = quotaToDecimal(
     quota,
-    Math.min(digits, 3)
+    Math.min(digits, 3),
+    quotaDisplay.perUnit
   ).split('.')
   return {
     prefix: '$',

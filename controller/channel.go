@@ -1292,22 +1292,24 @@ func UpdateChannelStatus(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	changed := model.UpdateChannelStatus(id, "", req.Status, "manual operation")
-	if changed {
+	result := model.UpdateChannelStatusDetailed(id, "", req.Status, "manual operation")
+	if result.Changed {
 		model.InitChannelCache()
 		if req.Status != common.ChannelStatusEnabled {
 			closeActiveChannelWebSockets([]int{id})
 		}
 	}
 	recordManageAudit(c, "channel.status_update", map[string]any{
-		"id":      id,
-		"status":  req.Status,
-		"changed": changed,
+		"id":                  id,
+		"status":              req.Status,
+		"changed":             result.Changed,
+		"publication_pending": result.PublicationPending,
 	})
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    changed,
+		"success":             true,
+		"message":             "",
+		"data":                result.Changed,
+		"publication_pending": result.PublicationPending,
 	})
 }
 
@@ -1319,9 +1321,14 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 	}
 	changedCount := 0
 	var disabledIDs []int
+	pendingCount := 0
 	for _, id := range req.Ids {
-		if model.UpdateChannelStatus(id, "", req.Status, "manual batch operation") {
+		result := model.UpdateChannelStatusDetailed(id, "", req.Status, "manual batch operation")
+		if result.Changed {
 			changedCount++
+			if result.PublicationPending {
+				pendingCount++
+			}
 			if req.Status != common.ChannelStatusEnabled {
 				disabledIDs = append(disabledIDs, id)
 			}
@@ -1334,14 +1341,16 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 		closeActiveChannelWebSockets(disabledIDs)
 	}
 	recordManageAudit(c, "channel.status_update_batch", map[string]any{
-		"count":  changedCount,
-		"total":  len(req.Ids),
-		"status": req.Status,
+		"count":               changedCount,
+		"total":               len(req.Ids),
+		"status":              req.Status,
+		"publication_pending": pendingCount,
 	})
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    changedCount,
+		"success":             true,
+		"message":             "",
+		"data":                changedCount,
+		"publication_pending": pendingCount,
 	})
 }
 

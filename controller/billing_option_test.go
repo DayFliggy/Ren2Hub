@@ -211,10 +211,8 @@ func TestPreConsumePolicyDatabaseMatrix(t *testing.T) {
 				require.Eventually(t, func() bool { return gopool.WorkerCount() == 0 }, time.Second, time.Millisecond)
 			})
 			require.NoError(t, db.AutoMigrate(&model.Token{}))
-			for key, value := range map[string]string{
-				"quota_setting.trust_quota_usd":        "10.5",
-				"quota_setting.pre_consume_multiplier": "1.5",
-			} {
+			{
+				key, value := "quota_setting.pre_consume_multiplier", "1.5"
 				var response struct{ Success bool }
 				modelManagementRequest(t, UpdateOption, http.MethodPut, "/api/option/", OptionUpdateRequest{Key: key, Value: value}, &response)
 				require.True(t, response.Success)
@@ -229,14 +227,11 @@ func TestPreConsumePolicyDatabaseMatrix(t *testing.T) {
 				stored[option.Key] = option.Value
 			}
 			for range 2 {
-				operation_setting.GetQuotaSetting().TrustQuotaUSD = 10
 				operation_setting.GetQuotaSetting().PreConsumeMultiplier = 1
 				require.NoError(t, config.GlobalConfig.LoadFromDB(stored))
-				assert.Equal(t, 10.5, operation_setting.GetQuotaSetting().TrustQuotaUSD)
 				assert.Equal(t, 1.5, operation_setting.GetQuotaSetting().PreConsumeMultiplier)
 			}
 			for _, tc := range []struct{ key, value string }{
-				{"trust_quota_usd", "-1"}, {"trust_quota_usd", "NaN"}, {"trust_quota_usd", "+Inf"},
 				{"pre_consume_multiplier", "0"}, {"pre_consume_multiplier", "-0.5"},
 				{"pre_consume_multiplier", "NaN"}, {"pre_consume_multiplier", "Inf"},
 				{"pre_consume_multiplier", "1e309"}, {"pre_consume_multiplier", ""},
@@ -249,31 +244,29 @@ func TestPreConsumePolicyDatabaseMatrix(t *testing.T) {
 				require.NoError(t, db.Where(&model.Option{Key: key}).First(&saved).Error)
 				assert.Equal(t, stored[key], saved.Value, "invalid saves must preserve the previous value")
 			}
+			var retired struct{ Success bool }
+			modelManagementRequest(t, UpdateOption, http.MethodPut, "/api/option/", OptionUpdateRequest{Key: "quota_setting.trust_quota_usd", Value: "10.5"}, &retired)
+			assert.False(t, retired.Success, "retired trust quota must not be writable")
 			require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 				"billing_setting.billing_mode": `{"policy-model":"tiered_expr"}`,
 				"billing_setting.billing_expr": `{"policy-model":"tier(\"base\", p * 3 + c * 15)"}`,
 			}))
 			cases := []struct {
-				name                  string
-				threshold, multiplier float64
-				wallet, token         int
-				unlimited             bool
-				wantHeld              int
+				name          string
+				multiplier    float64
+				wallet, token int
+				unlimited     bool
+				wantHeld      int
 			}{
-				{"above threshold", 10, 1, 5500000, 5500000, false, 1500},
-				{"custom threshold", 20, 1, 5500000, 5500000, false, 1500},
-				{"zero disables bypass", 0, 1, 5500000, 5500000, false, 1500},
-				{"wallet equals threshold", 10, 1, 5000000, 5500000, false, 1500},
-				{"token equals threshold", 10, 1, 5500000, 5000000, false, 1500},
-				{"fractional threshold", 10.5, 1, 5250001, 5250001, false, 1500},
-				{"unlimited token", 10, 1, 5500000, 0, true, 1500},
-				{"forced reservation", 10, 1, 5500000, 5500000, false, 1500},
-				{"half input cost", 0, 0.5, 100000, 100000, false, 750},
-				{"fractional multiple refunds excess", 0, 2.5, 100000, 100000, false, 3750},
+				{"normal reservation", 1, 5500000, 5500000, false, 1500},
+				{"wallet is low", 1, 5000000, 5500000, false, 1500},
+				{"token is low", 1, 5500000, 5000000, false, 1500},
+				{"unlimited token", 1, 5500000, 0, true, 1500},
+				{"half input cost", 0.5, 100000, 100000, false, 750},
+				{"fractional multiple refunds excess", 2.5, 100000, 100000, false, 3750},
 			}
 			for i, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
-					require.NoError(t, model.UpdateOption("quota_setting.trust_quota_usd", strconv.FormatFloat(tc.threshold, 'f', -1, 64)))
 					require.NoError(t, model.UpdateOption("quota_setting.pre_consume_multiplier", strconv.FormatFloat(tc.multiplier, 'f', -1, 64)))
 					user := model.User{Username: fmt.Sprintf("policy-user-%d", i), Quota: tc.wallet, AffCode: fmt.Sprintf("policy-aff-%d", i)}
 					require.NoError(t, db.Create(&user).Error)

@@ -30,7 +30,10 @@ vi.mock('@/api/auth', () => ({
 import { ApiError } from '@/api/types'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAppStore } from '@/stores/app'
-import { storeAffiliateAttribution } from '@/utils/affiliate'
+import {
+  getAffiliateAttribution,
+  storeAffiliateAttribution,
+} from '@/utils/affiliate'
 import SignUpView from '../SignUpView.vue'
 
 describe('SignUpView affiliate attribution', () => {
@@ -46,7 +49,7 @@ describe('SignUpView affiliate attribution', () => {
     await setLocale('zh-CN')
   })
 
-  it('passes the URL attribution to native registration without a validation API', async () => {
+  it('shows URL attribution without silently confirming or persisting it', async () => {
     storeAffiliateAttribution('STORED-CODE')
     const pinia = createPinia()
     setActivePinia(pinia)
@@ -65,10 +68,119 @@ describe('SignUpView affiliate attribution', () => {
     })
     await flushPromises()
 
-    const inputs = wrapper.findAll('input')
-    expect(inputs.at(-1)?.element.value).toBe('INVALID')
+    expect(
+      wrapper.get<HTMLInputElement>('[data-affiliate-attribution] input')
+        .element.value
+    ).toBe('INVALID')
+    expect(
+      wrapper.get<HTMLInputElement>(
+        '[data-affiliate-attribution] input[type="checkbox"]'
+      ).element.checked
+    ).toBe(false)
+    expect(getAffiliateAttribution()).toBe('')
     expect(validateAffiliate).not.toHaveBeenCalled()
     expect(wrapper.text()).not.toContain('邀请码无效')
+    wrapper.unmount()
+  })
+
+  it('omits an unconfirmed URL invite from password registration', async () => {
+    register.mockResolvedValue(undefined)
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    const wrapper = mount(SignUpView, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          AuthLayout: { template: '<div><slot /></div>' },
+          PasswordStrengthMeter: true,
+          RouterLink: true,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.find('input[autocomplete="username"]').setValue('demo')
+    for (const input of wrapper.findAll('input[autocomplete="new-password"]'))
+      await input.setValue('password-123')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(register).toHaveBeenCalledTimes(1)
+    expect(register.mock.calls[0]?.[0].aff_code).toBeUndefined()
+    expect(getAffiliateAttribution()).toBe('')
+    wrapper.unmount()
+  })
+
+  it('sends a confirmed code and exposes stable affiliate registration errors', async () => {
+    register.mockRejectedValueOnce(
+      new ApiError('The invite code is invalid.', {
+        code: 'AFFILIATE_CODE_INVALID',
+        business: true,
+      })
+    )
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    const wrapper = mount(SignUpView, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          AuthLayout: { template: '<div><slot /></div>' },
+          PasswordStrengthMeter: true,
+          RouterLink: true,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.find('input[autocomplete="username"]').setValue('demo')
+    for (const input of wrapper.findAll('input[autocomplete="new-password"]'))
+      await input.setValue('password-123')
+    await wrapper
+      .get<HTMLInputElement>(
+        '[data-affiliate-attribution] input[type="checkbox"]'
+      )
+      .setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(register).toHaveBeenCalledWith(
+      expect.objectContaining({ aff_code: 'INVALID' }),
+      undefined
+    )
+    expect(
+      wrapper.get('[data-affiliate-attribution] [role="alert"]').text()
+    ).toContain('The invite code is invalid.')
+    wrapper.unmount()
+  })
+
+  it('hides password registration and offers configured OAuth providers', async () => {
+    route.query.aff = ''
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    app.status = {
+      password_register_enabled: false,
+      github_oauth: true,
+    }
+
+    const wrapper = mount(SignUpView, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          AuthLayout: { template: '<div><slot /></div>' },
+          PasswordStrengthMeter: true,
+          RouterLink: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.text()).toContain('已关闭密码注册')
+    expect(wrapper.text()).toContain('使用 GitHub 继续')
     wrapper.unmount()
   })
 })

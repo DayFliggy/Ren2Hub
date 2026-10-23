@@ -2,6 +2,12 @@ import { securityMessages } from '../../security'
 export default {
   security: securityMessages['en'],
   auth: {
+    inviteAttributionHint:
+      'Used only if this sign-in creates a new account. You can edit or clear this code before continuing.',
+    confirmInviteCode: 'Use this invite code',
+    inviteRecoveryHint:
+      'Edit the code or explicitly clear it, then choose the sign-in provider again.',
+    clearInviteCode: 'Clear invite code',
     verificationCode: 'Email verification code',
     sendCode: 'Send code',
     resetConfirm: 'Confirm password reset',
@@ -42,6 +48,13 @@ export default {
     strength: ['Weak', 'Medium', 'Strong'],
     resetSent: 'Reset link sent. Check your inbox.',
     registerSuccess: 'Account created. Please sign in.',
+    passwordRegistrationDisabled:
+      'Password registration is disabled. Continue with an available provider below.',
+    otherWaysToRegister: 'Or continue with',
+    noRegistrationMethods: 'Registration is currently unavailable.',
+    continueWithProvider: 'Continue with {provider}',
+    oauthRequiresSignIn:
+      'This provider requires an additional verification step. Please sign in instead.',
     mismatch: 'Passwords do not match',
     usernameRequired: 'Username is required',
     inviteCode: 'Invite code',

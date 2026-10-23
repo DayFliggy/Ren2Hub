@@ -83,13 +83,32 @@ describe('quota_data usage summary', () => {
     latency.kpi.avgLatency = null
     expect(() => parseUsageSummary(latency)).toThrow()
   })
-  it('rejects out-of-range rates, string quotas and the retired log contract', () => {
+  it('preserves int64 quota strings exactly and rejects invalid or retired values', () => {
+    const large = dashboardFixture()
+    large.kpi.totalQuota = '9007199254740993'
+    large.models[0]!.quota = '9007199254740993'
+    large.hourly[1]!.quota = '9007199254740993'
+    large.flow[0]!.consume = '9007199254740993'
+    large.distribution[0]!.consume = '9007199254740993'
+    const parsed = parseUsageSummary(large)
+    expect(parsed.kpi.totalQuota).toBe('9007199254740993')
+    expect(parsed.models[0]!.quota).toBe('9007199254740993')
+    expect(parsed.hourly[1]!.quota).toBe('9007199254740993')
+    expect(parsed.flow[0]!.consume).toBe('9007199254740993')
+    expect(parsed.distribution[0]!.consume).toBe('9007199254740993')
+
     const input = dashboardFixture()
     expect(() =>
       parseUsageSummary({ ...input, kpi: { ...input.kpi, successRate: 101 } })
     ).toThrow()
     expect(() =>
-      parseUsageSummary({ ...input, kpi: { ...input.kpi, totalQuota: '25' } })
+      parseUsageSummary({ ...input, kpi: { ...input.kpi, totalQuota: '1.5' } })
+    ).toThrow()
+    expect(() =>
+      parseUsageSummary({
+        ...input,
+        kpi: { ...input.kpi, totalQuota: '9223372036854775808' },
+      })
     ).toThrow()
     expect(() =>
       parseUsageSummary({

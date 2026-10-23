@@ -66,6 +66,37 @@ function mountInvite() {
 }
 
 describe('native full referral transfer', () => {
+  it('disables reward transfer when payment compliance is not confirmed', async () => {
+    auth.user.quota = 0
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...info,
+      transfer_enabled: false,
+      outstanding_offset: 500000,
+    })
+    const post = vi.spyOn(api, 'post')
+    const { state, wrapper } = mountInvite()
+    await state.load()
+    expect(state.canTransfer.value).toBe(false)
+    await state.transfer()
+    expect(post).not.toHaveBeenCalled()
+    const card = mount(InviteRewardCard, {
+      props: {
+        transferable: '3',
+        frozen: '0',
+        rewardTotal: '3',
+        invited: 1,
+        outstandingOffset: '500000',
+        transferEnabled: false,
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(card.get('button').attributes('disabled')).toBeDefined()
+    expect(card.text()).toContain('Payment compliance has not been confirmed')
+    expect(card.text()).toContain('Pending reward offset')
+    expect(card.text()).toContain('$1.00')
+    card.unmount()
+    wrapper.unmount()
+  })
   it('blocks the full transfer when the native wallet would exceed the safe quota limit', async () => {
     const card = mount(InviteRewardCard, {
       props: { transferable: '3', frozen: '0', rewardTotal: '3', invited: 1 },
@@ -222,6 +253,79 @@ describe('invite sharing follows the native registration switches', () => {
     expect(open).toHaveBeenCalledTimes(2)
     expect(location.href).toContain(`mailto:?subject=`)
     expect(location.href).toContain(encodeURIComponent(link))
+    wrapper.unmount()
+  })
+})
+
+describe('invitee request failures', () => {
+  const page = (name: string, current = 1, total = 1) => ({
+    items: [{ masked_name: name, invited_at: 1, reward_quota: 0 }],
+    total,
+    page: current,
+    page_size: 20,
+  })
+
+  it('clears a failed sort and restores the requested ordering on retry', async () => {
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValueOnce(page('first'))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(page('retry'))
+    const { state, wrapper } = mountInvite()
+    state.inviteesOrder.value = 'asc'
+    await state.loadInvitees()
+    state.inviteesOrder.value = 'desc'
+    await state.loadInvitees(1)
+    expect(state.invitees.value).toEqual([])
+    expect(state.inviteesPage.value).toBe(1)
+    expect(state.inviteesTotal.value).toBe(0)
+    expect(state.inviteesPageCount.value).toBe(1)
+    expect(state.inviteesError.value).not.toBe('')
+    await state.loadInvitees()
+    expect(state.invitees.value[0]?.masked_name).toBe('retry')
+    expect(state.inviteesError.value).toBe('')
+    expect(get.mock.calls[2]?.[1]).toMatchObject({ order: 'desc', p: 1 })
+    wrapper.unmount()
+  })
+
+  it('clears failed pagination but retries the failed requested page', async () => {
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValueOnce(page('first', 1, 41))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(page('third', 3, 41))
+    const { state, wrapper } = mountInvite()
+    await state.loadInvitees()
+    await state.loadInvitees(3)
+    expect(state.invitees.value).toEqual([])
+    expect(state.inviteesPage.value).toBe(1)
+    expect(state.inviteesTotal.value).toBe(0)
+    await state.loadInvitees()
+    expect(get.mock.calls[2]?.[1]).toMatchObject({ p: 3 })
+    expect(state.inviteesPage.value).toBe(3)
+    expect(state.invitees.value[0]?.masked_name).toBe('third')
+    wrapper.unmount()
+  })
+
+  it('does not clear the latest success when an earlier request fails late', async () => {
+    let rejectOld!: (error: Error) => void
+    vi.spyOn(api, 'get')
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectOld = reject
+          })
+      )
+      .mockResolvedValueOnce(page('latest'))
+    const { state, wrapper } = mountInvite()
+    const old = state.loadInvitees(2)
+    state.inviteesOrder.value = 'asc'
+    await state.loadInvitees(1)
+    rejectOld(new Error('stale failure'))
+    await old
+    expect(state.invitees.value[0]?.masked_name).toBe('latest')
+    expect(state.inviteesError.value).toBe('')
+    expect(state.inviteesLoading.value).toBe(false)
     wrapper.unmount()
   })
 })

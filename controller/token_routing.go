@@ -25,17 +25,17 @@ func tokenRoutingError(c *gin.Context, err error) {
 	status, code, message := http.StatusInternalServerError, "ROUTING_INTERNAL_ERROR", "Unable to read or save token routing"
 	switch {
 	case errors.Is(err, model.ErrTokenRouteInvalid):
-		status, code, message = http.StatusBadRequest, "ROUTING_INVALID", err.Error()
+		status, code, message = http.StatusBadRequest, "ROUTING_INVALID", model.ErrTokenRouteInvalid.Error()
 	case errors.Is(err, model.ErrTokenRouteForbidden):
-		status, code, message = http.StatusForbidden, "ROUTING_CHANNEL_FORBIDDEN", err.Error()
+		status, code, message = http.StatusForbidden, "ROUTING_CHANNEL_FORBIDDEN", model.ErrTokenRouteForbidden.Error()
 	case errors.Is(err, model.ErrTokenRouteConflict):
-		status, code, message = http.StatusConflict, "ROUTING_VERSION_CONFLICT", err.Error()
+		status, code, message = http.StatusConflict, "ROUTING_VERSION_CONFLICT", model.ErrTokenRouteConflict.Error()
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		status, code, message = http.StatusNotFound, "ROUTING_NOT_FOUND", "Token not found"
 	default:
 		common.SysError(common.LogText("token routing error: %s", err.Error()))
 	}
-	c.JSON(status, gin.H{"success": false, "message": message, "code": code})
+	common.ApiErrorStatus(c, status, common.NewMessage(message), gin.H{"code": code})
 }
 
 func GetTokenRouting(c *gin.Context) {

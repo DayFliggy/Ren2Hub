@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -10,6 +10,8 @@ import FormField from '@/components/common/FormField.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
+import { useSystemSettings } from '@/composables/useSystemSettings'
+import { registerSettingsDraft } from './settingsDraftGuard'
 
 interface CustomOAuthProvider {
   id: number
@@ -68,6 +70,16 @@ const form = reactive({
   access_denied_message: '',
 })
 
+const baseline = ref('')
+const dirty = computed(() => dialogOpen.value && JSON.stringify(form) !== baseline.value)
+registerSettingsDraft({ dirty: () => dirty.value, busy: () => saving.value || discovering.value })
+const { refreshStatus } = useSystemSettings()
+function closeEditor() {
+  if (saving.value || discovering.value) return
+  if (dirty.value && !window.confirm(t('systemSettings.discardDraft'))) return
+  dialogOpen.value = false
+}
+
 function resetForm(provider?: CustomOAuthProvider) {
   editingId.value = provider?.id ?? null
   form.name = provider?.name ?? ''
@@ -88,6 +100,7 @@ function resetForm(provider?: CustomOAuthProvider) {
   form.auth_style = provider?.auth_style ?? 0
   form.access_policy = provider?.access_policy ?? ''
   form.access_denied_message = provider?.access_denied_message ?? ''
+  baseline.value = JSON.stringify(form)
 }
 
 async function loadProviders() {
@@ -177,6 +190,7 @@ async function saveProvider() {
       await api.put(`/api/custom-oauth-provider/${editingId.value}`, payload)
     }
     dialogOpen.value = false
+    await refreshStatus(true)
     await loadProviders()
     toast.success(t('systemSettings.customOAuth.saved'))
   } catch (error) {
@@ -192,6 +206,7 @@ async function deleteProvider() {
   try {
     await api.delete(`/api/custom-oauth-provider/${deleteTarget.value.id}`)
     deleteTarget.value = null
+    await refreshStatus(true)
     await loadProviders()
     toast.success(t('systemSettings.customOAuth.deleted'))
   } catch (error) {
@@ -281,8 +296,9 @@ onMounted(loadProviders)
       )
     "
     size="lg"
-    @close="dialogOpen = false"
+    @close="closeEditor"
   >
+    <fieldset :disabled="saving || discovering" class="min-w-0 border-0 p-0">
     <div class="grid gap-4 sm:grid-cols-2">
       <FormField :label="t('systemSettings.customOAuth.name')"
         ><TextInput v-model="form.name"
@@ -379,12 +395,13 @@ onMounted(loadProviders)
         />
       </div>
     </div>
+    </fieldset>
     <template #footer>
       <div class="flex justify-end gap-3">
         <ConsoleButton
           variant="secondary"
           :disabled="saving"
-          @click="dialogOpen = false"
+          @click="closeEditor"
           >{{ t('common.cancel') }}</ConsoleButton
         >
         <ConsoleButton :loading="saving" @click="saveProvider">{{

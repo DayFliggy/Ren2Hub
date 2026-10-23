@@ -76,6 +76,18 @@ const metric = (wrapper: Wrapper, label: string) =>
   radio(wrapper, '分布指标', label)
 
 describe('UsageDistributionCard', () => {
+  it('shows disabled collection as unavailable without a loading failure', () => {
+    const wrapper = render({
+      points: [],
+      unavailableReason: '当前未启用数据导出，无法统计使用情况。',
+    })
+    expect(wrapper.get('[data-usage-unavailable]').text()).toContain(
+      '当前未启用数据导出'
+    )
+    expect(wrapper.text()).not.toContain('仪表盘数据加载失败')
+    expect(wrapper.findAll('[data-usage-date]')).toHaveLength(0)
+  })
+
   it('defaults to month and calls with one roving grid focus', () => {
     const wrapper = render()
 

@@ -81,6 +81,7 @@ export const accountSecurityApi = {
     if (remaining !== null && remaining < 0) invalidResponse(endpoint)
     return {
       enabled: requiredBoolean(row.enabled, endpoint),
+      locked: requiredBoolean(row.locked, endpoint),
       backup_codes_remaining: remaining,
     }
   },

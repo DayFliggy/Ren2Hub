@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"strings"
 	"time"
 
@@ -61,10 +60,10 @@ type AffiliatePolicyUpdate struct {
 // UpdateAffiliateUserPolicy 只修改请求中提交的字段。
 func UpdateAffiliateUserPolicy(id, operatorRole int, request AffiliatePolicyUpdate) (*AffiliateUserPolicy, error) {
 	if rate := request.RateBps.Value; rate != nil && (*rate < 0 || *rate > 10000) {
-		return nil, errors.New("invalid affiliate rate")
+		return nil, common.NewMessage("invalid affiliate rate")
 	}
 	if request.ResetCode && request.Code != nil {
-		return nil, errors.New("cannot set and reset code together")
+		return nil, common.NewMessage("cannot set and reset code together")
 	}
 	var result AffiliateUserPolicy
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -102,7 +101,7 @@ func UpdateAffiliateUserPolicy(id, operatorRole int, request AffiliatePolicyUpda
 				return err
 			}
 			if count > 0 {
-				return errors.New("invitation code already exists")
+				return common.NewMessage("invitation code already exists")
 			}
 		}
 		if err := tx.Model(&User{}).Where("id = ?", id).Updates(map[string]any{"aff_rebate_rate_bps": user.AffRebateRateBps, "aff_code": user.AffCode, "aff_code_enabled": user.AffCodeEnabled, "aff_code_custom": user.AffCodeCustom}).Error; err != nil {
@@ -132,12 +131,17 @@ type AffiliateInfo struct {
 	TotalReward          int                                `json:"total_reward"`
 	RewardTotal          int                                `json:"reward_total"`
 	Transferable         int                                `json:"transferable"`
+	TransferEnabled      bool                               `json:"transfer_enabled"`
+	OutstandingOffset    int                                `json:"outstanding_offset"`
 	Records              []AffiliateRecord                  `json:"records"`
 	MonthlySeries        []AffiliateMonth                   `json:"monthly_series"`
 	Policy               operation_setting.AffiliateSetting `json:"policy"`
 }
 
 func GetAffiliateInfo(userID int, loc *time.Location) (*AffiliateInfo, error) {
+	if _, err := EnsureAffiliateCode(userID); err != nil {
+		return nil, err
+	}
 	var user User
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var err error
@@ -156,8 +160,8 @@ func GetAffiliateInfo(userID int, loc *time.Location) (*AffiliateInfo, error) {
 	if user.AffRebateRateBps != nil {
 		rate = *user.AffRebateRateBps
 	}
-	result := &AffiliateInfo{Code: user.AffCode, CodeEnabled: user.AffCodeEnabled, Invited: user.AffCount, EffectiveRateBps: rate, EffectiveRatePercent: float64(rate) / 100, AvailableReward: user.AffQuota, FrozenReward: user.AffFrozenQuota, TotalReward: user.AffHistoryQuota, RewardTotal: user.AffHistoryQuota, Transferable: user.AffQuota, Policy: policy, Records: []AffiliateRecord{}, MonthlySeries: []AffiliateMonth{}}
-	if err = DB.Where("user_id = ?", userID).Order("id DESC").Limit(100).Find(&result.Records).Error; err != nil {
+	result := &AffiliateInfo{Code: user.AffCode, CodeEnabled: user.AffCodeEnabled, Invited: user.AffCount, EffectiveRateBps: rate, EffectiveRatePercent: float64(rate) / 100, AvailableReward: user.AffQuota, FrozenReward: user.AffFrozenQuota, TotalReward: user.AffHistoryQuota, RewardTotal: user.AffHistoryQuota, Transferable: user.AffQuota, TransferEnabled: operation_setting.IsPaymentComplianceConfirmed(), OutstandingOffset: user.AffOffsetDebtQuota, Policy: policy, Records: []AffiliateRecord{}, MonthlySeries: []AffiliateMonth{}}
+	if err = DB.Where("user_id = ? AND kind <> ?", userID, "transfer_allocation").Order("id DESC").Limit(100).Find(&result.Records).Error; err != nil {
 		return nil, err
 	}
 	// Chart has a bounded twelve-month window of the viewer's calendar months in
@@ -195,13 +199,13 @@ func GetAffiliateInfo(userID int, loc *time.Location) (*AffiliateInfo, error) {
 	return result, nil
 }
 func ListAffiliateRecords(userID int, kind string, page *common.PageInfo) ([]AffiliateRecord, int64, error) {
-	query := DB.Model(&AffiliateRecord{})
+	query := DB.Model(&AffiliateRecord{}).Where("kind <> ?", "transfer_allocation")
 	if userID > 0 {
 		query = query.Where("user_id = ?", userID)
 	}
 	if kind != "" {
-		if kind != "accrue" && kind != "transfer" {
-			return nil, 0, errors.New("invalid referral record kind")
+		if kind != "accrue" && kind != "transfer" && kind != "reversal" {
+			return nil, 0, common.NewMessage("invalid referral record kind")
 		}
 		query = query.Where("kind = ?", kind)
 	}
@@ -235,10 +239,10 @@ func maskAffiliateName(name string) string {
 
 func ListAffiliateInvitees(userID int, order string, page *common.PageInfo) ([]AffiliateInvitee, int64, error) {
 	if userID < 1 || page == nil || page.Page < 1 || page.PageSize < 1 || page.PageSize > 100 || page.Page > common.MaxWalletQuota/page.PageSize {
-		return nil, 0, errors.New("invalid invitee pagination")
+		return nil, 0, common.NewMessage("invalid invitee pagination")
 	}
 	if order != "" && order != "asc" && order != "desc" {
-		return nil, 0, errors.New("invalid invitee order")
+		return nil, 0, common.NewMessage("invalid invitee order")
 	}
 	query := DB.Model(&User{}).Where("inviter_id = ?", userID)
 	var total int64

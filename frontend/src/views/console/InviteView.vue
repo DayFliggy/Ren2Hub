@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import InviteAffiliateCard from '@/components/console/invite/InviteAffiliateCard.vue'
 import InviteMonthChart from '@/components/console/invite/InviteMonthChart.vue'
 import InviteRewardCard from '@/components/console/invite/InviteRewardCard.vue'
+import InviteRecordsCard from '@/components/console/invite/InviteRecordsCard.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -32,6 +33,12 @@ const {
   inviteesLoading,
   inviteesError,
   loadInvitees,
+  records,
+  recordsPage,
+  recordsTotal,
+  recordsLoading,
+  recordsError,
+  loadRecords,
   sortInvitees,
   transferOpen,
   canTransfer,
@@ -49,7 +56,7 @@ const {
 const howSteps = [1, 2, 3, 4]
 const faqs = [1, 2, 3, 4]
 
-onMounted(() => Promise.all([load(), loadInvitees()]))
+onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
 </script>
 
 <template>
@@ -113,6 +120,12 @@ onMounted(() => Promise.all([load(), loadInvitees()]))
         </div>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.transferableHint') }}
+        </p>
+        <p
+          v-if="info?.transfer_enabled === false"
+          class="mt-1 text-xs text-[var(--text-tertiary)]"
+        >
+          {{ t('invite.skipReasons.compliance_unconfirmed') }}
         </p>
       </ConsoleCard>
 
@@ -288,12 +301,24 @@ onMounted(() => Promise.all([load(), loadInvitees()]))
         :transferable="info.transferable"
         :frozen="info.frozen_reward"
         :reward-total="info.reward_total"
+        :outstanding-offset="info.outstanding_offset"
+        :transfer-enabled="info.transfer_enabled"
         :invited="info.invited"
         :readonly="readOnly"
         @transfer="transferOpen = true"
       />
       <SkeletonBlock v-else class="h-72" />
     </div>
+
+    <InviteRecordsCard
+      class="mt-5"
+      :records="records"
+      :page="recordsPage"
+      :total="recordsTotal"
+      :loading="recordsLoading"
+      :error="recordsError"
+      @load="loadRecords"
+    />
 
     <!-- how it works -->
     <section class="mt-8">

@@ -37,6 +37,7 @@ const {
   tokenTrend,
   flushIntervalMinutes,
   recentOutOfRange,
+  usageUnavailable,
   system,
   limits,
   discounts,
@@ -199,6 +200,7 @@ const rangeOptions = computed(() => [
             :covered-from="distribution.coveredFrom.value"
             :loading="distribution.loading.value"
             :error="distribution.error.value"
+            :unavailable-reason="distribution.unavailableReason.value"
           />
 
           <!-- 系统状态 -->
@@ -209,7 +211,11 @@ const rangeOptions = computed(() => [
             :points="tokenTrend"
             :flush-interval-minutes="flushIntervalMinutes"
             :loading="loading"
-            :unavailable-reason="recentOutOfRange"
+            :unavailable-reason="
+              usageUnavailable
+                ? t('dashboard.stats.unavailable')
+                : recentOutOfRange
+            "
           />
 
           <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
@@ -219,7 +225,11 @@ const rangeOptions = computed(() => [
             class="min-w-0 xl:col-span-2"
             :items="share"
             :loading="loading"
-            :unavailable-reason="recentOutOfRange"
+            :unavailable-reason="
+              usageUnavailable
+                ? t('dashboard.stats.unavailable')
+                : recentOutOfRange
+            "
           />
         </div>
       </div>

@@ -68,8 +68,9 @@ func ReadDashboardLatency(ctx context.Context, userID int, start, end int64) ([]
 	return rows, err
 }
 
-// ReadDashboardOutcome 按 request_id 给本人请求分类。只有区间内有错误日志、
-// 且 start 之后任何时刻都没有消费日志的请求才算失败，end 之后才结算的重试仍算成功。
+// ReadDashboardOutcome 按 request_id 给本人请求分类。区间内有错误、且
+// start 之后任何时刻都没有消费日志的请求才算失败；同一请求在 end 之后
+// 才结算的重试仍归为区间内请求的成功。
 func ReadDashboardOutcome(ctx context.Context, userID int, start, end int64) (DashboardOutcome, error) {
 	var outcome DashboardOutcome
 	if err := validDashboardRange(userID, start, end); err != nil {
@@ -79,8 +80,12 @@ func ReadDashboardOutcome(ctx context.Context, userID int, start, end int64) (Da
 		return outcome, errors.New("log database is unavailable")
 	}
 	inRange := "user_id = ? AND type = ? AND created_at >= ? AND created_at < ?"
+	inRangeErrors := LOG_DB.WithContext(ctx).Table("logs").Select("request_id").
+		Where(inRange, userID, LogTypeError, start, end)
 	err := LOG_DB.WithContext(ctx).Table("logs").Select("COUNT(DISTINCT request_id)").
-		Where(inRange, userID, LogTypeConsume, start, end).Scan(&outcome.Succeeded).Error
+		Where("user_id = ? AND type = ? AND created_at >= ?", userID, LogTypeConsume, start).
+		Where("(created_at < ? OR request_id IN (?))", end, inRangeErrors).
+		Scan(&outcome.Succeeded).Error
 	if err != nil {
 		return outcome, err
 	}

@@ -29,6 +29,86 @@ const info = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('native affiliate API contracts', () => {
+  it('keeps legacy metadata compatible and reads the transfer gate and outstanding offset', async () => {
+    vi.spyOn(api, 'get')
+      .mockResolvedValueOnce(info)
+      .mockResolvedValueOnce({
+        ...info,
+        outstanding_offset: 12,
+        transfer_enabled: false,
+      })
+    expect(await affiliateApi.info()).toMatchObject({
+      outstanding_offset: '0',
+      transfer_enabled: true,
+    })
+    expect(await affiliateApi.info()).toMatchObject({
+      outstanding_offset: '12',
+      transfer_enabled: false,
+    })
+  })
+  it('reads reversal components and rejects private allocation rows', async () => {
+    const row = {
+      id: 1,
+      user_id: 2,
+      invitee_id: 3,
+      kind: 'reversal',
+      skip_reason: '',
+      source_type: 'admin_quota_reversal',
+      source_id: 'operation',
+      base_quota: 100,
+      rate_bps: 2000,
+      reward_quota: 20,
+      credited_quota: 5,
+      debt_offset_quota: 3,
+      debt_added_quota: 15,
+      frozen_until: 0,
+      thawed_at: 0,
+      created_at: 1,
+      available_after: 0,
+      frozen_after: 0,
+      wallet_after: 12,
+    }
+    const page = { items: [row], total: 1, page: 1, page_size: 20 }
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce({
+        ...page,
+        items: [
+          {
+            ...row,
+            kind: 'accrue',
+            credited_quota: undefined,
+            debt_offset_quota: undefined,
+            debt_added_quota: undefined,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ...page,
+        items: [{ ...row, kind: 'transfer_allocation' }],
+      })
+    expect((await affiliateApi.records(1, 20)).items[0]).toMatchObject({
+      kind: 'reversal',
+      reward_quota: '20',
+      credited_quota: '5',
+      debt_offset_quota: '3',
+      debt_added_quota: '15',
+    })
+    expect(get).toHaveBeenCalledWith(
+      '/api/user/affiliate/records',
+      { p: 1, page_size: 20 },
+      { signal: undefined }
+    )
+    expect((await affiliateApi.records(1, 20)).items[0]).toMatchObject({
+      credited_quota: '0',
+      debt_offset_quota: '0',
+      debt_added_quota: '0',
+    })
+    await expect(affiliateApi.records(1, 20)).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
+  })
   it('asks for monthly series in the viewer timezone', async () => {
     vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-480)
     const get = vi.spyOn(api, 'get').mockResolvedValue(info)

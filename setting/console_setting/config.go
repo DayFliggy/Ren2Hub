@@ -1,6 +1,10 @@
 package console_setting
 
-import "github.com/QuantumNous/new-api/setting/config"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/setting/config"
+)
 
 type ConsoleSetting struct {
 	ApiInfo              string `json:"api_info"`              // 控制台 API 信息 (JSON 数组字符串)
@@ -15,10 +19,10 @@ type ConsoleSetting struct {
 
 // 默认配置
 var defaultConsoleSetting = ConsoleSetting{
-	ApiInfo:              "",
-	UptimeKumaGroups:     "",
-	Announcements:        "",
-	FAQ:                  "",
+	ApiInfo:              "[]",
+	UptimeKumaGroups:     "[]",
+	Announcements:        "[]",
+	FAQ:                  "[]",
 	ApiInfoEnabled:       true,
 	UptimeKumaEnabled:    true,
 	AnnouncementsEnabled: true,
@@ -36,4 +40,16 @@ func init() {
 // GetConsoleSetting 获取 ConsoleSetting 配置实例
 func GetConsoleSetting() *ConsoleSetting {
 	return &consoleSetting
+}
+
+// NormalizeOptionValue preserves nonempty input so malformed persisted JSON is
+// still reported, while the legacy empty-string default represents an empty list.
+func NormalizeOptionValue(key, value string) string {
+	switch key {
+	case "console_setting.api_info", "console_setting.uptime_kuma_groups", "console_setting.announcements", "console_setting.faq":
+		if strings.TrimSpace(value) == "" {
+			return "[]"
+		}
+	}
+	return value
 }

@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance } from 'axios'
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -59,6 +59,101 @@ function conflict(code: string) {
 beforeEach(clearAuthBundle)
 
 describe('HTTP authentication transport', () => {
+  it.each([createHttpTransport, createPublicHttpTransport])(
+    'aborts oversized binary downloads during transfer without requesting a refresh',
+    async (createTransport) => {
+      setAuthBundle(bundle)
+      let aborted = false
+      const request = vi.fn(async (config: AxiosRequestConfig) => {
+        config.onDownloadProgress?.({
+          loaded: 4,
+          total: 101,
+          bytes: 4,
+          lengthComputable: true,
+        })
+        aborted = Boolean(config.signal?.aborted)
+        throw new axios.CanceledError('cancelled')
+      })
+      const transport = createTransport({ request } as unknown as AxiosInstance)
+      await expect(
+        transport.getBlob!('/api/log/self/export', { maxBytes: 100 })
+      ).rejects.toMatchObject({ code: 'BINARY_DOWNLOAD_TOO_LARGE' })
+      expect(aborted).toBe(true)
+      expect(request).toHaveBeenCalledOnce()
+      expect(getAuthBundle()?.access_token).toBe('old-token')
+    }
+  )
+
+  it('bounds downloads when the server does not send a content length', async () => {
+    let aborted = false
+    const request = vi.fn(async (config: AxiosRequestConfig) => {
+      config.onDownloadProgress?.({
+        loaded: 101,
+        bytes: 101,
+        lengthComputable: false,
+      })
+      aborted = Boolean(config.signal?.aborted)
+      throw new axios.CanceledError('cancelled')
+    })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+    await expect(
+      transport.getBlob!('/api/log/self/export', { maxBytes: 100 })
+    ).rejects.toMatchObject({ code: 'BINARY_DOWNLOAD_TOO_LARGE' })
+    expect(aborted).toBe(true)
+  })
+
+  it('forwards caller cancellation to a size-limited download', async () => {
+    const controller = new AbortController()
+    const request = vi.fn(
+      (config: AxiosRequestConfig) =>
+        new Promise<never>((_, reject) => {
+          config.signal?.addEventListener?.('abort', () =>
+            reject(new axios.CanceledError('caller cancelled'))
+          )
+          controller.abort()
+        })
+    )
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+    await expect(
+      transport.getBlob!('/api/log/self/export', {
+        maxBytes: 100,
+        signal: controller.signal,
+      })
+    ).rejects.toMatchObject({ message: 'caller cancelled' })
+    expect(request.mock.calls[0]?.[0].signal?.aborted).toBe(true)
+  })
+
+  it('retains the download byte limit across authentication refresh', async () => {
+    setAuthBundle(bundle)
+    const data = new Blob(['{}'])
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(unauthorized())
+      .mockResolvedValueOnce({
+        data: { success: true, data: { ...bundle, access_token: 'new-token' } },
+      })
+      .mockResolvedValueOnce({ data })
+    const transport = createHttpTransport({
+      request,
+    } as unknown as AxiosInstance)
+    await expect(
+      transport.getBlob!('/api/log/self/export', {
+        maxBytes: 100,
+        timeoutMs: 120_000,
+      })
+    ).resolves.toBe(data)
+    expect(request.mock.calls[2]?.[0]).toMatchObject({
+      headers: { Authorization: 'Bearer new-token' },
+      timeout: 120_000,
+      maxContentLength: 100,
+      onDownloadProgress: expect.any(Function),
+    })
+  })
+
   it('refreshes a log download while preserving its timeout and cancellation', async () => {
     setAuthBundle(bundle)
     const data = new Blob(['{"success":true,"data":{"count":0}}'])

@@ -62,7 +62,9 @@ const tpmSeries = computed(() =>
 // Headlines read the today window, which loads even when the trend window
 // exceeds the log limit.
 const avgTpm = computed(() =>
-  props.stats ? Math.round(props.stats.today_tokens / minutesElapsedToday()) : 0
+  props.stats?.today_tokens !== undefined
+    ? Math.round(props.stats.today_tokens / minutesElapsedToday())
+    : null
 )
 
 interface Cell {
@@ -89,7 +91,9 @@ const cells = computed<Cell[]>(() => [
     value: hidden.value
       ? '••••'
       : props.stats
-        ? formatQuota(props.stats.today_quota)
+        ? props.stats.today_quota !== undefined
+          ? formatQuota(props.stats.today_quota)
+          : '—'
         : '—',
     color: 'var(--accent-text)',
     skeleton: 'w-24',
@@ -98,9 +102,17 @@ const cells = computed<Cell[]>(() => [
   },
   {
     key: 'requests',
-    label: t('dashboard.statTodayRequests'),
+    label:
+      props.stats?.today_requests === undefined
+        ? t('dashboard.stats.totalRequests')
+        : t('dashboard.statTodayRequests'),
     icon: 'M4 17h4l3-9 3 14 3-11 2 6h3',
-    value: props.stats ? formatNumber(props.stats.today_requests) : '—',
+    value:
+      props.stats?.today_requests !== undefined
+        ? formatNumber(props.stats.today_requests)
+        : props.stats
+          ? formatNumber(props.stats.total_requests)
+          : '—',
     color: 'var(--signal)',
     textColor: 'var(--signal-text)',
     skeleton: 'w-20',
@@ -111,7 +123,10 @@ const cells = computed<Cell[]>(() => [
     key: 'tokens',
     label: t('dashboard.statTodayTokens'),
     icon: 'M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5',
-    value: props.stats ? formatCompact(props.stats.today_tokens) : '—',
+    value:
+      props.stats?.today_tokens !== undefined
+        ? formatCompact(props.stats.today_tokens)
+        : '—',
     color: 'var(--text-primary)',
     skeleton: 'w-20',
     series: tokenWindow.value.map(pointTotal),
@@ -128,7 +143,7 @@ const cells = computed<Cell[]>(() => [
     key: 'tpm',
     label: t('dashboard.statAvgTpm'),
     icon: 'M13 2 3 14h7l-1 8 10-12h-7l1-8Z',
-    value: props.stats ? formatCompact(avgTpm.value) : '—',
+    value: avgTpm.value === null ? '—' : formatCompact(avgTpm.value),
     color: 'var(--support)',
     textColor: 'var(--support-text)',
     skeleton: 'w-16',

@@ -19,6 +19,8 @@ export default {
     refresh: 'Refresh',
     retry: 'Retry',
     loadFailed: 'Failed to load',
+    publicationPending:
+      'Changes were saved. Runtime configuration publication is pending retry.',
     appError: {
       label: 'Application error',
       title: 'This page could not be rendered',
@@ -60,6 +62,7 @@ export default {
     signedOut: 'Signed out',
     success: 'Success',
     failed: 'Failed',
+    invalidInput: 'Enter a valid value.',
     pending: 'Pending',
     copyFailed: 'Copy failed — please copy manually',
     selectAll: 'Select all',

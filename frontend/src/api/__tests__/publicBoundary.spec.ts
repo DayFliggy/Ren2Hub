@@ -13,6 +13,8 @@ describe('public API response boundaries', () => {
       parsePublicStatus({
         system_name: 'Ren2Hub',
         register_enabled: false,
+        password_register_enabled: false,
+        quota_per_unit: 1_000_000,
         turnstile_check: true,
         turnstile_site_key: 'site-key',
         wechat_qrcode: 'https://cdn.example.com/wechat.png',
@@ -22,6 +24,8 @@ describe('public API response boundaries', () => {
     ).toEqual({
       system_name: 'Ren2Hub',
       register_enabled: false,
+      password_register_enabled: false,
+      quota_per_unit: 1_000_000,
       turnstile_check: true,
       turnstile_site_key: 'site-key',
       wechat_qrcode: 'https://cdn.example.com/wechat.png',
@@ -39,6 +43,10 @@ describe('public API response boundaries', () => {
   it('rejects malformed public response data', () => {
     expect(() => parsePublicStatus({ system_name: 123 })).toThrow()
     expect(() => parsePublicStatus({ turnstile_check: 'true' })).toThrow()
+    expect(() =>
+      parsePublicStatus({ password_register_enabled: 'false' })
+    ).toThrow()
+    expect(() => parsePublicStatus({ quota_per_unit: 0 })).toThrow()
     expect(() => parsePublicStatus({ api_info_enabled: 'true' })).toThrow()
     expect(() => parsePublicStatus({ server_address: 123 })).toThrow()
     expect(() => parsePublicStatus({ wechat_qrcode: 123 })).toThrow()
@@ -65,6 +73,13 @@ describe('public API response boundaries', () => {
       })
     for (const days of [0, -1, 1.5, '365'])
       expect(() => parsePublicStatus({ log_max_range_days: days })).toThrow()
+  })
+
+  it('accepts positive finite quota units including backend fractional settings', () => {
+    for (const quota_per_unit of [1.5, 333333.25, 1e-7, 1e21])
+      expect(parsePublicStatus({ quota_per_unit })).toEqual({ quota_per_unit })
+    for (const quota_per_unit of [0, -1, Infinity, NaN])
+      expect(() => parsePublicStatus({ quota_per_unit })).toThrow()
   })
 
   it('accepts only a consistent 24-hour metrics snapshot', () => {

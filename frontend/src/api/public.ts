@@ -17,6 +17,7 @@ export interface PublicStatus {
   api_info?: Array<{ url: string; route?: string; description?: string }>
   passkey_rp_ids?: string[]
   password_login_enabled?: boolean
+  password_register_enabled?: boolean
   password_login_encryption_enabled?: boolean
   version?: string
   system_name?: string
@@ -128,6 +129,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'log_export_enabled',
     'api_info_enabled',
     'password_login_enabled',
+    'password_register_enabled',
     'password_login_encryption_enabled',
     'register_enabled',
     'user_agreement_enabled',

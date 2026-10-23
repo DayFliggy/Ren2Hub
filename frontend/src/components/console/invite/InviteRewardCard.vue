@@ -11,6 +11,8 @@ const props = defineProps<{
   transferable: string
   frozen: string
   rewardTotal: string
+  outstandingOffset?: string
+  transferEnabled?: boolean
   invited: number
   readonly?: boolean
 }>()
@@ -28,6 +30,7 @@ const afterBalance = computed(() => {
 const canTransfer = computed(
   () =>
     !props.readonly &&
+    props.transferEnabled !== false &&
     BigInt(props.transferable) > 0n &&
     afterBalance.value !== null
 )
@@ -72,6 +75,23 @@ const canTransfer = computed(
       </div>
     </dl>
 
+    <div
+      v-if="BigInt(outstandingOffset ?? '0') > 0n"
+      class="mt-4 space-y-1 border-t border-[var(--border-subtle)] pt-3 text-sm"
+    >
+      <p class="flex items-center justify-between gap-3">
+        <span class="text-[var(--text-tertiary)]">{{
+          t('invite.outstandingOffset')
+        }}</span>
+        <span class="font-medium text-[var(--text-primary)]">{{
+          formatQuota(outstandingOffset ?? '0')
+        }}</span>
+      </p>
+      <p class="text-xs text-[var(--text-tertiary)]">
+        {{ t('invite.outstandingOffsetHint') }}
+      </p>
+    </div>
+
     <ConsoleButton
       class="mt-5"
       block
@@ -81,6 +101,12 @@ const canTransfer = computed(
     >
       {{ t('invite.transfer') }}
     </ConsoleButton>
+    <p
+      v-if="transferEnabled === false"
+      class="mt-2 text-xs text-[var(--text-tertiary)]"
+    >
+      {{ t('invite.skipReasons.compliance_unconfirmed') }}
+    </p>
 
     <p
       class="mt-4 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4 text-xs text-[var(--text-tertiary)]"

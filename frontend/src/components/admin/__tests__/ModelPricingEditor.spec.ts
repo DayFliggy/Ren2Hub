@@ -2,6 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelPricingEditor from '../ModelPricingEditor.vue'
+import { configureQuotaPerUnit } from '@/utils/quota'
 import { pricingConfigApi, type PricingValues } from '@/api/pricingConfig'
 const plugins = [
   createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
@@ -10,6 +11,7 @@ beforeEach(() => {
   vi.spyOn(pricingConfigApi, 'preview').mockResolvedValue({ effective: {} })
 })
 afterEach(() => {
+  configureQuotaPerUnit(500_000)
   vi.restoreAllMocks()
 })
 function setup(pricing: PricingValues = {}) {
@@ -105,6 +107,35 @@ describe('expression editor drafts', () => {
   })
 })
 describe('manual model price editor', () => {
+  it('saves dollar prices at the runtime quota unit, preserving untouched ratios', async () => {
+    configureQuotaPerUnit(1_000_000)
+    const wrapper = setup({ ModelRatio: '2', CompletionRatio: '3' })
+    const input = wrapper.get('input[inputmode="decimal"]')
+    expect(input.element).toHaveProperty('value', '2')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '2',
+      CompletionRatio: '3',
+    })
+    await input.setValue('5')
+    expect(wrapper.vm.commit()?.pricing).toMatchObject({ ModelRatio: '5' })
+    wrapper.unmount()
+  })
+  it('reprojects clean prices on status refresh and preserves edited dollar intent', async () => {
+    const wrapper = setup({ ModelRatio: '2' })
+    const input = wrapper.get('input[inputmode="decimal"]')
+    expect(input.element).toHaveProperty('value', '4')
+    configureQuotaPerUnit(1_000_000)
+    await flushPromises()
+    expect(input.element).toHaveProperty('value', '2')
+    expect(wrapper.vm.dirty()).toBe(false)
+    await input.setValue('5')
+    configureQuotaPerUnit(100_000)
+    await flushPromises()
+    expect(input.element).toHaveProperty('value', '5')
+    expect(wrapper.vm.commit()?.pricing).toEqual({ ModelRatio: '0.5' })
+    wrapper.unmount()
+  })
+
   it('keeps its own save action and saves only a committed draft', async () => {
     const wrapper = setup()
     const save = () =>

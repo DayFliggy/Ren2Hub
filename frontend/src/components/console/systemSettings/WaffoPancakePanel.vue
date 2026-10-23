@@ -8,6 +8,7 @@ import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
+import { registerSettingsDraft } from './settingsDraftGuard'
 
 interface CatalogProduct {
   id: string
@@ -31,7 +32,7 @@ const emit = defineEmits<{ saved: [] }>()
 
 const { t } = useI18n()
 const toast = useToast()
-const { load, rawValue, saveOptions } = useSystemSettings()
+const { load, rawValue, saveOptions, refreshStatus } = useSystemSettings()
 const loadingCatalog = ref(false)
 const saving = ref(false)
 const creating = ref(false)
@@ -46,6 +47,10 @@ const form = reactive({
   minTopUp: 1,
 })
 
+const baseline = ref('')
+const snapshot = () => JSON.stringify(form)
+registerSettingsDraft({ dirty: () => baseline.value !== '' && snapshot() !== baseline.value, busy: () => saving.value || creating.value || loadingCatalog.value })
+
 const selectedStore = computed(() =>
   catalog.value?.stores.find((store) => store.id === form.storeId)
 )
@@ -56,6 +61,7 @@ function syncForm() {
   form.productId = String(rawValue('WaffoPancakeProductID', ''))
   form.unitPrice = Number(rawValue('WaffoPancakeUnitPrice', 1)) || 1
   form.minTopUp = Number(rawValue('WaffoPancakeMinTopUp', 1)) || 1
+  baseline.value = snapshot()
 }
 
 function ensureProductBelongsToStore() {
@@ -84,10 +90,22 @@ async function saveConfiguration(loadCatalogAfterSave = false) {
       product_id: form.productId,
     })
     form.privateKey = ''
+    const committedForm = { ...form }
+    committedForm.unitPrice = JSON.parse(baseline.value).unitPrice
+    committedForm.minTopUp = JSON.parse(baseline.value).minTopUp
+    baseline.value = JSON.stringify(committedForm)
+    await refreshStatus(true)
     if (
       !(await saveOptions({
         WaffoPancakeUnitPrice: form.unitPrice,
         WaffoPancakeMinTopUp: form.minTopUp,
+      }, {
+        onApplied(key, value) {
+          const saved = JSON.parse(baseline.value)
+          if (key === 'WaffoPancakeUnitPrice') saved.unitPrice = Number(value)
+          if (key === 'WaffoPancakeMinTopUp') saved.minTopUp = Number(value)
+          baseline.value = JSON.stringify(saved)
+        },
       }))
     )
       return false
@@ -186,6 +204,7 @@ onMounted(async () => {
     class="waffo-pancake-panel"
     :aria-label="t('systemSettings.waffoPancake.label')"
   >
+    <fieldset :disabled="saving || creating || loadingCatalog" class="min-w-0 border-0 p-0">
     <div class="grid gap-4 sm:grid-cols-2">
       <FormField :label="t('systemSettings.waffoPancake.merchantId')">
         <TextInput v-model="form.merchantId" autocomplete="off" />
@@ -288,6 +307,7 @@ onMounted(async () => {
         </select>
       </FormField>
     </div>
+    </fieldset>
   </section>
 </template>
 

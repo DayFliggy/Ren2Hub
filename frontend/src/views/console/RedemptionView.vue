@@ -710,6 +710,35 @@ onBeforeUnmount(() => exportController?.abort())
               </div>
               <div class="flex items-center gap-0.5 pl-2">
                 <IconButton
+                  :label="
+                    code.status === 'disabled'
+                      ? t('redemption.enableCode')
+                      : t('redemption.disableCode')
+                  "
+                  :tone="
+                    code.status !== 'disabled' &&
+                    code.status !== 'used' &&
+                    code.status !== 'expired'
+                      ? 'danger'
+                      : 'default'
+                  "
+                  :disabled="
+                    !canManage ||
+                    isRowBusy(code.id) ||
+                    code.status === 'used' ||
+                    code.status === 'expired'
+                  "
+                  @click="toggleStatus(code)"
+                >
+                  <LoaderCircle
+                    v-if="isBusy(code.id, 'status')"
+                    :size="15"
+                    class="animate-spin"
+                  />
+                  <PowerOff v-else-if="code.status !== 'disabled'" :size="15" />
+                  <Power v-else :size="15" />
+                </IconButton>
+                <IconButton
                   :label="t('redemption.deleteCode')"
                   tone="danger"
                   :disabled="!canManage || isRowBusy(code.id)"

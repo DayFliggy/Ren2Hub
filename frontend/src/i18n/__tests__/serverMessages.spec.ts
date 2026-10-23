@@ -102,6 +102,21 @@ describe('server message rendering', () => {
 })
 
 describe('server message catalogs', () => {
+  it.each([
+    'invitation rewards are disabled until payment compliance is confirmed',
+    'invalid redemption sort field',
+    'invalid redemption sort order',
+    'expected a single JSON object',
+    'invalid user id',
+    'Top-up order not found',
+    'Failed to read the payment order',
+    'invalid token routing configuration',
+    'Attachment filename must not exceed {{count}} characters',
+  ])('provides a Chinese business message for %s', (key) => {
+    const catalog = Object.assign({}, ...Object.values(catalogFiles))
+    expect(catalog[key]).toMatch(/[\u4e00-\u9fff]/)
+    expect(placeholders(catalog[key])).toEqual(placeholders(key))
+  })
   it('keeps every catalog file a flat map with matching placeholders', () => {
     const seen = new Map<string, string>()
     for (const [file, catalog] of Object.entries(catalogFiles)) {

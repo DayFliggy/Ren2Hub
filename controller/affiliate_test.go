@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,7 +25,11 @@ func TestAffiliateHTTPTransferAndRecordOwnership(t *testing.T) {
 	policy := operation_setting.GetAffiliateSetting()
 	old := *policy
 	*policy = operation_setting.AffiliateSetting{Enabled: true, RateBps: 2000}
-	t.Cleanup(func() { *policy = old })
+	payment := operation_setting.GetPaymentSetting()
+	oldPayment := *payment
+	payment.ComplianceConfirmed = true
+	payment.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	t.Cleanup(func() { *policy = old; *payment = oldPayment })
 	user := model.User{Username: "referral-http", AffCode: "HTTP-CODE", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffQuota: 123, AffHistoryQuota: 123}
 	other := model.User{Username: "referral-other", AffCode: "HTTP-OTHER", Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
 	require.NoError(t, db.Create(&user).Error)
@@ -74,7 +79,50 @@ func TestAffiliateHTTPTransferAndRecordOwnership(t *testing.T) {
 	require.NoError(t, json.Unmarshal(result["data"], &info))
 	assert.Equal(t, "HTTP-CODE", info.Code)
 	assert.Equal(t, 123, info.RewardTotal)
+
+	conflictingOperationID := "http-conflict-one"
+	require.NoError(t, db.Create(&model.AffiliateRecord{
+		UserID: user.Id, Kind: "accrue", SourceType: "admin_add", SourceID: "other",
+		SourceKey: fmt.Sprintf("transfer:%d:%s", user.Id, conflictingOperationID), RewardQuota: 1,
+	}).Error)
+	request := httptest.NewRequest(http.MethodPost, "/transfer", bytes.NewBufferString(fmt.Sprintf(`{"operation_id":%q}`, conflictingOperationID)))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusConflict, response.Code, response.Body.String())
 }
+
+func TestAffiliateHTTPBackfillsLegacyRootInvitationCode(t *testing.T) {
+	db := useGmpayControllerDB(t)
+	root := model.User{Username: "legacy-root", Role: common.RoleRootUser, Quota: 1000, AffQuota: 123, AffHistoryQuota: 456}
+	require.NoError(t, db.Create(&root).Error)
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("id", root.Id); c.Set("role", common.RoleRootUser) })
+	router.GET("/api/user/affiliate", GetAffiliateInfo)
+	var code string
+	for attempt := range 2 {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/user/affiliate", nil))
+		var result struct {
+			Success bool                `json:"success"`
+			Data    model.AffiliateInfo `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+		require.True(t, result.Success, response.Body.String())
+		assert.Regexp(t, `^[A-Z0-9_-]{12}$`, result.Data.Code)
+		if attempt == 0 {
+			code = result.Data.Code
+		}
+		assert.Equal(t, code, result.Data.Code)
+		assert.Equal(t, 123, result.Data.AvailableReward)
+		assert.Equal(t, 456, result.Data.TotalReward)
+	}
+	require.NoError(t, db.First(&root, root.Id).Error)
+	assert.Equal(t, code, root.AffCode)
+	assert.Equal(t, 1000, root.Quota)
+	assert.Zero(t, root.InviterId)
+}
+
 func TestTopUpHTTPDetailAlwaysChecksOwner(t *testing.T) {
 	db := useGmpayControllerDB(t)
 	require.NoError(t, db.Create(&model.TopUp{UserId: 2, TradeNo: "another-wallet", Currency: "USD", PayAmount: "20"}).Error)

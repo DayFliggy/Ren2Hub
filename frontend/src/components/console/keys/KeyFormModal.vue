@@ -41,6 +41,7 @@ const form = reactive({
 })
 /** The datetime-local text backfilled from the token being edited. */
 let loadedExpireAt = ''
+let loadedQuota: { amount: string; quota: number } | null = null
 const saving = ref(false)
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
@@ -60,6 +61,10 @@ watch(
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
     form.quotaDollars = e && !e.unlimited ? quotaToDecimal(e.remain_quota) : ''
+    loadedQuota =
+      e && !e.unlimited
+        ? { amount: form.quotaDollars, quota: e.remain_quota }
+        : null
     form.unlimited = e?.unlimited ?? true
     form.ipText = e?.ip_limits?.join('\n') ?? ''
     form.expireAt =
@@ -110,9 +115,15 @@ async function save() {
   if (saving.value) return
   saving.value = true
   try {
-    const remainQuota = form.unlimited
-      ? 0
-      : Number(decimalToQuota(form.quotaDollars || '0'))
+    let remainQuota = 0
+    if (!form.unlimited) {
+      // Some runtime scales have no exact six-decimal dollar representation.
+      // Editing another field must preserve the original integer budget.
+      remainQuota =
+        loadedQuota?.amount === form.quotaDollars
+          ? loadedQuota.quota
+          : Number(decimalToQuota(form.quotaDollars || '0'))
+    }
     if (!Number.isSafeInteger(remainQuota) || remainQuota < 0)
       throw new Error(t('common.invalidInput'))
     const payload: Record<string, unknown> = {

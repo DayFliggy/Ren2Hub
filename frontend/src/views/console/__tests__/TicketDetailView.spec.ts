@@ -57,6 +57,22 @@ beforeAll(async () => {
 })
 
 describe('ticket status change', () => {
+  it('localizes model and request metadata in Chinese', async () => {
+    await setLocale('zh-CN')
+    mocks.detail.mockResolvedValue({
+      ticket: { ...ticket, model_id: 'model-x', request_id: 'request-x' },
+      messages,
+    })
+    const wrapper = mount(TicketDetailView, {
+      global: { plugins: [i18n], stubs: { teleport: true } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('模型: model-x')
+    expect(wrapper.text()).toContain('请求: request-x')
+    wrapper.unmount()
+    await setLocale('en')
+    mocks.detail.mockClear()
+  })
   it('applies the PATCH result and keeps the loaded thread without reloading', async () => {
     mocks.detail.mockResolvedValue({ ticket, messages: [...messages] })
     mocks.changeStatus.mockResolvedValue({

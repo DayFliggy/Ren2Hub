@@ -179,22 +179,25 @@ async function submit() {
         v-if="auth.isRoot && editing?.role === 10 && permissionsReady"
         v-model="permissions"
       />
-      <FormField
-        :label="t('channels.maxConcurrency')"
-        :hint="t('channels.maxConcurrencyHint')"
-        ><input
-          v-model.number="form.max_concurrency"
-          type="number"
-          min="0"
-          step="1"
-          class="console-input"
-      /></FormField>
       <FormField :label="t('users.username')" :hint="t('users.usernameHint')">
         <TextInput
           v-model="form.username"
           name="admin-user-username"
           :placeholder="t('users.usernamePlaceholder')"
           autocomplete="off"
+          autofocus
+        />
+      </FormField>
+      <FormField
+        :label="t('users.maxConcurrency')"
+        :hint="t('users.maxConcurrencyHint')"
+      >
+        <input
+          v-model.number="form.max_concurrency"
+          type="number"
+          min="0"
+          step="1"
+          class="console-input"
         />
       </FormField>
       <div class="grid gap-4 sm:grid-cols-2">

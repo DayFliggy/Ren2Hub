@@ -125,5 +125,13 @@
   "personal access token is invalid": "个人访问令牌无效",
   "personal access token limit reached": "个人访问令牌数量已达上限",
   "personal access token was not found or is no longer active": "个人访问令牌不存在或已失效",
-  "referral program is disabled; remove the invitation code to register": "邀请返利计划已停用，请去掉邀请码后再注册"
+  "referral program is disabled; remove the invitation code to register": "邀请返利计划已停用，请去掉邀请码后再注册",
+  "invitation rewards are disabled until payment compliance is confirmed": "管理员确认支付合规条款后才能发放或转入邀请返利。",
+  "invalid affiliate rate": "邀请返利比例无效",
+  "cannot set and reset code together": "不能同时设置和重置邀请码",
+  "invitation code already exists": "邀请码已存在",
+  "invalid referral record kind": "返利记录类型无效",
+  "invalid invitee pagination": "受邀用户分页参数无效",
+  "invalid invitee order": "受邀用户排序参数无效",
+  "expected a single JSON object": "请求只能包含一个 JSON 对象"
 }

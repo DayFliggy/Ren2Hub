@@ -809,6 +809,8 @@ export default {
       },
       metaCreated: '创建于',
       metaUpdated: '更新于',
+      modelId: '模型',
+      requestId: '请求',
     },
     upload: {
       selectFile: '选择图片',
@@ -1513,6 +1515,8 @@ export default {
     editTitle: '编辑用户',
     usernamePlaceholder: '输入登录用户名',
     usernameHint: '1-20 个字符，首尾空格会被去掉',
+    maxConcurrency: '并发请求上限',
+    maxConcurrencyHint: '0 表示该用户不限制并发。',
     displayNamePlaceholder: '输入昵称，可留空',
     initialPassword: '初始密码',
     initialPasswordPlaceholder: '8-20 位，仅保存哈希',
@@ -1528,7 +1532,7 @@ export default {
     quotaGrant: '增加',
     quotaDeduct: '扣减',
     quotaAmount: '变更金额（美元）',
-    quotaHint: '按美元填写，实际按 1 美元 = 500,000 额度换算',
+    quotaHint: '按美元填写，系统会按当前额度单位换算',
     quotaCurrent: '当前额度',
     quotaNext: '变更后',
     quotaSave: '确认变更',
@@ -1875,6 +1879,8 @@ export default {
     keepOneColumn: '至少保留一列',
     emptyTitle: '查询不到数据',
     emptyHint: '请重新输入筛选条件',
+    loadFailed: '日志加载失败',
+    exportTooLarge: '导出内容过大，请缩小筛选范围后重试。',
     exported: '已导出 {count} 条记录',
     exportTruncated:
       '结果超过 {limit} 条上限，已导出前 {count} 条，请缩小筛选范围',
@@ -2276,6 +2282,7 @@ export default {
     securityNotificationFailed: '变更已完成，但通知邮件发送失败。',
     oldPassword: '当前密码',
     twoFA: '两步验证（2FA）',
+    twoFALocked: '已锁定',
     twoFADesc: '登录时除密码外还需输入动态验证码',
     twoFASetup: '配置 2FA',
     twoFACode: '验证码',
@@ -2451,9 +2458,22 @@ export default {
   },
 
   invite: {
+    outstandingOffset: '待抵扣返利',
+    outstandingOffsetHint: '后续返利先抵扣此金额，剩余部分才计入可转余额。',
+    recordKinds: {
+      accrue: '返利入账',
+      transfer: '转入账户余额',
+      reversal: '返利冲销',
+    },
+    recordInvitee: '受邀用户 #{id}',
+    recordCredited: '实际入账：{amount}',
+    recordOffset: '用于抵扣：{amount}',
+    recordRevoked: '收回未转出返利：{amount}',
+    recordDebtAdded: '新增待抵扣：{amount}',
     skipped: '未产生返佣',
     credited: '已入账',
     skipReasons: {
+      compliance_unconfirmed: '支付合规尚未确认，暂不可转入返利。',
       program_disabled: '返佣计划已停用',
       admin_recharge_disabled: '管理员充值不参与',
       no_paid_quota: '无可返佣额度',
@@ -2884,6 +2904,10 @@ export default {
   },
 
   systemSettings: {
+    statusRefreshFailed:
+      '配置已保存，但未能读取最新站点状态：{error}。请重试刷新，无需重复保存。',
+    retryStatusRefresh: '重试刷新站点状态',
+    discardDraft: '放弃未保存的设置并离开当前页面？',
     sections: {
       affiliate: '邀请返佣',
       affiliateDescription:
@@ -3404,8 +3428,7 @@ export default {
     saved: '已保存',
     partialSaveFailed:
       '已保存 {count} 项设置，随后发生错误：{error}。剩余更改已保留，可重试；已保存的设置没有回滚。',
-    navigationRefreshFailed:
-      '导航设置已保存，但导航刷新失败：{error}。请重新加载页面使其生效。',
+
     oidcDiscoveryInvalid:
       'OIDC 发现结果必须包含有效的 HTTP 或 HTTPS 授权、令牌和用户信息端点。本次没有保存任何设置。',
     saveFailed: '保存失败',

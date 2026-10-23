@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { configureQuotaPerUnit } from '@/utils/quota'
 import {
   fillPriceDraft,
   initialPricingDraft,
@@ -34,6 +35,25 @@ const config: ModelPricingConfig = {
   empty_version: 'empty',
 }
 describe('model pricing draft contracts', () => {
+  afterEach(() => configureQuotaPerUnit(500_000))
+  it.each([500_000, 1_000_000, 100_000, 125_000.5])(
+    'round trips token prices using quota_per_unit=%s',
+    (unit) => {
+      configureQuotaPerUnit(unit)
+      const ratio = String(unit / 100_000)
+      const value = { ModelRatio: ratio, CompletionRatio: '2', CacheRatio: '0' }
+      expect(tokenPrices(value)).toMatchObject({
+        input: '10',
+        CompletionRatio: '20',
+        CacheRatio: '0',
+      })
+      expect(tokenPricing(tokenPrices(value))).toEqual(value)
+      expect(tokenPrices({})).not.toHaveProperty('CompletionRatio', '0')
+      expect(tokenPricing(tokenPrices({ ModelRatio: '0' }))).toEqual({
+        ModelRatio: '0',
+      })
+    }
+  )
   it('starts empty and changes only explicitly imported models', () => {
     expect(initialPricingDraft({ ...config, entries: [] })).toEqual({})
     const source = {

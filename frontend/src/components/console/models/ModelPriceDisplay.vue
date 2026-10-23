@@ -61,7 +61,11 @@ function label(line: MarketPriceLine) {
     <span
       v-if="!pricing || pricing.billingMode === 'unconfigured'"
       class="market-price-empty"
-      >{{ pricing?.priceReason || t('priceStates.unavailable') }}</span
+      >{{
+        pricing?.priceReason && te(`priceReasons.${pricing.priceReason}`)
+          ? t(`priceReasons.${pricing.priceReason}`)
+          : t('priceStates.unavailable')
+      }}</span
     >
     <template v-else-if="pricing.billingMode === 'dynamic'">
       <ReferencePrices

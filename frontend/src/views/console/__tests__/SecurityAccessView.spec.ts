@@ -68,7 +68,11 @@ function securityGet(url: string): Promise<unknown> {
     return Promise.resolve({ enabled: false, last_used_at: null })
   }
   if (url === '/api/user/2fa/status') {
-    return Promise.resolve({ enabled: true, backup_codes_remaining: 6 })
+    return Promise.resolve({
+      enabled: true,
+      locked: false,
+      backup_codes_remaining: 6,
+    })
   }
   if (url === '/api/user/oauth/bindings') return Promise.resolve([])
   if (url === '/api/user/self/personal-access-tokens') {
@@ -283,6 +287,22 @@ describe('SecurityAccessView', () => {
     expect(buttonByText(wrapper, '启用 Passkey')?.disabled).toBe(true)
     // The 2FA status loaded on its own and is still shown.
     expect(wrapper.text()).toContain('剩余备用码')
+    wrapper.unmount()
+  })
+
+  it('shows the backend 2FA lock state', async () => {
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/user/2fa/status'
+        ? Promise.resolve({
+            enabled: true,
+            locked: true,
+            backup_codes_remaining: 0,
+          })
+        : securityGet(url)
+    )
+    const wrapper = renderView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('已锁定')
     wrapper.unmount()
   })
 

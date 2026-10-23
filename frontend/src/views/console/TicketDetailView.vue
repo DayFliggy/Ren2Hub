@@ -257,10 +257,11 @@ watch(ticketId, (id) => void load(id), { immediate: true })
                 {{ formatTime(ticket.updated) }}</span
               >
               <span v-if="ticket.model_id" class="font-mono"
-                >Model: {{ ticket.model_id }}</span
+                >{{ t('tickets.detail.modelId') }}: {{ ticket.model_id }}</span
               >
               <span v-if="ticket.request_id" class="font-mono"
-                >Request: {{ ticket.request_id }}</span
+                >{{ t('tickets.detail.requestId') }}:
+                {{ ticket.request_id }}</span
               >
             </div>
           </div>

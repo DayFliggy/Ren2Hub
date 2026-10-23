@@ -66,6 +66,17 @@ beforeEach(async () => {
 })
 
 describe('capability route guard', () => {
+  it('blocks the sign-up route when global registration is disabled', async () => {
+    const auth = useAuthStore()
+    auth.persist(null)
+    auth.checked = true
+    publicApi.status.mockResolvedValue({
+      register_enabled: false,
+      frontend_capabilities: { registration: 'live' },
+    })
+    await router.push('/sign-up')
+    expect(router.currentRoute.value.name).toBe('sign-in')
+  })
   it.each([1, 10])(
     'keeps GMPay merchant configuration inaccessible to role %s',
     async (role) => {

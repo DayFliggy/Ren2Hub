@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/wsmanager"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -210,6 +211,50 @@ func TestReorderChannelPriorityReportsCommittedWriteWhenPublicationFails(t *test
 	stored, err := model.GetChannelById(8403, false)
 	require.NoError(t, err)
 	assert.Equal(t, int64(90), stored.GetPriority())
+}
+
+func TestChannelStatusReportsCommittedChangeWhenPublicationFails(t *testing.T) {
+	for _, cached := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cache_%v", cached), func(t *testing.T) {
+			setupChannelManagementContractTest(t)
+			createContractChannel(t, model.Channel{Id: 8601, Type: constant.ChannelTypeOpenAI, Name: "status-publication", Key: "k", Models: "gpt-4o"})
+			common.MemoryCacheEnabled = cached
+			model.InitChannelCache()
+			previous := model.ChannelRoutingChanged
+			model.ChannelRoutingChanged = func(int) error { return errors.New("forced publication failure") }
+			t.Cleanup(func() { model.ChannelRoutingChanged = previous })
+			closed := false
+			unregister := wsmanager.Register(8601, wsmanager.KindResponses, func(reason string) {
+				closed = true
+				assert.Equal(t, service.ChannelDisabledCloseReason, reason)
+			})
+			t.Cleanup(unregister)
+			recorder := serveChannelAdmin(t, UpdateChannelStatus, http.MethodPut, "/api/channel/8601/status", `{"status":2}`, gin.Params{{Key: "id", Value: "8601"}})
+			var response struct {
+				Success            bool `json:"success"`
+				Data               bool `json:"data"`
+				PublicationPending bool `json:"publication_pending"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response), recorder.Body.String())
+			assert.True(t, response.Success, recorder.Body.String())
+			assert.True(t, response.Data, "the database change committed")
+			assert.True(t, response.PublicationPending)
+			assert.True(t, closed, "committed disable must close existing connections despite publication failure")
+			stored, err := model.GetChannelById(8601, false)
+			require.NoError(t, err)
+			assert.Equal(t, 2, stored.Status)
+			cachedChannel, err := model.CacheGetChannel(8601)
+			require.NoError(t, err)
+			assert.Equal(t, 2, cachedChannel.Status)
+			var audit model.AuditLog
+			require.NoError(t, model.LOG_DB.Where("action = ?", "channel.status_update").First(&audit).Error)
+			require.True(t, audit.Success)
+			encoded, err := common.Marshal(audit.Other)
+			require.NoError(t, err)
+			assert.Contains(t, string(encoded), `"changed":true`)
+			assert.Contains(t, string(encoded), `"publication_pending":true`)
+		})
+	}
 }
 
 // E2-5：渠道倍率和并发上限只由模型层校验，非法值在写库前被拒绝。

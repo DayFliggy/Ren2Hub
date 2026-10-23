@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -17,7 +18,7 @@ const dashboardBucketSeconds = 3600
 
 type DashboardKPI struct {
 	TotalTokens   int64    `json:"totalTokens"`
-	TotalQuota    int64    `json:"totalQuota"`
+	TotalQuota    int64    `json:"totalQuota,string"`
 	TotalRequests int64    `json:"totalRequests"`
 	AvgLatency    *float64 `json:"avgLatency"`
 	SuccessRate   *float64 `json:"successRate"`
@@ -29,7 +30,7 @@ type DashboardComparison struct {
 type DashboardModel struct {
 	Model      string   `json:"model"`
 	Tokens     int64    `json:"tokens"`
-	Quota      int64    `json:"quota"`
+	Quota      int64    `json:"quota,string"`
 	Requests   int64    `json:"requests"`
 	Share      float64  `json:"share"`
 	AvgLatency *float64 `json:"avgLatency"`
@@ -40,12 +41,12 @@ type DashboardHour struct {
 	Ts       int64 `json:"ts"`
 	Requests int64 `json:"requests"`
 	Tokens   int64 `json:"tokens"`
-	Quota    int64 `json:"quota"`
+	Quota    int64 `json:"quota,string"`
 }
 type DashboardDay struct {
 	Date     string `json:"date"`
 	Requests int64  `json:"requests"`
-	Consume  int64  `json:"consume"`
+	Consume  int64  `json:"consume,string"`
 	Tokens   int64  `json:"tokens"`
 }
 
@@ -337,7 +338,8 @@ func sortedDashboardModels(models map[string]*DashboardModel, totalQuota int64) 
 	result := make([]DashboardModel, 0, len(models))
 	for _, item := range models {
 		if totalQuota != 0 {
-			item.Share = float64(item.Quota) / float64(totalQuota) * 100
+			share := float64(item.Quota) / float64(totalQuota) * 100
+			item.Share = math.Round(share*10) / 10
 		}
 		result = append(result, *item)
 	}

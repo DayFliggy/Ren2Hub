@@ -18,9 +18,12 @@ vi.mock('@/stores/auth', () => ({
       permissions[action],
   }),
 }))
-vi.mock('@/composables/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
+const toast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
 }))
+vi.mock('@/composables/useToast', () => ({ useToast: () => toast }))
 const channel: AdminChannel = {
   id: 101,
   name: 'Native fixture',
@@ -91,8 +94,43 @@ beforeEach(() =>
 afterEach(() => {
   wrapper?.unmount()
   vi.restoreAllMocks()
+  vi.clearAllMocks()
 })
 describe('native channel management', () => {
+  it.each([true, 1])(
+    'keeps a status update successful when publication_pending is %s',
+    async (pending) => {
+      vi.spyOn(api, 'get').mockResolvedValue(page)
+      const postEnvelope = vi.spyOn(api, 'postEnvelope').mockResolvedValue({
+        success: true,
+        data: 1,
+        publication_pending: pending,
+      })
+      const state = await setup()
+      expect(await state.toggleStatus(channel)).toBe(true)
+      expect(postEnvelope).toHaveBeenCalledWith('/api/channel/101/status', {
+        status: 2,
+      })
+      expect(toast.warning).toHaveBeenCalledExactlyOnceWith(
+        'common.publicationPending'
+      )
+      expect(toast.error).not.toHaveBeenCalled()
+    }
+  )
+
+  it('retains the batch changed count and reports pending publication separately', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(page)
+    vi.spyOn(api, 'postEnvelope').mockResolvedValue({
+      success: true,
+      data: 1,
+      publication_pending: 1,
+    })
+    const state = await setup()
+    expect(await state.updateChannelsStatus('disable', [channel])).toBe(true)
+    expect(toast.success).toHaveBeenCalledWith('channels.bulkDisabled')
+    expect(toast.warning).toHaveBeenCalledWith('common.publicationPending')
+    expect(toast.error).not.toHaveBeenCalled()
+  })
   it('uses native listing, search and multi-key creation without business groups', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue(page)
     const post = vi.spyOn(api, 'post').mockResolvedValue(null)

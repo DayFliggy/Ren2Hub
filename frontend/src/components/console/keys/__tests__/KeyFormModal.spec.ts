@@ -6,6 +6,7 @@ import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import i18n, { loadMessageDomain } from '@/i18n'
 import type { TokenSummary } from '@/types/console'
 import { api } from '@/api/console'
+import { configureQuotaDisplay } from '@/utils/format'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
@@ -34,6 +35,45 @@ function advancedTrigger(): HTMLButtonElement {
 }
 
 describe('KeyFormModal', () => {
+  it.each([
+    [1_000_000, 3_000_000, '3.000000'],
+    [1.5, 1, '0.666667'],
+  ] as const)(
+    'preserves an existing token budget with runtime quota unit %s',
+    async (perUnit, quota, displayed) => {
+      configureQuotaDisplay({ quota_per_unit: perUnit })
+      const put = vi.spyOn(api, 'put').mockResolvedValue(null)
+      const wrapper = mountForm({
+        id: 7,
+        name: 'runtime-unit',
+        type: 'auto',
+        remain_quota: quota,
+        used_quota: '0',
+        unlimited: false,
+        model_limits: [],
+        ip_limits: [],
+        expired_time: -1,
+      } as unknown as TokenSummary)
+      try {
+        expect(
+          document.querySelector<HTMLInputElement>('[name="token-quota"]')
+            ?.value
+        ).toBe(displayed)
+        const button = [...document.body.querySelectorAll('button')].find(
+          (item) => item.textContent?.trim() === i18n.global.t('common.confirm')
+        )!
+        button.click()
+        await flushPromises()
+        expect(put).toHaveBeenCalledWith(
+          '/api/token/',
+          expect.objectContaining({ remain_quota: quota })
+        )
+      } finally {
+        wrapper.unmount()
+        configureQuotaDisplay({ quota_per_unit: 500_000 })
+      }
+    }
+  )
   it('defaults new tokens to auto and keeps advanced restrictions hidden until expanded', async () => {
     const wrapper = mountForm()
     const typeOptions = [...document.body.querySelectorAll('[role="radio"]')]

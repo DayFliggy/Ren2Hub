@@ -12,6 +12,7 @@ import {
 } from '@/api/pricingConfig'
 import { isRecord } from '@/api/contracts'
 import { isDecimal, multiplyDecimal, divideDecimal } from '@/utils/decimal'
+import { modelRatioToPrice, priceToModelRatio } from '@/utils/quota'
 
 export type PricingDraft = Record<string, PricingValues>
 export type PricingMode = 'tiered_expr' | 'per-token' | 'per-request'
@@ -152,7 +153,7 @@ export function tokenPrices(value: PricingValues): Record<string, string> {
   const input =
     value.ModelRatio === undefined
       ? ''
-      : multiplyDecimal(decimalText(value.ModelRatio), '2')
+      : modelRatioToPrice(decimalText(value.ModelRatio))
   const prices: Record<string, string> = { input }
   for (const lane of TOKEN_LANES) {
     const base = lane.key === 'AudioCompletionRatio' ? prices.AudioRatio : input
@@ -165,7 +166,9 @@ export function tokenPrices(value: PricingValues): Record<string, string> {
 }
 export function tokenPricing(prices: Record<string, string>): PricingValues {
   if (!isDecimal(prices.input)) throw new Error('invalid')
-  const value: PricingValues = { ModelRatio: divideDecimal(prices.input, '2') }
+  const value: PricingValues = {
+    ModelRatio: priceToModelRatio(prices.input),
+  }
   for (const lane of TOKEN_LANES) {
     const price = prices[lane.key]
     if (!price) continue

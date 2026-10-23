@@ -221,6 +221,10 @@ func AddAdminTicketMessage(c *gin.Context) {
 		ticketBusinessError(c, common.NewMessage("Ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
 		return
 	}
+	if err := form.commit(); err != nil {
+		respondTicketFormError(c, err)
+		return
+	}
 	message, updatedTicket, err := model.AddSupportTicketMessage(ticketID, c.GetInt("id"), content, form.attachments())
 	if err != nil {
 		if errors.Is(err, model.ErrTicketClosed) {
@@ -234,16 +238,12 @@ func AddAdminTicketMessage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	storeErr := form.commit()
+	form.keep()
 	recordManageAudit(c, "ticket.reply", map[string]interface{}{
 		"ticket_id":     ticketID,
 		"auto_assigned": before.AssigneeID == nil,
 	})
 	service.NotifyTicketSupportReply(*updatedTicket)
-	if storeErr != nil {
-		respondTicketStorageFailure(c, ticketID, storeErr)
-		return
-	}
 	storedAttachments, err := model.ListTicketAttachments(ticketID)
 	if err != nil {
 		common.ApiError(c, err)

@@ -7,6 +7,8 @@ export interface RequestOptions {
   data?: unknown
   signal?: AbortSignal
   timeoutMs?: number
+  /** Stop a binary download once its declared or received bytes exceed this limit. */
+  maxBytes?: number
   headers?: Record<string, string>
 }
 

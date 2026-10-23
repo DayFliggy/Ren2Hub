@@ -849,6 +849,8 @@ export default {
       },
       metaCreated: 'Created',
       metaUpdated: 'Updated',
+      modelId: 'Model',
+      requestId: 'Request',
     },
     upload: {
       selectFile: 'Select image',
@@ -1570,6 +1572,8 @@ export default {
     editTitle: 'Edit user',
     usernamePlaceholder: 'Enter the login username',
     usernameHint: '1-20 characters; surrounding spaces are trimmed',
+    maxConcurrency: 'Concurrent requests',
+    maxConcurrencyHint: '0 means no limit for this user.',
     displayNamePlaceholder: 'Optional display name',
     initialPassword: 'Initial password',
     initialPasswordPlaceholder: '8-20 characters; only a hash is stored',
@@ -1586,7 +1590,7 @@ export default {
     quotaGrant: 'Grant',
     quotaDeduct: 'Deduct',
     quotaAmount: 'Amount (USD)',
-    quotaHint: 'Entered in dollars; converted at $1 = 500,000 quota',
+    quotaHint: 'Entered in dollars; converted using the current quota unit',
     quotaCurrent: 'Current quota',
     quotaNext: 'After change',
     quotaSave: 'Confirm change',
@@ -1945,6 +1949,9 @@ export default {
     keepOneColumn: 'Keep at least one column visible',
     emptyTitle: 'No data found',
     emptyHint: 'Adjust your filters and try again',
+    loadFailed: 'Logs could not be loaded',
+    exportTooLarge:
+      'This export is too large for the browser. Narrow the filters.',
     exported: 'Exported {count} records',
     exportTruncated:
       'Over the {limit} row limit — exported the first {count}. Narrow the filters.',
@@ -2356,6 +2363,7 @@ export default {
       'The change succeeded, but the notification email could not be sent.',
     oldPassword: 'Current password',
     twoFA: 'Two-factor auth (2FA)',
+    twoFALocked: 'Locked',
     twoFADesc: 'Require a one-time code in addition to the password',
     twoFASetup: 'Set up 2FA',
     twoFACode: 'Verification code',
@@ -2550,9 +2558,24 @@ export default {
   },
 
   invite: {
+    outstandingOffset: 'Pending reward offset',
+    outstandingOffsetHint:
+      'Future rewards first repay this amount before becoming transferable.',
+    recordKinds: {
+      accrue: 'Reward accrued',
+      transfer: 'Transferred to balance',
+      reversal: 'Reward reversal',
+    },
+    recordInvitee: 'Invited user #{id}',
+    recordCredited: 'Credited: {amount}',
+    recordOffset: 'Applied to pending offset: {amount}',
+    recordRevoked: 'Revoked from untransferred rewards: {amount}',
+    recordDebtAdded: 'Added to pending offset: {amount}',
     skipped: 'No reward accrued',
     credited: 'Credited',
     skipReasons: {
+      compliance_unconfirmed:
+        'Payment compliance has not been confirmed. Reward transfers are unavailable.',
       program_disabled: 'Program disabled',
       admin_recharge_disabled: 'Admin top-ups excluded',
       no_paid_quota: 'No eligible paid quota',
@@ -2992,6 +3015,10 @@ export default {
   },
 
   systemSettings: {
+    statusRefreshFailed:
+      'Settings were saved, but the latest site state could not be loaded: {error}. Retry the refresh; you do not need to save again.',
+    retryStatusRefresh: 'Retry site refresh',
+    discardDraft: 'Discard the unsaved settings and leave this page?',
     sections: {
       affiliate: 'Referral rewards',
       affiliateDescription:
@@ -3546,8 +3573,7 @@ export default {
     saved: 'Saved',
     partialSaveFailed:
       '{count} settings were saved before an error: {error}. The remaining changes are kept for retry; saved settings were not rolled back.',
-    navigationRefreshFailed:
-      'Navigation settings were saved, but navigation could not refresh: {error}. Reload the page to apply them.',
+
     oidcDiscoveryInvalid:
       'OIDC discovery must return valid HTTP or HTTPS authorization, token and user info endpoints. No settings were saved.',
     saveFailed: 'Save failed',

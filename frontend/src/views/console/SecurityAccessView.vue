@@ -72,6 +72,7 @@ let emailTimer: ReturnType<typeof setInterval> | null = null
 const passkeyEnabled = ref<boolean | null>(null)
 const passkeyLastUsedAt = ref<string | null>(null)
 const twoFAEnabled = ref<boolean | null>(null)
+const twoFALocked = ref<boolean | null>(null)
 const backupCodesRemaining = ref<number | null>(null)
 const loadError = ref('')
 let loadSequence = 0
@@ -309,9 +310,11 @@ async function loadSecurity(): Promise<void> {
   }
   if (twoFA.status === 'fulfilled') {
     twoFAEnabled.value = twoFA.value.enabled
+    twoFALocked.value = twoFA.value.locked
     backupCodesRemaining.value = twoFA.value.backup_codes_remaining
   } else {
     twoFAEnabled.value = null
+    twoFALocked.value = null
   }
   if (status.status === 'fulfilled') publicStatus.value = status.value
   // Custom bindings need both sources; keep the last good list otherwise.
@@ -362,6 +365,16 @@ function statusLabel(enabled: boolean | null): string {
 function statusTone(enabled: boolean | null): 'success' | 'neutral' {
   return enabled ? 'success' : 'neutral'
 }
+
+const twoFAStatusLabel = computed(() =>
+  twoFALocked.value === true
+    ? t('settings.twoFALocked')
+    : statusLabel(twoFAEnabled.value)
+)
+
+const twoFAStatusTone = computed<'success' | 'neutral' | 'danger'>(() =>
+  twoFALocked.value === true ? 'danger' : statusTone(twoFAEnabled.value)
+)
 
 function openProfile(): void {
   displayName.value = auth.user?.display_name ?? ''
@@ -1081,8 +1094,8 @@ onBeforeUnmount(() => {
                   <p class="font-semibold text-[var(--text-primary)]">
                     {{ t('settings.twoFA') }}
                   </p>
-                  <StatusChip :tone="statusTone(twoFAEnabled)">
-                    {{ statusLabel(twoFAEnabled) }}
+                  <StatusChip :tone="twoFAStatusTone">
+                    {{ twoFAStatusLabel }}
                   </StatusChip>
                 </div>
                 <p

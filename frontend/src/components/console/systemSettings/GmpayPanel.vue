@@ -8,6 +8,8 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { parseGmpayConfig, type GmpayConfig } from '@/api/topup'
 import { useToast } from '@/composables/useToast'
+import { useSystemSettings } from '@/composables/useSystemSettings'
+import { registerSettingsDraft } from './settingsDraftGuard'
 
 /**
  * One asset the gateway reports as collectable. The administrator picks the
@@ -49,6 +51,14 @@ const form = reactive({
   enabled: false,
 })
 
+const baseline = ref('')
+const snapshot = () => JSON.stringify({ ...form, assets: selected.value })
+registerSettingsDraft({
+  dirty: () => configurationReady.value && snapshot() !== baseline.value,
+  busy: () => saving.value || probing.value,
+})
+const { refreshStatus } = useSystemSettings()
+
 const selectedCount = computed(() => selected.value.length)
 
 function syncForm(config: GmpayConfig) {
@@ -57,6 +67,8 @@ function syncForm(config: GmpayConfig) {
   form.enabled = config.enabled
   secretConfigured.value = config.has_secret
   selected.value = config.assets
+  form.secretKey = ''
+  baseline.value = snapshot()
 }
 
 function isSelected(network: string, token: string): boolean {
@@ -198,6 +210,7 @@ async function save() {
     form.secretKey = ''
     emit('saved')
     toast.success(t('systemSettings.gmpayPanel.saved'))
+    await refreshStatus(true)
   } catch (error) {
     if (!disposed)
       toast.error(error instanceof Error ? error.message : String(error))

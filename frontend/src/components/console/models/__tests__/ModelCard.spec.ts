@@ -52,6 +52,92 @@ describe('native catalog cards', () => {
     expect(wrapper.text()).not.toMatch(/未提供|上下文|工具调用/)
     wrapper.unmount()
   })
+  it('renders cache, image and audio dimensions without dropping their price', () => {
+    const fixture = modelCatalogFixture()
+    fixture.models[0]!.pricing_values = {
+      input: '1',
+      cache: '0.25',
+      cache_create: '1.25',
+      cache_create_1h: '2',
+      image: '3',
+      image_cache: '0.5',
+      image_output: '4',
+      audio_input: '5',
+      audio_output: '10',
+    }
+    const model = buildModelMarketCatalog(fixture).models[0]!
+    const wrapper = mount(ModelPriceDisplay, {
+      props: { pricing: model.baselines[0], mode: 'full' },
+      global: { plugins: [i18n] },
+    })
+    for (const dimension of [
+      'cacheRead',
+      'cacheWrite',
+      'cacheWrite1h',
+      'image',
+      'imageCache',
+      'imageOutput',
+      'audioInput',
+      'audioOutput',
+    ]) {
+      const line = wrapper.get(`[data-price-dimension="${dimension}"]`)
+      expect(line.text()).toContain('$')
+      expect(line.text()).not.toContain(dimension)
+    }
+    wrapper.unmount()
+  })
+  it.each(['expression_requires_usage_context', 'private_internal_error'])(
+    'uses public wording for unavailable reason %s',
+    (reason) => {
+      const fixture = modelCatalogFixture()
+      fixture.offers[0]!.price_status = 'unavailable'
+      fixture.offers[0]!.pricing_values = {}
+      fixture.offers[0]!.price_reason = reason
+      const model = buildModelMarketCatalog(fixture).models[0]!
+      const wrapper = mount(ModelPriceDisplay, {
+        props: { pricing: model.offers[0]!.pricing },
+        global: { plugins: [i18n] },
+      })
+      expect(wrapper.text()).not.toContain(reason)
+      expect(wrapper.text()).not.toContain('$0')
+      expect(wrapper.text()).toMatch(/价格|用量/)
+      wrapper.unmount()
+    }
+  )
+  it.each([
+    ['zh-CN', 'invalid_audio_price', '音频价格超出可显示范围'],
+    ['zh-CN', 'protocol_dependent_audio_price', '音频价格因调用协议而异'],
+    [
+      'en',
+      'invalid_audio_price',
+      'The audio price exceeds the displayable range',
+    ],
+    [
+      'en',
+      'protocol_dependent_audio_price',
+      'Audio prices differ by request protocol',
+    ],
+  ] as const)(
+    'localizes specialized unavailable reason %s / %s',
+    async (locale, reason, message) => {
+      await setLocale(locale)
+      const fixture = modelCatalogFixture()
+      fixture.offers[0]!.price_status = 'unavailable'
+      fixture.offers[0]!.pricing_values = {}
+      fixture.offers[0]!.price_reason = reason
+      const projected =
+        buildModelMarketCatalog(fixture).models[0]!.offers[0]!.pricing
+      const wrapper = mount(ModelPriceDisplay, {
+        props: { pricing: projected },
+        global: { plugins: [i18n] },
+      })
+      expect(wrapper.text()).toContain(message)
+      expect(wrapper.text()).not.toContain(reason)
+      expect(wrapper.text()).not.toContain('$0')
+      wrapper.unmount()
+      await setLocale('zh-CN')
+    }
+  )
   it('retains an explicitly zero price and omits unsupported billing dimensions', () => {
     const fixture = modelCatalogFixture()
     fixture.models[0]!.price_status = 'zero'

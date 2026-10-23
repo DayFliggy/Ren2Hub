@@ -34,6 +34,8 @@ var ticketAttachmentExtensions = map[string]string{
 	"image/gif":  ".gif",
 }
 
+var renameTicketFile = os.Rename
+
 var ticketFormFields = map[string]bool{
 	"title": true, "category": true, "priority": true, "content": true, "model_id": true, "request_id": true,
 }
@@ -49,16 +51,18 @@ func (e *ticketFormError) Error() string { return e.message.Error() }
 type ticketUpload struct {
 	tempPath   string
 	finalPath  string
+	file       *os.File
 	attachment model.TicketAttachment
 }
 
 type ticketForm struct {
 	fields  map[string]string
 	uploads []*ticketUpload
+	kept    bool
 }
 
 // readTicketForm 流式解析工单表单：读到超出数量或大小的那一段时立即中止，
-// 不先缓冲整个请求。附件只写临时文件，事务提交后由 commit 改名。
+// 不先缓冲整个请求。附件先写临时文件，进入数据库事务前由 commit 提升。
 func readTicketForm(c *gin.Context) (*ticketForm, error) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTicketRequestSize)
 	reader, err := c.Request.MultipartReader()
@@ -94,10 +98,11 @@ func (form *ticketForm) attachments() []model.TicketAttachment {
 	return items
 }
 
-// commit 在事务提交后把临时文件改名为正式存储键；失败时清理剩余临时文件。
+// commit 在进入数据库事务前提升已暂存文件；失败则不创建记录，
+// discard 会同时删除临时文件和已提升文件。
 func (form *ticketForm) commit() error {
 	for _, upload := range form.uploads {
-		if err := os.Rename(upload.tempPath, upload.finalPath); err != nil {
+		if err := renameTicketFile(upload.tempPath, upload.finalPath); err != nil {
 			form.discard()
 			return err
 		}
@@ -106,12 +111,37 @@ func (form *ticketForm) commit() error {
 	return nil
 }
 
-// discard 删除尚未改名的临时文件。
+func (form *ticketForm) keep() {
+	form.kept = true
+	for _, upload := range form.uploads {
+		upload.closeFile()
+		upload.tempPath = ""
+		upload.finalPath = ""
+	}
+}
+
+// discard 清理尚未提升的临时文件，以及事务失败时已提升的文件。
 func (form *ticketForm) discard() {
+	if form.kept {
+		return
+	}
 	for _, upload := range form.uploads {
 		removeTicketFile(upload.tempPath)
+		removeTicketFile(upload.finalPath)
+		upload.closeFile()
 		upload.tempPath = ""
+		upload.finalPath = ""
 	}
+}
+
+func (upload *ticketUpload) closeFile() {
+	if upload.file == nil {
+		return
+	}
+	if err := upload.file.Close(); err != nil {
+		common.SysError(common.LogText("failed to close ticket attachment: %s", err.Error()))
+	}
+	upload.file = nil
 }
 
 // 未知字段和非 attachments 的文件段由 NextPart 跳过，不进入内存。
@@ -153,7 +183,10 @@ func (form *ticketForm) readField(name string, part *multipart.Part) error {
 }
 
 func stageTicketUpload(part *multipart.Part) (*ticketUpload, error) {
-	name := filepath.Base(part.FileName())
+	name := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
+	if len([]rune(name)) > 255 {
+		return nil, &ticketFormError{common.NewMessage("Attachment filename must not exceed {{count}} characters", map[string]any{"count": 255}), "ATTACHMENT_NAME_TOO_LONG"}
+	}
 	head := make([]byte, 512)
 	n, err := io.ReadFull(part, head)
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
@@ -177,22 +210,40 @@ func stageTicketUpload(part *multipart.Part) (*ticketUpload, error) {
 	if err != nil {
 		return nil, err
 	}
-	size, digest, err := writeTicketUpload(file, head, part)
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
+	upload := &ticketUpload{tempPath: file.Name(), finalPath: filepath.Join(dir, key), file: file}
+	staged := false
+	defer func() {
+		if !staged {
+			removeTicketFile(upload.tempPath)
+			upload.closeFile()
+		}
+	}()
+	if err := lockTicketUpload(file); err != nil {
+		return nil, err
 	}
+	size, digest, err := writeTicketUpload(file, head, part)
 	if err == nil && size > maxTicketAttachmentSize {
 		err = &ticketFormError{common.NewMessage("Attachment {{name}} exceeds 10 MB", map[string]any{"name": name}), "ATTACHMENT_TOO_LARGE"}
 	}
 	if err != nil {
-		removeTicketFile(file.Name())
 		return nil, err
 	}
-	return &ticketUpload{
-		tempPath:   file.Name(),
-		finalPath:  filepath.Join(dir, key),
-		attachment: model.TicketAttachment{StorageKey: key, OriginalName: name, MimeType: mimeType, Size: size, SHA256: digest},
-	}, nil
+	if err = file.Sync(); err != nil {
+		return nil, err
+	}
+	// Linux retains the inode lock through rename and the DB commit. Other
+	// platforms keep the existing closed-file promotion behavior; cleanup is
+	// explicitly unavailable there rather than deleting without a lock.
+	if !ticketAttachmentCleanupSupported {
+		err = file.Close()
+		upload.file = nil
+		if err != nil {
+			return nil, err
+		}
+	}
+	upload.attachment = model.TicketAttachment{StorageKey: key, OriginalName: name, MimeType: mimeType, Size: size, SHA256: digest}
+	staged = true
+	return upload, nil
 }
 
 // writeTicketUpload 最多多读 1 字节，超限即停止读取请求体。
@@ -258,13 +309,6 @@ func respondTicketFormError(c *gin.Context, err error) {
 		return
 	}
 	common.ApiError(c, err)
-}
-
-// respondTicketStorageFailure 用于事务已提交但改名失败：记录已在库里而文件缺失的附件，
-// 返回明确错误，不报告为完整成功。
-func respondTicketStorageFailure(c *gin.Context, ticketID int, err error) {
-	common.SysError(common.LogText("ticket %d attachments were committed but not stored: %s", ticketID, err.Error()))
-	ticketBusinessError(c, common.NewMessage("Ticket was saved but its attachments could not be stored"), "ATTACHMENT_STORAGE_FAILED")
 }
 
 // serveTicketAttachment 按上传时探测的类型返回附件，并禁止浏览器另行嗅探。

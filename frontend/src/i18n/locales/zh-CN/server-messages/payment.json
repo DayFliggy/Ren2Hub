@@ -54,5 +54,19 @@
   "Waffo Pancake configuration is incomplete": "Waffo Pancake 配置不完整",
   "Waffo Pancake credentials are not configured": "Waffo Pancake 凭证未配置",
   "Waffo payment is not enabled": "Waffo 支付未启用",
-  "gmpay order snapshot is missing": "GMPay 订单快照缺失，无法自动补单，请人工核对支付记录"
+  "gmpay order snapshot is missing": "GMPay 订单快照缺失，无法自动补单，请人工核对支付记录",
+  "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.": "支付、兑换码、订阅及邀请返利功能尚未启用，管理员需先确认合规条款。",
+  "Top-up order not found": "充值订单不存在",
+  "Failed to read the payment order": "读取支付订单失败",
+  "Redemption quota must be positive": "兑换额度必须大于 0",
+  "redemption quota must be positive": "兑换额度必须大于 0",
+  "invalid redemption sort field": "兑换码排序字段无效",
+  "invalid redemption sort order": "兑换码排序方向无效",
+  "redemption code not provided": "请输入兑换码",
+  "invalid user id": "用户 ID 无效",
+  "invalid redemption code": "兑换码无效",
+  "redemption code already used": "兑换码已被使用",
+  "redemption code expired": "兑换码已过期",
+  "select between 1 and 1000 redemption codes": "请选择 1 至 1000 个兑换码",
+  "redemption IDs must be positive": "兑换码 ID 必须为正整数"
 }

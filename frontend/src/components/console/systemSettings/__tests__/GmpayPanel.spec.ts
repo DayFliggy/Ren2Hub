@@ -1,3 +1,6 @@
+vi.mock('@/stores/app', () => ({
+  useAppStore: () => ({ refreshStatus: vi.fn().mockResolvedValue(undefined) }),
+}))
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'

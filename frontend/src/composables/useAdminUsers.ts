@@ -2,6 +2,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import { parseAdminUserPage } from '@/api/adminUserContracts'
+import { hasPendingPublication } from '@/api/publication'
 import { proofOptions, type SecurityOperation } from '@/api/security'
 import {
   adminOperator,
@@ -165,13 +166,15 @@ export function useAdminUsers(
     try {
       const { role, ...patch } = input
       try {
-        await api.put(
+        const response = await api.putEnvelope(
           '/api/user/',
           { id: user.id, ...patch },
           patch.password || patch.admin_permissions
             ? await authorize('admin.user.update', { user_id: user.id })
             : undefined
         )
+        if (hasPendingPublication(response))
+          toast.warning(t('common.publicationPending'))
       } catch (e) {
         toast.error(e instanceof Error ? e.message : String(e))
         return false

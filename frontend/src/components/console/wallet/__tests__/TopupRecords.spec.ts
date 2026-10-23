@@ -56,4 +56,27 @@ describe('TopupRecords', () => {
     expect(post).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  it('shows a retryable error state instead of an empty state on load failure', async () => {
+    vi.spyOn(api, 'get').mockRejectedValueOnce(new Error('offline'))
+    const wrapper = mount(TopupRecords, {
+      props: { refreshKey: 0 },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('offline')
+    expect(wrapper.text()).not.toContain('No data')
+
+    vi.mocked(api.get).mockResolvedValueOnce({
+      items: [order],
+      total: 1,
+      page: 1,
+      page_size: 6,
+    })
+    await wrapper.get('[role="alert"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(order.trade_no)
+    wrapper.unmount()
+  })
 })

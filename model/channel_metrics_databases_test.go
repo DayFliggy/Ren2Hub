@@ -65,6 +65,9 @@ func TestChannelMetricsDatabases(t *testing.T) {
 				{UserId: 11, Type: LogTypeError, CreatedAt: start + 20, RequestId: "failed"},
 				{UserId: 11, Type: LogTypeError, CreatedAt: end - 1, RequestId: "late-retry"},
 				{UserId: 11, Type: LogTypeConsume, CreatedAt: end, Quota: 100, RequestId: "late-retry"},
+				{UserId: 11, Type: LogTypeConsume, CreatedAt: end + 1, RequestId: "outside-window"},
+				{UserId: 11, Type: LogTypeConsume, CreatedAt: end + 2, RequestId: "late-retry"},
+				{UserId: 12, Type: LogTypeConsume, CreatedAt: end + 2, RequestId: "failed"},
 				{UserId: 12, Type: LogTypeError, CreatedAt: start, RequestId: "other-failed"},
 			}
 			require.NoError(t, db.Create(&logs).Error)
@@ -87,8 +90,8 @@ func TestChannelMetricsDatabases(t *testing.T) {
 			require.ElementsMatch(t, []DashboardLatencyRow{{ModelName: "model-one", Requests: 2, UseTime: 12}, {ModelName: "model-two", Requests: 1}}, latency)
 			outcome, err := ReadDashboardOutcome(context.Background(), 11, start, end)
 			require.NoError(t, err)
-			// ok-1, retried 与 ok-2 成功；failed 只算一次失败；late-retry 在 end 之后结算，不算失败。
-			require.Equal(t, DashboardOutcome{Succeeded: 3, Failed: 1}, outcome)
+			// late-retry 只成功一次；其他区间和其他用户的成功不能改变本区间结果。
+			require.Equal(t, DashboardOutcome{Succeeded: 4, Failed: 1}, outcome)
 			home, err := GetHomeRequestMetricsWithContext(context.Background(), now)
 			require.NoError(t, err)
 			require.EqualValues(t, 4, *home.Requests24h)

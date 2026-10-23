@@ -19,11 +19,13 @@ export function useUsageDistribution() {
     /** First queried date; the heatmap marks earlier days as not covered. */
     coveredFrom = ref(''),
     error = ref(''),
+    unavailableReason = ref(''),
     request = useLatestRequest(),
     toast = useToast()
   async function load() {
     loading.value = true
     error.value = ''
+    unavailableReason.value = ''
     const result = await request.run(async (signal) => {
       // A log limit below a year shortens the query instead of failing it.
       const range = usageCoverageRange(logRangeLimit(app.status))
@@ -39,15 +41,17 @@ export function useUsageDistribution() {
     if (result.ok && result.value.summary.meta.available) {
       coveredFrom.value = result.value.start
       points.value = result.value.summary.distribution
+    } else if (result.ok) {
+      points.value = []
+      unavailableReason.value = t('dashboard.stats.unavailable')
     } else {
       points.value = []
-      error.value = result.ok
-        ? t('dashboard.stats.unavailable')
-        : result.error instanceof Error
+      error.value =
+        result.error instanceof Error
           ? result.error.message
           : String(result.error)
-      if (!result.ok) toast.error(error.value)
+      toast.error(error.value)
     }
   }
-  return { loading, points, coveredFrom, error, load }
+  return { loading, points, coveredFrom, error, unavailableReason, load }
 }

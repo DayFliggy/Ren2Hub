@@ -17,10 +17,10 @@ import { useAuthStore } from '@/stores/auth'
 export interface DashboardStats {
   quota: string
   used_quota: string
-  today_quota: string
+  today_quota?: string
   month_quota?: string
-  today_requests: number
-  today_tokens: number
+  today_requests?: number
+  today_tokens?: number
   total_requests: number
 }
 
@@ -97,6 +97,7 @@ export function useDashboard() {
     flushIntervalMinutes = ref<number | null>(null),
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
+  const usageUnavailable = ref(false)
   // No public native endpoint exposes host metrics, account RPM limits or discounts.
   const system = ref<SystemMetrics | null>(null),
     limits = ref<UserLimits | null>(null),
@@ -110,6 +111,7 @@ export function useDashboard() {
     tokenTrend.value = []
     flushIntervalMinutes.value = null
     recentOutOfRange.value = null
+    usageUnavailable.value = false
     const result = await request.run(async (signal) => {
       const limit = logRangeLimit(app.status)
       // No overview card shows deltas, so no window asks for a comparison.
@@ -137,24 +139,24 @@ export function useDashboard() {
       return
     }
     const { limit, recent, month, today } = result.value
-    // A skipped window is null and has no availability to report.
-    if (
-      [recent, month, today].some(
-        (summary) => summary?.meta.available === false
-      )
-    ) {
-      error.value = t('dashboard.stats.unavailable')
-      return
-    }
     if (!auth.user) return
+    // Keep account facts visible even when the optional quota_data source is
+    // disabled. Usage-backed fields remain absent rather than becoming zero.
+    usageUnavailable.value = [recent, month, today].some(
+      (summary) => summary?.meta.available === false
+    )
     stats.value = {
       quota: String(auth.user.quota),
       used_quota: String(auth.user.used_quota),
-      today_quota: today.kpi.totalQuota,
-      month_quota: month?.kpi.totalQuota,
-      today_requests: today.kpi.totalRequests,
-      today_tokens: today.kpi.totalTokens,
       total_requests: auth.user.request_count,
+      ...(today.meta.available
+        ? {
+            today_quota: today.kpi.totalQuota,
+            today_requests: today.kpi.totalRequests,
+            today_tokens: today.kpi.totalTokens,
+          }
+        : {}),
+      ...(month?.meta.available ? { month_quota: month.kpi.totalQuota } : {}),
     }
     // The flush interval is a server setting, the same in every window.
     flushIntervalMinutes.value = today.meta.flush_interval_minutes
@@ -164,6 +166,7 @@ export function useDashboard() {
       })
       return
     }
+    if (!recent.meta.available) return
     share.value = recent.models.map((row) => ({
       model: row.model,
       ratio: row.share,
@@ -182,6 +185,7 @@ export function useDashboard() {
     tokenTrend,
     flushIntervalMinutes,
     recentOutOfRange,
+    usageUnavailable,
     system,
     limits,
     discounts,

@@ -23,6 +23,16 @@ const dependentEnableKeys = new Set([
 // Read-only status flags the backend returns instead of saved secret values.
 const secretStatusKeys = new Map([['ResendKeyConfigured', 'ResendApiKey']])
 
+// Older installations persisted empty strings for JSON console-content
+// options. Treat those values as the documented empty list so untouched
+// fields remain valid and do not block saving the section.
+const emptyJsonListOptions = new Set([
+  'console_setting.announcements',
+  'console_setting.api_info',
+  'console_setting.faq',
+  'console_setting.uptime_kuma_groups',
+])
+
 function savePhase(key: string, value: SystemSettingValue): number {
   if (!dependentEnableKeys.has(key)) return 1
   if (String(value) === 'false') return 0
@@ -44,6 +54,9 @@ const _configuredSecrets = ref<string[]>([])
 const _loading = ref(false)
 const _loaded = ref(false)
 const _saving = ref(false)
+const _statusRefreshing = ref(false)
+const _statusRefreshError = ref('')
+let _statusRefreshPromise: Promise<boolean> | null = null
 let _fetchPromise: Promise<boolean> | null = null
 let _savePromise: Promise<boolean> | null = null
 
@@ -92,7 +105,11 @@ export function useSystemSettings() {
             if (option.value === 'true') configuredSecrets.push(secretKey)
             continue
           }
-          if (!isSensitiveOption(option.key)) raw[option.key] = option.value
+          if (!isSensitiveOption(option.key))
+            raw[option.key] =
+              emptyJsonListOptions.has(option.key) && option.value.trim() === ''
+                ? '[]'
+                : option.value
         }
         // Publish options and credential availability together. A failed
         // refresh must not pair new values with stale secret status.
@@ -115,6 +132,36 @@ export function useSystemSettings() {
     return _fetchPromise
   }
 
+  // Committed settings and their public projection have different outcomes.
+  // A failed status read must not invite the user to submit committed writes again.
+  async function refreshStatus(afterCommit = false): Promise<boolean> {
+    if (_statusRefreshPromise) {
+      const refreshed = await _statusRefreshPromise
+      return afterCommit ? refreshStatus() : refreshed
+    }
+    _statusRefreshing.value = true
+    _statusRefreshPromise = (async () => {
+      try {
+        await useAppStore().refreshStatus()
+        _statusRefreshError.value = ''
+        return true
+      } catch (error) {
+        _statusRefreshError.value = i18n.global.t(
+          'systemSettings.statusRefreshFailed',
+          {
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
+        toast.error(_statusRefreshError.value)
+        return false
+      } finally {
+        _statusRefreshing.value = false
+        _statusRefreshPromise = null
+      }
+    })()
+    return _statusRefreshPromise
+  }
+
   /** Native options save independently; retain successful writes if a later key fails. */
   async function saveOptions(
     patch: Partial<Record<string, SystemSettingValue>>,
@@ -133,7 +180,6 @@ export function useSystemSettings() {
     _savePromise = (async () => {
       let applied = 0
       let saved = true
-      let refreshNavigation = false
       try {
         for (const [key, value] of entries) {
           await api.put('/api/option/', { key, value: String(value) })
@@ -145,8 +191,6 @@ export function useSystemSettings() {
             _rawOptions.value = { ..._rawOptions.value, [key]: String(value) }
           }
           applied++
-          if (key === 'HeaderNavModules' || key === 'SidebarModulesAdmin')
-            refreshNavigation = true
           callbacks.onApplied?.(key, value, isSensitiveOption(key))
         }
       } catch (err) {
@@ -162,16 +206,9 @@ export function useSystemSettings() {
         )
       }
       try {
-        // A navigation option can commit before a later option fails. Refresh
-        // the shared status for every committed navigation change either way.
-        if (refreshNavigation) await useAppStore().refreshStatus()
-      } catch (err) {
-        saved = false
-        toast.error(
-          i18n.global.t('systemSettings.navigationRefreshFailed', {
-            error: err instanceof Error ? err.message : String(err),
-          })
-        )
+        // Refresh once for every successful batch, including a partially
+        // committed batch. Status is the single authority for shared UI state.
+        if (applied > 0) await refreshStatus(true)
       } finally {
         _saving.value = false
         _savePromise = null
@@ -188,6 +225,7 @@ export function useSystemSettings() {
     if (isSensitiveOption(key)) return ''
     const value = _rawOptions.value[key]
     if (value === undefined) return fallback
+    if (emptyJsonListOptions.has(key) && value.trim() === '') return '[]'
     // Invalid stored values stay raw so field validation reports them instead
     // of hiding them behind the default.
     if (typeof fallback === 'boolean') {
@@ -213,6 +251,9 @@ export function useSystemSettings() {
     saving: readonly(_saving),
     load,
     saveOptions,
+    statusRefreshing: readonly(_statusRefreshing),
+    statusRefreshError: readonly(_statusRefreshError),
+    refreshStatus,
     rawValue,
     isSecretConfigured,
   }

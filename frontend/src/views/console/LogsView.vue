@@ -12,7 +12,7 @@ import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
-import { exportUserLogs } from '@/api/logExport'
+import { exportUserLogs, MAX_LOG_EXPORT_BYTES } from '@/api/logExport'
 import { useAppStore } from '@/stores/app'
 import { parseLogPage } from '@/api/liveContracts'
 import { ApiError } from '@/api/types'
@@ -57,7 +57,7 @@ import {
   localDayEndMs,
   localDayStartMs,
 } from '@/utils/format'
-import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
+import { createSpreadsheetExportStream } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -73,6 +73,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const loading = ref(true)
+const loadError = ref<string | null>(null)
 
 const keyword = ref('')
 const type = ref('')
@@ -299,6 +300,7 @@ const listRequest = useLatestRequest()
 
 async function load() {
   loading.value = true
+  loadError.value = null
   const result = await listRequest.run(async (signal) =>
     parseLogPage(
       await api.get<unknown>('/api/log/self', currentParams(), { signal })
@@ -307,11 +309,13 @@ async function load() {
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
-    toast.error(
+    rows.value = []
+    total.value = 0
+    loadError.value =
       result.error instanceof ApiError
         ? result.error.message
         : t('common.failed')
-    )
+    toast.error(loadError.value)
     return
   }
   const pageResult = result.value
@@ -338,8 +342,8 @@ watch(page, load)
 const exporting = ref(false)
 let exportController: AbortController | null = null
 
-function download(content: string, mime: string, ext: string) {
-  const blob = new Blob([content], { type: mime })
+function download(parts: string[], mime: string, ext: string) {
+  const blob = new Blob(parts, { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -359,39 +363,56 @@ async function doExport() {
       page_size: _pageSize,
       ...filters
     } = currentParams(exportStartDate.value, exportEndDate.value)
-    const items = await exportUserLogs(filters, controller.signal)
     const headers = LOG_EXPORT_HEADERS.map((key) =>
       t(`logs.exportHeaders.${key}`)
     )
-    if (exportType.value === 'json') {
-      download(
-        JSON.stringify(items, null, 2),
-        'application/json;charset=utf-8',
-        'json'
-      )
-    } else if (exportType.value === 'excel') {
-      download(
-        ...serializeSpreadsheet(
-          headers,
-          items.map((log) => getLogExportValues(log, getLocale())),
-          'excel'
-        )
-      )
-    } else {
-      download(
-        ...serializeSpreadsheet(
-          headers,
-          items.map((log) => getLogExportValues(log, getLocale())),
-          'csv'
-        )
-      )
+    const json = exportType.value === 'json'
+    const format = exportType.value === 'excel' ? 'excel' : 'csv'
+    const spreadsheet = json
+      ? null
+      : createSpreadsheetExportStream(headers, format)
+    const parts: string[] = []
+    let outputBytes = 0
+    let written = 0
+    const append = (part: string) => {
+      outputBytes += new TextEncoder().encode(part).byteLength
+      if (outputBytes > MAX_LOG_EXPORT_BYTES) {
+        throw new ApiError(t('logs.exportTooLarge'), {
+          code: 'LOG_EXPORT_TOO_LARGE',
+        })
+      }
+      parts.push(part)
     }
+    if (json) append('[')
+    else append(spreadsheet!.prefix)
+    const count = await exportUserLogs(filters, controller.signal, (log) => {
+      if (json) {
+        if (written > 0) append(',')
+        append(JSON.stringify(log))
+      } else {
+        append(spreadsheet!.appendRow(getLogExportValues(log, getLocale())))
+      }
+      written++
+    })
+    if (json) append(']')
+    else append(spreadsheet!.suffix)
+    download(
+      parts,
+      json ? 'application/json;charset=utf-8' : spreadsheet!.mime,
+      json ? 'json' : spreadsheet!.ext
+    )
     exportOpen.value = false
-    toast.success(t('logs.exported', { count: items.length }))
+    toast.success(t('logs.exported', { count }))
   } catch (error) {
     // An unmount mid-export is a cancellation, not a failure to report.
     if (controller.signal.aborted) return
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    toast.error(
+      error instanceof ApiError && error.code === 'LOG_EXPORT_TOO_LARGE'
+        ? t('logs.exportTooLarge')
+        : error instanceof ApiError
+          ? error.message
+          : String(error)
+    )
   } finally {
     if (exportController === controller) {
       exportController = null
@@ -588,8 +609,8 @@ onBeforeUnmount(() => {
         :page-size="pageSize"
         :min-table-width="minTableWidth"
         :scroll-region-label="t('logs.breadcrumb.1')"
-        :empty-title="t('logs.emptyTitle')"
-        :empty-hint="t('logs.emptyHint')"
+        :empty-title="t(loadError ? 'logs.loadFailed' : 'logs.emptyTitle')"
+        :empty-hint="loadError || t('logs.emptyHint')"
         empty-illustration="empty-logs"
       >
         <template #cell-created="{ row }">
@@ -698,8 +719,8 @@ onBeforeUnmount(() => {
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
       >
         <EmptyState
-          :title="t('logs.emptyTitle')"
-          :hint="t('logs.emptyHint')"
+          :title="t(loadError ? 'logs.loadFailed' : 'logs.emptyTitle')"
+          :hint="loadError || t('logs.emptyHint')"
           illustration="empty-logs"
         />
       </div>

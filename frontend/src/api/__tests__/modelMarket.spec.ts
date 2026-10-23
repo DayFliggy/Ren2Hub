@@ -28,6 +28,42 @@ describe('native model catalog', () => {
     expect(result.offers[0]!.price_status).toBe('unavailable')
     expect(result.offers[0]!.pricing_values).toEqual({})
   })
+  it.each(['invalid_audio_price', 'protocol_dependent_audio_price'])(
+    'preserves specialized unavailable reason %s without inventing a price',
+    (reason) => {
+      const input = modelCatalogFixture()
+      input.offers[0]!.price_status = 'unavailable'
+      input.offers[0]!.pricing_values = {}
+      input.offers[0]!.price_reason = reason
+      const result = parseModelMarket(input)
+      expect(result.offers[0]!.price_reason).toBe(reason)
+      expect(result.offers[0]!.pricing_values).toEqual({})
+    }
+  )
+  it('preserves all supported billing dimensions and channel unavailable reasons', () => {
+    const input = modelCatalogFixture()
+    const prices = {
+      input: '1',
+      output: '2',
+      cache: '0.25',
+      cache_create: '1.25',
+      cache_create_1h: '2',
+      image: '3',
+      image_cache: '0.5',
+      image_output: '4',
+      audio_input: '5',
+      audio_output: '10',
+    }
+    input.models[0]!.pricing_values = prices
+    input.offers[0]!.price_status = 'unavailable'
+    input.offers[0]!.pricing_values = {}
+    input.offers[0]!.price_reason = 'expression_requires_usage_context'
+    const result = parseModelMarket(input)
+    expect(result.models[0]!.pricing_values).toEqual(prices)
+    expect(result.offers[0]!.price_reason).toBe(
+      'expression_requires_usage_context'
+    )
+  })
   it.each([
     [
       'duplicate model',

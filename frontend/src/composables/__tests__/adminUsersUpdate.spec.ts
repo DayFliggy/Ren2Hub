@@ -6,9 +6,10 @@ import { defineComponent } from 'vue'
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
-  put: vi.fn(),
+  putEnvelope: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  warning: vi.fn(),
   proof: vi.fn(),
 }))
 vi.mock('@/api/console', () => ({ api: mocks }))
@@ -62,7 +63,7 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset()
   mocks.get.mockResolvedValue({ items: [], total: 0 })
   mocks.proof.mockResolvedValue('proof')
-  mocks.put.mockResolvedValue(null)
+  mocks.putEnvelope.mockResolvedValue({ success: true })
   mocks.post.mockResolvedValue(null)
 })
 
@@ -88,7 +89,7 @@ it('reports a saved profile whose role change failed and reloads the list', asyn
     new ApiError('Role change rejected', { status: 403 })
   )
   expect(await state.updateUserDetails(member, promotion)).toBe(true)
-  expect(mocks.put).toHaveBeenCalledOnce()
+  expect(mocks.putEnvelope).toHaveBeenCalledOnce()
   expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
     roleRequestFailed('Role change rejected')
   )
@@ -114,7 +115,9 @@ it('keeps the saved profile when the role verification is cancelled', async () =
 
 it('reports a failed profile save as a whole failure without touching the role', async () => {
   const { wrapper, state } = await setup()
-  mocks.put.mockRejectedValue(new ApiError('Username taken', { status: 200 }))
+  mocks.putEnvelope.mockRejectedValue(
+    new ApiError('Username taken', { status: 200 })
+  )
   expect(await state.updateUserDetails(member, promotion)).toBe(false)
   expect(mocks.error).toHaveBeenCalledExactlyOnceWith('Username taken')
   expect(mocks.proof).not.toHaveBeenCalled()
@@ -130,6 +133,23 @@ it('saves profile and role together with one reload and no error', async () => {
     '/api/user/manage',
     { id: 2, action: 'promote' },
     { headers: { 'X-Security-Proof': 'proof' } }
+  )
+  expect(mocks.error).not.toHaveBeenCalled()
+  expect(mocks.get).toHaveBeenCalledOnce()
+  wrapper.unmount()
+})
+
+it('keeps a committed update successful while warning about pending runtime publication', async () => {
+  const { wrapper, state } = await setup()
+  mocks.putEnvelope.mockResolvedValue({
+    success: true,
+    publication_pending: true,
+  })
+  expect(
+    await state.updateUserDetails(member, { ...promotion, role: member.role })
+  ).toBe(true)
+  expect(mocks.warning).toHaveBeenCalledExactlyOnceWith(
+    i18n.global.t('common.publicationPending')
   )
   expect(mocks.error).not.toHaveBeenCalled()
   expect(mocks.get).toHaveBeenCalledOnce()

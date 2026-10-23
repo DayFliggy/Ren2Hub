@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // The local sentinels below reach the console; each response must carry the
@@ -22,6 +24,30 @@ type sentinelResponse struct {
 	Success    bool   `json:"success"`
 	Message    string `json:"message"`
 	MessageKey string `json:"message_key"`
+}
+
+func TestTokenRoutingErrorsCarryStableMessageKeys(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		status int
+		key    string
+	}{
+		{fmt.Errorf("private context: %w", model.ErrTokenRouteInvalid), http.StatusBadRequest, model.ErrTokenRouteInvalid.Error()},
+		{model.ErrTokenRouteForbidden, http.StatusForbidden, model.ErrTokenRouteForbidden.Error()},
+		{model.ErrTokenRouteConflict, http.StatusConflict, model.ErrTokenRouteConflict.Error()},
+		{gorm.ErrRecordNotFound, http.StatusNotFound, "Token not found"},
+		{errors.New("storage failed"), http.StatusInternalServerError, "Unable to read or save token routing"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			tokenRoutingError(ctx, tc.err)
+			body := decodeSentinelResponse(t, recorder)
+			assert.Equal(t, tc.status, recorder.Code)
+			assert.Equal(t, tc.key, body.MessageKey)
+			assert.Equal(t, tc.key, body.Message)
+		})
+	}
 }
 
 func decodeSentinelResponse(t *testing.T, recorder *httptest.ResponseRecorder) sentinelResponse {

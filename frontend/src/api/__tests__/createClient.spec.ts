@@ -8,6 +8,26 @@ import { setLocale } from '@/i18n'
 import { mergeServerMessages } from '@/i18n/serverMessages'
 
 describe('API client request scope', () => {
+  it.each(['postEnvelope', 'putEnvelope'] as const)(
+    'preserves committed-write metadata through %s',
+    async (method) => {
+      const response = { success: true, data: 2, publication_pending: 1 }
+      const request = vi.fn().mockResolvedValue(response)
+      const client = createApiClient({ request } as ApiTransport)
+      await expect(client[method]('/status', { status: 2 })).resolves.toEqual(
+        response
+      )
+      expect(request).toHaveBeenCalledWith(
+        method === 'postEnvelope' ? 'POST' : 'PUT',
+        '/status',
+        { data: { status: 2 } }
+      )
+      request.mockResolvedValue({ success: false, message: 'Denied' })
+      await expect(client[method]('/status')).rejects.toMatchObject({
+        business: true,
+      })
+    }
+  )
   it('preserves pagination metadata without mixing plain and envelope requests', async () => {
     const request = vi
       .fn()

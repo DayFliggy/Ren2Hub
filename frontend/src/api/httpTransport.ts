@@ -96,6 +96,56 @@ function toApiError(error: unknown): never {
   throw error
 }
 
+/** Bound XHR downloads without bypassing this transport's authentication retry. */
+async function downloadBlob(
+  client: AxiosInstance,
+  url: string,
+  options: RequestOptions,
+  headers = options.headers
+): Promise<Blob> {
+  const limit = options.maxBytes
+  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0))
+    throw new TypeError('maxBytes must be a non-negative safe integer')
+  const controller = limit === undefined ? null : new AbortController()
+  const abort = () => controller?.abort(options.signal?.reason)
+  if (options.signal?.aborted) abort()
+  else if (controller)
+    options.signal?.addEventListener('abort', abort, { once: true })
+  let tooLarge = false
+  const sizeError = () =>
+    new ApiError('Binary download exceeds the configured limit', {
+      code: 'BINARY_DOWNLOAD_TOO_LARGE',
+    })
+  try {
+    const response = await client.request<Blob>({
+      method: 'GET',
+      url,
+      signal: controller?.signal ?? options.signal,
+      headers,
+      responseType: 'blob',
+      timeout: options.timeoutMs,
+      maxContentLength: limit,
+      onDownloadProgress:
+        limit === undefined
+          ? undefined
+          : ({ loaded, total }) => {
+              if (loaded > limit || (total !== undefined && total > limit)) {
+                tooLarge = true
+                controller!.abort()
+              }
+            },
+    })
+    if (tooLarge || (limit !== undefined && response.data.size > limit))
+      throw sizeError()
+    return response.data
+  } catch (error) {
+    if (tooLarge) throw sizeError()
+    throw error
+  } finally {
+    if (controller) options.signal?.removeEventListener('abort', abort)
+  }
+}
+
 export function createHttpTransport(client: AxiosInstance): ApiTransport {
   type RefreshOutcome = 'refreshed' | 'invalid' | 'stale'
   interface RefreshTask {
@@ -289,16 +339,9 @@ export function createHttpTransport(client: AxiosInstance): ApiTransport {
           headers.Authorization = `${bundle.token_type} ${bundle.access_token}`
         }
         try {
-          const response = await client.request<Blob>({
-            method: 'GET',
-            url,
-            signal: options.signal,
-            headers,
-            responseType: 'blob',
-            timeout: options.timeoutMs,
-          })
+          const data = await downloadBlob(client, url, options, headers)
           if (!isAuthSessionIdentityCurrent(snapshot)) throw staleSessionError()
-          return response.data
+          return data
         } catch (error) {
           if (!isAuthSessionIdentityCurrent(snapshot)) {
             throw staleSessionError(error)
@@ -352,15 +395,7 @@ export function createPublicHttpTransport(client: AxiosInstance): ApiTransport {
     },
     async getBlob(url: string, options: RequestOptions = {}): Promise<Blob> {
       try {
-        const response = await client.request<Blob>({
-          method: 'GET',
-          url,
-          signal: options.signal,
-          headers: options.headers,
-          responseType: 'blob',
-          timeout: options.timeoutMs,
-        })
-        return response.data
+        return await downloadBlob(client, url, options)
       } catch (error) {
         return toApiError(error)
       }

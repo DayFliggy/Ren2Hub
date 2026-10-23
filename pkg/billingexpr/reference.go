@@ -34,7 +34,11 @@ func StaticReferencePrices(expression string) (map[string]string, bool) {
 		return nil, false
 	}
 	result := map[string]string{}
-	for variable, key := range map[string]string{"p": "input", "c": "output"} {
+	for variable, key := range map[string]string{
+		"p": "input", "c": "output", "cr": "cache", "cc": "cache_create",
+		"cc1h": "cache_create_1h", "img": "image", "img_cr": "image_cache",
+		"img_o": "image_output", "ai": "audio_input", "ao": "audio_output",
+	} {
 		if value, ok := values[variable]; ok {
 			result[key] = value.String()
 		}

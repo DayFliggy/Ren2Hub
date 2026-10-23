@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/client'
 import { channelOperation, parseChannelPage } from '@/api/channelStatus'
+import { hasPendingPublication } from '@/api/publication'
 import {
   invalidResponse,
   isRecord,
@@ -309,10 +310,16 @@ export function useAdminChannels() {
     return runChannelAction(
       channel.id,
       'status',
-      () =>
-        api.post<unknown>(`/api/channel/${channel.id}/status`, {
-          status: nextStatus,
-        }),
+      async () => {
+        const response = await api.postEnvelope<unknown>(
+          `/api/channel/${channel.id}/status`,
+          {
+            status: nextStatus,
+          }
+        )
+        if (hasPendingPublication(response))
+          toast.warning(t('common.publicationPending'))
+      },
       nextStatus === 1 ? 'channels.enabled' : 'channels.disabled'
     )
   }
@@ -582,7 +589,7 @@ export function useAdminChannels() {
     const status = action === 'disable' ? 2 : 1
 
     return runBulkAction(action, async (signal) => {
-      const changed = await api.post<number>(
+      const response = await api.postEnvelope<number>(
         '/api/channel/status/batch',
         {
           ids: targets.map((channel) => channel.id),
@@ -597,9 +604,11 @@ export function useAdminChannels() {
             : action === 'disable'
               ? 'channels.bulkDisabled'
               : 'channels.bulkResetDone',
-          { count: changed }
+          { count: response.data }
         )
       )
+      if (hasPendingPublication(response))
+        toast.warning(t('common.publicationPending'))
       await load({ background: true })
     })
   }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/shopspring/decimal"
@@ -25,11 +24,11 @@ func CatalogPrices(ctx context.Context, names []string) (map[string]CatalogPrice
 	result := make(map[string]CatalogPrice, len(names))
 	for _, name := range names {
 		effective := effectiveModelPricing(values, name)
-		price := catalogPrice(effective)
+		price := catalogPrice(name, effective, modelPricingValues(values, name))
 		if price.PriceStatus != "unavailable" && price.PriceStatus != "zero" {
 			price.PriceStatus = "default"
 			alias := ratio_setting.FormatMatchingModelName(name)
-			for _, key := range []string{"ModelPrice", "ModelRatio", "CompletionRatio", "billing_setting.billing_mode", "billing_setting.billing_expr"} {
+			for _, key := range []string{"ModelPrice", "ModelRatio", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "billing_setting.billing_mode", "billing_setting.billing_expr"} {
 				if !existing[key] {
 					continue
 				}
@@ -45,7 +44,7 @@ func CatalogPrices(ctx context.Context, names []string) (map[string]CatalogPrice
 	}
 	return result, nil
 }
-func catalogPrice(values PricingValues) CatalogPrice {
+func catalogPrice(name string, values, configured PricingValues) CatalogPrice {
 	result := CatalogPrice{PriceStatus: "unavailable", PricingValues: map[string]string{}, PriceReason: "price_not_configured"}
 	if values["billing_setting.billing_mode"] == "tiered_expr" {
 		expression, _ := values["billing_setting.billing_expr"].(string)
@@ -67,14 +66,46 @@ func catalogPrice(values PricingValues) CatalogPrice {
 	if fixed, ok := number("ModelPrice"); ok {
 		result.PricingValues["request"] = fixed.String()
 	} else if ratio, ok := number("ModelRatio"); ok {
-		if common.QuotaPerUnit <= 0 || math.IsNaN(common.QuotaPerUnit) || math.IsInf(common.QuotaPerUnit, 0) {
+		input, err := legacyInputPricePerMillion(ratio.InexactFloat64())
+		if err != nil {
 			result.PriceReason = "invalid_quota_unit"
 			return result
 		}
-		input := ratio.Mul(decimal.NewFromInt(1_000_000)).Div(decimal.NewFromFloat(common.QuotaPerUnit))
+		details := ResolveLegacyBillingDetails(name, values, configured)
+		if details.InvalidAudioPrice {
+			result.PriceReason = "invalid_audio_price"
+			return result
+		}
+		// A model shared by native Gemini and compatible audio protocols can
+		// have different audio prices. A single catalog price must not choose
+		// one settlement path and present it as unconditional.
+		if details.ConflictingAudioPrices {
+			result.PriceReason = "protocol_dependent_audio_price"
+			return result
+		}
 		result.PricingValues["input"] = input.String()
 		if completion, ok := number("CompletionRatio"); ok {
 			result.PricingValues["output"] = input.Mul(completion).String()
+		}
+		for source, target := range map[string]string{
+			"CacheRatio": "cache", "CreateCacheRatio": "cache_create",
+			"ImageRatio": "image",
+		} {
+			if factor, ok := number(source); ok {
+				result.PricingValues[target] = input.Mul(factor).String()
+			}
+		}
+		if ResolveCacheWriteMode(name, configured) == CacheWriteClaudeTTL {
+			if factor, ok := number("CreateCacheRatio"); ok {
+				result.PricingValues["cache_create_1h"] = input.Mul(factor).Mul(decimal.NewFromFloat(legacyClaudeCacheCreation1hMultiplier)).String()
+			}
+		}
+		for key, price := range map[string]*float64{
+			"audio_input": details.AudioInputPrice, "audio_output": details.AudioOutputPrice,
+		} {
+			if price != nil {
+				result.PricingValues[key] = decimal.NewFromFloat(*price).String()
+			}
 		}
 	} else {
 		return result

@@ -1,5 +1,12 @@
 export type SpreadsheetExportFormat = 'csv' | 'excel'
 export type SerializedSpreadsheet = [content: string, mime: string, ext: string]
+export interface SpreadsheetExportStream {
+  prefix: string
+  suffix: string
+  appendRow(values: readonly unknown[]): string
+  mime: string
+  ext: string
+}
 
 const DANGEROUS_FORMULA_PREFIX = /^[=+\-@]/
 
@@ -45,22 +52,37 @@ export function serializeSpreadsheet(
   rows: readonly (readonly unknown[])[],
   format: SpreadsheetExportFormat
 ): SerializedSpreadsheet {
+  const stream = createSpreadsheetExportStream(headers, format)
+  return [
+    stream.prefix +
+      rows.map((row) => stream.appendRow(row)).join('') +
+      stream.suffix,
+    stream.mime,
+    stream.ext,
+  ]
+}
+
+/** Incremental row serializer for large downloads; callers retain no row array. */
+export function createSpreadsheetExportStream(
+  headers: readonly unknown[],
+  format: SpreadsheetExportFormat
+): SpreadsheetExportStream {
   if (format === 'excel') {
     const head = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`
-    const body = rows
-      .map(
-        (row) =>
-          `<tr>${row.map((value) => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`
-      )
-      .join('')
-
-    return [
-      `<html><head><meta charset="utf-8"></head><body><table>${head}${body}</table></body></html>`,
-      'application/vnd.ms-excel;charset=utf-8',
-      'xls',
-    ]
+    return {
+      prefix: `<html><head><meta charset="utf-8"></head><body><table>${head}`,
+      suffix: '</table></body></html>',
+      appendRow: (row) =>
+        `<tr>${row.map((value) => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`,
+      mime: 'application/vnd.ms-excel;charset=utf-8',
+      ext: 'xls',
+    }
   }
-
-  const content = [csvRow(headers), ...rows.map(csvRow)].join('\n')
-  return ['\uFEFF' + content, 'text/csv;charset=utf-8', 'csv']
+  return {
+    prefix: '\uFEFF' + csvRow(headers),
+    suffix: '',
+    appendRow: (row) => '\n' + csvRow(row),
+    mime: 'text/csv;charset=utf-8',
+    ext: 'csv',
+  }
 }

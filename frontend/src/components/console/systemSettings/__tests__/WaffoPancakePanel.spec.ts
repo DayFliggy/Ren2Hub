@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   rawValue: vi.fn(),
   saveOptions: vi.fn(),
+  refreshStatus: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
 }))
@@ -84,10 +85,13 @@ it('keeps an undisclosed existing private key and saves native price options sep
       signal: undefined,
     }
   )
-  expect(mocks.saveOptions).toHaveBeenCalledWith({
-    WaffoPancakeUnitPrice: 1,
-    WaffoPancakeMinTopUp: 1,
-  })
+  expect(mocks.saveOptions).toHaveBeenCalledWith(
+    {
+      WaffoPancakeUnitPrice: 1,
+      WaffoPancakeMinTopUp: 1,
+    },
+    { onApplied: expect.any(Function) }
+  )
   expect(wrapper.emitted('saved')).toHaveLength(1)
   wrapper.unmount()
 })

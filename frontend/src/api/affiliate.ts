@@ -11,6 +11,9 @@ import {
 } from './contracts'
 import { viewerTzOffset } from '@/utils/format'
 import type { Quota } from '@/utils/quota'
+import type { InviteRecord } from '@/types/console'
+
+export type AffiliateRecord = InviteRecord
 
 export interface AffiliateMonth {
   month: string
@@ -25,6 +28,8 @@ export interface AffiliateInfo {
   effective_rate_bps: number
   effective_rate_percent: number
   transferable: Quota
+  transfer_enabled: boolean
+  outstanding_offset: Quota
   frozen_reward: Quota
   reward_total: Quota
   monthly_series: AffiliateMonth[]
@@ -80,6 +85,40 @@ function parsePolicy(value: unknown, endpoint: string): AffiliateUserPolicy {
   }
 }
 
+function parseAffiliateRecord(
+  value: unknown,
+  endpoint: string
+): AffiliateRecord {
+  const row = record(value, endpoint)
+  if (
+    row.kind !== 'accrue' &&
+    row.kind !== 'transfer' &&
+    row.kind !== 'reversal'
+  )
+    invalidResponse(endpoint)
+  return {
+    id: count(row.id, endpoint),
+    user_id: count(row.user_id, endpoint),
+    invitee_id: count(row.invitee_id, endpoint),
+    kind: row.kind,
+    skip_reason: requiredString(row.skip_reason, endpoint),
+    source_type: requiredString(row.source_type, endpoint),
+    source_id: requiredString(row.source_id, endpoint),
+    base_quota: quota(row.base_quota, endpoint),
+    rate_bps: count(row.rate_bps, endpoint),
+    reward_quota: quota(row.reward_quota, endpoint),
+    credited_quota: quota(row.credited_quota ?? 0, endpoint),
+    debt_offset_quota: quota(row.debt_offset_quota ?? 0, endpoint),
+    debt_added_quota: quota(row.debt_added_quota ?? 0, endpoint),
+    frozen_until: count(row.frozen_until, endpoint),
+    thawed_at: count(row.thawed_at, endpoint),
+    created_at: count(row.created_at, endpoint),
+    available_after: quota(row.available_after, endpoint),
+    frozen_after: quota(row.frozen_after, endpoint),
+    wallet_after: requiredQuota(row.wallet_after, endpoint),
+  }
+}
+
 export const affiliateApi = {
   async info(signal?: AbortSignal): Promise<AffiliateInfo> {
     const endpoint = '/api/user/affiliate'
@@ -100,6 +139,11 @@ export const affiliateApi = {
         endpoint
       ),
       transferable: quota(data.transferable, endpoint),
+      transfer_enabled:
+        data.transfer_enabled === undefined
+          ? true
+          : requiredBoolean(data.transfer_enabled, endpoint),
+      outstanding_offset: quota(data.outstanding_offset ?? 0, endpoint),
       frozen_reward: quota(data.frozen_reward, endpoint),
       reward_total: quota(data.reward_total, endpoint),
       policy: {
@@ -116,6 +160,14 @@ export const affiliateApi = {
         }
       }),
     }
+  },
+  async records(page: number, pageSize: number, signal?: AbortSignal) {
+    const endpoint = '/api/user/affiliate/records'
+    return parsePage(
+      await api.get(endpoint, { p: page, page_size: pageSize }, { signal }),
+      endpoint,
+      parseAffiliateRecord
+    )
   },
   async invitees(
     page: number,

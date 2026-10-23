@@ -3,12 +3,11 @@ import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { getTopUps } from '@/api/adminOrders'
-import { ApiError } from '@/api/types'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
-import { useToast } from '@/composables/useToast'
 import {
   adminOrderMethodLabelKey,
   adminOrderStatusLabelKey,
@@ -21,13 +20,13 @@ import { formatQuota, formatTime } from '@/utils/format'
 const props = defineProps<{ refreshKey: number }>()
 
 const { t } = useI18n()
-const toast = useToast()
 
 const rows = ref<AdminOrder[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(6)
 const loading = ref(true)
+const loadError = ref('')
 const listRequest = useLatestRequest()
 
 async function load() {
@@ -38,13 +37,13 @@ async function load() {
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
-    toast.error(
-      result.error instanceof ApiError
-        ? result.error.message
-        : t('common.failed')
-    )
+    rows.value = []
+    total.value = 0
+    loadError.value =
+      result.error instanceof Error ? result.error.message : t('common.failed')
     return
   }
+  loadError.value = ''
   rows.value = result.value.items
   total.value = result.value.total
 }
@@ -62,6 +61,12 @@ onMounted(load)
 
 <template>
   <ConsoleCard :title="t('wallet.records')" :padded="false">
+    <ErrorBanner
+      v-if="!loading && loadError"
+      class="mx-4 mt-4"
+      :message="loadError"
+      @retry="load"
+    />
     <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)] px-5">
       <li
         v-for="row in rows"
@@ -94,7 +99,7 @@ onMounted(load)
         </div>
       </li>
       <li
-        v-if="!loading && rows.length === 0"
+        v-if="!loading && !loadError && rows.length === 0"
         class="py-10 text-center text-sm text-[var(--text-tertiary)]"
       >
         {{ t('common.none') }}

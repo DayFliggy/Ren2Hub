@@ -73,13 +73,14 @@ describe('native usage distribution', () => {
     )
     expect(state.coveredFrom.value).toBe('2025-12-04')
   })
-  it('clears the heatmap and exposes an error when measurements are unavailable', async () => {
+  it('clears the heatmap and distinguishes disabled measurements from a load error', async () => {
     const input = dashboardFixture()
     input.meta.available = false
     vi.mocked(api.get).mockResolvedValue(input)
     const state = setupDistribution()
     await state.load()
     expect(state.points.value).toEqual([])
-    expect(state.error.value).toBeTruthy()
+    expect(state.error.value).toBe('')
+    expect(state.unavailableReason.value).toBeTruthy()
   })
 })

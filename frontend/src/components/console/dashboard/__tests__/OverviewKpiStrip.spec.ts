@@ -79,6 +79,20 @@ describe('OverviewKpiStrip', () => {
     expect(wrapper.text()).not.toContain('5.8')
   })
 
+  it('keeps the account request count visible while export-backed usage is unavailable', () => {
+    const wrapper = render({
+      stats: {
+        quota: '5200000',
+        used_quota: '2985000',
+        total_requests: 18_764,
+      },
+    })
+    const requests = wrapper.get('[data-kpi-cell="requests"]')
+    expect(requests.text()).toContain('Total requests')
+    expect(requests.text()).toContain('18,764')
+    expect(requests.text()).not.toContain('Today requests')
+  })
+
   it('draws a sparkline for each series cell and a ring for RPM', () => {
     const wrapper = render({
       flow: flowPoints,

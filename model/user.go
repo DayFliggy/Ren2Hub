@@ -106,6 +106,7 @@ type User struct {
 	AffCount             int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
 	AffQuota             int                        `json:"aff_quota" gorm:"type:bigint;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota      int                        `json:"aff_history_quota" gorm:"type:bigint;default:0;column:aff_history"` // 邀请历史额度
+	AffOffsetDebtQuota   int                        `json:"-" gorm:"type:bigint;not null;default:0;column:aff_offset_debt_quota"`
 	InviterId            int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	DeletedAt            gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId            string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
@@ -755,7 +756,7 @@ func (user *User) UpdateWithTx(tx *gorm.DB, updatePassword bool) error {
 		"aff_count",
 		"aff_quota",
 		"aff_history",
-		"aff_frozen_quota", "aff_rebate_rate_bps", "aff_code_enabled", "aff_code_custom", "aff_code", "inviter_id", "invited_at", "max_concurrency",
+		"aff_frozen_quota", "aff_offset_debt_quota", "aff_rebate_rate_bps", "aff_code_enabled", "aff_code_custom", "aff_code", "inviter_id", "invited_at", "max_concurrency",
 		"auth_version",
 	).Updates(newUser).Error; err != nil {
 		return err

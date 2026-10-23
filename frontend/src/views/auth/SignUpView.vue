@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
+import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
+import { completeOAuth, oauthProviders } from '@/api/oauth'
+import AffiliateAttributionField from '@/components/auth/AffiliateAttributionField.vue'
 import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
 import TurnstileWidget from '@/components/auth/TurnstileWidget.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -12,23 +15,27 @@ import AuthLayout from '@/components/layout/AuthLayout.vue'
 import { authApi } from '@/api/auth'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import {
   clearAffiliateAttribution,
-  getAffiliateAttribution,
+  storeAffiliateAttribution,
 } from '@/utils/affiliate'
 
+const oauthAbort = new AbortController()
+onBeforeUnmount(() => oauthAbort.abort())
 const { t } = useI18n()
 const router = useRouter()
-const route = useRoute()
 const toast = useToast()
 const app = useAppStore()
+const auth = useAuthStore()
 
 const username = ref('')
 const email = ref('')
 const password = ref('')
 const confirm = ref('')
 const affiliateCode = ref('')
+const affiliateConfirmed = ref(false)
 const verificationCode = ref('')
 const verificationSending = ref(false)
 const loading = ref(false)
@@ -43,6 +50,7 @@ const errors = reactive({
   affiliate: '',
 })
 const busy = computed(() => loading.value || verificationSending.value)
+const providers = computed(() => oauthProviders(app.status))
 // Native Register reads email and code only when email verification is on.
 const emailRequired = computed(() => app.status.email_verification === true)
 const turnstileSatisfied = computed(
@@ -122,6 +130,11 @@ function validate(): boolean {
 async function submit() {
   if (busy.value || !validate()) return
   loading.value = true
+  const selectedAffiliateCode = affiliateConfirmed.value
+    ? affiliateCode.value.trim()
+    : ''
+  if (selectedAffiliateCode) storeAffiliateAttribution(selectedAffiliateCode)
+  else clearAffiliateAttribution()
   try {
     await app.initialize()
     if (!turnstileReady()) return
@@ -129,7 +142,7 @@ async function submit() {
       {
         username: username.value.trim(),
         password: password.value,
-        aff_code: affiliateCode.value.trim() || undefined,
+        aff_code: selectedAffiliateCode || undefined,
         ...(emailRequired.value
           ? {
               email: email.value.trim(),
@@ -143,6 +156,13 @@ async function submit() {
     toast.success(t('auth.registerSuccess'))
     await router.push({ name: 'sign-in' })
   } catch (error) {
+    if (
+      error instanceof ApiError &&
+      ['AFFILIATE_DISABLED', 'AFFILIATE_CODE_INVALID'].includes(
+        error.code ?? ''
+      )
+    )
+      errors.affiliate = error.message
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
     loading.value = false
@@ -150,12 +170,46 @@ async function submit() {
   }
 }
 
-onMounted(async () => {
-  await app.initialize()
-  const queryCode = typeof route.query.aff === 'string' ? route.query.aff : ''
-  const storedCode = getAffiliateAttribution()
-  affiliateCode.value = queryCode.trim() || storedCode
-})
+async function signUpWithOAuth(provider: string) {
+  if (busy.value) return
+  loading.value = true
+  if (affiliateConfirmed.value && affiliateCode.value.trim())
+    storeAffiliateAttribution(affiliateCode.value)
+  else clearAffiliateAttribution()
+  try {
+    await app.initialize()
+    const value = await completeOAuth(
+      app.status,
+      provider,
+      'login',
+      undefined,
+      undefined,
+      oauthAbort.signal
+    )
+    if (parseTwoFactorChallenge(value)) {
+      toast.error(t('auth.oauthRequiresSignIn'))
+      return
+    }
+    const bundle = parseAuthBundle(value)
+    if (!bundle) throw new Error(t('security.invalidProof'))
+    auth.acceptLogin(bundle)
+    clearAffiliateAttribution()
+    toast.success(t('auth.loginSuccess'))
+    await router.push({ name: 'dashboard' })
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      ['AFFILIATE_DISABLED', 'AFFILIATE_CODE_INVALID'].includes(
+        error.code ?? ''
+      )
+    )
+      errors.affiliate = error.message
+    toast.error(error instanceof ApiError ? error.message : String(error))
+  } finally {
+    loading.value = false
+  }
+}
+onMounted(() => app.initialize())
 </script>
 
 <template>
@@ -174,7 +228,11 @@ onMounted(async () => {
       </p>
     </div>
 
-    <form class="mt-8 sibling-space-y-4" @submit.prevent="submit">
+    <form
+      v-if="app.passwordRegisterEnabled"
+      class="mt-8 sibling-space-y-4"
+      @submit.prevent="submit"
+    >
       <FormField :label="t('auth.username')">
         <TextInput
           v-model="username"
@@ -246,22 +304,6 @@ onMounted(async () => {
           {{ errors.confirm }}
         </span>
       </FormField>
-      <FormField
-        :label="t('auth.inviteCode')"
-        :hint="t('auth.inviteCodeOptionalHint')"
-      >
-        <TextInput
-          v-model="affiliateCode"
-          :placeholder="t('auth.inviteCodePlaceholder')"
-          autocomplete="off"
-        />
-        <span
-          v-if="errors.affiliate"
-          class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
-        >
-          {{ errors.affiliate }}
-        </span>
-      </FormField>
 
       <TurnstileWidget
         v-if="app.turnstileEnabled"
@@ -281,6 +323,47 @@ onMounted(async () => {
         {{ t('auth.continue') }}
       </ConsoleButton>
     </form>
+
+    <AffiliateAttributionField
+      v-if="app.passwordRegisterEnabled || providers.length"
+      v-model="affiliateCode"
+      v-model:confirmed="affiliateConfirmed"
+      :disabled="busy"
+      :error="errors.affiliate"
+      @changed="errors.affiliate = ''"
+    />
+
+    <p
+      v-if="!app.passwordRegisterEnabled && providers.length"
+      class="mt-8 text-center text-sm text-[var(--text-tertiary)]"
+    >
+      {{ t('auth.passwordRegistrationDisabled') }}
+    </p>
+    <p
+      v-else-if="app.passwordRegisterEnabled && providers.length"
+      class="mt-5 text-center text-sm text-[var(--text-tertiary)]"
+    >
+      {{ t('auth.otherWaysToRegister') }}
+    </p>
+    <p
+      v-else-if="!app.passwordRegisterEnabled"
+      class="mt-8 text-center text-sm text-[var(--text-tertiary)]"
+    >
+      {{ t('auth.noRegistrationMethods') }}
+    </p>
+    <div v-if="providers.length" class="mt-3 sibling-space-y-3">
+      <ConsoleButton
+        v-for="provider in providers"
+        :key="provider.slug"
+        block
+        variant="secondary"
+        :disabled="busy"
+        :loading="loading"
+        @click="signUpWithOAuth(provider.slug)"
+      >
+        {{ t('auth.continueWithProvider', { provider: provider.name }) }}
+      </ConsoleButton>
+    </div>
 
     <p class="mt-6 text-center text-sm text-[var(--text-tertiary)]">
       {{ t('auth.hasAccount') }}

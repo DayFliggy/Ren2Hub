@@ -24,11 +24,24 @@ export interface ApiClient {
       'signal' | 'headers' | 'params' | 'timeoutMs'
     >
   ): Promise<T>
+  postEnvelope<T>(
+    url: string,
+    data?: unknown,
+    options?: Pick<
+      RequestOptions,
+      'signal' | 'headers' | 'params' | 'timeoutMs'
+    >
+  ): Promise<ApiEnvelope<T>>
   put<T>(
     url: string,
     data?: unknown,
     options?: Pick<RequestOptions, 'signal' | 'headers'>
   ): Promise<T>
+  putEnvelope<T>(
+    url: string,
+    data?: unknown,
+    options?: Pick<RequestOptions, 'signal' | 'headers'>
+  ): Promise<ApiEnvelope<T>>
   patch<T>(
     url: string,
     data?: unknown,
@@ -41,7 +54,10 @@ export interface ApiClient {
   ): Promise<T>
   getBlob(
     url: string,
-    options?: Pick<RequestOptions, 'signal' | 'headers' | 'timeoutMs'>
+    options?: Pick<
+      RequestOptions,
+      'signal' | 'headers' | 'timeoutMs' | 'maxBytes'
+    >
   ): Promise<Blob>
 }
 
@@ -165,7 +181,11 @@ export function createApiClient(
       request('GET', url, { ...options, params }, true),
     get: (url, params, options) => request('GET', url, { ...options, params }),
     post: (url, data, options) => request('POST', url, { ...options, data }),
+    postEnvelope: (url, data, options) =>
+      request('POST', url, { ...options, data }, true),
     put: (url, data, options) => request('PUT', url, { ...options, data }),
+    putEnvelope: (url, data, options) =>
+      request('PUT', url, { ...options, data }, true),
     patch: (url, data, options) => request('PATCH', url, { ...options, data }),
     delete: (url, params, options) =>
       request('DELETE', url, { ...options, params }),

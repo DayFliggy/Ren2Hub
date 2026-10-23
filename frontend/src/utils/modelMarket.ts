@@ -37,9 +37,18 @@ export function projectMarketPricing(
   raw: CatalogModel | CatalogOffer,
   id: string
 ): MarketPricing {
+  const dimensions: Record<string, string> = {
+    cache: 'cacheRead',
+    cache_create: 'cacheWrite',
+    cache_create_1h: 'cacheWrite1h',
+    image_cache: 'imageCache',
+    image_output: 'imageOutput',
+    audio_input: 'audioInput',
+    audio_output: 'audioOutput',
+  }
   const priceLines = Object.entries(raw.pricing_values).map(
     ([key, amount]) => ({
-      key,
+      key: dimensions[key] ?? key,
       amount,
       unit:
         key === 'request'

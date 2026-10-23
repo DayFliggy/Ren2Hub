@@ -26,14 +26,16 @@ describe('account security domain contracts', () => {
     client.get.mockResolvedValueOnce({ enabled: false, locked: false })
     expect(await accountSecurityApi.twoFactorStatus()).toEqual({
       enabled: false,
+      locked: false,
       backup_codes_remaining: null,
     })
-    client.get.mockResolvedValueOnce({ enabled: true })
+    client.get.mockResolvedValueOnce({ enabled: true, locked: false })
     expect(
       (await accountSecurityApi.twoFactorStatus()).backup_codes_remaining
     ).toBeNull()
     client.get.mockResolvedValueOnce({
       enabled: true,
+      locked: false,
       backup_codes_remaining: 0,
     })
     expect(
@@ -52,6 +54,7 @@ describe('account security domain contracts', () => {
     await expect(accountSecurityApi.passkeyStatus()).rejects.toThrow()
     client.get.mockResolvedValueOnce({
       enabled: true,
+      locked: false,
       backup_codes_remaining: '8',
     })
     await expect(accountSecurityApi.twoFactorStatus()).rejects.toThrow()

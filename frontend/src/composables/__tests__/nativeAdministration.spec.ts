@@ -7,9 +7,11 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   put: vi.fn(),
+  putEnvelope: vi.fn(),
   delete: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  warning: vi.fn(),
   proof: vi.fn(),
 }))
 vi.mock('@/api/console', () => ({ api: mocks }))
@@ -23,6 +25,7 @@ import { useAdminRedemption } from '../useAdminRedemption'
 import { ApiError } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import type { AdminUser } from '@/types/console'
+import { configureQuotaDisplay } from '@/utils/format'
 const member = { id: 2, role: 1, status: 1, username: 'member' } as AdminUser
 // authz.Capabilities output: Casbin has no user or billing resource.
 const capabilities = {
@@ -60,6 +63,7 @@ beforeEach(() => {
   mocks.proof.mockResolvedValue('proof')
   mocks.post.mockResolvedValue(null)
   mocks.put.mockResolvedValue(null)
+  mocks.putEnvelope.mockResolvedValue({ success: true })
 })
 function setup<T>(fn: () => T) {
   let state!: T
@@ -136,6 +140,33 @@ it('uses native integer quota adjustment and rejects nonintegral quota', async (
   expect(mocks.post).toHaveBeenCalledTimes(1)
   wrapper.unmount()
 })
+it('converts redemption amounts using a fractional runtime quota unit', async () => {
+  configureQuotaDisplay({ quota_per_unit: 1.25 })
+  const { wrapper, state } = setup(useAdminRedemption)
+  try {
+    await flushPromises()
+    mocks.post.mockResolvedValue(['redemption-code'])
+    expect(
+      await state.createCodes({
+        name: 'Runtime unit',
+        type: 'quota',
+        amount: '4',
+        count: 1,
+        expired_time: -1,
+      })
+    ).toMatchObject({ codes: ['redemption-code'] })
+    expect(mocks.post).toHaveBeenCalledWith('/api/redemption/', {
+      name: 'Runtime unit',
+      quota: 5,
+      count: 1,
+      expired_time: 0,
+    })
+  } finally {
+    wrapper.unmount()
+    configureQuotaDisplay({ quota_per_unit: 500_000 })
+  }
+})
+
 it('binds sensitive user changes to native verification contexts and separates role management', async () => {
   const { wrapper, state } = setup(() => useAdminUsers(mocks.proof))
   await flushPromises()
@@ -155,7 +186,7 @@ it('binds sensitive user changes to native verification contexts and separates r
     scope: 'admin.user.manage',
     context: { user_id: 2, action: 'promote' },
   })
-  expect(mocks.put.mock.calls[0]![1]).toEqual({
+  expect(mocks.putEnvelope.mock.calls[0]![1]).toEqual({
     id: 2,
     username: 'member',
     display_name: 'Member',

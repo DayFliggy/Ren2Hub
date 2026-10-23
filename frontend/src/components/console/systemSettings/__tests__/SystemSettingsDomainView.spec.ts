@@ -1,3 +1,6 @@
+vi.mock('@/stores/app', () => ({
+  useAppStore: () => ({ refreshStatus: vi.fn().mockResolvedValue(undefined) }),
+}))
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'

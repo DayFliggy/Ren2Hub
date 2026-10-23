@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import UserQuotaModal from '@/components/console/users/UserQuotaModal.vue'
 import type { AdminUser } from '@/types/console'
+import { configureQuotaDisplay } from '@/utils/format'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -35,6 +36,26 @@ function setup() {
 }
 
 describe('UserQuotaModal operation identity', () => {
+  it.each([
+    [1_000_000, '1.25', '1250000'],
+    [1.25, '4', '5'],
+  ] as const)(
+    'submits exact quota with runtime unit %s',
+    async (perUnit, amount, quota) => {
+      configureQuotaDisplay({ quota_per_unit: perUnit })
+      const { wrapper, save, submit } = setup()
+      try {
+        await wrapper
+          .get('input[name="admin-user-quota-amount"]')
+          .setValue(amount)
+        await submit()
+        expect(save.mock.calls[0]?.[0]).toBe(quota)
+      } finally {
+        wrapper.unmount()
+        configureQuotaDisplay({ quota_per_unit: 500_000 })
+      }
+    }
+  )
   it('starts a new operation for a second confirmed grant with the same amount', async () => {
     const { wrapper, save, submit } = setup()
     try {

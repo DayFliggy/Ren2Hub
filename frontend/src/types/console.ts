@@ -362,19 +362,22 @@ export interface InviteRecord {
   id: number
   user_id: number
   invitee_id: number
-  kind: 'accrue' | 'transfer'
+  kind: 'accrue' | 'transfer' | 'reversal'
   skip_reason: string
   source_type: string
   source_id: string
-  base_quota: number
+  base_quota: string
   rate_bps: number
-  reward_quota: number
+  reward_quota: string
+  credited_quota: string
+  debt_offset_quota: string
+  debt_added_quota: string
   frozen_until: number
   thawed_at: number
   created_at: number
-  available_after: number
-  frozen_after: number
-  wallet_after: number
+  available_after: string
+  frozen_after: string
+  wallet_after: string
 }
 export interface InviteMonthPoint {
   month: string

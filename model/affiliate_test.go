@@ -23,6 +23,11 @@ func affiliateTestDB(t *testing.T) (*gorm.DB, User, User) {
 	old := *settings
 	*settings = operation_setting.AffiliateSetting{Enabled: true, RateBps: 2000}
 	t.Cleanup(func() { *settings = old })
+	payment := operation_setting.GetPaymentSetting()
+	oldPayment := *payment
+	payment.ComplianceConfirmed = true
+	payment.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	t.Cleanup(func() { *payment = oldPayment })
 	inviter := User{Username: "inviter", AffCode: "INVITER", Status: common.UserStatusEnabled, Role: common.RoleCommonUser}
 	require.NoError(t, db.Create(&inviter).Error)
 	invitee := User{Username: "invitee", AffCode: "INVITEE", InviterId: inviter.Id, InvitedAt: common.GetTimestamp(), Status: common.UserStatusEnabled, Role: common.RoleCommonUser}
@@ -192,6 +197,109 @@ func TestAffiliateFullTransferIsIdempotentAndKeepsLaterAccrual(t *testing.T) {
 	assert.Equal(t, 50, inviter.AffQuota)
 	assert.Equal(t, 150, inviter.AffHistoryQuota)
 }
+func TestAffiliateTransferReplayAfterComplianceRevocation(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	firstOrder := testAffiliateTopUp(t, invitee.Id, "replay-before-revocation", 500)
+	_, err := RechargeEpay(firstOrder.TradeNo, "", "", "2.00")
+	require.NoError(t, err)
+	first, replayed, err := TransferAffiliateQuota(inviter.Id, "compliance-replay-transfer")
+	require.NoError(t, err)
+	require.False(t, replayed)
+	require.Equal(t, 100, first.RewardQuota)
+	laterOrder := testAffiliateTopUp(t, invitee.Id, "replay-later-accrual", 250)
+	_, err = RechargeEpay(laterOrder.TradeNo, "", "", "2.00")
+	require.NoError(t, err)
+	payment := operation_setting.GetPaymentSetting()
+	payment.ComplianceConfirmed = false
+	payment.ComplianceTermsVersion = ""
+	again, replayed, err := TransferAffiliateQuota(inviter.Id, "compliance-replay-transfer")
+	require.NoError(t, err)
+	assert.True(t, replayed)
+	assert.Equal(t, first, again, "a committed replay returns the original result, not current balances")
+	_, replayed, err = TransferAffiliateQuota(inviter.Id, "compliance-new-transfer")
+	require.ErrorIs(t, err, ErrAffiliateCompliance)
+	assert.False(t, replayed)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Equal(t, 100, inviter.Quota)
+	assert.Equal(t, 50, inviter.AffQuota)
+	var transfers int64
+	require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ? AND kind = ?", inviter.Id, "transfer").Count(&transfers).Error)
+	assert.EqualValues(t, 1, transfers)
+}
+
+func TestAffiliateTransferReplayPreservesReversalDebt(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "debt-replay-add")
+	require.NoError(t, err)
+	first, replayed, err := TransferAffiliateQuota(inviter.Id, "debt-replay-transfer")
+	require.NoError(t, err)
+	require.False(t, replayed)
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, "debt-replay-reverse")
+	require.NoError(t, err)
+	payment := operation_setting.GetPaymentSetting()
+	payment.ComplianceConfirmed = false
+	again, replayed, err := TransferAffiliateQuota(inviter.Id, "debt-replay-transfer")
+	require.NoError(t, err)
+	assert.True(t, replayed)
+	assert.Equal(t, first, again)
+	payment.ComplianceConfirmed = true
+	_, replayed, err = TransferAffiliateQuota(inviter.Id, "debt-replay-new-transfer")
+	require.ErrorIs(t, err, ErrAffiliateUnavailable)
+	assert.False(t, replayed)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Equal(t, 200, inviter.Quota)
+	assert.Zero(t, inviter.AffQuota)
+	assert.Equal(t, 200, inviter.AffOffsetDebtQuota, "replaying a receipt cannot erase reversal debt")
+	var transfers int64
+	require.NoError(t, db.Model(&AffiliateRecord{}).Where("user_id = ? AND kind = ?", inviter.Id, "transfer").Count(&transfers).Error)
+	assert.EqualValues(t, 1, transfers)
+}
+
+func TestAffiliateTransferRejectsConflictingRecordedOperation(t *testing.T) {
+	for _, field := range []string{"user_id", "kind", "source_type", "source_id"} {
+		t.Run(field, func(t *testing.T) {
+			db, inviter, other := affiliateTestDB(t)
+			require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Update("aff_quota", 100).Error)
+			operationID := "conflicting-transfer-operation"
+			record := AffiliateRecord{UserID: inviter.Id, Kind: "transfer", SourceType: "transfer", SourceID: operationID, SourceKey: fmt.Sprintf("transfer:%d:%s", inviter.Id, operationID), RewardQuota: 75}
+			require.NoError(t, db.Create(&record).Error)
+			var replacement any = "different-request"
+			if field == "user_id" {
+				replacement = other.Id
+			}
+			require.NoError(t, db.Model(&record).Update(field, replacement).Error)
+			_, replayed, err := TransferAffiliateQuota(inviter.Id, operationID)
+			require.ErrorIs(t, err, ErrAffiliateOperationConflict)
+			assert.False(t, replayed)
+			require.NoError(t, db.First(&inviter, inviter.Id).Error)
+			assert.Zero(t, inviter.Quota)
+			assert.Equal(t, 100, inviter.AffQuota)
+		})
+	}
+}
+
+func TestAffiliateTransferOperationIDsAreScopedToOwner(t *testing.T) {
+	db, firstOwner, secondOwner := affiliateTestDB(t)
+	for _, owner := range []*User{&firstOwner, &secondOwner} {
+		require.NoError(t, db.Model(owner).Update("aff_quota", owner.Id*100).Error)
+	}
+	first, replayed, err := TransferAffiliateQuota(firstOwner.Id, "shared-transfer-operation")
+	require.NoError(t, err)
+	require.False(t, replayed)
+	second, replayed, err := TransferAffiliateQuota(secondOwner.Id, "shared-transfer-operation")
+	require.NoError(t, err)
+	require.False(t, replayed)
+	assert.NotEqual(t, first.ID, second.ID)
+	assert.Equal(t, firstOwner.Id*100, first.RewardQuota)
+	assert.Equal(t, secondOwner.Id*100, second.RewardQuota)
+	for _, owner := range []*User{&firstOwner, &secondOwner} {
+		require.NoError(t, db.First(owner, owner.Id).Error)
+		assert.Equal(t, owner.Id*100, owner.Quota)
+		assert.Zero(t, owner.AffQuota)
+	}
+}
+
 func TestAffiliateAdminAdditionOperationAndCorrectionBoundaries(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 500, "")
@@ -208,18 +316,168 @@ func TestAffiliateAdminAdditionOperationAndCorrectionBoundaries(t *testing.T) {
 	require.ErrorIs(t, err, ErrAffiliateOperationConflict)
 	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-operation-two")
 	require.NoError(t, err)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 100, "")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 100, "admin-operation-three")
 	require.NoError(t, err)
-	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 2000, "")
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "override", 2000, "admin-operation-four")
 	require.NoError(t, err)
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	require.NoError(t, db.First(&invitee, invitee.Id).Error)
-	assert.Equal(t, 200, inviter.AffQuota)
+	assert.Equal(t, 300, inviter.AffQuota)
 	assert.Equal(t, 2000, invitee.Quota)
+	// Correcting the same operation under another mode is a conflict, not a replay.
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "admin-operation-four")
+	require.ErrorIs(t, err, ErrAffiliateOperationConflict)
 	// Generic credit (including redemption) must never dispatch referral rewards.
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return creditTopUpQuota(tx, invitee.Id, 500, nil) }))
 	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Equal(t, 300, inviter.AffQuota)
+}
+
+func TestAffiliateAdminReversalFIFOTransferredDebtAndFutureOffset(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
+	for _, operationID := range []string{"admin-fifo-one", "admin-fifo-two"} {
+		_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, operationID)
+		require.NoError(t, err)
+	}
+	// The first full reward and half of the second are revoked in FIFO order.
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1500, "admin-fifo-reduction-one")
+	require.NoError(t, err)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Equal(t, 100, inviter.AffQuota)
+	firstTransfer, replay, err := TransferAffiliateQuota(inviter.Id, "affiliate-early-transfer")
+	require.NoError(t, err)
+	assert.False(t, replay)
+	assert.Equal(t, 100, firstTransfer.RewardQuota)
+	// Two partial reversals of already-transferred reward must each charge only
+	// the portion not yet reversed, without subtracting the transfer twice.
+	for _, operationID := range []string{"admin-fifo-reduction-two", "admin-fifo-reduction-three"} {
+		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 250, operationID)
+		require.NoError(t, err)
+	}
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Zero(t, inviter.AffQuota)
+	assert.Equal(t, 100, inviter.AffOffsetDebtQuota)
+	// New rewards first repay that debt and do not become transferable.
+	order := testAffiliateTopUp(t, invitee.Id, "admin-reversal-offset", 500)
+	_, err = RechargeEpay(order.TradeNo, "", "", "2.00")
+	require.NoError(t, err)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Zero(t, inviter.AffOffsetDebtQuota)
+	assert.Zero(t, inviter.AffQuota)
+	var offset AffiliateRecord
+	require.NoError(t, db.Where("source_key = ?", "topup:"+fmt.Sprint(order.Id)).First(&offset).Error)
+	assert.Equal(t, 100, offset.RewardQuota)
+	assert.Equal(t, 100, offset.DebtOffsetQuota)
+	assert.Zero(t, offset.CreditedQuota)
+	var reversals []AffiliateRecord
+	require.NoError(t, db.Where("kind = ?", "reversal").Order("id ASC").Find(&reversals).Error)
+	require.Len(t, reversals, 4)
+	assert.Equal(t, 50, reversals[2].DebtAddedQuota)
+	assert.Equal(t, 0, reversals[2].CreditedQuota)
+	assert.Equal(t, 50, reversals[3].DebtAddedQuota)
+	// No more tracked administrative principal remains: the extra reduction
+	// cannot invent new referral debt, including after a later top-up.
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 600, "admin-fifo-excess-reduction")
+	require.NoError(t, err)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Zero(t, inviter.AffOffsetDebtQuota)
+}
+
+func TestAffiliateComplianceGateAndTrackedLegacyBoundary(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
+	payment := operation_setting.GetPaymentSetting()
+	payment.ComplianceConfirmed = false
+	payment.ComplianceTermsVersion = ""
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "compliance-gated-add")
+	require.NoError(t, err, "wallet credit must still settle while referral accrual is recorded as skipped")
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Zero(t, inviter.AffQuota)
+	var skipped AffiliateRecord
+	require.NoError(t, db.Where("source_type = ?", "admin_quota").First(&skipped).Error)
+	assert.Equal(t, "compliance_unconfirmed", skipped.SkipReason)
+	_, _, err = TransferAffiliateQuota(inviter.Id, "compliance-transfer")
+	require.ErrorIs(t, err, ErrAffiliateCompliance)
+
+	// Simulate pre-migration data: old add rows and their earned balance remain
+	// untouched by a later correction because they have no transfer attribution.
+	payment.ComplianceConfirmed = true
+	payment.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	legacyInvitee := User{Username: "legacy-invitee", InviterId: inviter.Id, Quota: 1000}
+	require.NoError(t, db.Create(&legacyInvitee).Error)
+	legacyOp := AdminQuotaOperation{OperatorID: 77, OperationID: "legacy-admin-add", OperationKey: "77:legacy-admin-add", UserID: legacyInvitee.Id, Value: 1000, Before: 0, After: 1000}
+	require.NoError(t, db.Create(&legacyOp).Error)
+	legacyReward := AffiliateRecord{UserID: inviter.Id, InviteeID: legacyInvitee.Id, Kind: "accrue", SourceType: "admin_quota", SourceID: fmt.Sprint(legacyOp.ID), SourceKey: "admin_quota:" + fmt.Sprint(legacyOp.ID), BaseQuota: 1000, RateBps: 2000, RewardQuota: 200, ThawedAt: common.GetTimestamp()}
+	require.NoError(t, db.Create(&legacyReward).Error)
+	require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Updates(map[string]any{"aff_quota": 200, "aff_history": 200}).Error)
+	replayed, err := AdjustUserQuotaWithOperation(legacyInvitee.Id, 77, common.RoleRootUser, "add", 1000, "legacy-admin-add")
+	require.NoError(t, err)
+	assert.True(t, replayed.Replayed, "legacy operation rows without mode remain replayable as add operations")
+	_, err = AdjustUserQuotaWithOperation(legacyInvitee.Id, 99, common.RoleRootUser, "subtract", 500, "legacy-admin-correction")
+	require.NoError(t, err)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
 	assert.Equal(t, 200, inviter.AffQuota)
+	assert.Zero(t, inviter.AffOffsetDebtQuota)
+	// Historical transfers have no allocation rows. Only the current legacy
+	// balance may move; past gross accrual must not be treated as available.
+	require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Update("aff_quota", 50).Error)
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "post-migration-admin-add")
+	require.NoError(t, err)
+	transfer, _, err := TransferAffiliateQuota(inviter.Id, "post-migration-transfer")
+	require.NoError(t, err)
+	assert.Equal(t, 250, transfer.RewardQuota)
+	var allocations []AffiliateRecord
+	require.NoError(t, db.Where("kind = ?", "transfer_allocation").Find(&allocations).Error)
+	require.Len(t, allocations, 1)
+	assert.Equal(t, 200, allocations[0].RewardQuota)
+}
+
+func TestAffiliateReversalRestoresOffsetDebtBeforeNewCredit(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "debt-origin-add")
+	require.NoError(t, err)
+	_, _, err = TransferAffiliateQuota(inviter.Id, "debt-origin-transfer")
+	require.NoError(t, err)
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 1000, "debt-origin-reversal")
+	require.NoError(t, err)
+	// 200 of the next 300 reward offsets existing debt; 100 becomes available.
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1500, "debt-repaying-add")
+	require.NoError(t, err)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Zero(t, inviter.AffOffsetDebtQuota)
+	assert.Equal(t, 100, inviter.AffQuota)
+	// Reverse the repayment in two steps and then its credited remainder.
+	for _, tc := range []struct{ value, debt, available int }{{500, 100, 100}, {500, 200, 100}, {500, 200, 0}} {
+		_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", tc.value, fmt.Sprintf("debt-repayment-reversal-%d-%d", tc.debt, tc.available))
+		require.NoError(t, err)
+		require.NoError(t, db.First(&inviter, inviter.Id).Error)
+		assert.Equal(t, tc.debt, inviter.AffOffsetDebtQuota)
+		assert.Equal(t, tc.available, inviter.AffQuota)
+	}
+}
+
+func TestEnsureAffiliateCodeBackfillsLegacyUserAndMigrationKeepsBalance(t *testing.T) {
+	db, inviter, _ := affiliateTestDB(t)
+	legacy := User{Username: "legacy-empty-code", AffQuota: 456, AffHistoryQuota: 789}
+	require.NoError(t, db.Create(&legacy).Error)
+	// Exercise the additive schema path against data that predates debt tracking.
+	require.NoError(t, db.Migrator().DropColumn(&User{}, "aff_offset_debt_quota"))
+	require.NoError(t, db.AutoMigrate(&User{}))
+	var migrated User
+	require.NoError(t, db.First(&migrated, legacy.Id).Error)
+	assert.Equal(t, 456, migrated.AffQuota)
+	assert.Equal(t, 789, migrated.AffHistoryQuota)
+	assert.Zero(t, migrated.AffOffsetDebtQuota)
+	code, err := EnsureAffiliateCode(legacy.Id)
+	require.NoError(t, err)
+	assert.Regexp(t, affiliateCodePattern, code)
+	second, err := EnsureAffiliateCode(legacy.Id)
+	require.NoError(t, err)
+	assert.Equal(t, code, second)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Zero(t, inviter.AffCount, "backfilling a user's own invitation code must not create referral attribution")
 }
 func TestAffiliateRegistrationFailureAndBindingAtomic(t *testing.T) {
 	db, inviter, _ := affiliateTestDB(t)
@@ -264,6 +522,19 @@ func TestAffiliateRegistrationFailureAndBindingAtomic(t *testing.T) {
 	err = db.Transaction(func(tx *gorm.DB) error { return InitializeAffiliateUserTx(tx, &User{}, "") })
 	require.NoError(t, err)
 }
+
+func TestAffiliateDebtIsNotOverwrittenByStaleProfileUpdate(t *testing.T) {
+	db, inviter, _ := affiliateTestDB(t)
+	inviter.AffOffsetDebtQuota = 100
+	inviter.DisplayName = "Updated profile"
+	require.NoError(t, db.Model(&User{}).Where("id = ?", inviter.Id).Update("aff_offset_debt_quota", 200).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return inviter.UpdateWithTx(tx, false) }))
+	var current User
+	require.NoError(t, db.First(&current, inviter.Id).Error)
+	assert.Equal(t, "Updated profile", current.DisplayName)
+	assert.Equal(t, 200, current.AffOffsetDebtQuota, "profile writes must preserve financial state committed since their snapshot")
+}
+
 func TestAffiliateGmpayValidationPrecedesCredit(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
 	order := TopUp{UserId: invitee.Id, TradeNo: "gmpay-invalid", PaymentProvider: PaymentProviderGmpay, Status: common.TopUpStatusPending}
@@ -316,7 +587,7 @@ func TestAffiliateConcurrentAdminAndTransferOperations(t *testing.T) {
 	require.NoError(t, db.Model(&AdminQuotaOperation{}).Count(&count).Error)
 	assert.EqualValues(t, 1, count)
 	require.NoError(t, db.Model(&AffiliateRecord{}).Count(&count).Error)
-	assert.EqualValues(t, 2, count)
+	assert.EqualValues(t, 3, count)
 }
 func TestAffiliatePerUserOverrideAndDisabledCodeOnlyAffectNewBindings(t *testing.T) {
 	db, inviter, invitee := affiliateTestDB(t)
@@ -386,6 +657,33 @@ func TestAffiliateAdminStorageFailureRollsBackEntireAddition(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&AdminQuotaOperation{}).Count(&count).Error)
 	assert.Zero(t, count)
+}
+
+func TestAffiliateAdminReversalStorageFailureRollsBackWalletAndDebt(t *testing.T) {
+	db, inviter, invitee := affiliateTestDB(t)
+	operation_setting.GetAffiliateSetting().AdminRechargeEnabled = true
+	_, err := AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "add", 1000, "rollback-origin-add")
+	require.NoError(t, err)
+	_, _, err = TransferAffiliateQuota(inviter.Id, "rollback-origin-transfer")
+	require.NoError(t, err)
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("fail_reversal_ledger", func(tx *gorm.DB) {
+		if tx.Statement.Table == "affiliate_records" {
+			tx.AddError(errors.New("reversal ledger unavailable"))
+		}
+	}))
+	_, err = AdjustUserQuotaWithOperation(invitee.Id, 99, common.RoleRootUser, "subtract", 500, "rollback-failed-reduction")
+	require.ErrorContains(t, err, "reversal ledger unavailable")
+	require.NoError(t, db.First(&invitee, invitee.Id).Error)
+	require.NoError(t, db.First(&inviter, inviter.Id).Error)
+	assert.Equal(t, 1000, invitee.Quota)
+	assert.Equal(t, 200, inviter.Quota)
+	assert.Zero(t, inviter.AffOffsetDebtQuota)
+	var count int64
+	require.NoError(t, db.Model(&AdminQuotaOperation{}).Where("operation_id = ?", "rollback-failed-reduction").Count(&count).Error)
+	assert.Zero(t, count)
+	var ledgerCount int64
+	require.NoError(t, db.Model(&AffiliateRecord{}).Where("kind = ?", "reversal").Count(&ledgerCount).Error)
+	assert.Zero(t, ledgerCount)
 }
 func TestTopUpTerminalStatusCannotRevertOrSkipSettlement(t *testing.T) {
 	_, _, invitee := affiliateTestDB(t)

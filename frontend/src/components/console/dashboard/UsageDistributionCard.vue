@@ -28,8 +28,9 @@ const props = withDefaults(
     coveredFrom: string
     loading?: boolean
     error?: string
+    unavailableReason?: string
   }>(),
-  { loading: false, error: '' }
+  { loading: false, error: '', unavailableReason: '' }
 )
 
 const { t, locale } = useI18n()
@@ -155,6 +156,11 @@ const topDaySummary = computed(() => {
       <SkeletonBlock class="mt-3 h-5" rounded="md" />
     </div>
 
+    <EmptyState
+      v-else-if="unavailableReason"
+      :title="unavailableReason"
+      data-usage-unavailable
+    />
     <EmptyState
       v-else-if="error"
       :title="t('dashboard.loadFailed')"

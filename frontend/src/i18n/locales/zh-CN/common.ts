@@ -19,6 +19,7 @@ export default {
     refresh: '刷新',
     retry: '重试',
     loadFailed: '加载失败',
+    publicationPending: '变更已保存，运行时配置发布待重试。',
     appError: {
       label: '应用错误',
       title: '此页面暂时无法显示',
@@ -58,6 +59,7 @@ export default {
     signedOut: '已退出登录',
     success: '成功',
     failed: '失败',
+    invalidInput: '请输入有效内容。',
     pending: '处理中',
     copyFailed: '复制失败，请手动复制',
     selectAll: '选择全部',

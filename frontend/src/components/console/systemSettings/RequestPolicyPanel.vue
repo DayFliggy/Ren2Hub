@@ -8,6 +8,7 @@ import { useToast } from '@/composables/useToast'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import { registerSettingsDraft } from './settingsDraftGuard'
 const { t } = useI18n({
   messages: {
     'zh-CN': {
@@ -38,6 +39,8 @@ const draft = ref(''),
   ready = ref(false),
   request = useLatestRequest()
 const baselineText = computed(() => JSON.stringify(baseline.value, null, 2))
+const dirty = computed(() => ready.value && draft.value !== baselineText.value)
+registerSettingsDraft({ dirty: () => dirty.value, busy: () => loading.value })
 function validOptions(value: unknown): Record<string, string> {
   if (
     !value ||
@@ -57,6 +60,12 @@ function changedOptions(next: Record<string, string>) {
 }
 async function run(save: boolean) {
   if (loading.value) return
+  if (
+    !save &&
+    dirty.value &&
+    !window.confirm(globalT('systemSettings.discardDraft'))
+  )
+    return
   let payload: Record<string, string> | undefined
   error.value = ''
   try {
@@ -100,7 +109,10 @@ async function run(save: boolean) {
   draft.value = baselineText.value
   ready.value = true
   // The settings form shares these keys; load reports its own failure.
-  if (save) await settings.load(true)
+  if (save) {
+    await settings.refreshStatus(true)
+    await settings.load(true)
+  }
 }
 const load = () => run(false),
   save = () => run(true)

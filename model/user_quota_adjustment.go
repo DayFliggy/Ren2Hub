@@ -30,6 +30,7 @@ type AdminQuotaOperation struct {
 	OperationID  string `json:"operation_id" gorm:"type:varchar(96)"`
 	OperationKey string `json:"-" gorm:"type:varchar(128);uniqueIndex;not null"`
 	UserID       int    `json:"user_id" gorm:"index"`
+	Mode         string `json:"mode" gorm:"type:varchar(16);not null;default:''"`
 	Value        int    `json:"value" gorm:"type:bigint"`
 	Before       int    `json:"before" gorm:"type:bigint"`
 	After        int    `json:"after" gorm:"type:bigint"`
@@ -41,7 +42,7 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 	return adjustUserQuota(userID, 0, operatorRole, mode, value, "")
 }
 func AdjustUserQuotaWithOperation(userID, operatorID, operatorRole int, mode string, value int, operationID string) (*UserQuotaAdjustment, error) {
-	if mode == "add" && (!affiliateOperationPattern.MatchString(operationID) || operatorID <= 0) {
+	if !affiliateOperationPattern.MatchString(operationID) || operatorID <= 0 {
 		return nil, ErrAffiliateOperation
 	}
 	return adjustUserQuota(userID, operatorID, operatorRole, mode, value, operationID)
@@ -69,10 +70,15 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 		}
 		var operation AdminQuotaOperation
 		operationKey := fmt.Sprintf("%d:%s", operatorID, operationID)
-		if mode == "add" && operatorID > 0 {
+		if operatorID > 0 {
 			err := lockForUpdate(tx).Where("operation_key = ?", operationKey).First(&operation).Error
 			if err == nil {
-				if operation.UserID != userID || operation.Value != value {
+				storedMode := operation.Mode
+				if storedMode == "" {
+					// Before mode was persisted, every idempotent quota operation was an add.
+					storedMode = "add"
+				}
+				if operation.UserID != userID || storedMode != mode || operation.Value != value {
 					return ErrAffiliateOperationConflict
 				}
 				adjustment = UserQuotaAdjustment{UserID: userID, Username: user.Username, Before: operation.Before, After: operation.After, Replayed: true}
@@ -107,13 +113,21 @@ func adjustUserQuota(userID, operatorID, operatorRole int, mode string, value in
 				return gorm.ErrRecordNotFound
 			}
 		}
-		if mode == "add" && operatorID > 0 {
-			operation = AdminQuotaOperation{OperatorID: operatorID, OperationID: operationID, OperationKey: operationKey, UserID: userID, Value: value, Before: user.Quota, After: after, CreatedAt: common.GetTimestamp()}
+		if operatorID > 0 {
+			operation = AdminQuotaOperation{OperatorID: operatorID, OperationID: operationID, OperationKey: operationKey, UserID: userID, Mode: mode, Value: value, Before: user.Quota, After: after, CreatedAt: common.GetTimestamp()}
 			if err := tx.Create(&operation).Error; err != nil {
 				return err
 			}
-			if err := applyAffiliateRewardTx(tx, &user, "admin_quota", fmt.Sprint(operation.ID), value); err != nil {
-				return err
+			delta := after - user.Quota
+			switch {
+			case delta > 0:
+				if err := applyAffiliateRewardTx(tx, &user, "admin_quota", fmt.Sprint(operation.ID), delta); err != nil {
+					return err
+				}
+			case delta < 0:
+				if err := reverseAdminAffiliateRewardsTx(tx, &user, fmt.Sprint(operation.ID), -delta); err != nil {
+					return err
+				}
 			}
 		}
 		adjustment = UserQuotaAdjustment{UserID: user.Id, Username: user.Username, Before: user.Quota, After: after}

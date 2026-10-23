@@ -1,14 +1,12 @@
 package model
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type Redemption struct {
@@ -24,38 +22,6 @@ type Redemption struct {
 	UsedUserId   int            `json:"used_user_id"`
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
 	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
-}
-
-type RedemptionSort struct {
-	column string
-	asc    bool
-}
-
-// ParseRedemptionSort limits ordering to public fields; request values never
-// become SQL fragments. The zero value preserves NewAPI's default ID order.
-func ParseRedemptionSort(field, order string) (RedemptionSort, error) {
-	columns := map[string]string{"": "id", "id": "id", "created_time": "created_time", "used_time": "redeemed_time"}
-	column, ok := columns[field]
-	if !ok {
-		return RedemptionSort{}, errors.New("invalid redemption sort field")
-	}
-	if order != "" && order != "asc" && order != "desc" {
-		return RedemptionSort{}, errors.New("invalid redemption sort order")
-	}
-	return RedemptionSort{column: column, asc: order == "asc"}, nil
-}
-
-func (sort RedemptionSort) apply(query *gorm.DB) *gorm.DB {
-	column := sort.column
-	if column == "" {
-		column = "id"
-	}
-	query = query.Order(clause.OrderByColumn{Column: clause.Column{Name: column}, Desc: !sort.asc})
-	if column != "id" {
-		// Equal timestamps must keep a stable order across pagination.
-		query = query.Order(clause.OrderByColumn{Column: clause.Column{Name: "id"}, Desc: !sort.asc})
-	}
-	return query
 }
 
 func GetAllRedemptions(startIdx int, num int, sort RedemptionSort) ([]*Redemption, int64, error) {
@@ -138,10 +104,10 @@ func GetRedemptionById(id int) (*Redemption, error) {
 
 func Redeem(key string, userId int) (quota int, err error) {
 	if key == "" {
-		return 0, errors.New("redemption code not provided")
+		return 0, common.NewMessage("redemption code not provided")
 	}
 	if userId == 0 {
-		return 0, errors.New("invalid user id")
+		return 0, common.NewMessage("invalid user id")
 	}
 	redemption := &Redemption{}
 
@@ -153,13 +119,13 @@ func Redeem(key string, userId int) (quota int, err error) {
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		err := lockForUpdate(tx).Where(keyCol+" = ?", key).First(redemption).Error
 		if err != nil {
-			return errors.New("invalid redemption code")
+			return common.NewMessage("invalid redemption code")
 		}
 		if redemption.Status != common.RedemptionCodeStatusEnabled {
-			return errors.New("redemption code already used")
+			return common.NewMessage("redemption code already used")
 		}
 		if redemption.ExpiredTime != 0 && redemption.ExpiredTime < common.GetTimestamp() {
-			return errors.New("redemption code expired")
+			return common.NewMessage("redemption code expired")
 		}
 		// Compare-and-swap on status: only the transaction that flips
 		// enabled -> used may credit quota, so a concurrent redeem of the
@@ -175,7 +141,7 @@ func Redeem(key string, userId int) (quota int, err error) {
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			return errors.New("redemption code already used")
+			return common.NewMessage("redemption code already used")
 		}
 		return creditTopUpQuota(tx, userId, redemption.Quota, nil)
 	})
@@ -190,7 +156,7 @@ func Redeem(key string, userId int) (quota int, err error) {
 
 func (redemption *Redemption) Insert() error {
 	if redemption.Quota <= 0 {
-		return errors.New("redemption quota must be positive")
+		return common.NewMessage("redemption quota must be positive")
 	}
 	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
 		return err
@@ -208,7 +174,7 @@ func (redemption *Redemption) SelectUpdate() error {
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
 	if redemption.Quota <= 0 {
-		return errors.New("redemption quota must be positive")
+		return common.NewMessage("redemption quota must be positive")
 	}
 	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
 		return err
@@ -245,11 +211,11 @@ func DeleteInvalidRedemptions() (int64, error) {
 // BatchDeleteRedemptions soft-deletes the selected codes in one statement.
 func BatchDeleteRedemptions(ids []int) (int64, error) {
 	if len(ids) == 0 || len(ids) > 1000 {
-		return 0, errors.New("select between 1 and 1000 redemption codes")
+		return 0, common.NewMessage("select between 1 and 1000 redemption codes")
 	}
 	for _, id := range ids {
 		if id <= 0 {
-			return 0, errors.New("redemption IDs must be positive")
+			return 0, common.NewMessage("redemption IDs must be positive")
 		}
 	}
 	result := DB.Where("id IN ?", ids).Delete(&Redemption{})

@@ -42,6 +42,15 @@ const zh = {
   configured: '已配置',
   unavailable: '不可用',
   unconfigured: '价格未配置',
+  priceReasons: {
+    expression_requires_usage_context:
+      '该计价表达式依赖实际用量，无法显示固定单价',
+    price_not_configured: '尚未配置可展示的模型价格',
+    invalid_quota_unit: '额度单位配置无效，暂时无法换算价格',
+    invalid_audio_price: '音频价格超出可显示范围，暂时无法显示单价',
+    protocol_dependent_audio_price:
+      '该模型的音频价格因调用协议而异，无法显示统一单价',
+  },
   expressionPrice: '按表达式计价',
   expressionHint: '价格随请求用量与计价规则变化，查看详情了解完整规则。',
   expression: '计价表达式',
@@ -64,6 +73,8 @@ const zh = {
     cacheWrite: '缓存写入',
     cacheWrite5m: '缓存写入 · 5m',
     cacheWrite1h: '缓存写入 · 1h',
+    imageCache: '图像缓存读取',
+    imageOutput: '图像输出',
     imageRequest: '每张图像',
     image: '图像输入',
     audioInput: '音频输入',
@@ -194,6 +205,16 @@ const en: typeof zh = {
   configured: 'Configured',
   unavailable: 'Unavailable',
   unconfigured: 'Price not configured',
+  priceReasons: {
+    expression_requires_usage_context:
+      'This billing expression depends on actual usage and has no fixed unit price',
+    price_not_configured: 'No displayable model price is configured',
+    invalid_audio_price: 'The audio price exceeds the displayable range',
+    protocol_dependent_audio_price:
+      'Audio prices differ by request protocol, so no single unit price is available',
+    invalid_quota_unit:
+      'The quota unit is invalid, so the price cannot be converted',
+  },
   expressionPrice: 'Expression pricing',
   expressionHint:
     'The price depends on usage and billing rules. View details for the full expression.',
@@ -218,6 +239,8 @@ const en: typeof zh = {
     cacheWrite: 'Cache write',
     cacheWrite5m: 'Cache write · 5m',
     cacheWrite1h: 'Cache write · 1h',
+    imageCache: 'Image cache read',
+    imageOutput: 'Image output',
     imageRequest: 'Per image',
     image: 'Image input',
     audioInput: 'Audio input',

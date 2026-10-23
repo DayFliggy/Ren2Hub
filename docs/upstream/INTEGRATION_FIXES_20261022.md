@@ -4,7 +4,7 @@
 
 ## 执行状态
 
-当前为集成验证已完成阶段，尚未发布或部署。批次 0 和五个方向均已合入，最终本地验证提交为 `c6880aa8cf4f596fd41e98792d25a0122aa421b3`；方向及跨方向审计均已收口，不以方向交接自述代替集成验证。
+以下是 2026-10-22 集成阶段的历史状态快照：当时最终验证提交为 `c6880aa8cf4f596fd41e98792d25a0122aa421b3`，尚未发布。之后该批进入审计修复基线 `a0a1f8dd1b7909089aed0339bd714406a5ccb66b`。当前源码提交、部署及验证身份见[本轮审计修复记录](AUDIT_FIXES_20261023.md)与工作区[服务器档案](../../../docs/server/SERVER_PROFILE.md)。
 
 证据目录：`/home/work/ren2hub-integration-fixes-evidence-20261022`。权威条目见 `consolidated-plan.md`，方向交接见 `agents/handoff-*.md`，审计原文和逐条裁定见 `codex-audit/`，恢复检查点见 `RECOVERY_20261022.md`。
 

@@ -35,6 +35,9 @@ func GetVerificationMethods(c *gin.Context) {
 // writeSecurityOperationError only exposes known, fixed business messages.
 // Unexpected errors retain their cause for the existing server-side auth logger.
 func writeSecurityOperationError(c *gin.Context, err error) {
+	if writeAffiliateRegistrationError(c, err) {
+		return
+	}
 	status := http.StatusOK
 	var code, message string
 	var protocolError *protocol.Error
@@ -133,6 +136,23 @@ func writeSecurityOperationError(c *gin.Context, err error) {
 	// Every message above is fixed English text, so it is also the key the web
 	// console translates.
 	common.ApiErrorStatus(c, status, common.NewMessage(message), gin.H{"code": code})
+}
+
+// writeAffiliateRegistrationError keeps the public code and message contract
+// identical across password, OAuth and provider-backed registration.
+func writeAffiliateRegistrationError(c *gin.Context, err error) bool {
+	var code string
+	var message *common.Message
+	switch {
+	case errors.Is(err, model.ErrAffiliateDisabled):
+		code, message = "AFFILIATE_DISABLED", model.ErrAffiliateDisabled
+	case errors.Is(err, model.ErrAffiliateCodeInvalid):
+		code, message = "AFFILIATE_CODE_INVALID", model.ErrAffiliateCodeInvalid
+	default:
+		return false
+	}
+	common.ApiErrorStatus(c, http.StatusOK, message, gin.H{"code": code})
+	return true
 }
 
 // writeAccountStatusError responds with a web console message under a non-200

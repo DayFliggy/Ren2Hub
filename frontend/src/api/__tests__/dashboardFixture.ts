@@ -3,7 +3,7 @@ export function dashboardFixture(marker = 10) {
   return {
     kpi: {
       totalTokens: marker,
-      totalQuota: 25,
+      totalQuota: '25',
       totalRequests: 2,
       avgLatency: 820 as number | null,
       successRate: 50 as number | null,
@@ -13,7 +13,7 @@ export function dashboardFixture(marker = 10) {
       {
         model: 'fixture-model',
         tokens: marker,
-        quota: 25,
+        quota: '25',
         requests: 2,
         share: 1,
         avgLatency: 820 as number | null,
@@ -21,14 +21,14 @@ export function dashboardFixture(marker = 10) {
     ],
     hourly: [
       { ts: 1792537200, requests: 0, tokens: 0, quota: 0 },
-      { ts: 1792540800, requests: 2, tokens: marker, quota: 25 },
+      { ts: 1792540800, requests: 2, tokens: marker, quota: '25' },
     ],
-    flow: [{ date: '2026-10-21', consume: 25, requests: 2, tokens: marker }],
+    flow: [{ date: '2026-10-21', consume: '25', requests: 2, tokens: marker }],
     token_trend: [
       { date: '2026-10-21', total: marker, cache_read: 4, cache_create: 1 },
     ],
     distribution: [
-      { date: '2026-10-21', consume: 25, requests: 2, tokens: marker },
+      { date: '2026-10-21', consume: '25', requests: 2, tokens: marker },
     ],
     meta: {
       start: 1792540800,

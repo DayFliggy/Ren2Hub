@@ -136,6 +136,62 @@ describe('LogsView log content', () => {
   })
 })
 
+it('clears previously displayed rows and shows an error when filtering fails', async () => {
+  let fail = false
+  vi.mocked(api.get).mockImplementation((path: string) => {
+    if (path === '/api/user/self/groups')
+      return Promise.resolve({ default: { ratio: 1, desc: 'Default' } })
+    if (path === '/api/log/self/stat')
+      return Promise.resolve({
+        total_requests: 1,
+        total_quota: 1,
+        today_requests: 1,
+        today_quota: 1,
+      })
+    if (path === '/api/log/self') {
+      if (fail) return Promise.reject(new Error('Filter query failed'))
+      return Promise.resolve({
+        page: 1,
+        page_size: 10,
+        total: 1,
+        items: [
+          {
+            id: 77,
+            type: 2,
+            token_id: 0,
+            token_name: 'fixture-token',
+            model_name: 'fixture-model',
+            channel_name: 'fixture-channel',
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            quota: 1,
+            use_time: 1,
+            is_stream: false,
+            content: 'ok',
+            created_at: 1_700_000_000,
+          },
+        ],
+      })
+    }
+    return Promise.reject(new Error(`Unexpected API request: ${path}`))
+  })
+  wrapper = mount(LogsView, {
+    attachTo: document.body,
+    global: { plugins: [createPinia(), i18n], stubs: { LogsNavTabs: true } },
+  })
+  await flushPromises()
+  expect(wrapper.find('[data-log-model]').exists()).toBe(true)
+
+  fail = true
+  await wrapper.get('input[name="log-search"]').setValue('bad-range')
+  await new Promise((resolve) => setTimeout(resolve, 350))
+  await flushPromises()
+
+  expect(wrapper.find('[data-log-model]').exists()).toBe(false)
+  expect(wrapper.text()).toContain('日志加载失败')
+  expect(wrapper.text()).toContain('失败')
+})
+
 it('filters native logs by request_id without sending the retired keyword parameter', async () => {
   wrapper = mount(LogsView, {
     global: { plugins: [createPinia(), i18n], stubs: { LogsNavTabs: true } },

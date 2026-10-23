@@ -24,6 +24,7 @@ import {
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { isRecord } from '@/api/contracts'
 import { isDecimal, multiplyDecimal, divideDecimal } from '@/utils/decimal'
+import { getQuotaPerUnit } from '@/utils/quota'
 const props = withDefaults(
   defineProps<{
     modelName: string
@@ -175,6 +176,13 @@ watch(
   },
   { immediate: true }
 )
+watch(getQuotaPerUnit, () => {
+  // Keep edited dollar amounts as user intent. An untouched ratio must instead
+  // be reprojected so its displayed price follows the newly published scale.
+  if (defaultBaseline !== defaultPricingSnapshot()) return
+  Object.assign(prices, tokenPrices(props.pricing))
+  captureDefaultBaseline()
+})
 watch(schema, () => {
   for (const key of Object.keys(taskPrices)) delete taskPrices[key]
   taskConditions.value = []
@@ -246,7 +254,7 @@ watch(
   () => expressionEditor.value?.issue ?? '',
   () => (error.value = '')
 )
-watch([formSnapshot, plugin], () => {
+watch([formSnapshot, plugin, getQuotaPerUnit], () => {
   if (hydrating) return
   error.value = ''
   preview.value = null

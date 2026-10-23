@@ -2,6 +2,11 @@ import { securityMessages } from '../../security'
 export default {
   security: securityMessages['zh-CN'],
   auth: {
+    inviteAttributionHint:
+      '仅在本次登录创建新账号时使用。继续前可修改或清除邀请码。',
+    confirmInviteCode: '确认使用此邀请码',
+    inviteRecoveryHint: '请修改邀请码，或明确清除后重新选择登录方式。',
+    clearInviteCode: '清除邀请码',
     verificationCode: '邮箱验证码',
     sendCode: '发送验证码',
     resetConfirm: '确认重置密码',
@@ -41,6 +46,12 @@ export default {
     strength: ['弱密码', '中等', '强密码'],
     resetSent: '重置链接已发送，请查收邮箱',
     registerSuccess: '账户已创建，请登录。',
+    passwordRegistrationDisabled:
+      '已关闭密码注册，请使用下方可用的第三方服务继续。',
+    otherWaysToRegister: '或使用以下方式继续',
+    noRegistrationMethods: '当前暂时无法注册。',
+    continueWithProvider: '使用 {provider} 继续',
+    oauthRequiresSignIn: '该服务需要额外验证，请返回登录页面继续。',
     mismatch: '两次输入的密码不一致',
     usernameRequired: '请输入用户名',
     inviteCode: '邀请码',

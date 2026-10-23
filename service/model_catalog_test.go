@@ -52,3 +52,48 @@ func TestModelCatalogSharesRoutingConstraintsAndPublicPrices(t *testing.T) {
 	require.Empty(t, view.Models)
 	require.Empty(t, view.Offers)
 }
+
+func TestModelCatalogSpecializedPricesKeepBillingIdentityAndScaleOnce(t *testing.T) {
+	db := setupRouteTest(t)
+	previousUnit := common.QuotaPerUnit
+	common.QuotaPerUnit = 500000
+	t.Cleanup(func() { common.QuotaPerUnit = previousUnit })
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Model{}, &model.Vendor{}, &model.Option{}))
+	require.NoError(t, db.Create(&model.User{Id: 17, Username: "specialized-catalog-owner"}).Error)
+	createRouteChannel(t, db, 1, "gemini-2.5-flash,claude-sonnet-4-20250514")
+	// Provider mapping changes the upstream request model, not the catalog's
+	// original billing identity or the native specialty price for that identity.
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 1).Updates(map[string]any{
+		"channel_ratio": "1.25",
+		"model_mapping": `{"gemini-2.5-flash":"provider-audio","claude-sonnet-4-20250514":"provider-cache"}`,
+	}).Error)
+	model.InvalidatePricingCache()
+	t.Cleanup(model.InvalidatePricingCache)
+	view, err := BuildModelCatalog(context.Background(), 17, 7)
+	require.NoError(t, err)
+	require.Len(t, view.Models, 2)
+	require.Len(t, view.Offers, 2)
+	for _, item := range view.Models {
+		switch item.ModelName {
+		case "gemini-2.5-flash":
+			require.Equal(t, "1", item.PricingValues["audio_input"])
+		case "claude-sonnet-4-20250514":
+			require.Equal(t, "3.75", item.PricingValues["cache_create"])
+			require.Equal(t, "6", item.PricingValues["cache_create_1h"])
+		}
+	}
+	for _, offer := range view.Offers {
+		switch offer.ModelID {
+		case "gemini-2.5-flash":
+			require.Equal(t, "1.25", offer.PricingValues["audio_input"])
+		case "claude-sonnet-4-20250514":
+			require.Equal(t, "4.6875", offer.PricingValues["cache_create"])
+			require.Equal(t, "7.5", offer.PricingValues["cache_create_1h"])
+		}
+	}
+	encoded, err := common.Marshal(view)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"audio_input":"1"`)
+	require.Contains(t, string(encoded), `"cache_create_1h":"7.5"`)
+	require.Equal(t, 1, view.SchemaVersion)
+}

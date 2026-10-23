@@ -226,16 +226,16 @@ func CreateTicket(c *gin.Context) {
 		ModelID:   modelID,
 		RequestID: requestID,
 	}
+	if err := form.commit(); err != nil {
+		respondTicketFormError(c, err)
+		return
+	}
 	if _, err := model.CreateTicket(ticket, content, userID, form.attachments()); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	storeErr := form.commit()
+	form.keep()
 	service.NotifyNewTicket(*ticket)
-	if storeErr != nil {
-		respondTicketStorageFailure(c, ticket.ID, storeErr)
-		return
-	}
 	messages, err := model.ListTicketMessages(ticket.ID)
 	if err != nil {
 		common.ApiError(c, err)
@@ -304,6 +304,10 @@ func AddTicketMessage(c *gin.Context) {
 		ticketBusinessError(c, common.NewMessage("Ticket content is required and must not exceed 2000 characters"), "VALIDATION_ERROR")
 		return
 	}
+	if err := form.commit(); err != nil {
+		respondTicketFormError(c, err)
+		return
+	}
 	message, updatedTicket, err := model.AddTicketMessage(ticketID, userID, content, form.attachments())
 	if errors.Is(err, model.ErrTicketClosed) {
 		ticketBusinessError(c, common.NewMessage("Closed tickets cannot receive replies"), "TICKET_CLOSED")
@@ -317,12 +321,8 @@ func AddTicketMessage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	storeErr := form.commit()
+	form.keep()
 	service.NotifyTicketUserReply(*updatedTicket)
-	if storeErr != nil {
-		respondTicketStorageFailure(c, ticketID, storeErr)
-		return
-	}
 	storedAttachments, err := model.ListTicketAttachments(ticketID)
 	if err != nil {
 		common.ApiError(c, err)

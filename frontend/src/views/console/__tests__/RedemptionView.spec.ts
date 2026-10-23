@@ -24,6 +24,7 @@ vi.mock('@/composables/useFeatureAccess', async () => {
 })
 
 import FilterSelect from '@/components/common/FilterSelect.vue'
+import IconButton from '@/components/common/IconButton.vue'
 import RedemptionView from '@/views/console/RedemptionView.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import { REDEMPTION_EXPORT_MAX_ROWS } from '@/composables/useAdminRedemption'
@@ -36,6 +37,7 @@ function mountView() {
       // The page actions, including export, render in the breadcrumb slot.
       stubs: {
         PageBreadcrumb: { template: '<div><slot name="action" /></div>' },
+        IconButton: false,
       },
       plugins: [
         createI18n({
@@ -76,6 +78,24 @@ it('offers every native status even when the current result page is empty', asyn
       expect.objectContaining({ status: 'expired' }),
       { signal: expect.any(AbortSignal) }
     )
+  } finally {
+    wrapper.unmount()
+  }
+})
+
+it('keeps the unused-code enable/disable action available in the mobile list', async () => {
+  mocks.get.mockResolvedValue({
+    items: [{ ...nativeRedemptions(1, 1)[0]!, status: 1 }],
+    total: 1,
+  })
+  const wrapper = mountView()
+  try {
+    await flushPromises()
+    const toggle = wrapper
+      .findAllComponents(IconButton)
+      .find((button) => button.props('label') === 'redemption.disableCode')
+    expect(toggle).toBeDefined()
+    expect(toggle?.attributes('disabled')).toBeUndefined()
   } finally {
     wrapper.unmount()
   }

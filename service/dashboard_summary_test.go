@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +47,7 @@ func TestDashboardHourlySeriesIsContinuousAndViewerDayAligned(t *testing.T) {
 	require.Equal(t, summary.Flow, summary.Distribution)
 
 	require.Equal(t, []string{"b", "a"}, []string{summary.Models[0].Model, summary.Models[1].Model})
-	require.InDelta(t, 54.545, summary.Models[0].Share, 0.001)
+	require.Equal(t, 54.5, summary.Models[0].Share)
 	require.Nil(t, summary.KPI.SuccessRate)
 	require.Nil(t, summary.KPI.AvgLatency)
 }
@@ -65,4 +66,26 @@ func TestDashboardRangeAndPercentageEdges(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, percentageChange(1, 0))
 	require.Equal(t, 100.0, *percentageChange(2, 1))
+}
+
+func TestDashboardQuotaUsesExactDecimalStringsInJSON(t *testing.T) {
+	const exact int64 = 9007199254740993
+	summary := DashboardSummary{
+		KPI:          DashboardKPI{TotalQuota: exact, TotalRequests: 3, TotalTokens: 7},
+		Models:       []DashboardModel{{Model: "large", Quota: exact}},
+		Hourly:       []DashboardHour{{Quota: exact}},
+		Flow:         []DashboardDay{{Consume: exact}},
+		Distribution: []DashboardDay{{Consume: exact}},
+	}
+	encoded, err := common.Marshal(summary)
+	require.NoError(t, err)
+	var decoded map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &decoded))
+	require.Equal(t, "9007199254740993", decoded["kpi"].(map[string]any)["totalQuota"])
+	require.Equal(t, float64(3), decoded["kpi"].(map[string]any)["totalRequests"])
+	require.Equal(t, float64(7), decoded["kpi"].(map[string]any)["totalTokens"])
+	require.Equal(t, "9007199254740993", decoded["models"].([]any)[0].(map[string]any)["quota"])
+	require.Equal(t, "9007199254740993", decoded["hourly"].([]any)[0].(map[string]any)["quota"])
+	require.Equal(t, "9007199254740993", decoded["flow"].([]any)[0].(map[string]any)["consume"])
+	require.Equal(t, "9007199254740993", decoded["distribution"].([]any)[0].(map[string]any)["consume"])
 }

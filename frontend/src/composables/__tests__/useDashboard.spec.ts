@@ -76,17 +76,25 @@ describe('native overview summary', () => {
     expect(state.discounts.value).toBeNull()
     expect(state.limits.value).toBeNull()
   })
-  it('clears old data when consumption logging becomes unavailable', async () => {
+  it('keeps account KPIs and marks only usage-backed values unavailable', async () => {
     const state = setupDashboard()
     await state.load()
     const unavailable = dashboardFixture()
     unavailable.meta.available = false
     vi.mocked(api.get).mockResolvedValue(unavailable)
     await state.load()
-    expect(state.stats.value).toBeNull()
+    expect(state.stats.value).toMatchObject({
+      quota: '500',
+      used_quota: '250',
+      total_requests: 9,
+    })
+    expect(state.stats.value?.today_quota).toBeUndefined()
+    expect(state.stats.value?.today_requests).toBeUndefined()
+    expect(state.stats.value?.today_tokens).toBeUndefined()
     expect(state.flow.value).toEqual([])
     expect(state.tokenTrend.value).toEqual([])
-    expect(state.error.value).toBeTruthy()
+    expect(state.error.value).toBeNull()
+    expect(state.usageUnavailable.value).toBe(true)
   })
   it('skips a month past the log limit and keeps the other periods', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })

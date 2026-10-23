@@ -47,12 +47,16 @@ func TestAffiliateDeletedInviterDatabases(t *testing.T) {
 			}
 			previousDB, previousRedis, previousType := DB, common.RedisEnabled, common.MainDatabaseType()
 			previousPolicy := *operation_setting.GetAffiliateSetting()
+			previousPayment := *operation_setting.GetPaymentSetting()
+			operation_setting.GetPaymentSetting().ComplianceConfirmed = true
+			operation_setting.GetPaymentSetting().ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
 			DB, common.RedisEnabled = db, false
 			common.SetMainDatabaseType(dbType)
 			t.Cleanup(func() {
 				DB, common.RedisEnabled = previousDB, previousRedis
 				common.SetMainDatabaseType(previousType)
 				*operation_setting.GetAffiliateSetting() = previousPolicy
+				*operation_setting.GetPaymentSetting() = previousPayment
 				require.NoError(t, db.Migrator().DropTable(&AffiliateRecord{}, &AdminQuotaOperation{}, &TopUp{}, &User{}))
 				require.NoError(t, conn.Close())
 			})

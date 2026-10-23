@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/client'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -7,6 +7,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import FormField from '@/components/common/FormField.vue'
 import { useSystemSettings } from '@/composables/useSystemSettings'
+import { registerSettingsDraft } from './settingsDraftGuard'
 
 interface DomainChange {
   removed_rp_ids: string[]
@@ -24,12 +25,20 @@ const preview = ref<DomainChange | null>(null)
 const confirmed = ref(false)
 const busy = ref(false)
 const error = ref('')
+const baseline = ref('')
+const snapshot = () => JSON.stringify([rpID.value, legacy.value, origins.value])
+const dirty = computed(
+  () => baseline.value !== '' && snapshot() !== baseline.value
+)
+registerSettingsDraft({ dirty: () => dirty.value, busy: () => busy.value })
 watch(
   () => settings.rawOptions.value,
   () => {
+    if (dirty.value) return
     rpID.value = String(settings.rawValue('passkey.rp_id', ''))
     legacy.value = String(settings.rawValue('passkey.legacy_rp_ids', ''))
     origins.value = String(settings.rawValue('passkey.origins', ''))
+    baseline.value = snapshot()
   },
   { immediate: true }
 )
@@ -52,6 +61,8 @@ async function submit(previewOnly: boolean) {
     })
     preview.value = result
     if (!previewOnly) {
+      baseline.value = snapshot()
+      await settings.refreshStatus(true)
       await settings.load(true)
       preview.value = null
       confirmed.value = false
@@ -67,12 +78,14 @@ async function submit(previewOnly: boolean) {
 <template>
   <ConsoleCard class="sibling-space-y-4">
     <h3 class="font-semibold">{{ t('security.domainsTitle') }}</h3>
-    <FormField label="RP ID"><TextInput v-model="rpID" /></FormField>
+    <FormField label="RP ID"
+      ><TextInput v-model="rpID" :disabled="busy"
+    /></FormField>
     <FormField :label="t('security.legacyDomains')"
-      ><TextInput v-model="legacy"
+      ><TextInput v-model="legacy" :disabled="busy"
     /></FormField>
     <FormField :label="t('security.origins')"
-      ><TextInput v-model="origins"
+      ><TextInput v-model="origins" :disabled="busy"
     /></FormField>
     <div
       v-if="preview?.confirmation_required"

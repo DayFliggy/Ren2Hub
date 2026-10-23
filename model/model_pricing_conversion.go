@@ -120,6 +120,9 @@ func ResolveLegacyBillingDetails(name string, effective, configured PricingValue
 	return details
 }
 
+// Keep display and conversion aligned with the native relay TTL multiplier.
+const legacyClaudeCacheCreation1hMultiplier = 6 / 3.75
+
 type CacheWriteMode string
 
 const (
@@ -351,7 +354,7 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 			{"c", "CompletionRatio", 1},
 			{"cr", "CacheRatio", 1},
 			{"cc", "CreateCacheRatio", 1},
-			{"cc1h", "CreateCacheRatio", 6 / 3.75},
+			{"cc1h", "CreateCacheRatio", legacyClaudeCacheCreation1hMultiplier},
 			{"img", "ImageRatio", 1},
 		} {
 			if ordinaryAudio && !preview.BillingDetails.AudioTextBranches && lane.variable != "c" {
