@@ -425,6 +425,139 @@ describe('request policy panel', () => {
   })
 })
 
+describe('integer settings', () => {
+  it.each([
+    ['security', 'rate-limit', 'ModelRequestRateLimitCount', '61'],
+    ['security', 'rate-limit', 'ModelRequestRateLimitSuccessCount', '1001'],
+    ['security', 'rate-limit', 'ModelRequestRateLimitDurationMinutes', '2'],
+    ['content', 'dashboard', 'DataExportInterval', '6'],
+    ['operations', 'email', 'SMTPPort', '588'],
+  ] as const)(
+    'blocks fractional %s/%s/%s and saves its corrected integer',
+    async (domain, section, key, corrected) => {
+      await serve({ ModelRequestRateLimitSuccessCount: '1000' })
+      const wrapper = await render(domain, section)
+      const input = wrapper.get(`[id="setting-${key}"]`)
+      expect(input.attributes('step')).toBe('1')
+      await input.setValue('1.5')
+      const save = wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Save changes')!
+      await save.trigger('click')
+      await flushPromises()
+      expect(backend.puts).toEqual([])
+      expect(toast.error).toHaveBeenCalledWith(
+        'Correct invalid settings before saving.'
+      )
+      await input.setValue(corrected)
+      await save.trigger('click')
+      await flushPromises()
+      expect(backend.puts).toEqual([{ key, value: corrected }])
+      wrapper.unmount()
+    }
+  )
+})
+
+describe('legacy currency setting', () => {
+  it('does not expose the legacy toggle when it is already enabled', async () => {
+    await serve({
+      DisplayInCurrencyEnabled: 'true',
+      'general_setting.quota_display_type': 'CNY',
+    })
+    const wrapper = await render('billing', 'quota')
+    expect(
+      wrapper
+        .find('[role="switch"][aria-label="Display quota as currency"]')
+        .exists()
+    ).toBe(false)
+    expect(
+      wrapper.get<HTMLSelectElement>(
+        '[id="setting-general_setting.quota_display_type"]'
+      ).element.value
+    ).toBe('CNY')
+    wrapper.unmount()
+  })
+
+  it('saves the false-to-true legacy transition after the toggle hides without rewriting the enum', async () => {
+    await serve({
+      DisplayInCurrencyEnabled: 'false',
+      'general_setting.quota_display_type': 'TOKENS',
+    })
+    const wrapper = await render('billing', 'quota')
+    await wrapper
+      .get('[role="switch"][aria-label="Display quota as currency"]')
+      .trigger('click')
+    expect(
+      wrapper
+        .find('[role="switch"][aria-label="Display quota as currency"]')
+        .exists()
+    ).toBe(false)
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.puts).toEqual([
+      { key: 'DisplayInCurrencyEnabled', value: 'true' },
+    ])
+    expect(backend.options['general_setting.quota_display_type']).toBe('TOKENS')
+    wrapper.unmount()
+  })
+})
+
+describe('unused local settings', () => {
+  it('falls back from the removed file-access section and saves only the edited live setting', async () => {
+    await serve({
+      FileUploadPermission: '10',
+      FileDownloadPermission: '10',
+      ImageUploadPermission: '10',
+      ImageDownloadPermission: '10',
+    })
+    const wrapper = await render('site', 'file-access')
+    expect(wrapper.text()).not.toContain('File and media access')
+    await wrapper.get('[id="setting-SystemName"]').setValue('New name')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.puts).toEqual([{ key: 'SystemName', value: 'New name' }])
+    expect(backend.options.FileUploadPermission).toBe('10')
+    wrapper.unmount()
+  })
+
+  it('omits local dead sensitive and task controls while retaining upstream drawing and export fields', async () => {
+    await serve({
+      StopOnSensitiveEnabled: 'true',
+      StreamCacheQueueLength: '42',
+      TaskEnabled: 'true',
+    })
+    const sensitive = await render('security', 'sensitive')
+    expect(sensitive.text()).not.toContain('Stop generation on a match')
+    expect(
+      sensitive.find('[id="setting-StreamCacheQueueLength"]').exists()
+    ).toBe(false)
+    sensitive.unmount()
+    const drawing = await render('content', 'drawing')
+    expect(drawing.text()).not.toContain('Enable tasks')
+    expect(
+      drawing.find('[role="switch"][aria-label="Enable drawing"]').exists()
+    ).toBe(true)
+    drawing.unmount()
+    const dashboard = await render('content', 'dashboard')
+    expect(
+      dashboard.find('[id="setting-DataExportDefaultTime"]').exists()
+    ).toBe(true)
+    expect(backend.puts).toEqual([])
+    expect(backend.options).toMatchObject({
+      StopOnSensitiveEnabled: 'true',
+      StreamCacheQueueLength: '42',
+      TaskEnabled: 'true',
+    })
+    dashboard.unmount()
+  })
+})
+
 describe('system settings in English', () => {
   it('renders every section without Chinese text or raw message keys', async () => {
     for (const domain of SYSTEM_SETTINGS_DOMAINS) {

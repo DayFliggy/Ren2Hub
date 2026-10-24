@@ -65,7 +65,6 @@ describe('system settings catalog', () => {
     expect(keys).toContain('payment_setting.amount_discount')
     expect(keys).toContain('channel_affinity_setting.rules')
     expect(keys).toContain('global.chat_completions_to_responses_policy')
-    expect(keys).toContain('FileUploadPermission')
     expect(keys).not.toContain('grok.reasoning_effort')
     expect(keys).toContain('WaffoPancakeUnitPrice')
   })

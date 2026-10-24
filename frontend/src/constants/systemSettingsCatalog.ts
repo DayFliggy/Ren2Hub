@@ -140,13 +140,6 @@ const select = (
   ...field('select', key, label, defaultValue, description),
   options,
 })
-const role = (key: string, label: string) =>
-  select(key, label, '0', [
-    option('0', 'guest'),
-    option('1', 'user'),
-    option('10', 'admin'),
-    option('100', 'root'),
-  ])
 const amountList = (key: string, label: string, description?: string) =>
   field('amount-list', key, label, '[]', description)
 const discount = (key: string, label: string, description?: string) =>
@@ -172,17 +165,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           textarea('HomePageContent', 'homePageContent'),
           textarea('legal.user_agreement', 'userAgreement'),
           textarea('legal.privacy_policy', 'privacyPolicy'),
-        ],
-      },
-      {
-        id: 'file-access',
-        titleKey: 'systemSettings.sections.fileAccess',
-        descriptionKey: 'systemSettings.sections.fileAccessDescription',
-        fields: [
-          role('FileUploadPermission', 'fileUpload'),
-          role('FileDownloadPermission', 'fileDownload'),
-          role('ImageUploadPermission', 'imageUpload'),
-          role('ImageDownloadPermission', 'imageDownload'),
         ],
       },
       {
@@ -692,9 +674,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         fields: [
           toggle('CheckSensitiveEnabled', 'sensitiveCheck'),
           toggle('CheckSensitiveOnPromptEnabled', 'sensitiveCheckPrompt'),
-          toggle('StopOnSensitiveEnabled', 'sensitiveStop', true),
           textarea('SensitiveWords', 'sensitiveWords'),
-          number('StreamCacheQueueLength', 'streamCacheQueueLength'),
         ],
       },
       {
@@ -781,7 +761,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('MjForwardUrlEnabled', 'mjForwardUrl'),
           toggle('MjModeClearEnabled', 'mjModeClear'),
           toggle('MjActionCheckSuccessEnabled', 'mjActionCheck'),
-          toggle('TaskEnabled', 'taskEnabled'),
         ],
       },
     ],

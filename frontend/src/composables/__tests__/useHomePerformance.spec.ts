@@ -8,7 +8,9 @@ import { useHomePerformance } from '../useHomePerformance'
 const fetchSummary = vi.hoisted(() => vi.fn())
 vi.mock('@/api/modelMarket', () => ({ getPerformanceSummary: fetchSummary }))
 vi.mock('@/api/publicCatalog', () => ({
-  publicCatalogApi: { pricing: vi.fn().mockResolvedValue({ models: [], issues: [] }) },
+  publicCatalogApi: {
+    pricing: vi.fn().mockResolvedValue({ models: [], issues: [] }),
+  },
 }))
 beforeEach(() => {
   setActivePinia(createPinia())
