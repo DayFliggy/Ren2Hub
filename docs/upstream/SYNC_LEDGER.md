@@ -2,6 +2,10 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+## 2026-10-24 Vue 前端审计修复
+
+从 `79e237455262fcb652379e13965ce86fb1a4eefa` 按已批准计划处理 A、B、E 类本地问题，冻结 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6`。实施与验证见[本轮记录](FRONTEND_FIXES_20261024.md)，共同缺陷统一维护在[待上游台账](UPSTREAM_KNOWN_ISSUES_20261024.md)，本账本不复制条目。C、D、延后项及退役项不扩入，无后端 API、status 或数据库合同改动，不代表应用部署。
+
 ## 2026-10-23 全量审计修复
 
 本轮以 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6` 为冻结核心，从 `a0a1f8dd1b7909089aed0339bd714406a5ccb66b` 整合并修复。邀请返利参考 Sub2API `a34f373973bf547ccec301c7405eb45194e1f28a` 的来源追踪和操作幂等，另按本地净额冲销合同记录已转出负债及后续抵债；AxonHub `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` 没有可直接复用的返利实现。
