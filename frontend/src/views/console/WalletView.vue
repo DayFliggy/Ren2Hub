@@ -31,7 +31,6 @@ import { sumQuota } from '@/utils/quota'
 import { formatNumber, formatQuota, formatQuotaParts } from '@/utils/format'
 
 interface WalletStats {
-  quota: string
   /** Null when the month to date exceeds log_max_range_days. */
   month: { quota: string; requests: number } | null
 }
@@ -61,7 +60,12 @@ const activePanel = computed<'topup' | 'redeem'>(() =>
   route.query.panel === 'redeem' ? 'redeem' : 'topup'
 )
 
-const balance = computed(() => formatQuotaParts(stats.value?.quota ?? '0', 2))
+const balanceQuota = computed(() =>
+  auth.user?.quota == null ? null : String(auth.user.quota)
+)
+const balance = computed(() =>
+  balanceQuota.value === null ? null : formatQuotaParts(balanceQuota.value, 2)
+)
 const dayCount = computed(() => flow.value.length || 30)
 
 const statCards = computed(() => {
@@ -103,6 +107,8 @@ const statCards = computed(() => {
 
 async function loadStats(): Promise<void> {
   loading.value = true
+  stats.value = null
+  flow.value = []
   const result = await statsRequest.run((signal) => {
     // A month past the log limit is skipped; today always fits.
     const monthRange = currentMonthRange()
@@ -133,7 +139,6 @@ async function loadStats(): Promise<void> {
   todayConsume.value = today.kpi.totalQuota
   flow.value = month?.flow ?? []
   stats.value = {
-    quota: String(auth.user?.quota ?? 0),
     month: month && {
       quota: month.kpi.totalQuota,
       requests: month.kpi.totalRequests,
@@ -205,15 +210,15 @@ onBeforeUnmount(() => statusController?.abort())
         <div class="flex items-center gap-3" :aria-busy="loading">
           <p class="font-mono tracking-tight text-[var(--text-primary)]">
             <span
-              v-if="balance.prefix"
+              v-if="balance?.prefix"
               class="text-lg text-[var(--text-tertiary)]"
               >{{ balance.prefix }}</span
             >
             <span class="display-number text-5xl">
-              {{ hidden ? '••••••' : stats ? balance.whole : '—' }}
+              {{ hidden ? '••••••' : balance ? balance.whole : '—' }}
             </span>
             <span
-              v-if="!hidden && stats && balance.fraction"
+              v-if="!hidden && balance?.fraction"
               class="display-number text-xl text-[var(--text-secondary)]"
             >
               .{{ balance.fraction }}
@@ -296,7 +301,7 @@ onBeforeUnmount(() => statusController?.abort())
     <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_23.75rem]">
       <TopupPanel
         v-model:payment-method="paymentMethod"
-        :balance-quota="stats?.quota ?? null"
+        :balance-quota="balanceQuota"
         @done="handlePaymentDone"
         @track-order="trackPayment"
         @capabilities="capabilities = $event"
@@ -310,7 +315,7 @@ onBeforeUnmount(() => statusController?.abort())
     </div>
 
     <div class="sibling-space-y-6">
-      <FlowChart :flow="flow" />
+      <FlowChart v-if="stats?.month" :flow="flow" />
       <TopupRecords :refresh-key="refreshKey" />
     </div>
   </div>

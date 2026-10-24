@@ -51,7 +51,7 @@ describe('SystemStatusCard', () => {
     })
   })
 
-  it('does not report online before the system metrics request succeeds', () => {
+  it('reports API reachability separately from unavailable host metrics', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     const app = useAppStore()
@@ -62,8 +62,8 @@ describe('SystemStatusCard', () => {
       global: { plugins: [pinia, i18n] },
     })
 
-    expect(wrapper.text()).toContain('UNKNOWN')
-    expect(wrapper.text()).not.toContain('ONLINE')
+    expect(wrapper.text()).toContain('ONLINE')
+    expect(wrapper.text()).toContain('Not provided')
   })
 
   it('renders placeholders rather than zeroes when metrics are unavailable', () => {

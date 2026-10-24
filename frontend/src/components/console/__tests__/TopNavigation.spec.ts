@@ -126,7 +126,7 @@ describe('top navigation', () => {
       '仪表盘',
       '运维监控',
       '控制台',
-      '炼金室',
+      '炼金室 未提供',
     ])
     // The alchemy placeholder has no pages, so it is always disabled.
     expect(buttons[4]!.attributes()).toHaveProperty('disabled')
@@ -135,6 +135,29 @@ describe('top navigation', () => {
     const member = mount(TopNavMenu, await setup(1, { admin: 'live' }))
     await flushPromises()
     expect(member.text()).not.toContain('运维监控')
+  })
+
+  it('opens configured docs with native links and explains unavailable links', async () => {
+    const options = await setup(1, {})
+    const app = useAppStore()
+    app.status.docs_link = '/docs'
+    const view = mount(TopNavMenu, options)
+    await view
+      .findAll('button')
+      .find((button) => button.text() === '创意社区')!
+      .trigger('click')
+    const link = view.get('a')
+    expect(link.attributes('href')).toBe(new URL('/docs', location.origin).href)
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    app.status.HeaderNavModules = '{"docs":false}'
+    await flushPromises()
+    expect(view.find('a').exists()).toBe(false)
+    expect(view.text()).toContain('已关闭')
+    app.status.HeaderNavModules = ''
+    app.status.docs_link = 'javascript:alert(1)'
+    await flushPromises()
+    expect(view.text()).toContain('链接不可用')
+    view.unmount()
   })
 
   it('renders the mobile strip from the same definition', async () => {

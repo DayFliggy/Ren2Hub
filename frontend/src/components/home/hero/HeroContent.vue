@@ -150,16 +150,12 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useResizeObserver } from '@vueuse/core'
+import { useHomePerformance } from '@/composables/useHomePerformance'
 import { useTyped } from '@/composables/useTyped'
 import { useTheme } from '@/composables/useTheme'
 import IntegrationMarquee from './IntegrationMarquee.vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
-
-const props = defineProps<{
-  /** Canvas 信号场景回传的滚动平均延迟；首个请求完成前为 undefined。 */
-  averageLatencyMs?: number
-}>()
 
 const { t, tm } = useI18n()
 const { docsLink, showDocs, modelCountLabel, uptimeLabel, uptimePercent } =
@@ -171,10 +167,11 @@ const { displayed, currentWord, isTyping } = useTyped(typedWords)
 
 const pledges = computed(() => tm('hero.pledges') as string[])
 
+const performance = useHomePerformance()
 const latencyLabel = computed(() =>
-  typeof props.averageLatencyMs === 'number'
-    ? `${Math.round(props.averageLatencyMs)}ms`
-    : '--'
+  performance.latency.value === null
+    ? t(`hero.metrics.${performance.state.value}`)
+    : `${Math.round(performance.latency.value)}ms`
 )
 
 // Availability comes only from Uptime Kuma: no item while that source is off

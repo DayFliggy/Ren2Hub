@@ -207,6 +207,7 @@
     <!-- 移动端单行 Live Ticker（桌面端由完整 rail + baseline 承载，CSS 控制显隐） -->
     <div class="signal-console__ticker" aria-hidden="true">
       <span class="signal-console__ticker-dot" />
+      <span>{{ t('signalConsole.demo') }}</span>
       <span class="signal-console__ticker-phase">{{
         phaseLabel(snapshot.phase)
       }}</span>
@@ -382,7 +383,7 @@ const moreLine = computed(() => {
 const screenReaderStatus = computed(() => {
   const trace = focusedTrace.value
   if (!trace) return t('signalConsole.a11yIdle')
-  return `${sourceLine(trace)} through ${traceTargetLine(trace)}: ${phaseLabel(trace.phase)}, ${formatLatency(trace.latencyMs)}`
+  return `${t('signalConsole.demo')}: ${sourceLine(trace)} through ${traceTargetLine(trace)}: ${phaseLabel(trace.phase)}, ${formatLatency(trace.latencyMs)}`
 })
 
 // 移动端 ticker：目标行（模型链或待命）+ 当前延迟

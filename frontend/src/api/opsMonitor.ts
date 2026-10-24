@@ -316,6 +316,7 @@ export type OpsStatus = 'ok' | 'warning' | 'critical' | 'unknown'
 export interface OpsCheck {
   key: 'cpu' | 'memory' | 'disk' | 'database' | 'redis'
   status: OpsStatus
+  unavailable_reason?: 'not_provided'
   value: number | null
   threshold: number | null
 }
@@ -464,8 +465,20 @@ export function projectOpsOverview(
     measuredCheck('cpu', usage?.cpu_percent ?? null),
     measuredCheck('memory', usage?.memory_percent ?? null),
     measuredCheck('disk', percent),
-    { key: 'database', status: 'unknown', value: null, threshold: null },
-    { key: 'redis', status: 'unknown', value: null, threshold: null },
+    {
+      key: 'database',
+      status: 'unknown',
+      value: null,
+      threshold: null,
+      unavailable_reason: 'not_provided',
+    },
+    {
+      key: 'redis',
+      status: 'unknown',
+      value: null,
+      threshold: null,
+      unavailable_reason: 'not_provided',
+    },
   ]
   const path = config.disk_cache_path
   if (path !== undefined && path !== null && typeof path !== 'string')
@@ -473,12 +486,16 @@ export function projectOpsOverview(
   return {
     sampled_at: sampledAt,
     health_score: null,
-    // An unmeasured check prevents an "all healthy" roll-up.
+    // Only collected and configured checks contribute to the health judgement.
     status: checks.some((check) => check.status === 'critical')
       ? 'critical'
       : checks.some((check) => check.status === 'warning')
         ? 'warning'
-        : 'unknown',
+        : checks
+              .filter((check) => check.unavailable_reason !== 'not_provided')
+              .every((check) => check.status === 'ok')
+          ? 'ok'
+          : 'unknown',
     checks,
     gateway: routing,
     cache: stats,

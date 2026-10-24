@@ -9,17 +9,22 @@ const publicApi = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/public', () => ({ publicApi }))
+vi.mock('@/api/publicCatalog', () => ({
+  publicCatalogApi: { pricing: publicApi.pricing },
+}))
 
 import { useAuthStore } from '@/stores/auth'
 import type { PublicStatus } from '@/api/public'
+import { parsePricingModelsPartial } from '@/api/liveContracts'
 import { useAppStore } from '@/stores/app'
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  useAuthStore().checked = true
   vi.clearAllMocks()
   publicApi.status.mockResolvedValue({ system_name: 'Ren2Hub' })
   publicApi.notice.mockResolvedValue('Notice')
-  publicApi.pricing.mockResolvedValue([{ id: 1 }])
+  publicApi.pricing.mockResolvedValue({ models: [{ id: 1 }], issues: [] })
   publicApi.uptime.mockResolvedValue([
     { monitors: [{ uptime: 0.999, status: 1 }] },
   ])
@@ -206,6 +211,118 @@ describe('public application state', () => {
     resolveNotice('Notice')
     await initialization
     await vi.waitFor(() => expect(publicApi.pricing).toHaveBeenCalledTimes(1))
+  })
+
+  it('exposes loading, disabled, protected, failed and zero counts distinctly', async () => {
+    const store = useAppStore()
+    useAuthStore().checked = false
+    await store.initialize()
+    expect(store.modelCountState).toBe('loading')
+    expect(publicApi.pricing).not.toHaveBeenCalled()
+    store.status.HeaderNavModules = '{"pricing":false}'
+    expect(store.modelCountState).toBe('notPublic')
+    store.status.HeaderNavModules = '{"pricing":{"requireAuth":true}}'
+    useAuthStore().checked = true
+    expect(store.modelCountState).toBe('signIn')
+    publicApi.pricing.mockRejectedValueOnce(new Error('offline'))
+    store.status.HeaderNavModules = ''
+    await vi.waitFor(() => expect(store.modelCountState).toBe('error'))
+    store.statusReachable = false
+    publicApi.pricing.mockResolvedValueOnce({ models: [], issues: [] })
+    await store.refreshStatus()
+    await vi.waitFor(() => expect(store.modelCountState).toBe('ready'))
+    expect(store.modelCountLabel).toBe('0')
+  })
+
+  it.each([
+    [{ model_name: 'broken', quota_type: 0, model_ratio: -1 }],
+    [
+      { model_name: 'valid', quota_type: 0, model_ratio: 1 },
+      { model_name: 'broken', quota_type: 0, model_ratio: -1 },
+    ],
+  ])(
+    'rejects an incomplete model count when catalog records are invalid (%j)',
+    async (...records) => {
+      publicApi.pricing.mockResolvedValueOnce(
+        parsePricingModelsPartial(records)
+      )
+      const store = useAppStore()
+
+      await store.initialize()
+
+      expect(store.modelCountState).toBe('error')
+      expect(store.modelCountLabel).not.toBe('0')
+      expect(store.phase).toBe('degraded')
+    }
+  )
+
+  it('reports a genuinely empty catalog as a measured zero count', async () => {
+    publicApi.pricing.mockResolvedValueOnce(parsePricingModelsPartial([]))
+    const store = useAppStore()
+
+    await store.initialize()
+
+    expect(store.modelCountState).toBe('ready')
+    expect(store.modelCountLabel).toBe('0')
+    expect(store.phase).toBe('ready')
+  })
+
+  it('keeps a failed status unavailable after session discovery completes', async () => {
+    const auth = useAuthStore()
+    auth.checked = false
+    publicApi.status.mockRejectedValueOnce(new Error('status offline'))
+    const store = useAppStore()
+
+    await store.initialize()
+    expect(store.phase).toBe('error')
+    expect(store.modelCountState).toBe('error')
+    const failureLabel = store.modelCountLabel
+
+    auth.checked = true
+    await Promise.resolve()
+
+    expect(store.modelCountState).toBe('error')
+    expect(store.modelCountLabel).toBe(failureLabel)
+    expect(publicApi.pricing).not.toHaveBeenCalled()
+  })
+
+  it('discards protected counts when permission changes before a response arrives', async () => {
+    const store = useAppStore()
+    await store.initialize()
+    let resolve!: (value: { models: unknown[]; issues: [] }) => void
+    publicApi.pricing.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        })
+    )
+    store.status.HeaderNavModules = '{"pricing":true}'
+    // The access rule did not change, so authenticate to start a different audience request.
+    useAuthStore().persist({ id: 3, role: 1 } as never)
+    const signal = publicApi.pricing.mock.calls.at(-1)![0] as AbortSignal
+    store.status.HeaderNavModules = '{"pricing":false}'
+    expect(signal.aborted).toBe(true)
+    resolve({ models: [{ id: 1 }, { id: 2 }], issues: [] })
+    await vi.waitFor(() => expect(store.modelCountState).toBe('notPublic'))
+    await Promise.resolve()
+    expect(store.modelCountState).toBe('notPublic')
+  })
+
+  it('applies the docs module permission and safe URL policy to the shared entry', () => {
+    const store = useAppStore()
+    store.status = {
+      docs_link: '/docs',
+      HeaderNavModules: '{"docs":{"requireAuth":true}}',
+    }
+    expect(store.docsNavigation.disabledReason).toBe('nav.loginRequired')
+    useAuthStore().persist({ id: 1, role: 1 } as never)
+    expect(store.docsNavigation.href).toBe(
+      new URL('/docs', location.origin).href
+    )
+    store.status.docs_link = 'javascript:alert(1)'
+    expect(store.docsNavigation.disabledReason).toBe('nav.invalidLink')
+    store.status.docs_link = ''
+    expect(store.docsNavigation.disabledReason).toBe('nav.notConfigured')
   })
 
   it('skips the uptime request when the administrator disabled the panel', async () => {

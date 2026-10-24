@@ -333,6 +333,11 @@ export default {
     },
   },
   nav: {
+    notProvided: 'Not provided',
+    notConfigured: 'Not configured',
+    disabledConfigured: 'Disabled',
+    loginRequired: 'Sign in required',
+    invalidLink: 'Link unavailable',
     adminModels: 'Model management',
     opsMonitor: 'Ops monitor',
     dashboard: 'Dashboard',
@@ -397,6 +402,7 @@ export default {
   },
 
   dashboard: {
+    notProvided: 'Not provided',
     greeting: {
       morning: 'Good morning',
       noon: 'Time for lunch',
@@ -439,8 +445,9 @@ export default {
       effectiveDiscount: 'Effective discount',
       effectiveDesc: '{pct}% off',
       effectiveNone: 'At list price',
-      notConnected: 'Not connected',
-      notConnectedHint: 'Discount data is not connected to a data source yet',
+      notConnected: 'Not provided',
+      notConnectedHint:
+        'The current API does not provide discount information.',
     },
     balanceHint: {
       healthy: 'Healthy',
@@ -457,7 +464,7 @@ export default {
       ceiling: 'Ceiling',
       headroom: 'Headroom',
       ofCeiling: 'of {n} RPM',
-      notConnected: 'Not connected',
+      notConnected: 'Not provided',
     },
     modelDist: {
       title: 'Spend by model',

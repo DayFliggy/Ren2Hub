@@ -217,7 +217,7 @@ async function refreshQuote(): Promise<void> {
       quote.value = {
         pay_amount: String(selectedProduct.value.price),
         currency: selectedProduct.value.currency,
-        expected_quota: null,
+        expected_quota: String(selectedProduct.value.quota),
       }
     return
   }

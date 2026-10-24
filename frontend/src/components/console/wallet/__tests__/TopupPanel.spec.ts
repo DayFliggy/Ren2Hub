@@ -13,6 +13,7 @@ import { httpTransport } from '@/api/httpTransport'
 import { nativeTopupInfo } from '@/api/__tests__/topupFixtures'
 import TopupPanel from '../TopupPanel.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { configureQuotaDisplay, formatQuota } from '@/utils/format'
 
 const app = vi.hoisted(() => ({
   status: { quota_display_type: 'USD', quota_per_unit: 500000 },
@@ -37,6 +38,7 @@ afterEach(() => {
     writable: true,
   })
   vi.restoreAllMocks()
+  configureQuotaDisplay({})
 })
 async function render(method = 'gmpay:usdt.tron') {
   vi.spyOn(api, 'get').mockResolvedValue(nativeTopupInfo)
@@ -53,6 +55,32 @@ function submit(wrapper: Awaited<ReturnType<typeof render>>) {
     .find((button) => button.text() === i18n.global.t('wallet.gmpaySubmit'))!
 }
 describe('native wallet checkout', () => {
+  it('shows Creem native quota once and adds it exactly to the account balance', async () => {
+    configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...nativeTopupInfo,
+      enable_creem_topup: true,
+      creem_products: JSON.stringify([
+        {
+          productId: 'prod_test',
+          name: 'Credits',
+          price: 9,
+          currency: 'USD',
+          quota: 1500000,
+        },
+      ]),
+    })
+    const quote = vi.spyOn(httpTransport, 'request')
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: 'creem', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain(formatQuota(1500000, 3))
+    expect(wrapper.text()).toContain(formatQuota(2000000))
+    expect(quote).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   it('quotes CNY and submits the complete crypto method exactly once', async () => {
     const assign = vi.fn()
     Object.defineProperty(window, 'location', {

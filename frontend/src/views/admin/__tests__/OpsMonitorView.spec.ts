@@ -123,7 +123,9 @@ describe('historical ops layout with native data', () => {
     expect(database).toContain('1.5s')
     expect(database).toContain('Logs share the main database')
     expect(view.find('[data-ops-storage="logDatabase"]').exists()).toBe(false)
-    expect(view.get('[data-ops-storage="redis"]').text()).toContain('Unknown')
+    expect(view.get('[data-ops-storage="redis"]').text()).toContain(
+      'Not provided'
+    )
     expect(view.get('[data-ops-quality-summary]').text()).toContain('95%')
     expect(
       view

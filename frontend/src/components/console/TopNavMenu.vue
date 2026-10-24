@@ -19,6 +19,7 @@ const auth = useAuthStore()
 
 const navGroups = computed<NavGroup[]>(() =>
   getVisibleTopNavItems({
+    docs: app.docsNavigation,
     checkinEnabled: app.checkinEnabled,
     isAdmin: auth.isAdmin,
     isRoot: auth.isRoot,
@@ -55,9 +56,9 @@ function onGroupClick(group: NavGroup) {
 }
 
 function onChildClick(child: NavChild) {
-  if (child.disabled || !child.route) return
+  if (child.disabled) return
   openGroup.value = null
-  router.push({ name: child.route })
+  if (child.route) router.push({ name: child.route })
 }
 
 function onClickOutside(e: MouseEvent) {
@@ -102,12 +103,19 @@ onBeforeUnmount(() => {
             : 'color:var(--text-secondary)'
         "
         :disabled="group.disabled"
-        :title="group.disabled ? t('nav.comingSoon') : undefined"
+        :title="
+          group.disabled
+            ? t(group.name === 'alchemy' ? 'nav.notProvided' : 'nav.comingSoon')
+            : undefined
+        "
         :aria-expanded="group.children ? openGroup === group.name : undefined"
         :aria-current="isActive(group) && group.route ? 'page' : undefined"
         @click="onGroupClick(group)"
       >
         {{ t(group.labelKey) }}
+        <span v-if="group.name === 'alchemy'" class="text-[0.625rem]">{{
+          t('nav.notProvided')
+        }}</span>
         <svg
           v-if="group.children"
           class="transition-transform"
@@ -128,10 +136,14 @@ onBeforeUnmount(() => {
         class="absolute left-1/2 top-12 z-40 w-52 -translate-x-1/2 rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5 animate-scale-in"
         data-handdrawn="menu"
       >
-        <button
+        <component
+          :is="child.href && !child.disabled ? 'a' : 'button'"
           v-for="child in group.children"
           :key="child.name"
-          type="button"
+          :href="!child.disabled ? child.href : undefined"
+          :target="child.href ? '_blank' : undefined"
+          :rel="child.href ? 'noopener noreferrer' : undefined"
+          :type="!child.href || child.disabled ? 'button' : undefined"
           class="flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors"
           :class="
             child.disabled
@@ -159,9 +171,9 @@ onBeforeUnmount(() => {
             v-if="child.disabled"
             class="rounded-sm bg-[var(--surface-muted)] px-1.5 py-px text-[0.625rem] text-[var(--text-tertiary)]"
           >
-            {{ t('nav.comingSoon') }}
+            {{ t(child.disabledReason || 'nav.notProvided') }}
           </span>
-        </button>
+        </component>
       </div>
     </div>
   </div>

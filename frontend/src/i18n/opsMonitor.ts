@@ -13,6 +13,9 @@ export const opsMonitorMessages = {
     stale: '数据已过期',
     staleHint: '以下为 {time} 的数据，最近一次刷新失败。',
     unavailable: '暂无数据',
+    notProvided: '未提供',
+    notProvidedItems: '未提供：{items}',
+    healthNotProvided: '健康评分：未提供',
     rootOnly: '仅 Root',
     status: {
       ok: '正常',
@@ -290,6 +293,9 @@ export const opsMonitorMessages = {
     stale: 'Stale data',
     staleHint: 'Showing data from {time}; the latest refresh failed.',
     unavailable: 'No data',
+    notProvided: 'Not provided',
+    notProvidedItems: 'Not provided: {items}',
+    healthNotProvided: 'Health score: not provided',
     rootOnly: 'Root only',
     status: {
       ok: 'Healthy',

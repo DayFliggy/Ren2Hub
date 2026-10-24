@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 
 const publicApi = vi.hoisted(() => ({
   status: vi.fn(),
@@ -14,6 +15,9 @@ const setupApi = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/public', () => ({ publicApi }))
+vi.mock('@/api/publicCatalog', () => ({
+  publicCatalogApi: { pricing: publicApi.pricing },
+}))
 vi.mock('@/api/setup', () => ({ setupApi }))
 
 import { ApiError } from '@/api/types'
@@ -33,7 +37,7 @@ beforeEach(async () => {
     database_type: 'postgres',
   })
   publicApi.notice.mockResolvedValue('')
-  publicApi.pricing.mockResolvedValue([])
+  publicApi.pricing.mockResolvedValue({ models: [], issues: [] })
   publicApi.uptime.mockResolvedValue([])
   publicApi.status.mockResolvedValue({
     frontend_capabilities: {
@@ -148,11 +152,39 @@ describe('capability route guard', () => {
     )
   })
 
+  it('waits for the cookie session check before entering home', async () => {
+    await router.push('/404')
+    const auth = useAuthStore()
+    const user = auth.user!
+    auth.persist(null)
+    auth.checked = false
+    let finish!: () => void
+    vi.spyOn(auth, 'fetchSelf').mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = () => {
+            auth.persist(user)
+            auth.checked = true
+            resolve(true)
+          }
+        })
+    )
+    const entering = router.push('/')
+    await flushPromises()
+    expect(auth.fetchSelf).toHaveBeenCalledOnce()
+    expect(router.currentRoute.value.name).toBe('status-404')
+    finish()
+    await entering
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(auth.isAuthenticated).toBe(true)
+  })
+
   // docs/authentication.md: a temporary refresh failure must leave the
   // session unchecked so a later navigation retries it.
   it.each([
     '/sign-in?redirect=%2Fkeys%3Fpage%3D2#auth',
     '/pricing?model=gpt%2F4&unit=K#prices',
+    '/?session-check=1#home',
   ])('keeps a rate-limited session check on %s retryable', async (path) => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const auth = useAuthStore()

@@ -31,6 +31,14 @@ const visibleNavGroups = computed(() =>
   })
 )
 
+const toolItems = computed(() =>
+  consoleNavTools.map((item) =>
+    item.name === 'docs'
+      ? { ...item, ...app.docsNavigation }
+      : { ...item, disabledReason: undefined }
+  )
+)
+
 const collapsed = useSidebarCollapsed()
 
 const AUTO_COLLAPSE_KEY = 'ren2hub_activity_auto_collapsed'
@@ -239,13 +247,23 @@ defineExpose({ collapsed })
     <div class="shrink-0 px-3 py-3">
       <div class="ink-divider mb-3 -mx-3" aria-hidden="true" />
       <ul class="sibling-space-y-0.5">
-        <li v-for="item in consoleNavTools" :key="item.name">
+        <li v-for="item in toolItems" :key="item.name">
           <component
             :is="navComponent(item)"
             :to="
-              !item.disabled && item.route ? { name: item.route } : undefined
+              !item.disabled && item.route && !item.href
+                ? { name: item.route }
+                : undefined
             "
-            :type="item.disabled || !item.route ? 'button' : undefined"
+            :href="!item.disabled ? item.href : undefined"
+            :target="item.href ? '_blank' : undefined"
+            :rel="item.href ? 'noopener noreferrer' : undefined"
+            :data-console-tool="item.name"
+            :type="
+              item.disabled || (!item.route && !item.href)
+                ? 'button'
+                : undefined
+            "
             class="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium transition-all focus-ring"
             :class="[
               item.disabled
@@ -256,10 +274,10 @@ defineExpose({ collapsed })
             style="color: var(--text-tertiary)"
             :disabled="item.disabled || undefined"
             :title="
-              collapsed
-                ? t(item.labelKey)
-                : item.disabled
-                  ? t('nav.comingSoon')
+              item.disabled
+                ? `${t(item.labelKey)} · ${t(item.disabledReason || 'nav.notProvided')}`
+                : collapsed
+                  ? t(item.labelKey)
                   : undefined
             "
           >
@@ -277,6 +295,9 @@ defineExpose({ collapsed })
             </svg>
             <span v-if="!collapsed" class="min-w-0 flex-1 truncate text-left">{{
               t(item.labelKey)
+            }}</span>
+            <span v-if="!collapsed && item.disabled" class="text-[0.625rem]">{{
+              t(item.disabledReason || 'nav.notProvided')
             }}</span>
           </component>
         </li>

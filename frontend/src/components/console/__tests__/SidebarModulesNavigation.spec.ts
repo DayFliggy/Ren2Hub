@@ -73,6 +73,35 @@ async function mountNavigation(
 }
 
 describe('SidebarModulesAdmin in the console navigation', () => {
+  it('uses the configured docs URL in the sidebar and disables an unset entry', async () => {
+    await loadMessageDomain('console')
+    const view = await mountNavigation(ConsoleSidebar)
+    const app = useAppStore()
+    expect(view.get('[data-console-tool="docs"]').element.tagName).toBe(
+      'BUTTON'
+    )
+    expect(
+      view.get('[data-console-tool="docs"]').attributes('disabled')
+    ).toBeDefined()
+    app.status.docs_link = '/documentation'
+    await flushPromises()
+    const link = view.get('[data-console-tool="docs"]')
+    expect(link.element.tagName).toBe('A')
+    expect(link.attributes('href')).toBe(
+      new URL('/documentation', location.origin).href
+    )
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    app.status.HeaderNavModules = '{"docs":false}'
+    await flushPromises()
+    expect(
+      view.get('[data-console-tool="docs"]').attributes('href')
+    ).toBeUndefined()
+    expect(
+      view.get('[data-console-tool="docs"]').attributes('disabled')
+    ).toBeDefined()
+    view.unmount()
+  })
+
   it.each([
     ['sidebar', ConsoleSidebar, {}],
     ['mobile strip', ConsoleNavStrip, {}],

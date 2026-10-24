@@ -42,6 +42,7 @@ let mutationSequence = 0
 
 const canReply = computed(() => auth.hasPermission('ticket', 'reply'))
 const canManage = computed(() => auth.hasPermission('ticket', 'manage'))
+const canAssignToSelf = computed(() => canManage.value && canReply.value)
 const selectedID = computed(() => {
   const value = Number(route.params.id)
   return Number.isSafeInteger(value) && value > 0 ? value : 0
@@ -352,7 +353,7 @@ async function saveAssignment(value = assignmentValue.value): Promise<void> {
 }
 
 function takeTicket(): void {
-  if (!auth.user?.id) return
+  if (!canAssignToSelf.value || !auth.user?.id) return
   void saveAssignment(String(auth.user.id))
 }
 
@@ -710,7 +711,9 @@ onBeforeUnmount(() => {
                     {{ t('tickets.admin.assignee') }}
                   </h3>
                   <button
-                    v-if="canManage && ticket.assignee_id !== auth.user?.id"
+                    v-if="
+                      canAssignToSelf && ticket.assignee_id !== auth.user?.id
+                    "
                     type="button"
                     class="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent-text)] hover:underline"
                     @click="takeTicket"

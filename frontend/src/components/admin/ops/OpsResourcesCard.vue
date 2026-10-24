@@ -189,12 +189,20 @@ const trend = computed(() => {
       <dl class="ops-metric-grid ops-metric-grid--3">
         <OpsMetric
           :label="t('resources.up')"
-          v-bind="formatMbps(overview.resources.network.up_mbps, locale)"
+          v-bind="
+            overview.resources.network.up_mbps === null
+              ? { value: t('notProvided'), unit: '' }
+              : formatMbps(overview.resources.network.up_mbps, locale)
+          "
           size="sm"
         />
         <OpsMetric
           :label="t('resources.down')"
-          v-bind="formatMbps(overview.resources.network.down_mbps, locale)"
+          v-bind="
+            overview.resources.network.down_mbps === null
+              ? { value: t('notProvided'), unit: '' }
+              : formatMbps(overview.resources.network.down_mbps, locale)
+          "
           size="sm"
         />
         <OpsMetric
@@ -222,7 +230,12 @@ const trend = computed(() => {
         <OpsMetric
           :label="t('resources.gcPause')"
           v-bind="
-            formatLatencyMs(overview.resources.process.last_gc_pause_ms, locale)
+            overview.resources.process.last_gc_pause_ms === null
+              ? { value: t('notProvided'), unit: '' }
+              : formatLatencyMs(
+                  overview.resources.process.last_gc_pause_ms,
+                  locale
+                )
           "
           size="sm"
         />

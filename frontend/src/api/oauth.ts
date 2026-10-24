@@ -5,6 +5,10 @@ import type { SecurityOperation } from './security'
 import { proofOptions } from './security'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
+export function oidcDisplayName(status: PublicStatus): string {
+  return status.oidc_display_name?.trim() || 'OIDC'
+}
+
 export function oauthProviders(
   status: PublicStatus
 ): Array<{ slug: string; name: string }> {
@@ -12,7 +16,9 @@ export function oauthProviders(
     ...(status.github_oauth ? [{ slug: 'github', name: 'GitHub' }] : []),
     ...(status.discord_oauth ? [{ slug: 'discord', name: 'Discord' }] : []),
     ...(status.linuxdo_oauth ? [{ slug: 'linuxdo', name: 'Linux DO' }] : []),
-    ...(status.oidc_enabled ? [{ slug: 'oidc', name: 'OIDC' }] : []),
+    ...(status.oidc_enabled
+      ? [{ slug: 'oidc', name: oidcDisplayName(status) }]
+      : []),
     ...(status.telegram_oauth && status.telegram_oauth_configured
       ? [{ slug: 'telegram', name: 'Telegram' }]
       : []),

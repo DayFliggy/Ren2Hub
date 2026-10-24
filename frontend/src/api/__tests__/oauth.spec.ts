@@ -1,7 +1,8 @@
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../client'
-import { completeOAuth } from '../oauth'
+import { completeOAuth, oauthProviders } from '../oauth'
+import { parsePublicStatus } from '../public'
 import {
   clearAffiliateAttribution,
   storeAffiliateAttribution,
@@ -13,6 +14,21 @@ afterEach(() => {
 })
 
 describe('OAuth referral and callback contract', () => {
+  it('uses the configured OIDC name with a blank or absent fallback', () => {
+    for (const [value, name] of [
+      ['  Company Login  ', 'Company Login'],
+      ['', 'OIDC'],
+      ['   ', 'OIDC'],
+      [undefined, 'OIDC'],
+    ] as const) {
+      const status = parsePublicStatus({
+        oidc_enabled: true,
+        oidc_display_name: value,
+      })
+      expect(oauthProviders(status)).toEqual([{ slug: 'oidc', name }])
+    }
+    expect(() => parsePublicStatus({ oidc_display_name: 123 })).toThrow()
+  })
   it.each(['login', 'bind'] as const)(
     'uses the SPA callback and carries attribution only for login (%s)',
     async (intent) => {

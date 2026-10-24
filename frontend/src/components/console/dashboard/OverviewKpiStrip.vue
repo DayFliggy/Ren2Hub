@@ -216,7 +216,7 @@ const rpmCaption = computed(() => {
             </p>
 
             <p
-              v-if="loading"
+              v-if="loading && (cell.key !== 'rpm' || limits)"
               class="mt-1.5 h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
               :class="cell.skeleton"
             />

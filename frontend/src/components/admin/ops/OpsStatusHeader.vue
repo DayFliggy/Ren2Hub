@@ -113,7 +113,11 @@ const reasons = computed(() =>
 // Unmeasured checks are named, so a quiet instance never reads as fully checked.
 const unmeasured = computed(() => {
   const names = (props.overview?.checks ?? [])
-    .filter((check) => check.status === 'unknown')
+    .filter(
+      (check) =>
+        check.status === 'unknown' &&
+        check.unavailable_reason !== 'not_provided'
+    )
     .map((check) => t(`checks.${check.key}`))
   if (!names.length) return ''
   return new Intl.ListFormat(locale.value, {
@@ -121,6 +125,12 @@ const unmeasured = computed(() => {
     type: 'conjunction',
   }).format(names)
 })
+const notProvided = computed(() =>
+  (props.overview?.checks ?? [])
+    .filter((check) => check.unavailable_reason === 'not_provided')
+    .map((check) => t(`checks.${check.key}`))
+    .join(' / ')
+)
 /** Check values carry the unit of their key. */
 function checkValue(check: OpsCheck, value: number): string {
   if (check.key === 'database' || check.key === 'redis') {
@@ -209,10 +219,21 @@ const tiles = computed(() => {
               data-ops-overall-status
               :data-status="overview.status"
               ><span class="sr-only">{{ t('statusLabel') }}: </span
-              >{{ t(`status.${overview.status}`) }}</StatusChip
+              >{{
+                overview.status === 'ok' && notProvided
+                  ? t('allMeasuredOk')
+                  : t(`status.${overview.status}`)
+              }}</StatusChip
             >
           </div>
           <p class="ops-header-subtitle">{{ t('subtitle') }}</p>
+          <p
+            v-if="overview && healthScore === null"
+            class="ops-note"
+            data-ops-health-unavailable
+          >
+            {{ t('healthNotProvided') }}
+          </p>
         </div>
       </div>
 
@@ -300,7 +321,9 @@ const tiles = computed(() => {
           v-if="!reasons.length && overview.status === 'ok'"
           class="ops-reason ops-reason--ok"
         >
-          {{ unmeasured ? t('allMeasuredOk') : t('allChecksOk') }}
+          {{
+            unmeasured || notProvided ? t('allMeasuredOk') : t('allChecksOk')
+          }}
         </li>
         <li
           v-if="unmeasured"
@@ -308,6 +331,13 @@ const tiles = computed(() => {
           data-ops-unmeasured
         >
           {{ t('unmeasured', { items: unmeasured }) }}
+        </li>
+        <li
+          v-if="notProvided"
+          class="ops-reason ops-reason--muted"
+          data-ops-not-provided
+        >
+          {{ t('notProvidedItems', { items: notProvided }) }}
         </li>
       </ul>
       <StatTileGrid

@@ -233,6 +233,31 @@ async function openWeChatBindDialog(wechatQRCode: string) {
 }
 
 describe('SecurityAccessView', () => {
+  it('uses the configured OIDC label and shows bound builtins as a non-action badge', async () => {
+    publicStatus.mockResolvedValue({
+      oidc_enabled: true,
+      oidc_display_name: '企业登录',
+    })
+    const auth = useAuthStore()
+    auth.persist({
+      ...auth.user!,
+      oidc_id: 'company-user',
+      github_id: 'github-user',
+    })
+    const wrapper = renderView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('企业登录')
+    for (const account of ['company-user', 'github-user']) {
+      const row = wrapper
+        .findAll('div.flex.min-w-0.items-center.justify-between')
+        .find((item) => item.text().includes(account))!
+      expect(row.text()).toContain('已绑定')
+      expect(row.find('button').exists()).toBe(false)
+    }
+    expect(buttonByText(wrapper, '编辑')).toBeDefined()
+    expect(apiDelete).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   it('renders profile, credentials, bindings, passkey and 2fa', async () => {
     const wrapper = renderView()
     await flushPromises()

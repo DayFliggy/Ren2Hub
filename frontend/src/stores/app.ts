@@ -1,9 +1,12 @@
 import { configureQuotaDisplay } from '@/utils/format'
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
-import { isRecord } from '@/api/contracts'
+import { invalidResponse, isRecord } from '@/api/contracts'
 import { publicApi, type FeatureStatus, type PublicStatus } from '@/api/public'
+import i18n from '@/i18n'
+import { publicCatalogApi } from '@/api/publicCatalog'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import { BRAND_LOGO_PATH, BRAND_NAME } from '@/constants/branding'
 import { useAuthStore } from '@/stores/auth'
 import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
@@ -92,11 +95,18 @@ export const useAppStore = defineStore('app', () => {
   const status = ref<PublicStatus>({})
   const notice = ref('')
   const modelCount = ref<number | null>(null)
+  const modelCountState = ref<
+    'loading' | 'notPublic' | 'signIn' | 'error' | 'ready'
+  >('loading')
   const uptimePercent = ref<number | null>(null)
   const lastError = ref<unknown>(null)
   let initializationPromise: Promise<void> | null = null
   let statusRequested = 0
   let statusApplied = 0
+  const pricingRequest = useLatestRequest()
+  onScopeDispose(() => {
+    modelCount.value = null
+  })
 
   const initialized = computed(
     () => phase.value === 'ready' || phase.value === 'degraded'
@@ -120,9 +130,24 @@ export const useAppStore = defineStore('app', () => {
       pricingAccess.value.enabled &&
       (!pricingAccess.value.requireAuth || auth.isAuthenticated)
   )
-  const showDocs = computed(
-    () => moduleAccess('docs').enabled && Boolean(docsLink.value)
-  )
+  const docsNavigation = computed(() => {
+    const access = moduleAccess('docs')
+    const reason = !access.enabled
+      ? 'nav.disabledConfigured'
+      : access.requireAuth && !auth.isAuthenticated
+        ? 'nav.loginRequired'
+        : !status.value.docs_link?.trim()
+          ? 'nav.notConfigured'
+          : !docsLink.value
+            ? 'nav.invalidLink'
+            : undefined
+    return {
+      href: reason ? undefined : docsLink.value,
+      disabled: Boolean(reason),
+      disabledReason: reason,
+    }
+  })
+  const showDocs = computed(() => !docsNavigation.value.disabled)
   const showAbout = computed(() => moduleAccess('about').enabled)
   const sidebarModules = computed(() =>
     parseSidebarModules(status.value.SidebarModulesAdmin)
@@ -163,7 +188,9 @@ export const useAppStore = defineStore('app', () => {
     () => status.value.turnstile_site_key?.trim() || ''
   )
   const modelCountLabel = computed(() =>
-    modelCount.value === null ? '--' : String(modelCount.value)
+    modelCount.value === null
+      ? i18n.global.t(`hero.metrics.${modelCountState.value}`)
+      : String(modelCount.value)
   )
   const uptimeLabel = computed(() =>
     uptimePercent.value === null ? '--' : `${uptimePercent.value.toFixed(2)}%`
@@ -222,25 +249,15 @@ export const useAppStore = defineStore('app', () => {
     try {
       await refreshStatus()
 
-      const canLoadPricing =
-        pricingAccess.value.enabled &&
-        (!pricingAccess.value.requireAuth || auth.isAuthenticated)
-
       const summaries = await Promise.allSettled([
         publicApi.notice(),
-        canLoadPricing ? publicApi.pricing() : Promise.resolve(null),
+        loadModelCount(),
         uptimeEnabled.value ? publicApi.uptime() : Promise.resolve([]),
       ])
-      const [noticeResult, pricingResult, uptimeResult] = summaries
+      const [noticeResult, , uptimeResult] = summaries
 
       if (noticeResult.status === 'fulfilled') {
         notice.value = toPlainText(noticeResult.value)
-      }
-      if (
-        pricingResult.status === 'fulfilled' &&
-        pricingResult.value !== null
-      ) {
-        modelCount.value = pricingResult.value.length
       }
       if (uptimeResult.status === 'fulfilled') {
         const monitors = uptimeResult.value.flatMap(
@@ -267,6 +284,7 @@ export const useAppStore = defineStore('app', () => {
       statusReachable.value = false
       lastError.value = error
       phase.value = 'error'
+      modelCountState.value = 'error'
     }
   }
 
@@ -282,32 +300,55 @@ export const useAppStore = defineStore('app', () => {
     return initializationPromise
   }
 
-  watch(
-    [() => auth.isAuthenticated, initialized],
-    ([isAuthenticated, isInitialized]) => {
-      if (!pricingAccess.value.requireAuth) return
-      if (!isAuthenticated) {
-        modelCount.value = null
-        return
-      }
-      if (
-        !isInitialized ||
-        !pricingAccess.value.enabled ||
-        modelCount.value !== null
-      ) {
-        return
-      }
-
-      void publicApi.pricing().then(
-        (models) => {
-          modelCount.value = models.length
-        },
-        (error: unknown) => {
-          lastError.value = error
-          phase.value = 'degraded'
-        }
-      )
+  async function loadModelCount(): Promise<void> {
+    pricingRequest.cancel()
+    modelCount.value = null
+    modelCountState.value = 'loading'
+    if (!statusReachable.value) {
+      modelCountState.value = phase.value === 'error' ? 'error' : 'loading'
+      return
     }
+    if (!pricingAccess.value.enabled) {
+      modelCountState.value = 'notPublic'
+      return
+    }
+    if (!auth.checked) return
+    if (pricingAccess.value.requireAuth && !auth.isAuthenticated) {
+      modelCountState.value = 'signIn'
+      return
+    }
+    const result = await pricingRequest.run((signal) =>
+      publicCatalogApi.pricing(signal, auth.isAuthenticated)
+    )
+    if (result.stale) return
+    if (!result.ok) {
+      modelCountState.value = 'error'
+      throw result.error
+    }
+    if (result.value.issues.length > 0) {
+      modelCountState.value = 'error'
+      invalidResponse('/api/pricing')
+    }
+    modelCountState.value = 'ready'
+    modelCount.value = result.value.models.length
+  }
+
+  watch(
+    [
+      () => auth.user,
+      () => auth.checked,
+      () => statusReachable.value,
+      () => pricingAccess.value.enabled,
+      () => pricingAccess.value.requireAuth,
+    ],
+    (next, previous) => {
+      if (phase.value === 'loading' && next[2] && !previous[2]) return
+      void loadModelCount().catch((error: unknown) => {
+        lastError.value = error
+        if (initialized.value) phase.value = 'degraded'
+      })
+    },
+    { flush: 'sync' }
   )
 
   async function retry(): Promise<void> {
@@ -327,6 +368,7 @@ export const useAppStore = defineStore('app', () => {
     systemName,
     logo,
     docsLink,
+    docsNavigation,
     showPricing,
     showDocs,
     showAbout,
@@ -339,6 +381,7 @@ export const useAppStore = defineStore('app', () => {
     userAgreementEnabled,
     privacyPolicyEnabled,
     modelCountLabel,
+    modelCountState,
     uptimeLabel,
     uptimePercent,
     versionLabel,

@@ -475,7 +475,10 @@ router.beforeEach(async (to) => {
   // first render rather than relying on a previous sign-in visit.
   if (to.name === 'security') await loadMessageDomain('auth')
 
-  if (!to.meta.requiresAuth && !to.meta.guestOnly) return true
+  // Home metrics may require a session; restore it before deciding which
+  // transport and visibility rules apply, including after a full refresh.
+  if (!to.meta.requiresAuth && !to.meta.guestOnly && to.name !== 'home')
+    return true
 
   const auth = useAuthStore()
   if (!auth.checked) await auth.fetchSelf()

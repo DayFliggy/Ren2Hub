@@ -138,7 +138,7 @@ async function executeAction() {
     >
       <template #action
         ><StatusChip tone="neutral">{{
-          t('status.unknown')
+          t('notProvided')
         }}</StatusChip></template
       >
       <p class="ops-storage-kind">{{ t('native.poolScope') }}</p>
@@ -174,7 +174,7 @@ async function executeAction() {
     >
       <template #action
         ><StatusChip tone="neutral">{{
-          t('status.unknown')
+          t('notProvided')
         }}</StatusChip></template
       >
       <p class="ops-storage-kind">{{ t('native.storageUnavailable') }}</p>

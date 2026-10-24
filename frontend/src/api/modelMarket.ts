@@ -1,5 +1,10 @@
 import { api } from './client'
-import { parsePerfMetricsSummary } from './liveContracts'
+import { createApiClient } from './createClient'
+import { publicHttpTransport } from './httpTransport'
+import {
+  parsePerfMetricsSummaryResult,
+  parsePerfMetricsSummary,
+} from './liveContracts'
 import { getModelCatalog } from './modelCatalog'
 export { parseModelCatalog as parseModelMarket } from './modelCatalog'
 export function getModelMarket(signal?: AbortSignal) {
@@ -13,6 +18,21 @@ export const MODEL_PERFORMANCE_HOURS = 24
 export async function getModelPerformance(signal?: AbortSignal) {
   return parsePerfMetricsSummary(
     await api.get(
+      '/api/perf-metrics/summary',
+      { hours: MODEL_PERFORMANCE_HOURS },
+      { signal }
+    )
+  )
+}
+
+const publicPerformanceClient = createApiClient(publicHttpTransport)
+
+export async function getPerformanceSummary(
+  authenticated: boolean,
+  signal?: AbortSignal
+) {
+  return parsePerfMetricsSummaryResult(
+    await (authenticated ? api : publicPerformanceClient).get(
       '/api/perf-metrics/summary',
       { hours: MODEL_PERFORMANCE_HOURS },
       { signal }

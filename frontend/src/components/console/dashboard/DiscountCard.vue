@@ -62,7 +62,10 @@ const tiles = computed<StatTile[]>(() => {
     stretch
     data-discount-card
   >
-    <div v-if="loading" class="flex grow flex-col justify-between gap-4">
+    <div
+      v-if="loading && discounts"
+      class="flex grow flex-col justify-between gap-4"
+    >
       <div class="flex grow flex-col justify-center sibling-space-y-2">
         <SkeletonBlock rounded="md" class="h-4 w-20" />
         <SkeletonBlock rounded="lg" class="h-10 w-32" />

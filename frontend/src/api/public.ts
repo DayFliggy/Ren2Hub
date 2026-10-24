@@ -40,6 +40,7 @@ export interface PublicStatus {
   linuxdo_oauth?: boolean
   linuxdo_client_id?: string
   oidc_enabled?: boolean
+  oidc_display_name?: string
   oidc_client_id?: string
   oidc_authorization_endpoint?: string
   wechat_login?: boolean
@@ -62,10 +63,6 @@ export interface CustomOAuthProviderInfo {
 
 export type FeatureStatus = 'live' | 'disabled'
 export type FrontendCapabilities = Record<string, FeatureStatus>
-
-export interface PricingModel {
-  model_name: string
-}
 
 export interface UptimeMonitor {
   uptime: number
@@ -192,6 +189,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'discord_client_id',
     'linuxdo_client_id',
     'oidc_client_id',
+    'oidc_display_name',
     'oidc_authorization_endpoint',
   ] as const
   const statusStringKeys = [
@@ -275,23 +273,6 @@ export function parsePublicStatus(value: unknown): PublicStatus {
   return result
 }
 
-export function parsePricingModels(value: unknown): PricingModel[] {
-  if (!Array.isArray(value)) invalidResponse('/api/pricing')
-  if (
-    value.some(
-      (item) =>
-        !isRecord(item) ||
-        typeof item.model_name !== 'string' ||
-        item.model_name.length === 0
-    )
-  ) {
-    invalidResponse('/api/pricing')
-  }
-  return value.map((item) => ({
-    model_name: String((item as Record<string, unknown>).model_name),
-  }))
-}
-
 export function parseUptimeGroups(value: unknown): UptimeGroup[] {
   if (!Array.isArray(value)) invalidResponse('/api/uptime/status')
   return value.map((group) => {
@@ -372,11 +353,7 @@ export const publicApi = {
     if (typeof value !== 'string') invalidResponse('/api/notice')
     return value
   },
-  async pricing(signal?: AbortSignal) {
-    return parsePricingModels(
-      await publicClient.get<unknown>('/api/pricing', undefined, { signal })
-    )
-  },
+
   async uptime(signal?: AbortSignal) {
     return parseUptimeGroups(
       await publicClient.get<unknown>('/api/uptime/status', undefined, {

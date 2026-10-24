@@ -310,6 +310,11 @@ export default {
     },
   },
   nav: {
+    notProvided: '未提供',
+    notConfigured: '未配置',
+    disabledConfigured: '已关闭',
+    loginRequired: '登录后可用',
+    invalidLink: '链接不可用',
     adminModels: '模型管理',
     opsMonitor: '运维监控',
     dashboard: '仪表盘',
@@ -374,6 +379,7 @@ export default {
   },
 
   dashboard: {
+    notProvided: '未提供',
     greeting: {
       morning: '早上好',
       noon: '该去吃饭了',
@@ -416,8 +422,8 @@ export default {
       effectiveDiscount: '综合折扣',
       effectiveDesc: '{zhe} 折',
       effectiveNone: '按原价计费',
-      notConnected: '未接入',
-      notConnectedHint: '折扣数据尚未接入数据源',
+      notConnected: '未提供',
+      notConnectedHint: '当前接口未提供折扣信息。',
     },
     balanceHint: {
       healthy: '余额充足',
@@ -434,7 +440,7 @@ export default {
       ceiling: '限速上限',
       headroom: '剩余余量',
       ofCeiling: '上限 {n} RPM',
-      notConnected: '未接入',
+      notConnected: '未提供',
     },
     modelDist: {
       title: '模型消费分布',

@@ -42,11 +42,7 @@ const apiState = computed(() => {
       pulse: false,
     }
   }
-  if (
-    phase.value === 'ready' &&
-    statusReachable.value &&
-    metricsAvailable.value
-  ) {
+  if (phase.value === 'ready' && statusReachable.value) {
     return {
       color: 'var(--status-success)',
       textColor: 'var(--status-success-text)',
@@ -54,11 +50,7 @@ const apiState = computed(() => {
       pulse: true,
     }
   }
-  if (
-    phase.value === 'degraded' &&
-    statusReachable.value &&
-    metricsAvailable.value
-  ) {
+  if (phase.value === 'degraded' && statusReachable.value) {
     return {
       color: 'var(--status-warning)',
       textColor: 'var(--status-warning-text)',
@@ -385,6 +377,12 @@ const successTone = computed(() => rateTone(successRate.value))
       <div class="flex min-w-0 items-center gap-2">
         <h2 class="truncate text-sm font-semibold text-[var(--text-primary)]">
           {{ t('dashboard.systemStatus.title') }}
+          <span
+            v-if="!metricsAvailable"
+            class="text-xs text-[var(--text-tertiary)]"
+          >
+            · {{ t('dashboard.notProvided') }}</span
+          >
         </h2>
         <span
           class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold"
@@ -417,6 +415,9 @@ const successTone = computed(() => rateTone(successRate.value))
             class="success-rate-label text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
           >
             {{ t('dashboard.systemStatus.successRate') }}
+            <span v-if="!metricsAvailable" class="text-xs">
+              · {{ t('dashboard.notProvided') }}</span
+            >
           </p>
           <!-- The server reports no rate until the last hour holds enough
                relay requests to measure one. -->
@@ -425,7 +426,7 @@ const successTone = computed(() => rateTone(successRate.value))
             class="success-rate-value text-xs font-medium leading-none text-[var(--text-tertiary)]"
             data-success-rate-empty
           >
-            {{ t('common.none') }}
+            {{ t(metricsAvailable ? 'common.none' : 'dashboard.notProvided') }}
           </p>
           <p
             v-else

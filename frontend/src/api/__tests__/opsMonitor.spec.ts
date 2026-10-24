@@ -23,6 +23,31 @@ vi.mock('../client', () => ({ api: mocks }))
 beforeEach(() => vi.clearAllMocks())
 
 describe('native ops monitoring', () => {
+  it('keeps missing connectivity probes outside measured resource health', () => {
+    const stats = performanceFixture()
+    stats.system_usage = {
+      cpu_percent: 10,
+      memory_percent: 20,
+      sampled_at: 3600,
+    }
+    const result = projectOpsOverview(
+      parsePerformanceStats(stats),
+      routingFixture(),
+      '1h',
+      [],
+      3600
+    )!
+    expect(result.status).toBe('ok')
+    expect(result.health_score).toBeNull()
+    expect(
+      result.checks
+        .filter((check) => check.unavailable_reason === 'not_provided')
+        .map((check) => check.key)
+    ).toEqual(['database', 'redis'])
+    expect(
+      result.checks.find((check) => check.key === 'database')?.status
+    ).toBe('unknown')
+  })
   it('keeps Go process memory separate from unmeasured host memory and health', () => {
     const result = projectOpsOverview(
       parsePerformanceStats(performanceFixture()),

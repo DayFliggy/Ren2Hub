@@ -224,6 +224,21 @@ export function parsePerfMetricsSummary(
   })
 }
 
+/** The native global aggregate is weighted by request count, independently of models. */
+export function parsePerfMetricsSummaryResult(value: unknown) {
+  const models = parsePerfMetricsSummary(value)
+  if (!isRecord(value)) invalidResponse('/api/perf-metrics/summary')
+  const summary = value.summary
+  if (summary === null) return { models, summary: null }
+  if (!isRecord(summary)) invalidResponse('/api/perf-metrics/summary')
+  const avgLatency = requiredStrictInteger(
+    summary.avg_latency_ms,
+    '/api/perf-metrics/summary'
+  )
+  if (avgLatency < 0) invalidResponse('/api/perf-metrics/summary')
+  return { models, summary: { avg_latency_ms: avgLatency } }
+}
+
 export interface LogStatContract {
   quota: string
   rpm: number

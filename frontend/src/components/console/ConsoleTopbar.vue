@@ -145,11 +145,15 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             v-if="item.disabled"
             type="button"
             class="mobile-pill flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1.5 px-3.5 text-xs font-medium text-[var(--text-tertiary)] opacity-60"
-            :title="t('nav.comingSoon')"
+            :title="
+              t(item.name === 'alchemy' ? 'nav.notProvided' : 'nav.comingSoon')
+            "
             disabled
           >
             {{ t(item.labelKey) }}
-            <span class="text-[0.625rem]">{{ t('nav.comingSoon') }}</span>
+            <span class="text-[0.625rem]">{{
+              t(item.name === 'alchemy' ? 'nav.notProvided' : 'nav.comingSoon')
+            }}</span>
           </button>
           <RouterLink
             v-else-if="item.route"

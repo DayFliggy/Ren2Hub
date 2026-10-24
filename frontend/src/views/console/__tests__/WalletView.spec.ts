@@ -20,7 +20,7 @@ import { configureQuotaDisplay, formatQuota } from '@/utils/format'
 
 const state = vi.hoisted(() => ({
   route: { query: {} as Record<string, string> },
-  auth: { user: { id: 7, quota: 500000 }, fetchSelf: vi.fn() },
+  auth: { user: { id: 7, quota: 500000 as number | null }, fetchSelf: vi.fn() },
   app: { status: { log_max_range_days: 365 } },
 }))
 vi.mock('vue-router', () => ({ useRoute: () => state.route }))
@@ -130,6 +130,35 @@ describe('wallet payment return', () => {
 describe('wallet balance header', () => {
   const headerText = (wrapper: Awaited<ReturnType<typeof render>>) =>
     wrapper.get('p.font-mono').text().replace(/\s+/g, '')
+  it.each(['disabled', 'failed'])(
+    'keeps the account balance when statistics are %s',
+    async (state) => {
+      const get = vi.mocked(getUsageSummary)
+      if (state === 'failed')
+        get.mockRejectedValueOnce(new Error('Unavailable'))
+      else get.mockResolvedValueOnce({ meta: { available: false } } as never)
+      const wrapper = await render()
+      expect(headerText(wrapper)).toBe(formatQuota(500000))
+      expect(
+        wrapper.findComponent({ name: 'TopupPanel' }).props('balanceQuota')
+      ).toBe('500000')
+      expect(wrapper.findComponent({ name: 'FlowChart' }).exists()).toBe(false)
+      expect(
+        wrapper.findComponent({ name: 'StatTileGrid' }).props('tiles')
+      ).toEqual([])
+      wrapper.unmount()
+    }
+  )
+  it('distinguishes unknown balance from a true zero', async () => {
+    state.auth.user.quota = null
+    const unknown = await render()
+    expect(headerText(unknown)).toBe('—')
+    unknown.unmount()
+    state.auth.user.quota = 0
+    const zero = await render()
+    expect(headerText(zero)).toBe(formatQuota(0))
+    zero.unmount()
+  })
   it('uses the configured currency and the same text as formatQuota', async () => {
     configureQuotaDisplay({ quota_display_type: 'CNY', usd_exchange_rate: 7.3 })
     state.auth.user.quota = 617_283_950

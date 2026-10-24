@@ -9,6 +9,7 @@ vi.mock('@/api/setup', () => ({ setupApi }))
 
 import router from '@/router'
 import { navigationError } from '@/router/navigationState'
+import { useAuthStore } from '@/stores/auth'
 
 const nativeLocation = window.location
 const assign = vi.fn()
@@ -30,6 +31,7 @@ async function openBrokenRoute() {
 
 beforeEach(async () => {
   setActivePinia(createPinia())
+  useAuthStore().checked = true
   setupApi.status.mockResolvedValue({
     status: true,
     root_init: true,

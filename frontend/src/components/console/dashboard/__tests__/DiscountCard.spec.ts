@@ -36,8 +36,8 @@ function tile(wrapper: ReturnType<typeof render>, label: string) {
 }
 
 describe('DiscountCard', () => {
-  it('shows a not-connected state inside the card when discounts are null', () => {
-    const wrapper = render({ discounts: null })
+  it('shows a not-provided state inside the card when discounts are null', () => {
+    const wrapper = render({ discounts: null, loading: true })
     const state = wrapper.find('[data-discount-not-connected]')
 
     expect(state.exists()).toBe(true)
@@ -45,7 +45,7 @@ describe('DiscountCard', () => {
     expect(
       wrapper.find('[data-discount-card]').element.contains(state.element)
     ).toBe(true)
-    expect(state.text()).toContain('Not connected')
+    expect(state.text()).toContain('Not provided')
     // No fabricated rate, bar or tiles.
     expect(wrapper.text()).not.toContain('×')
     expect(wrapper.find('[data-discount-effective-bar]').exists()).toBe(false)
@@ -53,12 +53,12 @@ describe('DiscountCard', () => {
     expect(wrapper.text()).not.toContain('At list price')
   })
 
-  it('reads 未接入 in Chinese when discounts are null', async () => {
+  it('reads 未提供 in Chinese when discounts are null', async () => {
     await setLocale('zh-CN')
     const wrapper = render({ discounts: null })
 
     expect(wrapper.find('[data-discount-not-connected]').text()).toContain(
-      '未接入'
+      '未提供'
     )
     expect(wrapper.text()).not.toContain('按原价计费')
   })

@@ -8,12 +8,20 @@ import { consoleEntryRoute } from './consoleNav'
 export type TopNavName =
   'activities' | 'dashboard' | 'ops' | 'console' | 'alchemy' | 'community'
 
+export interface DocumentationNavigation {
+  href?: string
+  disabled: boolean
+  disabledReason?: string
+}
+
 export interface TopNavChild {
   name: string
   labelKey: string
   route?: string
   disabled?: boolean
   icon?: string
+  href?: string
+  disabledReason?: string
 }
 
 export interface TopNavItem {
@@ -31,6 +39,7 @@ export interface TopNavItem {
 }
 
 export interface TopNavAccessContext {
+  docs?: DocumentationNavigation
   isAdmin: boolean
   checkinEnabled?: boolean
   isRoot?: boolean
@@ -56,7 +65,14 @@ export const topNavItems: readonly TopNavItem[] = [
     name: 'community',
     labelKey: 'nav.community',
     desktopOnly: true,
-    children: [{ name: 'docs', labelKey: 'nav.docs', disabled: true }],
+    children: [
+      {
+        name: 'docs',
+        labelKey: 'nav.docs',
+        disabled: true,
+        disabledReason: 'nav.notConfigured',
+      },
+    ],
   },
 ]
 
@@ -72,6 +88,11 @@ export function getVisibleTopNavItems(
     )
     .map((item) => ({
       ...item,
+      children: item.children?.map((child) =>
+        child.name === 'docs' && context.docs
+          ? { ...child, ...context.docs }
+          : child
+      ),
       disabled:
         item.disabled ||
         (item.name === 'activities' && context.checkinEnabled === false) ||

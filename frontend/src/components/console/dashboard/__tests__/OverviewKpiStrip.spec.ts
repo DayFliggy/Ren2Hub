@@ -146,23 +146,23 @@ describe('OverviewKpiStrip', () => {
     ).toBe('4.0M')
   })
 
-  it('marks the rate-limit cell as not connected when limits are null', () => {
-    const wrapper = render({ limits: null })
+  it('marks the rate-limit cell as not provided when limits are null', () => {
+    const wrapper = render({ limits: null, loading: true })
     const cell = wrapper.find('[data-kpi-cell="rpm"]')
 
     expect(cell.find('.display-number').text()).toBe('--')
-    expect(cell.text()).toContain('Not connected')
+    expect(cell.text()).toContain('Not provided')
     // No fabricated reading: no "unmetered" ceiling and no ring.
     expect(cell.text()).not.toContain('Unmetered')
     expect(wrapper.findAllComponents(RpmRing)).toHaveLength(0)
   })
 
-  it('reads 未接入 for null limits in Chinese', async () => {
+  it('reads 未提供 for null limits in Chinese', async () => {
     await setLocale('zh-CN')
     const text = render({ limits: null }).find('[data-kpi-cell="rpm"]').text()
     await setLocale('en')
 
-    expect(text).toContain('未接入')
+    expect(text).toContain('未提供')
     expect(text).not.toContain('不限速')
   })
 

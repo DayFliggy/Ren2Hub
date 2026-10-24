@@ -104,7 +104,7 @@
           }"
           data-hero-map-copy
         >
-          <HeroContent :average-latency-ms="signalSnapshot.averageLatencyMs" />
+          <HeroContent />
         </div>
       </div>
 

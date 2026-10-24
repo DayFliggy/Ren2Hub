@@ -27,7 +27,7 @@ import {
   type PasskeyCreationOptions,
 } from '@/api/accountSecurity'
 import { applyAuthRotation, parseAuthRotation } from '@/api/authSession'
-import { completeOAuth } from '@/api/oauth'
+import { completeOAuth, oidcDisplayName } from '@/api/oauth'
 import { publicApi, type PublicStatus } from '@/api/public'
 import { ApiError } from '@/api/types'
 import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
@@ -200,7 +200,13 @@ function bindingMetaFor(binding: SettingsBinding) {
   }
   const meta =
     bindingMeta[binding.id as Exclude<SettingsBindingId, `custom:${number}`>]
-  return { icon: meta.icon, label: t(meta.labelKey) }
+  return {
+    icon: meta.icon,
+    label:
+      binding.id === 'oidc'
+        ? oidcDisplayName(publicStatus.value ?? {})
+        : t(meta.labelKey),
+  }
 }
 
 const bindingItems = computed(() =>
@@ -951,14 +957,20 @@ onBeforeUnmount(() => {
                     </p>
                   </div>
                 </div>
-                <ConsoleButton
-                  :variant="binding.bound ? 'ghost' : 'secondary'"
-                  size="sm"
-                  :disabled="
+                <StatusChip
+                  v-if="
                     binding.bound &&
                     binding.id !== 'email' &&
                     !binding.id.startsWith('custom:')
                   "
+                  tone="neutral"
+                >
+                  {{ t('settings.bound') }}
+                </StatusChip>
+                <ConsoleButton
+                  v-else
+                  :variant="binding.bound ? 'ghost' : 'secondary'"
+                  size="sm"
                   @click="openBinding(binding)"
                 >
                   {{

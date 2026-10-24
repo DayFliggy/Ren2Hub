@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   parseHomeRequestMetrics,
-  parsePricingModels,
   parsePublicStatus,
   parseUptimeGroups,
 } from '@/api/public'
@@ -32,9 +31,6 @@ describe('public API response boundaries', () => {
       HeaderNavModules: '{"pricing":true}',
       SidebarModulesAdmin: '{"admin":{"channel":false}}',
     })
-    expect(parsePricingModels([{ model_name: 'gpt-4o' }])).toEqual([
-      { model_name: 'gpt-4o' },
-    ])
     expect(
       parseUptimeGroups([{ monitors: [{ uptime: 0.99, status: 1 }] }])
     ).toEqual([{ monitors: [{ uptime: 0.99, status: 1 }] }])
@@ -59,8 +55,6 @@ describe('public API response boundaries', () => {
       parsePublicStatus({ SidebarModulesAdmin: { admin: { enabled: true } } })
     ).toThrow()
     expect(() => parsePublicStatus({ api_info: [{ url: 123 }] })).toThrow()
-    expect(() => parsePricingModels({ model_name: 'gpt-4o' })).toThrow()
-    expect(() => parsePricingModels([{ id: 1 }])).toThrow()
     expect(() =>
       parseUptimeGroups([{ monitors: [{ uptime: 'offline', status: 0 }] }])
     ).toThrow()

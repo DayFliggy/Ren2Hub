@@ -285,9 +285,14 @@ export const publicCatalogApi = {
       `/api/${kind}`
     )
   },
-  async pricing(signal?: AbortSignal): Promise<PricingCatalog> {
+  async pricing(
+    signal?: AbortSignal,
+    authenticated = true
+  ): Promise<PricingCatalog> {
     return parsePricingCatalog(
-      await httpTransport.request<unknown>('GET', '/api/pricing', { signal })
+      await (
+        authenticated ? httpTransport : publicHttpTransport
+      ).request<unknown>('GET', '/api/pricing', { signal })
     )
   },
   async rankings(
