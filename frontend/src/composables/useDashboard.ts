@@ -24,17 +24,6 @@ export interface DashboardStats {
   total_requests: number
 }
 
-export interface UserLimits {
-  /** Account request ceiling; 0 = unmetered. */
-  rate_limit: number
-  current_rpm: number // observed throughput
-}
-
-export interface UserDiscounts {
-  global_ratio: number // platform-wide pricing multiplier, e.g. 0.88
-  effective_ratio: number // effective pricing multiplier
-}
-
 export interface ModelShare {
   model: string
   ratio: number
@@ -48,23 +37,6 @@ export interface TokenTrendPoint {
   date: string
   cache_create: number
   cache_read: number
-}
-
-export interface SystemMetrics {
-  cpu_percent: number | null
-  /** Host logical CPUs — the scale a load average is read against. */
-  cpu_cores: number | null
-  /** Host run-queue averages over 1 / 5 / 15 minutes; null off Unix hosts. */
-  load_average: { one: number; five: number; fifteen: number } | null
-  memory_used_gb: number | null
-  memory_total_gb: number | null
-  bandwidth_up_mbps: number | null
-  bandwidth_down_mbps: number | null
-  disk_used_gb: number | null
-  disk_total_gb: number | null
-  api_success_rate: number | null
-  /** Recent throughput samples, oldest → newest; the last pair is the live figure. */
-  bandwidth_series: { up: number[]; down: number[] } | null
 }
 
 export interface FlowPoint {
@@ -98,10 +70,6 @@ export function useDashboard() {
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
   const usageUnavailable = ref(false)
-  // No public native endpoint exposes host metrics, account RPM limits or discounts.
-  const system = ref<SystemMetrics | null>(null),
-    limits = ref<UserLimits | null>(null),
-    discounts = ref<UserDiscounts | null>(null)
   async function load() {
     loading.value = true
     error.value = null
@@ -186,9 +154,6 @@ export function useDashboard() {
     flushIntervalMinutes,
     recentOutOfRange,
     usageUnavailable,
-    system,
-    limits,
-    discounts,
     error,
     load,
   }

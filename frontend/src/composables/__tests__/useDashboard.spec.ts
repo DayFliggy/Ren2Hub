@@ -49,7 +49,7 @@ afterEach(() => {
   app.status.log_max_range_days = 365
 })
 describe('native overview summary', () => {
-  it('uses real account quota and three native summary periods with unknown system data', async () => {
+  it('uses real account quota and three native summary periods without supplemental resource reads', async () => {
     const state = setupDashboard()
     await state.load()
     expect(state.stats.value).toMatchObject({
@@ -72,9 +72,6 @@ describe('native overview summary', () => {
     ).toBe(true)
     expect(state.tokenTrend.value[0]!.cache_read).toBe(4)
     expect(state.flushIntervalMinutes.value).toBe(5)
-    expect(state.system.value).toBeNull()
-    expect(state.discounts.value).toBeNull()
-    expect(state.limits.value).toBeNull()
   })
   it('keeps account KPIs and marks only usage-backed values unavailable', async () => {
     const state = setupDashboard()

@@ -1,8 +1,10 @@
+import type { Observability, ResourceObservation } from '../observability'
 import type { PerformanceStats, RoutingSnapshot } from '../opsMonitor'
 
 /** Native monitoring contracts; unavailable host probes are never invented. */
 export function performanceFixture(): PerformanceStats {
   return {
+    observability: observationFixture(),
     memory_stats: {
       alloc: 1_048_576,
       total_alloc: 8_388_608,
@@ -103,5 +105,82 @@ export function routingFixture(): RoutingSnapshot {
         updated_at: 1_792_353_600_000,
       },
     ],
+  }
+}
+
+export function observationFixture(): Observability {
+  const unknown = (): ResourceObservation => ({
+    available: false,
+    percent: null,
+    scope: 'unknown',
+    sampled_at: null,
+    state: 'unknown',
+    used_bytes: null,
+    total_bytes: null,
+    threshold: 90,
+  })
+  return {
+    scope: 'instance',
+    instance_started_at: 1,
+    sampled_at: 3600,
+    stale: false,
+    status: 'unknown',
+    coverage: { measured: 1, total: 4 },
+    checks: [
+      { id: 'cpu', status: 'unknown', reason: 'not_sampled' },
+      { id: 'memory', status: 'unknown', reason: 'not_sampled' },
+      { id: 'disk', status: 'ok', reason: '' },
+      { id: 'database', status: 'unknown', reason: 'unavailable' },
+      { id: 'redis', status: 'disabled', reason: 'disabled' },
+    ],
+    resources: {
+      cpu: unknown(),
+      memory: unknown(),
+      disk: {
+        available: true,
+        percent: 40,
+        scope: 'filesystem',
+        sampled_at: 3600,
+        state: 'ok',
+        used_bytes: 400,
+        total_bytes: 1000,
+        threshold: 95,
+      },
+    },
+    storage: {
+      database: { status: 'unknown', latency_ms: null, reason: 'unavailable' },
+      log_database: null,
+      log_shared: true,
+      redis: { status: 'disabled', latency_ms: null, reason: 'disabled' },
+    },
+    process: {
+      goroutines: 32,
+      heap_alloc_bytes: 1_048_576,
+      heap_sys_bytes: 4_194_304,
+      gc_count: 8,
+      last_gc_pause_ms: null,
+    },
+    traffic: {
+      scope: 'application_http_body',
+      request_mbps: null,
+      response_mbps: null,
+    },
+    series: { window: '1h', bucket_seconds: 60, points: [] },
+  }
+}
+
+export function measuredResource(
+  percent: number,
+  threshold = 90
+): ResourceObservation {
+  return {
+    available: true,
+    percent,
+    scope: 'container',
+    sampled_at: 3600,
+    state: 'ok',
+    used_bytes: null,
+    total_bytes: null,
+    threshold,
   }
 }

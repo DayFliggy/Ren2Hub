@@ -4,23 +4,28 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSystemUsageIsNullUnlessMonitorSampleIsFresh(t *testing.T) {
-	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
-	enabled := common.PerformanceMonitorConfig{Enabled: true}
-	fresh := common.SystemStatus{CPUUsage: 0, MemoryUsage: 41.5, SampledAt: now.Add(-5 * time.Second)}
-	require.Nil(t, systemUsageFrom(common.PerformanceMonitorConfig{}, fresh, now), "monitor disabled")
-	require.Nil(t, systemUsageFrom(enabled, common.SystemStatus{}, now), "no sample yet")
-	require.Nil(t, systemUsageFrom(enabled, common.SystemStatus{CPUUsage: 9, SampledAt: now.Add(-31 * time.Second)}, now), "stale sample")
-	usage := systemUsageFrom(enabled, fresh, now)
+func TestSystemUsageUsesTheSameObservationSnapshot(t *testing.T) {
+	cpu, memory, sampledAt := 0.0, 41.5, int64(1792583995)
+	observation := service.PerformanceObservation{Resources: service.ObservationResources{
+		CPU:    service.ObservationResource{Available: true, Percent: &cpu, SampledAt: &sampledAt},
+		Memory: service.ObservationResource{Available: true, Percent: &memory, SampledAt: &sampledAt},
+	}}
+	require.Nil(t, systemUsageFrom(service.PerformanceObservation{}), "no sample yet")
+	usage := systemUsageFrom(observation)
 	require.NotNil(t, usage)
-	require.Equal(t, SystemUsage{CPUPercent: 0, MemoryPercent: 41.5, SampledAt: fresh.SampledAt.Unix()}, *usage)
+	require.Equal(t, SystemUsage{CPUPercent: cpu, MemoryPercent: memory, SampledAt: sampledAt}, *usage)
+	observation.Stale = true
+	require.Nil(t, systemUsageFrom(observation), "stale snapshot")
+	observation.Stale = false
+	observation.Resources.Memory.Available = false
+	require.Nil(t, systemUsageFrom(observation), "one unavailable resource")
 }
 
 func TestPerformanceStatsReportsPoolAndNullUsageWhenMonitorOff(t *testing.T) {
@@ -55,4 +60,17 @@ func TestPerformanceStatsReportsPoolAndNullUsageWhenMonitorOff(t *testing.T) {
 	for _, key := range []string{"cache_stats", "memory_stats", "disk_cache_info", "disk_space_info", "config"} {
 		require.Contains(t, body.Data, key)
 	}
+	var observation service.PerformanceObservation
+	require.NoError(t, common.Unmarshal(body.Data["observability"], &observation))
+	require.Equal(t, "1h", observation.Series.Window)
+}
+
+func TestPerformanceStatsRejectsInvalidObservationWindow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/performance/stats?window=bad", nil)
+	GetPerformanceStats(ctx)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), "observability")
 }

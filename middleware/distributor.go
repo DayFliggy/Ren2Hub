@@ -425,7 +425,13 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	} else if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") || strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
 		// Gemini API 路径处理: /v1beta/models/gemini-2.0-flash:generateContent
 		relayMode := relayconstant.RelayModeGemini
-		modelName := extractModelNameFromGeminiPath(c.Request.URL.Path)
+		modelName, _, pathErr := relayconstant.ParseGeminiModelAction(c.Request.URL.Path)
+		if pathErr != nil {
+			return nil, false, pathErr
+		}
+		if relayconstant.NativeCountChannelType(c.Request.URL.Path) != 0 {
+			relayMode = relayconstant.RelayModeNativeCount
+		}
 		if modelName != "" {
 			modelRequest.Model = modelName
 		}
@@ -637,32 +643,4 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
-}
-
-// extractModelNameFromGeminiPath 从 Gemini API URL 路径中提取模型名
-// 输入格式: /v1beta/models/gemini-2.0-flash:generateContent
-// 输出: gemini-2.0-flash
-func extractModelNameFromGeminiPath(path string) string {
-	// 查找 "/models/" 的位置
-	modelsPrefix := "/models/"
-	modelsIndex := strings.Index(path, modelsPrefix)
-	if modelsIndex == -1 {
-		return ""
-	}
-
-	// 从 "/models/" 之后开始提取
-	startIndex := modelsIndex + len(modelsPrefix)
-	if startIndex >= len(path) {
-		return ""
-	}
-
-	// 查找 ":" 的位置，模型名在 ":" 之前
-	colonIndex := strings.Index(path[startIndex:], ":")
-	if colonIndex == -1 {
-		// 如果没有找到 ":"，返回从 "/models/" 到路径结尾的部分
-		return path[startIndex:]
-	}
-
-	// 返回模型名部分
-	return path[startIndex : startIndex+colonIndex]
 }

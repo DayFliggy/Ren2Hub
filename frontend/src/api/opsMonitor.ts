@@ -1,3 +1,10 @@
+import {
+  parseObservability,
+  type Observability,
+  type ObservationStatus,
+  type CheckID,
+  type ObservationReason,
+} from './observability'
 import { api } from './client'
 import {
   invalidResponse,
@@ -61,6 +68,7 @@ export interface DBPoolStats {
   log_shared: boolean
 }
 export interface PerformanceStats {
+  observability: Observability
   memory_stats: {
     alloc: number
     total_alloc: number
@@ -160,6 +168,7 @@ export function parsePerformanceStats(value: unknown): PerformanceStats {
   if (path !== undefined && path !== null && typeof path !== 'string')
     invalidResponse(endpoint)
   return {
+    observability: parseObservability(value.observability),
     memory_stats: {
       alloc: nonnegative(memory.alloc, endpoint),
       total_alloc: nonnegative(memory.total_alloc, endpoint),
@@ -287,9 +296,9 @@ export const opsMonitorApi = {
     action === 'disk_cache'
       ? api.delete('/api/performance/disk_cache')
       : api.post(`/api/performance/${action}`),
-  stats: async (signal?: AbortSignal) =>
+  stats: async (signal?: AbortSignal, window: OpsWindow = '1h') =>
     parsePerformanceStats(
-      await api.get('/api/performance/stats', undefined, { signal })
+      await api.get('/api/performance/stats', { window }, { signal })
     ),
   routing: async (signal?: AbortSignal) =>
     parseRoutingSnapshot(
@@ -312,9 +321,10 @@ export const OPS_WINDOW_SECONDS: Record<OpsWindow, number> = {
   '6h': 21600,
   '24h': 86400,
 }
-export type OpsStatus = 'ok' | 'warning' | 'critical' | 'unknown'
+export type OpsStatus = ObservationStatus
 export interface OpsCheck {
-  key: 'cpu' | 'memory' | 'disk' | 'database' | 'redis'
+  key: CheckID
+  reason?: ObservationReason
   status: OpsStatus
   unavailable_reason?: 'not_provided'
   value: number | null
@@ -327,11 +337,14 @@ export interface OpsSeriesPoint {
   disk: number | null
   users: number | null
   channels: number | null
+  request_mbps?: number | null
+  response_mbps?: number | null
 }
 export type OpsSeriesField = Exclude<keyof OpsSeriesPoint, 'ts'>
 export interface OpsOverview {
   sampled_at: number
   health_score: null
+  observation: Observability | null
   status: OpsStatus
   checks: OpsCheck[]
   gateway: RoutingSnapshot | null
@@ -341,8 +354,8 @@ export interface OpsOverview {
     memory: {
       percent: number | null
       threshold: number | null
-      used_bytes: null
-      total_bytes: null
+      used_bytes: number | null
+      total_bytes: number | null
     }
     disk: {
       percent: number | null
@@ -351,13 +364,13 @@ export interface OpsOverview {
       total_bytes: number | null
       path: string | null
     }
-    network: { up_mbps: null; down_mbps: null }
+    network: { up_mbps: number | null; down_mbps: number | null }
     process: {
-      goroutines: number
-      heap_alloc_bytes: number
-      runtime_sys_bytes: number
-      gc_count: number
-      last_gc_pause_ms: null
+      goroutines: number | null
+      heap_alloc_bytes: number | null
+      runtime_sys_bytes: number | null
+      gc_count: number | null
+      last_gc_pause_ms: number | null
     }
   } | null
   cache: PerformanceStats | null
@@ -437,102 +450,93 @@ export function projectOpsOverview(
 ): OpsOverview | null {
   if (!stats && !routing) return null
   const config = stats?.config ?? {}
-  const disk = stats?.disk_space_info ?? {}
-  const total = performanceNumber(disk, 'total')
-  const used = performanceNumber(disk, 'used')
-  const measuredDisk = total !== null && total > 0 && used !== null
-  const percent = measuredDisk ? performanceNumber(disk, 'used_percent') : null
-  if (percent !== null && percent > 100)
-    invalidResponse('/api/performance/stats')
-  const monitor = performanceBoolean(config, 'monitor_enabled')
-  const usage = stats?.system_usage ?? null
-  const measuredCheck = (
-    key: 'cpu' | 'memory' | 'disk',
-    value: number | null
-  ): OpsCheck => {
-    const threshold = monitorThreshold(config, `monitor_${key}_threshold`)
-    const status: OpsStatus =
-      value === null || monitor !== true || threshold === null || threshold <= 0
-        ? 'unknown'
-        : Math.trunc(value) > threshold
-          ? 'critical'
-          : value >= threshold * 0.9
-            ? 'warning'
-            : 'ok'
-    return { key, status, value, threshold }
-  }
-  const checks: OpsCheck[] = [
-    measuredCheck('cpu', usage?.cpu_percent ?? null),
-    measuredCheck('memory', usage?.memory_percent ?? null),
-    measuredCheck('disk', percent),
-    {
-      key: 'database',
-      status: 'unknown',
-      value: null,
-      threshold: null,
-      unavailable_reason: 'not_provided',
-    },
-    {
-      key: 'redis',
-      status: 'unknown',
-      value: null,
-      threshold: null,
-      unavailable_reason: 'not_provided',
-    },
-  ]
+  const observation = stats?.observability ?? null
+  const resources = observation?.resources
+  const checks: OpsCheck[] = (observation?.checks ?? []).map((check) => {
+    const resource =
+      check.id === 'cpu' || check.id === 'memory' || check.id === 'disk'
+    const probe =
+      check.id === 'database'
+        ? observation?.storage.database
+        : check.id === 'log_database'
+          ? observation?.storage.log_database
+          : check.id === 'redis'
+            ? observation?.storage.redis
+            : null
+    return {
+      key: check.id,
+      status: check.status,
+      reason: check.reason,
+      value: resource
+        ? (resources?.[check.id as 'cpu' | 'memory' | 'disk'].percent ?? null)
+        : (probe?.latency_ms ?? null),
+      threshold: resource
+        ? (resources?.[check.id as 'cpu' | 'memory' | 'disk'].threshold ?? null)
+        : null,
+    }
+  })
+  const threshold = (key: 'cpu' | 'memory' | 'disk') =>
+    resources?.[key].threshold ?? null
   const path = config.disk_cache_path
-  if (path !== undefined && path !== null && typeof path !== 'string')
-    invalidResponse('/api/performance/stats')
   return {
     sampled_at: sampledAt,
     health_score: null,
-    // Only collected and configured checks contribute to the health judgement.
-    status: checks.some((check) => check.status === 'critical')
-      ? 'critical'
-      : checks.some((check) => check.status === 'warning')
-        ? 'warning'
-        : checks
-              .filter((check) => check.unavailable_reason !== 'not_provided')
-              .every((check) => check.status === 'ok')
-          ? 'ok'
-          : 'unknown',
+    observation,
+    status: observation?.status ?? 'unknown',
     checks,
     gateway: routing,
     cache: stats,
-    resources: stats
+    resources:
+      stats && observation && resources
+        ? {
+            monitor_enabled: performanceBoolean(config, 'monitor_enabled'),
+            cpu: {
+              percent: resources.cpu.percent,
+              threshold: threshold('cpu'),
+            },
+            memory: {
+              percent: resources.memory.percent,
+              threshold: threshold('memory'),
+              used_bytes: resources.memory.used_bytes,
+              total_bytes: resources.memory.total_bytes,
+            },
+            disk: {
+              percent: resources.disk.percent,
+              threshold: threshold('disk'),
+              used_bytes: resources.disk.used_bytes,
+              total_bytes: resources.disk.total_bytes,
+              path: typeof path === 'string' ? path : null,
+            },
+            network: {
+              up_mbps: observation.traffic.response_mbps,
+              down_mbps: observation.traffic.request_mbps,
+            },
+            process: {
+              goroutines: observation.process?.goroutines ?? null,
+              heap_alloc_bytes: observation.process?.heap_alloc_bytes ?? null,
+              runtime_sys_bytes: observation.process?.heap_sys_bytes ?? null,
+              gc_count: observation.process?.gc_count ?? null,
+              last_gc_pause_ms: observation.process?.last_gc_pause_ms ?? null,
+            },
+          }
+        : null,
+    series: observation
       ? {
-          monitor_enabled: monitor,
-          cpu: { percent: checks[0]!.value, threshold: checks[0]!.threshold },
-          memory: {
-            percent: checks[1]!.value,
-            threshold: checks[1]!.threshold,
-            used_bytes: null,
-            total_bytes: null,
-          },
-          disk: {
-            percent,
-            threshold: checks[2]!.threshold,
-            used_bytes: measuredDisk ? used : null,
-            total_bytes: measuredDisk ? total : null,
-            path: typeof path === 'string' ? path : null,
-          },
-          network: { up_mbps: null, down_mbps: null },
-          process: {
-            goroutines: stats.memory_stats.num_goroutine,
-            heap_alloc_bytes: stats.memory_stats.alloc,
-            runtime_sys_bytes: stats.memory_stats.sys,
-            gc_count: stats.memory_stats.num_gc,
-            last_gc_pause_ms: null,
-          },
+          window: observation.series.window,
+          bucket_seconds: observation.series.bucket_seconds,
+          points: observation.series.points.map((point) => ({
+            ...point,
+            users: null,
+            channels: null,
+          })),
         }
-      : null,
-    series: {
-      window,
-      bucket_seconds: 30,
-      points: points.filter(
-        (point) => point.ts >= sampledAt - OPS_WINDOW_SECONDS[window]
-      ),
-    },
+      : {
+          window,
+          bucket_seconds: 30,
+          points: points.filter(
+            (point) => point.ts >= sampledAt - OPS_WINDOW_SECONDS[window]
+          ),
+        },
   }
 }
 /** A feed records measured values or an explicit failed-poll gap. Retain by

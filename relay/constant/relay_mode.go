@@ -52,9 +52,13 @@ const (
 
 	RelayModeToolsSearch
 	RelayModeToolsFetch
+	RelayModeNativeCount
 )
 
 func Path2RelayMode(path string) int {
+	if NativeCountChannelType(path) != 0 {
+		return RelayModeNativeCount
+	}
 	relayMode := RelayModeUnknown
 	if strings.HasPrefix(path, "/v1/chat/completions") {
 		relayMode = RelayModeChatCompletions

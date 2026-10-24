@@ -1,4 +1,4 @@
-type OpsStatus = 'ok' | 'warning' | 'critical' | 'unknown'
+import type { ObservationStatus as OpsStatus } from '@/api/observability'
 /** A display value with its unit kept separate, so the unit can sit smaller. */
 export interface DisplayValue {
   value: string
@@ -159,6 +159,8 @@ export const STATUS_TONES = {
   warning: 'warning',
   critical: 'danger',
   unknown: 'neutral',
+  stale: 'warning',
+  disabled: 'neutral',
 } as const satisfies Record<OpsStatus, string>
 
 /** Gauge strokes: healthy uses the dashboard's normal-load colour. */
@@ -167,6 +169,8 @@ export const GAUGE_COLORS: Record<OpsStatus, string> = {
   warning: 'var(--status-warning)',
   critical: 'var(--status-danger)',
   unknown: 'var(--text-tertiary)',
+  stale: 'var(--status-warning)',
+  disabled: 'var(--text-tertiary)',
 }
 
 export const STATUS_COLORS: Record<OpsStatus, string> = {
@@ -174,4 +178,6 @@ export const STATUS_COLORS: Record<OpsStatus, string> = {
   warning: 'var(--status-warning)',
   critical: 'var(--status-danger)',
   unknown: 'var(--text-tertiary)',
+  stale: 'var(--status-warning)',
+  disabled: 'var(--text-tertiary)',
 }

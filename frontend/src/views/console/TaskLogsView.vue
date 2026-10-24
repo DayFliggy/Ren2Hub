@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { parseTaskLogPage } from '@/api/liveContracts'
-import { ApiError, type PageResult } from '@/api/types'
+import { ApiError } from '@/api/types'
 import type { RelayTaskLogItem } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -48,6 +48,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const loading = ref(true)
+const loadError = ref<string | null>(null)
 
 const taskId = ref('')
 const platform = ref('')
@@ -93,24 +94,32 @@ function currentParams() {
 
 const listRequest = useLatestRequest()
 
-async function load() {
+function clearResults() {
   loading.value = true
-  const result = await listRequest.run((signal) =>
-    api.get<PageResult<RelayTaskLogItem>>('/api/task/self', currentParams(), {
-      signal,
-    })
+  loadError.value = null
+  rows.value = []
+  total.value = 0
+}
+
+async function load() {
+  window.clearTimeout(searchTimer)
+  clearResults()
+  const result = await listRequest.run(async (signal) =>
+    parseTaskLogPage(
+      await api.get<unknown>('/api/task/self', currentParams(), { signal })
+    )
   )
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
-    toast.error(
+    loadError.value =
       result.error instanceof ApiError
         ? result.error.message
         : t('common.failed')
-    )
+    toast.error(loadError.value)
     return
   }
-  const pageResult = parseTaskLogPage(result.value as unknown)
+  const pageResult = result.value
   rows.value = pageResult.items
   total.value = pageResult.total
 }
@@ -122,6 +131,9 @@ function reload() {
   else page.value = 1
 }
 watch([taskId, platform], () => {
+  // The input already describes a new query during the debounce interval.
+  listRequest.cancel()
+  clearResults()
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
@@ -129,6 +141,7 @@ watch([startDate, endDate], reload)
 watch(pageSize, reload)
 watch(page, load)
 onMounted(load)
+onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
 function formatDuration(row: RelayTaskLogItem): string {
   const seconds = relayTaskDurationSeconds(
@@ -176,7 +189,19 @@ function formatDuration(row: RelayTaskLogItem): string {
     </div>
 
     <ConsoleCard class="hidden lg:block" :padded="false">
+      <EmptyState
+        v-if="loadError"
+        role="alert"
+        :title="t('logs.loadFailed')"
+        :hint="loadError"
+        illustration="empty-logs"
+      >
+        <ConsoleButton class="mt-4" variant="secondary" @click="load">
+          {{ t('common.retry') }}
+        </ConsoleButton>
+      </EmptyState>
       <DataTable
+        v-else
         :columns="columns"
         :rows="rows"
         row-key="id"
@@ -281,6 +306,19 @@ function formatDuration(row: RelayTaskLogItem): string {
         />
       </div>
 
+      <EmptyState
+        v-else-if="loadError"
+        role="alert"
+        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+        :title="t('logs.loadFailed')"
+        :hint="loadError"
+        illustration="empty-logs"
+      >
+        <ConsoleButton class="mt-4" variant="secondary" @click="load">
+          {{ t('common.retry') }}
+        </ConsoleButton>
+      </EmptyState>
+
       <div v-else-if="rows.length" class="sibling-space-y-3">
         <article
           v-for="row in rows"
@@ -338,6 +376,7 @@ function formatDuration(row: RelayTaskLogItem): string {
       </div>
 
       <div
+        v-if="!loadError"
         class="mt-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
       >
         <TablePagination

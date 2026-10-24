@@ -15,13 +15,30 @@ export const opsMonitorMessages = {
     unavailable: '暂无数据',
     notProvided: '未提供',
     notProvidedItems: '未提供：{items}',
-    healthNotProvided: '健康评分：未提供',
+    coverage: '已测 {measured} / {total} 个启用检查项',
+    resourceScope: {
+      container: '容器',
+      host: '宿主机',
+      filesystem: '缓存文件系统',
+      unknown: '采样范围未知',
+    },
+    observationReasons: {
+      not_sampled: '尚未采样',
+      disabled: '未启用',
+      stale: '采样已过期',
+      unavailable: '探测不可用',
+      timeout: '探测超时',
+      canceled: '探测已取消',
+      threshold_exceeded: '超过资源阈值',
+    },
     rootOnly: '仅 Root',
     status: {
       ok: '正常',
       warning: '警告',
       critical: '严重',
       unknown: '未知',
+      disabled: '未启用',
+      stale: '已过期',
     },
     statusLabel: '整体状态',
     allChecksOk: '所有检查项正常',
@@ -78,9 +95,9 @@ export const opsMonitorMessages = {
       threshold: '阈值 {value}%',
       thresholdOff: '阈值关闭',
       usedOfTotal: '{used} / {total}',
-      network: '网络',
-      up: '上行',
-      down: '下行',
+      network: '应用请求／响应吞吐',
+      up: '响应吞吐',
+      down: '请求吞吐',
       process: '进程',
       goroutines: 'Goroutine',
       heap: '堆内存',
@@ -224,7 +241,7 @@ export const opsMonitorMessages = {
       sessionHistory:
         '趋势仅记录本页打开后的成功采样；刷新页面后重新开始，不代表服务端历史。',
       resourceCoverage:
-        'CPU 与内存来自资源监控采样（优先容器口径），监控关闭或采样超过 30 秒时不可用；网络与 GC 停顿尚未采集。',
+        '资源来自后台采样，CPU 与内存优先使用容器口径；关闭、失败或过期的采样保持不可用。',
       observationScope: '当前进程观察',
       observationNote:
         '按渠道、模型和请求类型观察；错误率与延迟为 EWMA，连续 5 分钟无新样本后过期，不是固定时间窗口的请求统计。',
@@ -239,7 +256,11 @@ export const opsMonitorMessages = {
       nonStreaming: '非流式 · 完成耗时',
       errorEWMA: '错误率 EWMA',
       latencyEWMA: '延迟 EWMA',
-      runtimeMemory: 'Go 运行时系统占用：{value}',
+      instanceHistory:
+        '后台保留本实例最近 24 小时采样，进程重启后清空；缺测不补零。',
+      trafficScope:
+        '仅统计应用 HTTP 请求与响应 body 字节，不含协议头和 WebSocket 帧，不代表网卡带宽。',
+      runtimeMemory: 'Go 运行时堆申请：{value}',
       noPublishedChannels: '模型目录中暂无已发布渠道，不代表平台尚未配置渠道。',
       catalogScope: '仅统计模型目录中已发布模型的渠道，不代表全部已配置渠道。',
       errorObservations: '已达到样本要求的错误率观察',
@@ -295,13 +316,30 @@ export const opsMonitorMessages = {
     unavailable: 'No data',
     notProvided: 'Not provided',
     notProvidedItems: 'Not provided: {items}',
-    healthNotProvided: 'Health score: not provided',
+    coverage: '{measured} / {total} enabled checks measured',
+    resourceScope: {
+      container: 'Container',
+      host: 'Host',
+      filesystem: 'Cache filesystem',
+      unknown: 'Unknown sampling scope',
+    },
+    observationReasons: {
+      not_sampled: 'Not sampled yet',
+      disabled: 'Disabled',
+      stale: 'Sample is stale',
+      unavailable: 'Probe unavailable',
+      timeout: 'Probe timed out',
+      canceled: 'Probe canceled',
+      threshold_exceeded: 'Resource threshold exceeded',
+    },
     rootOnly: 'Root only',
     status: {
       ok: 'Healthy',
       warning: 'Warning',
       critical: 'Critical',
       unknown: 'Unknown',
+      disabled: 'Disabled',
+      stale: 'Stale',
     },
     statusLabel: 'Overall status',
     allChecksOk: 'All checks passing',
@@ -358,9 +396,9 @@ export const opsMonitorMessages = {
       threshold: 'Threshold {value}%',
       thresholdOff: 'Threshold off',
       usedOfTotal: '{used} / {total}',
-      network: 'Network',
-      up: 'Up',
-      down: 'Down',
+      network: 'Application request/response throughput',
+      up: 'Response throughput',
+      down: 'Request throughput',
       process: 'Process',
       goroutines: 'Goroutines',
       heap: 'Heap',
@@ -504,7 +542,7 @@ export const opsMonitorMessages = {
       sessionHistory:
         'Trends contain successful samples collected while this page is open. Reloading starts a new session; these are not server history.',
       resourceCoverage:
-        'CPU and memory come from the resource monitor sample (container limits first). They are unavailable while monitoring is off or the sample is older than 30 seconds. Network and GC pause are not collected.',
+        'Background resource samples use container limits first. Disabled, failed or stale measurements remain unavailable.',
       observationScope: 'Current process observations',
       observationNote:
         'Observed by channel, model and request type. Error rate and latency use EWMA; observations expire after 5 minutes without new samples. Counts are not a fixed time window.',
@@ -520,7 +558,11 @@ export const opsMonitorMessages = {
       nonStreaming: 'Non-streaming · completion',
       errorEWMA: 'Error EWMA',
       latencyEWMA: 'Latency EWMA',
-      runtimeMemory: 'Go runtime system memory: {value}',
+      instanceHistory:
+        'The server retains 24 hours of samples for this instance. Restarting clears history; missing samples remain gaps.',
+      trafficScope:
+        'Application HTTP request and response body bytes only; excludes headers and WebSocket frames. This is not network-interface bandwidth.',
+      runtimeMemory: 'Go runtime reserved heap: {value}',
       noPublishedChannels:
         'No published channels in the model catalog. Other configured channels may exist.',
       catalogScope:

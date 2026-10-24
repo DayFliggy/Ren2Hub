@@ -2,22 +2,20 @@ package controller
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"gorm.io/gorm"
 )
-
-// systemUsageMaxAge 是采样被视为有效的最长时间；监控每 5 秒采样一次，超过即视为未运行。
-const systemUsageMaxAge = 30 * time.Second
 
 // PerformanceStatsExtension 是 /api/performance/stats 的本地追加字段，嵌入原生结构体。
 type PerformanceStatsExtension struct {
 	// SystemUsage 为性能监控的最近一次采样；监控关闭、尚未采样或采样过期时为 null，不返回 0。
 	SystemUsage *SystemUsage `json:"system_usage"`
 	// DBPool 来自 sql.DB.Stats()。
-	DBPool DBPoolStats `json:"db_pool"`
+	DBPool        DBPoolStats                    `json:"db_pool"`
+	Observability service.PerformanceObservation `json:"observability"`
 }
 
 // SystemUsage 与哨兵使用同一份采样：优先容器 cgroup 口径，不可用时为宿主机口径。
@@ -45,18 +43,20 @@ type DBPoolStat struct {
 	MaxLifetimeClosed  int64 `json:"max_lifetime_closed"`
 }
 
-func newPerformanceStatsExtension() PerformanceStatsExtension {
+func newPerformanceStatsExtension(observation service.PerformanceObservation) PerformanceStatsExtension {
 	return PerformanceStatsExtension{
-		SystemUsage: systemUsageFrom(common.GetPerformanceMonitorConfig(), common.GetSystemStatus(), time.Now()),
-		DBPool:      dbPoolStats(),
+		SystemUsage:   systemUsageFrom(observation),
+		DBPool:        dbPoolStats(),
+		Observability: observation,
 	}
 }
 
-func systemUsageFrom(config common.PerformanceMonitorConfig, status common.SystemStatus, now time.Time) *SystemUsage {
-	if !config.Enabled || status.SampledAt.IsZero() || now.Sub(status.SampledAt) > systemUsageMaxAge {
+func systemUsageFrom(observation service.PerformanceObservation) *SystemUsage {
+	cpu, memory := observation.Resources.CPU, observation.Resources.Memory
+	if observation.Stale || !cpu.Available || !memory.Available || cpu.Percent == nil || memory.Percent == nil || cpu.SampledAt == nil {
 		return nil
 	}
-	return &SystemUsage{CPUPercent: status.CPUUsage, MemoryPercent: status.MemoryUsage, SampledAt: status.SampledAt.Unix()}
+	return &SystemUsage{CPUPercent: *cpu.Percent, MemoryPercent: *memory.Percent, SampledAt: *cpu.SampledAt}
 }
 
 func dbPoolStats() DBPoolStats {

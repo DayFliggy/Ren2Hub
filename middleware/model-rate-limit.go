@@ -173,15 +173,16 @@ func modelRequestSucceeded(c *gin.Context) bool {
 func ModelRequestRateLimit() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		// 在每个请求时检查是否启用限流
-		if !setting.ModelRequestRateLimitEnabled {
+		limits := setting.CurrentModelRequestLimits()
+		if !limits.Enabled {
 			c.Next()
 			return
 		}
 
 		// 计算限流参数
-		duration := rateLimitDurationSeconds(setting.ModelRequestRateLimitDurationMinutes)
-		totalMaxCount := setting.ModelRequestRateLimitCount
-		successMaxCount := setting.ModelRequestRateLimitSuccessCount
+		duration := rateLimitDurationSeconds(limits.WindowMinutes)
+		totalMaxCount := limits.TotalRequests
+		successMaxCount := limits.SuccessfulRequests
 
 		subject := strconv.Itoa(c.GetInt("id"))
 

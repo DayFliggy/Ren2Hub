@@ -90,7 +90,6 @@ describe('top navigation', () => {
       'dashboard',
       'ops',
       'console',
-      'alchemy',
       'community',
     ])
     expect(member.map((item) => item.name)).not.toContain('ops')
@@ -101,7 +100,7 @@ describe('top navigation', () => {
         surface: 'mobile',
         featureStatus: live,
       }).map((item) => item.name)
-    ).toEqual(['activities', 'dashboard', 'ops', 'console', 'alchemy'])
+    ).toEqual(['activities', 'dashboard', 'ops', 'console'])
   })
 
   it('fails closed when the admin capability is disabled', () => {
@@ -126,10 +125,9 @@ describe('top navigation', () => {
       '仪表盘',
       '运维监控',
       '控制台',
-      '炼金室 未提供',
+      '创意社区',
     ])
-    // The alchemy placeholder has no pages, so it is always disabled.
-    expect(buttons[4]!.attributes()).toHaveProperty('disabled')
+    expect(admin.text()).not.toContain('炼金室')
     expect(admin.get('[aria-current="page"]').text()).toBe('运维监控')
 
     const member = mount(TopNavMenu, await setup(1, { admin: 'live' }))
@@ -182,9 +180,7 @@ describe('top navigation', () => {
       '运维监控',
       '控制台',
     ])
-    const placeholder = strip.get('button')
-    expect(placeholder.text()).toContain('炼金室')
-    expect(placeholder.attributes()).toHaveProperty('disabled')
+    expect(strip.text()).not.toContain('炼金室')
     expect(strip.get('[aria-current="page"]').attributes('href')).toBe('/ops')
   })
 })

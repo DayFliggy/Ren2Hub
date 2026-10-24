@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCountClaudeTokensReturnsInputTokensWhenRelayCountingDisabled(t *testing.T) {
+func TestCountClaudeTokensNeverEstimatesWithoutNativeChannel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	originalCountToken := constant.CountToken
 	constant.CountToken = false
@@ -37,12 +37,9 @@ func TestCountClaudeTokensReturnsInputTokensWhenRelayCountingDisabled(t *testing
 
 	CountClaudeTokens(ctx)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
-	var response struct {
-		InputTokens int `json:"input_tokens"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Positive(t, response.InputTokens)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "unsupported_count_channel")
+	assert.NotContains(t, recorder.Body.String(), "input_tokens")
 }
 
 func TestCountClaudeTokensRejectsMissingMessages(t *testing.T) {
@@ -55,6 +52,8 @@ func TestCountClaudeTokensRejectsMissingMessages(t *testing.T) {
 		strings.NewReader(`{"model":"gemini-3.6-flash"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
+	common.SetContextKey(ctx, constant.ContextKeyChannelType, constant.ChannelTypeAnthropic)
+	common.SetContextKey(ctx, constant.ContextKeyOriginalModel, "gemini-3.6-flash")
 
 	CountClaudeTokens(ctx)
 

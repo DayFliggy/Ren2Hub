@@ -1,4 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick, reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OpsMonitorView from '@/views/admin/OpsMonitorView.vue'
@@ -11,6 +12,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import {
   performanceFixture,
+  measuredResource,
   qualityFixture,
   routingFixture,
 } from '@/api/__tests__/opsFixtures'
@@ -22,9 +24,20 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   delete: vi.fn(),
 }))
+const authState = reactive({
+  user: { id: 1, role: 100 } as { id: number; role: number } | null,
+})
 vi.mock('@/api/client', () => ({ api: mocks }))
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ isRoot: true, hasPermission: () => true }),
+  useAuthStore: () => ({
+    get user() {
+      return authState.user
+    },
+    get isRoot() {
+      return (authState.user?.role ?? 0) >= 100
+    },
+    hasPermission: () => (authState.user?.role ?? 0) >= 100,
+  }),
 }))
 vi.mock('@/charts/useEChart', () => ({ useEChart: vi.fn() }))
 let wrapper: VueWrapper | undefined
@@ -60,6 +73,7 @@ function setup() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  authState.user = { id: 1, role: 100 }
   Object.defineProperty(document, 'hidden', {
     configurable: true,
     value: false,
@@ -110,7 +124,7 @@ describe('historical ops layout with native data', () => {
     )
     expect(view.get('[data-ops-gauge="disk"]').text()).toContain('40%')
     expect(view.getComponent(OpsResourcesCard).text()).toContain(
-      'Go runtime system memory:'
+      'Go runtime reserved heap:'
     )
     expect(view.get('[data-ops-concurrency="users"]').text()).toContain(
       '#12 / 4'
@@ -123,9 +137,7 @@ describe('historical ops layout with native data', () => {
     expect(database).toContain('1.5s')
     expect(database).toContain('Logs share the main database')
     expect(view.find('[data-ops-storage="logDatabase"]').exists()).toBe(false)
-    expect(view.get('[data-ops-storage="redis"]').text()).toContain(
-      'Not provided'
-    )
+    expect(view.get('[data-ops-storage="redis"]').text()).toContain('Disabled')
     expect(view.get('[data-ops-quality-summary]').text()).toContain('95%')
     expect(
       view
@@ -157,7 +169,15 @@ describe('historical ops layout with native data', () => {
           memory_percent: 40,
           sampled_at: 1,
         }
+        data.observability.resources.cpu = measuredResource(12.5)
+        data.observability.resources.memory = measuredResource(40)
         data.db_pool.log_shared = false
+        data.observability.storage.log_shared = false
+        data.observability.storage.log_database = {
+          status: 'unknown',
+          latency_ms: null,
+          reason: 'unavailable',
+        }
         return Promise.resolve(data)
       }
       return defaultGet(path, ...args)
@@ -179,6 +199,12 @@ describe('historical ops layout with native data', () => {
     mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
       if (path === '/api/performance/stats') {
         const data = performanceFixture()
+        data.observability.resources.cpu = measuredResource(99, -1)
+        data.observability.resources.cpu.state = 'disabled'
+        data.observability.checks.find((check) => check.id === 'cpu')!.status =
+          'disabled'
+        data.observability.checks.find((check) => check.id === 'cpu')!.reason =
+          'disabled'
         data.config.monitor_cpu_threshold = -1
         data.system_usage = {
           cpu_percent: 99,
@@ -194,15 +220,19 @@ describe('historical ops layout with native data', () => {
     expect(view.find('[data-ops-error]').exists()).toBe(false)
     expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('Threshold off')
     expect(view.get('[data-ops-unmeasured]').text()).toContain('CPU')
-    expect(view.findAll('[data-ops-reason]').map((row) => row.text())).toEqual(
-      []
-    )
+    expect(view.get('[data-ops-coverage]').text()).toContain('1 / 4')
   })
   it('shows a CPU burst above 100% while capping its ring at a full arc', async () => {
     const defaultGet = mocks.get.getMockImplementation()!
     mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
       if (path === '/api/performance/stats') {
         const data = performanceFixture()
+        data.observability.resources.cpu = measuredResource(101.2)
+        data.observability.resources.cpu.state = 'critical'
+        data.observability.checks.find((check) => check.id === 'cpu')!.status =
+          'critical'
+        data.observability.checks.find((check) => check.id === 'cpu')!.reason =
+          'threshold_exceeded'
         data.system_usage = {
           cpu_percent: 101.2,
           memory_percent: 40,
@@ -294,119 +324,91 @@ describe('historical ops layout with native data', () => {
     expect(view.getComponent(OpsQualityCard).props('error')).toBe('')
     expect(view.get('[data-ops-top-models]').text()).toContain('fixture-model')
   })
-  it('keeps independently completed feeds continuous across seconds and window changes', async () => {
-    const start = 1_800_000_000_000
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(start)
+  it('loads history recorded before opening the page and fetches distinct server buckets for a new window', async () => {
     const defaultGet = mocks.get.getMockImplementation()!
-    let performanceCalls = 0
-    let completeRouting!: (value: ReturnType<typeof routingFixture>) => void
     mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
       if (path === '/api/performance/stats') {
         const data = performanceFixture()
-        data.disk_space_info.used_percent = 40 + performanceCalls++
+        const window = (args[0] as { window: '1h' | '24h' }).window
+        data.observability.series = {
+          window,
+          bucket_seconds: window === '1h' ? 60 : 900,
+          points: [
+            {
+              ts: 900,
+              cpu: 10,
+              memory: 20,
+              disk: 40,
+              request_mbps: 1,
+              response_mbps: 2,
+              goroutines: 5,
+              heap_alloc_bytes: 1024,
+            },
+          ],
+        }
         return Promise.resolve(data)
       }
-      if (path === '/api/performance/routing')
-        return new Promise((resolve) => {
-          completeRouting = resolve
-        })
       return defaultGet(path, ...args)
     })
     const view = setup()
     await flushPromises()
-    vi.setSystemTime(start + 1000)
-    completeRouting(routingFixture())
-    await flushPromises()
-    vi.setSystemTime(start + 30_000)
-    view.getComponent(OpsStatusHeader).vm.$emit('refresh')
-    await flushPromises()
-    expect(
-      view.getComponent(OpsGatewayCard).props('overview')!.series.points
-    ).toHaveLength(1)
-    vi.setSystemTime(start + 31_000)
-    const routing = routingFixture()
-    routing.users[0]!.in_flight = 3
-    completeRouting(routing)
-    await flushPromises()
     const resources = view.getComponent(OpsResourcesCard)
-    const gateway = view.getComponent(OpsGatewayCard)
-    expect(
-      resources
-        .props('overview')!
-        .series.points.map(({ ts, disk }) => [ts, disk])
-    ).toEqual([
-      [start / 1000, 40],
-      [start / 1000 + 30, 41],
-    ])
-    expect(
-      gateway
-        .props('overview')!
-        .series.points.map(({ ts, users }) => [ts, users])
-    ).toEqual([
-      [start / 1000 + 1, 2],
-      [start / 1000 + 31, 3],
-    ])
+    expect(resources.props('overview')!.series.points[0]?.ts).toBe(900)
+    expect(resources.props('overview')!.series.bucket_seconds).toBe(60)
     view.getComponent(SegmentedToggle).vm.$emit('update:modelValue', '24h')
     await flushPromises()
-    for (const card of [resources, gateway]) {
-      expect(card.props('overview')!.series.window).toBe('24h')
-      expect(card.props('overview')!.series.points).toHaveLength(2)
-    }
+    expect(resources.props('overview')!.series.window).toBe('24h')
+    expect(resources.props('overview')!.series.bucket_seconds).toBe(900)
+    expect(mocks.get).toHaveBeenCalledWith(
+      '/api/performance/stats',
+      { window: '24h' },
+      { signal: expect.any(AbortSignal) }
+    )
   })
-  it.each(['stats', 'routing'] as const)(
-    'records repeated %s failures as gaps without breaking its peer, then resumes with fresh values',
-    async (endpoint) => {
-      const start = 1_800_000_000_000
-      vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(start)
-      const defaultGet = mocks.get.getMockImplementation()!
-      let failed = false
-      let recovered = false
-      mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
-        if (path === `/api/performance/${endpoint}` && failed)
-          return Promise.reject(new Error('feed offline'))
-        if (path === '/api/performance/stats') {
-          const data = performanceFixture()
-          if (recovered) data.disk_space_info.used_percent = 50
-          return Promise.resolve(data)
-        }
-        if (path === '/api/performance/routing') {
-          const data = routingFixture()
-          if (recovered) data.users[0]!.in_flight = 3
-          return Promise.resolve(data)
-        }
-        return defaultGet(path, ...args)
-      })
-      const view = setup()
-      await flushPromises()
-      failed = true
-      for (const elapsed of [30_000, 60_000]) {
-        vi.setSystemTime(start + elapsed)
-        view.getComponent(OpsStatusHeader).vm.$emit('refresh')
-        await flushPromises()
+  it('keeps server history with a visible read error when the API fails and replaces it after retry', async () => {
+    const defaultGet = mocks.get.getMockImplementation()!
+    let failed = false
+    let disk = 40
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/stats') {
+        if (failed) return Promise.reject(new Error('feed offline'))
+        const data = performanceFixture()
+        data.observability.series.points = [
+          {
+            ts: 900,
+            cpu: null,
+            memory: null,
+            disk,
+            request_mbps: null,
+            response_mbps: null,
+            goroutines: 5,
+            heap_alloc_bytes: 1024,
+          },
+        ]
+        return Promise.resolve(data)
       }
-      failed = false
-      recovered = true
-      vi.setSystemTime(start + 90_000)
-      view.getComponent(OpsStatusHeader).vm.$emit('refresh')
-      await flushPromises()
-      const disks = view
-        .getComponent(OpsResourcesCard)
-        .props('overview')!
-        .series.points.map(({ disk }) => disk)
-      const users = view
-        .getComponent(OpsGatewayCard)
-        .props('overview')!
-        .series.points.map(({ users }) => users)
-      expect(disks).toEqual(
-        endpoint === 'stats' ? [40, null, null, 50] : [40, 40, 40, 50]
-      )
-      expect(users).toEqual(
-        endpoint === 'routing' ? [2, null, null, 3] : [2, 2, 2, 3]
-      )
-    }
-  )
+      return defaultGet(path, ...args)
+    })
+    const view = setup()
+    await flushPromises()
+    failed = true
+    view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+    await flushPromises()
+    const resources = view.getComponent(OpsResourcesCard)
+    expect(resources.props('error')).toBe('feed offline')
+    expect(
+      resources.props('overview')!.series.points.map((point) => point.disk)
+    ).toEqual([40])
+    expect(view.getComponent(OpsGatewayCard).props('error')).toBe('')
+    failed = false
+    disk = 50
+    view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+    await flushPromises()
+    expect(resources.props('error')).toBe('')
+    expect(
+      resources.props('overview')!.series.points.map((point) => point.disk)
+    ).toEqual([50])
+  })
   it('does not sample superseded or aborted routing responses', async () => {
     const start = 1_800_000_000_000
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -490,5 +492,119 @@ describe('historical ops layout with native data', () => {
       .trigger('click')
     await flushPromises()
     expect(view.text()).toContain('fullscreen denied')
+  })
+})
+
+describe('ops permission lifecycle', () => {
+  it.each([
+    ['anonymous', null],
+    ['user', { id: 2, role: 1 }],
+    ['admin', { id: 2, role: 10 }],
+  ] as const)(
+    'does not mount or poll for an initial %s session',
+    async (_label, user) => {
+      vi.useFakeTimers()
+      authState.user = user
+      const view = setup()
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(view.find('[data-ops-page]').exists()).toBe(false)
+      expect(mocks.get).not.toHaveBeenCalled()
+      expect(mocks.getEnvelope).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ['downgrade', { id: 1, role: 1 }],
+    ['logout', null],
+  ] as const)(
+    'hides data and aborts every feed on %s, ignoring late responses',
+    async (_label, user) => {
+      vi.useFakeTimers()
+      const view = setup()
+      await flushPromises()
+      expect(view.find('[data-ops-page]').exists()).toBe(true)
+      const originalGet = mocks.get.getMockImplementation()!
+      const pending: {
+        signal: AbortSignal
+        settle: () => void
+      }[] = []
+      mocks.get.mockImplementation(
+        (path: string, query: unknown, options: { signal: AbortSignal }) =>
+          new Promise((resolve, reject) => {
+            pending.push({
+              signal: options.signal,
+              settle:
+                path === '/api/performance/routing'
+                  ? () => reject(new Error('old routing failure'))
+                  : () => resolve(originalGet(path, query, options)),
+            })
+          })
+      )
+      mocks.getEnvelope.mockImplementation(
+        (_path: string, _query: unknown, options: { signal: AbortSignal }) =>
+          new Promise((resolve) => {
+            pending.push({
+              signal: options.signal,
+              settle: () => resolve({ data: [], total: 0 }),
+            })
+          })
+      )
+      // Include the maintenance feeds as well as all four overview feeds.
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(pending).toHaveLength(6)
+      expect(pending.every(({ signal }) => !signal.aborted)).toBe(true)
+      authState.user = user
+      await nextTick()
+      expect(view.find('[data-ops-page]').exists()).toBe(false)
+      expect(pending.every(({ signal }) => signal.aborted)).toBe(true)
+      for (const { settle } of pending) settle()
+      await flushPromises()
+      const calls =
+        mocks.get.mock.calls.length + mocks.getEnvelope.mock.calls.length
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(view.find('[data-ops-page]').exists()).toBe(false)
+      expect(
+        mocks.get.mock.calls.length + mocks.getEnvelope.mock.calls.length
+      ).toBe(calls)
+    }
+  )
+
+  it('remounts all feeds for a different Root identity without accepting the old response', async () => {
+    const view = setup()
+    await flushPromises()
+    const originalGet = mocks.get.getMockImplementation()!
+    let oldSignal: AbortSignal | undefined
+    let finishOld: (() => void) | undefined
+    mocks.get.mockImplementationOnce(
+      (_path: string, _query: unknown, options: { signal: AbortSignal }) =>
+        new Promise((resolve) => {
+          oldSignal = options.signal
+          finishOld = () => resolve(performanceFixture())
+        })
+    )
+    view.getComponent(OpsStatusHeader).vm.$emit('refresh')
+    await flushPromises()
+    mocks.get.mockImplementation((path: string, ...args: unknown[]) => {
+      if (path === '/api/performance/stats') {
+        const data = performanceFixture()
+        data.observability.resources.disk = measuredResource(65)
+        return Promise.resolve(data)
+      }
+      return originalGet(path, ...args)
+    })
+    const previousResources = view.findComponent(OpsResourcesCard)
+    authState.user = { id: 2, role: 100 }
+    await flushPromises()
+    expect(oldSignal?.aborted).toBe(true)
+    expect(previousResources.exists()).toBe(false)
+    expect(view.get('[data-ops-gauge="disk"]').text()).toContain('65%')
+    expect(
+      mocks.get.mock.calls.filter(([path]) => path === '/api/performance/stats')
+    ).toHaveLength(3)
+    expect(mocks.getEnvelope).toHaveBeenCalledTimes(4)
+    finishOld!()
+    await flushPromises()
+    expect(view.get('[data-ops-gauge="disk"]').text()).toContain('65%')
   })
 })

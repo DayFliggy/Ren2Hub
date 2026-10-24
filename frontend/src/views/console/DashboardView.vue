@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
 import BalanceCard from '@/components/console/dashboard/BalanceCard.vue'
-import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
 import UsageDistributionCard from '@/components/console/dashboard/UsageDistributionCard.vue'
 import TokenTrendCard from '@/components/console/dashboard/TokenTrendCard.vue'
 import ModelDistributionCard from '@/components/console/dashboard/ModelDistributionCard.vue'
@@ -20,6 +19,7 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import { useDashboard } from '@/composables/useDashboard'
+import { useDashboardResources } from '@/composables/useDashboardResources'
 import { useDashboardStats } from '@/composables/useDashboardStats'
 import { useUsageDistribution } from '@/composables/useUsageDistribution'
 import type { StatsRange } from '@/composables/useDashboardStats'
@@ -38,12 +38,10 @@ const {
   flushIntervalMinutes,
   recentOutOfRange,
   usageUnavailable,
-  system,
-  limits,
-  discounts,
   error: dashboardError,
   load,
 } = useDashboard()
+const resources = useDashboardResources()
 const statsComposable = useDashboardStats()
 const distribution = useUsageDistribution()
 
@@ -165,13 +163,16 @@ const rangeOptions = computed(() => [
         v-if="activeTab === 'overview'"
         class="sibling-space-y-4 sm:sibling-space-y-5"
       >
-        <!-- KPI strip — 4 clickable chips, jumps to Stats tab -->
+        <!-- Usage drill-downs and independently loaded request limits. -->
         <OverviewKpiStrip
           :stats="stats"
           :flow="flow"
           :token-trend="tokenTrend"
-          :limits="limits"
+          :limits="resources.limits.value"
+          :limits-loading="resources.limitsLoading.value"
+          :limits-error="resources.limitsError.value"
           :loading="loading"
+          @retry-limits="resources.loadLimits"
           @switch-tab="activeTab = $event"
         />
 
@@ -184,7 +185,7 @@ const rangeOptions = computed(() => [
         />
 
         <div v-else class="grid gap-4 sm:gap-5 xl:grid-cols-3">
-          <!-- 总额度（限速已并入 KPI 条的 RPM 格） -->
+          <!-- Wallet and usage are independent of supplemental resource reads. -->
           <BalanceCard
             class="min-w-0"
             :quota="stats?.quota ?? null"
@@ -204,10 +205,18 @@ const rangeOptions = computed(() => [
           />
 
           <!-- 系统状态 -->
-          <SystemStatusCard class="min-w-0" :metrics="system" />
+          <SystemStatusCard
+            v-if="auth.isRoot"
+            class="min-w-0"
+            :metrics="resources.system.value"
+            :loading="resources.systemLoading.value"
+            :error="resources.systemError.value"
+            @refresh="resources.loadSystem"
+          />
           <!-- Token 使用趋势 -->
           <TokenTrendCard
-            class="min-w-0 xl:col-span-2"
+            class="min-w-0"
+            :class="auth.isRoot ? 'xl:col-span-2' : 'xl:col-span-3'"
             :points="tokenTrend"
             :flush-interval-minutes="flushIntervalMinutes"
             :loading="loading"
@@ -218,11 +227,9 @@ const rangeOptions = computed(() => [
             "
           />
 
-          <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
-          <DiscountCard class="min-w-0" :discounts="discounts" />
           <!-- 模型消费分布 -->
           <ModelDistributionCard
-            class="min-w-0 xl:col-span-2"
+            class="min-w-0 xl:col-span-3"
             :items="share"
             :loading="loading"
             :unavailable-reason="

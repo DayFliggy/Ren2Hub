@@ -69,12 +69,12 @@ func (u *containerUsage) cpuSaturation(now time.Time) (float64, bool) {
 	return usedCores / limitCores * 100, true
 }
 
-// memoryUsage 返回容器内存工作集相对上限的使用率（百分比）。
+// memoryWorkingSet 返回容器内存工作集和配额（字节），供使用率与容量共同使用。
 // 工作集 = 用量 - 非活跃文件缓存，与 docker stats、kubelet 一致：用量包含可回收的
 // 页缓存，写日志或文件后会长期贴近上限，不代表内存压力。
 // ok=false 时调用方回退宿主机口径（同样不含缓存）：内存未限制、文件不可读、
 // 或 memory.stat 缺少非活跃缓存字段。宁可回退旧口径，也不把含缓存的用量当作压力。
-func (u *containerUsage) memoryUsage() (float64, bool) {
+func (u *containerUsage) memoryWorkingSet() (uint64, uint64, bool) {
 	usagePath := filepath.Join(u.cgroupRoot, "memory.current")
 	limitPath := filepath.Join(u.cgroupRoot, "memory.max")
 	statPath := filepath.Join(u.cgroupRoot, "memory.stat")
@@ -90,19 +90,19 @@ func (u *containerUsage) memoryUsage() (float64, bool) {
 	// cgroup v2 未限制时 memory.max 为 "max"，解析失败即视为不可用。
 	limit, ok := readCgroupUint(limitPath)
 	if !ok || limit == 0 || limit >= unlimitedMemoryBytes {
-		return 0, false
+		return 0, 0, false
 	}
 	usage, ok := readCgroupUint(usagePath)
 	if !ok {
-		return 0, false
+		return 0, 0, false
 	}
 	inactiveFile, ok := readCgroupStatValue(statPath, inactiveFileKey)
 	if !ok {
-		return 0, false
+		return 0, 0, false
 	}
 	// 用量与 memory.stat 不是同一时刻的快照，缓存可能短暂大于用量，按 0 处理防止下溢。
 	workingSet := usage - min(inactiveFile, usage)
-	return float64(workingSet) / float64(limit) * 100, true
+	return workingSet, limit, true
 }
 
 // readCgroupCPUQuotaCores 返回 cgroup CPU 配额（核）。ok=false 表示未限制或不可读。

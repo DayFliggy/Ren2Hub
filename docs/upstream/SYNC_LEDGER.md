@@ -2,6 +2,16 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+## 2026-10-24 本地修复、独有观测与普通 API Key 计数
+
+从 Ren2Hub `6e4539904d649f892cb7d2f61ea5fedc8c5198bb` 实施用户批准的日志、观测、Dashboard 和原生计数批次；历史参考为 `9a63062227c31ba54a6346e07ee8b4fd8802f22f`。NewAPI 核心仍冻结在 `206e0fa5c600127a314a97f88592c067f784f4a6`，另核对固定快照 `33c61a24234aa20cb10e8a644304322c476361de`，没有整包升级。Sub2API `a34f373973bf547ccec301c7405eb45194e1f28a` 仅择取普通 API Key 真实计数合同；AxonHub `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` 的图片变体转换仍是候选，本轮不开放。
+
+日志采用当前取消/序列机制消除失败和筛选交错下的旧结果；观测以当前 performance 扩展的唯一缓存快照提供资源范围、探测、GC、HTTP body 吞吐及实例历史，不恢复旧评分/队列/账务。Root 运维权限保持；Dashboard 请求限制来自实际限流配置，移除统一折扣空卡和 Alchemy 占位。Claude/Gemini 两版本计数使用独立真实转发，复用现有权限/路由/限流/并发，不进入生成或估算成功回退。修复前 Gemini `/v1` 计数误走生成及预扣退款已由本地 mock 复现，没有真实供应商成本。
+
+唯一维护位置、来源取舍、兼容边界、上游替换条件及验证状态见[本轮记录](LOCAL_REPAIRS_20261024.md)。10 组共同缺陷沿用[待上游台账](UPSTREAM_KNOWN_ISSUES_20261024.md)，新增缓存全部清理假成功与任务通用测试证据；登记不等于修复。D 类、其余未实现协议和部署不扩入；未提交阶段 `candidate_sha=null`，整合验证由主代理收尾，不以本账本表示已发布。
+
+发布前独立审计另修正本地计数的渠道头覆盖遗漏与工具 JSON 误拒绝，复用现行头规则并限定协议引用位置；五包 24 个顶层/85 个含子用例及 relay/router vet 通过，详见本轮记录的“发布前审计修正”。来源基线和等待上游政策不变。
+
 ## 2026-10-24 Vue 前端审计修复
 
 从 `79e237455262fcb652379e13965ce86fb1a4eefa` 按已批准计划处理 A、B、E 类本地问题，冻结 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6`。实施与验证见[本轮记录](FRONTEND_FIXES_20261024.md)，共同缺陷统一维护在[待上游台账](UPSTREAM_KNOWN_ISSUES_20261024.md)，本账本不复制条目。C、D、延后项及退役项不扩入，无后端 API、status 或数据库合同改动，不代表应用部署。

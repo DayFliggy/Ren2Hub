@@ -12,7 +12,6 @@ import {
 
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
 import OverviewKpiStrip from '@/components/console/dashboard/OverviewKpiStrip.vue'
-import RpmRing from '@/components/console/dashboard/RpmRing.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type {
   DashboardStats,
@@ -93,16 +92,20 @@ describe('OverviewKpiStrip', () => {
     expect(requests.text()).not.toContain('Today requests')
   })
 
-  it('draws a sparkline for each series cell and a ring for RPM', () => {
+  it('draws sparklines only for measured usage series', () => {
     const wrapper = render({
       flow: flowPoints,
       tokenTrend: [trendPoint({ date: '2026-07-25' }), trendPoint()],
-      limits: { rate_limit: 300, current_rpm: 141 },
+      limits: {
+        enabled: true,
+        window_minutes: 5,
+        total_requests: 300,
+        successful_requests: 250,
+      },
     })
 
-    // Spend, requests, tokens and TPM get a line; RPM gets the ring instead.
+    // Limits describe configuration, so they have no fabricated trend.
     expect(wrapper.findAllComponents(MiniSparkline)).toHaveLength(4)
-    expect(wrapper.findAllComponents(RpmRing)).toHaveLength(1)
   })
 
   it('omits a sparkline when a series has too few points to draw', () => {
@@ -114,20 +117,84 @@ describe('OverviewKpiStrip', () => {
     expect(wrapper.findAllComponents(MiniSparkline)).toHaveLength(0)
   })
 
-  it('states the ceiling under the RPM figure', () => {
+  it('keeps the real limit window and its two ceilings', () => {
     const wrapper = render({
-      limits: { rate_limit: 300, current_rpm: 141 },
+      limits: {
+        enabled: true,
+        window_minutes: 5,
+        total_requests: 300,
+        successful_requests: 250,
+      },
     })
-
-    expect(wrapper.text()).toContain('of 300 RPM')
+    const cell = wrapper.get('[data-kpi-cell="requestLimits"]')
+    expect(cell.text()).toContain('5-minute window')
+    expect(cell.text()).toContain('Total: 300')
+    expect(cell.text()).toContain('Successful: 250')
+    expect(cell.text()).not.toContain('RPM')
   })
 
-  it('labels an unmetered group instead of showing a ceiling', () => {
-    const wrapper = render({
-      limits: { rate_limit: 0, current_rpm: 118 },
-    })
+  it('treats nonpositive ceilings as unlimited independently', () => {
+    const cell = render({
+      limits: {
+        enabled: true,
+        window_minutes: 2,
+        total_requests: 0,
+        successful_requests: -1,
+      },
+    }).get('[data-kpi-cell="requestLimits"]')
+    expect(cell.text()).toContain('Total: Unlimited')
+    expect(cell.text()).toContain('Successful: Unlimited')
+  })
 
-    expect(wrapper.text()).toContain('Unmetered')
+  it('does not describe disabled limits as an active window', () => {
+    const cell = render({
+      limits: {
+        enabled: false,
+        window_minutes: 5,
+        total_requests: 300,
+        successful_requests: 250,
+      },
+    }).get('[data-kpi-cell="requestLimits"]')
+    expect(cell.text()).toContain('Not enabled')
+    expect(cell.text()).not.toContain('5-minute window')
+    expect(cell.text()).not.toContain('Total:')
+  })
+
+  it.each([0, -1])(
+    'reports an invalid enabled window of %s',
+    (window_minutes) => {
+      const cell = render({
+        limits: {
+          enabled: true,
+          window_minutes,
+          total_requests: 300,
+          successful_requests: 250,
+        },
+      }).get('[data-kpi-cell="requestLimits"]')
+      expect(cell.text()).toContain('Invalid time window')
+      expect(cell.text()).not.toContain('Total:')
+    }
+  )
+
+  it('loads the request limits independently of usage', () => {
+    const wrapper = render({ limitsLoading: true })
+    expect(
+      wrapper
+        .get('[data-kpi-cell="requestLimits"]')
+        .find('.animate-pulse')
+        .exists()
+    ).toBe(true)
+    expect(wrapper.get('[data-kpi-cell="requests"]').text()).toContain('312')
+  })
+
+  it('retries only limits after a supplemental failure', async () => {
+    const wrapper = render({ limitsError: 'settings unavailable' })
+    const cell = wrapper.get('[data-kpi-cell="requestLimits"]')
+    expect(cell.text()).toContain('Failed to load')
+    await cell.get('button').trigger('click')
+    expect(wrapper.emitted('retryLimits')).toEqual([[]])
+    expect(wrapper.emitted('switchTab')).toBeUndefined()
+    expect(wrapper.get('[data-kpi-cell="requests"]').text()).toContain('312')
   })
 
   it("reads today's tokens from the today window when the trend is skipped", () => {
@@ -148,30 +215,22 @@ describe('OverviewKpiStrip', () => {
 
   it('marks the rate-limit cell as not provided when limits are null', () => {
     const wrapper = render({ limits: null, loading: true })
-    const cell = wrapper.find('[data-kpi-cell="rpm"]')
+    const cell = wrapper.find('[data-kpi-cell="requestLimits"]')
 
-    expect(cell.find('.display-number').text()).toBe('--')
     expect(cell.text()).toContain('Not provided')
-    // No fabricated reading: no "unmetered" ceiling and no ring.
+    // A missing response is distinct from unlimited configuration.
     expect(cell.text()).not.toContain('Unmetered')
-    expect(wrapper.findAllComponents(RpmRing)).toHaveLength(0)
   })
 
   it('reads 未提供 for null limits in Chinese', async () => {
     await setLocale('zh-CN')
-    const text = render({ limits: null }).find('[data-kpi-cell="rpm"]').text()
+    const text = render({ limits: null })
+      .find('[data-kpi-cell="requestLimits"]')
+      .text()
     await setLocale('en')
 
     expect(text).toContain('未提供')
     expect(text).not.toContain('不限速')
-  })
-
-  it('reads the observed RPM from limits', () => {
-    const wrapper = render({
-      limits: { rate_limit: 300, current_rpm: 141 },
-    })
-
-    expect(wrapper.text()).toContain('141')
   })
 
   it('floors the TPM divisor at one hour so just-after-midnight is not absurd', () => {
@@ -195,10 +254,13 @@ describe('OverviewKpiStrip', () => {
   })
 
   it('only makes the spend and request cells drill down', () => {
-    // Passing limits so the ring's own button is present — the count must not
-    // include it, which is what a bare findAll('button') would do.
     const wrapper = render({
-      limits: { rate_limit: 300, current_rpm: 141 },
+      limits: {
+        enabled: true,
+        window_minutes: 5,
+        total_requests: 300,
+        successful_requests: 250,
+      },
     })
 
     const drillDowns = wrapper
@@ -215,16 +277,6 @@ describe('OverviewKpiStrip', () => {
     await wrapper.findAll('[class*="px-5"]')[0]!.trigger('click')
 
     expect(wrapper.emitted('switchTab')).toEqual([['stats']])
-  })
-
-  it('does not drill down when the rate-limit ring is focused', async () => {
-    const wrapper = render({
-      limits: { rate_limit: 300, current_rpm: 141 },
-    })
-
-    await wrapper.findComponent(RpmRing).find('button').trigger('click')
-
-    expect(wrapper.emitted('switchTab')).toBeUndefined()
   })
 
   it('always pairs a divider width with the theme border colour', () => {

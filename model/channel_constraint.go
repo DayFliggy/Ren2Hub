@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 )
 
 var filterEvalOrder = []dto.ChannelFilterKind{
@@ -42,6 +43,9 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 	case dto.FilterTokenRoute:
 		return slices.Contains(filter.ChannelIDs, ch.Id)
 	case dto.FilterRequestPath:
+		if nativeType := relayconstant.NativeCountChannelType(filter.RequestPath); nativeType != 0 {
+			return ch.Type == nativeType
+		}
 		if filter.RequestPath == "" {
 			return true
 		}

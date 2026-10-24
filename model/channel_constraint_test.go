@@ -116,3 +116,20 @@ func TestChannelSatisfiesFilters(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, dto.FilterRequestPath, kind)
 }
+
+func TestNativeCountFiltersOnlyProviderAPIKeyChannels(t *testing.T) {
+	for _, route := range []struct {
+		path     string
+		provider int
+	}{
+		{"/v1/messages/count_tokens", constant.ChannelTypeAnthropic},
+		{"/v1/models/gemini-2.5-flash:countTokens", constant.ChannelTypeGemini},
+		{"/v1beta/models/gemini-2.5-flash:countTokens", constant.ChannelTypeGemini},
+	} {
+		for _, provider := range []int{constant.ChannelTypeAnthropic, constant.ChannelTypeGemini, constant.ChannelTypeVertexAi, constant.ChannelTypeOpenAI, constant.ChannelTypeAdvancedCustom, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI, constant.ChannelTypeTaskPlugin} {
+			ch := &Channel{Id: provider, Type: provider, Status: common.ChannelStatusEnabled}
+			ok, _ := ChannelSatisfiesFilters(ch, "shared-model", []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: route.path}})
+			require.Equal(t, provider == route.provider, ok, "path=%s provider=%d", route.path, provider)
+		}
+	}
+}

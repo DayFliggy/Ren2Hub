@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -463,6 +464,7 @@ func buildSelfUserData(user *model.User) map[string]any {
 		"quota":             user.Quota,
 		"used_quota":        user.UsedQuota,
 		"request_count":     user.RequestCount,
+		"request_limits":    setting.CurrentModelRequestLimits(),
 		"aff_code":          user.AffCode,
 		"aff_count":         user.AffCount,
 		"aff_quota":         user.AffQuota,

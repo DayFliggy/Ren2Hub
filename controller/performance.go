@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -81,6 +82,11 @@ type PerformanceConfig struct {
 
 // GetPerformanceStats 获取性能统计信息
 func GetPerformanceStats(c *gin.Context) {
+	observation, err := service.ReadPerformanceObservation(c.DefaultQuery("window", "1h"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	// 不再每次获取统计都全量扫描磁盘，依赖原子计数器保证性能
 	// 仅在系统启动或显式清理时同步
 	cacheStats := common.GetDiskCacheStats()
@@ -132,7 +138,7 @@ func GetPerformanceStats(c *gin.Context) {
 		DiskSpaceInfo: diskSpaceInfo,
 		Config:        config,
 	}
-	stats.PerformanceStatsExtension = newPerformanceStatsExtension()
+	stats.PerformanceStatsExtension = newPerformanceStatsExtension(observation)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

@@ -5,19 +5,19 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import CpuLoadCells, {
-  type CpuLoadCell,
-} from '@/components/console/dashboard/CpuLoadCells.vue'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
-import PrecisionTickDial from '@/components/console/dashboard/PrecisionTickDial.vue'
-import type { SystemMetrics } from '@/composables/useDashboard'
+import type { Observability, ResourceObservation } from '@/api/observability'
+import { formatTime } from '@/utils/format'
 import { useAppStore } from '@/stores'
 
 const props = defineProps<{
-  metrics?: SystemMetrics | null
+  metrics?: Observability | null
+  loading?: boolean
+  error?: string | null
 }>()
 
+const emit = defineEmits<{ refresh: [] }>()
 const { t } = useI18n()
 const { phase, statusReachable, versionLabel } = storeToRefs(useAppStore())
 const metricsAvailable = computed(
@@ -83,16 +83,6 @@ function clampPercent(value: number | null | undefined): number | null {
   return finite === null ? null : Math.min(100, finite)
 }
 
-function ratioPercent(
-  used: number | null | undefined,
-  total: number | null | undefined
-): number | null {
-  const safeUsed = finiteNonNegative(used)
-  const safeTotal = finiteNonNegative(total)
-  if (safeUsed === null || safeTotal === null || safeTotal <= 0) return null
-  return Math.min(100, (safeUsed / safeTotal) * 100)
-}
-
 type LoadTier = 'idle' | 'normal' | 'notice' | 'warning' | 'danger'
 
 /**
@@ -117,7 +107,7 @@ function loadTone(tier: LoadTier): Tone {
 }
 
 /**
- * 统一 5 档资源负载语义色彩梯度 (CPU / 内存 / 磁盘 / 负载格):
+ * 统一 5 档资源负载语义色彩梯度 (CPU / 内存 / 磁盘):
  * - <= 30%: 空闲
  * - 30% ~ 60%: 正常
  * - 60% ~ 75%: 关注
@@ -131,14 +121,6 @@ function resourceLoadTone(percent: number | null): Tone {
   if (percent > 60) return loadTone('notice')
   if (percent > 30) return loadTone('normal')
   return loadTone('idle')
-}
-
-/** Success rate reads the other way round — high is good. */
-function rateTone(percent: number | null): Tone {
-  if (percent === null) return UNKNOWN_TONE
-  if (percent >= 99) return loadTone('normal')
-  if (percent >= 95) return loadTone('warning')
-  return loadTone('danger')
 }
 
 function formatMetric(value: number): string {
@@ -157,7 +139,7 @@ function formatBandwidth(valueMbps: number): string {
 
 /**
  * Used and total in one unit with at most three significant figures, so the
- * reading fits its tile. The API reports binary GB, so a TB is 1024 of them.
+ * reading fits its tile. Resource byte counts are converted to GiB; a TiB is 1024 GiB.
  */
 function storageReading(
   used: number | null,
@@ -170,72 +152,41 @@ function storageReading(
   return {
     used: format(used / scale),
     total: format(total / scale),
-    unit: scale === 1 ? 'GB' : 'TB',
+    unit: scale === 1 ? 'GiB' : 'TiB',
   }
 }
 
-function normalizeSeries(
-  series: SystemMetrics['bandwidth_series'] | undefined
-): { down: number[]; up: number[] } | undefined {
-  if (!series || !Array.isArray(series.up) || !Array.isArray(series.down)) {
+function trafficSeries(): { down: number[]; up: number[] } | undefined {
+  if (!props.metrics || props.metrics.stale) return undefined
+  const points = props.metrics.series.points.slice(-12)
+  if (
+    points.length < 2 ||
+    points.some((p) => p.request_mbps === null || p.response_mbps === null)
+  )
     return undefined
+  return {
+    up: points.map((p) => p.request_mbps!),
+    down: points.map((p) => p.response_mbps!),
   }
-
-  if (series.up.length !== series.down.length || series.up.length < 2) {
-    return undefined
-  }
-
-  const up: number[] = []
-  const down: number[] = []
-  for (let index = 0; index < series.up.length; index += 1) {
-    const safeUp = finiteNonNegative(series.up[index])
-    const safeDown = finiteNonNegative(series.down[index])
-    if (safeUp === null || safeDown === null) return undefined
-    up.push(safeUp)
-    down.push(safeDown)
-  }
-
-  return up.length >= 2 ? { up, down } : undefined
 }
 
-function cpuCoreCount(value: number | null | undefined): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
-    ? value
-    : null
+function observed(resource: ResourceObservation | undefined) {
+  return Boolean(
+    resource?.available &&
+    ['ok', 'warning', 'critical'].includes(resource.state) &&
+    !props.metrics?.stale
+  )
 }
-
-/** Two decimals as uptime prints them; fewer once the figure grows, so a
- * reading still fits the stretched cell. */
-function formatLoad(value: number): string {
-  if (value >= 100) return value.toFixed(0)
-  if (value >= 10) return value.toFixed(1)
-  return value.toFixed(2)
+function resourceCaption(resource: ResourceObservation | undefined) {
+  if (!resource) return t('dashboard.notProvided')
+  const scope = t(`dashboard.systemStatus.scope.${resource.scope}`)
+  const state = t(
+    `dashboard.systemStatus.state.${props.metrics?.stale ? 'stale' : resource.state}`
+  )
+  const sample =
+    resource.sampled_at === null ? '' : formatTime(resource.sampled_at)
+  return `${scope} · ${state}${sample ? ` · ${sample}` : ''}`
 }
-
-/** 1 / 5 / 15 min cells, each measured against the core count with the same
- * five-tier colours as CPU usage. */
-function buildLoadCells(
-  load: SystemMetrics['load_average'] | undefined,
-  cores: number | null
-): CpuLoadCell[] {
-  const readings = [load?.one, load?.five, load?.fifteen]
-  return [1, 5, 15].map((minutes, index) => {
-    const value = finiteNonNegative(readings[index])
-    if (value === null) {
-      const color = 'var(--text-tertiary)'
-      return { minutes, value: null, fill: null, color, overloaded: false }
-    }
-    const fill = cores === null ? null : value / cores
-    return {
-      minutes,
-      value: formatLoad(value),
-      fill,
-      color: resourceLoadTone(fill === null ? null : fill * 100).fill,
-      overloaded: fill !== null && fill > 1,
-    }
-  })
-}
-
 interface MetricTile {
   key: 'cpu' | 'memory' | 'bandwidth' | 'disk'
   label: string
@@ -247,8 +198,7 @@ interface MetricTile {
   bandwidth?: { up: string; down: string }
   /** Memory and disk: used and total in one unit. */
   storage?: { used: string; total: string; unit: string }
-  /** CPU only: host load per averaging window and the core count it scales to. */
-  load?: { cells: CpuLoadCell[]; cores: number | null }
+  caption: string
   /** 0-100 usage against a ceiling; null when the metric is unavailable. */
   percent: number | null
   /** Shared-scale throughput history, for metrics with no ceiling. */
@@ -258,21 +208,29 @@ interface MetricTile {
 
 const tiles = computed<MetricTile[]>(() => {
   const metrics = props.metrics
-  const memoryUsed = finiteNonNegative(metrics?.memory_used_gb)
-  const memoryTotal = finiteNonNegative(metrics?.memory_total_gb)
-  const diskUsed = finiteNonNegative(metrics?.disk_used_gb)
-  const diskTotal = finiteNonNegative(metrics?.disk_total_gb)
-  const cpuPercent = clampPercent(metrics?.cpu_percent)
-  const cpuCores = cpuCoreCount(metrics?.cpu_cores)
-  const memoryPercent = ratioPercent(memoryUsed, memoryTotal)
-  const diskPercent = ratioPercent(diskUsed, diskTotal)
-  const bandwidthUp = finiteNonNegative(metrics?.bandwidth_up_mbps)
-  const bandwidthDown = finiteNonNegative(metrics?.bandwidth_down_mbps)
+  const cpu = metrics?.resources.cpu
+  const memory = metrics?.resources.memory
+  const disk = metrics?.resources.disk
+  const gib = (value: number | null | undefined) =>
+    value == null ? null : value / 1024 ** 3
+  const memoryUsed = observed(memory) ? gib(memory?.used_bytes) : null
+  const memoryTotal = observed(memory) ? gib(memory?.total_bytes) : null
+  const diskUsed = observed(disk) ? gib(disk?.used_bytes) : null
+  const diskTotal = observed(disk) ? gib(disk?.total_bytes) : null
+  const cpuPercent = observed(cpu) ? finiteNonNegative(cpu?.percent) : null
+  const memoryPercent = observed(memory) ? clampPercent(memory?.percent) : null
+  const diskPercent = observed(disk) ? clampPercent(disk?.percent) : null
+  const bandwidthUp = metrics?.stale
+    ? null
+    : finiteNonNegative(metrics?.traffic.request_mbps)
+  const bandwidthDown = metrics?.stale
+    ? null
+    : finiteNonNegative(metrics?.traffic.response_mbps)
   const bandwidth =
-    bandwidthUp !== null && bandwidthDown !== null
+    bandwidthUp !== null || bandwidthDown !== null
       ? {
-          up: formatBandwidth(bandwidthUp),
-          down: formatBandwidth(bandwidthDown),
+          up: bandwidthUp === null ? '--' : formatBandwidth(bandwidthUp),
+          down: bandwidthDown === null ? '--' : formatBandwidth(bandwidthDown),
         }
       : undefined
 
@@ -283,10 +241,7 @@ const tiles = computed<MetricTile[]>(() => {
       icon: 'M4 4h16v16H4zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3M9 9h6v6H9z',
       value: cpuPercent === null ? '--' : formatMetric(cpuPercent),
       unit: cpuPercent === null ? '' : '%',
-      load: {
-        cells: buildLoadCells(metrics?.load_average, cpuCores),
-        cores: cpuCores,
-      },
+      caption: resourceCaption(cpu),
       percent: cpuPercent,
       tone: resourceLoadTone(cpuPercent),
     },
@@ -297,6 +252,7 @@ const tiles = computed<MetricTile[]>(() => {
       value: '--',
       unit: '',
       storage: storageReading(memoryUsed, memoryTotal),
+      caption: resourceCaption(memory),
       percent: memoryPercent,
       tone: resourceLoadTone(memoryPercent),
     },
@@ -307,7 +263,8 @@ const tiles = computed<MetricTile[]>(() => {
       unit: '',
       bandwidth,
       percent: null,
-      series: normalizeSeries(metrics?.bandwidth_series),
+      series: trafficSeries(),
+      caption: t('dashboard.systemStatus.trafficScope'),
       tone: resourceLoadTone(null),
     },
     {
@@ -317,6 +274,7 @@ const tiles = computed<MetricTile[]>(() => {
       value: '--',
       unit: '',
       storage: storageReading(diskUsed, diskTotal),
+      caption: resourceCaption(disk),
       percent: diskPercent,
       tone: resourceLoadTone(diskPercent),
     },
@@ -331,7 +289,7 @@ const tiles = computed<MetricTile[]>(() => {
 const CPU_NEEDLE_LENGTH = 18
 
 const cpuGauge = computed(() => {
-  const percent = tiles.value[0]?.percent ?? null
+  const percent = clampPercent(tiles.value[0]?.percent)
   if (percent === null) return null
   const angle = Math.PI - (percent / 100) * Math.PI
   return {
@@ -363,12 +321,6 @@ function memorySegmentStyle(
     '--mark-glow': fill >= 1 ? color : 'transparent',
   }
 }
-
-/** Success rate reads out in the header, so it is not one of the tiles. */
-const successRate = computed(() =>
-  clampPercent(props.metrics?.api_success_rate)
-)
-const successTone = computed(() => rateTone(successRate.value))
 </script>
 
 <template>
@@ -409,42 +361,38 @@ const successTone = computed(() => rateTone(successRate.value))
     </template>
 
     <template #action>
-      <div class="flex items-center gap-2">
-        <div class="text-right">
-          <p
-            class="success-rate-label text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
-          >
-            {{ t('dashboard.systemStatus.successRate') }}
-            <span v-if="!metricsAvailable" class="text-xs">
-              · {{ t('dashboard.notProvided') }}</span
-            >
-          </p>
-          <!-- The server reports no rate until the last hour holds enough
-               relay requests to measure one. -->
-          <p
-            v-if="successRate === null"
-            class="success-rate-value text-xs font-medium leading-none text-[var(--text-tertiary)]"
-            data-success-rate-empty
-          >
-            {{ t(metricsAvailable ? 'common.none' : 'dashboard.notProvided') }}
-          </p>
-          <p
-            v-else
-            class="success-rate-value text-sm font-bold leading-none tabular-nums"
-            :style="{ color: successTone.text }"
-          >
-            {{ formatMetric(successRate) }}%
-          </p>
-        </div>
-        <PrecisionTickDial
-          :percent="successRate"
-          :color="successTone.fill"
-          :size="38"
-          :style="{ '--mark-glow': successTone.fill }"
-        />
-      </div>
+      <button
+        type="button"
+        class="text-xs text-[var(--accent-text)] disabled:opacity-50"
+        :disabled="loading"
+        @click="emit('refresh')"
+      >
+        {{
+          t(
+            loading
+              ? 'dashboard.loading'
+              : error
+                ? 'common.retry'
+                : 'dashboard.systemStatus.refresh'
+          )
+        }}
+      </button>
     </template>
 
+    <p
+      v-if="error"
+      role="alert"
+      class="px-4 py-2 text-sm text-[var(--status-danger-text)]"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-else-if="metrics?.stale"
+      role="status"
+      class="px-4 py-2 text-sm text-[var(--status-warning-text)]"
+    >
+      {{ t('dashboard.systemStatus.state.stale') }}
+    </p>
     <div class="flex grow flex-col px-4 pt-2.5 pb-2.5 sm:px-5 sm:pt-3 sm:pb-3">
       <div
         class="mb-2.5 grid grid-cols-2 content-start gap-2 sm:mb-3 sm:gap-2.5"
@@ -453,7 +401,7 @@ const successTone = computed(() => rateTone(successRate.value))
         <div
           v-for="tile in tiles"
           :key="tile.key"
-          class="relative flex h-[5.5rem] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 sm:h-[5.75rem] sm:px-3 sm:py-2"
+          class="relative flex min-h-[6.5rem] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 sm:min-h-[6.75rem] sm:px-3 sm:py-2"
           :class="{ 'overflow-hidden': tile.key !== 'cpu' }"
           data-system-status-tile
           :data-metric="tile.key"
@@ -487,9 +435,6 @@ const successTone = computed(() => rateTone(successRate.value))
               </svg>
               <span class="truncate">{{ tile.label }}</span>
             </p>
-            <!-- CPU's headline is already the percentage; a rounded badge would
-                 repeat it and could disagree with it (4.6% vs 5%). Its slot holds
-                 the load cells instead. -->
             <span
               v-if="tile.percent !== null && tile.key !== 'cpu'"
               class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[0.625rem] font-semibold tabular-nums sm:px-1.5"
@@ -501,11 +446,6 @@ const successTone = computed(() => rateTone(successRate.value))
             >
               {{ Math.round(tile.percent) }}%
             </span>
-            <CpuLoadCells
-              v-else-if="tile.load"
-              :cells="tile.load.cells"
-              :cores="tile.load.cores"
-            />
           </div>
 
           <!-- The figure keeps its width; the decorative gauge shrinks first. -->
@@ -648,13 +588,15 @@ const successTone = computed(() => rateTone(successRate.value))
                     data-bandwidth-direction="up"
                     class="shrink-0 whitespace-nowrap text-[var(--text-tertiary)]"
                   >
-                    ↑{{ tile.bandwidth.up }}
+                    {{ t('dashboard.systemStatus.requests') }}
+                    {{ tile.bandwidth.up }}
                   </span>
                   <span
                     data-bandwidth-direction="down"
                     class="shrink-0 whitespace-nowrap text-[var(--text-primary)]"
                   >
-                    ↓{{ tile.bandwidth.down }}
+                    {{ t('dashboard.systemStatus.responses') }}
+                    {{ tile.bandwidth.down }}
                   </span>
                 </template>
                 <span v-else class="text-[var(--text-tertiary)]">--</span>
@@ -726,8 +668,27 @@ const successTone = computed(() => rateTone(successRate.value))
               :indeterminate="tile.percent === null"
             />
           </div>
+          <p
+            class="mt-1 text-[0.625rem] leading-tight text-[var(--text-tertiary)]"
+            data-resource-caption
+          >
+            {{ tile.caption }}
+          </p>
         </div>
       </div>
+      <p
+        class="mb-2 text-[0.625rem] text-[var(--text-tertiary)]"
+        data-resource-sampled-at
+      >
+        {{
+          t('dashboard.systemStatus.sampledAt', {
+            time:
+              metrics?.sampled_at == null
+                ? t('dashboard.notProvided')
+                : formatTime(metrics.sampled_at),
+          })
+        }}
+      </p>
 
       <div
         class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2 text-[0.6875rem] sm:pt-2.5"
@@ -771,7 +732,7 @@ const successTone = computed(() => rateTone(successRate.value))
 }
 
 /* Tile figures size by card width too: in the three-column desktop grid the
-   card is narrower than on a phone. The longest readings ("87.4 / 94.2 GB",
+   card is narrower than on a phone. The longest readings ("87.4 / 94.2 GiB",
    "45.6 %" beside a 40px gauge) fit 24px only from a 344px card. */
 .status-headline {
   font-size: 1.125rem;
@@ -784,53 +745,14 @@ const successTone = computed(() => rateTone(successRate.value))
 }
 
 /* Glow is a night-theme accent; day tiles stay flat. The filled part of every
-   main gauge (CPU arc, disk ring, full memory segments, active success ticks)
+   main gauge (CPU arc, disk ring and full memory segments)
    takes the same faint glow in its own colour, so no gauge stands out from the
-   others. The small load cells stay flat. */
+   others. */
 html.dark [data-cpu-gauge-active],
 html.dark [data-disk-gauge] :deep(circle[stroke-linecap]),
-html.dark [data-success-rate-ring] :deep(.tick-active),
 html.dark .memory-segment {
   filter: drop-shadow(
     0 0 3px color-mix(in srgb, var(--mark-glow) 40%, transparent)
   );
-}
-
-/* An absolutely positioned label drops this margin with it. */
-.success-rate-label {
-  margin-bottom: 4px;
-}
-
-/* A tight header first drops the caption from the layout, keeping it readable
-   to assistive technology, then the decorative dial; the rate always shows.
-   Breakpoints are the measured card widths each layout needs, with slack:
-   Chinese 289px with the caption; English 362px, 320px without the caption
-   and 274px without the dial. */
-@container (max-width: 299px) {
-  .success-rate-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-@container (max-width: 365px) {
-  .success-rate-label:lang(en) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-@container (max-width: 323px) {
-  [data-success-rate-ring]:lang(en) {
-    display: none;
-  }
 }
 </style>

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
+import { performanceFixture } from '../../src/api/__tests__/opsFixtures'
 import {
   nativeModelCatalog,
   nativeUsageSummary,
@@ -76,6 +77,12 @@ export function nativeUser(
     quota: 5000000,
     used_quota: 1000000,
     request_count: 4,
+    request_limits: {
+      enabled: true,
+      window_minutes: 5,
+      total_requests: 100,
+      successful_requests: 80,
+    },
     max_concurrency: 0,
     aff_frozen_quota: 500000,
     created_at: 1781928000,
@@ -610,20 +617,7 @@ export async function nativeCoreFixture(
           },
         ],
       })
-    if (path === '/api/performance/stats')
-      return ok({
-        memory_stats: {
-          alloc: 1024,
-          total_alloc: 2048,
-          sys: 4096,
-          num_gc: 1,
-          num_goroutine: 8,
-        },
-        cache_stats: {},
-        disk_cache_info: {},
-        disk_space_info: {},
-        config: {},
-      })
+    if (path === '/api/performance/stats') return ok(performanceFixture())
     if (path === '/api/system-task/list')
       return route.fulfill({ json: { success: true, data: [], total: 0 } })
     if (path === '/api/option/')

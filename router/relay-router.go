@@ -1,8 +1,6 @@
 package router
 
 import (
-	"strings"
-
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
@@ -85,8 +83,7 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.Use(middleware.Distribute())
 
 		// claude related routes
-		// TODO: /messages/count_tokens is disabled. The current controller.CountClaudeTokens
-		// httpRouter.POST("/messages/count_tokens", controller.CountClaudeTokens)
+		httpRouter.POST("/messages/count_tokens", controller.CountClaudeTokens)
 		httpRouter.POST("/messages", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatClaude)
 		})
@@ -149,9 +146,7 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.POST("/engines/:model/embeddings", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
-		httpRouter.POST("/models/*path", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatGemini)
-		})
+		httpRouter.POST("/models/*path", controller.RelayGeminiAction)
 
 		// other relay routes
 		httpRouter.POST("/moderations", func(c *gin.Context) {
@@ -185,15 +180,6 @@ func SetRelayRouter(router *gin.Engine) {
 	//relayMjRouter.Use()
 
 	relayGeminiRouter := router.Group("/v1beta")
-	// :countTokens is not implemented. Answer it like an unregistered route
-	// before auth/channel selection instead of silently relaying it as
-	// generateContent (#7283).
-	relayGeminiRouter.Use(func(c *gin.Context) {
-		if strings.HasSuffix(c.Request.URL.Path, ":countTokens") {
-			controller.RelayNotFound(c)
-			c.Abort()
-		}
-	})
 	relayGeminiRouter.Use(middleware.RouteTag("relay"))
 	relayGeminiRouter.Use(middleware.SystemPerformanceCheck())
 	relayGeminiRouter.Use(middleware.TokenAuth())
@@ -201,9 +187,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayGeminiRouter.Use(middleware.Distribute())
 	{
 		// Gemini API 路径格式: /v1beta/models/{model_name}:{action}
-		relayGeminiRouter.POST("/models/*path", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatGemini)
-		})
+		relayGeminiRouter.POST("/models/*path", controller.RelayGeminiAction)
 	}
 }
 

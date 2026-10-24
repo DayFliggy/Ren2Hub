@@ -103,19 +103,12 @@ onBeforeUnmount(() => {
             : 'color:var(--text-secondary)'
         "
         :disabled="group.disabled"
-        :title="
-          group.disabled
-            ? t(group.name === 'alchemy' ? 'nav.notProvided' : 'nav.comingSoon')
-            : undefined
-        "
+        :title="group.disabled ? t('nav.comingSoon') : undefined"
         :aria-expanded="group.children ? openGroup === group.name : undefined"
         :aria-current="isActive(group) && group.route ? 'page' : undefined"
         @click="onGroupClick(group)"
       >
         {{ t(group.labelKey) }}
-        <span v-if="group.name === 'alchemy'" class="text-[0.625rem]">{{
-          t('nav.notProvided')
-        }}</span>
         <svg
           v-if="group.children"
           class="transition-transform"

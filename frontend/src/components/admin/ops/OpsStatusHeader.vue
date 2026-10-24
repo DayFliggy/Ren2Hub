@@ -35,7 +35,12 @@ const { t, locale } = useI18n({
   messages: opsMonitorMessages,
 })
 
-const healthScore = computed(() => props.overview?.health_score ?? null)
+const coverage = computed(() => props.overview?.observation?.coverage ?? null)
+const coveragePercent = computed(() =>
+  coverage.value && coverage.value.total > 0
+    ? (100 * coverage.value.measured) / coverage.value.total
+    : null
+)
 
 const healthColor = computed(() => {
   if (!props.overview) return 'var(--text-tertiary)'
@@ -115,7 +120,7 @@ const unmeasured = computed(() => {
   const names = (props.overview?.checks ?? [])
     .filter(
       (check) =>
-        check.status === 'unknown' &&
+        ['unknown', 'stale', 'disabled'].includes(check.status) &&
         check.unavailable_reason !== 'not_provided'
     )
     .map((check) => t(`checks.${check.key}`))
@@ -133,7 +138,11 @@ const notProvided = computed(() =>
 )
 /** Check values carry the unit of their key. */
 function checkValue(check: OpsCheck, value: number): string {
-  if (check.key === 'database' || check.key === 'redis') {
+  if (
+    check.key === 'database' ||
+    check.key === 'log_database' ||
+    check.key === 'redis'
+  ) {
     const latency = formatLatencyMs(value, locale.value)
     return `${latency.value} ${latency.unit}`
   }
@@ -141,6 +150,7 @@ function checkValue(check: OpsCheck, value: number): string {
 }
 
 function checkDetail(check: OpsCheck): string {
+  if (check.reason) return t(`observationReasons.${check.reason}`)
   if (check.value === null) return t(`status.${check.status}`)
   const value = checkValue(check, check.value)
   if (check.threshold === null) return value
@@ -196,17 +206,17 @@ const tiles = computed(() => {
       <div class="ops-header-heading">
         <div v-if="overview" class="ops-health" aria-hidden="true">
           <MiniRing
-            :percent="healthScore ?? 0"
+            :percent="coveragePercent ?? 0"
             :color="healthColor"
             :size="46"
             :stroke-width="4.5"
-            :indeterminate="healthScore === null"
+            :indeterminate="coveragePercent === null"
           >
             <span
               class="ops-health-score font-mono"
               :style="{ color: healthColor }"
             >
-              {{ healthScore !== null ? healthScore : '--' }}
+              {{ coverage ? `${coverage.measured}/${coverage.total}` : '--' }}
             </span>
           </MiniRing>
         </div>
@@ -227,12 +237,8 @@ const tiles = computed(() => {
             >
           </div>
           <p class="ops-header-subtitle">{{ t('subtitle') }}</p>
-          <p
-            v-if="overview && healthScore === null"
-            class="ops-note"
-            data-ops-health-unavailable
-          >
-            {{ t('healthNotProvided') }}
+          <p v-if="coverage" class="ops-note" data-ops-coverage>
+            {{ t('coverage', coverage) }}
           </p>
         </div>
       </div>

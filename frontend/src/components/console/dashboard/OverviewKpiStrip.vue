@@ -4,14 +4,13 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
-import RpmRing from '@/components/console/dashboard/RpmRing.vue'
+import type { RequestLimits } from '@/api/dashboardResources'
 import { kpiDividerClasses } from '@/components/console/dashboard/kpiDividers'
 import { useBalanceVisibility } from '@/composables/useDashboard'
 import type {
   DashboardStats,
   FlowPoint,
   TokenTrendPoint,
-  UserLimits,
 } from '@/composables/useDashboard'
 import { formatCompact, formatNumber, formatQuota } from '@/utils/format'
 
@@ -19,11 +18,13 @@ const props = defineProps<{
   stats: DashboardStats | null
   flow?: FlowPoint[]
   tokenTrend?: TokenTrendPoint[]
-  limits?: UserLimits | null
+  limits?: RequestLimits | null
+  limitsLoading?: boolean
+  limitsError?: string | null
   loading?: boolean
 }>()
 
-const emit = defineEmits<{ switchTab: [tab: string] }>()
+const emit = defineEmits<{ switchTab: [tab: string]; retryLimits: [] }>()
 
 const { t } = useI18n()
 const { hidden } = useBalanceVisibility()
@@ -77,7 +78,7 @@ interface Cell {
   textColor?: string
   /** widens the loading skeleton to roughly match the real value */
   skeleton: string
-  /** trend series; the RPM cell uses a ring instead */
+  /** A sparkline is only shown for measured time series. */
   series?: number[]
   /** cells with a drill-down target render as buttons */
   drillDown?: boolean
@@ -132,10 +133,10 @@ const cells = computed<Cell[]>(() => [
     series: tokenWindow.value.map(pointTotal),
   },
   {
-    key: 'rpm',
-    label: t('dashboard.rpm.label'),
+    key: 'requestLimits',
+    label: t('dashboard.requestLimits.title'),
     icon: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
-    value: props.limits ? formatNumber(props.limits.current_rpm) : '--',
+    value: limitsHeadline.value,
     color: 'var(--text-primary)',
     skeleton: 'w-16',
   },
@@ -151,15 +152,24 @@ const cells = computed<Cell[]>(() => [
   },
 ])
 
-/**
- * Caption sits under the figure; the RPM cell states its ceiling instead.
- * Null limits means no data source, never "unmetered".
- */
-const rpmCaption = computed(() => {
-  if (!props.limits) return t('dashboard.rpm.notConnected')
-  if (props.limits.rate_limit === 0) return t('dashboard.rpm.unmetered')
-  return t('dashboard.rpm.ofCeiling', { n: props.limits.rate_limit })
+const limitsValid = computed(() =>
+  Boolean(props.limits?.enabled && props.limits.window_minutes > 0)
+)
+const limitsHeadline = computed(() => {
+  if (props.limitsError) return t('common.loadFailed')
+  if (!props.limits) return t('dashboard.notProvided')
+  if (!props.limits.enabled) return t('dashboard.requestLimits.disabled')
+  if (props.limits.window_minutes <= 0)
+    return t('dashboard.requestLimits.invalidWindow')
+  return t('dashboard.requestLimits.window', {
+    minutes: props.limits.window_minutes,
+  })
 })
+function ceiling(value: number): string {
+  return value <= 0
+    ? t('dashboard.requestLimits.unlimited')
+    : formatNumber(value)
+}
 </script>
 
 <template>
@@ -171,8 +181,8 @@ const rpmCaption = computed(() => {
     <!--
       Divided strip: hairline separators between cells rather than gaps, so the
       five figures read as one summary row. Every cell is label / figure / mini
-      visual — a sparkline where the data is a series, a ring for RPM where it is
-      a share of a ceiling.
+      visual where a measured series exists. Request limits retain their native
+      window and do not claim to measure current throughput.
     -->
     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
       <component
@@ -216,13 +226,18 @@ const rpmCaption = computed(() => {
             </p>
 
             <p
-              v-if="loading && (cell.key !== 'rpm' || limits)"
+              v-if="cell.key === 'requestLimits' ? limitsLoading : loading"
               class="mt-1.5 h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
               :class="cell.skeleton"
             />
             <p
               v-else
-              class="display-number mt-1 truncate text-2xl leading-tight tabular-nums tracking-tight"
+              class="display-number mt-1 leading-tight tabular-nums tracking-tight"
+              :class="
+                cell.key === 'requestLimits'
+                  ? 'text-base break-words'
+                  : 'truncate text-2xl'
+              "
               :style="{ color: cell.textColor ?? cell.color }"
             >
               {{ cell.value }}
@@ -230,20 +245,34 @@ const rpmCaption = computed(() => {
           </div>
 
           <div
-            v-if="cell.key === 'rpm'"
-            class="mt-2 flex h-[1.875rem] min-w-0 items-center gap-2 overflow-hidden"
+            v-if="cell.key === 'requestLimits'"
+            class="mt-2 min-w-0 text-xs text-[var(--text-tertiary)]"
           >
-            <RpmRing
-              v-if="limits"
-              :current="limits.current_rpm"
-              :limit="limits.rate_limit"
-              :size="26"
-              :show-inner-label="true"
-              :show-side-label="false"
-            />
-            <span class="truncate text-xs text-[var(--text-tertiary)]">
-              {{ rpmCaption }}
-            </span>
+            <button
+              v-if="limitsError"
+              type="button"
+              class="underline underline-offset-2 hover:text-[var(--text-primary)]"
+              :title="limitsError"
+              @click="emit('retryLimits')"
+            >
+              {{ t('common.retry') }}
+            </button>
+            <template v-else-if="!limitsLoading && limitsValid && limits">
+              <p>
+                {{
+                  t('dashboard.requestLimits.total', {
+                    count: ceiling(limits.total_requests),
+                  })
+                }}
+              </p>
+              <p class="mt-1">
+                {{
+                  t('dashboard.requestLimits.successful', {
+                    count: ceiling(limits.successful_requests),
+                  })
+                }}
+              </p>
+            </template>
           </div>
           <div
             v-else

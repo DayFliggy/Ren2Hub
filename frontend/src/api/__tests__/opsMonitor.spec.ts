@@ -11,6 +11,7 @@ import {
 } from '../opsMonitor'
 import {
   performanceFixture,
+  measuredResource,
   qualityFixture,
   routingFixture,
 } from './opsFixtures'
@@ -23,32 +24,37 @@ vi.mock('../client', () => ({ api: mocks }))
 beforeEach(() => vi.clearAllMocks())
 
 describe('native ops monitoring', () => {
-  it('keeps missing connectivity probes outside measured resource health', () => {
-    const stats = performanceFixture()
-    stats.system_usage = {
-      cpu_percent: 10,
-      memory_percent: 20,
-      sampled_at: 3600,
+  it('preserves server probe failures, disabled checks and measured coverage', () => {
+    const data = performanceFixture()
+    data.observability.status = 'critical'
+    data.observability.storage.database = {
+      status: 'critical',
+      latency_ms: null,
+      reason: 'timeout',
     }
+    data.observability.checks.find((check) => check.id === 'database')!.status =
+      'critical'
+    data.observability.checks.find((check) => check.id === 'database')!.reason =
+      'timeout'
+    data.observability.coverage.measured = 2
     const result = projectOpsOverview(
-      parsePerformanceStats(stats),
-      routingFixture(),
+      parsePerformanceStats(data),
+      null,
       '1h',
       [],
       3600
     )!
-    expect(result.status).toBe('ok')
+    expect(result.status).toBe('critical')
     expect(result.health_score).toBeNull()
+    expect(result.observation?.coverage).toEqual({ measured: 2, total: 4 })
     expect(
-      result.checks
-        .filter((check) => check.unavailable_reason === 'not_provided')
-        .map((check) => check.key)
-    ).toEqual(['database', 'redis'])
-    expect(
-      result.checks.find((check) => check.key === 'database')?.status
-    ).toBe('unknown')
+      result.checks.find((check) => check.key === 'database')
+    ).toMatchObject({ status: 'critical', reason: 'timeout', value: null })
+    expect(result.checks.find((check) => check.key === 'redis')?.status).toBe(
+      'disabled'
+    )
   })
-  it('keeps Go process memory separate from unmeasured host memory and health', () => {
+  it('keeps unavailable resources, application traffic and GC null rather than using Go heap', () => {
     const result = projectOpsOverview(
       parsePerformanceStats(performanceFixture()),
       routingFixture(),
@@ -57,98 +63,37 @@ describe('native ops monitoring', () => {
       3600
     )!
     expect(result.resources?.process.heap_alloc_bytes).toBe(1_048_576)
+    expect(result.resources?.process.last_gc_pause_ms).toBeNull()
     expect(result.resources?.memory.percent).toBeNull()
     expect(result.resources?.cpu.percent).toBeNull()
+    expect(result.resources?.network.up_mbps).toBeNull()
+    expect(result.resources?.disk.percent).toBe(40)
     expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
       'unknown'
     )
-    expect(result.resources?.network.up_mbps).toBeNull()
-    expect(result.resources?.disk.percent).toBe(40)
-    expect(result.checks.find((row) => row.key === 'disk')?.status).toBe('ok')
-    expect(
-      result.checks.find((row) => row.key === 'database')?.value
-    ).toBeNull()
-    expect(result.health_score).toBeNull()
     expect(result.status).toBe('unknown')
     expect(seriesRange(result)).toEqual([0, 3600])
   })
-  it('rates sampled host CPU and memory against their thresholds', () => {
+  it('preserves container CPU bursts and disabled thresholds without a second client health model', () => {
     const data = performanceFixture()
-    data.system_usage = {
-      cpu_percent: 92,
-      memory_percent: 40,
-      sampled_at: 3590,
-    }
-    const result = projectOpsOverview(data, null, '1h', [], 3600)!
-    expect(result.resources?.cpu.percent).toBe(92)
-    expect(result.resources?.memory.percent).toBe(40)
+    data.observability.resources.cpu = measuredResource(120, -1)
+    data.observability.resources.cpu.state = 'disabled'
+    const check = data.observability.checks.find((check) => check.id === 'cpu')!
+    check.status = 'disabled'
+    check.reason = 'disabled'
+    const result = projectOpsOverview(
+      parsePerformanceStats(data),
+      null,
+      '1h',
+      [],
+      3600
+    )!
+    expect(result.resources?.cpu).toEqual({ percent: 120, threshold: -1 })
     expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
-      'critical'
+      'disabled'
     )
-    expect(result.checks.find((row) => row.key === 'memory')?.status).toBe('ok')
-    expect(result.status).toBe('critical')
+    expect(result.status).toBe('unknown')
   })
-  it.each([
-    { threshold: -1, status: 'unknown' },
-    { threshold: 0, status: 'unknown' },
-    { threshold: 150, status: 'ok' },
-  ])(
-    'accepts the backend CPU threshold $threshold and rates it $status',
-    ({ threshold, status }) => {
-      const data = performanceFixture()
-      data.config.monitor_cpu_threshold = threshold
-      data.system_usage = { cpu_percent: 120, memory_percent: 1, sampled_at: 1 }
-      const result = projectOpsOverview(
-        parsePerformanceStats(data),
-        null,
-        '1h',
-        [],
-        3600
-      )!
-      expect(result.resources?.cpu.threshold).toBe(threshold)
-      expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
-        status
-      )
-    }
-  )
-  it.each([
-    { value: 89.9, status: 'warning' },
-    { value: 90, status: 'warning' },
-    { value: 90.5, status: 'warning' },
-    { value: 90.99, status: 'warning' },
-    { value: 91, status: 'critical' },
-  ])(
-    'uses the Go integer threshold boundary for a sample of $value',
-    ({ value, status }) => {
-      const data = performanceFixture()
-      data.config.monitor_cpu_threshold = 90
-      data.config.monitor_memory_threshold = 90
-      data.config.monitor_disk_threshold = 90
-      data.system_usage = {
-        cpu_percent: value,
-        memory_percent: value,
-        sampled_at: 1,
-      }
-      data.disk_space_info = {
-        total: 1000,
-        used: value * 10,
-        used_percent: value,
-      }
-      const result = projectOpsOverview(
-        parsePerformanceStats(data),
-        null,
-        '1h',
-        [],
-        3600
-      )!
-      for (const key of ['cpu', 'memory', 'disk']) {
-        expect(result.checks.find((check) => check.key === key)?.status).toBe(
-          status
-        )
-      }
-      expect(result.status).toBe(status)
-    }
-  )
   it('reads DB pool counters and keeps an unreadable pool null', () => {
     const data = JSON.parse(JSON.stringify(performanceFixture()))
     data.db_pool.main = null
@@ -160,23 +105,6 @@ describe('native ops monitoring', () => {
     )
     delete data.db_pool
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
-  })
-  it('does not treat a failed native disk probe or disabled threshold as healthy', () => {
-    const data = performanceFixture()
-    data.disk_space_info = { total: 0, used: 0, used_percent: 0 }
-    const unavailable = projectOpsOverview(data, null, '1h', [], 3600)!
-    expect(unavailable.resources?.disk.percent).toBeNull()
-    expect(unavailable.checks.find((row) => row.key === 'disk')?.status).toBe(
-      'unknown'
-    )
-    data.disk_space_info = { total: 1000, used: 980, used_percent: 98 }
-    expect(projectOpsOverview(data, null, '1h', [], 3600)?.status).toBe(
-      'critical'
-    )
-    data.config.monitor_enabled = false
-    expect(projectOpsOverview(data, null, '1h', [], 3600)?.status).toBe(
-      'unknown'
-    )
   })
   it.each([
     ['cache_stats', 'memory_cache_hits', -1],
@@ -197,21 +125,6 @@ describe('native ops monitoring', () => {
     >
     data[section as string]![key as string] = value
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
-  })
-  it('accepts a container CPU burst above 100% and still rates it critical', () => {
-    const data = performanceFixture()
-    data.system_usage = { cpu_percent: 101.2, memory_percent: 1, sampled_at: 1 }
-    const result = projectOpsOverview(
-      parsePerformanceStats(data),
-      null,
-      '1h',
-      [],
-      3600
-    )!
-    expect(result.resources?.cpu.percent).toBe(101.2)
-    expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
-      'critical'
-    )
   })
   it.each([
     { cpu_percent: -1, memory_percent: 1 },
@@ -324,39 +237,88 @@ describe('native ops monitoring', () => {
     expect(result.series.points).toEqual([point(100000, 0)])
     expect(seriesRange(result)).toEqual([96400, 100000])
   })
-  it('retains the full 24-hour window even with frequent manual refreshes', () => {
-    const point = (ts: number): OpsSeriesPoint => ({
-      ts,
-      cpu: null,
-      memory: null,
-      disk: 40,
-      users: null,
-      channels: null,
-    })
-    const points = appendOpsSample(
-      Array.from({ length: 3000 }, (_, index) => point(100000 + index * 10)),
-      point(130000)
-    )
-    expect(points).toHaveLength(3001)
-    expect(points[0]?.ts).toBe(100000)
-    for (const window of ['1h', '6h', '24h'] as const) {
-      const result = projectOpsOverview(
-        performanceFixture(),
-        null,
-        window,
-        points,
-        130000
-      )!
-      const seconds = { '1h': 3600, '6h': 21600, '24h': 86400 }[window]
-      expect(
-        result.series.points.every(({ ts }) => ts >= 130000 - seconds)
-      ).toBe(true)
-      expect(seriesRange(result)).toEqual([130000 - seconds, 130000])
+  it('uses server instance history, preserving gaps and fractional bucket averages', () => {
+    const data = performanceFixture()
+    data.observability.series = {
+      window: '24h',
+      bucket_seconds: 900,
+      points: [
+        {
+          ts: 450,
+          cpu: null,
+          memory: null,
+          disk: null,
+          request_mbps: null,
+          response_mbps: null,
+          goroutines: null,
+          heap_alloc_bytes: null,
+        },
+        {
+          ts: 1350,
+          cpu: 15,
+          memory: 40,
+          disk: 40,
+          request_mbps: 1,
+          response_mbps: 2,
+          goroutines: 2.5,
+          heap_alloc_bytes: 1024,
+        },
+      ],
     }
-    expect(
-      projectOpsOverview(performanceFixture(), null, '24h', points, 130000)!
-        .series.points
-    ).toHaveLength(3001)
+    const result = projectOpsOverview(
+      parsePerformanceStats(data),
+      null,
+      '1h',
+      [],
+      3600
+    )!
+    expect(result.series.window).toBe('24h')
+    expect(result.series.bucket_seconds).toBe(900)
+    expect(result.series.points).toEqual(
+      data.observability.series.points.map((point) => ({
+        ...point,
+        users: null,
+        channels: null,
+      }))
+    )
+    expect(seriesRange(result)).toEqual([-82800, 3600])
+  })
+  it('preserves stale snapshots and an unavailable process instead of inventing measurements', () => {
+    const data = performanceFixture()
+    data.observability.stale = true
+    data.observability.status = 'stale'
+    data.observability.process = null
+    const result = projectOpsOverview(
+      parsePerformanceStats(data),
+      null,
+      '1h',
+      [],
+      3600
+    )!
+    expect(result.status).toBe('stale')
+    expect(Object.values(result.resources!.process)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+    ])
+  })
+  it.each([
+    ['coverage', { measured: 5, total: 4 }],
+    ['traffic', { scope: 'host_network', request_mbps: 0, response_mbps: 0 }],
+    ['process', { goroutines: -1 }],
+    ['checks', [{ id: 'unknown_probe', status: 'ok', reason: '' }]],
+    ['series', { window: '1h', bucket_seconds: 0, points: [] }],
+  ])('rejects malformed observation %s', (key, value) => {
+    const data = performanceFixture()
+    Object.assign(data.observability, { [key]: value })
+    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
+  })
+  it('rejects an unavailable resource carrying a synthetic zero measurement', () => {
+    const data = performanceFixture()
+    data.observability.resources.cpu.percent = 0
+    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
   })
   it('uses native reads and maintenance endpoints and propagates cancellation', async () => {
     mocks.get
@@ -368,7 +330,7 @@ describe('native ops monitoring', () => {
     await opsMonitorApi.routing(signal)
     await opsMonitorApi.quality(signal)
     expect(mocks.get.mock.calls).toEqual([
-      ['/api/performance/stats', undefined, { signal }],
+      ['/api/performance/stats', { window: '1h' }, { signal }],
       ['/api/performance/routing', undefined, { signal }],
       ['/api/performance/quality', { hours: '24' }, { signal }],
     ])

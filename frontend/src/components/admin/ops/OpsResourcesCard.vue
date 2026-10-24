@@ -16,6 +16,7 @@ import {
   formatLatencyMs,
   formatMbps,
   formatPercent,
+  formatClock,
 } from '@/utils/opsFormat'
 import OpsCard from './OpsCard.vue'
 import OpsMetric from './OpsMetric.vue'
@@ -73,6 +74,10 @@ const gauges = computed(() => {
     const status = checkStatus(props.overview, gauge.key)
     return {
       ...gauge,
+      scope:
+        props.overview?.observation?.resources[gauge.key].scope ?? 'unknown',
+      sampledAt:
+        props.overview?.observation?.resources[gauge.key].sampled_at ?? null,
       status,
       color: GAUGE_COLORS[status],
       reading: formatPercent(gauge.percent, locale.value),
@@ -92,11 +97,19 @@ const trend = computed(() => {
   const line = (field: OpsSeriesField) =>
     overview.series.points.map((point) => ({
       ts: point.ts,
-      value: point[field],
+      value: point[field] ?? null,
     }))
   return {
     range: seriesRange(overview),
     bucketSeconds: overview.series.bucket_seconds,
+    max: Math.max(
+      100,
+      ...overview.series.points.flatMap((point) => [
+        point.cpu ?? 0,
+        point.memory ?? 0,
+        point.disk ?? 0,
+      ])
+    ),
     series: [
       {
         name: t('resources.cpu'),
@@ -115,6 +128,26 @@ const trend = computed(() => {
         points: line('disk'),
       },
     ],
+  }
+})
+const trafficTrend = computed(() => {
+  const overview = props.overview
+  if (!overview) return null
+  return {
+    range: seriesRange(overview),
+    series: (
+      [
+        ['request_mbps', 'down', 'accent'],
+        ['response_mbps', 'up', 'signal'],
+      ] as const
+    ).map(([field, label, color]) => ({
+      name: t(`resources.${label}`),
+      color,
+      points: overview.series.points.map((point) => ({
+        ts: point.ts,
+        value: point[field] ?? null,
+      })),
+    })),
   }
 })
 </script>
@@ -181,17 +214,24 @@ const trend = computed(() => {
             {{ t('errors.unavailable') }}
           </p>
           <p class="ops-gauge-detail">{{ gauge.thresholdLabel }}</p>
+          <p class="ops-gauge-detail" data-ops-resource-scope>
+            {{ t(`resourceScope.${gauge.scope}`)
+            }}<span v-if="gauge.sampledAt">
+              · {{ formatClock(gauge.sampledAt * 1000, locale) }}</span
+            >
+          </p>
           <p v-if="gauge.detail" class="ops-gauge-detail" :title="gauge.detail">
             {{ gauge.detail }}
           </p>
         </li>
       </ul>
+      <p class="ops-footnote">{{ t('native.trafficScope') }}</p>
       <dl class="ops-metric-grid ops-metric-grid--3">
         <OpsMetric
           :label="t('resources.up')"
           v-bind="
             overview.resources.network.up_mbps === null
-              ? { value: t('notProvided'), unit: '' }
+              ? { value: t('unavailable'), unit: '' }
               : formatMbps(overview.resources.network.up_mbps, locale)
           "
           size="sm"
@@ -200,7 +240,7 @@ const trend = computed(() => {
           :label="t('resources.down')"
           v-bind="
             overview.resources.network.down_mbps === null
-              ? { value: t('notProvided'), unit: '' }
+              ? { value: t('unavailable'), unit: '' }
               : formatMbps(overview.resources.network.down_mbps, locale)
           "
           size="sm"
@@ -231,7 +271,7 @@ const trend = computed(() => {
           :label="t('resources.gcPause')"
           v-bind="
             overview.resources.process.last_gc_pause_ms === null
-              ? { value: t('notProvided'), unit: '' }
+              ? { value: t('unavailable'), unit: '' }
               : formatLatencyMs(
                   overview.resources.process.last_gc_pause_ms,
                   locale
@@ -253,15 +293,25 @@ const trend = computed(() => {
             t('scope.window', { window: t(`window.${overview.series.window}`) })
           }}</span>
         </p>
-        <p class="ops-footnote">{{ t('native.sessionHistory') }}</p>
+        <p class="ops-footnote">{{ t('native.instanceHistory') }}</p>
         <OpsTrendChart
           :label="t('resources.trend')"
           :series="trend.series"
           :bucket-seconds="trend.bucketSeconds"
           :range="trend.range"
           unit="%"
-          :max="100"
+          :max="trend.max"
           :height="120"
+        />
+      </div>
+      <div v-if="trafficTrend" class="ops-trend">
+        <p class="ops-trend-title">{{ t('resources.network') }}</p>
+        <OpsTrendChart
+          :label="t('resources.network')"
+          :series="trafficTrend.series"
+          :bucket-seconds="overview.series.bucket_seconds"
+          :range="trafficTrend.range"
+          unit="Mbps"
         />
       </div>
     </template>

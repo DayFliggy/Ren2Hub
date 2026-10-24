@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { parseDrawingLogPage } from '@/api/liveContracts'
-import { ApiError, type PageResult } from '@/api/types'
+import { ApiError } from '@/api/types'
 import type { DrawingLogItem } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -42,6 +42,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const loading = ref(true)
+const loadError = ref<string | null>(null)
 
 const taskId = ref('')
 const startDate = ref('')
@@ -81,24 +82,32 @@ function currentParams() {
 
 const listRequest = useLatestRequest()
 
-async function load() {
+function clearResults() {
   loading.value = true
-  const result = await listRequest.run((signal) =>
-    api.get<PageResult<DrawingLogItem>>('/api/mj/self', currentParams(), {
-      signal,
-    })
+  loadError.value = null
+  rows.value = []
+  total.value = 0
+}
+
+async function load() {
+  window.clearTimeout(searchTimer)
+  clearResults()
+  const result = await listRequest.run(async (signal) =>
+    parseDrawingLogPage(
+      await api.get<unknown>('/api/mj/self', currentParams(), { signal })
+    )
   )
   if (result.stale) return
   loading.value = false
   if (!result.ok) {
-    toast.error(
+    loadError.value =
       result.error instanceof ApiError
         ? result.error.message
         : t('common.failed')
-    )
+    toast.error(loadError.value)
     return
   }
-  const pageResult = parseDrawingLogPage(result.value as unknown)
+  const pageResult = result.value
   rows.value = pageResult.items
   total.value = pageResult.total
 }
@@ -110,6 +119,9 @@ function reload() {
   else page.value = 1
 }
 watch(taskId, () => {
+  // The input already describes a new query during the debounce interval.
+  listRequest.cancel()
+  clearResults()
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
@@ -117,6 +129,7 @@ watch([startDate, endDate], reload)
 watch(pageSize, reload)
 watch(page, load)
 onMounted(load)
+onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
 function formatDuration(row: DrawingLogItem): string {
   const seconds = relayTaskDurationSeconds(
@@ -174,7 +187,19 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
     </div>
 
     <ConsoleCard class="hidden lg:block" :padded="false">
+      <EmptyState
+        v-if="loadError"
+        role="alert"
+        :title="t('logs.loadFailed')"
+        :hint="loadError"
+        illustration="empty-logs"
+      >
+        <ConsoleButton class="mt-4" variant="secondary" @click="load">
+          {{ t('common.retry') }}
+        </ConsoleButton>
+      </EmptyState>
       <DataTable
+        v-else
         :columns="columns"
         :rows="rows"
         row-key="id"
@@ -296,6 +321,19 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
         />
       </div>
 
+      <EmptyState
+        v-else-if="loadError"
+        role="alert"
+        class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+        :title="t('logs.loadFailed')"
+        :hint="loadError"
+        illustration="empty-logs"
+      >
+        <ConsoleButton class="mt-4" variant="secondary" @click="load">
+          {{ t('common.retry') }}
+        </ConsoleButton>
+      </EmptyState>
+
       <div v-else-if="rows.length" class="sibling-space-y-3">
         <article
           v-for="row in rows"
@@ -365,6 +403,7 @@ async function copyResultUrl(row: DrawingLogItem): Promise<void> {
       </div>
 
       <div
+        v-if="!loadError"
         class="mt-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
       >
         <TablePagination

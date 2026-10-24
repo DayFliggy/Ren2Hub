@@ -23,10 +23,14 @@ type DiskSpaceInfo struct {
 
 // SystemStatus 系统状态信息
 type SystemStatus struct {
-	CPUUsage    float64
-	MemoryUsage float64
-	DiskUsage   float64
-	SampledAt   time.Time
+	CPUUsage                                     float64
+	MemoryUsage                                  float64
+	DiskUsage                                    float64
+	SampledAt                                    time.Time
+	CPUAvailable, MemoryAvailable, DiskAvailable bool
+	CPUScope, MemoryScope                        string
+	MemoryUsedBytes, MemoryTotalBytes            uint64
+	DiskUsedBytes, DiskTotalBytes                uint64
 	// 过载判定带连续性要求：单一采样尖峰不再直接熔断，需连续多次超阈值。
 	CPUOverloaded    bool
 	MemoryOverloaded bool
@@ -119,18 +123,26 @@ func collectSystemStatus(usage *containerUsage) SystemStatus {
 	// 保持对未限制资源或被挂载为宿主 cgroup 的环境的兼容。
 	if saturation, ok := usage.cpuSaturation(now); ok {
 		status.CPUUsage = saturation
+		status.CPUAvailable, status.CPUScope = true, "container"
 	} else if percents, err := cpu.Percent(0, false); err == nil && len(percents) > 0 {
 		status.CPUUsage = percents[0]
+		status.CPUAvailable, status.CPUScope = true, "host"
 	}
-	if containerMemory, ok := usage.memoryUsage(); ok {
-		status.MemoryUsage = containerMemory
+	if used, total, ok := usage.memoryWorkingSet(); ok {
+		status.MemoryUsage = float64(used) / float64(total) * 100
+		status.MemoryAvailable, status.MemoryScope = true, "container"
+		status.MemoryUsedBytes, status.MemoryTotalBytes = used, total
 	} else if memInfo, err := mem.VirtualMemory(); err == nil {
 		status.MemoryUsage = memInfo.UsedPercent
+		status.MemoryAvailable, status.MemoryScope = true, "host"
+		status.MemoryUsedBytes, status.MemoryTotalBytes = memInfo.Used, memInfo.Total
 	}
 
 	diskInfo := GetDiskSpaceInfo()
 	if diskInfo.Total > 0 {
 		status.DiskUsage = diskInfo.UsedPercent
+		status.DiskAvailable = true
+		status.DiskUsedBytes, status.DiskTotalBytes = diskInfo.Used, diskInfo.Total
 	}
 	return status
 }
@@ -138,6 +150,12 @@ func collectSystemStatus(usage *containerUsage) SystemStatus {
 // GetSystemStatus 获取当前系统状态
 func GetSystemStatus() SystemStatus {
 	return latestSystemStatus.Load().(SystemStatus)
+}
+
+// SystemStatusFresh is shared by observation projections. Overload decisions
+// continue to use their existing consecutive-sample rules below.
+func SystemStatusFresh(status SystemStatus, now time.Time) bool {
+	return !status.SampledAt.IsZero() && !status.SampledAt.After(now) && now.Sub(status.SampledAt) <= systemStatusMaxAge
 }
 
 // CheckSystemOverload 返回哨兵应据以熔断的过载项。监控关闭、采样缺失或已超过

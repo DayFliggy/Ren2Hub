@@ -6,7 +6,7 @@ import type { FeatureStatus } from '@/api/public'
 import { consoleEntryRoute } from './consoleNav'
 
 export type TopNavName =
-  'activities' | 'dashboard' | 'ops' | 'console' | 'alchemy' | 'community'
+  'activities' | 'dashboard' | 'ops' | 'console' | 'community'
 
 export interface DocumentationNavigation {
   href?: string
@@ -59,8 +59,6 @@ export const topNavItems: readonly TopNavItem[] = [
   },
   // Direct link into the workspace layout; its sub-nav lives in the sidebar.
   { name: 'console', labelKey: 'nav.console', route: consoleEntryRoute },
-  // Permanent placeholder with no pages or capability behind it.
-  { name: 'alchemy', labelKey: 'nav.alchemy', disabled: true },
   {
     name: 'community',
     labelKey: 'nav.community',
@@ -102,9 +100,7 @@ export function getVisibleTopNavItems(
 }
 
 /** Route guards derive from the same access rule as the visible entry. */
-export function getTopNavRouteMeta<
-  N extends Exclude<TopNavName, 'alchemy' | 'community'>,
->(
+export function getTopNavRouteMeta<N extends Exclude<TopNavName, 'community'>>(
   name: N
 ): {
   topNav: N

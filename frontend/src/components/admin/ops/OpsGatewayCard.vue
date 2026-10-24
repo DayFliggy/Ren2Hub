@@ -27,7 +27,7 @@ const trends = computed(() => {
   const line = (field: OpsSeriesField) =>
     overview.series.points.map((point) => ({
       ts: point.ts,
-      value: point[field],
+      value: point[field] ?? null,
     }))
   return {
     range: seriesRange(overview),

@@ -79,6 +79,8 @@ func main() {
 			common.FatalLog(common.LogText("failed to close database: %s", err.Error()))
 		}
 	}()
+	stopObservation := service.StartPerformanceObserver()
+	defer stopObservation()
 
 	if common.RedisEnabled {
 		// for compatibility with old versions

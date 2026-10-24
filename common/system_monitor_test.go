@@ -152,9 +152,9 @@ func TestContainerMemoryUsageUsesWorkingSet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := newTestContainerUsage(t, 4, tt.files).memoryUsage()
+			used, total, ok := newTestContainerUsage(t, 4, tt.files).memoryWorkingSet()
 			require.True(t, ok)
-			assert.InDelta(t, tt.want, got, 0.001)
+			assert.InDelta(t, tt.want, float64(used)/float64(total)*100, 0.001)
 		})
 	}
 }
@@ -182,7 +182,7 @@ func TestContainerMemoryUsageFallsBackWhenUnavailable(t *testing.T) {
 			if tt.stat != "" {
 				writeTestCgroupFile(t, filepath.Join(usage.cgroupRoot, "memory.stat"), tt.stat)
 			}
-			_, ok := usage.memoryUsage()
+			_, _, ok := usage.memoryWorkingSet()
 			assert.False(t, ok, "拿不到可信工作集时交由调用方回退宿主机口径")
 		})
 	}

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
+import { performanceFixture } from '@/api/__tests__/opsFixtures'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SystemSettingsMaintenanceActions from '../SystemSettingsMaintenanceActions.vue'
@@ -8,28 +9,17 @@ import SystemSettingsMaintenanceActions from '../SystemSettingsMaintenanceAction
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
 vi.mock('@/composables/useToast', () => ({ useToast: () => toast }))
 
-/** Shape of controller.PerformanceStats with common.DiskCacheStats counters. */
+/** Keep the native monitoring contract while varying maintenance counters. */
 function performanceStats(cacheStats: Record<string, number>) {
   return {
+    ...performanceFixture(),
     cache_stats: cacheStats,
-    memory_stats: {
-      alloc: 1_048_576,
-      total_alloc: 8_388_608,
-      sys: 4_194_304,
-      num_gc: 3,
-      num_goroutine: 12,
-    },
     disk_cache_info: {
       path: '/tmp/cache',
       exists: true,
       file_count: 2,
       total_size: 4096,
     },
-    disk_space_info: { total: 1000, free: 600, used: 400, used_percent: 40 },
-    config: { disk_cache_enabled: true, monitor_enabled: false },
-    // C4 always sends both; this page does not render them.
-    system_usage: null,
-    db_pool: { main: null, log: null, log_shared: true },
   }
 }
 
