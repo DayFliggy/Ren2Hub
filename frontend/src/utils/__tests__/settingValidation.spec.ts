@@ -72,6 +72,31 @@ describe('payment setting validation', () => {
 describe('numeric setting bounds', () => {
   it.each([
     {
+      key: 'ModelRequestRateLimitCount',
+      rejected: [-1, 0.5, 100_000_001],
+      accepted: [0, 60, 100_000_000],
+    },
+    {
+      key: 'ModelRequestRateLimitSuccessCount',
+      rejected: [0, 1.5, 100_000_001],
+      accepted: [1, 1000, 100_000_000],
+    },
+    {
+      key: 'ModelRequestRateLimitDurationMinutes',
+      rejected: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
+      accepted: [0, 1, Number.MAX_SAFE_INTEGER],
+    },
+    {
+      key: 'DataExportInterval',
+      rejected: [0, 5.5, 1441],
+      accepted: [1, 5, 1440],
+    },
+    {
+      key: 'SMTPPort',
+      rejected: [0, 587.5, 65536],
+      accepted: [1, 587, 65535],
+    },
+    {
       key: 'quota_setting.pre_consume_multiplier',
       rejected: [0, -0.5, ''],
       accepted: [0.0001, 1, 2.5],

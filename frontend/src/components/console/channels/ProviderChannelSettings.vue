@@ -71,15 +71,30 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           autocomplete="off"
         />
       </FormField>
-      <FormField :label="t('region')" :hint="t('regionHint')">
-        <TextInput
+      <FormField :label="t('region') + ' *'" :hint="t('regionHint')">
+        <textarea
           v-model="vertexRegion"
           name="channel-vertex-region"
           :disabled="disabled"
+          rows="3"
+          class="console-input w-full resize-y"
+          required
+          :aria-invalid="!vertexRegion.trim()"
+          :aria-describedby="
+            !vertexRegion.trim() ? 'channel-vertex-region-error' : undefined
+          "
           placeholder="global"
           autocomplete="off"
-        />
+        ></textarea>
       </FormField>
+      <p
+        v-if="!vertexRegion.trim()"
+        id="channel-vertex-region-error"
+        role="alert"
+        class="text-xs text-[var(--status-danger)]"
+      >
+        {{ t('regionRequired') }}
+      </p>
     </template>
   </div>
 </template>

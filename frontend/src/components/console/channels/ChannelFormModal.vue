@@ -488,7 +488,8 @@ const valid = computed(
     form.name.trim().length > 0 &&
     (![60, 61, 62, 63].includes(form.type) || form.baseUrl.trim().length > 0) &&
     (props.editing !== null || form.key.trim().length > 0) &&
-    (props.editing !== null || modelTags.value.length > 0) &&
+    modelTags.value.length > 0 &&
+    (form.type !== 41 || vertexRegion.value.trim().length > 0) &&
     Number.isSafeInteger(form.type) &&
     !unknownType.value &&
     !isRetiredChannelType(form.type) &&
@@ -1214,6 +1215,14 @@ async function submit() {
                 @blur="modelInput.trim() && addModelTag(modelInput)"
               />
             </div>
+
+            <p
+              v-if="modelTags.length === 0"
+              role="alert"
+              class="mt-1.5 text-xs text-[var(--status-danger)]"
+            >
+              {{ t('channels.modelsRequired') }}
+            </p>
 
             <div v-if="canUsePrefill" class="mt-3 grid gap-2">
               <label

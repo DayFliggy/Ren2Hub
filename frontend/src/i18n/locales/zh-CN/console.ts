@@ -1103,6 +1103,7 @@ export default {
   },
 
   channels: {
+    modelsRequired: '请至少选择一个模型。停用渠道请使用禁用操作。',
     permissionDenied: '没有此渠道操作权限。',
     lab: '实验室分类',
     allLabs: '全部实验室',
@@ -3300,6 +3301,8 @@ export default {
       title: '运行状态与维护',
       loadingStats: '正在获取最新运行状态…',
       affinitySummary: '缓存 {total} 条，容量 {capacity}。',
+      affinityStatsUnavailable: '无法读取亲和缓存统计，请重试。',
+      affinityStatsStale: '刷新失败，当前显示上次读取的统计。',
       performanceSummary:
         '活动内存缓冲 {memoryCount} 个（{memorySize}），活动磁盘文件 {diskCount} 个（{diskSize}），日志文件 {logCount} 个。',
       cacheEntries: '缓存条目',

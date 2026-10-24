@@ -38,6 +38,7 @@ const pendingAction = ref<Action | null>(null)
 const loading = ref(false)
 const loadingStats = ref(false)
 const affinityStats = ref<ChannelAffinityStats | null>(null)
+const affinityStatsFailed = ref(false)
 const performanceStats = ref<PerformanceStats | null>(null)
 const logFiles = ref<LogFiles | null>(null)
 const logCleanupMode = ref<'by_count' | 'by_days'>('by_count')
@@ -118,6 +119,7 @@ async function loadStats() {
       affinityStats.value = await api.get<ChannelAffinityStats>(
         '/api/option/channel_affinity_cache'
       )
+      affinityStatsFailed.value = false
     } else {
       const [stats, logs] = await Promise.all([
         opsMonitorApi.stats(),
@@ -127,8 +129,12 @@ async function loadStats() {
       logFiles.value = logs
     }
   } catch (error) {
-    // A failed refresh must not leave an earlier cleanable state in place.
-    logFiles.value = null
+    if (props.kind === 'channel-affinity') {
+      affinityStatsFailed.value = true
+    } else {
+      // A failed refresh must not leave an earlier cleanable state in place.
+      logFiles.value = null
+    }
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     loadingStats.value = false
@@ -191,17 +197,32 @@ onMounted(loadStats)
         >
           {{ t('systemSettings.maintenance.loadingStats') }}
         </p>
-        <p
-          v-else-if="kind === 'channel-affinity'"
-          class="mt-0.5 text-xs text-[var(--text-tertiary)]"
-        >
-          {{
-            t('systemSettings.maintenance.affinitySummary', {
-              total: affinityStats?.total ?? 0,
-              capacity: affinityStats?.cache_capacity ?? 0,
-            })
-          }}
-        </p>
+        <template v-else-if="kind === 'channel-affinity'">
+          <p
+            v-if="affinityStats"
+            class="mt-0.5 text-xs text-[var(--text-tertiary)]"
+          >
+            {{
+              t('systemSettings.maintenance.affinitySummary', {
+                total: affinityStats.total,
+                capacity: affinityStats.cache_capacity,
+              })
+            }}
+          </p>
+          <p
+            v-if="affinityStatsFailed"
+            role="status"
+            class="mt-0.5 text-xs text-[var(--text-tertiary)]"
+          >
+            {{
+              t(
+                affinityStats
+                  ? 'systemSettings.maintenance.affinityStatsStale'
+                  : 'systemSettings.maintenance.affinityStatsUnavailable'
+              )
+            }}
+          </p>
+        </template>
         <p v-else class="mt-0.5 text-xs text-[var(--text-tertiary)]">
           {{ t('systemSettings.maintenance.performanceSummary', cacheSummary) }}
         </p>

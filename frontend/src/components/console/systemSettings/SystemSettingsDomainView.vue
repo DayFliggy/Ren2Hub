@@ -64,7 +64,10 @@ const saving = reactive({ value: false })
 const searchQuery = ref('')
 
 const visibleFields = computed(() => {
-  const fields = activeSection.value?.fields ?? []
+  const fields = (activeSection.value?.fields ?? []).filter(
+    (field) =>
+      field.key !== 'DisplayInCurrencyEnabled' || draft[field.key] === false
+  )
   const query = searchQuery.value.trim().toLocaleLowerCase()
   if (!query) return fields
   return fields.filter((field) => {

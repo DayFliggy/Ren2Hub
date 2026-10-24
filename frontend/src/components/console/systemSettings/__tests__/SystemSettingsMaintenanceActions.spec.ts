@@ -60,9 +60,11 @@ function mockFeeds(
   })
 }
 
-async function render() {
+async function render(
+  kind: 'performance' | 'channel-affinity' = 'performance'
+) {
   const wrapper = mount(SystemSettingsMaintenanceActions, {
-    props: { kind: 'performance' },
+    props: { kind },
     global: { plugins: [i18n], stubs: { ConfirmDialog: true } },
   })
   await flushPromises()
@@ -76,6 +78,57 @@ beforeAll(async () => {
 afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
+})
+
+describe('affinity cache statistics', () => {
+  const stats = (total: number, capacity = 20) => ({
+    enabled: true,
+    total,
+    unknown: 0,
+    cache_capacity: capacity,
+    cache_algo: 'lru',
+  })
+  async function refresh(wrapper: Awaited<ReturnType<typeof render>>) {
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '刷新')!
+      .trigger('click')
+    await flushPromises()
+  }
+
+  it('shows a failed first read as unavailable and accepts a real zero after retry', async () => {
+    const get = vi.spyOn(api, 'get').mockRejectedValue(new Error('forbidden'))
+    const wrapper = await render('channel-affinity')
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      '无法读取亲和缓存统计，请重试。'
+    )
+    expect(wrapper.text()).not.toContain('缓存 0 条')
+    expect(wrapper.text()).not.toContain('缓存条目')
+    expect(toast.error).toHaveBeenCalledWith('forbidden')
+
+    get.mockResolvedValue(stats(0, 0))
+    await refresh(wrapper)
+    expect(wrapper.text()).toContain('缓存 0 条，容量 0。')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('marks retained statistics stale after failure and clears the warning after recovery', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue(stats(7))
+    const wrapper = await render('channel-affinity')
+    get.mockRejectedValue(new Error('offline'))
+    await refresh(wrapper)
+    expect(wrapper.text()).toContain('缓存 7 条，容量 20。')
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      '刷新失败，当前显示上次读取的统计。'
+    )
+
+    get.mockResolvedValue(stats(3))
+    await refresh(wrapper)
+    expect(wrapper.text()).toContain('缓存 3 条，容量 20。')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })
 
 describe('performance maintenance summary', () => {

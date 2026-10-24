@@ -1143,6 +1143,7 @@ export default {
   },
 
   channels: {
+    modelsRequired: 'Select at least one model. Use Disable to stop a channel.',
     permissionDenied: 'You do not have permission for this channel action.',
     lab: 'Lab classification',
     allLabs: 'All labs',
@@ -3431,6 +3432,9 @@ export default {
       title: 'Runtime status and maintenance',
       loadingStats: 'Fetching the latest runtime status…',
       affinitySummary: '{total} cached entries, capacity {capacity}.',
+      affinityStatsUnavailable:
+        'Affinity cache statistics could not be loaded. Retry the refresh.',
+      affinityStatsStale: 'Refresh failed. Showing the last loaded statistics.',
       performanceSummary:
         '{memoryCount} active memory buffers ({memorySize}), {diskCount} active disk files ({diskSize}), {logCount} log files.',
       cacheEntries: 'Cached entries',

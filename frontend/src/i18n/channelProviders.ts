@@ -17,7 +17,8 @@ export const channelProviderMessages = {
       '标准 Vertex API 填写项目 ID；Express 模式留空。服务账号使用 JSON 中的项目。',
     region: 'Vertex 区域',
     regionHint:
-      '例如 global、us、eu 或 us-central1，也可填写按模型映射的 JSON。留空使用 global。',
+      '例如 global、us、eu 或 us-central1，也可填写按模型映射的 JSON。',
+    regionRequired: '请填写 Vertex 区域。',
   },
   en: {
     awsApiType: 'AWS API',
@@ -37,6 +38,7 @@ export const channelProviderMessages = {
       'Enter the project for the standard Vertex API; leave empty for express mode. Service accounts use the project in their JSON.',
     region: 'Vertex region',
     regionHint:
-      'For example global, us, eu or us-central1, or a per-model JSON map. Empty uses global.',
+      'For example global, us, eu or us-central1, or a per-model JSON map.',
+    regionRequired: 'Enter a Vertex region.',
   },
 }

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import ChannelFormModal from '../ChannelFormModal.vue'
 import type { AdminChannel } from '@/types/console'
+import enConsole from '@/i18n/locales/en/console'
+import zhConsole from '@/i18n/locales/zh-CN/console'
 
 const permission = vi.hoisted(() => ({ sensitive: true }))
 vi.mock('@/api/adminManagement', () => ({
@@ -35,34 +37,38 @@ afterEach(() => {
 async function form(
   type: number,
   setting: Record<string, unknown> = {},
-  settings: Record<string, unknown> = {}
+  settings: Record<string, unknown> = {},
+  creating = false,
+  locale = 'en'
 ) {
   const save = vi.fn().mockResolvedValue(true)
   wrapper = mount(ChannelFormModal, {
     props: {
       open: true,
-      editing: {
-        id: 101,
-        name: 'Provider fixture',
-        channel_ratio: '1',
-        max_concurrency: 0,
-        in_flight: 0,
-        lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
-        used_quota: 0,
-        balance: 0,
-        response_time: 0,
-        test_time: 0,
-        type,
-        status: 1,
-        base_url: '',
-        models: 'fixture',
-        model_mapping: '',
-        priority: 0,
-        weight: 1,
-        setting: JSON.stringify(setting),
-        settings: JSON.stringify(settings),
-        other: 'global',
-      } as AdminChannel,
+      editing: creating
+        ? null
+        : ({
+            id: 101,
+            name: 'Provider fixture',
+            channel_ratio: '1',
+            max_concurrency: 0,
+            in_flight: 0,
+            lab: { id: 'openai', name: 'OpenAI', source: 'vendor' },
+            used_quota: 0,
+            balance: 0,
+            response_time: 0,
+            test_time: 0,
+            type,
+            status: 1,
+            base_url: '',
+            models: 'fixture',
+            model_mapping: '',
+            priority: 0,
+            weight: 1,
+            setting: JSON.stringify(setting),
+            settings: JSON.stringify(settings),
+            other: '{"default":"global"}',
+          } as AdminChannel),
       save,
       fetchModels: vi.fn(),
     },
@@ -70,7 +76,15 @@ async function form(
       plugins: [
         createI18n({
           legacy: false,
-          locale: 'en',
+          locale,
+          messages: {
+            en: {
+              channels: { modelsRequired: enConsole.channels.modelsRequired },
+            },
+            'zh-CN': {
+              channels: { modelsRequired: zhConsole.channels.modelsRequired },
+            },
+          },
           missingWarn: false,
           fallbackWarn: false,
         }),
@@ -79,6 +93,24 @@ async function form(
     },
   })
   await flushPromises()
+  if (creating) {
+    if (type === 41) {
+      await wrapper.get('button[aria-expanded]').trigger('click')
+      await wrapper
+        .findAll('[role="option"]')
+        .find((option) => option.text().endsWith('Vertex AI'))!
+        .trigger('click')
+    }
+    await wrapper
+      .get('input[name="admin-channel-name"]')
+      .setValue('New provider')
+    await wrapper.get('input[name="admin-channel-key"]').setValue('fixture-key')
+    const modelInput = wrapper.get(
+      '.channel-form-section--models input[type="text"]'
+    )
+    await modelInput.setValue('fixture')
+    await modelInput.trigger('keydown', { key: 'Enter' })
+  }
   return save
 }
 async function saveForm() {
@@ -150,7 +182,7 @@ describe('native provider configuration round trip', () => {
     })
     expect(save.mock.calls[0]![0].setting).toBeUndefined()
   })
-  it('saves and clears Vertex project ID in settings and region in other', async () => {
+  it('saves and clears Vertex project ID while preserving region JSON in other', async () => {
     const save = await form(
       41,
       { proxy: '' },
@@ -159,13 +191,16 @@ describe('native provider configuration round trip', () => {
     const project = wrapper!.get('input[name="channel-vertex-project-id"]')
     expect((project.element as HTMLInputElement).value).toBe('old-project')
     await project.setValue(' new-project ')
-    await wrapper!.get('input[name="channel-vertex-region"]').setValue('eu')
+    const region = '{\n  "default": "eu",\n  "gemini-2.5-pro": "us-central1"\n}'
+    await wrapper!
+      .get('textarea[name="channel-vertex-region"]')
+      .setValue(region)
     await saveForm()
     expect(JSON.parse(save.mock.calls[0]![0].settings)).toEqual({
       vertex_project_id: 'new-project',
       vertex_key_type: 'api_key',
     })
-    expect(save.mock.calls[0]![0].other).toBe('eu')
+    expect(save.mock.calls[0]![0].other).toBe(region)
     await project.setValue('')
     await saveForm()
     expect(JSON.parse(save.mock.calls[1]![0].settings).vertex_project_id).toBe(
@@ -173,6 +208,72 @@ describe('native provider configuration round trip', () => {
     )
     expect(save.mock.calls[0]![0].setting).toBeUndefined()
   })
+  it.each([
+    { creating: false, locale: 'en', error: 'Enter a Vertex region.' },
+    { creating: true, locale: 'en', error: 'Enter a Vertex region.' },
+    { creating: false, locale: 'zh-CN', error: '请填写 Vertex 区域。' },
+    { creating: true, locale: 'zh-CN', error: '请填写 Vertex 区域。' },
+  ])(
+    'rejects blank Vertex regions (creating=$creating, locale=$locale)',
+    async ({ creating, locale, error }) => {
+      const save = await form(41, {}, {}, creating, locale)
+      const region = wrapper!.get('textarea[name="channel-vertex-region"]')
+      for (const blank of ['', ' \t\n ']) {
+        await region.setValue(blank)
+        expect(region.attributes('aria-invalid')).toBe('true')
+        expect(wrapper!.get('#channel-vertex-region-error').text()).toBe(error)
+        await saveForm()
+        expect(save).not.toHaveBeenCalled()
+      }
+      const mapping = '{ "default": "global" }'
+      await region.setValue(mapping)
+      expect(wrapper!.find('#channel-vertex-region-error').exists()).toBe(false)
+      await saveForm()
+      expect(save).toHaveBeenCalledOnce()
+      expect(save.mock.calls[0]![0].other).toBe(mapping)
+    }
+  )
+  it('passes nonblank region text without converting it to JSON', async () => {
+    const save = await form(41)
+    await wrapper!.get('textarea[name="channel-vertex-region"]').setValue('eu')
+    await saveForm()
+    expect(save.mock.calls[0]![0].other).toBe('eu')
+  })
+  it.each([false, true])(
+    'requires at least one model (creating=%s)',
+    async (creating) => {
+      const save = await form(1, {}, {}, creating)
+      if (creating) {
+        await wrapper!
+          .get('button[aria-label="Remove fixture"]')
+          .trigger('click')
+      } else {
+        await wrapper!
+          .findAll('button')
+          .find((button) => button.text() === 'channels.quickClearAll')!
+          .trigger('click')
+      }
+      expect(
+        wrapper!
+          .findAll('[role="alert"]')
+          .some((alert) => alert.text() === enConsole.channels.modelsRequired)
+      ).toBe(true)
+      await saveForm()
+      expect(save).not.toHaveBeenCalled()
+      const modelInput = wrapper!.get(
+        '.channel-form-section--models input[type="text"]'
+      )
+      await modelInput.setValue(' , , ')
+      await modelInput.trigger('keydown', { key: 'Enter' })
+      await saveForm()
+      expect(save).not.toHaveBeenCalled()
+      await modelInput.setValue('gemini-2.5-pro')
+      await modelInput.trigger('keydown', { key: 'Enter' })
+      await saveForm()
+      expect(save).toHaveBeenCalledOnce()
+      expect(save.mock.calls[0]![0].models).toBe('gemini-2.5-pro')
+    }
+  )
   it('service-account mode clears the API-key project while preserving unrelated flags', async () => {
     const save = await form(
       41,

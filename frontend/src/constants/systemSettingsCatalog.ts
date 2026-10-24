@@ -381,7 +381,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           },
           url('TopUpLink', 'topUpLink'),
           number('USDExchangeRate', 'usdExchangeRate', 1),
-          toggle('DisplayInCurrencyEnabled', 'displayInCurrency'),
+          toggle('DisplayInCurrencyEnabled', 'displayInCurrency', true),
           toggle('DisplayTokenStatEnabled', 'displayTokenStat'),
           select(
             'general_setting.quota_display_type',
@@ -658,13 +658,31 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         descriptionKey: 'systemSettings.sections.rateLimitDescription',
         fields: [
           toggle('ModelRequestRateLimitEnabled', 'rateLimitEnabled'),
-          number('ModelRequestRateLimitCount', 'rateLimitCount', 60),
-          number('ModelRequestRateLimitSuccessCount', 'rateLimitSuccessCount'),
-          number(
-            'ModelRequestRateLimitDurationMinutes',
-            'rateLimitDuration',
-            1
-          ),
+          {
+            ...number('ModelRequestRateLimitCount', 'rateLimitCount', 60),
+            min: 0,
+            max: 100_000_000,
+            integer: true,
+          },
+          {
+            ...number(
+              'ModelRequestRateLimitSuccessCount',
+              'rateLimitSuccessCount',
+              1000
+            ),
+            min: 1,
+            max: 100_000_000,
+            integer: true,
+          },
+          {
+            ...number(
+              'ModelRequestRateLimitDurationMinutes',
+              'rateLimitDuration',
+              1
+            ),
+            min: 0,
+            integer: true,
+          },
         ],
       },
       {
@@ -721,7 +739,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         descriptionKey: 'systemSettings.sections.dashboardDescription',
         fields: [
           toggle('DataExportEnabled', 'dataExportEnabled', true),
-          number('DataExportInterval', 'dataExportInterval', 5),
+          {
+            ...number('DataExportInterval', 'dataExportInterval', 5),
+            min: 1,
+            max: 1440,
+            integer: true,
+          },
           select('DataExportDefaultTime', 'dataExportDefaultTime', 'hour', [
             option('hour', 'hour'),
             option('day', 'day'),
@@ -796,7 +819,12 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         descriptionKey: 'systemSettings.sections.emailDescription',
         fields: [
           text('SMTPServer', 'smtpServer'),
-          number('SMTPPort', 'smtpPort', 587),
+          {
+            ...number('SMTPPort', 'smtpPort', 587),
+            min: 1,
+            max: 65535,
+            integer: true,
+          },
           text('SMTPAccount', 'smtpAccount'),
           text('SMTPFrom', 'smtpFrom'),
           secret('SMTPToken', 'smtpToken'),
