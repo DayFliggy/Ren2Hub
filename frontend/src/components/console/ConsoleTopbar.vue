@@ -184,14 +184,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
 }
 
 /*
- * The desktop menu labels never wrap. Below 1120px of bar width the widest
- * menu (English, administrator) needs the room of the search and language
- * labels; below 920px it also takes part of the bar's side padding, and
- * TopNavMenu tightens its pills at the same width. Below lg the menu is
- * hidden, so the controls keep their labels.
+ * The desktop menu labels never wrap. At a 16px default font, widths below
+ * 1120px reclaim the search and language labels; below 920px the bar and
+ * TopNavMenu also tighten their padding. Rem thresholds preserve these tiers
+ * as the user's default font grows. Below lg the menu is hidden.
  */
 @media (min-width: 1024px) {
-  @container console-topbar (max-width: 1119px) {
+  @container console-topbar (max-width: 69.9375rem) {
     .topbar-control-label,
     .topbar-divider,
     .topbar-language :deep([data-language-label]) {
@@ -202,7 +201,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
       padding-inline: 0;
     }
   }
-  @container console-topbar (max-width: 919px) {
+  @container console-topbar (max-width: 57.4375rem) {
     .topbar-nav {
       padding-inline: 1rem;
     }

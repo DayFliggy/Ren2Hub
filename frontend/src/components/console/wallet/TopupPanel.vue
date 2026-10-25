@@ -34,6 +34,7 @@ const emit = defineEmits<{
   'update:paymentMethod': [method: string]
   'track-order': [tradeNo: string]
   capabilities: [info: TopupInfo]
+  'capabilities-state': [state: 'idle' | 'ready' | 'failed']
 }>()
 const { t } = useI18n()
 const { t: paymentT } = useI18n({
@@ -45,6 +46,9 @@ const app = useAppStore()
 const auth = useAuthStore()
 const info = ref<TopupInfo | null>(null)
 const configState = ref<'idle' | 'ready' | 'failed'>('idle')
+watch(configState, (state) => emit('capabilities-state', state), {
+  immediate: true,
+})
 const amount = ref<number | null>(10)
 const submittingTopup = ref(false)
 const paymentError = ref('')
@@ -85,6 +89,7 @@ const selectedProduct = computed(() =>
 )
 const invalidAmount = computed(
   () =>
+    configState.value === 'ready' &&
     method.value !== 'creem' &&
     amount.value !== null &&
     !validTopupAmount(amount.value, amounts.value)
@@ -319,7 +324,14 @@ onUnmounted(() => {
 
 <template>
   <ConsoleCard :title="t('wallet.quickTopup')">
-    <fieldset :disabled="submittingTopup" class="min-w-0 border-0 p-0">
+    <div
+      v-if="configState === 'idle'"
+      role="status"
+      class="min-h-40 rounded-xl bg-[var(--surface-muted)] px-5 py-8 text-sm text-[var(--text-secondary)]"
+    >
+      {{ t('common.loading') }}
+    </div>
+    <fieldset v-else :disabled="submittingTopup" class="min-w-0 border-0 p-0">
       <div v-if="method !== 'creem'" class="grid grid-cols-3 gap-2">
         <button
           v-for="preset in presets"

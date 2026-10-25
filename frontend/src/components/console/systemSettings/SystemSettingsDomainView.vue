@@ -390,7 +390,9 @@ onMounted(() => load())
           kind="performance"
         />
       </SysSettingsFormCard>
-      <RequestPolicyPanel v-if="props.domain === 'security'" />
+      <RequestPolicyPanel
+        v-if="props.domain === 'security' && activeSection?.id === 'rate-limit'"
+      />
     </div>
   </div>
 </template>

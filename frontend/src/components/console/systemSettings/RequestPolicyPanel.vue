@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { api } from '@/api/client'
@@ -32,6 +32,7 @@ const { t } = useI18n({
 const { t: globalT } = useI18n({ useScope: 'global' })
 const settings = useSystemSettings()
 const toast = useToast()
+const editorId = useId()
 const draft = ref(''),
   error = ref(''),
   loading = ref(false),
@@ -123,17 +124,31 @@ watch(settings.rawOptions, () => {
 })
 </script>
 <template>
-  <ConsoleCard :title="t('policy.title')" class="mt-6"
-    ><p class="mb-4 text-sm">{{ t('policy.hint') }}</p>
-    <ErrorBanner v-if="error" :message="error" /><textarea
+  <ConsoleCard :title="t('policy.title')" class="mt-6">
+    <p
+      :id="`${editorId}-hint`"
+      class="text-sm leading-6 text-[var(--text-secondary)]"
+    >
+      {{ t('policy.hint') }}
+    </p>
+    <ErrorBanner
+      v-if="error"
+      :id="`${editorId}-error`"
+      class="mt-3"
+      :message="error"
+      @retry="load"
+    />
+    <textarea
       v-model="draft"
       :disabled="loading"
       rows="18"
       :aria-label="t('policy.title')"
+      :aria-invalid="Boolean(error)"
+      :aria-describedby="`${editorId}-hint${error ? ` ${editorId}-error` : ''}`"
       spellcheck="false"
-      class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-sm"
+      class="mt-3 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-sm text-[var(--text-primary)] focus-ring"
     />
-    <div class="mt-4 flex gap-3">
+    <div class="mt-4 flex flex-wrap gap-3">
       <ConsoleButton
         :disabled="loading || !ready || draft === baselineText"
         @click="save"
@@ -141,6 +156,6 @@ watch(settings.rawOptions, () => {
       ><ConsoleButton variant="secondary" :disabled="loading" @click="load">{{
         t('policy.reload')
       }}</ConsoleButton>
-    </div></ConsoleCard
-  >
+    </div>
+  </ConsoleCard>
 </template>

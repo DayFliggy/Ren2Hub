@@ -11,7 +11,7 @@ import {
   Shapes,
   X,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError } from '@/api/types'
@@ -400,6 +400,7 @@ function onModelInputKeydown(e: KeyboardEvent) {
 
 // ── Quick actions ──────────────────────────────────────────────────────────
 const fetchingUpstream = ref(false)
+const fetchModelsButton = ref<HTMLButtonElement | null>(null)
 const fetchedModels = ref<string[]>([])
 const modelPickerOpen = ref(false)
 let fetchEpoch = 0
@@ -449,11 +450,25 @@ async function fetchUpstream() {
     )
     if (epoch !== fetchEpoch || !props.open) return
     fetchedModels.value = [...new Set(models)]
+    // Loading disables and blurs the trigger. Restore it before the nested
+    // modal records its opener, so both cancellation and apply return focus.
+    fetchingUpstream.value = false
+    await nextTick()
+    if (epoch !== fetchEpoch || !props.open) return
+    fetchModelsButton.value?.focus()
     modelPickerOpen.value = true
     toast.success(t('channels.upstreamFetched', { count: models.length }))
   } catch (error) {
-    if (epoch === fetchEpoch)
-      toast.error(error instanceof ApiError ? error.message : String(error))
+    if (epoch !== fetchEpoch || !props.open) return
+    toast.error(error instanceof ApiError ? error.message : String(error))
+    fetchingUpstream.value = false
+    await nextTick()
+    if (
+      epoch === fetchEpoch &&
+      props.open &&
+      document.activeElement === document.body
+    )
+      fetchModelsButton.value?.focus()
   } finally {
     if (epoch === fetchEpoch) fetchingUpstream.value = false
   }
@@ -898,28 +913,6 @@ async function submit() {
             </FormField>
           </div>
 
-          <!-- channel_ratio sets what every user pays, so it needs
-            ChannelSensitiveWrite; an unchanged value is still accepted. -->
-          <FormField
-            :label="t('channels.channelRatio')"
-            :hint="canSensitiveWrite ? '' : t('channels.channelRatioReadOnly')"
-            ><TextInput
-              v-model="form.channel_ratio"
-              inputmode="decimal"
-              name="channel-ratio"
-              :disabled="!canSensitiveWrite"
-          /></FormField>
-          <FormField
-            :label="t('channels.maxConcurrency')"
-            :hint="t('channels.maxConcurrencyHint')"
-            ><input
-              v-model.number="form.max_concurrency"
-              type="number"
-              min="0"
-              step="1"
-              class="console-input w-full"
-              name="channel-max-concurrency"
-          /></FormField>
           <!-- Enabled toggle (create only; existing channels toggle status from the table) -->
           <div
             v-if="editing === null"
@@ -1292,6 +1285,7 @@ async function submit() {
               </p>
               <div class="flex flex-wrap gap-1.5">
                 <button
+                  ref="fetchModelsButton"
                   type="button"
                   class="channel-form-quick-action"
                   :disabled="fetchingUpstream || !canFetchUpstream"
@@ -1588,6 +1582,43 @@ async function submit() {
                 class="channel-form-number focus-ring"
               />
             </FormField>
+            <FormField
+              :label="t('channels.maxConcurrency')"
+              :hint="t('channels.maxConcurrencyHint')"
+            >
+              <input
+                v-model.number="form.max_concurrency"
+                type="number"
+                min="0"
+                step="1"
+                name="channel-max-concurrency"
+                class="channel-form-number focus-ring"
+              />
+            </FormField>
+            <!-- The multiplier changes every user's price, so sensitive write
+              permission remains required even alongside ordinary settings. -->
+            <FormField
+              :label="t('channels.channelRatio')"
+              :hint="
+                canSensitiveWrite ? '' : t('channels.channelRatioReadOnly')
+              "
+            >
+              <div class="relative">
+                <input
+                  v-model="form.channel_ratio"
+                  type="text"
+                  inputmode="decimal"
+                  name="channel-ratio"
+                  :disabled="!canSensitiveWrite"
+                  class="channel-form-number channel-form-number--ratio focus-ring"
+                />
+                <span
+                  class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[var(--text-tertiary)]"
+                  aria-hidden="true"
+                  >×</span
+                >
+              </div>
+            </FormField>
           </div>
         </div>
       </section>
@@ -1703,6 +1734,13 @@ async function submit() {
 }
 .channel-form-number:focus {
   border-color: var(--border-strong);
+}
+.channel-form-number--ratio {
+  padding-right: 2.5rem;
+}
+.channel-form-number:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 .channel-form-quick-action {
   border: 1px solid var(--border-subtle);

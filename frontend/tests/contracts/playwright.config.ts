@@ -9,10 +9,17 @@ const baseURL = `http://127.0.0.1:${port}`
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'product-regressions.spec.ts',
+  testMatch: '*.spec.ts',
   outputDir: `${output}/artifacts`,
-  workers: 1,
+  workers: 2,
+  forbidOnly: true,
   retries: 0,
+  updateSnapshots: 'none',
+  ...(process.env.REN2HUB_UI_BASELINE
+    ? {
+        snapshotPathTemplate: `${process.env.REN2HUB_UI_BASELINE}/{testFileName}/{arg}{ext}`,
+      }
+    : {}),
   timeout: 45_000,
   expect: { timeout: 8_000 },
   reporter: [['list'], ['json', { outputFile: `${output}/playwright.json` }]],
@@ -24,7 +31,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: `bun run dev -- --host 127.0.0.1 --port ${port} --strictPort --base /`,
+    command: `bun run dev -- --config tests/contracts/vite.config.ts --host 127.0.0.1 --port ${port} --strictPort --base /`,
     cwd: new URL('../..', import.meta.url).pathname,
     url: baseURL,
     reuseExistingServer: false,

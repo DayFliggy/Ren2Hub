@@ -83,7 +83,10 @@ function render() {
     global: {
       plugins: [i18n],
       stubs: {
-        ConsoleModal: { template: '<div><slot /><slot name="footer" /></div>' },
+        ConsoleModal: {
+          template:
+            '<div><slot /><footer><slot name="footer" /></footer></div>',
+        },
       },
     },
   })
@@ -96,6 +99,27 @@ function completeButton(wrapper: ReturnType<typeof render>) {
 }
 
 describe('manual completion', () => {
+  it('spaces the available footer actions without sending completion before confirmation', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(nativeTopUpDetail)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(undefined)
+    const wrapper = render()
+    await flushPromises()
+    const complete = completeButton(wrapper)!
+    const close = wrapper
+      .get('footer')
+      .findAll('button')
+      .find((button) => button.text() === 'Close')!
+    expect(complete.element.parentElement).toBe(close.element.parentElement)
+    expect(close.element.parentElement?.classList.contains('gap-3')).toBe(true)
+    expect(
+      close.element.parentElement?.classList.contains('sm:grid-cols-2')
+    ).toBe(true)
+    await complete.trigger('click')
+    await flushPromises()
+    expect(post).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('offers manual completion of a pending order to a role-10 admin', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(nativeTopUpDetail)
     const post = vi.spyOn(api, 'post').mockResolvedValue(undefined)
@@ -119,6 +143,13 @@ describe('manual completion', () => {
     const wrapper = render()
     await flushPromises()
     expect(completeButton(wrapper)).toBeUndefined()
+    const footer = wrapper.get('footer')
+    expect(footer.findAll('button')).toHaveLength(1)
+    expect(
+      footer
+        .get('button')
+        .element.parentElement?.classList.contains('sm:grid-cols-2')
+    ).toBe(false)
     wrapper.unmount()
   })
 

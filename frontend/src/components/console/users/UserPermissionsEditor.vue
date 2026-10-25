@@ -40,18 +40,26 @@ function change(resource: string, action: string, enabled: boolean) {
 }
 </script>
 <template>
-  <fieldset class="space-y-3">
-    <legend class="mb-2 font-semibold">{{ t('users.permissions') }}</legend>
+  <fieldset class="min-w-0 space-y-3 text-left">
+    <legend class="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+      {{ t('users.permissions') }}
+    </legend>
     <ErrorBanner v-if="error" :message="error" />
-    <div v-for="resource in resources" :key="resource.resource">
-      <h4 class="text-sm">{{ serverText(resource.label_key) }}</h4>
+    <fieldset
+      v-for="resource in resources"
+      :key="resource.resource"
+      class="min-w-0 rounded-xl border border-[var(--border-subtle)] p-3"
+    >
+      <legend class="px-1 text-sm font-medium text-[var(--text-primary)]">
+        {{ serverText(resource.label_key) }}
+      </legend>
       <label
         v-for="action in resource.actions"
         :key="action.action"
-        class="mt-1 flex items-start gap-2 text-sm"
+        class="flex min-h-11 cursor-pointer items-start gap-3 py-2 text-sm text-[var(--text-primary)]"
         ><input
           type="checkbox"
-          class="mt-1"
+          class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)] focus-ring"
           :checked="model[resource.resource]?.[action.action] === true"
           @change="
             change(
@@ -60,7 +68,7 @@ function change(resource: string, action: string, enabled: boolean) {
               ($event.target as HTMLInputElement).checked
             )
           "
-        /><span
+        /><span class="min-w-0 break-words"
           >{{ serverText(action.label_key)
           }}<span
             v-if="action.description_key"
@@ -69,6 +77,6 @@ function change(resource: string, action: string, enabled: boolean) {
           ></span
         ></label
       >
-    </div>
+    </fieldset>
   </fieldset>
 </template>

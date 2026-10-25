@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* Labels stay on one line (see the width tiers in ConsoleTopbar). In the
    narrowest bar the widest menu only fits with tighter pills. */
-@container console-topbar (max-width: 919px) {
+@container console-topbar (max-width: 57.4375rem) {
   .top-nav {
     gap: 2px;
   }

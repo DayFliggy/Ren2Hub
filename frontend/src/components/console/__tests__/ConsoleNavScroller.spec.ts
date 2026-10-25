@@ -36,6 +36,11 @@ describe('mobile navigation font loading', () => {
         return this.classList.contains('nav-scroller') ? 375 : 0
       }
     )
+    vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(
+      function (this: Element) {
+        return this.classList.contains('nav-scroller') ? stripWidth : 0
+      }
+    )
     vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(
       function (this: HTMLElement) {
         return this.getAttribute('aria-current') === 'page' ? itemLeft : 0
@@ -75,6 +80,51 @@ describe('mobile navigation font loading', () => {
     finishFonts()
     await flushPromises()
   }
+
+  function applyNarrowerFont() {
+    itemLeft = 650
+    itemWidth = 60
+    stripWidth = 900
+    // Font layout can clamp the browser's position without a JS assignment.
+    scrollPosition = Math.min(scrollPosition, stripWidth - 375)
+  }
+
+  it.each([true, false])(
+    'recenters after native font-width clamping (scroll delivered: %s)',
+    async (delivered) => {
+      expect(scrollPosition).toBe(814)
+      applyNarrowerFont()
+      expect(scrollPosition).toBe(525)
+      if (delivered) await wrapper!.get('.nav-scroller').trigger('scroll')
+      finishFonts()
+      await flushPromises()
+      expect(scrollPosition).toBe(492.5)
+      expect(itemLeft + itemWidth / 2 - scrollPosition).toBe(375 / 2)
+    }
+  )
+
+  it.each([true, false])(
+    'preserves a user position during font narrowing (scroll delivered: %s)',
+    async (delivered) => {
+      scrollPosition = 20
+      if (delivered) await wrapper!.get('.nav-scroller').trigger('scroll')
+      applyNarrowerFont()
+      finishFonts()
+      await flushPromises()
+      expect(scrollPosition).toBe(20)
+    }
+  )
+
+  it('preserves an established manual position even when fonts clamp it', async () => {
+    scrollPosition = 700
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    applyNarrowerFont()
+    expect(scrollPosition).toBe(525)
+    await wrapper!.get('.nav-scroller').trigger('scroll')
+    finishFonts()
+    await flushPromises()
+    expect(scrollPosition).toBe(525)
+  })
 
   it('reveals the current item after font widths change without a container resize', async () => {
     expect(scrollPosition).toBe(814)

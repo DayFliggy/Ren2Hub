@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -37,6 +37,7 @@ const confirm = ref('')
 const affiliateCode = ref('')
 const affiliateConfirmed = ref(false)
 const verificationCode = ref('')
+const verificationCodeId = useId()
 const verificationSending = ref(false)
 const loading = ref(false)
 const turnstileToken = ref('')
@@ -261,19 +262,31 @@ onMounted(() => app.initialize())
             {{ errors.email }}
           </span>
         </FormField>
-        <FormField :label="t('auth.verificationCode')"
-          ><TextInput
-            v-model="verificationCode"
-            autocomplete="one-time-code"
-          /><ConsoleButton
-            type="button"
-            variant="secondary"
-            :loading="verificationSending"
-            :disabled="busy || !email.trim() || !turnstileSatisfied"
-            @click="sendVerification"
-            >{{ t('auth.sendCode') }}</ConsoleButton
-          ></FormField
-        >
+        <div>
+          <label
+            :for="verificationCodeId"
+            class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
+          >
+            {{ t('auth.verificationCode') }}
+          </label>
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <TextInput
+              :id="verificationCodeId"
+              v-model="verificationCode"
+              class="min-w-0 flex-1"
+              autocomplete="one-time-code"
+            />
+            <ConsoleButton
+              type="button"
+              variant="secondary"
+              class="shrink-0"
+              :loading="verificationSending"
+              :disabled="busy || !email.trim() || !turnstileSatisfied"
+              @click="sendVerification"
+              >{{ t('auth.sendCode') }}</ConsoleButton
+            >
+          </div>
+        </div>
       </template>
       <FormField :label="t('auth.newPassword')" :hint="t('auth.passwordHint')">
         <TextInput

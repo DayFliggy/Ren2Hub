@@ -55,6 +55,84 @@ function submit(wrapper: Awaited<ReturnType<typeof render>>) {
     .find((button) => button.text() === i18n.global.t('wallet.gmpaySubmit'))!
 }
 describe('native wallet checkout', () => {
+  it('cancels capability loading on unmount without publishing a late ready state', async () => {
+    const onCapabilitiesState = vi.fn()
+    const onCapabilities = vi.fn()
+    let finish!: (value: typeof nativeTopupInfo) => void
+    const get = vi.spyOn(api, 'get').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const wrapper = mount(TopupPanel, {
+      props: {
+        paymentMethod: '',
+        balanceQuota: '500000',
+        onCapabilitiesState,
+        onCapabilities,
+      },
+      global: { plugins: [i18n] },
+    })
+    const signal = get.mock.calls[0]![2]?.signal as AbortSignal
+    expect(signal.aborted).toBe(false)
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    finish(nativeTopupInfo)
+    await flushPromises()
+    expect(onCapabilitiesState.mock.calls).toEqual([['idle']])
+    expect(onCapabilities).not.toHaveBeenCalled()
+  })
+
+  it('reports configuration loading, failure and retry without leaving a false loading placeholder', async () => {
+    let reject!: (error: Error) => void
+    const get = vi.spyOn(api, 'get').mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail
+        })
+    )
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: '', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      i18n.global.t('common.loading')
+    )
+    expect(wrapper.emitted('capabilities-state')).toEqual([['idle']])
+    expect(wrapper.emitted('capabilities')).toBeUndefined()
+    reject(new Error('Unavailable'))
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain(
+      i18n.global.t('wallet.invalidTopupAmount')
+    )
+    expect(wrapper.text()).toContain(
+      i18n.global.t('wallet.epayMethodsLoadFailed')
+    )
+    expect(wrapper.emitted('capabilities-state')).toEqual([
+      ['idle'],
+      ['failed'],
+    ])
+    get.mockResolvedValue({
+      ...nativeTopupInfo,
+      pay_methods: [],
+      enable_online_topup: false,
+    })
+    await wrapper.get('[role="alert"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('capabilities-state')).toEqual([
+      ['idle'],
+      ['failed'],
+      ['idle'],
+      ['ready'],
+    ])
+    expect(wrapper.emitted('capabilities')).toHaveLength(1)
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('shows Creem native quota once and adds it exactly to the account balance', async () => {
     configureQuotaDisplay({ quota_per_unit: 500000, quota_display_type: 'USD' })
     vi.spyOn(api, 'get').mockResolvedValue({

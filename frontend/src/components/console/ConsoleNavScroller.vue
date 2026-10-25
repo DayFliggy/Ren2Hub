@@ -35,7 +35,15 @@ function centerActiveItem() {
 }
 
 function preserveManualPosition() {
-  if (scroller.value && scroller.value.scrollLeft !== centeredScrollLeft) {
+  const strip = scroller.value
+  if (!strip) return
+  // Narrower fonts can clamp our automatic position without user input.
+  const maxScrollLeft = Math.max(0, strip.scrollWidth - strip.clientWidth)
+  const automaticPosition = Math.min(
+    Math.max(0, centeredScrollLeft),
+    maxScrollLeft
+  )
+  if (strip.scrollLeft !== automaticPosition) {
     manuallyScrolled = true
   }
 }

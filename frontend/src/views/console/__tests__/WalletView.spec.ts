@@ -13,6 +13,7 @@ import { getUsageSummary } from '@/api/dashboard'
 import {
   nativeTopUpDetail,
   nativeGmpayEvidence,
+  nativeTopupInfo,
 } from '@/api/__tests__/topupFixtures'
 import WalletView from '../WalletView.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
@@ -219,6 +220,48 @@ describe('wallet month statistics', () => {
       })
     }
     expect(today!.value).not.toBe('—')
+    wrapper.unmount()
+  })
+})
+
+describe('wallet payment capabilities layout', () => {
+  it('keeps one column while capabilities load or fail, then reveals only enabled redemption', async () => {
+    const wrapper = await render()
+    const panel = wrapper.findComponent({ name: 'TopupPanel' })
+    const region = () => panel.element.parentElement!
+    expect(region().getAttribute('aria-busy')).toBe('true')
+    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
+      false
+    )
+    expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(false)
+
+    panel.vm.$emit('capabilities-state', 'failed')
+    await flushPromises()
+    expect(region().getAttribute('aria-busy')).toBe('false')
+    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
+      false
+    )
+
+    panel.vm.$emit('capabilities', {
+      ...nativeTopupInfo,
+      enable_redemption: false,
+    })
+    panel.vm.$emit('capabilities-state', 'ready')
+    await flushPromises()
+    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
+      false
+    )
+    expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(false)
+
+    panel.vm.$emit('capabilities', {
+      ...nativeTopupInfo,
+      enable_redemption: true,
+    })
+    await flushPromises()
+    expect(region().classList.contains('xl:grid-cols-[1fr_23.75rem]')).toBe(
+      true
+    )
+    expect(wrapper.findComponent({ name: 'RedeemPanel' }).exists()).toBe(true)
     wrapper.unmount()
   })
 })

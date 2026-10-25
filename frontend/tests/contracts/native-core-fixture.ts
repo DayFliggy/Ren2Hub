@@ -110,10 +110,15 @@ export async function nativeCoreFixture(
   page.on('console', (message) => {
     if (message.text().includes('[intlify] Not found'))
       missingMessages.push(message.text())
+    if (message.text().includes('[Vue warn]: Invalid prop'))
+      errors.push(message.text())
   })
   const locale = options.locale ?? 'en'
   await page.addInitScript(
     ({ theme, locale }) => {
+      // Sandboxed public-document frames have no storage origin. Only seed
+      // the application frame; do not weaken the document sandbox for tests.
+      if (window !== window.top || location.protocol !== 'http:') return
       localStorage.setItem('ren2hub_theme_mode', theme)
       localStorage.setItem('ren2hub_locale', locale)
     },
@@ -386,6 +391,7 @@ export async function nativeCoreFixture(
           },
         ],
         daily: [],
+        methods: [],
         start_time: now - 2592000,
         end_time: 0,
       })
@@ -618,6 +624,17 @@ export async function nativeCoreFixture(
         ],
       })
     if (path === '/api/performance/stats') return ok(performanceFixture())
+    if (path === '/api/performance/quality')
+      return ok({
+        enabled: true,
+        window_start: now - 86400,
+        window_end: now,
+        bucket_seconds: 3600,
+        summary: null,
+        series: [],
+      })
+    if (path === '/api/user/topup/ranking')
+      return ok({ items: [], start_time: now - 2592000, end_time: now })
     if (path === '/api/system-task/list')
       return route.fulfill({ json: { success: true, data: [], total: 0 } })
     if (path === '/api/option/')

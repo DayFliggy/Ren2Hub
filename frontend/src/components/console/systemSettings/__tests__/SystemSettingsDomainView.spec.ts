@@ -397,18 +397,23 @@ describe('Email settings page', () => {
 })
 
 describe('request policy panel', () => {
+  it.each(['sensitive', 'ssrf', 'token-limits'])(
+    'does not repeat the policy editor in security/%s',
+    async (section) => {
+      const wrapper = await render('security', section)
+      expect(
+        wrapper.find('textarea[aria-label="Request policy"]').exists()
+      ).toBe(false)
+      wrapper.unmount()
+    }
+  )
   it('shows a policy saved in the panel on the settings form', async () => {
     await serve({
       CheckSensitiveEnabled: 'false',
       SensitiveWords: 'old',
       RetryTimes: '2',
     })
-    const wrapper = await render('security', 'sensitive')
-    const sensitiveCheck = () =>
-      wrapper.get(
-        '[role="switch"][aria-label="Enable sensitive word detection"]'
-      )
-    expect(sensitiveCheck().attributes('aria-checked')).toBe('false')
+    const wrapper = await render('security', 'rate-limit')
     const policy = wrapper.get('textarea[aria-label="Request policy"]')
     const draft = JSON.parse((policy.element as HTMLTextAreaElement).value)
     await policy.setValue(
@@ -420,7 +425,41 @@ describe('request policy panel', () => {
       .trigger('click')
     await flushPromises()
     expect(backend.patches).toEqual([{ CheckSensitiveEnabled: 'true' }])
-    expect(sensitiveCheck().attributes('aria-checked')).toBe('true')
+    await wrapper.vm.$router.push('/security/sensitive')
+    await flushPromises()
+    expect(wrapper.find('textarea[aria-label="Request policy"]').exists()).toBe(
+      false
+    )
+    expect(
+      wrapper
+        .get('[role="switch"][aria-label="Enable sensitive word detection"]')
+        .attributes('aria-checked')
+    ).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('protects policy drafts before unmounting the editor on a section change', async () => {
+    const wrapper = await render('security', 'rate-limit')
+    const policy = wrapper.get('textarea[aria-label="Request policy"]')
+    await policy.setValue('{"RetryTimes":"4"}')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await wrapper.vm.$router.push('/security/sensitive')
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(wrapper.vm.$router.currentRoute.value.params.section).toBe(
+      'rate-limit'
+    )
+    expect(
+      wrapper.get<HTMLTextAreaElement>('textarea[aria-label="Request policy"]')
+        .element.value
+    ).toBe('{"RetryTimes":"4"}')
+    confirm.mockReturnValue(true)
+    await wrapper.vm.$router.push('/security/sensitive')
+    await flushPromises()
+    expect(wrapper.find('textarea[aria-label="Request policy"]').exists()).toBe(
+      false
+    )
+    confirm.mockRestore()
     wrapper.unmount()
   })
 })

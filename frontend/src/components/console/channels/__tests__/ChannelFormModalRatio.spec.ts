@@ -79,6 +79,52 @@ afterEach(() => {
 })
 
 describe('channel multiplier permission', () => {
+  it('groups numeric routing settings together and keeps their native value types', async () => {
+    permissions.sensitive = true
+    const { wrapper, save } = mountForm()
+    try {
+      await flushPromises()
+      const ratio = ratioInput()
+      const section = ratio.closest('.channel-form-section--advanced')
+      expect(section).not.toBeNull()
+      const concurrency = section!.querySelector<HTMLInputElement>(
+        'input[name="channel-max-concurrency"]'
+      )!
+      expect(concurrency.type).toBe('number')
+      expect(concurrency.min).toBe('0')
+      expect(concurrency.step).toBe('1')
+      expect(ratio.type).toBe('text')
+      expect(ratio.inputMode).toBe('decimal')
+      expect(
+        ratio.parentElement?.querySelector('[aria-hidden="true"]')?.textContent
+      ).toBe('×')
+      const settingGrid = ratio.closest('label')!.parentElement!
+      expect(settingGrid.contains(concurrency)).toBe(true)
+      expect(
+        settingGrid.querySelector('input[name="admin-channel-priority"]')
+      ).not.toBeNull()
+      expect(
+        settingGrid.querySelector('input[name="admin-channel-weight"]')
+      ).not.toBeNull()
+
+      ratio.value = '0.123456789012345678'
+      ratio.dispatchEvent(new Event('input'))
+      concurrency.value = '4'
+      concurrency.dispatchEvent(new Event('input'))
+      await flushPromises()
+      saveButton().click()
+      await flushPromises()
+      expect(save).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          channel_ratio: '0.123456789012345678',
+          max_concurrency: 4,
+        })
+      )
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('is read-only without sensitive write and leaves the multiplier out of the update', async () => {
     const { wrapper, save } = mountForm()
     try {

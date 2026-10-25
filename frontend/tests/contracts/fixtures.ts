@@ -107,7 +107,11 @@ export async function configureStablePage(
 
 export async function waitForStablePage(page: Page): Promise<void> {
   assertHealthy(page)
-  await expect(page.locator('#app > :visible').first()).toBeVisible()
+  // The first isolated Vite request compiles lazy route dependencies. This is
+  // readiness, not a retry; runtime and fixture errors are still asserted.
+  await expect(page.locator('#app > :visible').first()).toBeVisible({
+    timeout: 30_000,
+  })
   expect(
     await page.evaluate(
       () => matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -117,15 +121,19 @@ export async function waitForStablePage(page: Page): Promise<void> {
   await expect(
     page.locator('.page-enter-active, .page-leave-active')
   ).toHaveCount(0)
-  await page.waitForFunction(() =>
-    document
-      .getAnimations()
-      .every(
-        (animation) =>
-          animation.effect?.getTiming().iterations === Infinity ||
-          animation.playState !== 'running'
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document
+          .getAnimations()
+          .every(
+            (animation) =>
+              animation.effect?.getTiming().iterations === Infinity ||
+              animation.playState !== 'running'
+          )
       )
-  )
+    )
+    .toBe(true)
   await expect(page.locator('[data-error-retry]')).toHaveCount(0)
   assertHealthy(page)
 }

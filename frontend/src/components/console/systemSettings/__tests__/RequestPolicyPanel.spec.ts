@@ -211,3 +211,33 @@ it('preserves draft and server rejection instead of claiming a successful save',
   expect(api.get).toHaveBeenCalledTimes(1)
   wrapper.unmount()
 })
+
+it('associates editor instructions and validation errors with its accessible input', async () => {
+  const wrapper = await render()
+  const editor = wrapper.get('textarea')
+  expect(editor.attributes('aria-invalid')).toBe('false')
+  const hintId = editor.attributes('aria-describedby')!
+  expect(wrapper.get(`[id="${hintId}"]`).text()).toContain(
+    'Values remain strings'
+  )
+  await editor.setValue('invalid')
+  await wrapper.findAll('button')[0]!.trigger('click')
+  await flushPromises()
+  expect(editor.attributes('aria-invalid')).toBe('true')
+  expect(editor.attributes('aria-describedby')?.split(' ')).toContain(
+    wrapper.get('[role=alert]').attributes('id')
+  )
+  wrapper.unmount()
+})
+
+it('retries a failed policy load from the visible error action', async () => {
+  api.get.mockRejectedValueOnce(new Error('Policy unavailable'))
+  const wrapper = await render()
+  expect(wrapper.get('[role=alert]').text()).toContain('Policy unavailable')
+  await wrapper.get('[role=alert] button').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('[role=alert]').exists()).toBe(false)
+  expect(draft(wrapper).RetryTimes).toBe('2')
+  expect(api.patch).not.toHaveBeenCalled()
+  wrapper.unmount()
+})

@@ -349,20 +349,23 @@ function paymentRailLabel(method: string): string {
     </section>
 
     <template #footer>
-      <ConsoleButton
-        v-if="canComplete"
-        :disabled="completing || evidenceLoading"
-        @click="confirmComplete = true"
-        >{{ paymentT('nativePayment.complete') }}</ConsoleButton
-      >
-      <ConsoleButton
-        variant="secondary"
-        block
-        :disabled="completing"
-        @click="emit('close')"
-      >
-        {{ t('common.close') }}
-      </ConsoleButton>
+      <div class="grid gap-3" :class="{ 'sm:grid-cols-2': canComplete }">
+        <ConsoleButton
+          v-if="canComplete"
+          block
+          :disabled="completing || evidenceLoading"
+          @click="confirmComplete = true"
+          >{{ paymentT('nativePayment.complete') }}</ConsoleButton
+        >
+        <ConsoleButton
+          variant="secondary"
+          block
+          :disabled="completing"
+          @click="emit('close')"
+        >
+          {{ t('common.close') }}
+        </ConsoleButton>
+      </div>
     </template>
   </ConsoleModal>
   <ConfirmDialog

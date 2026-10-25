@@ -1,11 +1,35 @@
 <script setup lang="ts">
-import { computed, useAttrs, useId } from 'vue'
+import { computed, ref, useAttrs, useId } from 'vue'
 
 // Keep consumer `class`/`style` on the sizing wrapper, but forward everything
 // else (e.g. `id`, `aria-*`) to the real <input> so label/focus targeting works.
 defineOptions({ inheritAttrs: false })
 
 const model = defineModel<string>({ default: '' })
+const composing = ref(false)
+const compositionValue = ref('')
+const inputValue = computed(() =>
+  composing.value ? compositionValue.value : model.value
+)
+
+// Native v-model coerces number inputs before emitting. Keep this component's
+// string contract and decimal precision while retaining composition buffering.
+function onInput(event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  if (composing.value) compositionValue.value = value
+  else model.value = value
+}
+
+function startComposition(event: CompositionEvent) {
+  compositionValue.value = (event.target as HTMLInputElement).value
+  composing.value = true
+}
+
+function finishComposition(event: Event) {
+  if (!composing.value) return
+  composing.value = false
+  onInput(event)
+}
 
 withDefaults(
   defineProps<{
@@ -45,7 +69,7 @@ const inputAttrs = computed(() => {
     </div>
     <input
       :id="inputId"
-      v-model="model"
+      :value="inputValue"
       :type="type"
       :placeholder="placeholder"
       :autocomplete="autocomplete"
@@ -57,6 +81,10 @@ const inputAttrs = computed(() => {
         $slots.icon ? 'pl-10' : 'pl-4',
         readonly ? 'cursor-not-allowed opacity-60' : '',
       ]"
+      @input="onInput"
+      @compositionstart="startComposition"
+      @compositionend="finishComposition"
+      @change="finishComposition"
     />
   </div>
 </template>

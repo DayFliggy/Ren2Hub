@@ -388,6 +388,27 @@ describe('SignUpView email verification', () => {
     await setLocale('zh-CN')
   })
 
+  it('labels the verification input independently from the send-code action', async () => {
+    const wrapper = mountSignUp(true)
+    await flushPromises()
+    const code = wrapper.get<HTMLInputElement>(
+      'input[autocomplete="one-time-code"]'
+    )
+    const label = wrapper.get(`label[for="${code.element.id}"]`)
+    expect(label.text()).toBe(i18n.global.t('auth.verificationCode'))
+    expect(code.element.labels).toHaveLength(1)
+    const send = wrapper
+      .findAll('button')
+      .find((button) => button.text() === i18n.global.t('auth.sendCode'))!
+    expect(send.element.closest('label')).toBeNull()
+    expect(send.attributes('type')).toBe('button')
+    expect(send.element.parentElement).toBe(
+      code.element.parentElement?.parentElement
+    )
+    expect(send.element.parentElement?.classList.contains('gap-2')).toBe(true)
+    wrapper.unmount()
+  })
+
   it('registers without email fields when verification is off', async () => {
     register.mockResolvedValue(undefined)
     const wrapper = mountSignUp(false)

@@ -107,10 +107,15 @@ const monthPct = computed(() =>
           {{ t('nativeAccount.rewardRange') }}
         </p>
         <p
-          class="break-all text-center text-3xl font-bold tracking-tighter text-[var(--text-primary)]"
+          class="text-center text-2xl font-bold tracking-tighter text-[var(--text-primary)]"
         >
-          {{ formatQuota(status.min_quota) }} –
-          {{ formatQuota(status.max_quota) }}
+          <span class="inline-block max-w-full break-all">{{
+            formatQuota(status.min_quota)
+          }}</span>
+          –
+          <span class="inline-block max-w-full break-all">{{
+            formatQuota(status.max_quota)
+          }}</span>
         </p>
         <p class="text-center text-xs leading-5 text-[var(--text-tertiary)]">
           {{ t('nativeAccount.checkinHint') }}
@@ -150,23 +155,53 @@ const monthPct = computed(() =>
         </label>
         <CheckinCalendar :month="month" :records="status.stats.records" />
         <details class="mt-4 text-sm">
-          <summary class="cursor-pointer">
+          <summary
+            class="cursor-pointer rounded-lg text-xs font-semibold text-[var(--text-secondary)] focus-ring"
+          >
             {{ t('activityRestoration.records') }}
           </summary>
-          <table class="mt-3 w-full text-left">
+          <table
+            v-if="status.stats.records.length"
+            class="mt-3 w-full table-fixed border-separate border-spacing-y-1 text-left text-xs"
+          >
+            <caption class="sr-only">
+              {{
+                t('activityRestoration.records')
+              }}
+              ·
+              {{
+                month
+              }}
+            </caption>
             <thead>
-              <tr>
-                <th>{{ t('nativeAccount.date') }}</th>
-                <th>{{ t('nativeAccount.quota') }}</th>
+              <tr class="text-[var(--text-tertiary)]">
+                <th scope="col" class="px-2 py-1 font-medium">
+                  {{ t('nativeAccount.date') }}
+                </th>
+                <th scope="col" class="px-2 py-1 text-right font-medium">
+                  {{ t('nativeAccount.quota') }}
+                </th>
               </tr>
             </thead>
             <tbody>
               <tr
                 v-for="record in status.stats.records"
                 :key="record.checkin_date"
+                class="transition-colors hover:bg-[var(--surface-muted)]"
               >
-                <td>{{ record.checkin_date }}</td>
-                <td>{{ formatQuota(record.quota_awarded) }}</td>
+                <th
+                  scope="row"
+                  class="rounded-l-lg px-2 py-1.5 font-mono font-normal text-[var(--text-secondary)]"
+                >
+                  <time :datetime="record.checkin_date">{{
+                    record.checkin_date
+                  }}</time>
+                </th>
+                <td
+                  class="rounded-r-lg break-all px-2 py-1.5 text-right font-semibold tabular-nums text-[var(--accent-text)]"
+                >
+                  {{ formatQuota(record.quota_awarded) }}
+                </td>
               </tr>
             </tbody>
           </table>

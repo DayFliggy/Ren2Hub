@@ -129,6 +129,40 @@ html.dark .focus-ring:focus-visible {
   box-shadow: var(--focus-halo);
 }
 
+/* Native number, month, select and multiline controls keep their value/event
+   contracts. Width remains owned by each layout (the month picker is inline). */
+.console-input {
+  min-width: 0;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  background-color: var(--surface-solid);
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.console-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+html.dark .console-input:focus-visible {
+  box-shadow: var(--focus-halo);
+}
+
+.console-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (min-width: 640px) {
+  .console-input {
+    font-size: 0.875rem;
+  }
+}
+
 /* Apple / SwiftUI 交互动效与触控实用类 */
 .touch-snappy {
   transition:

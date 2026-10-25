@@ -24,7 +24,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="awsApiType"
           :aria-label="t('awsApiType')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm focus-ring"
+          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
         >
           <option value="invoke_model">{{ t('invokeModel') }}</option>
           <option value="mantle">{{ t('mantle') }}</option>
@@ -36,7 +36,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="awsKeyType"
           :aria-label="t('awsKeyType')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm focus-ring"
+          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
         >
           <option value="ak_sk">{{ t('awsAccessKey') }}</option>
           <option value="api_key">{{ t('apiKey') }}</option>
@@ -53,7 +53,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           v-model="vertexKeyType"
           :aria-label="t('vertexKeyType')"
           :disabled="disabled"
-          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm focus-ring"
+          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
         >
           <option value="json">{{ t('serviceAccount') }}</option>
           <option value="api_key">{{ t('apiKey') }}</option>
@@ -77,7 +77,7 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
           name="channel-vertex-region"
           :disabled="disabled"
           rows="3"
-          class="console-input w-full resize-y"
+          class="console-input w-full resize-y focus-ring"
           required
           :aria-invalid="!vertexRegion.trim()"
           :aria-describedby="

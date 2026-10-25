@@ -6,6 +6,9 @@ import FilterSelect from '@/components/common/FilterSelect.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { AdminUser } from '@/types/console'
 
+const mocks = vi.hoisted(() => ({ get: vi.fn() }))
+vi.mock('@/api/client', () => ({ api: mocks }))
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ isRoot: true }),
 }))
@@ -55,6 +58,72 @@ const existingUser = {
 } as unknown as AdminUser
 
 describe('native user form contract', () => {
+  it('keeps administrator permissions after account fields and saves explicit changes', async () => {
+    mocks.get.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/authz/catalog'
+          ? {
+              resources: [
+                {
+                  resource: 'channel',
+                  label_key: 'Channel Management',
+                  actions: [
+                    {
+                      action: 'read',
+                      label_key: 'Read channels',
+                      description_key: '',
+                    },
+                  ],
+                },
+              ],
+            }
+          : {
+              ...existingUser,
+              role: 10,
+              admin_permissions: { channel: { read: false } },
+            }
+      )
+    )
+    const { wrapper, save, submit } = render({ ...existingUser, role: 10 })
+    await flushPromises()
+    const username = wrapper.get('[name="admin-user-username"]').element
+    const permissions = wrapper.get('fieldset').element
+    expect(
+      username.compareDocumentPosition(permissions) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(wrapper.get('fieldset > legend').text()).toBe(
+      i18n.global.t('users.permissions')
+    )
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await submit()
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        admin_permissions: { channel: { read: true } },
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('keeps concurrency numeric and explicitly names the input', async () => {
+    const { wrapper, save, submit } = render(existingUser)
+    const input = wrapper.get<HTMLInputElement>(
+      '[name="admin-user-max-concurrency"]'
+    )
+    expect(input.element.type).toBe('number')
+    expect(input.element.min).toBe('0')
+    expect(input.element.step).toBe('1')
+    expect(input.element.labels?.[0]?.textContent).toContain(
+      i18n.global.t('users.maxConcurrency')
+    )
+    await input.setValue('6')
+    await submit()
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ max_concurrency: 6 })
+    )
+    wrapper.unmount()
+  })
+
   it.each([1, 10])(
     'creates role %s with only supported fields and no ignored controls',
     async (role) => {

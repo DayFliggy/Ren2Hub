@@ -525,7 +525,6 @@ onBeforeUnmount(() => controller.abort())
                 :disabled="saving"
               />
             </section>
-            <section class="drawer-section"></section>
             <section class="drawer-section">
               <h3 class="drawer-section-title">{{ t('statusSync') }}</h3>
               <div class="sibling-space-y-4">

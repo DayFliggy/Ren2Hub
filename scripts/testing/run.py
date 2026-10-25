@@ -19,6 +19,9 @@ sys.dont_write_bytecode = True
 
 SOURCE = Path(__file__).resolve().parents[2]
 MODULES = ('.', 'relaykit', 'tokenkit')
+# Invitation URLs render window.location.origin. A random transport port changes
+# visible content between reference creation and verification. Fail if occupied.
+UI_CONTRACTS_PORT = 41739
 PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'candidate', 'all')
 DEFERRED = {
     'TestVLLMStatusLive': '需要真实外部供应商；本地方案不执行',
@@ -194,21 +197,87 @@ def build(source: Path, output: Path, env: dict[str, str]) -> dict:
             index.unlink(missing_ok=True)
 
 
+def browser_specs(data: dict):
+    for suite in data.get('suites', []):
+        yield from suite.get('specs', [])
+        yield from browser_specs(suite)
+
+
+def playwright_cases(data: dict, required_files: set[str]) -> set[str]:
+    specs = list(browser_specs(data))
+    found_files = {Path(spec['file']).name for spec in specs}
+    ids = [spec['id'] for spec in specs]
+    if not ids or len(ids) != len(set(ids)) or found_files != required_files:
+        raise RuntimeError(f'浏览器发现清单不完整：missing={sorted(required_files - found_files)}, '
+                           f'unregistered={sorted(found_files - required_files)}')
+    return set(ids)
+
+
+def playwright_result(data: dict, expected_ids: set[str]) -> int:
+    specs = list(browser_specs(data))
+    actual = [spec['id'] for spec in specs]
+    if set(actual) != expected_ids or len(actual) != len(expected_ids):
+        raise RuntimeError('浏览器执行集合与发现清单不一致')
+    for spec in specs:
+        tests = spec.get('tests', [])
+        if len(tests) != 1:
+            raise RuntimeError(f'浏览器用例缺失或重复：{spec["id"]}')
+        test = tests[0]
+        results = test.get('results', [])
+        if (test.get('expectedStatus') != 'passed' or test.get('status') != 'expected'
+                or len(results) != 1 or results[0].get('status') != 'passed'
+                or results[0].get('retry', 0) != 0):
+            raise RuntimeError(f'浏览器用例失败、跳过或重试：{spec["id"]}')
+    stats = data.get('stats', {})
+    if stats.get('expected') != len(expected_ids) or any(stats.get(k, 0) for k in ('skipped', 'unexpected', 'flaky')):
+        raise RuntimeError('浏览器报告统计与实际执行不一致')
+    return len(expected_ids)
+
+
+def visual_baseline(path: Path) -> dict:
+    files = {p.relative_to(path).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+             for p in sorted(path.rglob('*.png')) if p.is_file()}
+    if not files:
+        raise RuntimeError('Visual baseline contains no PNG references')
+    return {'directory': str(path.resolve()), 'files': len(files),
+            'sha256': hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()}
+
+
 def ui_contracts(source: Path, output: Path, env: dict[str, str]) -> dict:
+    baseline = os.environ.get('REN2HUB_UI_BASELINE')
+    if not baseline:
+        raise RuntimeError('REN2HUB_UI_BASELINE is required; unified UI verification cannot omit pixel comparisons')
+    if not Path(baseline).is_dir():
+        raise RuntimeError('Visual baseline directory does not exist')
+    baseline_identity = visual_baseline(Path(baseline))
     env = {**env, 'REN2HUB_UI_OUTPUT': str(output)}
+    env['REN2HUB_UI_BASELINE'] = str(Path(baseline).resolve())
+    (output / 'visual-baseline.json').write_text(json.dumps(baseline_identity, indent=2))
     with socket.socket() as reservation:
-        reservation.bind(('127.0.0.1', 0))
-        env['REN2HUB_UI_PORT'] = str(reservation.getsockname()[1])
+        # Permit the previous server's TIME_WAIT connections, never a live listener.
+        reservation.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        reservation.bind(('127.0.0.1', UI_CONTRACTS_PORT))
+        env['REN2HUB_UI_PORT'] = str(UI_CONTRACTS_PORT)
+    origin = f'http://127.0.0.1:{UI_CONTRACTS_PORT}'
+    (output / 'visual-origin.json').write_text(json.dumps({'origin': origin}, indent=2))
     libraries = os.environ.get('REN2HUB_BROWSER_LIB_DIR')
     if libraries:
         env['LD_LIBRARY_PATH'] = libraries
-    execute(['bun', 'x', '--no-install', 'playwright', 'test', '--config', 'tests/contracts/playwright.config.ts'],
-            source / 'frontend', output, 'ui-contracts', env, 600)
+    command = ['bun', 'x', '--no-install', 'playwright', 'test', '--config', 'tests/contracts/playwright.config.ts']
+    manifest = json.loads((source / 'frontend/tests/contracts/suite-manifest.json').read_text())
+    discovered = json.loads(execute(command + ['--list', '--reporter=json'],
+                                   source / 'frontend', output, 'ui-inventory', env, 120))
+    expected_ids = playwright_cases(discovered, set(manifest['files']))
+    # Match the discovered suite size. The per-case Playwright deadline still
+    # catches hangs; a fixed one-hour process limit truncates the full matrix.
+    deadline = max(3600, ((len(expected_ids) + 1) // 2) * 45 + 300)
+    execute(command, source / 'frontend', output, 'ui-contracts', env, deadline)
     data = json.loads((output / 'playwright.json').read_text())
-    stats = data.get('stats', {})
-    if stats.get('expected') != 32 or any(stats.get(key, 0) for key in ('skipped', 'unexpected', 'flaky')):
-        raise RuntimeError('UI 契约必须32项通过，零跳过/重试/失败')
-    return {'success': True, 'passed': stats['expected'], 'kind': 'mock-api-ui-contracts'}
+    passed = playwright_result(data, expected_ids)
+    if visual_baseline(Path(baseline)) != baseline_identity:
+        raise RuntimeError('Visual references changed during verification')
+    return {'success': True, 'passed': passed, 'files': manifest['files'],
+            'kind': 'mock-api-ui-contracts', 'origin': origin, 'visual_baseline': baseline_identity}
 
 
 def race(source: Path, output: Path, env: dict[str, str]) -> dict:

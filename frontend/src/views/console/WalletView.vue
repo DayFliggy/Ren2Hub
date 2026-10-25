@@ -48,6 +48,11 @@ const todayConsume = ref('0')
 const refreshKey = ref(0)
 const paymentMethod = ref('epay')
 const capabilities = ref<TopupInfo | null>(null)
+const capabilitiesState = ref<'idle' | 'ready' | 'failed'>('idle')
+const redemptionEnabled = computed(
+  () =>
+    capabilitiesState.value === 'ready' && capabilities.value?.enable_redemption
+)
 const trackedTradeNo = ref('')
 const trackedPayment = ref<ReturnType<typeof parseTopUpDetail> | null>(null)
 const paymentStatusError = ref('')
@@ -298,16 +303,21 @@ onBeforeUnmount(() => statusController?.abort())
       >
     </ConsoleCard>
 
-    <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_23.75rem]">
+    <div
+      class="mb-6 grid gap-6"
+      :class="{ 'xl:grid-cols-[1fr_23.75rem]': redemptionEnabled }"
+      :aria-busy="capabilitiesState === 'idle'"
+    >
       <TopupPanel
         v-model:payment-method="paymentMethod"
         :balance-quota="balanceQuota"
         @done="handlePaymentDone"
         @track-order="trackPayment"
         @capabilities="capabilities = $event"
+        @capabilities-state="capabilitiesState = $event"
       />
       <RedeemPanel
-        v-if="capabilities?.enable_redemption"
+        v-if="redemptionEnabled"
         :auto-focus="activePanel === 'redeem'"
         :refresh-key="refreshKey"
         @done="handlePaymentDone"

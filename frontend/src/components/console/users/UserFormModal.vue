@@ -175,10 +175,6 @@ async function submit() {
     @close="close"
   >
     <div class="sibling-space-y-5 text-left">
-      <UserPermissionsEditor
-        v-if="auth.isRoot && editing?.role === 10 && permissionsReady"
-        v-model="permissions"
-      />
       <FormField :label="t('users.username')" :hint="t('users.usernameHint')">
         <TextInput
           v-model="form.username"
@@ -197,7 +193,8 @@ async function submit() {
           type="number"
           min="0"
           step="1"
-          class="console-input"
+          name="admin-user-max-concurrency"
+          class="console-input w-full"
         />
       </FormField>
       <div class="grid gap-4 sm:grid-cols-2">
@@ -270,6 +267,11 @@ async function submit() {
       </div>
     </div>
 
+    <UserPermissionsEditor
+      v-if="auth.isRoot && editing?.role === 10 && permissionsReady"
+      v-model="permissions"
+      class="mt-5 border-t border-[var(--border-subtle)] pt-5"
+    />
     <AdminUserBindings
       v-if="open && editing"
       :key="editing.id"
