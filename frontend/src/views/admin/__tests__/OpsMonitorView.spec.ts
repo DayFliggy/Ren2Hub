@@ -124,7 +124,7 @@ describe('historical ops layout with native data', () => {
     )
     expect(view.get('[data-ops-gauge="disk"]').text()).toContain('40%')
     expect(view.getComponent(OpsResourcesCard).text()).toContain(
-      'Go runtime reserved heap:'
+      'Runtime reserved heap:'
     )
     expect(view.get('[data-ops-concurrency="users"]').text()).toContain(
       '#12 / 4'
@@ -144,9 +144,9 @@ describe('historical ops layout with native data', () => {
         .findAll('[data-ops-health-strip] span')
         .map((cell) => cell.attributes('data-tone'))
     ).toEqual(['idle', 'good'])
-    expect(view.get('[data-ops-task-summary-unavailable]').text()).toContain(
-      'not the scheduler registry'
-    )
+    const taskSection = view.get('[data-ops-task-summary-unavailable]')
+    expect(taskSection.attributes('title')).toContain('scheduler registry')
+    expect(taskSection.text()).not.toContain('scheduler registry')
     expect(view.find('pre').exists()).toBe(false)
     expect(
       mocks.get.mock.calls.every(

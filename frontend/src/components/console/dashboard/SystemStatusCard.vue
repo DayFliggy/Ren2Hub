@@ -401,11 +401,13 @@ function memorySegmentStyle(
         <div
           v-for="tile in tiles"
           :key="tile.key"
-          class="relative flex min-h-[6.5rem] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 sm:min-h-[6.75rem] sm:px-3 sm:py-2"
+          class="relative flex h-[5.5rem] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 sm:h-[5.75rem] sm:px-3 sm:py-2"
           :class="{ 'overflow-hidden': tile.key !== 'cpu' }"
           data-system-status-tile
           :data-metric="tile.key"
           :data-load-tier="tile.tone.tier"
+          :data-resource-caption="tile.caption"
+          :title="tile.caption"
           :style="{ '--mark-glow': tile.tone.fill }"
         >
           <div class="flex min-h-5 items-center justify-between gap-1">
@@ -588,14 +590,20 @@ function memorySegmentStyle(
                     data-bandwidth-direction="up"
                     class="shrink-0 whitespace-nowrap text-[var(--text-tertiary)]"
                   >
-                    {{ t('dashboard.systemStatus.requests') }}
+                    <span class="sr-only">{{
+                      t('dashboard.systemStatus.requests')
+                    }}</span>
+                    ↑
                     {{ tile.bandwidth.up }}
                   </span>
                   <span
                     data-bandwidth-direction="down"
                     class="shrink-0 whitespace-nowrap text-[var(--text-primary)]"
                   >
-                    {{ t('dashboard.systemStatus.responses') }}
+                    <span class="sr-only">{{
+                      t('dashboard.systemStatus.responses')
+                    }}</span>
+                    ↓
                     {{ tile.bandwidth.down }}
                   </span>
                 </template>
@@ -668,27 +676,8 @@ function memorySegmentStyle(
               :indeterminate="tile.percent === null"
             />
           </div>
-          <p
-            class="mt-1 text-[0.625rem] leading-tight text-[var(--text-tertiary)]"
-            data-resource-caption
-          >
-            {{ tile.caption }}
-          </p>
         </div>
       </div>
-      <p
-        class="mb-2 text-[0.625rem] text-[var(--text-tertiary)]"
-        data-resource-sampled-at
-      >
-        {{
-          t('dashboard.systemStatus.sampledAt', {
-            time:
-              metrics?.sampled_at == null
-                ? t('dashboard.notProvided')
-                : formatTime(metrics.sampled_at),
-          })
-        }}
-      </p>
 
       <div
         class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2 text-[0.6875rem] sm:pt-2.5"

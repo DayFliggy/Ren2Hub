@@ -55,7 +55,7 @@ describe('GMPay native configuration', () => {
         String(field.props('label')).includes('USDT · tron icon identifier')
       )!
     await icon.get('input').setValue('coin-usdt')
-    await wrapper.get('input[type="checkbox"]').setValue(false)
+    await wrapper.get('[role="switch"]').trigger('click')
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Save gateway configuration')!

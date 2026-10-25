@@ -110,8 +110,12 @@ function skipReason(reason: string): string {
         </div>
       </li>
     </ul>
-    <p v-else class="py-5 text-sm text-[var(--text-tertiary)]">
-      {{ t('common.none') }}
+    <p
+      v-else
+      class="py-3 text-xs text-[var(--text-tertiary)]"
+      data-invite-records-empty
+    >
+      {{ t('invite.recordsEmpty') }}
     </p>
     <TablePagination
       v-if="!error && !loading && total > 0"

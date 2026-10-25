@@ -34,21 +34,6 @@ const monthReward = computed(() =>
     0
   )
 )
-const monthDays = computed(() => {
-  if (!/^\d{4}-\d{2}$/.test(props.month)) return 0
-  const [year, month] = props.month.split('-').map(Number) as [number, number]
-  return month >= 1 && month <= 12
-    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
-    : 0
-})
-const monthPct = computed(() =>
-  monthDays.value
-    ? Math.min(
-        100,
-        Math.round((props.status.stats.checkin_count / monthDays.value) * 100)
-      )
-    : 0
-)
 </script>
 
 <template>
@@ -84,9 +69,6 @@ const monthPct = computed(() =>
           >
             {{ t('nativeAccount.checkin') }}
           </h3>
-          <p class="text-[0.625rem] text-[var(--text-tertiary)]">
-            {{ t('activityRestoration.randomReward') }}
-          </p>
         </div>
       </div>
       <span class="text-xs text-[var(--text-tertiary)]">
@@ -216,25 +198,6 @@ const monthPct = computed(() =>
     </div>
 
     <div class="border-t border-[var(--border-subtle)] px-5 py-4">
-      <div class="mb-3">
-        <div
-          class="mb-1.5 flex items-center justify-between text-[0.625rem] text-[var(--text-tertiary)]"
-        >
-          <span>{{ t('activityRestoration.monthProgress') }}</span>
-          <span class="font-medium"
-            >{{ status.stats.checkin_count }} / {{ monthDays }}</span
-          >
-        </div>
-        <div
-          class="pencil-progress h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]"
-        >
-          <div
-            class="h-full rounded-full transition-all duration-700"
-            style="background: var(--accent)"
-            :style="{ width: `${monthPct}%` }"
-          />
-        </div>
-      </div>
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div class="flex items-center gap-1.5">
           <span class="text-xs text-[var(--text-tertiary)]">{{

@@ -217,11 +217,14 @@ describe('price source confirmation', () => {
     const axonhub = card(wrapper, 'AxonHub')
     expect(axonhub.text()).toContain('not published or unreadable')
     expect(axonhub.text()).not.toContain('Matches the published')
+    expect(axonhub.get('details').attributes('open')).toBeUndefined()
+    expect(axonhub.get('details summary').text()).toBe('View fingerprints')
     expect(axonhub.get('code').attributes('title')).toBe(digest)
     const sub2api = card(wrapper, 'Sub2API')
     expect(
       sub2api.get('[data-fingerprint=fingerprintMismatched]').text()
     ).toContain('Does not match the published SHA-256')
+    expect(sub2api.get('details').attributes('open')).toBeUndefined()
     expect(sub2api.text()).toContain(`Published SHA-256: ${published}`)
     expect(wrapper.text()).toContain(
       'Sub2API: published sha256 does not match the downloaded document'

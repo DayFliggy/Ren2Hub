@@ -26,9 +26,11 @@ describe('native catalog cards', () => {
     expect(
       wrapper.find('[data-channel-quote] [data-market-telemetry]').exists()
     ).toBe(false)
-    expect(wrapper.get('[data-model-statistics="empty"]').text()).toContain(
-      '模型统计'
+    expect(wrapper.find('[data-model-statistics]').exists()).toBe(false)
+    expect(wrapper.find('[data-model-statistics-unavailable]').exists()).toBe(
+      false
     )
+    expect(wrapper.text()).not.toContain('近 24 小时')
     expect(wrapper.text()).not.toMatch(/\d+%|TPS|优惠|最低|最优/)
     await wrapper.get('button[aria-label*="模型详情"]').trigger('click')
     expect(wrapper.emitted('detail')).toEqual([
@@ -153,6 +155,53 @@ describe('native catalog cards', () => {
     expect(wrapper.find('[data-price-dimension="cacheRead"]').exists()).toBe(
       false
     )
+    wrapper.unmount()
+  })
+  it('omits routine configured status while keeping default and zero-price states', () => {
+    const fixture = modelCatalogFixture()
+    const pricing = buildModelMarketCatalog(fixture).models[0]!.baselines[0]!
+    const configured = mount(ModelPriceDisplay, {
+      props: { pricing: { ...pricing, priceStatus: 'configured' } },
+      global: { plugins: [i18n] },
+    })
+    expect(configured.text()).toContain('$1.250')
+    expect(configured.text()).not.toContain('已配置价格')
+    configured.unmount()
+
+    for (const [priceStatus, label] of [
+      ['default', '默认价格'],
+      ['zero', '零价格'],
+    ] as const) {
+      const wrapper = mount(ModelPriceDisplay, {
+        props: { pricing: { ...pricing, priceStatus } },
+        global: { plugins: [i18n] },
+      })
+      expect(wrapper.text()).toContain(label)
+      wrapper.unmount()
+    }
+  })
+  it('keeps ready model statistics but omits repeated compact scope and empty states', () => {
+    const model = buildModelMarketCatalog(modelCatalogFixture()).models[0]!
+    const wrapper = mount(ModelCard, {
+      props: {
+        model,
+        performance: {
+          status: 'ready',
+          summary: {
+            model_name: model.name,
+            success_rate: 99.5,
+            avg_latency_ms: 80,
+            avg_tps: 10.5,
+          },
+        },
+      },
+      global: { plugins: [i18n] },
+    })
+    const statistics = wrapper.get('[data-model-statistics="ready"]')
+    expect(statistics.text()).toContain('99.5%')
+    expect(statistics.text()).toContain('10.5')
+    expect(statistics.attributes('aria-label')).toContain('近 24 小时')
+    expect(statistics.text()).not.toContain('近 24 小时')
     wrapper.unmount()
   })
 })

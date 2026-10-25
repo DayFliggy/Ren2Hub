@@ -115,6 +115,7 @@ const peak = computed(() =>
   <OpsCard
     :title="t('quality.title')"
     :scope="t('scope.hours', { hours: QUALITY_HOURS })"
+    :scope-hint="t('native.qualityScope')"
     :loading="loading"
     :loaded="quality !== null || snapshot !== null"
     :error="error"
@@ -127,7 +128,6 @@ const peak = computed(() =>
         {{ t('quality.disabled') }}
       </p>
       <template v-else>
-        <p class="ops-note">{{ t('native.qualityScope') }}</p>
         <dl class="ops-metric-grid ops-metric-grid--4" data-ops-quality-summary>
           <OpsMetric
             :label="t('quality.requests')"
@@ -198,7 +198,6 @@ const peak = computed(() =>
       </template>
     </template>
     <template v-if="snapshot">
-      <p class="ops-note">{{ t('native.observationNote') }}</p>
       <dl class="ops-metric-grid ops-metric-grid--3">
         <OpsMetric
           :label="t('native.sampleCount')"
@@ -217,7 +216,13 @@ const peak = computed(() =>
         />
       </dl>
       <div class="ops-trend">
-        <p class="ops-trend-title">{{ t('native.topObservations') }}</p>
+        <p
+          class="ops-trend-title"
+          :aria-description="t('native.observationNote')"
+          :title="t('native.observationNote')"
+        >
+          {{ t('native.topObservations') }}
+        </p>
         <p v-if="!models.length" class="ops-empty">
           {{ t('native.noObservations') }}
         </p>

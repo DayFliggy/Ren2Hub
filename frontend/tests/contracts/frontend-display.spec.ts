@@ -230,7 +230,8 @@ for (const scenario of scenarios) {
     // missing reading remains empty; measured resources are no longer hidden.
     const cpu = page.locator('[data-system-status-tile][data-metric="cpu"]')
     await expect(cpu.locator('[data-metric-value]')).toHaveText('--')
-    await expect(cpu.locator('[data-resource-caption]')).not.toHaveText('')
+    await expect(cpu).toHaveAttribute('data-resource-caption', /.+/)
+    await expect(cpu).toHaveAttribute('title', /.+/)
     await expect(
       page.locator('[data-system-status-tile][data-metric="disk"]')
     ).toContainText('40%')

@@ -68,6 +68,14 @@ describe('PreferencesNotificationsPanel', () => {
     expect(
       toggle(wrapper, 'Low balance reminder').attributes('aria-checked')
     ).toBe('true')
+    const sections = wrapper.findAll('section')
+    expect(sections[0]?.find('input[inputmode="numeric"]').exists()).toBe(true)
+    expect(
+      sections[0]?.find('[aria-label="Low balance reminder"]').exists()
+    ).toBe(true)
+    expect(
+      sections[2]?.find('[aria-label="Low balance reminder"]').exists()
+    ).toBe(false)
     expect(toggle(wrapper, 'Channel notifications').exists()).toBe(false)
 
     await save(wrapper)

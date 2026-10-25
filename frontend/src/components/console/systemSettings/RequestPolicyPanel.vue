@@ -14,6 +14,7 @@ const { t } = useI18n({
     'zh-CN': {
       policy: {
         title: '请求策略',
+        edit: '查看和编辑策略',
         hint: '统一管理上游重试、敏感词、渠道自动禁用及会话亲和策略。值保留为字符串；保存由服务端校验并原子更新。',
         save: '保存请求策略',
         reload: '重新读取',
@@ -22,6 +23,7 @@ const { t } = useI18n({
     en: {
       policy: {
         title: 'Request policy',
+        edit: 'View and edit policy',
         hint: 'Manage retries, sensitive words, automatic channel disabling and session affinity. Values remain strings; the server validates and atomically applies changes.',
         save: 'Save request policy',
         reload: 'Reload',
@@ -125,12 +127,6 @@ watch(settings.rawOptions, () => {
 </script>
 <template>
   <ConsoleCard :title="t('policy.title')" class="mt-6">
-    <p
-      :id="`${editorId}-hint`"
-      class="text-sm leading-6 text-[var(--text-secondary)]"
-    >
-      {{ t('policy.hint') }}
-    </p>
     <ErrorBanner
       v-if="error"
       :id="`${editorId}-error`"
@@ -138,24 +134,37 @@ watch(settings.rawOptions, () => {
       :message="error"
       @retry="load"
     />
-    <textarea
-      v-model="draft"
-      :disabled="loading"
-      rows="18"
-      :aria-label="t('policy.title')"
-      :aria-invalid="Boolean(error)"
-      :aria-describedby="`${editorId}-hint${error ? ` ${editorId}-error` : ''}`"
-      spellcheck="false"
-      class="mt-3 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-sm text-[var(--text-primary)] focus-ring"
-    />
-    <div class="mt-4 flex flex-wrap gap-3">
-      <ConsoleButton
-        :disabled="loading || !ready || draft === baselineText"
-        @click="save"
-        >{{ t('policy.save') }}</ConsoleButton
-      ><ConsoleButton variant="secondary" :disabled="loading" @click="load">{{
-        t('policy.reload')
-      }}</ConsoleButton>
-    </div>
+    <details class="mt-3" :open="Boolean(error) || dirty" data-policy-editor>
+      <summary
+        class="cursor-pointer rounded-lg text-sm font-semibold text-[var(--text-secondary)] focus-ring"
+      >
+        {{ t('policy.edit') }}
+      </summary>
+      <p
+        :id="`${editorId}-hint`"
+        class="mt-3 text-sm leading-6 text-[var(--text-secondary)]"
+      >
+        {{ t('policy.hint') }}
+      </p>
+      <textarea
+        v-model="draft"
+        :disabled="loading"
+        rows="18"
+        :aria-label="t('policy.title')"
+        :aria-invalid="Boolean(error)"
+        :aria-describedby="`${editorId}-hint${error ? ` ${editorId}-error` : ''}`"
+        spellcheck="false"
+        class="mt-3 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-sm text-[var(--text-primary)] focus-ring"
+      />
+      <div class="mt-4 flex flex-wrap gap-3">
+        <ConsoleButton
+          :disabled="loading || !ready || draft === baselineText"
+          @click="save"
+          >{{ t('policy.save') }}</ConsoleButton
+        ><ConsoleButton variant="secondary" :disabled="loading" @click="load">{{
+          t('policy.reload')
+        }}</ConsoleButton>
+      </div>
+    </details>
   </ConsoleCard>
 </template>

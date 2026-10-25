@@ -244,23 +244,23 @@ export const opsMonitorMessages = {
         '资源来自后台采样，CPU 与内存优先使用容器口径；关闭、失败或过期的采样保持不可用。',
       observationScope: '当前进程观察',
       observationNote:
-        '按渠道、模型和请求类型观察；错误率与延迟为 EWMA，连续 5 分钟无新样本后过期，不是固定时间窗口的请求统计。',
+        '按渠道、模型和请求类型统计；错误率与延迟在连续 5 分钟无新样本后过期，不是固定时间窗口的请求统计。',
       latencyObservations: '有效延迟观察',
       qualityScope:
-        '全站跨模型的 perf_metrics 按小时合计，包含尚未落库的当前小时；没有请求的小时不计算成功率。',
+        '全站跨模型按小时合计，包含当前小时；没有请求的小时不计算成功率。',
       topObservations: '样本最多的观察',
       noObservations: '暂无请求观察；未采样不表示健康。',
       unknownOperation: '请求类型未知',
       operation: '请求类型 {id}',
       streaming: '流式 · 首次有效输出',
       nonStreaming: '非流式 · 完成耗时',
-      errorEWMA: '错误率 EWMA',
-      latencyEWMA: '延迟 EWMA',
+      errorEWMA: '错误率',
+      latencyEWMA: '延迟',
       instanceHistory:
         '后台保留本实例最近 24 小时采样，进程重启后清空；缺测不补零。',
       trafficScope:
         '仅统计应用 HTTP 请求与响应 body 字节，不含协议头和 WebSocket 帧，不代表网卡带宽。',
-      runtimeMemory: 'Go 运行时堆申请：{value}',
+      runtimeMemory: '运行时保留堆内存：{value}',
       noPublishedChannels: '模型目录中暂无已发布渠道，不代表平台尚未配置渠道。',
       catalogScope: '仅统计模型目录中已发布模型的渠道，不代表全部已配置渠道。',
       errorObservations: '已达到样本要求的错误率观察',
@@ -273,7 +273,7 @@ export const opsMonitorMessages = {
       taskSummaryUnavailable:
         '当前接口提供活动任务和任务历史，未提供定时任务注册表与执行健康摘要。',
       storageUnavailable: '当前监控接口未提供连通性探测，状态不可用。',
-      poolScope: '连接池计数来自 sql.DB.Stats()，不代表连通性探测结果。',
+      poolScope: '连接池计数展示当前连接使用情况，不代表连通性探测结果。',
       poolUnavailable: '连接池数据读取失败，不可用。',
       cache: '缓存与维护',
       cacheCounterScope: '缓存命中为当前进程计数，重置统计后重新累计。',
@@ -545,10 +545,10 @@ export const opsMonitorMessages = {
         'Background resource samples use container limits first. Disabled, failed or stale measurements remain unavailable.',
       observationScope: 'Current process observations',
       observationNote:
-        'Observed by channel, model and request type. Error rate and latency use EWMA; observations expire after 5 minutes without new samples. Counts are not a fixed time window.',
+        'Observed by channel, model and request type. Error rate and latency expire after 5 minutes without new samples. Counts are not a fixed time window.',
       latencyObservations: 'Measured latency observations',
       qualityScope:
-        'Hourly perf_metrics totals across all models, including the current unflushed hour. Hours without requests have no success rate.',
+        'Hourly totals across all models, including the current hour. Hours without requests have no success rate.',
       topObservations: 'Observations with most samples',
       noObservations:
         'No request observations. Missing samples do not imply health.',
@@ -556,13 +556,13 @@ export const opsMonitorMessages = {
       operation: 'Request type {id}',
       streaming: 'Streaming · first valid output',
       nonStreaming: 'Non-streaming · completion',
-      errorEWMA: 'Error EWMA',
-      latencyEWMA: 'Latency EWMA',
+      errorEWMA: 'Error rate',
+      latencyEWMA: 'Latency',
       instanceHistory:
         'The server retains 24 hours of samples for this instance. Restarting clears history; missing samples remain gaps.',
       trafficScope:
         'Application HTTP request and response body bytes only; excludes headers and WebSocket frames. This is not network-interface bandwidth.',
-      runtimeMemory: 'Go runtime reserved heap: {value}',
+      runtimeMemory: 'Runtime reserved heap: {value}',
       noPublishedChannels:
         'No published channels in the model catalog. Other configured channels may exist.',
       catalogScope:
@@ -580,7 +580,7 @@ export const opsMonitorMessages = {
       storageUnavailable:
         'The current monitoring API does not provide connectivity probes.',
       poolScope:
-        'Pool counters come from sql.DB.Stats() and do not prove connectivity.',
+        'Pool counters show current connection use and do not prove connectivity.',
       poolUnavailable: 'Connection pool statistics could not be read.',
       cache: 'Cache and maintenance',
       cacheCounterScope:

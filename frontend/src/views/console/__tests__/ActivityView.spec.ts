@@ -161,7 +161,7 @@ it('uses real random reward bounds, calendar records and separate cumulative tot
   const card = wrapper.get('[data-checkin-card]')
   expect(card.text()).toContain('$1.00 – $5.00')
   expect(card.text()).toContain('Selected month rewards $4.00')
-  expect(card.text()).toContain('2 / 31')
+  expect(card.find('.pencil-progress').exists()).toBe(false)
   expect(card.text()).toMatch(/Total check-ins\s*10/)
   expect(card.text()).toMatch(/Total rewards\s*\$20\.00/)
   expect(card.findAll('[data-checkin-record]')).toHaveLength(2)

@@ -77,6 +77,7 @@ const latency = (value: number | null) => {
   <OpsCard
     :title="t('upstream.title')"
     :scope="t('scope.instant')"
+    :scope-hint="t('native.catalogScope')"
     :loading="loading"
     :loaded="report !== null"
     :error="error"
@@ -92,7 +93,6 @@ const latency = (value: number | null) => {
       {{ t('native.noPublishedChannels') }}
     </p>
     <template v-else-if="report">
-      <p class="ops-note">{{ t('native.catalogScope') }}</p>
       <p class="ops-trend-title">{{ t('upstream.channels') }}</p>
       <dl class="ops-metric-grid ops-metric-grid--fit">
         <OpsMetric
@@ -188,7 +188,11 @@ const latency = (value: number | null) => {
               t(item.critical ? 'status.critical' : 'status.warning')
             }}</StatusChip>
           </div>
-          <p class="ops-cooling-meta">
+          <p
+            class="ops-cooling-meta"
+            :aria-description="t('native.observationNote')"
+            :title="t('native.observationNote')"
+          >
             <code v-if="item.model">{{ item.model }}</code>
             <span
               >{{ t('native.errorEWMA') }}

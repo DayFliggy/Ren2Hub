@@ -91,6 +91,15 @@ function patchedOptions() {
   return api.patch.mock.calls.map(([, body]) => body.options)
 }
 
+it('keeps the raw policy editor collapsed until it is needed', async () => {
+  const wrapper = await render()
+  expect(wrapper.get('[data-policy-editor]').attributes('open')).toBeUndefined()
+  expect(wrapper.get('[data-policy-editor] summary').text()).toBe(
+    'View and edit policy'
+  )
+  wrapper.unmount()
+})
+
 it('patches only the edited key and shows the merged snapshot', async () => {
   const wrapper = await render()
   await editAndSave(wrapper, { RetryTimes: '4' })

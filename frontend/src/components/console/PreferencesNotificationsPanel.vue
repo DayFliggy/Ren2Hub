@@ -318,6 +318,21 @@ function changeTheme(value: string): void {
             }}</span>
           </label>
 
+          <div class="settings-toggle-row sm:col-span-2">
+            <div>
+              <p class="settings-toggle-title">
+                {{ t('settings.walletQuotaReminder') }}
+              </p>
+              <p class="settings-toggle-description">
+                {{ t('settings.walletQuotaReminderDesc') }}
+              </p>
+            </div>
+            <ConsoleToggle
+              v-model="quotaWarningOn"
+              :label="t('settings.walletQuotaReminder')"
+            />
+          </div>
+
           <label
             v-if="draft.notifyType === 'email'"
             class="block sm:col-span-2"
@@ -527,20 +542,6 @@ function changeTheme(value: string): void {
       <div
         class="sibling-divide-y sibling-divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]"
       >
-        <div class="settings-toggle-row">
-          <div>
-            <p class="settings-toggle-title">
-              {{ t('settings.walletQuotaReminder') }}
-            </p>
-            <p class="settings-toggle-description">
-              {{ t('settings.walletQuotaReminderDesc') }}
-            </p>
-          </div>
-          <ConsoleToggle
-            v-model="quotaWarningOn"
-            :label="t('settings.walletQuotaReminder')"
-          />
-        </div>
         <div v-if="isAdmin" class="settings-toggle-row">
           <div>
             <p class="settings-toggle-title">

@@ -146,6 +146,7 @@ async function executeAction() {
       :key="pool.key"
       :title="t(`storage.${pool.key}`)"
       :scope="t('scope.instant')"
+      :scope-hint="t('native.poolScope')"
       :loading="loading"
       :loaded="dbPool !== null"
       :error="error"
@@ -166,7 +167,6 @@ async function executeAction() {
         v-bind="formatLatencyMs(pool.probe?.latency_ms ?? null, locale)"
         size="sm"
       />
-      <p class="ops-storage-kind">{{ t('native.poolScope') }}</p>
       <p v-if="pool.stats === null" class="ops-empty" data-ops-pool-unavailable>
         {{ t('native.poolUnavailable') }}
       </p>
@@ -216,6 +216,7 @@ async function executeAction() {
     <OpsCard
       :title="t('native.cache')"
       :scope="t('scope.instant')"
+      :scope-hint="t('native.cacheCounterScope')"
       :loading="loading"
       :loaded="overview?.cache != null"
       :error="error"
@@ -234,7 +235,6 @@ async function executeAction() {
             size="sm"
           />
         </dl>
-        <p class="ops-footnote">{{ t('native.cacheCounterScope') }}</p>
         <div class="ops-maintenance-actions">
           <ConsoleButton
             v-for="action in actions"

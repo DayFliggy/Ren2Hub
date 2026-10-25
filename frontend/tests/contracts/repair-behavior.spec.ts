@@ -114,7 +114,11 @@ for (const theme of ['light', 'dark'] as const) {
           role === 100 ? 1 : 0
         )
         if (role === 100) {
-          await expect(page.locator('[data-resource-sampled-at]')).toBeVisible()
+          const cpu = page.locator(
+            '[data-system-status-tile][data-metric="cpu"]'
+          )
+          await expect(cpu).toHaveAttribute('data-resource-caption', /.+/)
+          await expect(cpu).toHaveAttribute('title', /.+/)
           expect(performanceRequests).toBeGreaterThan(0)
         } else expect(performanceRequests).toBe(0)
         await expect(page.getByText('炼金室', { exact: true })).toHaveCount(0)

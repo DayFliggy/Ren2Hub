@@ -17,10 +17,10 @@ it('states the quota_data flush lag without inferring a cache hit rate', () => {
     },
     global: { plugins: [i18n] },
   })
-  expect(wrapper.get('[data-cache-coverage]').text()).toContain(
+  expect(wrapper.get('[data-cache-coverage]').attributes('title')).toContain(
     'written every 5 minutes, so the latest hour may be incomplete'
   )
-  expect(wrapper.text()).toContain('Cross-protocol hit rate is unknown')
+  expect(wrapper.text()).not.toContain('Cross-protocol hit rate')
   expect(wrapper.text()).not.toContain('%')
   wrapper.unmount()
 })

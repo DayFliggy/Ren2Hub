@@ -627,9 +627,6 @@ watch(
               </ol>
             </template>
             <div v-else class="sibling-space-y-3">
-              <p class="text-sm leading-relaxed text-[var(--text-secondary)]">
-                {{ t('routing.automaticHint') }}
-              </p>
               <p
                 class="rounded-xl border border-dashed border-[var(--border-subtle)] p-4 text-sm text-[var(--text-tertiary)]"
               >

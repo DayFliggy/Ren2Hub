@@ -239,6 +239,15 @@ it('adds eligible platform channels without duplicates and preserves disabled en
 })
 it('allows an explicitly empty manual list and explains that there is no automatic fallback', async () => {
   const wrapper = await render()
+  expect(wrapper.get('header p').text()).toBe(
+    'Configure routing for this API key.'
+  )
+  expect(wrapper.get('fieldset').text()).toContain(
+    'Choose platform channels and try them in your saved order.'
+  )
+  expect(wrapper.get('fieldset').text()).not.toContain(
+    'An empty list has no available route.'
+  )
   await button(wrapper, 'Remove').trigger('click')
   expect(ids(wrapper)).toEqual([])
   expect(wrapper.text()).toContain('Manual mode does not fall back')
@@ -247,6 +256,20 @@ it('allows an explicitly empty manual list and explains that there is no automat
   expect(mocks.save).toHaveBeenCalledWith(
     7,
     expect.objectContaining({ mode: 'manual', entries: [] })
+  )
+  wrapper.unmount()
+})
+it('shows automatic routing criteria once and retains its manual-list warning', async () => {
+  mocks.get.mockResolvedValue({ ...config(), mode: 'auto', entries: [] })
+  const wrapper = await render()
+  expect(
+    wrapper.text().match(/ordered by priority, health, load and latency/g) ?? []
+  ).toHaveLength(1)
+  expect(wrapper.text()).toContain(
+    'Saving automatic mode clears the manual channel list.'
+  )
+  expect(wrapper.get('header p').text()).toBe(
+    'Configure routing for this API key.'
   )
   wrapper.unmount()
 })

@@ -156,6 +156,7 @@ const trafficTrend = computed(() => {
   <OpsCard
     :title="t('resources.title')"
     :scope="t('scope.instant')"
+    :scope-hint="t('native.resourceCoverage')"
     :loading="loading"
     :loaded="overview?.resources != null"
     :error="error"
@@ -167,7 +168,6 @@ const trafficTrend = computed(() => {
       <p v-if="overview.resources.monitor_enabled === false" class="ops-note">
         {{ t('resources.monitorOff') }}
       </p>
-      <p class="ops-note">{{ t('native.resourceCoverage') }}</p>
       <ul class="ops-gauges">
         <li
           v-for="gauge in gauges"
@@ -225,8 +225,11 @@ const trafficTrend = computed(() => {
           </p>
         </li>
       </ul>
-      <p class="ops-footnote">{{ t('native.trafficScope') }}</p>
-      <dl class="ops-metric-grid ops-metric-grid--3">
+      <dl
+        class="ops-metric-grid ops-metric-grid--3"
+        :aria-description="t('native.trafficScope')"
+        :title="t('native.trafficScope')"
+      >
         <OpsMetric
           :label="t('resources.up')"
           v-bind="
@@ -293,8 +296,8 @@ const trafficTrend = computed(() => {
             t('scope.window', { window: t(`window.${overview.series.window}`) })
           }}</span>
         </p>
-        <p class="ops-footnote">{{ t('native.instanceHistory') }}</p>
         <OpsTrendChart
+          :title="t('native.instanceHistory')"
           :label="t('resources.trend')"
           :series="trend.series"
           :bucket-seconds="trend.bucketSeconds"

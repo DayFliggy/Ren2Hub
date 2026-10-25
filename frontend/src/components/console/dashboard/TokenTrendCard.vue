@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { Info } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
@@ -21,6 +22,13 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
+const cacheCoverageText = computed(() =>
+  props.flushIntervalMinutes == null
+    ? t('dashboard.tokenTrend.cacheUnknown')
+    : t('dashboard.tokenTrend.cacheCoverage', {
+        minutes: props.flushIntervalMinutes,
+      })
+)
 
 function defaultPoints(days = 30): TokenTrendPoint[] {
   const now = new Date()
@@ -181,15 +189,18 @@ useEChart(
     stretch
     data-token-trend-card
   >
-    <p class="mb-3 text-xs text-[var(--text-tertiary)]" data-cache-coverage>
-      {{
-        flushIntervalMinutes == null
-          ? t('dashboard.tokenTrend.cacheUnknown')
-          : t('dashboard.tokenTrend.cacheCoverage', {
-              minutes: flushIntervalMinutes,
-            })
-      }}
-    </p>
+    <template #action>
+      <span
+        class="inline-flex text-[var(--text-tertiary)]"
+        role="note"
+        tabindex="0"
+        :aria-label="cacheCoverageText"
+        :title="cacheCoverageText"
+        data-cache-coverage
+      >
+        <Info :size="14" aria-hidden="true" />
+      </span>
+    </template>
     <div
       v-if="loading"
       class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"

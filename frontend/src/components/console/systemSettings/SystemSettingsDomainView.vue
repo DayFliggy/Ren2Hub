@@ -63,11 +63,32 @@ const draftValid = reactive<Record<string, boolean>>({})
 const saving = reactive({ value: false })
 const searchQuery = ref('')
 
+const activeFields = computed(() => {
+  const fields = activeSection.value?.fields ?? []
+  if (activeSection.value?.id !== 'email') return fields
+  const provider = String(draft.EmailProvider ?? 'smtp')
+  return fields.filter((field) => {
+    if (field.key === 'EmailProvider') return true
+    if (provider === 'smtp') return !field.key.startsWith('Resend')
+    if (provider === 'resend') return field.key.startsWith('Resend')
+    return true
+  })
+})
+
 const visibleFields = computed(() => {
-  const fields = (activeSection.value?.fields ?? []).filter(
+  let fields = activeFields.value.filter(
     (field) =>
       field.key !== 'DisplayInCurrencyEnabled' || draft[field.key] === false
   )
+
+  if (activeSection.value?.id === 'email') {
+    fields.sort((left, right) => {
+      if (left.key === 'EmailProvider') return -1
+      if (right.key === 'EmailProvider') return 1
+      return 0
+    })
+  }
+
   const query = searchQuery.value.trim().toLocaleLowerCase()
   if (!query) return fields
   return fields.filter((field) => {
@@ -110,7 +131,7 @@ function serialize(value: SystemSettingValue) {
 const dirty = computed(() => {
   const section = activeSection.value
   if (!section) return false
-  return section.fields.some((field) => {
+  return activeFields.value.some((field) => {
     const next = draft[field.key]
     if (
       (field.kind === 'secret' || field.kind === 'secret-textarea') &&
@@ -153,13 +174,14 @@ async function saveSection() {
     sharedSaving.value
   )
     return
-  if (section.fields.some((field) => draftValid[field.key] === false)) {
+  const fields = activeFields.value
+  if (fields.some((field) => draftValid[field.key] === false)) {
     toast.error(t('systemSettings.invalidConfiguration'))
     return
   }
   const patch: Record<string, SystemSettingValue> = {}
 
-  for (const field of section.fields) {
+  for (const field of fields) {
     const next = draft[field.key]
     if (
       (field.kind === 'secret' || field.kind === 'secret-textarea') &&
@@ -290,6 +312,7 @@ onMounted(() => load())
         </ConsoleButton>
       </div>
       <SysSettingsFormCard
+        v-if="activeSection.integration !== 'gmpay'"
         :title="t(activeSection.titleKey)"
         :description="t(activeSection.descriptionKey)"
         :saving="saving.value"
@@ -369,7 +392,6 @@ onMounted(() => load())
         <CustomOAuthProvidersPanel
           v-if="activeSection.integration === 'custom-oauth'"
         />
-        <GmpayPanel v-else-if="activeSection.integration === 'gmpay'" />
         <WaffoPancakePanel
           v-else-if="activeSection.integration === 'waffo-pancake'"
           @saved="load(true)"
@@ -390,6 +412,7 @@ onMounted(() => load())
           kind="performance"
         />
       </SysSettingsFormCard>
+      <GmpayPanel v-if="activeSection.integration === 'gmpay'" />
       <RequestPolicyPanel
         v-if="props.domain === 'security' && activeSection?.id === 'rate-limit'"
       />

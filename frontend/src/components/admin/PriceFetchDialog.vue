@@ -187,16 +187,19 @@ onBeforeUnmount(() => controller?.abort())
           <small :data-fingerprint="fingerprintState(fingerprint)">{{
             t(fingerprintState(fingerprint))
           }}</small>
-          <code v-if="fingerprint" :title="fingerprint.sha256">{{
-            t('downloadedSha256', { digest: fingerprint.sha256 })
-          }}</code>
-          <code
-            v-if="fingerprint?.matches === false"
-            :title="fingerprint.published_sha256 ?? ''"
-            >{{
-              t('publishedSha256', { digest: fingerprint.published_sha256 })
-            }}</code
-          >
+          <details v-if="fingerprint" class="price-fingerprint">
+            <summary>{{ t('fingerprintDetails') }}</summary>
+            <code :title="fingerprint.sha256">{{
+              t('downloadedSha256', { digest: fingerprint.sha256 })
+            }}</code>
+            <code
+              v-if="fingerprint.matches === false"
+              :title="fingerprint.published_sha256 ?? ''"
+              >{{
+                t('publishedSha256', { digest: fingerprint.published_sha256 })
+              }}</code
+            >
+          </details>
         </label>
       </fieldset>
       <p class="text-xs text-[var(--text-tertiary)]">{{ t('upstreamHint') }}</p>
@@ -426,6 +429,19 @@ onBeforeUnmount(() => controller?.abort())
   white-space: nowrap;
   font-size: 0.75rem;
   color: var(--text-tertiary);
+}
+.price-fingerprint {
+  width: 100%;
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+.price-fingerprint summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.price-fingerprint code {
+  margin-top: 0.25rem;
 }
 .price-fetch-tools {
   display: flex;

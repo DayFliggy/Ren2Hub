@@ -75,8 +75,12 @@ const counters = computed(() => [
     :retryable="false"
     data-ops-section="gateway"
   >
-    <p v-if="trends" class="ops-note">{{ t('native.sessionHistory') }}</p>
-    <div v-if="trends" class="ops-gateway-grid">
+    <div
+      v-if="trends"
+      class="ops-gateway-grid"
+      :aria-description="t('native.sessionHistory')"
+      :title="t('native.sessionHistory')"
+    >
       <div class="ops-trend">
         <p class="ops-trend-title">
           {{ t('native.userInFlight')

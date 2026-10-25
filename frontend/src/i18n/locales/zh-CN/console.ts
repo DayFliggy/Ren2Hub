@@ -446,8 +446,8 @@ export default {
       cacheCreate: '缓存写入',
       cacheRead: '缓存读取',
       cacheCoverage:
-        '数据来自按小时汇总的用量记录，每 {minutes} 分钟写入一次，最近一小时可能尚未计全；跨协议命中率未知。',
-      cacheUnknown: '数据来自按小时汇总的用量记录；跨协议命中率未知。',
+        '用量记录每 {minutes} 分钟写入一次，最近一小时可能尚未计全。',
+      cacheUnknown: '用量记录按小时汇总。',
       emptyHint: '最近 30 天暂无 Token 使用记录',
     },
     systemStatus: {
@@ -2522,13 +2522,14 @@ export default {
     codeDisabled: '你的邀请码已被停用，请联系管理员。',
     invitees: '受邀用户',
     records: '返佣记录',
+    recordsEmpty: '暂无邀请奖励记录',
     sortRecent: '最近',
     sortEarly: '最早',
     inviteesNote: '展示当前绑定的脱敏用户、注册日期和累计返佣。',
-    chartTitle: '返佣趋势',
-    chartSubtitle: '按月统计实际产生的返佣额度',
-    chartTabNew: '当月返佣',
-    chartTabCumulative: '累计返佣',
+    chartTitle: '近 6 个月邀请注册',
+    chartSubtitle: '每月通过你的邀请码完成注册的用户',
+    chartTabNew: '新增',
+    chartTabCumulative: '累计',
     rewardBalanceTitle: '邀请奖励余额',
     rewardBalanceSubtitle: '来自 {count} 位受邀用户的奖励可手动转入账户余额。',
     currentBalance: '当前账户余额',
@@ -2934,7 +2935,7 @@ export default {
       customOAuthDescription:
         '通过下方提供商管理面板维护自定义 OAuth/OIDC 登录。',
       quota: '配额与展示',
-      quotaDescription: '注册、邀请、充值入口和货币展示规则。',
+      quotaDescription: '新用户配额、预扣倍数、充值入口与货币展示规则。',
       payment: '通用支付与其他网关',
       paymentDescription:
         '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户配置在各自页面；密钥留空保留现有值。',

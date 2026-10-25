@@ -121,21 +121,26 @@ describe('native model performance', () => {
       { signal: expect.any(AbortSignal) }
     )
     const stats = view.get('[data-model-statistics="ready"]')
-    expect(stats.text()).toContain('全部渠道 · 近 24 小时')
+    expect(stats.attributes('aria-label')).toContain('全部渠道 · 近 24 小时')
+    expect(stats.text()).not.toContain('全部渠道 · 近 24 小时')
     expect(stats.text()).toContain('99.5%')
     expect(stats.text()).toContain('850 ms')
     expect(stats.text()).toContain('42.25')
     expect(view.find('[data-model-performance-error]').exists()).toBe(false)
     await view.get('[role="radio"][aria-label="渠道货架"]').trigger('click')
     expect(view.find('[data-model-statistics]').exists()).toBe(false)
-    expect(view.get('[data-market-shelves]').text()).toContain('未按渠道统计')
+    expect(
+      view.get('[data-market-shelves]').find('[data-market-telemetry]').exists()
+    ).toBe(false)
   })
   it('reports models without samples instead of a zero success rate', async () => {
     mockFeeds(async () => performanceSummary([]))
     const view = render()
     await flushPromises()
-    const stats = view.get('[data-model-statistics="empty"]')
-    expect(stats.text()).toContain('近 24 小时无请求样本')
+    expect(view.find('[data-model-statistics]').exists()).toBe(false)
+    expect(view.find('[data-model-statistics-unavailable]').exists()).toBe(
+      false
+    )
     expect(view.get('[data-model-card]').text()).not.toMatch(/\d%|TPS/)
   })
   it('shows a load error without inventing statistics and retries on demand', async () => {
@@ -144,7 +149,8 @@ describe('native model performance', () => {
     })
     const view = render()
     await flushPromises()
-    expect(view.get('[data-model-statistics="error"]').text()).toContain(
+    expect(view.find('[data-model-statistics]').exists()).toBe(false)
+    expect(view.get('[data-model-performance-error]').text()).toContain(
       '统计加载失败'
     )
     expect(view.get('[data-model-card]').text()).not.toMatch(/\d%|TPS/)

@@ -469,9 +469,8 @@ export default {
       cacheCreate: 'Cache Creation',
       cacheRead: 'Cache Read',
       cacheCoverage:
-        'Totals come from hourly usage records written every {minutes} minutes, so the latest hour may be incomplete. Cross-protocol hit rate is unknown.',
-      cacheUnknown:
-        'Totals come from hourly usage records. Cross-protocol hit rate is unknown.',
+        'Usage records are written every {minutes} minutes, so the latest hour may be incomplete.',
+      cacheUnknown: 'Usage records are written hourly.',
       emptyHint: 'No token usage recorded in the last 30 days',
     },
     systemStatus: {
@@ -2628,14 +2627,15 @@ export default {
       'Your invite code has been disabled. Contact an administrator.',
     invitees: 'Invited users',
     records: 'Reward records',
+    recordsEmpty: 'No invite reward records yet',
     sortRecent: 'Recent',
     sortEarly: 'Earliest',
     inviteesNote:
       'Current referrals with masked names, registration dates and earned rewards.',
-    chartTitle: 'Referral rewards',
-    chartSubtitle: 'Actual referral quota earned each month',
-    chartTabNew: 'Monthly reward',
-    chartTabCumulative: 'Cumulative reward',
+    chartTitle: 'Invite registrations · last 6 months',
+    chartSubtitle: 'Users registered with your invite code each month',
+    chartTabNew: 'New',
+    chartTabCumulative: 'Cumulative',
     rewardBalanceTitle: 'Invite reward balance',
     rewardBalanceSubtitle:
       'Rewards from {count} invited users can be transferred to your account balance.',
@@ -3050,7 +3050,7 @@ export default {
         'Manage custom OAuth/OIDC sign-in with the provider panel below.',
       quota: 'Quota and display',
       quotaDescription:
-        'Sign-up and invite rewards, the top-up link, and currency display rules.',
+        'New-user quota, pre-consumption, top-up access, and currency display.',
       payment: 'Shared payment settings and other gateways',
       paymentDescription:
         'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant settings have their own pages. Blank credentials retain the saved value.',

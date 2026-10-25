@@ -78,9 +78,11 @@ function label(line: MarketPriceLine) {
       <p v-else class="market-price-hint">{{ t('expressionHint') }}</p>
     </template>
     <template v-else>
-      <span v-if="pricing.priceStatus" class="market-price-hint">{{
-        t(`priceStates.${pricing.priceStatus}`)
-      }}</span>
+      <span
+        v-if="pricing.priceStatus && pricing.priceStatus !== 'configured'"
+        class="market-price-hint"
+        >{{ t(`priceStates.${pricing.priceStatus}`) }}</span
+      >
       <dl class="market-price-lines">
         <div
           v-for="line in lines"

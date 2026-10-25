@@ -163,18 +163,17 @@ async function cleanLogs() {
     data-ops-section="tasks"
     @retry="refreshTasks"
   >
-    <p class="ops-note" data-ops-task-summary-unavailable>
-      {{ t('ops.native.taskSummaryUnavailable') }}
-    </p>
     <p v-if="result" class="ops-result" role="status">{{ result }}</p>
     <SystemTaskSection
       :title="t('activeTasks')"
       :empty-text="t('emptyActive')"
+      :description="t('ops.native.taskSummaryUnavailable')"
       :tasks="activeTasks"
       :loading="active.loading.value"
       :loaded="active.data.value !== null"
       :error="active.error.value"
       :updated-at="active.updatedAt.value"
+      data-ops-task-summary-unavailable
       @refresh="active.refresh"
       @details="taskDetail = $event"
     >

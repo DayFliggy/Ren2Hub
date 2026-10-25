@@ -189,6 +189,7 @@ const zh = {
   fingerprintMismatched: '与发布的 SHA-256 不一致，填入前请核对价格',
   fingerprintUnverified: '未发布或无法读取 SHA-256，未校验',
   fingerprintMissing: '文档下载失败，无指纹',
+  fingerprintDetails: '查看指纹',
   downloadedSha256: '下载内容 SHA-256：{digest}',
   publishedSha256: '发布的 SHA-256：{digest}',
   upstreamHint:
@@ -437,6 +438,7 @@ const en: Record<keyof typeof zh, string> = {
     'Does not match the published SHA-256. Review prices before filling.',
   fingerprintUnverified: 'SHA-256 not published or unreadable; not verified',
   fingerprintMissing: 'Download failed; no fingerprint',
+  fingerprintDetails: 'View fingerprints',
   downloadedSha256: 'Downloaded SHA-256: {digest}',
   publishedSha256: 'Published SHA-256: {digest}',
   upstreamHint:

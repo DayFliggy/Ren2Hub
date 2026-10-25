@@ -10,6 +10,7 @@ import { formatRelative, formatTimestamp } from '@/utils/opsFormat'
 
 const props = defineProps<{
   title: string
+  description?: string
   emptyText: string
   tasks: SystemTask[]
   loading: boolean
@@ -36,7 +37,13 @@ const tones = {
 </script>
 
 <template>
-  <section class="task-section" :aria-label="title" :aria-busy="loading">
+  <section
+    class="task-section"
+    :aria-label="title"
+    :aria-description="description"
+    :title="description"
+    :aria-busy="loading"
+  >
     <header class="task-header">
       <h2>
         <ListChecks :size="17" aria-hidden="true" />{{ title

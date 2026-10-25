@@ -51,28 +51,40 @@ const metrics = computed(() => {
 
 <template>
   <div
-    v-if="performance"
+    v-if="performance?.status === 'ready'"
+    class="model-statistics"
+    :class="{ compact }"
+    data-model-statistics="ready"
+    data-market-telemetry
+    :role="compact ? 'group' : undefined"
+    :aria-label="compact ? t('modelStats.scope', { hours }) : undefined"
+  >
+    <span v-if="!compact" class="statistics-scope">{{
+      t('modelStats.scope', { hours })
+    }}</span>
+    <dl class="statistics-metrics">
+      <div v-for="metric in metrics" :key="metric.key">
+        <dt>{{ t(`modelStats.${metric.key}`) }}</dt>
+        <dd>{{ metric.value }}</dd>
+      </div>
+    </dl>
+  </div>
+  <div
+    v-else-if="!compact && performance"
     class="model-statistics"
     :class="{ compact }"
     :data-model-statistics="performance.status"
     data-market-telemetry
   >
     <span class="statistics-scope">{{ t('modelStats.scope', { hours }) }}</span>
-    <dl v-if="performance.status === 'ready'" class="statistics-metrics">
-      <div v-for="metric in metrics" :key="metric.key">
-        <dt>{{ t(`modelStats.${metric.key}`) }}</dt>
-        <dd>{{ metric.value }}</dd>
-      </div>
-    </dl>
     <span
-      v-else
       class="statistics-status"
       :class="{ 'is-error': performance.status === 'error' }"
       >{{ t(`modelStats.${performance.status}`, { hours }) }}</span
     >
   </div>
   <div
-    v-else
+    v-else-if="!compact"
     class="model-statistics-empty"
     :class="{ compact }"
     data-model-statistics-unavailable

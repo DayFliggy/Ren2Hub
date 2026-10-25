@@ -37,8 +37,7 @@ export const tokenRoutingMessages = {
       keyNumber: 'Key #{id}',
       automaticHint:
         'Use platform channels automatically, ordered by priority, health, load and latency.',
-      manualHint:
-        'Choose platform channels and try them in your saved order. An empty list has no available route.',
+      manualHint: 'Choose platform channels and try them in your saved order.',
       entriesTitle: 'Channel order',
       orderHint: 'Drag to reorder, or use the arrow buttons',
       selectedCount: '{count} enabled',
@@ -61,8 +60,7 @@ export const tokenRoutingMessages = {
         'Enter a positive multiplier up to 1000 with at most 18 decimal places, or leave it empty.',
       automatic: 'Automatic',
       manual: 'Manual routing',
-      description:
-        'Each key chooses automatic or manual routing. Automatic mode considers platform priority, health, load and latency; manual mode tries platform channels in your saved order.',
+      description: 'Configure routing for this API key.',
       add: 'Add channel',
       empty: 'No channels selected.',
       unavailable: 'Unavailable channel #{id}',
@@ -117,7 +115,7 @@ export const tokenRoutingMessages = {
       modeTitle: '路由方式',
       keyNumber: 'Key #{id}',
       automaticHint: '从全平台渠道中，按优先级、健康、负载和延迟自动选择。',
-      manualHint: '选择平台渠道，按保存的顺序逐个尝试。空列表没有可用路由。',
+      manualHint: '选择平台渠道，按保存的顺序逐个尝试。',
       entriesTitle: '渠道顺序',
       orderHint: '拖动调整顺序，或使用上下箭头',
       selectedCount: '已启用 {count} 个渠道',
@@ -138,8 +136,7 @@ export const tokenRoutingMessages = {
         '请输入不超过 1000、最多 18 位小数的正数倍率，或留空表示不限制。',
       automatic: '自动路由',
       manual: '手动路由',
-      description:
-        '每个 Key 独立选择路由方式。自动模式按优先级、健康、负载和延迟选择全平台渠道；手动模式按以下顺序尝试平台渠道。',
+      description: '配置此 API Key 的路由方式。',
       add: '添加渠道',
       empty: '尚未选择渠道。',
       unavailable: '不可用渠道 #{id}',

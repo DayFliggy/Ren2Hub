@@ -69,3 +69,14 @@ it('shows reversals as reductions and separates credited rewards from debt offse
   expect(wrapper.text()).toContain('Payment compliance has not been confirmed')
   wrapper.unmount()
 })
+it('uses a compact empty state without an empty pagination area', () => {
+  const wrapper = mount(InviteRecordsCard, {
+    props: { records: [], page: 1, total: 0, loading: false, error: '' },
+    global: { plugins: [i18n] },
+  })
+  const empty = wrapper.get('[data-invite-records-empty]')
+  expect(empty.classes()).toContain('py-3')
+  expect(empty.text()).toBe('No invite reward records yet')
+  expect(wrapper.find('nav').exists()).toBe(false)
+  wrapper.unmount()
+})

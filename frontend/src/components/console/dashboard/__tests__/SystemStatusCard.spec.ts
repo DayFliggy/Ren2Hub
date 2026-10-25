@@ -66,17 +66,21 @@ describe('SystemStatusCard native observation snapshot', () => {
     const metrics = observabilityFixture()
     metrics.resources.cpu.scope = 'host'
     const wrapper = render(metrics)
+    expect(wrapper.get('[data-metric="cpu"]').attributes('title')).toContain(
+      'Host · Measured'
+    )
+    expect(wrapper.get('[data-metric="memory"]').attributes('title')).toContain(
+      'Container · Measured'
+    )
+    expect(wrapper.get('[data-metric="disk"]').attributes('title')).toContain(
+      'Filesystem · Measured'
+    )
     expect(
-      wrapper.get('[data-metric="cpu"] [data-resource-caption]').text()
+      wrapper.get('[data-metric="cpu"]').attributes('data-resource-caption')
     ).toContain('Host · Measured')
-    expect(
-      wrapper.get('[data-metric="memory"] [data-resource-caption]').text()
-    ).toContain('Container · Measured')
-    expect(
-      wrapper.get('[data-metric="disk"] [data-resource-caption]').text()
-    ).toContain('Filesystem · Measured')
-    expect(wrapper.get('[data-resource-sampled-at]').text()).toContain(
-      formatTime(metrics.sampled_at!)
+    expect(wrapper.find('[data-resource-sampled-at]').exists()).toBe(false)
+    expect(wrapper.get('[data-metric="cpu"]').attributes('title')).toContain(
+      formatTime(metrics.resources.cpu.sampled_at!)
     )
   })
   it.each(['unknown', 'disabled', 'stale'] as const)(
@@ -120,9 +124,11 @@ describe('SystemStatusCard native observation snapshot', () => {
   })
   it('labels traffic as application body throughput and uses native history', () => {
     const tile = render().get('[data-metric="bandwidth"]')
-    expect(tile.text()).toContain('Request 2.1 Mbps')
-    expect(tile.text()).toContain('Response 12.4 Mbps')
-    expect(tile.text()).toContain('Application HTTP body throughput')
+    expect(tile.text()).toContain('↑ 2.1 Mbps')
+    expect(tile.text()).toContain('↓ 12.4 Mbps')
+    expect(tile.attributes('title')).toContain(
+      'Application HTTP body throughput'
+    )
     expect(tile.find('[data-bandwidth-sparkline]').exists()).toBe(true)
   })
   it('does not invent a missing traffic direction or bridge a history gap', () => {
@@ -131,8 +137,8 @@ describe('SystemStatusCard native observation snapshot', () => {
     metrics.traffic.response_mbps = 0.002
     metrics.series.points[1]!.request_mbps = null
     const tile = render(metrics).get('[data-metric="bandwidth"]')
-    expect(tile.text()).toContain('Request --')
-    expect(tile.text()).toContain('Response 2 Kbps')
+    expect(tile.text()).toContain('↑ --')
+    expect(tile.text()).toContain('↓ 2 Kbps')
     expect(tile.find('[data-bandwidth-sparkline]').exists()).toBe(false)
   })
   it('does not draw history from a single sample', () => {
@@ -172,10 +178,10 @@ describe('SystemStatusCard native observation snapshot', () => {
   it('shows resource scope and sampling labels in Chinese', async () => {
     await setLocale('zh-CN')
     const wrapper = render()
-    expect(wrapper.get('[data-metric="cpu"]').text()).toContain('容器 · 已采集')
-    expect(wrapper.get('[data-resource-sampled-at]').text()).toContain(
-      '快照采样'
+    expect(wrapper.get('[data-metric="cpu"]').attributes('title')).toContain(
+      '容器 · 已采集'
     )
+    expect(wrapper.find('[data-resource-sampled-at]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('dashboard.')
   })
 })

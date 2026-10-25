@@ -334,13 +334,22 @@ describe('GMPay settings page', () => {
           .exists()
       ).toBe(false)
       expect(wrapper.text()).toContain(newOrdersLabel)
-      const save = wrapper
+      expect(wrapper.find('input[type="search"]').exists()).toBe(false)
+      expect(wrapper.find('[data-gmpay-panel]').exists()).toBe(true)
+      expect(wrapper.text()).toContain(
+        locale === 'en' ? 'GMPay crypto payments' : 'GMPay 虚拟币支付'
+      )
+      expect(
+        wrapper.findAll('button').some((button) => button.text() === saveLabel)
+      ).toBe(false)
+      const saveGateway = wrapper
         .findAll('button')
-        .find((button) => button.text() === saveLabel)!
-      expect(save.attributes('disabled')).toBeDefined()
-      await save.trigger('click')
-      await flushPromises()
-      expect(backend.puts).toEqual([])
+        .find(
+          (button) =>
+            button.text() ===
+            (locale === 'en' ? 'Save gateway configuration' : '保存网关配置')
+        )
+      expect(saveGateway?.exists()).toBe(true)
       wrapper.unmount()
     }
   )
@@ -351,7 +360,19 @@ describe('Email settings page', () => {
   // switches, so a single save must write both before EmailProvider.
   it('writes Resend credentials before switching the sending method', async () => {
     const wrapper = await render('operations', 'email')
+    const visibleOrder = wrapper
+      .findAll('.settings-fields-grid > *')
+      .map((field) =>
+        field.element
+          .querySelector('input, select, textarea')
+          ?.getAttribute('id')
+      )
+    expect(visibleOrder[0]).toBe('setting-EmailProvider')
+    expect(wrapper.find('[id="setting-SMTPServer"]').exists()).toBe(true)
+    expect(wrapper.find('[id="setting-ResendApiKey"]').exists()).toBe(false)
     await wrapper.get('[id="setting-EmailProvider"]').setValue('resend')
+    expect(wrapper.find('[id="setting-SMTPServer"]').exists()).toBe(false)
+    expect(wrapper.find('[id="setting-ResendApiKey"]').exists()).toBe(true)
     await wrapper.get('[id="setting-ResendApiKey"]').setValue('re_test')
     await wrapper
       .get('[id="setting-ResendFrom"]')
@@ -366,6 +387,43 @@ describe('Email settings page', () => {
       { key: 'ResendApiKey', value: 're_test' },
       { key: 'EmailProvider', value: 'resend' },
     ])
+    wrapper.unmount()
+  })
+
+  it('shows only SMTP settings when SMTP is selected', async () => {
+    const wrapper = await render('operations', 'email')
+    expect(wrapper.find('[id="setting-SMTPServer"]').exists()).toBe(true)
+    expect(wrapper.find('[id="setting-ResendFrom"]').exists()).toBe(false)
+    expect(wrapper.find('[id="setting-ResendApiKey"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps saved Resend credentials when switching to SMTP', async () => {
+    await serve({
+      EmailProvider: 'resend',
+      ResendApiKey: 'existing-secret',
+      ResendFrom: 'Saved <sender@example.com>',
+    })
+    const wrapper = await render('operations', 'email')
+    expect(wrapper.find('[id="setting-SMTPServer"]').exists()).toBe(false)
+    expect(wrapper.find('[id="setting-ResendFrom"]').exists()).toBe(true)
+    expect(
+      wrapper.get<HTMLInputElement>('[id="setting-ResendApiKey"]').element.value
+    ).toBe('')
+    await wrapper
+      .get('[id="setting-ResendFrom"]')
+      .setValue('Unsaved <sender@example.com>')
+    await wrapper.get('[id="setting-EmailProvider"]').setValue('smtp')
+    expect(wrapper.find('[id="setting-SMTPServer"]').exists()).toBe(true)
+    expect(wrapper.find('[id="setting-ResendFrom"]').exists()).toBe(false)
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes')!
+      .trigger('click')
+    await flushPromises()
+    expect(backend.puts).toEqual([{ key: 'EmailProvider', value: 'smtp' }])
+    expect(backend.options.ResendApiKey).toBe('existing-secret')
+    expect(backend.options.ResendFrom).toBe('Saved <sender@example.com>')
     wrapper.unmount()
   })
 
@@ -542,6 +600,26 @@ describe('legacy currency setting', () => {
     expect(backend.options['general_setting.quota_display_type']).toBe('TOKENS')
     wrapper.unmount()
   })
+})
+
+describe('quota description', () => {
+  it.each([
+    [
+      'en',
+      'New-user quota, pre-consumption, top-up access, and currency display.',
+    ],
+    ['zh-CN', '新用户配额、预扣倍数、充值入口与货币展示规则。'],
+  ])(
+    'describes the current quota fields in %s',
+    async (locale, description) => {
+      await setLocale(locale)
+      const wrapper = await render('billing', 'quota')
+      expect(wrapper.text()).toContain(description)
+      expect(wrapper.text()).not.toContain('invite rewards')
+      expect(wrapper.text()).not.toContain('邀请、充值入口')
+      wrapper.unmount()
+    }
+  )
 })
 
 describe('unused local settings', () => {

@@ -64,6 +64,10 @@ describe('check-in records ledger', () => {
     expect(wrapper.get('details').text()).toContain(
       'No check-ins recorded for this month.'
     )
+    expect(wrapper.find('.pencil-progress').exists()).toBe(false)
+    expect(
+      wrapper.text().match(/random daily reward configured by the site/g)
+    ).toHaveLength(1)
     expect(wrapper.find('table').exists()).toBe(false)
     await wrapper.get('input[type=month]').setValue('2026-09')
     expect(wrapper.emitted('update:month')).toEqual([['2026-09']])

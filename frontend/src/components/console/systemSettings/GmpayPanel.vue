@@ -2,7 +2,9 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
+import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
@@ -262,10 +264,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section
-    class="gmpay-panel"
+  <ConsoleCard
+    :title="t('systemSettings.gmpayPanel.title')"
     :aria-label="t('systemSettings.gmpayPanel.title')"
+    data-gmpay-panel
   >
+    <p class="mb-4 text-xs text-[var(--text-secondary)]">
+      {{ t('systemSettings.gmpayPanel.description') }}
+    </p>
     <p v-if="configurationLoading" class="gmpay-hint" role="status">
       {{ t('systemSettings.gmpayPanel.loading') }}
     </p>
@@ -309,12 +315,15 @@ onUnmounted(() => {
             }}</span>
           </div>
         </FormField>
-        <label
+        <div
           class="flex items-center gap-2 text-sm text-[var(--text-secondary)] sm:col-span-2"
         >
-          <input v-model="form.enabled" type="checkbox" />
+          <ConsoleToggle
+            v-model="form.enabled"
+            :label="t('systemSettings.gmpayPanel.enabled')"
+          />
           {{ t('systemSettings.gmpayPanel.enabled') }}
-        </label>
+        </div>
         <p class="gmpay-hint sm:col-span-2">
           {{ t('systemSettings.gmpayPanel.nativePricing') }}
         </p>
@@ -452,15 +461,10 @@ onUnmounted(() => {
         </div>
       </div>
     </fieldset>
-  </section>
+  </ConsoleCard>
 </template>
 
 <style scoped>
-.gmpay-panel {
-  margin-top: 1.5rem;
-  border-top: 1px dashed var(--border-default);
-  padding-top: 1rem;
-}
 .gmpay-actions {
   display: flex;
   flex-wrap: wrap;
