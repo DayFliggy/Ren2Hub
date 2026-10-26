@@ -77,6 +77,11 @@ function mountList(
         createI18n({
           legacy: false,
           locale: 'en',
+          messages: {
+            en: {
+              channels: { channelRatioValue: 'Channel ratio {ratio}×' },
+            },
+          },
           missingWarn: false,
           fallbackWarn: false,
         }),
@@ -191,5 +196,33 @@ describe('channel mobile list backend labs', () => {
     expect(flagged).toHaveLength(1)
     expect(flagged[0]!.text()).toContain('contract-invalid')
     expect(flagged[0]!.text()).toContain('channels.labInvalidMapping')
+  })
+})
+
+describe('channel mobile list concurrency and pricing', () => {
+  it('distinguishes unlimited concurrency from an explicit cap and shows its ratio', () => {
+    const { wrapper } = mountList(
+      [
+        channel({
+          id: 1,
+          in_flight: 3,
+          max_concurrency: 0,
+          channel_ratio: '1.25',
+        }),
+        channel({
+          id: 2,
+          in_flight: 2,
+          max_concurrency: 8,
+          channel_ratio: '0.5',
+        }),
+      ],
+      true,
+      ['capacity', 'usage']
+    )
+    const rows = wrapper.findAll('[data-channel-mobile-row]')
+    expect(rows[0]!.text()).toContain('3 / ∞')
+    expect(rows[0]!.text()).toContain('Channel ratio 1.250×')
+    expect(rows[1]!.text()).toContain('2 / 8')
+    expect(rows[1]!.text()).toContain('Channel ratio 0.500×')
   })
 })

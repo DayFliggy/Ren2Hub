@@ -1255,11 +1255,20 @@ async function runBulkStatus(
           </template>
           <template #cell-capacity="{ row }">
             <CapacityMeter
+              v-if="
+                channelFromRow(row as AdminChannelTableRow).max_concurrency > 0
+              "
               :used="channelFromRow(row as AdminChannelTableRow).in_flight"
               :total="
                 channelFromRow(row as AdminChannelTableRow).max_concurrency
               "
             />
+            <span
+              v-else
+              class="font-mono text-xs tabular-nums text-[var(--text-secondary)]"
+            >
+              {{ channelFromRow(row as AdminChannelTableRow).in_flight }} / ∞
+            </span>
           </template>
           <template #cell-usage="{ row }">
             <div class="sibling-space-y-0.5 text-xs">

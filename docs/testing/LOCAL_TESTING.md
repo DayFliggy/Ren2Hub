@@ -27,21 +27,21 @@ python3 -B scripts/testing/run.py static
 python3 -B scripts/testing/run.py build
 python3 -B scripts/testing/run.py race
 python3 -B scripts/testing/run.py browser
-REN2HUB_UI_BASELINE=/absolute/path/to/reviewed-baselines python3 -B scripts/testing/run.py ui-contracts
+python3 -B scripts/testing/run.py ui-contracts
 python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1
 python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 ```
 
-| 层           | 实际验证                                                                           | 依赖及通过条件                                                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| unit         | Go 三模块、Vue 业务断言；httptest 模拟协议、计费、权限、路由、任务、工单           | 自动发现 Go 用例，每批最多 20 个，单次 `-timeout=60s`；检查 JSON 测试事件，零用例/失败/意外跳过均失败                              |
-| databases    | 空库初始化、旧账务拒绝、钱包/返利/充值、路由、管理操作、模型目录、任务、日志与迁移 | SQLite + 新 MySQL 8.4 + PostgreSQL 15.19；每个合同独立新库，检查每个方言的运行与通过事件                                           |
-| static       | Vue 类型、Lint、格式；三个 Go 模块 vet                                             | 全部退出 0；缺工具是失败                                                                                                           |
-| build        | Vue 构建、嵌入资源图、实际 Go 二进制与两个独立模块                                 | 不用 placeholder 代替生产资源验证，记录二进制 SHA256                                                                               |
-| race         | 轮询、并发资金、服务准入、WebSocket 结算                                           | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                                                  |
-| browser      | 全新实例真实登录/刷新/注销、权限、Token、邀请归属与设置交互                        | 桌面/手机 × 明/暗，每组独立数据库；不拦截业务 API，不接已有服务器，不接受任意目标地址                                              |
-| ui-contracts | 原有93项契约、全路由矩阵、组件交互、状态及响应式边界                               | 从 `tests/contracts/suite-manifest.json` 校验全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；独立端口模拟 API，不冒充真实后端 |
-| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同              | 全新 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过                                                 |
+| 层           | 实际验证                                                                           | 依赖及通过条件                                                                                                |
+| ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| unit         | Go 三模块、Vue 业务断言；httptest 模拟协议、计费、权限、路由、任务、工单           | 自动发现 Go 用例，每批最多 20 个，单次 `-timeout=60s`；检查 JSON 测试事件，零用例/失败/意外跳过均失败         |
+| databases    | 空库初始化、旧账务拒绝、钱包/返利/充值、路由、管理操作、模型目录、任务、日志与迁移 | SQLite + 新 MySQL 8.4 + PostgreSQL 15.19；每个合同独立新库，检查每个方言的运行与通过事件                      |
+| static       | Vue 类型、Lint、格式；三个 Go 模块 vet                                             | 全部退出 0；缺工具是失败                                                                                      |
+| build        | Vue 构建、嵌入资源图、实际 Go 二进制与两个独立模块                                 | 不用 placeholder 代替生产资源验证，记录二进制 SHA256                                                          |
+| race         | 轮询、并发资金、服务准入、WebSocket 结算                                           | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                             |
+| browser      | 全新实例真实登录/刷新/注销、权限、Token、邀请归属与设置交互                        | 桌面/手机 × 明/暗，每组独立数据库；不拦截业务 API，不接已有服务器，不接受任意目标地址                         |
+| ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                        | 自动发现该目录全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端，不做像素比较 |
+| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同              | 全新 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过                            |
 
 `unit` 只把数据库矩阵列为转交 `databases`，把嵌入产物测试转交 `build`；不会把它们计入 unit 通过数量。需要真实 VLLM 的可选用例明确不在本地方案内。`unit` 通过不等于 `all` 通过。数据库清单中测试被删除、改名或缺失不能静默减少覆盖。
 
@@ -53,9 +53,9 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 数据库和候选 runner 自己创建目标，不接收用户提供的 DSN，不继承生产数据库环境变量。容器均带本轮随机 label，清理前核验确切 ID 和 label，不用名称通配符、全局 prune、FLUSHDB 或清空旧库。失败退出非零，保留报告与日志；清理失败也不能算通过。`browser` profile 的真实浏览器实例在只有回环接口的独立 network/PID namespace 内运行，外网请求直接失败；`ui-contracts` 使用同源模拟 API 和独立 loopback Vite 端口，不把这层当作真实网络隔离。
 
-浏览器行为断言与像素比较分别记录。`all-pages.spec.ts` 的78条当前入口在三种视口、两种主题和两种语言下展开为936项基础页面场景；设置域按有效分区展开。六个列表另以非空合成行展开72项完整矩阵，避免仅测默认空态。统一入口必须显式传入 `REN2HUB_UI_BASELINE=/absolute/path/to/reviewed-baselines`；缺少或空基线立即失败，不能静默省略像素比较。正常页面、非空列表和采集器自测比较首帧及全部内部滚动帧，缺图、差异或帧集合变化即失败；默认 `updateSnapshots: none`，并核对运行前后参考文件摘要不变。基线生成须显式使用 Playwright 的 `--update-snapshots`，并经过历史意图及当前合同复核，不能以更新图片代替修复。截图固定浏览器、仓库字体、日期和随机源；运维倒计时采用冻结时钟和明确帧推进。组件交互另有分帧截图与结构/行为断言，其留证不自动等于像素比较通过。来源、命令和逐组件证据见 [UI_REGRESSION_20261024.md](UI_REGRESSION_20261024.md)。
+`ui-contracts` 只证明浏览器行为与布局断言。`tests/visual/` 恢复自 9a63062227，没有经过复核的像素参考，因此这一层不声称像素一致；视觉回归需另行对照 9a63062227 截图人工复核，并单独记账。旧 `tests/contracts/` 的像素基线流程随该目录退役，其证据见 [UI_REGRESSION_20261024.md](UI_REGRESSION_20261024.md)。
 
-`ui-contracts` 固定使用专用回环入口 `http://127.0.0.1:41739`，因为邀请链接会真实显示当前 origin。该端口被占用时直接失败，不回退随机端口；同一机器上的完整视觉验收须串行。历史副本、真实后端 smoke 及不比较像素的隔离诊断仍使用各自端口。生成参考也必须采用此入口；每轮 `visual-origin.json` 记录实际值。
+`ui-contracts` 固定使用专用回环入口 `http://127.0.0.1:41739`，因为邀请链接会真实显示当前 origin。该端口被占用时直接失败，不回退随机端口；同一机器上的完整浏览器验收须串行。历史副本与真实后端 smoke 仍使用各自端口；每轮 `visual-origin.json` 记录实际值。
 
 真实 OAuth、真实付费模型和真实支付不在本地验证范围。SDK 运行时版本必须匹配候选合同要求，缺依赖不能跳过。新库部署不再以旧版本改写新库的回滚演练作为门槛；回退必须连同旧数据库、Redis 和附件整体切回，不能只换镜像。
 
@@ -63,15 +63,15 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 ## 旧资产的迁移边界
 
-| 旧资产                                                                    | 新位置与状态                                                                                                                                |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境和全部7阶段；旧入口删除                                                 |
-| Go `*_test.go` 与 Vue `src/**/*.spec.ts`                                  | 保留原生行为断言，统一发现并运行；共享SQLite fixture补齐用户硬删除的路由表                                                                  |
-| 日期审计 spec 的8组业务回归及必要fixtures                                 | `frontend/tests/contracts/product-regressions.spec.ts` 的32项保留，并与另外三套旧契约及新回归 spec 一起由 `ui-contracts` 完整发现执行       |
-| 旧 `frontend/tests/live/`                                                 | 新 `frontend/tests/local/` 对实际产物执行登录、权限、Token、邀请与设置；旧页面穷举不再作为现行门槛                                          |
-| 其余旧 `frontend/tests/visual/`                                           | 退役并归档；仍适用的视觉意图在 `tests/contracts/` 使用当前响应合同重新验证。历史截图、当前模拟 API 和4组真实后端 smoke 分别记账，不互相代替 |
-| 旧 SDK / admission benchmark / upstream-sync 独立工具及 routing-simulator | 不再存在的接口与实现引用退役；当前SDK合同在 candidate 层                                                                                    |
-| 工作区 scripts/tests                                                      | 发布/安装/核验/Nginx/密钥断言迁入 scripts/testing/infra；旧独立入口删除。Windows专用测试未在Linux运行，不声称连接层完整验证                 |
+| 旧资产                                                                    | 新位置与状态                                                                                                                |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境和全部7阶段；旧入口删除                                 |
+| Go `*_test.go` 与 Vue `src/**/*.spec.ts`                                  | 保留原生行为断言，统一发现并运行；共享SQLite fixture补齐用户硬删除的路由表                                                  |
+| 日期审计 spec 的8组业务回归及必要fixtures                                 | 随 `frontend/tests/contracts/` 退役；`tests/visual/` 继续复用其中的 `native-core-fixture.ts` 与 `channel-core-fixtures.ts`  |
+| 旧 `frontend/tests/live/`                                                 | 新 `frontend/tests/local/` 对实际产物执行登录、权限、Token、邀请与设置；旧页面穷举不再作为现行门槛                          |
+| `frontend/tests/visual/` 与 `frontend/tests/contracts/`                   | 恢复 9a63062227 的 `tests/visual/` 作为 `ui-contracts` 套件；`tests/contracts/` 的 spec、清单与配置退役                     |
+| 旧 SDK / admission benchmark / upstream-sync 独立工具及 routing-simulator | 不再存在的接口与实现引用退役；当前SDK合同在 candidate 层                                                                    |
+| 工作区 scripts/tests                                                      | 发布/安装/核验/Nginx/密钥断言迁入 scripts/testing/infra；旧独立入口删除。Windows专用测试未在Linux运行，不声称连接层完整验证 |
 
 数据库 runner 发现读取 DSN/dialect 的测试及其 helper 使用者；明确清单覆盖的项目必须执行，未分类新项目使门槛失败。共享 helper 的其他原生用例单列为 SQLite 覆盖，不能宣称全部三方。当前矩阵使用 MySQL 8.4 与 PostgreSQL 15.19，并记录实际镜像 ID、digest 和服务器版本；不覆盖历史 MySQL 5.7、PostgreSQL 9.6 或 ClickHouse，亦不证明现有生产 PostgreSQL 15.18 的所有版本差异。浏览器网络 namespace 隔离 IP 网络，不是完整文件系统沙箱；不得用不可信二进制或不可信浏览器测试。
 

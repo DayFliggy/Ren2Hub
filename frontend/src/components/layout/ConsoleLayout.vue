@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeMount, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeMount, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
@@ -15,6 +15,7 @@ const featureStatus = computed(() => app.featureStatus(route.meta.feature))
 const isDisabled = computed(() => featureStatus.value === 'disabled')
 
 const isScrolling = ref(false)
+const scrollZone = ref<HTMLElement | null>(null)
 let scrollTimer: ReturnType<typeof setTimeout> | null = null
 
 function onScroll() {
@@ -24,6 +25,15 @@ function onScroll() {
     isScrolling.value = false
   }, 2300)
 }
+
+// Pages scroll inside this zone, not the window the router's scrollBehavior
+// resets. A new path starts at the top; query-only updates such as filters
+// and pagination keep their place.
+watch(
+  () => route.path,
+  () => scrollZone.value?.scrollTo({ top: 0 }),
+  { flush: 'post' }
+)
 
 // Scope rem sizing to the console, including overlays teleported to body.
 onBeforeMount(() => {
@@ -46,6 +56,7 @@ onBeforeUnmount(() => {
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <ConsoleTopbar data-console-scroll-boundary />
       <div
+        ref="scrollZone"
         data-console-scroll-zone
         class="night-page-texture scroll-zone texture-paper draft-grid min-w-0 flex-1 overflow-y-auto"
         :class="{ scrolling: isScrolling, 'no-page-scroll': noPageScroll }"

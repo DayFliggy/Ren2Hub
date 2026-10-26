@@ -304,16 +304,12 @@ onBeforeUnmount(() => {
       data-testid="pat-legacy"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0">
-          <span class="font-semibold text-[var(--text-primary)]">{{
-            t('pat.legacy')
-          }}</span
-          ><code
-            v-if="legacy.token_hint"
-            class="ml-3 font-mono text-xs text-[var(--text-secondary)]"
+        <span class="font-semibold text-[var(--text-primary)]"
+          >{{ t('pat.legacy') }}
+          <code v-if="legacy.token_hint" class="ml-3 text-xs"
             >…{{ legacy.token_hint }}</code
-          >
-        </div>
+          ></span
+        >
         <ConsoleButton
           variant="ghost"
           :disabled="busy"
@@ -324,9 +320,7 @@ onBeforeUnmount(() => {
       <p class="mt-2 text-sm text-[var(--text-secondary)]">
         {{ t('pat.legacyRetire', { date: timestamp(legacy.retire_at) }) }}
       </p>
-      <dl
-        class="mt-2 grid gap-x-5 gap-y-1 text-xs text-[var(--text-tertiary)] sm:grid-cols-3"
-      >
+      <dl class="mt-2 text-xs text-[var(--text-tertiary)]">
         <div v-if="legacy.created_at">
           <dt>{{ t('pat.created') }}</dt>
           <dd>{{ timestamp(legacy.created_at) }}</dd>
@@ -455,40 +449,36 @@ onBeforeUnmount(() => {
                   v-for="action in resource.actions"
                   :key="action.scope"
                   class="mt-1 flex min-w-0 items-start gap-2 text-xs"
-                  ><input
+                >
+                  <input
                     v-model="scopes"
                     type="checkbox"
                     :value="action.scope"
                     class="mt-0.5"
-                  /><span class="min-w-0"
+                  />
+                  <span class="min-w-0"
                     >{{ serverText(action.label_key)
                     }}<span
                       v-if="action.description_key"
                       class="block text-[var(--text-secondary)]"
                       >{{ serverText(action.description_key) }}</span
                     ></span
-                  ></label
-                >
+                  >
+                </label>
               </div>
             </section>
-            <section v-if="unavailableScopes.length">
-              <h4
-                class="text-xs font-semibold text-[var(--status-warning-text)]"
-              >
-                {{ t('pat.unavailableScope') }}
-              </h4>
-              <label
-                v-for="scope in unavailableScopes"
-                :key="scope"
-                class="mt-1 flex min-w-0 items-start gap-2 text-xs"
-                ><input
-                  v-model="scopes"
-                  type="checkbox"
-                  :value="scope"
-                  class="mt-0.5"
-                /><span class="break-all font-mono">{{ scope }}</span></label
-              >
-            </section>
+            <label
+              v-for="scope in unavailableScopes"
+              :key="scope"
+              class="flex items-start gap-2 text-xs text-[var(--status-warning-text)]"
+            >
+              <input
+                v-model="scopes"
+                type="checkbox"
+                :value="scope"
+                class="mt-0.5"
+              />{{ scope }} · {{ t('pat.unavailableScope') }}
+            </label>
           </div>
         </fieldset>
         <label v-if="editor === 'create'" class="block text-sm"

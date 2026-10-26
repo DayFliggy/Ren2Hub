@@ -525,7 +525,7 @@ function memorySegmentStyle(
           <template v-else-if="tile.key === 'memory'">
             <div
               v-if="tile.storage"
-              class="mt-auto flex items-baseline gap-0.5 font-mono leading-none whitespace-nowrap pt-0.5 sm:gap-1"
+              class="mt-auto flex items-baseline gap-0.5 font-mono leading-none whitespace-nowrap pt-0.5"
             >
               <span
                 class="display-number status-headline leading-none"

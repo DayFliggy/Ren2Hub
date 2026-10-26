@@ -30,6 +30,7 @@ import {
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
+import { formatDecimal } from '@/utils/decimal'
 
 import ChannelInlineNumber from './ChannelInlineNumber.vue'
 import ChannelKeyStatus from './ChannelKeyStatus.vue'
@@ -416,6 +417,16 @@ function responseDisplay(channel: AdminChannel): {
                   </span>
                 </dd>
               </div>
+              <div v-if="visibleFields.includes('capacity')" class="min-w-0">
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('channels.maxConcurrency') }}
+                </dt>
+                <dd
+                  class="mt-1 font-mono tabular-nums text-[var(--text-primary)]"
+                >
+                  {{ channel.in_flight }} / {{ channel.max_concurrency || '∞' }}
+                </dd>
+              </div>
               <div v-if="visibleFields.includes('usage')" class="min-w-0">
                 <dt class="text-[var(--text-tertiary)]">
                   {{ t('channels.usage') }}
@@ -425,6 +436,13 @@ function responseDisplay(channel: AdminChannel): {
                     class="font-semibold tabular-nums text-[var(--text-primary)]"
                   >
                     {{ formatQuota(channel.used_quota) }}
+                  </p>
+                  <p class="mt-1 text-[0.6875rem] text-[var(--text-tertiary)]">
+                    {{
+                      t('channels.channelRatioValue', {
+                        ratio: formatDecimal(channel.channel_ratio),
+                      })
+                    }}
                   </p>
                 </dd>
               </div>

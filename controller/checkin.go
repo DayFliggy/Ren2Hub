@@ -35,6 +35,7 @@ func GetCheckinStatus(c *gin.Context) {
 			"min_quota": setting.MinQuota,
 			"max_quota": setting.MaxQuota,
 			"stats":     stats,
+			"today":     checkinToday(),
 		},
 	})
 }

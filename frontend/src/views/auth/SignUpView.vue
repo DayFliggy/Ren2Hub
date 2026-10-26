@@ -247,47 +247,46 @@ onMounted(() => app.initialize())
           {{ errors.username }}
         </span>
       </FormField>
-      <template v-if="emailRequired">
-        <FormField :label="t('auth.email')">
+      <FormField v-if="emailRequired" :label="t('auth.email')">
+        <TextInput
+          v-model="email"
+          type="email"
+          :placeholder="t('auth.email')"
+          autocomplete="email"
+        />
+        <span
+          v-if="errors.email"
+          class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
+        >
+          {{ errors.email }}
+        </span>
+      </FormField>
+      <div v-if="emailRequired">
+        <label
+          :for="verificationCodeId"
+          class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
+          >{{ t('auth.verificationCode') }}</label
+        >
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
           <TextInput
-            v-model="email"
-            type="email"
-            :placeholder="t('auth.email')"
-            autocomplete="email"
+            :id="verificationCodeId"
+            v-model="verificationCode"
+            class="min-w-0 flex-1"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            :placeholder="t('auth.verificationCode')"
           />
-          <span
-            v-if="errors.email"
-            class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
+          <ConsoleButton
+            type="button"
+            variant="secondary"
+            class="shrink-0"
+            :disabled="busy || !email.trim() || !turnstileSatisfied"
+            :loading="verificationSending"
+            @click="sendVerification"
+            >{{ t('auth.sendCode') }}</ConsoleButton
           >
-            {{ errors.email }}
-          </span>
-        </FormField>
-        <div>
-          <label
-            :for="verificationCodeId"
-            class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
-          >
-            {{ t('auth.verificationCode') }}
-          </label>
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <TextInput
-              :id="verificationCodeId"
-              v-model="verificationCode"
-              class="min-w-0 flex-1"
-              autocomplete="one-time-code"
-            />
-            <ConsoleButton
-              type="button"
-              variant="secondary"
-              class="shrink-0"
-              :loading="verificationSending"
-              :disabled="busy || !email.trim() || !turnstileSatisfied"
-              @click="sendVerification"
-              >{{ t('auth.sendCode') }}</ConsoleButton
-            >
-          </div>
         </div>
-      </template>
+      </div>
       <FormField :label="t('auth.newPassword')" :hint="t('auth.passwordHint')">
         <TextInput
           v-model="password"
@@ -317,7 +316,13 @@ onMounted(() => app.initialize())
           {{ errors.confirm }}
         </span>
       </FormField>
-
+      <AffiliateAttributionField
+        v-model="affiliateCode"
+        v-model:confirmed="affiliateConfirmed"
+        :error="errors.affiliate"
+        :disabled="busy"
+        @changed="errors.affiliate = ''"
+      />
       <TurnstileWidget
         v-if="app.turnstileEnabled"
         ref="turnstileWidget"
@@ -337,12 +342,13 @@ onMounted(() => app.initialize())
       </ConsoleButton>
     </form>
 
+    <!-- OAuth-only sites have no form, but the code still applies to OAuth sign-up. -->
     <AffiliateAttributionField
-      v-if="app.passwordRegisterEnabled || providers.length"
+      v-if="!app.passwordRegisterEnabled && providers.length"
       v-model="affiliateCode"
       v-model:confirmed="affiliateConfirmed"
-      :disabled="busy"
       :error="errors.affiliate"
+      :disabled="busy"
       @changed="errors.affiliate = ''"
     />
 
@@ -364,7 +370,8 @@ onMounted(() => app.initialize())
     >
       {{ t('auth.noRegistrationMethods') }}
     </p>
-    <div v-if="providers.length" class="mt-3 sibling-space-y-3">
+
+    <div v-if="providers.length" class="mt-4 sibling-space-y-2">
       <ConsoleButton
         v-for="provider in providers"
         :key="provider.slug"
@@ -373,9 +380,10 @@ onMounted(() => app.initialize())
         :disabled="busy"
         :loading="loading"
         @click="signUpWithOAuth(provider.slug)"
+        >{{
+          t('auth.continueWithProvider', { provider: provider.name })
+        }}</ConsoleButton
       >
-        {{ t('auth.continueWithProvider', { provider: provider.name }) }}
-      </ConsoleButton>
     </div>
 
     <p class="mt-6 text-center text-sm text-[var(--text-tertiary)]">

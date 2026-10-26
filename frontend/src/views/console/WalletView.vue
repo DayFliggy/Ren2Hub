@@ -299,8 +299,9 @@ onBeforeUnmount(() => statusController?.abort())
         variant="secondary"
         :loading="paymentStatusLoading"
         @click="trackPayment(trackedTradeNo)"
-        >{{ t('orders.refresh') }}</ConsoleButton
       >
+        {{ t('orders.refresh') }}
+      </ConsoleButton>
     </ConsoleCard>
 
     <div

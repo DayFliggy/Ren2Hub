@@ -234,50 +234,39 @@ def playwright_result(data: dict, expected_ids: set[str]) -> int:
     return len(expected_ids)
 
 
-def visual_baseline(path: Path) -> dict:
-    files = {p.relative_to(path).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-             for p in sorted(path.rglob('*.png')) if p.is_file()}
-    if not files:
-        raise RuntimeError('Visual baseline contains no PNG references')
-    return {'directory': str(path.resolve()), 'files': len(files),
-            'sha256': hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()}
-
-
 def ui_contracts(source: Path, output: Path, env: dict[str, str]) -> dict:
-    baseline = os.environ.get('REN2HUB_UI_BASELINE')
-    if not baseline:
-        raise RuntimeError('REN2HUB_UI_BASELINE is required; unified UI verification cannot omit pixel comparisons')
-    if not Path(baseline).is_dir():
-        raise RuntimeError('Visual baseline directory does not exist')
-    baseline_identity = visual_baseline(Path(baseline))
-    env = {**env, 'REN2HUB_UI_OUTPUT': str(output)}
-    env['REN2HUB_UI_BASELINE'] = str(Path(baseline).resolve())
-    (output / 'visual-baseline.json').write_text(json.dumps(baseline_identity, indent=2))
+    # tests/visual asserts behaviour and layout against mocked native APIs; it has
+    # no reviewed pixel references, so this layer does not claim pixel equality.
+    suite = source / 'frontend/tests/visual'
+    files = {path.name for path in suite.glob('*.spec.ts')}
+    if not files:
+        raise RuntimeError('tests/visual contains no browser specs')
+    env = {key: value for key, value in env.items() if key != 'REN2HUB_LOCAL_SESSION'}
     with socket.socket() as reservation:
         # Permit the previous server's TIME_WAIT connections, never a live listener.
         reservation.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         reservation.bind(('127.0.0.1', UI_CONTRACTS_PORT))
-        env['REN2HUB_UI_PORT'] = str(UI_CONTRACTS_PORT)
+        env['PLAYWRIGHT_PORT'] = str(UI_CONTRACTS_PORT)
     origin = f'http://127.0.0.1:{UI_CONTRACTS_PORT}'
     (output / 'visual-origin.json').write_text(json.dumps({'origin': origin}, indent=2))
     libraries = os.environ.get('REN2HUB_BROWSER_LIB_DIR')
     if libraries:
         env['LD_LIBRARY_PATH'] = libraries
-    command = ['bun', 'x', '--no-install', 'playwright', 'test', '--config', 'tests/contracts/playwright.config.ts']
-    manifest = json.loads((source / 'frontend/tests/contracts/suite-manifest.json').read_text())
+    # Playwright empties outputDir before each run; keep attachments with this run's evidence.
+    command = ['bun', 'x', '--no-install', 'playwright', 'test', '--config', 'playwright.config.ts',
+               '--output', str(output / 'artifacts')]
     discovered = json.loads(execute(command + ['--list', '--reporter=json'],
                                    source / 'frontend', output, 'ui-inventory', env, 120))
-    expected_ids = playwright_cases(discovered, set(manifest['files']))
+    expected_ids = playwright_cases(discovered, files)
     # Match the discovered suite size. The per-case Playwright deadline still
     # catches hangs; a fixed one-hour process limit truncates the full matrix.
-    deadline = max(3600, ((len(expected_ids) + 1) // 2) * 45 + 300)
-    execute(command, source / 'frontend', output, 'ui-contracts', env, deadline)
-    data = json.loads((output / 'playwright.json').read_text())
-    passed = playwright_result(data, expected_ids)
-    if visual_baseline(Path(baseline)) != baseline_identity:
-        raise RuntimeError('Visual references changed during verification')
-    return {'success': True, 'passed': passed, 'files': manifest['files'],
-            'kind': 'mock-api-ui-contracts', 'origin': origin, 'visual_baseline': baseline_identity}
+    deadline = max(3600, len(expected_ids) * 45 + 300)
+    report = output / 'playwright.json'
+    run_env = {**env, 'PLAYWRIGHT_JSON_OUTPUT_FILE': str(report)}
+    execute(command + ['--reporter=list,json'], source / 'frontend', output, 'ui-contracts', run_env, deadline)
+    passed = playwright_result(json.loads(report.read_text()), expected_ids)
+    return {'success': True, 'passed': passed, 'files': sorted(files),
+            'kind': 'mock-api-ui-behaviour', 'origin': origin, 'pixel_comparison': False}
 
 
 def race(source: Path, output: Path, env: dict[str, str]) -> dict:

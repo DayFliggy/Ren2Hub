@@ -11,9 +11,9 @@ const props = defineProps<{
   transferable: string
   frozen: string
   rewardTotal: string
+  invited: number
   outstandingOffset?: string
   transferEnabled?: boolean
-  invited: number
   readonly?: boolean
 }>()
 
@@ -30,7 +30,7 @@ const afterBalance = computed(() => {
 const canTransfer = computed(
   () =>
     !props.readonly &&
-    props.transferEnabled !== false &&
+    props.transferEnabled === true &&
     BigInt(props.transferable) > 0n &&
     afterBalance.value !== null
 )
@@ -73,24 +73,24 @@ const canTransfer = computed(
           {{ afterBalance === null ? '—' : formatQuota(afterBalance) }}
         </dd>
       </div>
+      <div
+        v-if="BigInt(outstandingOffset ?? '0') > 0n"
+        class="flex items-center justify-between"
+      >
+        <dt class="text-[var(--text-tertiary)]">
+          {{ t('invite.outstandingOffset') }}
+        </dt>
+        <dd class="font-medium text-[var(--status-warning-text)]">
+          {{ formatQuota(outstandingOffset ?? '0') }}
+        </dd>
+      </div>
     </dl>
-
-    <div
+    <p
       v-if="BigInt(outstandingOffset ?? '0') > 0n"
-      class="mt-4 space-y-1 border-t border-[var(--border-subtle)] pt-3 text-sm"
+      class="mt-2 text-xs text-[var(--text-tertiary)]"
     >
-      <p class="flex items-center justify-between gap-3">
-        <span class="text-[var(--text-tertiary)]">{{
-          t('invite.outstandingOffset')
-        }}</span>
-        <span class="font-medium text-[var(--text-primary)]">{{
-          formatQuota(outstandingOffset ?? '0')
-        }}</span>
-      </p>
-      <p class="text-xs text-[var(--text-tertiary)]">
-        {{ t('invite.outstandingOffsetHint') }}
-      </p>
-    </div>
+      {{ t('invite.outstandingOffsetHint') }}
+    </p>
 
     <ConsoleButton
       class="mt-5"

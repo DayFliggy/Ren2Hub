@@ -322,11 +322,11 @@ async function signInOAuth(provider: string) {
     </form>
 
     <AffiliateAttributionField
-      v-if="providers.length && !twoFactorFlowToken"
+      v-if="!twoFactorFlowToken && providers.length"
       v-model="affiliateCode"
       v-model:confirmed="affiliateConfirmed"
-      :disabled="loading"
       :error="affiliateError"
+      :disabled="loading"
       @changed="affiliateError = ''"
     />
 

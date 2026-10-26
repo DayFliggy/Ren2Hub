@@ -11,7 +11,7 @@ export default class LocalReporter implements Reporter {
     title: string
     status: string
     duration_ms: number
-    steps: Array<{ title: string; success: boolean }>
+    steps: Array<{ title: string; success: boolean; duration_ms: number }>
   }> = []
 
   onTestEnd(test: TestCase, result: TestResult) {
@@ -28,7 +28,11 @@ export default class LocalReporter implements Reporter {
       duration_ms: result.duration,
       steps: result.steps
         .filter((step) => step.category === 'test.step')
-        .map((step) => ({ title: step.title, success: !step.error })),
+        .map((step) => ({
+          title: step.title,
+          success: !step.error,
+          duration_ms: step.duration,
+        })),
     })
   }
 

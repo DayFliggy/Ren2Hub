@@ -14,7 +14,8 @@
     "format:check": "prettier . --check",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:browser": "python3 -B ../scripts/testing/run.py browser"
+    "test:browser": "python3 -B ../scripts/testing/run.py browser",
+    "test:visual": "playwright test"
   },
   "dependencies": {
     "@vueuse/core": "^14.3.0",

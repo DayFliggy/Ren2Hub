@@ -9,6 +9,7 @@ const status: CheckinStatus = {
   enabled: true,
   min_quota: 100,
   max_quota: 500000,
+  today: '2026-10-09',
   stats: {
     total_quota: 500000,
     total_checkins: 1,
@@ -38,6 +39,19 @@ function render(locale: string, records = status.stats.records) {
     },
   })
 }
+
+describe('check-in day label', () => {
+  it('shows the server date, not the browser clock', () => {
+    const wrapper = render('en')
+    expect(wrapper.text()).toContain('Oct 9, 2026')
+    expect(wrapper.text()).not.toContain(
+      new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(
+        new Date('2026-10-10T12:00:00Z')
+      )
+    )
+    wrapper.unmount()
+  })
+})
 
 describe('check-in records ledger', () => {
   it.each([

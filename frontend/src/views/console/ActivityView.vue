@@ -2,88 +2,92 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import ActivityHero from '@/components/console/activity/ActivityHero.vue'
-import ActivityCard from '@/components/console/activity/ActivityCard.vue'
-import CheckinCard from '@/components/console/activity/CheckinCard.vue'
+
 import TurnstileWidget from '@/components/auth/TurnstileWidget.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import StatTileGrid from '@/components/common/StatTileGrid.vue'
+import ActivityHero from '@/components/console/activity/ActivityHero.vue'
+import CheckinCard from '@/components/console/activity/CheckinCard.vue'
 import { useActivity } from '@/composables/useActivity'
-import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
-import { formatQuota } from '@/utils/format'
 import { nativeAccountMessages } from '@/i18n/nativeAccount'
 import { restoredConsoleMessages } from '@/i18n/restoredConsole'
 import { activityRestorationMessages } from '@/i18n/activityRestoration'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
+import { formatQuota } from '@/utils/format'
 
-const { t: rootT } = useI18n({ useScope: 'global' })
-const { t } = useI18n({
-  useScope: 'local',
+const { t: accountT } = useI18n({
   messages: {
-    en: {
-      ...nativeAccountMessages.en,
-      ...restoredConsoleMessages.en,
-      ...activityRestorationMessages.en,
-    },
     'zh-CN': {
       ...nativeAccountMessages['zh-CN'],
       ...restoredConsoleMessages['zh-CN'],
       ...activityRestorationMessages['zh-CN'],
     },
+    en: {
+      ...nativeAccountMessages.en,
+      ...restoredConsoleMessages.en,
+      ...activityRestorationMessages.en,
+    },
   },
 })
+const { t } = useI18n()
 const router = useRouter()
 const app = useAppStore()
 const auth = useAuthStore()
-const { month, status, loading, claiming, loadError, load, checkin } =
+const toast = useToast()
+const { month, status, loading, loadError, claiming, load, checkin } =
   useActivity()
 const turnstileToken = ref('')
 const turnstileUnavailable = ref(false)
 const turnstileWidget = ref<InstanceType<typeof TurnstileWidget> | null>(null)
-const checkinDisabled = computed(
-  () =>
-    loading.value ||
-    claiming.value ||
-    Boolean(loadError.value) ||
-    (app.turnstileEnabled &&
-      (!app.turnstileSiteKey ||
-        !turnstileToken.value ||
-        turnstileUnavailable.value))
+
+const checkinEnabled = computed(
+  () => app.checkinEnabled && status.value?.enabled === true
 )
-const inviteTiles = computed(() => [
-  {
-    label: t('nativeAccount.invited'),
-    value: String(auth.user?.aff_count ?? '—'),
-  },
-  {
-    label: t('nativeAccount.available'),
-    value:
-      auth.user?.aff_quota === undefined
-        ? '—'
-        : formatQuota(auth.user.aff_quota),
-  },
-  {
-    label: t('nativeAccount.history'),
-    value:
-      auth.user?.aff_history_quota === undefined
-        ? '—'
-        : formatQuota(auth.user.aff_history_quota),
-  },
-])
-async function submit() {
+const turnstileReady = computed(
+  () =>
+    !app.turnstileEnabled ||
+    Boolean(
+      app.turnstileSiteKey &&
+      turnstileToken.value &&
+      !turnstileUnavailable.value
+    )
+)
+
+async function handleCheckin() {
   if (
-    checkinDisabled.value ||
-    !app.checkinEnabled ||
-    !status.value?.enabled ||
-    status.value.stats.checked_in_today
+    loading.value ||
+    loadError.value ||
+    !checkinEnabled.value ||
+    status.value?.stats.checked_in_today
   )
     return
-  await checkin(turnstileToken.value)
+  if (!app.turnstileEnabled) {
+    await checkin()
+    return
+  }
+  if (!app.turnstileSiteKey || turnstileUnavailable.value) {
+    toast.error(t('common.turnstileUnavailable'))
+    return
+  }
+  if (!turnstileToken.value) {
+    toast.error(t('common.turnstileRequired'))
+    return
+  }
+  const token = turnstileToken.value
   turnstileToken.value = ''
+  await checkin(token)
   turnstileWidget.value?.reset()
 }
+
+function handleTurnstileVerified(token: string) {
+  turnstileToken.value = token
+  turnstileUnavailable.value = false
+}
+
+// A reload or config change remounts the widget, so the previous challenge state is stale.
 watch([() => app.turnstileEnabled, () => app.turnstileSiteKey], () => {
   turnstileToken.value = ''
   turnstileUnavailable.value = false
@@ -98,21 +102,19 @@ watch(loading, (value) => {
 <template>
   <div class="sibling-space-y-6">
     <ActivityHero
-      :title="rootT('activity.title')"
-      :subtitle="t('restored.activitySubtitle')"
-      :pill="t('restored.activityPill')"
+      :title="t('activity.title')"
+      :subtitle="accountT('restored.activitySubtitle')"
+      :pill="accountT('restored.activityPill')"
     />
+
     <section>
       <div class="mb-4 flex items-center justify-between">
-        <SectionHeading>{{
-          t('activityRestoration.dailyTitle')
-        }}</SectionHeading>
+        <SectionHeading>{{ t('activity.dailyTasks') }}</SectionHeading>
         <button
           type="button"
-          class="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-secondary)] focus-ring"
-          :disabled="loading || claiming"
-          :aria-label="t('nativeAccount.refresh')"
-          :title="t('nativeAccount.refresh')"
+          class="rounded-lg p-1.5 text-[var(--text-tertiary)] hover:bg-[var(--state-hover-layer)] focus-ring"
+          :disabled="loading"
+          :aria-label="accountT('nativeAccount.refresh')"
           @click="load"
         >
           <svg
@@ -130,55 +132,106 @@ watch(loading, (value) => {
           </svg>
         </button>
       </div>
-      <ErrorBanner v-if="loadError" :message="loadError" @retry="load" />
+      <!-- The invite totals come from the account, so a failed check-in load must not hide them. -->
       <div class="grid gap-5 lg:grid-cols-2">
-        <SkeletonBlock v-if="loading" bordered class="h-96 lg:col-span-2" />
-        <article
-          v-else-if="!app.checkinEnabled"
-          class="pencil-surface rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 lg:col-span-2"
-          data-handdrawn="surface"
-        >
-          <h3 class="text-base font-semibold text-[var(--text-primary)]">
-            {{ t('nativeAccount.checkin') }}
-          </h3>
-          <p role="status" class="mt-4 text-sm text-[var(--text-tertiary)]">
-            {{ t('nativeAccount.checkinDisabled') }}
-          </p>
-        </article>
-        <CheckinCard
-          v-else-if="status"
-          v-model:month="month"
+        <SkeletonBlock v-if="loading" bordered class="h-64 lg:col-span-2" />
+        <ErrorBanner
+          v-else-if="loadError"
           class="lg:col-span-2"
-          :status="status"
-          :claiming="claiming"
-          :disabled="checkinDisabled"
-          @checkin="submit"
-        >
+          :message="loadError"
+          @retry="load()"
+        />
+        <template v-else>
           <TurnstileWidget
             v-if="
               app.turnstileEnabled &&
-              status.enabled &&
+              status?.enabled &&
               !status.stats.checked_in_today
             "
             ref="turnstileWidget"
-            class="mt-4"
+            class="lg:col-span-2"
             :site-key="app.turnstileSiteKey"
-            @verified="turnstileToken = $event"
+            @verified="handleTurnstileVerified"
             @unavailable="turnstileUnavailable = true"
           />
-        </CheckinCard>
-        <ActivityCard
-          class="lg:col-span-2"
-          :title="t('restored.inviteSummary')"
-          :tagline="t('restored.shareHint')"
-          :status-label="t('activityRestoration.accountTotals')"
-          icon="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"
-          :claim-label="t('restored.inviteOpen')"
-          :footer-hint="t('activityRestoration.inviteHint')"
-          @claim="router.push({ name: 'invite' })"
+          <CheckinCard
+            v-if="status"
+            class="lg:col-span-2"
+            :status="status"
+            :month="month"
+            :claiming="claiming"
+            :disabled="!checkinEnabled || !turnstileReady"
+            @update:month="month = $event"
+            @checkin="handleCheckin"
+          />
+          <div
+            v-else
+            role="status"
+            class="lg:col-span-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 text-sm text-[var(--text-secondary)]"
+          >
+            {{ accountT('nativeAccount.checkinDisabled') }}
+          </div>
+        </template>
+        <section
+          class="pencil-surface lg:col-span-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
+          data-handdrawn="surface"
         >
-          <StatTileGrid :tiles="inviteTiles" :columns="3" />
-        </ActivityCard>
+          <p
+            class="text-xs font-semibold uppercase tracking-wide text-[var(--accent-text)]"
+          >
+            {{ t('activity.invite.tagline') }}
+          </p>
+          <h3 class="mt-2 text-lg font-semibold text-[var(--text-primary)]">
+            {{ t('activity.invite.title') }}
+          </h3>
+          <p class="mt-2 text-sm leading-relaxed text-[var(--text-tertiary)]">
+            {{ accountT('nativeAccount.inviteHint') }}
+          </p>
+          <p class="mt-4 text-xs font-semibold text-[var(--text-tertiary)]">
+            {{ accountT('activityRestoration.accountTotals') }}
+          </p>
+          <dl class="mt-3 grid gap-4 sm:grid-cols-3">
+            <div>
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ accountT('nativeAccount.invited') }}
+              </dt>
+              <dd class="mt-1 text-xl font-semibold text-[var(--text-primary)]">
+                {{ auth.user?.aff_count ?? '—' }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ accountT('nativeAccount.available') }}
+              </dt>
+              <dd class="mt-1 text-xl font-semibold text-[var(--accent-text)]">
+                {{
+                  auth.user?.aff_quota == null
+                    ? '—'
+                    : formatQuota(auth.user.aff_quota)
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ accountT('nativeAccount.history') }}
+              </dt>
+              <dd class="mt-1 text-xl font-semibold text-[var(--text-primary)]">
+                {{
+                  auth.user?.aff_history_quota == null
+                    ? '—'
+                    : formatQuota(auth.user.aff_history_quota)
+                }}
+              </dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            class="mt-4 text-sm font-semibold text-[var(--accent-text)] hover:underline focus-ring"
+            @click="router.push({ name: 'invite' })"
+          >
+            {{ accountT('restored.inviteOpen') }}
+          </button>
+        </section>
       </div>
     </section>
   </div>

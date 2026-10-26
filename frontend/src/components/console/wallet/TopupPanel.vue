@@ -15,7 +15,6 @@ import { ApiError } from '@/api/types'
 import AmountInput from '@/components/common/AmountInput.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import FormField from '@/components/common/FormField.vue'
 import PaymentMethods from '@/components/console/wallet/PaymentMethods.vue'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
@@ -324,13 +323,13 @@ onUnmounted(() => {
 
 <template>
   <ConsoleCard :title="t('wallet.quickTopup')">
-    <div
+    <p
       v-if="configState === 'idle'"
       role="status"
-      class="min-h-40 rounded-xl bg-[var(--surface-muted)] px-5 py-8 text-sm text-[var(--text-secondary)]"
+      class="mb-3 text-xs text-[var(--text-tertiary)]"
     >
       {{ t('common.loading') }}
-    </div>
+    </p>
     <fieldset v-else :disabled="submittingTopup" class="min-w-0 border-0 p-0">
       <div v-if="method !== 'creem'" class="grid grid-cols-3 gap-2">
         <button
@@ -359,6 +358,9 @@ onUnmounted(() => {
           :prefix="tokens ? '' : '$'"
           integer
         />
+        <p v-if="tokens" class="mt-2 text-xs text-[var(--text-tertiary)]">
+          {{ t('wallet.nativeTokenUnit', { units: amounts?.scale ?? '—' }) }}
+        </p>
         <p
           v-if="invalidAmount || balanceProjection.invalid"
           role="alert"
@@ -375,7 +377,7 @@ onUnmounted(() => {
           role="alert"
           class="mt-2 text-xs text-[var(--status-danger-text)]"
         >
-          {{ t('wallet.epayMethodsLoadFailed') }}
+          {{ t('wallet.paymentMethodsUnavailable') }}
           <ConsoleButton
             class="mt-2"
             variant="secondary"
@@ -385,47 +387,57 @@ onUnmounted(() => {
           >
         </p>
         <p
-          v-if="configState === 'ready' && !paymentMethods.length"
+          v-else-if="configState === 'ready' && !paymentMethods.length"
           class="mt-2 text-xs text-[var(--text-tertiary)]"
         >
-          {{ t('wallet.paymentMethodsUnavailable') }}
+          {{ paymentT('nativePayment.none') }}
         </p>
-        <p v-if="tokens" class="mt-2 text-xs text-[var(--text-tertiary)]">
-          {{ t('wallet.nativeTokenUnit', { units: amounts?.scale ?? '—' }) }}
-        </p>
+        <div v-if="method === 'creem' && products.length" class="mt-3">
+          <label
+            class="mb-1 block text-xs text-[var(--text-tertiary)]"
+            for="topup-product"
+            >{{ paymentT('nativePayment.product') }}</label
+          >
+          <select
+            id="topup-product"
+            v-model="product"
+            class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 text-sm"
+          >
+            <option
+              v-for="item in products"
+              :key="item.productId"
+              :value="item.productId"
+            >
+              {{ item.name }} · {{ item.currency }} {{ item.price }}
+            </option>
+          </select>
+        </div>
+        <div
+          v-if="method === 'waffo' && info?.waffo_pay_methods?.length"
+          class="mt-3"
+        >
+          <label
+            class="mb-1 block text-xs text-[var(--text-tertiary)]"
+            for="topup-submethod"
+            >{{ paymentT('nativePayment.methodDetail') }}</label
+          >
+          <select
+            id="topup-submethod"
+            v-model="submethod"
+            class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 text-sm"
+          >
+            <option value="">{{ paymentT('nativePayment.automatic') }}</option>
+            <option
+              v-for="(item, index) in info.waffo_pay_methods"
+              :key="index"
+              :value="String(index)"
+            >
+              {{ item.name }}
+            </option>
+          </select>
+        </div>
       </div>
 
-      <FormField
-        v-if="method === 'creem'"
-        :label="t('wallet.nativeProduct')"
-        class="mt-4"
-      >
-        <select v-model="product" class="console-input w-full">
-          <option
-            v-for="item in products"
-            :key="item.productId"
-            :value="item.productId"
-          >
-            {{ item.name }} · {{ item.price }} {{ item.currency }}
-          </option>
-        </select>
-      </FormField>
-      <FormField
-        v-if="method === 'waffo' && info?.waffo_pay_methods?.length"
-        :label="t('wallet.payMethodLabel')"
-        class="mt-4"
-      >
-        <select v-model="submethod" class="console-input w-full">
-          <option value="">{{ paymentT('nativePayment.automatic') }}</option>
-          <option
-            v-for="(item, index) in info.waffo_pay_methods"
-            :key="index"
-            :value="String(index)"
-          >
-            {{ item.name }}
-          </option>
-        </select>
-      </FormField>
       <div
         class="mt-5 sibling-space-y-2 border-t border-[var(--border-subtle)] pt-4"
       >
@@ -434,7 +446,7 @@ onUnmounted(() => {
             !quote?.currency
               ? paymentT('nativePayment.due')
               : t(
-                  quote?.currency === 'USD'
+                  quote.currency === 'USD'
                     ? 'wallet.summaryPayNowUsd'
                     : 'wallet.summaryPayNow'
                 )
@@ -486,18 +498,18 @@ onUnmounted(() => {
         </ConsoleButton>
       </div>
       <p
+        v-if="paymentBlocked"
+        role="status"
+        class="mt-3 text-xs text-[var(--status-warning-text)]"
+      >
+        {{ t('wallet.creationUncertain') }}
+      </p>
+      <p
         v-if="paymentError"
         role="alert"
         class="mt-3 text-xs text-[var(--status-danger-text)]"
       >
         {{ paymentError }}
-      </p>
-      <p
-        v-if="paymentBlocked"
-        role="status"
-        class="mt-3 text-xs text-[var(--text-secondary)]"
-      >
-        {{ t('wallet.creationUncertain') }}
       </p>
 
       <ConsoleButton

@@ -126,3 +126,19 @@ describe('ticket self assignment permissions', () => {
     wrapper.unmount()
   })
 })
+describe('ticket queue filters', () => {
+  it('shows each filter dimension in its unset default instead of a bare "all"', async () => {
+    const wrapper = await render()
+    const defaults = wrapper
+      .findAllComponents({ name: 'FilterSelect' })
+      .slice(0, 3)
+      .map((select) => select.props('options')[0])
+    expect(defaults).toEqual([
+      { value: '', label: i18n.global.t('tickets.create.categoryLabel') },
+      { value: '', label: i18n.global.t('tickets.create.priorityLabel') },
+      { value: '', label: i18n.global.t('tickets.admin.assignee') },
+    ])
+    expect(new Set(defaults.map((option) => option.label)).size).toBe(3)
+    wrapper.unmount()
+  })
+})

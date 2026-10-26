@@ -200,7 +200,7 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
                 { value: 'asc', label: t('invite.sortEarly') },
               ]"
               :label="t('invite.invitees')"
-              @update:model-value="sortInvitees"
+              @update:model-value="sortInvitees($event)"
             />
           </div>
 
@@ -212,8 +212,8 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
           />
           <p
             v-if="inviteesLoading"
-            class="px-5 py-3 text-xs text-[var(--text-tertiary)]"
             role="status"
+            class="px-5 py-3 text-xs text-[var(--text-tertiary)]"
           >
             {{ t('common.loading') }}
           </p>
@@ -396,6 +396,11 @@ onMounted(() => Promise.all([load(), loadInvitees(), loadRecords()]))
       @close="transferOpen = false"
     >
       <div class="sibling-space-y-3">
+        <p
+          class="rounded-lg bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-secondary)]"
+        >
+          {{ t('invite.transferHint') }}
+        </p>
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.transferable') }}:
           {{ formatQuota(info?.transferable ?? 0) }}

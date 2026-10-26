@@ -1,0 +1,344 @@
+import { expect, test, type Page } from '@playwright/test'
+import {
+  measuredResource,
+  performanceFixture,
+  qualityFixture,
+  routingFixture,
+} from '../../src/api/__tests__/opsFixtures'
+import { createModelMarketFixture } from '../fixtures/modelMarket'
+import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
+
+const SECTIONS = [
+  'status',
+  'quality',
+  'upstream',
+  'gateway',
+  'resources',
+  'storage',
+  'tasks',
+]
+const section = (page: Page, name: string) =>
+  page.locator(`[data-ops-section="${name}"]`)
+const ok = (data: unknown) => ({ json: { success: true, data } })
+function overview(window: '1h' | '6h' | '24h' = '1h') {
+  const data = performanceFixture()
+  data.observability.resources.cpu = measuredResource(36.2)
+  data.observability.resources.memory = measuredResource(58.9)
+  data.observability.status = 'warning'
+  data.observability.series.window = window
+  return data
+}
+function routing() {
+  const data = routingFixture()
+  data.channels[0]!.id = 11
+  data.observations[0]!.channel_id = 11
+  return data
+}
+async function mockOps(page: Page) {
+  await page.route('**/api/performance/stats?*', (route) => {
+    const window = new URL(route.request().url()).searchParams.get('window') as
+      '1h' | '6h' | '24h'
+    return route.fulfill(ok(overview(window)))
+  })
+  await page.route('**/api/performance/routing', (route) =>
+    route.fulfill(ok(routing()))
+  )
+  await page.route('**/api/performance/quality?*', (route) =>
+    route.fulfill(ok(qualityFixture()))
+  )
+}
+async function gotoOps(page: Page) {
+  await page.goto('/ops')
+  await expect(section(page, 'status')).toBeVisible({ timeout: 30_000 })
+}
+
+function recordApi(page: Page) {
+  const paths = new Set<string>()
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname
+    if (path.startsWith('/api/')) paths.add(path)
+  })
+  return paths
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  for (const mobile of [false, true]) {
+    test(`ops monitor root ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(
+        mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }
+      )
+      await configureStablePage(page, { theme })
+      await mockOps(page)
+      const clockTime = new Date('2026-07-27T04:00:00Z')
+      await page.clock.install({ time: clockTime })
+      await page.clock.pauseAt(clockTime)
+      const api = recordApi(page)
+      await gotoOps(page)
+      await expect(
+        page.getByRole('heading', { level: 1, name: '运维监控' })
+      ).toBeVisible({ timeout: 30_000 })
+      await expect(section(page, 'tasks')).toContainText(
+        '暂无等待或运行中的任务'
+      )
+      await expect(section(page, 'upstream')).toContainText('雾桥中转')
+      await expect(section(page, 'billing')).toHaveCount(0)
+      const nav = page
+        .locator(`[data-top-nav="${mobile ? 'mobile' : 'desktop'}"]`)
+        .locator(
+          mobile ? ':scope > a, :scope > button' : ':scope > div > button'
+        )
+      await expect(nav.first()).toBeVisible()
+      expect(
+        (await nav.allInnerTexts())
+          .map((text) => text.trim().split('\n')[0])
+          .slice(0, 4)
+      ).toEqual(['活动', '仪表盘', '运维监控', '控制台'])
+      await expect(nav.nth(2)).toHaveAttribute('aria-current', 'page')
+      await expect(section(page, 'status')).toContainText('用户在途请求')
+      const countdown = section(page, 'status').locator('.ops-countdown-badge')
+      await expect(countdown).toHaveAttribute('title', '30s')
+      await page.clock.runFor(1000)
+      await expect(countdown).toHaveAttribute('title', '29s')
+      await section(page, 'status')
+        .getByRole('button', { name: '刷新', exact: true })
+        .click()
+      await expect(countdown).toHaveAttribute('title', '30s')
+      await expect(page.locator('[data-ops-overall-status]')).toHaveAttribute(
+        'data-status',
+        'warning'
+      )
+      await assertNoHorizontalOverflow(page)
+      const boxes = await Promise.all(
+        SECTIONS.map((name) => section(page, name).boundingBox())
+      )
+      if (mobile) {
+        const tops = boxes.map((box) => box!.y)
+        expect(tops).toEqual([...tops].sort((a, b) => a - b))
+      } else {
+        const [status, quality, upstream, gateway, resources, storage, tasks] =
+          boxes
+        expect(status!.y).toBeLessThan(quality!.y)
+        expect(upstream!.x).toBeGreaterThan(quality!.x)
+        expect(gateway!.y).toBeGreaterThan(quality!.y)
+        expect(resources!.y).toBeGreaterThan(gateway!.y)
+        expect(storage!.x).toBeGreaterThan(resources!.x)
+        expect(storage!.y).toBe(resources!.y)
+        expect(tasks!.width).toBeGreaterThan(quality!.width)
+      }
+      const history = page.locator('[data-ops-task-history]')
+      await history.getByRole('button', { name: '展开' }).click()
+      await expect(history.getByText('清理任务历史')).toBeVisible()
+      await page.screenshot({ path: testInfo.outputPath('ops-top.png') })
+      await page
+        .locator('[data-console-scroll-zone]')
+        .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight / 2))
+      await page.screenshot({ path: testInfo.outputPath('ops-middle.png') })
+      await page
+        .locator('[data-console-scroll-zone]')
+        .evaluate((zone) => zone.scrollTo(0, zone.scrollHeight))
+      await page.screenshot({ path: testInfo.outputPath('ops-bottom.png') })
+      for (const path of [
+        '/api/performance/stats',
+        '/api/performance/routing',
+        '/api/performance/quality',
+        '/api/user/model-catalog',
+        '/api/system-task/list',
+      ])
+        expect(api.has(path), path).toBe(true)
+    })
+  }
+}
+
+test('overview failure shows an inline retry while other sections load', async ({
+  page,
+}) => {
+  await configureStablePage(page, {
+    theme: 'light',
+    expectedApiErrors: { '/api/performance/stats': [500] },
+  })
+  await mockOps(page)
+  let failing = true
+  await page.route('**/api/performance/stats?*', (route) =>
+    failing
+      ? route.fulfill({
+          status: 500,
+          json: { success: false, message: 'overview unavailable' },
+        })
+      : route.fulfill(ok(overview()))
+  )
+  await gotoOps(page)
+  const status = section(page, 'status')
+  await expect(status.getByRole('alert')).toContainText('overview unavailable')
+  await expect(status.getByRole('alert')).toContainText('尚未成功加载')
+  await expect(section(page, 'quality')).toContainText('样本最多的观察')
+  failing = false
+  await status.getByRole('button', { name: '重试', exact: true }).click()
+  await expect(status.getByRole('alert')).toHaveCount(0)
+  await expect(page.locator('[data-ops-gauge="cpu"]')).toContainText('36.2')
+  await assertNoHorizontalOverflow(page)
+})
+
+test('a failed refresh keeps earlier data only behind a stale marker', async ({
+  page,
+}) => {
+  await configureStablePage(page, {
+    theme: 'dark',
+    expectedApiErrors: { '/api/performance/stats': [500] },
+  })
+  await mockOps(page)
+  await gotoOps(page)
+  await expect(page.locator('[data-ops-gauge="cpu"]')).toContainText('36.2')
+  await page.route('**/api/performance/stats?*', (route) =>
+    route.fulfill({
+      status: 500,
+      json: { success: false, message: 'sampler timeout' },
+    })
+  )
+  await section(page, 'status')
+    .getByRole('button', { name: '刷新', exact: true })
+    .click()
+  await expect(section(page, 'status').getByRole('alert')).toContainText(
+    '数据已过期'
+  )
+  await expect(section(page, 'resources')).toHaveAttribute(
+    'data-ops-stale',
+    'true'
+  )
+  await expect(page.locator('[data-ops-gauge="cpu"]')).toContainText('36.2')
+  await assertNoHorizontalOverflow(page)
+})
+
+test('native empty observations remain distinct from healthy measurements', async ({
+  page,
+}, testInfo) => {
+  await configureStablePage(page, { theme: 'light' })
+  await mockOps(page)
+  await page.route('**/api/performance/routing', (route) =>
+    route.fulfill(ok({ users: [], channels: [], observations: [] }))
+  )
+  await page.route('**/api/performance/quality?*', (route) =>
+    route.fulfill(ok({ ...qualityFixture(), summary: null, series: [] }))
+  )
+  await gotoOps(page)
+  await expect(section(page, 'upstream')).toContainText('未采样不表示健康')
+  await expect(section(page, 'quality')).toContainText('暂无请求观察')
+  await expect(section(page, 'tasks')).toContainText('暂无等待或运行中的任务')
+  await assertNoHorizontalOverflow(page)
+  await page.screenshot({ path: testInfo.outputPath('ops-empty.png') })
+})
+
+for (const role of [1, 10]) {
+  test(`non-Root role ${role} cannot see or request native ops`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme: 'light', user: { role } })
+    const api = recordApi(page)
+    await page.goto('/ops')
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page.locator('[data-ops-page]')).toHaveCount(0)
+    expect(api.has('/api/performance/stats')).toBe(false)
+    expect(api.has('/api/performance/routing')).toBe(false)
+    await assertNoHorizontalOverflow(page)
+  })
+}
+
+test('many abnormal observations scroll inside the upstream card', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'dark' })
+  await mockOps(page)
+  const snapshot = routing()
+  snapshot.observations = Array.from({ length: 50 }, (_, index) => ({
+    ...snapshot.observations[0]!,
+    model: `native-model-${index}`,
+  }))
+  await page.route('**/api/performance/routing', (route) =>
+    route.fulfill(ok(snapshot))
+  )
+  await gotoOps(page)
+  const list = page.locator('[data-ops-cooling]')
+  await expect(list.locator('li')).toHaveCount(50)
+  const size = await list.evaluate((element) => ({
+    client: element.clientHeight,
+    scroll: element.scrollHeight,
+  }))
+  expect(size.client).toBeLessThanOrEqual(260)
+  expect(size.scroll).toBeGreaterThan(size.client)
+  await assertNoHorizontalOverflow(page)
+})
+
+test('an empty published catalog is not reported as healthy infrastructure', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light' })
+  await mockOps(page)
+  const catalog = createModelMarketFixture()
+  catalog.channels = []
+  catalog.offers = []
+  await page.route('**/api/user/model-catalog', (route) =>
+    route.fulfill(ok(catalog))
+  )
+  await gotoOps(page)
+  await expect(section(page, 'upstream')).toContainText(
+    '模型目录中暂无已发布渠道'
+  )
+  await expect(section(page, 'upstream')).not.toContainText('所有上游通道正常')
+})
+
+for (const width of [1280, 1440]) {
+  test(`store readings fit their cards at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await configureStablePage(page, { theme: 'light' })
+    await mockOps(page)
+    await gotoOps(page)
+    const stores = page.locator('[data-ops-storage]')
+    await expect(stores).toHaveCount(3)
+    const problems = await stores.evaluateAll((cards) =>
+      cards.flatMap((card) => [
+        ...Array.from(card.querySelectorAll('.ops-metric-value'))
+          .filter((value) => value.scrollWidth > value.clientWidth + 1)
+          .map((value) => `truncated: ${value.textContent?.trim()}`),
+        ...Array.from(card.querySelectorAll('.ops-metric-label'))
+          .filter((label) => label.getBoundingClientRect().height > 24)
+          .map((label) => `wrapped: ${label.textContent?.trim()}`),
+      ])
+    )
+    expect(problems).toEqual([])
+  })
+}
+
+test('the window selector reloads native server resource history', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light' })
+  await mockOps(page)
+  const windows: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname === '/api/performance/stats')
+      windows.push(url.searchParams.get('window') ?? '')
+  })
+  await gotoOps(page)
+  await expect(page.locator('[data-ops-gauge="cpu"]')).toBeVisible()
+  await page.getByRole('radio', { name: '6 小时' }).click()
+  await expect.poll(() => windows.at(-1)).toBe('6h')
+  await expect(section(page, 'resources')).toContainText('趋势：6 小时')
+})
+
+test('english labels render without raw keys', async ({ page }) => {
+  await configureStablePage(page, { theme: 'light', locale: 'en' })
+  await mockOps(page)
+  await gotoOps(page)
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ops monitor' })
+  ).toBeVisible()
+  await expect(section(page, 'quality')).toContainText(
+    'Observations with most samples'
+  )
+  expect(await page.locator('[data-ops-page]').innerText()).not.toMatch(
+    /\b(?:ops|gateway|quality|storage|tasks)\.[a-z]/
+  )
+  await assertNoHorizontalOverflow(page)
+})

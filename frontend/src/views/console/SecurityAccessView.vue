@@ -372,16 +372,6 @@ function statusTone(enabled: boolean | null): 'success' | 'neutral' {
   return enabled ? 'success' : 'neutral'
 }
 
-const twoFAStatusLabel = computed(() =>
-  twoFALocked.value === true
-    ? t('settings.twoFALocked')
-    : statusLabel(twoFAEnabled.value)
-)
-
-const twoFAStatusTone = computed<'success' | 'neutral' | 'danger'>(() =>
-  twoFALocked.value === true ? 'danger' : statusTone(twoFAEnabled.value)
-)
-
 function openProfile(): void {
   displayName.value = auth.user?.display_name ?? ''
   profileOpen.value = true
@@ -964,9 +954,8 @@ onBeforeUnmount(() => {
                     !binding.id.startsWith('custom:')
                   "
                   tone="neutral"
+                  >{{ t('settings.bound') }}</StatusChip
                 >
-                  {{ t('settings.bound') }}
-                </StatusChip>
                 <ConsoleButton
                   v-else
                   :variant="binding.bound ? 'ghost' : 'secondary'"
@@ -1106,8 +1095,16 @@ onBeforeUnmount(() => {
                   <p class="font-semibold text-[var(--text-primary)]">
                     {{ t('settings.twoFA') }}
                   </p>
-                  <StatusChip :tone="twoFAStatusTone">
-                    {{ twoFAStatusLabel }}
+                  <StatusChip
+                    :tone="
+                      twoFALocked === true ? 'danger' : statusTone(twoFAEnabled)
+                    "
+                  >
+                    {{
+                      twoFALocked === true
+                        ? t('settings.twoFALocked')
+                        : statusLabel(twoFAEnabled)
+                    }}
                   </StatusChip>
                 </div>
                 <p
@@ -1299,37 +1296,33 @@ onBeforeUnmount(() => {
         <p class="text-center text-sm text-[var(--text-secondary)]">
           {{ t('settings.twoFASecretHint') }}
         </p>
-        <div
+        <!-- Encodes the otpauth:// URI locally; the secret never leaves the page. -->
+        <QrcodeSvg
           v-if="setupQRCode"
+          :value="setupQRCode"
+          :size="144"
+          :margin="2"
+          level="M"
+          class="rounded-lg border border-[var(--border-subtle)] bg-[#ffffff] p-3"
           role="img"
           :aria-label="t('settings.twoFAQRCodeAlt')"
-          class="rounded-lg border border-[var(--border-subtle)] bg-[#ffffff] p-3"
-        >
-          <!-- Encodes the otpauth:// URI locally; the secret never leaves the page. -->
-          <QrcodeSvg :value="setupQRCode" :size="168" level="M" />
-        </div>
+        />
         <div
-          class="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3"
+          class="flex w-full items-center justify-between gap-2 rounded-lg bg-[var(--surface-muted)] px-4 py-3 font-mono text-xs text-[var(--text-secondary)]"
         >
           <div class="min-w-0">
-            <p class="text-xs text-[var(--text-tertiary)]">
+            <p class="font-sans text-[var(--text-tertiary)]">
               {{ t('settings.twoFAManualKey') }}
             </p>
-            <code
-              data-twofa-secret
-              class="block break-all font-mono text-sm text-[var(--text-primary)]"
-              >{{ setupSecret }}</code
-            >
+            <code data-twofa-secret class="break-all">{{ setupSecret }}</code>
           </div>
           <ConsoleButton
-            variant="ghost"
+            v-if="setupSecret"
             size="sm"
-            class="shrink-0"
-            :disabled="!setupSecret"
+            variant="ghost"
             @click="copySetupSecret"
+            >{{ t('settings.copyTwoFASecret') }}</ConsoleButton
           >
-            {{ t('settings.copyTwoFASecret') }}
-          </ConsoleButton>
         </div>
         <FormField
           :label="t('settings.twoFACode')"
@@ -1429,7 +1422,7 @@ onBeforeUnmount(() => {
       </div>
       <div
         v-if="bindTarget === 'wechat'"
-        class="flex flex-col items-center gap-3"
+        class="mb-4 flex flex-col items-center gap-3"
         data-wechat-qrcode
       >
         <img
@@ -1441,7 +1434,7 @@ onBeforeUnmount(() => {
         <p
           v-else
           role="status"
-          class="w-full rounded-lg bg-[var(--surface-muted)] px-4 py-3 text-center text-sm text-[var(--text-secondary)]"
+          class="rounded-lg bg-[var(--surface-muted)] p-3 text-center text-sm text-[var(--text-secondary)]"
         >
           {{
             wechatBindQRCode.state === 'invalid'

@@ -28,7 +28,9 @@ bun run format:check
 bun run build
 ```
 
-浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。
+浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。 本地浏览器场景覆盖登录和刷新、权限拒绝、Key 自动/手动路由保存、钱包读取、工单创建/详情与退役路径 404；不创建真实支付订单。
+
+`bun run test:visual -- tests/visual/greeting-hero.spec.ts tests/visual/models.spec.ts tests/visual/billing.spec.ts` 使用原生合同的模拟数据验证保留页面。`PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 保留临时截图到 `output/`，不会更新正式基线。设置 `REN2HUB_LOCAL_SESSION` 时，Playwright 只运行隔离后端套件；直接调用 `test:visual` 时运行已有视觉与交互测试。
 
 依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已迁移到 Tailwind CSS 4.3.3 的官方 `@tailwindcss/vite` 集成，移除 Tailwind 3 引入的 braces 和 postcss-selector-parser 6.x 依赖链。`autoprefixer`、直接 `postcss` 依赖、旧 JavaScript Tailwind/PostCSS 配置及三项不再必要的 override 已删除；Vue/Vite 自身使用的 PostCSS 和 ESLint Vue 插件使用的安全版 selector parser 仍保留，详见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。
 
@@ -38,7 +40,7 @@ bun run build
 
 样式保持原有层级优先级、字体、阴影、边框默认色、按钮指针、键盘焦点和 reduced-motion。`sibling-space-y-*` 与 `sibling-divide-*` 保留既有兄弟元素及隐藏节点的间距/分隔线行为；旧版无效的 `shadow-xs` 已改为无阴影，旧版有效的 `shadow-sm` 对应新版 `shadow-xs`。旧版无法生成有效阴影的 `shadow-[var(...)]` 类已删除，保留 `sketch-card` 等 CSS 自身的既有阴影，避免升级后额外产生阴影。全局规则和 Vue scoped CSS 不因引入 CSS 层而改变优先级。
 
-所有响应断点统一在 CSS `@theme` 定义为 640/768/1024/1280/1536px，与既有 CSS 和 JavaScript 的像素判断一致；浏览器默认字号改为 20px 时仍按原宽度切换布局，不固定或覆盖用户的根字号。历史断点测试（已归档） 在 16/20px、明暗主题下验证首页导航间距、移动菜单 resize 与控制台侧栏切换。
+所有响应断点统一在 CSS `@theme` 定义为 640/768/1024/1280/1536px，与既有 CSS 和 JavaScript 的像素判断一致；浏览器默认字号改为 20px 时仍按原宽度切换布局，不固定或覆盖用户的根字号。`tests/visual/responsive-breakpoints.spec.ts` 在 16/20px、明暗主题下验证首页导航间距、移动菜单 resize 与控制台侧栏切换。
 
 公共页面容器在 utilities 前按旧版 components 展开后的顺序输出，保留居中与内边距。字号工具类保留旧版固定行高、任意字号的嵌套继承及响应字号对行高的重置；同断点的显式 `leading-*` 仍优先，避免徽标、表格、标题和首页内容因升级改变布局。
 
@@ -46,7 +48,7 @@ bun run build
 
 带 transform 的入场动画、按钮按压和深色签到取消旧 transform 时，同时取消新版独立 translate/rotate/scale；取消值使用 CSS-wide `initial`，避免生产压缩删除 `none` 后重新叠加 utility。旧版未生成规则的变量阴影及颜色透明度类已删除，不借迁移新增外观。
 
-日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；只有实际横向位置偏移才保护用户位置，点击、Tab/Enter 或未造成横移的滚轮事件不会禁止字体校正。切换页面清除上个页面的保护状态，选页后的真实横向滚动仍受保护；组件卸载后不再校正，从桌面隐藏状态重新显示时仍定位当前项。历史样式测试（已归档） 保护容器、字号和交互状态；导航生命周期有组件测试，`tests/visual/navigation-fonts.spec.ts` 用实际延迟字体和明暗主题验证点击、键盘选页及手动横移。
+日期浮层的入离场保留原水平与垂直过渡路径，并遵守减少动态效果设置。移动导航在字体加载完成后重新定位当前项；只有实际横向位置偏移才保护用户位置，点击、Tab/Enter 或未造成横移的滚轮事件不会禁止字体校正。切换页面清除上个页面的保护状态，选页后的真实横向滚动仍受保护；组件卸载后不再校正，从桌面隐藏状态重新显示时仍定位当前项。`tests/visual/style-compatibility.spec.ts` 保护容器、字号和交互状态；导航生命周期有组件测试，`tests/visual/navigation-fonts.spec.ts` 用实际延迟字体和明暗主题验证点击、键盘选页及手动横移。
 
 Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；不提供低于这些版本的兼容构建。升级与浏览器要求依据[官方升级指南](https://tailwindcss.com/docs/upgrade-guide)，构建方式依据[官方 Vite 集成说明](https://tailwindcss.com/docs/installation/using-vite)。
 
@@ -57,22 +59,20 @@ Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；
 - `/`：公开首页
 - `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`：认证与密码重置
 - `/oauth/:provider`：OAuth 登录、绑定与二次验证的弹窗回调
-- `/dashboard`、`/keys`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
+- `/dashboard`、`/keys`、`/keys/:id/routing`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
 - `/models`：模型广场，提供模型聚合、渠道货架和比价矩阵；使用用户作用域的真实渠道与平台基准价格，见[模型广场契约](../docs/console/MODELS.md)
 - `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
-- `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；空安装无价格，只有保存后生效，见[计费界面契约](docs/BILLING.md)
+- `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；候选只回填草稿，只有保存后生效，见[计费界面契约](docs/BILLING.md)
 
 旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不转换也不加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
 
-前端按领域直接调用原生 API，不使用 `/api/next/*` 兼容层。用户模型目录为 `/api/user/model-catalog`，管理元数据为 `/api/models/`，不合并其语义。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
+前端按领域直接调用原生 API，不使用 `/api/next/*` 兼容层。用户模型目录为 `/api/user/model-catalog`，管理元数据为 `/api/models/`，不合并其语义。旧商城、开票、农场、小游戏、Gateway 配置与请求诊断入口均已退役；其页面路径返回 404，前端不再请求专属接口。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体也返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
 
 ## 领域接口
 
 `src/api/` 集中认证与安全、工单、充值订单、返利、模型目录、Token 路由、统计、管理和运维的请求与 DTO 校验。普通接口校验 `success/data`，支付模块单独校验原生 `message/url/data`。缺字段、未知状态、超出 JavaScript 安全整数的原生额度和业务错误不转换为零、空列表或成功；请求取消和会话版本保护防止迟到响应覆盖当前页面。
 
 用户额度使用 `quota/used_quota`，Token 使用 `remain_quota/used_quota/unlimited_quota`。工单调用 `/api/tickets` 与 `/api/admin/tickets`，返利概览、邀请名单、流水分开读取；转入只提交稳定的 `operation_id`，由后端全额转入。GMPay 使用人民币法币金额和完整加密资产标识，未知创建结果进入订单查询，不自动重新创建。完整回归范围和来源见[本批记录](../docs/upstream/API_REGRESSION_20261021.md)。
-
-浏览器采用 `python3 -B scripts/testing/run.py browser`（应用根目录），对全新真实后端执行桌面/手机与明暗主题；详见[本地方案](../docs/testing/LOCAL_TESTING.md)。
 
 ## 用量日志导出
 
@@ -101,7 +101,7 @@ src/
   __tests__/    全局测试设置
 ```
 
-顶部导航的“炼金室”是禁用的占位入口，背后没有页面和路由。Token 农场、小游戏、开票和独立市场不属于当前产品范围，入口及失效业务请求已移除。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
+旧 Gateway 策略、请求诊断、资金事件预留等旧接口不属于当前前端合同。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
 
 `common` 和 `home` 语言包随首屏加载，`auth`、`console`、`setup` 按路由和当前语言延迟加载。`public/` 保存直接发布的资源，`src/assets/` 保存构建管理的图片和自托管字体。`dist/`、`embed-dist/` 与 `output/` 分别是构建产物、Go 嵌入产物和本地测试输出。
 

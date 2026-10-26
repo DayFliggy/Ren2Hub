@@ -63,7 +63,7 @@ const accountStats = computed(() => [
   {
     key: 'balance',
     label: t('profile.balance'),
-    value: formatQuota(auth.user?.quota ?? 0),
+    value: auth.user ? formatQuota(auth.user.quota) : '—',
     destination: t('nav.wallet'),
     route: 'wallet',
     icon: WalletCards,

@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
           :is-toggling="(row: TokenSummary) => togglingIds.has(row.id)"
           :toggle-status="toggleStatus"
           :view-key="copyKey"
-          :client-config="(row) => (clientConfigTokenId = row.id)"
+          :client-config="(row: TokenSummary) => (clientConfigTokenId = row.id)"
           :edit-key="openEdit"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"

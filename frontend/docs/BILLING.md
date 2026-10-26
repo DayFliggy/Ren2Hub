@@ -81,7 +81,7 @@ Root 在 `/models/pricing` 维护价格，旧 `/system-settings/billing/model-pr
 
 ## 日志与验证边界
 
-用户、管理员日志分别读取 `GET /api/log/self`、`GET /api/log/`，对应统计和导出接口提供汇总与下载。详情显示已记录的 `quota`、模型和原生 `other` 数据；`other` 可为对象或 JSON 字符串。它不是旧 `charge_result` 版本化证明，界面不按当前价格重算历史收费，也不要求 schema 5 字段或 Token 资金事件。
+用户、管理员日志分别读取 `GET /api/log/self`、`GET /api/log/`，对应统计和导出接口提供汇总与下载。详情显示已记录的 `quota`、模型和原生 `other` 数据；`other` 可为对象或 JSON 字符串。它不是旧 `charge_result` 版本化证明，界面不按当前价格重算历史收费，也不要求 schema 5 字段或 Token 资金事件。前端不请求已退役的 `/api/billing/self/events`，也不维护 Token 账本或冻结报价兼容层。
 
 前端回归覆盖安全整数、输入精确换算、原生响应格式、报价和付款失败、订单归属、回跳状态、未知创建不重复、全额返利幂等、价格版本冲突、权限及响应式布局。浏览器的真实合同模拟不能代替三库事务测试和隔离候选上的真实 HTTP 回调。验证顺序见[前端文档](../README.md)，服务端合同见[资金 API](../../docs/billing/API.md)、[定价](../../docs/billing/PRICING.md)、[GMPay](../../docs/billing/GMPAY.md)及[资金验证](../../docs/billing/VALIDATION.md)。
 

@@ -63,7 +63,7 @@ onMounted(load)
   <ConsoleCard :title="t('wallet.records')" :padded="false">
     <ErrorBanner
       v-if="!loading && loadError"
-      class="mx-4 mt-4"
+      class="m-4"
       :message="loadError"
       @retry="load"
     />

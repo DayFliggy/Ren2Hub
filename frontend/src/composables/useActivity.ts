@@ -8,6 +8,8 @@ export interface CheckinStatus {
   enabled: boolean
   min_quota: number
   max_quota: number
+  /** Server-local YYYY-MM-DD, the same date checked_in_today is judged by. */
+  today: string
   stats: {
     total_quota: number
     total_checkins: number

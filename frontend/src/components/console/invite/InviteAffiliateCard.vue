@@ -10,7 +10,7 @@ defineProps<{
   ratePercent: number
   shareable: boolean
   // Why sharing is blocked; empty while loading or when sharing is allowed.
-  notice: string
+  notice?: string
 }>()
 
 const emit = defineEmits<{
@@ -53,7 +53,7 @@ const { t } = useI18n()
     <p
       v-if="notice"
       role="status"
-      class="mt-4 rounded-xl bg-[var(--status-warning-soft)] px-4 py-2.5 text-sm text-[var(--status-warning-text)]"
+      class="mt-3 text-sm text-[var(--status-warning-text)]"
     >
       {{ notice }}
     </p>

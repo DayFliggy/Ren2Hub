@@ -9,7 +9,7 @@ import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
-  series: AffiliateMonth[]
+  series: Pick<AffiliateMonth, 'month' | 'new_count' | 'cumulative'>[]
 }>()
 
 const { t } = useI18n()

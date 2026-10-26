@@ -11,9 +11,9 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 | 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                |
 | 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                            |
 | 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Root，admin capability；按原生 performance 与系统任务权限读取 |
-| 排除模块 | 独立市场、发票、Farm、Bigame                                                                                                       | 不注册功能路由，移除旧页面及 API 调用                                                               |
+| 排除模块 | 独立市场、发票、Farm、Bigame、旧 Gateway 配置与请求诊断                                                                            | 不注册功能路由，移除旧页面、导航、专属 API 与请求调用                                               |
 
-顶部导航的“炼金室”是禁用的占位入口，不注册路由也没有页面；`/lab/*` 进入标准 404。
+旧炼金室未注册路由；`/lab/*` 进入标准 404。
 
 普通用户模型目录使用 `/models`。管理侧边栏的“模型管理”入口分为“模型”（`/models/metadata`）、“供应商”（`/models/vendors`）和 Root 可见的“定价”（`/models/pricing`），切换分区时保留 query；上游的“部署”分区已停用。模型分区的筛选参数沿用上游的 `filter/vendor/status/sync/page/pageSize`，供应商分区为 `vFilter/vPage/vPageSize`。`/models/prefill-groups` 跳转到模型分区并以 `manage=prefill-groups` 打开预填充分组弹窗。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。
 
@@ -28,6 +28,7 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 - 旧账号审计 `/audit` 进入 `/usage-logs/audit`；旧操作日志 `/usage-logs/operations`、`/logs/operations` 进入 `/usage-logs/audit?scope=all`。守卫与请求均遵循当前 `audit:read` 和 capability，不能以旧书签扩大授权。
 - `/next` 和 `/next/*`：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不转换为其他页面。
 - `/api`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。`/api/next` 已退役，前端不请求也不实现兼容层。绝不统一清理 API 尾斜杠；用户授权目录为 `/api/user/model-catalog`，管理 metadata 为 `/api/models/`。
+- `/market`、`/invoice`、`/farm`、`/bigame` 及旧 Gateway 配置、请求诊断页面路径不注册路由，进入标准 404；旧资金事件和 Gateway/请求诊断 API 也不保留隐藏调用。
 - Playground、Chat、Chat2Link、Chat Presets、模型部署及其旧前缀路径返回 404；Vue 内部导航也拒绝进入。
 - 本站没有订阅与套餐管理：`/subscription`、`/plan-management`、`/plans` 及其 `/console/` 前缀路径进入标准 404，不注册功能路由，也不请求订阅接口。
 - 缺失 capability 按禁用处理；后端不可达时不挂载业务页面。服务端鉴权仍为最终权限边界。

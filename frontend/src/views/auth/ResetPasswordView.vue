@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import TurnstileWidget from '@/components/auth/TurnstileWidget.vue'
@@ -22,12 +22,6 @@ const sent = ref(false)
 const turnstileToken = ref('')
 const turnstileUnavailable = ref(false)
 const turnstileWidget = ref<InstanceType<typeof TurnstileWidget> | null>(null)
-const turnstileSatisfied = computed(
-  () =>
-    !app.turnstileEnabled ||
-    (Boolean(turnstileToken.value) && !turnstileUnavailable.value)
-)
-
 function turnstileReady(): boolean {
   if (!app.turnstileEnabled) return true
   if (!app.turnstileSiteKey || turnstileUnavailable.value) {
@@ -98,7 +92,10 @@ async function submit() {
         size="lg"
         block
         :loading="loading"
-        :disabled="sent || !turnstileSatisfied"
+        :disabled="
+          sent ||
+          (app.turnstileEnabled && (!turnstileToken || turnstileUnavailable))
+        "
       >
         {{ sent ? `✓ ${t('auth.resetSent')}` : t('auth.sendReset') }}
       </ConsoleButton>

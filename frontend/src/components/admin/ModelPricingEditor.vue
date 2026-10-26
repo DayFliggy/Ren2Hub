@@ -781,15 +781,6 @@ h3 {
   overflow-y: auto;
   color: var(--text-primary);
 }
-.pricing-simulation {
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  padding: 0.875rem 1rem;
-  background: var(--surface-solid);
-}
-.pricing-simulation > * {
-  margin-bottom: 0.75rem;
-}
 pre,
 textarea {
   max-width: 100%;

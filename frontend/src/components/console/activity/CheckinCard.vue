@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import CheckinCalendar from './CheckinCalendar.vue'
+import CheckinCalendar from '@/components/console/activity/CheckinCalendar.vue'
 import type { CheckinStatus } from '@/composables/useActivity'
 import { activityRestorationMessages } from '@/i18n/activityRestoration'
 import { nativeAccountMessages } from '@/i18n/nativeAccount'
@@ -12,38 +13,48 @@ const props = defineProps<{
   status: CheckinStatus
   month: string
   claiming: boolean
-  disabled: boolean
+  disabled?: boolean
 }>()
-const emit = defineEmits<{
-  checkin: []
-  'update:month': [month: string]
-}>()
-const { t } = useI18n({
-  useScope: 'local',
+const emit = defineEmits<{ checkin: []; 'update:month': [value: string] }>()
+const { t, locale } = useI18n({
   messages: {
-    en: { ...nativeAccountMessages.en, ...activityRestorationMessages.en },
     'zh-CN': {
       ...nativeAccountMessages['zh-CN'],
       ...activityRestorationMessages['zh-CN'],
     },
+    en: {
+      ...nativeAccountMessages.en,
+      ...activityRestorationMessages.en,
+    },
   },
 })
-const monthReward = computed(() =>
-  props.status.stats.records.reduce(
-    (sum, record) => sum + record.quota_awarded,
-    0
+
+const monthRecords = computed(() =>
+  [...props.status.stats.records].sort((a, b) =>
+    a.checkin_date.localeCompare(b.checkin_date)
   )
+)
+const monthQuota = computed(() =>
+  monthRecords.value.reduce((sum, row) => sum + BigInt(row.quota_awarded), 0n)
+)
+// Show the server's date: the browser clock can sit in another time zone or
+// pass midnight while the page stays open.
+const today = computed(() =>
+  new Intl.DateTimeFormat(locale.value, {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  }).format(new Date(`${props.status.today}T00:00:00Z`))
 )
 </script>
 
 <template>
   <article
-    class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+    class="pencil-surface overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:col-span-2"
     data-handdrawn="surface-clipped"
     data-checkin-card
   >
-    <div
-      class="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 py-4"
+    <header
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-5 py-4"
     >
       <div class="flex min-w-0 flex-1 items-center gap-2.5">
         <span
@@ -59,54 +70,58 @@ const monthReward = computed(() =>
             stroke-width="1.8"
             aria-hidden="true"
           >
-            <rect x="3" y="5" width="18" height="16" rx="2" />
-            <path d="M16 3v4M8 3v4M3 11h18m-11 5 2 2 4-4" />
+            <path
+              d="M8 3v3m8-3v3M5 9h14M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+            />
           </svg>
         </span>
         <div class="min-w-0">
-          <h3
-            class="text-sm font-bold tracking-wide text-[var(--text-primary)]"
-          >
+          <p class="text-sm font-bold tracking-wide text-[var(--text-primary)]">
             {{ t('nativeAccount.checkin') }}
-          </h3>
+          </p>
+          <p class="text-[0.625rem] text-[var(--text-tertiary)]">
+            {{ t('nativeAccount.checkinHint') }}
+          </p>
         </div>
       </div>
-      <span class="text-xs text-[var(--text-tertiary)]">
-        {{ t('activityRestoration.monthReward') }}
-        <span class="ml-1 font-semibold text-[var(--accent-text)]">{{
-          formatQuota(monthReward)
-        }}</span>
-      </span>
-    </div>
+      <span
+        v-if="status.stats.checked_in_today"
+        class="rounded-full bg-[var(--status-success-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--status-success-text)]"
+        >{{ t('nativeAccount.checked') }}</span
+      >
+      <span class="text-xs text-[var(--text-tertiary)]"
+        >{{ t('activityRestoration.monthReward') }}
+        <strong class="ml-1 text-[var(--accent-text)]">{{
+          formatQuota(monthQuota.toString())
+        }}</strong></span
+      >
+    </header>
 
     <div
-      class="flex flex-col xl:flex-row xl:sibling-divide-x xl:sibling-divide-[var(--border-subtle)]"
+      class="flex flex-col sm:flex-row sm:divide-x sm:divide-[var(--border-subtle)]"
     >
       <div
-        class="relative flex flex-col items-center justify-center gap-3 px-6 py-6 xl:w-56 xl:shrink-0"
+        class="relative flex flex-col items-center justify-center gap-3 px-6 py-6 sm:w-56 sm:shrink-0"
       >
-        <p class="text-xs text-[var(--text-tertiary)]">
-          {{ t('nativeAccount.rewardRange') }}
+        <p
+          class="font-mono text-[0.6875rem] tracking-widest text-[var(--text-tertiary)]"
+        >
+          {{ today }}
         </p>
         <p
-          class="text-center text-2xl font-bold tracking-tighter text-[var(--text-primary)]"
+          class="text-4xl font-bold tracking-tighter text-[var(--text-primary)]"
         >
-          <span class="inline-block max-w-full break-all">{{
-            formatQuota(status.min_quota)
-          }}</span>
-          –
-          <span class="inline-block max-w-full break-all">{{
-            formatQuota(status.max_quota)
-          }}</span>
+          {{ formatQuota(status.min_quota) }} –
+          {{ formatQuota(status.max_quota) }}
         </p>
-        <p class="text-center text-xs leading-5 text-[var(--text-tertiary)]">
-          {{ t('nativeAccount.checkinHint') }}
+        <p class="text-xs text-[var(--text-tertiary)]">
+          {{ t('nativeAccount.rewardRange') }}
         </p>
         <div
           class="checkin-stamp mt-1 rotate-[-14deg] rounded-md border-2 px-3 py-1 text-xs font-bold uppercase tracking-widest"
           :style="
             status.stats.checked_in_today
-              ? 'border-color:var(--status-danger);color:var(--status-danger-text)'
+              ? 'border-color:var(--status-success);color:var(--status-success-text)'
               : 'border-color:var(--accent);color:var(--accent-text)'
           "
         >
@@ -117,36 +132,36 @@ const monthReward = computed(() =>
           }}
         </div>
         <div
-          class="checkin-perforation absolute bottom-0 left-5 right-5 h-px border-b border-dashed border-[var(--border-default)] xl:hidden"
+          class="checkin-perforation absolute bottom-0 left-5 right-5 h-px border-b border-dashed border-[var(--border-default)] sm:hidden"
         />
       </div>
 
-      <div class="min-w-0 flex-1 px-5 py-5">
+      <div class="flex-1 px-5 py-5">
         <label
-          class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-[var(--text-secondary)]"
+          class="mb-3 flex items-center justify-between gap-3 text-xs text-[var(--text-secondary)]"
         >
           {{ t('nativeAccount.month') }}
           <input
             :value="month"
             type="month"
-            class="console-input min-w-0 max-w-full text-xs"
+            class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-2 py-1"
             @input="
               emit('update:month', ($event.target as HTMLInputElement).value)
             "
           />
         </label>
         <CheckinCalendar :month="month" :records="status.stats.records" />
-        <details class="mt-4 text-sm">
+        <details class="mt-4 border-t border-[var(--border-subtle)] pt-3">
           <summary
-            class="cursor-pointer rounded-lg text-xs font-semibold text-[var(--text-secondary)] focus-ring"
+            class="cursor-pointer text-xs font-semibold text-[var(--text-secondary)]"
           >
             {{ t('activityRestoration.records') }}
           </summary>
           <table
-            v-if="status.stats.records.length"
-            class="mt-3 w-full table-fixed border-separate border-spacing-y-1 text-left text-xs"
+            v-if="monthRecords.length"
+            class="mt-3 w-full text-left text-xs"
           >
-            <caption class="sr-only">
+            <caption class="mb-2 text-left text-[var(--text-tertiary)]">
               {{
                 t('activityRestoration.records')
               }}
@@ -156,40 +171,29 @@ const monthReward = computed(() =>
               }}
             </caption>
             <thead>
-              <tr class="text-[var(--text-tertiary)]">
-                <th scope="col" class="px-2 py-1 font-medium">
-                  {{ t('nativeAccount.date') }}
-                </th>
-                <th scope="col" class="px-2 py-1 text-right font-medium">
+              <tr>
+                <th scope="col" class="py-2">{{ t('nativeAccount.date') }}</th>
+                <th scope="col" class="py-2 text-right">
                   {{ t('nativeAccount.quota') }}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="record in status.stats.records"
-                :key="record.checkin_date"
-                class="transition-colors hover:bg-[var(--surface-muted)]"
-              >
-                <th
-                  scope="row"
-                  class="rounded-l-lg px-2 py-1.5 font-mono font-normal text-[var(--text-secondary)]"
-                >
+              <tr v-for="record in monthRecords" :key="record.checkin_date">
+                <th scope="row" class="py-1 font-normal">
                   <time :datetime="record.checkin_date">{{
                     record.checkin_date
                   }}</time>
                 </th>
-                <td
-                  class="rounded-r-lg break-all px-2 py-1.5 text-right font-semibold tabular-nums text-[var(--accent-text)]"
-                >
+                <td class="py-1 text-right text-[var(--accent-text)]">
                   {{ formatQuota(record.quota_awarded) }}
                 </td>
               </tr>
             </tbody>
           </table>
           <p
-            v-if="!status.stats.records.length"
-            class="mt-2 text-[var(--text-tertiary)]"
+            v-else
+            class="py-5 text-center text-xs text-[var(--text-tertiary)]"
           >
             {{ t('activityRestoration.noRecords') }}
           </p>
@@ -216,13 +220,11 @@ const monthReward = computed(() =>
           }}</span>
         </div>
         <ConsoleButton
-          size="sm"
-          :loading="claiming"
-          :disabled="
-            disabled || !status.enabled || status.stats.checked_in_today
-          "
-          class="ml-auto"
           data-checkin-action
+          size="sm"
+          class="ml-auto"
+          :loading="claiming"
+          :disabled="disabled || status.stats.checked_in_today"
           @click="emit('checkin')"
           >{{
             status.stats.checked_in_today
@@ -231,7 +233,6 @@ const monthReward = computed(() =>
           }}</ConsoleButton
         >
       </div>
-      <slot />
     </div>
   </article>
 </template>

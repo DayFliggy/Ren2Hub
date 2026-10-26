@@ -134,6 +134,11 @@ describe('SignUpView affiliate attribution', () => {
       },
     })
     await flushPromises()
+    // Password sign-up lists the code with the other fields, before the submit button.
+    expect(wrapper.findAll('[data-affiliate-attribution]')).toHaveLength(1)
+    expect(wrapper.find('form [data-affiliate-attribution]').exists()).toBe(
+      true
+    )
     await wrapper.find('input[autocomplete="username"]').setValue('demo')
     for (const input of wrapper.findAll('input[autocomplete="new-password"]'))
       await input.setValue('password-123')
@@ -179,6 +184,8 @@ describe('SignUpView affiliate attribution', () => {
     await flushPromises()
 
     expect(wrapper.find('form').exists()).toBe(false)
+    // OAuth sign-up still carries the invite code, so the field stays outside the form.
+    expect(wrapper.findAll('[data-affiliate-attribution]')).toHaveLength(1)
     expect(wrapper.text()).toContain('已关闭密码注册')
     expect(wrapper.text()).toContain('使用 GitHub 继续')
     wrapper.unmount()

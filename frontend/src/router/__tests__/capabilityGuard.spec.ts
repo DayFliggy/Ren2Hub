@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
+import { START_LOCATION } from 'vue-router'
 
 const publicApi = vi.hoisted(() => ({
   status: vi.fn(),
@@ -24,6 +25,7 @@ import { ApiError } from '@/api/types'
 import router from '@/router'
 import { sanitizeSetupRedirect, sanitizeRedirect } from '@/router'
 import { navigationError } from '@/router/navigationState'
+import { guardPublicModule } from '@/router/publicRoutes'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
@@ -402,6 +404,20 @@ describe('capability route guard', () => {
     }
   })
 
+  it('does not register retired marketplace, invoice, farm, game, or gateway pages', async () => {
+    for (const path of [
+      '/market',
+      '/invoice',
+      '/farm',
+      '/bigame',
+      '/gateway',
+      '/request-diagnostics',
+    ]) {
+      await router.push(path)
+      expect(router.currentRoute.value.name, path).toBe('not-found')
+    }
+  })
+
   it('opens model management sections from bookmarks without losing query or hash', async () => {
     useAuthStore().user!.role = 10
     // Vendors is its own section, as in NewAPI; prefill groups open as a dialog.
@@ -533,6 +549,24 @@ describe('public module guard', () => {
 
     expect(router.currentRoute.value.name).toBe('sign-in')
     expect(router.currentRoute.value.query.redirect).toBe('/rankings')
+  })
+
+  it('reuses the startup status read for the first navigation only', async () => {
+    publicApi.status.mockClear()
+    const app = useAppStore()
+    // main.ts starts initialization alongside the first navigation.
+    const startup = app.initialize()
+    // Guards receive normalized locations, whose name is never null.
+    const pricing = { ...router.resolve('/pricing'), name: 'pricing' }
+
+    expect(await guardPublicModule(pricing, START_LOCATION)).toBe(true)
+    await startup
+    expect(publicApi.status).toHaveBeenCalledOnce()
+
+    expect(await guardPublicModule(pricing, router.currentRoute.value)).toBe(
+      true
+    )
+    expect(publicApi.status).toHaveBeenCalledTimes(2)
   })
 
   it('updates the navigation when the guard reads a changed option', async () => {

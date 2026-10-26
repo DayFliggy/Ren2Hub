@@ -1,17 +1,25 @@
-import type {
-  RouteLocationNormalized,
-  RouteLocationRaw,
-  RouteRecordRaw,
+import {
+  START_LOCATION,
+  type RouteLocationNormalized,
+  type RouteLocationRaw,
+  type RouteRecordRaw,
 } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 
+// Later navigations re-read /api/status so a just-saved option applies at once.
+function readStatus(from: RouteLocationNormalized): Promise<void> {
+  const app = useAppStore()
+  return from === START_LOCATION ? app.statusAtStartup() : app.refreshStatus()
+}
+
 export async function guardPublicModule(
-  to: RouteLocationNormalized
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized
 ): Promise<true | RouteLocationRaw> {
   const app = useAppStore()
   try {
-    await app.refreshStatus()
+    await readStatus(from)
   } catch {
     return { name: 'status-503' }
   }
@@ -28,11 +36,12 @@ export async function guardPublicModule(
 }
 
 export async function guardLegalDocument(
-  to: RouteLocationNormalized
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized
 ): Promise<true | RouteLocationRaw> {
   const app = useAppStore()
   try {
-    await app.refreshStatus()
+    await readStatus(from)
   } catch {
     return { name: 'status-503' }
   }

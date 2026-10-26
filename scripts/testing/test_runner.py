@@ -7,17 +7,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from run import environment, go_result, playwright_cases, playwright_result, visual_baseline, ui_contracts
+from run import environment, go_result, playwright_cases, playwright_result, ui_contracts
 
 
 class RunnerContractTests(unittest.TestCase):
     def test_ui_runs_keep_origin_stable_after_recent_server_shutdown(self):
         with tempfile.TemporaryDirectory() as directory, socket.socket() as available:
             root = Path(directory)
-            (root / 'reference.png').write_bytes(b'reviewed reference')
-            manifest = root / 'frontend/tests/contracts/suite-manifest.json'
-            manifest.parent.mkdir(parents=True)
-            manifest.write_text(json.dumps({'files': ['one.spec.ts']}))
+            suite = root / 'frontend/tests/visual'
+            suite.mkdir(parents=True)
+            (suite / 'one.spec.ts').write_text('')
             case = {'id': 'one', 'file': 'one.spec.ts', 'tests': [{
                 'expectedStatus': 'passed', 'status': 'expected',
                 'results': [{'status': 'passed', 'retry': 0}]}]}
@@ -26,14 +25,16 @@ class RunnerContractTests(unittest.TestCase):
             port = available.getsockname()[1]
             available.close()
             observed = []
+            attachments = []
 
             def execute(command, cwd, output, name, env, timeout):
-                observed.append(env['REN2HUB_UI_PORT'])
+                observed.append(env['PLAYWRIGHT_PORT'])
+                attachments.append(command[command.index('--output') + 1])
                 if '--list' not in command:
-                    (output / 'playwright.json').write_text(json.dumps(report))
+                    Path(env['PLAYWRIGHT_JSON_OUTPUT_FILE']).write_text(json.dumps(report))
                 return json.dumps(report)
 
-            with patch.dict('os.environ', {'REN2HUB_UI_BASELINE': str(root)}, clear=True), \
+            with patch.dict('os.environ', {}, clear=True), \
                     patch('run.UI_CONTRACTS_PORT', port), patch('run.execute', side_effect=execute):
                 self.assertTrue(ui_contracts(root, root, {})['success'])
                 # Close the server side first, leaving a real TIME_WAIT socket.
@@ -49,15 +50,18 @@ class RunnerContractTests(unittest.TestCase):
                     self.assertEqual(client.recv(1), b'')
                 self.assertTrue(ui_contracts(root, root, {})['success'])
             self.assertEqual(observed, [str(port)] * 4)
+            self.assertEqual(attachments, [str(root / 'artifacts')] * 4)
 
     def test_occupied_visual_port_fails_without_random_port_fallback(self):
         with tempfile.TemporaryDirectory() as directory, socket.socket() as occupied:
             root = Path(directory)
-            (root / 'reference.png').write_bytes(b'reviewed reference')
+            suite = root / 'frontend/tests/visual'
+            suite.mkdir(parents=True)
+            (suite / 'one.spec.ts').write_text('')
             occupied.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             occupied.bind(('127.0.0.1', 0))
             occupied.listen(1)
-            with patch.dict('os.environ', {'REN2HUB_UI_BASELINE': str(root)}, clear=True), \
+            with patch.dict('os.environ', {}, clear=True), \
                     patch('run.UI_CONTRACTS_PORT', occupied.getsockname()[1]), \
                     patch('run.execute') as execute:
                 with self.assertRaises(OSError) as failure:
@@ -65,26 +69,11 @@ class RunnerContractTests(unittest.TestCase):
                 self.assertEqual(failure.exception.errno, errno.EADDRINUSE)
                 execute.assert_not_called()
 
-    def test_unified_ui_cannot_silently_omit_visual_comparison(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {}, clear=True), \
-                patch('run.execute') as execute:
-            with self.assertRaisesRegex(RuntimeError, 'REN2HUB_UI_BASELINE'):
+    def test_unified_ui_fails_when_visual_suite_is_missing(self):
+        with tempfile.TemporaryDirectory() as directory, patch('run.execute') as execute:
+            with self.assertRaisesRegex(RuntimeError, 'no browser specs'):
                 ui_contracts(Path(directory), Path(directory), {})
             execute.assert_not_called()
-
-    def test_visual_references_reject_empty_and_detect_replacement_or_removal(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            with self.assertRaises(RuntimeError):
-                visual_baseline(root)
-            reference = root / 'page.png'
-            reference.write_bytes(b'first reference')
-            original = visual_baseline(root)
-            reference.write_bytes(b'replaced reference')
-            self.assertNotEqual(visual_baseline(root)['sha256'], original['sha256'])
-            reference.unlink()
-            with self.assertRaises(RuntimeError):
-                visual_baseline(root)
 
     def test_browser_inventory_rejects_missing_or_unregistered_suites(self):
         report = {'suites': [{'specs': [{'id': 'one', 'file': 'one.spec.ts',

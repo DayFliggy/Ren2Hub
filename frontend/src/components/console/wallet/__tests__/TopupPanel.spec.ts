@@ -109,7 +109,7 @@ describe('native wallet checkout', () => {
       i18n.global.t('wallet.invalidTopupAmount')
     )
     expect(wrapper.text()).toContain(
-      i18n.global.t('wallet.epayMethodsLoadFailed')
+      i18n.global.t('wallet.paymentMethodsUnavailable')
     )
     expect(wrapper.emitted('capabilities-state')).toEqual([
       ['idle'],
@@ -245,6 +245,46 @@ describe('native wallet checkout', () => {
     ).toHaveLength(1)
     wrapper.unmount()
   })
+  it('labels Waffo sub-methods by name and leaves the currency to the cashier', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      ...nativeTopupInfo,
+      enable_waffo_topup: true,
+      pay_methods: [{ type: 'waffo', name: 'Waffo' }],
+      // Native defaults: Card has an empty payMethodName and Apple Pay shares no key.
+      waffo_pay_methods: [
+        {
+          name: 'Card',
+          icon: '/pay-card.png',
+          payMethodType: 'CREDITCARD,DEBITCARD',
+          payMethodName: '',
+        },
+        {
+          name: 'Apple Pay',
+          icon: '/pay-apple.png',
+          payMethodType: 'APPLEPAY',
+          payMethodName: 'APPLEPAY',
+        },
+      ],
+    })
+    vi.spyOn(httpTransport, 'request').mockResolvedValue({
+      message: 'success',
+      data: '10.00',
+    } as never)
+    const wrapper = mount(TopupPanel, {
+      props: { paymentMethod: 'waffo', balanceQuota: '500000' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    const options = wrapper
+      .get('#topup-submethod')
+      .findAll('option')
+      .map((option) => option.text())
+    expect(options.slice(1)).toEqual(['Card', 'Apple Pay'])
+    expect(wrapper.text()).toContain(i18n.global.t('wallet.nativeCurrencyNote'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('wallet.summaryPayNow'))
+    wrapper.unmount()
+  })
+
   it('uses scaled token quantities and rejects partial native units', async () => {
     app.status.quota_display_type = 'TOKENS'
     const request = vi

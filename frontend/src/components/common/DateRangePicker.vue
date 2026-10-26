@@ -269,6 +269,8 @@ async function focusDay(key: string, preventScroll = false): Promise<void> {
       candidate.dataset.dateKey === key && candidate.dataset.inMonth === 'true'
   )
   button?.focus({ preventScroll })
+  if (!preventScroll)
+    button?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
 function onDayKeydown(event: KeyboardEvent, key: string): void {

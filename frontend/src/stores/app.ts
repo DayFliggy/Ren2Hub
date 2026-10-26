@@ -103,6 +103,7 @@ export const useAppStore = defineStore('app', () => {
   let initializationPromise: Promise<void> | null = null
   let statusRequested = 0
   let statusApplied = 0
+  let startupStatus: Promise<void> | null = null
   const pricingRequest = useLatestRequest()
   onScopeDispose(() => {
     modelCount.value = null
@@ -241,13 +242,20 @@ export const useAppStore = defineStore('app', () => {
     applyBranding()
   }
 
+  // The first navigation starts together with initialization, so that read is
+  // already as fresh as the navigation; a cold public visit reuses it.
+  function statusAtStartup(): Promise<void> {
+    return startupStatus ?? refreshStatus()
+  }
+
   async function runInitialization(): Promise<void> {
     phase.value = 'loading'
     lastError.value = null
     modelCount.value = null
     uptimePercent.value = null
     try {
-      await refreshStatus()
+      startupStatus = refreshStatus()
+      await startupStatus
 
       const summaries = await Promise.allSettled([
         publicApi.notice(),
@@ -391,6 +399,7 @@ export const useAppStore = defineStore('app', () => {
     isSidebarModuleEnabled,
     initialize,
     refreshStatus,
+    statusAtStartup,
     retry,
   }
 })

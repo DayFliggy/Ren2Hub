@@ -8,6 +8,7 @@ import i18n from '@/i18n'
 describe('DateRangePicker keyboard model', () => {
   it('keeps initial inline focus from scrolling but scrolls keyboard destinations', async () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockClear()
     const wrapper = mount(DateRangePicker, {
       attachTo: document.body,
       props: { start: '2026-07-15', end: '', presentation: 'inline' },
@@ -17,6 +18,7 @@ describe('DateRangePicker keyboard model', () => {
       await wrapper.get('button[aria-haspopup="dialog"]').trigger('click')
       await nextTick()
       expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+      expect(scroll).not.toHaveBeenCalled()
       const active = document.activeElement as HTMLButtonElement
       expect(active.dataset.dateKey).toBe('2026-07-15')
       active.dispatchEvent(
@@ -27,9 +29,15 @@ describe('DateRangePicker keyboard model', () => {
       expect((document.activeElement as HTMLElement).dataset.dateKey).toBe(
         '2026-07-16'
       )
+      expect(scroll).toHaveBeenLastCalledWith({
+        block: 'nearest',
+        inline: 'nearest',
+      })
+      expect(scroll.mock.instances.at(-1)).toBe(document.activeElement)
     } finally {
       wrapper.unmount()
       focus.mockRestore()
+      scroll.mockRestore()
     }
   })
 

@@ -463,6 +463,9 @@ export async function nativeCoreFixture(
         version: routing.version,
         model: url.searchParams.get('model'),
         path: url.searchParams.get('path'),
+        stream: url.searchParams.get('stream') === 'true',
+        ordering:
+          routing.mode === 'auto' ? 'weighted_random_per_request' : 'manual',
         entries: [
           {
             channel_id: 2,
@@ -529,6 +532,7 @@ export async function nativeCoreFixture(
         enabled: true,
         min_quota: 500,
         max_quota: 500,
+        today: '2026-07-26',
         stats: {
           total_quota: 500,
           total_checkins: 1,
@@ -557,6 +561,17 @@ export async function nativeCoreFixture(
       })
     if (path === '/api/admin/tickets/summary')
       return ok({ pending: 0, unassigned: 0, mine: 0 })
+    if (method === 'GET' && /^\/api\/admin\/affiliate\/users\/\d+$/.test(path))
+      return ok({
+        user_id: Number(path.split('/').at(-1)),
+        code: 'VISUAL2026',
+        code_custom: false,
+        enabled: true,
+        rate_bps: null,
+        effective_rate_bps: 1000,
+        inviter_id: 0,
+        invited_at: 0,
+      })
     if (path === '/api/user/' || path === '/api/user/search')
       return ok({
         ...emptyPage,
@@ -659,7 +674,7 @@ export async function nativeCoreFixture(
       })
     if (path === '/api/user/passkey') return ok({ enabled: false })
     if (path === '/api/user/2fa/status')
-      return ok({ enabled: false, backup_codes_remaining: 0 })
+      return ok({ enabled: false, locked: false, backup_codes_remaining: 0 })
     if (path === '/api/user/oauth/bindings' || path === '/api/user/sessions')
       return ok([])
     if (path === '/api/user/access_tokens')

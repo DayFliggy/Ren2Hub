@@ -3,9 +3,9 @@
   "implementation_base_sha": "39daa6ccee738f7a26fdba131c829be1adbbdd5b",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 838,
-    "adapted": 238,
-    "extension": 213,
+    "upstream_equal": 837,
+    "adapted": 239,
+    "extension": 215,
     "removed": 43
   },
   "files": [
@@ -889,9 +889,25 @@
     },
     {
       "path": "controller/checkin.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "950b24ec1c174e16efbcc95b6676c6495e3cbdea8f4044b622d2e42d50b426f5",
-      "local_sha256": "950b24ec1c174e16efbcc95b6676c6495e3cbdea8f4044b622d2e42d50b426f5"
+      "local_sha256": "e53e7b69ab6899c387f9203c0c1dbd8729eba38ae40f75b1f86cb092e34d369f",
+      "reasons": [
+        "vue-frontend",
+        "extension-hook"
+      ]
+    },
+    {
+      "path": "controller/checkin_extension.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "33828e5a800447cc61467a117bf73c134bf6a69652e6e6ffe9314c4956c7ca22"
+    },
+    {
+      "path": "controller/checkin_extension_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c158ee9294b6c5fac43b6b3f0809dea9a66bec214752442b2b418bf227025d39"
     },
     {
       "path": "controller/codex_usage.go",

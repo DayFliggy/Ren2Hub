@@ -22,6 +22,7 @@ const status = {
   enabled: true,
   min_quota: 100,
   max_quota: 500,
+  today: '2026-10-09',
   stats: {
     total_quota: 0,
     total_checkins: 0,
@@ -134,6 +135,32 @@ it('keeps real enabled-feature request failures visible', async () => {
   expect(wrapper.get('[role=alert]').text()).toBe(
     'Check-in storage unavailable'
   )
+  // Invite totals come from the account, not the failed check-in request.
+  expect(wrapper.text()).toMatch(/Invited users\s*3/)
+  wrapper.unmount()
+})
+
+it('keeps invite totals visible while the check-in status is still loading', async () => {
+  mocks.app.checkinEnabled = true
+  mocks.get.mockReturnValue(new Promise(() => {}))
+  const wrapper = setup()
+  await flushPromises()
+  expect(wrapper.find('[data-checkin-card]').exists()).toBe(false)
+  expect(wrapper.text()).toMatch(/Invited users\s*3/)
+  wrapper.unmount()
+})
+
+it('does not post a claim when the card requests one for an already claimed day', async () => {
+  mocks.get.mockResolvedValue({
+    ...status,
+    stats: { ...status.stats, checked_in_today: true },
+  })
+  mocks.app.checkinEnabled = true
+  const wrapper = setup()
+  await flushPromises()
+  wrapper.findComponent({ name: 'CheckinCard' }).vm.$emit('checkin')
+  await flushPromises()
+  expect(mocks.post).not.toHaveBeenCalled()
   wrapper.unmount()
 })
 
@@ -143,6 +170,7 @@ it('uses real random reward bounds, calendar records and separate cumulative tot
     ...status,
     min_quota: 500000,
     max_quota: 2500000,
+    today: '2026-10-09',
     stats: {
       ...status.stats,
       total_checkins: 10,
@@ -225,5 +253,40 @@ it('blocks claims when the Turnstile challenge is unavailable or expires', async
   await flushPromises()
   await wrapper.get('[data-checkin-action]').trigger('click')
   expect(mocks.post).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('recovers the claim after a failed Turnstile challenge is solved again', async () => {
+  mocks.app.checkinEnabled = true
+  mocks.app.turnstileEnabled = true
+  mocks.app.turnstileSiteKey = 'test-site-key'
+  const wrapper = setup()
+  await flushPromises()
+  expect(mocks.get).toHaveBeenCalledOnce()
+  const turnstile = wrapper.findComponent({ name: 'TurnstileWidget' })
+  turnstile.vm.$emit('unavailable')
+  turnstile.vm.$emit('verified', 'retried-token')
+  await flushPromises()
+  await wrapper.get('[data-checkin-action]').trigger('click')
+  await flushPromises()
+  expect(mocks.post).toHaveBeenCalledWith('/api/user/checkin', undefined, {
+    params: { turnstile: 'retried-token' },
+  })
+  wrapper.unmount()
+})
+
+it('does not mount a Turnstile challenge once today is already claimed', async () => {
+  mocks.get.mockResolvedValue({
+    ...status,
+    stats: { ...status.stats, checked_in_today: true },
+  })
+  mocks.app.checkinEnabled = true
+  mocks.app.turnstileEnabled = true
+  mocks.app.turnstileSiteKey = 'test-site-key'
+  const wrapper = setup()
+  await flushPromises()
+  expect(wrapper.findComponent({ name: 'TurnstileWidget' }).exists()).toBe(
+    false
+  )
   wrapper.unmount()
 })

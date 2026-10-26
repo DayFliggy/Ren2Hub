@@ -24,11 +24,6 @@ const props = defineProps<{
     options: ChannelModelTestOptions,
     signal?: AbortSignal
   ) => Promise<ChannelModelTestResult>
-  recordAudit?: (
-    action: 'channel.lab_balance_sync' | 'channel.lab_model_test',
-    channels: AdminChannel[],
-    groupSlug?: string
-  ) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -132,18 +127,6 @@ async function runBatch() {
     return
   }
   const batchTargets = [...targets.value]
-  if (props.recordAudit) {
-    try {
-      await props.recordAudit?.(
-        'channel.lab_model_test',
-        batchTargets,
-        props.groupSlug
-      )
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
-      return
-    }
-  }
   testing.value = true
   done.value = 0
   total.value = batchTargets.length

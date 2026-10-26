@@ -87,8 +87,10 @@ const statusTabs = computed(() => [
   { value: 'closed', label: t('tickets.status.closed') },
   { value: '', label: t('common.all') },
 ])
+// An unset filter shows its dimension: the three narrow controls sit side by
+// side, and a longer "all categories" label truncates to the same text.
 const categoryOptions = computed(() => [
-  { value: '', label: t('common.all') },
+  { value: '', label: t('tickets.create.categoryLabel') },
   ...(['billing', 'api', 'model', 'account', 'other'] as const).map(
     (value) => ({
       value,
@@ -97,14 +99,14 @@ const categoryOptions = computed(() => [
   ),
 ])
 const priorityOptions = computed(() => [
-  { value: '', label: t('common.all') },
+  { value: '', label: t('tickets.create.priorityLabel') },
   ...(['low', 'normal', 'high'] as const).map((value) => ({
     value,
     label: t(`tickets.priority.${value}`),
   })),
 ])
 const assigneeOptions = computed(() => [
-  { value: '', label: t('common.all') },
+  { value: '', label: t('tickets.admin.assignee') },
   { value: 'unassigned', label: t('tickets.admin.unassigned') },
   { value: 'mine', label: t('tickets.admin.mine') },
   ...agents.value.map((agent) => ({
@@ -418,7 +420,7 @@ onBeforeUnmount(() => {
     </PageBreadcrumb>
 
     <div
-      class="flex h-[calc(100dvh-13.5rem)] min-h-0 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:min-h-[580px]"
+      class="flex min-h-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] lg:h-[calc(100dvh-13.5rem)] lg:min-h-[580px] lg:overflow-hidden"
       data-handdrawn="surface"
     >
       <aside
@@ -488,7 +490,9 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div class="subtle-scroll min-h-0 flex-1 overflow-y-auto">
+        <div
+          class="subtle-scroll max-h-[65dvh] min-h-0 flex-1 overflow-y-auto lg:max-h-none"
+        >
           <div v-if="queueLoading" class="sibling-space-y-1 p-2">
             <SkeletonBlock
               v-for="index in 7"
@@ -544,9 +548,9 @@ onBeforeUnmount(() => {
                 class="mb-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
               >
                 <span class="truncate">{{ requesterName(item.user) }}</span>
-                <StatusChip v-if="item.user_deleted" tone="neutral">
-                  {{ t('tickets.admin.userDeleted') }}
-                </StatusChip>
+                <StatusChip v-if="item.user_deleted" tone="neutral">{{
+                  t('tickets.admin.userDeleted')
+                }}</StatusChip>
                 <span aria-hidden="true">·</span>
                 <span>{{ t(`tickets.category.${item.category}`) }}</span>
                 <span aria-hidden="true">·</span>
@@ -657,7 +661,7 @@ onBeforeUnmount(() => {
           <div class="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
             <div class="flex min-h-0 flex-col">
               <div
-                class="subtle-scroll min-h-0 flex-1 sibling-space-y-5 overflow-y-auto px-4 py-5 sm:px-6"
+                class="subtle-scroll max-h-[60dvh] min-h-0 flex-1 sibling-space-y-5 overflow-y-auto px-4 py-5 sm:px-6 lg:max-h-none"
               >
                 <TicketThreadMessage
                   v-for="message in messages"
@@ -694,9 +698,9 @@ onBeforeUnmount(() => {
                   class="flex flex-wrap items-center gap-2 font-medium text-[var(--text-primary)]"
                 >
                   <span>{{ requesterName(ticket.user) }}</span>
-                  <StatusChip v-if="ticket.user_deleted" tone="neutral">
-                    {{ t('tickets.admin.userDeleted') }}
-                  </StatusChip>
+                  <StatusChip v-if="ticket.user_deleted" tone="neutral">{{
+                    t('tickets.admin.userDeleted')
+                  }}</StatusChip>
                 </p>
                 <p class="mt-1 break-all text-xs text-[var(--text-secondary)]">
                   {{ ticket.user.email || '-' }}
