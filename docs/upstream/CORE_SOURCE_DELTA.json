@@ -6868,7 +6868,7 @@
       "path": "router/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9b57fb4e67b30e4568da71cacd3ab9a3f05162cac72f14c1b1d7529e0a07e594"
+      "local_sha256": "07f6e69c449637c6d2a8220f1ddbdd50b17e9fe4431a9654fcb99be711359abd"
     },
     {
       "path": "router/extensions.go",
@@ -7346,13 +7346,13 @@
       "path": "service/dashboard_system_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "4795899dcbc1162c9961825825a68e5ca37167e2207a4d0edb645e7c55509f1b"
+      "local_sha256": "612743957886961a45be234fef3eb253212f9ce24be68ee1318733c387003faa"
     },
     {
       "path": "service/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "da994e3c5139e058389212ec6e33c73ea14098ee95b29ceba3ce6997a589e93a"
+      "local_sha256": "c40a83e6939f3395392589a4de015a2b10c6a0b919ec833828683d5f985d3279"
     },
     {
       "path": "service/download.go",

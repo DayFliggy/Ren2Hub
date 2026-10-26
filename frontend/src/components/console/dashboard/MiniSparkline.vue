@@ -102,33 +102,34 @@ const geometry = computed(() => {
       return { x, y }
     })
 
-  const runs = segments(project(values))
-  if (!runs.length) return null
-  const line = runs.map(toSmoothLine).join(' ')
-  const area = runs
-    .map(
-      (run) =>
-        `${toSmoothLine(run)} L${run[run.length - 1]!.x.toFixed(2)} ${props.height} L${run[0]!.x.toFixed(2)} ${props.height} Z`
-    )
-    .join(' ')
-  // The beacon marks the newest sample only when that sample was measured.
-  const lastRun = runs[runs.length - 1]!
-  const last =
-    values[values.length - 1] === null ? null : lastRun[lastRun.length - 1]!
+  // segments() keeps only runs of two or more points, so the newest sample is
+  // drawn exactly when it and its predecessor were both measured.
+  const newest = (series: (number | null)[], coords: (Coord | null)[]) =>
+    series[series.length - 1] !== null && series[series.length - 2] !== null
+      ? coords[coords.length - 1]!
+      : null
 
-  const secondaryRuns = secondary ? segments(project(secondary)) : []
-  const secondaryLastRun = secondaryRuns[secondaryRuns.length - 1]
+  const coords = project(values)
+  const runs = segments(coords)
+  const secondaryCoords = secondary ? project(secondary) : []
+  const secondaryRuns = segments(secondaryCoords)
+  // Either direction alone is still a trend worth drawing.
+  if (!runs.length && !secondaryRuns.length) return null
   return {
-    line,
-    area,
-    last,
+    line: runs.length ? runs.map(toSmoothLine).join(' ') : null,
+    area: runs.length
+      ? runs
+          .map(
+            (run) =>
+              `${toSmoothLine(run)} L${run[run.length - 1]!.x.toFixed(2)} ${props.height} L${run[0]!.x.toFixed(2)} ${props.height} Z`
+          )
+          .join(' ')
+      : null,
+    last: newest(values, coords),
     secondaryLine: secondaryRuns.length
       ? secondaryRuns.map(toSmoothLine).join(' ')
       : null,
-    secondaryLast:
-      secondaryLastRun && secondary![secondary!.length - 1] !== null
-        ? secondaryLastRun[secondaryLastRun.length - 1]!
-        : null,
+    secondaryLast: secondary ? newest(secondary, secondaryCoords) : null,
   }
 })
 </script>
@@ -149,8 +150,13 @@ const geometry = computed(() => {
         <stop offset="100%" :stop-color="color" stop-opacity="0" />
       </linearGradient>
     </defs>
-    <path :d="geometry.area" :fill="`url(#${gradientId})`" />
     <path
+      v-if="geometry.area"
+      :d="geometry.area"
+      :fill="`url(#${gradientId})`"
+    />
+    <path
+      v-if="geometry.line"
       :d="geometry.line"
       fill="none"
       :stroke="color"

@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -95,10 +96,15 @@ func TestDashboardSystemStatusRejectsPersonalAccessTokens(t *testing.T) {
 	require.NotContains(t, response.Body.String(), `"cpu"`)
 }
 
+// The rate limiter is process-wide, so each run (including -count reruns) takes
+// user IDs whose buckets no earlier run has filled.
+var systemStatusLimitRun atomic.Int32
+
 func TestDashboardSystemStatusLimitsEachUser(t *testing.T) {
 	engine, db := setupDashboardSystemStatusRouter(t)
-	_, first := createSystemStatusSession(t, db, 91005, "status-limit-a", common.RoleCommonUser)
-	_, second := createSystemStatusSession(t, db, 91006, "status-limit-b", common.RoleCommonUser)
+	id := 91100 + 2*int(systemStatusLimitRun.Add(1))
+	_, first := createSystemStatusSession(t, db, id, "status-limit-a", common.RoleCommonUser)
+	_, second := createSystemStatusSession(t, db, id+1, "status-limit-b", common.RoleCommonUser)
 	for i := 0; i < 30; i++ {
 		require.Equal(t, http.StatusOK, getSystemStatus(engine, first).Code, "request %d", i+1)
 	}

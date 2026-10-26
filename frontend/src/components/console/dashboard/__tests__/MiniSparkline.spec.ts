@@ -39,6 +39,24 @@ describe('MiniSparkline gaps', () => {
     expect(wrapper.find('path[fill="none"]').exists()).toBe(true)
     expect(wrapper.findAll('circle')).toHaveLength(0)
   })
+  it('marks no latest point when the newest sample is a lone point', () => {
+    const wrapper = mount(MiniSparkline, {
+      props: { points: [1, 2, null, 9], secondary: [1, 2, null, 9] },
+    })
+    expect(wrapper.find('path[fill="none"]').exists()).toBe(true)
+    expect(wrapper.findAll('circle')).toHaveLength(0)
+  })
+  it('still draws the secondary series when the primary has no run', () => {
+    const wrapper = mount(MiniSparkline, {
+      props: { points: [null, null, null], secondary: [1, 2, 3] },
+    })
+    const paths = wrapper.findAll('path')
+    expect(paths).toHaveLength(1)
+    expect(paths[0]!.attributes('stroke-dasharray')).toBe('3 2.5')
+    const circles = wrapper.findAll('circle')
+    expect(circles).toHaveLength(1)
+    expect(circles[0]!.attributes('cx')).toBe('100')
+  })
   it('renders nothing when no two adjacent points were measured', () => {
     const wrapper = mount(MiniSparkline, {
       props: { points: [1, null, 2, null] },

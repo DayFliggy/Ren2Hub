@@ -77,6 +77,11 @@ const (
 	dashboardSuccessRateErrorTTL = 10 * time.Second
 )
 
+// The upstream perf-metrics query takes no context. A waiter gives up after
+// this deadline so a blocked database cannot hold the resource readings; the
+// shared query keeps running and refills the cache when it returns.
+var dashboardSuccessRateWait = 3 * time.Second
+
 var dashboardSuccessRateCache struct {
 	sync.Mutex
 	value   DashboardSuccessRate
@@ -156,7 +161,8 @@ func dashboardLoad() *DashboardLoad {
 
 // dashboardSuccessRate shares one perf-metrics query per TTL across all
 // callers. A failed query is logged and reported as state "error" for a short
-// TTL, so the resource readings stay visible while the failure is explicit.
+// TTL, so the resource readings stay visible while the failure is explicit. A
+// query still running past the wait deadline is reported as "error" uncached.
 func dashboardSuccessRate(ctx context.Context) (DashboardSuccessRate, error) {
 	read := func() (DashboardSuccessRate, bool) {
 		dashboardSuccessRateCache.Lock()
@@ -177,9 +183,14 @@ func dashboardSuccessRate(ctx context.Context) (DashboardSuccessRate, error) {
 		dashboardSuccessRateCache.Unlock()
 		return value, nil
 	})
+	timer := time.NewTimer(dashboardSuccessRateWait)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return DashboardSuccessRate{}, ctx.Err()
+	case <-timer.C:
+		common.SysError(fmt.Sprintf("dashboard success rate query exceeded %s", dashboardSuccessRateWait))
+		return DashboardSuccessRate{State: "error", CheckedAt: time.Now().Unix()}, nil
 	case response := <-result:
 		return response.Val.(DashboardSuccessRate), nil
 	}

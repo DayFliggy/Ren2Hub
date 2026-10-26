@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,4 +87,76 @@ func TestDashboardSuccessRateSharesOneQueryPerTTL(t *testing.T) {
 		require.Equal(t, 99.5, *value.Rate)
 	}
 	require.Equal(t, 1, calls)
+}
+
+func TestDashboardSuccessRateBlockedQueryDoesNotHoldWaiters(t *testing.T) {
+	previousQuery, previousWait := queryDashboardHourly, dashboardSuccessRateWait
+	resetCache := func() {
+		dashboardSuccessRateCache.Lock()
+		dashboardSuccessRateCache.expires = time.Time{}
+		dashboardSuccessRateCache.Unlock()
+	}
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		queryDashboardHourly, dashboardSuccessRateWait = previousQuery, previousWait
+		resetCache()
+	})
+	resetCache()
+	dashboardSuccessRateWait = 50 * time.Millisecond
+	var calls atomic.Int32
+	done := make(chan struct{})
+	queryDashboardHourly = func(int) (perfmetrics.HourlyResult, error) {
+		calls.Add(1)
+		defer close(done)
+		<-release
+		return perfmetrics.HourlyResult{Enabled: true, Summary: &perfmetrics.Summary{SuccessRate: 98}}, nil
+	}
+
+	var waiters sync.WaitGroup
+	for range 4 {
+		waiters.Add(1)
+		go func() {
+			defer waiters.Done()
+			value, err := dashboardSuccessRate(context.Background())
+			assert.NoError(t, err)
+			assert.Equal(t, "error", value.State)
+			assert.Nil(t, value.Rate)
+		}()
+	}
+	waiters.Wait()
+	require.Equal(t, int32(1), calls.Load(), "concurrent waiters share one query")
+
+	close(release)
+	<-done
+	require.Eventually(t, func() bool {
+		value, err := dashboardSuccessRate(context.Background())
+		return err == nil && value.State == "ok" && *value.Rate == 98
+	}, time.Second, 10*time.Millisecond, "the finished query fills the cache")
+	require.Equal(t, int32(1), calls.Load())
+}
+
+func TestDashboardSuccessRateCancelledWaiterReturnsContextError(t *testing.T) {
+	previous := queryDashboardHourly
+	release, done := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		// Let the shared query finish before resetting what it writes.
+		close(release)
+		<-done
+		queryDashboardHourly = previous
+		dashboardSuccessRateCache.Lock()
+		dashboardSuccessRateCache.expires = time.Time{}
+		dashboardSuccessRateCache.Unlock()
+	})
+	dashboardSuccessRateCache.Lock()
+	dashboardSuccessRateCache.expires = time.Time{}
+	dashboardSuccessRateCache.Unlock()
+	queryDashboardHourly = func(int) (perfmetrics.HourlyResult, error) {
+		defer close(done)
+		<-release
+		return perfmetrics.HourlyResult{Enabled: true}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := dashboardSuccessRate(ctx)
+	require.ErrorIs(t, err, context.Canceled)
 }
