@@ -9,7 +9,8 @@ import { computed, useId } from 'vue'
  */
 const props = withDefaults(
   defineProps<{
-    points: number[]
+    /** A null entry is a gap: the line breaks there instead of bridging it. */
+    points: (number | null)[]
     /** stroke colour — pass a CSS variable so it follows the theme */
     color?: string
     height?: number
@@ -18,7 +19,7 @@ const props = withDefaults(
      * upload next to download. Normalising each series on its own would
      * stretch both to full height and erase their relative magnitude.
      */
-    secondary?: number[]
+    secondary?: (number | null)[]
     secondaryColor?: string
   }>(),
   {
@@ -63,6 +64,18 @@ function toSmoothLine(coords: { x: number; y: number }[]): string {
   return d
 }
 
+type Coord = { x: number; y: number }
+
+/** Contiguous measured runs; a lone point between gaps has no line to draw. */
+function segments(coords: (Coord | null)[]): Coord[][] {
+  const runs: Coord[][] = [[]]
+  for (const coord of coords) {
+    if (coord) runs[runs.length - 1]!.push(coord)
+    else if (runs[runs.length - 1]!.length) runs.push([])
+  }
+  return runs.filter((run) => run.length >= 2)
+}
+
 /** Normalised paths. Flat series sit on the centre line instead of the floor. */
 const geometry = computed(() => {
   const values = props.points
@@ -70,14 +83,18 @@ const geometry = computed(() => {
   const secondary =
     props.secondary && props.secondary.length > 1 ? props.secondary : null
 
-  const all = secondary ? [...values, ...secondary] : values
-  const min = Math.min(...all)
-  const max = Math.max(...all)
+  const measured = [...values, ...(secondary ?? [])].filter(
+    (value): value is number => value !== null
+  )
+  if (!measured.length) return null
+  const min = Math.min(...measured)
+  const max = Math.max(...measured)
   const span = max - min
   const usable = props.height - PAD * 2
 
-  const project = (series: number[]) =>
+  const project = (series: (number | null)[]) =>
     series.map((value, i) => {
+      if (value === null) return null
       const x = (i / (series.length - 1)) * WIDTH
       const ratio = span === 0 ? 0.5 : (value - min) / span
       // SVG y grows downward, so invert.
@@ -85,20 +102,33 @@ const geometry = computed(() => {
       return { x, y }
     })
 
-  const coords = project(values)
-  const line = toSmoothLine(coords)
-  const area = `${line} L${WIDTH} ${props.height} L0 ${props.height} Z`
-  const last = coords[coords.length - 1]!
+  const runs = segments(project(values))
+  if (!runs.length) return null
+  const line = runs.map(toSmoothLine).join(' ')
+  const area = runs
+    .map(
+      (run) =>
+        `${toSmoothLine(run)} L${run[run.length - 1]!.x.toFixed(2)} ${props.height} L${run[0]!.x.toFixed(2)} ${props.height} Z`
+    )
+    .join(' ')
+  // The beacon marks the newest sample only when that sample was measured.
+  const lastRun = runs[runs.length - 1]!
+  const last =
+    values[values.length - 1] === null ? null : lastRun[lastRun.length - 1]!
 
-  const secondaryCoords = secondary ? project(secondary) : null
+  const secondaryRuns = secondary ? segments(project(secondary)) : []
+  const secondaryLastRun = secondaryRuns[secondaryRuns.length - 1]
   return {
     line,
     area,
     last,
-    secondaryLine: secondaryCoords ? toSmoothLine(secondaryCoords) : null,
-    secondaryLast: secondaryCoords
-      ? secondaryCoords[secondaryCoords.length - 1]!
+    secondaryLine: secondaryRuns.length
+      ? secondaryRuns.map(toSmoothLine).join(' ')
       : null,
+    secondaryLast:
+      secondaryLastRun && secondary![secondary!.length - 1] !== null
+        ? secondaryLastRun[secondaryLastRun.length - 1]!
+        : null,
   }
 })
 </script>
@@ -146,6 +176,7 @@ const geometry = computed(() => {
     />
     <!-- Latest point with a pulse beacon; it glows at night only. -->
     <circle
+      v-if="geometry.last"
       :cx="geometry.last.x"
       :cy="geometry.last.y"
       r="2.5"

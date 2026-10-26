@@ -2,6 +2,12 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+## 2026-10-26 Dashboard 系统状态卡片共享快照
+
+按用户批准，Dashboard 系统状态卡片对所有登录用户开放。新增扩展接口 `GET /api/user/system-status`（`service/dashboard_system_status.go`、`controller/dashboard_system_status.go`），从现有唯一观测缓存投影 CPU、内存、磁盘（含绝对容量）、应用 HTTP 正文流量及 1h 分桶历史，并读取主机负载均值和逻辑核数（`service/dashboard_system_load_{unix,windows}.go`，gopsutil `load.Avg` 带 recover）。成功率取 `perf_metrics.QueryHourlyAll(24)`，所有调用方共享 60 秒缓存，失败缓存 10 秒，并以 `state` 区分 ok、no_requests、disabled、error。数据库/Redis 探测、检查原因、阈值、进程和连接池仍只在 Root 的 `/api/performance/*` 返回。
+
+该接口仅限会话访问，拒绝 PAT；关闭缓存，按用户限制每分钟 30 次（`middleware/dashboard_status_rate_limit.go` 复用原生 `userRateLimitFactory`）。原生文件和 `router/api-router.go` 不改，路由登记在 `router/extensions.go`。核心清单新增 7 个 extension，upstream_equal 与 adapted 数量不变；NewAPI 基线仍为 `206e0fa5c600127a314a97f88592c067f784f4a6`。
+
 ## 2026-10-24 本地修复、独有观测与普通 API Key 计数
 
 从 Ren2Hub `6e4539904d649f892cb7d2f61ea5fedc8c5198bb` 实施用户批准的日志、观测、Dashboard 和原生计数批次；历史参考为 `9a63062227c31ba54a6346e07ee8b4fd8802f22f`。NewAPI 核心仍冻结在 `206e0fa5c600127a314a97f88592c067f784f4a6`，另核对固定快照 `33c61a24234aa20cb10e8a644304322c476361de`，没有整包升级。Sub2API `a34f373973bf547ccec301c7405eb45194e1f28a` 仅择取普通 API Key 真实计数合同；AxonHub `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` 的图片变体转换仍是候选，本轮不开放。

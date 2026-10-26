@@ -1,8 +1,8 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 import {
-  measuredResource,
-  performanceFixture,
-} from '../../src/api/__tests__/opsFixtures'
+  resourceFixture,
+  systemStatusFixture,
+} from '../../src/components/console/dashboard/__tests__/systemStatusFixture'
 
 import {
   assertNoHorizontalOverflow,
@@ -30,24 +30,21 @@ const DEFAULT_READINGS: ResourceReadings = {
 }
 
 function systemSnapshot(readings: ResourceReadings = DEFAULT_READINGS) {
-  const data = performanceFixture()
-  const resources = data.observability.resources
-  resources.cpu = measuredResource(readings.cpuPercent)
-  resources.memory = {
-    ...measuredResource(
-      (readings.memoryUsedGib / readings.memoryTotalGib) * 100
-    ),
+  const data = systemStatusFixture()
+  data.cpu = resourceFixture({ percent: readings.cpuPercent })
+  data.memory = resourceFixture({
+    percent: (readings.memoryUsedGib / readings.memoryTotalGib) * 100,
     used_bytes: readings.memoryUsedGib * 1024 ** 3,
     total_bytes: readings.memoryTotalGib * 1024 ** 3,
-  }
-  resources.disk = {
-    ...measuredResource((readings.diskUsedGib / readings.diskTotalGib) * 100),
+  })
+  data.disk = resourceFixture({
+    percent: (readings.diskUsedGib / readings.diskTotalGib) * 100,
     scope: 'filesystem',
     used_bytes: readings.diskUsedGib * 1024 ** 3,
     total_bytes: readings.diskTotalGib * 1024 ** 3,
-  }
-  data.observability.traffic.request_mbps = 0.45
-  data.observability.traffic.response_mbps = 0.00042
+  })
+  data.traffic.request_mbps = 0.45
+  data.traffic.response_mbps = 0.00042
   return data
 }
 
@@ -56,7 +53,7 @@ async function configureSystemPage(
   options: Parameters<typeof configureStablePage>[1]
 ) {
   await configureStablePage(page, options)
-  await page.route('**/api/performance/stats?*', (route) =>
+  await page.route('**/api/user/system-status', (route) =>
     route.fulfill({ json: { success: true, data: systemSnapshot() } })
   )
 }
@@ -103,9 +100,9 @@ async function expectHeaderFits(card: Locator): Promise<void> {
   expect(header.labelLines).toBeLessThanOrEqual(1)
   expect(header.valueWidth).toBeGreaterThan(0)
   await expect(card.getByText(/API/)).toHaveCount(1)
-  await expect(card.locator('[data-status-reachable]')).toHaveAttribute(
-    'data-status-reachable',
-    'true'
+  await expect(card.locator('[data-system-health]')).toHaveAttribute(
+    'data-system-health',
+    'ok'
   )
 }
 
@@ -197,7 +194,7 @@ for (const width of [320, 390, 1280, 1366, 1440]) {
   })
 }
 
-// The fixture's 16 GB / 512 GB host hides overflow; these are a real server's
+// The fixture's 16 GiB / 512 GiB host hides overflow; these are a real server's
 // readings and the widest figures each tile can show.
 const SERVER_READINGS = {
   realistic: {
@@ -267,7 +264,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
       page,
     }, testInfo) => {
       await configureSystemPage(page, { theme, authenticated: true })
-      await page.route('**/api/performance/stats?*', (route) =>
+      await page.route('**/api/user/system-status', (route) =>
         route.fulfill({
           json: { success: true, data: systemSnapshot(readings) },
         })
@@ -277,11 +274,11 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
       const card = page.locator('[data-system-status-card]')
       if (name === 'widest') {
         await expect(card.locator('[data-metric="memory"]')).toContainText(
-          /87\.4\s*\/\s*94\.2\s*GB/
+          /87\.4\s*\/\s*94\.2\s*GiB/
         )
       }
       if (name === 'realistic') {
-        await expect(card.locator('[data-metric="disk"]')).toContainText('TB')
+        await expect(card.locator('[data-metric="disk"]')).toContainText('TiB')
       }
 
       // 1280-1366 is the three-column grid, where the card is at its narrowest.
@@ -295,7 +292,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
         }
       }
       const figures = card.locator(
-        '[data-metric-value], [data-percent-badge], [data-bandwidth-direction], [data-status-reachable] > span:last-child'
+        '[data-metric-value], [data-percent-badge], [data-bandwidth-direction], [data-system-health] > span:nth-child(2)'
       )
       expect(await minTextContrast(figures)).toBeGreaterThanOrEqual(4.5)
     })
@@ -402,7 +399,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
   }) => {
     let reading = TIER_READINGS[0]!
     await configureSystemPage(page, { theme, authenticated: true })
-    await page.route('**/api/performance/stats?*', (route) =>
+    await page.route('**/api/user/system-status', (route) =>
       route.fulfill({
         json: {
           success: true,

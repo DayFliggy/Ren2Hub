@@ -172,65 +172,69 @@ const rangeOptions = computed(() => [
           @switch-tab="activeTab = $event"
         />
 
-        <!-- Error State -->
-        <EmptyState
-          v-if="dashboardError"
-          class="min-h-64"
-          :title="$t('dashboard.loadFailed')"
-          :hint="dashboardError"
-        />
-
-        <div v-else class="grid gap-4 sm:gap-5 xl:grid-cols-3">
-          <!-- 总额度（限速已并入 KPI 条的 RPM 格） -->
-          <BalanceCard
-            class="min-w-0"
-            :quota="stats?.quota ?? null"
-            :used-quota="stats?.used_quota ?? null"
-            :today-quota="stats?.today_quota"
-            :month-quota="stats?.month_quota"
-            :daily-burn="dailyBurn"
+        <div class="grid gap-4 sm:gap-5 xl:grid-cols-3">
+          <!-- 个人汇总失败只替换个人卡片；系统状态来自独立接口，继续显示。 -->
+          <EmptyState
+            v-if="dashboardError"
+            class="min-h-64 min-w-0 xl:col-span-3"
+            :title="$t('dashboard.loadFailed')"
+            :hint="dashboardError"
           />
-          <!-- Usage distribution -->
-          <UsageDistributionCard
-            class="min-w-0 xl:col-span-2"
-            :points="distribution.points.value"
-            :covered-from="distribution.coveredFrom.value"
-            :loading="distribution.loading.value"
-            :error="distribution.error.value"
-            :unavailable-reason="distribution.unavailableReason.value"
-          />
+          <template v-else>
+            <!-- 总额度（限速已并入 KPI 条的 RPM 格） -->
+            <BalanceCard
+              class="min-w-0"
+              :quota="stats?.quota ?? null"
+              :used-quota="stats?.used_quota ?? null"
+              :today-quota="stats?.today_quota"
+              :month-quota="stats?.month_quota"
+              :daily-burn="dailyBurn"
+            />
+            <!-- Usage distribution -->
+            <UsageDistributionCard
+              class="min-w-0 xl:col-span-2"
+              :points="distribution.points.value"
+              :covered-from="distribution.coveredFrom.value"
+              :loading="distribution.loading.value"
+              :error="distribution.error.value"
+              :unavailable-reason="distribution.unavailableReason.value"
+            />
+          </template>
 
-          <!-- 系统状态（快照仅 Root 可读，其他角色显示占位） -->
+          <!-- 系统状态：所有登录用户可读的共享快照 -->
           <SystemStatusCard
             class="min-w-0"
             :metrics="resources.system.value"
             :error="resources.systemError.value"
+            :loading="resources.systemLoading.value"
           />
-          <!-- Token 使用趋势 -->
-          <TokenTrendCard
-            class="min-w-0 xl:col-span-2"
-            :points="tokenTrend"
-            :loading="loading"
-            :unavailable-reason="
-              usageUnavailable
-                ? t('dashboard.stats.unavailable')
-                : recentOutOfRange
-            "
-          />
+          <template v-if="!dashboardError">
+            <!-- Token 使用趋势 -->
+            <TokenTrendCard
+              class="min-w-0 xl:col-span-2"
+              :points="tokenTrend"
+              :loading="loading"
+              :unavailable-reason="
+                usageUnavailable
+                  ? t('dashboard.stats.unavailable')
+                  : recentOutOfRange
+              "
+            />
 
-          <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
-          <DiscountCard class="min-w-0" :discounts="null" />
-          <!-- 模型消费分布 -->
-          <ModelDistributionCard
-            class="min-w-0 xl:col-span-2"
-            :items="share"
-            :loading="loading"
-            :unavailable-reason="
-              usageUnavailable
-                ? t('dashboard.stats.unavailable')
-                : recentOutOfRange
-            "
-          />
+            <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
+            <DiscountCard class="min-w-0" :discounts="null" />
+            <!-- 模型消费分布 -->
+            <ModelDistributionCard
+              class="min-w-0 xl:col-span-2"
+              :items="share"
+              :loading="loading"
+              :unavailable-reason="
+                usageUnavailable
+                  ? t('dashboard.stats.unavailable')
+                  : recentOutOfRange
+              "
+            />
+          </template>
         </div>
       </div>
 

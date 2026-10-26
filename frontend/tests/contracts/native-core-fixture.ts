@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { performanceFixture } from '../../src/api/__tests__/opsFixtures'
+import { systemStatusFixture } from '../../src/components/console/dashboard/__tests__/systemStatusFixture'
 import {
   nativeModelCatalog,
   nativeUsageSummary,
@@ -639,6 +640,7 @@ export async function nativeCoreFixture(
         ],
       })
     if (path === '/api/performance/stats') return ok(performanceFixture())
+    if (path === '/api/user/system-status') return ok(systemStatusFixture())
     if (path === '/api/performance/quality')
       return ok({
         enabled: true,

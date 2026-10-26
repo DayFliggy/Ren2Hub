@@ -11,67 +11,64 @@ import CpuLoadCells, {
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
 import PrecisionTickDial from '@/components/console/dashboard/PrecisionTickDial.vue'
-import type { Observability, ResourceObservation } from '@/api/observability'
+import type {
+  SystemLoad,
+  SystemResource,
+  SystemStatus,
+} from '@/api/systemStatus'
 import { useAppStore } from '@/stores'
 
 const props = defineProps<{
-  metrics?: Observability | null
-  /** The last snapshot failure; kept on the status pill's title. */
+  metrics?: SystemStatus | null
+  /** The last snapshot failure; shown on the status pill. */
   error?: string | null
+  loading?: boolean
 }>()
 
 const { t } = useI18n()
-const { phase, statusReachable, versionLabel } = storeToRefs(useAppStore())
-const metricsAvailable = computed(
-  () => props.metrics !== null && props.metrics !== undefined
-)
+const { versionLabel } = storeToRefs(useAppStore())
 
-/** The dot and tint use the fill; the label uses the matching text token. */
-const apiState = computed(() => {
-  if (phase.value === 'loading') {
-    return {
-      color: 'var(--status-info)',
-      textColor: 'var(--status-info-text)',
-      label: t('dashboard.loading'),
-      pulse: false,
-    }
+interface PillState {
+  color: string
+  textColor: string
+  label: string
+  pulse: boolean
+}
+
+function pill(tone: string, label: string, pulse = false): PillState {
+  return {
+    color: `var(--status-${tone})`,
+    textColor: `var(--status-${tone}-text)`,
+    label,
+    pulse,
   }
-  if (phase.value === 'error') {
-    return {
-      color: 'var(--status-danger)',
-      textColor: 'var(--status-danger-text)',
-      label: t('dashboard.offline'),
-      pulse: false,
-    }
+}
+
+/** The pill reports the server's own health verdict, not page reachability. */
+const apiState = computed<PillState>(() => {
+  if (props.error)
+    return pill('danger', t('dashboard.systemStatus.health.error'))
+  const status = props.metrics?.status
+  if (!status) {
+    return props.loading
+      ? pill('info', t('dashboard.loading'))
+      : {
+          color: 'var(--text-tertiary)',
+          textColor: 'var(--text-tertiary)',
+          label: t('dashboard.systemStatus.health.unknown'),
+          pulse: false,
+        }
   }
-  if (
-    phase.value === 'ready' &&
-    statusReachable.value &&
-    metricsAvailable.value
-  ) {
-    return {
-      color: 'var(--status-success)',
-      textColor: 'var(--status-success-text)',
-      label: t('dashboard.online'),
-      pulse: true,
-    }
-  }
-  if (
-    phase.value === 'degraded' &&
-    statusReachable.value &&
-    metricsAvailable.value
-  ) {
-    return {
-      color: 'var(--status-warning)',
-      textColor: 'var(--status-warning-text)',
-      label: t('dashboard.degraded'),
-      pulse: false,
-    }
-  }
+  if (status === 'ok')
+    return pill('success', t('dashboard.systemStatus.health.ok'), true)
+  if (status === 'warning')
+    return pill('warning', t('dashboard.systemStatus.health.warning'))
+  if (status === 'critical')
+    return pill('danger', t('dashboard.systemStatus.health.critical'))
   return {
     color: 'var(--text-tertiary)',
     textColor: 'var(--text-tertiary)',
-    label: t('dashboard.unknown'),
+    label: t(`dashboard.systemStatus.health.${status}`),
     pulse: false,
   }
 })
@@ -86,11 +83,6 @@ function finiteNonNegative(value: number | null | undefined): number | null {
     return null
   }
   return value
-}
-
-function clampPercent(value: number | null | undefined): number | null {
-  const finite = finiteNonNegative(value)
-  return finite === null ? null : Math.min(100, finite)
 }
 
 function ratioPercent(
@@ -167,8 +159,7 @@ function formatBandwidth(valueMbps: number): string {
 
 /**
  * Used and total in one unit with at most three significant figures, so the
- * reading fits its tile. Byte counts are converted to binary GB, so a TB is
- * 1024 of them.
+ * reading fits its tile. Byte counts are binary: GiB, and TiB from 1000 GiB.
  */
 function storageReading(
   used: number | null,
@@ -181,32 +172,28 @@ function storageReading(
   return {
     used: format(used / scale),
     total: format(total / scale),
-    unit: scale === 1 ? 'GB' : 'TB',
+    unit: scale === 1 ? 'GiB' : 'TiB',
   }
 }
 
-/** The last twelve snapshot points; a gap in either direction drops the line. */
+/** The last twelve one-minute buckets. An unmeasured bucket stays a gap in
+ * its own line; a stale snapshot shows no history at all. */
 function trafficSeries(
-  metrics: Observability | null | undefined
-): { down: number[]; up: number[] } | undefined {
+  metrics: SystemStatus | null | undefined
+): { down: (number | null)[]; up: (number | null)[] } | undefined {
   if (!metrics || metrics.stale) return undefined
-  const points = metrics.series.points.slice(-12)
-  const up: number[] = []
-  const down: number[] = []
-  for (const point of points) {
-    const safeUp = finiteNonNegative(point.request_mbps)
-    const safeDown = finiteNonNegative(point.response_mbps)
-    if (safeUp === null || safeDown === null) return undefined
-    up.push(safeUp)
-    down.push(safeDown)
-  }
-  return up.length >= 2 ? { up, down } : undefined
+  const points = metrics.traffic.points.slice(-12)
+  const up = points.map((point) => finiteNonNegative(point.request_mbps))
+  const down = points.map((point) => finiteNonNegative(point.response_mbps))
+  const measured = (series: (number | null)[]) =>
+    series.filter((value) => value !== null).length >= 2
+  return measured(up) || measured(down) ? { up, down } : undefined
 }
 
 /** Only fresh, measured samples are shown; anything else reads as unknown. */
 function observed(
-  metrics: Observability | null | undefined,
-  resource: ResourceObservation | undefined
+  metrics: SystemStatus | null | undefined,
+  resource: SystemResource | undefined
 ): boolean {
   return Boolean(
     metrics &&
@@ -221,21 +208,52 @@ function gib(value: number | null | undefined): number | null {
   return bytes === null ? null : bytes / 1024 ** 3
 }
 
-/** 1 / 5 / 15 min cells. The snapshot carries no load average or core count,
- * so every cell shows its unavailable placeholder. */
-const LOAD_CELLS: CpuLoadCell[] = [1, 5, 15].map((minutes) => ({
-  minutes,
-  value: null,
-  fill: null,
-  color: 'var(--text-tertiary)',
-  overloaded: false,
-}))
+function cpuCoreCount(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null
+}
+
+function formatLoad(value: number): string {
+  if (value >= 100) return value.toFixed(0)
+  if (value >= 10) return value.toFixed(1)
+  return value.toFixed(2)
+}
+
+/** 1 / 5 / 15 min cells; a cell fills by load per host core. */
+function buildLoadCells(
+  load: SystemLoad | null | undefined,
+  cores: number | null
+): CpuLoadCell[] {
+  const readings = [load?.one, load?.five, load?.fifteen]
+  return [1, 5, 15].map((minutes, index) => {
+    const value = finiteNonNegative(readings[index])
+    if (value === null) {
+      const color = 'var(--text-tertiary)'
+      return { minutes, value: null, fill: null, color, overloaded: false }
+    }
+    const fill = cores === null ? null : value / cores
+    return {
+      minutes,
+      value: formatLoad(value),
+      fill,
+      color: resourceLoadTone(fill === null ? null : fill * 100).fill,
+      overloaded: fill !== null && fill > 1,
+    }
+  })
+}
+
+function scopeLabel(scope: SystemResource['scope'] | undefined): string {
+  return t(`dashboard.systemStatus.scope.${scope ?? 'unknown'}`)
+}
 
 interface MetricTile {
   key: 'cpu' | 'memory' | 'bandwidth' | 'disk'
   label: string
   /** lucide 24x24 path data */
   icon?: string
+  /** Where the reading was measured, for the tile's accessible label. */
+  scope: string
   /** CPU headline, or the placeholder of a tile without data. */
   value: string
   unit: string
@@ -247,22 +265,24 @@ interface MetricTile {
   /** 0-100 usage against a ceiling; null when the metric is unavailable. */
   percent: number | null
   /** Shared-scale throughput history, for metrics with no ceiling. */
-  series?: { down: number[]; up: number[] }
+  series?: { down: (number | null)[]; up: (number | null)[] }
   tone: Tone
 }
 
 const tiles = computed<MetricTile[]>(() => {
   const metrics = props.metrics
-  const resources = metrics?.resources
-  const memoryLive = observed(metrics, resources?.memory)
-  const diskLive = observed(metrics, resources?.disk)
-  const memoryUsed = memoryLive ? gib(resources?.memory.used_bytes) : null
-  const memoryTotal = memoryLive ? gib(resources?.memory.total_bytes) : null
-  const diskUsed = diskLive ? gib(resources?.disk.used_bytes) : null
-  const diskTotal = diskLive ? gib(resources?.disk.total_bytes) : null
-  const cpuPercent = observed(metrics, resources?.cpu)
-    ? clampPercent(resources?.cpu.percent)
+  const memoryLive = observed(metrics, metrics?.memory)
+  const diskLive = observed(metrics, metrics?.disk)
+  const memoryUsed = memoryLive ? gib(metrics?.memory.used_bytes) : null
+  const memoryTotal = memoryLive ? gib(metrics?.memory.total_bytes) : null
+  const diskUsed = diskLive ? gib(metrics?.disk.used_bytes) : null
+  const diskTotal = diskLive ? gib(metrics?.disk.total_bytes) : null
+  // Container CPU may exceed 100% of one quota; the figure keeps the measured
+  // value and only the gauge is clamped.
+  const cpuPercent = observed(metrics, metrics?.cpu)
+    ? finiteNonNegative(metrics?.cpu.percent)
     : null
+  const cores = cpuCoreCount(metrics?.load?.cores)
   const memoryPercent = ratioPercent(memoryUsed, memoryTotal)
   const diskPercent = ratioPercent(diskUsed, diskTotal)
   const bandwidthUp = metrics?.stale
@@ -286,17 +306,19 @@ const tiles = computed<MetricTile[]>(() => {
       icon: 'M4 4h16v16H4zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3M9 9h6v6H9z',
       value: cpuPercent === null ? '--' : formatMetric(cpuPercent),
       unit: cpuPercent === null ? '' : '%',
+      scope: scopeLabel(metrics?.cpu.scope),
       load: {
-        cells: LOAD_CELLS,
-        cores: null,
+        cells: buildLoadCells(metrics?.load, cores),
+        cores,
       },
-      percent: cpuPercent,
+      percent: cpuPercent === null ? null : Math.min(100, cpuPercent),
       tone: resourceLoadTone(cpuPercent),
     },
     {
       key: 'memory',
       label: t('dashboard.systemStatus.memory'),
       icon: 'M3 7h18v10H3zM7 7v10M11 7v10M15 7v10M5 17v3M19 17v3',
+      scope: scopeLabel(metrics?.memory.scope),
       value: '--',
       unit: '',
       storage: storageReading(memoryUsed, memoryTotal),
@@ -306,6 +328,7 @@ const tiles = computed<MetricTile[]>(() => {
     {
       key: 'bandwidth',
       label: t('dashboard.systemStatus.bandwidth'),
+      scope: t('dashboard.systemStatus.scope.application_http_body'),
       value: bandwidth ? '' : '--',
       unit: '',
       bandwidth,
@@ -317,6 +340,7 @@ const tiles = computed<MetricTile[]>(() => {
       key: 'disk',
       label: t('dashboard.systemStatus.disk'),
       icon: 'M22 12H2M5.5 16h.01M9.5 16h.01M5.45 5h13.1a2 2 0 0 1 1.79 1.11L22 12v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5l1.66-5.89A2 2 0 0 1 5.45 5z',
+      scope: scopeLabel(metrics?.disk.scope),
       value: '--',
       unit: '',
       storage: storageReading(diskUsed, diskTotal),
@@ -367,9 +391,18 @@ function memorySegmentStyle(
   }
 }
 
-/** Success rate reads out in the header. The resource snapshot has no
- * request outcome, so it stays at the empty reading. */
-const successRate = computed<number | null>(() => null)
+/** Relay success over the last 24 hours. Null states say why there is no
+ * rate: no requests yet, metrics disabled, or a failed query. */
+const successRate = computed(() => {
+  const rate = props.metrics?.success_rate
+  return rate?.state === 'ok' ? finiteNonNegative(rate.rate) : null
+})
+const successEmptyLabel = computed(() => {
+  const state = props.metrics?.success_rate.state
+  return state && state !== 'ok'
+    ? t(`dashboard.systemStatus.successRateState.${state}`)
+    : t('common.none')
+})
 const successTone = computed(() => rateTone(successRate.value))
 </script>
 
@@ -386,7 +419,7 @@ const successTone = computed(() => rateTone(successRate.value))
             background: `color-mix(in srgb, ${apiState.color} 14%, transparent)`,
             color: apiState.textColor,
           }"
-          :data-status-reachable="statusReachable"
+          :data-system-health="error ? 'error' : (metrics?.status ?? 'none')"
           :title="error ?? undefined"
         >
           <span class="relative flex h-1.5 w-1.5">
@@ -401,6 +434,7 @@ const successTone = computed(() => rateTone(successRate.value))
             />
           </span>
           <span>{{ apiState.label }}</span>
+          <span v-if="error" class="sr-only">{{ error }}</span>
         </span>
       </div>
     </template>
@@ -410,17 +444,17 @@ const successTone = computed(() => rateTone(successRate.value))
         <div class="text-right">
           <p
             class="success-rate-label text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
+            :title="t('dashboard.systemStatus.successRateWindow')"
           >
             {{ t('dashboard.systemStatus.successRate') }}
           </p>
-          <!-- The server reports no rate until the last hour holds enough
-               relay requests to measure one. -->
           <p
             v-if="successRate === null"
             class="success-rate-value text-xs font-medium leading-none text-[var(--text-tertiary)]"
             data-success-rate-empty
+            :data-success-rate-state="metrics?.success_rate.state ?? 'none'"
           >
-            {{ t('common.none') }}
+            {{ successEmptyLabel }}
           </p>
           <p
             v-else
@@ -479,7 +513,8 @@ const successTone = computed(() => rateTone(successRate.value))
               >
                 <path :d="tile.icon" />
               </svg>
-              <span class="truncate">{{ tile.label }}</span>
+              <span class="truncate" :title="tile.scope">{{ tile.label }}</span>
+              <span class="sr-only" data-metric-scope>{{ tile.scope }}</span>
             </p>
             <!-- CPU's headline is already the percentage; a rounded badge would
                  repeat it and could disagree with it (4.6% vs 5%). Its slot holds
@@ -577,7 +612,7 @@ const successTone = computed(() => rateTone(successRate.value))
           <template v-else-if="tile.key === 'memory'">
             <div
               v-if="tile.storage"
-              class="mt-auto flex items-baseline gap-0.5 font-mono leading-none whitespace-nowrap pt-0.5 sm:gap-1"
+              class="storage-row mt-auto flex items-baseline font-mono leading-none whitespace-nowrap pt-0.5"
             >
               <span
                 class="display-number status-headline leading-none"
@@ -771,9 +806,22 @@ const successTone = computed(() => rateTone(successRate.value))
   font-size: 1.125rem;
 }
 
+/* The memory reading's gaps follow the card, not the viewport: the binary unit
+   ("87.4 / 94.2 GiB") needs tight gaps up to a 380px card (measured 347px with
+   the 24px headline). */
+.storage-row {
+  gap: 0.125rem;
+}
+
 @container (min-width: 344px) {
   .status-headline {
     font-size: 1.5rem;
+  }
+}
+
+@container (min-width: 380px) {
+  .storage-row {
+    gap: 0.25rem;
   }
 }
 

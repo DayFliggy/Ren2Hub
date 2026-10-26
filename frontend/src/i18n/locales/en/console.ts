@@ -503,6 +503,28 @@ export default {
       bandwidth: 'App traffic',
       disk: 'Disk',
       successRate: 'API success rate',
+      successRateWindow: 'Relay request success rate over the last 24 hours',
+      successRateState: {
+        no_requests: 'No requests',
+        disabled: 'Disabled',
+        error: 'Unavailable',
+      },
+      health: {
+        ok: 'Healthy',
+        warning: 'Warning',
+        critical: 'Critical',
+        stale: 'Stale',
+        unknown: 'Unknown',
+        error: 'Read failed',
+      },
+      scope: {
+        container: 'Container',
+        host: 'Host',
+        filesystem: 'Cache directory filesystem',
+        unknown: 'Unknown source',
+        application_http_body: 'App HTTP bodies',
+      },
+      rateLimited: 'Refreshing too often. Try again shortly.',
       version: 'Version',
     },
     stats: {

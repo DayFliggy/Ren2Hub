@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 837,
     "adapted": 239,
-    "extension": 215,
+    "extension": 222,
     "removed": 43
   },
   "files": [
@@ -932,6 +932,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "422436c4ad5b58dbfab3339882d4125a9ab2263bfdfd5ee195df4cc526d04dcf"
+    },
+    {
+      "path": "controller/dashboard_system_status.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3e4dc8cbb549650eb2e03aff1f1b38115a8195ed4739640cf126ae2d55465fa1"
     },
     {
       "path": "controller/deployment.go",
@@ -2155,6 +2161,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "60be3ab3943d712a060ec49c164ee0d2af77bc404ca9ea6b0ba4070d84146f77",
       "local_sha256": "60be3ab3943d712a060ec49c164ee0d2af77bc404ca9ea6b0ba4070d84146f77"
+    },
+    {
+      "path": "middleware/dashboard_status_rate_limit.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "bedba25b02f451c3c21157915e22160b39f05cd491522fc6b6a8c73469abf91c"
     },
     {
       "path": "middleware/disable-cache.go",
@@ -6853,10 +6865,16 @@
       "local_sha256": "5a76e635cffe4ab8d7860eb30928619c5d9df1382c47358eb2641878f69b72f5"
     },
     {
+      "path": "router/dashboard_system_status_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "9b57fb4e67b30e4568da71cacd3ab9a3f05162cac72f14c1b1d7529e0a07e594"
+    },
+    {
       "path": "router/extensions.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a1296f02a05146af76d18d040af5e91f71fad6d4e00f5cf7e05492ce62e3cbcc"
+      "local_sha256": "6f218e3749d37028c06ff70c48331632bdfc4cb820dd72e6870d7081c76f9ad7"
     },
     {
       "path": "router/extensions_test.go",
@@ -7311,6 +7329,30 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "02cd53c3a6a5642ec715f6751ce9b745b5dadae78b3f8038e61627e6548b42ac"
+    },
+    {
+      "path": "service/dashboard_system_load_unix.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "05da3dfb1df37e8e832896103b551988b3d5f390ff62736c07cbd02b8f94fd6a"
+    },
+    {
+      "path": "service/dashboard_system_load_windows.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "99ac1b04524da7babffc8130325bc95da6034858a565f2cc96a0ab013fc2e6f3"
+    },
+    {
+      "path": "service/dashboard_system_status.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4795899dcbc1162c9961825825a68e5ca37167e2207a4d0edb645e7c55509f1b"
+    },
+    {
+      "path": "service/dashboard_system_status_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "da994e3c5139e058389212ec6e33c73ea14098ee95b29ceba3ce6997a589e93a"
     },
     {
       "path": "service/download.go",

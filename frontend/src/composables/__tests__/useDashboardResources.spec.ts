@@ -10,16 +10,22 @@ import {
   it,
   vi,
 } from 'vitest'
-import { opsMonitorApi, type PerformanceStats } from '@/api/opsMonitor'
+import { ref } from 'vue'
+import { systemStatusApi, type SystemStatus } from '@/api/systemStatus'
+import { ApiError } from '@/api/types'
 import { useDashboardResources } from '@/composables/useDashboardResources'
-import { observabilityFixture } from '@/components/console/dashboard/__tests__/observabilityFixture'
+import { systemStatusFixture } from '@/components/console/dashboard/__tests__/systemStatusFixture'
 import { useAuthStore } from '@/stores/auth'
 import i18n, { loadMessageDomain } from '@/i18n'
 
-vi.mock('@/api/opsMonitor', () => ({ opsMonitorApi: { stats: vi.fn() } }))
-function snapshot() {
-  return { observability: observabilityFixture() } as PerformanceStats
-}
+const visibility = ref<DocumentVisibilityState>('visible')
+vi.mock('@/api/systemStatus', () => ({ systemStatusApi: { get: vi.fn() } }))
+vi.mock('@vueuse/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@vueuse/core')>()),
+  useDocumentVisibility: () => visibility,
+}))
+const getStatus = vi.mocked(systemStatusApi.get)
+const snapshot = systemStatusFixture
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (error: Error) => void
@@ -49,9 +55,10 @@ beforeAll(async () => {
   await loadMessageDomain('console')
 })
 beforeEach(() => {
+  visibility.value = 'visible'
   vi.useFakeTimers()
   setActivePinia(createPinia())
-  vi.mocked(opsMonitorApi.stats).mockResolvedValue(snapshot())
+  getStatus.mockResolvedValue(snapshot())
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -61,49 +68,61 @@ afterEach(() => {
 })
 
 describe('useDashboardResources', () => {
-  it.each([1, 10])(
-    'does not call Root observability for role %s',
+  it.each([1, 10, 100])(
+    'reads and polls the shared snapshot for role %s',
     async (role) => {
       setup(role)
       await flushPromises()
-      expect(opsMonitorApi.stats).not.toHaveBeenCalled()
-      await state.loadSystem()
-      await vi.advanceTimersByTimeAsync(30_000)
-      expect(opsMonitorApi.stats).not.toHaveBeenCalled()
-      expect(state.system.value).toBeNull()
+      expect(getStatus).toHaveBeenCalledTimes(1)
+      expect(state.system.value).toEqual(snapshot())
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(getStatus).toHaveBeenCalledTimes(2)
     }
   )
+  it('pauses polling while the page is hidden and refreshes on return', async () => {
+    setup()
+    await flushPromises()
+    visibility.value = 'hidden'
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(getStatus).toHaveBeenCalledTimes(1)
+    visibility.value = 'visible'
+    await nextTick()
+    await flushPromises()
+    expect(getStatus).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(getStatus).toHaveBeenCalledTimes(3)
+  })
+  it('names a rate-limited refresh instead of showing the raw error', async () => {
+    getStatus.mockRejectedValueOnce(
+      new ApiError('Too Many Requests', { status: 429 })
+    )
+    setup()
+    await flushPromises()
+    expect(state.systemError.value).toBe(
+      'Refreshing too often. Try again shortly.'
+    )
+    expect(state.system.value).toBeNull()
+  })
   it('starts no snapshot request for anonymous sessions', async () => {
     setup(null)
     await flushPromises()
-    expect(opsMonitorApi.stats).not.toHaveBeenCalled()
-  })
-  it('uses the server snapshot directly for Root and polls only that endpoint', async () => {
-    const result = snapshot()
-    vi.mocked(opsMonitorApi.stats).mockResolvedValue(result)
-    setup()
-    await flushPromises()
-    expect(state.system.value).toEqual(result.observability)
-    expect(opsMonitorApi.stats).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(opsMonitorApi.stats).toHaveBeenCalledTimes(2)
+    expect(getStatus).not.toHaveBeenCalled()
   })
   it('does not start overlapping polling while a snapshot request is pending', async () => {
-    const pending = deferred<PerformanceStats>()
-    vi.mocked(opsMonitorApi.stats).mockReturnValue(pending.promise)
+    const pending = deferred<SystemStatus>()
+    getStatus.mockReturnValue(pending.promise)
     setup()
     await flushPromises()
     await vi.advanceTimersByTimeAsync(30_000)
-    expect(opsMonitorApi.stats).toHaveBeenCalledTimes(1)
+    expect(getStatus).toHaveBeenCalledTimes(1)
     expect(state.systemLoading.value).toBe(true)
     pending.resolve(snapshot())
     await flushPromises()
     expect(state.systemLoading.value).toBe(false)
   })
   it('surfaces a failed snapshot and recovers on retry', async () => {
-    vi.mocked(opsMonitorApi.stats).mockRejectedValueOnce(
-      new Error('snapshot failed')
-    )
+    getStatus.mockRejectedValueOnce(new Error('snapshot failed'))
     setup()
     await flushPromises()
     expect(state.systemError.value).toBe('snapshot failed')
@@ -115,17 +134,17 @@ describe('useDashboardResources', () => {
   it.each(['success', 'failure'])(
     'ignores a superseded snapshot %s',
     async (outcome) => {
-      const old = deferred<PerformanceStats>()
-      vi.mocked(opsMonitorApi.stats).mockReturnValueOnce(old.promise)
+      const old = deferred<SystemStatus>()
+      getStatus.mockReturnValueOnce(old.promise)
       setup()
       await flushPromises()
-      const firstSignal = vi.mocked(opsMonitorApi.stats).mock.calls[0]![0]!
+      const firstSignal = getStatus.mock.calls[0]![0]!
       await state.loadSystem()
       const current = state.system.value
       expect(firstSignal.aborted).toBe(true)
       if (outcome === 'success') {
         const obsolete = snapshot()
-        obsolete.observability.resources.cpu.percent = 99
+        obsolete.cpu.percent = 99
         old.resolve(obsolete)
       } else old.reject(new Error('obsolete failure'))
       await flushPromises()
@@ -134,31 +153,37 @@ describe('useDashboardResources', () => {
       expect(state.systemLoading.value).toBe(false)
     }
   )
-  it('revokes cached Root metrics, aborts pending reads and stops polling on downgrade', async () => {
-    const pending = deferred<PerformanceStats>()
+  it('drops the previous account snapshot and aborts its read on account switch', async () => {
+    const pending = deferred<SystemStatus>()
     setup()
     await flushPromises()
-    vi.mocked(opsMonitorApi.stats).mockReturnValueOnce(pending.promise)
+    getStatus.mockReturnValueOnce(pending.promise)
     const reading = state.loadSystem()
-    const signal = vi.mocked(opsMonitorApi.stats).mock.calls[1]![0]!
+    const signal = getStatus.mock.calls[1]![0]!
     const auth = useAuthStore()
-    auth.persist({ id: 1, role: 10 } as never)
+    auth.persist({ id: 2, role: 1 } as never)
     await nextTick()
     expect(signal.aborted).toBe(true)
-    expect(state.system.value).toBeNull()
-    expect(state.systemLoading.value).toBe(false)
     pending.resolve(snapshot())
     await reading
-    await vi.advanceTimersByTimeAsync(30_000)
-    expect(state.system.value).toBeNull()
-    expect(opsMonitorApi.stats).toHaveBeenCalledTimes(2)
+    await flushPromises()
+    expect(getStatus).toHaveBeenCalledTimes(3)
   })
-  it('aborts the active snapshot read and disposes polling when the Dashboard unmounts', async () => {
-    const pendingStats = deferred<PerformanceStats>()
-    vi.mocked(opsMonitorApi.stats).mockReturnValue(pendingStats.promise)
+  it('stops reading after sign-out', async () => {
     setup()
     await flushPromises()
-    const systemSignal = vi.mocked(opsMonitorApi.stats).mock.calls[0]![0]!
+    useAuthStore().persist(null)
+    await nextTick()
+    expect(state.system.value).toBeNull()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(getStatus).toHaveBeenCalledTimes(1)
+  })
+  it('aborts the active snapshot read and disposes polling when the Dashboard unmounts', async () => {
+    const pendingStats = deferred<SystemStatus>()
+    getStatus.mockReturnValue(pendingStats.promise)
+    setup()
+    await flushPromises()
+    const systemSignal = getStatus.mock.calls[0]![0]!
     wrapper!.unmount()
     wrapper = undefined
     expect(systemSignal.aborted).toBe(true)
@@ -166,6 +191,6 @@ describe('useDashboardResources', () => {
     await flushPromises()
     await vi.advanceTimersByTimeAsync(30_000)
     expect(state.system.value).toBeNull()
-    expect(opsMonitorApi.stats).toHaveBeenCalledTimes(1)
+    expect(getStatus).toHaveBeenCalledTimes(1)
   })
 })

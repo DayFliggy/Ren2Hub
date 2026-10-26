@@ -480,6 +480,28 @@ export default {
       bandwidth: '应用流量',
       disk: '磁盘',
       successRate: 'API 成功率',
+      successRateWindow: '近 24 小时中转请求成功率',
+      successRateState: {
+        no_requests: '暂无请求',
+        disabled: '未启用',
+        error: '读取失败',
+      },
+      health: {
+        ok: '正常',
+        warning: '告警',
+        critical: '严重',
+        stale: '数据过期',
+        unknown: '未知',
+        error: '读取失败',
+      },
+      scope: {
+        container: '容器',
+        host: '宿主机',
+        filesystem: '缓存目录所在文件系统',
+        unknown: '来源未知',
+        application_http_body: '应用 HTTP 正文',
+      },
+      rateLimited: '刷新过于频繁，请稍后再试',
       version: '系统版本',
     },
     stats: {
