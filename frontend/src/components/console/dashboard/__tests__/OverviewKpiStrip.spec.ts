@@ -96,15 +96,9 @@ describe('OverviewKpiStrip', () => {
     const wrapper = render({
       flow: flowPoints,
       tokenTrend: [trendPoint({ date: '2026-07-25' }), trendPoint()],
-      limits: {
-        enabled: true,
-        window_minutes: 5,
-        total_requests: 300,
-        successful_requests: 250,
-      },
     })
 
-    // Limits describe configuration, so they have no fabricated trend.
+    // The RPM cell has no measured series, so it draws no fabricated trend.
     expect(wrapper.findAllComponents(MiniSparkline)).toHaveLength(4)
   })
 
@@ -117,84 +111,22 @@ describe('OverviewKpiStrip', () => {
     expect(wrapper.findAllComponents(MiniSparkline)).toHaveLength(0)
   })
 
-  it('keeps the real limit window and its two ceilings', () => {
-    const wrapper = render({
-      limits: {
-        enabled: true,
-        window_minutes: 5,
-        total_requests: 300,
-        successful_requests: 250,
-      },
-    })
-    const cell = wrapper.get('[data-kpi-cell="requestLimits"]')
-    expect(cell.text()).toContain('5-minute window')
-    expect(cell.text()).toContain('Total: 300')
-    expect(cell.text()).toContain('Successful: 250')
-    expect(cell.text()).not.toContain('RPM')
+  it('marks the RPM cell as not connected instead of inventing a rate', () => {
+    const cell = render().get('[data-kpi-cell="rpm"]')
+
+    expect(cell.find('.display-number').text()).toBe('--')
+    expect(cell.text()).toContain('Not connected')
+    // No data source is distinct from an unmetered account.
+    expect(cell.text()).not.toContain('Unmetered')
   })
 
-  it('treats nonpositive ceilings as unlimited independently', () => {
-    const cell = render({
-      limits: {
-        enabled: true,
-        window_minutes: 2,
-        total_requests: 0,
-        successful_requests: -1,
-      },
-    }).get('[data-kpi-cell="requestLimits"]')
-    expect(cell.text()).toContain('Total: Unlimited')
-    expect(cell.text()).toContain('Successful: Unlimited')
-  })
+  it('reads 未接入 for the RPM cell in Chinese', async () => {
+    await setLocale('zh-CN')
+    const text = render().get('[data-kpi-cell="rpm"]').text()
+    await setLocale('en')
 
-  it('does not describe disabled limits as an active window', () => {
-    const cell = render({
-      limits: {
-        enabled: false,
-        window_minutes: 5,
-        total_requests: 300,
-        successful_requests: 250,
-      },
-    }).get('[data-kpi-cell="requestLimits"]')
-    expect(cell.text()).toContain('Not enabled')
-    expect(cell.text()).not.toContain('5-minute window')
-    expect(cell.text()).not.toContain('Total:')
-  })
-
-  it.each([0, -1])(
-    'reports an invalid enabled window of %s',
-    (window_minutes) => {
-      const cell = render({
-        limits: {
-          enabled: true,
-          window_minutes,
-          total_requests: 300,
-          successful_requests: 250,
-        },
-      }).get('[data-kpi-cell="requestLimits"]')
-      expect(cell.text()).toContain('Invalid time window')
-      expect(cell.text()).not.toContain('Total:')
-    }
-  )
-
-  it('loads the request limits independently of usage', () => {
-    const wrapper = render({ limitsLoading: true })
-    expect(
-      wrapper
-        .get('[data-kpi-cell="requestLimits"]')
-        .find('.animate-pulse')
-        .exists()
-    ).toBe(true)
-    expect(wrapper.get('[data-kpi-cell="requests"]').text()).toContain('312')
-  })
-
-  it('retries only limits after a supplemental failure', async () => {
-    const wrapper = render({ limitsError: 'settings unavailable' })
-    const cell = wrapper.get('[data-kpi-cell="requestLimits"]')
-    expect(cell.text()).toContain('Failed to load')
-    await cell.get('button').trigger('click')
-    expect(wrapper.emitted('retryLimits')).toEqual([[]])
-    expect(wrapper.emitted('switchTab')).toBeUndefined()
-    expect(wrapper.get('[data-kpi-cell="requests"]').text()).toContain('312')
+    expect(text).toContain('请求限速')
+    expect(text).toContain('未接入')
   })
 
   it("reads today's tokens from the today window when the trend is skipped", () => {
@@ -211,26 +143,6 @@ describe('OverviewKpiStrip', () => {
     expect(
       wrapper.find('[data-kpi-cell="tokens"] .display-number').text()
     ).toBe('4.0M')
-  })
-
-  it('marks the rate-limit cell as not provided when limits are null', () => {
-    const wrapper = render({ limits: null, loading: true })
-    const cell = wrapper.find('[data-kpi-cell="requestLimits"]')
-
-    expect(cell.text()).toContain('Not provided')
-    // A missing response is distinct from unlimited configuration.
-    expect(cell.text()).not.toContain('Unmetered')
-  })
-
-  it('reads 未提供 for null limits in Chinese', async () => {
-    await setLocale('zh-CN')
-    const text = render({ limits: null })
-      .find('[data-kpi-cell="requestLimits"]')
-      .text()
-    await setLocale('en')
-
-    expect(text).toContain('未提供')
-    expect(text).not.toContain('不限速')
   })
 
   it('floors the TPM divisor at one hour so just-after-midnight is not absurd', () => {
@@ -254,14 +166,7 @@ describe('OverviewKpiStrip', () => {
   })
 
   it('only makes the spend and request cells drill down', () => {
-    const wrapper = render({
-      limits: {
-        enabled: true,
-        window_minutes: 5,
-        total_requests: 300,
-        successful_requests: 250,
-      },
-    })
+    const wrapper = render()
 
     const drillDowns = wrapper
       .findAll('[class*="px-5"]')

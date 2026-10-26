@@ -71,7 +71,6 @@ describe('native overview summary', () => {
         )
     ).toBe(true)
     expect(state.tokenTrend.value[0]!.cache_read).toBe(4)
-    expect(state.flushIntervalMinutes.value).toBe(5)
   })
   it('keeps account KPIs and marks only usage-backed values unavailable', async () => {
     const state = setupDashboard()

@@ -738,16 +738,16 @@ test('statistics trend supports the single-series modes', async ({ page }) => {
   await assertInteractiveCentersVisible(page)
 })
 
-test('request limits show their native window without invented throughput', async ({
+test('RPM and discount placeholders stay unconnected instead of invented', async ({
   page,
 }) => {
-  const limits = page.locator(
-    '[data-overview-kpi] [data-kpi-cell="requestLimits"]'
-  )
-  await expect(limits).toContainText(/5.*分钟/)
-  await expect(limits).toContainText('100')
-  await expect(limits).toContainText('80')
-  await expect(page.locator('[data-discount-card]')).toHaveCount(0)
+  const rpm = page.locator('[data-overview-kpi] [data-kpi-cell="rpm"]')
+  await expect(rpm).toContainText('请求限速')
+  await expect(rpm).toContainText('未接入')
+  await expect(rpm.locator('.display-number')).toHaveText('--')
+  const discount = page.locator('[data-discount-card]')
+  await expect(discount).toHaveCount(1)
+  await expect(discount).toContainText('未接入')
   await assertNoHorizontalOverflow(page)
 })
 

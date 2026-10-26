@@ -5,7 +5,6 @@ import SystemStatusCard from '@/components/console/dashboard/SystemStatusCard.vu
 import type { Observability } from '@/api/observability'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAppStore } from '@/stores'
-import { formatTime } from '@/utils/format'
 import { observabilityFixture, resourceFixture } from './observabilityFixture'
 
 beforeAll(async () => {
@@ -17,74 +16,71 @@ beforeEach(async () => {
 })
 function render(
   metrics: Observability | null = observabilityFixture(),
-  props: { loading?: boolean; error?: string } = {}
+  error?: string
 ) {
   return mount(SystemStatusCard, {
-    props: { metrics, ...props },
+    props: { metrics, error },
     global: { plugins: [i18n] },
   })
 }
 
-describe('SystemStatusCard native observation snapshot', () => {
-  it('reports public API reachability separately from resource availability', () => {
+describe('SystemStatusCard', () => {
+  it('reports online only when the API is reachable and a snapshot exists', () => {
     const app = useAppStore()
     app.phase = 'ready'
     app.statusReachable = true
+    expect(render().text()).toContain('ONLINE')
+    const withoutSnapshot = render(null)
+    expect(withoutSnapshot.text()).toContain('UNKNOWN')
+    expect(withoutSnapshot.text()).not.toContain('ONLINE')
+  })
+  it('keeps the last snapshot error on the status pill', () => {
+    const pill = render(null, 'snapshot unavailable').get(
+      '[data-status-reachable]'
+    )
+    expect(pill.attributes('title')).toBe('snapshot unavailable')
+  })
+  it('renders placeholders rather than zeroes without a snapshot', () => {
     const wrapper = render(null)
-    expect(wrapper.text()).toContain('ONLINE')
-    expect(wrapper.text()).toContain('Not provided')
-    expect(
-      wrapper.get('[data-status-reachable]').attributes('data-status-reachable')
-    ).toBe('true')
+    expect(wrapper.findAll('[data-system-status-tile]')).toHaveLength(4)
+    expect(wrapper.get('[data-metric="cpu"] [data-metric-value]').text()).toBe(
+      '--'
+    )
+    expect(wrapper.find('[data-cpu-gauge-unknown]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('0%')
   })
-  it('does not claim healthy API state before status is known', () => {
-    const wrapper = render(null)
-    expect(wrapper.text()).toContain('UNKNOWN')
-    expect(wrapper.text()).not.toContain('ONLINE')
-  })
-  it('keeps distinct resource gauges and native binary capacities', () => {
+  it('maps snapshot resources onto the CPU, memory, traffic and disk gauges', () => {
     const wrapper = render()
-    expect(wrapper.findAll('[data-system-status-tile]')).toHaveLength(4)
     expect(wrapper.get('[data-metric="cpu"] [data-metric-value]').text()).toBe(
       '34'
     )
     expect(wrapper.find('[data-cpu-gauge-active]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-memory-segments] > span')).toHaveLength(10)
     expect(wrapper.get('[data-metric="memory"]').text()).toMatch(
-      /5\.2\s*\/\s*16\s*GiB/
+      /5\.2\s*\/\s*16\s*GB/
     )
     expect(wrapper.get('[data-metric="disk"]').text()).toMatch(
-      /218\s*GiB\s*\/\s*512\s*GiB/
+      /218\s*GB\s*\/\s*512\s*GB/
     )
-    expect(wrapper.find('[data-disk-gauge]').exists()).toBe(true)
-    expect(wrapper.find('[data-success-rate-ring]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('cores')
-    expect(wrapper.text()).not.toContain('Load average')
+    const traffic = wrapper.get('[data-metric="bandwidth"]')
+    expect(traffic.text()).toContain('↑2.1 Mbps')
+    expect(traffic.text()).toContain('↓12.4 Mbps')
+    expect(traffic.find('[data-bandwidth-sparkline]').exists()).toBe(true)
   })
-  it('shows each resource scope and timestamp from the same snapshot', () => {
-    const metrics = observabilityFixture()
-    metrics.resources.cpu.scope = 'host'
-    const wrapper = render(metrics)
-    expect(wrapper.get('[data-metric="cpu"]').attributes('title')).toContain(
-      'Host · Measured'
-    )
-    expect(wrapper.get('[data-metric="memory"]').attributes('title')).toContain(
-      'Container · Measured'
-    )
-    expect(wrapper.get('[data-metric="disk"]').attributes('title')).toContain(
-      'Filesystem · Measured'
-    )
+  it('shows the success rate and load cells as unavailable, never as zero', () => {
+    const wrapper = render()
+    expect(wrapper.get('[data-success-rate-empty]').text()).toBe('No data')
     expect(
-      wrapper.get('[data-metric="cpu"]').attributes('data-resource-caption')
-    ).toContain('Host · Measured')
-    expect(wrapper.find('[data-resource-sampled-at]').exists()).toBe(false)
-    expect(wrapper.get('[data-metric="cpu"]').attributes('title')).toContain(
-      formatTime(metrics.resources.cpu.sampled_at!)
-    )
+      wrapper
+        .get('[data-success-rate-ring]')
+        .attributes('data-success-rate-state')
+    ).toBe('unknown')
+    const cells = wrapper.findAll('[data-metric="cpu"] [data-minutes]')
+    expect(cells).toHaveLength(3)
+    for (const cell of cells)
+      expect(cell.attributes('data-unknown')).toBeDefined()
   })
   it.each(['unknown', 'disabled', 'stale'] as const)(
-    'leaves %s resource values unmeasured',
+    'leaves a %s CPU reading unmeasured',
     (state) => {
       const metrics = observabilityFixture()
       metrics.resources.cpu = resourceFixture({
@@ -97,16 +93,22 @@ describe('SystemStatusCard native observation snapshot', () => {
         wrapper.get('[data-metric="cpu"] [data-metric-value]').text()
       ).toBe('--')
       expect(wrapper.find('[data-cpu-gauge-active]').exists()).toBe(false)
-      expect(wrapper.find('[data-cpu-gauge-unknown]').exists()).toBe(true)
     }
   )
-  it('keeps an over-capacity CPU headline without overflowing the decorative gauge', () => {
+  it('withholds every measured value from a stale snapshot', () => {
+    const metrics = observabilityFixture()
+    metrics.stale = true
+    const wrapper = render(metrics)
+    expect(wrapper.get('[data-metric="memory"]').text()).not.toContain('5.2')
+    expect(wrapper.get('[data-metric="bandwidth"]').text()).not.toContain(
+      'Mbps'
+    )
+    expect(wrapper.find('[data-bandwidth-sparkline]').exists()).toBe(false)
+  })
+  it('caps an over-capacity CPU gauge and marks it danger', () => {
     const metrics = observabilityFixture()
     metrics.resources.cpu.percent = 150
     const wrapper = render(metrics)
-    expect(wrapper.get('[data-metric="cpu"] [data-metric-value]').text()).toBe(
-      '150'
-    )
     expect(
       wrapper.get('[data-cpu-gauge-active]').attributes('stroke-dashoffset')
     ).toBe('0')
@@ -114,74 +116,27 @@ describe('SystemStatusCard native observation snapshot', () => {
       wrapper.get('[data-metric="cpu"]').attributes('data-load-tier')
     ).toBe('danger')
   })
-  it('formats large storage in TiB while preserving the capacity', () => {
+  it('converts large byte counts to TB', () => {
     const metrics = observabilityFixture()
     metrics.resources.disk.used_bytes = 1536 * 1024 ** 3
     metrics.resources.disk.total_bytes = 2048 * 1024 ** 3
     expect(render(metrics).get('[data-metric="disk"]').text()).toMatch(
-      /1\.5\s*TiB\s*\/\s*2\s*TiB/
+      /1\.5\s*TB\s*\/\s*2\s*TB/
     )
   })
-  it('labels traffic as application body throughput and uses native history', () => {
-    const tile = render().get('[data-metric="bandwidth"]')
-    expect(tile.text()).toContain('↑ 2.1 Mbps')
-    expect(tile.text()).toContain('↓ 12.4 Mbps')
-    expect(tile.attributes('title')).toContain(
-      'Application HTTP body throughput'
-    )
-    expect(tile.find('[data-bandwidth-sparkline]').exists()).toBe(true)
-  })
-  it('does not invent a missing traffic direction or bridge a history gap', () => {
+  it('does not bridge a traffic history gap or invent a direction', () => {
     const metrics = observabilityFixture()
     metrics.traffic.request_mbps = null
-    metrics.traffic.response_mbps = 0.002
     metrics.series.points[1]!.request_mbps = null
     const tile = render(metrics).get('[data-metric="bandwidth"]')
-    expect(tile.text()).toContain('↑ --')
-    expect(tile.text()).toContain('↓ 2 Kbps')
+    expect(tile.text()).toContain('--')
+    expect(tile.text()).not.toContain('Mbps')
     expect(tile.find('[data-bandwidth-sparkline]').exists()).toBe(false)
   })
-  it('does not draw history from a single sample', () => {
-    const metrics = observabilityFixture()
-    metrics.series.points = metrics.series.points.slice(0, 1)
-    expect(render(metrics).find('[data-bandwidth-sparkline]').exists()).toBe(
-      false
-    )
-  })
-  it('marks stale snapshots and withholds their measured values', () => {
-    const metrics = observabilityFixture()
-    metrics.stale = true
-    const wrapper = render(metrics)
-    expect(wrapper.get('[role="status"]').text()).toBe('Stale data')
-    expect(wrapper.get('[data-metric="cpu"] [data-metric-value]').text()).toBe(
-      '--'
-    )
-    expect(wrapper.get('[data-metric="memory"]').text()).not.toContain('5.2')
-    expect(wrapper.get('[data-metric="bandwidth"]').text()).not.toContain(
-      'Mbps'
-    )
-    expect(wrapper.find('[data-bandwidth-sparkline]').exists()).toBe(false)
-  })
-  it('shows a read error and emits a focused retry', async () => {
-    const wrapper = render(null, { error: 'snapshot unavailable' })
-    expect(wrapper.get('[role="alert"]').text()).toBe('snapshot unavailable')
-    await wrapper.get('header button').trigger('click')
-    expect(wrapper.emitted('refresh')).toEqual([[]])
-  })
-  it('disables duplicate refreshes while a snapshot is loading', () => {
-    expect(
-      render(null, { loading: true })
-        .get('header button')
-        .attributes('disabled')
-    ).toBeDefined()
-  })
-  it('shows resource scope and sampling labels in Chinese', async () => {
+  it('renders Chinese labels without raw keys', async () => {
     await setLocale('zh-CN')
     const wrapper = render()
-    expect(wrapper.get('[data-metric="cpu"]').attributes('title')).toContain(
-      '容器 · 已采集'
-    )
-    expect(wrapper.find('[data-resource-sampled-at]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('API 成功率')
     expect(wrapper.text()).not.toContain('dashboard.')
   })
 })

@@ -7,20 +7,18 @@ beforeAll(async () => {
   await loadMessageDomain('console')
   setLocale('en')
 })
-it('states the quota_data flush lag without inferring a cache hit rate', () => {
+it('reads the average hit rate as a placeholder instead of inferring one', () => {
   const wrapper = mount(TokenTrendCard, {
     props: {
       points: [
         { date: '2026-10-18', total: 150, cache_create: 0, cache_read: 25 },
       ],
-      flushIntervalMinutes: 5,
     },
     global: { plugins: [i18n] },
   })
-  expect(wrapper.get('[data-cache-coverage]').attributes('title')).toContain(
-    'written every 5 minutes, so the latest hour may be incomplete'
-  )
-  expect(wrapper.text()).not.toContain('Cross-protocol hit rate')
+  expect(wrapper.text()).toContain('Avg hit')
+  // quota_data has no input/output split, so no rate can be derived from it.
+  expect(wrapper.get('[data-avg-hit-rate]').text()).toBe('--')
   expect(wrapper.text()).not.toContain('%')
   wrapper.unmount()
 })

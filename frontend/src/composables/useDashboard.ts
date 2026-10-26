@@ -24,6 +24,12 @@ export interface DashboardStats {
   total_requests: number
 }
 
+/** No backend source exists yet; the discount card renders 未接入 for null. */
+export interface UserDiscounts {
+  global_ratio: number // platform-wide pricing multiplier, e.g. 0.88
+  effective_ratio: number // effective pricing multiplier
+}
+
 export interface ModelShare {
   model: string
   ratio: number
@@ -66,7 +72,6 @@ export function useDashboard() {
     share = ref<ModelShare[]>([]),
     flow = ref<FlowPoint[]>([]),
     tokenTrend = ref<TokenTrendPoint[]>([]),
-    flushIntervalMinutes = ref<number | null>(null),
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
   const usageUnavailable = ref(false)
@@ -77,7 +82,6 @@ export function useDashboard() {
     share.value = []
     flow.value = []
     tokenTrend.value = []
-    flushIntervalMinutes.value = null
     recentOutOfRange.value = null
     usageUnavailable.value = false
     const result = await request.run(async (signal) => {
@@ -126,8 +130,6 @@ export function useDashboard() {
         : {}),
       ...(month?.meta.available ? { month_quota: month.kpi.totalQuota } : {}),
     }
-    // The flush interval is a server setting, the same in every window.
-    flushIntervalMinutes.value = today.meta.flush_interval_minutes
     if (!recent) {
       recentOutOfRange.value = t('dashboard.stats.recentOutOfRange', {
         days: limit,
@@ -151,7 +153,6 @@ export function useDashboard() {
     share,
     flow,
     tokenTrend,
-    flushIntervalMinutes,
     recentOutOfRange,
     usageUnavailable,
     error,

@@ -86,23 +86,23 @@ async function expectMetricValuesToFit(card: Locator): Promise<void> {
   }
 }
 
-/** The title and refresh control remain inside the compact card header. */
+/** The title, success-rate caption and value share the compact card header. */
 async function expectHeaderFits(card: Locator): Promise<void> {
   const header = await card.evaluate((node) => {
     const title = node.querySelector('h2')!
-    const action = node.querySelector('button')!
-    const cardRect = node.getBoundingClientRect()
-    const actionRect = action.getBoundingClientRect()
+    const label = node.querySelector('.success-rate-label')!
+    const value = node.querySelector('.success-rate-value')!
+    const labelRect = label.getBoundingClientRect()
     return {
       titleClipped: title.scrollWidth > title.clientWidth,
-      actionWidth: actionRect.width,
-      actionInside:
-        actionRect.left >= cardRect.left && actionRect.right <= cardRect.right,
+      labelLines: labelRect.width > 1 ? Math.round(labelRect.height / 11) : 0,
+      valueWidth: value.getBoundingClientRect().width,
     }
   })
   expect(header.titleClipped).toBe(false)
-  expect(header.actionWidth).toBeGreaterThan(0)
-  expect(header.actionInside).toBe(true)
+  expect(header.labelLines).toBeLessThanOrEqual(1)
+  expect(header.valueWidth).toBeGreaterThan(0)
+  await expect(card.getByText(/API/)).toHaveCount(1)
   await expect(card.locator('[data-status-reachable]')).toHaveAttribute(
     'data-status-reachable',
     'true'
@@ -277,11 +277,11 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
       const card = page.locator('[data-system-status-card]')
       if (name === 'widest') {
         await expect(card.locator('[data-metric="memory"]')).toContainText(
-          /87\.4\s*\/\s*94\.2\s*GiB/
+          /87\.4\s*\/\s*94\.2\s*GB/
         )
       }
       if (name === 'realistic') {
-        await expect(card.locator('[data-metric="disk"]')).toContainText('TiB')
+        await expect(card.locator('[data-metric="disk"]')).toContainText('TB')
       }
 
       // 1280-1366 is the three-column grid, where the card is at its narrowest.

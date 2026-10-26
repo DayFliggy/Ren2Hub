@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Info } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import { useEChart } from '@/charts/useEChart'
@@ -13,8 +12,6 @@ import { escapeHtml } from '@/utils/html'
 
 const props = defineProps<{
   points: TokenTrendPoint[]
-  /** quota_data flush interval; null until a summary has loaded. */
-  flushIntervalMinutes?: number | null
   loading?: boolean
   /** Why the trend window was not queried; replaces the chart when set. */
   unavailableReason?: string | null
@@ -22,13 +19,6 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
-const cacheCoverageText = computed(() =>
-  props.flushIntervalMinutes == null
-    ? t('dashboard.tokenTrend.cacheUnknown')
-    : t('dashboard.tokenTrend.cacheCoverage', {
-        minutes: props.flushIntervalMinutes,
-      })
-)
 
 function defaultPoints(days = 30): TokenTrendPoint[] {
   const now = new Date()
@@ -65,24 +55,26 @@ useEChart(
   (p, scale = 1) => {
     const mood = lineMood(p)
     const dates = displayPoints.value.map((d) => d.date)
-    // quota_data records total and cache tokens only; there is no input/output
-    // split or hit rate to plot.
+    const labels = {
+      input: t('dashboard.tokenTrend.input'),
+      output: t('dashboard.tokenTrend.output'),
+      cacheCreate: t('dashboard.tokenTrend.cacheCreate'),
+      cacheRead: t('dashboard.tokenTrend.cacheRead'),
+      hitRate: t('dashboard.tokenTrend.hitRate'),
+    }
+
+    // Token series share the left axis; the hit-rate percentage gets its own.
+    // quota_data records total and cache tokens only, so the input / output
+    // split and the hit rate have no source and their series stay empty.
     const tokenSeries = [
+      { name: labels.input, key: null, color: p.signal },
+      { name: labels.output, key: null, color: p.success },
       {
-        name: t('dashboard.stats.totalTokens'),
-        key: 'total' as const,
-        color: p.signal,
-      },
-      {
-        name: t('dashboard.tokenTrend.cacheCreate'),
+        name: labels.cacheCreate,
         key: 'cache_create' as const,
         color: p.warning,
       },
-      {
-        name: t('dashboard.tokenTrend.cacheRead'),
-        key: 'cache_read' as const,
-        color: p.accent,
-      },
+      { name: labels.cacheRead, key: 'cache_read' as const, color: p.accent },
     ].map((s) => ({
       name: s.name,
       type: 'line' as const,
@@ -91,7 +83,7 @@ useEChart(
       symbol: mood.line.symbol,
       symbolSize: mood.line.symbolSize * scale,
       yAxisIndex: 0,
-      data: displayPoints.value.map((d) => d[s.key]),
+      data: displayPoints.value.map((d) => (s.key ? d[s.key] : null)),
       lineStyle: {
         color: s.color,
         ...mood.line.lineStyle,
@@ -140,7 +132,12 @@ useEChart(
           if (!params.length) return ''
           const rows = params
             .map((s) => {
-              const value = s.value === null ? '—' : formatCompact(s.value)
+              const value =
+                s.value === null
+                  ? '--'
+                  : s.seriesName === labels.hitRate
+                    ? `${s.value}%`
+                    : formatCompact(s.value)
               return `<div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.1875rem">
                 <span style="width:0.5rem;height:0.5rem;border-radius:0.125rem;background:${s.color}"></span>
                 <span style="color:${p.textSecondary}">${escapeHtml(s.seriesName)}:</span>
@@ -166,17 +163,53 @@ useEChart(
           interval: Math.max(0, Math.floor(dates.length / 5) - 1),
         },
       },
-      yAxis: {
-        type: 'value',
-        minInterval: 1,
-        splitLine: mood.splitLine,
-        axisLabel: {
-          color: p.textTertiary,
-          fontSize: 9 * scale,
-          formatter: (v: number) => formatCompact(v),
+      yAxis: [
+        {
+          type: 'value',
+          minInterval: 1,
+          splitLine: mood.splitLine,
+          axisLabel: {
+            color: p.textTertiary,
+            fontSize: 9 * scale,
+            formatter: (v: number) => formatCompact(v),
+          },
         },
-      },
-      series: tokenSeries,
+        {
+          type: 'value',
+          min: 0,
+          max: 100,
+          splitLine: { show: false },
+          axisLabel: {
+            color: p.support,
+            fontSize: 9 * scale,
+            formatter: (v: number) => `${v}%`,
+          },
+        },
+      ],
+      series: [
+        ...tokenSeries,
+        {
+          name: labels.hitRate,
+          type: 'line',
+          smooth: mood.line.smooth,
+          yAxisIndex: 1,
+          showSymbol: !p.isDark,
+          symbol: mood.line.symbol,
+          symbolSize: mood.line.symbolSize * scale,
+          data: displayPoints.value.map(() => null),
+          lineStyle: {
+            color: p.support,
+            ...mood.line.lineStyle,
+            width: mood.line.lineStyle.width * scale,
+            type: p.isDark ? 'solid' : 'dashed',
+          },
+          itemStyle: {
+            color: p.surfaceSolid,
+            borderColor: p.support,
+            borderWidth: 2 * scale,
+          },
+        },
+      ],
     }
   },
   () => displayPoints.value
@@ -190,17 +223,16 @@ useEChart(
     data-token-trend-card
   >
     <template #action>
-      <span
-        class="inline-flex text-[var(--text-tertiary)]"
-        role="note"
-        tabindex="0"
-        :aria-label="cacheCoverageText"
-        :title="cacheCoverageText"
-        data-cache-coverage
-      >
-        <Info :size="14" aria-hidden="true" />
-      </span>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="text-[var(--text-tertiary)]">
+          {{ t('dashboard.tokenTrend.avgHitRate') }}
+          <span class="font-semibold text-[var(--support)]" data-avg-hit-rate
+            >--</span
+          >
+        </span>
+      </div>
     </template>
+
     <div
       v-if="loading"
       class="h-[11.875rem] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[12.25rem]"

@@ -4,7 +4,6 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
-import type { RequestLimits } from '@/api/dashboardResources'
 import { kpiDividerClasses } from '@/components/console/dashboard/kpiDividers'
 import { useBalanceVisibility } from '@/composables/useDashboard'
 import type {
@@ -18,13 +17,10 @@ const props = defineProps<{
   stats: DashboardStats | null
   flow?: FlowPoint[]
   tokenTrend?: TokenTrendPoint[]
-  limits?: RequestLimits | null
-  limitsLoading?: boolean
-  limitsError?: string | null
   loading?: boolean
 }>()
 
-const emit = defineEmits<{ switchTab: [tab: string]; retryLimits: [] }>()
+const emit = defineEmits<{ switchTab: [tab: string] }>()
 
 const { t } = useI18n()
 const { hidden } = useBalanceVisibility()
@@ -50,7 +46,8 @@ function minutesElapsedToday(): number {
 
 /**
  * Tokens per minute for each day in the window. Past days divide by a full day;
- * today divides by the elapsed minutes, like the headline figure.
+ * today divides by the elapsed minutes, so the last point of the sparkline is
+ * exactly the headline figure rather than a differently-derived number.
  */
 const tpmSeries = computed(() =>
   tokenWindow.value.map((point, i, all) => {
@@ -75,10 +72,9 @@ interface Cell {
   icon: string
   value: string
   color: string
-  textColor?: string
   /** widens the loading skeleton to roughly match the real value */
   skeleton: string
-  /** A sparkline is only shown for measured time series. */
+  /** trend series; the RPM cell uses a ring instead */
   series?: number[]
   /** cells with a drill-down target render as buttons */
   drillDown?: boolean
@@ -91,11 +87,9 @@ const cells = computed<Cell[]>(() => [
     icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
     value: hidden.value
       ? '••••'
-      : props.stats
-        ? props.stats.today_quota !== undefined
-          ? formatQuota(props.stats.today_quota)
-          : '—'
-        : '—',
+      : props.stats?.today_quota !== undefined
+        ? formatQuota(props.stats.today_quota)
+        : '--',
     color: 'var(--accent-text)',
     skeleton: 'w-24',
     series: flowWindow.value.map((f) => quotaForChart(f.consume)),
@@ -113,9 +107,8 @@ const cells = computed<Cell[]>(() => [
         ? formatNumber(props.stats.today_requests)
         : props.stats
           ? formatNumber(props.stats.total_requests)
-          : '—',
+          : '--',
     color: 'var(--signal)',
-    textColor: 'var(--signal-text)',
     skeleton: 'w-20',
     series: flowWindow.value.map((f) => f.requests),
     drillDown: true,
@@ -127,16 +120,17 @@ const cells = computed<Cell[]>(() => [
     value:
       props.stats?.today_tokens !== undefined
         ? formatCompact(props.stats.today_tokens)
-        : '—',
+        : '--',
     color: 'var(--text-primary)',
     skeleton: 'w-20',
     series: tokenWindow.value.map(pointTotal),
   },
   {
-    key: 'requestLimits',
-    label: t('dashboard.requestLimits.title'),
+    key: 'rpm',
+    label: t('dashboard.rpm.label'),
     icon: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
-    value: limitsHeadline.value,
+    // No endpoint reports current throughput against a ceiling.
+    value: '--',
     color: 'var(--text-primary)',
     skeleton: 'w-16',
   },
@@ -144,32 +138,12 @@ const cells = computed<Cell[]>(() => [
     key: 'tpm',
     label: t('dashboard.statAvgTpm'),
     icon: 'M13 2 3 14h7l-1 8 10-12h-7l1-8Z',
-    value: avgTpm.value === null ? '—' : formatCompact(avgTpm.value),
+    value: avgTpm.value === null ? '--' : formatCompact(avgTpm.value),
     color: 'var(--support)',
-    textColor: 'var(--support-text)',
     skeleton: 'w-16',
     series: tpmSeries.value,
   },
 ])
-
-const limitsValid = computed(() =>
-  Boolean(props.limits?.enabled && props.limits.window_minutes > 0)
-)
-const limitsHeadline = computed(() => {
-  if (props.limitsError) return t('common.loadFailed')
-  if (!props.limits) return t('dashboard.notProvided')
-  if (!props.limits.enabled) return t('dashboard.requestLimits.disabled')
-  if (props.limits.window_minutes <= 0)
-    return t('dashboard.requestLimits.invalidWindow')
-  return t('dashboard.requestLimits.window', {
-    minutes: props.limits.window_minutes,
-  })
-})
-function ceiling(value: number): string {
-  return value <= 0
-    ? t('dashboard.requestLimits.unlimited')
-    : formatNumber(value)
-}
 </script>
 
 <template>
@@ -181,8 +155,8 @@ function ceiling(value: number): string {
     <!--
       Divided strip: hairline separators between cells rather than gaps, so the
       five figures read as one summary row. Every cell is label / figure / mini
-      visual where a measured series exists. Request limits retain their native
-      window and do not claim to measure current throughput.
+      visual — a sparkline where the data is a series, a ring for RPM where it is
+      a share of a ceiling.
     -->
     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
       <component
@@ -226,53 +200,26 @@ function ceiling(value: number): string {
             </p>
 
             <p
-              v-if="cell.key === 'requestLimits' ? limitsLoading : loading"
+              v-if="loading"
               class="mt-1.5 h-7 animate-pulse rounded-sm bg-[var(--surface-muted)]"
               :class="cell.skeleton"
             />
             <p
               v-else
-              class="display-number mt-1 leading-tight tabular-nums tracking-tight"
-              :class="
-                cell.key === 'requestLimits'
-                  ? 'text-base break-words'
-                  : 'truncate text-2xl'
-              "
-              :style="{ color: cell.textColor ?? cell.color }"
+              class="display-number mt-1 truncate text-2xl leading-tight tabular-nums tracking-tight"
+              :style="{ color: cell.color }"
             >
               {{ cell.value }}
             </p>
           </div>
 
           <div
-            v-if="cell.key === 'requestLimits'"
-            class="mt-2 min-w-0 text-xs text-[var(--text-tertiary)]"
+            v-if="cell.key === 'rpm'"
+            class="mt-2 flex h-[1.875rem] min-w-0 items-center gap-2 overflow-hidden"
           >
-            <button
-              v-if="limitsError"
-              type="button"
-              class="underline underline-offset-2 hover:text-[var(--text-primary)]"
-              :title="limitsError"
-              @click="emit('retryLimits')"
-            >
-              {{ t('common.retry') }}
-            </button>
-            <template v-else-if="!limitsLoading && limitsValid && limits">
-              <p>
-                {{
-                  t('dashboard.requestLimits.total', {
-                    count: ceiling(limits.total_requests),
-                  })
-                }}
-              </p>
-              <p class="mt-1">
-                {{
-                  t('dashboard.requestLimits.successful', {
-                    count: ceiling(limits.successful_requests),
-                  })
-                }}
-              </p>
-            </template>
+            <span class="truncate text-xs text-[var(--text-tertiary)]">
+              {{ t('dashboard.rpm.notConnected') }}
+            </span>
           </div>
           <div
             v-else
