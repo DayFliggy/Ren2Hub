@@ -201,6 +201,30 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
   await assertNoHorizontalOverflow(page)
 })
 
+// Wide cards split the month stage between a growing calendar and its
+// analytics column instead of opening a dead gap before the divider.
+for (const width of [1920, 2560, 3840]) {
+  test(`month calendar shares the wide stage at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1440 })
+    const card = page.locator('[data-usage-distribution]')
+    await periodOption(card, 'month').click()
+    const layout = await card.evaluate((element) => {
+      const rect = (selector: string) =>
+        element.querySelector(selector)!.getBoundingClientRect()
+      return {
+        gap:
+          rect('[data-usage-analytics]').left -
+          rect('.usage-month-calendar').right,
+        stage: rect('[data-usage-stage]').width,
+      }
+    })
+    expect(layout.gap, JSON.stringify(layout)).toBeLessThan(layout.stage * 0.08)
+    await expectStableOverviewRow(page)
+  })
+}
+
 function quarterGeometry(card: Locator) {
   return card.evaluate((element) => {
     const cells = [...element.querySelectorAll('.usage-dense-cell')].map(

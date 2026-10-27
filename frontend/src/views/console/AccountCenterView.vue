@@ -89,7 +89,7 @@ const accountStats = computed(() => [
 
 <template>
   <div
-    class="sibling-space-y-8 lg:sibling-space-y-10"
+    class="mx-auto max-w-[var(--console-form-width)] sibling-space-y-8 lg:sibling-space-y-10"
     data-handdrawn-page="profile"
   >
     <PageHero

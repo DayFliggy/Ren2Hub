@@ -272,8 +272,8 @@ onBeforeUnmount(() => controller?.abort())
   </PublicPage>
 </template>
 <style scoped>
-/* Search spans the row on narrow screens; the three filters share one line
-   from 640px and sit beside the search box from 1024px. */
+/* Search spans the row below 1280px; the four filters pair up from 640px,
+   share one line from 1024px and sit beside the search box from 1280px. */
 .public-pricing-filters {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -283,7 +283,7 @@ onBeforeUnmount(() => controller?.abort())
 }
 @media (min-width: 640px) {
   .public-pricing-filters {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .public-pricing-search {
     grid-column: 1 / -1;
@@ -291,7 +291,12 @@ onBeforeUnmount(() => controller?.abort())
 }
 @media (min-width: 1024px) {
   .public-pricing-filters {
-    grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .public-pricing-filters {
+    grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr));
   }
   .public-pricing-search {
     grid-column: auto;
@@ -299,7 +304,9 @@ onBeforeUnmount(() => controller?.abort())
 }
 .public-pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  /* auto-fill keeps empty tracks, so one or two models keep the card width
+     instead of stretching across the page. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
   gap: 1rem;
 }
 .public-pricing-card {

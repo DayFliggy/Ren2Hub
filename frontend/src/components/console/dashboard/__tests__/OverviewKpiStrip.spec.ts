@@ -70,6 +70,10 @@ function render(props: Record<string, unknown> = {}) {
 
 describe('OverviewKpiStrip', () => {
   it('shows five cells and no month-over-month figures', () => {
+    // The TPM cell divides by minutes elapsed today; a fixed clock keeps its
+    // value (6.7K) from containing the absent delta digits at some hours.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 26, 10, 0))
     const wrapper = render()
 
     expect(wrapper.findAll('[class*="px-5"]')).toHaveLength(5)

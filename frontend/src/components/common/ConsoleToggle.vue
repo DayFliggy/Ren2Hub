@@ -58,7 +58,9 @@ function toggle(event: MouseEvent) {
       ]"
       :style="{
         transform: model
-          ? `translateX(${size === 'sm' ? '16px' : '20px'})`
+          ? // Track width - thumb width - both 2px insets, in rem like the
+            // track so the travel stays symmetric as the console root grows.
+            `translateX(${size === 'sm' ? 'calc(1.25rem - 4px)' : 'calc(1.5rem - 4px)'})`
           : 'translateX(0)',
       }"
     >

@@ -319,7 +319,7 @@ watch(
                       :style="{ background: swatchColor(i) }"
                     />
                     <span
-                      class="min-w-0 max-w-[120px] truncate font-mono text-xs font-medium text-[var(--text-primary)] sm:max-w-[160px]"
+                      class="min-w-0 max-w-[7.5rem] truncate font-mono text-xs font-medium text-[var(--text-primary)] sm:max-w-[10rem] min-[1800px]:max-w-[15rem]"
                       :title="m.model"
                     >
                       {{ m.model }}

@@ -661,8 +661,15 @@ onMounted(() => void alignLatest())
 }
 
 @media (min-width: 640px) {
+  /* Month cells widen with the stage (its query container) so a wide card
+     splits between calendar and analytics instead of opening a gap. Height
+     stays fixed: every period shares one stage height. */
   .usage-heatmap {
-    --usage-calendar-width: 2.625rem;
+    --usage-calendar-width: clamp(
+      2.625rem,
+      (42cqi - 6 * var(--usage-calendar-column-gap)) / 7,
+      3.375rem
+    );
     --usage-calendar-column-gap: 0.3125rem;
     min-height: 0;
   }
@@ -696,7 +703,7 @@ onMounted(() => void alignLatest())
 
 /* Touch targets keep their own grid space. Pan through the weeks instead of
    shrinking targets or allowing enlarged hit areas to cover neighbouring days. */
-@media (max-width: 639px), (any-pointer: coarse) {
+@media (max-width: 639px), (pointer: coarse) {
   .usage-heatmap {
     min-height: 14.3125rem;
   }

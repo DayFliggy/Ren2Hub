@@ -331,6 +331,8 @@ function remove(index: number) {
   align-items: stretch;
 }
 .settings-boolean-row {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

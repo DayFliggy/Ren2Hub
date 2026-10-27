@@ -25,6 +25,13 @@ defineProps<{ title: string }>()
 </template>
 
 <style scoped>
+/* Past 1920px the navbar and page body widen together from the 80rem
+   reference so the content does not sit in a narrow centre strip. */
+@media (min-width: 1920px) {
+  .public-page :deep(.site-container) {
+    max-width: 100rem;
+  }
+}
 .public-page :deep(a:focus-visible) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 3px;

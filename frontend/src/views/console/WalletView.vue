@@ -205,7 +205,7 @@ onBeforeUnmount(() => statusController?.abort())
 </script>
 
 <template>
-  <div>
+  <div class="mx-auto max-w-[var(--console-form-width)]">
     <PageHero
       :title="t('wallet.title')"
       :title-accent="t('wallet.titleAccent')"

@@ -480,6 +480,11 @@ onMounted(() => load())
 .settings-fields-grid > :deep(.settings-field-toggle) {
   grid-column: 1 / -1;
 }
+/* A full-row toggle keeps its label, switch and hint within the first column,
+   so the switch lines up with the inputs instead of the far card edge. */
+.settings-fields-grid > :deep(.settings-field-toggle) > * {
+  max-width: calc((100% - 1.5rem) / 2);
+}
 .settings-fields-grid > :deep(.settings-field-control) {
   min-width: 0;
 }
@@ -560,6 +565,9 @@ onMounted(() => load())
   }
   .settings-fields-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-fields-grid > :deep(.settings-field-toggle) > * {
+    max-width: none;
   }
 }
 </style>

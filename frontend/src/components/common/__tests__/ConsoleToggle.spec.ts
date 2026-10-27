@@ -34,7 +34,9 @@ describe('ConsoleToggle', () => {
 
     const thumb = wrapper.get('.console-toggle-thumb')
     expect(thumb.classes()).toContain('thumb-checked')
-    expect(thumb.attributes('style')).toContain('translateX(20px)')
+    expect(thumb.attributes('style')).toContain(
+      'translateX(calc(1.5rem - 4px))'
+    )
   })
 
   it('toggles value on click and emits update:modelValue', async () => {
@@ -57,7 +59,9 @@ describe('ConsoleToggle', () => {
     expect(button.attributes('data-size')).toBe('sm')
 
     const thumb = wrapper.get('.console-toggle-thumb')
-    expect(thumb.attributes('style')).toContain('translateX(16px)')
+    expect(thumb.attributes('style')).toContain(
+      'translateX(calc(1.25rem - 4px))'
+    )
   })
 
   it('prevents toggling when disabled', async () => {

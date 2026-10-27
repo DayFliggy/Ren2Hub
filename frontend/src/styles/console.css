@@ -9,6 +9,9 @@ html[data-console-layout] {
   --console-page-width: clamp(1200px, calc(50vw + 480px), 1760px);
   --console-wide-width: clamp(1400px, calc(60vw + 536px), 2080px);
   --console-list-width: clamp(1276px, calc(72vw + 239.2px), 2080px);
+  /* Form pages (profile, wallet) stop widening where their fields would
+     stretch past a comfortable reading span. */
+  --console-form-width: min(var(--console-page-width), 1440px);
 }
 
 /* A wide but short window must retain room for rows and dialog contents. */

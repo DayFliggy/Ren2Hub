@@ -1563,6 +1563,24 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
   letter-spacing: 0.01em;
   text-shadow: 0 1px 12px var(--console-glow);
 }
+/* Large, tall displays grow the Hero type, so the rail's px-sized telemetry
+   scales with it. zoom also multiplies vh, so the viewport-derived offsets are
+   divided back and the rail keeps its on-screen top and bottom edges. */
+@media (min-width: 1800px) and (min-height: 1000px) {
+  .landing-shell .signal-console {
+    --signal-zoom: 1.25;
+    zoom: var(--signal-zoom);
+    top: calc(var(--signal-top) / var(--signal-zoom));
+    height: calc(
+      (100vh - var(--signal-top) - var(--signal-bottom)) / var(--signal-zoom)
+    );
+  }
+}
+@media (min-width: 2400px) and (min-height: 1300px) {
+  .landing-shell .signal-console {
+    --signal-zoom: 1.5;
+  }
+}
 .landing-shell .signal-console__rail {
   position: absolute;
   top: -8px;

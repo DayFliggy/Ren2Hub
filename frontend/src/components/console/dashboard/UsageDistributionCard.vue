@@ -82,8 +82,11 @@ const stageColumns = computed(() => {
 const analyticsClasses = computed(() => {
   if (period.value === 'year') return 'sm:gap-6 sm:pt-1'
   // Month and quarter both end flush with the card's right edge; surplus
-  // width opens before the divider, never after it.
-  return 'sm:flex sm:w-full sm:max-w-[22rem] sm:flex-col sm:justify-center sm:justify-self-end sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0'
+  // width opens before the divider, never after it. The month calendar grows
+  // with wide cards, so its analytics column may widen to meet it.
+  const maxWidth =
+    period.value === 'month' ? 'sm:max-w-[30rem]' : 'sm:max-w-[22rem]'
+  return `sm:flex sm:w-full ${maxWidth} sm:flex-col sm:justify-center sm:justify-self-end sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0`
 })
 const metricLabel = computed(
   () =>
@@ -279,12 +282,16 @@ const topDaySummary = computed(() => {
 @media (min-width: 640px) {
   .usage-stage {
     min-height: 10.625rem;
+    /* The month calendar sizes its cells from the stage width. */
+    container-type: inline-size;
   }
 }
 
 /* Touch year cells need seven 24px rows plus the analytics band. Reserve the
-   same space for every period so switching does not move the cards below. */
-@media (min-width: 640px) and (any-pointer: coarse) {
+   same space for every period so switching does not move the cards below.
+   Only a primary touch pointer counts: touchscreen laptops driven by a mouse
+   keep the compact desktop stage. */
+@media (min-width: 640px) and (pointer: coarse) {
   .usage-stage {
     min-height: 18rem;
   }
