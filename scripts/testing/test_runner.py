@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import candidate
 from run import environment, go_result, playwright_cases, playwright_result, ui_contracts
 
 
@@ -125,6 +126,33 @@ class RunnerContractTests(unittest.TestCase):
         self.assertEqual(actual['GOFLAGS'], '-mod=readonly')
         self.assertEqual(actual['GOENV'], 'off')
         self.assertEqual(actual['GOWORK'], 'off')
+
+    def test_candidate_rejects_missing_sdk_runtime_before_any_container(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            python = root / 'python3'
+            python.write_text('#!/bin/sh\n')
+            python.chmod(0o700)
+            module = root / 'openai'
+            module.mkdir()
+            runner = candidate.Candidate.__new__(candidate.Candidate)
+            runner.source = root
+            runner.docker = lambda *argv, **kwargs: self.fail('docker called before SDK preflight')
+            cases = (
+                ({'GATEWAY_SDK_PYTHON': str(root / 'missing')}, 'explicit_sdk_python_runtime_required'),
+                ({'GATEWAY_SDK_PYTHON': str(python), 'GATEWAY_SDK_NODE': 'node'}, 'explicit_sdk_node_runtime_required'),
+                ({'GATEWAY_SDK_PYTHON': str(python), 'GATEWAY_SDK_NODE': str(python),
+                  'GATEWAY_SDK_NODE_MODULE': str(module)}, 'explicit_sdk_node_module_required'),
+            )
+            for env, code in cases:
+                with self.subTest(code=code), patch.dict('os.environ', env, clear=True), \
+                        self.assertRaisesRegex(candidate.CandidateError, code):
+                    runner.prepare()
+            (module / 'package.json').write_text('{}')
+            env = {'GATEWAY_SDK_PYTHON': str(python), 'GATEWAY_SDK_NODE': str(python), 'GATEWAY_SDK_NODE_MODULE': str(module)}
+            with patch.dict('os.environ', env, clear=True):
+                runner.sdk_runtimes()
+            self.assertEqual(runner.sdk_environment, env)
 
 
 if __name__ == '__main__':

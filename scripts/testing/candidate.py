@@ -174,7 +174,22 @@ class Candidate:
         os.chmod(certificate, 0o600)
         return certificate
 
+    def sdk_runtimes(self):
+        """在启动任何容器前确认 SDK 运行时可用，避免前六个阶段跑完才在 sdk 阶段失败。"""
+        environment = {key: os.environ[key] for key in ('GATEWAY_SDK_PYTHON', 'GATEWAY_SDK_NODE', 'GATEWAY_SDK_NODE_MODULE')
+                       if os.environ.get(key)}
+        environment.setdefault('GATEWAY_SDK_PYTHON', str(self.source / '.test-tools/sdk-python/bin/python3'))
+        environment.setdefault('GATEWAY_SDK_NODE', shutil.which('node') or '/usr/bin/node')
+        environment.setdefault('GATEWAY_SDK_NODE_MODULE', str(self.source / '.test-tools/sdk-node/node_modules/openai'))
+        for language in ('python', 'node'):
+            executable = Path(environment['GATEWAY_SDK_' + language.upper()])
+            require(executable.is_absolute() and os.access(executable, os.X_OK), 'explicit_sdk_' + language + '_runtime_required')
+        module = Path(environment['GATEWAY_SDK_NODE_MODULE'])
+        require(module.is_absolute() and (module / 'package.json').is_file(), 'explicit_sdk_node_module_required')
+        self.sdk_environment = environment
+
     def prepare(self):
+        self.sdk_runtimes()
         image = json.loads(self.docker('image', 'inspect', self.image).stdout)[0]
         labels = image['Config'].get('Labels') or {}
         revision = labels.get('org.opencontainers.image.revision', '')
@@ -317,12 +332,7 @@ class Candidate:
         configuration = {'private': str(self.private), 'output': str(self.output), 'stage': stage, 'revision': self.revision}
         environment = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'PYTHONDONTWRITEBYTECODE': '1',
                        'PYTHONPATH': str(Path(__file__).parent), 'LANG': 'C.UTF-8'}
-        for key in ('GATEWAY_SDK_PYTHON', 'GATEWAY_SDK_NODE', 'GATEWAY_SDK_NODE_MODULE'):
-            if os.environ.get(key):
-                environment[key] = os.environ[key]
-        environment.setdefault('GATEWAY_SDK_PYTHON', str(self.source / '.test-tools/sdk-python/bin/python3'))
-        environment.setdefault('GATEWAY_SDK_NODE', shutil.which('node') or '/usr/bin/node')
-        environment.setdefault('GATEWAY_SDK_NODE_MODULE', str(self.source / '.test-tools/sdk-node/node_modules/openai'))
+        environment.update(self.sdk_environment)
         command = ['sudo', '-n', 'nsenter', '--target', str(mock['State']['Pid']), '--net',
                    '--setuid', str(os.getuid()), '--setgid', str(os.getgid()), 'env', '-i',
                    *[key + '=' + value for key, value in environment.items()], sys.executable, '-B', '-c',
@@ -360,6 +370,7 @@ class Candidate:
                     'reports': reports, 'source_worktree': self.report['source'], 'identity_verification': self.report['identity_verification'],
                     'image_matches_clean_source': self.report.get('image_matches_clean_source', False)}
         private_write(self.output / 'candidate-manifest.json', manifest)
+        self.report['deployment_eligible'] = deployable
 
     def cleanup(self):
         errors = []
@@ -428,7 +439,9 @@ def main():
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}
-    print(json.dumps({'success': report['success'], 'error_code': report.get('error_code'),
+    # success 只表示候选阶段通过；正式更新另需 deployment_eligible（干净源码、匹配镜像与 gitlink）。
+    print(json.dumps({'success': report['success'], 'deployment_eligible': report.get('deployment_eligible', False),
+                      'error_code': report.get('error_code'),
                       'report': str(args.output / 'candidate.json')}, ensure_ascii=False))
     return 0 if report['success'] else 1
 
