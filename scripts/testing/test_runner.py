@@ -153,6 +153,10 @@ class RunnerContractTests(unittest.TestCase):
             with patch.dict('os.environ', env, clear=True):
                 runner.sdk_runtimes()
             self.assertEqual(runner.sdk_environment, env)
+            (module / 'index.mjs').write_text('')
+            env['GATEWAY_SDK_NODE_MODULE'] = str(module / 'index.mjs')
+            with patch.dict('os.environ', env, clear=True):
+                runner.sdk_runtimes()
 
 
 if __name__ == '__main__':

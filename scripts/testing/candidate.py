@@ -184,8 +184,11 @@ class Candidate:
         for language in ('python', 'node'):
             executable = Path(environment['GATEWAY_SDK_' + language.upper()])
             require(executable.is_absolute() and os.access(executable, os.X_OK), 'explicit_sdk_' + language + '_runtime_required')
+        # 与 sdk_node.mjs 一致：可传包目录，也可传包内入口文件。
         module = Path(environment['GATEWAY_SDK_NODE_MODULE'])
-        require(module.is_absolute() and (module / 'package.json').is_file(), 'explicit_sdk_node_module_required')
+        package = module if module.is_dir() else module.parent
+        require(module.is_absolute() and module.exists() and (package / 'package.json').is_file(),
+                'explicit_sdk_node_module_required')
         self.sdk_environment = environment
 
     def prepare(self):
