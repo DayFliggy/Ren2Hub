@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
 import { completeOAuth, oauthProviders } from '@/api/oauth'
@@ -14,6 +14,7 @@ import TextInput from '@/components/common/TextInput.vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
 import { authApi } from '@/api/auth'
 import { ApiError } from '@/api/types'
+import { sanitizeRedirect } from '@/router'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -26,10 +27,16 @@ const oauthAbort = new AbortController()
 onBeforeUnmount(() => oauthAbort.abort())
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const app = useAppStore()
 const auth = useAuthStore()
 
+// Switching between sign-up and sign-in keeps the protected destination.
+const redirectQuery = computed(() => {
+  const redirect = sanitizeRedirect(route.query.redirect)
+  return redirect ? { redirect } : {}
+})
 const username = ref('')
 const email = ref('')
 const password = ref('')
@@ -155,7 +162,7 @@ async function submit() {
     )
     clearAffiliateAttribution()
     toast.success(t('auth.registerSuccess'))
-    await router.push({ name: 'sign-in' })
+    await router.replace({ name: 'sign-in', query: redirectQuery.value })
   } catch (error) {
     if (
       error instanceof ApiError &&
@@ -196,7 +203,10 @@ async function signUpWithOAuth(provider: string) {
     auth.acceptLogin(bundle)
     clearAffiliateAttribution()
     toast.success(t('auth.loginSuccess'))
-    await router.push({ name: 'dashboard' })
+    // Replace the guest-only entry so Back does not bounce into the console.
+    await router.replace(
+      sanitizeRedirect(route.query.redirect) || { name: 'dashboard' }
+    )
   } catch (error) {
     if (
       error instanceof ApiError &&
@@ -389,8 +399,9 @@ onMounted(() => app.initialize())
     <p class="mt-6 text-center text-sm text-[var(--text-tertiary)]">
       {{ t('auth.hasAccount') }}
       <RouterLink
-        :to="{ name: 'sign-in' }"
-        class="font-semibold text-[var(--accent-text)] hover:underline"
+        :to="{ name: 'sign-in', query: redirectQuery }"
+        replace
+        class="-my-1 inline-flex min-h-6 items-center rounded-md px-1 font-semibold text-[var(--accent-text)] hover:underline focus-ring"
       >
         {{ t('auth.goSignIn') }}
       </RouterLink>

@@ -59,6 +59,86 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+function setSessionHint(present: boolean) {
+  document.cookie = present
+    ? 'new_api_has_session=1; path=/'
+    : 'new_api_has_session=; path=/; max-age=0'
+}
+
+describe('visitor and protected session checks', () => {
+  beforeEach(() => setSessionHint(false))
+
+  it('settles a hintless visitor as a guest without a refresh', async () => {
+    const auth = useAuthStore()
+
+    await auth.ensureVisitorSession()
+
+    expect(mocks.authApi.refreshSession).not.toHaveBeenCalled()
+    expect(auth.checked).toBe(true)
+    expect(auth.isAuthenticated).toBe(false)
+  })
+
+  it('asks the server once a protected page needs an assumed guest', async () => {
+    const auth = useAuthStore()
+    await auth.ensureVisitorSession()
+    mocks.authApi.refreshSession.mockRejectedValueOnce(
+      new ApiError('Unauthenticated', { status: 401 })
+    )
+
+    await auth.ensureSession()
+    await auth.ensureSession()
+
+    // The 401 is a server verdict, so the second check does not refresh again.
+    expect(mocks.authApi.refreshSession).toHaveBeenCalledOnce()
+    expect(auth.isAuthenticated).toBe(false)
+  })
+
+  it('shows the guest view when a hinted refresh is rate-limited', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    setSessionHint(true)
+    const auth = useAuthStore()
+    mocks.authApi.refreshSession.mockRejectedValueOnce(
+      new ApiError('Too many requests', { status: 429 })
+    )
+
+    await auth.ensureVisitorSession()
+
+    expect(auth.checked).toBe(true)
+    expect(auth.isAuthenticated).toBe(false)
+    mocks.authApi.refreshSession.mockResolvedValueOnce(bundle)
+    await auth.ensureSession()
+    expect(auth.user?.username).toBe('demo')
+  })
+
+  it('propagates a rate-limited refresh on a protected page', async () => {
+    const auth = useAuthStore()
+    mocks.authApi.refreshSession.mockRejectedValueOnce(
+      new ApiError('Too many requests', { status: 429 })
+    )
+
+    await expect(auth.ensureSession()).rejects.toMatchObject({ status: 429 })
+    expect(auth.checked).toBe(false)
+  })
+
+  it.each([
+    ['a session conflict', new ApiError('Session changed', { status: 409 })],
+    [
+      'a malformed success response',
+      new ApiError('Invalid authentication response', {
+        status: 502,
+        code: 'INVALID_RESPONSE',
+      }),
+    ],
+  ])('propagates %s on a public page', async (_, error) => {
+    setSessionHint(true)
+    const auth = useAuthStore()
+    mocks.authApi.refreshSession.mockRejectedValueOnce(error)
+
+    await expect(auth.ensureVisitorSession()).rejects.toBe(error)
+    expect(auth.checked).toBe(false)
+  })
+})
+
 describe('authentication store', () => {
   it('invalidates the local session and broadcasts when self returns 401', async () => {
     setAuthBundle(bundle)

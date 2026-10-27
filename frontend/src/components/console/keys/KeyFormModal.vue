@@ -364,7 +364,7 @@ async function save() {
           :id="advancedSectionId"
           class="sibling-space-y-4 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-4"
         >
-          <FormField :label="t('keys.modelsLabel')">
+          <FormField group :label="t('keys.modelsLabel')">
             <ChipPicker
               v-model="form.model_limits"
               :options="models"

@@ -481,7 +481,8 @@ router.beforeEach(async (to) => {
     return true
 
   const auth = useAuthStore()
-  if (!auth.checked) await auth.fetchSelf()
+  if (to.meta.requiresAuth) await auth.ensureSession()
+  else await auth.ensureVisitorSession()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return {

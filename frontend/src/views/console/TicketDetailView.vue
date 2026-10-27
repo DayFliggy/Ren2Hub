@@ -173,7 +173,7 @@ watch(ticketId, (id) => void load(id), { immediate: true })
 
     <button
       type="button"
-      class="mb-4 inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-text)]"
+      class="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-text)]"
       @click="router.push({ name: 'tickets' })"
     >
       <svg

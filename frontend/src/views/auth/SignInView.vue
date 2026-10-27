@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Eye, EyeOff } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { api } from '@/api/client'
 import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
 import { completeOAuth, oauthProviders } from '@/api/oauth'
@@ -56,6 +56,30 @@ const loading = ref(false)
 const turnstileToken = ref('')
 const turnstileUnavailable = ref(false)
 const turnstileWidget = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+const errors = reactive({ username: '', password: '' })
+// Switching between sign-in and sign-up keeps the protected destination.
+const redirectQuery = computed(() => {
+  const redirect = sanitizeRedirect(route.query.redirect)
+  return redirect ? { redirect } : {}
+})
+
+// Empty credentials fail here with a field message instead of the backend's
+// generic invalid-parameter error.
+function validateCredentials(): boolean {
+  errors.username = username.value.trim()
+    ? ''
+    : t('auth.usernameOrEmailRequired')
+  errors.password = password.value ? '' : t('auth.passwordRequired')
+  return !errors.username && !errors.password
+}
+
+// Replace the sign-in entry so Back leaves the console instead of returning
+// to a guest-only page that immediately redirects forward again.
+async function enterDestination() {
+  await router.replace(
+    sanitizeRedirect(route.query.redirect) || { name: 'dashboard' }
+  )
+}
 
 function turnstileReady(): boolean {
   if (!app.turnstileEnabled) return true
@@ -93,6 +117,7 @@ async function submit() {
         twoFactorCode.value.trim()
       )
     } else {
+      if (!validateCredentials()) return
       await app.initialize()
       if (!turnstileReady()) return
       const submittedTurnstileToken = turnstileToken.value
@@ -114,8 +139,7 @@ async function submit() {
     }
     clearAffiliateAttribution()
     toast.success(t('auth.loginSuccess'))
-    const redirect = sanitizeRedirect(route.query.redirect)
-    await router.push(redirect || { name: 'dashboard' })
+    await enterDestination()
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
@@ -134,9 +158,7 @@ async function finishAlternateLogin(value: unknown) {
   if (!bundle) throw new Error(t('security.invalidProof'))
   auth.acceptLogin(bundle)
   clearAffiliateAttribution()
-  await router.push(
-    sanitizeRedirect(route.query.redirect) || { name: 'dashboard' }
-  )
+  await enterDestination()
 }
 async function signInPasskey() {
   if (loading.value) return
@@ -230,7 +252,16 @@ async function signInOAuth(provider: string) {
             v-model="username"
             :placeholder="t('auth.usernameOrEmailPlaceholder')"
             autocomplete="username"
+            :aria-invalid="errors.username ? 'true' : undefined"
+            @update:model-value="errors.username = ''"
           />
+          <span
+            v-if="errors.username"
+            class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
+            role="alert"
+          >
+            {{ errors.username }}
+          </span>
         </FormField>
 
         <FormField :label="t('auth.password')">
@@ -241,6 +272,8 @@ async function signInOAuth(provider: string) {
               :placeholder="t('auth.passwordPlaceholder')"
               autocomplete="current-password"
               class="[&_input]:pr-12"
+              :aria-invalid="errors.password ? 'true' : undefined"
+              @update:model-value="errors.password = ''"
             />
             <button
               type="button"
@@ -254,6 +287,13 @@ async function signInOAuth(provider: string) {
               <Eye v-else :size="18" />
             </button>
           </div>
+          <span
+            v-if="errors.password"
+            class="mt-1.5 block text-xs text-[var(--status-danger-text)]"
+            role="alert"
+          >
+            {{ errors.password }}
+          </span>
         </FormField>
       </template>
 
@@ -379,8 +419,9 @@ async function signInOAuth(provider: string) {
     >
       {{ t('auth.noAccount') }}
       <RouterLink
-        :to="{ name: 'sign-up' }"
-        class="font-semibold text-[var(--accent-text)] hover:underline"
+        :to="{ name: 'sign-up', query: redirectQuery }"
+        replace
+        class="-my-1 inline-flex min-h-6 items-center rounded-md px-1 font-semibold text-[var(--accent-text)] hover:underline focus-ring"
       >
         {{ t('auth.goSignUp') }}
       </RouterLink>

@@ -830,7 +830,7 @@ onBeforeUnmount(() => {
       size="sm"
       @close="exportOpen = false"
     >
-      <FormField :label="t('logs.docType')">
+      <FormField group :label="t('logs.docType')">
         <FilterSelect
           v-model="exportType"
           :options="[

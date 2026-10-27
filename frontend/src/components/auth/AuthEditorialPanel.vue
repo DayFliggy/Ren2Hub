@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
         <span>{{ t('auth.editorial.word3') }}</span>
       </p>
 
-      <h1
+      <h2
         class="auth-huiwen-title display-title mt-6 leading-[1.14] text-[var(--text-primary)]"
       >
         <span class="block text-5xl font-bold xl:text-6xl">{{
@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
           class="mt-2 block text-5xl font-bold text-[var(--text-tertiary)] xl:text-6xl"
           >{{ t('auth.editorial.line2') }}</span
         >
-      </h1>
+      </h2>
 
       <div class="mt-10 h-px w-full bg-[var(--border-default)]" />
 

@@ -764,6 +764,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .pricing-model-name {
+  min-height: 1.5rem;
   text-align: start;
   overflow-wrap: anywhere;
   font-size: 0.8125rem;

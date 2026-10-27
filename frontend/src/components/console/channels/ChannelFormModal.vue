@@ -1543,6 +1543,7 @@ async function submit() {
           </FormField>
           <FormField
             v-if="isAdvancedChannel"
+            group
             :label="t('channels.advancedRoutes')"
             :hint="
               t(

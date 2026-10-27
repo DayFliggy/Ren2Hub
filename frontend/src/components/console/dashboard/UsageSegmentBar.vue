@@ -56,16 +56,18 @@ const placeholderRows = computed(() =>
   Math.max(0, props.reservedRows - props.segments.length)
 )
 
+function segmentFill(segment: (typeof props.segments)[number]): string {
+  return segment.value > 0
+    ? `color-mix(in srgb, ${props.color} ${segment.intensity}%, var(--surface-solid))`
+    : 'transparent'
+}
+
+// Ranked shares grow from a 24px floor so a tiny day stays tappable; flex
+// hands the remaining width out in proportion. The floor needs 72px for the
+// three ranked days, far below the narrowest dashboard card.
 function segmentStyle(segment: (typeof props.segments)[number]): CSSProperties {
-  const background =
-    segment.value > 0
-      ? `color-mix(in srgb, ${props.color} ${segment.intensity}%, var(--surface-solid))`
-      : 'transparent'
-  if (props.layout === 'rhythm') return { flex: '1 1 0%', background }
-  return {
-    width: `${total.value ? (segment.value / total.value) * 100 : 0}%`,
-    background,
-  }
+  if (props.layout === 'rhythm') return { flex: '1 1 0%' }
+  return { flex: `${total.value ? segment.value / total.value : 0} 1 0%` }
 }
 
 function showTooltip(
@@ -73,8 +75,10 @@ function showTooltip(
   segment: (typeof props.segments)[number]
 ) {
   if (!root.value) return
+  // Anchor to the visible band, not the taller hit area around it.
   const target = event.currentTarget as HTMLElement
-  const targetRect = target.getBoundingClientRect()
+  const band = target.firstElementChild as HTMLElement
+  const targetRect = band.getBoundingClientRect()
   const rootRect = root.value.getBoundingClientRect()
   tooltip.value = {
     key: segment.key,
@@ -173,17 +177,24 @@ watch(
       </span>
     </div>
 
-    <!-- Track, rows and labels stay in place without data so heights match. -->
+    <!-- Track, rows and labels stay in place without data so heights match.
+         Segments are 24px tall hit areas around the 8px band; the negative
+         margins keep the band where the layout expects it. -->
     <div
-      class="mt-1 flex h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]"
+      class="relative -mb-2 -mt-1 flex h-6 items-center"
       role="group"
       :aria-label="title"
     >
+      <span
+        class="pointer-events-none absolute inset-x-0 top-2 h-2 rounded-full bg-[var(--surface-muted)]"
+        aria-hidden="true"
+      />
       <button
-        v-for="segment in trackSegments"
+        v-for="(segment, index) in trackSegments"
         :key="segment.key"
         type="button"
-        class="h-full min-w-px border-r border-[var(--surface-solid)] transition-[filter] last:border-r-0 hover:brightness-110 focus-ring"
+        class="relative flex h-full items-center transition-[filter] hover:brightness-110 focus-ring"
+        :class="layout === 'ranked' ? 'min-w-6' : 'min-w-px'"
         :style="segmentStyle(segment)"
         :tabindex="focusKey === segment.key ? 0 : -1"
         :aria-label="`${segment.label} ${segment.displayValue}`"
@@ -197,7 +208,19 @@ watch(
         @mouseenter="showTooltip($event, segment)"
         @mouseleave="hideTooltip(segment.key)"
         @keydown="onKeydown($event, segment.key)"
-      />
+      >
+        <span
+          class="h-2 w-full"
+          :class="{
+            'rounded-l-full': index === 0,
+            'rounded-r-full': index === trackSegments.length - 1,
+            'border-r border-[var(--surface-solid)]':
+              index < trackSegments.length - 1,
+          }"
+          :style="{ background: segmentFill(segment) }"
+          data-usage-segment-fill
+        />
+      </button>
     </div>
 
     <div

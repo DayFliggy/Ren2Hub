@@ -18,7 +18,7 @@ export default {
     themeAuto: '跟随系统',
     themeLight: '日间',
     themeDark: '夜间',
-    login: '立即开始',
+    login: '登录',
     console: '进入控制台',
     operational: '服务正常',
     checking: '正在检查系统状态',

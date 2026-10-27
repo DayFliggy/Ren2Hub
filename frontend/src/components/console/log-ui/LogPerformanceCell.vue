@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
       <span
         data-log-performance-indicator
         :data-mode="log.request_mode"
-        class="flex h-4 w-full min-w-0 shrink-0 overflow-hidden rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)]"
+        class="flex h-4 w-full min-w-0 shrink-0 rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)]"
       >
         <button
           type="button"
@@ -249,10 +249,12 @@ onBeforeUnmount(() => {
             tooltip?.metric === 'duration' ? tooltipId : undefined
           "
           :aria-label="`${metricLabel('duration')}: ${durationLabel}. ${t('logs.showTimingDetails')}`"
-          class="min-h-0 flex-1 transition-[filter] duration-100 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
+          class="relative min-h-0 flex-1 transition-[filter] duration-100 before:absolute before:inset-x-0 before:-inset-y-1.5 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
           :class="[
             barToneClass[durationTone],
-            stream ? 'border-r border-[var(--surface-solid)]' : '',
+            stream
+              ? 'rounded-l-[5px] border-r border-[var(--surface-solid)]'
+              : 'rounded-[5px]',
           ]"
           @pointerenter="showTooltip('duration', $event)"
           @pointerleave="hideTooltip"
@@ -270,8 +272,8 @@ onBeforeUnmount(() => {
             tooltip?.metric === 'first-token' ? tooltipId : undefined
           "
           :aria-label="`${metricLabel('first-token')}: ${firstTokenLabel}. ${t('logs.showTimingDetails')}`"
-          class="min-h-0 flex-1 transition-[filter] duration-100 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
-          :class="barToneClass[firstTokenTone]"
+          class="relative min-h-0 flex-1 transition-[filter] duration-100 before:absolute before:inset-x-0 before:-inset-y-1.5 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--focus-ring)]"
+          :class="[barToneClass[firstTokenTone], 'rounded-r-[5px]']"
           @pointerenter="showTooltip('first-token', $event)"
           @pointerleave="hideTooltip"
           @focus="showTooltip('first-token', $event)"

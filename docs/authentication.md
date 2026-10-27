@@ -14,6 +14,8 @@ PAT管理使用 `/api/user/access_tokens`、`/catalog`、`/scopes`，创建、�
 
 刷新和退出分别为 `POST /api/user/auth/refresh`、`POST /api/user/auth/logout`。会话查询与撤销使用 `/api/user/sessions`。Secure Cookie模式要求精确HTTPS Origin，可信URL不是CORS白名单。公开部署设置稳定 `SESSION_SECRET`、`CRYPTO_SECRET`、`SESSION_COOKIE_SECURE=true` 与精确 `SESSION_COOKIE_TRUSTED_URL`；本地候选HTTP配置不得复制到公网。
 
+Vue沿用上游会话提示：后端随Refresh Cookie写入非HttpOnly的 `new_api_has_session=1`（`service/auth_session.go`）。首页、登录注册页和公开模块在内存无会话且无提示Cookie时直接按访客渲染，不请求refresh，避免匿名访问消耗按IP计数的CriticalRateLimit；refresh遇到429、5xx或网络错误时这些页面降级为访客视图，响应格式错误（`INVALID_RESPONSE`）和其他状态照常报错。requiresAuth页面不以提示Cookie判定登出，总是向服务端确认，失败时显示对应错误页（`frontend/src/stores/auth.ts` 的 `ensureVisitorSession` / `ensureSession`）。
+
 `TRUSTED_PROXIES` 仅声明实际反向代理，不能信任客户端提供的任意转发头。API与模型请求限流沿用原生middleware及Redis/内存行为；不再声明旧“每逻辑请求成功名额持久租约”和独立准入合同。当前产品仅单节点，认证子系统的缓存能力不授予扩容授权。
 
 站点OAuth、Passkey、两步验证和密码加密继续采用NewAPI。官方订阅账号渠道退役不等于删除站点OAuth登录。权限菜单由后端能力/权限投影控制，最终授权始终在服务端完成。

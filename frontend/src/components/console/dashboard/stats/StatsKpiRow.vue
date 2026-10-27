@@ -79,7 +79,7 @@ const cells = computed<Cell[]>(() => [
         ? '—'
         : (props.kpi.avgLatency / 1000).toFixed(2),
     suffix: 's',
-    color: 'var(--support)',
+    color: 'var(--support-text)',
     skeleton: 'w-20',
   },
   {

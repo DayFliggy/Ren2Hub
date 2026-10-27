@@ -31,6 +31,7 @@ import {
 function invalidAuthResponse(endpoint: string): never {
   throw new ApiError(`Invalid authentication response: ${endpoint}`, {
     status: 502,
+    code: 'INVALID_RESPONSE',
   })
 }
 

@@ -762,7 +762,7 @@ onBeforeUnmount(() => {
       size="lg"
       @close="closeExport"
     >
-      <FormField :label="t('logs.dateRange')">
+      <FormField group :label="t('logs.dateRange')">
         <DateRangePicker
           v-model:start="exportStartDate"
           v-model:end="exportEndDate"
@@ -773,7 +773,7 @@ onBeforeUnmount(() => {
           {{ t('logs.exportRangeHint', { days: maxRangeDays }) }}
         </p>
       </FormField>
-      <FormField :label="t('logs.docType')">
+      <FormField group :label="t('logs.docType')">
         <FilterSelect
           v-model="exportType"
           :options="[

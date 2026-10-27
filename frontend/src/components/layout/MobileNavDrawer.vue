@@ -10,13 +10,11 @@
         data-handdrawn-scope="mobile-navigation"
         @keydown="onKeydown"
       >
-        <button
-          type="button"
+        <div
           class="mobile-nav-drawer__backdrop absolute inset-0 cursor-default backdrop-blur-[4px]"
           style="background: var(--drawer-backdrop)"
           data-hero-canvas-boundary
-          tabindex="-1"
-          :aria-label="t('nav.closeMenu')"
+          aria-hidden="true"
           @click="close"
         />
 
@@ -173,6 +171,16 @@
             </ul>
           </nav>
 
+          <!-- Below 420px the navbar CTA is icon-only, so the drawer repeats
+               the account entry with its label. -->
+          <RouterLink
+            :to="accountTarget"
+            class="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+            @click="close"
+          >
+            {{ isAuthenticated ? t('nav.console') : t('nav.login') }}
+          </RouterLink>
+
           <div class="mt-auto border-t border-[var(--border-subtle)] pt-5">
             <ThemeSwitcher mobile />
             <p
@@ -194,6 +202,7 @@ import { useI18n } from 'vue-i18n'
 import StatusDot from '@/components/common/StatusDot.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import { closeModalDialog, openModalDialog } from '@/utils/modalStack'
 
 const props = defineProps<{
@@ -207,6 +216,10 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { systemName, docsLink, showDocs, showPricing, phase } =
   storeToRefs(useAppStore())
+const { isAuthenticated } = storeToRefs(useAuthStore())
+const accountTarget = computed(() =>
+  isAuthenticated.value ? { name: 'dashboard' } : { name: 'sign-in' }
+)
 const stackEntry = Symbol('MobileNavDrawer')
 const panel = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)

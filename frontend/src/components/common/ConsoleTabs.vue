@@ -59,7 +59,7 @@ function onKeydown(e: KeyboardEvent, index: number) {
       class="relative inline-flex items-center font-medium transition-colors sm:min-h-0"
       :class="[
         density === 'compact'
-          ? 'min-h-9 pb-2 text-xs'
+          ? 'min-h-11 pb-2 text-xs'
           : 'min-h-11 pb-3 text-sm',
         model === item.key
           ? 'text-[var(--text-primary)]'

@@ -40,9 +40,10 @@ const app = useAppStore()
         <LanguageSelector variant="console" />
         <RouterLink
           :to="{ name: 'home' }"
-          class="ml-1 hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring sm:flex"
+          class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring sm:min-h-0 sm:min-w-0"
         >
-          ← {{ t('auth.backHome') }}
+          <span aria-hidden="true">←</span>
+          <span class="sr-only sm:not-sr-only">{{ t('auth.backHome') }}</span>
         </RouterLink>
       </div>
     </header>

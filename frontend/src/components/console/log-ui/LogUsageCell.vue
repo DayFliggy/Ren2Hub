@@ -164,7 +164,7 @@ onBeforeUnmount(() => {
         </span>
         <span
           data-log-usage-output
-          class="inline-flex items-center gap-1 whitespace-nowrap tabular-nums text-[var(--accent)]"
+          class="inline-flex items-center gap-1 whitespace-nowrap tabular-nums text-[var(--accent-text)]"
           :aria-label="`${t('logs.outputTokens')}: ${formatNumber(usage.completionTokens)}`"
         >
           <ArrowUp :size="14" stroke-width="1.9" aria-hidden="true" />
@@ -349,7 +349,7 @@ onBeforeUnmount(() => {
             <dt class="font-medium text-[var(--text-secondary)]">
               {{ t('logs.totalTokens') }}
             </dt>
-            <dd class="font-semibold tabular-nums text-[var(--accent)]">
+            <dd class="font-semibold tabular-nums text-[var(--accent-text)]">
               {{ formatNumber(usage.totalTokens) }}
             </dd>
           </div>

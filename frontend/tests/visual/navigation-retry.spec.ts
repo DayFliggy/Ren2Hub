@@ -7,7 +7,7 @@ import { configureStablePage, waitForStablePage } from './fixtures'
 test('retry returns to a failed in-app destination with its query and hash', async ({
   page,
 }) => {
-  await configureStablePage(page, { theme: 'light', authenticated: false })
+  await configureStablePage(page, { theme: 'light' })
   let limited = true
   await page.route('**/api/user/auth/refresh', async (route) => {
     if (!limited) return route.fallback()
@@ -16,12 +16,13 @@ test('retry returns to a failed in-app destination with its query and hash', asy
       json: { success: false, message: 'Too many requests' },
     })
   })
-  // Home now restores the session too. Start on an unguarded error page so
-  // the rejected refresh belongs to the in-app destination under test.
+  // Public pages render the guest view after a failed refresh, so the
+  // retryable destination is a protected page. Start on an unguarded error
+  // page so the rejected refresh belongs to the destination under test.
   await page.goto('/404')
   await expect(page.getByText('页面不存在', { exact: true })).toBeVisible()
 
-  const target = '/pricing?model=gpt%2F4&unit=K#prices'
+  const target = '/keys?page=2#list'
   // Use the live router to exercise an in-app navigation, whose failure
   // leaves the address bar on the source page.
   await page.evaluate(async (path) => {
@@ -38,7 +39,6 @@ test('retry returns to a failed in-app destination with its query and hash', asy
   await page.getByRole('button', { name: '重试', exact: true }).click()
   await expect(page).toHaveURL(new URL(target, page.url()).href)
   await waitForStablePage(page)
-  await expect(page.locator('.public-pricing-filters')).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 

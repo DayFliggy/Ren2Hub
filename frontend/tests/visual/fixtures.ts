@@ -155,6 +155,12 @@ export async function configureStablePage(
     })
   }
   const origin = `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? 4173}`
+  // The backend writes this hint beside the Refresh Cookie at sign-in; a
+  // fixture session that already exists must carry it too.
+  if (options.authenticated !== false)
+    await page
+      .context()
+      .addCookies([{ name: 'new_api_has_session', value: '1', url: origin }])
   await page.route('**/*', (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== origin) {

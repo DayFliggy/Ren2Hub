@@ -41,7 +41,7 @@ for (const theme of ['light', 'dark'] as const) {
             card: rect('.auth-card'),
             copy: rect('.panel-measure'),
             titleSize: parseFloat(
-              getComputedStyle(document.querySelector('.auth-panel h1 span')!)
+              getComputedStyle(document.querySelector('.auth-panel h2 span')!)
                 .fontSize
             ),
             input: rect('.auth-card input[autocomplete="username"]'),
@@ -73,7 +73,7 @@ for (const theme of ['light', 'dark'] as const) {
           }
           if (locale === 'en') {
             const endingSharesLine = await page.evaluate(() => {
-              const title = document.querySelector('.auth-panel h1 span')!
+              const title = document.querySelector('.auth-panel h2 span')!
               const text = title.firstChild!
               const content = text.textContent!.trimEnd()
               const dashIndex = content.lastIndexOf('—')

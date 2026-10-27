@@ -35,7 +35,7 @@ const methods = computed(() => props.methods ?? defaultMethods.value)
         v-for="method in methods"
         :key="method.value"
         type="button"
-        class="h-9 rounded-xl px-4 text-xs font-medium transition-all focus-ring"
+        class="h-11 rounded-xl px-4 text-xs sm:h-9 font-medium transition-all focus-ring"
         :style="
           props.modelValue === method.value
             ? 'background:var(--accent);color:var(--accent-contrast)'

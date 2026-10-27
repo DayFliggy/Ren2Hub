@@ -124,6 +124,9 @@
   --signal-deep: #38372b;
   --support: #cfaf6b;
   --support-strong: #a98c4e;
+  /* 麦色文字与数值用：对 --surface-solid ≥5.5:1、--page-background ≥5:1。
+     --support 和 --support-strong 在日间底上只有 2-3:1，只能做大面积图形。 */
+  --support-text: #7a6334;
   --on-colored: #f4f2e8;
   /* 草甸绿点缀族：田园航拍（草甸中绿/树篱深绿/麦茬金）推导，仅作点缀、暖土基调不动 */
   --glow: #7fa463;
@@ -429,6 +432,7 @@ html.dark {
   --signal-deep: #1a2236;
   --support: #e8a4c4;
   --support-strong: #d484ae;
+  --support-text: var(--support);
   --on-colored: #e8edf8;
   /* 薄荷绿点缀族：炭蓝底 + 星辉金主色之外的活力补色，
      柔化霓虹感（比旧萤绿更哑、更专业）。 */

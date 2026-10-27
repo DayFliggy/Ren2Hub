@@ -14,6 +14,7 @@ import {
   subscribeAuthSessionEvents,
   type AuthSessionSyncEvent,
 } from '@/api/authSessionSync'
+import { hasSessionHint } from '@/api/sessionHint'
 import { ApiError } from '@/api/types'
 import type {
   AuthBundle,
@@ -57,9 +58,21 @@ export async function applyAuthSessionSyncEvent(
   }
 }
 
+// Refresh failures that say nothing about the session itself. A malformed
+// success response is a contract break, not an outage, so it still surfaces.
+function isTransientAuthError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  if (error.code === 'INVALID_RESPONSE') return false
+  const status = error.status
+  return status === undefined || status === 429 || status >= 500
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserInfo | null>(null)
   const checked = ref(false)
+  // Set when a public page settled on "guest" without the server's verdict.
+  // Protected pages must still ask the server before trusting it.
+  const guestAssumed = ref(false)
 
   const isAuthenticated = computed(() => Boolean(user.value))
   const isAdmin = computed(() => (user.value?.role ?? 0) >= 10)
@@ -70,6 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function persist(next: UserInfo | null): void {
     user.value = next
+    guestAssumed.value = false
   }
 
   function hasPermission(resource: string, action: string): boolean {
@@ -162,6 +176,41 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function assumeGuest(): void {
+    persist(null)
+    checked.value = true
+    guestAssumed.value = true
+  }
+
+  /**
+   * Session check for public and guest-only pages, which render either way.
+   * Without the server's hint cookie a refresh is certain to 401 and still
+   * spends the IP-keyed CriticalRateLimit budget, so it is skipped. A
+   * transient refresh failure also renders the guest view; ensureSession
+   * retries once a protected page needs the answer.
+   */
+  async function ensureVisitorSession(): Promise<void> {
+    if (checked.value) return
+    if (!getAuthBundle() && !hasSessionHint()) {
+      assumeGuest()
+      return
+    }
+    try {
+      await fetchSelf()
+    } catch (error) {
+      if (!isTransientAuthError(error)) throw error
+      console.warn('[auth] Session check failed; showing the guest view', error)
+      assumeGuest()
+    }
+  }
+
+  /** Session check for protected pages; failures propagate to the router. */
+  async function ensureSession(): Promise<void> {
+    if (checked.value && (isAuthenticated.value || !guestAssumed.value)) return
+    await fetchSelf()
+    guestAssumed.value = false
+  }
+
   async function updateProfile(patch: UserProfilePatch): Promise<void> {
     const api = await getAuthApi()
     await api.updateProfile(patch)
@@ -231,6 +280,8 @@ export const useAuthStore = defineStore('auth', () => {
     verifyTwoFactor,
     logout,
     fetchSelf,
+    ensureVisitorSession,
+    ensureSession,
     updateProfile,
     saveLanguage,
     changePassword,

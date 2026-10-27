@@ -321,7 +321,7 @@ function remove(index: number) {
   min-height: 44px;
   border: 1px solid var(--outline);
   border-radius: var(--shape-control);
-  background: var(--surface-container);
+  background: var(--surface-muted);
   color: var(--text-primary);
   padding: 0.65rem 0.75rem;
   font-size: 0.875rem;

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 import {
   assertInteractiveCentersVisible,
@@ -111,32 +111,67 @@ test('failed lazy navigation displays an accessible retry state', async ({
   await expect(retry).toBeFocused()
 })
 
-// docs/authentication.md: a temporary refresh failure stays retryable; it is
-// neither a signed-out state nor a rendering error.
+// A visitor without the server's session hint never refreshes: that request
+// is certain to 401 and spends the IP-keyed CriticalRateLimit budget.
+test('guest pages skip the session refresh without the session hint', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light', authenticated: false })
+  let refreshes = 0
+  await page.route('**/api/user/auth/refresh', (route) => {
+    refreshes++
+    return route.fallback()
+  })
+  for (const path of ['/', '/sign-in', '/pricing']) {
+    await page.goto(path, { waitUntil: 'networkidle' })
+    await expect(page.getByRole('banner').first()).toBeVisible()
+  }
+  expect(refreshes).toBe(0)
+})
+
+function limitRefresh(page: Page) {
+  return page.route('**/api/user/auth/refresh', (route) =>
+    route.fulfill({
+      status: 429,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: false, message: 'Too many requests' }),
+    })
+  )
+}
+
+// docs/authentication.md: a temporary refresh failure is not a signed-out
+// verdict. Public pages render the guest view; protected pages stay retryable.
 for (const path of ['/sign-in', '/pricing']) {
-  test(`rate-limited session check on ${path} explains the limit and links home`, async ({
+  test(`rate-limited session check on ${path} renders the guest view`, async ({
     page,
   }) => {
-    await configureStablePage(page, { theme: 'light', authenticated: false })
-    await page.route('**/api/user/auth/refresh', (route) =>
-      route.fulfill({
-        status: 429,
-        contentType: 'application/json',
-        body: JSON.stringify({ success: false, message: 'Too many requests' }),
-      })
-    )
+    await configureStablePage(page, { theme: 'light' })
+    await limitRefresh(page)
     await page.goto(path, { waitUntil: 'networkidle' })
 
-    const alert = page.getByRole('alert')
-    await expect(alert).toContainText('请求过于频繁')
-    await expect(alert).not.toContainText('渲染')
     expect(new URL(page.url()).pathname).toBe(path)
-    await assertNoHorizontalOverflow(page)
-    await alert.getByRole('link', { name: '返回首页' }).click()
-    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('banner').first()).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
+    await assertNoHorizontalOverflow(page)
   })
 }
+
+test('rate-limited session check on a protected page explains the limit and links home', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light' })
+  await limitRefresh(page)
+  await page.goto('/keys', { waitUntil: 'networkidle' })
+
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('请求过于频繁')
+  await expect(alert).not.toContainText('渲染')
+  expect(new URL(page.url()).pathname).toBe('/keys')
+  await assertNoHorizontalOverflow(page)
+  await alert.getByRole('link', { name: '返回首页' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
 
 for (const viewport of viewports) {
   for (const [groupIndex, routes] of routeGroups.entries()) {

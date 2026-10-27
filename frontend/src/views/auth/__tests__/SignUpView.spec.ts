@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
 const route = vi.hoisted(() => ({ query: { aff: 'INVALID' } }))
-const push = vi.hoisted(() => vi.fn())
+const replace = vi.hoisted(() => vi.fn())
 const validateAffiliate = vi.hoisted(() => vi.fn())
 const register = vi.hoisted(() => vi.fn())
 const sendVerification = vi.hoisted(() => vi.fn())
@@ -16,7 +16,7 @@ vi.mock('vue-router', async () => {
   return {
     ...actual,
     useRoute: () => route,
-    useRouter: () => ({ push }),
+    useRouter: () => ({ replace }),
   }
 })
 vi.mock('@/api/auth', () => ({
@@ -294,7 +294,7 @@ describe('SignUpView Turnstile requests', () => {
       'register-token'
     )
     expect(turnstileReset).toHaveBeenCalledTimes(2)
-    expect(push).toHaveBeenCalledWith({ name: 'sign-in' })
+    expect(replace).toHaveBeenCalledWith({ name: 'sign-in', query: {} })
     wrapper.unmount()
   })
 
@@ -363,7 +363,7 @@ describe('SignUpView Turnstile requests', () => {
     ])
     expect(register).toHaveBeenCalledWith(expect.anything(), 'register-token')
     expect(turnstileReset).toHaveBeenCalledTimes(3)
-    expect(push).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })
@@ -439,7 +439,7 @@ describe('SignUpView email verification', () => {
       username: 'demo',
       password: 'password-123',
     })
-    expect(push).toHaveBeenCalledWith({ name: 'sign-in' })
+    expect(replace).toHaveBeenCalledWith({ name: 'sign-in', query: {} })
     wrapper.unmount()
   })
 

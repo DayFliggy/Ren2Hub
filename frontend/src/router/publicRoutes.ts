@@ -25,11 +25,11 @@ export async function guardPublicModule(
   }
   const access = app.moduleAccess(String(to.meta.publicModule))
   if (!access.enabled) return { name: 'status-404' }
-  // A failed session check (for example a rate-limited refresh) propagates to
-  // the router's navigation error state like every other guarded route, so the
-  // page stays retryable instead of being reported as an unavailable service.
+  // A module that requires a session needs the server's answer; a failed
+  // check propagates to the router's retryable navigation error state.
   const auth = useAuthStore()
-  if (!auth.checked) await auth.fetchSelf()
+  if (access.requireAuth) await auth.ensureSession()
+  else await auth.ensureVisitorSession()
   if (access.requireAuth && !auth.isAuthenticated)
     return { name: 'sign-in', query: { redirect: to.fullPath } }
   return true

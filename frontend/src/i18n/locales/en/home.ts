@@ -18,7 +18,7 @@ export default {
     themeAuto: 'System',
     themeLight: 'Light',
     themeDark: 'Dark',
-    login: 'Get Started',
+    login: 'Sign in',
     console: 'Open Console',
     operational: 'All systems operational',
     checking: 'Checking system status',

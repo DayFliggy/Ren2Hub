@@ -60,7 +60,7 @@ async function submit() {
   <AuthLayout>
     <RouterLink
       :to="{ name: 'sign-in' }"
-      class="mb-6 inline-flex items-center gap-1.5 text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
+      class="mb-6 inline-flex min-h-6 items-center gap-1.5 text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
     >
       ← {{ t('common.back') }}
     </RouterLink>

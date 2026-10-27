@@ -47,7 +47,6 @@ interface TooltipParam {
   seriesName: string
   value: number | null
   color: string
-  axisValueLabel: string
 }
 
 useEChart(
@@ -146,7 +145,7 @@ useEChart(
             })
             .join('')
           return `<div style="min-width:11.625rem">
-            <div style="font-weight:700;margin-bottom:0.125rem">${escapeHtml(params[0]!.axisValueLabel)}</div>
+            <div style="font-weight:700;margin-bottom:0.125rem">${escapeHtml(dates[params[0]!.dataIndex] ?? '')}</div>
             ${rows}
           </div>`
         },
@@ -160,7 +159,9 @@ useEChart(
         axisLabel: {
           color: p.textTertiary,
           fontSize: 9 * scale,
-          interval: Math.max(0, Math.floor(dates.length / 5) - 1),
+          hideOverlap: true,
+          // YYYY-MM-DD labels collide on phones; the tooltip keeps the full date.
+          formatter: (date: string) => date.slice(5),
         },
       },
       yAxis: [
@@ -226,7 +227,9 @@ useEChart(
       <div class="flex items-center gap-3 text-xs">
         <span class="text-[var(--text-tertiary)]">
           {{ t('dashboard.tokenTrend.avgHitRate') }}
-          <span class="font-semibold text-[var(--support)]" data-avg-hit-rate
+          <span
+            class="font-semibold text-[var(--support-text)]"
+            data-avg-hit-rate
             >--</span
           >
         </span>

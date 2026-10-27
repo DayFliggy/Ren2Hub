@@ -352,6 +352,12 @@ onMounted(load)
   font-size: 0.75rem;
   min-height: 2.75rem;
 }
+/* Two-character labels are only 24px wide; widen the hit area into the gap. */
+.market-type-tab::before {
+  content: '';
+  position: absolute;
+  inset: 0 -0.5rem;
+}
 .market-type-tab:hover {
   color: var(--text-primary);
 }

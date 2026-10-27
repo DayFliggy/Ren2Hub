@@ -574,6 +574,57 @@ test('weekday labels stay under their rhythm slots when weekends are quiet', asy
   }
 })
 
+test('ranked day segments keep 24px targets when one day dominates', async ({
+  page,
+}) => {
+  // Three active days: one dominant, two well under 1% of the total.
+  const lopsided = Array.from({ length: 30 }, (_, index) => {
+    const value = [1_000_000, 4_000, 1_000][index] ?? 0
+    return {
+      date: visualDateKey(index),
+      requests: value,
+      consume: value,
+      tokens: value,
+    }
+  })
+  await page.route('**/api/data/self/summary?*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: { ...nativeUsageSummary(NOW), distribution: lopsided },
+      },
+    })
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await waitForStablePage(page)
+
+  const card = page.locator('[data-usage-distribution]')
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    const boxes = await card
+      .locator('[data-usage-segment-bar="ranked"] [data-usage-segment]')
+      .evaluateAll((segments) =>
+        segments.map((segment) => segment.getBoundingClientRect())
+      )
+    expect(boxes, `segments at ${width}px`).toHaveLength(3)
+    const bar = await card
+      .locator('[data-usage-segment-bar="ranked"] [role="group"]')
+      .evaluate((group) => group.getBoundingClientRect())
+    boxes.forEach((box, index) => {
+      expect(box.width, `segment ${index} width`).toBeGreaterThanOrEqual(24)
+      expect(box.height, `segment ${index} height`).toBeGreaterThanOrEqual(24)
+      if (index > 0) {
+        expect(box.left, 'segments overlap').toBeGreaterThanOrEqual(
+          boxes[index - 1]!.right - 0.5
+        )
+      }
+    })
+    expect(boxes.at(-1)!.right).toBeLessThanOrEqual(bar.right + 0.5)
+    // The dominant day still reads as the larger share.
+    expect(boxes[0]!.width).toBeGreaterThan(boxes[1]!.width * 3)
+  }
+})
+
 for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
   test.describe(`heatmap ramp by ${theme === 'light' ? 'day' : 'night'}`, () => {
     test.use({ dashboardTheme: theme })

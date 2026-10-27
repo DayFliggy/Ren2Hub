@@ -139,7 +139,7 @@ const cells = computed<Cell[]>(() => [
     label: t('dashboard.statAvgTpm'),
     icon: 'M13 2 3 14h7l-1 8 10-12h-7l1-8Z',
     value: avgTpm.value === null ? '--' : formatCompact(avgTpm.value),
-    color: 'var(--support)',
+    color: 'var(--support-text)',
     skeleton: 'w-16',
     series: tpmSeries.value,
   },

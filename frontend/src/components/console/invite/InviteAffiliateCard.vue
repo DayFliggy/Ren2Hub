@@ -59,7 +59,7 @@ const { t } = useI18n()
     </p>
 
     <div class="mt-6 grid gap-4 md:grid-cols-2">
-      <div>
+      <div class="min-w-0">
         <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.inviteCode') }}
         </p>
@@ -79,7 +79,7 @@ const { t } = useI18n()
         </div>
       </div>
 
-      <div>
+      <div class="min-w-0">
         <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
           {{ t('invite.inviteLink') }}
         </p>

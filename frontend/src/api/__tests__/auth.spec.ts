@@ -61,6 +61,13 @@ describe('authentication API', () => {
       authApi.confirmPasswordReset('reset@example.com', 'example-code')
     ).rejects.toThrow('Invalid authentication response')
   })
+  it('marks a malformed refresh bundle as a contract break', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({ user: null })
+    await expect(authApi.refreshSession()).rejects.toMatchObject({
+      status: 502,
+      code: 'INVALID_RESPONSE',
+    })
+  })
   it('accepts the dataless native success of verification and reset mail', async () => {
     const request = vi
       .spyOn(httpTransport, 'request')

@@ -15,12 +15,19 @@ const setupApi = vi.hoisted(() => ({
   submit: vi.fn(),
 }))
 
+const authApi = vi.hoisted(() => ({
+  refreshSession: vi.fn(),
+  self: vi.fn(),
+}))
+
+vi.mock('@/api/auth', () => ({ authApi }))
 vi.mock('@/api/public', () => ({ publicApi }))
 vi.mock('@/api/publicCatalog', () => ({
   publicCatalogApi: { pricing: publicApi.pricing },
 }))
 vi.mock('@/api/setup', () => ({ setupApi }))
 
+import { clearAuthBundle } from '@/api/authSession'
 import { ApiError } from '@/api/types'
 import router from '@/router'
 import { sanitizeSetupRedirect, sanitizeRedirect } from '@/router'
@@ -30,7 +37,36 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
 
+function setSessionHint(present: boolean) {
+  document.cookie = present
+    ? 'new_api_has_session=1; path=/'
+    : 'new_api_has_session=; path=/; max-age=0'
+}
+
+function sessionBundle(
+  user: NonNullable<ReturnType<typeof useAuthStore>['user']>
+) {
+  return {
+    access_token: 'access-token',
+    token_type: 'Bearer',
+    access_expires_at: 2_000_000_000,
+    session: {
+      sid: 'session-1',
+      current: true,
+      login_method: 'password',
+      ip: '127.0.0.1',
+      user_agent: 'vitest',
+      created_at: 1,
+      last_active_at: 2,
+      expires_at: 2_000_000_000,
+    },
+    user,
+  }
+}
+
 beforeEach(async () => {
+  setSessionHint(false)
+  clearAuthBundle()
   setActivePinia(createPinia())
   vi.clearAllMocks()
   setupApi.status.mockResolvedValue({
@@ -155,25 +191,22 @@ describe('capability route guard', () => {
   })
 
   it('waits for the cookie session check before entering home', async () => {
+    setSessionHint(true)
     await router.push('/404')
     const auth = useAuthStore()
     const user = auth.user!
     auth.persist(null)
     auth.checked = false
     let finish!: () => void
-    vi.spyOn(auth, 'fetchSelf').mockImplementation(
+    authApi.refreshSession.mockImplementation(
       () =>
-        new Promise<boolean>((resolve) => {
-          finish = () => {
-            auth.persist(user)
-            auth.checked = true
-            resolve(true)
-          }
+        new Promise((resolve) => {
+          finish = () => resolve(sessionBundle(user))
         })
     )
     const entering = router.push('/')
     await flushPromises()
-    expect(auth.fetchSelf).toHaveBeenCalledOnce()
+    expect(authApi.refreshSession).toHaveBeenCalledOnce()
     expect(router.currentRoute.value.name).toBe('status-404')
     finish()
     await entering
@@ -181,31 +214,90 @@ describe('capability route guard', () => {
     expect(auth.isAuthenticated).toBe(true)
   })
 
-  // docs/authentication.md: a temporary refresh failure must leave the
-  // session unchecked so a later navigation retries it.
+  it.each(['/', '/sign-in', '/pricing'])(
+    'renders %s as a guest without a refresh when the session hint is absent',
+    async (path) => {
+      await router.push('/404')
+      const auth = useAuthStore()
+      auth.persist(null)
+      auth.checked = false
+
+      await router.push(path)
+
+      expect(authApi.refreshSession).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe(path)
+      expect(auth.checked).toBe(true)
+      expect(auth.isAuthenticated).toBe(false)
+    }
+  )
+
+  // A missing hint is not a server verdict: a protected page still asks.
+  it('still refreshes for a protected page when the session hint is absent', async () => {
+    await router.push('/404')
+    const auth = useAuthStore()
+    const user = auth.user!
+    auth.persist(null)
+    auth.checked = false
+    await router.push('/pricing')
+    authApi.refreshSession.mockResolvedValueOnce(sessionBundle(user))
+
+    await router.push('/keys')
+
+    expect(authApi.refreshSession).toHaveBeenCalledOnce()
+    expect(router.currentRoute.value.path).toBe('/keys')
+  })
+
+  // A public page renders either way, so a rate-limited refresh shows the
+  // guest view; the first protected page asks the server again.
   it.each([
     '/sign-in?redirect=%2Fkeys%3Fpage%3D2#auth',
     '/pricing?model=gpt%2F4&unit=K#prices',
     '/?session-check=1#home',
-  ])('keeps a rate-limited session check on %s retryable', async (path) => {
+  ])(
+    'renders %s as a guest when the session check is rate-limited',
+    async (path) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      setSessionHint(true)
+      await router.push('/404')
+      const auth = useAuthStore()
+      const user = auth.user!
+      auth.persist(null)
+      auth.checked = false
+      authApi.refreshSession.mockRejectedValueOnce(
+        new ApiError('Too many requests', { status: 429 })
+      )
+
+      await router.push(path)
+
+      expect(router.currentRoute.value.fullPath).toBe(path)
+      expect(navigationError.value).toBeNull()
+      expect(auth.isAuthenticated).toBe(false)
+
+      authApi.refreshSession.mockResolvedValueOnce(sessionBundle(user))
+      await router.push('/keys')
+      expect(authApi.refreshSession).toHaveBeenCalledTimes(2)
+      expect(router.currentRoute.value.path).toBe('/keys')
+    }
+  )
+
+  it('keeps a rate-limited session check on a protected page retryable', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await router.push('/404')
     const auth = useAuthStore()
+    auth.persist(null)
     auth.checked = false
-    vi.spyOn(auth, 'fetchSelf').mockRejectedValue(
+    authApi.refreshSession.mockRejectedValue(
       new ApiError('Too many requests', { status: 429 })
     )
 
-    await router.push(path).catch(() => undefined)
+    await router.push('/keys?page=2#list').catch(() => undefined)
 
-    expect(router.currentRoute.value.name).toBe('home')
+    expect(router.currentRoute.value.name).toBe('status-404')
     expect(navigationError.value).toEqual({
       kind: 'rate-limited',
-      href: path,
+      href: '/keys?page=2#list',
     })
     expect(auth.checked).toBe(false)
-
-    await router.push('/404')
-    expect(navigationError.value).toBeNull()
   })
 
   it('fails closed for protected routes when status is unreachable', async () => {

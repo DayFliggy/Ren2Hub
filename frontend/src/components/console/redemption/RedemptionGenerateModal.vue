@@ -135,7 +135,7 @@ function submit() {
         <TextInput v-model="amount" inputmode="decimal" placeholder="10" />
       </FormField>
 
-      <FormField :label="t('redemption.fieldExpiry')">
+      <FormField group :label="t('redemption.fieldExpiry')">
         <div class="flex flex-wrap gap-2">
           <button
             v-for="option in expiryOptions"

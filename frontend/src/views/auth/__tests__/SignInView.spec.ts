@@ -2,7 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
-const push = vi.hoisted(() => vi.fn())
+const replace = vi.hoisted(() => vi.fn())
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
 const assertPasskey = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', async () => {
@@ -10,8 +11,8 @@ vi.mock('vue-router', async () => {
     await vi.importActual<typeof import('vue-router')>('vue-router')
   return {
     ...actual,
-    useRoute: () => ({ query: {} }),
-    useRouter: () => ({ push }),
+    useRoute: () => route,
+    useRouter: () => ({ replace }),
   }
 })
 vi.mock('@/utils/passkey', () => ({ assertPasskey }))
@@ -61,6 +62,71 @@ beforeAll(async () => {
 afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
+  route.query = {}
+})
+
+function mountSignIn(pinia: ReturnType<typeof createPinia>) {
+  return mount(SignInView, {
+    global: {
+      plugins: [pinia, i18n],
+      stubs: {
+        AuthLayout: { template: '<div><slot /></div>' },
+        RouterLink: {
+          props: ['to'],
+          template: '<a :data-to="JSON.stringify(to)"><slot /></a>',
+        },
+        TurnstileWidget: true,
+      },
+    },
+  })
+}
+
+describe('SignInView password form', () => {
+  it('names the empty fields instead of submitting them', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    app.status = {}
+    const login = vi.spyOn(useAuthStore(), 'login')
+
+    const wrapper = mountSignIn(pinia)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(login).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('请输入邮箱或用户名')
+    expect(wrapper.text()).toContain('请输入密码')
+    wrapper.unmount()
+  })
+
+  it('replaces the sign-in entry with the sanitized redirect', async () => {
+    route.query = { redirect: '/keys?p=2' }
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    app.status = {}
+    vi.spyOn(app, 'initialize').mockResolvedValue()
+    vi.spyOn(useAuthStore(), 'login').mockResolvedValue(null)
+
+    const wrapper = mountSignIn(pinia)
+    const [username, password] = wrapper.findAll('input')
+    await username!.setValue('demo')
+    await password!.setValue('password')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(replace).toHaveBeenCalledWith('/keys?p=2')
+    const signUp = wrapper
+      .findAll('a')
+      .find((link) => link.text() === '立即注册')
+    expect(JSON.parse(signUp!.attributes('data-to')!)).toEqual({
+      name: 'sign-up',
+      query: { redirect: '/keys?p=2' },
+    })
+    wrapper.unmount()
+  })
 })
 
 describe('SignInView passkey second factor', () => {
@@ -134,7 +200,7 @@ describe('SignInView passkey second factor', () => {
     ])
     expect(assertPasskey).toHaveBeenCalledWith(options)
     expect(acceptLogin).toHaveBeenCalledWith(bundle)
-    expect(push).toHaveBeenCalledWith({ name: 'dashboard' })
+    expect(replace).toHaveBeenCalledWith({ name: 'dashboard' })
     wrapper.unmount()
   })
 })

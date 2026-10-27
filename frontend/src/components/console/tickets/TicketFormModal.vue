@@ -133,7 +133,7 @@ async function save() {
       </FormField>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <FormField :label="t('tickets.create.categoryLabel')">
+        <FormField group :label="t('tickets.create.categoryLabel')">
           <div class="flex flex-wrap gap-2">
             <button
               v-for="cat in categories"
@@ -152,7 +152,7 @@ async function save() {
             </button>
           </div>
         </FormField>
-        <FormField :label="t('tickets.create.priorityLabel')">
+        <FormField group :label="t('tickets.create.priorityLabel')">
           <div class="flex flex-wrap gap-2">
             <button
               v-for="pri in priorities"
@@ -207,7 +207,7 @@ async function save() {
         </FormField>
       </div>
 
-      <FormField :label="t('tickets.create.imagesLabel')">
+      <FormField group :label="t('tickets.create.imagesLabel')">
         <TicketImageUploader ref="uploader" :max-count="5" />
       </FormField>
     </div>

@@ -4,7 +4,7 @@
   >
     <!-- 眉标 -->
     <p
-      class="hero-eyebrow animate-fade-in font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--accent)] sm:text-xs sm:tracking-[0.2em]"
+      class="hero-eyebrow animate-fade-in font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--accent-text)] sm:text-xs sm:tracking-[0.2em]"
       style="animation-delay: 0.15s"
     >
       {{ t('hero.eyebrow') }}
@@ -73,13 +73,11 @@
       style="animation-delay: 0.8s"
     >
       <RouterLink
-        :to="isAuthenticated ? { name: 'dashboard' } : { name: 'sign-in' }"
+        :to="primaryTarget"
         class="hero-cta-primary group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-7 py-3.5 text-base font-semibold text-[var(--accent-contrast)] transition-all [text-shadow:none] hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] active:scale-[0.98] lg:w-auto"
       >
         <span class="cta-sheen" />
-        <span class="relative">{{
-          isAuthenticated ? t('nav.console') : t('hero.ctaPrimary')
-        }}</span>
+        <span class="relative">{{ primaryLabel }}</span>
         <svg
           class="relative transition-transform group-hover:translate-x-0.5"
           width="18"
@@ -158,9 +156,25 @@ import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 
 const { t, tm } = useI18n()
-const { docsLink, showDocs, modelCountLabel, uptimeLabel, uptimePercent } =
-  storeToRefs(useAppStore())
+const {
+  docsLink,
+  showDocs,
+  modelCountLabel,
+  uptimeLabel,
+  uptimePercent,
+  registerEnabled,
+} = storeToRefs(useAppStore())
 const { isAuthenticated } = storeToRefs(useAuthStore())
+// "Start free" promises an account; it falls back to sign-in only when
+// registration is closed, and then says so.
+const primaryTarget = computed(() => {
+  if (isAuthenticated.value) return { name: 'dashboard' }
+  return registerEnabled.value ? { name: 'sign-up' } : { name: 'sign-in' }
+})
+const primaryLabel = computed(() => {
+  if (isAuthenticated.value) return t('nav.console')
+  return registerEnabled.value ? t('hero.ctaPrimary') : t('nav.login')
+})
 
 const typedWords = computed(() => tm('hero.typed') as string[])
 const { displayed, currentWord, isTyping } = useTyped(typedWords)

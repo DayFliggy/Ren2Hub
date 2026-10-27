@@ -48,6 +48,14 @@ html[data-console-layout] {
     border-color 0.15s ease,
     background-color 0.15s ease;
 }
+/* Grows the 17px box to a 25px hit area; clicks on the pseudo-element land on
+   the input itself. */
+.checkbox-round::before {
+  content: '';
+  position: absolute;
+  inset: -0.25rem;
+  border-radius: 9999px;
+}
 html.dark .checkbox-round {
   border-radius: 9999px;
 }

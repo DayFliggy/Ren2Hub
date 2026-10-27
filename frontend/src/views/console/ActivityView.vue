@@ -226,7 +226,7 @@ watch(loading, (value) => {
           </dl>
           <button
             type="button"
-            class="mt-4 text-sm font-semibold text-[var(--accent-text)] hover:underline focus-ring"
+            class="mt-4 inline-flex min-h-6 items-center text-sm font-semibold text-[var(--accent-text)] hover:underline focus-ring"
             @click="router.push({ name: 'invite' })"
           >
             {{ accountT('restored.inviteOpen') }}

@@ -651,7 +651,7 @@ onBeforeUnmount(() => exportController?.abort())
       size="sm"
       @close="exportOpen = false"
     >
-      <FormField :label="t('orders.exportFormat')">
+      <FormField group :label="t('orders.exportFormat')">
         <FilterSelect
           v-model="exportFormat"
           :options="[

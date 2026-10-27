@@ -54,6 +54,8 @@ export default {
     oauthRequiresSignIn: '该服务需要额外验证，请返回登录页面继续。',
     mismatch: '两次输入的密码不一致',
     usernameRequired: '请输入用户名',
+    usernameOrEmailRequired: '请输入邮箱或用户名',
+    passwordRequired: '请输入密码',
     inviteCode: '邀请码',
     inviteCodePlaceholder: '输入邀请码',
     inviteCodeRequired: '请输入有效邀请码',

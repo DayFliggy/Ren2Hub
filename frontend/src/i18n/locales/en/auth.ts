@@ -57,6 +57,8 @@ export default {
       'This provider requires an additional verification step. Please sign in instead.',
     mismatch: 'Passwords do not match',
     usernameRequired: 'Username is required',
+    usernameOrEmailRequired: 'Enter your email or username',
+    passwordRequired: 'Enter your password',
     inviteCode: 'Invite code',
     inviteCodePlaceholder: 'Enter invite code',
     inviteCodeRequired: 'A valid invite code is required',
