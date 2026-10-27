@@ -2,6 +2,8 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+2026-10-23 之前的批次记录、浏览器迁移清单和渠道历史处置已于 2026-10-27 移出工作树；下文括号内的 `<提交>:<路径>` 可用 `git show` 读取，Ren2Hub 记录在本仓库执行，工作区记录在根仓库执行。历史段落提到的 `/home/work/ren2hub-*` 实施副本与证据目录已删除，仅作当时事实，不能再作为可复核证据。
+
 ## 2026-10-26 Dashboard 系统状态卡片共享快照
 
 按用户批准，Dashboard 系统状态卡片对所有登录用户开放。新增扩展接口 `GET /api/user/system-status`（`service/dashboard_system_status.go`、`controller/dashboard_system_status.go`），从现有唯一观测缓存投影 CPU、内存、磁盘（含绝对容量）、应用 HTTP 正文流量及 1h 分桶历史，并读取主机负载均值和逻辑核数（`service/dashboard_system_load_{unix,windows}.go`，gopsutil `load.Avg` 带 recover）。成功率取 `perf_metrics.QueryHourlyAll(24)`，所有调用方共享 60 秒缓存，失败缓存 10 秒，并以 `state` 区分 ok、no_requests、disabled、error。原生查询不接受 context，因此等待者最多等 3 秒；超时返回不缓存的 error，资源读数照常返回，共享查询结束后再写缓存。数据库/Redis 探测、检查原因、阈值、进程和连接池仍只在 Root 的 `/api/performance/*` 返回。
@@ -47,13 +49,13 @@ NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6` 仍有以下相同问题，参
 
 从 `a6436f2494` 实施的批次 0–2 固定 NewAPI 核心 `206e0fa5c600127a314a97f88592c067f784f4a6`。认证、管理、设置、资金和渠道五方向集成提交 `c6880aa8cf4f596fd41e98792d25a0122aa421b3`，后续形成审计修复基线 `a0a1f8dd1b7909089aed0339bd714406a5ccb66b`。源码与运行态以本账本顶部当前发布记录及工作区服务器档案为准。
 
-逐项处置、5处原生非测试改动、审计修复和候选验证限制见[本批记录](INTEGRATION_FIXES_20261022.md)。批次3延期，退役功能不恢复，原生多扣行为按用户决定保留；来源清单刷新为140个有理由标注的非测试 adapted 文件。新依赖 qrcode.vue 及原清单遗漏的 acorn 已纳入102个直接依赖的许可核对。
+逐项处置、5处原生非测试改动、审计修复和候选验证限制见本批记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/INTEGRATION_FIXES_20261022.md`）。批次3延期，退役功能不恢复，原生多扣行为按用户决定保留；来源清单刷新为140个有理由标注的非测试 adapted 文件。新依赖 qrcode.vue 及原清单遗漏的 acorn 已纳入102个直接依赖的许可核对。
 
 ## 2026-10-21 修复、收敛、借鉴与上游吸收
 
 NewAPI 核心从 `09109ec315a5086366f94bcce00f177ec831dbe1` 推进到 main HEAD `206e0fa5c600127a314a97f88592c067f784f4a6`（官方 latest `v1.0.0-rc.45` 之后，含任务凭据安全修复）。参考副本为 Sub2API `a34f373973bf`、AxonHub `cbdf9a6d4a3d`，只借鉴做法，没有搬代码。用户决定保留现行裁剪、本批不建新表、Vue 不回归上游、上游代码尽量原样照搬，与上游相同且属于多扣的资金问题保持上游原样。
 
-窗口内 25 个提交的逐项处置见[批次记录](CONVERGENCE_20261021.md)阶段 1：后端全部吸收，4 个只涉及 React 的提交刻意不吸收；`5e9595190`（渠道优先级拖拽后端）已由 `87ad554d9` 逐字节带入，本批补记。阶段 2 逐文件把没有合同依据的适配差异回归上游原文，`CORE_SOURCE_DELTA.json` 每个非测试 adapted 行都带合同标签，缺标签时刷新脚本拒绝写入。
+窗口内 25 个提交的逐项处置见批次记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/CONVERGENCE_20261021.md`）阶段 1：后端全部吸收，4 个只涉及 React 的提交刻意不吸收；`5e9595190`（渠道优先级拖拽后端）已由 `87ad554d9` 逐字节带入，本批补记。阶段 2 逐文件把没有合同依据的适配差异回归上游原文，`CORE_SOURCE_DELTA.json` 每个非测试 adapted 行都带合同标签，缺标签时刷新脚本拒绝写入。
 
 阶段 3 修复研究报告确认的缺陷，并实施 3E 评估中的 12 项 do-now 重构；7 项 defer、25 项 reject 的理由和复评条件见批次记录“3E 组”。本批新增的上游偏离以 `upstream-defect` 标注，上游修复后回归上游写法：`UpdateOption` 写库失败不再报告成功（E3-2）；分发器首轮检查 `SetupContextForSelectedChannel` 的返回值（B3）；订单计数用派生表封顶，上游的 `Limit(n).Count()` 不生效（A4）；支付回调统一核对实付金额并区分永久和暂时错误（A2、A7）。A2 在 Creem、Waffo、Waffo Pancake 上没有启用，登记为待验证。Realtime WSS 逐轮直扣后结算再扣一次全额（E1-1）与上游相同，按用户决定不修。运维扩展以 `ops-metrics` 标注。
 
@@ -65,19 +67,19 @@ Codex `gpt-6-astra` 共同审计 6 轮，按资金与权限、路由与并发、
 
 以 `f96b9c516284323e2606845f1c11bab51ea3075c` 为开发基线，保留 `9a63062227c31ba54a6346e07ee8b4fd8802f22f` 的有效 Vue 视觉，按文件复用 `324dcb3bcac8f5d7fe89b63284b067f6a1658a02` 已有原生适配。NewAPI 核心仍为 `09109ec315a5086366f94bcce00f177ec831dbe1`，没有上游升级。
 
-工单、GMPay 和邀请返利按独有业务标注；认证/金额/路径/提交语义、模型与路由、统计和管理运维改用现行领域合同。补 GMPay 未知创建的可查询身份、返利十二月真实人数，以及 summary 不含同比时的实际查询边界。移除排除业务及旧账务依赖，不恢复 `/api/next` 兼容后端。来源、功能处置、验证边界见[本批记录](API_REGRESSION_20261021.md)；源码发布不等于正式应用切换。
+工单、GMPay 和邀请返利按独有业务标注；认证/金额/路径/提交语义、模型与路由、统计和管理运维改用现行领域合同。补 GMPay 未知创建的可查询身份、返利十二月真实人数，以及 summary 不含同比时的实际查询边界。移除排除业务及旧账务依赖，不恢复 `/api/next` 兼容后端。来源、功能处置、验证边界见本批记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/API_REGRESSION_20261021.md`）；源码发布不等于正式应用切换。
 
 ## 2026-10-19 Vue 历史覆盖与审计
 
 按用户“直接使用 Git 历史版本进行覆盖并进行审计”“不动后端”，从 `e8bf2aa0c16f5ad39f15fdd701c66dc0e34ad063` 恢复遗漏的 Vue 界面。来源为 `9a63062227c31ba54a6346e07ee8b4fd8802f22f`，实际提交时间为 2026-10-16 13:04:14 UTC。先覆盖历史页面及组件，再仅在前端适配已有原生接口；不推进 NewAPI 核心，不修改 Go、迁移、依赖、数据库或正式配置。
 
-恢复运维、Key 路由、自动路由卡、订单、充值、GMPay、发票及活动布局；缺失监控数据与发票接口保持明确不可用。保留当前无分组、渠道倍率、权限、支付和返利边界。逐项页面清单、审计修正与执行证据见[恢复记录](FRONTEND_REGRESSION_20261019.md)，最终源码身份与发布状态由根工作区[交付记录](../../../docs/workflows/REN2HUB_FRONTEND_REGRESSION_20261019.md)登记；源码同步不代表正式部署。
+恢复运维、Key 路由、自动路由卡、订单、充值、GMPay、发票及活动布局；缺失监控数据与发票接口保持明确不可用。保留当前无分组、渠道倍率、权限、支付和返利边界。逐项页面清单、审计修正与执行证据见恢复记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/FRONTEND_REGRESSION_20261019.md`），最终源码身份与发布状态由根工作区交付记录（工作区 `61d7528693a832dc759014f15179ad42f0e324f3:docs/workflows/REN2HUB_FRONTEND_REGRESSION_20261019.md`）登记；源码同步不代表正式部署。
 
 ## 2026-10-18 渠道路由审计修复
 
 从 `0934cbfbcf7c69bb7e7b4f55d109aecab9afd314` 修复 3 项 P1、6 项 P2：删除邀请人不能阻断付款入账；管理员加额操作身份只在结果未确认时复用；已提交并发限制必须发布且保留在途计数；原任务使用原渠道例外；流式调度延迟从首个有效输出计时；任务/WS 区分撤权与技术故障；订单 PAT 复用目录中的 `billing:read`；兑换码接通四状态与双向排序。
 
-NewAPI 核心不变，保持原生额度事务、首字节重试边界、任务和权限生命周期。相关本地扩展不能登记为上游整包吸收。2026-10-18 13:38 UTC 只读来源采集完整；逐项代码、来源边界和回归见[本批修复记录](AUDIT_FIXES_20261018.md)，源码与候选、模拟渠道压力及真实浏览器结果见根工作区[交付记录](../../../docs/workflows/REN2HUB_AUDIT_FIX_RELEASE_20261018.md)。未提交时 `candidate_sha=null`；不复用旧镜像候选，不修改正式数据。
+NewAPI 核心不变，保持原生额度事务、首字节重试边界、任务和权限生命周期。相关本地扩展不能登记为上游整包吸收。2026-10-18 13:38 UTC 只读来源采集完整；逐项代码、来源边界和回归见本批修复记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/AUDIT_FIXES_20261018.md`），源码与候选、模拟渠道压力及真实浏览器结果见根工作区交付记录（工作区 `61d7528693a832dc759014f15179ad42f0e324f3:docs/workflows/REN2HUB_AUDIT_FIX_RELEASE_20261018.md`）。未提交时 `candidate_sha=null`；不复用旧镜像候选，不修改正式数据。
 
 ## 2026-10-18 渠道路由与历史能力回归（代码完成，发布候选待验）
 
@@ -85,7 +87,7 @@ NewAPI 核心不变，保持原生额度事务、首字节重试边界、任务�
 
 业务分组删除，每 Key 自动/有序手动渠道路由；统一资格服务，原生价格乘渠道倍率，强制预扣与更贵重试补足；用户/渠道即时并发、进程内尝试观察。Vue 保留 9a 页面结构并对接原生额度、工单、GMPay、签到和设置，补统一目录、客户端配置、统计及领域返利事务。未恢复历史认证/协议诊断/插件/产物增强、独立商城、会员等级、新人任务、七日阶梯或 schema 5。
 
-详细落点、历史处置、实际验证和未完成发布阶段见[执行记录](CHANNEL_REGRESSION_20261018.md)，文件差异见[核心差异清单](CORE_SOURCE_DELTA.json)。本地代码及适用验证已完成，默认浏览器 506/506 通过；四条 AWS 文案增量另经定向与生产构建验证。提交前阶段 `candidate_sha=null`，发布后最终身份及候选状态由根工作区[交付记录](../../../docs/workflows/REN2HUB_CHANNEL_RELEASE_20261018.md)登记；单测、三库与浏览器结果不能代替隔离候选。正式空库切换需要独立批准，当前库、Redis db1 和附件均未修改。
+详细落点、历史处置、实际验证和未完成发布阶段见执行记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/CHANNEL_REGRESSION_20261018.md`），文件差异见[核心差异清单](CORE_SOURCE_DELTA.json)。本地代码及适用验证已完成，默认浏览器 506/506 通过；四条 AWS 文案增量另经定向与生产构建验证。提交前阶段 `candidate_sha=null`，发布后最终身份及候选状态由根工作区交付记录（工作区 `61d7528693a832dc759014f15179ad42f0e324f3:docs/workflows/REN2HUB_CHANNEL_RELEASE_20261018.md`）登记；单测、三库与浏览器结果不能代替隔离候选。正式空库切换需要独立批准，当前库、Redis db1 和附件均未修改。
 
 ## 2026-10-17 Vue 体验恢复
 
@@ -93,17 +95,17 @@ NewAPI 核心不变，保持原生额度事务、首字节重试边界、任务�
 
 首页双栏和文档入口、模型三视图、概览五格指标与 Token 趋势、订单概览/详情/导出、账户/活动/邀请和运维布局已适配现有原生接口。缺失统计明确不可用；模型比较采用用户分组，订单汇总和导出注明当前页。Key 配置恢复预览、复制、下载，使用环境变量引用，不读取实际密钥；协议目录、当前 Token 与路由资格在生成时复验。
 
-完整范围、实现边界、测试和用户指定 Gemini 4/Gemini 3.8 视觉审计见 [Vue 恢复记录](VUE_RESTORATION_20261017.md)。源码发布与正式运行身份由根工作区[本批交付记录](../../../docs/workflows/REN2HUB_VUE_RESTORATION_20261017.md)分别登记，源码同步不等于重新部署。
+完整范围、实现边界、测试和用户指定 Gemini 4/Gemini 3.8 视觉审计见 Vue 恢复记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/VUE_RESTORATION_20261017.md`）。源码发布与正式运行身份由根工作区本批交付记录（工作区 `61d7528693a832dc759014f15179ad42f0e324f3:docs/workflows/REN2HUB_VUE_RESTORATION_20261017.md`）分别登记，源码同步不等于重新部署。
 
 ## 历史批次：2026-10-17 已授权审计修复
 
-以下保留当时实施阶段的记录。其后最终 `c7fcfb635…` 已完成候选并于 2026-10-17 10:37:49 UTC 正式切换，8 项问题及 A4 遗漏已关闭；最终身份和证据见根工作区[审计交付记录](../../../docs/workflows/REN2HUB_AUDIT_RELEASE_20261017.md)，不以此处较早的待执行状态覆盖最终结果。
+以下保留当时实施阶段的记录。其后最终 `c7fcfb635…` 已完成候选并于 2026-10-17 10:37:49 UTC 正式切换，8 项问题及 A4 遗漏已关闭；最终身份和证据见根工作区审计交付记录（工作区 `61d7528693a832dc759014f15179ad42f0e324f3:docs/workflows/REN2HUB_AUDIT_RELEASE_20261017.md`），不以此处较早的待执行状态覆盖最终结果。
 
 `01098b7387fb67a79ea01b4192d71e96a62a78ad` 的完整审计发现 8 项代码缺陷和 1 项验收遗漏。首阶段只参考上游已有处理方式，发布为 `29a1d1c78ad576feda3e280dd359e37219b49df2`。用户随后批准：先核对 NewAPI，再研究两个参考项目；没有完整对应实现时做最小本地修复。先前“待授权”是历史阶段状态，当前执行限制已由本批授权替代。
 
 当前实施副本 `/home/work/ren2hub-audit-repair-20261017`，应用基点为 `29a1d1c78…`，证据 `/home/work/ren2hub-audit-repair-evidence-20261017/`。源码及第一候选已发布为 `1c04f945e4f0927a3a803347fad3b4831e9c37bf`；A1/A3/A4/A5/A6/A7/A8 的源码及定向检查已完成，A2 复用先前已发布修复。A9 及最终本地检查已完成：Vue 174 文件/1012 单测、默认浏览器 55 文件/416 场景全部通过，无跳过/重试通过；Go 全套分批、vet、三库定向、race、生产构建与嵌入 HTTP 检查通过。发布、新候选待执行，不能关闭整批审计。
 
-标准采集 `source-state.json` 在 `2026-10-17T08:36:51.9100792Z` 为 complete。NewAPI 冻结核心仍是 `09109ec315a5086366f94bcce00f177ec831dbe1`，观察 main 为 `3e2ce2c8856e32ca7054d673f8cd059ae466e80c`；两者间 4 个提交未处理本批问题且未吸收。参考 Sub2API main 为 `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`，AxonHub unstable 为 `a946fca495c52344ed073abb6c3562b9ff728b12`；参考副本干净且引用未变。官方 latest 的标签、提交、发布时间及原始标志见[审计修复记录](AUDIT_FIXES_20261017.md)。
+标准采集 `source-state.json` 在 `2026-10-17T08:36:51.9100792Z` 为 complete。NewAPI 冻结核心仍是 `09109ec315a5086366f94bcce00f177ec831dbe1`，观察 main 为 `3e2ce2c8856e32ca7054d673f8cd059ae466e80c`；两者间 4 个提交未处理本批问题且未吸收。参考 Sub2API main 为 `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`，AxonHub unstable 为 `a946fca495c52344ed073abb6c3562b9ff728b12`；参考副本干净且引用未变。官方 latest 的标签、提交、发布时间及原始标志见审计修复记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/AUDIT_FIXES_20261017.md`）。
 
 | 范围          | 当前实现与来源边界                                                                                                                                                                                                                                                  |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -114,9 +116,9 @@ NewAPI 核心不变，保持原生额度事务、首字节重试边界、任务�
 | A6 候选交集   | 复用原生规范化函数，按实际请求名到 ability 单向求交；Models 返回获准请求名，具体同族不同模型不能互相授权。                                                                                                                                                          |
 | A7 WS         | manual+pin 的首次/续次共用当前组/模型/列表资格检查；保持锁定计价组、auto pin 和原任务边界。撤权 403/1008，技术故障 500/1011，发送和预扣前失败。共享 SQL 任一错误立即传播；定向真实 WS 与 race 通过。                                                                |
 | A8 数据身份   | 验证器将首次安装数据库身份与当前镜像 SHA 分离，仍核对 release.env、实际 DSN、Redis、目录及镜像；19 项本地验证器/安装器回归通过，未执行正式更新。                                                                                                                    |
-| A9 Vue/浏览器 | 迁移旧合同并保留真实断言，发现并修复元数据 preview candidates / apply selections；插件预览采用 NewAPI 静态 AST 解析，不执行源码；原生 upload 权威处理动态插件。55 原文件逐一映射由[浏览器迁移记录](BROWSER_TEST_MIGRATION_20261017.md)维护，完整默认 416 场景通过。 |
+| A9 Vue/浏览器 | 迁移旧合同并保留真实断言，发现并修复元数据 preview candidates / apply selections；插件预览采用 NewAPI 静态 AST 解析，不执行源码；原生 upload 权威处理动态插件。55 原文件逐一映射由浏览器迁移记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/BROWSER_TEST_MIGRATION_20261017.md`）维护，完整默认 416 场景通过。 |
 
-Sub2API 的 WS 逐次白名单与 AxonHub 的权限交集只是参考惯例，没有本地 routing/PAT/pin 的完整实现；A1、A3-A8 的新增本地边界不可登记为整个参考提交已吸收。NewAPI 仍是唯一上游，不新增调度、账务或权限来源。详细落点、先红/后绿证据和历史阶段的准确状态见[审计修复记录](AUDIT_FIXES_20261017.md)。最终文件指纹在 `a5-a7-final-files.sha256`，当前核心范围清单见 [CORE_SOURCE_DELTA.json](CORE_SOURCE_DELTA.json)。
+Sub2API 的 WS 逐次白名单与 AxonHub 的权限交集只是参考惯例，没有本地 routing/PAT/pin 的完整实现；A1、A3-A8 的新增本地边界不可登记为整个参考提交已吸收。NewAPI 仍是唯一上游，不新增调度、账务或权限来源。详细落点、先红/后绿证据和历史阶段的准确状态见审计修复记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/AUDIT_FIXES_20261017.md`）。最终文件指纹在 `a5-a7-final-files.sha256`，当前核心范围清单见 [CORE_SOURCE_DELTA.json](CORE_SOURCE_DELTA.json)。
 
 ## 历史阶段：首轮上游依据修复
 

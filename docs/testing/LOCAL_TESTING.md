@@ -53,7 +53,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 数据库和候选 runner 自己创建目标，不接收用户提供的 DSN，不继承生产数据库环境变量。容器均带本轮随机 label，清理前核验确切 ID 和 label，不用名称通配符、全局 prune、FLUSHDB 或清空旧库。失败退出非零，保留报告与日志；清理失败也不能算通过。`browser` profile 的真实浏览器实例在只有回环接口的独立 network/PID namespace 内运行，外网请求直接失败；`ui-contracts` 使用同源模拟 API 和独立 loopback Vite 端口，不把这层当作真实网络隔离。
 
-`ui-contracts` 只证明浏览器行为与布局断言。`tests/visual/` 恢复自 9a63062227，没有经过复核的像素参考，因此这一层不声称像素一致；视觉回归需另行对照 9a63062227 截图人工复核，并单独记账。旧 `tests/contracts/` 的像素基线流程随该目录退役，其证据见 [UI_REGRESSION_20261024.md](UI_REGRESSION_20261024.md)。
+`ui-contracts` 只证明浏览器行为与布局断言。`tests/visual/` 恢复自 9a63062227，没有经过复核的像素参考，因此这一层不声称像素一致；视觉回归需另行对照 9a63062227 截图人工复核，并单独记账。旧 `tests/contracts/` 的像素基线流程随该目录退役，其证据见 Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/testing/UI_REGRESSION_20261024.md`（`git show` 读取）。
 
 `ui-contracts` 固定使用专用回环入口 `http://127.0.0.1:41739`，因为邀请链接会真实显示当前 origin。该端口被占用时直接失败，不回退随机端口；同一机器上的完整浏览器验收须串行。历史副本与真实后端 smoke 仍使用各自端口；每轮 `visual-origin.json` 记录实际值。
 

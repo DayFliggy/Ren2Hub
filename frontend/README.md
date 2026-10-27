@@ -72,7 +72,7 @@ Tailwind 4 的最低浏览器要求为 Safari 16.4、Chrome 111、Firefox 128；
 
 `src/api/` 集中认证与安全、工单、充值订单、返利、模型目录、Token 路由、统计、管理和运维的请求与 DTO 校验。普通接口校验 `success/data`，支付模块单独校验原生 `message/url/data`。缺字段、未知状态、超出 JavaScript 安全整数的原生额度和业务错误不转换为零、空列表或成功；请求取消和会话版本保护防止迟到响应覆盖当前页面。
 
-用户额度使用 `quota/used_quota`，Token 使用 `remain_quota/used_quota/unlimited_quota`。工单调用 `/api/tickets` 与 `/api/admin/tickets`，返利概览、邀请名单、流水分开读取；转入只提交稳定的 `operation_id`，由后端全额转入。GMPay 使用人民币法币金额和完整加密资产标识，未知创建结果进入订单查询，不自动重新创建。完整回归范围和来源见[本批记录](../docs/upstream/API_REGRESSION_20261021.md)。
+用户额度使用 `quota/used_quota`，Token 使用 `remain_quota/used_quota/unlimited_quota`。工单调用 `/api/tickets` 与 `/api/admin/tickets`，返利概览、邀请名单、流水分开读取；转入只提交稳定的 `operation_id`，由后端全额转入。GMPay 使用人民币法币金额和完整加密资产标识，未知创建结果进入订单查询，不自动重新创建。完整回归范围和来源见本批记录（Ren2Hub `888498f1b19e08acbafae91fefe1b755048fa7eb:docs/upstream/API_REGRESSION_20261021.md`）。
 
 ## 用量日志导出
 

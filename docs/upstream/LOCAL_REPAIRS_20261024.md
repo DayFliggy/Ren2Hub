@@ -1,6 +1,6 @@
 # 2026-10-24 本地修复、观测重构与原生计数
 
-本轮从 `6e4539904d649f892cb7d2f61ea5fedc8c5198bb` 按用户批准的修复计划实施。代码覆盖绘图/任务日志结果归属、独有观测、Dashboard 指标语义和普通 API Key 原生计数；实际验证及边界见末尾记录。未提交工作树的 `candidate_sha=null`。本记录保存实施阶段证据；发布、镜像候选和运行身份由根工作区 `docs/workflows/REN2HUB_REPAIR_RELEASE_20261024.md` 单独绑定。
+本轮从 `6e4539904d649f892cb7d2f61ea5fedc8c5198bb` 按用户批准的修复计划实施。代码覆盖绘图/任务日志结果归属、独有观测、Dashboard 指标语义和普通 API Key 原生计数；实际验证及边界见末尾记录。未提交工作树的 `candidate_sha=null`。本记录保存实施阶段证据；发布、镜像候选和运行身份由根工作区[服务器档案](../../../docs/server/SERVER_PROFILE.md)记录；当时的发布记录见工作区 `61d7528693a832dc759014f15179ad42f0e324f3:docs/workflows/REN2HUB_REPAIR_RELEASE_20261024.md`。
 
 后端已有而 Vue 无入口的 D 类不纳入本轮；不恢复 `/api/next`、业务分组、旧等待队列、旧账务、React 或已退役功能。10 组共同缺陷仍在[待上游台账](UPSTREAM_KNOWN_ISSUES_20261024.md)，登记不等于修复。
 
