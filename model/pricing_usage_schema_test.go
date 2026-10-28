@@ -191,6 +191,9 @@ export function parseTaskResult(){return {};}
 	for _, entry := range snapshot.Entries {
 		entries[entry.ModelName] = entry
 	}
+	// A model served by a single plugin still gets that plugin's price editor.
+	require.Len(t, entries["profile-image"].PluginVariants, 1)
+	assert.Equal(t, key, entries["profile-image"].PluginVariants[0].PluginKey)
 	for _, tc := range []struct {
 		name, field, unit string
 		wantExamples      int

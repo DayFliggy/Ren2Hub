@@ -25,6 +25,9 @@ func TestFetchUpstreamRatiosRoutesFixedSourcesAndNativeUpstreams(t *testing.T) {
 		{"fixed and channel sources are exclusive", `{"source_ids":["sub2api"],"channel_ids":[1]}`, "application/json", http.StatusBadRequest, "source_ids cannot be combined with channel sources"},
 		// 原生流程能再次绑定请求体，才会走到上游过滤并报告没有可用上游。
 		{"native flow rebinds restored body", `{"upstreams":[{"name":"x","base_url":"ftp://example.invalid"}]}`, "application/json", http.StatusOK, "No valid upstream channel"},
+		// include_unchanged 属于原生请求字段，不改变本地钩子的分派。
+		{"include_unchanged keeps fixed source dispatch", `{"source_ids":["basellm"],"include_unchanged":true}`, "application/json", http.StatusBadRequest, "unknown price source: basellm"},
+		{"include_unchanged reaches native flow", `{"upstreams":[{"name":"x","base_url":"ftp://example.invalid"}],"include_unchanged":true}`, "application/json", http.StatusOK, "No valid upstream channel"},
 		{"malformed body", `{`, "application/json", http.StatusBadRequest, "Invalid request parameter format"},
 		{"empty body", ``, "application/json", http.StatusBadRequest, "Invalid request parameter format"},
 	} {

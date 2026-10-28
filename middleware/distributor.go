@@ -49,6 +49,14 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		if value, exists := c.Get(contextKeyTaskPluginEndpointSelection); exists {
+			if selected, ok := value.(taskPluginEndpointSelection); ok {
+				// Plugin preparation may replace the model with its resolved name;
+				// keep the original stream dimensions for route observations.
+				modelRequest.Stream = selected.Request.Stream
+				modelRequest.StreamFormat = selected.Request.StreamFormat
+			}
+		}
 		stream := modelRequest.Stream || modelRequest.StreamFormat == "sse"
 		if relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeGemini {
 			stream = c.Query("alt") == "sse" || strings.Contains(c.Request.URL.Path, "streamGenerateContent")
@@ -84,33 +92,47 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 		}
-		userPermit, admissionErr := service.AcquireUserConcurrency(c.Request.Context(), c.GetInt("id"), c.GetInt("user_max_concurrency"))
-		if admissionErr != nil {
-			status, code := service.ConcurrencyAdmissionError("user", admissionErr)
-			abortWithOpenAiMessage(c, status, admissionErr.Error(), code)
-			return
+		var userPermit *service.ConcurrencyPermit
+		userPermitAdmittedByEndpoint := false
+		if value, exists := c.Get(contextKeyTaskPluginUserConcurrencyPermit); exists {
+			if admitted, ok := value.(*service.ConcurrencyPermit); ok && admitted != nil {
+				userPermit = admitted
+				userPermitAdmittedByEndpoint = true
+			}
 		}
-		defer userPermit.Release()
+		if userPermit == nil {
+			var admissionErr error
+			userPermit, admissionErr = service.AcquireUserConcurrency(c.Request.Context(), c.GetInt("id"), c.GetInt("user_max_concurrency"))
+			if admissionErr != nil {
+				status, code := service.ConcurrencyAdmissionError("user", admissionErr)
+				abortWithOpenAiMessage(c, status, admissionErr.Error(), code)
+				return
+			}
+		}
+		if !userPermitAdmittedByEndpoint {
+			defer userPermit.Release()
+		}
 		defer service.ReleaseRouteChannel(c)
 		if pinned || shouldSelectChannel {
 			var selectErr *service.ChannelSelectError
-			channel, selectErr = service.SelectChannelForRequest(c, modelRequest.Model, &service.RetryParam{
-				Ctx:         c,
-				ModelName:   modelRequest.Model,
-				RequestPath: c.Request.URL.Path,
-				Retry:       common.GetPointer(0),
-			})
+			if value, exists := c.Get(contextKeyTaskPluginEndpointSelection); exists && !pinned {
+				if selected, ok := value.(taskPluginEndpointSelection); ok && selected.Model == modelRequest.Model && selected.Channel != nil {
+					channel, selectErr = service.ReacquireSelectedRouteChannel(c, selected.Channel.Id, modelRequest.Model)
+				}
+			}
+			if channel == nil && selectErr == nil {
+				channel, selectErr = service.SelectChannelForRequest(c, modelRequest.Model, &service.RetryParam{
+					Ctx:         c,
+					ModelName:   modelRequest.Model,
+					RequestPath: c.Request.URL.Path,
+					Retry:       common.GetPointer(0),
+				})
+			}
 			if selectErr != nil {
 				if selectErr.FilterKind == taskdto.FilterTaskPluginIdentity {
 					logTaskPluginChannelDecision(c, selectErr.Channel, modelRequest.Model, "channel_rejected", "identity_mismatch")
 				}
-				message := selectErr.Message
-				if selectErr.NoAvailableChannel {
-					message = noAvailableChannelMessage(c, modelRequest.Model)
-				} else if selectErr.MessageID != "" {
-					message = i18n.T(c, selectErr.MessageID, selectErr.Params)
-				}
-				abortWithOpenAiMessage(c, selectErr.StatusCode, message, selectErr.Code)
+				abortWithChannelSelectError(c, selectErr, modelRequest.Model)
 				return
 			}
 		}
@@ -343,6 +365,16 @@ func getJSONStringValue(result gjson.Result, field string) (string, error) {
 		return "", fmt.Errorf("field %s must be a string", field)
 	}
 	return result.String(), nil
+}
+
+func abortWithChannelSelectError(c *gin.Context, selectErr *service.ChannelSelectError, modelName string) {
+	message := selectErr.Message
+	if selectErr.NoAvailableChannel {
+		message = noAvailableChannelMessage(c, modelName)
+	} else if selectErr.MessageID != "" {
+		message = i18n.T(c, selectErr.MessageID, selectErr.Params)
+	}
+	abortWithOpenAiMessage(c, selectErr.StatusCode, message, selectErr.Code)
 }
 
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {

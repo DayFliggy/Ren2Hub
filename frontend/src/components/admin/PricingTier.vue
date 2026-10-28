@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { modelPricingMessages } from '@/i18n/modelPricing'
+import { TOKEN_VARIABLES } from '@/features/pricing/lib/billing-expression/types'
 import {
   createEmptyVisualCondition,
   visualNodeId,
@@ -9,7 +10,11 @@ import {
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import PricingCondition from './PricingCondition.vue'
 const model = defineModel<VisualPricingNode>({ required: true })
+// The whole document is multiplied by image_count: fixed prices are per image.
+defineProps<{ imageCount?: boolean }>()
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
+// len is the tier-condition context length; it is never priced on its own.
+const priceVariables = TOKEN_VARIABLES.filter((variable) => variable !== 'len')
 function branch() {
   model.value = {
     id: visualNodeId(),
@@ -41,12 +46,14 @@ function branch() {
           ><span>{{ t('unit') }}</span
           ><select v-model="model.billingUnit">
             <option value="token">{{ t('perMillion') }}</option>
-            <option value="request">{{ t('perRequest') }}</option>
+            <option value="request">
+              {{ t(imageCount ? 'perImage' : 'perRequest') }}
+            </option>
           </select></label
         >
       </div>
       <label v-if="model.billingUnit === 'request'" class="admin-field"
-        ><span>{{ t('fixed') }} (USD)</span
+        ><span>{{ t(imageCount ? 'imagePrice' : 'fixed') }} (USD)</span
         ><input v-model="model.fixedPrice" inputmode="decimal"
       /></label>
       <template v-else>
@@ -62,21 +69,7 @@ function branch() {
               v-model="price.variable"
               @change="price.origin = undefined"
             >
-              <option
-                v-for="variable in [
-                  'p',
-                  'c',
-                  'cr',
-                  'cc',
-                  'cc1h',
-                  'img',
-                  'img_cr',
-                  'img_o',
-                  'ai',
-                  'ao',
-                ]"
-                :key="variable"
-              >
+              <option v-for="variable in priceVariables" :key="variable">
                 {{ variable }}
               </option>
             </select></label
@@ -113,7 +106,7 @@ function branch() {
             >{{ t('deleteBranch') }}</ConsoleButton
           >
         </div>
-        <PricingTier v-model="model.yes" />
+        <PricingTier v-model="model.yes" :image-count="imageCount" />
       </div>
       <div class="price-tier-branch">
         <div class="price-tier-heading">
@@ -122,7 +115,7 @@ function branch() {
             t('deleteBranch')
           }}</ConsoleButton>
         </div>
-        <PricingTier v-model="model.no" />
+        <PricingTier v-model="model.no" :image-count="imageCount" />
       </div>
     </template>
   </div>

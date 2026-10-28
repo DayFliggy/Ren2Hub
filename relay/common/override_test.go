@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	common2 "github.com/QuantumNous/new-api/common"
@@ -16,6 +17,30 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestParamOverrideRegexCacheIsBounded(t *testing.T) {
+	first := t.Name() + "-0"
+	for i := 0; i <= paramOverrideRegexCacheLimit; i++ {
+		_, err := getParamOverrideRegex(t.Name() + "-" + fmt.Sprint(i))
+		require.NoError(t, err)
+	}
+
+	paramOverrideRegexCache.Lock()
+	defer paramOverrideRegexCache.Unlock()
+	assert.LessOrEqual(t, len(paramOverrideRegexCache.values), paramOverrideRegexCacheLimit)
+	assert.LessOrEqual(t, paramOverrideRegexCache.bytes, paramOverrideRegexCacheMaxBytes)
+	assert.NotContains(t, paramOverrideRegexCache.values, first, "old entries must be evicted")
+}
+
+func TestParamOverrideRegexCacheSkipsOversizedPatterns(t *testing.T) {
+	pattern := "^" + strings.Repeat("a", paramOverrideRegexCacheMaxPatternBytes) + "$"
+	_, err := getParamOverrideRegex(pattern)
+	require.NoError(t, err)
+
+	paramOverrideRegexCache.Lock()
+	defer paramOverrideRegexCache.Unlock()
+	assert.NotContains(t, paramOverrideRegexCache.values, pattern)
+}
 
 func TestApplyParamOverrideTrimPrefix(t *testing.T) {
 	// trim_prefix example:
@@ -166,23 +191,45 @@ func TestApplyParamOverrideReplace(t *testing.T) {
 func TestApplyParamOverrideRegexReplace(t *testing.T) {
 	// regex_replace example:
 	// {"operations":[{"path":"model","mode":"regex_replace","from":"^gpt-","to":"openai/gpt-"}]}
-	input := []byte(`{"model":"gpt-4o-mini","temperature":0.7}`)
-	override := map[string]any{
-		"operations": []any{
-			map[string]any{
-				"path": "model",
-				"mode": "regex_replace",
-				"from": "^gpt-",
-				"to":   "openai/gpt-",
-			},
+	operation := map[string]any{"mode": "regex_replace"}
+	override := map[string]any{"operations": []any{operation}}
+	// Reusing a channel configuration must apply the current pattern on every request.
+	for _, tt := range []struct {
+		name  string
+		input string
+		path  string
+		from  string
+		to    string
+		want  string
+	}{
+		{
+			name:  "single path",
+			input: `{"model":"gpt-4o-mini","temperature":0.7}`,
+			path:  "model", from: "^gpt-", to: "openai/gpt-",
+			want: `{"model":"openai/gpt-4o-mini","temperature":0.7}`,
 		},
+		{
+			name:  "next request uses updated pattern",
+			input: `{"model":"gpt-4o-mini","temperature":0.7}`,
+			path:  "model", from: "-mini$", to: "",
+			want: `{"model":"gpt-4o","temperature":0.7}`,
+		},
+		{
+			name:  "wildcard path applies one pattern to every field",
+			input: `{"messages":[{"content":"foo 1"},{"content":"foo 2"},{"content":"bar"}]}`,
+			path:  "messages.*.content", from: `^foo (\d)$`, to: "baz $1",
+			want: `{"messages":[{"content":"baz 1"},{"content":"baz 2"},{"content":"bar"}]}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			operation["path"] = tt.path
+			operation["from"] = tt.from
+			operation["to"] = tt.to
+			out, err := ApplyParamOverride([]byte(tt.input), override, nil)
+			require.NoError(t, err)
+			assert.JSONEq(t, tt.want, string(out))
+		})
 	}
-
-	out, err := ApplyParamOverride(input, override, nil)
-	if err != nil {
-		t.Fatalf("ApplyParamOverride returned error: %v", err)
-	}
-	assertJSONEqual(t, `{"model":"openai/gpt-4o-mini","temperature":0.7}`, string(out))
 }
 
 func TestApplyParamOverrideReplaceRequiresFrom(t *testing.T) {

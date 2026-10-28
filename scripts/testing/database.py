@@ -23,6 +23,7 @@ LABEL = "io.ren2hub.local-test.run-id"
 IMAGES = {"mysql": "mysql:8.4", "postgres": "postgres:15.19"}
 # 显式清单使测试改名、被删除或未运行都成为失败，而非自动缩减覆盖范围。
 MATRIX_TESTS = {
+    "middleware": ("TestRouteTaskPluginEndpointUsesSelectedChannel",),
     "model": (
         "TestTokenRoutingDatabases", "TestGmpayAndTicketDatabaseContracts",
         "TestCoreEmptyDatabaseInitialization", "TestAffiliateLedgerMigrationAndIdempotencyDatabases",
@@ -131,6 +132,16 @@ def database_inventory(source: Path, tracked_files: list[str]) -> dict:
     existing = {name for _, name in functions}
     result["missing_required"] = sorted(set(REQUIRED_TESTS) - existing)
     return result
+
+
+def database_test_files(source: Path) -> list[str]:
+    """Include tracked and non-ignored working-tree tests for dirty candidates."""
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+         "--", "*_test.go", ":(exclude)docs/developer-notes/**"],
+        cwd=source, check=True, stdout=subprocess.PIPE, text=False,
+    )
+    return [path for path in result.stdout.decode().split("\0") if path]
 
 
 class Failure(RuntimeError):
@@ -292,8 +303,8 @@ class Runner:
                 raise Failure("缺少工具: " + tool)
         version = self.command(["go", "version"]).stdout.strip()
         self.report["go_version"] = version
-        tracked = self.command(["git", "ls-files", "-z", "--", "*_test.go", ":(exclude)docs/developer-notes/**"]).stdout.split("\0")
-        self.report["discovery"] = database_inventory(self.source, tracked)
+        tests = database_test_files(self.source)
+        self.report["discovery"] = database_inventory(self.source, tests)
         if self.report["discovery"]["unclassified"] or self.report["discovery"]["missing_required"]:
             raise Failure("发现未归类或缺失的数据库测试；见报告 discovery，拒绝缩减覆盖范围")
         # 固定本机 socket，绕开 Docker context 和 DOCKER_HOST 的远程目标。

@@ -379,6 +379,7 @@ export const pricingConfigApi = {
           endpoint: UPSTREAM_ENDPOINTS[upstream.kind],
         },
       ],
+      include_unchanged: true,
     }
     return parseUpstreamPrices(
       await api.post('/api/ratio_sync/fetch', body, { signal })

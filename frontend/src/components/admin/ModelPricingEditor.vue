@@ -21,6 +21,7 @@ import {
   validatePricing,
   type PricingMode,
 } from '@/features/pricing/draft'
+import { compileBillingExpression } from '@/features/pricing/lib/billing-expression/parser'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { isRecord } from '@/api/contracts'
 import { isDecimal, multiplyDecimal, divideDecimal } from '@/utils/decimal'
@@ -81,6 +82,8 @@ const expressionEditor = ref<InstanceType<
   hydration = ref(0)
 let baseline = '',
   defaultBaseline = '',
+  // The zero ordinary price stays unsaved until the administrator prices it.
+  ordinaryPlaceholder = '',
   hydrating = false,
   previewTimer: ReturnType<typeof setTimeout> | undefined,
   previewController: AbortController | undefined
@@ -107,6 +110,26 @@ const activeExpression = computed({
 const rate = computed(() =>
   currency.value === 'USD' ? '1' : props.exchangeRate
 )
+// Plugins without their own expression bill with the model default, and a
+// u() default cannot price ordinary requests at all.
+const inheritingPlugins = computed(() =>
+  (props.entry?.plugin_variants ?? []).filter(
+    (item) => !item.stale && !pluginExpressions.value[item.plugin_key]?.trim()
+  )
+)
+const ordinaryPricingAvailable = computed(
+  () =>
+    !plugin.value &&
+    mode.value === 'tiered_expr' &&
+    Boolean(expression.value.trim()) &&
+    (inheritingPlugins.value.length > 0 ||
+      (Boolean(props.entry?.plugin_variants?.some((item) => !item.stale)) &&
+        usesTaskUsage(expression.value)))
+)
+function usesTaskUsage(source: string) {
+  const compiled = compileBillingExpression(source.trim())
+  return compiled.status === 'ready' && compiled.functions.has('u')
+}
 const label = (value: unknown) =>
   typeof value === 'string'
     ? value
@@ -165,6 +188,7 @@ watch(
     )
     currency.value = 'USD'
     plugin.value = ''
+    ordinaryPlaceholder = ''
     hydration.value++
     error.value = ''
     preview.value = null
@@ -202,12 +226,14 @@ function build(): PricingValues {
     // Editing a plugin must preserve an absent default or its exact prices.
     result = clonePricing(props.pricing)
     delete result['billing_setting.plugin_billing_expr']
-  } else if (mode.value === 'tiered_expr')
+  } else if (mode.value === 'tiered_expr') {
+    if (expression.value.trim() === ordinaryPlaceholder)
+      throw new Error('ordinaryPriceRequired')
     result = {
       'billing_setting.billing_mode': 'tiered_expr',
       'billing_setting.billing_expr': expression.value.trim(),
     }
-  else if (mode.value === 'per-request') {
+  } else if (mode.value === 'per-request') {
     if (!isDecimal(fixed.value)) throw new Error('invalid')
     result = { ModelPrice: divideDecimal(fixed.value, rate.value) }
   } else {
@@ -332,6 +358,24 @@ function applyConversion() {
   expression.value = conversion.value.expression
   mode.value = 'tiered_expr'
   conversion.value = null
+}
+// Absorbed from upstream 8802113 configureOrdinaryPricing: inheriting plugins
+// keep the current expression as their own override, then the model default
+// becomes an ordinary relay price, per returned image when the model has one.
+function configureOrdinaryPricing() {
+  const inherited = expression.value.trim()
+  const inheriting = inheritingPlugins.value
+  const next = { ...pluginExpressions.value }
+  for (const item of inheriting) next[item.plugin_key] = inherited
+  pluginExpressions.value = next
+  const perImage = [props.entry, ...inheriting].some(
+    (item) => item?.usage_schema?.image_count?.unit === 'count'
+  )
+  expression.value = perImage
+    ? 'tier("image", fixed(0)) * image_count'
+    : 'tier("base", p * 0 + c * 0)'
+  ordinaryPlaceholder = expression.value
+  hydration.value++
 }
 function createTaskExpression() {
   const terms = Object.entries(taskPrices).filter(([, value]) => value !== '')
@@ -459,6 +503,12 @@ defineExpose({ commit, dirty })
         >
           {{ t(item.label) }}
         </button>
+      </div>
+      <div v-if="ordinaryPricingAvailable" class="pricing-convert">
+        <p>{{ t('ordinaryPricingHint') }}</p>
+        <ConsoleButton size="sm" @click="configureOrdinaryPricing">{{
+          t('ordinaryPricing')
+        }}</ConsoleButton>
       </div>
       <div v-if="!plugin && mode !== 'tiered_expr'" class="pricing-convert">
         <p>{{ t('conversionHint') }}</p>

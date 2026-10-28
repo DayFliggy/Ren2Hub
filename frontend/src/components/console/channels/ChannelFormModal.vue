@@ -131,7 +131,7 @@ const canSensitiveWrite = computed(
 )
 const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
 const supportsResponsesWebSocket = computed(() =>
-  [1, 58, 59, 60].includes(form.type)
+  [1, 3, 58, 59, 60].includes(form.type)
 )
 // The binding lives in the sensitive setting field, so it needs both
 // permissions, in upstream's order.

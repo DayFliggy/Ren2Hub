@@ -35,6 +35,61 @@ export function divideDecimal(left: string, right: string): string {
   const denominator = b.coefficient * 10n ** BigInt(a.scale)
   return render((numerator + denominator / 2n) / denominator, 18)
 }
+
+/** Divide while retaining significant digits for prices smaller than 1e-18. */
+export function divideDecimalSignificant(
+  left: string,
+  right: string,
+  significantDigits = 18
+): string {
+  const a = parts(left)
+  const b = parts(right)
+  if (b.coefficient === 0n) throw new RangeError('Zero exchange rate')
+  if (a.coefficient === 0n) return '0'
+  if (
+    !Number.isInteger(significantDigits) ||
+    significantDigits < 1 ||
+    significantDigits > 128
+  ) {
+    throw new RangeError('Invalid significant digit count')
+  }
+
+  const exponentShift = b.scale - a.scale
+  let exponent =
+    a.coefficient.toString().length -
+    b.coefficient.toString().length +
+    exponentShift
+  const compareAtPower = (power: number): number => {
+    const shift = exponentShift - power
+    if (shift >= 0) {
+      const scaledLeft = a.coefficient * 10n ** BigInt(shift)
+      return scaledLeft === b.coefficient
+        ? 0
+        : scaledLeft > b.coefficient
+          ? 1
+          : -1
+    }
+    const scaledRight = b.coefficient * 10n ** BigInt(-shift)
+    return a.coefficient === scaledRight
+      ? 0
+      : a.coefficient > scaledRight
+        ? 1
+        : -1
+  }
+  if (compareAtPower(exponent) < 0) exponent--
+
+  const scale = significantDigits - 1 - exponent
+  if (scale >= 0) {
+    const numerator = a.coefficient * 10n ** BigInt(b.scale + scale)
+    const denominator = b.coefficient * 10n ** BigInt(a.scale)
+    return render((numerator + denominator / 2n) / denominator, scale)
+  }
+  const roundingScale = -scale
+  const numerator = a.coefficient * 10n ** BigInt(b.scale)
+  const denominator = b.coefficient * 10n ** BigInt(a.scale + roundingScale)
+  const rounded = (numerator + denominator / 2n) / denominator
+  return render(rounded * 10n ** BigInt(roundingScale), 0)
+}
 export function shiftDecimal(value: string, places: number): string {
   const parsed = parts(value),
     scale = parsed.scale + places

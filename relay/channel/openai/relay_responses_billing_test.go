@@ -46,6 +46,7 @@ func (b *responsesLifecycleBody) Read(p []byte) (int, error) {
 		if b.data.Len() == 0 && b.readErr != nil {
 			// Return the error with the final bytes so it really occurs before
 			// completion, even if the handler stops before another read starts.
+			b.readOnce.Do(func() { close(b.waiting) })
 			return n, b.readErr
 		}
 		return n, err
@@ -68,6 +69,7 @@ type responsesLifecycleWriter struct {
 	body              *responsesLifecycleBody
 	cancel            context.CancelFunc
 	cancelBeforeFlush bool
+	waitForCleanup    bool
 	failWrite         int
 	writeErr          error
 	flushErr          error
@@ -105,6 +107,7 @@ func (w *responsesLifecycleWriter) Write(p []byte) (int, error) {
 	if w.cancelBeforeFlush && strings.Contains(w.Body.String(), w.needle) {
 		<-w.body.waiting
 		w.cancel()
+		<-w.body.closed
 	}
 	return n, err
 }
@@ -114,8 +117,12 @@ func (w *responsesLifecycleWriter) Flush() {
 	if !strings.Contains(w.Body.String(), w.needle) || w.body == nil {
 		return
 	}
+	<-w.body.waiting
 	if w.cancel != nil {
 		w.cancel()
+	}
+	if w.waitForCleanup {
+		<-w.body.closed
 	}
 }
 
@@ -160,7 +167,7 @@ func TestOaiResponsesStreamHandlerCompletionLifecycle(t *testing.T) {
 		{name: "delimiter write failure", event: "response.completed", responseStatus: "completed", failWrite: 3, wantEnd: relaycommon.StreamEndReasonHandlerStop, wantError: true},
 		{name: "flush failure", event: "response.completed", responseStatus: "completed", failFlush: true, wantEnd: relaycommon.StreamEndReasonHandlerStop, wantError: true},
 		{name: "protocol error before completion", event: "response.completed", responseStatus: "completed", priorError: true, cancel: true, wantEnd: relaycommon.StreamEndReasonClientGone, wantError: true},
-		{name: "protocol error before completed event", event: "response.completed", responseStatus: "completed", priorError: true, eof: true, wantEnd: relaycommon.StreamEndReasonEOF, wantError: true},
+		{name: "protocol error before completed event without upstream EOF", event: "response.completed", responseStatus: "completed", priorError: true, wantEnd: relaycommon.StreamEndReasonDone, wantError: true},
 		{name: "upstream read failure before handler returns", event: "response.completed", responseStatus: "completed", scannerError: true, wantEnd: relaycommon.StreamEndReasonScannerErr, wantError: true},
 		{name: "done with failed response", event: "response.done", responseStatus: "failed", eof: true, wantEnd: relaycommon.StreamEndReasonEOF, wantError: true},
 		{name: "done with incomplete response", event: "response.done", responseStatus: "incomplete", eof: true, wantEnd: relaycommon.StreamEndReasonEOF},
@@ -186,8 +193,8 @@ func TestOaiResponsesStreamHandlerCompletionLifecycle(t *testing.T) {
 			t.Cleanup(cancel)
 			writer := &responsesLifecycleWriter{
 				ResponseRecorder: httptest.NewRecorder(), body: body, needle: payload + "\n\n",
-				cancelBeforeFlush: tc.cancelBeforeFlush,
-				failWrite:         tc.failWrite, writeErr: errors.New("downstream write failed"),
+				cancelBeforeFlush: tc.cancelBeforeFlush, waitForCleanup: tc.cancel || tc.scannerError,
+				failWrite: tc.failWrite, writeErr: errors.New("downstream write failed"),
 			}
 			if tc.cancel {
 				writer.cancel = cancel

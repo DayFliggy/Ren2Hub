@@ -36,7 +36,11 @@ for (const theme of ['light', 'dark'] as const) {
                   created_at: 1785123000,
                   other: JSON.stringify({
                     upstream_model_name: 'expected-provider-model',
-                    response_model_name: 'unexpected-actual-model',
+                    response_model: {
+                      requested_model: 'customer-alias',
+                      upstream_model: 'expected-provider-model',
+                      returned_model: 'unexpected-actual-model',
+                    },
                   }),
                 },
               ],
@@ -69,7 +73,11 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(evidence).toBeVisible()
       expect(JSON.parse(await evidence.innerText())).toEqual({
         upstream_model_name: 'expected-provider-model',
-        response_model_name: 'unexpected-actual-model',
+        response_model: {
+          requested_model: 'customer-alias',
+          upstream_model: 'expected-provider-model',
+          returned_model: 'unexpected-actual-model',
+        },
       })
       await assertNoHorizontalOverflow(page)
       await page.screenshot({

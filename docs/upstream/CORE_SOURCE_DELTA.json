@@ -1,11 +1,11 @@
 {
-  "upstream_sha": "34003e9c2eed2c20e617f583fdfe54bf1bf42237",
-  "implementation_base_sha": "ae9be9d32116e7511633dcf3c7e6814cd5fc0737",
+  "upstream_sha": "e449cc700eb569cdfc2199cb73e97de46944f43c",
+  "implementation_base_sha": "0837a03c77ea0d5b7618588d4c9e77781f656590",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 803,
-    "adapted": 274,
-    "extension": 227,
+    "upstream_equal": 804,
+    "adapted": 273,
+    "extension": 229,
     "removed": 43
   },
   "files": [
@@ -849,7 +849,7 @@
     {
       "path": "controller/channel_pin_retry_test.go",
       "status": "adapted",
-      "upstream_sha256": "30e70e91f153a565580e2275bc5181326542a22d4c4962959f8e2daa82096545",
+      "upstream_sha256": "7ec33ff51859e2faba78ba5814e41952567f63e07857bf5a5aa3ce17e47c9627",
       "local_sha256": "370b46ecc7e3badf2bc5253ff607fe2a6064c9c336e51d79367b2a62cdae57c2"
     },
     {
@@ -888,8 +888,8 @@
     {
       "path": "controller/channel_test_request_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "d87d86fa2781c9cdd75b538ab1ff18deae651d4d5d015c3c68da6da25226c8d9",
-      "local_sha256": "d87d86fa2781c9cdd75b538ab1ff18deae651d4d5d015c3c68da6da25226c8d9"
+      "upstream_sha256": "336edede6fc2f20178eb7a56d202a23796ce5566c4864cf51c2faba24ff91150",
+      "local_sha256": "336edede6fc2f20178eb7a56d202a23796ce5566c4864cf51c2faba24ff91150"
     },
     {
       "path": "controller/channel_upstream_update.go",
@@ -1339,7 +1339,7 @@
       "path": "controller/price_source_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8d4214d78cc6a6a1b5edbfd9788c3fa58fe5e22655986bf5e803a93c909524a2"
+      "local_sha256": "63bff8f778b3c2304ccf92041f7951c6cdfabca6c2ad35a999b38a4569a3b197"
     },
     {
       "path": "controller/pricing.go",
@@ -1367,20 +1367,16 @@
       "path": "controller/ratio_sync.go",
       "status": "adapted",
       "upstream_sha256": "dece2f1b7c64586a7000a3e495575d5dead871169c1a32281cb357b94648e83e",
-      "local_sha256": "e99327dc670012b2de4245461ea3771f74336645f8b9b8837aff7f6204392deb",
+      "local_sha256": "2cacd17207f7b4b42d26e3e15a7bddb6658f0cddbc6103cf15e82afd79908838",
       "reasons": [
-        "catalog-stats",
-        "exchange-rate-pricing-deferred"
+        "catalog-stats"
       ]
     },
     {
       "path": "controller/ratio_sync_test.go",
       "status": "adapted",
       "upstream_sha256": "4bf74e7bbcad59616e0727e3003e01e60154e6d56aa27470c5ed75712f866dfd",
-      "local_sha256": "a16f08eb1576e828d570952f4709523c94d548e4a5bdc06372c5f28e58f7dc99",
-      "reasons": [
-        "exchange-rate-pricing-deferred"
-      ]
+      "local_sha256": "3482b4d0e0532259199d953173deaf7d0de89a23fb0982363a8f94bde0e33af7"
     },
     {
       "path": "controller/redemption.go",
@@ -1406,8 +1402,8 @@
     {
       "path": "controller/relay.go",
       "status": "adapted",
-      "upstream_sha256": "52d154e1361e06f09b58bf4038c3bbfae97c66fb8cfa3e26682a26e6e3783dc3",
-      "local_sha256": "cf4fe2b2c24701af78cd76eba9a5359527660e5526b8e5a6cc5d95195962976b",
+      "upstream_sha256": "bdd45371c9eaa84b20811e278d1c1ea90c18c99866a498e3d2024006b864115f",
+      "local_sha256": "5b43fdd0147c1fe687d6d0e637ed05fe92d7ef14aa90645733643406bc1b4901",
       "reasons": [
         "channel-ratio",
         "token-routing",
@@ -1446,6 +1442,12 @@
       "status": "adapted",
       "upstream_sha256": "755d455067cde38c6d9940ed86f92578ce226332b74955c28c1b95427dc4fac3",
       "local_sha256": "38b5def6c16aa1e81422f37087077633605f736c18224f8726ebe466b4d0ada2"
+    },
+    {
+      "path": "controller/relay_task_metrics_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d0c395806007bc758ae637de1e4385161dc70fc654568b9838456154c54b7be6"
     },
     {
       "path": "controller/relay_task_plugin_test.go",
@@ -1958,10 +1960,9 @@
       "path": "dto/channel_constraints.go",
       "status": "adapted",
       "upstream_sha256": "7368c2eada9dece89e53b4a2a98226a1033deba74e07cdf9041c25e8c5d1e9f1",
-      "local_sha256": "c2a9f39b73a2d338f8f09d1c457c92b81c83606315aad47dd6d721f9aef715d0",
+      "local_sha256": "7c8c3ead8f4d74d961b416513a058e4498ee3e5088f51ad1f1950d7a452f5624",
       "reasons": [
-        "token-routing",
-        "plugin-shared-route-competition-deferred"
+        "token-routing"
       ]
     },
     {
@@ -2035,41 +2036,38 @@
     },
     {
       "path": "i18n/keys.go",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "105f3159742f85d87c472c17ca84337468703847c37742d06105c44d92653b3d",
-      "local_sha256": "226621878015bc2e7714f22b9a6b46cc8f6838b02c344bdbbaec6aca326cb13e",
-      "reasons": [
-        "plugin-shared-route-competition-deferred"
-      ]
+      "local_sha256": "105f3159742f85d87c472c17ca84337468703847c37742d06105c44d92653b3d"
     },
     {
       "path": "i18n/locales/en.yaml",
       "status": "adapted",
       "upstream_sha256": "933eae89c7eb8977bcb989984a6d10b9b216bb7c4b697059f660d25f5f0d0924",
-      "local_sha256": "abc13923960cc2d47980beb365a9f299952208881084968a753b5a3550719b86",
+      "local_sha256": "12ea2ab5bfa11e005a45f21332cdc1bb1e5668481ca347a8666a2064bcc4d380",
       "reasons": [
         "ticket",
-        "plugin-shared-route-competition-deferred"
+        "group-removal"
       ]
     },
     {
       "path": "i18n/locales/zh-CN.yaml",
       "status": "adapted",
       "upstream_sha256": "7fe4f18aad17a631ccdf82f765ea3ce155f738ec29a8e2fd8ae403679cdba3da",
-      "local_sha256": "afe074d0c9f5da52db83466c6230d8cbf6ad425dc642812da4aab047eead9188",
+      "local_sha256": "93b00061da14231830d8b12633e83eec42d36d1de36c46db10209b2008e20334",
       "reasons": [
         "ticket",
-        "plugin-shared-route-competition-deferred"
+        "group-removal"
       ]
     },
     {
       "path": "i18n/locales/zh-TW.yaml",
       "status": "adapted",
       "upstream_sha256": "0aa71c93b1ea41779972618ca828c3f95c6741990eef6cf3d20ad22c79c403d7",
-      "local_sha256": "d2de92e815dfd6385ad736e38c578e15ae65f2fc3e59ab01677b125a51fab115",
+      "local_sha256": "8fd40d8cf5327ad590af8fa073ab98fe9588872fe005fa676e99864f5af255a5",
       "reasons": [
         "ticket",
-        "plugin-shared-route-competition-deferred"
+        "group-removal"
       ]
     },
     {
@@ -2216,7 +2214,7 @@
       "path": "middleware/distributor.go",
       "status": "adapted",
       "upstream_sha256": "bae81fe07cba2116ae703f38e8946d085c91f704e391328c94c3f7c412b8c53d",
-      "local_sha256": "6916da7a4b6ba9c7a93461cbac09def962ec3986b1c9793adc0e2cc3becc2f06",
+      "local_sha256": "3f78ffeccefd405e9824012b57c7d315146e71595eab8777e07614ddd53a28cc",
       "reasons": [
         "group-removal",
         "retired",
@@ -2224,8 +2222,7 @@
         "token-routing",
         "channel-ratio",
         "upstream-defect",
-        "native-count",
-        "plugin-shared-route-competition-deferred"
+        "native-count"
       ]
     },
     {
@@ -2395,10 +2392,18 @@
       "path": "middleware/task_plugin.go",
       "status": "adapted",
       "upstream_sha256": "f1dda775ce977a2aec03eb50639fc25476b984f78ebeeb4f43abe5a069741006",
-      "local_sha256": "fc53bfe4a08c3e9cefef79a4adc4edba8473de75ec4565bd9c3426e542122c73",
+      "local_sha256": "98e8cb09e214a25a1a62c5f70b53fcf6ae3c7d1b934967f2fa672b2200755ccc",
       "reasons": [
-        "native-plugin-multipart"
+        "native-plugin-multipart",
+        "token-routing",
+        "concurrency"
       ]
+    },
+    {
+      "path": "middleware/task_plugin_endpoint_route_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ae2f6c0abf1623b8416a4d5aec28ca77b4aa954042aae8c2f135a847a94d18c6"
     },
     {
       "path": "middleware/task_plugin_model.go",
@@ -2598,13 +2603,12 @@
     {
       "path": "model/channel_constraint.go",
       "status": "adapted",
-      "upstream_sha256": "fa13730d61a80aca9de10200cd5ce3855a0a9ebe6772e5083409c7c6388f4522",
-      "local_sha256": "048e5e48e707463ea6f57eca5776c93fdbc0348fdbcca556211fe2e1ec602ff7",
+      "upstream_sha256": "7bddc400b60b6b6cd0a31c485754e696ab921c073b7658e4f2d679c0becf732b",
+      "local_sha256": "1dc38ca8e92621ca47f2b05395581e5b057dc7a5ef8cb7d658e61c13a29aa808",
       "reasons": [
         "token-routing",
         "retired",
-        "native-count",
-        "plugin-shared-route-competition-deferred"
+        "native-count"
       ]
     },
     {
@@ -2974,17 +2978,16 @@
       "path": "model/model_pricing_config.go",
       "status": "adapted",
       "upstream_sha256": "3264709d3b8a1d6616a42f6bfa3e3fb2eec44b5cd27a17103cc63b39ae56c12f",
-      "local_sha256": "c7c35c704c543a6cd764d5f0951fcc3634a0b7f15cda3139c91951e2caa0271f",
+      "local_sha256": "a2625073feb543380aff7a2ec2490f26f4f972a7356d9fb67668aff779d2510a",
       "reasons": [
-        "catalog-stats",
-        "plugin-shared-route-competition-deferred"
+        "catalog-stats"
       ]
     },
     {
       "path": "model/model_pricing_conversion.go",
       "status": "adapted",
       "upstream_sha256": "b5102eec6ce949172a55ae9e9060d66c93e9674f89839460973d358e995a519f",
-      "local_sha256": "3413705b083600e7880025237e8746b45e471e4e19cd1b6abf88153cd996fb19",
+      "local_sha256": "8099ae1e046988e2e0e7aeb37bb03a5dfc687faefceb18ab0cdb281c0b3ad824",
       "reasons": [
         "catalog-stats"
       ]
@@ -3120,7 +3123,7 @@
       "path": "model/pricing_usage_schema_test.go",
       "status": "adapted",
       "upstream_sha256": "476f7e30e4cd9202d90c0cac15dad790fc49bd5ca537ee01d5880518e5a1ded7",
-      "local_sha256": "3228f4055068ab037461b38338c9141ec11df20f31796b6d7a3920fe5d9f6b09"
+      "local_sha256": "63c876cbfcdec3e6b4e22adbdbadf36baa6018fcd32eefdb8035abdcebe5fad1"
     },
     {
       "path": "model/quota_reserve.go",
@@ -3703,7 +3706,7 @@
       "path": "pkg/billingexpr/types.go",
       "status": "adapted",
       "upstream_sha256": "ac9b03e7b82a2c6fce59e68b5800243dd43df089cf804c815a2a5bcd4f9efab7",
-      "local_sha256": "56355a4ca5abd29f80d6eab1d60f99d06fc30817609835dc9ca0353e8fcc064c",
+      "local_sha256": "c768d8569ddf9e7be464da1cdd1e87893bff7d3a99bd18ba59760d7e610e03d9",
       "reasons": [
         "channel-ratio"
       ]
@@ -3872,12 +3875,9 @@
     },
     {
       "path": "pkg/jsplugin/routing.go",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "f2907de61a42c4090b7700bd7e1ee29793c0072a13eb6686f743938e3510ff89",
-      "local_sha256": "0cca432bd0985f5e0dedead58a5a31271d5394278af8043bb6edb064f9f9a608",
-      "reasons": [
-        "plugin-shared-route-competition-deferred"
-      ]
+      "local_sha256": "f2907de61a42c4090b7700bd7e1ee29793c0072a13eb6686f743938e3510ff89"
     },
     {
       "path": "pkg/jsplugin/routing_test.go",
@@ -3933,8 +3933,8 @@
     {
       "path": "pkg/perf_metrics/metrics.go",
       "status": "adapted",
-      "upstream_sha256": "17ce983779b7385a40d6b6b77a053699ee64b0784998445118feadbc309c06b8",
-      "local_sha256": "3aac03bf4618b9b1ed9fa5d516966153399f4c2a1c614322c7a88df18775e306",
+      "upstream_sha256": "bbb8ecd1ab0a5a154603d37ac01bb63cef0e31e1eefbef70ffceef49bfb90c54",
+      "local_sha256": "1d10732d60b55e183e613c24ae028eac0864a3e75195ce5966417b39d069f80b",
       "reasons": [
         "group-removal"
       ]
@@ -3942,14 +3942,14 @@
     {
       "path": "pkg/perf_metrics/metrics_test.go",
       "status": "adapted",
-      "upstream_sha256": "4b433f92078d78b26bbe545ce8572162596927e3c332d1be28e7d8b794321dd4",
-      "local_sha256": "69285cd0ba9d94e4324bbdfbdf285756c27c2c1c1b2a1bbc1784eabfc4c02995"
+      "upstream_sha256": "aeef37181e9e00cb071b6c208bf3d4022e98082119ef09a46904190b59b01c97",
+      "local_sha256": "1c525eb5c29cf71d2bf935da0e76a7a8726cac9f6905f3456a1f50c057a64484"
     },
     {
       "path": "pkg/perf_metrics/outcome.go",
       "status": "upstream_equal",
-      "upstream_sha256": "c2105ff6ee27af09dd2f84c2cd5838512ca726e7c1cb47a1de3595ff2822c4aa",
-      "local_sha256": "c2105ff6ee27af09dd2f84c2cd5838512ca726e7c1cb47a1de3595ff2822c4aa"
+      "upstream_sha256": "5ea2950b0a0f012bee891c94a284596e04d2e3d329f903cbdc1f6b9634bfb8c5",
+      "local_sha256": "5ea2950b0a0f012bee891c94a284596e04d2e3d329f903cbdc1f6b9634bfb8c5"
     },
     {
       "path": "pkg/perf_metrics/types.go",
@@ -4362,8 +4362,8 @@
     {
       "path": "relay/channel/aws/dto.go",
       "status": "upstream_equal",
-      "upstream_sha256": "00825816f929b261c3d3834874f5c9d370172427f3978adacfc5f4d7ac865ec3",
-      "local_sha256": "00825816f929b261c3d3834874f5c9d370172427f3978adacfc5f4d7ac865ec3"
+      "upstream_sha256": "07207ceb3c6747b473ac6bad3b9134d2ace422d0608dbcb2fed0e7bfa2f1bca0",
+      "local_sha256": "07207ceb3c6747b473ac6bad3b9134d2ace422d0608dbcb2fed0e7bfa2f1bca0"
     },
     {
       "path": "relay/channel/aws/mantle.go",
@@ -4383,8 +4383,8 @@
     {
       "path": "relay/channel/aws/relay_aws_test.go",
       "status": "adapted",
-      "upstream_sha256": "3a8fc58325ede8bc8dfe2fd98377ef3de932d3af905e1ac047d6977e4a1eac45",
-      "local_sha256": "49dcc97cd65547db49ccb557eb90a28bd27370924331934c3e44d24b0f5e05c2"
+      "upstream_sha256": "9dde332fdeab490f81b5e534705fdbf1e0f027e60d65b4a4ae809b13f73d7cdf",
+      "local_sha256": "b92127fbc50bcebb7dc99b41f06c43a16f63562cccf28ccb65922862bb4de850"
     },
     {
       "path": "relay/channel/baidu/adaptor.go",
@@ -4488,8 +4488,8 @@
     {
       "path": "relay/channel/cloudflare/adaptor.go",
       "status": "upstream_equal",
-      "upstream_sha256": "8fdc71959d700855f09deaf36d649d784f6b86d89c826ac0cec881a7d250bfb3",
-      "local_sha256": "8fdc71959d700855f09deaf36d649d784f6b86d89c826ac0cec881a7d250bfb3"
+      "upstream_sha256": "d7de16181dae4b46712da371babebd44d5692287ebc3a03a9078f958eb00746e",
+      "local_sha256": "d7de16181dae4b46712da371babebd44d5692287ebc3a03a9078f958eb00746e"
     },
     {
       "path": "relay/channel/cloudflare/constant.go",
@@ -4961,19 +4961,15 @@
     },
     {
       "path": "relay/channel/openai/relay_responses.go",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "fb49fbd3c08f966d6fa7738afb7654eeb731490cfcfda8ac532b89731f250710",
-      "local_sha256": "ca18198ab8263674dd6d836e4d1138d290b6fcf3f4710a3e3ec0fecfb4bb8ace",
-      "reasons": [
-        "streaming-lifecycle",
-        "cache-ttl-billing"
-      ]
+      "local_sha256": "fb49fbd3c08f966d6fa7738afb7654eeb731490cfcfda8ac532b89731f250710"
     },
     {
       "path": "relay/channel/openai/relay_responses_billing_test.go",
       "status": "adapted",
       "upstream_sha256": "bfe5c9274333f056b5a80a1d76a745afc0c6d9921d1d213200aa8f7c09b5c958",
-      "local_sha256": "4e3e73f2c7e5d46b39233cfb9a09379cb6f0c87a6c495baa61fe7d7df39ba54f"
+      "local_sha256": "465c0ac47839e96f26bdecd9d26d97c09be09e22dfb406c6969e08b7eaccf6a4"
     },
     {
       "path": "relay/channel/openai/relay_responses_compact.go",
@@ -5511,17 +5507,18 @@
     {
       "path": "relay/common/override.go",
       "status": "adapted",
-      "upstream_sha256": "daa62479f6a2c73ac0323a14d5458541744337ff7950f619b35233d2fae36662",
-      "local_sha256": "8f469d735a713b2a9bfa9d812ba7152bb3b36386f4a7c055320eb420aa15939d",
+      "upstream_sha256": "70a439d259e1e6b2a6c1080eae0ab25b7b3573bb5196e580f2b0b5199a72dd1d",
+      "local_sha256": "14306560c5bab15ae0925bf09214af86a9e2bdcb85750034ef7fe29aeeec3fd0",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "upstream-defect"
       ]
     },
     {
       "path": "relay/common/override_test.go",
       "status": "adapted",
-      "upstream_sha256": "8dea6e7c695c11482db918933905dfb52e2c97c7e92f1860309e847c1fe725b4",
-      "local_sha256": "f56429b6f3bb9b53947e3cbc1c80c81d07d652e0b0458312ab8f4de797e5b955"
+      "upstream_sha256": "ffec45c1829c14d0bb6c15158e2c5dc5a5b940f0f1d28b60c435f13c7c6c5305",
+      "local_sha256": "2da4810f85fc3d6d3c0620618e95057124bc1b96e929d2a3678bbf9dd52ded19"
     },
     {
       "path": "relay/common/relay_info.go",
@@ -5722,7 +5719,7 @@
       "path": "relay/helper/price.go",
       "status": "adapted",
       "upstream_sha256": "9fff94958ffb64b581fe1f02e3ddb6195132441a39252112c2e55c0d53d20430",
-      "local_sha256": "07b1658c48fae9726520165900b823a8cd7786c764fec568baf913b35c5705b2",
+      "local_sha256": "c2cf3d35b53e33c66d48091634968427d2576015867b7e7055f2c57cf8185e7f",
       "reasons": [
         "channel-ratio",
         "group-removal"
@@ -5764,8 +5761,8 @@
     {
       "path": "relay/helper/stream_scanner.go",
       "status": "adapted",
-      "upstream_sha256": "75d61905e291a49e5b33952e48ec6362707b3f32a62f23dc371879ef0b017321",
-      "local_sha256": "ad93f04b74e14d236df64bcf4b7156982aaabe6494b7b8ac4a1f6df3499dd5bb",
+      "upstream_sha256": "7f06994b50d845f76d08be9574ca22cd3e656ea44149f196d352af863e59baa5",
+      "local_sha256": "5497988eec405cade142d268d4c158865a88fae1e05afe70a5eb30fb95684f91",
       "reasons": [
         "stream-write-budget"
       ]
@@ -5773,8 +5770,8 @@
     {
       "path": "relay/helper/stream_scanner_test.go",
       "status": "adapted",
-      "upstream_sha256": "5067567d531c473db551f84adc0fd5e1c5baf3a6ae0b33f3b78e368e8e4ae891",
-      "local_sha256": "e047bdc2a433c4b6807804ff9495bba1c4e741d8beb6ab56a7957b44b60829bd"
+      "upstream_sha256": "5b8394261f6412ba64be1813d7a40e38b6b940062a024ead077770c42ce7f397",
+      "local_sha256": "cebf1dbcd62c415ddab5bc104987f4e5e52b91c8420d34b282d65a60d77fb2cd"
     },
     {
       "path": "relay/helper/valid_request.go",
@@ -5867,10 +5864,7 @@
       "path": "relay/relay_task_test.go",
       "status": "adapted",
       "upstream_sha256": "216e07f50e519976b48bd7564482288f88be6cf6896df04c5ad76de5863e1a84",
-      "local_sha256": "0f1ba47ebf4aaf8dd77c557be3382fc965805eb897cba5f15ba0409f6b184ec5",
-      "reasons": [
-        "plugin-shared-route-competition-deferred"
-      ]
+      "local_sha256": "5d0c369d031388583d6ec72b44a6ea1f750baa0a892bb241e27e6400ad53d2ee"
     },
     {
       "path": "relay/request_billing.go",
@@ -5929,8 +5923,8 @@
     {
       "path": "relay/responses_websocket_test.go",
       "status": "adapted",
-      "upstream_sha256": "e1702de2f6d9d9c9e49ae5103a7ac9b56dc100aec882200fc6d49225ddc0caec",
-      "local_sha256": "b7b3b406bd8ad9e72270873481850589efbc93d853b78c323e6231372c4085bb"
+      "upstream_sha256": "755ad570463fb4c025b0be121db65fd82c7f0a8e55b727c6ed18125434126580",
+      "local_sha256": "ac113a195a0f012fc04c8b29095dbdf78bea35b37c66659f448ea2234d11e0d4"
     },
     {
       "path": "relay/responses_websocket_token_route_test.go",
@@ -6076,8 +6070,8 @@
     {
       "path": "relaykit/dto/openai_request.go",
       "status": "upstream_equal",
-      "upstream_sha256": "2ebebf453205fcefac04ee14bd22df3c6de2a31053e517eab9e87d8ccd804b54",
-      "local_sha256": "2ebebf453205fcefac04ee14bd22df3c6de2a31053e517eab9e87d8ccd804b54"
+      "upstream_sha256": "1f87548cb2aeaf2d77ff08266e41e013315a34230e235e951e0c3cd94ee20fbd",
+      "local_sha256": "1f87548cb2aeaf2d77ff08266e41e013315a34230e235e951e0c3cd94ee20fbd"
     },
     {
       "path": "relaykit/dto/openai_request_zero_value_test.go",
@@ -7068,9 +7062,11 @@
       "path": "router/task-plugin-protocol-router.go",
       "status": "adapted",
       "upstream_sha256": "be71f56229ce52b925c9c37e51b30c15854c1601bdd6e66209d0b0d295e3db44",
-      "local_sha256": "c589783baa6ad693e53f4624b363ba824b9777fc1e8d392164c77aa586c23216",
+      "local_sha256": "2f3de0f9829e190a34310593ca4467cde51812fda9ac3f76b798fc211226335b",
       "reasons": [
-        "plugin-shared-route-competition-deferred"
+        "token-routing",
+        "concurrency",
+        "request-limits-summary"
       ]
     },
     {
@@ -7087,9 +7083,9 @@
     },
     {
       "path": "router/task_plugin_protocol_router_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "cf5d5cc3e2e879123e4d013a0a486f5b82bd8771bc97ce23e9b775e7bebdf79f",
-      "local_sha256": "cf5d5cc3e2e879123e4d013a0a486f5b82bd8771bc97ce23e9b775e7bebdf79f"
+      "local_sha256": "0350c7b770f1bfda5d79fe77257efca1ad6cdadf45a320138d776b2f4e51499e"
     },
     {
       "path": "router/task_router_test.go",
@@ -7105,15 +7101,18 @@
     },
     {
       "path": "router/video-router.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "92c0c484f32767d9e0078bbd5e296dd5f75578e5aaced27e66688a30d01db92d",
-      "local_sha256": "92c0c484f32767d9e0078bbd5e296dd5f75578e5aaced27e66688a30d01db92d"
+      "local_sha256": "51d519fa4f2c8b04a91dd439272e1766be9abfc105f67cc523c0168c833fc49f",
+      "reasons": [
+        "request-limits-summary"
+      ]
     },
     {
       "path": "router/video_router_test.go",
       "status": "adapted",
       "upstream_sha256": "186d93d83a1c95d682f02c7e245a6cb883eaf053037caa95211f07e765446433",
-      "local_sha256": "c936d60aa490759b5e81cbd0ef50272db87287da7786c9f996e9732f4d3d430f"
+      "local_sha256": "fa49cdf6088d44f16a6cb840d85a3b9630892e88028aa1ffb715ff09713a9bdc"
     },
     {
       "path": "router/web-router.go",
@@ -7335,8 +7334,8 @@
     {
       "path": "service/channel_affinity.go",
       "status": "adapted",
-      "upstream_sha256": "3f35e963dbd8cf9d4a1f145eab18b44c663aab68f0c9f748ab2ea9cea1079be3",
-      "local_sha256": "a1c84e53ac5fa520588cf28f7c79d4e1a1725ebd0bebc2894b9fa780aaaf41e6",
+      "upstream_sha256": "a69a14b1fe8a337c346e83ccd32800686626cfa1d82fc276fb49c3f330bfb907",
+      "local_sha256": "01ed4c8344184a1e28aef2afdd96045e89778ee2abfe30d55629fefd10f7a9a9",
       "reasons": [
         "group-removal"
       ]
@@ -7368,7 +7367,7 @@
     {
       "path": "service/channel_select.go",
       "status": "adapted",
-      "upstream_sha256": "88158a8dd92b833938a70d3ca047bc7380aac31a3ebe2998aa190a72348d8a4d",
+      "upstream_sha256": "04e08580c9f07dfe05df39c911c56770ccb9fb13bddf9f5eccaf95ae3fbe5022",
       "local_sha256": "585fd103c242f0defa615e246cad786e8cd1716698de1d51759e0d0f8106b96a",
       "reasons": [
         "group-removal",
@@ -7879,7 +7878,7 @@
       "path": "service/route_affinity_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a606f4445c304f71194b48ce44c64e4e6a399f60c33bcd18ea0e021714960eb9"
+      "local_sha256": "3670e54056ba763e1e80cc1aae398a825f34e363b5f8c4cff382a542c3b384ca"
     },
     {
       "path": "service/route_attempt.go",
@@ -7891,7 +7890,7 @@
       "path": "service/route_attempt_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "091bdf8be148edb2b3a87c5b77d07f2afdd8482269784a44be34c89a26c050f9"
+      "local_sha256": "b5a665e5ef3a2cb4cd26b2460cba5b1418e3103c21adca15387af36e0869035a"
     },
     {
       "path": "service/route_breaker.go",
@@ -7909,7 +7908,7 @@
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "db5778e3385421a0aca2f7d5b762ded32cc242d69c19d3095ab164855b793d54"
+      "local_sha256": "622a3809673cfa4880608b6c53f42841c8834e1719f372aa21778977a93520c2"
     },
     {
       "path": "service/route_endpoint_test.go",
@@ -8138,7 +8137,7 @@
       "path": "service/tiered_settle.go",
       "status": "adapted",
       "upstream_sha256": "d971643c61f74645a774f0e680606dadd7f678ddb7d3e237a498690045ed175a",
-      "local_sha256": "897b6d8e30a6d654858f00105094a0deeb48a88c5bae0ddc6e58801c9ac0676b",
+      "local_sha256": "17fb04273ecc675347d136552bcdff8d4385624d9008399a25eebf96905d12e2",
       "reasons": [
         "channel-ratio",
         "group-removal"
@@ -8793,5 +8792,5 @@
   ],
   "candidate_sha": null,
   "history_baseline_sha": "9a63062227c31ba54a6346e07ee8b4fd8802f22f",
-  "reference_newapi_sha": "34003e9c2eed2c20e617f583fdfe54bf1bf42237"
+  "reference_newapi_sha": "e449cc700eb569cdfc2199cb73e97de46944f43c"
 }

@@ -41,6 +41,7 @@ export function projectMarketPricing(
     cache: 'cacheRead',
     cache_create: 'cacheWrite',
     cache_create_1h: 'cacheWrite1h',
+    cache_create_12h: 'cacheWrite12h',
     image_cache: 'imageCache',
     image_output: 'imageOutput',
     audio_input: 'audioInput',

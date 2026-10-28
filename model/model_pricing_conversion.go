@@ -130,9 +130,10 @@ const (
 	CacheWriteOpenAITTL CacheWriteMode = "openai_ttl"
 )
 
-// ResolveCacheWriteMode determines the legacy conversion and catalog projection
-// for named cache-write prices. Generic fallback expressions remain independent
-// of provider TTL conventions.
+// ResolveCacheWriteMode describes display and migration only. A generic engine
+// fallback is not configured cache-write pricing. Only Claude names inherit the
+// legacy dual-TTL rule; a configured write price on a GPT name also prices the
+// OpenAI 12h write, and other models retain their configured write price.
 func ResolveCacheWriteMode(name string, configured PricingValues) CacheWriteMode {
 	if strings.Contains(strings.ToLower(name), "claude") {
 		return CacheWriteClaudeTTL
@@ -347,8 +348,9 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		var expressionBody strings.Builder
 		expressionBody.WriteString(`tier("base", p * `)
 		expressionBody.WriteString(base.String())
-		// Retain explicit zero coefficients for included categories. Only
-		// Claude names inherit the relay's 1h / 5m factor of 6 / 3.75.
+		// Retain explicit zero coefficients for included categories. Claude
+		// names inherit the relay's 1h / 5m factor and GPT names its 12h / 30m
+		// factor.
 		for _, lane := range []struct {
 			variable, key string
 			multiplier    float64

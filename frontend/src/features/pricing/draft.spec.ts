@@ -15,6 +15,7 @@ import {
   parseVisualBillingDocument,
   serializeVisualBillingDocument,
 } from './lib/billing-expression/visual'
+import { evaluateBillingExpression } from './lib/billing-expression/runtime'
 import {
   buildRequestRuleExpr,
   combineBillingExpr,
@@ -207,5 +208,71 @@ describe('model pricing draft contracts', () => {
       splitBillingExprAndRequestRules(combineBillingExpr(source, rules))
         .billingExpr
     ).toContain('len <= 200000')
+  })
+  // Ported from upstream 8802113 billing-expression.test.ts.
+  it('keeps image quantity outside a condition added to per-image pricing', () => {
+    const document = parseVisualBillingDocument(
+      'image_count * tier("image", fixed(0.04))'
+    )
+    expect(document?.root.kind).toBe('tier')
+    if (!document || document.root.kind !== 'tier') return
+    const original = document.root
+    document.root = {
+      id: 'priced-condition',
+      kind: 'branch',
+      condition: {
+        id: 'length',
+        kind: 'comparison',
+        probe: 'len',
+        timezone: '',
+        operator: '>=',
+        value: '100',
+      },
+      yes: {
+        ...original,
+        id: 'long',
+        origin: undefined,
+        label: 'long',
+        fixedPrice: '0.1',
+      },
+      no: original,
+    }
+    const result = serializeVisualBillingDocument(document)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(
+      evaluateBillingExpression(result.source, {
+        imageCount: 3,
+        tokens: { len: 100 },
+      })
+    ).toMatchObject({ status: 'success', cost: 300000 })
+    expect(
+      evaluateBillingExpression(result.source, {
+        imageCount: 3,
+        tokens: { len: 0 },
+      })
+    ).toMatchObject({ status: 'success', cost: 120000 })
+  })
+  it.each([
+    'v1: (tier("image", fixed(0.04))) * image_count',
+    'image_count * tier("image", fixed(0.04))',
+  ])('retains the quantity multiplier when editing %s', (source) => {
+    const document = parseVisualBillingDocument(source)
+    expect(document?.imageCount).toBe(true)
+    if (!document || document.root.kind !== 'tier') return
+    expect(serializeVisualBillingDocument(document)).toEqual({
+      ok: true,
+      source,
+    })
+    document.root.fixedPrice = '0.05'
+    const updated = serializeVisualBillingDocument(document)
+    expect(updated).toEqual({
+      ok: true,
+      source: source.replace('0.04', '0.05'),
+    })
+    if (!updated.ok) return
+    expect(
+      evaluateBillingExpression(updated.source, { imageCount: 3 })
+    ).toMatchObject({ status: 'success', cost: 150000 })
   })
 })

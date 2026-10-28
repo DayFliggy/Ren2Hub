@@ -4,6 +4,7 @@ import {
   formatDecimalUSD,
   formatUnitPriceUSD,
   divideDecimal,
+  divideDecimalSignificant,
 } from '../decimal'
 import { decimalToQuota, quotaToDecimal } from '../quota'
 import { formatQuota } from '../format'
@@ -15,6 +16,11 @@ describe('billing presentation precision', () => {
     )
     expect(divideDecimal('1', '3')).toBe('0.333333333333333333')
     expect(() => divideDecimal('1', '0')).toThrow('Zero exchange rate')
+  })
+  it('retains significant digits for very small prices', () => {
+    expect(divideDecimalSignificant('0.00000000000000001', '7')).toBe(
+      '0.00000000000000000142857142857142857'
+    )
   })
   it('limits read-only money and fee displays to three fractional digits', () => {
     expect(formatDecimalUSD('0.0005', 8)).toBe('$0.001')

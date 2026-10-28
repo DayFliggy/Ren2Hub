@@ -75,7 +75,7 @@ func TestPricingSyncCompleteSourcesAndArrayFormats(t *testing.T) {
 		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(oldRatios))
 		require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(oldCompletion))
 	})
-	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"sync-token":1}`))
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"sync-token":1,"sync-numeric-unchanged":7}`))
 	require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(`{"sync-token":2}`))
 	expression := `len <= 200000 ? tier("short", p * 2 + c * 8 + cr * 0) : tier("long", p * 4 + c * 12)`
 	expressions, err := common.Marshal(map[string]string{"sync-already": expression})
@@ -87,7 +87,7 @@ func TestPricingSyncCompleteSourcesAndArrayFormats(t *testing.T) {
 			data = map[string]any{
 				"billing_mode":     map[string]string{"sync-already": "tiered_expr", "sync-expression": "tiered_expr"},
 				"billing_expr":     map[string]string{"sync-already": expression, "sync-expression": expression},
-				"model_ratio":      map[string]float64{"sync-already": 9, "sync-expression": 9, "sync-token": 1},
+				"model_ratio":      map[string]float64{"sync-already": 9, "sync-expression": 9, "sync-token": 1, "sync-numeric-unchanged": 7},
 				"model_price":      map[string]float64{"sync-expression": 4},
 				"completion_ratio": map[string]float64{"sync-token": 4},
 				"cache_ratio":      map[string]float64{"sync-token": 0},
@@ -97,6 +97,7 @@ func TestPricingSyncCompleteSourcesAndArrayFormats(t *testing.T) {
 				{"model_name": "sync-already", "model_ratio": 5, "completion_ratio": 3},
 				{"model_name": "sync-expression", "model_ratio": 2, "model_price": 1},
 				{"model_name": "sync-array-expression", "billing_mode": "tiered_expr", "billing_expr": expression, "quota_type": 1, "model_price": 0},
+				{"model_name": "sync-numeric-unchanged", "model_ratio": 7},
 				{"model_name": "sync-unpriced"},
 				{"model_name": "sync-invalid-expression", "billing_mode": "tiered_expr", "billing_expr": "", "model_ratio": 0},
 				{"model_name": "sync-free", "model_ratio": 0, "completion_ratio": 0},
@@ -139,4 +140,15 @@ func TestPricingSyncCompleteSourcesAndArrayFormats(t *testing.T) {
 	assert.Equal(t, float64(4), response.Data.Prices["sync-token"].Upstreams["Expressions(1)"]["completion_ratio"])
 	assert.Equal(t, float64(0), response.Data.Prices["sync-token"].Upstreams["Expressions(1)"]["cache_ratio"])
 	assert.Equal(t, float64(0), response.Data.Prices["sync-free"].Upstreams["Legacy(2)"]["model_ratio"])
+	assert.NotContains(t, response.Data.Prices, "sync-already")
+	assert.NotContains(t, response.Data.Prices, "sync-numeric-unchanged")
+	body["include_unchanged"] = true
+	recorder = modelManagementRequest(t, FetchUpstreamRatios, http.MethodPost, "/api/ratio_sync/fetch", body, &response)
+	require.True(t, response.Success, recorder.Body.String())
+	assert.Equal(t, map[string]any{"billing_mode": "tiered_expr", "billing_expr": expression}, response.Data.Prices["sync-already"].Upstreams["Expressions(1)"])
+	assert.NotContains(t, response.Data.Prices["sync-already"].Upstreams, "Legacy(2)")
+	assert.NotContains(t, response.Data.Prices, "sync-unpriced")
+	assert.NotContains(t, response.Data.Prices, "sync-invalid-expression")
+	assert.NotContains(t, response.Data.Differences, "sync-already")
+	assert.Equal(t, float64(7), response.Data.Prices["sync-numeric-unchanged"].Upstreams["Expressions(1)"]["model_ratio"])
 }

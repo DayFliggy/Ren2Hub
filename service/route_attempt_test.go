@@ -40,6 +40,29 @@ func TestRouteAttemptOnlyCountsSentProviderOutcomesOnce(t *testing.T) {
 	require.Equal(t, 1, routeObservations.snapshot()[0].Samples)
 }
 
+func TestRouteAttemptCountsNonStreamResponseAfterConnectionClose(t *testing.T) {
+	setupRouteTest(t)
+	resetRouteObservations(t)
+	c := routeTestContext(t)
+	BeginRouteObservation(c)
+	common.SetContextKey(c, constant.ContextKeyChannelId, 11)
+	info := &relaycommon.RelayInfo{OriginModelName: "model", RelayMode: 1, StartTime: time.Now()}
+	MarkRouteAttemptSent(c, info)
+	FinishRouteAttempt(c, info, types.NewOpenAIError(errors.New("upstream"), types.ErrorCodeBadResponseStatusCode, http.StatusInternalServerError))
+	require.Equal(t, 1, routeObservations.breakers[routeBreakerKey{11, "model"}].failures)
+
+	// A proxy may close the connection right after a complete non-stream response.
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	c.Request = c.Request.WithContext(ctx)
+	MarkRouteAttemptSent(c, info)
+	cancel()
+	FinishRouteAttempt(c, info, nil)
+	require.NotContains(t, routeObservations.breakers, routeBreakerKey{11, "model"}, "the served response is a success")
+	row := routeObservations.get(11, "model", 1, false)
+	require.Equal(t, 2, row.Samples)
+	require.InDelta(t, 0.8, row.ErrorRate, 1e-9)
+}
+
 func TestRouteAttemptUsesMappedModelAndOnlySuccessfulValidLatency(t *testing.T) {
 	setupRouteTest(t)
 	previous := routeObservations.rows

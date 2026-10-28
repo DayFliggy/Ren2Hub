@@ -93,6 +93,15 @@ describe('expression editor drafts', () => {
     )
     wrapper.unmount()
   })
+  it('offers the OpenAI 12h cache write as a price dimension', async () => {
+    const wrapper = setup(tiered('v1:tier("base", p * 2 + c * 4)'))
+    await button(wrapper, 'Visual tiers').trigger('click')
+    await wrapper.findAll('.price-tier-line select')[1]!.setValue('cc12h')
+    expect(wrapper.vm.commit()?.pricing).toEqual(
+      tiered('v1:tier("base", p * 2 + cc12h * 4)')
+    )
+    wrapper.unmount()
+  })
   it('stops the editor save on an incomplete request rule', async () => {
     const wrapper = setup(tiered('p * 2'))
     await button(wrapper, 'Add multiplier rule').trigger('click')
@@ -250,6 +259,79 @@ describe('manual model price editor', () => {
     wrapper.unmount()
   })
 
+  // Ported from upstream 8802113: inheriting plugins keep the shared task
+  // price as their own override before the default becomes ordinary pricing.
+  it('starts ordinary per-image pricing and keeps the inherited plugin price', async () => {
+    const shared = 'tier("base", u("image_count") * 0.04)'
+    const wrapper = setup(tiered(shared))
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: tiered(shared),
+        effective: tiered(shared),
+        plugin_variants: [
+          {
+            plugin_key: 'provider',
+            plugin_name: 'Task provider',
+            usage_schema: { image_count: { type: 'number', unit: 'count' } },
+            configured: '',
+            effective: shared,
+            compatible: true,
+          },
+        ],
+      },
+    })
+    await button(wrapper, 'Configure ordinary OpenAI pricing').trigger('click')
+    // The zero placeholder must be priced before it can be saved.
+    expect(wrapper.vm.commit()).toBeNull()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('Set the ordinary OpenAI price first')
+    await button(wrapper, 'Visual tiers').trigger('click')
+    await field(wrapper, '.price-tier', 'Price per image (USD)').setValue(
+      '0.02'
+    )
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ...tiered('tier("image", fixed(0.02)) * image_count'),
+      'billing_setting.plugin_billing_expr': { provider: shared },
+    })
+    expect(wrapper.text()).not.toContain('Configure ordinary OpenAI pricing')
+    wrapper.unmount()
+  })
+  it('offers ordinary pricing for a u() default whose plugins all have prices', async () => {
+    const shared = 'tier("base", u("seconds") * 0.1)'
+    const own = { provider: 'tier("own", u("seconds") * 0.2)' }
+    const pricing = {
+      ...tiered(shared),
+      'billing_setting.plugin_billing_expr': own,
+    }
+    const wrapper = setup(pricing)
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: pricing,
+        effective: pricing,
+        plugin_variants: [
+          {
+            plugin_key: 'provider',
+            plugin_name: 'Task provider',
+            usage_schema: { seconds: { type: 'number', unit: 'second' } },
+            configured: own.provider,
+            effective: own.provider,
+            compatible: true,
+          },
+        ],
+      },
+    })
+    await button(wrapper, 'Configure ordinary OpenAI pricing').trigger('click')
+    await wrapper.get('textarea').setValue('tier("base", p * 2 + c * 4)')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ...tiered('tier("base", p * 2 + c * 4)'),
+      'billing_setting.plugin_billing_expr': own,
+    })
+    wrapper.unmount()
+  })
   it('does not invent a free expression for an empty model', async () => {
     const wrapper = setup()
     expect(wrapper.get('textarea').element).toHaveProperty('value', '')

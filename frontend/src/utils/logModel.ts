@@ -12,18 +12,22 @@ export function logEvidence(log: LogItem): Record<string, unknown> {
   }
 }
 
+function text(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+// Mirrors relay/common.ResponseModel: the backend stores the requested,
+// upstream and returned names under other.response_model.
 export function logModelObservation(log: LogItem) {
   const evidence = logEvidence(log)
+  const observed = isRecord(evidence.response_model)
+    ? evidence.response_model
+    : {}
   const upstream =
-    typeof evidence.upstream_model_name === 'string'
-      ? evidence.upstream_model_name.trim()
-      : ''
-  const response =
-    typeof evidence.response_model_name === 'string'
-      ? evidence.response_model_name.trim()
-      : ''
+    text(observed.upstream_model) || text(evidence.upstream_model_name)
+  const response = text(observed.returned_model)
   const returned = response.toLowerCase()
-  const expected = [log.model, upstream]
+  const expected = [text(observed.requested_model) || log.model, upstream]
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean)
   const mismatch = Boolean(

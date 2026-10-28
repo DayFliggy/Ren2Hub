@@ -684,6 +684,13 @@ func MarkChannelAffinityUsed(c *gin.Context, channelID int) {
 	c.Set(ginKeyChannelAffinityLogInfo, info)
 }
 
+// forgetChannelAffinityUse drops a use marked for a channel the request did
+// not keep, so admin_info and retry policy describe the final selection.
+func forgetChannelAffinityUse(c *gin.Context) {
+	c.Set(ginKeyChannelAffinityLogInfo, nil)
+	c.Set(ginKeyChannelAffinitySkipRetry, nil)
+}
+
 func AppendChannelAffinityAdminInfo(c *gin.Context, other *model.LogOther) {
 	if c == nil || other == nil {
 		return

@@ -192,6 +192,35 @@ describe('channel model prefill integration', () => {
     })
     wrapper.unmount()
   })
+  it('lets Azure channels opt in to Responses WebSocket', async () => {
+    mocks.canSensitiveWrite = true
+    const { wrapper, save } = setup({
+      type: 3,
+      setting: JSON.stringify({ proxy: 'http://proxy.test' }),
+    })
+    const toggle = wrapper.get(
+      '[role="switch"][aria-label="channels.responsesWebSocket"]'
+    )
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    await toggle.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('channels.saveChannel'))!
+      .trigger('click')
+    await flushPromises()
+    expect(JSON.parse(save.mock.calls[0]![0].setting)).toEqual({
+      proxy: 'http://proxy.test',
+      responses_websocket_enabled: true,
+    })
+    wrapper.unmount()
+    const other = setup({ type: 14 })
+    expect(
+      other.wrapper
+        .find('[role="switch"][aria-label="channels.responsesWebSocket"]')
+        .exists()
+    ).toBe(false)
+    other.wrapper.unmount()
+  })
   it('saves turning on the upstream TLS verification skip with the other settings', async () => {
     mocks.canSensitiveWrite = true
     const { wrapper, save } = setup({

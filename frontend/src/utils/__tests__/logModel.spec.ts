@@ -15,7 +15,11 @@ describe('observed response model comparison', () => {
         model,
         other: JSON.stringify({
           upstream_model_name: 'provider-model',
-          response_model_name: response,
+          response_model: {
+            requested_model: model,
+            upstream_model: 'provider-model',
+            returned_model: response,
+          },
         }),
       } as LogItem).mismatch
     ).toBe(mismatch)
@@ -31,5 +35,11 @@ describe('observed response model comparison', () => {
       logModelObservation({ model: 'alias', other: 'invalid' } as LogItem)
         .mismatch
     ).toBe(false)
+    expect(
+      logModelObservation({
+        model: 'alias',
+        other: { response_model_name: 'unrelated-model' },
+      } as unknown as LogItem)
+    ).toMatchObject({ response: '', mismatch: false })
   })
 })

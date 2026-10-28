@@ -2,9 +2,101 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+
+## 2026-10-28 最终审计与验证修正
+
+本轮以工作树当前内容重新核对 NewAPI `e449cc700eb569cdfc2199cb73e97de46944f43c`，并对 `eb169e7`、`8802113`、`fcc241cdf` 做独立只读交叉审计。Git 历史确认 `6cd0248` 将旧 PowerShell 采集器迁移为 Python 版本，并非误删；技能入口已补充从工作区根目录运行的明确路径。
+
+验证器修正：数据库测试发现器现在纳入未跟踪且未被 `.gitignore` 排除的测试文件；共享端点测试的 MySQL 表名前缀缩短到数据库标识符限制以内。此前数据库报告因缺少未跟踪测试而失败，路由矩阵因 MySQL 标识符过长而失败，均不作为成功证据。Codex `gpt-6-astra`（xhigh）复审确认三项 P2：插件准备阶段替换模型名后会丢失原始 `Stream`/`StreamFormat`，导致重选使用非流式观测；参数覆盖正则缓存按管理员输入无限累积；来源清单的哈希及分类未反映最新工作树。现已在共享端点选择上下文中保留完整 `ModelRequest`，以 256 条、256 KiB、单条 4 KiB 上限的并发安全 FIFO 缓存替代无界 `sync.Map`，并重新生成来源清单；各项均有测试或生成器核验。
+
+来源清单已在源码冻结前重生成：NewAPI `e449cc700eb569cdfc2199cb73e97de46944f43c`，计数 804 `upstream_equal`、273 `adapted`、229 `extension`、43 `removed`；清单哈希覆盖当前工作树，`candidate_sha` 在提交前仍为空。
+
+源码冻结后已完成全套本地验证与隔离浏览器验收；候选镜像、内部 bare 发布和正式应用更新在本节之后按完整 SHA 顺序执行。
+
+## 2026-10-28 延期项与 main 新增 2 提交吸收
+
+本节吸收上一批延期的 `eb169e7`、`8802113`，以及 NewAPI main 在 `b08ee86` 之后新增的 `fcc241cdf`、`e449cc700`。来源清单基线随之改为 `e449cc700eb569cdfc2199cb73e97de46944f43c`。本节验证与发布结果只记录 Ren2Hub 本地事实，不向 NewAPI 报告。
+
+| NewAPI 完整 SHA | 处置 | Ren2Hub 落点、证据与边界 |
+| --- | --- | --- |
+| `e449cc700eb569cdfc2199cb73e97de46944f43c` | adapted | `pkg/perf_metrics/metrics.go` 新增 `RecordImmediateTaskResult`，去掉上游 `Group` 维度；`controller/relay.go` 在结算成功后调用。即时成功的任务不进入轮询终态，原先没有性能样本。新增 `controller/relay_task_metrics_test.go`：已结算的即时成功恰好 1 个样本，即时失败、异步提交和结算失败为 0。
+| `fcc241cdf8ae0a7ba54107a256b5b0167d5a4fdc` | not applicable | 上游把重试次数当作优先级档位，亲和占用一次后跳过最高档。本地亲和只在第 0 次尝试生效（`service/channel_select.go`），重试时 `routeCandidates` 每次按优先级重排并排除已用渠道，不读重试次数，该缺陷不存在。 |
+| `eb169e74d772afdb281970d0cbe0b62fbf9fa994` | adapted | 后端 `controller/ratio_sync.go` 加 `include_unchanged`，表达式优先改按本地或上游 `billing_mode == tiered_expr` 判断，无上游价格的行不返回；本地固定价来源钩子先读请求体再复位，`include_unchanged` 不影响其分派。`ratio_sync_test.go` 与上游一致。Vue `PriceFetchDialog.vue` 每行可选保持、除以或乘以站点汇率，并可批量设置；换算放在 `features/pricing/priceAdjustment.ts`（移植上游 `upstream-price-adjustment.ts`）。 |
+| `8802113263b8a94bf8957a1231b4ec04705d7dd9` | adapted | 普通渠道与插件渠道在共享端点（Responses、images、videos）竞争；插件自有原生路由仍由插件独占。同时带入价格守卫、单插件定价展示、按张图片可视化定价、普通价配置和插件 API 文档段落。 |
+
+汇率调整只换算以站点币种报价的来源，保存值始终是 USD 基础价，计费时照常再乘 `ChannelRatioInfo`，不会重复计价。旧价格只改 `ModelPrice`，没有时改 `ModelRatio`；`CompletionRatio`、缓存和音频倍率等相对倍率不变。表达式只改 `tier()` 价格叶和 `fixed()`，阈值、零价、版本前缀、`image_count` 和请求条件倍率保持原文。条件里调用 `tier`/`fixed`、非线性运算或无法识别的结构一律拒绝，非法汇率、溢出或下溢也拒绝；任一选中行出错时禁止填入。表格显示的“最终价格”就是 `fill()` 写入草稿的值，仍须走现有保存流程。
+
+共享端点路由按本地合同改写，Token 自动路由与有序手动路由保持完整：
+
+- `RouteTaskPluginEndpoint` 用 `SelectChannelForRequest` 预选：普通渠道胜出时原始请求体直达普通 relay，不跑插件解码、模式检查或模型改写，并加 relay-only 过滤，重试不会落到插件渠道；插件渠道胜出时沿用插件路径，重试限于其接受的候选。手动路由按列表顺序决定两类渠道，先于优先级。
+- 共享端点先完成用户并发准入，再进行渠道预选；预选拿到的渠道许可立即释放。`Distribute` 复用已完成的用户准入，并通过 `ReacquireSelectedRouteChannel` 在当前过滤条件下重新校验和取得渠道许可；渠道已满或不再符合时丢弃预选的亲和记录（`forgetChannelAffinityUse`），然后正常重选。有 pin 时不复用预选结果，与上游相同。
+- 预选失败且不是“无可用渠道”时（429 或 5xx，例如渠道全忙、strict 亲和或加载失败），直接返回该错误，不再让插件解码错误掩盖它。“无可用渠道”仍回落到插件路径，与上游相同。
+
+价格守卫 `relay/helper/price.go` 逐字吸收：普通请求遇到含 `u()` 的表达式，或表达式仍被该端点的任务插件继承，在预扣前返回 400 `model_price_error`。这关闭了一条与上游 `b08ee86` 相同的少扣路径，即条件回退式任务表达式被当作每百万 token 价格。行为变化：非任务模型配置含 `u()` 的表达式时，普通请求和渠道测试都返回 400。`model/model_pricing_config.go` 改为只有一个插件时也展示插件变体。
+
+Vue 编辑器：`visual.ts` 识别 `<pricing> * image_count`，可视化编辑保留数量乘数，加条件时用括号包住整个分支；按张计价时 `PricingTier.vue` 显示“/ 张”“每张图片价格”。`ModelPricingEditor.vue` 的“配置普通 OpenAI 价格”先把当前表达式写入每个仍在继承的插件覆盖，再把模型默认值换成普通价：模型或插件 schema 有 `image_count` 计数时为 `tier("image", fixed(0)) * image_count`，否则为 `tier("base", p * 0 + c * 0)`。占位 0 与上游相同；本地另加保存拦截：表达式仍是该占位时提交报 `ordinaryPriceRequired`，需免费须显式改写。上游 React 可直接保存该 0 价，本地为关闭少扣而偏离。默认表达式含 `u()` 且所有插件已有独立价格时也显示该按钮，对应上游 `usesTaskModelPricing` 对 `u()` 的判断。
+
+统一本地验证已完成（报告位于 `/tmp/ren2hub-final-evidence-20261028/local-tests/`，各报告绑定源码指纹 `e2a6af9b7d146b05183ddfaddbce7ac04d08d1e2e98ce72ac731ce80fc78a3d1`）：Go 单测 167 批、6,422 个事件通过，0 skip；Vue 268 个文件、1,869 项通过；静态检查含 typecheck、ESLint、格式检查和 `go vet` 通过；嵌入构建 10 项通过，二进制指纹为 `d488de0f300117522f514bb33ce43a6c136366a0cc3a9d3217efa22c3959bcc9`；三库矩阵 72/72 suite 通过、1,221 个方言用例通过、0 skip/fail；race 3 suite、30 项通过；UI 合同 489 项通过；独立浏览器 4 个隔离环境（desktop/mobile × light/dark）均通过。候选镜像验收和正式部署仍按本节后续步骤执行。
+- 回归边界：共享端点同时遇到用户并发已满和所有候选渠道已满时，必须返回 `user_concurrency_exceeded`，且用户与渠道许可都只释放一次；Token 自动/手动路由、普通/插件竞争、价格守卫、即时任务采样和汇率转换均保留既有测试。
+- 来源清单以 `e449cc700` 刷新，计数为 804 `upstream_equal`、273 `adapted`、229 `extension`、43 `removed`；当前共享端点路由文件因 Token 路由和并发适配记为 `adapted`，清单逐文件哈希已重算。两个延期标签已删除；`i18n/keys.go`、`pkg/jsplugin/routing.go`、`controller/ratio_sync_test.go` 回到与上游一致。
+
+交叉审计：Codex CLI `gpt-6-astra`（`model_reasoning_effort=xhigh`，只读沙箱）审阅了本节本地 Go/Vue 差异、新测试和四个上游补丁，共报告 4 项，处置如下。
+
+- 中，已确认：“配置普通 OpenAI 价格”后直接保存会存成 0 价。已按上段加保存拦截并补测试。
+- 中，推测：共享端点预选在插件解码之前，普通渠道胜出时不会建立 origin-task pin。上游 `8802113` 的 `RouteTaskPluginEndpoint` 顺序相同，其“origin task still pins”用例同样只覆盖 `pluginOnly`；普通 relay 不读取插件任务 ID，这条路径不涉及计费。按上游一致保留，不修改。
+- 低，已确认：所有插件都有独立价格时，按钮被隐藏。默认表达式含 `u()` 时已改为显示，与上游 `usesTaskModelPricing` 一致。其余情况仍要求至少一个插件在继承，因为此时模型默认值不被任何插件使用，可直接按普通价编辑。
+- 低，推测：`image_count` 只识别根级乘法。上游 `imageCountPricingRoot` 同样只识别根级，嵌套形式退回文本编辑，不会改写错误。保留，不修改。
+
+本轮 xhigh 复审发现的三个 P2 已处理：共享端点上下文新增完整 `ModelRequest`，插件模型解析后仍沿用原始流式维度；`relay/common/override.go` 改为并发安全的有界 FIFO 正则缓存，并覆盖条目、总字节和超长规则边界；来源清单重新生成，逐文件哈希与当前源码一致。路由流式回归、缓存上限回归和上述全量验收均已通过。最终 Codex `gpt-6-astra` xhigh 复审未发现新的 P0/P1/P2；仅建议补充 `Stream=false, StreamFormat=sse` 与总字节压力/并发 race 两项 P3 覆盖，当前不影响发布，留作后续测试增强。
+
+Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync 优先级、价格守卫和即时任务采样无问题。审计环境没有 Go，未运行测试，以上 Go 验证由本机完成。
+
+## 2026-10-28 同步窗口完整审计
+
+重新拉取 NewAPI 后 main 仍为 `b08ee86fe2a899dcf9060d8cde7858c93c2b770c`，latest 仍为 `v1.0.0-rc.47`。对 `206e0fa5c600127a314a97f88592c067f784f4a6..b08ee86fe2a899dcf9060d8cde7858c93c2b770c` 共 39 个提交按流式、计费、任务插件、Vue 四个区域逐提交复核，并逐文件比对上游累计差异。无 P0/P1。与上游 `b08ee86` 行为相同的项目不做本地偏离，下列只记录本地问题及修复。修复未提交、发布或部署，`candidate_sha=null`。
+
+| 级别 | 问题 | 修复 |
+| --- | --- | --- |
+| P2 | `relay/channel/openai/relay_responses.go` 在完成事件前已有写错误时不调用 `sr.Done()`（本地多出 `!info.StreamStatus.HasErrors()`），上游未 EOF 时该流以超时结束；本地测试夹具缺上游的取消/清理同步，掩盖了差异。 | 文件恢复为上游原文；`relay_responses_billing_test.go` 移植上游 `waitForCleanup` 同步，"完成事件前协议错误"用例改为不含上游 EOF，旧实现下得到 `timeout` 而失败。 |
+| P2 | Vue 日志模型核对读取不存在的 `other.response_model_name`，后端写入的是 `other.response_model` 对象（`requested_model`/`upstream_model`/`returned_model`），返回模型不一致提示从不出现。 | `frontend/src/utils/logModel.ts` 读取 `response_model`；单测与视觉夹具改用后端结构，旧实现下单测失败 2 项。 |
+| P2 | 模型广场未映射后端价格目录的 `cache_create_12h`，12h 缓存写入价格显示原始键名；可视化定价层级的变量下拉缺 `cc12h`。 | `modelMarket.ts` 增加 `cacheWrite12h` 维度与中英文文案；`PricingTier.vue` 下拉改由 `TOKEN_VARIABLES` 去掉 `len` 生成；补 ModelCard 与 ModelPricingEditor 用例，后者旧组件下失败。 |
+| P2 | `docs/plugin-api/v1.md`、`v1.d.ts` 仍停在 `206e0fa`，未随 `556517fa5`、`dbe97beb9`、`db80ac8e0` 更新，仍描述已删除的宿主递归 duration 校验。 | 按本地实现写入 multipart 原生路由、插件自校验与宿主 usage facts 上限、`duration-auto@1` 无效果；请求头按本地 allowlist 描述，未发送的头省略。`8802113` 的共享端点段落当时随延期未带入，后已补入（见"2026-10-28 延期项与 main 新增 2 提交吸收"）。 |
+| P3 | `.github/workflows/release.yml` 漏改 `7d8b91268` 的 `go-version-file: go.mod`。 | 三处改为 `go-version-file: go.mod`。 |
+| P3 | `service/tiered_settle.go`、`model/model_pricing_conversion.go`、`pkg/billingexpr/types.go` 的注释与上游措辞漂移，逻辑一致。 | 恢复上游注释原文。 |
+
+验证记录（Go `go1.26.10 linux/amd64`，`GOTOOLCHAIN=local GOWORK=off`，后端均 `-timeout 60s`）：
+
+- `./relay/channel/openai`、`./model`、`./pkg/billingexpr` 全包与 `./service -run 'Tiered|TextQuota'` 通过；根模块 `go build -p=2 ./...`、`go vet -p=2 ./...` 通过。Responses 生命周期用例 `-count=20` 通过；用 `-overlay` 换回 `0837a03` 的 `relay_responses.go` 时新用例失败。
+- `golang:1.26.10-bookworm` 容器（断网、源码只读）中 `-race`：`./relay/channel/openai -run Responses` `-count=1` 通过，生命周期用例 `-count=20` 通过。`-count=3` 下 `TestResponsesToGeminiStreamObservesFirstOutput` 因进程级计数累积失败，与上一批记录相同。
+- Vue：logModel、ModelCard、ModelPricingEditor、modelMarket API 与 `src/features/pricing` 共 8 文件/86 项通过；typecheck、改动文件 ESLint/Prettier 与生产构建通过。`tests/visual/log-response-model.spec.ts` 为 Playwright 用例，按主机资源限制未运行。
+- 来源清单以 `b08ee86` 刷新：`relay/channel/openai/relay_responses.go` 由 adapted 转为 upstream_equal，计数为 804 upstream_equal、273 adapted、227 extension、43 removed。
+
+## 2026-10-28 NewAPI main 7 提交吸收
+
+以 Ren2Hub `0837a03c77ea0d5b7618588d4c9e77781f656590`（上一批 32 提交的源码提交）为基线，对照 NewAPI `34003e9c2eed2c20e617f583fdfe54bf1bf42237..b08ee86fe2a899dcf9060d8cde7858c93c2b770c` 的 7 个提交。7 项都在 rc.47 之后，官方 latest 仍为 `v1.0.0-rc.47`。上游 `web/` 的 React 文件不适用，由 Vue 对应实现。本批源码未提交、发布或部署，`candidate_sha=null`。
+
+| # | NewAPI 完整 SHA | 处置 | Ren2Hub 落点、证据与边界 |
+| --- | --- | --- | --- |
+| 1 | `01da3a55f838cfa21010b05c7451c0a42cf5a173` | adapted | 上游按模式文本共享编译结果，规则来自渠道参数覆盖的 `from` 和条件 `value`，不取自请求体。此前无界 `sync.Map` 会随管理员输入的不同模式永久累积；本地保留复用行为并改为 256 条、256 KiB、单模式 4 KiB 上限的并发安全 FIFO，超长模式不缓存。`TestParamOverrideRegexCacheIsBounded` 与超长模式用例保护上限。W1、W3。 |
+| 2 | `ad561128202c0a1f0a547df6c283d1efeb803692` | absorbed | RelayKit `GetOpenAIChatCapabilities`：`gpt-6.1-sol` 不保留采样参数，`gpt-6.1-terra` 仅显式 `none` 时保留，两者改用 `max_completion_tokens`。本批不增加 6.1 默认价格。W1、W2。 |
+| 3 | `54788117d6574edcabbff2aa61d838f4d85616eb` | absorbed | `pkg/perf_metrics/outcome.go` 原文吸收。分类结果同时进入本地自动路由熔断和观测：非流式响应写完后连接被关闭，现计成功样本。Cloudflare、Coze、Ollama、Zhipu、Cohere、Tencent 的流式处理器不设置 `StreamStatus`，客户端取消且处理器无错误时也会计成功，压低错误率。全局性能指标会为这类成功样本记录截至取消时的 `LatencyMs`（已有首个输出时含 TTFT），使延迟偏低；自动路由观测只在观测到首个输出时记录延迟，Zhipu、Cohere 会观测输出，其余四类不产生路由延迟样本。预扣、结算和日志写入不受分类影响。按批准保持上游口径，不另做本地偏离。新增 `service/route_attempt_test.go` 回归，旧分类器下失败。W1、W3。 |
+| 4 | `49271d2d8b5fd85c6d69e3947594ac79804ba31f` | absorbed | `relay/channel/aws/dto.go` 保留 `safeguards`；无该字段的旧请求出站字节不变。W1、W3。 |
+| 5 | `55515dbae24179e7dd9ba332adfa43c2961521f5` | absorbed | 公共流扫描器仅在内容精确为 `[DONE]` 时结束：无前缀 `[DONE]` 现结束流，`data: [DONE]extra` 现作为数据交给处理器。本地写入预算、输出观测和读取错误分类不变；各渠道自带的扫描逻辑不在本提交范围，例如 `relay/channel/openai/chat_via_responses.go` 仍只认 `data:` 前缀行，与上游 `b08ee86` 相同，该路径靠 `response.completed` 等终止事件结束。W1、W3。 |
+| 6 | `26c488c4476aa7d8f7e8afc33421b70ee8e9f617` | adapted | 后端 `FilterResponsesWebSocket` 接受 Azure，默认仍关闭；Vue `ChannelFormModal.vue` 的 Responses WebSocket 开关加入类型 3，补 Azure 开启与非支持类型隐藏用例。Vue 没有 Azure Responses API 版本输入，WebSocket 与 HTTP 一样使用默认 `preview` 或渠道 API 版本。W1、W3、W4。 |
+| 7 | `b08ee86fe2a899dcf9060d8cde7858c93c2b770c` | absorbed | Cloudflare embeddings 改走 `openai.OpenaiHandler`，保留向量与额外字段。扣费结果变化：改按上游 `prompt_tokens` 计费，上游无 usage 时才回退输入估算。W1。 |
+
+验证记录（Go `go1.26.10 linux/amd64`，`GOTOOLCHAIN=local GOWORK=off`，后端均 `-timeout 60s`）：
+
+- W1：`./relay/common ./pkg/perf_metrics ./relay/channel/aws ./relay/helper ./relay/channel/cloudflare ./model ./service ./relay` 通过；controller 定向 GPT-6.1、采样参数和 Cloudflare embedding 4 个用例通过；上游新增的正则、分类、safeguards、`[DONE]`、Azure 选择与握手测试均实际执行。新增路由回归用 `-overlay` 换回旧 `outcome.go` 时失败，换回后通过。
+- W2：RelayKit `go test ./...` 与 `go build ./...` 通过。
+- W3：根模块 `go build -p=2 ./...`、`go vet -p=2 ./...` 通过；`./relay/... ./pkg/... ./service/... ./model/... ./middleware/... ./common/... ./setting/... ./plugins/...` 全部通过。`golang:1.26.10-bookworm` 容器（断网、源码只读）中 `-race -count=1`：`relay/helper`（`-parallel=1`）、`relay/common`、`relay/channel/aws`、OpenAI Responses 定向、service/relay 路由与 WebSocket 定向、controller 两个 WebSocket 结算用例通过。`relay/helper` 默认并行下的 `logger.logHelper` 竞争及 `TestPerformanceAggregationAndFlush` 的测试写入竞争，在基线 `0837a03` 导出快照上同样出现，不由本批引入，未计通过；`-count=3` 下 `TestSSEHelpersMeasureEffectiveOutputInsteadOfControlFrames`、`TestResponsesToGeminiStreamObservesFirstOutput` 因进程级计数累积失败，`-count=1` 通过。
+- W4：Vue Vitest 全量 267 文件/1856 项、typecheck、目标 ESLint/Prettier 与生产构建通过。
+- 来源清单以 `b08ee86fe2a899dcf9060d8cde7858c93c2b770c` 刷新，计数仍为 803 upstream_equal、274 adapted、227 extension、43 removed；本批文件两侧同步移动，原有适配理由仍适用。完整审计后计数见上一节。
+- 交叉审计：Codex CLI 0.165.0 `gpt-6-astra` 只读审计工作树差异、上游补丁和 7 个提交，无 P0/P1。其提出的正则缓存无界增长已在 2026-10-28 最终审计中按上游基础实现作适配修复（见上文），不再作为“账本表述不准”保留；`#3` 延迟样本的时序与重复计数担忧经本地调用链核对后记为无重复。Responses 缓冲扫描器不认裸 `[DONE]`、正则结果用例不能区分缓存前后两项与上游原文一致，不做本地偏离。审计沙箱无法写 Go 构建缓存，未独立运行测试；本批无代码改动，W1–W4 结果沿用。
+
 ## 2026-10-27 NewAPI main 32 提交吸收
 
-2026-10-28 源码修复、适用验证和最终独立复审已完成；源码验收通过。提交、发布和部署不在本次完成状态内，`candidate_sha=null`。
+2026-10-28 源码修复、适用验证和最终独立复审已完成；源码验收通过，已提交为 Ren2Hub `0837a03c77ea0d5b7618588d4c9e77781f656590`，未推送、发布或部署。以下各段中的"未提交"描述的是提交前的状态。
 
 随后一次交叉审计发现日志页未读取后端 `cache_tokens`，且 OpenAI 缓存明细被重复计入总量；现已修复字段映射，并按后端显式输入总量及 Anthropic 用量语义计算总量和命中率。同步清单补记任务插件请求头 allowlist 与流式输出观测两项适配理由。针对性 UI 测试 12/12、typecheck、ESLint、Prettier、前端生产构建和 `git diff --check` 均通过；改动仍未提交、发布或部署。
 
@@ -14,19 +106,19 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 | --- | --- | --- | --- |
 | 1 | `eea05e010c7f212e1a617638fe27164f24d9478d` | absorbed | `go.mod`、`go.sum` 升级 `klauspost/compress` 到 1.18.7；V1、V3。 |
 | 2 | `4d36f2c5245dd6676075be1c4f668dfe56d3340a` | not applicable | 上游只升级 `/web` 的 Vitest 5；Vue 独立使用锁定的 Vitest 4.1.11，本轮不迁移测试框架主版本；V7 验证现行 Vue 栈。 |
-| 3 | `7d8b91268dab69d7150f345c448b5e250163146a` | adapted | Go、Docker/开发镜像、RelayKit、CI 与本地测试统一 Go 1.26.10；race 测试固定本地工具链版本；V3、V4。 |
-| 4 | `0c2af9780e45f6f9073528fb0fcbdcd64b5d9495` | adapted | Responses 完成事件、错误写入/Flush、取消及结算生命周期；保留 `ObserveRouteStreamOutput`；V1、V4、V6。 |
+| 3 | `7d8b91268dab69d7150f345c448b5e250163146a` | adapted | Go、Docker/开发镜像、RelayKit、CI 与本地测试统一 Go 1.26.10；race 测试固定本地工具链版本；V3、V4。`release.yml` 的 `go-version-file: go.mod` 在完整审计中补齐。 |
+| 4 | `0c2af9780e45f6f9073528fb0fcbdcd64b5d9495` | adapted | Responses 完成事件、错误写入/Flush、取消及结算生命周期；V1、V4、V6。完整审计后 `relay_responses.go` 与上游原文一致，去掉本地 `HasErrors` 条件，测试夹具同步上游。 |
 | 5 | `7e6596728ff640392bd77169ebb6137a8fe0c309` | adapted | `relay/helper/stream_scanner.go` 集中写入预算并覆盖慢客户端、SSE/Responses/WebSocket；真实读取错误与关闭清理错误分开；V1、V4、V6。 |
 | 6 | `94cc3ff0906db37703d5ce2bc6a479209b7b9b23` | adapted | Claude 缓存写入未拆分时保留可计费用量；扩展 DTO、merge、变量、结算快照与日志；V1、V2。 |
-| 7 | `556517fa57d255c73428325f6a094fd8b4cab76c` | adapted | 原生任务路由支持 JSON/multipart；模型限定路由仅 JSON、query 无请求体、urlencoded 拒绝；文本字段受全局请求体限额约束，保留部件/文件/UTF-8/临时文件检查；V1。 |
-| 8 | `dbe97beb9b06e8a4e23b5b8f009d882cc49f70bb` | adapted | 插件请求头改安全 allowlist，不透传认证、Cookie 与代理凭据；V1。 |
-| 9 | `db80ac8e0c4063e67938cf651c240c69f4f4cf54` | adapted | 移除宿主对业务请求字段的递归计费校验；8 个任务插件在提交前校验自身上游参数，usage facts 仍由宿主限制；V1。Jimeng S2 固定 5 秒、Doubao 帧数向下取整沿用插件现有合同。 |
+| 7 | `556517fa57d255c73428325f6a094fd8b4cab76c` | adapted | 原生任务路由支持 JSON/multipart；模型限定路由仅 JSON、query 无请求体、urlencoded 拒绝；文本字段受全局请求体限额约束，保留部件/文件/UTF-8/临时文件检查；V1。插件 API 文档在完整审计中补齐。 |
+| 8 | `dbe97beb9b06e8a4e23b5b8f009d882cc49f70bb` | adapted | 插件请求头改安全 allowlist（`Accept`、`Accept-Language`、`Content-Type`、`Prefer`、`User-Agent`、`X-Request-Id`），未发送的头省略，不透传认证、Cookie 与代理凭据；V1。插件 API 文档按 allowlist 描述。 |
+| 9 | `db80ac8e0c4063e67938cf651c240c69f4f4cf54` | adapted | 移除宿主对业务请求字段的递归计费校验；8 个任务插件在提交前校验自身上游参数，usage facts 仍由宿主限制；V1。Jimeng S2 固定 5 秒、Doubao 帧数向下取整沿用插件现有合同。Kling 出站请求写回 `model_name`/`model`，`mode` 按解码请求选择，使计费与上游请求使用同一模式。插件 API 文档在完整审计中补齐。 |
 | 10 | `e2321a5a9f590e8398868cb7ef56af3d833faa07` | not applicable | 仅上游 React locale 排序；Ren2Hub Vue 不带回 React 文案体系。 |
-| 11 | `eb169e74d772afdb281970d0cbe0b62fbf9fa994` | deferred | 汇率联动价格留待独立定价设计，不改现行价格同步或 `ChannelRatioInfo` 计价。 |
-| 12 | `8802113263b8a94bf8957a1231b4ec04705d7dd9` | deferred | 共享插件端点竞争留待单独路由设计；不改渠道选择、并发和插件路由边界。 |
-| 13 | `d8e65613c09adf3663f960ea4316414a99694751` | not applicable | 仅上游 React 使用日志复制模型名；Vue 使用自己的 usage-log 组件。 |
+| 11 | `eb169e74d772afdb281970d0cbe0b62fbf9fa994` | adapted | 原记延期，已在"2026-10-28 延期项与 main 新增 2 提交吸收"一节落地：后端 `include_unchanged`、表达式优先级与空行过滤；Vue 价格同步按模型选择保持/除以/乘以站点汇率，保存值仍为 USD 基础价。 |
+| 12 | `8802113263b8a94bf8957a1231b4ec04705d7dd9` | adapted | 原记延期，已在"2026-10-28 延期项与 main 新增 2 提交吸收"一节落地：普通渠道与插件渠道在共享端点按 Token 自动/手动路由竞争，价格守卫、单插件展示、按张图片价与普通价配置随之带入。 |
+| 13 | `d8e65613c09adf3663f960ea4316414a99694751` | adapted | 后端 `other.response_model` 记录请求、上游与返回模型；上游 React 的三模型展示与复制按钮不带入，Vue 只读取该对象提示返回模型不一致（完整审计修正字段读取）。 |
 | 14 | `d0b840e75ff36d731b04ff981ee361819acd593f` | adapted | JSON Schema 属性顺序保真；检查本地 RawMessage/类型断言并保留 Ren2Hub 转换器约定；V1、V2。 |
-| 15 | `e9d4d6353ce2c11df753d751ba1ad778e2433a88` | adapted | OpenAI 12 小时缓存写入字段与计价接入，保持 `ChannelRatioInfo` 和 `prompt_cache_options`；V1、V2、V7。价格目录通过 `billing_expr.cc12h` 呈现，当前 `/api/pricing` 没有独立 12h ratio 字段；补齐上游内置表达式在普通/长上下文的 12h 计费断言（V9）。 |
+| 15 | `e9d4d6353ce2c11df753d751ba1ad778e2433a88` | adapted | OpenAI 12 小时缓存写入字段与计价接入，保持 `ChannelRatioInfo` 和 `prompt_cache_options`；V1、V2、V7。价格目录通过 `billing_expr.cc12h` 呈现，当前 `/api/pricing` 没有独立 12h ratio 字段；补齐上游内置表达式在普通/长上下文的 12h 计费断言（V9）。完整审计补齐 Vue 模型广场 `cache_create_12h` 维度与可视化定价 `cc12h` 变量。 |
 | 16 | `7fb6e57a5ff671582131c74e00bdfaa867d4e985` | adapted | 渠道高级自定义全局/路由级透传 roundtrip 与全路由风险提示；不放宽后端路由/转换器限制；V7。 |
 | 17 | `30748c6558bc97de49ff74871cfec717e50f3322` | adapted | 访问日志统一清理查询凭据；其他支付入口 URI 和 RelayInfo 调试日志复用同一清理逻辑；保留上游 logger_test.go 全部回归并增加签名/OAuth 用例；V1、V3、V9。 |
 | 18 | `33c61a24234aa20cb10e8a644304322c476361de` | not applicable | 仅 React 编辑抽屉状态修复；当前 Vue 页面不包含该组件。 |
@@ -74,9 +166,9 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 | 文件 | 上游来源与处置 |
 | --- | --- |
-| `controller/ratio_sync.go`、`controller/ratio_sync_test.go` | `eb169e74d772afdb281970d0cbe0b62fbf9fa994`；汇率联动延期，清单补 `exchange-rate-pricing-deferred`。 |
-| `dto/channel_constraints.go`、`middleware/distributor.go`、`model/channel_constraint.go`、`model/model_pricing_config.go`、`relay/relay_task_test.go` | `8802113263b8a94bf8957a1231b4ec04705d7dd9`；共享插件端点竞争延期，逐文件补延期标签。`model_pricing_config.go` 不属于 f1569d1；后者只改上游 Web 分类。 |
-| `i18n/locales/en.yaml`、`i18n/locales/zh-CN.yaml`、`i18n/locales/zh-TW.yaml`、`i18n/keys.go`、`pkg/jsplugin/routing.go`、`router/task-plugin-protocol-router.go` | 同属 `8802113263b8a94bf8957a1231b4ec04705d7dd9` 延期，相关路由错误和文案未孤立带入。 |
+| `controller/ratio_sync.go`、`controller/ratio_sync_test.go` | `eb169e74d772afdb281970d0cbe0b62fbf9fa994`；原记汇率联动延期，后续吸收后 `ratio_sync_test.go` 与上游一致，`exchange-rate-pricing-deferred` 标签已删除。 |
+| `dto/channel_constraints.go`、`middleware/distributor.go`、`model/channel_constraint.go`、`model/model_pricing_config.go`、`relay/relay_task_test.go` | `8802113263b8a94bf8957a1231b4ec04705d7dd9`；原记共享插件端点竞争延期，后续吸收后 `plugin-shared-route-competition-deferred` 标签已删除，各文件按实际差异改记 `token-routing` 等理由。`model_pricing_config.go` 不属于 f1569d1；后者只改上游 Web 分类。 |
+| `i18n/locales/en.yaml`、`i18n/locales/zh-CN.yaml`、`i18n/locales/zh-TW.yaml`、`i18n/keys.go`、`pkg/jsplugin/routing.go`、`router/task-plugin-protocol-router.go` | 同属 `8802113263b8a94bf8957a1231b4ec04705d7dd9`，后续吸收后 `i18n/keys.go`、`pkg/jsplugin/routing.go`、`router/task-plugin-protocol-router.go` 与上游一致；三份 locale 只余工单文案与去分组措辞差异。 |
 | `setting/billing_setting/builtin_billing_test.go` | `e9d4d6353ce2c11df753d751ba1ad778e2433a88` 的 12h 普通/长上下文用例已补到本地 ChannelRatio 合同，精确额度断言保留。 |
 | `middleware/logger_test.go`、`middleware/logger_sync_test.go` | `30748c6558bc97de49ff74871cfec717e50f3322`：前者恢复完整上游原文，后者补本地 Google 签名/OAuth 覆盖，不再记为删除上游测试。 |
 

@@ -16,8 +16,18 @@ import {
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import type { PricingDraft } from '@/features/pricing/draft'
 import { pricingDiff } from '@/features/pricing/diff'
+import {
+  adjustPrice,
+  type AdjustedPrice,
+  type PriceAdjustment,
+} from '@/features/pricing/priceAdjustment'
 import PriceDiffCell from './PriceDiffCell.vue'
-const props = defineProps<{ draft: PricingDraft }>()
+// exchangeRate is the site currency per USD; prices are always saved in USD.
+const props = defineProps<{
+  draft: PricingDraft
+  exchangeRate: number
+  currency: string
+}>()
 const emit = defineEmits<{ close: []; fill: [rows: FetchedModelPrice[]] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const sources = ref<FetchedPriceSource[]>([])
@@ -68,12 +78,24 @@ const visibleRows = computed(() =>
   )
 )
 const selectedKeys = computed(() => new Set(selected.value))
+const ADJUSTMENTS: PriceAdjustment[] = ['keep', 'divide', 'multiply']
+// Per-row choice keyed like the selection; the source quote is never mutated.
+const adjustments = ref<Record<string, PriceAdjustment>>({})
+const bulkAdjustment = ref<PriceAdjustment>('keep')
+const adjustmentOf = (model: FetchedModelPrice) =>
+  adjustments.value[keyFor(model)] ?? 'keep'
+function adjusted(model: FetchedModelPrice): AdjustedPrice {
+  return adjustPrice(model.pricing, adjustmentOf(model), props.exchangeRate)
+}
 const comparisons = computed(
   () =>
     new Map(
       visibleRows.value.map((model) => [
         keyFor(model),
-        pricingDiff(props.draft[model.model_name] ?? {}, model.pricing),
+        pricingDiff(
+          props.draft[model.model_name] ?? {},
+          adjusted(model).values ?? model.pricing
+        ),
       ])
     )
 )
@@ -82,6 +104,29 @@ const chosen = computed(() =>
     selectedKeys.value.has(keyFor(model))
   )
 )
+const chosenAdjusted = computed(() =>
+  chosen.value.map((model) => ({ model, result: adjusted(model) }))
+)
+const adjustedCount = computed(
+  () => chosen.value.filter((model) => adjustmentOf(model) !== 'keep').length
+)
+const adjustmentFailed = computed(() =>
+  chosenAdjusted.value.some(({ result }) => result.error)
+)
+function applyBulkAdjustment() {
+  const next = { ...adjustments.value }
+  for (const key of selected.value) next[key] = bulkAdjustment.value
+  adjustments.value = next
+}
+function fill() {
+  emit(
+    'fill',
+    chosenAdjusted.value.map(({ model, result }) => ({
+      ...model,
+      pricing: result.values ?? model.pricing,
+    }))
+  )
+}
 const overwrite = computed(
   () =>
     chosen.value.filter(
@@ -95,6 +140,7 @@ const duplicate = computed(
 )
 watch(source, () => {
   selected.value = []
+  adjustments.value = {}
   search.value = ''
   upstreamPrices.value = undefined
   if (upstream.value) void fetchUpstream(upstream.value)
@@ -283,6 +329,27 @@ onBeforeUnmount(() => controller?.abort())
             t('clearSelection')
           }}</ConsoleButton>
         </div>
+        <div class="price-fetch-tools">
+          <p class="text-xs text-[var(--text-tertiary)]">
+            {{ t('exchangeRateHint', { rate: exchangeRate, currency }) }}
+          </p>
+          <select
+            v-model="bulkAdjustment"
+            class="price-adjustment"
+            :aria-label="t('bulkAdjustment')"
+          >
+            <option v-for="mode in ADJUSTMENTS" :key="mode" :value="mode">
+              {{ t(`adjust_${mode}`, { rate: exchangeRate }) }}
+            </option>
+          </select>
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            :disabled="!chosen.length"
+            @click="applyBulkAdjustment"
+            >{{ t('bulkAdjustment') }}</ConsoleButton
+          >
+        </div>
         <div class="price-fetch-table">
           <table>
             <thead>
@@ -291,7 +358,8 @@ onBeforeUnmount(() => controller?.abort())
                 <th>{{ t('name') }}</th>
                 <th>{{ t('provider') }}</th>
                 <th>{{ t('current') }}</th>
-                <th>{{ t('candidate') }}</th>
+                <th>{{ t('adjustment') }}</th>
+                <th>{{ t('finalPrice') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -316,6 +384,39 @@ onBeforeUnmount(() => controller?.abort())
                     :fields="comparisons.get(keyFor(model)) ?? []"
                     side="current"
                   />
+                </td>
+                <td>
+                  <select
+                    class="price-adjustment"
+                    :value="adjustmentOf(model)"
+                    :aria-label="`${t('adjustment')} ${model.model_name} ${model.provider}`"
+                    :disabled="
+                      Boolean(model.unsupported_reason) ||
+                      !Object.keys(model.pricing).length
+                    "
+                    @change="
+                      adjustments = {
+                        ...adjustments,
+                        [keyFor(model)]: ($event.target as HTMLSelectElement)
+                          .value as PriceAdjustment,
+                      }
+                    "
+                  >
+                    <option
+                      v-for="mode in ADJUSTMENTS"
+                      :key="mode"
+                      :value="mode"
+                    >
+                      {{ t(`adjust_${mode}`, { rate: exchangeRate }) }}
+                    </option>
+                  </select>
+                  <p
+                    v-if="adjusted(model).error"
+                    role="alert"
+                    class="text-xs text-[var(--status-danger-text)]"
+                  >
+                    {{ t(`adjustError_${adjusted(model).error}`) }}
+                  </p>
                 </td>
                 <td>
                   <p
@@ -352,6 +453,9 @@ onBeforeUnmount(() => controller?.abort())
           @update:page-size="pageSize = $event"
         />
         <p role="status">{{ t('selected', { count: chosen.length }) }}</p>
+        <p v-if="adjustedCount" role="status">
+          {{ t('adjustedCount', { count: adjustedCount, rate: exchangeRate }) }}
+        </p>
         <p v-if="overwrite" class="price-overwrite">
           {{ t('overwrite', { count: overwrite }) }}
         </p>
@@ -377,8 +481,8 @@ onBeforeUnmount(() => controller?.abort())
           t('cancel')
         }}</ConsoleButton>
         <ConsoleButton
-          :disabled="loading || !chosen.length || duplicate"
-          @click="emit('fill', chosen)"
+          :disabled="loading || !chosen.length || duplicate || adjustmentFailed"
+          @click="fill"
           >{{ t('fill') }}</ConsoleButton
         >
       </div>
@@ -491,6 +595,14 @@ onBeforeUnmount(() => controller?.abort())
   max-width: 16rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+.price-adjustment {
+  max-width: 12rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  background: var(--surface-base, transparent);
+  padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
 }
 .price-overwrite {

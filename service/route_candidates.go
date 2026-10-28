@@ -309,6 +309,22 @@ func AcquirePinnedRouteChannel(c *gin.Context, channelID int, modelName string) 
 	return nil, model.ErrTokenRouteForbidden
 }
 
+// ReacquireSelectedRouteChannel admits a channel chosen before user admission
+// under the request's current filters. A full or no longer eligible channel
+// returns nil so the caller selects again; other failures are reported.
+func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, *ChannelSelectError) {
+	channel, err := AcquirePinnedRouteChannel(c, channelID, modelName)
+	if errors.Is(err, ErrConcurrencyFull) || errors.Is(err, model.ErrTokenRouteForbidden) {
+		// The caller selects again, which records affinity use afresh.
+		forgetChannelAffinityUse(c)
+		return nil, nil
+	}
+	if err != nil {
+		return nil, routeLoadFailure(c, err)
+	}
+	return channel, nil
+}
+
 // AcquireOriginTaskRouteChannel is only used after the task resolver has
 // verified ownership and pinned its original channel. Current Key preferences
 // do not move an accepted task to another supplier, but capacity still applies.

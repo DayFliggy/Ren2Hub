@@ -173,7 +173,11 @@ defineExpose({ issue })
         :placeholder="t('exprRequired')"
       />
     </label>
-    <PricingTier v-else-if="document" v-model="document.root" />
+    <PricingTier
+      v-else-if="document"
+      v-model="document.root"
+      :image-count="document.imageCount"
+    />
     <p v-if="model && !document" class="admin-muted">{{ t('exprAdvanced') }}</p>
     <p v-if="issue" class="admin-error" role="alert">{{ issue }}</p>
     <details>

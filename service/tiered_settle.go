@@ -20,6 +20,10 @@ type TieredResultWrapper = billingexpr.TieredResult
 // include all sub-categories (cache, image, audio). Claude-format APIs
 // report them as text-only. This function normalizes to text-only when
 // sub-categories are separately priced.
+//
+// A long-lived cache write (Claude 1h, OpenAI 12h) without its own price
+// costs a fixed multiple of the short write price: it is billed in cc, or in
+// p when cc has no price either.
 func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVars map[string]bool) billingexpr.TokenParams {
 	p := float64(usage.PromptTokens)
 	c := float64(usage.CompletionTokens)
@@ -30,7 +34,7 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 
 	if usage.UsageSemantic == "anthropic" {
 		// Upstreams may report the cache-write total without a full 5m/1h
-		// split; bill the unlabelled remainder as 5m writes.
+		// split; the unlabelled remainder is billed as 5m writes.
 		split5m, split1h := NormalizeCacheCreationSplit(
 			usage.PromptTokensDetails.CacheCreationTokensTotal(),
 			usage.ClaudeCacheCreation5mTokens,
@@ -85,8 +89,8 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	}
 
 	if isClaudeUsageSemantic {
-		// Anthropic input excludes cache reads. When cr has no separate
-		// price, merge those tokens into the input category instead.
+		// Anthropic input excludes cache reads and writes. When they have no
+		// separate price, merge those tokens into the input category instead.
 		if !usedVars["cr"] {
 			p += cr
 		}
@@ -102,9 +106,9 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 		if usedVars["cr"] {
 			p -= cr
 		}
-		// OpenAI reports prompt totals containing cache writes. A 12h write
-		// without its own price joins cc at twice its token count; ccTokens
-		// tracks the actual writes removed from p.
+		// prompt_tokens counts every cache write once. A 12h write without
+		// its own price joins cc at twice its count; ccTokens keeps the real
+		// count that cc takes out of p, and an unpriced cc leaves p the extra.
 		cc12h = float64(usage.PromptTokensDetails.CacheWrite12hTokens())
 		cc -= cc12h
 		ccTokens := cc

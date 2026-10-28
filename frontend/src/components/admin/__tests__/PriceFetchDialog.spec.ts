@@ -29,9 +29,9 @@ function mockSources(sources: FetchedPriceSource[]) {
   vi.spyOn(pricingConfigApi, 'fetch').mockResolvedValue(sources)
   vi.spyOn(pricingConfigApi, 'upstreams').mockResolvedValue([])
 }
-function mountDialog(draft: PricingDraft = {}) {
+function mountDialog(draft: PricingDraft = {}, exchangeRate = 1) {
   return mount(PriceFetchDialog, {
-    props: { draft },
+    props: { draft, exchangeRate, currency: 'CNY' },
     global: {
       plugins: [
         createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
@@ -56,6 +56,64 @@ function fillButton(wrapper: VueWrapper) {
     .find((button) => button.text() === 'Fill pricing draft')!
 }
 describe('price source confirmation', () => {
+  it('fills the exchange-rate adjusted USD price and blocks unsupported expressions', async () => {
+    mockSources([
+      localSource({
+        models: [
+          {
+            model_name: 'a',
+            provider: 'p',
+            pricing: { ModelPrice: 7, CompletionRatio: 2 },
+          },
+          {
+            model_name: 'b',
+            provider: 'p',
+            pricing: {
+              'billing_setting.billing_mode': 'tiered_expr',
+              'billing_setting.billing_expr': 'max(p * 7, 10)',
+            },
+          },
+        ],
+      }),
+    ])
+    const wrapper = mountDialog({}, 7)
+    await flushPromises()
+    await wrapper.get('input[value=sub2api]').setValue(true)
+    expect(wrapper.text()).toContain('1 USD = 7 CNY')
+    const boxes = wrapper.findAll('input[type=checkbox]')
+    await boxes[0]!.setValue(true)
+    await boxes[1]!.setValue(true)
+    const bulk = wrapper.get('select[aria-label="Apply to selected prices"]')
+    await bulk.setValue('divide')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Apply to selected prices')!
+      .trigger('click')
+    expect(wrapper.text()).toContain('Adjusted by exchange rate: 2 models')
+    expect(wrapper.text()).toContain('cannot be adjusted automatically')
+    expect(fillButton(wrapper).attributes('disabled')).toBeDefined()
+    await wrapper
+      .get('select[aria-label="Exchange-rate adjustment b p"]')
+      .setValue('keep')
+    expect(fillButton(wrapper).attributes('disabled')).toBeUndefined()
+    await fillButton(wrapper).trigger('click')
+    expect(wrapper.emitted('fill')?.[0]?.[0]).toEqual([
+      {
+        model_name: 'a',
+        provider: 'p',
+        pricing: { ModelPrice: 1, CompletionRatio: 2 },
+      },
+      {
+        model_name: 'b',
+        provider: 'p',
+        pricing: {
+          'billing_setting.billing_mode': 'tiered_expr',
+          'billing_setting.billing_expr': 'max(p * 7, 10)',
+        },
+      },
+    ])
+    wrapper.unmount()
+  })
   it('renders precise field and expression differences as inert text', async () => {
     const oldExpression = 'p * 0.123456789012345678 + c * 2'
     const newExpression =
@@ -336,6 +394,7 @@ describe('price source confirmation', () => {
             endpoint: '/llm-metadata/api/newapi/ratio_config-v1-base.json',
           },
         ],
+        include_unchanged: true,
       },
       expect.anything()
     )
@@ -365,6 +424,7 @@ describe('price source confirmation', () => {
             endpoint: 'openrouter',
           },
         ],
+        include_unchanged: true,
       },
       expect.anything()
     )

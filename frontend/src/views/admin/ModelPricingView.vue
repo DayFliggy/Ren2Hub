@@ -722,6 +722,8 @@ onBeforeUnmount(() => {
     <PriceFetchDialog
       v-if="fetchOpen"
       :draft="draft"
+      :exchange-rate="Number(exchangeRate)"
+      :currency="siteCurrency"
       @close="fetchOpen = false"
       @fill="fill"
     />

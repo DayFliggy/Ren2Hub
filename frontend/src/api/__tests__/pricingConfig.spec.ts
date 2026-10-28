@@ -65,6 +65,32 @@ describe('model pricing requests', () => {
     )
   })
 
+  it('fetches unchanged models for exchange-rate price adjustments', async () => {
+    vi.mocked(api.post).mockResolvedValue({ prices: {}, test_results: [] })
+    await pricingConfigApi.fetchUpstream({
+      id: -100,
+      kind: 'basellm',
+      name: 'Official prices',
+      base_url: 'https://prices.example',
+    })
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/ratio_sync/fetch',
+      {
+        upstreams: [
+          {
+            id: -100,
+            name: 'Official prices',
+            base_url: 'https://prices.example',
+            endpoint: '/llm-metadata/api/newapi/ratio_config-v1-base.json',
+          },
+        ],
+        include_unchanged: true,
+      },
+      { signal: undefined }
+    )
+  })
+
   it('rejects prices the backend would refuse before sending', () => {
     for (const ModelRatio of ['', ' ', '-1', 'abc', Number.NaN, -1])
       expect(() => serializePricing({ ModelRatio })).toThrow('invalid')

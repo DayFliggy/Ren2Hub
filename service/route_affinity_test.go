@@ -154,3 +154,33 @@ func TestStrictAffinityStillRejectsUnavailableBoundChannel(t *testing.T) {
 		})
 	}
 }
+
+// A shared endpoint pre-selects before user admission and reacquires after
+// it. When the reacquire loses the bound channel, the affinity use recorded
+// by the pre-selection must not survive into admin_info or retry policy.
+func TestReacquireSelectedRouteChannelForgetsLostAffinityUse(t *testing.T) {
+	db := setupAffinityChannels(t)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Update("max_concurrency", 1).Error)
+	c, _ := enableRouteAffinity(t, "prefer", 22)
+	selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, selectErr)
+	require.Equal(t, 22, selected.Id)
+	ReleaseRouteChannel(c)
+	holder, err := AcquireChannelConcurrency(context.Background(), &model.Channel{Id: 22, MaxConcurrency: 1})
+	require.NoError(t, err)
+	defer holder.Release()
+
+	reacquired, selectErr := ReacquireSelectedRouteChannel(c, 22, "route-model")
+	require.Nil(t, selectErr)
+	require.Nil(t, reacquired)
+	info, _ := c.Get(ginKeyChannelAffinityLogInfo)
+	require.Nil(t, info)
+	selected, selectErr = SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, selectErr)
+	require.Equal(t, 11, selected.Id)
+	info, _ = c.Get(ginKeyChannelAffinityLogInfo)
+	require.Nil(t, info, "the fallback channel was not chosen by affinity")
+	ReleaseRouteChannel(c)
+	require.Equal(t, 1, ChannelInFlight(22))
+	require.Zero(t, ChannelInFlight(11))
+}

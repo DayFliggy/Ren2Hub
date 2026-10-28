@@ -20,6 +20,26 @@ def events(test, actions):
 
 
 class DatabaseRunnerTests(unittest.TestCase):
+    def test_shared_endpoint_routing_runs_in_the_database_matrix(self):
+        self.assertIn(
+            "TestRouteTaskPluginEndpointUsesSelectedChannel",
+            database.REQUIRED_TESTS,
+        )
+
+    def test_database_inventory_includes_untracked_nonignored_tests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+            (source / "tracked_test.go").write_text("package test\n")
+            subprocess.run(["git", "add", "tracked_test.go"], cwd=source, check=True)
+            untracked = source / "new_test.go"
+            untracked.write_text("package test\n")
+            ignored = source / "ignored_test.go"
+            ignored.write_text("package test\n")
+            (source / ".gitignore").write_text("ignored_test.go\n")
+            actual = set(database.database_test_files(source))
+            self.assertEqual(actual, {"tracked_test.go", "new_test.go"})
+
     def test_external_environment_rejected_without_secret_in_error(self):
         for name in ("SQL_DSN", "LOG_SQL_DSN", "TEST_MYSQL_DSN", "AUDIT_POSTGRES_DSN", "DOCKER_HOST", "TEST_MANAGE_USER_DIALECT", "NEW_API_VLLM_TEST_URL"):
             with self.subTest(name=name), self.assertRaises(database.Failure) as caught:
