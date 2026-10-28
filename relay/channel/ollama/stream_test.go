@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOllamaResponseFormatKeepsSchemaPropertyOrder(t *testing.T) {
+	responseFormat := &dto.ResponseFormat{
+		Type:       "json_schema",
+		JsonSchema: json.RawMessage(`{"name":"answer","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}`),
+	}
+
+	got, err := toOllamaResponseFormat(responseFormat)
+	require.NoError(t, err)
+	wire, err := common.Marshal(got)
+	require.NoError(t, err)
+	assert.Equal(t, `{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}`, string(wire))
+}
 
 func TestOllamaChatHandlerNonStreamToolCalls(t *testing.T) {
 	gin.SetMode(gin.TestMode)

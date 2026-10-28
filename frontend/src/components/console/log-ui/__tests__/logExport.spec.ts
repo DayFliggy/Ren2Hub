@@ -13,11 +13,14 @@ const log: LogItem = {
   token_name: 'Export key',
   model: 'gpt-4o',
   channel: 'OpenAI',
-  other: JSON.stringify({ reasoning_effort: 'xhigh' }),
+  other: JSON.stringify({
+    reasoning_effort: 'xhigh',
+    cache_creation_tokens_12h: 2,
+    cache_tokens: 3,
+    cache_write_tokens: 4,
+  }),
   prompt_tokens: 1,
   completion_tokens: 2,
-  cache_read_tokens: 3,
-  cache_write_tokens: 4,
   cache_ttl: '5m',
   quota: '3',
   latency: 4.5,
@@ -37,7 +40,7 @@ describe('log exports', () => {
     expect(values[LOG_EXPORT_HEADERS.indexOf('quota')]).toBe('9007199254740993')
     expect(values[LOG_EXPORT_HEADERS.indexOf('latency')]).toBe(1.123456789)
   })
-  it('exports request timing and cache fields in the token field group', () => {
+  it('appends 12h cache writes without shifting existing export columns', () => {
     expect(LOG_EXPORT_HEADERS).toEqual([
       'time',
       'token',
@@ -56,6 +59,7 @@ describe('log exports', () => {
       'tps',
       'quota',
       'content',
+      'cache_write_tokens_12h',
     ])
     expect(getLogExportValues(log, 'en')).toEqual([
       expect.any(String),
@@ -75,6 +79,7 @@ describe('log exports', () => {
       5,
       '3',
       'done',
+      2,
     ])
   })
   it('exports the token name and content in the viewer language', () => {

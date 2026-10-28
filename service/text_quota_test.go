@@ -864,6 +864,80 @@ func TestCalculateTextQuotaSummaryBillsOpenAICacheWriteTokens(t *testing.T) {
 	})
 }
 
+func TestCalculateTextQuotaSummaryBillsOpenAI12HourCacheWritesAtChannelRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "gpt-5.6-terra",
+		PriceData: hosttypes.PriceData{
+			ModelRatio:            2,
+			CompletionRatio:       1,
+			CacheRatio:            0.1,
+			CacheCreationRatio:    1.25,
+			CacheCreation12hRatio: 2.5,
+			ChannelRatioInfo:      hosttypes.ChannelRatioInfo{ChannelRatio: 1.5},
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{
+		PromptTokens: 12000,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:     4000,
+			CacheWriteTokens: 7000,
+			CacheWriteTokensDetails: &dto.CacheWriteTokenDetails{
+				TTL30mTokens: 3000,
+				TTL12hTokens: 4000,
+			},
+		},
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	// (1000 + 4000*0.1 + 3000*1.25 + 4000*2.5) * model ratio 2 * channel ratio 1.5
+	require.Equal(t, 4000, summary.CacheCreationTokens12h)
+	require.Equal(t, 45450, summary.Quota)
+}
+
+func TestPostTextConsumeQuotaLogsOpenAI12HourCacheWrites(t *testing.T) {
+	truncate(t)
+	const userID, channelID = 661, 661
+	seedUser(t, userID, 100_000)
+	seedChannel(t, channelID)
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{
+		UserId:          userID,
+		OriginModelName: "gpt-5.6-terra",
+		StartTime:       time.Now(),
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: channelID},
+		PriceData: hosttypes.PriceData{
+			ModelRatio: 1, CompletionRatio: 1, CacheCreationRatio: 1,
+			CacheCreation12hRatio: 2,
+			ChannelRatioInfo:      hosttypes.ChannelRatioInfo{ChannelRatio: 1},
+		},
+	}
+	usage := &dto.Usage{
+		PromptTokens: 1000,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CacheWriteTokens: 200,
+			CacheWriteTokensDetails: &dto.CacheWriteTokenDetails{
+				TTL30mTokens: 100,
+				TTL12hTokens: 100,
+			},
+		},
+	}
+	PostTextConsumeQuota(ctx, info, usage, nil)
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	var other map[string]any
+	require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+	assert.Equal(t, float64(100), other["cache_creation_tokens_12h"])
+	assert.Equal(t, float64(2), other["cache_creation_ratio_12h"])
+	assert.Equal(t, float64(200), other["cache_write_tokens"])
+}
+
 func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheReadFromPromptBilling(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

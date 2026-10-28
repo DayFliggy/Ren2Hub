@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,11 +27,13 @@ const (
 	InitialScannerBufferSize    = 64 << 10  // 64KB (64*1024)
 	DefaultMaxScannerBufferSize = 128 << 20 // 64MB (64*1024*1024) default SSE buffer size
 	DefaultPingInterval         = 10 * time.Second
-	// streamWriteTimeout bounds a single blocked write to a slow client so the
-	// unconditional wg.Wait() in cleanup can always finish. Without it, a slow
-	// but connected client (full TCP buffer, no server WriteTimeout) could hang
-	// the handler forever.
-	streamWriteTimeout = 30 * time.Second
+	// streamWriteTimeout bounds a write blocked on a client that stopped
+	// reading so the unconditional wg.Wait() in cleanup can always finish.
+	// Without it, a connected client with a full TCP buffer (no server
+	// WriteTimeout) could hang the handler forever. StreamWriteBudget adds the
+	// time a client reading at streamMinClientRate needs for the data.
+	streamWriteTimeout  = 30 * time.Second
+	streamMinClientRate = 8 << 10 // bytes per second
 )
 
 func getScannerBufferSize() int {
@@ -70,14 +73,70 @@ func copyCodexSSEHeaders(c *gin.Context, resp *http.Response) {
 	}
 }
 
-// ExtendWriteDeadline pushes the connection write deadline forward before each
-// stream write. Best-effort: writers that don't support deadlines (e.g.
-// httptest recorders) are silently ignored.
-func ExtendWriteDeadline(c *gin.Context) {
-	if c == nil || c.Writer == nil {
-		return
+// StreamWriteBudget gives the writes of one stream a deadline of
+// streamWriteTimeout past the time a client reading at streamMinClientRate
+// needs for everything written so far. A fixed deadline per write cut slow
+// clients off in the middle of a multi-megabyte image event, and the timeout
+// looked like a client disconnect. The budget carries over between writes
+// because the kernel can still hold megabytes of earlier writes and wakes a
+// blocked writer only after a large part of them drains. A client that stops
+// reading is still cut off once the budget runs out. Callers serialize writes.
+type StreamWriteBudget struct {
+	drainBy time.Time
+}
+
+// Deadline returns the write deadline for n more bytes written at now.
+func (b *StreamWriteBudget) Deadline(now time.Time, n int) time.Time {
+	if b.drainBy.Before(now) {
+		b.drainBy = now
 	}
-	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
+	b.drainBy = b.drainBy.Add(time.Duration(n) * time.Second / streamMinClientRate)
+	return b.drainBy.Add(streamWriteTimeout)
+}
+
+// streamResponseWriter sets the connection write deadline from its budget
+// before every write. Writers that don't support deadlines (e.g. httptest
+// recorders) are silently ignored.
+type streamResponseWriter struct {
+	gin.ResponseWriter
+	budget StreamWriteBudget
+}
+
+func (w *streamResponseWriter) Write(p []byte) (int, error) {
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(w.budget.Deadline(time.Now(), len(p)))
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *streamResponseWriter) WriteString(s string) (int, error) {
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(w.budget.Deadline(time.Now(), len(s)))
+	return w.ResponseWriter.WriteString(s)
+}
+
+func (w *streamResponseWriter) FlushError() error {
+	return flushResponseWriter(w.ResponseWriter)
+}
+
+// Unwrap lets http.ResponseController reach the connection.
+func (w *streamResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// streamReadTracker preserves failures returned while the stream is live even
+// if cleanup runs before the scanner processes them. Errors caused by closing
+// the body after cancellation do not become upstream failures.
+type streamReadTracker struct {
+	reader         io.Reader
+	ctx            context.Context
+	requestContext context.Context
+	err            error // Only the scanner writes; inspected after it has joined.
+}
+
+func (r *streamReadTracker) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if err != nil && err != io.EOF && r.ctx.Err() == nil && r.requestContext.Err() == nil {
+		r.err = err
+	}
+	return n, err
 }
 
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
@@ -96,18 +155,20 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	info.StreamStatus = relaycommon.NewStreamStatus()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	upstreamReader := &streamReadTracker{reader: resp.Body, ctx: ctx, requestContext: c.Request.Context()}
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 
 	var (
 		stopChan    = make(chan bool, 3) // 增加缓冲区避免阻塞
-		scanner     = NewStreamScanner(resp.Body)
+		scanner     = NewStreamScanner(upstreamReader)
 		ticker      = time.NewTicker(streamingTimeout)
 		pingTicker  *time.Ticker
 		writeMutex  sync.Mutex     // Mutex to protect concurrent writes
 		wg          sync.WaitGroup // 用于等待所有 goroutine 退出
 		cleanupOnce sync.Once
 		stopOnce    sync.Once
+		scannerErr  error // Written by the scanner; read only after cleanup joins it.
 	)
 
 	stop := func() {
@@ -184,7 +245,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					func() {
 						writeMutex.Lock()
 						defer writeMutex.Unlock()
-						ExtendWriteDeadline(c)
 						err = PingData(c)
 					}()
 					if err != nil {
@@ -209,6 +269,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	dataChan := make(chan string, 10)
+	sr := newStreamResult(info.StreamStatus, c.Request.Context())
 
 	wg.Add(1)
 	gopool.Go(func() {
@@ -220,13 +281,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			stop()
 			wg.Done()
 		}()
-		sr := newStreamResult(info.StreamStatus)
 		for data := range dataChan {
 			sr.reset()
 			func() {
 				writeMutex.Lock()
 				defer writeMutex.Unlock()
-				ExtendWriteDeadline(c)
 				dataHandler(data, sr)
 			}()
 			if sr.IsStopped() {
@@ -292,11 +351,23 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 		}
 
-		if err := scanner.Err(); err != nil {
-			if err != io.EOF {
-				logger.LogError(c, common.LogText("scanner error: %s", err.Error()))
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
-			}
+		// Closing the upstream body is part of stopping the scanner. Ignore the
+		// errors caused by that cleanup, while preserving a real read failure
+		// that was already returned before the body was closed.
+		if err := scanner.Err(); err != nil && err != io.EOF &&
+			(ctx.Err() == nil && c.Request.Context().Err() == nil || upstreamReader.err != nil) {
+			scannerErr = err
+			logger.LogError(c, common.LogText("scanner error: %s", err.Error()))
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
+		}
+		// The upstream read may observe a client cancellation before the main
+		// select. Do not let its EOF win the first terminal status in that race.
+		if err := c.Request.Context().Err(); err != nil {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
+			return
+		}
+		if ctx.Err() != nil {
+			return
 		}
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
 	})
@@ -306,7 +377,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	case <-ticker.C:
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
 	case <-stopChan:
-		// EndReason already set by the goroutine that triggered stopChan
+		// A downstream write can observe request cancellation before this select
+		// does. Preserve the disconnect classification when its callback stops.
+		if err := c.Request.Context().Err(); err != nil {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
+		}
 	case <-c.Request.Context().Done():
 		// 客户端断开：立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成，
 		// 避免为已放弃的请求继续消费上游 token。
@@ -314,6 +389,24 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	cleanup()
+	if scannerErr == nil {
+		scannerErr = upstreamReader.err
+	}
+	// Completion and the final upstream read run concurrently. A callback's
+	// successful delivery must not hide a real read failure observed before join.
+	if scannerErr != nil && info.StreamStatus.IsNormalEnd() {
+		info.StreamStatus.EndReason = relaycommon.StreamEndReasonScannerErr
+		info.StreamStatus.EndError = scannerErr
+	}
+	// All stream goroutines have joined. Done from a successfully delivered
+	// protocol completion can now correct a cancellation that won while its
+	// callback was still running. Bare EOF and failed writes never qualify.
+	if sr.done && scannerErr == nil && info.StreamStatus.ResponseOutcome() == string(relaycommon.ResponseOutcomeCompleted) &&
+		info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone &&
+		errors.Is(info.StreamStatus.EndError, context.Canceled) && !info.StreamStatus.HasErrors() {
+		info.StreamStatus.EndReason = relaycommon.StreamEndReasonDone
+		info.StreamStatus.EndError = nil
+	}
 	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
 		logger.LogInfo(c, common.LogText("stream ended: %s", info.StreamStatus.Summary()))
 	} else {

@@ -4,6 +4,7 @@ import { formatTime } from '@/utils/format'
 
 import { logContentText, logTokenName } from './logContent'
 import { getLogMetadata } from './logMetadata'
+import { getLogUsageSummary } from './logUsage'
 
 export const LOG_EXPORT_HEADERS = [
   'time',
@@ -23,6 +24,7 @@ export const LOG_EXPORT_HEADERS = [
   'tps',
   'quota',
   'content',
+  'cache_write_tokens_12h',
 ] as const
 
 export function getLogExportValues(
@@ -30,6 +32,7 @@ export function getLogExportValues(
   locale: LocaleCode
 ): Array<string | number> {
   const reasoningEffort = getLogMetadata(log).reasoningEffort
+  const usage = getLogUsageSummary(log)
   return [
     formatTime(log.created),
     logTokenName(log, locale),
@@ -41,12 +44,13 @@ export function getLogExportValues(
     log.first_token_latency ?? '',
     log.prompt_tokens,
     log.completion_tokens,
-    log.cache_read_tokens ?? '',
-    log.cache_write_tokens ?? '',
+    usage.cacheReadTokens ?? '',
+    usage.cacheWriteTokens ?? '',
     log.cache_ttl ?? '',
     log.latency,
     log.tps,
     log.quota,
     logContentText(log, locale),
+    usage.cacheWrite12hTokens ?? '',
   ]
 }

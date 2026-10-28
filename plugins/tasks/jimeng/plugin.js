@@ -236,12 +236,17 @@ function submitReqKey(ctx) {
 }
 
 function outboundSeconds(req, reqKey) {
-  if (!isV3ReqKey(reqKey)) return 5;
   const metadata = (req && req.metadata) || {};
-  if (Number(metadata.frames) === 241) return 10;
-  if (Number(metadata.frames) === 121) return 5;
-  const seconds = Number(req && req.duration);
-  return seconds === 10 ? 10 : 5;
+  if (!isV3ReqKey(reqKey)) return 5;
+  const requested = req && req.duration !== undefined && req.duration !== null ? validateSecondsForReqKey(reqKey, req.duration) : undefined;
+  if (metadata.frames !== undefined && metadata.frames !== null) {
+    const frames = Number(metadata.frames);
+    if (frames !== 121 && frames !== 241) throw new Error("frames must be 121 or 241");
+    const frameSeconds = frames === 241 ? 10 : 5;
+    if (requested !== undefined && requested !== frameSeconds) throw new Error("frames and duration must describe the same output length");
+    return frameSeconds;
+  }
+  return requested === undefined ? 5 : requested;
 }
 
 function aspectRatioFromSize(size) {
@@ -332,9 +337,7 @@ export function buildSubmitRequest(ctx) {
   const metadataImageCount = binaryCount + urlCount;
   const imageCount = metadataImageCount > 0 ? metadataImageCount : images.length;
   body.req_key = convertedReqKey(body.req_key, imageCount);
-  if (isV3ReqKey(body.req_key) && (body.frames === undefined || body.frames === null)) {
-    body.frames = outboundSeconds(req, body.req_key) === 10 ? 241 : 121;
-  }
+  if (isV3ReqKey(body.req_key)) body.frames = outboundSeconds(req, body.req_key) === 10 ? 241 : 121;
   if (!isV3ReqKey(body.req_key)) delete body.frames;
 
   const ordered = { req_key: body.req_key };

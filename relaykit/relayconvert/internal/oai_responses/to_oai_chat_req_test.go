@@ -34,6 +34,7 @@ func TestResponsesRequestToChatCompletionsRequestInstructionsAndScalarInput(t *t
 		Metadata:             mustRawMessage(t, map[string]any{"trace": "abc"}),
 		ParallelToolCalls:    mustRawMessage(t, parallelToolCalls),
 		PromptCacheKey:       mustRawMessage(t, "cache-key"),
+		PromptCacheOptions:   mustRawMessage(t, map[string]any{"ttl": "12h"}),
 		PromptCacheRetention: mustRawMessage(t, "24h"),
 		Reasoning:            &dto.Reasoning{Effort: "medium"},
 	})
@@ -51,6 +52,7 @@ func TestResponsesRequestToChatCompletionsRequestInstructionsAndScalarInput(t *t
 	assert.Equal(t, 0.9, lo.FromPtr(got.TopP))
 	assert.True(t, lo.FromPtr(got.ParallelTooCalls))
 	assert.Equal(t, "cache-key", got.PromptCacheKey)
+	assert.JSONEq(t, `{"ttl":"12h"}`, string(got.PromptCacheOptions))
 	assert.Equal(t, "medium", got.ReasoningEffort)
 	assert.Equal(t, `"user-1"`, string(got.User))
 	assert.Equal(t, `false`, string(got.Store))
@@ -220,7 +222,7 @@ func TestResponsesRequestToChatCompletionsRequestToolsToolChoiceAndTextFormat(t 
 	assert.Equal(t, "function", got.Tools[0].Type)
 	assert.Equal(t, "lookup", got.Tools[0].Function.Name)
 	assert.Equal(t, "Lookup data", got.Tools[0].Function.Description)
-	assert.Equal(t, "object", got.Tools[0].Function.Parameters.(map[string]any)["type"])
+	assert.Equal(t, "object", gjson.GetBytes(got.Tools[0].Function.Parameters, "type").String())
 	assert.Equal(t, map[string]any{
 		"type": "function",
 		"function": map[string]any{

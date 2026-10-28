@@ -8,8 +8,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-# 冻结的 NewAPI 核心基线；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
-UPSTREAM_SHA = '206e0fa5c600127a314a97f88592c067f784f4a6'
+# 本轮已审计的 NewAPI 核心版本；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
+UPSTREAM_SHA = '34003e9c2eed2c20e617f583fdfe54bf1bf42237'
 
 
 def git(*args, repository=None):
@@ -64,7 +64,7 @@ if missing:
         print('  ' + path, file=sys.stderr)
     sys.exit(1)
 data.update(upstream_sha=upstream,
-            implementation_base_sha='39daa6ccee738f7a26fdba131c829be1adbbdd5b',
+            implementation_base_sha='ae9be9d32116e7511633dcf3c7e6814cd5fc0737',
             history_baseline_sha='9a63062227c31ba54a6346e07ee8b4fd8802f22f',
             reference_newapi_sha=upstream,
             candidate_sha=None, counts=dict(collections.Counter(row['status'] for row in rows)), files=rows)

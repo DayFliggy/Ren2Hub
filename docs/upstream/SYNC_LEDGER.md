@@ -2,6 +2,90 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+## 2026-10-27 NewAPI main 32 提交吸收
+
+2026-10-28 源码修复、适用验证和最终独立复审已完成；源码验收通过。提交、发布和部署不在本次完成状态内，`candidate_sha=null`。
+
+随后一次交叉审计发现日志页未读取后端 `cache_tokens`，且 OpenAI 缓存明细被重复计入总量；现已修复字段映射，并按后端显式输入总量及 Anthropic 用量语义计算总量和命中率。同步清单补记任务插件请求头 allowlist 与流式输出观测两项适配理由。针对性 UI 测试 12/12、typecheck、ESLint、Prettier、前端生产构建和 `git diff --check` 均通过；改动仍未提交、发布或部署。
+
+按用户批准的计划，从 Ren2Hub 工作树基线 `ae9be9d32116e7511633dcf3c7e6814cd5fc0737` 对照 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6..34003e9c2eed2c20e617f583fdfe54bf1bf42237` 的 32 个提交。rc.47 分界是 `e835b1bfc43b565d625537830dbfb19328925134`；其前 26 项至该 Axios 提交，后 6 项为缓存计费、协议及缓存测试更新。没有合并上游分支；钱包预扣/结算机制、渠道倍率/并发和扩展模块合同保持，缓存计费结果的变化见下文。本轮源码尚未提交、发布或部署。
+
+| # | NewAPI 完整 SHA | 处置 | Ren2Hub 落点、证据与边界 |
+| --- | --- | --- | --- |
+| 1 | `eea05e010c7f212e1a617638fe27164f24d9478d` | absorbed | `go.mod`、`go.sum` 升级 `klauspost/compress` 到 1.18.7；V1、V3。 |
+| 2 | `4d36f2c5245dd6676075be1c4f668dfe56d3340a` | not applicable | 上游只升级 `/web` 的 Vitest 5；Vue 独立使用锁定的 Vitest 4.1.11，本轮不迁移测试框架主版本；V7 验证现行 Vue 栈。 |
+| 3 | `7d8b91268dab69d7150f345c448b5e250163146a` | adapted | Go、Docker/开发镜像、RelayKit、CI 与本地测试统一 Go 1.26.10；race 测试固定本地工具链版本；V3、V4。 |
+| 4 | `0c2af9780e45f6f9073528fb0fcbdcd64b5d9495` | adapted | Responses 完成事件、错误写入/Flush、取消及结算生命周期；保留 `ObserveRouteStreamOutput`；V1、V4、V6。 |
+| 5 | `7e6596728ff640392bd77169ebb6137a8fe0c309` | adapted | `relay/helper/stream_scanner.go` 集中写入预算并覆盖慢客户端、SSE/Responses/WebSocket；真实读取错误与关闭清理错误分开；V1、V4、V6。 |
+| 6 | `94cc3ff0906db37703d5ce2bc6a479209b7b9b23` | adapted | Claude 缓存写入未拆分时保留可计费用量；扩展 DTO、merge、变量、结算快照与日志；V1、V2。 |
+| 7 | `556517fa57d255c73428325f6a094fd8b4cab76c` | adapted | 原生任务路由支持 JSON/multipart；模型限定路由仅 JSON、query 无请求体、urlencoded 拒绝；文本字段受全局请求体限额约束，保留部件/文件/UTF-8/临时文件检查；V1。 |
+| 8 | `dbe97beb9b06e8a4e23b5b8f009d882cc49f70bb` | adapted | 插件请求头改安全 allowlist，不透传认证、Cookie 与代理凭据；V1。 |
+| 9 | `db80ac8e0c4063e67938cf651c240c69f4f4cf54` | adapted | 移除宿主对业务请求字段的递归计费校验；8 个任务插件在提交前校验自身上游参数，usage facts 仍由宿主限制；V1。Jimeng S2 固定 5 秒、Doubao 帧数向下取整沿用插件现有合同。 |
+| 10 | `e2321a5a9f590e8398868cb7ef56af3d833faa07` | not applicable | 仅上游 React locale 排序；Ren2Hub Vue 不带回 React 文案体系。 |
+| 11 | `eb169e74d772afdb281970d0cbe0b62fbf9fa994` | deferred | 汇率联动价格留待独立定价设计，不改现行价格同步或 `ChannelRatioInfo` 计价。 |
+| 12 | `8802113263b8a94bf8957a1231b4ec04705d7dd9` | deferred | 共享插件端点竞争留待单独路由设计；不改渠道选择、并发和插件路由边界。 |
+| 13 | `d8e65613c09adf3663f960ea4316414a99694751` | not applicable | 仅上游 React 使用日志复制模型名；Vue 使用自己的 usage-log 组件。 |
+| 14 | `d0b840e75ff36d731b04ff981ee361819acd593f` | adapted | JSON Schema 属性顺序保真；检查本地 RawMessage/类型断言并保留 Ren2Hub 转换器约定；V1、V2。 |
+| 15 | `e9d4d6353ce2c11df753d751ba1ad778e2433a88` | adapted | OpenAI 12 小时缓存写入字段与计价接入，保持 `ChannelRatioInfo` 和 `prompt_cache_options`；V1、V2、V7。价格目录通过 `billing_expr.cc12h` 呈现，当前 `/api/pricing` 没有独立 12h ratio 字段；补齐上游内置表达式在普通/长上下文的 12h 计费断言（V9）。 |
+| 16 | `7fb6e57a5ff671582131c74e00bdfaa867d4e985` | adapted | 渠道高级自定义全局/路由级透传 roundtrip 与全路由风险提示；不放宽后端路由/转换器限制；V7。 |
+| 17 | `30748c6558bc97de49ff74871cfec717e50f3322` | adapted | 访问日志统一清理查询凭据；其他支付入口 URI 和 RelayInfo 调试日志复用同一清理逻辑；保留上游 logger_test.go 全部回归并增加签名/OAuth 用例；V1、V3、V9。 |
+| 18 | `33c61a24234aa20cb10e8a644304322c476361de` | not applicable | 仅 React 编辑抽屉状态修复；当前 Vue 页面不包含该组件。 |
+| 19 | `a404460413fb7c0c2182e935bb373ba51904df70` | not applicable | 该提交迁移上游 `/web` 到 Bun 1.4.4 与 `bun check`；Vue 仍统一固定 Bun 1.4.0，并用 vue-tsc、ESLint、Prettier 检查。按本轮既定取舍不连带迁移工具链，不能归因于 Vue 不使用 Bun。 |
+| 20 | `0034b24914981078e6ef1a3794e43afe28df43af` | adapted | 任务超时默认改 4320 分钟，保留环境覆盖及 `0` 禁用；覆盖旧 24h、60h、正好 72h、73h、重复退款与零值；V1。 |
+| 21 | `1dafb19a429aa7c17b3f4efa457078984b6a4fd3` | adapted | RelayKit Gemini 转换保留顶层 `imageConfig`；V2。 |
+| 22 | `b6b85cae5931cd27e9adf21cfccfede800980a83` | not applicable | 仅 React panels 依赖；未引入 React 依赖体系。 |
+| 23 | `4105bd089cce1a7c1067e77babf45ebd8d4455ec` | not applicable | 仅 React input-otp 依赖；未引入 React 依赖体系。 |
+| 24 | `0b667ca478d6dbce6f60a2e3c4a217a7aab64031` | not applicable | 仅 React i18next 依赖；继续使用现有 Vue I18n。 |
+| 25 | `5c8032d7002f82fb04fabf9a9c9b143de78547fe` | not applicable | 仅 React react-i18next 依赖；未引入 React 依赖体系。 |
+| 26 | `e835b1bfc43b565d625537830dbfb19328925134` | already present | Vue 锁文件已使用 Axios 1.20.0；未重复改动。 |
+| 27 | `9823ebc7ea4ac7102d5d8478d395c7d7eaf6c285` | adapted | 计入 `prompt_tokens_details.cache_creation_input_tokens`，与缓存写入拆分、缺失/显式零价格和聚合字段去重规则协同；V1、V2、V7。 |
+| 28 | `bc795cc1185a0ecef0ca51f73d337667026ec62f` | adapted | `stop` 非字符串和字符串数组的协议转换 golden 覆盖；V2。 |
+| 29 | `f1569d1ea7e87cd1a73c5f89d989b6b3bdaf68b3` | adapted | Vue 价格目录按同一分类函数驱动筛选/计数；固定层级 request、Token/混合 token、有 usage schema 的 task，解析失败回退旧 quota 类型；V2、V7。 |
+| 30 | `4d962e464de7a16ff8bf16c660307899d49108ba` | adapted | Claude 工具参数数字保真；V2。 |
+| 31 | `0165fef98d41b02a7368e89dc5fa2df651f8587b` | adapted | Gemini 混合文本及工具调用保真；V2。 |
+| 32 | `34003e9c2eed2c20e617f583fdfe54bf1bf42237` | adapted | 缓存统计测试以原子序列和测试名构造键，适配本地两参数缓存查询接口；`service` 测试重复 20 次；V1、V5。 |
+
+验证记录（Go 工具版本 `go1.26.10 linux/amd64`；未提交工作树 `candidate_sha=null`）：
+
+- V1：`GOTOOLCHAIN=local GOWORK=off go test -count=1 -timeout 60s ./middleware ./relay/channel/task/jsplugin ./relay/channel/openai ./relay/helper ./relay/common ./relay/channel/aws ./relay/channel/ollama ./plugins ./service ./model ./pkg/billingexpr` 通过；含 12 MiB multipart 字段、文件 boundary 重建重试、插件自校验、计费与零/72h 超时回归。
+- V2：RelayKit `GOWORK=off go test -count=1 -timeout 60s ./...` 与 `GOWORK=off go build ./...` 通过，覆盖 Claude 数字、Gemini 混合内容、Schema 顺序、stop 和缓存 usage。
+- V3：Ren2Hub `go build ./...`、`go vet -p=2 ./...` 通过；审计后来源差异清单刷新为 803 upstream_equal、274 adapted、227 extension、43 removed。
+- V4：Go 1.26.10 `golang:1.26.10-bookworm` 容器中，relay/helper、OpenAI Responses、controller 流式/keepalive/WebSocket/插件输出定向 `go test -race -count=1 -timeout 60s` 通过。首次 race 暴露 Responses 真实读取错误被关闭清理状态盖过，已修正并复跑通过。
+- V5：`go test -count=20 -timeout 60s ./service -run '^TestObserveChannelAffinityUsageCacheByRelayFormat'` 通过。
+- V6：controller 定向渠道价格、目录价格、插件流、SSE/WebSocket 结算和查询凭据清理回归通过。首轮全量因未配置 `SQL_DSN` 出现 options 表缺失，未计通过；2026-10-28 已以新建隔离数据库补齐本地合同，结果见 V10。没有执行真实供应商付费请求。
+- V7：Vue Vitest 全量 267 文件/1854 项、定向 35 项、typecheck、ESLint、format check 和生产构建通过。首轮 8 个 Playwright 用例因环境缺少 `libnspr4.so` 未启动；2026-10-28 复用现有浏览器库重跑，报价和高级渠道两个 spec 共 8/8 通过、零跳过/零重试，覆盖桌面/手机和明/暗主题。Bun 不在本地 PATH，使用 Node 24.21.0 直接运行已有 Playwright/Vite；是受控 API 的浏览器行为/布局验证，不是像素快照或真实供应商验证。
+- V8：`python3 -m unittest discover -s scripts/testing -p 'test_*.py'`，34 项通过；2026-10-28 重跑仍通过。
+- V9（2026-10-28 审计增量）：common、middleware、JS task adaptor、plugins、builtin billing 全包测试通过；helper/common/OpenAI 三包完整测试、20 次定向 race 和 vet 通过。含取消即时读错、独立上游 Canceled/ClosedPipe、真正 HTTP Body.Close、完成事件与真实读错竞争、Epay GET/POST 凭据日志和先验签回归。Sora 出站 JSON/multipart 字符串与数字 facts、内置 12h 普通/长上下文精确计费断言通过。CSV 定向 3 项、目标 ESLint/Prettier、前端 typecheck 与生产构建通过。后端包均 `-timeout 60s`。最终根模块 `go build -p=2 ./...`、`go vet -p=2 ./...` 与两个生产嵌入资源合同测试通过。第二轮审计补出的畸形 query 原文回退已修复，新增 9 个无泄露回归，relay/common、middleware、controller 的日志定向测试通过。
+- V10：controller 发现 523 项，非矩阵 497 项分 25 批通过；新增日志回归后 55 项相关 Stream/Responses/WebSocket/KeepAlive/Epay 再次通过，零 skip/fail。隔离三库矩阵 71/71 suite 全通过（SQLite 41、MySQL 46、PostgreSQL 46 次方言执行），零失败/零跳过，清理错误为空且本轮 label 的容器/网络均已清理。controller 最终发现 524 项，累计执行 523 个唯一顶层测试，仅 `TestVLLMStatusLive` 不执行。使用 Go 1.26.10、MySQL 8.4.11、PostgreSQL 15.19；真实 VLLM/供应商不在本地门槛内。完整摘要与证据哈希在 `/tmp/ren2hub-resume-20261028-validation/summary.json`、`evidence-sha256.json`。
+
+2026-10-28 审计后修复与来源复核：
+
+- Sora 提交统一发送字符串 `seconds`（`"4"` / `"8"` / `"12"`），计费 facts 保持数值；JSON、multipart、默认值、duration 别名和非法类型/枚举都有回归。合同按 OpenAI Videos Create API 的字符串枚举核对，未执行真实付费调用。
+- 任务 multipart 将文本字段总预算与文件驻留内存预算分开，复用标准库 FileHeader 和落盘清理；新维护点 `common/task_multipart.go`。12 MiB 文本、多个文件共享预算、解析失败、重试清理与前置读尽后再次解析均有回归。`GetBodyStorage` 本身已经复位，首轮审计的缺少 Seek 判断不成立；原有出站缓冲方式未改。
+- 日志进一步关闭 `RelayInfo.ToString()` 查询凭据出口；Epay 共享清理增加 `sign`，删除下单/回调的 `params` 与 `verify_info` 完整对象日志，验签/结算逻辑不改。
+- 流式取消即时返回 `context.Canceled` / EOF / `io.ErrClosedPipe` 的分类已补回归；重复 race 又暴露完成事件与真实读取错误的先后竞争，修复及复验结果见 V9。
+- 本批 `db80ac8` 的本地适配包括 8 个任务插件自校验（kling 来自上游，另外 7 个为保持出站参数与计费 facts 一致的本地适配），并非全部原生 JS 原文照搬。沿用已批准的插件自校验范围，不引入新 ABI 或第二计费入口。Jimeng 删除非 V3 分支无效调用；Google/Vertex 的声明模型只有 Veo 3.0/3.1，审计提出的 Veo 2 枚举问题在现行列表不成立。
+- CSV 新增 12h 列移至末尾，保持既有列序；价格页面的 mode 从未从 URL 或持久状态恢复，移除 expression 选项没有旧链接兼容缺口。
+- 删除刷新脚本中的 `SYNC_REASONS` 第二份映射，理由只维护于 `CORE_SOURCE_DELTA.json`；`common/gin.go` 更正为 multipart 适配，回到上游一致的文件自动删除理由。
+
+计费结果变化：Claude 表达式没有单列 `cc1h` 时，1h 写入按 1.6 倍合入 `cc`；没有单列 `cc` 时再计入输入 `p`。OpenAI 12h 写入有独立 `cc12h` 时单独计价，否则按短效写入的两倍权重归入已有表达式；ratio 路径的 12h 倍率也保持独立。`prompt_tokens_details.cache_creation_input_tokens` 现在纳入实际扣费，聚合与 TTL 拆分去重。这些属于本轮明确的扣费结果变化，不是钱包机制变化。
+
+审计点名的逐文件归因：
+
+| 文件 | 上游来源与处置 |
+| --- | --- |
+| `controller/ratio_sync.go`、`controller/ratio_sync_test.go` | `eb169e74d772afdb281970d0cbe0b62fbf9fa994`；汇率联动延期，清单补 `exchange-rate-pricing-deferred`。 |
+| `dto/channel_constraints.go`、`middleware/distributor.go`、`model/channel_constraint.go`、`model/model_pricing_config.go`、`relay/relay_task_test.go` | `8802113263b8a94bf8957a1231b4ec04705d7dd9`；共享插件端点竞争延期，逐文件补延期标签。`model_pricing_config.go` 不属于 f1569d1；后者只改上游 Web 分类。 |
+| `i18n/locales/en.yaml`、`i18n/locales/zh-CN.yaml`、`i18n/locales/zh-TW.yaml`、`i18n/keys.go`、`pkg/jsplugin/routing.go`、`router/task-plugin-protocol-router.go` | 同属 `8802113263b8a94bf8957a1231b4ec04705d7dd9` 延期，相关路由错误和文案未孤立带入。 |
+| `setting/billing_setting/builtin_billing_test.go` | `e9d4d6353ce2c11df753d751ba1ad778e2433a88` 的 12h 普通/长上下文用例已补到本地 ChannelRatio 合同，精确额度断言保留。 |
+| `middleware/logger_test.go`、`middleware/logger_sync_test.go` | `30748c6558bc97de49ff74871cfec717e50f3322`：前者恢复完整上游原文，后者补本地 Google 签名/OAuth 覆盖，不再记为删除上游测试。 |
+
+首轮 Claude 只读审计已实际执行，CLI 返回 `canonicalModel=claude-opus-5-5`，原始输出 `/tmp/ren2hub-claude-audit.json`。第二轮复审 `/tmp/ren2hub-resume-audit-20261028/result.json`（CLI canonical model 同上）判定原 6 项关闭或不成立，无阻塞；当时尚未结束的三库矩阵现已完成。其新增低风险日志缺口已修：`ParseQuery` 部分解析失败不再回退原始 query，整个 URL 不可解析时记录显式无敏感值标记；同时去掉日志 URL 的 userinfo 和 fragment，避免原始 `#` 或 URL 用户信息继续泄露凭据。补充任务 DTO、Vidu、RawMessage 工具和 SSE 写预算上下文后，最终增量复审通过、无阻塞缺陷；五项上下文全部关闭。CLI 实际返回 `canonicalModel=claude-opus-5-5`，原始结果 `/tmp/ren2hub-resume-audit-20261028/increment-result.json`，调用与退出状态见同目录 `increment-run.json`。最终代码指纹 `cac9684d25728e712251c6d15940237ee85ee8d36e2a1177961f0512c0812a3a`（base `ae9be9d32116e7511633dcf3c7e6814cd5fc0737`，覆盖全部修改/新增源码，账本与生成清单单独核验）；已确认复审后源码未再变化。审计补充发现的 `ClaudeRequest.AddTool`→`GetTools` 混合 RawMessage 组合边界与固定上游原文相同，全仓无调用；当前请求计数、转换和搜索计费路径经静态核对及现有定向回归通过。未来接入该 helper 或上游修复时重评，本轮不为未使用 API 增加核心偏离。源码未提交、未发布、未部署；延期 2 项仍保留后续设计。
+
+最终审计另登记非阻塞边界：Vidu 的非声明、非前缀映射名（如 `xxx-viduq2`）可能触发不同的模型判定；`RelayInfo.ToString()` 的渠道 BaseURL 仍按现行逻辑记录，若管理员将凭据置于 BaseURL 会存在泄露风险；未知字段名或无值键中的凭据不在现行敏感键清单保证内。以上未在当前声明模型/既有配置合同内扩修，未来引入相应输入或修改日志合同前须重评。真实供应商、真实 VLLM 和应用候选/正式部署均未执行，不冒充本地验收覆盖。
+
+本轮来源仅消费临时缓存的固定 Git 提交对象（`git show` / `ls-tree` / `log`），不读取其脏索引或未展开的工作树。默认 `reference-projects/new-api` 不存在，标准离线采集不代表远端最新状态；固定窗口对象与 32 个完整 SHA 已另行校验，未 fetch 或移动参考目录。
+
 2026-10-23 之前的批次记录、浏览器迁移清单和渠道历史处置已于 2026-10-27 移出工作树；下文括号内的 `<提交>:<路径>` 可用 `git show` 读取，Ren2Hub 记录在本仓库执行，工作区记录在根仓库执行。历史段落提到的 `/home/work/ren2hub-*` 实施副本与证据目录已删除，仅作当时事实，不能再作为可复核证据。
 
 ## 2026-10-26 Dashboard 系统状态卡片共享快照

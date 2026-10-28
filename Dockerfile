@@ -15,7 +15,7 @@ RUN node ./node_modules/vue-tsc/bin/vue-tsc.js -b \
     && VITE_API_MODE=http node ./node_modules/vite/bin/vite.js build \
     && node /build/scripts/prepare-frontend-embed.mjs
 
-FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS builder2
+FROM golang:1.26.10-alpine@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0 GOWORK=off
 
 ARG APP_VERSION

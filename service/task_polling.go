@@ -68,10 +68,14 @@ var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
 // 每次最多处理 100 条，剩余的下个周期继续处理。
 // 使用 per-task CAS (UpdateWithStatus) 防止覆盖被正常轮询已推进的任务。
 func sweepTimedOutTasks(ctx context.Context) {
+	sweepTimedOutTasksAt(ctx, time.Now())
+}
+
+func sweepTimedOutTasksAt(ctx context.Context, now time.Time) {
 	if constant.TaskTimeoutMinutes <= 0 {
 		return
 	}
-	cutoff := time.Now().Unix() - int64(constant.TaskTimeoutMinutes)*60
+	cutoff := now.Unix() - int64(constant.TaskTimeoutMinutes)*60
 	tasks := model.GetTimedOutUnfinishedTasks(cutoff, 100)
 	if len(tasks) == 0 {
 		return
@@ -79,7 +83,7 @@ func sweepTimedOutTasks(ctx context.Context) {
 
 	reason := "Task timed out"
 	legacyReason := "Task timed out (a task left by the old system is not refunded; contact the administrator)"
-	now := time.Now().Unix()
+	nowUnix := now.Unix()
 	timedOutCount := 0
 
 	for _, task := range tasks {
@@ -88,7 +92,7 @@ func sweepTimedOutTasks(ctx context.Context) {
 		oldStatus := task.Status
 		task.Status = model.TaskStatusFailure
 		task.Progress = "100%"
-		task.FinishTime = now
+		task.FinishTime = nowUnix
 		if isLegacy {
 			task.FailReason = legacyReason
 			// 旧系统任务明确不退款，随终态 CAS 一并清掉 quota，
@@ -785,7 +789,7 @@ func recordPollFailure(ctx context.Context, adaptor TaskPollingAdaptor, task *mo
 	}
 	task.PrivateData.PollFailures++
 	// TASK_POLL_MAX_FAILURES <= 0 disables the consecutive-failure cutoff, matching
-	// TASK_TIMEOUT_MINUTES semantics; the 24h sweep remains the only backstop.
+	// TASK_TIMEOUT_MINUTES semantics; the 72h sweep remains the only backstop.
 	giveUp := constant.TaskPollMaxFailures > 0 && task.PrivateData.PollFailures >= constant.TaskPollMaxFailures
 	if giveUp || class == pollClassUnrecognized || class == pollClassHookError {
 		// The redacted body is intentionally not persisted to Task.Data on these

@@ -1191,7 +1191,7 @@ export default {
     keyReplace: '替换全部密钥',
     passThroughBody: '透传请求体',
     passThroughBodyHint:
-      'API 格式一致时保留原始请求体，绕过模型映射、参数覆盖与协议转换；高级路由使用各自的透传设置。',
+      '开启后对所有路由生效，会绕过模型映射、参数覆盖与协议转换。高级自定义渠道中需要格式转换的路由会失败；若只需在部分原生路由透传，请使用路由级开关。',
     tlsInsecureSkipVerify: '忽略上游证书校验',
     tlsInsecureSkipVerifyHint:
       '接受无法通过校验的上游证书，例如自签名证书。仅对可信的内网上游开启。',
@@ -1836,6 +1836,7 @@ export default {
       completion_tokens: '输出 Token',
       cache_read_tokens: '缓存读取 Token',
       cache_write_tokens: '缓存写入 Token',
+      cache_write_tokens_12h: '缓存写入 Token（12h）',
       cache_ttl: '缓存有效期',
       latency: '耗时（秒）',
       tps: '每秒 Token',
@@ -1888,6 +1889,8 @@ export default {
     inputTokens: '输入 Token',
     outputTokens: '输出 Token',
     cacheCreation: '缓存创建',
+    cacheCreation30m: '缓存创建（30m）',
+    cacheCreation12h: '缓存创建（12h）',
     cacheReadTokens: '缓存读取 Token',
     totalTokens: '总 Token',
     cacheRead: '缓存读',

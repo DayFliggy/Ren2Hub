@@ -352,6 +352,12 @@ function parseLogOther(value: unknown, endpoint: string): LogItem['other'] {
   return invalidResponse(endpoint)
 }
 
+function optionalLogNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined
+}
+
 function parseLog(value: unknown, endpoint: string): LogItem {
   if (!isRecord(value)) invalidResponse(endpoint)
   const numericType = requiredInteger(value.type, endpoint)
@@ -359,6 +365,12 @@ function parseLog(value: unknown, endpoint: string): LogItem {
   if (!type) invalidResponse(endpoint)
   const other = parseLogOther(value.other, endpoint)
   const firstToken = isRecord(other) ? Number(other.frt) : Number.NaN
+  const cacheCreationTokens12h = isRecord(other)
+    ? optionalLogNumber(other.cache_creation_tokens_12h)
+    : undefined
+  const cacheCreationRatio12h = isRecord(other)
+    ? optionalLogNumber(other.cache_creation_ratio_12h)
+    : undefined
   const promptTokens = requiredInteger(value.prompt_tokens, endpoint)
   const completionTokens = requiredInteger(value.completion_tokens, endpoint)
   const latency = requiredInteger(value.use_time, endpoint)
@@ -377,6 +389,12 @@ function parseLog(value: unknown, endpoint: string): LogItem {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     other,
+    ...(cacheCreationTokens12h !== undefined
+      ? { cache_creation_tokens_12h: cacheCreationTokens12h }
+      : {}),
+    ...(cacheCreationRatio12h !== undefined
+      ? { cache_creation_ratio_12h: cacheCreationRatio12h }
+      : {}),
     quota: requiredQuota(value.quota, endpoint),
     latency,
     first_token_latency: Number.isFinite(firstToken) ? firstToken / 1000 : null,

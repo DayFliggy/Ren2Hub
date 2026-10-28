@@ -214,9 +214,12 @@ export interface LogItem {
   channel: string // 渠道名称
   prompt_tokens: number
   completion_tokens: number
-  /** Cache-token fields are optional until the production log API exposes them. */
+  /** Optional flattened cache-token fields from alternate log API adapters. */
   cache_read_tokens?: number | null
   cache_write_tokens?: number | null
+  /** OpenAI long-lived prompt-cache writes, when flattened by an adapter. */
+  cache_creation_tokens_12h?: number | null
+  cache_creation_ratio_12h?: number | null
   cache_ttl?: string | null
   /** Raw request metadata. Production logs currently expose this as JSON. */
   other?: LogOther

@@ -574,6 +574,10 @@ export function buildSubmitRequest(ctx) {
       action: h3HasVisualContent(content) ? "image_to_video" : "text_to_video",
     };
   }
+  const duration = req.duration === undefined ? undefined : Number(req.duration);
+  if (req.duration !== undefined && (!Number.isFinite(duration) || duration <= 0)) throw new Error("duration must be positive");
+  const resolution = outboundResolution(req, model);
+  validateHailuoCombo(model, duration, resolution, hasHailuoImage(req, false));
   const body = Object.assign(
     {
       model: model,
@@ -629,7 +633,11 @@ export function extractUsage(ctx) {
         : 0,
     };
   }
-  return { seconds: outboundDuration(req), resolution: outboundResolution(req, model), input_images: 0, input_video_seconds: 0 };
+  const duration = req.duration === undefined ? undefined : Number(req.duration);
+  if (req.duration !== undefined && (!Number.isFinite(duration) || duration <= 0)) throw new Error("duration must be positive");
+  const resolution = outboundResolution(req, model);
+  validateHailuoCombo(model, duration, resolution, hasHailuoImage(req, false));
+  return { seconds: outboundDuration(req), resolution: resolution, input_images: 0, input_video_seconds: 0 };
 }
 
 export function buildQueryRequest(ctx) {

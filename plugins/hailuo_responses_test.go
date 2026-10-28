@@ -32,7 +32,7 @@ func TestHailuoResponsesProtocol(t *testing.T) {
 				map[string]any{"type": "input_image", "image_url": "https://cdn.example/frame.png"},
 			}}},
 			"seconds": 10,
-			"size":    "1920x1080",
+			"size":    "1280x720",
 		},
 		wantAction: "image_to_video",
 		wantRequest: map[string]any{
@@ -40,7 +40,7 @@ func TestHailuoResponsesProtocol(t *testing.T) {
 			"prompt":   "ocean at sunset",
 			"images":   []any{"https://cdn.example/frame.png"},
 			"duration": float64(10),
-			"size":     "1920x1080",
+			"size":     "1280x720",
 			"metadata": map[string]any{"first_frame_image": "https://cdn.example/frame.png"},
 		},
 		wantUsageKeys:  []string{"input_images", "input_video_seconds", "resolution", "seconds"},

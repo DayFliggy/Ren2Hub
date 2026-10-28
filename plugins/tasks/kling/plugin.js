@@ -165,13 +165,14 @@ function validateKlingDuration(value) {
   return n;
 }
 
+// The duration Kling receives and the one billed: metadata.duration (the whole
+// body on native routes) overrides the top-level duration, which defaults to 5.
 function outboundDuration(req) {
-  const n = Number(req && req.duration);
-  if (Number.isFinite(n) && n > 0) return n;
   const metadata = (req && req.metadata) || {};
-  const fromMeta = Number(metadata.duration);
-  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
-  return 5;
+  let value = metadata.duration;
+  if (value === undefined || value === null) value = req && req.duration;
+  if (value === undefined || value === null) return 5;
+  return validateKlingDuration(value);
 }
 
 function outboundMode(req, model) {
@@ -244,7 +245,6 @@ export function buildSubmitRequest(ctx) {
       prompt: req.prompt,
       image: req.image,
       mode: outboundMode(req, model),
-      duration: String(req.duration || 5),
       aspect_ratio: aspectRatio(req.size),
       model_name: model,
       model: model,
@@ -252,7 +252,12 @@ export function buildSubmitRequest(ctx) {
     },
     metadata
   );
-  body.mode = outboundMode({ mode: body.mode, metadata: metadata }, model);
+  // Billing and the provider request must use the same selected mode. The
+  // decoded request's explicit mode takes precedence over opaque metadata.
+  body.model_name = model;
+  body.model = model;
+  body.mode = outboundMode(req, model);
+  body.duration = String(outboundDuration(req));
   if (body.image) body.image = filePlaceholder(body.image);
   if (body.image_tail) body.image_tail = filePlaceholder(body.image_tail);
   if (!body.prompt) delete body.prompt;

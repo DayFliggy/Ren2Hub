@@ -775,6 +775,73 @@ func TestSweepTimedOutTasksHonorsRefundRolloutBoundary(t *testing.T) {
 	assert.Equal(t, int64(1), countLogs(t))
 }
 
+func TestSweepTimedOutTasksAt72HourBoundaryAndRefundsOnce(t *testing.T) {
+	truncate(t)
+	const userID, initialQuota, taskQuota = 404, 10_000, 1_500
+	seedUser(t, userID, initialQuota)
+	now := time.Unix(1_800_000_000, 0)
+
+	makeRunning := func(id string, age time.Duration) *model.Task {
+		task := makeTask(userID, 0, taskQuota, 0, BillingSourceWallet)
+		task.TaskID = id
+		task.Progress = "50%"
+		task.SubmitTime = now.Add(-age).Unix()
+		require.NoError(t, model.DB.Create(task).Error)
+		return task
+	}
+	oldBoundary := makeRunning("old_24h_boundary", 25*time.Hour)
+	atOldDeadline := makeRunning("at_old_24h_deadline", 24*time.Hour)
+	insideDeadline := makeRunning("still_running_at_60h", 60*time.Hour)
+	exactDeadline := makeRunning("at_72h_deadline", 72*time.Hour)
+	afterDeadline := makeRunning("past_72h_deadline", 73*time.Hour)
+
+	previousTimeout := constant.TaskTimeoutMinutes
+	constant.TaskTimeoutMinutes = 72 * 60
+	t.Cleanup(func() { constant.TaskTimeoutMinutes = previousTimeout })
+
+	sweepTimedOutTasksAt(context.Background(), now)
+	sweepTimedOutTasksAt(context.Background(), now)
+
+	var gotOld, gotAtOldDeadline, gotInside, gotExact, gotAfter model.Task
+	for task, target := range map[*model.Task]*model.Task{
+		oldBoundary: &gotOld, atOldDeadline: &gotAtOldDeadline, insideDeadline: &gotInside,
+		exactDeadline: &gotExact, afterDeadline: &gotAfter,
+	} {
+		require.NoError(t, model.DB.First(target, task.ID).Error)
+	}
+	assert.EqualValues(t, model.TaskStatusInProgress, gotOld.Status)
+	assert.EqualValues(t, model.TaskStatusInProgress, gotAtOldDeadline.Status)
+	assert.EqualValues(t, model.TaskStatusInProgress, gotInside.Status)
+	assert.EqualValues(t, model.TaskStatusInProgress, gotExact.Status)
+	assert.EqualValues(t, model.TaskStatusFailure, gotAfter.Status)
+	assert.Equal(t, initialQuota+taskQuota, getUserQuota(t, userID))
+	assert.Equal(t, int64(1), countLogs(t))
+}
+
+func TestSweepTimedOutTasksDisabledAtZero(t *testing.T) {
+	truncate(t)
+	const userID, initialQuota, taskQuota = 405, 10_000, 1_500
+	seedUser(t, userID, initialQuota)
+	now := time.Unix(1_800_000_000, 0)
+	task := makeTask(userID, 0, taskQuota, 0, BillingSourceWallet)
+	task.TaskID = "timeout_disabled_at_zero"
+	task.Progress = "50%"
+	task.SubmitTime = now.Add(-100 * time.Hour).Unix()
+	require.NoError(t, model.DB.Create(task).Error)
+
+	previousTimeout := constant.TaskTimeoutMinutes
+	constant.TaskTimeoutMinutes = 0
+	t.Cleanup(func() { constant.TaskTimeoutMinutes = previousTimeout })
+
+	sweepTimedOutTasksAt(context.Background(), now)
+
+	var reloaded model.Task
+	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
+	assert.EqualValues(t, model.TaskStatusInProgress, reloaded.Status)
+	assert.Equal(t, initialQuota, getUserQuota(t, userID))
+	assert.Zero(t, countLogs(t))
+}
+
 type scriptedPollingAdaptor struct {
 	statusCode int
 	body       []byte

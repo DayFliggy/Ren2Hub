@@ -490,6 +490,22 @@ func TestAwsStreamHandlerStopsAtClientCancellation(t *testing.T) {
 	}
 }
 
+func TestAwsBodyPassthroughKeepsNestedSchemaOrder(t *testing.T) {
+	const body = `{"model":"client-model","stream":true,"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}}}`
+	ctx := newAwsTestContext(httptest.NewRecorder(), context.Background())
+	ctx.Request.Body = io.NopCloser(strings.NewReader(body))
+	info := newAwsTestRelayInfo()
+	info.ChannelSetting.PassThroughBodyEnabled = true
+
+	got, err := buildAwsRequestBody(ctx, info, nil)
+	require.NoError(t, err)
+	var members map[string]json.RawMessage
+	require.NoError(t, common.Unmarshal(got, &members))
+	assert.NotContains(t, members, "model")
+	assert.NotContains(t, members, "stream")
+	assert.Equal(t, `{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}}`, string(members["response_format"]))
+}
+
 func newMantleTestInfo() *relaycommon.RelayInfo {
 	info := newAwsTestRelayInfo()
 	info.IsStream = false

@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -97,7 +98,12 @@ func catalogPrice(name string, values, configured PricingValues) CatalogPrice {
 		}
 		if ResolveCacheWriteMode(name, configured) == CacheWriteClaudeTTL {
 			if factor, ok := number("CreateCacheRatio"); ok {
-				result.PricingValues["cache_create_1h"] = input.Mul(factor).Mul(decimal.NewFromFloat(legacyClaudeCacheCreation1hMultiplier)).String()
+				result.PricingValues["cache_create_1h"] = input.Mul(factor).Mul(decimal.NewFromFloat(hosttypes.ClaudeCacheCreation1hMultiplier)).String()
+			}
+		}
+		if ResolveCacheWriteMode(name, configured) == CacheWriteOpenAITTL {
+			if factor, ok := number("CreateCacheRatio"); ok {
+				result.PricingValues["cache_create_12h"] = input.Mul(factor).Mul(decimal.NewFromFloat(hosttypes.OpenAICacheCreation12hMultiplier)).String()
 			}
 		}
 		for key, price := range map[string]*float64{

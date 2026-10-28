@@ -518,6 +518,100 @@ func TestBuildTieredTokenParams_GPT_NoCacheVar(t *testing.T) {
 	}
 }
 
+func TestBuildTieredTokenParamsLongLivedCacheWrites(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens: 12000,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:     4000,
+			CacheWriteTokens: 7000,
+			CacheWriteTokensDetails: &dto.CacheWriteTokenDetails{
+				TTL30mTokens: 3000,
+				TTL12hTokens: 4000,
+			},
+		},
+	}
+
+	for _, tc := range []struct {
+		name                     string
+		expr                     string
+		wantP, wantCC, wantCC12h float64
+		wantCost                 float64
+	}{
+		{"explicit ttl prices", `tier("standard", p * 10 + cr * 1 + cc * 12.5 + cc12h * 25)`, 1000, 3000, 4000, 151500},
+		{"unpriced 12h joins cc at double count", `tier("standard", p * 10 + cr * 1 + cc * 12.5)`, 1000, 11000, 0, 151500},
+		{"unpriced cache writes are input", `tier("standard", p * 10 + cr * 1)`, 12000, 0, 0, 124000},
+		{"12h priced while 30m stays in input", `tier("standard", p * 10 + cr * 1 + cc12h * 25)`, 4000, 0, 4000, 144000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			params := BuildTieredTokenParams(usage, false, billingexpr.UsedVars(tc.expr))
+			assert.Equal(t, tc.wantP, params.P)
+			assert.Equal(t, tc.wantCC, params.CC)
+			assert.Equal(t, tc.wantCC12h, params.CC12h)
+			cost, _, err := billingexpr.RunExpr(tc.expr, params)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantCost, cost)
+		})
+	}
+
+	// OpenAI-compatible `cache_creation_input_tokens` is another report of the
+	// same writes, and must not be added to `cache_write_tokens`.
+	usage.PromptTokensDetails.CacheCreationInputTokens = 9000
+	params := BuildTieredTokenParams(usage, false, billingexpr.UsedVars(`tier("standard", p * 10 + cc * 12.5 + cc12h * 25)`))
+	assert.Equal(t, float64(9000), params.CC+params.CC12h)
+	assert.Equal(t, float64(12000), params.Len)
+}
+
+func TestBuildTieredTokenParamsClaudeCacheWritesWithoutSplit(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		usage      dto.Usage
+		expr       string
+		wantP      float64
+		wantCC     float64
+		wantCC1h   float64
+		wantLength float64
+	}{
+		{
+			name: "unlabelled remainder is a 5m write",
+			usage: dto.Usage{PromptTokens: 100, UsageSemantic: "anthropic",
+				PromptTokensDetails: dto.InputTokenDetails{CachedCreationTokens: 10000}},
+			expr:  `tier("base", p * 3 + cc * 3.75 + cc1h * 6)`,
+			wantP: 100, wantCC: 10000, wantLength: 10100,
+		},
+		{
+			name: "missing 5m split is remainder after 1h",
+			usage: dto.Usage{PromptTokens: 100, UsageSemantic: "anthropic",
+				PromptTokensDetails:         dto.InputTokenDetails{CachedCreationTokens: 10000},
+				ClaudeCacheCreation1hTokens: 4000},
+			expr:  `tier("base", p * 3 + cc * 3.75 + cc1h * 6)`,
+			wantP: 100, wantCC: 6000, wantCC1h: 4000, wantLength: 10100,
+		},
+		{
+			name: "unpriced cache writes stay billable as input",
+			usage: dto.Usage{PromptTokens: 100, UsageSemantic: "anthropic",
+				PromptTokensDetails: dto.InputTokenDetails{CachedCreationTokens: 10000}},
+			expr:  `tier("base", p * 3)`,
+			wantP: 10100, wantLength: 10100,
+		},
+		{
+			name: "unpriced 1h uses 1.6x 5m write price",
+			usage: dto.Usage{PromptTokens: 100, UsageSemantic: "anthropic",
+				PromptTokensDetails:         dto.InputTokenDetails{CachedCreationTokens: 10000},
+				ClaudeCacheCreation1hTokens: 10000},
+			expr:  `tier("base", p * 3 + cc * 3.75)`,
+			wantP: 100, wantCC: 16000, wantLength: 10100,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			params := BuildTieredTokenParams(&tc.usage, true, billingexpr.UsedVars(tc.expr))
+			assert.Equal(t, tc.wantP, params.P)
+			assert.Equal(t, tc.wantCC, params.CC)
+			assert.Equal(t, tc.wantCC1h, params.CC1h)
+			assert.Equal(t, tc.wantLength, params.Len)
+		})
+	}
+}
+
 func TestBuildTieredTokenParams_GPT_WithImage(t *testing.T) {
 	usage := &dto.Usage{
 		PromptTokens:     1000,

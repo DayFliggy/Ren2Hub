@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
 	"strings"
 	"testing"
 
@@ -86,10 +87,15 @@ func TestTaskAdaptorRejectsDeprecatedClientResponse(t *testing.T) {
 }
 
 func TestTaskAdaptorBuildsMultipartFromOpaqueFileReference(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TMPDIR", tempDir)
+	previousFileLimit := constant.MaxFileDownloadMB
+	constant.MaxFileDownloadMB = 1
+	t.Cleanup(func() { constant.MaxFileDownloadMB = previousFileLimit })
 	// The plugin forwards the client's Content-Type, whose boundary is not the one of the rebuilt body.
 	source := `
 export const meta = {apiVersion:1,key:"multipart",name:"Multipart",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task"};
-export function buildSubmitRequest(ctx) { return {url:ctx.baseUrl+"/submit",headers:{"Content-Type":ctx.requestHeaders["Content-Type"]},bodyType:"multipart",parts:[{name:"model",value:"m"},{name:"input_reference",fileRef:ctx.files[0].ref}]}; }
+export function buildSubmitRequest(ctx) { return {url:ctx.baseUrl+"/submit",headers:{"Content-Type":ctx.requestHeaders["Content-Type"]},bodyType:"multipart",parts:[{name:"model",value:"m"},{name:"input_reference",fileRef:ctx.files[1].ref}]}; }
 export function parseSubmitResponse(ctx,r){return {taskId:"1"}} export function buildQueryRequest(){return {url:"https://example.com"}} export function parseTaskResult(){return {status:"SUCCESS"}}
 `
 	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
@@ -99,6 +105,11 @@ export function parseSubmitResponse(ctx,r){return {taskId:"1"}} export function 
 	adaptor.Init(info)
 	var input bytes.Buffer
 	writer := multipart.NewWriter(&input)
+	// Exhaust the shared memory budget while both files stay within the per-file limit.
+	firstFile, err := writer.CreateFormFile("input_reference", "first.png")
+	require.NoError(t, err)
+	_, err = firstFile.Write(bytes.Repeat([]byte("a"), 1<<20))
+	require.NoError(t, err)
 	file, err := writer.CreateFormFile("input_reference", "ref.png")
 	require.NoError(t, err)
 	_, err = file.Write([]byte("image-bytes"))
@@ -108,8 +119,12 @@ export function parseSubmitResponse(ctx,r){return {taskId:"1"}} export function 
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(input.Bytes()))
 	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
 	c.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "p"})
+	t.Cleanup(func() { common.CleanupBodyStorage(c) })
 	body, err := adaptor.BuildRequestBody(c, info)
 	require.NoError(t, err)
+	tempFiles, err := os.ReadDir(tempDir)
+	require.NoError(t, err)
+	assert.Empty(t, tempFiles, "building the body must remove parsed upload files")
 	requestBytes, err := io.ReadAll(body)
 	require.NoError(t, err)
 	upstreamRequest := httptest.NewRequest(http.MethodPost, "https://provider.example/submit", bytes.NewReader(requestBytes))
@@ -121,13 +136,35 @@ export function parseSubmitResponse(ctx,r){return {taskId:"1"}} export function 
 	reader := multipart.NewReader(bytes.NewReader(requestBytes), params["boundary"])
 	form, err := reader.ReadForm(1024)
 	require.NoError(t, err)
+	defer form.RemoveAll()
 	assert.Equal(t, []string{"m"}, form.Value["model"])
 	require.Len(t, form.File["input_reference"], 1)
 	opened, err := form.File["input_reference"][0].Open()
 	require.NoError(t, err)
+	defer opened.Close()
 	content, err := io.ReadAll(opened)
 	require.NoError(t, err)
 	assert.Equal(t, "image-bytes", string(content))
+
+	// A retry replays the original upload but gets a fresh multipart boundary.
+	secondBody, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	tempFiles, err = os.ReadDir(tempDir)
+	require.NoError(t, err)
+	assert.Empty(t, tempFiles, "retrying must also remove parsed upload files")
+	secondBytes, err := io.ReadAll(secondBody)
+	require.NoError(t, err)
+	secondRequest := httptest.NewRequest(http.MethodPost, "https://provider.example/submit", bytes.NewReader(secondBytes))
+	require.NoError(t, adaptor.BuildRequestHeader(c, secondRequest, info))
+	_, secondParams, err := mime.ParseMediaType(secondRequest.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	assert.NotEqual(t, params["boundary"], secondParams["boundary"])
+	secondReader := multipart.NewReader(bytes.NewReader(secondBytes), secondParams["boundary"])
+	secondForm, err := secondReader.ReadForm(1024)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"m"}, secondForm.Value["model"])
+	require.Len(t, secondForm.File["input_reference"], 1)
+	assert.NoError(t, secondForm.RemoveAll())
 }
 
 func TestTaskAdaptorInlinesJSONFilePlaceholders(t *testing.T) {
@@ -459,14 +496,11 @@ func TestTaskAdaptorJSONOrderCapability(t *testing.T) {
 		source string
 		client string
 		want   string
-		status int
 	}{
 		{name: "declared keeps the client's order", source: orderedProtocolPlugin, client: client,
 			want: `{"model":"m","state":{"zeta":"1","alpha":"2","mid":"&<>"},"questions":{"q2":{"type":"noul"},"q1":{"type":"noul"}}}`},
 		{name: "undeclared stays sorted", source: undeclared, client: client,
 			want: `{"model":"m","questions":{"q1":{"type":"noul"},"q2":{"type":"noul"}},"state":{"alpha":"2","mid":"\u0026\u003c\u003e","zeta":"1"}}`},
-		{name: "declared still bounds billing quantities", source: orderedProtocolPlugin,
-			client: `{"model":"m","state":{"duration":3601},"questions":{}}`, status: http.StatusBadRequest},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -486,14 +520,7 @@ func TestTaskAdaptorJSONOrderCapability(t *testing.T) {
 			adaptor := New(plugin)
 			adaptor.Init(info)
 
-			taskErr := adaptor.ValidateRequestAndSetAction(c, info)
-			if tc.status != 0 {
-				require.NotNil(t, taskErr)
-				assert.Equal(t, tc.status, taskErr.StatusCode)
-				assert.Equal(t, "plugin_usage_invalid", taskErr.Code)
-				return
-			}
-			require.Nil(t, taskErr)
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
 			body, err := adaptor.BuildRequestBody(c, info)
 			require.NoError(t, err)
 			raw, err := io.ReadAll(body)
@@ -1243,62 +1270,26 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		return adaptor, context, info
 	}
 
-	requestTests := []struct {
-		name string
-		body map[string]any
-	}{
-		{
-			name: "duration in resolved metadata",
-			body: map[string]any{"metadata": map[string]any{"duration": relaycommon.MaxTaskDurationSeconds + 1}},
-		},
-		{
-			name: "count in resolved metadata",
-			body: map[string]any{"metadata": map[string]any{"count": dto.MaxImageN + 1}},
-		},
-		{
-			name: "declared enum in resolved metadata",
-			body: map[string]any{"metadata": map[string]any{"mode": "turbo"}},
-		},
-		{
-			name: "implicit duration key without declaration",
-			body: map[string]any{"durationSeconds": relaycommon.MaxTaskDurationSeconds + 1},
-		},
-		{
-			name: "implicit count key without declaration",
-			body: map[string]any{"image_count": dto.MaxImageN + 1},
-		},
-		{
-			name: "negative resolved duration",
-			body: map[string]any{"duration": -1},
-		},
-		{
-			name: "non-finite resolved duration",
-			body: map[string]any{"duration": math.Inf(1)},
-		},
-		{
-			name: "metadata cannot hide behind valid top-level duration",
-			body: map[string]any{
-				"duration": relaycommon.MaxTaskDurationSeconds,
-				"metadata": map[string]any{"duration": relaycommon.MaxTaskDurationSeconds + 1},
+	t.Run("request members are not read as quantities and usage facts stay bounded", func(t *testing.T) {
+		// Plugins validate their own requests; members named like a quantity
+		// or a usage field are vendor parameters or client content.
+		adaptor, context, info := newRequest(t, map[string]any{
+			"duration": -1,
+			"metadata": map[string]any{
+				"count":      dto.MaxImageN + 1,
+				"mode":       "turbo",
+				"parameters": map[string]any{"durationSeconds": relaycommon.MaxTaskDurationSeconds + 1},
 			},
-		},
-		{
-			name: "nested passthrough duration",
-			body: map[string]any{
-				"metadata": map[string]any{
-					"parameters": map[string]any{"duration": relaycommon.MaxTaskDurationSeconds + 1},
-				},
-			},
-		},
-	}
-	for _, testCase := range requestTests {
-		t.Run(testCase.name, func(t *testing.T) {
-			adaptor, context, info := newRequest(t, testCase.body)
-			taskErr := adaptor.ValidateRequestAndSetAction(context, info)
-			require.NotNil(t, taskErr)
-			assert.Equal(t, "plugin_usage_invalid", taskErr.Code)
+			"state":            map[string]any{"options": map[string]any{"y": "Yes", "n": "No"}},
+			"hookUsageEntries": []any{map[string]any{"name": "duration", "value": -1}},
 		})
-	}
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+		_, err := adaptor.ExtractUsageFactsValidated(context, info)
+		assert.Error(t, err)
+		ratios, err := adaptor.EstimateBillingValidated(context, info)
+		assert.Error(t, err)
+		assert.Nil(t, ratios)
+	})
 
 	hookTests := []struct {
 		name  string
@@ -1343,17 +1334,6 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		})
 	}
 
-	t.Run("numeric strings remain valid in vendor request fields", func(t *testing.T) {
-		adaptor, context, info := newRequest(t, map[string]any{
-			"metadata": map[string]any{
-				"duration": "5",
-				"count":    "2",
-				"mode":     "std",
-			},
-		})
-		assert.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-	})
-
 	t.Run("numeric strings from usage hooks are rejected", func(t *testing.T) {
 		adaptor, context, info := newRequest(t, map[string]any{
 			"hookUsageEntries": []any{map[string]any{"name": "duration", "value": "5"}},
@@ -1362,53 +1342,6 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		ratios, err := adaptor.EstimateBillingValidated(context, info)
 		require.Error(t, err)
 		assert.Nil(t, ratios)
-	})
-
-	t.Run("duration -1 passes only for plugins that declare duration-auto@1", func(t *testing.T) {
-		declaring, err := pluginruntime.NewRegistry().Register(strings.Replace(source, `fetchMode: "per_task",`, `fetchMode: "per_task", requiredCapabilities: ["duration-auto@1"],`, 1), pluginruntime.Options{})
-		require.NoError(t, err)
-		for _, tc := range []struct {
-			name      string
-			declaring bool
-			body      map[string]any
-			accepted  bool
-		}{
-			{"undeclared plugins keep rejecting it", false, map[string]any{"metadata": map[string]any{"duration": -1}}, false},
-			{"vendor parameters and declared usage fields", true, map[string]any{
-				"duration": -1,
-				"metadata": map[string]any{"seconds": "-1", "parameters": map[string]any{"durationSeconds": -1}},
-			}, true},
-			{"other negative durations", true, map[string]any{"metadata": map[string]any{"duration": -2}}, false},
-			{"durations above the host limit", true, map[string]any{"metadata": map[string]any{"duration": relaycommon.MaxTaskDurationSeconds + 1}}, false},
-			{"negative counts", true, map[string]any{"metadata": map[string]any{"count": -1}}, false},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				adaptor, context, info := newRequest(t, tc.body)
-				if tc.declaring {
-					adaptor = New(declaring)
-					adaptor.Init(info)
-				}
-				taskErr := adaptor.ValidateRequestAndSetAction(context, info)
-				if tc.accepted {
-					assert.Nil(t, taskErr)
-					return
-				}
-				require.NotNil(t, taskErr)
-				assert.Equal(t, "plugin_usage_invalid", taskErr.Code)
-			})
-		}
-
-		adaptor, context, info := newRequest(t, map[string]any{
-			"metadata":         map[string]any{"duration": -1},
-			"hookUsageEntries": []any{map[string]any{"name": "duration", "value": -1}},
-		})
-		adaptor = New(declaring)
-		adaptor.Init(info)
-		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		_, err = adaptor.ExtractUsageFactsValidated(context, info)
-		assert.Error(t, err, "usage facts stay non-negative")
-		_, err = adaptor.EstimateBillingValidated(context, info)
-		assert.Error(t, err, "billing ratios stay non-negative")
 	})
 
 	t.Run("declared token facts use int32 saturation instead of duration cap", func(t *testing.T) {
@@ -1441,9 +1374,6 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 
 	t.Run("canonical maxima and enum are accepted", func(t *testing.T) {
 		adaptor, context, info := newRequest(t, map[string]any{
-			"duration": relaycommon.MaxTaskDurationSeconds,
-			"count":    dto.MaxImageN,
-			"mode":     "std",
 			"hookUsageEntries": []any{
 				map[string]any{"name": "duration", "value": float64(relaycommon.MaxTaskDurationSeconds)},
 				map[string]any{"name": "count", "value": float64(dto.MaxImageN)},
@@ -1701,6 +1631,31 @@ func TestSubmitContextOriginTasksNilDataOnInvalidJSON(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, originTasks, 1)
 	assert.Nil(t, originTasks[0]["data"])
+}
+
+func TestSubmitContextExposesClientHeadersWithoutCredentials(t *testing.T) {
+	plugin, err := pluginruntime.NewRegistry().Register(mockPlugin, pluginruntime.Options{})
+	require.NoError(t, err)
+	adaptor := New(plugin)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://provider.example"}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
+	adaptor.Init(info)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/vendor/v1/jobs", nil)
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("User-Agent", "renai-test")
+	c.Request.Header.Set("X-Request-Id", "request-1")
+	for _, name := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key", "X-Goog-Api-Key", "Mj-Api-Secret"} {
+		c.Request.Header.Set(name, "gateway-secret")
+	}
+
+	headers := adaptor.submitContext(c, info)["requestHeaders"]
+
+	assert.Equal(t, map[string]string{
+		"Content-Type": "application/json",
+		"User-Agent":   "renai-test",
+		"X-Request-Id": "request-1",
+	}, headers)
+	assert.Equal(t, headers, adaptor.submitContext(nil, info)["requestHeaders"], "hooks without a client request see the submission headers")
 }
 
 func TestSubmitContextNormalizesRequestBodyOnEveryCall(t *testing.T) {
@@ -2137,23 +2092,6 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 			assert.Equal(t, ratios, adaptor.AdjustBillingOnSubmit(info, body))
 		})
 	}
-
-	t.Run("request revalidated after model rewrite", func(t *testing.T) {
-		adaptor, c, info := newRequest(t, "public-alias", "video", map[string]any{
-			"rewriteTo": "image", "metadata": map[string]any{"units": dto.MaxImageN + 1},
-		})
-		taskErr := adaptor.ValidateRequestAndSetAction(c, info)
-		require.NotNil(t, taskErr)
-		assert.Equal(t, "plugin_usage_invalid", taskErr.Code)
-	})
-
-	t.Run("request enum belongs to the rewritten model", func(t *testing.T) {
-		adaptor, c, info := newRequest(t, "public-alias", "video", map[string]any{
-			"rewriteTo": "image", "mode": "image", "units": 2,
-		})
-		require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
-		assert.Equal(t, "image", info.UpstreamModelName)
-	})
 
 	t.Run("completion selects each persisted model including legacy origin fallback", func(t *testing.T) {
 		adaptor, _, _ := newRequest(t, "public-alias", "image", map[string]any{})

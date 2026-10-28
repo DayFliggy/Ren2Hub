@@ -138,9 +138,28 @@ function aspect(size) {
   return !p || p[0] <= 0 || p[1] <= 0 ? "16:9" : p[1] > p[0] ? "9:16" : "16:9";
 }
 function duration(req) {
-  let n = Number(req.duration);
-  if (!Number.isFinite(n) || n <= 0) n = 8;
-  return n;
+  return videoParameters(req).seconds;
+}
+function videoParameters(req) {
+  const metadata = Object.assign({}, (req && req.metadata) || {});
+  if (req && req.duration !== undefined) metadata.durationSeconds = req.duration;
+  if (req && req.size !== undefined) {
+    const parts = sizeParts(req.size);
+    if (!parts || !parts.every(function (part) { return Number.isFinite(part) && part > 0; })) throw new Error("size must be positive width x height");
+    if (!metadata.resolution) metadata.resolution = resolution(req.size);
+    if (!metadata.aspectRatio) metadata.aspectRatio = aspect(req.size);
+  }
+  let seconds = 8;
+  if (metadata.durationSeconds !== undefined) {
+    seconds = Number(metadata.durationSeconds);
+    if (![4, 6, 8].includes(seconds)) throw new Error("durationSeconds must be one of 4, 6, or 8");
+    metadata.durationSeconds = seconds;
+  }
+  let outputResolution = metadata.resolution === undefined ? "720p" : String(metadata.resolution).toLowerCase();
+  if (!["720p", "1080p", "4k"].includes(outputResolution)) throw new Error("resolution must be one of 720p, 1080p, or 4k");
+  if (metadata.resolution !== undefined) metadata.resolution = outputResolution;
+  if (metadata.generateAudio !== undefined && typeof metadata.generateAudio !== "boolean") throw new Error("generateAudio must be a boolean");
+  return { metadata: metadata, seconds: seconds, resolution: outputResolution };
 }
 function region(ctx, model) {
   const setting = ctx.userSetting || {};
@@ -241,12 +260,9 @@ export const native = {
 export function buildSubmitRequest(ctx) {
   if (ctx.authError) throw new Error(ctx.authError);
   const req = ctx.requestBody || {},
-    metadata = Object.assign({}, req.metadata || {}),
+    parameters = videoParameters(req),
+    metadata = parameters.metadata,
     model = ctx.upstreamModel || "veo-3.0-generate-001";
-  if (Number(req.duration) > 0) metadata.durationSeconds = Number(req.duration);
-  if (!metadata.resolution && req.size) metadata.resolution = resolution(req.size);
-  if (!metadata.aspectRatio && req.size) metadata.aspectRatio = aspect(req.size);
-  if (metadata.resolution) metadata.resolution = String(metadata.resolution).toLowerCase();
   metadata.sampleCount = 1;
   const instance = { prompt: req.prompt };
   const image = (req.images || [])[0];
@@ -293,11 +309,11 @@ export function parseSubmitResponse(ctx, resp) {
 }
 export function extractUsage(ctx) {
   const req = ctx.requestBody || {};
-  const metadata = req.metadata || {};
+  const parameters = videoParameters(req);
   return {
-    seconds: duration(req),
-    resolution: String(metadata.resolution || resolution(req.size) || "720p").toLowerCase(),
-    generate_audio: metadata.generateAudio !== false,
+    seconds: parameters.seconds,
+    resolution: parameters.resolution,
+    generate_audio: parameters.metadata.generateAudio !== false,
   };
 }
 export function extractUsageOnComplete() {

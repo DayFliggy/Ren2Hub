@@ -16,7 +16,7 @@ Ren2Hub 的质量门槛在本地运行，CI 调用同一入口。Go、Vue 的业
 
 ## 运行入口
 
-先安装匹配的 Go 1.26.9、Bun 1.4.0、Node 24、Python 3、Docker，执行 `cd frontend && bun install --frozen-lockfile`。Chromium 及其系统库需事先就绪。runner 不自动安装依赖、拉取镜像、连接真实供应商或申请凭据。Linux 网络 namespace 用于隔离真实浏览器实例。
+先安装匹配的 Go 1.26.10、Bun 1.4.0、Node 24、Python 3、Docker，执行 `cd frontend && bun install --frozen-lockfile`。Chromium 及其系统库需事先就绪。runner 不自动安装依赖、拉取镜像、连接真实供应商或申请凭据。Linux 网络 namespace 用于隔离真实浏览器实例。
 
 在 Ren2Hub 目录执行：
 

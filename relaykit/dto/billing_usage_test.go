@@ -49,6 +49,19 @@ func TestNewOpenAIChatBillingUsageRequiresTokenContent(t *testing.T) {
 	assert.Equal(t, 1, billingUsage.OpenAIUsage.PromptTokens)
 }
 
+func TestOpenAICacheCreationInputTokensAloneIsBillableUsage(t *testing.T) {
+	for _, usage := range []*Usage{
+		{PromptTokensDetails: InputTokenDetails{CacheCreationInputTokens: 7}},
+		{InputTokensDetails: &InputTokenDetails{CacheCreationInputTokens: 7}},
+	} {
+		billing := NewOpenAIResponsesBillingUsage(usage)
+		require.NotNil(t, billing)
+		canonical, ok := billing.CanonicalUsage()
+		require.True(t, ok)
+		assert.Equal(t, 7, canonical.PromptTokensDetails.CacheCreationTokensTotal())
+	}
+}
+
 func TestImageCacheDetailsSurviveUsageSnapshots(t *testing.T) {
 	var original Usage
 	require.NoError(t, kitutil.Unmarshal([]byte(`{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300,"image_tokens":600,"cached_tokens_details":{"image_tokens":200,"text_tokens":100}}}`), &original))
@@ -74,6 +87,37 @@ func TestImageCacheDetailsSurviveUsageSnapshots(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(encoded), `"cached_tokens_details":{"text_tokens":100,"image_tokens":0}`)
 	assert.NotContains(t, string(encoded), `"audio_tokens":null`)
+}
+
+func TestCacheWriteTTLDetailsSurviveUsageSnapshots(t *testing.T) {
+	var original Usage
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"input_tokens":12000,"input_tokens_details":{"cached_tokens":4000,"cache_write_tokens":7000,"cache_write_tokens_details":{"ttl_30m_tokens":3000,"ttl_12h_tokens":4000}}}`), &original))
+	billing := NewOpenAIResponsesBillingUsage(&original)
+	require.NotNil(t, billing)
+	original.InputTokensDetails.CacheWriteTokensDetails.TTL12hTokens = 99
+	canonical, ok := billing.CanonicalUsage()
+	require.True(t, ok)
+	assert.Equal(t, 7000, canonical.PromptTokensDetails.CacheCreationTokensTotal())
+	assert.Equal(t, 4000, canonical.PromptTokensDetails.CacheWrite12hTokens())
+	canonical.PromptTokensDetails.CacheWriteTokensDetails.TTL12hTokens = 42
+	assert.Equal(t, 4000, billing.OpenAIUsage.InputTokensDetails.CacheWriteTokensDetails.TTL12hTokens)
+
+	// Stream snapshots merge like the scalar counts: a later zero keeps the
+	// earlier value, and the merged split is detached from both inputs.
+	current := &Usage{InputTokensDetails: &InputTokenDetails{CacheWriteTokensDetails: &CacheWriteTokenDetails{TTL30mTokens: 3000}}}
+	var incoming Usage
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"input_tokens_details":{"cache_write_tokens":7000,"cache_write_tokens_details":{"ttl_30m_tokens":0,"ttl_12h_tokens":4000}}}`), &incoming))
+	merged := MergeUsageNonZero(current, &incoming)
+	assert.Equal(t, &CacheWriteTokenDetails{TTL30mTokens: 3000, TTL12hTokens: 4000}, merged.InputTokensDetails.CacheWriteTokensDetails)
+	incoming.InputTokensDetails.CacheWriteTokensDetails.TTL12hTokens = 9
+	assert.Equal(t, 4000, merged.InputTokensDetails.CacheWriteTokensDetails.TTL12hTokens)
+	encoded, err := kitutil.Marshal(merged)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"cache_write_tokens_details":{"ttl_30m_tokens":3000,"ttl_12h_tokens":4000}`)
+
+	// Billing never takes more 12h writes than the reported write total.
+	assert.Equal(t, 7000, InputTokenDetails{CacheWriteTokens: 7000, CacheWriteTokensDetails: &CacheWriteTokenDetails{TTL12hTokens: 9000}}.CacheWrite12hTokens())
+	assert.Zero(t, InputTokenDetails{CacheWriteTokens: 7000, CacheWriteTokensDetails: &CacheWriteTokenDetails{TTL12hTokens: -1}}.CacheWrite12hTokens())
 }
 
 func TestNewEstimatedGeminiChatBillingUsage(t *testing.T) {

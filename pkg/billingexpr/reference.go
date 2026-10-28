@@ -36,7 +36,7 @@ func StaticReferencePrices(expression string) (map[string]string, bool) {
 	result := map[string]string{}
 	for variable, key := range map[string]string{
 		"p": "input", "c": "output", "cr": "cache", "cc": "cache_create",
-		"cc1h": "cache_create_1h", "img": "image", "img_cr": "image_cache",
+		"cc1h": "cache_create_1h", "cc12h": "cache_create_12h", "img": "image", "img_cr": "image_cache",
 		"img_o": "image_output", "ai": "audio_input", "ao": "audio_output",
 	} {
 		if value, ok := values[variable]; ok {
@@ -89,7 +89,7 @@ func readReferenceTerms(body string, node ast.Node, values map[string]decimal.De
 		return false
 	}
 	switch id.Value {
-	case "p", "c", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao":
+	case "p", "c", "cr", "cc", "cc1h", "cc12h", "img", "img_cr", "img_o", "ai", "ao":
 	default:
 		return false
 	}

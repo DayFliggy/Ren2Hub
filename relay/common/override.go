@@ -1683,7 +1683,7 @@ func moveValue(data []byte, fromPath, toPath string) ([]byte, error) {
 	if !sourceValue.Exists() {
 		return data, fmt.Errorf("source path does not exist: %s", fromPath)
 	}
-	result, err := sjson.SetBytes(data, toPath, sourceValue.Value())
+	result, err := sjson.SetRawBytes(data, toPath, []byte(sourceValue.Raw))
 	if err != nil {
 		return nil, err
 	}
@@ -1695,7 +1695,7 @@ func copyValue(data []byte, fromPath, toPath string) ([]byte, error) {
 	if !sourceValue.Exists() {
 		return data, fmt.Errorf("source path does not exist: %s", fromPath)
 	}
-	return sjson.SetBytes(data, toPath, sourceValue.Value())
+	return sjson.SetRawBytes(data, toPath, []byte(sourceValue.Raw))
 }
 
 func isPathBasedOperation(mode string) bool {
@@ -1811,7 +1811,7 @@ func modifyArray(data []byte, path string, value any, isPrepend bool) ([]byte, e
 	// 添加原值
 	addOriginal := func() {
 		current.ForEach(func(_, val gjson.Result) bool {
-			newArray = append(newArray, val.Value())
+			newArray = append(newArray, common.RawMessage(val.Raw))
 			return true
 		})
 	}

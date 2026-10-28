@@ -1233,7 +1233,7 @@ export default {
     keyReplace: 'Replace all keys',
     passThroughBody: 'Pass through request body',
     passThroughBodyHint:
-      'Preserve the original body when API formats match, bypassing model mapping, parameter overrides and conversion. Advanced routes use their own passthrough setting.',
+      'Applies to every route and bypasses model mapping, parameter overrides and protocol conversion. Advanced Custom routes that require format conversion will fail; use the route-level switch to limit passthrough to selected native routes.',
     tlsInsecureSkipVerify: 'Skip upstream TLS verification',
     tlsInsecureSkipVerifyHint:
       'Accept upstream certificates that fail validation, such as self-signed ones. Only enable for trusted internal upstreams.',
@@ -1905,6 +1905,7 @@ export default {
       completion_tokens: 'Output tokens',
       cache_read_tokens: 'Cache read tokens',
       cache_write_tokens: 'Cache write tokens',
+      cache_write_tokens_12h: 'Cache write tokens (12h)',
       cache_ttl: 'Cache TTL',
       latency: 'Latency (s)',
       tps: 'Tokens per second',
@@ -1957,6 +1958,8 @@ export default {
     inputTokens: 'Input tokens',
     outputTokens: 'Output tokens',
     cacheCreation: 'Cache creation',
+    cacheCreation30m: 'Cache creation (30m)',
+    cacheCreation12h: 'Cache creation (12h)',
     cacheReadTokens: 'Cache read tokens',
     totalTokens: 'Total tokens',
     cacheRead: 'Cache read',

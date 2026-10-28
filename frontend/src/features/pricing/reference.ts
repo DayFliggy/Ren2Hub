@@ -17,6 +17,7 @@ const tokenKeys: Record<string, string> = {
   cr: 'cacheRead',
   cc: 'cacheWrite',
   cc1h: 'cacheWrite1h',
+  cc12h: 'cacheWrite12h',
   img: 'image',
   img_cr: 'imageCache',
   img_o: 'imageOutput',

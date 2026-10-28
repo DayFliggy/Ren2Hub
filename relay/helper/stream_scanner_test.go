@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -358,6 +359,128 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 	assert.NotContains(t, body, "second")
 }
 
+type cancelOnReadBody struct {
+	cancel context.CancelFunc
+	err    error
+}
+
+func (b *cancelOnReadBody) Read([]byte) (int, error) {
+	if b.cancel != nil {
+		b.cancel()
+	}
+	return 0, b.err
+}
+
+func (b *cancelOnReadBody) Close() error { return nil }
+
+func TestStreamScannerHandler_ClientCancelDuringUpstreamRead(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{name: "canceled read", err: context.Canceled},
+		{name: "EOF from canceled connection", err: io.EOF},
+		{name: "closed pipe from canceled connection", err: io.ErrClosedPipe},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			c, resp, info := setupStreamTest(t, strings.NewReader(""))
+			c.Request = c.Request.WithContext(ctx)
+			resp.Body = &cancelOnReadBody{cancel: cancel, err: test.err}
+			info.DisablePing = true
+
+			StreamScannerHandler(c, resp, info, func(string, *StreamResult) {
+				t.Error("a canceled read must not produce an event")
+			})
+
+			require.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+			require.ErrorIs(t, info.StreamStatus.EndError, context.Canceled)
+			assert.False(t, info.StreamStatus.IsNormalEnd())
+		})
+	}
+}
+
+type errorWithCompletionBody struct{ data *strings.Reader }
+
+func (b *errorWithCompletionBody) Read(p []byte) (int, error) {
+	n, _ := b.data.Read(p)
+	return n, io.ErrUnexpectedEOF
+}
+
+func (*errorWithCompletionBody) Close() error { return nil }
+
+func TestStreamScannerHandler_ReadFailureWithCompletion(t *testing.T) {
+	body := &errorWithCompletionBody{data: strings.NewReader("data: complete\n\n")}
+	c, resp, info := setupStreamTest(t, strings.NewReader(""))
+	resp.Body = body
+	info.DisablePing = true
+
+	StreamScannerHandler(c, resp, info, func(_ string, sr *StreamResult) {
+		info.StreamStatus.MarkCompleted()
+		sr.Done()
+	})
+
+	assert.Equal(t, relaycommon.StreamEndReasonScannerErr, info.StreamStatus.EndReason)
+	assert.ErrorIs(t, info.StreamStatus.EndError, io.ErrUnexpectedEOF)
+	assert.False(t, info.StreamStatus.IsNormalEnd())
+}
+
+func TestStreamScannerHandler_UpstreamCancellationWithoutClientCancellation(t *testing.T) {
+	for _, err := range []error{context.Canceled, io.ErrClosedPipe} {
+		t.Run(err.Error(), func(t *testing.T) {
+			c, resp, info := setupStreamTest(t, strings.NewReader(""))
+			resp.Body = &cancelOnReadBody{err: err}
+			info.DisablePing = true
+
+			StreamScannerHandler(c, resp, info, func(string, *StreamResult) {})
+
+			assert.Equal(t, relaycommon.StreamEndReasonScannerErr, info.StreamStatus.EndReason)
+			assert.ErrorIs(t, info.StreamStatus.EndError, err)
+		})
+	}
+}
+
+type blockingHTTPBody struct {
+	io.ReadCloser
+	reads   int
+	reading chan struct{}
+}
+
+func (b *blockingHTTPBody) Read(p []byte) (int, error) {
+	b.reads++
+	if b.reads == 2 {
+		close(b.reading)
+	}
+	return b.ReadCloser.Read(p)
+}
+
+func TestStreamScannerHandler_CompletionClosesHTTPBodyWithoutFailure(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: complete\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer upstream.Close()
+	resp, err := upstream.Client().Get(upstream.URL)
+	require.NoError(t, err)
+	body := &blockingHTTPBody{ReadCloser: resp.Body, reading: make(chan struct{})}
+	resp.Body = body
+	c, _, info := setupStreamTest(t, strings.NewReader(""))
+	info.DisablePing = true
+
+	StreamScannerHandler(c, resp, info, func(_ string, sr *StreamResult) {
+		<-body.reading
+		info.StreamStatus.MarkCompleted()
+		sr.Done()
+	})
+
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.NoError(t, info.StreamStatus.EndError)
+	assert.False(t, info.StreamStatus.HasErrors())
+}
+
 // ---------- Ping tests ----------
 
 func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
@@ -657,4 +780,98 @@ func TestNewStreamScannerCallerLimit(t *testing.T) {
 	require.True(t, scanner.Scan())
 	assert.Equal(t, "data: ok", scanner.Text())
 	require.NoError(t, scanner.Err())
+}
+
+// ---------- Write deadlines ----------
+
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadlines []time.Time
+}
+
+type flushErrorRecorder struct {
+	*httptest.ResponseRecorder
+	flushErr        error
+	flushErrorCalls int
+	flushCalls      int
+}
+
+func (r *flushErrorRecorder) Flush() {
+	r.flushCalls++
+	r.ResponseRecorder.Flush()
+}
+
+func (r *flushErrorRecorder) FlushError() error {
+	r.flushErrorCalls++
+	return r.flushErr
+}
+
+// Gin 1.9's ResponseWriter implements Flush but unwraps to the original
+// ResponseWriter, whose FlushError result Gin's method does not return.
+type ginFlushAdapter struct {
+	gin.ResponseWriter
+	underlying http.ResponseWriter
+}
+
+func (w *ginFlushAdapter) Unwrap() http.ResponseWriter {
+	return w.underlying
+}
+
+func (w *ginFlushAdapter) Flush() {
+	w.underlying.(http.Flusher).Flush()
+}
+
+func (r *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
+	r.deadlines = append(r.deadlines, deadline)
+	return nil
+}
+
+func TestStreamWriteBudget(t *testing.T) {
+	start := time.Unix(1_800_000_000, 0)
+	var budget StreamWriteBudget
+	steps := []struct {
+		name  string
+		at    time.Duration
+		bytes int
+		want  time.Duration
+	}{
+		{"small event", 0, 8 << 10, 31 * time.Second},
+		{"image event gets the time a slow client needs", 0, 3600 << 10, 481 * time.Second},
+		{"next write keeps the image budget", 60 * time.Second, 8 << 10, 482 * time.Second},
+		{"budget starts over once it ran out", 600 * time.Second, 8 << 10, 631 * time.Second},
+	}
+	for _, step := range steps {
+		assert.Equal(t, start.Add(step.want), budget.Deadline(start.Add(step.at), step.bytes), step.name)
+	}
+}
+
+func TestSetEventStreamHeadersBoundsStreamWritesByBudget(t *testing.T) {
+	recorder := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	stop := StartStreamKeepAlive(c, time.Hour)
+	defer stop()
+
+	before := time.Now()
+	require.NoError(t, StringData(c, strings.Repeat("A", 3600<<10)))
+
+	require.NotEmpty(t, recorder.deadlines)
+	assert.False(t, recorder.deadlines[0].Before(before.Add(streamWriteTimeout+450*time.Second)))
+	assert.Contains(t, recorder.Body.String(), "data: AAAA")
+}
+
+func TestFlushWriterPreservesUnderlyingFlushErrorThroughGin(t *testing.T) {
+	wantErr := errors.New("client flush failed")
+	underlying := &flushErrorRecorder{ResponseRecorder: httptest.NewRecorder(), flushErr: wantErr}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Writer = &ginFlushAdapter{ResponseWriter: c.Writer, underlying: underlying}
+	stop := StartStreamKeepAlive(c, time.Hour)
+	defer stop()
+
+	err := FlushWriter(c)
+
+	require.ErrorIs(t, err, wantErr)
+	assert.Equal(t, 1, underlying.flushErrorCalls)
+	assert.Equal(t, 1, underlying.flushCalls, "Gin must flush before its underlying error is collected")
 }

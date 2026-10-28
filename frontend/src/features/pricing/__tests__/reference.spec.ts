@@ -60,6 +60,15 @@ describe('catalog reference prices', () => {
       condition: expect.stringContaining('hour("UTC") < 12'),
     })
   })
+  it('shows OpenAI 12-hour cache-write price dimensions from expressions', () => {
+    expect(
+      amounts(
+        expressionReferencePrices(
+          'tier("long", p * 10 + cc * 12.5 + cc12h * 25)'
+        )
+      )
+    ).toEqual({ input: '10', cacheWrite: '12.5', cacheWrite12h: '25' })
+  })
   it.each([
     'p * param("price")',
     'tier("dynamic", p * hour("UTC"))',

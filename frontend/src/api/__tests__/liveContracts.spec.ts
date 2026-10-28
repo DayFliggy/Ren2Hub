@@ -284,7 +284,8 @@ describe('live API contracts', () => {
           channel_name: 'OpenAI',
           prompt_tokens: 10,
           completion_tokens: 20,
-          other: '{"frt":250}',
+          other:
+            '{"frt":250,"cache_creation_tokens_12h":300,"cache_creation_ratio_12h":2.5}',
           quota: 300,
           use_time: 1,
           is_stream: true,
@@ -301,6 +302,8 @@ describe('live API contracts', () => {
       first_token_latency: 0.25,
       request_mode: 'stream',
       tps: 20,
+      cache_creation_tokens_12h: 300,
+      cache_creation_ratio_12h: 2.5,
     })
     expect(
       parseLogPage({ page: 1, page_size: 20, total: 0, items: [] }).items

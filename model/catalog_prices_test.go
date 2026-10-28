@@ -107,6 +107,16 @@ func TestCatalogPriceNativeSpecializedDimensions(t *testing.T) {
 	}
 }
 
+func TestCatalogPriceProjectsOpenAITwelveHourCacheWritePrice(t *testing.T) {
+	previous := common.QuotaPerUnit
+	common.QuotaPerUnit = 500000
+	t.Cleanup(func() { common.QuotaPerUnit = previous })
+	values := PricingValues{"ModelRatio": float64(1.5), "CreateCacheRatio": float64(1.25)}
+	price := catalogPrice("gpt-5.6-terra", values, values)
+	require.Equal(t, "3.75", price.PricingValues["cache_create"])
+	require.Equal(t, "7.5", price.PricingValues["cache_create_12h"])
+}
+
 func TestCatalogPriceSpecializedOverridesAndExplicitZero(t *testing.T) {
 	db := setupCatalogPricingTest(t)
 	require.NoError(t, db.Create(&Option{Key: "CreateCacheRatio", Value: `{"claude-sonnet-4-20250514":2,"claude-zero":0}`}).Error)

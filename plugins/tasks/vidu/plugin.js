@@ -302,6 +302,8 @@ export function buildSubmitRequest(ctx) {
   const metadata = req.metadata || {};
   let model = ctx.upstreamModel || "viduq1";
   if (action === "reference_to_video" && model.includes("viduq2")) model = "viduq2";
+  const duration = req.duration === undefined ? undefined : Number(req.duration);
+  validateViduCombo(model, duration, outboundResolution(req, model), hasViduImages(req, false));
   const images = Array.isArray(req.images) ? req.images.map(filePlaceholder) : null;
   // metadata carries the other Vidu fields and cannot replace the billed
   // model, duration and resolution.
@@ -333,7 +335,10 @@ export function extractUsage(ctx) {
   if (ctx.usagePurpose === "billing_ratios") return null;
   const req = ctx.requestBody || {};
   const model = ctx.upstreamModel || req.model;
-  return { duration: outboundDuration(req, model), resolution: outboundResolution(req, model) };
+  const duration = req.duration === undefined ? undefined : Number(req.duration);
+  const resolution = outboundResolution(req, model);
+  validateViduCombo(model, duration, resolution, hasViduImages(req, false));
+  return { duration: outboundDuration(req, model), resolution: resolution };
 }
 
 export function buildQueryRequest(ctx) {

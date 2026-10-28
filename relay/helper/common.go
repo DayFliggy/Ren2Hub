@@ -57,8 +57,12 @@ func (writer *streamKeepAliveWriter) WriteHeaderNow() {
 }
 
 func (writer *streamKeepAliveWriter) Flush() {
+	_ = writer.FlushError()
+}
+
+func (writer *streamKeepAliveWriter) FlushError() error {
 	writer.stop()
-	writer.ResponseWriter.Flush()
+	return flushResponseWriter(writer.ResponseWriter)
 }
 
 func (writer *streamKeepAliveWriter) Status() int {
@@ -82,7 +86,6 @@ func (writer *streamKeepAliveWriter) Written() bool {
 func (writer *streamKeepAliveWriter) ping() error {
 	writer.mutex.Lock()
 	defer writer.mutex.Unlock()
-	ExtendWriteDeadline(writer.pingContext)
 	return PingData(writer.pingContext)
 }
 
@@ -151,13 +154,31 @@ func FlushWriter(c *gin.Context) (err error) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		return errors.New("streaming error: flusher not found")
-	}
+	return flushResponseWriter(c.Writer)
+}
 
-	flusher.Flush()
-	return nil
+// flushResponseWriter collects FlushError before unwrapping response writers.
+// It flushes each intermediate wrapper first to preserve its buffers; Gin 1.9
+// discards the underlying net/http FlushError, so that error is collected next.
+func flushResponseWriter(writer http.ResponseWriter) error {
+	for writer != nil {
+		if flusher, ok := writer.(interface{ FlushError() error }); ok {
+			return flusher.FlushError()
+		}
+		flusher, canFlush := writer.(http.Flusher)
+		if canFlush {
+			flusher.Flush()
+		}
+		unwrapper, ok := writer.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			if canFlush {
+				return nil
+			}
+			return http.NewResponseController(writer).Flush()
+		}
+		writer = unwrapper.Unwrap()
+	}
+	return errors.New("streaming error: response writer is nil")
 }
 
 func requestContextDone(c *gin.Context) bool {
@@ -178,6 +199,7 @@ func SetEventStreamHeaders(c *gin.Context) {
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("Transfer-Encoding", "chunked")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer = &streamResponseWriter{ResponseWriter: c.Writer}
 }
 
 func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
@@ -215,8 +237,14 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
+	event := common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)}
+	if err := event.Render(c.Writer); err != nil {
+		return err
+	}
+	event.Data = fmt.Sprintf("data: %s", data)
+	if err := event.Render(c.Writer); err != nil {
+		return err
+	}
 	return flushStreamOutput(c, data)
 }
 

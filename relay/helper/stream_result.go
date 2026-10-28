@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"context"
 	"errors"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -11,12 +12,14 @@ import (
 // to record soft errors, signal fatal stops, or mark normal completion.
 // StreamScannerHandler checks IsStopped() after each callback invocation.
 type StreamResult struct {
-	status  *relaycommon.StreamStatus
-	stopped bool
+	status         *relaycommon.StreamStatus
+	requestContext context.Context
+	stopped        bool
+	done           bool
 }
 
-func newStreamResult(status *relaycommon.StreamStatus) *StreamResult {
-	return &StreamResult{status: status}
+func newStreamResult(status *relaycommon.StreamStatus, requestContext context.Context) *StreamResult {
+	return &StreamResult{status: status, requestContext: requestContext}
 }
 
 // Error records a soft error. The stream continues processing.
@@ -33,9 +36,17 @@ func (r *StreamResult) Error(err error) {
 }
 
 // Stop records a fatal error and marks the stream to stop after this chunk.
+// A cancellation from the request context leaves the disconnect reason to the
+// scanner's main loop, which owns that transport-level classification.
 func (r *StreamResult) Stop(err error) {
 	r.Error(err)
-	r.status.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
+	var requestErr error
+	if r.requestContext != nil {
+		requestErr = r.requestContext.Err()
+	}
+	if requestErr == nil || !errors.Is(err, requestErr) {
+		r.status.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
+	}
 	r.stopped = true
 }
 
@@ -44,6 +55,7 @@ func (r *StreamResult) Stop(err error) {
 func (r *StreamResult) Done() {
 	r.status.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 	r.stopped = true
+	r.done = true
 }
 
 // IsStopped returns whether Stop() or Done() was called during this chunk.

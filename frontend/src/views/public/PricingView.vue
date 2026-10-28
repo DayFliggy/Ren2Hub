@@ -8,6 +8,10 @@ import {
   compareReferencePrices,
   publicPricingReferences,
 } from '@/features/pricing/reference'
+import {
+  countPricingCatalogModes,
+  filterPricingCatalogByMode,
+} from '@/features/pricing/classification'
 import { isAudioEndpoint } from '@/utils/modelMarket'
 import { PRICE_SORTS, type PriceSort } from '@/types/pricingReference'
 import { pricingReferenceMessages } from '@/i18n/pricingReference'
@@ -44,23 +48,21 @@ const detailId = computed(() => String(route.params.modelId ?? ''))
 const detail = computed(() =>
   catalog.value?.models.find((model) => model.model_name === detailId.value)
 )
-const filteredModels = computed(() =>
+const candidateModels = computed(() =>
   (catalog.value?.models ?? []).filter(
     (model) =>
       (!search.value ||
         `${model.model_name} ${model.description} ${model.tags}`
           .toLowerCase()
           .includes(search.value.toLowerCase())) &&
-      (!vendor.value || String(model.vendor_id) === vendor.value) &&
-      (!mode.value ||
-        (model.billing_mode === 'unconfigured'
-          ? 'unconfigured'
-          : model.billing_mode === 'tiered_expr'
-            ? 'expression'
-            : model.quota_type === 1
-              ? 'request'
-              : 'token') === mode.value)
+      (!vendor.value || String(model.vendor_id) === vendor.value)
   )
+)
+const modeCounts = computed(() =>
+  countPricingCatalogModes(candidateModels.value)
+)
+const filteredModels = computed(() =>
+  filterPricingCatalogByMode(candidateModels.value, mode.value)
 )
 const referencePrices = computed(
   () =>
@@ -107,10 +109,22 @@ const vendorOptions = computed(() =>
   }))
 )
 const modeOptions = computed(() => [
-  { value: 'expression', label: t('expression') },
-  { value: 'token', label: t('perToken') },
-  { value: 'request', label: t('perCall') },
-  { value: 'unconfigured', label: t('unpriced') },
+  {
+    value: 'task',
+    label: `${t('task')} (${modeCounts.value.task})`,
+  },
+  {
+    value: 'token',
+    label: `${t('catalogTokenMode')} (${modeCounts.value.token})`,
+  },
+  {
+    value: 'request',
+    label: `${t('catalogRequestMode')} (${modeCounts.value.request})`,
+  },
+  {
+    value: 'unconfigured',
+    label: `${t('unpriced')} (${modeCounts.value.unconfigured})`,
+  },
 ])
 const unitOptions = [
   { value: 'M', label: '1M tokens' },

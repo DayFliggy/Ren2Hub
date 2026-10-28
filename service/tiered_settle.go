@@ -5,6 +5,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	hosttypes "github.com/QuantumNous/new-api/types"
 )
 
 // TieredResultWrapper wraps billingexpr.TieredResult for use at the service layer.
@@ -23,12 +24,20 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	p := float64(usage.PromptTokens)
 	c := float64(usage.CompletionTokens)
 	cr := float64(usage.PromptTokensDetails.CachedTokens)
-	cc5m := float64(usage.PromptTokensDetails.CacheCreationTokensTotal())
+	cc := float64(usage.PromptTokensDetails.CacheCreationTokensTotal())
 	cc1h := float64(0)
+	cc12h := float64(0)
 
 	if usage.UsageSemantic == "anthropic" {
-		cc1h = float64(usage.ClaudeCacheCreation1hTokens)
-		cc5m = float64(usage.ClaudeCacheCreation5mTokens)
+		// Upstreams may report the cache-write total without a full 5m/1h
+		// split; bill the unlabelled remainder as 5m writes.
+		split5m, split1h := NormalizeCacheCreationSplit(
+			usage.PromptTokensDetails.CacheCreationTokensTotal(),
+			usage.ClaudeCacheCreation5mTokens,
+			usage.ClaudeCacheCreation1hTokens,
+		)
+		cc = float64(split5m)
+		cc1h = float64(split1h)
 	}
 
 	img := float64(usage.PromptTokensDetails.ImageTokens)
@@ -72,7 +81,7 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	// Claude: input_tokens is text-only, so add cache read + cache creation.
 	inputLen := p
 	if isClaudeUsageSemantic {
-		inputLen = p + cr + cc5m + cc1h
+		inputLen = p + cr + cc + cc1h
 	}
 
 	if isClaudeUsageSemantic {
@@ -81,12 +90,36 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 		if !usedVars["cr"] {
 			p += cr
 		}
+		if !usedVars["cc1h"] {
+			cc += cc1h * hosttypes.ClaudeCacheCreation1hMultiplier
+			cc1h = 0
+		}
+		if !usedVars["cc"] {
+			p += cc
+			cc = 0
+		}
 	} else {
 		if usedVars["cr"] {
 			p -= cr
 		}
+		// OpenAI reports prompt totals containing cache writes. A 12h write
+		// without its own price joins cc at twice its token count; ccTokens
+		// tracks the actual writes removed from p.
+		cc12h = float64(usage.PromptTokensDetails.CacheWrite12hTokens())
+		cc -= cc12h
+		ccTokens := cc
+		if usedVars["cc12h"] {
+			p -= cc12h
+		} else {
+			ccTokens += cc12h
+			cc += cc12h * hosttypes.OpenAICacheCreation12hMultiplier
+			cc12h = 0
+		}
 		if usedVars["cc"] {
-			p -= cc5m
+			p -= ccTokens
+		} else {
+			p += cc - ccTokens
+			cc = 0
 		}
 		if usedVars["cc1h"] {
 			p -= cc1h
@@ -122,8 +155,9 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 		C:     c,
 		Len:   inputLen,
 		CR:    cr,
-		CC:    cc5m,
+		CC:    cc,
 		CC1h:  cc1h,
+		CC12h: cc12h,
 		Img:   img,
 		ImgCR: imgCR,
 		ImgO:  imgO,

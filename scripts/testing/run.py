@@ -273,7 +273,7 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     # A pinned container supplies gcc/CGO even on minimal production hosts.
     probe = subprocess.run(['docker', 'info'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     docker = ['docker'] if probe.returncode == 0 else ['sudo', '-n', 'docker']
-    execute(docker + ['image', 'inspect', 'golang:1.26.9-bookworm'], source, output, 'race-image', env)
+    execute(docker + ['image', 'inspect', 'golang:1.26.10-bookworm'], source, output, 'race-image', env)
     modcache = execute(['go', 'env', 'GOMODCACHE'], source, output, 'race-modcache', env).strip()
     cache = Path(execute(['go', 'env', 'GOCACHE'], source, output, 'race-cache', env).strip())
     cache.mkdir(parents=True, exist_ok=True)
@@ -289,7 +289,7 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
                             '-v', f'{cache}:/cache', '-w', '/src', '-e', 'GOCACHE=/cache',
                             '-e', 'GOWORK=off', '-e', 'GOTOOLCHAIN=local', '-e', 'GOMAXPROCS=2',
                             '-e', 'CGO_ENABLED=1', '-e', 'GOPROXY=off', '-e', 'GOSUMDB=off',
-                            'golang:1.26.9-bookworm', 'go', 'test', '-buildvcs=false', '-race', '-json',
+                            'golang:1.26.10-bookworm', 'go', 'test', '-buildvcs=false', '-race', '-json',
                             '-timeout=60s', '-count=1', '-p=2', '-run', pattern, package]
         raw = execute(command, source, output, f'race-{index}', env, 600)
         results.append(go_result(raw, []))
@@ -323,8 +323,8 @@ def main() -> int:
                              (['node', '--version'], 'node')]:
             tools[key] = execute(command, SOURCE, output, 'version-' + key, env).strip()
         report['tools'] = tools
-        if not re.search(r'\bgo1\.26\.9\b', tools['go']) or tools['bun'] != '1.4.0':
-            raise RuntimeError('要求 Go 1.26.9 与 Bun 1.4.0；不会自动下载或切换工具链')
+        if not re.search(r'\bgo1\.26\.10\b', tools['go']) or tools['bun'] != '1.4.0':
+            raise RuntimeError('要求 Go 1.26.10 与 Bun 1.4.0；不会自动下载或切换工具链')
         profiles = ('unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate') if args.profile == 'all' else (args.profile,)
         for profile in profiles:
             stage = output / profile

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm/clause"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -549,6 +551,94 @@ func newTestWebSocketPair(t *testing.T) (*websocket.Conn, *websocket.Conn, func(
 		server.Close()
 	}
 	return target, serverConn, cleanup
+}
+
+type writeDeadlineConn struct {
+	net.Conn
+	mu        sync.Mutex
+	deadlines []time.Time
+}
+
+func (c *writeDeadlineConn) SetWriteDeadline(deadline time.Time) error {
+	c.mu.Lock()
+	c.deadlines = append(c.deadlines, deadline)
+	c.mu.Unlock()
+	return c.Conn.SetWriteDeadline(deadline)
+}
+
+func (c *writeDeadlineConn) latestWriteDeadline() (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.deadlines) == 0 {
+		return time.Time{}, false
+	}
+	return c.deadlines[len(c.deadlines)-1], true
+}
+
+type writeDeadlineListener struct {
+	net.Listener
+	accepted chan *writeDeadlineConn
+}
+
+func (l *writeDeadlineListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	wrapped := &writeDeadlineConn{Conn: conn}
+	l.accepted <- wrapped
+	return wrapped, nil
+}
+
+func TestResponsesWSClientWritesShareDrainBudget(t *testing.T) {
+	serverConnCh := make(chan *websocket.Conn, 1)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			t.Errorf("upgrade websocket: %v", err)
+			return
+		}
+		serverConnCh <- conn
+	}))
+	listener := &writeDeadlineListener{Listener: server.Listener, accepted: make(chan *writeDeadlineConn, 1)}
+	server.Listener = listener
+	server.Start()
+	t.Cleanup(server.Close)
+
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	require.NoError(t, err)
+	serverConn := <-serverConnCh
+	conn := <-listener.accepted
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = serverConn.Close()
+		server.Close()
+	})
+	require.NoError(t, client.SetReadDeadline(time.Now().Add(10*time.Second)))
+	reads := make(chan error, 2)
+	go func() {
+		for range 2 {
+			_, _, err := client.ReadMessage()
+			reads <- err
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	session := &responsesWSSession{client: serverConn}
+	started := time.Now()
+	require.NoError(t, session.writeClient(websocket.TextMessage, []byte(strings.Repeat("x", 3600<<10))))
+	firstDeadline, ok := conn.latestWriteDeadline()
+	require.True(t, ok)
+	assert.WithinDuration(t, started.Add(480*time.Second), firstDeadline, time.Second)
+	require.NoError(t, <-reads)
+
+	require.NoError(t, session.writeClient(websocket.TextMessage, []byte(strings.Repeat("y", 8<<10))))
+	secondDeadline, ok := conn.latestWriteDeadline()
+	require.True(t, ok)
+	assert.Equal(t, firstDeadline.Add(time.Second), secondDeadline)
+	require.NoError(t, <-reads)
 }
 
 func TestResponsesWSMessageSizeLimit(t *testing.T) {

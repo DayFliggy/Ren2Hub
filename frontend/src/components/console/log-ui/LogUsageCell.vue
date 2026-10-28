@@ -50,7 +50,8 @@ const metadata = computed(() => getLogMetadata(props.log))
 const cacheSummaryAvailable = computed(
   () =>
     usage.value.cacheReadTokens !== null ||
-    usage.value.cacheWriteTokens !== null
+    usage.value.cacheWriteTokens !== null ||
+    usage.value.cacheWrite12hTokens !== null
 )
 const cacheHitRateLabel = computed(() =>
   formatLogCacheHitRate(usage.value.cacheHitRate)
@@ -283,18 +284,47 @@ onBeforeUnmount(() => {
                 class="text-[var(--status-warning-text)]"
                 aria-hidden="true"
               />
-              {{ t('logs.cacheCreation') }}
+              {{
+                t(
+                  usage.cacheWrite12hTokens === null
+                    ? 'logs.cacheCreation'
+                    : 'logs.cacheCreation30m'
+                )
+              }}
             </dt>
             <dd
               class="flex items-center gap-1.5 font-medium tabular-nums text-[var(--text-primary)]"
             >
-              {{ formatTokenValue(usage.cacheWriteTokens) }}
+              {{
+                formatTokenValue(
+                  usage.cacheWrite12hTokens === null
+                    ? usage.cacheWriteTokens
+                    : usage.cacheWrite30mTokens
+                )
+              }}
               <span
                 v-if="usage.cacheTtl"
                 class="rounded-sm border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-1 py-0.5 text-[0.625rem] font-medium leading-none text-[var(--status-warning-text)]"
               >
                 {{ usage.cacheTtl }}
               </span>
+            </dd>
+          </div>
+          <div
+            v-if="usage.cacheWrite12hTokens !== null"
+            class="flex items-center justify-between gap-4"
+            data-log-cache-write-12h
+          >
+            <dt class="flex items-center gap-1.5 text-[var(--text-tertiary)]">
+              <PenLine
+                :size="14"
+                class="text-[var(--status-warning-text)]"
+                aria-hidden="true"
+              />
+              {{ t('logs.cacheCreation12h') }}
+            </dt>
+            <dd class="font-medium tabular-nums text-[var(--text-primary)]">
+              {{ formatTokenValue(usage.cacheWrite12hTokens) }}
             </dd>
           </div>
           <div class="flex items-center justify-between gap-4">
