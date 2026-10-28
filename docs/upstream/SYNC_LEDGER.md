@@ -11,7 +11,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 来源清单已在源码冻结前重生成：NewAPI `e449cc700eb569cdfc2199cb73e97de46944f43c`，计数 804 `upstream_equal`、273 `adapted`、229 `extension`、43 `removed`；清单哈希覆盖当前工作树，`candidate_sha` 在提交前仍为空。
 
-源码冻结后已完成全套本地验证与隔离浏览器验收；候选镜像、内部 bare 发布和正式应用更新在本节之后按完整 SHA 顺序执行。
+源码冻结后完成全套本地验证与隔离浏览器验收；应用提交 `b39843c6977a21d0309858ec6c10d09d615675d4` 已推送内部 bare、构建候选并完成正式普通更新。
 
 ## 2026-10-28 延期项与 main 新增 2 提交吸收
 
@@ -36,7 +36,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 Vue 编辑器：`visual.ts` 识别 `<pricing> * image_count`，可视化编辑保留数量乘数，加条件时用括号包住整个分支；按张计价时 `PricingTier.vue` 显示“/ 张”“每张图片价格”。`ModelPricingEditor.vue` 的“配置普通 OpenAI 价格”先把当前表达式写入每个仍在继承的插件覆盖，再把模型默认值换成普通价：模型或插件 schema 有 `image_count` 计数时为 `tier("image", fixed(0)) * image_count`，否则为 `tier("base", p * 0 + c * 0)`。占位 0 与上游相同；本地另加保存拦截：表达式仍是该占位时提交报 `ordinaryPriceRequired`，需免费须显式改写。上游 React 可直接保存该 0 价，本地为关闭少扣而偏离。默认表达式含 `u()` 且所有插件已有独立价格时也显示该按钮，对应上游 `usesTaskModelPricing` 对 `u()` 的判断。
 
-统一本地验证已完成（报告位于 `/tmp/ren2hub-final-evidence-20261028/local-tests/`，各报告绑定源码指纹 `e2a6af9b7d146b05183ddfaddbce7ac04d08d1e2e98ce72ac731ce80fc78a3d1`）：Go 单测 167 批、6,422 个事件通过，0 skip；Vue 268 个文件、1,869 项通过；静态检查含 typecheck、ESLint、格式检查和 `go vet` 通过；嵌入构建 10 项通过，二进制指纹为 `d488de0f300117522f514bb33ce43a6c136366a0cc3a9d3217efa22c3959bcc9`；三库矩阵 72/72 suite 通过、1,221 个方言用例通过、0 skip/fail；race 3 suite、30 项通过；UI 合同 489 项通过；独立浏览器 4 个隔离环境（desktop/mobile × light/dark）均通过。候选镜像验收和正式部署仍按本节后续步骤执行。
+统一本地验证已完成（报告位于 `/tmp/ren2hub-final-evidence-20261028/local-tests/`，各报告绑定源码指纹 `e2a6af9b7d146b05183ddfaddbce7ac04d08d1e2e98ce72ac731ce80fc78a3d1`）：Go 单测 167 批、6,422 个事件通过，0 skip；Vue 268 个文件、1,869 项通过；静态检查含 typecheck、ESLint、格式检查和 `go vet` 通过；嵌入构建 10 项通过，二进制指纹为 `d488de0f300117522f514bb33ce43a6c136366a0cc3a9d3217efa22c3959bcc9`；三库矩阵 72/72 suite 通过、1,221 个方言用例通过、0 skip/fail；race 3 suite、30 项通过；UI 合同 489 项通过；独立浏览器 4 个隔离环境（desktop/mobile × light/dark）均通过。候选验收与正式普通更新已完成：候选七阶段全通过且 `deployment_eligible=true`；运行身份、备份与 HTTPS 核验记录在本节末。
 - 回归边界：共享端点同时遇到用户并发已满和所有候选渠道已满时，必须返回 `user_concurrency_exceeded`，且用户与渠道许可都只释放一次；Token 自动/手动路由、普通/插件竞争、价格守卫、即时任务采样和汇率转换均保留既有测试。
 - 来源清单以 `e449cc700` 刷新，计数为 804 `upstream_equal`、273 `adapted`、229 `extension`、43 `removed`；当前共享端点路由文件因 Token 路由和并发适配记为 `adapted`，清单逐文件哈希已重算。两个延期标签已删除；`i18n/keys.go`、`pkg/jsplugin/routing.go`、`controller/ratio_sync_test.go` 回到与上游一致。
 
@@ -50,6 +50,8 @@ Vue 编辑器：`visual.ts` 识别 `<pricing> * image_count`，可视化编辑�
 本轮 xhigh 复审发现的三个 P2 已处理：共享端点上下文新增完整 `ModelRequest`，插件模型解析后仍沿用原始流式维度；`relay/common/override.go` 改为并发安全的有界 FIFO 正则缓存，并覆盖条目、总字节和超长规则边界；来源清单重新生成，逐文件哈希与当前源码一致。路由流式回归、缓存上限回归和上述全量验收均已通过。最终 Codex `gpt-6-astra` xhigh 复审未发现新的 P0/P1/P2；仅建议补充 `Stream=false, StreamFormat=sse` 与总字节压力/并发 race 两项 P3 覆盖，当前不影响发布，留作后续测试增强。
 
 Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync 优先级、价格守卫和即时任务采样无问题。审计环境没有 Go，未运行测试，以上 Go 验证由本机完成。
+
+正式发布结果：Ren2Hub `b39843c6977a21d0309858ec6c10d09d615675d4`，部署时根源码 `087c58472c6135b3b1583c7412e7b90da8cfa60d`；候选 `run-_bjz7e91` 七阶段及 HTTPS 只读报告通过，镜像 `sha256:bb1de3083df0305d0c82822cd85ee3fafe2f63e9e0c12f13fcc6b3e963584712`，2026-10-28 22:42 UTC 更新正式应用。备份为 `/srv/ren2hub-preview/backups/upstream-sync-b39843c6-20261028T224200Z/`。本段发布结果在部署后以文档提交补记，未改动运行源码或已部署镜像。
 
 ## 2026-10-28 同步窗口完整审计
 
