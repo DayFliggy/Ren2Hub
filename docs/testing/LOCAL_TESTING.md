@@ -6,13 +6,13 @@ Ren2Hub 的质量门槛在本地运行，CI 调用同一入口。Go、Vue 的业
 
 本轮研究只读快照，不升级应用核心，也不增加 Git 上游。NewAPI 是唯一上游，另外两个项目只提供测试设计参考。
 
-| 来源    | 固定提交                                   | 采用的方式                                                                                                  | 不照搬的方式                                                                         |
-| ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| NewAPI  | `206e0fa5c600127a314a97f88592c067f784f4a6` | `.github/workflows/ci.yml`、`makefile` 的 root/relaykit/tokenkit 独立测试，原生 Go 测试与协议夹具           | 缺 MySQL/PostgreSQL DSN 后跳过，不能算完整数据库验收                                 |
-| Sub2API | `a34f373973bf547ccec301c7405eb45194e1f28a` | `backend/Makefile` 的分层入口，`backend/internal/repository/integration_harness_test.go` 的每轮真实新数据库 | 不增加 testcontainers 大依赖，不给上游共享测试批量加 build tag；本地缺 Docker 也失败 |
-| AxonHub | `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` | `.github/workflows/test.yml` 的独立模块验证、协议请求/响应/流夹具、迁移独立场景                             | 不按用户前缀清理已有库，不使用真实供应商 key，不以固定等待或自动重试掩盖失败         |
+| 来源    | 固定提交                                   | 采用的方式                                                                                                  | 不照搬的方式                                                                                     |
+| ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| NewAPI  | `e449cc700eb569cdfc2199cb73e97de46944f43c` | `.github/workflows/ci.yml`、`makefile` 的 root/relaykit/tokenkit 独立测试，原生 Go 测试与协议夹具           | 缺 MySQL/PostgreSQL DSN 后跳过，不能算完整数据库验收；不照搬 React 的 Bun 1.4.4 / `bun check -b` |
+| Sub2API | `a34f373973bf547ccec301c7405eb45194e1f28a` | `backend/Makefile` 的分层入口，`backend/internal/repository/integration_harness_test.go` 的每轮真实新数据库 | 不增加 testcontainers 大依赖，不给上游共享测试批量加 build tag；本地缺 Docker 也失败             |
+| AxonHub | `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` | `.github/workflows/test.yml` 的独立模块验证、协议请求/响应/流夹具、迁移独立场景                             | 不按用户前缀清理已有库，不使用真实供应商 key，不以固定等待或自动重试掩盖失败                     |
 
-源码链接：[NewAPI CI](https://github.com/QuantumNous/new-api/blob/206e0fa5c600127a314a97f88592c067f784f4a6/.github/workflows/ci.yml)、[Sub2API 数据库设施](https://github.com/Wei-Shaw/sub2api/blob/a34f373973bf547ccec301c7405eb45194e1f28a/backend/internal/repository/integration_harness_test.go)、[AxonHub 测试入口](https://github.com/looplj/axonhub/blob/cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913/Makefile)。Opus 5.5 参与设计与脚本审查；研究是静态分析，不代表上游测试已在本机运行。
+源码链接：[NewAPI CI](https://github.com/QuantumNous/new-api/blob/e449cc700eb569cdfc2199cb73e97de46944f43c/.github/workflows/ci.yml)、[Sub2API 数据库设施](https://github.com/Wei-Shaw/sub2api/blob/a34f373973bf547ccec301c7405eb45194e1f28a/backend/internal/repository/integration_harness_test.go)、[AxonHub 测试入口](https://github.com/looplj/axonhub/blob/cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913/Makefile)。NewAPI 的 React CI 已更新到 Bun 1.4.4 和 `bun check -b`；Ren2Hub 仍使用适配 Vue 的 Bun 1.4.0、vue-tsc、ESLint 和 Prettier。此处是源码设计参考，不代表上游测试已在本机运行。
 
 ## 运行入口
 

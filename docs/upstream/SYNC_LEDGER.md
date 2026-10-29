@@ -2,6 +2,7 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
+当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
 ## 2026-10-28 最终审计与验证修正
 
@@ -36,7 +37,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 Vue 编辑器：`visual.ts` 识别 `<pricing> * image_count`，可视化编辑保留数量乘数，加条件时用括号包住整个分支；按张计价时 `PricingTier.vue` 显示“/ 张”“每张图片价格”。`ModelPricingEditor.vue` 的“配置普通 OpenAI 价格”先把当前表达式写入每个仍在继承的插件覆盖，再把模型默认值换成普通价：模型或插件 schema 有 `image_count` 计数时为 `tier("image", fixed(0)) * image_count`，否则为 `tier("base", p * 0 + c * 0)`。占位 0 与上游相同；本地另加保存拦截：表达式仍是该占位时提交报 `ordinaryPriceRequired`，需免费须显式改写。上游 React 可直接保存该 0 价，本地为关闭少扣而偏离。默认表达式含 `u()` 且所有插件已有独立价格时也显示该按钮，对应上游 `usesTaskModelPricing` 对 `u()` 的判断。
 
-统一本地验证已完成（报告位于 `/tmp/ren2hub-final-evidence-20261028/local-tests/`，各报告绑定源码指纹 `e2a6af9b7d146b05183ddfaddbce7ac04d08d1e2e98ce72ac731ce80fc78a3d1`）：Go 单测 167 批、6,422 个事件通过，0 skip；Vue 268 个文件、1,869 项通过；静态检查含 typecheck、ESLint、格式检查和 `go vet` 通过；嵌入构建 10 项通过，二进制指纹为 `d488de0f300117522f514bb33ce43a6c136366a0cc3a9d3217efa22c3959bcc9`；三库矩阵 72/72 suite 通过、1,221 个方言用例通过、0 skip/fail；race 3 suite、30 项通过；UI 合同 489 项通过；独立浏览器 4 个隔离环境（desktop/mobile × light/dark）均通过。候选验收与正式普通更新已完成：候选七阶段全通过且 `deployment_eligible=true`；运行身份、备份与 HTTPS 核验记录在本节末。
+统一本地验证已完成（各报告绑定源码指纹 `e2a6af9b7d146b05183ddfaddbce7ac04d08d1e2e98ce72ac731ce80fc78a3d1`；原始报告包已于 2026-10-29 清理）：Go 单测 167 批、6,422 个事件通过，0 skip；Vue 268 个文件、1,869 项通过；静态检查含 typecheck、ESLint、格式检查和 `go vet` 通过；嵌入构建 10 项通过，二进制指纹为 `d488de0f300117522f514bb33ce43a6c136366a0cc3a9d3217efa22c3959bcc9`；三库矩阵 72/72 suite 通过、1,221 个方言用例通过、0 skip/fail；race 3 suite、30 项通过；UI 合同 489 项通过；独立浏览器 4 个隔离环境（desktop/mobile × light/dark）均通过。候选验收与正式普通更新已完成：候选七阶段全通过且 `deployment_eligible=true`；运行身份、备份与 HTTPS 核验记录在本节末。
 - 回归边界：共享端点同时遇到用户并发已满和所有候选渠道已满时，必须返回 `user_concurrency_exceeded`，且用户与渠道许可都只释放一次；Token 自动/手动路由、普通/插件竞争、价格守卫、即时任务采样和汇率转换均保留既有测试。
 - 来源清单以 `e449cc700` 刷新，计数为 804 `upstream_equal`、273 `adapted`、229 `extension`、43 `removed`；当前共享端点路由文件因 Token 路由和并发适配记为 `adapted`，清单逐文件哈希已重算。两个延期标签已删除；`i18n/keys.go`、`pkg/jsplugin/routing.go`、`controller/ratio_sync_test.go` 回到与上游一致。
 
@@ -150,7 +151,7 @@ Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync �
 - V7：Vue Vitest 全量 267 文件/1854 项、定向 35 项、typecheck、ESLint、format check 和生产构建通过。首轮 8 个 Playwright 用例因环境缺少 `libnspr4.so` 未启动；2026-10-28 复用现有浏览器库重跑，报价和高级渠道两个 spec 共 8/8 通过、零跳过/零重试，覆盖桌面/手机和明/暗主题。Bun 不在本地 PATH，使用 Node 24.21.0 直接运行已有 Playwright/Vite；是受控 API 的浏览器行为/布局验证，不是像素快照或真实供应商验证。
 - V8：`python3 -m unittest discover -s scripts/testing -p 'test_*.py'`，34 项通过；2026-10-28 重跑仍通过。
 - V9（2026-10-28 审计增量）：common、middleware、JS task adaptor、plugins、builtin billing 全包测试通过；helper/common/OpenAI 三包完整测试、20 次定向 race 和 vet 通过。含取消即时读错、独立上游 Canceled/ClosedPipe、真正 HTTP Body.Close、完成事件与真实读错竞争、Epay GET/POST 凭据日志和先验签回归。Sora 出站 JSON/multipart 字符串与数字 facts、内置 12h 普通/长上下文精确计费断言通过。CSV 定向 3 项、目标 ESLint/Prettier、前端 typecheck 与生产构建通过。后端包均 `-timeout 60s`。最终根模块 `go build -p=2 ./...`、`go vet -p=2 ./...` 与两个生产嵌入资源合同测试通过。第二轮审计补出的畸形 query 原文回退已修复，新增 9 个无泄露回归，relay/common、middleware、controller 的日志定向测试通过。
-- V10：controller 发现 523 项，非矩阵 497 项分 25 批通过；新增日志回归后 55 项相关 Stream/Responses/WebSocket/KeepAlive/Epay 再次通过，零 skip/fail。隔离三库矩阵 71/71 suite 全通过（SQLite 41、MySQL 46、PostgreSQL 46 次方言执行），零失败/零跳过，清理错误为空且本轮 label 的容器/网络均已清理。controller 最终发现 524 项，累计执行 523 个唯一顶层测试，仅 `TestVLLMStatusLive` 不执行。使用 Go 1.26.10、MySQL 8.4.11、PostgreSQL 15.19；真实 VLLM/供应商不在本地门槛内。完整摘要与证据哈希在 `/tmp/ren2hub-resume-20261028-validation/summary.json`、`evidence-sha256.json`。
+- V10：controller 发现 523 项，非矩阵 497 项分 25 批通过；新增日志回归后 55 项相关 Stream/Responses/WebSocket/KeepAlive/Epay 再次通过，零 skip/fail。隔离三库矩阵 71/71 suite 全通过（SQLite 41、MySQL 46、PostgreSQL 46 次方言执行），零失败/零跳过，清理错误为空且本轮 label 的容器/网络均已清理。controller 最终发现 524 项，累计执行 523 个唯一顶层测试，仅 `TestVLLMStatusLive` 不执行。使用 Go 1.26.10、MySQL 8.4.11、PostgreSQL 15.19；真实 VLLM/供应商不在本地门槛内。当时的完整摘要与证据哈希已留在该批次 Git 历史；此处保留实际套件与方言执行摘要。
 
 2026-10-28 审计后修复与来源复核：
 
@@ -174,7 +175,7 @@ Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync �
 | `setting/billing_setting/builtin_billing_test.go` | `e9d4d6353ce2c11df753d751ba1ad778e2433a88` 的 12h 普通/长上下文用例已补到本地 ChannelRatio 合同，精确额度断言保留。 |
 | `middleware/logger_test.go`、`middleware/logger_sync_test.go` | `30748c6558bc97de49ff74871cfec717e50f3322`：前者恢复完整上游原文，后者补本地 Google 签名/OAuth 覆盖，不再记为删除上游测试。 |
 
-首轮 Claude 只读审计已实际执行，CLI 返回 `canonicalModel=claude-opus-5-5`，原始输出 `/tmp/ren2hub-claude-audit.json`。第二轮复审 `/tmp/ren2hub-resume-audit-20261028/result.json`（CLI canonical model 同上）判定原 6 项关闭或不成立，无阻塞；当时尚未结束的三库矩阵现已完成。其新增低风险日志缺口已修：`ParseQuery` 部分解析失败不再回退原始 query，整个 URL 不可解析时记录显式无敏感值标记；同时去掉日志 URL 的 userinfo 和 fragment，避免原始 `#` 或 URL 用户信息继续泄露凭据。补充任务 DTO、Vidu、RawMessage 工具和 SSE 写预算上下文后，最终增量复审通过、无阻塞缺陷；五项上下文全部关闭。CLI 实际返回 `canonicalModel=claude-opus-5-5`，原始结果 `/tmp/ren2hub-resume-audit-20261028/increment-result.json`，调用与退出状态见同目录 `increment-run.json`。最终代码指纹 `cac9684d25728e712251c6d15940237ee85ee8d36e2a1177961f0512c0812a3a`（base `ae9be9d32116e7511633dcf3c7e6814cd5fc0737`，覆盖全部修改/新增源码，账本与生成清单单独核验）；已确认复审后源码未再变化。审计补充发现的 `ClaudeRequest.AddTool`→`GetTools` 混合 RawMessage 组合边界与固定上游原文相同，全仓无调用；当前请求计数、转换和搜索计费路径经静态核对及现有定向回归通过。未来接入该 helper 或上游修复时重评，本轮不为未使用 API 增加核心偏离。源码未提交、未发布、未部署；延期 2 项仍保留后续设计。
+首轮与增量只读交叉审计均已完成，最终增量复审无阻塞缺陷，五项上下文全部关闭。复审修正了 URL 查询解析失败时的敏感信息回退，去除 URL userinfo 与 fragment，并补充任务 DTO、Vidu、RawMessage 工具和 SSE 写预算上下文的复核。最终代码指纹 `cac9684d25728e712251c6d15940237ee85ee8d36e2a1177961f0512c0812a3a`（base `ae9be9d32116e7511633dcf3c7e6814cd5fc0737`，覆盖全部修改/新增源码，账本与生成清单单独核验）；复审后源码未再变化。`ClaudeRequest.AddTool`→`GetTools` 的混合 RawMessage 边界与固定上游原文相同，全仓无调用；现有请求计数、转换和搜索计费路径经静态核对及定向回归通过。旧 CLI 原始输出已随临时审计资料清理；源码实现与结论见当前代码和本账本。
 
 最终审计另登记非阻塞边界：Vidu 的非声明、非前缀映射名（如 `xxx-viduq2`）可能触发不同的模型判定；`RelayInfo.ToString()` 的渠道 BaseURL 仍按现行逻辑记录，若管理员将凭据置于 BaseURL 会存在泄露风险；未知字段名或无值键中的凭据不在现行敏感键清单保证内。以上未在当前声明模型/既有配置合同内扩修，未来引入相应输入或修改日志合同前须重评。真实供应商、真实 VLLM 和应用候选/正式部署均未执行，不冒充本地验收覆盖。
 
@@ -186,7 +187,7 @@ Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync �
 
 按用户批准，Dashboard 系统状态卡片对所有登录用户开放。新增扩展接口 `GET /api/user/system-status`（`service/dashboard_system_status.go`、`controller/dashboard_system_status.go`），从现有唯一观测缓存投影 CPU、内存、磁盘（含绝对容量）、应用 HTTP 正文流量及 1h 分桶历史，并读取主机负载均值和逻辑核数（`service/dashboard_system_load_{unix,windows}.go`，gopsutil `load.Avg` 带 recover）。成功率取 `perf_metrics.QueryHourlyAll(24)`，所有调用方共享 60 秒缓存，失败缓存 10 秒，并以 `state` 区分 ok、no_requests、disabled、error。原生查询不接受 context，因此等待者最多等 3 秒；超时返回不缓存的 error，资源读数照常返回，共享查询结束后再写缓存。数据库/Redis 探测、检查原因、阈值、进程和连接池仍只在 Root 的 `/api/performance/*` 返回。
 
-该接口仅限会话访问，拒绝 PAT；关闭缓存，按用户限制每分钟 30 次（`middleware/dashboard_status_rate_limit.go` 复用原生 `userRateLimitFactory`）。原生文件和 `router/api-router.go` 不改，路由登记在 `router/extensions.go`。核心清单新增 7 个 extension，upstream_equal 与 adapted 数量不变；NewAPI 基线仍为 `206e0fa5c600127a314a97f88592c067f784f4a6`。
+该接口仅限会话访问，拒绝 PAT；关闭缓存，按用户限制每分钟 30 次（`middleware/dashboard_status_rate_limit.go` 复用原生 `userRateLimitFactory`）。原生文件和 `router/api-router.go` 不改，路由登记在 `router/extensions.go`。核心清单新增 7 个 extension，upstream_equal 与 adapted 数量不变；截至本次 2026-10-26 更新，NewAPI 基线为 `206e0fa5c600127a314a97f88592c067f784f4a6`。
 
 ## 2026-10-24 本地修复、独有观测与普通 API Key 计数
 
@@ -194,34 +195,34 @@ Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync �
 
 日志采用当前取消/序列机制消除失败和筛选交错下的旧结果；观测以当前 performance 扩展的唯一缓存快照提供资源范围、探测、GC、HTTP body 吞吐及实例历史，不恢复旧评分/队列/账务。Root 运维权限保持；Dashboard 请求限制来自实际限流配置，移除统一折扣空卡和 Alchemy 占位。Claude/Gemini 两版本计数使用独立真实转发，复用现有权限/路由/限流/并发，不进入生成或估算成功回退。修复前 Gemini `/v1` 计数误走生成及预扣退款已由本地 mock 复现，没有真实供应商成本。
 
-唯一维护位置、来源取舍、兼容边界、上游替换条件及验证状态见[本轮记录](LOCAL_REPAIRS_20261024.md)。10 组共同缺陷沿用[待上游台账](UPSTREAM_KNOWN_ISSUES_20261024.md)，新增缓存全部清理假成功与任务通用测试证据；登记不等于修复。D 类、其余未实现协议和部署不扩入；未提交阶段 `candidate_sha=null`，整合验证由主代理收尾，不以本账本表示已发布。
+本段实施记录已在 2026-10-29 清理出工作树；当时的来源取舍、兼容边界和验证状态保留在 Git 历史。共同缺陷清单同样按当时的基线登记，不作为当前 `e449cc7` 的未复核待办；当前实现和验证以本账本最新审计段及源码为准。未提交阶段 `candidate_sha=null`，不以本段历史记录表示已发布。
 
-发布前独立审计另修正本地计数的渠道头覆盖遗漏与工具 JSON 误拒绝，复用现行头规则并限定协议引用位置；五包 24 个顶层/85 个含子用例及 relay/router vet 通过，详见本轮记录的“发布前审计修正”。来源基线和等待上游政策不变。
+发布前独立审计另修正本地计数的渠道头覆盖遗漏与工具 JSON 误拒绝，复用现行头规则并限定协议引用位置；五包 24 个顶层/85 个含子用例及 relay/router vet 通过。此结论属于 2026-10-24 固定基线的历史记录；当前来源状态见 2026-10-28 审计段。
 
 ## 2026-10-24 Vue 前端审计修复
 
-从 `79e237455262fcb652379e13965ce86fb1a4eefa` 按已批准计划处理 A、B、E 类本地问题，冻结 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6`。实施与验证见[本轮记录](FRONTEND_FIXES_20261024.md)，共同缺陷统一维护在[待上游台账](UPSTREAM_KNOWN_ISSUES_20261024.md)，本账本不复制条目。C、D、延后项及退役项不扩入，无后端 API、status 或数据库合同改动，不代表应用部署。
+从 `79e237455262fcb652379e13965ce86fb1a4eefa` 按已批准计划处理 A、B、E 类本地问题，冻结 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6`。当时的前端实施记录和共同缺陷清单已在 2026-10-29 退回 Git 历史；本节只保留历史处置摘要，不代表当前适配基线或应用部署。
 
 ## 2026-10-23 全量审计修复
 
 本轮以 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6` 为冻结核心，从 `a0a1f8dd1b7909089aed0339bd714406a5ccb66b` 整合并修复。邀请返利参考 Sub2API `a34f373973bf547ccec301c7405eb45194e1f28a` 的来源追踪和操作幂等，另按本地净额冲销合同记录已转出负债及后续抵债；AxonHub `cbdf9a6d4a3dab1e4bfe5168ce5d80205c805913` 没有可直接复用的返利实现。
 
-已处理多 Key 缓存轮询、额度单位、目录报价、返利合规与额度幂等、OAuth 邀请归属、设置保存和草稿、Dashboard 数据降级、日志错误状态、工单附件提交与崩溃孤儿、渠道和用户提交后收尾、统计精度及错误文案。详情、迁移语义、实现边界和原始证据见[修复记录](AUDIT_FIXES_20261023.md)。实际提交 SHA、内部 bare 发布、根 gitlink 和正式应用身份记录在工作区[服务器档案](../../../docs/server/SERVER_PROFILE.md)，本文不重复维护镜像或运行态值。
+已处理多 Key 缓存轮询、额度单位、目录报价、返利合规与额度幂等、OAuth 邀请归属、设置保存和草稿、Dashboard 数据降级、日志错误状态、工单附件提交与崩溃孤儿、渠道和用户提交后收尾、统计精度及错误文案。该批详细修复记录已退回 Git 历史；实际提交 SHA、内部 bare 发布、根 gitlink 和正式应用身份只在工作区[服务器档案](../../../docs/server/SERVER_PROFILE.md)维护。
 
-验证：前端 Vitest 250 个文件/1660 项通过，typecheck、lint、生产构建通过；修复专项浏览器 32/32 通过，覆盖桌面/移动和明/暗主题。后端定向检查、build、vet、三库返利账本与系统任务矩阵及轮询 race 通过。浏览器业务接口使用受控 fixtures，没有替代真实 OAuth 或支付供应商联调。controller 中未配置权限的 MySQL database-matrix 分支不计为通过；具体未验证项列在修复记录。
+验证：前端 Vitest 250 个文件/1660 项通过，typecheck、lint、生产构建通过；修复专项浏览器 32/32 通过，覆盖桌面/移动和明/暗主题。后端定向检查、build、vet、三库返利账本与系统任务矩阵及轮询 race 通过。浏览器业务接口使用受控 fixtures，没有替代真实 OAuth 或支付供应商联调。controller 中未配置权限的 MySQL database-matrix 分支不计为通过。
 
-### 保留的 NewAPI 共同缺陷
+### 206e0fa5 基线下记录的共同缺陷（历史状态）
 
-NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6` 仍有以下相同问题，参考项目没有适用于当前合同的直接修复，本地按已批准范围保留：
+下列问题在 2026-10-23 以 NewAPI `206e0fa5c600127a314a97f88592c067f784f4a6` 为基线登记；它们没有在当前账本中重新逐项确认，不构成当前待修清单。需要处理时，先对照最新上游和 Ren2Hub 源码复核。
 
-| 问题 | 重开条件 |
+| 当时登记的问题 | 当时的复核条件 |
 | --- | --- |
-| Realtime 最终累计结算重复扣费 | NewAPI 修复对应路径，或另行批准本地偏离并补一次性结算回归 |
-| Waffo 将处理中/授权等待状态作为失败终态 | NewAPI 增加非终态合同，或另行批准本地状态映射 |
-| Uptime Kuma 缺失心跳按 0 统计 | 上游区分缺失与零值，或另行批准本地处理 |
-| 服务端日志导出无行数/字节上限 | 上游增加上限/流式合同，或另行批准本地服务端偏离 |
+| Realtime 最终累计结算重复扣费 | 对照上游结算路径并补一次性结算回归 |
+| Waffo 将处理中或授权等待状态作为失败终态 | 对照上游任务状态合同及本地映射 |
+| Uptime Kuma 缺失心跳按 0 统计 | 对照上游缺失值语义与展示消费端 |
+| 服务端日志导出缺少行数/字节上限 | 对照上游限制及流式导出实现 |
 
-本地客户端已避免多份完整导出副本并检测截断，但服务端无界问题仍保留。上表是跟踪状态，不代表问题已修复或通过运行时验证。
+此表是历史待核事项，不说明问题仍存在、已修复或通过运行时验证。
 
 ## 2026-10-22 前后端对接修复（历史集成批次）
 
