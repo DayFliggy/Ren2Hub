@@ -64,8 +64,8 @@ export interface ModelPricingEntry {
   effective: PricingValues
   usage_schema?: BillingUsageSchema
   plugin_variants?: PluginPriceVariant[]
-  cache_write_mode?: string
-  billing_details?: Record<string, unknown>
+  cache_write_mode?: CacheWriteMode
+  billing_details?: LegacyBillingDetails
 }
 export interface ModelPricingConfig {
   entries: ModelPricingEntry[]
@@ -78,10 +78,25 @@ export interface ModelPricingChange {
   pricing: PricingValues
   reset?: boolean
 }
+export const CACHE_WRITE_MODES = [
+  'none',
+  'standard',
+  'claude_ttl',
+  'openai_ttl',
+] as const
+export type CacheWriteMode = (typeof CACHE_WRITE_MODES)[number]
+// Display-only legacy details from model.ResolveLegacyBillingDetails.
+export interface LegacyBillingDetails {
+  audio_input_price?: number
+  audio_output_price?: number
+  image_count?: boolean
+  request_rules?: { condition: string; multiplier: number }[]
+  audio_text_branches?: boolean
+}
 export interface PricingPreview {
   effective: PricingValues
-  cache_write_mode?: string
-  billing_details?: Record<string, unknown>
+  cache_write_mode?: CacheWriteMode
+  billing_details?: LegacyBillingDetails
   expression?: string
   unsupported_reason?: string
 }
@@ -189,12 +204,17 @@ export function parsePricingConfig(value: unknown): ModelPricingConfig {
     invalidResponse(endpoint)
   const entries = value.entries.map((raw): ModelPricingEntry => {
     if (!isRecord(raw)) invalidResponse(endpoint)
+    // Entries embed the preview description: effective, cache_write_mode
+    // and billing_details share its parser.
+    const description = parsePricingPreview(raw, endpoint)
     return {
       ...raw,
       model_name: requiredString(raw.model_name, endpoint, false),
       version: requiredString(raw.version, endpoint),
       configured: parsePricingValues(raw.configured),
-      effective: parsePricingValues(raw.effective),
+      effective: description.effective,
+      cache_write_mode: description.cache_write_mode,
+      billing_details: description.billing_details,
     } as ModelPricingEntry
   })
   if (new Set(entries.map((entry) => entry.model_name)).size !== entries.length)
@@ -204,6 +224,78 @@ export function parsePricingConfig(value: unknown): ModelPricingConfig {
     options: value.options as ModelPricingConfig['options'],
     empty_version: requiredString(value.empty_version, endpoint),
   }
+}
+function optional<T>(value: unknown, parse: (value: unknown) => T) {
+  return value === undefined ? undefined : parse(value)
+}
+function parseCacheWriteMode(value: unknown, endpoint: string) {
+  if (!(CACHE_WRITE_MODES as readonly unknown[]).includes(value))
+    invalidResponse(endpoint)
+  return value as CacheWriteMode
+}
+function parsePrice(value: unknown, endpoint: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    invalidResponse(endpoint)
+  return value
+}
+function parseFlag(value: unknown, endpoint: string): boolean {
+  if (typeof value !== 'boolean') invalidResponse(endpoint)
+  return value
+}
+function parseBillingDetails(
+  value: unknown,
+  endpoint: string
+): LegacyBillingDetails {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const rules = optional(value.request_rules, (raw) => {
+    if (!Array.isArray(raw)) invalidResponse(endpoint)
+    return raw.map((rule) => {
+      if (!isRecord(rule)) invalidResponse(endpoint)
+      return {
+        condition: requiredString(rule.condition, endpoint),
+        multiplier: parsePrice(rule.multiplier, endpoint),
+      }
+    })
+  })
+  const details: LegacyBillingDetails = {
+    audio_input_price: optional(value.audio_input_price, (raw) =>
+      parsePrice(raw, endpoint)
+    ),
+    audio_output_price: optional(value.audio_output_price, (raw) =>
+      parsePrice(raw, endpoint)
+    ),
+    image_count: optional(value.image_count, (raw) => parseFlag(raw, endpoint)),
+    request_rules: rules,
+    audio_text_branches: optional(value.audio_text_branches, (raw) =>
+      parseFlag(raw, endpoint)
+    ),
+  }
+  return Object.fromEntries(
+    Object.entries(details).filter(([, field]) => field !== undefined)
+  ) as LegacyBillingDetails
+}
+// Preview and conversion share model.ModelPricingDescription. The backend
+// omits an empty effective map.
+export function parsePricingPreview(
+  value: unknown,
+  endpoint: string
+): PricingPreview {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const text = (raw: unknown) => requiredString(raw, endpoint)
+  const preview: PricingPreview = {
+    effective: parsePricingValues(value.effective ?? {}, endpoint),
+    cache_write_mode: optional(value.cache_write_mode, (raw) =>
+      parseCacheWriteMode(raw, endpoint)
+    ),
+    billing_details: optional(value.billing_details, (raw) =>
+      parseBillingDetails(raw, endpoint)
+    ),
+    expression: optional(value.expression, text),
+    unsupported_reason: optional(value.unsupported_reason, text),
+  }
+  return Object.fromEntries(
+    Object.entries(preview).filter(([, field]) => field !== undefined)
+  ) as unknown as PricingPreview
 }
 // The published digest and matches are both null or both set, and matches
 // must agree with the digests so a mismatch can never render as a match.
@@ -340,18 +432,35 @@ export const pricingConfigApi = {
       })),
     })
   },
-  preview(model_name: string, pricing: PricingValues, signal?: AbortSignal) {
-    return api.post<PricingPreview>(
-      '/api/option/model_pricing/preview',
-      { model_name, pricing: serializePricing(pricing) },
-      { signal }
+  async preview(
+    model_name: string,
+    pricing: PricingValues,
+    signal?: AbortSignal
+  ) {
+    const endpoint = '/api/option/model_pricing/preview'
+    return parsePricingPreview(
+      await api.post(
+        endpoint,
+        { model_name, pricing: serializePricing(pricing) },
+        { signal }
+      ),
+      endpoint
     )
   },
-  convert(model_name: string, pricing: PricingValues) {
-    return api.post<PricingPreview>('/api/option/model_pricing/convert', {
-      model_name,
-      pricing: serializePricing(pricing),
-    })
+  async convert(
+    model_name: string,
+    pricing: PricingValues,
+    signal?: AbortSignal
+  ) {
+    const endpoint = '/api/option/model_pricing/convert'
+    return parsePricingPreview(
+      await api.post(
+        endpoint,
+        { model_name, pricing: serializePricing(pricing) },
+        { signal }
+      ),
+      endpoint
+    )
   },
   async fetch(signal?: AbortSignal) {
     return parseFetchedPrices(

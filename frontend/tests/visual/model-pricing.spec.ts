@@ -292,14 +292,18 @@ for (const theme of ['light', 'dark'] as const)
       await page
         .getByRole('button', { name: 'test-model', exact: true })
         .click()
+      // A parseable expression opens in the visual editor, as in NewAPI.
       const editor = page.locator('.pricing-editor')
+      await expect(editor.getByLabel('Tier name')).toHaveValue('base')
+      await editor
+        .getByRole('button', { name: 'Expression source', exact: true })
+        .click()
       await expect(
         editor.getByRole('textbox', { name: 'Expression source', exact: true })
       ).toHaveValue('tier("base", p * 2 + c * 4)')
       await editor
         .getByRole('button', { name: 'Visual tiers', exact: true })
         .click()
-      await expect(editor.getByLabel('Tier name')).toHaveValue('base')
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('manual-pricing.png'),

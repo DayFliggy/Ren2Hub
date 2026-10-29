@@ -325,6 +325,8 @@ describe('manual model price editor', () => {
       },
     })
     await button(wrapper, 'Configure ordinary OpenAI pricing').trigger('click')
+    // The zero placeholder is a visual tier, so its source is one click away.
+    await button(wrapper, 'Expression source').trigger('click')
     await wrapper.get('textarea').setValue('tier("base", p * 2 + c * 4)')
     expect(wrapper.vm.commit()?.pricing).toEqual({
       ...tiered('tier("base", p * 2 + c * 4)'),
@@ -422,7 +424,11 @@ describe('manual model price editor', () => {
       .find((button) => button.text() === 'Convert to expression')!
       .trigger('click')
     await flushPromises()
-    expect(convert).toHaveBeenCalledWith('test-model', { ModelPrice: '0.2' })
+    expect(convert).toHaveBeenCalledWith(
+      'test-model',
+      { ModelPrice: '0.2' },
+      expect.any(AbortSignal)
+    )
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Confirm')!
@@ -431,6 +437,149 @@ describe('manual model price editor', () => {
       'fixed(0.2)'
     )
     expect(save).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+describe('editor drafts from the shared pricing parts', () => {
+  const branched =
+    '(p > 100 && hour("UTC") >= 8) ? tier("peak", p * 3) : tier("base", p * 2)'
+  it('opens a visual expression visually and keeps unparsed source as text', async () => {
+    const wrapper = setup(tiered(branched))
+    expect(wrapper.find('.price-expression textarea').exists()).toBe(false)
+    expect(wrapper.findAll('.price-rule-card')).toHaveLength(2)
+    expect(wrapper.vm.dirty()).toBe(false)
+    await wrapper.setProps({ modelName: 'other', pricing: tiered('p * 5') })
+    expect(wrapper.get('.price-expression textarea').element).toHaveProperty(
+      'value',
+      'p * 5'
+    )
+    expect(button(wrapper, 'Visual tiers').element.matches(':disabled')).toBe(
+      true
+    )
+    wrapper.unmount()
+  })
+  it('round-trips a nested condition edit without rewriting the rest', async () => {
+    const wrapper = setup(tiered(branched))
+    const values = wrapper
+      .findAll('.price-condition-child label')
+      .filter((label) => label.find('span').text() === 'Value')
+    expect(values).toHaveLength(2)
+    await values[1]!.get('input').setValue('9')
+    expect(wrapper.vm.commit()?.pricing).toEqual(
+      tiered(
+        '(p > 100 && hour("UTC") >= 9) ? tier("peak", p * 3) : tier("base", p * 2)'
+      )
+    )
+    wrapper.unmount()
+  })
+  it('shows local-currency amounts without changing the USD draft', async () => {
+    const wrapper = setup({ ModelPrice: '1' })
+    await wrapper.setProps({ siteCurrency: 'CNY', exchangeRate: '7' })
+    const currency = wrapper
+      .findAll('label')
+      .find((label) => label.text().startsWith('Display currency'))!
+      .get('select')
+    await currency.setValue('CNY')
+    const input = wrapper.get('input[inputmode="decimal"]')
+    expect(input.element).toHaveProperty('value', '7')
+    expect(wrapper.vm.dirty()).toBe(false)
+    expect(wrapper.emitted('dirty')).toBeUndefined()
+    await input.setValue('14')
+    expect(wrapper.vm.commit()?.pricing).toEqual({ ModelPrice: '2' })
+    await currency.setValue('USD')
+    expect(input.element).toHaveProperty('value', '2')
+    wrapper.unmount()
+  })
+  it('enters visual tier prices in the display currency', async () => {
+    const wrapper = setup(tiered('tier("base", p * 2)'))
+    await wrapper.setProps({ siteCurrency: 'CNY', exchangeRate: '7' })
+    await wrapper
+      .findAll('label')
+      .find((label) => label.text().startsWith('Display currency'))!
+      .get('select')
+      .setValue('CNY')
+    const price = field(wrapper, '.price-tier-line', 'Unit price (CNY)')
+    expect(price.element).toHaveProperty('value', '14')
+    await price.setValue('21')
+    expect(wrapper.vm.commit()?.pricing).toEqual(tiered('tier("base", p * 3)'))
+    wrapper.unmount()
+  })
+  it('shows the saved task unit price in the task generator', async () => {
+    const pricing = tiered('tier("base", u("seconds") * 0.4)')
+    const wrapper = setup(pricing)
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: pricing,
+        effective: pricing,
+        usage_schema: { seconds: { type: 'number', unit: 'second' } },
+      },
+    })
+    expect(
+      wrapper.get('input[placeholder="Usage unit price"]').element
+    ).toHaveProperty('value', '0.4')
+    wrapper.unmount()
+  })
+  it('drops a conversion that finishes after the draft changed', async () => {
+    let resolve!: (value: {
+      effective: PricingValues
+      expression: string
+    }) => void
+    const convert = vi.spyOn(pricingConfigApi, 'convert').mockReturnValue(
+      new Promise((done) => {
+        resolve = done
+      })
+    )
+    const wrapper = setup({ ModelPrice: '0.2' })
+    await button(wrapper, 'Convert to expression').trigger('click')
+    await wrapper.get('input[inputmode="decimal"]').setValue('0.3')
+    const signal = convert.mock.calls[0]![2]!
+    expect(signal.aborted).toBe(true)
+    resolve({ effective: {}, expression: 'fixed(0.2)' })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('fixed(0.2)')
+    expect(wrapper.vm.commit()?.pricing).toEqual({ ModelPrice: '0.3' })
+    wrapper.unmount()
+  })
+  it('lists the backend cache-write prices of the draft preview', async () => {
+    vi.useFakeTimers()
+    vi.mocked(pricingConfigApi.preview).mockResolvedValue({
+      effective: {
+        ModelRatio: 1.5,
+        CompletionRatio: 4,
+        CreateCacheRatio: 1.25,
+      },
+      cache_write_mode: 'claude_ttl',
+    })
+    const wrapper = setup({ ModelRatio: '1' })
+    await wrapper.get('input[inputmode="decimal"]').setValue('3')
+    await vi.advanceTimersByTimeAsync(400)
+    const rows = wrapper.findAll('.pricing-preview-rows div')
+    expect(rows.map((row) => row.find('dt').text())).toContain(
+      'Cache write price (1h)'
+    )
+    expect(wrapper.get('.pricing-preview-rows').text()).toContain('$6.000')
+    vi.useRealTimers()
+    wrapper.unmount()
+  })
+  it('translates visual issues for the active locale', async () => {
+    const wrapper = mount(ModelPricingEditor, {
+      props: { modelName: 'test-model', pricing: {} },
+      global: {
+        plugins: [
+          createI18n({
+            legacy: false,
+            locale: 'zh-CN',
+            messages: { 'zh-CN': {} },
+          }),
+        ],
+      },
+    })
+    await button(wrapper as EditorWrapper, '添加基础阶梯').trigger('click')
+    expect(wrapper.get('.price-expression [role="alert"]').text()).toContain(
+      '请输入有限的非负价格。'
+    )
     wrapper.unmount()
   })
 })

@@ -20,11 +20,16 @@ import {
   type RequestRuleGroup,
 } from '@/features/pricing/lib/billing-expr'
 import { isDecimal } from '@/utils/decimal'
-import PricingTier from './PricingTier.vue'
+import PricingRuleList from './PricingRuleList.vue'
 // As in NewAPI's tiered editor, every edit that serializes is written to the
 // expression at once. An incomplete draft keeps the last valid expression and
 // is exposed as `issue`; the host counts it as unsaved and refuses to save it.
 const model = defineModel<string>({ required: true })
+// Visual prices are entered in the display currency and written in USD.
+withDefaults(defineProps<{ rate?: string; currency?: string }>(), {
+  rate: '1',
+  currency: 'USD',
+})
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 // Compilable frame for the preset tier; its blank prices must still be entered.
 const PRESET_SOURCE = 'tier("base", p * 0 + c * 0)'
@@ -48,6 +53,9 @@ watch(
   },
   { immediate: true }
 )
+// Each model mounts a fresh editor. A saved expression opens visually when it
+// can be edited that way; otherwise its source stays as written.
+if (document.value) mode.value = 'visual'
 const opaqueRules = computed(
   () => ruleSource.value && !tryParseRequestRuleExpr(ruleSource.value)
 )
@@ -92,11 +100,14 @@ watch(
   },
   { deep: true }
 )
+const visualIssues = computed(() =>
+  visual.value && !visual.value.ok ? visual.value.issues : []
+)
 const issue = computed(() => {
   const messages = new Set<string>()
   const result = visual.value
   if (result && !result.ok)
-    for (const item of result.issues) messages.add(item.message)
+    for (const item of result.issues) messages.add(t(item.message))
   if (rulesInvalid.value) messages.add(t('requestRuleInvalid'))
   return [...messages].join('; ')
 })
@@ -173,11 +184,20 @@ defineExpose({ issue })
         :placeholder="t('exprRequired')"
       />
     </label>
-    <PricingTier
-      v-else-if="document"
-      v-model="document.root"
-      :image-count="document.imageCount"
-    />
+    <template v-else-if="document">
+      <p v-if="document.root.kind === 'branch'" class="admin-muted">
+        {{ t('rulesHint') }}
+      </p>
+      <PricingRuleList
+        :node="document.root"
+        :source="document.source"
+        :issues="visualIssues"
+        :rate="rate"
+        :currency="currency"
+        :image-count="document.imageCount"
+        @change="document = { ...document, root: $event }"
+      />
+    </template>
     <p v-if="model && !document" class="admin-muted">{{ t('exprAdvanced') }}</p>
     <p v-if="issue" class="admin-error" role="alert">{{ issue }}</p>
     <details>

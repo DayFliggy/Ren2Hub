@@ -1,19 +1,11 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { useMediaQuery } from '@vueuse/core'
+import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
-import { api } from '@/api/client'
+import type { PricingValues, FetchedModelPrice } from '@/api/pricingConfig'
 import {
-  pricingConfigApi,
-  PRICING_KEYS,
-  type ModelPricingConfig,
-  type PricingValues,
-  type FetchedModelPrice,
-} from '@/api/pricingConfig'
-import {
-  initialPricingDraft,
   pricingChanges,
   pricingMode,
   pricingJSON,
@@ -21,11 +13,12 @@ import {
   fillPriceDraft,
   clonePricing,
   validatePricing,
-  type PricingDraft,
 } from '@/features/pricing/draft'
+import { translateError } from '@/features/pricing/errors'
+import { pricingPreviewRows } from '@/features/pricing/previewRows'
+import { useModelPricingConfig } from '@/features/pricing/useModelPricingConfig'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { useSystemSettings } from '@/composables/useSystemSettings'
-import { formatDecimalUSD, multiplyDecimal, isDecimal } from '@/utils/decimal'
 import { Copy, Plus } from 'lucide-vue-next'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -40,7 +33,9 @@ import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ModelPricingEditor from '@/components/admin/ModelPricingEditor.vue'
-import ToolPricingEditor from '@/components/admin/ToolPricingEditor.vue'
+import PricingExposeToggle from '@/components/admin/PricingExposeToggle.vue'
+import PricingJsonEditor from '@/components/admin/PricingJsonEditor.vue'
+import PricingToolsPanel from '@/components/admin/PricingToolsPanel.vue'
 import PriceFetchDialog from '@/components/admin/PriceFetchDialog.vue'
 import PricingActionBar from '@/components/admin/PricingActionBar.vue'
 import {
@@ -53,14 +48,34 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
 })
 const { t, te } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const { t: tGlobal } = useI18n()
-const route = useRoute(),
-  mobile = useMediaQuery('(max-width: 767px)')
+const route = useRoute()
+// The page width is the only layout breakpoint: the list and editor columns
+// need 320px + 440px plus the gap, so a narrower page (a phone, or a tablet
+// beside the console sidebar) lists models alone and edits in a drawer.
+const STACKED_WIDTH = 820
+const root = ref<HTMLElement | null>(null)
+const { width: rootWidth } = useElementSize(root)
+// A zero width means the page has no layout yet (or is hidden); it keeps the
+// inline editor instead of opening a drawer nobody can see.
+const compact = computed(
+  () => rootWidth.value > 0 && rootWidth.value < STACKED_WIDTH
+)
+// The editor is defined once and shown in the card or the drawer.
+const [DefineEditor, ReuseEditor] = createReusableTemplate()
 const settings = useSystemSettings()
-const baseline = ref<ModelPricingConfig | null>(null),
-  draft = ref<PricingDraft>({})
-const loading = ref(false),
-  saving = ref(false),
-  error = ref(''),
+const {
+  baseline,
+  draft,
+  enabledModels,
+  changes,
+  loading,
+  saving,
+  ready,
+  reloadRequired,
+  load: loadConfig,
+  save: saveConfig,
+} = useModelPricingConfig(settings.load)
+const error = ref(''),
   message = ref('')
 const tab = ref('models'),
   mode = ref('visual'),
@@ -72,18 +87,16 @@ const selected = ref<string[]>([]),
   editorDirty = ref(false)
 const editor = ref<InstanceType<typeof ModelPricingEditor> | null>(null)
 const json = ref(pricingJSON({})),
-  enabledModels = ref<string[]>([]),
   fetchOpen = ref(false),
-  clearOpen = ref(false)
+  clearOpen = ref(false),
+  reloadOpen = ref(false)
 const toolsDirty = ref(false)
-const ready = ref(false)
-// Set when a save was accepted but its refresh failed; cleared by a load.
-const reloadRequired = ref(false)
+// The ?model= deep link opens its editor after the first load only; later
+// reloads keep the editor the user chose.
+let deepLinkApplied = false
 const toolsRevision = ref(0)
 const page = ref(1),
-  pageSize = ref(20),
-  expose = ref(false),
-  toolsJSON = ref('{}')
+  pageSize = ref(20)
 const activeName = computed(() =>
   editing.value === '__new__' ? '' : (editing.value ?? '')
 )
@@ -103,9 +116,7 @@ const dirty = computed(() => {
   if (reloadRequired.value) return false
   return (
     editorDirty.value ||
-    (baseline.value
-      ? pricingChanges(baseline.value, draft.value).length > 0
-      : false) ||
+    changes.value.length > 0 ||
     (mode.value === 'json' &&
       JSON.stringify(json.value) !== JSON.stringify(pricingJSON(draft.value)))
   )
@@ -198,55 +209,31 @@ watch([search, filter, tab, pageSize], () => {
   page.value = 1
   selected.value = []
 })
-let controller: AbortController | undefined
-
+// The list shows the first preview row: the expression, the fixed price or
+// the input price, in the same USD units as the editor preview.
 function summary(value: PricingValues) {
-  if (!Object.keys(value).length) return t('unpriced')
-  if (pricingMode(value) === 'tiered_expr')
-    return String(value['billing_setting.billing_expr'] ?? '')
-  const raw = value.ModelPrice ?? value.ModelRatio
-  if (raw === undefined || !isDecimal(String(raw))) return t('unpriced')
-  return `${formatDecimalUSD(value.ModelPrice === undefined ? multiplyDecimal(String(raw), '2') : String(raw))} ${t(value.ModelPrice === undefined ? 'perMillion' : 'perRequest')}`
+  const first = pricingPreviewRows(value)[0]
+  if (!first) return t('unpriced')
+  return first.unit === 'none' ? first.value : `${first.value} ${t(first.unit)}`
+}
+// Editor, JSON and revision state follow every newly loaded baseline.
+function resetDrafts() {
+  json.value = pricingJSON(draft.value)
+  editorDirty.value = false
+  revision.value++
 }
 async function load(forceSettings = false) {
-  controller?.abort()
-  controller = new AbortController()
-  const request = controller
-  loading.value = true
-  ready.value = false
   error.value = ''
   try {
-    const [config, names, settingsLoaded] = await Promise.all([
-      pricingConfigApi.load(request.signal),
-      api.get<string[]>('/api/channel/models_enabled', undefined, {
-        signal: request.signal,
-      }),
-      settings.load(forceSettings),
-    ])
-    if (request.signal.aborted) return
-    if (!settingsLoaded) throw new Error(t('loadError'))
-    baseline.value = config
-    draft.value = initialPricingDraft(config)
-    enabledModels.value = names
-    json.value = pricingJSON(draft.value)
-    editorDirty.value = false
-    reloadRequired.value = false
-    expose.value = ['true', '1'].includes(
-      String(settings.rawValue('ExposeRatioEnabled', false))
-    )
-    toolsJSON.value = String(
-      settings.rawValue('tool_price_setting.prices', '{}')
-    )
+    if (!(await loadConfig(forceSettings))) return
+    resetDrafts()
     toolsDirty.value = false
     toolsRevision.value++
-    ready.value = true
-    revision.value++
-    if (typeof route.query.model === 'string') editing.value = route.query.model
+    if (!deepLinkApplied && typeof route.query.model === 'string')
+      editing.value = route.query.model
+    deepLinkApplied = true
   } catch (cause) {
-    if (!request.signal.aborted)
-      error.value = cause instanceof Error ? cause.message : String(cause)
-  } finally {
-    if (controller === request) loading.value = false
+    error.value = translateError(cause, t, te)
   }
 }
 function updateDraft(name: string, pricing: PricingValues) {
@@ -265,6 +252,20 @@ function open(name: string) {
 function closeEditor() {
   if (commitOpen()) editing.value = null
 }
+// Moving the editor between the card and the drawer mounts it again from the
+// page draft, so it moves only once its edit commits. An edit that does not
+// commit stays where it is, showing its error. A fixed edit stays too, so
+// the editor never remounts while the user types; the next resize, save,
+// model switch or close moves it.
+const drawer = ref(compact.value)
+function placeEditor() {
+  if (drawer.value === compact.value || !commitOpen()) return
+  drawer.value = compact.value
+}
+// Runs after the render, once the editor's dirty flag has settled: an input
+// fixed from invalid reports the editor clean until its expression is
+// written back in the same flush, and that moment must not move the editor.
+watch([rootWidth, editing, editorDirty], placeEditor, { flush: 'post' })
 function switchMode() {
   error.value = ''
   try {
@@ -278,12 +279,7 @@ function switchMode() {
       revision.value++
     }
   } catch (cause) {
-    error.value =
-      cause instanceof Error
-        ? te(cause.message)
-          ? t(cause.message)
-          : cause.message
-        : String(cause)
+    error.value = translateError(cause, t, te)
   }
 }
 async function save() {
@@ -291,48 +287,37 @@ async function save() {
   error.value = ''
   message.value = ''
   if (!commitOpen()) return
-  saving.value = true
-  let persisted = false
+  let pending
   try {
     if (mode.value === 'json') draft.value = parsePricingJSON(json.value)
-    const changes = pricingChanges(baseline.value, draft.value)
-    for (const change of changes) validatePricing(change.pricing)
-    if (!changes.length) {
-      // A commit can normalize an editor draft back to the loaded baseline.
-      // There is nothing to persist or report in that case.
-      editorDirty.value = false
-      json.value = pricingJSON(draft.value)
-      return
-    }
-    await pricingConfigApi.save(changes)
-    persisted = true
-    const config = await pricingConfigApi.load()
-    baseline.value = config
-    draft.value = initialPricingDraft(config)
-    json.value = pricingJSON(draft.value)
-    editorDirty.value = false
-    revision.value++
-    message.value = t('saved')
+    pending = pricingChanges(baseline.value, draft.value)
+    for (const change of pending) validatePricing(change.pricing)
   } catch (cause) {
-    const reason =
-      cause instanceof Error
-        ? te(cause.message)
-          ? t(cause.message)
-          : cause.message
-        : String(cause)
-    if (!persisted) {
-      error.value = `${t('conflict')} ${reason}`
-      return
-    }
-    // The server holds this draft, but the page still has the old versions;
-    // another save would conflict, so only a reload may continue.
-    reloadRequired.value = true
-    ready.value = false
-    editorDirty.value = false
-    error.value = `${t('savedReloadFailed')} ${reason}`
-  } finally {
-    saving.value = false
+    error.value = translateError(cause, t, te)
+    return
   }
+  if (!pending.length) {
+    // A commit can normalize an editor draft back to the loaded baseline.
+    // There is nothing to persist or report in that case.
+    editorDirty.value = false
+    json.value = pricingJSON(draft.value)
+    return
+  }
+  const result = await saveConfig(pending)
+  if (result.status === 'aborted') return
+  if (result.status === 'saved') {
+    resetDrafts()
+    message.value = t('saved')
+    return
+  }
+  const reason = translateError(result.cause, t, te)
+  if (result.status === 'rejected') {
+    error.value = `${t(result.conflict ? 'conflict' : 'saveFailed')} ${reason}`
+    return
+  }
+  // The saved draft only differs from the stale baseline until it reloads.
+  editorDirty.value = false
+  error.value = `${t('savedReloadFailed')} ${reason}`
 }
 function remove(name: string) {
   const next = { ...draft.value }
@@ -364,12 +349,7 @@ function beginFetch() {
     try {
       draft.value = parsePricingJSON(json.value)
     } catch (cause) {
-      error.value =
-        cause instanceof Error
-          ? te(cause.message)
-            ? t(cause.message)
-            : cause.message
-          : String(cause)
+      error.value = translateError(cause, t, te)
       return
     }
   }
@@ -384,32 +364,22 @@ function fill(rows: FetchedModelPrice[]) {
     fetchOpen.value = false
     message.value = t('imported', { count: rows.length })
   } catch (cause) {
-    error.value =
-      cause instanceof Error
-        ? te(cause.message)
-          ? t(cause.message)
-          : cause.message
-        : String(cause)
+    error.value = translateError(cause, t, te)
   }
 }
-async function changeExpose() {
-  if (!(await settings.saveOptions({ ExposeRatioEnabled: expose.value })))
-    expose.value = !expose.value
-}
-async function saveTools(value: string) {
-  if (!ready.value || loading.value || saving.value || settings.saving.value)
-    return
+function toolsSaved() {
   error.value = ''
-  if (await settings.saveOptions({ 'tool_price_setting.prices': value })) {
-    toolsJSON.value = value
-    toolsDirty.value = false
-    toolsRevision.value++
-    message.value = t('toolsSaved')
-  }
+  toolsDirty.value = false
+  message.value = t('toolsSaved')
 }
 function reload() {
   if (saving.value || settings.saving.value) return
-  if (!dirty.value || window.confirm(t('refreshConfirm'))) void load(true)
+  if (dirty.value) reloadOpen.value = true
+  else void load(true)
+}
+function confirmReload() {
+  reloadOpen.value = false
+  void load(true)
 }
 useUnsavedChanges({
   dirty: () => dirty.value,
@@ -420,16 +390,31 @@ onMounted(() => {
   void load()
 })
 onBeforeUnmount(() => {
-  controller?.abort()
   if (props.embedded) registerBar?.(null)
 })
 </script>
 <template>
   <section
+    ref="root"
     class="model-pricing-page"
-    :class="{ 'is-embedded': embedded }"
+    :class="{ 'is-embedded': embedded, 'is-compact': compact }"
     :aria-label="t('title')"
   >
+    <DefineEditor>
+      <ModelPricingEditor
+        ref="editor"
+        :model-name="activeName"
+        :pricing="activePricing"
+        :entry="activeEntry"
+        :revision="revision"
+        :saving="saving"
+        :site-currency="siteCurrency"
+        :exchange-rate="exchangeRate"
+        @update="updateDraft"
+        @dirty="editorDirty = $event"
+        @save="save"
+      />
+    </DefineEditor>
     <PageBreadcrumb
       v-if="!embedded"
       :crumbs="[tGlobal('nav.groupAdmin'), t('title')]"
@@ -476,18 +461,7 @@ onBeforeUnmount(() => {
           v-if="tab !== 'tools'"
           class="flex flex-wrap items-center gap-3 text-xs"
         >
-          <label
-            class="inline-flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)] select-none"
-            :title="t('exposeHint')"
-          >
-            <input
-              v-model="expose"
-              type="checkbox"
-              class="checkbox-round"
-              @change="changeExpose"
-            />
-            <span>{{ t('expose') }}</span>
-          </label>
+          <PricingExposeToggle />
           <ConsoleButton variant="ghost" size="sm" @click="clearOpen = true">
             {{ t('clear') }}
           </ConsoleButton>
@@ -501,34 +475,15 @@ onBeforeUnmount(() => {
         class="pricing-panel"
         :aria-label="tabs.find((item) => item.key === tab)?.label"
       >
-        <div v-show="tab === 'tools'">
-          <ConsoleCard :padded="true">
-            <ToolPricingEditor
-              :key="toolsRevision"
-              :value="toolsJSON"
-              @save="saveTools"
-              @dirty="toolsDirty = $event"
-            />
-          </ConsoleCard>
-        </div>
+        <PricingToolsPanel
+          v-show="tab === 'tools'"
+          :revision="toolsRevision"
+          @dirty="toolsDirty = $event"
+          @saved="toolsSaved"
+        />
 
         <template v-if="tab !== 'tools'">
-          <ConsoleCard v-if="mode === 'json'" :padded="true">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label v-for="key in PRICING_KEYS" :key="key" class="block">
-                <span
-                  class="mb-1.5 block text-xs font-mono font-medium text-[var(--text-secondary)]"
-                  >{{ key }}</span
-                >
-                <textarea
-                  v-model="json[key]"
-                  rows="7"
-                  spellcheck="false"
-                  class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-hidden"
-                />
-              </label>
-            </div>
-          </ConsoleCard>
+          <PricingJsonEditor v-if="mode === 'json'" v-model="json" />
 
           <div v-else class="pricing-workspace">
             <ConsoleCard :padded="false" class="pricing-models overflow-hidden">
@@ -648,74 +603,49 @@ onBeforeUnmount(() => {
               </DataTable>
             </ConsoleCard>
 
-            <div class="pricing-editor-container">
-              <template v-if="!mobile">
-                <ConsoleCard v-if="editing !== null" :padded="false">
-                  <ModelPricingEditor
-                    ref="editor"
-                    :model-name="activeName"
-                    :pricing="activePricing"
-                    :entry="activeEntry"
-                    :revision="revision"
-                    :saving="saving"
-                    :site-currency="siteCurrency"
-                    :exchange-rate="exchangeRate"
-                    @update="updateDraft"
-                    @dirty="editorDirty = $event"
-                    @save="save"
-                  />
-                </ConsoleCard>
-                <ConsoleCard
-                  v-else
-                  class="pricing-editor-empty h-full flex flex-col justify-center min-h-[28rem]"
-                >
-                  <EmptyState :title="t('select')" :hint="t('emptyHint')">
-                    <template #action>
-                      <ConsoleButton
-                        variant="secondary"
-                        size="sm"
-                        @click="open('__new__')"
-                      >
-                        <Plus :size="13" class="mr-1" aria-hidden="true" />{{
-                          t('add')
-                        }}
-                      </ConsoleButton>
-                    </template>
-                  </EmptyState>
-                </ConsoleCard>
-              </template>
+            <div v-if="!drawer" class="pricing-editor-container">
+              <ConsoleCard v-if="editing !== null" :padded="false">
+                <ReuseEditor />
+              </ConsoleCard>
+              <ConsoleCard
+                v-else
+                class="pricing-editor-empty h-full flex flex-col justify-center min-h-[28rem]"
+              >
+                <EmptyState :title="t('select')" :hint="t('emptyHint')">
+                  <template #action>
+                    <ConsoleButton
+                      variant="secondary"
+                      size="sm"
+                      @click="open('__new__')"
+                    >
+                      <Plus :size="13" class="mr-1" aria-hidden="true" />{{
+                        t('add')
+                      }}
+                    </ConsoleButton>
+                  </template>
+                </EmptyState>
+              </ConsoleCard>
             </div>
           </div>
         </template>
       </section>
     </fieldset>
 
+    <!-- The editor's own header names the dialog, so the drawer has none. -->
     <ConsoleModal
-      v-if="mobile && editing !== null"
+      v-if="drawer && editing !== null"
       :open="true"
-      :title="t('edit')"
+      :aria-label="t('edit')"
       presentation="drawer"
       size="xl"
-      :close-disabled="loading || saving"
+      :close-disabled="loading || saving || settings.saving.value"
       @close="closeEditor"
     >
       <fieldset
         class="pricing-controls"
-        :disabled="loading || saving || !ready"
+        :disabled="loading || saving || settings.saving.value || !ready"
       >
-        <ModelPricingEditor
-          ref="editor"
-          :model-name="activeName"
-          :pricing="activePricing"
-          :entry="activeEntry"
-          :revision="revision"
-          :saving="saving"
-          :site-currency="siteCurrency"
-          :exchange-rate="exchangeRate"
-          @update="updateDraft"
-          @dirty="editorDirty = $event"
-          @save="save"
-        />
+        <ReuseEditor />
       </fieldset>
     </ConsoleModal>
 
@@ -736,6 +666,15 @@ onBeforeUnmount(() => {
       @confirm="clear"
       @cancel="clearOpen = false"
     />
+
+    <ConfirmDialog
+      :open="reloadOpen"
+      :title="t('reload')"
+      :message="t('refreshConfirm')"
+      :confirm-text="t('reload')"
+      @confirm="confirmReload"
+      @cancel="reloadOpen = false"
+    />
   </section>
 </template>
 
@@ -754,7 +693,6 @@ onBeforeUnmount(() => {
 .model-pricing-page {
   min-width: 0;
   max-width: 100%;
-  container-type: inline-size;
 }
 .pricing-workspace {
   display: grid;
@@ -779,8 +717,15 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .pricing-model-name:hover {
-  color: var(--accent);
+  /* --accent on the light surface is 2.4:1; the text variant meets 4.5:1. */
+  color: var(--accent-text);
   text-decoration: underline;
+}
+/* Matches ConsoleButton: 44px touch targets below the sm breakpoint. */
+@media (max-width: 639px) {
+  .pricing-model-name {
+    min-height: 2.75rem;
+  }
 }
 .pricing-summary {
   overflow: hidden;
@@ -792,20 +737,24 @@ onBeforeUnmount(() => {
 .pricing-editor-container {
   min-width: 0;
 }
-@container (max-width: 820px) {
-  .pricing-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* As in NewAPI's editor panel, Save stays in view while the form scrolls.
+   The page scrolls here instead of an inner panel, so the footer sticks to
+   the bottom of the scroll zone. The drawer keeps it in flow. */
+.pricing-editor-container :deep(.pricing-editor-footer) {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  /* Matches the hosting ConsoleCard's rounded-2xl bottom corners. */
+  border-radius: 0 0 1rem 1rem;
 }
-@media (max-width: 767px) {
-  .pricing-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .pricing-summary {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
+/* compact is set from the page width; see STACKED_WIDTH. */
+.is-compact .pricing-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+.is-compact .pricing-summary {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>

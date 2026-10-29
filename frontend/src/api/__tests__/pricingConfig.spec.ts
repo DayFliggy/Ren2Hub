@@ -47,6 +47,7 @@ describe('model pricing requests', () => {
   })
 
   it('sends numeric preview and convert bodies', async () => {
+    vi.mocked(api.post).mockResolvedValue({ billing_details: {} })
     const pricing = { ModelPrice: '0.04', ModelRatio: '2.5' }
     await pricingConfigApi.preview('contract-image', pricing)
     await pricingConfigApi.convert('contract-image', pricing)
@@ -61,7 +62,38 @@ describe('model pricing requests', () => {
     )
     expect(api.post).toHaveBeenCalledWith(
       '/api/option/model_pricing/convert',
-      body
+      body,
+      { signal: undefined }
+    )
+  })
+
+  it('reads preview descriptions and rejects fields the backend never sends', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      effective: { ModelRatio: 1.5, CreateCacheRatio: 1.25 },
+      cache_write_mode: 'claude_ttl',
+      billing_details: {
+        image_count: true,
+        request_rules: [{ condition: 'size == "1024x1792"', multiplier: 2 }],
+      },
+    })
+    await expect(pricingConfigApi.preview('m', {})).resolves.toEqual({
+      effective: { ModelRatio: 1.5, CreateCacheRatio: 1.25 },
+      cache_write_mode: 'claude_ttl',
+      billing_details: {
+        image_count: true,
+        request_rules: [{ condition: 'size == "1024x1792"', multiplier: 2 }],
+      },
+    })
+    vi.mocked(api.post).mockResolvedValueOnce({
+      billing_details: {},
+      cache_write_mode: 'ttl',
+    })
+    await expect(pricingConfigApi.preview('m', {})).rejects.toThrow(
+      'Invalid API response: /api/option/model_pricing/preview'
+    )
+    vi.mocked(api.post).mockResolvedValueOnce({ expression: 3 })
+    await expect(pricingConfigApi.convert('m', {})).rejects.toThrow(
+      'Invalid API response: /api/option/model_pricing/convert'
     )
   })
 
