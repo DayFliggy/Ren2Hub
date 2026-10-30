@@ -1880,13 +1880,13 @@
       "path": "controller/usage_discount.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5e249cad909ddd275f51e21bcfb777a7bd6069f47de8b6216ad04cdbd261a6ea"
+      "local_sha256": "9ef141211d00be9311d157924235d14d29e5c3dae8616011e1f94514111d3a65"
     },
     {
       "path": "controller/usage_discount_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f9d249846eff84c71b3fbaf66e2b476e0983fa62da2c8928b3716cf8fba3b61f"
+      "local_sha256": "77eda48d0854e658d3240ba543557e308f404f7c05986b3812f9af7b8e758702"
     },
     {
       "path": "controller/usedata.go",
@@ -3446,7 +3446,7 @@
       "path": "model/usage_discount.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "d824af2359c9c54a83519db7ba97d03f8bea31eb9855cea2066c34d828e7856d"
+      "local_sha256": "96ad2e28c135733efd211e15ce1ee6b3825ad449503a89406fc1ee3a5c121b1f"
     },
     {
       "path": "model/usage_discount_config.go",
@@ -5839,7 +5839,7 @@
       "path": "relay/helper/usage_discount_price_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a25c1eb64231bb1924a6577a9c12fcc01f0d11894cd7f8f7ca02b91775375f5d"
+      "local_sha256": "16427a19843d3d575261660cdf2b7c508096068c834586a2fcf33cd5f0055ae6"
     },
     {
       "path": "relay/helper/valid_request.go",
@@ -8303,7 +8303,7 @@
       "path": "service/usage_discount.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aca5a1531afc6588fa26444a21815488369b0e623cf9fcad57d20592ddd09f96"
+      "local_sha256": "20d2b04b8c52462c35e569165ab666540d3fd135bc4703c4ce757f867598df6a"
     },
     {
       "path": "service/usage_discount_estimate.go",
@@ -8327,7 +8327,7 @@
       "path": "service/usage_discount_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "02e730ee3769010c3be12906c8b0639c0f0bdb98e9674917461df0021091cbf0"
+      "local_sha256": "1466ccf07a467f20b1d4f37aa067598d75d382fa48128f852c35771dceb5df8e"
     },
     {
       "path": "service/usage_discount_violation_fee_test.go",

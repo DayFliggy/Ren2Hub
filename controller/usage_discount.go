@@ -100,18 +100,28 @@ func GetSelfUsageDiscount(c *gin.Context) {
 }
 
 // decodeUsageDiscountBody accepts exactly one JSON object with known fields.
+// A body over the limit is rejected even when its first object is complete.
 func decodeUsageDiscountBody(c *gin.Context, target any) bool {
-	decoder := json.NewDecoder(io.LimitReader(c.Request.Body, usageDiscountBodyLimit))
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, usageDiscountBodyLimit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		common.ApiErrorStatus(c, http.StatusBadRequest, errors.New("invalid request body"), gin.H{"code": "usage_discount_invalid_config"})
-		return false
+		return rejectUsageDiscountBody(c, err, "invalid request body")
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		common.ApiErrorStatus(c, http.StatusBadRequest, errors.New("expected a single JSON object"), gin.H{"code": "usage_discount_invalid_config"})
-		return false
+		return rejectUsageDiscountBody(c, err, "expected a single JSON object")
 	}
 	return true
+}
+
+// rejectUsageDiscountBody answers 413 when the body hit the limit, else 400.
+func rejectUsageDiscountBody(c *gin.Context, err error, message string) bool {
+	status := http.StatusBadRequest
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		status, message = http.StatusRequestEntityTooLarge, "request body is too large"
+	}
+	common.ApiErrorStatus(c, status, errors.New(message), gin.H{"code": "usage_discount_invalid_config"})
+	return false
 }
 
 func respondUsageDiscountError(c *gin.Context, err error) {

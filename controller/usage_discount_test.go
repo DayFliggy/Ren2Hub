@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"net/http"
 	"testing"
 	"time"
@@ -121,4 +122,26 @@ func TestFrontendContractUsageDiscount(t *testing.T) {
 	assert.Equal(t, "0.98", selfData["factor"])
 	assert.NotContains(t, view.Body.String(), "site_month_quota")
 	frontendFixture(t, "usage-discount-self.get.json", selfBody)
+}
+
+// The body limit applies to the whole body: a complete first object followed
+// by trailing data past the limit must not be accepted.
+func TestUsageDiscountBodyLimitRejectsTrailingDataPastLimit(t *testing.T) {
+	db := setupUsageDiscountControllerTest(t)
+	engine := contractEngine(1, common.RoleRootUser)
+	engine.PATCH("/api/option/usage_discount", UpdateUsageDiscountConfig)
+	patch, err := common.Marshal(map[string]any{"expected_version": 0, "config": model.DefaultUsageDiscountConfig()})
+	require.NoError(t, err)
+
+	padded := bytes.Join([][]byte{patch, bytes.Repeat([]byte(" "), usageDiscountBodyLimit), []byte("{}")}, nil)
+	tooLarge := contractRequest(t, engine, http.MethodPatch, "/api/option/usage_discount", padded)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, tooLarge.Code)
+	assert.Equal(t, "usage_discount_invalid_config", decodeContractBody(t, tooLarge)["code"])
+
+	trailing := contractRequest(t, engine, http.MethodPatch, "/api/option/usage_discount", append(patch, "{}"...))
+	assert.Equal(t, http.StatusBadRequest, trailing.Code)
+
+	var versions int64
+	require.NoError(t, db.Model(&model.UsageDiscountConfigVersion{}).Count(&versions).Error)
+	assert.Zero(t, versions)
 }

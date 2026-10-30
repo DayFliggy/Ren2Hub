@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	_ "time/tzdata"
@@ -229,6 +230,46 @@ func TestResolveUsageDiscountConcurrentAcrossMidnight(t *testing.T) {
 	}
 	wg.Wait()
 	assert.Equal(t, "2026-10-31", currentUsageDiscountDay.Load().date, "the shared day never moves backwards")
+}
+
+// Concurrent first reads of one user share a single query, so a write that
+// commits between two queries cannot give requests of one day different sums.
+func TestUsageDiscountConcurrentFirstReadsShareOneQuery(t *testing.T) {
+	db := setupUsageDiscountTestDB(t)
+	seedUsageDiscountRows(t, db, model.UsageDiscountHourly{UserID: 7, HourUTC: usageDiscountTestCutoff - 3600, Quota: 700})
+	var queries atomic.Int32
+	release := make(chan struct{})
+	require.NoError(t, db.Callback().Row().Before("gorm:row").Register("test:count_window_sums", func(tx *gorm.DB) {
+		if tx.Statement.Table == "usage_discount_hourly" && queries.Add(1) == 1 {
+			<-release
+		}
+	}))
+	day, err := newUsageDiscountDay(usageDiscountTestSettings(t, 1, nil).Location, usageDiscountTestNow)
+	require.NoError(t, err)
+
+	const readers = 20
+	results := make([]model.UsageDiscountWindowSums, readers)
+	var started, done sync.WaitGroup
+	for i := range readers {
+		started.Add(1)
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			started.Done()
+			sums, err := day.windowSums(7)
+			assert.NoError(t, err)
+			results[i] = sums
+		}()
+	}
+	started.Wait()
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	done.Wait()
+
+	assert.Equal(t, int32(1), queries.Load())
+	for _, sums := range results {
+		assert.Equal(t, model.UsageDiscountWindowSums{DayQuota: 700, WeekQuota: 700, MonthQuota: 700}, sums)
+	}
 }
 
 func TestUsageDiscountSelfViewHidesSiteTotalAndShadow(t *testing.T) {

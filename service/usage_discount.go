@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,11 +12,12 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/shopspring/decimal"
+	"golang.org/x/sync/singleflight"
 )
 
-// Windows are summed from hourly rows strictly before the business-day cutoff.
-// Those rows no longer change during the day, so per-day caching is exact and
-// a restart recomputes the same values. See docs/billing/USAGE_DISCOUNT.md.
+// Windows are summed from hourly rows strictly before the business-day cutoff
+// and cached for the day. Those rows usually stop changing at the cutoff; the
+// exceptions are listed in docs/billing/USAGE_DISCOUNT.md.
 
 const (
 	usageDiscountMonthDays      = 30
@@ -44,6 +46,9 @@ type usageDiscountDay struct {
 
 	mu    sync.Mutex
 	users map[int]model.UsageDiscountWindowSums
+	// loads merges concurrent first reads of one user into one query, so every
+	// request of the day sees the same sums.
+	loads singleflight.Group
 
 	siteMu       sync.Mutex
 	siteVersion  int64
@@ -118,20 +123,31 @@ func pruneUsageDiscountHourly(day *usageDiscountDay) {
 }
 
 func (d *usageDiscountDay) windowSums(userID int) (model.UsageDiscountWindowSums, error) {
-	d.mu.Lock()
-	sums, ok := d.users[userID]
-	d.mu.Unlock()
-	if ok {
+	if sums, ok := d.cachedSums(userID); ok {
 		return sums, nil
 	}
-	sums, err := model.SumUsageDiscountWindows(userID, d.dayStart, d.weekStart, d.monthStart, d.cutoff)
-	if err != nil {
-		return sums, err
-	}
+	loaded, err, _ := d.loads.Do(strconv.Itoa(userID), func() (any, error) {
+		// A load that finished just before this one joined already cached it.
+		if sums, ok := d.cachedSums(userID); ok {
+			return sums, nil
+		}
+		sums, err := model.SumUsageDiscountWindows(userID, d.dayStart, d.weekStart, d.monthStart, d.cutoff)
+		if err != nil {
+			return sums, err
+		}
+		d.mu.Lock()
+		d.users[userID] = sums
+		d.mu.Unlock()
+		return sums, nil
+	})
+	return loaded.(model.UsageDiscountWindowSums), err
+}
+
+func (d *usageDiscountDay) cachedSums(userID int) (model.UsageDiscountWindowSums, bool) {
 	d.mu.Lock()
-	d.users[userID] = sums
-	d.mu.Unlock()
-	return sums, nil
+	defer d.mu.Unlock()
+	sums, ok := d.users[userID]
+	return sums, ok
 }
 
 func (d *usageDiscountDay) cachedUsers() int {
