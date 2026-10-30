@@ -22,6 +22,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(ticketAttachmentCleanupHandler{})
+	service.RegisterSystemTaskHandler(channelUpstreamRatioHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -149,6 +150,40 @@ func (asyncTaskPollHandler) NewPayload() any { return nil }
 
 func (asyncTaskPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := service.RunTaskPollingOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// channelUpstreamRatioHandler 每分钟检查一次到期渠道；没有到期渠道时不建任务行。
+type channelUpstreamRatioHandler struct{}
+
+func (channelUpstreamRatioHandler) Type() string { return model.SystemTaskTypeChannelUpstreamRatio }
+
+// 孤儿记录没有到期渠道时也要清理，因此启用条件包含孤儿检查。
+func (channelUpstreamRatioHandler) Enabled() bool {
+	due, err := model.HasDueUpstreamRatioChannels(time.Now().Unix())
+	if err != nil {
+		common.SysLog(common.LogText("channel upstream ratio due check failed: %v", err))
+	}
+	if due {
+		return true
+	}
+	orphans, err := model.HasOrphanChannelUpstreamRatios()
+	if err != nil {
+		common.SysLog(common.LogText("channel upstream ratio orphan check failed: %v", err))
+	}
+	return orphans
+}
+
+func (channelUpstreamRatioHandler) Interval() time.Duration { return time.Minute }
+
+func (channelUpstreamRatioHandler) NewPayload() any { return nil }
+
+func (channelUpstreamRatioHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary, err := service.RunChannelUpstreamRatioCycle(ctx)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, summary, err)
+		return
+	}
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
 }
 

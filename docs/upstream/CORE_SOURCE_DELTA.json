@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 804,
     "adapted": 273,
-    "extension": 229,
+    "extension": 238,
     "removed": 43
   },
   "files": [
@@ -892,6 +892,12 @@
       "local_sha256": "336edede6fc2f20178eb7a56d202a23796ce5566c4864cf51c2faba24ff91150"
     },
     {
+      "path": "controller/channel_upstream_ratio.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "423b14869681d758f8a4501bb867c963fdd360fe54bd1f3b98fe3f5436e9dcf0"
+    },
+    {
       "path": "controller/channel_upstream_update.go",
       "status": "adapted",
       "upstream_sha256": "7825ad882dc8304e136b5215e1c0b699f37291fb57cbf058e6d308185f114eb2",
@@ -982,7 +988,7 @@
       "path": "controller/frontend_contract_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a82e1b3b8b0996cd7c0a0e98c23172559541737f8d97dbcf66f4050aca312fbd"
+      "local_sha256": "9b8747451a20efb419e2f89c8d0d32fba0e5aed6c247fa5cdabaf69aec7e1731"
     },
     {
       "path": "controller/gmpay.go",
@@ -1591,7 +1597,7 @@
       "path": "controller/system_task_handlers.go",
       "status": "adapted",
       "upstream_sha256": "0616de1c976ebcfed4c4d71e68788938b1f0056f63c46940870381e9bb4f2212",
-      "local_sha256": "e64771b425e150fa27345b52acc168b9913a2066d48e1148f47bfc2fecad008d",
+      "local_sha256": "fd2b6e29306e1878051d5b11990e10157d39af524a62001b3066f938f5c607ef",
       "reasons": [
         "ticket"
       ]
@@ -2711,6 +2717,18 @@
       "local_sha256": "fd48cdedf65c4f5e64e6e61ba82acbb75872ff15540503421afa0c6944fbf6fa"
     },
     {
+      "path": "model/channel_upstream_ratio.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6e69d688186295e2e9c3a7db42f4f6d8efbca1cd6853ff0a23d332a0dd51b155"
+    },
+    {
+      "path": "model/channel_upstream_ratio_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "8b51e693f6721e0463a91052034c498d1a3f38808b3626c8bb79d0690b171d82"
+    },
+    {
       "path": "model/checkin.go",
       "status": "upstream_equal",
       "upstream_sha256": "36a0eab8170fe1fb17e38d89ed24eeef4c492d7e07e820216cbec71054a9128a",
@@ -2909,7 +2927,7 @@
       "path": "model/main.go",
       "status": "adapted",
       "upstream_sha256": "36d2ef0c7dd4124b0a07e0e5972830da44f5fc72e39b90703472ace43746a1e1",
-      "local_sha256": "19fcb115166a65054d3a984881ec797a96401b0dd2fa7d5c1458db07a4c96d08",
+      "local_sha256": "c3bc8a0a4b70af43e35e92ec2e725da1657af9957c5c3f50d1ffd982fd78e298",
       "reasons": [
         "group-removal",
         "retired",
@@ -3222,7 +3240,7 @@
       "path": "model/system_task.go",
       "status": "adapted",
       "upstream_sha256": "cfffb5f8054fde342f95d7c669160235c47b9db31efd63935d8262557c28f0db",
-      "local_sha256": "ffeb1f41de0caba2af0a5a537c0dde803b996ef05b848630f00a32abff7f6838",
+      "local_sha256": "9e32406eaa7d8dc14bf341419454405579298916af487ad58ff1486ead619ffb",
       "reasons": [
         "ticket"
       ]
@@ -6967,7 +6985,7 @@
       "path": "router/channel-router.go",
       "status": "adapted",
       "upstream_sha256": "fecddd2cef7fb8132b63ab9964388c4d0671730936d9a4cc287d12e34db99d52",
-      "local_sha256": "bd71b354bd4e73685eac0bdba2dbee8cd635fd2c127d06093753363d74d21449",
+      "local_sha256": "6acab2ed48603c641c819f9e160f66e2aeeb6a8362a5d74afb3b2796c9b4844d",
       "reasons": [
         "catalog-stats",
         "retired"
@@ -7386,6 +7404,42 @@
       "status": "upstream_equal",
       "upstream_sha256": "55309944a0f8883ff06c5e391c5ad15ec552f997306ba31f63d5d71a78fac401",
       "local_sha256": "55309944a0f8883ff06c5e391c5ad15ec552f997306ba31f63d5d71a78fac401"
+    },
+    {
+      "path": "service/channel_upstream_ratio.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "9aa38c8b8c2056a34a341a44f1ca58c0408f3b1e373cf4d9f20f461d5c13b632"
+    },
+    {
+      "path": "service/channel_upstream_ratio_http.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "81e3f459fec563c186cec104c6626164797c64a4893ffedb8f2d1a7c4ebb8f0d"
+    },
+    {
+      "path": "service/channel_upstream_ratio_newapi.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "043aac0f9f58e8df768cd2005d3170b8ebb90d3e0295b3738f7bc4dfc0548c52"
+    },
+    {
+      "path": "service/channel_upstream_ratio_record.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6af0a3a791d88cdaec210e14b70ce2363f7854e5513863a7841a1072a2f60931"
+    },
+    {
+      "path": "service/channel_upstream_ratio_sub2api.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5f0f940e7db6909d68b28ac992ae604f7c6f3c11dfe1cf598723445b3eefc534"
+    },
+    {
+      "path": "service/channel_upstream_ratio_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "98add821c8f6cbdc49164d313283aef48cf03a87ef73b0541d9be1c633f8c70e"
     },
     {
       "path": "service/codex_channel_models.go",

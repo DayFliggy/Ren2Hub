@@ -389,6 +389,7 @@ func migrateDB() error {
 		&Ticket{},
 		&TicketMessage{},
 		&TicketAttachment{},
+		&ChannelUpstreamRatio{},
 	)
 	if err != nil {
 		return err

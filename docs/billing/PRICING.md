@@ -4,10 +4,10 @@
 
 每个渠道的 `channel_ratio` 必须大于 0、最多 18 位小数、最大 1000，默认 `"1"`。每 Key 的 `max_channel_ratio` 可为空；它仅限制候选，不创建第二份售价。业务分组、组间倍率及充值分组倍率已移除。
 
-| 模式 | 接入位置 |
-| --- | --- |
-| 按量 | 原生输入、输出、缓存、图像、音频、工具费用合成后，最终取整前应用一次渠道倍率 |
-| 按次 | `ModelPrice` 与原生数量规则应用渠道倍率 |
+| 模式         | 接入位置                                                                         |
+| ------------ | -------------------------------------------------------------------------------- |
+| 按量         | 原生输入、输出、缓存、图像、音频、工具费用合成后，最终取整前应用一次渠道倍率     |
+| 按次         | `ModelPrice` 与原生数量规则应用渠道倍率                                          |
 | 表达式及任务 | 保留原生表达式和用量语义，独立绑定渠道倍率，不能放进会被适配器替换的 OtherRatios |
 
 模型编辑仍使用 `GET/PATCH /api/option/model_pricing` 和 `expected_version`。目录 `/api/user/model-catalog` 对基础价与各渠道报价提供同一展示/排序投影，区分 configured、default、zero、unavailable。只投影能静态确定的表达式单价；动态条件、上下文倍率不能猜成 1。目录十进制字符串不构成结算精度升级。
@@ -17,3 +17,5 @@
 渠道倍率无效时，`HandleChannelRatio` 返回错误，`ModelPriceHelper`、`ModelPriceHelperPerCall` 和任务表达式分支都拒绝请求（任务返回 400 `model_price_error`），不预扣、不发上游，也不按 0 计费。
 
 所有金额 API 沿原生数值 quota，不补造旧 `available_quota`、`reserved_quota` 或钱包版本。配置生成、公开展示和排序不能反向决定路由。实际结算以 `relay/helper/price.go`、`service/text_quota.go`、`service/tiered_settle.go`、`service/task_billing.go` 为准。
+
+渠道上游倍率（`GET /api/channel/upstream_ratios`、`/:id/upstream_ratio`）只展示上游声明的分组倍率，写入独立表 `channel_upstream_ratios`，不改写 `channel_ratio`，也不参与路由或计费。详见 `docs/channel/UPSTREAM_RATIO.md`。

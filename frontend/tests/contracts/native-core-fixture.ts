@@ -409,6 +409,15 @@ export async function nativeCoreFixture(
       path === '/api/prefill_group/'
     )
       return ok([])
+    // Visual channels are never probed: each requested id gets the real
+    // handler's no-record view.
+    if (path === '/api/channel/upstream_ratios') {
+      const [view] = nativeFixture<{ data: Record<string, unknown>[] }>(
+        'channel-upstream-ratios.get.json'
+      ).data
+      const ids = (url.searchParams.get('ids') ?? '').split(',').map(Number)
+      return ok(ids.map((id) => ({ ...view, channel_id: id })))
+    }
     if (path === '/api/channel/') return ok({ ...emptyPage, type_counts: {} })
     if (path === '/api/channel/models_enabled')
       return ok(['contract-chat', 'contract-image'])

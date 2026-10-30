@@ -13,6 +13,7 @@ import {
   Plus,
   Power,
   PowerOff,
+  Scale,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -45,6 +46,9 @@ import ChannelKeyStatus from '@/components/console/channels/ChannelKeyStatus.vue
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
 import ChannelTestPickerDialog from '@/components/console/channels/ChannelTestPickerDialog.vue'
+import ChannelUpstreamRatioDialog from '@/components/console/channels/ChannelUpstreamRatioDialog.vue'
+import UpstreamRatioSummary from '@/components/console/channels/UpstreamRatioSummary.vue'
+import { useChannelUpstreamRatios } from '@/composables/useChannelUpstreamRatios'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import {
   type ChannelModelTestResult,
@@ -159,6 +163,9 @@ const {
   runVisibleBalance,
   runSupplierBalance,
 } = useAdminChannels()
+const { ratios: upstreamRatios, update: updateUpstreamRatio } =
+  useChannelUpstreamRatios(rows, canRead)
+const editingUpstreamRatio = ref<AdminChannel | null>(null)
 
 const formOpen = ref(false)
 const editing = ref<AdminChannel | null>(null)
@@ -1300,6 +1307,30 @@ async function runBulkStatus(
                     )
                   }}
                 </p>
+                <button
+                  v-if="
+                    upstreamRatios[
+                      channelFromRow(row as AdminChannelTableRow).id
+                    ]
+                  "
+                  type="button"
+                  class="flex flex-wrap items-center gap-1 text-left text-[0.6875rem] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  :disabled="!canRead"
+                  @click="
+                    editingUpstreamRatio = channelFromRow(
+                      row as AdminChannelTableRow
+                    )
+                  "
+                >
+                  <Scale :size="12" aria-hidden="true" />
+                  <UpstreamRatioSummary
+                    :view="
+                      upstreamRatios[
+                        channelFromRow(row as AdminChannelTableRow).id
+                      ]!
+                    "
+                  />
+                </button>
               </div>
               <IconButton
                 v-if="
@@ -1654,6 +1685,14 @@ async function runBulkStatus(
       :can-write="canWrite"
       @close="syncingModels = null"
       @applied="load({ background: true })"
+    />
+
+    <ChannelUpstreamRatioDialog
+      :channel="editingUpstreamRatio"
+      :can-operate="canOperate && canMutate"
+      :can-write="canWrite && canMutate"
+      @close="editingUpstreamRatio = null"
+      @saved="updateUpstreamRatio"
     />
 
     <ChannelTestModal

@@ -596,3 +596,23 @@ func TestFrontendContractFixedPriceSources(t *testing.T) {
 		})
 	}
 }
+
+// A channel that has never been probed has no upstream ratio record; the list
+// still returns one view per channel with only its kind and the auto mode.
+func TestFrontendContractChannelUpstreamRatios(t *testing.T) {
+	setupTaskPluginBindChannelTest(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.ChannelUpstreamRatio{}))
+	baseURL, priority, weight := "https://upstream.example", int64(0), uint(1)
+	channel := model.Channel{
+		Type: constant.ChannelTypeAdvancedCustom, Name: "contract-unprobed", Key: "sk-contract", Models: "gpt-4o",
+		BaseURL: &baseURL, Priority: &priority, Weight: &weight, Status: common.ChannelStatusEnabled,
+	}
+	require.NoError(t, channel.Insert())
+	engine := contractEngine(1, common.RoleRootUser)
+	engine.GET("/api/channel/upstream_ratios", GetChannelUpstreamRatios)
+	recorder := contractRequest(t, engine, http.MethodGet, fmt.Sprintf("/api/channel/upstream_ratios?ids=%d", channel.Id), nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body := decodeContractBody(t, recorder)
+	require.Equal(t, true, body["success"])
+	frontendFixture(t, "channel-upstream-ratios.get.json", body)
+}

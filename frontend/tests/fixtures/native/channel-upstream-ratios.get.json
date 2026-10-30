@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "channel_id": 1,
+      "effective_ratio": "",
+      "failure_count": 0,
+      "fresh_until": 0,
+      "group_name": "",
+      "http_status": 0,
+      "kind": "unsupported",
+      "last_error": "",
+      "mapping": "",
+      "mode": "auto",
+      "next_probe_at": 0,
+      "observed_at": 0,
+      "ratio": "",
+      "received_at": 0,
+      "source": "",
+      "stale": false,
+      "status": "",
+      "token_name": "",
+      "version": 0
+    }
+  ],
+  "message": "",
+  "success": true
+}
