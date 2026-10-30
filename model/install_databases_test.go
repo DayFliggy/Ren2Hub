@@ -49,7 +49,7 @@ func TestCoreEmptyDatabaseInitialization(t *testing.T) {
 			})
 			require.NoError(t, migrateDB())
 			require.NoError(t, migrateLOGDB())
-			for _, table := range []string{"users", "tokens", "channels", "top_ups", "tasks", "task_plugins", "tickets", "ticket_messages", "ticket_attachments", "token_route_profiles", "token_route_entries", "gmpay_orders", "gmpay_merchant_versions"} {
+			for _, table := range []string{"users", "tokens", "channels", "top_ups", "tasks", "task_plugins", "tickets", "ticket_messages", "ticket_attachments", "token_route_profiles", "token_route_entries", "gmpay_orders", "gmpay_merchant_versions", "usage_discount_hourly", "usage_discount_configs"} {
 				assert.True(t, db.Migrator().HasTable(table), table)
 			}
 			for _, table := range []string{"billing_schemas", "billing_events", "subscriptions", "subscription_plans", "subscription_orders", "user_subscriptions", "system_instances"} {

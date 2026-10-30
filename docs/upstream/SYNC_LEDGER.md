@@ -4,6 +4,14 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-10-30 用量折扣
+
+新增用量折扣：固定折扣、全站阶梯和个人日/周/月阶梯合成一个乘在渠道倍率上的系数，行为见 `docs/billing/USAGE_DISCOUNT.md`。这是 Ren2Hub 扩展，NewAPI 没有对应功能。
+
+原生文件只做接入。`relay/helper/price.go` 的 `HandleChannelRatio` 增加 RelayInfo 参数并乘 factor，这是唯一一处乘法，三个调用点（`price.go` 两处、`relay/relay_task.go`）传入 info。`types/price_data.go` 的 `ChannelRatioInfo` 增加基础倍率和决策；`relay/common/relay_info.go`、`model/task.go` 保存决策，`controller/relay.go` 写入任务上下文。`model/user.go` 两个 used_quota 函数开头各加一行小时增量。`service/log_info_generate.go`、`service/task_billing.go` 追加日志对象，`service/violation_fee.go` 改用基础倍率。`model/main.go` 注册两张表，`main.go` 启动时加载配置，`router/api-router.go` 与 `middleware/access_token_routes.go` 登记五条路由。这 14 个文件原本就是 adapted，reasons 增加 `usage-discount`。逻辑放在 `types/usage_discount.go`、`model/usage_discount*.go`、`service/usage_discount*.go` 和 `controller/usage_discount.go`。
+
+来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 804 `upstream_equal`、273 `adapted`、252 `extension`、43 `removed`，`candidate_sha` 为空。
+
 ## 2026-10-29 渠道上游倍率
 
 在 Ren2Hub 新增渠道上游倍率功能，只展示上游声明的分组倍率，不写 `channel_ratio`，不参与路由或计费。详细行为见 `docs/channel/UPSTREAM_RATIO.md`。

@@ -13,8 +13,20 @@ const (
 	OpenAICacheCreation12hMultiplier = 2
 )
 
+// ChannelRatio is the effective pricing multiplier (configured channel ratio
+// times the usage discount factor); every pricing path applies it once.
 type ChannelRatioInfo struct {
-	ChannelRatio float64
+	ChannelRatio     float64
+	BaseChannelRatio float64
+	UsageDiscount    *UsageDiscountDecision
+}
+
+// BaseRatio is the configured channel ratio before the usage discount.
+func (i ChannelRatioInfo) BaseRatio() float64 {
+	if i.UsageDiscount == nil {
+		return i.ChannelRatio
+	}
+	return i.BaseChannelRatio
 }
 
 type PriceData struct {

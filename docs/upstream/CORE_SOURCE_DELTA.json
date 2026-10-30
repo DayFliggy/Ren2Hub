@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 804,
     "adapted": 273,
-    "extension": 238,
+    "extension": 252,
     "removed": 43
   },
   "files": [
@@ -1409,14 +1409,15 @@
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "bdd45371c9eaa84b20811e278d1c1ea90c18c99866a498e3d2024006b864115f",
-      "local_sha256": "5b43fdd0147c1fe687d6d0e637ed05fe92d7ef14aa90645733643406bc1b4901",
+      "local_sha256": "7de7f7139964f639fcf4d296c0a47b4b9367d554cfbf7732633f0d60ba00c3c7",
       "reasons": [
         "channel-ratio",
         "token-routing",
         "concurrency",
         "group-removal",
         "retired",
-        "native-count"
+        "native-count",
+        "usage-discount"
       ]
     },
     {
@@ -1876,6 +1877,18 @@
       "local_sha256": "07ae3ad91c63842907f974ef0488b557b59b2717d91282f3486f0d46109752f5"
     },
     {
+      "path": "controller/usage_discount.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "5e249cad909ddd275f51e21bcfb777a7bd6069f47de8b6216ad04cdbd261a6ea"
+    },
+    {
+      "path": "controller/usage_discount_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "f9d249846eff84c71b3fbaf66e2b476e0983fa62da2c8928b3716cf8fba3b61f"
+    },
+    {
       "path": "controller/usedata.go",
       "status": "upstream_equal",
       "upstream_sha256": "aa051c28438f7e78ceb6c147f9b0fc06211b74af2d2cbc0dc3103710faff7c56",
@@ -2092,12 +2105,13 @@
       "path": "main.go",
       "status": "adapted",
       "upstream_sha256": "0431a88661ddac970da9b51e95ea76ca741afb782901cbbd0eb56d8bba14febc",
-      "local_sha256": "b921624d5c716e8da98edd5f73f3000153f6e63a6efdbd37c54495bfcf891c72",
+      "local_sha256": "0260f785ed5c1191cc7b3c1bb0365cfc2b1cf6866a76568f1285b409c2f224be",
       "reasons": [
         "vue-frontend",
         "branding",
         "retired",
-        "single-node"
+        "single-node",
+        "usage-discount"
       ]
     },
     {
@@ -2128,14 +2142,15 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "6d8369b5e86765d65511680bb5ef29a1c94877d9922479f08dca55c3e63f0145",
-      "local_sha256": "caf22dcc5a5a5baa15cc34630892463724d0ef50dabbb4c27747747344fb1cec",
+      "local_sha256": "bc588acac7fe9b23efb2fa109da4cd1188e14a0de47c9f5d309b45283c9c2820",
       "reasons": [
         "extension-hook",
         "retired",
         "group-removal",
         "catalog-stats",
         "token-routing",
-        "affiliate"
+        "affiliate",
+        "usage-discount"
       ]
     },
     {
@@ -2852,7 +2867,7 @@
       "path": "model/install_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "40e2de4c13f6baff301a64dda755bcaebf06db0bbbff2168eb627d478e8b7d64"
+      "local_sha256": "3ed191612558b26818e3e461326749f839690b206cd716d3a85b176c010a5354"
     },
     {
       "path": "model/install_guard.go",
@@ -2927,7 +2942,7 @@
       "path": "model/main.go",
       "status": "adapted",
       "upstream_sha256": "36d2ef0c7dd4124b0a07e0e5972830da44f5fc72e39b90703472ace43746a1e1",
-      "local_sha256": "c3bc8a0a4b70af43e35e92ec2e725da1657af9957c5c3f50d1ffd982fd78e298",
+      "local_sha256": "71bda5051deef81aa81a35796cc6bfde3b05d18faf9beb534e40d07835dda143",
       "reasons": [
         "group-removal",
         "retired",
@@ -2935,7 +2950,8 @@
         "affiliate",
         "gmpay",
         "ticket",
-        "token-routing"
+        "token-routing",
+        "usage-discount"
       ]
     },
     {
@@ -3255,11 +3271,12 @@
       "path": "model/task.go",
       "status": "adapted",
       "upstream_sha256": "67a41371388754226959757eb54ad9b01cde70bac621eb957103cee9d5f09d5c",
-      "local_sha256": "2a4064511d30a6603cf8a1e83c5cd4e4867842dd6bc18bc63c2125af40df9937",
+      "local_sha256": "4ec8e2dd0cf6969481adfb8e3b430292ac13412631be462541f6e3da3aef62b5",
       "reasons": [
         "group-removal",
         "retired",
-        "channel-ratio"
+        "channel-ratio",
+        "usage-discount"
       ]
     },
     {
@@ -3426,6 +3443,30 @@
       "local_sha256": "a7e18bada4ce9fae61a1a9407a7fafb0f90f98f66e23da90b75a8cc2c7cd5148"
     },
     {
+      "path": "model/usage_discount.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d824af2359c9c54a83519db7ba97d03f8bea31eb9855cea2066c34d828e7856d"
+    },
+    {
+      "path": "model/usage_discount_config.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c414c1ed63529e6faa24f8650e77a1dd7e74281628c9d78fe503c564eedc459c"
+    },
+    {
+      "path": "model/usage_discount_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3e35ef63d1a6eb457ecd9af2ce505f64001621489579380c8747b4dbba1b36f0"
+    },
+    {
+      "path": "model/usage_discount_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fbce0bc3aa31eeaeec1b5d810b8fe9022487ae289449cf45c1ef81aa95474059"
+    },
+    {
       "path": "model/usedata.go",
       "status": "adapted",
       "upstream_sha256": "0bac4e00b0372ca181cca34c405cc7183796f9a5dab2ed8fa230f916eda59fc8",
@@ -3459,13 +3500,14 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "b74b07db9b379a4f4115c7e8f2e97e26430a64e4d67ef340c975e63cfee13964",
-      "local_sha256": "476b44fb085026b66c98b03d0e2b0c46de0ab7138605daa2a01a12f04ee489bd",
+      "local_sha256": "6ee155a8c7c6bb8e1f851ba471be9c85bf3cf2c5c3261b43473892f52877931c",
       "reasons": [
         "group-removal",
         "concurrency",
         "affiliate",
         "retired",
-        "vue-frontend"
+        "vue-frontend",
+        "usage-discount"
       ]
     },
     {
@@ -5542,14 +5584,15 @@
       "path": "relay/common/relay_info.go",
       "status": "adapted",
       "upstream_sha256": "ce16e9fe9bef04231ab8d73b84d6a5427421f96d679d17af92b1ea079b65a06a",
-      "local_sha256": "9152378a443b7c6979685096bfae47e1100ab175e91851c9480285c0bd511d8c",
+      "local_sha256": "3dc3853f3ef5bcb5b098bcacd8fc1afad8731978efe5a066d7f136442bb76623",
       "reasons": [
         "group-removal",
         "retired",
         "channel-ratio",
         "token-routing",
         "query-credential-redaction",
-        "protocol-schema-preservation"
+        "protocol-schema-preservation",
+        "usage-discount"
       ]
     },
     {
@@ -5737,10 +5780,11 @@
       "path": "relay/helper/price.go",
       "status": "adapted",
       "upstream_sha256": "9fff94958ffb64b581fe1f02e3ddb6195132441a39252112c2e55c0d53d20430",
-      "local_sha256": "c2cf3d35b53e33c66d48091634968427d2576015867b7e7055f2c57cf8185e7f",
+      "local_sha256": "5fe6754551438eedd8ef560e167a74f1f828533d581c7a4122c64776275f8ef8",
       "reasons": [
         "channel-ratio",
-        "group-removal"
+        "group-removal",
+        "usage-discount"
       ]
     },
     {
@@ -5790,6 +5834,12 @@
       "status": "adapted",
       "upstream_sha256": "5b8394261f6412ba64be1813d7a40e38b6b940062a024ead077770c42ce7f397",
       "local_sha256": "cebf1dbcd62c415ddab5bc104987f4e5e52b91c8420d34b282d65a60d77fb2cd"
+    },
+    {
+      "path": "relay/helper/usage_discount_price_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a25c1eb64231bb1924a6577a9c12fcc01f0d11894cd7f8f7ca02b91775375f5d"
     },
     {
       "path": "relay/helper/valid_request.go",
@@ -5864,12 +5914,13 @@
       "path": "relay/relay_task.go",
       "status": "adapted",
       "upstream_sha256": "6ab687f070babcf6d6704f9d9f13405908f587e3a22be940f0214a9efa4c0676",
-      "local_sha256": "fd5811d602f0ccd80121882f8e2f584d521b74c74bf86695c12f43650760a7e5",
+      "local_sha256": "40869d04a95ca5fa3fde9ece51676ad973c6a3c0472cb74457ed64bd2c8f3b9c",
       "reasons": [
         "channel-ratio",
         "token-routing",
         "concurrency",
-        "group-removal"
+        "group-removal",
+        "usage-discount"
       ]
     },
     {
@@ -6962,7 +7013,7 @@
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "7cfd94ad4768920203d49bd2f687c1e7e86d7a60715834615613a0295a5f147b",
-      "local_sha256": "bebe6d7e836f30cefefbadcf9af7c9af168c035ba48e4a8a4e955c6e15cb62d2",
+      "local_sha256": "42439d0475694f04d1b6c8e2a7415dc10864b30afd9130230d35a4ffdc58f4c3",
       "reasons": [
         "group-removal",
         "retired",
@@ -6972,7 +7023,8 @@
         "ticket",
         "affiliate",
         "gmpay",
-        "ops-metrics"
+        "ops-metrics",
+        "usage-discount"
       ]
     },
     {
@@ -7691,11 +7743,12 @@
       "path": "service/log_info_generate.go",
       "status": "adapted",
       "upstream_sha256": "3edada64e5d203a41998c0e7469fdfa72c303d104a128abb959bfb6d67fdf4be",
-      "local_sha256": "77c5fce28a6178bbe626d2b62a5b8078138f27384f90b53abf6a7fee2de6127f",
+      "local_sha256": "f83fa2d51fcd1a2b4c0f0ba268817c031ee911df6a3dc23d1091b9cafa34d7c5",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired"
+        "retired",
+        "usage-discount"
       ]
     },
     {
@@ -8106,11 +8159,12 @@
       "path": "service/task_billing.go",
       "status": "adapted",
       "upstream_sha256": "a2ac29108b2cfdb80fd0e343914754392907da5acab3f81bf7e3ff10850abeca",
-      "local_sha256": "26ce46610ae53fdb118f62e060c4c481bc9ea6268a8f587f249ded953e4a5436",
+      "local_sha256": "d5315ad02ba563cc012a9446e27c974a66a50b5ae4f450520526a2f4b0bc6a03",
       "reasons": [
         "channel-ratio",
         "retired",
-        "group-removal"
+        "group-removal",
+        "usage-discount"
       ]
     },
     {
@@ -8246,6 +8300,42 @@
       "local_sha256": "478b81e9e287e65d072293c95197a11325585256ff63290f21e861932da7d144"
     },
     {
+      "path": "service/usage_discount.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "aca5a1531afc6588fa26444a21815488369b0e623cf9fcad57d20592ddd09f96"
+    },
+    {
+      "path": "service/usage_discount_estimate.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "32c73e43584681bdf4bd2c1936b2ca92fd5e54700efb36219b99533a17a59da9"
+    },
+    {
+      "path": "service/usage_discount_estimate_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "47f049f59035f72af75975c30a7b7f27003e2cf35bda0eb3bf8103cc9a474250"
+    },
+    {
+      "path": "service/usage_discount_log.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3696e64a4919a58558b2bd8b7cfcae94651b37089249b60b34c737068150efcd"
+    },
+    {
+      "path": "service/usage_discount_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "02e730ee3769010c3be12906c8b0639c0f0bdb98e9674917461df0021091cbf0"
+    },
+    {
+      "path": "service/usage_discount_violation_fee_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e8101541ec990996d46e38a3f647a3ca89db025fa7bb4a750ea0ccda937b1bd5"
+    },
+    {
       "path": "service/usage_helpr.go",
       "status": "upstream_equal",
       "upstream_sha256": "ed21d633d0526cfb95183c88df3e22970e24625b993e521017070ceb519fd65e",
@@ -8282,11 +8372,12 @@
       "path": "service/violation_fee.go",
       "status": "adapted",
       "upstream_sha256": "ee38f6a2b2243f41f05f44bd81c0ef39250cafc1d3d5f2031715d90987014f88",
-      "local_sha256": "c2e9c0e6fe6289a8e943dea781c31c8a04e3a9e803efb77f3c91a892fca230a7",
+      "local_sha256": "af5aad37b94c8a9e32f23e7609ddc6ee4ef914e0363b74afa7d1c79ba75ba58c",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired"
+        "retired",
+        "usage-discount"
       ]
     },
     {
@@ -8819,10 +8910,11 @@
       "path": "types/price_data.go",
       "status": "adapted",
       "upstream_sha256": "1cec62351b2bd4250b4d67ad4d6523aa31751b99514960c0789b449004be8702",
-      "local_sha256": "c2aff957b1ee5b9a96d1b43e42f5e0e5c90effba793b036e0b0b4e891a252e22",
+      "local_sha256": "560ed740c901e37c3160fe0c119e948b475300812a2a8464f8c2eb5880ce2ff4",
       "reasons": [
         "group-removal",
-        "channel-ratio"
+        "channel-ratio",
+        "usage-discount"
       ]
     },
     {
@@ -8842,6 +8934,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "869f71f2ddda2bc662bdd9486106e9cd93f40a3c844581c66048eb44b83614d7",
       "local_sha256": "869f71f2ddda2bc662bdd9486106e9cd93f40a3c844581c66048eb44b83614d7"
+    },
+    {
+      "path": "types/usage_discount.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1902703f741a0d77c50564e3b6d4671bcd37dc0662625805fc34939fffea2acd"
     }
   ],
   "candidate_sha": null,

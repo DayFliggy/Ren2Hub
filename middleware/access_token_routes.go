@@ -42,6 +42,7 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/user/model-catalog":                accessTokenScopeRule("profile:read"),
+	"GET /api/user/usage-discount":               accessTokenScopeRule("profile:read"),
 	"GET /api/data/self/summary":                 accessTokenScopeRule("usage:read"),
 	"GET /api/performance/routing":               accessTokenScopeRule("ops:read"),
 	"GET /api/admin/affiliate/records":           accessTokenScopeRule("user:read"),
@@ -141,6 +142,10 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"PATCH /api/option/model_pricing":           accessTokenScopeRule("option:write"),
 	"POST /api/option/model_pricing/convert":    accessTokenScopeRule("option:read"),
 	"POST /api/option/model_pricing/preview":    accessTokenScopeRule("option:read"),
+	"GET /api/option/usage_discount":            accessTokenScopeRule("option:read"),
+	"PATCH /api/option/usage_discount":          accessTokenScopeRule("option:write"),
+	"GET /api/option/usage_discount/status":     accessTokenScopeRule("option:read"),
+	"POST /api/option/usage_discount/estimate":  accessTokenScopeRule("option:read"),
 	"POST /api/option/payment_compliance":       accessTokenSessionRule,
 	"GET /api/option/channel_affinity_cache":    accessTokenScopeRule("option:read"),
 	"DELETE /api/option/channel_affinity_cache": accessTokenScopeRule("option:write"),
