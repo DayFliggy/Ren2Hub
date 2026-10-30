@@ -104,7 +104,9 @@ func SumUsageDiscountByUser(start, end int64) ([]UsageDiscountUserQuota, error) 
 
 // DeleteUsageDiscountHourlyBefore removes rows older than the retention cutoff.
 func DeleteUsageDiscountHourlyBefore(hourUTC int64) error {
-	err := DB.Where("hour_utc < ?", hourUTC).Delete(&UsageDiscountHourly{}).Error
+	db, cancel := usageDiscountDB()
+	defer cancel()
+	err := db.Where("hour_utc < ?", hourUTC).Delete(&UsageDiscountHourly{}).Error
 	if err != nil {
 		usageDiscountHealth.cleanup.record()
 	}
