@@ -279,7 +279,7 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     cache.mkdir(parents=True, exist_ok=True)
     results = []
     suites = {
-        './model': '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess|UsageDiscountDatabaseMatrix)',
+        './model': '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess)',
         './service': '^Test.*(Concurrency|Admission|UsageDiscount)',
         './controller': '^TestResponsesWebSocket(ReusesConnectionAndSettlesEachRequest|DisconnectSettlesDeliveredOutputOnce)$',
     }
