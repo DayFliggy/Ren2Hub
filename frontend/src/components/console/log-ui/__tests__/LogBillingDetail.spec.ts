@@ -109,7 +109,8 @@ describe('native consumption log detail', () => {
           raw_rate: '0.01',
           cap_rate: '0.05',
           config_version: 0,
-          shadow_rates: { day: '0.01', month: '0' },
+          // Go writes map keys in alphabetical order.
+          shadow_rates: { day: '0.01', month: '0', site: '0.02' },
         },
       },
     })
@@ -118,9 +119,27 @@ describe('native consumption log detail', () => {
     )
     expect(shadow.text()).not.toContain('Base channel ratio')
     expect(shadow.get('[data-log-usage-discount-admin]').text()).toContain(
-      'Day 1% · Month 0%'
+      'Site 2% · Day 1% · Month 0%'
     )
     shadow.unmount()
+  })
+
+  it('shows no administrator summary for an unknown shadow component', () => {
+    const evidence = {
+      admin_info: {
+        usage_discount: {
+          status: 'ok',
+          raw_rate: '0.01',
+          cap_rate: '0.05',
+          config_version: 2,
+          shadow_rates: { fixed: '0.01' },
+        },
+      },
+    }
+    const wrapper = render(evidence)
+    expect(wrapper.find('[data-log-usage-discount]').exists()).toBe(false)
+    expect(JSON.parse(wrapper.get('pre').text())).toEqual(evidence)
+    wrapper.unmount()
   })
 
   it('shows no summary for malformed discount evidence and keeps the raw JSON', () => {

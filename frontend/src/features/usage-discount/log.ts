@@ -15,6 +15,8 @@ import { isDecimal } from '@/utils/decimal'
 
 export const LOG_COMPONENTS = ['fixed', 'site', 'day', 'week', 'month'] as const
 export type LogComponent = (typeof LOG_COMPONENTS)[number]
+// The fixed rate has no mode, so it is never a shadow component.
+const SHADOW_COMPONENTS: readonly string[] = LOG_COMPONENTS.slice(1)
 
 export interface LogUsageDiscount {
   status: UsageDiscountSelfStatus
@@ -31,8 +33,8 @@ export interface LogUsageDiscountAdmin {
   raw_rate: string
   cap_rate: string
   config_version: number
-  /** Would-be rates of shadow components, keyed site/day/week/month. */
-  shadow_rates: Record<string, string>
+  /** Would-be rates of shadow components: site, day, week or month. */
+  shadow_rates: Partial<Record<LogComponent, string>>
 }
 
 function isRate(value: unknown): value is string {
@@ -90,7 +92,9 @@ export function logUsageDiscountAdmin(
     !isRate(value.cap_rate) ||
     !Number.isSafeInteger(value.config_version) ||
     !isRecord(shadow) ||
-    !Object.values(shadow).every(isRate)
+    !Object.entries(shadow).every(
+      ([part, rate]) => SHADOW_COMPONENTS.includes(part) && isRate(rate)
+    )
   )
     return null
   return {
@@ -98,6 +102,6 @@ export function logUsageDiscountAdmin(
     raw_rate: value.raw_rate,
     cap_rate: value.cap_rate,
     config_version: value.config_version as number,
-    shadow_rates: shadow as Record<string, string>,
+    shadow_rates: shadow as Partial<Record<LogComponent, string>>,
   }
 }

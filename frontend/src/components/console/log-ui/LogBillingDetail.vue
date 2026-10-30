@@ -9,6 +9,7 @@ import {
   LOG_COMPONENTS,
   logUsageDiscount,
   logUsageDiscountAdmin,
+  type LogComponent,
 } from '@/features/usage-discount/log'
 const props = defineProps<{ log: LogItem }>(),
   { t } = useI18n()
@@ -23,14 +24,13 @@ const discountStatus = computed(
 function percent(rate: string) {
   return `${rateToPercent(rate)}%`
 }
-function part(name: string) {
-  return (LOG_COMPONENTS as readonly string[]).includes(name)
-    ? t(`billing.usageDiscount.${name}`)
-    : name
+function part(name: LogComponent) {
+  return t(`billing.usageDiscount.${name}`)
 }
-function parts(rates: Record<string, string>) {
-  return Object.entries(rates)
-    .map(([name, rate]) => `${part(name)} ${percent(rate)}`)
+// Components always read in LOG_COMPONENTS order, whatever the JSON order.
+function parts(rates: Partial<Record<LogComponent, string>>) {
+  return LOG_COMPONENTS.filter((name) => rates[name] !== undefined)
+    .map((name) => `${part(name)} ${percent(rates[name]!)}`)
     .join(' · ')
 }
 </script>
