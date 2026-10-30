@@ -16,6 +16,7 @@ afterEach(async () => {
 
 /** Platform and effective differ, so each figure can be traced to its ratio. */
 const discounts: UserDiscounts = {
+  status: 'ok',
   global_ratio: 0.9,
   effective_ratio: 0.72,
 }
@@ -95,7 +96,7 @@ describe('DiscountCard', () => {
   it('writes Chinese discounts in 折, not as the percentage off', async () => {
     await setLocale('zh-CN')
     const wrapper = render({
-      discounts: { global_ratio: 0.88, effective_ratio: 0.88 },
+      discounts: { status: 'ok', global_ratio: 0.88, effective_ratio: 0.88 },
     })
 
     expect(tile(wrapper, '全局折扣')).toContain('平台 8.8 折')
@@ -122,7 +123,7 @@ describe('DiscountCard', () => {
     async ({ locale, globalCopy, effectiveCopy, forbidden }) => {
       await setLocale(locale)
       const wrapper = render({
-        discounts: { global_ratio: 1, effective_ratio: 1 },
+        discounts: { status: 'inactive', global_ratio: 1, effective_ratio: 1 },
       })
 
       expect(wrapper.text()).toContain(globalCopy)
@@ -130,6 +131,48 @@ describe('DiscountCard', () => {
       for (const copy of forbidden) expect(wrapper.text()).not.toContain(copy)
       const bar = wrapper.find('[data-discount-effective-bar] div')
       expect((bar.element as HTMLElement).style.width).toBe('0%')
+      expect(wrapper.find('[data-discount-unavailable]').exists()).toBe(false)
     }
   )
+
+  it.each([
+    { locale: 'en', note: 'Usage discount is temporarily unavailable' },
+    { locale: 'zh-CN', note: '用量折扣暂不可用' },
+  ])(
+    'keeps the fixed discount when usage data is unavailable in $locale',
+    async ({ locale, note }) => {
+      await setLocale(locale)
+      // Only the 1% fixed part applies while the usage windows are unreadable.
+      const wrapper = render({
+        discounts: {
+          status: 'unavailable',
+          global_ratio: 0.99,
+          effective_ratio: 0.99,
+        },
+      })
+
+      expect(wrapper.get('[data-discount-unavailable]').text()).toContain(note)
+      expect(wrapper.text()).toContain('0.990×')
+      expect(wrapper.text()).toContain('0.99×')
+      expect(wrapper.find('[data-discount-not-connected]').exists()).toBe(false)
+    }
+  )
+
+  it('says the discount could not be read instead of inventing a rate', () => {
+    const wrapper = render({ discounts: null, error: 'Request timed out' })
+    const state = wrapper.get('[data-discount-error]')
+
+    expect(state.text()).toContain('Discount unavailable')
+    expect(state.text()).toContain('Request timed out')
+    expect(wrapper.text()).not.toContain('×')
+    expect(wrapper.text()).not.toContain('Not connected')
+  })
+
+  it('shows the loading skeleton before the discount arrives', () => {
+    const wrapper = render({ discounts: null, loading: true })
+
+    expect(wrapper.find('[data-discount-not-connected]').exists()).toBe(false)
+    expect(wrapper.find('[data-discount-error]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('×')
+  })
 })

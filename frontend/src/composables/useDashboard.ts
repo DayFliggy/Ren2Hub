@@ -10,9 +10,11 @@ import {
   summaryFits,
   type SummaryRange,
 } from '@/api/dashboard'
+import { usageDiscountApi } from '@/api/usageDiscount'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import type { UsageDiscountSelfStatus } from '@/types/usageDiscount'
 
 export interface DashboardStats {
   quota: string
@@ -24,10 +26,14 @@ export interface DashboardStats {
   total_requests: number
 }
 
-/** No backend source exists yet; the discount card renders 未接入 for null. */
+/**
+ * Price multipliers from GET /api/user/usage-discount: 0.95 means 5% off.
+ * Display only; billing reads the exact decimal factor on the server.
+ */
 export interface UserDiscounts {
-  global_ratio: number // platform-wide pricing multiplier, e.g. 0.88
-  effective_ratio: number // effective pricing multiplier
+  status: UsageDiscountSelfStatus
+  global_ratio: number // fixed and site parts, e.g. 0.88
+  effective_ratio: number // the factor the next request is priced with
 }
 
 export interface ModelShare {
@@ -65,7 +71,8 @@ export function useDashboard() {
     toast = useToast(),
     auth = useAuthStore(),
     app = useAppStore(),
-    request = useLatestRequest()
+    request = useLatestRequest(),
+    discountRequest = useLatestRequest()
   const loading = ref(true),
     error = ref<string | null>(null),
     stats = ref<DashboardStats | null>(null),
@@ -75,7 +82,37 @@ export function useDashboard() {
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
   const usageUnavailable = ref(false)
+  const discounts = ref<UserDiscounts | null>(null),
+    discountsLoading = ref(true),
+    discountsError = ref<string | null>(null)
+  // The discount has its own request, so a failed or partial usage summary
+  // never hides it.
   async function load() {
+    await Promise.all([loadStats(), loadDiscounts()])
+  }
+  async function loadDiscounts() {
+    discountsLoading.value = true
+    discountsError.value = null
+    discounts.value = null
+    const result = await discountRequest.run((signal) =>
+      usageDiscountApi.self(signal)
+    )
+    if (result.stale) return
+    discountsLoading.value = false
+    if (!result.ok) {
+      discountsError.value =
+        result.error instanceof Error
+          ? result.error.message
+          : t('common.failed')
+      return
+    }
+    discounts.value = {
+      status: result.value.status,
+      global_ratio: Number(result.value.global_factor),
+      effective_ratio: Number(result.value.factor),
+    }
+  }
+  async function loadStats() {
     loading.value = true
     error.value = null
     stats.value = null
@@ -156,6 +193,9 @@ export function useDashboard() {
     recentOutOfRange,
     usageUnavailable,
     error,
+    discounts,
+    discountsLoading,
+    discountsError,
     load,
   }
 }

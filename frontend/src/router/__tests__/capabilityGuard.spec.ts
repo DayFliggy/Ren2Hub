@@ -439,6 +439,7 @@ describe('capability route guard', () => {
       '/models/vendors',
       '/models/pricing',
       '/models/prefill-groups',
+      '/usage-discount',
       '/ops',
       '/system-info',
     ]) {
@@ -606,6 +607,17 @@ describe('capability route guard', () => {
       expect(router.currentRoute.value.query.audit).toBe('1')
       expect(router.currentRoute.value.hash).toBe('#pricing')
     }
+  })
+
+  it('opens the usage discount page for root only', async () => {
+    for (const role of [1, 10]) {
+      useAuthStore().user!.role = role
+      await router.push('/usage-discount')
+      expect(router.currentRoute.value.name, String(role)).toBe('dashboard')
+    }
+    useAuthStore().user!.role = 100
+    await router.push('/usage-discount')
+    expect(router.currentRoute.value.name).toBe('usage-discount-admin')
   })
 
   it('keeps model pricing on the model management workspace for root only', async () => {

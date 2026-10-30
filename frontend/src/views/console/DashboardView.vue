@@ -39,6 +39,9 @@ const {
   recentOutOfRange,
   usageUnavailable,
   error: dashboardError,
+  discounts,
+  discountsLoading,
+  discountsError,
   load,
 } = useDashboard()
 const resources = useDashboardResources()
@@ -208,21 +211,26 @@ const rangeOptions = computed(() => [
             :error="resources.systemError.value"
             :loading="resources.systemLoading.value"
           />
+          <!-- Token 使用趋势 -->
+          <TokenTrendCard
+            v-if="!dashboardError"
+            class="min-w-0 xl:col-span-2"
+            :points="tokenTrend"
+            :loading="loading"
+            :unavailable-reason="
+              usageUnavailable
+                ? t('dashboard.stats.unavailable')
+                : recentOutOfRange
+            "
+          />
+          <!-- 折扣来自独立接口，个人汇总失败时照常显示 -->
+          <DiscountCard
+            class="min-w-0"
+            :discounts="discounts"
+            :loading="discountsLoading"
+            :error="discountsError"
+          />
           <template v-if="!dashboardError">
-            <!-- Token 使用趋势 -->
-            <TokenTrendCard
-              class="min-w-0 xl:col-span-2"
-              :points="tokenTrend"
-              :loading="loading"
-              :unavailable-reason="
-                usageUnavailable
-                  ? t('dashboard.stats.unavailable')
-                  : recentOutOfRange
-              "
-            />
-
-            <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
-            <DiscountCard class="min-w-0" :discounts="null" />
             <!-- 模型消费分布 -->
             <ModelDistributionCard
               class="min-w-0 xl:col-span-2"

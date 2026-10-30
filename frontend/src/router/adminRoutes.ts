@@ -53,6 +53,19 @@ export const adminRoutes: RouteRecordRaw[] = [
       nav: 'models-admin',
     },
   },
+  // Root-only, like model pricing: the backend gates it with RootAuth.
+  {
+    path: '/usage-discount',
+    name: 'usage-discount-admin',
+    component: () => import('@/views/admin/UsageDiscountView.vue'),
+    meta: {
+      wide: true,
+      requiresAdmin: true,
+      requiresRoot: true,
+      feature: 'admin',
+      protected: true,
+    },
+  },
   {
     path: '/models/prefill-groups',
     name: 'prefill-admin',

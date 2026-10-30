@@ -154,6 +154,15 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 3h6v4H9zM9 12h6M9 16h6',
       },
       {
+        name: 'usage-discount',
+        labelKey: 'nav.usageDiscount',
+        route: 'usage-discount-admin',
+        feature: 'admin',
+        rootOnly: true,
+        // Lucide "badge-percent"
+        icon: 'M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76ZM15 9l-6 6M9 9h.01M15 15h.01',
+      },
+      {
         name: 'task-plugins',
         labelKey: 'taskPlugins.title',
         route: 'task-plugins',

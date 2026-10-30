@@ -150,6 +150,31 @@
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
+/* An input with a fixed unit mark: $ before it or % after it. */
+.admin-affix {
+  position: relative;
+  display: block;
+}
+.admin-affix-mark {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+  pointer-events: none;
+}
+.admin-affix-mark.is-start {
+  left: 0.75rem;
+}
+.admin-affix-mark.is-end {
+  right: 0.75rem;
+}
+.admin-field .admin-affix input.has-start {
+  padding-left: 1.5rem;
+}
+.admin-field .admin-affix input.has-end {
+  padding-right: 1.75rem;
+}
 .admin-muted {
   color: var(--text-secondary);
   font-size: 0.8125rem;
