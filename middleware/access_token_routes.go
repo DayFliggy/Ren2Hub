@@ -144,7 +144,6 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/option/payment_compliance":       accessTokenSessionRule,
 	"GET /api/option/channel_affinity_cache":    accessTokenScopeRule("option:read"),
 	"DELETE /api/option/channel_affinity_cache": accessTokenScopeRule("option:write"),
-	"POST /api/option/rest_model_ratio":         accessTokenScopeRule("option:write"),
 	"GET /api/option/waffo-pancake/catalog":     accessTokenScopeRule("option:read"),
 	"POST /api/option/waffo-pancake/pair":       accessTokenScopeRule("option:write"),
 	"POST /api/option/waffo-pancake/save":       accessTokenScopeRule("option:write"),

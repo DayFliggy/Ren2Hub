@@ -82,9 +82,10 @@ describe('model pricing draft contracts', () => {
     expect(Object.hasOwn(result, 'constructor')).toBe(true)
     expect(Object.prototype).not.toHaveProperty('ModelPrice')
   })
-  it('clears stored prices without restoring defaults and retains original versions', () => {
-    expect(pricingChanges(config, {})).toEqual([
-      { model_name: 'model', expected_version: 'v1', pricing: {}, reset: true },
+  it('clears stored prices with an empty pricing map and retains original versions', () => {
+    // The backend has no reset flag: an empty map saves the model unpriced.
+    expect(pricingChanges(config, {})).toStrictEqual([
+      { model_name: 'model', expected_version: 'v1', pricing: {} },
     ])
     expect(pricingChanges(config, initialPricingDraft(config))).toEqual([])
   })

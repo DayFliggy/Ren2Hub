@@ -76,7 +76,6 @@ export interface ModelPricingChange {
   model_name: string
   expected_version: string
   pricing: PricingValues
-  reset?: boolean
 }
 export const CACHE_WRITE_MODES = [
   'none',

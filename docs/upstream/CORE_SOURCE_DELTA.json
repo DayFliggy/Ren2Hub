@@ -3,10 +3,10 @@
   "implementation_base_sha": "0837a03c77ea0d5b7618588d4c9e77781f656590",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 804,
-    "adapted": 273,
+    "upstream_equal": 798,
+    "adapted": 277,
     "extension": 238,
-    "removed": 43
+    "removed": 45
   },
   "files": [
     {
@@ -1112,7 +1112,7 @@
       "path": "controller/model_catalog_prices_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6b1cb04a226e274bee9b16862262edba89710d7de24740975c71ea91a7405a78"
+      "local_sha256": "bf1bfea8a77f3352dc9718a073e0ca9eba6170099c834aace4f17db0241f2039"
     },
     {
       "path": "controller/model_list_test.go",
@@ -1124,7 +1124,7 @@
       "path": "controller/model_management_test.go",
       "status": "adapted",
       "upstream_sha256": "f722866950eb9e9c39d97bf215014ef1715021dd235956c00e338bcfcc72a216",
-      "local_sha256": "515642de42033f0704978070087e7bed6dcfaac7f2fdc0139a8e239b7b367c55"
+      "local_sha256": "8e9562f426befc204042d1f81745ac122ecf976e4bbc904813b166a6609c3ff6"
     },
     {
       "path": "controller/model_meta.go",
@@ -1184,11 +1184,12 @@
       "path": "controller/option.go",
       "status": "adapted",
       "upstream_sha256": "b735400ac135d76dc33ac4b4cafc4726f0ce8c6e51c81d89238489b5e4b5344b",
-      "local_sha256": "5fe0951b7aaf7419e36d622efe183ba174e0e6ff8b1f28d7132bd2923f01700e",
+      "local_sha256": "726254dc0eef05b51e79201c5734170fa8e92e6d3f03cf62305ce82b85228ee8",
       "reasons": [
         "group-removal",
         "affiliate",
-        "retired"
+        "retired",
+        "no-builtin-prices"
       ]
     },
     {
@@ -1351,10 +1352,11 @@
       "path": "controller/pricing.go",
       "status": "adapted",
       "upstream_sha256": "4576b183b1c4739f6fa25f34be71fe938304133e82a087afdb292cb19c850953",
-      "local_sha256": "05ce38894661a18e618d20c239bae928b519d7724d87c62aecca422c5c7653f5",
+      "local_sha256": "96840d5df205fa3841c5dfc085255cbc06ed41581dcd07d5ba2c389914a970b6",
       "reasons": [
         "catalog-stats",
-        "group-removal"
+        "group-removal",
+        "no-builtin-prices"
       ]
     },
     {
@@ -2092,12 +2094,13 @@
       "path": "main.go",
       "status": "adapted",
       "upstream_sha256": "0431a88661ddac970da9b51e95ea76ca741afb782901cbbd0eb56d8bba14febc",
-      "local_sha256": "b921624d5c716e8da98edd5f73f3000153f6e63a6efdbd37c54495bfcf891c72",
+      "local_sha256": "5821063740a4618c51965068d6f67a0c7a5a6929c9cdb26b52b5cf735f261034",
       "reasons": [
         "vue-frontend",
         "branding",
         "retired",
-        "single-node"
+        "single-node",
+        "no-builtin-prices"
       ]
     },
     {
@@ -2128,14 +2131,15 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "6d8369b5e86765d65511680bb5ef29a1c94877d9922479f08dca55c3e63f0145",
-      "local_sha256": "caf22dcc5a5a5baa15cc34630892463724d0ef50dabbb4c27747747344fb1cec",
+      "local_sha256": "21bf23408224cd79fc5d1f9d305af01d955394370dc3df5c9bd4d51e4c738bd2",
       "reasons": [
         "extension-hook",
         "retired",
         "group-removal",
         "catalog-stats",
         "token-routing",
-        "affiliate"
+        "affiliate",
+        "no-builtin-prices"
       ]
     },
     {
@@ -2154,9 +2158,10 @@
       "path": "middleware/audit.go",
       "status": "adapted",
       "upstream_sha256": "1165af97b7abd4e13c0c8eddbc8e516f483de1c365383da73063cf0e1fab89f2",
-      "local_sha256": "96572e2c15909a19f0a6d493f877af2d770ec2b94616b4aa6f3594387cc1a787",
+      "local_sha256": "05ca15893202f4f662c30caf50bdf2e6c91756123e7f88ed3a032582e7a043cf",
       "reasons": [
-        "retired"
+        "retired",
+        "no-builtin-prices"
       ]
     },
     {
@@ -2575,13 +2580,13 @@
       "path": "model/catalog_prices.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8e004468f956b19d800b5e5f2e3a9c06a35e36a64df4117b5c82ec0587557755"
+      "local_sha256": "3002007c526a8f8fd0b526b78f6f8f1d964e9f220aa116175911071dadd1dab3"
     },
     {
       "path": "model/catalog_prices_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "36d5653ed5fa986281be3013e2da1331e110f9fac2f9b22f019d3adf3e4bcda9"
+      "local_sha256": "bbf5099be507ae1e90c52f87e19b2cd321049d243483d27784ebc1d47f9509a7"
     },
     {
       "path": "model/channel.go",
@@ -2996,18 +3001,20 @@
       "path": "model/model_pricing_config.go",
       "status": "adapted",
       "upstream_sha256": "3264709d3b8a1d6616a42f6bfa3e3fb2eec44b5cd27a17103cc63b39ae56c12f",
-      "local_sha256": "a2625073feb543380aff7a2ec2490f26f4f972a7356d9fb67668aff779d2510a",
+      "local_sha256": "88f3f52d21ffc8924e350026498005f07c204e58453347760e4ede3c7208e52d",
       "reasons": [
-        "catalog-stats"
+        "catalog-stats",
+        "no-builtin-prices"
       ]
     },
     {
       "path": "model/model_pricing_conversion.go",
       "status": "adapted",
       "upstream_sha256": "b5102eec6ce949172a55ae9e9060d66c93e9674f89839460973d358e995a519f",
-      "local_sha256": "8099ae1e046988e2e0e7aeb37bb03a5dfc687faefceb18ab0cdb281c0b3ad824",
+      "local_sha256": "32722ef9419575b227e8f6508dd9a97d9863362193bd598cb0974aa04a96bec6",
       "reasons": [
-        "catalog-stats"
+        "catalog-stats",
+        "no-builtin-prices"
       ]
     },
     {
@@ -4237,7 +4244,7 @@
       "path": "relay/alpha_search_handler_test.go",
       "status": "adapted",
       "upstream_sha256": "f94d85e82ff0c6b2cd0c8a4d754a3a227bfeceab20bbb9226ec0cf06e6f31a74",
-      "local_sha256": "ea9b4c3c1edf9a0e19f6246be34f967232400a25ecb9718b8a9604cdb66311f9"
+      "local_sha256": "c75c89d47d3d494aa149afbfc46c913ee1eb0108f7207e0c409a07c5b282f2fb"
     },
     {
       "path": "relay/audio_handler.go",
@@ -5737,17 +5744,18 @@
       "path": "relay/helper/price.go",
       "status": "adapted",
       "upstream_sha256": "9fff94958ffb64b581fe1f02e3ddb6195132441a39252112c2e55c0d53d20430",
-      "local_sha256": "c2cf3d35b53e33c66d48091634968427d2576015867b7e7055f2c57cf8185e7f",
+      "local_sha256": "ee768277a7759dc7098e9016f368f3c36532e9016bff5be20075dedc6c4caaa6",
       "reasons": [
         "channel-ratio",
-        "group-removal"
+        "group-removal",
+        "no-builtin-prices"
       ]
     },
     {
       "path": "relay/helper/price_test.go",
       "status": "adapted",
       "upstream_sha256": "97ccbc28f075a6c0d0571117940e2f0757b4ade584ef84ea57266035bce10778",
-      "local_sha256": "300a5106e36c80a5023c4f885c54872859a7c87c3aeaf6fb1a0da9d1652a2731"
+      "local_sha256": "491e84d4857ca8a2bfb2a6f742da466f78fdd429fa784061ba06525f5b7aa493"
     },
     {
       "path": "relay/helper/reasoning_suffix.go",
@@ -6962,7 +6970,7 @@
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "7cfd94ad4768920203d49bd2f687c1e7e86d7a60715834615613a0295a5f147b",
-      "local_sha256": "bebe6d7e836f30cefefbadcf9af7c9af168c035ba48e4a8a4e955c6e15cb62d2",
+      "local_sha256": "f01b85866c3211d0d2eb0a6b8b8631f4e588625dae2d81ed41704ae6d6bfa6e3",
       "reasons": [
         "group-removal",
         "retired",
@@ -6972,7 +6980,8 @@
         "ticket",
         "affiliate",
         "gmpay",
-        "ops-metrics"
+        "ops-metrics",
+        "no-builtin-prices"
       ]
     },
     {
@@ -7726,7 +7735,7 @@
       "path": "service/model_catalog_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0ea3e572cc60627b48a896c06d385a339b42cdb0e53d93112865abb4225f4f44"
+      "local_sha256": "8cd6c3a9d941fe92179316f52f35ba0fc6acf3343320b338f558025c3be28fb1"
     },
     {
       "path": "service/notify-limit.go",
@@ -7840,18 +7849,19 @@
       "path": "service/quota.go",
       "status": "adapted",
       "upstream_sha256": "4e7edea4c3de4a3d5ba99cca27f09d1c09dacb0cffa926784b9eaa24972daf9d",
-      "local_sha256": "0271947c25ea95d635033202fc10036ef85960ff081199635835e7ddb4912ff3",
+      "local_sha256": "bd90fd857140337d7393cc9be92a233c21bfe3895f5986a348bd56edcb9daf3c",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired"
+        "retired",
+        "no-builtin-prices"
       ]
     },
     {
       "path": "service/quota_saturation_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "59a9ccbfaafb251346321098fa13f35f7f998c95d34855b0f5bf6ff3e72e0ce4",
-      "local_sha256": "59a9ccbfaafb251346321098fa13f35f7f998c95d34855b0f5bf6ff3e72e0ce4"
+      "local_sha256": "9cd3ec49579677f9d7764edb549d7c671e00b656c2787c21e705ef54494c4296"
     },
     {
       "path": "service/rankings.go",
@@ -8157,10 +8167,11 @@
       "path": "service/text_quota.go",
       "status": "adapted",
       "upstream_sha256": "ba6a6d3f5d44867186c5cbede88cf6be1085324821a17111d369d6bdb3f84dc7",
-      "local_sha256": "953f9c298664a2b4ec686db986b62d7c20c0f017f4965c44d79f277aa0701a4d",
+      "local_sha256": "b3cec9e88389d5ca722ecb6b2db7ab8ce34433ced5ef03f4c697185beb58a6b0",
       "reasons": [
         "channel-ratio",
-        "group-removal"
+        "group-removal",
+        "no-builtin-prices"
       ]
     },
     {
@@ -8324,24 +8335,30 @@
     },
     {
       "path": "setting/billing_setting/builtin_billing.go",
-      "status": "upstream_equal",
+      "status": "removed",
       "upstream_sha256": "d982ec763665a8944685bb32756d911a3f991f2150c11fdb76c9c236bc1d5eab",
-      "local_sha256": "d982ec763665a8944685bb32756d911a3f991f2150c11fdb76c9c236bc1d5eab"
+      "local_sha256": null,
+      "reasons": [
+        "no-builtin-prices"
+      ]
     },
     {
       "path": "setting/billing_setting/builtin_billing_test.go",
-      "status": "adapted",
+      "status": "removed",
       "upstream_sha256": "13ee0ef8bb0bc9cc13985b9ca0dc808a2d77fd2ba3bd617585424b7cb8f853c5",
-      "local_sha256": "6de80e4d279448fcb5e73be2f0e2b281bc795f06d2ab65a4ca7afe7cf4ebde64",
+      "local_sha256": null,
       "reasons": [
-        "cache-ttl-billing"
+        "no-builtin-prices"
       ]
     },
     {
       "path": "setting/billing_setting/tiered_billing.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "86739616eae283319edc72b894d190872dab5fcdfcfb5208cdc93e581fcd2e34",
-      "local_sha256": "86739616eae283319edc72b894d190872dab5fcdfcfb5208cdc93e581fcd2e34"
+      "local_sha256": "be219503a44c2e35aba0e09d19fb1ac5d9ec83a2bf62fc1e9300c75ee5cc4f8a",
+      "reasons": [
+        "no-builtin-prices"
+      ]
     },
     {
       "path": "setting/billing_setting/tiered_billing_test.go",
@@ -8540,9 +8557,12 @@
     },
     {
       "path": "setting/operation_setting/tools.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "d8f40274c18adacc91dd317518315823082eaae6a5fec23136c4fe1ec964b6fd",
-      "local_sha256": "d8f40274c18adacc91dd317518315823082eaae6a5fec23136c4fe1ec964b6fd"
+      "local_sha256": "f4eb7bccedb1ba44181e8be3d4f7f97049bf4c12e3058a2d999a14942dde0e81",
+      "reasons": [
+        "no-builtin-prices"
+      ]
     },
     {
       "path": "setting/operation_setting/tools_price_test.go",
@@ -8607,9 +8627,12 @@
     },
     {
       "path": "setting/ratio_setting/cache_ratio.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "8b81ca3fa0c33ba50392019db73694563af71e1306f8a1ba4c801f4fa61eeca6",
-      "local_sha256": "8b81ca3fa0c33ba50392019db73694563af71e1306f8a1ba4c801f4fa61eeca6"
+      "local_sha256": "ab78137e5cad9ae4fa9735f88002700ebbab73d68a58d0649195a0d0d743f89c",
+      "reasons": [
+        "no-builtin-prices"
+      ]
     },
     {
       "path": "setting/ratio_setting/expose_ratio.go",
@@ -8637,9 +8660,12 @@
     },
     {
       "path": "setting/ratio_setting/model_ratio.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "45382d83e32a5c6fcbfa8090fd1a244b13e7e7a9b82884589876b5fea8f624fc",
-      "local_sha256": "45382d83e32a5c6fcbfa8090fd1a244b13e7e7a9b82884589876b5fea8f624fc"
+      "local_sha256": "aef02d2a73af16fcea6b82b23e30e9bf8ad72ca2aced0adff0c686f7c95794f3",
+      "reasons": [
+        "no-builtin-prices"
+      ]
     },
     {
       "path": "setting/reasoning/suffix.go",

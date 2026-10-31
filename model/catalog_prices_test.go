@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -52,18 +53,16 @@ func TestCatalogPriceProjectsNonTextDimensions(t *testing.T) {
 	require.Equal(t, "2", price.PricingValues["cache"], "scaling must not mutate the baseline")
 }
 
-func TestCatalogPriceClassifiesCustomCacheDimensionAsConfigured(t *testing.T) {
-	previous := DB
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	DB = db
-	t.Cleanup(func() { DB = previous; connection, _ := db.DB(); _ = connection.Close() })
-	require.NoError(t, db.AutoMigrate(&Option{}))
+// An auxiliary ratio alone does not price a model: with no built-in base
+// price, a saved cache ratio leaves the model unavailable.
+func TestCatalogPriceAuxiliaryRatioAloneIsNotAPrice(t *testing.T) {
+	db := setupCatalogPricingTest(t)
 	require.NoError(t, db.Create(&Option{Key: "CacheRatio", Value: `{"gpt-4o":0.25}`}).Error)
 	prices, err := CatalogPrices(context.Background(), []string{"gpt-4o"})
 	require.NoError(t, err)
-	require.Equal(t, "configured", prices["gpt-4o"].PriceStatus)
-	require.Contains(t, prices["gpt-4o"].PricingValues, "cache")
+	require.Equal(t, "unavailable", prices["gpt-4o"].PriceStatus)
+	require.Equal(t, "price_not_configured", prices["gpt-4o"].PriceReason)
+	require.Empty(t, prices["gpt-4o"].PricingValues)
 }
 
 func setupCatalogPricingTest(t *testing.T) *gorm.DB {
@@ -82,7 +81,9 @@ func setupCatalogPricingTest(t *testing.T) *gorm.DB {
 }
 
 func TestCatalogPriceNativeSpecializedDimensions(t *testing.T) {
-	setupCatalogPricingTest(t)
+	db := setupCatalogPricingTest(t)
+	require.NoError(t, db.Create(&Option{Key: "ModelRatio", Value: `{"claude-sonnet-4-20250514":1.5}`}).Error)
+	require.NoError(t, db.Create(&Option{Key: "CreateCacheRatio", Value: `{"claude-sonnet-4-20250514":1.25}`}).Error)
 	for _, tc := range []struct {
 		unit             float64
 		cache5m, cache1h string
@@ -92,19 +93,31 @@ func TestCatalogPriceNativeSpecializedDimensions(t *testing.T) {
 		{100000, "18.75", "30"},
 	} {
 		common.QuotaPerUnit = tc.unit
-		prices, err := CatalogPrices(context.Background(), []string{"gemini-2.5-flash", "claude-sonnet-4-20250514", "gemini-2.5-flash-thinking-2048", "not-configured"})
+		prices, err := CatalogPrices(context.Background(), []string{"claude-sonnet-4-20250514", "gemini-2.5-flash", "gemini-2.5-flash-thinking-2048", "not-configured"})
 		require.NoError(t, err)
-		for _, name := range []string{"gemini-2.5-flash", "gemini-2.5-flash-thinking-2048"} {
-			require.Equal(t, "default", prices[name].PriceStatus)
-			require.Equal(t, "1", prices[name].PricingValues["audio_input"], "native Gemini's absolute audio price is independent of the quota unit")
-			require.NotContains(t, prices[name].PricingValues, "audio_output", "no separate native output audio price is configured")
-		}
+		require.Equal(t, "configured", prices["claude-sonnet-4-20250514"].PriceStatus)
 		require.Equal(t, tc.cache5m, prices["claude-sonnet-4-20250514"].PricingValues["cache_create"])
 		require.Equal(t, tc.cache1h, prices["claude-sonnet-4-20250514"].PricingValues["cache_create_1h"])
-		require.Equal(t, "unavailable", prices["not-configured"].PriceStatus)
-		require.Equal(t, "price_not_configured", prices["not-configured"].PriceReason)
-		require.Empty(t, prices["not-configured"].PricingValues)
+		// No model is priced out of the box, including former built-in ones.
+		for _, name := range []string{"gemini-2.5-flash", "gemini-2.5-flash-thinking-2048", "not-configured"} {
+			require.Equal(t, "unavailable", prices[name].PriceStatus, name)
+			require.Equal(t, "price_not_configured", prices[name].PriceReason, name)
+			require.Empty(t, prices[name].PricingValues, name)
+		}
 	}
+}
+
+// Self-use mode is the only source of the "default" status: its 37.5
+// fallback ratio prices models that have no saved price.
+func TestCatalogPriceSelfUseFallbackIsDefault(t *testing.T) {
+	setupCatalogPricingTest(t)
+	previous := operation_setting.SelfUseModeEnabled
+	operation_setting.SelfUseModeEnabled = true
+	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = previous })
+	prices, err := CatalogPrices(context.Background(), []string{"not-configured"})
+	require.NoError(t, err)
+	require.Equal(t, "default", prices["not-configured"].PriceStatus)
+	require.Equal(t, map[string]string{"input": "75", "output": "75", "cache": "75", "cache_create": "75", "image": "75"}, prices["not-configured"].PricingValues)
 }
 
 func TestCatalogPriceProjectsOpenAITwelveHourCacheWritePrice(t *testing.T) {
@@ -134,19 +147,8 @@ func TestCatalogPriceSpecializedOverridesAndExplicitZero(t *testing.T) {
 	require.Equal(t, "0", prices["audio-zero"].PricingValues["audio_output"])
 	require.Equal(t, "2", prices["audio-output-only"].PricingValues["audio_input"])
 	require.Equal(t, "6", prices["audio-output-only"].PricingValues["audio_output"])
-	require.Equal(t, "0", prices["gemini-2.5-flash"].PricingValues["input"])
-	require.Equal(t, "1", prices["gemini-2.5-flash"].PricingValues["audio_input"])
-	require.NotEqual(t, "zero", prices["gemini-2.5-flash"].PriceStatus, "free text does not make dedicated audio free")
-}
-
-func TestCatalogPriceDoesNotChooseBetweenConflictingAudioProtocols(t *testing.T) {
-	db := setupCatalogPricingTest(t)
-	require.NoError(t, db.Create(&Option{Key: "AudioRatio", Value: `{"gemini-2.5-flash":0}`}).Error)
-	prices, err := CatalogPrices(context.Background(), []string{"gemini-2.5-flash"})
-	require.NoError(t, err)
-	require.Equal(t, "unavailable", prices["gemini-2.5-flash"].PriceStatus)
-	require.Equal(t, "protocol_dependent_audio_price", prices["gemini-2.5-flash"].PriceReason)
-	require.Empty(t, prices["gemini-2.5-flash"].PricingValues, "explicit free compatible audio must not hide the native $1 audio path")
+	require.Equal(t, "zero", prices["gemini-2.5-flash"].PriceStatus, "free text has no hidden built-in audio price")
+	require.NotContains(t, prices["gemini-2.5-flash"].PricingValues, "audio_input")
 }
 
 func TestCatalogPriceRejectsOverflowingAudioDisplayPrice(t *testing.T) {

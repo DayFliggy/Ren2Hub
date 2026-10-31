@@ -148,7 +148,7 @@ const tabs = computed(() => [
   { key: 'tools', label: t('tools') },
 ])
 const modeOptions = computed(() => [
-  { value: '', label: t('all') },
+  { value: '', label: t('filterAll') },
   { value: 'tiered_expr', label: t('expression') },
   { value: 'per-token', label: t('token') },
   { value: 'per-request', label: t('request') },

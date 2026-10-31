@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,6 +87,13 @@ func TestDeepSeekToolsHelper(t *testing.T) {
 	batch, logConsume := common.BatchUpdateEnabled, common.LogConsumeEnabled
 	common.BatchUpdateEnabled, common.LogConsumeEnabled = true, false
 	t.Cleanup(func() { common.BatchUpdateEnabled, common.LogConsumeEnabled = batch, logConsume })
+	// The routing names have no built-in price: $0.75 per 1,000 requests is
+	// configured here the way an administrator would save it.
+	saveBillingConfig(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.billing_mode": `{"deepseek-search":"tiered_expr","deepseek-fetch":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"deepseek-search":"tier(\"request\", fixed(0.00075))","deepseek-fetch":"tier(\"request\", fixed(0.00075))"}`,
+	}))
 
 	const search, fetch = "/v1/tools/search", "/v1/tools/fetch"
 	const results = `{"results":[{"title":"DeepSeek","url":"https://deepseek.com/","rerank_score":2.1}]}`
@@ -137,7 +145,7 @@ func TestDeepSeekToolsHelper(t *testing.T) {
 			require.NoError(t, err)
 			info.BillingRequestInput = &billingexpr.RequestInput{Body: []byte(tc.body)}
 			_, err = helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
-			require.NoError(t, err, "the routing name is priced out of the box")
+			require.NoError(t, err, "the configured routing name is priced")
 			settlement := &recordedSettlement{}
 			info.Billing = settlement
 

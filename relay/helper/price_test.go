@@ -623,7 +623,7 @@ func TestModelPriceHelperPreservesGpt51CodexMaxIdentity(t *testing.T) {
 	assert.Equal(t, 1.75, priceData.ModelRatio)
 }
 
-// DeepSeek thinking tails and @ modifiers bill at the base model's built-in
+// DeepSeek thinking tails and @ modifiers bill at the base model's configured
 // expression; a name on the thinking-suffix blacklist stays opaque and needs
 // its own price.
 func TestModelPriceHelperDeepSeekThinkingTailsBillAtBase(t *testing.T) {
@@ -635,9 +635,13 @@ func TestModelPriceHelperDeepSeekThinkingTailsBillAtBase(t *testing.T) {
 		return nil
 	}))
 	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(saved)) })
+	expressions := map[string]string{
+		"deepseek-flash":  `tier("base", p * 0.15 + c * 0.6)`,
+		"deepseek-v4-pro": `tier("base", p * 0.66 + c * 1.98)`,
+	}
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode": `{}`,
-		"billing_setting.billing_expr": `{}`,
+		"billing_setting.billing_mode": `{"deepseek-flash":"tiered_expr","deepseek-v4-pro":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"deepseek-flash":"tier(\"base\", p * 0.15 + c * 0.6)","deepseek-v4-pro":"tier(\"base\", p * 0.66 + c * 1.98)"}`,
 	}))
 	oldSelfUse := operation_setting.SelfUseModeEnabled
 	operation_setting.SelfUseModeEnabled = false
@@ -666,9 +670,8 @@ func TestModelPriceHelperDeepSeekThinkingTailsBillAtBase(t *testing.T) {
 		_, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
 		require.NoError(t, err, origin)
 		assert.Equal(t, base, info.BillingModelName, origin)
-		expression, _ := billing_setting.GetBuiltinBillingExpr(base)
 		require.NotNil(t, info.TieredBillingSnapshot, origin)
-		assert.Equal(t, expression, info.TieredBillingSnapshot.ExprString, origin)
+		assert.Equal(t, expressions[base], info.TieredBillingSnapshot.ExprString, origin)
 	}
 
 	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-v4-pro-max"}
@@ -778,3 +781,41 @@ func (s *priceTestReservation) GetPreConsumedQuota() int { return s.held }
 func (s *priceTestReservation) Reserve(quota int) error  { s.held = max(s.held, quota); return nil }
 
 func (s *priceTestReservation) ReserveBeforeSubmit(quota int) error { return s.Reserve(quota) }
+
+// No model has a built-in price: formerly built-in names are rejected on both
+// pricing paths, and an unset completion ratio prices output like input even
+// for models whose ratio used to be locked.
+func TestModelPriceHelperHasNoBuiltInPrices(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	savedRatios := ratio_setting.ModelRatio2JSONString()
+	savedCompletion := ratio_setting.CompletionRatio2JSONString()
+	savedPrices := ratio_setting.ModelPrice2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
+		require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(savedCompletion))
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
+	})
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"gpt-4o":1.25,"claude-sonnet-4-20250514":1.5}`))
+	require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(`{"claude-sonnet-4-20250514":2}`))
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{}`))
+	oldSelfUse := operation_setting.SelfUseModeEnabled
+	operation_setting.SelfUseModeEnabled = false
+	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = oldSelfUse })
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Set("channel_ratio", "1")
+
+	for _, name := range []string{"gpt-4", "BLOOMZ-7B", "deepseek-chat"} {
+		_, err := ModelPriceHelper(ctx, &relaycommon.RelayInfo{OriginModelName: name}, 1000, &types.TokenCountMeta{})
+		require.ErrorContains(t, err, name)
+	}
+	_, err := ModelPriceHelperPerCall(ctx, &relaycommon.RelayInfo{OriginModelName: "mj_imagine"})
+	require.ErrorContains(t, err, "mj_imagine")
+
+	for name, want := range map[string]float64{"gpt-4o": 1, "claude-sonnet-4-20250514": 2} {
+		price, err := ModelPriceHelper(ctx, &relaycommon.RelayInfo{OriginModelName: name}, 1000, &types.TokenCountMeta{})
+		require.NoError(t, err, name)
+		assert.Equal(t, want, price.CompletionRatio, name)
+	}
+}
