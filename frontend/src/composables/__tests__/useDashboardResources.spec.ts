@@ -104,6 +104,36 @@ describe('useDashboardResources', () => {
     )
     expect(state.system.value).toBeNull()
   })
+  it.each([
+    [
+      'a proxy failure',
+      new ApiError('Request failed with status code 502', { status: 502 }),
+      'Service unavailable (HTTP 502)',
+    ],
+    [
+      'a network failure',
+      new ApiError('Network Error'),
+      'Network connection failed',
+    ],
+    [
+      'a broken response',
+      new ApiError('Invalid API response: /api/user/system-status', {
+        status: 502,
+        code: 'INVALID_RESPONSE',
+      }),
+      'The server returned an unrecognized response',
+    ],
+    [
+      "the server's own business message",
+      new ApiError('Access denied', { status: 200, business: true }),
+      'Access denied',
+    ],
+  ])('names %s in the interface language', async (_name, error, message) => {
+    getStatus.mockRejectedValueOnce(error)
+    setup()
+    await flushPromises()
+    expect(state.systemError.value).toBe(message)
+  })
   it('starts no snapshot request for anonymous sessions', async () => {
     setup(null)
     await flushPromises()

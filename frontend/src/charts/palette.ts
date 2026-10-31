@@ -11,6 +11,10 @@ export interface ChartPalette {
   signalStrong: string
   support: string
   glow: string
+  /** Root resource history lines; hues outside the load ramp. */
+  trendCpu: string
+  trendMemory: string
+  trendDisk: string
   success: string
   warning: string
   danger: string
@@ -68,6 +72,12 @@ export function chartPalette(): ChartPalette {
     ),
     support: normalizeOpaqueColor(resolveToken('--support'), '#cfaf6b'),
     glow,
+    trendCpu: normalizeOpaqueColor(resolveToken('--trend-cpu'), '#224a8d'),
+    trendMemory: normalizeOpaqueColor(
+      resolveToken('--trend-memory'),
+      '#7a6fb1'
+    ),
+    trendDisk: normalizeOpaqueColor(resolveToken('--trend-disk'), '#77324b'),
     success: normalizeOpaqueColor(resolveToken('--status-success'), '#64764b'),
     warning: normalizeOpaqueColor(resolveToken('--status-warning'), '#a87b2a'),
     danger: normalizeOpaqueColor(resolveToken('--status-danger'), '#9d3017'),

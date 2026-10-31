@@ -6,7 +6,13 @@ import {
   routingFixture,
 } from '../../src/api/__tests__/opsFixtures'
 import { createModelMarketFixture } from '../fixtures/modelMarket'
-import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
+import {
+  assertNoHorizontalOverflow,
+  configureStablePage,
+  contrastRatio,
+  oklabDistance,
+  relativeLuminance,
+} from './fixtures'
 
 const SECTIONS = [
   'status',
@@ -149,6 +155,82 @@ for (const theme of ['light', 'dark'] as const) {
         expect(api.has(path), path).toBe(true)
     })
   }
+}
+
+/** The colours a gauge can take: the five load tiers and the two neutrals. */
+const GAUGE_TOKENS = [
+  '--load-idle',
+  '--load-normal',
+  '--load-notice',
+  '--load-warning',
+  '--load-danger',
+  '--load-unchecked',
+  '--text-tertiary',
+]
+
+/**
+ * Resource history lines take hues outside the gauge colours, so a line cannot
+ * read as a verdict: each stays apart from every tier, from the neutrals and
+ * from the other lines, and keeps 3:1 against the card.
+ */
+for (const theme of ['light', 'dark'] as const) {
+  test(`resource trend lines stay apart from gauge colours in ${theme} theme`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme })
+    await mockOps(page)
+    await gotoOps(page)
+    const legend = section(page, 'resources')
+      .locator('.ops-trend')
+      .first()
+      .locator('.ops-legend .ops-dot')
+    await expect(legend).toHaveCount(3)
+    const measured = await legend.evaluateAll((dots, tokens) => {
+      const context = document.createElement('canvas').getContext('2d')!
+      const paint = (colors: string[]) => {
+        context.clearRect(0, 0, 1, 1)
+        for (const color of colors) {
+          context.fillStyle = color
+          context.fillRect(0, 0, 1, 1)
+        }
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+      }
+      const root = getComputedStyle(document.documentElement)
+      const page = root.getPropertyValue('--page-background').trim()
+      const layers: string[] = []
+      for (let node = dots[0]!.parentElement; node; node = node.parentElement)
+        layers.unshift(getComputedStyle(node).backgroundColor)
+      const card = paint([page, ...layers])
+      const probe = document.createElement('span')
+      document.body.append(probe)
+      const gauges = tokens.map((token) => {
+        probe.style.color = `var(${token})`
+        return { token, rgb: paint([getComputedStyle(probe).color]) }
+      })
+      probe.remove()
+      const lines = dots.map((dot) =>
+        paint([`rgb(${card.join(',')})`, getComputedStyle(dot).backgroundColor])
+      )
+      return { card, gauges, lines }
+    }, GAUGE_TOKENS)
+    const card = relativeLuminance(measured.card)
+    measured.lines.forEach((line, index) => {
+      expect(
+        contrastRatio(card, relativeLuminance(line)),
+        `line ${index} on the card`
+      ).toBeGreaterThanOrEqual(3)
+      for (const gauge of measured.gauges)
+        expect(
+          oklabDistance(line, gauge.rgb),
+          `line ${index} against ${gauge.token}`
+        ).toBeGreaterThanOrEqual(10)
+      for (const other of measured.lines.slice(index + 1))
+        expect(
+          oklabDistance(line, other),
+          `line ${index}`
+        ).toBeGreaterThanOrEqual(10)
+    })
+  })
 }
 
 test('overview failure shows an inline retry while other sections load', async ({

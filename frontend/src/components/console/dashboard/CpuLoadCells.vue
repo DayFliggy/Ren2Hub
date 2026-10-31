@@ -8,7 +8,9 @@ export interface CpuLoadCell {
   minutes: number
   /** Formatted load figure; null when this window was not measured. */
   value: string | null
-  /** Share of the cores in use, 0-1; null when the core count is unknown. */
+  /** Share of the cores in use, 0-1; null when the window was not measured or
+   * the core count is unknown. Either way the cell is drawn as unknown: an
+   * empty cell would read as zero load. The readout still shows the figure. */
   fill: number | null
   /** Load-tier colour chosen by the caller. */
   color: string
@@ -63,6 +65,18 @@ function fillHeight(fill: number): string {
   return `${Math.max(8, Math.min(1, fill) * 100)}%`
 }
 
+/** The host scope is always named; the core count only when it was read. */
+function readoutHeader(): string {
+  const title = t('dashboard.systemStatus.loadAverage')
+  if (props.cores === null) return title
+  const cores = t(
+    'dashboard.systemStatus.loadCores',
+    { n: props.cores.toString() },
+    props.cores
+  )
+  return `${title} · ${cores}`
+}
+
 function buttonLabel(): string {
   const windows = props.cells
     .map((c) =>
@@ -111,7 +125,7 @@ function buttonLabel(): string {
         :key="cell.minutes"
         class="cpu-load__cell"
         :data-minutes="cell.minutes"
-        :data-unknown="cell.value === null ? '' : undefined"
+        :data-unknown="cell.fill === null ? '' : undefined"
         :style="{
           '--tier': cell.color,
           '--fill-height': cell.fill !== null ? fillHeight(cell.fill) : '0%',
@@ -127,12 +141,7 @@ function buttonLabel(): string {
       data-load-readout
       aria-hidden="true"
     >
-      <p v-if="cores !== null" class="cpu-load__header">
-        {{ t('dashboard.systemStatus.loadAverage') }} ·
-        {{
-          t('dashboard.systemStatus.loadCores', { n: cores.toString() }, cores)
-        }}
-      </p>
+      <p class="cpu-load__header">{{ readoutHeader() }}</p>
       <dl class="cpu-load__values">
         <div
           v-for="cell in cells"

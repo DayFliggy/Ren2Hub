@@ -17,6 +17,13 @@ import type {
   SystemStatus,
 } from '@/api/systemStatus'
 import { useAppStore } from '@/stores'
+import {
+  UNKNOWN_TONE,
+  loadTone,
+  shareTone,
+  verdictTone,
+  type LoadTone,
+} from '@/utils/loadTone'
 
 const props = defineProps<{
   metrics?: SystemStatus | null
@@ -35,42 +42,55 @@ interface PillState {
   pulse: boolean
 }
 
-function pill(tone: string, label: string, pulse = false): PillState {
-  return {
-    color: `var(--status-${tone})`,
-    textColor: `var(--status-${tone}-text)`,
-    label,
-    pulse,
-  }
+type PillTone = Pick<LoadTone, 'fill' | 'text'>
+
+/** A verdict takes its tile tier's colour, so a warning pill and a warning
+ * tile match. Loading is no verdict and keeps the info colour. */
+function pill(tone: PillTone, label: string, pulse = false): PillState {
+  return { color: tone.fill, textColor: tone.text, label, pulse }
 }
 
-/** The pill reports the server's own health verdict, not page reachability. */
+const LOADING_TONE: PillTone = {
+  fill: 'var(--status-info)',
+  text: 'var(--status-info-text)',
+}
+
+/** The pill reports the server's own health verdict, not page reachability.
+ * The success rate stays out of it: it is a 24-hour relay figure, not a
+ * health check of this instance. */
 const apiState = computed<PillState>(() => {
   if (props.error)
-    return pill('danger', t('dashboard.systemStatus.health.error'))
+    return pill(loadTone('danger'), t('dashboard.systemStatus.health.error'))
   const status = props.metrics?.status
   if (!status) {
     return props.loading
-      ? pill('info', t('dashboard.loading'))
-      : {
-          color: 'var(--text-tertiary)',
-          textColor: 'var(--text-tertiary)',
-          label: t('dashboard.systemStatus.health.unknown'),
-          pulse: false,
-        }
+      ? pill(LOADING_TONE, t('dashboard.loading'))
+      : pill(UNKNOWN_TONE, t('dashboard.systemStatus.health.unknown'))
   }
   if (status === 'ok')
-    return pill('success', t('dashboard.systemStatus.health.ok'), true)
+    return pill(loadTone('normal'), t('dashboard.systemStatus.health.ok'), true)
   if (status === 'warning')
-    return pill('warning', t('dashboard.systemStatus.health.warning'))
+    return pill(loadTone('warning'), t('dashboard.systemStatus.health.warning'))
+  // No tile shows the database or Redis, so a critical verdict from them is
+  // named on the pill itself.
   if (status === 'critical')
-    return pill('danger', t('dashboard.systemStatus.health.critical'))
-  return {
-    color: 'var(--text-tertiary)',
-    textColor: 'var(--text-tertiary)',
-    label: t(`dashboard.systemStatus.health.${status}`),
-    pulse: false,
-  }
+    return pill(
+      loadTone('danger'),
+      t(
+        props.metrics?.storage_status === 'critical'
+          ? 'dashboard.systemStatus.health.storageCritical'
+          : 'dashboard.systemStatus.health.critical'
+      )
+    )
+  return pill(UNKNOWN_TONE, t(`dashboard.systemStatus.health.${status}`))
+})
+
+/** The pill's hover and screen-reader detail: the failure, or which readings a
+ * stale snapshot withholds (host load and the success rate are read apart). */
+const pillDetail = computed(() => {
+  if (props.error) return props.error
+  if (props.metrics?.stale) return t('dashboard.systemStatus.staleDetail')
+  return null
 })
 
 function finiteNonNegative(value: number | null | undefined): number | null {
@@ -85,58 +105,8 @@ function finiteNonNegative(value: number | null | undefined): number | null {
   return value
 }
 
-function ratioPercent(
-  used: number | null | undefined,
-  total: number | null | undefined
-): number | null {
-  const safeUsed = finiteNonNegative(used)
-  const safeTotal = finiteNonNegative(total)
-  if (safeUsed === null || safeTotal === null || safeTotal <= 0) return null
-  return Math.min(100, (safeUsed / safeTotal) * 100)
-}
-
-type LoadTier = 'idle' | 'normal' | 'notice' | 'warning' | 'danger'
-
-/**
- * A load tier's fill for gauges, rings and segments, and its text colour. The
- * fills only reach 3:1 against the tile, so figures use the -text tokens, which
- * keep 4.5:1 in both themes (see the load ramp in tokens.css).
- */
-interface Tone {
-  tier: LoadTier | 'unknown'
-  fill: string
-  text: string
-}
-
-const UNKNOWN_TONE: Tone = {
-  tier: 'unknown',
-  fill: 'var(--text-tertiary)',
-  text: 'var(--text-tertiary)',
-}
-
-function loadTone(tier: LoadTier): Tone {
-  return { tier, fill: `var(--load-${tier})`, text: `var(--load-${tier}-text)` }
-}
-
-/**
- * 统一 5 档资源负载语义色彩梯度 (CPU / 内存 / 磁盘 / 负载格):
- * - <= 30%: 空闲
- * - 30% ~ 60%: 正常
- * - 60% ~ 75%: 关注
- * - 75% ~ 90%: 警告
- * - > 90%: 危险
- */
-function resourceLoadTone(percent: number | null): Tone {
-  if (percent === null) return UNKNOWN_TONE
-  if (percent > 90) return loadTone('danger')
-  if (percent > 75) return loadTone('warning')
-  if (percent > 60) return loadTone('notice')
-  if (percent > 30) return loadTone('normal')
-  return loadTone('idle')
-}
-
 /** Success rate reads the other way round — high is good. */
-function rateTone(percent: number | null): Tone {
+function rateTone(percent: number | null): LoadTone {
   if (percent === null) return UNKNOWN_TONE
   if (percent >= 99) return loadTone('normal')
   if (percent >= 95) return loadTone('warning')
@@ -160,6 +130,8 @@ function formatBandwidth(valueMbps: number): string {
 /**
  * Used and total in one unit with at most three significant figures, so the
  * reading fits its tile. Byte counts are binary: GiB, and TiB from 1000 GiB.
+ * Below 10 two decimals keep the third figure, so 930 / 1000 GiB reads
+ * 0.91 / 0.98 TiB beside its 93% badge rather than 0.9 / 1.
  */
 function storageReading(
   used: number | null,
@@ -167,8 +139,11 @@ function storageReading(
 ): MetricTile['storage'] {
   if (used === null || total === null) return undefined
   const scale = total >= 1000 ? 1024 : 1
-  const format = (value: number) =>
-    value >= 100 ? String(Math.round(value)) : formatMetric(value)
+  const format = (value: number) => {
+    if (value >= 100) return String(Math.round(value))
+    if (value >= 10) return formatMetric(value)
+    return String(Math.round(value * 100) / 100)
+  }
   return {
     used: format(used / scale),
     total: format(total / scale),
@@ -199,8 +174,34 @@ function observed(
     metrics &&
     !metrics.stale &&
     resource?.available &&
-    ['ok', 'warning', 'critical'].includes(resource.state)
+    ['ok', 'warning', 'critical', 'unchecked'].includes(resource.state)
   )
+}
+
+/** A tile without a reading says when monitoring is off, not just "--". */
+function placeholder(resource: SystemResource | undefined): string {
+  return resource?.state === 'disabled'
+    ? t('dashboard.systemStatus.resourceOff')
+    : '--'
+}
+
+/** Memory and disk headline when the byte counts are missing: the share. */
+function shareValue(
+  percent: number | null,
+  resource: SystemResource | undefined
+): string {
+  return percent === null ? placeholder(resource) : `${formatMetric(percent)}%`
+}
+
+/** A fresh measured share of a bounded resource, capped at its ceiling. */
+function observedShare(
+  metrics: SystemStatus | null | undefined,
+  resource: SystemResource | undefined
+): number | null {
+  const percent = observed(metrics, resource)
+    ? finiteNonNegative(resource?.percent)
+    : null
+  return percent === null ? null : Math.min(100, percent)
 }
 
 function gib(value: number | null | undefined): number | null {
@@ -220,7 +221,11 @@ function formatLoad(value: number): string {
   return value.toFixed(2)
 }
 
-/** 1 / 5 / 15 min cells; a cell fills by load per host core. */
+/**
+ * 1 / 5 / 15 min cells; a cell fills by load per host core. Host load has no
+ * health check and may differ from a container CPU figure, so it never takes
+ * an alarm tier; load beyond the cores is marked only in its labelled readout.
+ */
 function buildLoadCells(
   load: SystemLoad | null | undefined,
   cores: number | null
@@ -237,14 +242,29 @@ function buildLoadCells(
       minutes,
       value: formatLoad(value),
       fill,
-      color: resourceLoadTone(fill === null ? null : fill * 100).fill,
+      color: fill === null ? UNKNOWN_TONE.fill : shareTone(fill * 100).fill,
       overloaded: fill !== null && fill > 1,
     }
   })
 }
 
-function scopeLabel(scope: SystemResource['scope'] | undefined): string {
-  return t(`dashboard.systemStatus.scope.${scope ?? 'unknown'}`)
+/** Words for the tiers that colour alone would carry; the tile's tone decides,
+ * so a reading withheld as unknown never reads as an alarm. */
+const SCOPE_VERDICTS: Partial<Record<LoadTone['tier'], string>> = {
+  warning: 'dashboard.systemStatus.scopeWarning',
+  danger: 'dashboard.systemStatus.scopeCritical',
+  unchecked: 'dashboard.systemStatus.thresholdOff',
+}
+
+/** Where the reading was measured, or why there is no judged reading. */
+function scopeLabel(resource: SystemResource | undefined, tone: LoadTone) {
+  if (resource?.state === 'disabled')
+    return t('dashboard.systemStatus.monitorOff')
+  const scope = t(
+    `dashboard.systemStatus.scope.${resource?.scope ?? 'unknown'}`
+  )
+  const verdict = SCOPE_VERDICTS[tone.tier]
+  return verdict ? t(verdict, { scope }) : scope
 }
 
 interface MetricTile {
@@ -252,9 +272,11 @@ interface MetricTile {
   label: string
   /** lucide 24x24 path data */
   icon?: string
-  /** Where the reading was measured, for the tile's accessible label. */
+  /** Where the reading was measured, or that its check is off; for the tile's
+   * title and accessible label. */
   scope: string
-  /** CPU headline, or the placeholder of a tile without data. */
+  /** CPU headline, a memory or disk share without byte counts, or the
+   * placeholder of a tile without data. */
   value: string
   unit: string
   bandwidth?: { up: string; down: string }
@@ -266,7 +288,7 @@ interface MetricTile {
   percent: number | null
   /** Shared-scale throughput history, for metrics with no ceiling. */
   series?: { down: (number | null)[]; up: (number | null)[] }
-  tone: Tone
+  tone: LoadTone
 }
 
 const tiles = computed<MetricTile[]>(() => {
@@ -283,8 +305,9 @@ const tiles = computed<MetricTile[]>(() => {
     ? finiteNonNegative(metrics?.cpu.percent)
     : null
   const cores = cpuCoreCount(metrics?.load?.cores)
-  const memoryPercent = ratioPercent(memoryUsed, memoryTotal)
-  const diskPercent = ratioPercent(diskUsed, diskTotal)
+  // The badge shows the percent the server judged, not a byte ratio of its own.
+  const memoryPercent = observedShare(metrics, metrics?.memory)
+  const diskPercent = observedShare(metrics, metrics?.disk)
   const bandwidthUp = metrics?.stale
     ? null
     : finiteNonNegative(metrics?.traffic.request_mbps)
@@ -298,32 +321,38 @@ const tiles = computed<MetricTile[]>(() => {
           down: formatBandwidth(bandwidthDown),
         }
       : undefined
+  const cpuTone = verdictTone(metrics?.cpu.state, cpuPercent)
+  const memoryTone = verdictTone(metrics?.memory.state, memoryPercent)
+  const diskTone = verdictTone(metrics?.disk.state, diskPercent)
 
   return [
     {
       key: 'cpu',
       label: t('dashboard.systemStatus.cpu'),
       icon: 'M4 4h16v16H4zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3M9 9h6v6H9z',
-      value: cpuPercent === null ? '--' : formatMetric(cpuPercent),
+      value:
+        cpuPercent === null
+          ? placeholder(metrics?.cpu)
+          : formatMetric(cpuPercent),
       unit: cpuPercent === null ? '' : '%',
-      scope: scopeLabel(metrics?.cpu.scope),
+      scope: scopeLabel(metrics?.cpu, cpuTone),
       load: {
         cells: buildLoadCells(metrics?.load, cores),
         cores,
       },
       percent: cpuPercent === null ? null : Math.min(100, cpuPercent),
-      tone: resourceLoadTone(cpuPercent),
+      tone: cpuTone,
     },
     {
       key: 'memory',
       label: t('dashboard.systemStatus.memory'),
       icon: 'M3 7h18v10H3zM7 7v10M11 7v10M15 7v10M5 17v3M19 17v3',
-      scope: scopeLabel(metrics?.memory.scope),
-      value: '--',
+      scope: scopeLabel(metrics?.memory, memoryTone),
+      value: shareValue(memoryPercent, metrics?.memory),
       unit: '',
       storage: storageReading(memoryUsed, memoryTotal),
       percent: memoryPercent,
-      tone: resourceLoadTone(memoryPercent),
+      tone: memoryTone,
     },
     {
       key: 'bandwidth',
@@ -334,18 +363,18 @@ const tiles = computed<MetricTile[]>(() => {
       bandwidth,
       percent: null,
       series: trafficSeries(metrics),
-      tone: resourceLoadTone(null),
+      tone: UNKNOWN_TONE,
     },
     {
       key: 'disk',
       label: t('dashboard.systemStatus.disk'),
       icon: 'M22 12H2M5.5 16h.01M9.5 16h.01M5.45 5h13.1a2 2 0 0 1 1.79 1.11L22 12v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5l1.66-5.89A2 2 0 0 1 5.45 5z',
-      scope: scopeLabel(metrics?.disk.scope),
-      value: '--',
+      scope: scopeLabel(metrics?.disk, diskTone),
+      value: shareValue(diskPercent, metrics?.disk),
       unit: '',
       storage: storageReading(diskUsed, diskTotal),
       percent: diskPercent,
-      tone: resourceLoadTone(diskPercent),
+      tone: diskTone,
     },
   ]
 })
@@ -371,15 +400,16 @@ const cpuGauge = computed(() => {
 /**
  * A partly filled segment fills its share in the tier colour instead of fading
  * the whole segment, so it keeps the fill's contrast. Only full segments take
- * the night glow (see the style block).
+ * the night glow (see the style block). Without a reading the segments are
+ * dashed (see the style block), so they do not read as 0%.
  */
 function memorySegmentStyle(
   percent: number | null,
   index: number,
   color: string
 ) {
-  const fill =
-    percent === null ? 0 : Math.min(1, Math.max(0, percent / 10 - index))
+  if (percent === null) return { '--mark-glow': 'transparent' }
+  const fill = Math.min(1, Math.max(0, percent / 10 - index))
   const track = 'color-mix(in srgb, var(--text-primary) 12%, transparent)'
   const stop = `${(fill * 100).toFixed(1)}%`
   let background = `linear-gradient(90deg, ${color} ${stop}, ${track} ${stop})`
@@ -397,11 +427,13 @@ const successRate = computed(() => {
   const rate = props.metrics?.success_rate
   return rate?.state === 'ok' ? finiteNonNegative(rate.rate) : null
 })
+// Without a snapshot (loading or a failed read) the rate is just unknown, like
+// the tiles; only a snapshot can say there were no requests.
 const successEmptyLabel = computed(() => {
   const state = props.metrics?.success_rate.state
   return state && state !== 'ok'
     ? t(`dashboard.systemStatus.successRateState.${state}`)
-    : t('common.none')
+    : '--'
 })
 const successTone = computed(() => rateTone(successRate.value))
 </script>
@@ -413,14 +445,16 @@ const successTone = computed(() => rateTone(successRate.value))
         <h2 class="truncate text-sm font-semibold text-[var(--text-primary)]">
           {{ t('dashboard.systemStatus.title') }}
         </h2>
+        <!-- The pill and the rate never wrap: a narrow card truncates the
+             title instead, so the header keeps one height in every state. -->
         <span
-          class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold"
+          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold"
           :style="{
             background: `color-mix(in srgb, ${apiState.color} 14%, transparent)`,
             color: apiState.textColor,
           }"
           :data-system-health="error ? 'error' : (metrics?.status ?? 'none')"
-          :title="error ?? undefined"
+          :title="pillDetail ?? undefined"
         >
           <span class="relative flex h-1.5 w-1.5">
             <span
@@ -434,7 +468,7 @@ const successTone = computed(() => rateTone(successRate.value))
             />
           </span>
           <span>{{ apiState.label }}</span>
-          <span v-if="error" class="sr-only">{{ error }}</span>
+          <span v-if="pillDetail" class="sr-only">{{ pillDetail }}</span>
         </span>
       </div>
     </template>
@@ -448,9 +482,16 @@ const successTone = computed(() => rateTone(successRate.value))
           >
             {{ t('dashboard.systemStatus.successRate') }}
           </p>
+          <!-- A failed query is a fault, not an empty window, so it alone
+               takes the warning ink. -->
           <p
             v-if="successRate === null"
-            class="success-rate-value text-xs font-medium leading-none text-[var(--text-tertiary)]"
+            class="success-rate-value whitespace-nowrap text-xs font-medium leading-none"
+            :class="
+              metrics?.success_rate.state === 'error'
+                ? 'text-[var(--status-warning-text)]'
+                : 'text-[var(--text-tertiary)]'
+            "
             data-success-rate-empty
             :data-success-rate-state="metrics?.success_rate.state ?? 'none'"
           >
@@ -458,7 +499,7 @@ const successTone = computed(() => rateTone(successRate.value))
           </p>
           <p
             v-else
-            class="success-rate-value text-sm font-bold leading-none tabular-nums"
+            class="success-rate-value whitespace-nowrap text-sm font-bold leading-none tabular-nums"
             :style="{ color: successTone.text }"
           >
             {{ formatMetric(successRate) }}%
@@ -516,11 +557,12 @@ const successTone = computed(() => rateTone(successRate.value))
               <span class="truncate" :title="tile.scope">{{ tile.label }}</span>
               <span class="sr-only" data-metric-scope>{{ tile.scope }}</span>
             </p>
-            <!-- CPU's headline is already the percentage; a rounded badge would
-                 repeat it and could disagree with it (4.6% vs 5%). Its slot holds
-                 the load cells instead. -->
+            <!-- Only a byte reading gets the badge. A headline that is already
+                 the percentage (CPU, or a share without byte counts) would be
+                 repeated and could disagree (4.6% vs 5%). CPU's slot holds the
+                 load cells instead. -->
             <span
-              v-if="tile.percent !== null && tile.key !== 'cpu'"
+              v-if="tile.percent !== null && tile.storage"
               class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[0.625rem] font-semibold tabular-nums sm:px-1.5"
               data-percent-badge
               :style="{
@@ -543,19 +585,30 @@ const successTone = computed(() => rateTone(successRate.value))
             class="mt-auto flex items-end justify-between gap-1.5 pt-0.5"
             data-cpu-gauge
           >
+            <!-- Only the figure and its unit are monospaced; a placeholder word
+                 keeps the body face of the other tiles ("Off", not "0ff"). -->
             <p
-              class="flex shrink-0 items-baseline gap-0.5 whitespace-nowrap font-mono sm:gap-1"
+              class="flex shrink-0 items-baseline gap-0.5 whitespace-nowrap sm:gap-1"
             >
               <span
-                class="display-number status-headline whitespace-nowrap leading-none"
+                v-if="tile.percent !== null"
+                class="display-number status-headline whitespace-nowrap font-mono leading-none"
                 :style="{ color: tile.tone.text }"
                 data-metric-value
               >
                 {{ tile.value }}
               </span>
               <span
+                v-else
+                class="text-base font-bold leading-tight tabular-nums"
+                :style="{ color: tile.tone.text }"
+                data-metric-placeholder
+              >
+                {{ tile.value }}
+              </span>
+              <span
                 v-if="tile.unit"
-                class="text-[0.625rem] font-medium text-[var(--text-tertiary)]"
+                class="font-mono text-[0.625rem] font-medium text-[var(--text-tertiary)]"
               >
                 {{ tile.unit }}
               </span>
@@ -644,6 +697,9 @@ const successTone = computed(() => rateTone(successRate.value))
               <span
                 class="text-base font-bold leading-tight tabular-nums"
                 :style="{ color: tile.tone.text }"
+                :data-metric-placeholder="
+                  tile.percent === null ? '' : undefined
+                "
               >
                 {{ tile.value }}
               </span>
@@ -651,6 +707,7 @@ const successTone = computed(() => rateTone(successRate.value))
             <div
               class="mt-1 grid h-1.5 grid-cols-10 gap-0.5 sm:mt-1.5 sm:h-2 sm:gap-1"
               data-memory-segments
+              :data-unknown="tile.percent === null ? '' : undefined"
               aria-hidden="true"
             >
               <span
@@ -686,7 +743,12 @@ const successTone = computed(() => rateTone(successRate.value))
                     ↓{{ tile.bandwidth.down }}
                   </span>
                 </template>
-                <span v-else class="text-[var(--text-tertiary)]">--</span>
+                <span
+                  v-else
+                  class="text-base font-bold leading-tight tabular-nums text-[var(--text-tertiary)]"
+                  data-metric-placeholder
+                  >--</span
+                >
               </p>
               <div
                 v-if="tile.series"
@@ -744,6 +806,9 @@ const successTone = computed(() => rateTone(successRate.value))
               <span
                 class="text-base font-bold leading-tight tabular-nums"
                 :style="{ color: tile.tone.text }"
+                :data-metric-placeholder="
+                  tile.percent === null ? '' : undefined
+                "
               >
                 {{ tile.value }}
               </span>
@@ -836,6 +901,11 @@ html.dark .memory-segment {
   filter: drop-shadow(
     0 0 3px color-mix(in srgb, var(--mark-glow) 40%, transparent)
   );
+}
+
+/* No reading: dashed like an unknown CPU arc, disk ring or load cell. */
+[data-memory-segments][data-unknown] .memory-segment {
+  border: 1px dashed color-mix(in srgb, var(--text-tertiary) 60%, transparent);
 }
 
 /* An absolutely positioned label drops this margin with it. */

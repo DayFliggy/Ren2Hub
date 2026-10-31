@@ -9,8 +9,8 @@ import {
 } from '@/api/opsMonitor'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
+import { verdictTone } from '@/utils/loadTone'
 import {
-  GAUGE_COLORS,
   formatBytes,
   formatCount,
   formatLatencyMs,
@@ -72,6 +72,12 @@ const gauges = computed(() => {
     },
   ].map((gauge) => {
     const status = checkStatus(props.overview, gauge.key)
+    // The dashboard's colour language: a check turned off by threshold 0 keeps
+    // its reading, unjudged; stale or unknown has no reading to colour.
+    const tone = verdictTone(
+      status === 'disabled' ? 'unchecked' : status,
+      gauge.percent
+    )
     return {
       ...gauge,
       scope:
@@ -79,7 +85,7 @@ const gauges = computed(() => {
       sampledAt:
         props.overview?.observation?.resources[gauge.key].sampled_at ?? null,
       status,
-      color: GAUGE_COLORS[status],
+      tone,
       reading: formatPercent(gauge.percent, locale.value),
       thresholdLabel:
         gauge.threshold !== null && gauge.threshold > 0
@@ -111,20 +117,21 @@ const trend = computed(() => {
       ])
     ),
     series: [
+      // Lines take hues outside the load ramp, so history never reads as a
+      // gauge verdict.
       {
         name: t('resources.cpu'),
-        color: 'accent' as const,
+        color: 'trendCpu' as const,
         points: line('cpu'),
       },
       {
         name: t('resources.memory'),
-        color: 'signal' as const,
+        color: 'trendMemory' as const,
         points: line('memory'),
       },
-      // Day theme gives info and signal the same olive; glow keeps disk distinct.
       {
         name: t('resources.disk'),
-        color: 'glow' as const,
+        color: 'trendDisk' as const,
         points: line('disk'),
       },
     ],
@@ -174,18 +181,20 @@ const trafficTrend = computed(() => {
           :key="gauge.key"
           class="ops-gauge"
           :data-ops-gauge="gauge.key"
+          :data-load-tier="gauge.tone.tier"
         >
           <MiniRing
             :percent="gauge.percent ?? 0"
-            :color="gauge.color"
+            :color="gauge.tone.fill"
             :size="64"
             :stroke-width="5"
             :indeterminate="gauge.percent === null"
           >
             <span
               class="ops-gauge-value"
-              :class="{
-                'ops-metric-value--critical': gauge.status === 'critical',
+              :style="{
+                color:
+                  gauge.status === 'critical' ? gauge.tone.text : undefined,
               }"
               >{{ gauge.reading.value
               }}<span v-if="gauge.reading.unit" class="ops-unit">{{
@@ -197,7 +206,7 @@ const trafficTrend = computed(() => {
             <span
               v-if="gauge.status === 'warning' || gauge.status === 'critical'"
               class="ops-dot"
-              :style="{ background: gauge.color }"
+              :style="{ background: gauge.tone.fill }"
               aria-hidden="true"
             />{{ t(`resources.${gauge.key}`)
             }}<span

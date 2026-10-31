@@ -35,7 +35,7 @@ describe('CpuLoadCells', () => {
 
     const trigger = wrapper.find('.cpu-load__trigger')
     expect(trigger.attributes('type')).toBe('button')
-    expect(trigger.attributes('aria-label')).toContain('Load average')
+    expect(trigger.attributes('aria-label')).toContain('Host load average')
     expect(trigger.attributes('aria-label')).toContain('1 min 0.38')
     expect(trigger.attributes('aria-label')).toContain('5 min 0.38')
     expect(trigger.attributes('aria-label')).toContain('15 min 0.38')
@@ -116,16 +116,16 @@ describe('CpuLoadCells', () => {
   it('shows core count in readout header when available', () => {
     const wrapper = mountCells([cell(1), cell(5), cell(15)], 4)
     const header = wrapper.find('.cpu-load__header')
-    expect(header.text()).toContain('Load average')
+    expect(header.text()).toContain('Host load average')
     expect(header.text()).toContain('4 cores')
   })
 
-  it('omits core count header when cores are unknown', () => {
+  it('names the host scope without a core count when cores are unknown', () => {
     const wrapper = mountCells([cell(1), cell(5), cell(15)], null)
-    expect(wrapper.find('.cpu-load__header').exists()).toBe(false)
+    expect(wrapper.get('.cpu-load__header').text()).toBe('Host load average')
     expect(
       wrapper.find('.cpu-load__trigger').attributes('aria-label')
-    ).toContain('Load average')
+    ).toContain('Host load average')
     expect(
       wrapper.find('.cpu-load__trigger').attributes('aria-label')
     ).not.toContain('cores')

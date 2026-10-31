@@ -1,4 +1,8 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
+import type {
+  SystemResourceState,
+  SystemStatus,
+} from '../../src/api/systemStatus'
 import {
   resourceFixture,
   systemStatusFixture,
@@ -8,6 +12,8 @@ import {
   assertNoHorizontalOverflow,
   contrastRatio,
   minTextContrast,
+  oklabDistance,
+  relativeLuminance,
   configureStablePage,
   waitForStablePage,
   type VisualTheme,
@@ -19,6 +25,10 @@ interface ResourceReadings {
   memoryTotalGib: number
   diskUsedGib: number
   diskTotalGib: number
+  /** Server threshold verdicts; only these raise the warning and danger tiers. */
+  states?: Partial<Record<'cpu' | 'memory' | 'disk', SystemResourceState>>
+  /** The overall verdict on the pill; the fixture's "ok" when omitted. */
+  status?: SystemStatus['status']
 }
 
 const DEFAULT_READINGS: ResourceReadings = {
@@ -31,13 +41,20 @@ const DEFAULT_READINGS: ResourceReadings = {
 
 function systemSnapshot(readings: ResourceReadings = DEFAULT_READINGS) {
   const data = systemStatusFixture()
-  data.cpu = resourceFixture({ percent: readings.cpuPercent })
+  const states = readings.states ?? {}
+  if (readings.status) data.status = readings.status
+  data.cpu = resourceFixture({
+    percent: readings.cpuPercent,
+    state: states.cpu ?? 'ok',
+  })
   data.memory = resourceFixture({
+    state: states.memory ?? 'ok',
     percent: (readings.memoryUsedGib / readings.memoryTotalGib) * 100,
     used_bytes: readings.memoryUsedGib * 1024 ** 3,
     total_bytes: readings.memoryTotalGib * 1024 ** 3,
   })
   data.disk = resourceFixture({
+    state: states.disk ?? 'ok',
     percent: (readings.diskUsedGib / readings.diskTotalGib) * 100,
     scope: 'filesystem',
     used_bytes: readings.diskUsedGib * 1024 ** 3,
@@ -104,6 +121,34 @@ async function expectHeaderFits(card: Locator): Promise<void> {
     'data-system-health',
     'ok'
   )
+}
+
+/** The widest English pill beside the widest empty rate. */
+function longestHeaderSnapshot() {
+  const data = systemStatusFixture()
+  data.status = 'critical'
+  data.storage_status = 'critical'
+  data.success_rate = { ...data.success_rate, state: 'no_requests', rate: null }
+  return data
+}
+
+/** Pill label and rate stay on one line each and the header keeps its height;
+ * only the title may truncate. */
+async function readHeaderLines(card: Locator) {
+  return card.evaluate((node) => {
+    const lines = (element: Element) =>
+      Math.round(
+        element.getBoundingClientRect().height /
+          parseFloat(getComputedStyle(element).lineHeight)
+      )
+    return {
+      pillLines: lines(
+        node.querySelector('[data-system-health] > span:nth-child(2)')!
+      ),
+      valueLines: lines(node.querySelector('.success-rate-value')!),
+      height: node.querySelector('header')!.getBoundingClientRect().height,
+    }
+  })
 }
 
 /** CPU, memory and disk headlines share one face, size and theme-driven weight. */
@@ -173,7 +218,8 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
 }
 
 // English needs the widest header. The card width follows the dashboard grid,
-// so a 1280 desktop is as tight as a phone.
+// so a 1280 desktop is as tight as a phone. The healthy title never truncates;
+// the longest pill and rate may truncate it but never wrap.
 for (const width of [320, 390, 1280, 1366, 1440]) {
   test(`system status header fits in English at ${width}px`, async ({
     page,
@@ -190,6 +236,20 @@ for (const width of [320, 390, 1280, 1366, 1440]) {
     const card = page.locator('[data-system-status-card]')
     await expect(card).toContainText('System status')
     await expectHeaderFits(card)
+    await assertNoHorizontalOverflow(page)
+    const healthy = await readHeaderLines(card)
+
+    await page.route('**/api/user/system-status', (route) =>
+      route.fulfill({ json: { success: true, data: longestHeaderSnapshot() } })
+    )
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+    await expect(card).toContainText('Storage down')
+    await expect(card).toContainText('No requests')
+    const longest = await readHeaderLines(card)
+    expect(longest.pillLines).toBe(1)
+    expect(longest.valueLines).toBe(1)
+    expect(longest.height).toBeCloseTo(healthy.height, 0)
     await assertNoHorizontalOverflow(page)
   })
 }
@@ -299,10 +359,82 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
   }
 }
 
-/** Two readings that between them put CPU, memory and disk in all five tiers. */
-const TIER_READINGS = [
-  { cpuPercent: 18, memoryUsedGib: 45, diskUsedGib: 700 },
-  { cpuPercent: 82, memoryUsedGib: 95, diskUsedGib: 200 },
+/** Resource monitoring off: CPU, memory and disk say so; traffic is unmeasured. */
+function monitorOffSnapshot() {
+  const data = systemStatusFixture()
+  const off = resourceFixture({
+    available: false,
+    percent: null,
+    state: 'disabled',
+  })
+  data.cpu = off
+  data.memory = off
+  data.disk = { ...off, scope: 'filesystem' }
+  data.traffic.request_mbps = null
+  return data
+}
+
+for (const locale of ['en', 'zh-CN'] as const) {
+  test(`placeholders share one face and fit their tiles in ${locale}`, async ({
+    page,
+  }) => {
+    await configureSystemPage(page, {
+      theme: 'light',
+      authenticated: true,
+      locale,
+    })
+    await page.route('**/api/user/system-status', (route) =>
+      route.fulfill({ json: { success: true, data: monitorOffSnapshot() } })
+    )
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+    const card = page.locator('[data-system-status-card]')
+    const placeholders = card.locator('[data-metric-placeholder]')
+    await expect(placeholders).toHaveText(
+      locale === 'en'
+        ? ['Off', 'Off', '--', 'Off']
+        : ['未启用', '未启用', '--', '未启用']
+    )
+    const faces = await placeholders.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const style = getComputedStyle(node)
+        return [style.fontFamily, style.fontSize, style.fontWeight].join('|')
+      })
+    )
+    expect(new Set(faces).size, faces.join('\n')).toBe(1)
+    for (const width of [320, 390, 1280, 1366, 1440]) {
+      await page.setViewportSize({ width, height: 900 })
+      await expectReadingsInsideTiles(card)
+    }
+  })
+}
+
+/** Readings that between them put CPU, memory and disk in all five tiers and
+ * the unchecked state; the share sets the three calm tiers and the server
+ * verdict the two alarms. Each overall verdict names the tier its pill takes. */
+const TIER_READINGS: Array<Partial<ResourceReadings> & { pillTier: string }> = [
+  {
+    cpuPercent: 18,
+    memoryUsedGib: 45,
+    diskUsedGib: 700,
+    pillTier: 'normal',
+  },
+  {
+    cpuPercent: 82,
+    memoryUsedGib: 95,
+    diskUsedGib: 200,
+    states: { cpu: 'warning', memory: 'critical' },
+    status: 'critical',
+    pillTier: 'danger',
+  },
+  {
+    cpuPercent: 93,
+    memoryUsedGib: 20,
+    diskUsedGib: 990,
+    states: { cpu: 'warning', disk: 'unchecked' },
+    status: 'warning',
+    pillTier: 'warning',
+  },
 ]
 const LOAD_TIERS = ['idle', 'normal', 'notice', 'warning', 'danger']
 
@@ -359,39 +491,28 @@ async function readTierColours(card: Locator): Promise<TierColours[]> {
     })
 }
 
-function linearChannels(rgb: number[]): [number, number, number] {
-  return rgb.map((channel) => {
-    const value = channel / 255
-    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  }) as [number, number, number]
-}
-
-function relativeLuminance(rgb: number[]): number {
-  const [r, g, b] = linearChannels(rgb)
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
-}
-
-/** OKLab distance ×100; about 2 is the smallest difference people notice. */
-function oklabDistance(first: number[], second: number[]): number {
-  const oklab = (rgb: number[]) => {
-    const [r, g, b] = linearChannels(rgb)
-    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-    return [
-      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-    ]
-  }
-  const [a, b] = [oklab(first), oklab(second)]
-  return Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!) * 100
+/** The pill dot, composited on the header, like a tile's fill on its tile. */
+async function readPillDot(card: Locator): Promise<number[]> {
+  return card
+    .locator('[data-system-health] > span:first-child > span:last-child')
+    .evaluate((dot) => {
+      const context = document.createElement('canvas').getContext('2d')!
+      context.fillStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue('--page-background')
+        .trim()
+      context.fillRect(0, 0, 1, 1)
+      context.fillStyle = getComputedStyle(dot).backgroundColor
+      context.fillRect(0, 0, 1, 1)
+      return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+    })
 }
 
 /**
  * Gauges reach 3:1 and figures 4.5:1 in every load tier, and neighbouring tiers
  * stay clearly apart, so attention and warning cannot read as one colour again.
  * No tier's figures may pass for the accent colour of money figures either.
+ * A reading with its check off stays apart from every tier, and the pill takes
+ * the colour of the tile tier that matches its verdict.
  */
 for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
   test(`load tiers stay legible and distinct in ${theme} theme`, async ({
@@ -414,12 +535,14 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     )
 
     const seen = new Map<string, TierColours>()
+    const pills: Array<{ tier: string; dot: number[] }> = []
     for (const next of TIER_READINGS) {
       reading = next
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       const card = page.locator('[data-system-status-card]')
       await expect(card.locator('[data-load-tier]')).toHaveCount(4)
+      pills.push({ tier: next.pillTier, dot: await readPillDot(card) })
       const figures = card.locator('[data-metric-value], [data-percent-badge]')
       expect(await minTextContrast(figures)).toBeGreaterThanOrEqual(4.5)
       for (const colours of await readTierColours(card)) {
@@ -437,13 +560,24 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
       }
     }
 
-    expect([...seen.keys()].sort()).toEqual([...LOAD_TIERS].sort())
+    expect([...seen.keys()].sort()).toEqual([...LOAD_TIERS, 'unchecked'].sort())
     for (let index = 1; index < LOAD_TIERS.length; index += 1) {
       const lower = seen.get(LOAD_TIERS[index - 1]!)!
       const higher = seen.get(LOAD_TIERS[index]!)!
       const pair = `${lower.tier} → ${higher.tier}`
       expect(oklabDistance(lower.fill, higher.fill), pair).toBeGreaterThan(6)
       expect(oklabDistance(lower.text, higher.text), pair).toBeGreaterThan(6)
+    }
+    const unchecked = seen.get('unchecked')!
+    for (const tier of LOAD_TIERS) {
+      const other = seen.get(tier)!
+      const pair = `unchecked → ${tier}`
+      expect(oklabDistance(unchecked.fill, other.fill), pair).toBeGreaterThan(6)
+      expect(oklabDistance(unchecked.text, other.text), pair).toBeGreaterThan(6)
+    }
+    // The dot and the fill are opaque tokens, so equal tokens paint equal pixels.
+    for (const pill of pills) {
+      expect(pill.dot, `${pill.tier} pill`).toEqual(seen.get(pill.tier)!.fill)
     }
   })
 }

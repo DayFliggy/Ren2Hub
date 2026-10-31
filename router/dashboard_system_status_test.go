@@ -78,6 +78,8 @@ func TestDashboardSystemStatusIsReadableByEverySignedInRole(t *testing.T) {
 			for _, field := range []string{`"storage"`, `"checks"`, `"threshold"`, `"process"`, `"db_pool"`, `"coverage"`, `"latency_ms"`} {
 				require.NotContains(t, body, field)
 			}
+			// Only the coarse dependency verdict, a bare string, is shared.
+			require.Regexp(t, `"storage_status":"(ok|critical|stale|unknown)"`, body)
 		})
 	}
 }

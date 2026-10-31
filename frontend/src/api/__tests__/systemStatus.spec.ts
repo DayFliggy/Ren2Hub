@@ -38,6 +38,24 @@ describe('parseSystemStatus', () => {
     zero.load!.cores = 0
     expect(() => parseSystemStatus(zero)).toThrow('Invalid API response')
   })
+  it('keeps the reading of a resource whose threshold check is off', () => {
+    const raw = payload()
+    raw.disk.state = 'unchecked'
+    expect(parseSystemStatus(raw).disk).toMatchObject({
+      state: 'unchecked',
+      percent: 42.6,
+    })
+    raw.disk.state = 'partial' as never
+    expect(() => parseSystemStatus(raw)).toThrow('Invalid API response')
+  })
+  it.each([undefined, 'warning', 'database'])(
+    'rejects a storage verdict of %s',
+    (storage) => {
+      const raw = payload()
+      Object.assign(raw, { storage_status: storage })
+      expect(() => parseSystemStatus(raw)).toThrow('Invalid API response')
+    }
+  )
   it('rejects Root-only diagnostics in place of the projection', () => {
     const { cpu, ...raw } = payload()
     Object.assign(raw, { resources: { cpu } })

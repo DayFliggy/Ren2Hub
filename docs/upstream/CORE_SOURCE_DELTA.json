@@ -7007,7 +7007,7 @@
       "path": "router/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "07f6e69c449637c6d2a8220f1ddbdd50b17e9fe4431a9654fcb99be711359abd"
+      "local_sha256": "f29f561872e835cd34562b0b4aee045099732b2dc0689c131c9754a5b26442b2"
     },
     {
       "path": "router/extensions.go",
@@ -7529,13 +7529,13 @@
       "path": "service/dashboard_system_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "612743957886961a45be234fef3eb253212f9ce24be68ee1318733c387003faa"
+      "local_sha256": "8e43107ce2bcefb20d33971cd1481b57e1dfe6226ea56f06239db5a1da63a0f5"
     },
     {
       "path": "service/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c40a83e6939f3395392589a4de015a2b10c6a0b919ec833828683d5f985d3279"
+      "local_sha256": "6d9d2f6def98c50a32d7b5187398d5c120c127d69166b31ef682c72f682b3793"
     },
     {
       "path": "service/download.go",
@@ -7786,7 +7786,7 @@
       "path": "service/performance_observation_health.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "77b6341b7d7f583a37ca560d97509b45f2cae329a123d97bcb279bcacb541b11"
+      "local_sha256": "31813b2ddf909fcd8fe3850b8e19db3e570483c1ea4c182a02d845c627eaf07e"
     },
     {
       "path": "service/performance_observation_probes.go",

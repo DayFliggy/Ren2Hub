@@ -4,6 +4,16 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-10-31 Dashboard 系统状态卡片口径统一
+
+系统状态卡片的格子颜色和标题胶囊改用同一套阈值判定。`service/dashboard_system_status.go` 把 `observationHealth` 对 CPU、内存、磁盘的检查结果写入投影的资源 `state`：已测量的资源超过阈值时为 `warning`，阈值关闭时仍为 `ok`，读数保留。前端只按占比显示空闲、正常、关注三档，警告和危险两档只来自 `state`，不再按固定的 75% / 90% 告警。资源检查目前只产出 `warning`，所以资源格子最高到警告档，以前超过 90% 显示的红色不再出现。内存和磁盘格子改用后端的 `percent`，不再由字节数自行换算。`service/performance_observation_health.go` 的资源阈值比较改为浮点比较，90.6% 在 90% 阈值下判为 warning。原生 `common/system_monitor.go` 的过载熔断仍沿用上游的整数比较，从 91% 起才拒绝请求，该文件未修改。
+
+投影新增 `storage_status` 字段，取主库、独立日志库和已启用 Redis 探测中最差的结果，取值为 ok、critical、stale、unknown；主库没有检查结果时为 unknown，不报 ok。这样能说明卡片上没有对应格子的严重状态，胶囊显示“存储异常”。探测名称、原因、延迟和阈值数值仍只在 Root 的 `/api/performance/*` 返回。宿主机负载格最高只到关注档，浮层和读屏文案标明“宿主机平均负载”。超过核数仍在浮层内用危险文字色标出。
+
+视觉审计后的修正：阈值关闭的资源投影为 `unchecked`，读数保留但按中性色显示，替代原先的 `ok`；资源监控关闭（`disabled`）的格子显示“未启用”。成功率不参与标题胶囊判定，维持原设计，胶囊只反映本实例的健康检查。标题区的胶囊和成功率不再换行，窄卡片截断标题，各状态标题区高度一致。TiB 读数在 10 以下保留两位小数，930 / 1000 GiB 显示为 0.91 / 0.98 TiB，与 93% 一致。其余修正：过期胶囊的悬停与读屏文本说明哪些读数过期；加载和读取失败时成功率显示“--”；英文 Loading 改为首字母大写；代理错误、网络错误和响应格式错误改用界面语言文案，服务端业务错误原样显示；成功率查询失败用警告文字色；读不到核数时负载格按未知样式显示；缺字节数时内存和磁盘标题显示百分比；四个格子的占位字号统一。
+
+配色复核后的修正：CPU、内存、磁盘的档位颜色由 `frontend/src/utils/loadTone.ts` 一处计算，仪表盘格子和 Root 运维页资源仪表共用。Root 仪表原先正常一律用 `--glow`、告警用全局状态色，现在按同一占比色阶和阈值判定上色，过期和未知不再借用告警色。标题胶囊的正常、告警、严重和读取失败改用对应档位的 `--load-*` 颜色，与格子同色。日间阈值关闭的读数改用新增的冷石板灰 `--load-unchecked`，原先的暖灰离正常档太近（ΔE 4.7）。告警和严重格子的悬停与读屏文字带判定（如“容器，超过告警阈值”），档位不只靠颜色表达。内存没有读数时十段画成虚线，不再和 0% 一样。Root 资源趋势线改用色阶以外的 `--trend-{cpu,memory,disk}`。Root 状态区的整体状态标签和检查项圆点仍用全局状态色，统一需要改全局 `--status-*`，本次未做。
+
 ## 2026-10-29 渠道上游倍率
 
 在 Ren2Hub 新增渠道上游倍率功能，只展示上游声明的分组倍率，不写 `channel_ratio`，不参与路由或计费。详细行为见 `docs/channel/UPSTREAM_RATIO.md`。
@@ -198,7 +208,7 @@ Codex 确认价格换算、对话框显示值与 `fill()` 一致、ratio sync �
 
 ## 2026-10-26 Dashboard 系统状态卡片共享快照
 
-按用户批准，Dashboard 系统状态卡片对所有登录用户开放。新增扩展接口 `GET /api/user/system-status`（`service/dashboard_system_status.go`、`controller/dashboard_system_status.go`），从现有唯一观测缓存投影 CPU、内存、磁盘（含绝对容量）、应用 HTTP 正文流量及 1h 分桶历史，并读取主机负载均值和逻辑核数（`service/dashboard_system_load_{unix,windows}.go`，gopsutil `load.Avg` 带 recover）。成功率取 `perf_metrics.QueryHourlyAll(24)`，所有调用方共享 60 秒缓存，失败缓存 10 秒，并以 `state` 区分 ok、no_requests、disabled、error。原生查询不接受 context，因此等待者最多等 3 秒；超时返回不缓存的 error，资源读数照常返回，共享查询结束后再写缓存。数据库/Redis 探测、检查原因、阈值、进程和连接池仍只在 Root 的 `/api/performance/*` 返回。
+按用户批准，Dashboard 系统状态卡片对所有登录用户开放。新增扩展接口 `GET /api/user/system-status`（`service/dashboard_system_status.go`、`controller/dashboard_system_status.go`），从现有唯一观测缓存投影 CPU、内存、磁盘（含绝对容量）、应用 HTTP 正文流量及 1h 分桶历史，并读取主机负载均值和逻辑核数（`service/dashboard_system_load_{unix,windows}.go`，gopsutil `load.Avg` 带 recover）。成功率取 `perf_metrics.QueryHourlyAll(24)`，所有调用方共享 60 秒缓存，失败缓存 10 秒，并以 `state` 区分 ok、no_requests、disabled、error。原生查询不接受 context，因此等待者最多等 3 秒；超时返回不缓存的 error，资源读数照常返回，共享查询结束后再写缓存。数据库/Redis 探测、检查原因、阈值、进程和连接池仍只在 Root 的 `/api/performance/*` 返回；2026-10-31 起投影另带资源阈值判定和粗粒度 `storage_status` 结果，见该日条目。
 
 该接口仅限会话访问，拒绝 PAT；关闭缓存，按用户限制每分钟 30 次（`middleware/dashboard_status_rate_limit.go` 复用原生 `userRateLimitFactory`）。原生文件和 `router/api-router.go` 不改，路由登记在 `router/extensions.go`。核心清单新增 7 个 extension，upstream_equal 与 adapted 数量不变；截至本次 2026-10-26 更新，NewAPI 基线为 `206e0fa5c600127a314a97f88592c067f784f4a6`。
 

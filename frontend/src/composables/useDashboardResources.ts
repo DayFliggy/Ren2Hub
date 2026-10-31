@@ -17,10 +17,20 @@ export function useDashboardResources() {
   const systemLoading = ref(false)
   const systemError = ref<string | null>(null)
 
+  // A business error (HTTP 200) or a 4xx carries the server's own localized
+  // message. Proxy failures, broken responses and network errors only carry the
+  // transport's English text, so they are named here.
   const errorMessage = (error: unknown) => {
-    if (error instanceof ApiError && error.status === 429)
-      return t('dashboard.systemStatus.rateLimited')
-    return error instanceof Error ? error.message : t('common.failed')
+    if (!(error instanceof ApiError))
+      return error instanceof Error ? error.message : t('common.failed')
+    if (error.status === 429) return t('dashboard.systemStatus.rateLimited')
+    if (error.code === 'INVALID_RESPONSE')
+      return t('dashboard.systemStatus.invalidResponse')
+    if (error.status === undefined)
+      return t('dashboard.systemStatus.networkError')
+    if (error.status >= 500)
+      return t('dashboard.systemStatus.serverError', { status: error.status })
+    return error.message
   }
 
   async function loadSystem() {
