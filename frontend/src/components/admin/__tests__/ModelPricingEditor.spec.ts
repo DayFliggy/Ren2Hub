@@ -152,6 +152,41 @@ describe('manual model price editor', () => {
     })
     wrapper.unmount()
   })
+  it('keeps an output-only audio ratio while other prices change', async () => {
+    const wrapper = setup({ AudioCompletionRatio: 2 })
+    await wrapper.get('input[inputmode="decimal"]').setValue('2')
+    const output = wrapper
+      .findAll('.pricing-lane')
+      .find((lane) => lane.text().includes('Output price'))!
+    await output.get('input[type="checkbox"]').setValue(true)
+    await output.get('input[aria-label="Output price"]').setValue('6')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '1',
+      CompletionRatio: '3',
+      AudioCompletionRatio: '2',
+    })
+    const audioOutput = wrapper
+      .findAll('.pricing-lane')
+      .find((lane) => lane.text().includes('Audio output price'))!
+    await audioOutput.get('input[type="checkbox"]').setValue(false)
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '1',
+      CompletionRatio: '3',
+    })
+    wrapper.unmount()
+  })
+  it('keeps a saved audio input ratio but needs it priced for an output price', async () => {
+    const wrapper = setup({ AudioRatio: 25, AudioCompletionRatio: 1 })
+    await wrapper.get('input[inputmode="decimal"]').setValue('2')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '1',
+      AudioRatio: '25',
+      AudioCompletionRatio: '1',
+    })
+    await wrapper.get('input[aria-label="Audio output price"]').setValue('10')
+    expect(wrapper.vm.commit()).toBeNull()
+    wrapper.unmount()
+  })
   it('rejects an enabled extra price left empty instead of dropping it', async () => {
     const wrapper = setup({ ModelRatio: '1', AudioRatio: '2' })
     const audio = wrapper.get('input[aria-label="Audio input price"]')

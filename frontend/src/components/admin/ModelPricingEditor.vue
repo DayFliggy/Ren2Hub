@@ -531,10 +531,14 @@ defineExpose({ commit, dirty })
               v-model="enabled[lane.key]"
               type="checkbox"
               :disabled="
-                lane.key === 'AudioCompletionRatio' && !enabled.AudioRatio
+                lane.key === 'AudioCompletionRatio' &&
+                !enabled.AudioRatio &&
+                !enabled.AudioCompletionRatio
               "
               @change="
-                !enabled.AudioRatio && (enabled.AudioCompletionRatio = false)
+                lane.key === 'AudioRatio' &&
+                !enabled.AudioRatio &&
+                (enabled.AudioCompletionRatio = false)
               "
             />{{ t(lane.label) }}</label
           ><PricingAmountInput

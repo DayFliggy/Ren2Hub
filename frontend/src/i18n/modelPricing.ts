@@ -68,7 +68,7 @@ const zh = {
   enabled: '启用',
   preview: '当前草稿预览',
   laneFallback:
-    '未启用的附加单价按输入单价计费，其中音频输出按音频输入单价计费。上游内置的音频倍率预先勾选，单价留空时按原倍率保存；取消勾选即删除该倍率，两个音频倍率都删除后，兼容接口的音频改按文本价计费。Gemini 2.5 Flash、2.0 Flash 等模型在原生接口另按上游固定单价计音频输入。',
+    '未启用的附加单价按输入单价计费，其中音频输出按音频输入单价计费。上游内置的音频倍率预先勾选；加载时就没有单价的倍率可以留空，按原倍率保存，已显示的单价不能清空，删除请取消勾选。两个音频倍率都删除后，兼容接口改走文本结算；Gemini 2.5 Flash、2.0 Flash 等模型在文本结算中仍按上游固定单价计音频输入。',
   toolBuiltinPrice:
     '内置工具未配置时使用上游内置单价；这里保存的值覆盖内置价，0 表示免费。其他工具未配置时不收费。',
   invalid: '请填写有效的非负价格；留空不表示免费。',
@@ -354,7 +354,7 @@ const en: Record<keyof typeof zh, string> = {
   enabled: 'Enabled',
   preview: 'Draft preview',
   laneFallback:
-    'Extra prices that are not enabled bill at the input price; audio output bills at the audio input price. Built-in upstream audio ratios start enabled and are saved unchanged while their price is empty. Unchecking one deletes it; once both audio ratios are gone, compatible audio bills at the text price. Gemini 2.5 Flash, 2.0 Flash and similar models also bill native audio input at a fixed upstream price.',
+    'Extra prices that are not enabled bill at the input price; audio output bills at the audio input price. Built-in upstream audio ratios start enabled. A ratio that had no price when loaded can stay empty and is saved unchanged; a shown price cannot be cleared, so uncheck it to delete it. Once both audio ratios are gone, compatible requests use text settlement, where Gemini 2.5 Flash, 2.0 Flash and similar models still bill audio input at a fixed upstream price.',
   toolBuiltinPrice:
     'Built-in tools use the upstream built-in price unless overridden here; 0 makes a tool free. Other tools are free until priced.',
   invalid: 'Enter a nonnegative price. Empty does not mean free.',

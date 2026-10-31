@@ -20,7 +20,7 @@
 
 工具内置单价保留上游原文（`tools.go` 与上游一致），见 `setting/operation_setting/tools.go` 的 `seedHardcodedToolPrices`，数值按美元计入 quota，智谱、阿里搜索档位的人民币标价也不换算。`tool_price_setting.prices` 保存的值覆盖内置价，0 表示免费；托管工具名只按协议项或厂商用量计数，同名客户端函数不计入。
 
-音频与上游 NewAPI 一致。`AudioRatio`、`AudioCompletionRatio` 保留上游内置表（`gpt-4o-audio-preview`、`gpt-4o-realtime-preview`、`gpt-4o-mini-tts`、`tts-1` 等），首次保存定价时随其他键写入选项表，之后以选项表为准；在定价页取消某模型的音频单价并保存即删除该倍率，不恢复内置值；OpenAI 兼容接口只在模型存在音频倍率时走音频结算。原生 Gemini 接口按文本结算，`operation_setting.GetGeminiInputAudioPricePerMillionTokens` 给出的模型（Gemini 2.5 Flash、2.0 Flash 等）按上游固定美元单价单独计音频输入，其他模型的音频输入计入输入 Token；同一模型的兼容音频价与原生固定价不一致时，目录不展示价格，转换预览拒绝转换。音频倍率只是附加维度，模型仍须配置基础价格才能调用。
+音频与上游 NewAPI 一致。`AudioRatio`、`AudioCompletionRatio` 保留上游内置表（`gpt-4o-audio-preview`、`gpt-4o-realtime-preview`、`gpt-4o-mini-tts`、`tts-1` 等），首次保存定价时随其他键写入选项表，之后以选项表为准；在定价页取消某模型的音频单价并保存即删除该倍率，不恢复内置值；OpenAI 兼容接口只在模型存在音频倍率时走音频结算。原生 Gemini 接口及没有音频倍率的兼容请求走文本结算；文本结算中，`operation_setting.GetGeminiInputAudioPricePerMillionTokens` 给出的模型（Gemini 2.5 Flash、2.0 Flash 等）按上游固定美元单价单独计音频输入，其他模型的音频输入计入输入 Token；同一模型的兼容音频价与原生固定价不一致时，目录不展示价格，转换预览拒绝转换。音频倍率只是附加维度，模型仍须配置基础价格才能调用。
 
 缺项与显式零不同。删除或清空某个模型并保存，等于提交 `pricing: {}`，该模型回到未定价，不恢复任何价格；`ModelPricingChange` 没有 `reset` 字段。
 
