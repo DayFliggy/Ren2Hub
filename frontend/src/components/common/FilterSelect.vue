@@ -8,6 +8,8 @@ export interface SelectOption {
   /** status family — renders a small tone dot before the label (and in the
       trigger when selected) so the control echoes the table's StatusChip. */
   tone?: 'success' | 'warning' | 'danger' | 'info' | 'accent'
+  /** item count shown at the row's end in the panel only, never in the trigger */
+  count?: number
 }
 
 const model = defineModel<string>({ default: '' })
@@ -23,8 +25,13 @@ const props = withDefaults(
     prefixLabel?: string
     /** open the panel upward — use when the control sits near the page bottom */
     direction?: 'down' | 'up'
-    /** control height — 'md' (default 40px) or 'sm' (36px, denser toolbars) */
-    size?: 'sm' | 'md'
+    /** control height — 'md' (default 40px), 'sm' (32px, denser toolbars) or
+        'compact' (32px from sm, 44px touch target below it, matching
+        ConsoleButton and IconButton size sm) */
+    size?: 'sm' | 'md' | 'compact'
+    /** 'facet' renders a compact dashed chip titled by prefixLabel; it shows
+        the selected label as a badge, and the value '' means no filter. */
+    variant?: 'field' | 'facet'
     disabled?: boolean
   }>(),
   {
@@ -32,6 +39,7 @@ const props = withDefaults(
     prefixLabel: '',
     direction: 'down',
     size: 'md',
+    variant: 'field',
     disabled: false,
   }
 )
@@ -40,6 +48,12 @@ const root = ref<HTMLElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 const open = ref(false)
 const activeIndex = ref(-1)
+/** Facet panel placement, measured from the chip each time it opens. */
+const alignEnd = ref(false)
+const facetMaxWidth = ref(288)
+const facetActive = computed(
+  () => props.variant === 'facet' && model.value !== ''
+)
 const triggerId = useId()
 const listboxId = useId()
 const optionId = (i: number) => `${listboxId}-option-${i}`
@@ -91,10 +105,23 @@ function scrollActiveIntoView() {
 
 function openMenu() {
   if (props.disabled) return
+  if (props.variant === 'facet') placeFacetPanel()
   open.value = true
   const cur = allOptions.value.findIndex((o) => o.value === model.value)
   activeIndex.value = cur >= 0 ? cur : 0
   scrollActiveIntoView()
+}
+
+/** Opens the content-wide facet panel toward the roomier side of the chip and
+    caps its width there, so it never leaves the viewport. */
+function placeFacetPanel() {
+  const chip = root.value?.getBoundingClientRect()
+  if (!chip) return
+  const gutter = 16
+  const toRight = window.innerWidth - chip.left - gutter
+  const toLeft = chip.right - gutter
+  alignEnd.value = toLeft > toRight
+  facetMaxWidth.value = Math.min(288, Math.max(toRight, toLeft))
 }
 
 function closeMenu() {
@@ -181,19 +208,29 @@ onClickOutside(root, closeMenu)
 </script>
 
 <template>
-  <div ref="root" class="relative" :class="size === 'sm' ? 'h-8' : 'h-10'">
+  <div
+    ref="root"
+    class="relative"
+    :class="size === 'compact' ? 'h-11 sm:h-8' : size === 'sm' ? 'h-8' : 'h-10'"
+  >
     <!-- trigger -->
     <button
       :id="triggerId"
       type="button"
-      class="pencil-control flex h-full w-full items-center gap-2 rounded-xl border px-4 text-left text-sm text-[var(--text-primary)] transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+      class="pencil-control flex h-full w-full items-center text-left text-sm text-[var(--text-primary)] transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-50"
       data-handdrawn="control"
+      :data-facet-active="facetActive ? 'true' : undefined"
       :disabled="disabled"
-      :class="
+      :class="[
+        variant === 'facet'
+          ? 'filter-facet gap-1.5 whitespace-nowrap rounded-xl border border-dashed px-3 font-medium'
+          : 'gap-2 rounded-xl border px-4',
         open
           ? 'border-[var(--border-strong)] bg-[var(--surface-solid)]'
-          : 'border-transparent bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)]'
-      "
+          : variant === 'facet'
+            ? 'border-[var(--border-default)] bg-transparent hover:bg-[var(--surface-hover)]'
+            : 'border-transparent bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)]',
+      ]"
       role="combobox"
       :aria-label="label"
       aria-haspopup="listbox"
@@ -205,31 +242,68 @@ onClickOutside(root, closeMenu)
       @click="toggle"
       @keydown="onKeydown"
     >
-      <span v-if="prefixLabel" class="shrink-0 text-[var(--text-tertiary)]">{{
-        prefixLabel
-      }}</span>
-      <span
-        v-if="selectedOption?.tone"
-        class="h-2 w-2 shrink-0 rounded-full"
-        :style="{ background: toneColor(selectedOption.tone) }"
-        aria-hidden="true"
-      />
-      <span class="min-w-0 flex-1 truncate">{{ triggerLabel }}</span>
-      <svg
-        class="shrink-0 text-[var(--text-tertiary)] transition-transform"
-        :class="open ? 'rotate-180' : ''"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="m6 9 6 6 6-6" />
-      </svg>
+      <template v-if="variant === 'facet'">
+        <svg
+          class="shrink-0 text-[var(--text-tertiary)]"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M8 12h8M12 8v8" />
+        </svg>
+        <span>{{ prefixLabel }}</span>
+        <template v-if="facetActive">
+          <span
+            class="mx-0.5 h-4 w-px shrink-0 bg-[var(--border-default)]"
+            aria-hidden="true"
+          />
+          <span
+            class="inline-flex min-w-0 max-w-[9rem] items-center gap-1.5 rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 text-xs font-normal text-[var(--accent-text)]"
+            data-facet-value
+          >
+            <span
+              v-if="selectedOption?.tone"
+              class="h-1.5 w-1.5 shrink-0 rounded-full"
+              :style="{ background: toneColor(selectedOption.tone) }"
+              aria-hidden="true"
+            />
+            <span class="truncate">{{ triggerLabel }}</span>
+          </span>
+        </template>
+      </template>
+      <template v-else>
+        <span v-if="prefixLabel" class="shrink-0 text-[var(--text-tertiary)]">{{
+          prefixLabel
+        }}</span>
+        <span
+          v-if="selectedOption?.tone"
+          class="h-2 w-2 shrink-0 rounded-full"
+          :style="{ background: toneColor(selectedOption.tone) }"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1 truncate">{{ triggerLabel }}</span>
+        <svg
+          class="shrink-0 text-[var(--text-tertiary)] transition-transform"
+          :class="open ? 'rotate-180' : ''"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </template>
     </button>
 
     <!-- panel: sketch radius + paper texture by day, uniform + elevation by night -->
@@ -238,12 +312,19 @@ onClickOutside(root, closeMenu)
         v-if="open"
         :id="listboxId"
         ref="listRef"
-        class="subtle-scroll texture-paper absolute left-0 z-[200] max-h-64 w-full overflow-y-auto border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
+        class="subtle-scroll texture-paper absolute z-[200] max-h-64 overflow-y-auto border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
         style="
           border-radius: var(--sketch-border-radius-md);
           box-shadow: var(--elevation-3);
         "
-        :class="direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
+        :class="[
+          direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2',
+          variant === 'facet' ? 'w-max min-w-full' : 'w-full',
+          alignEnd ? 'right-0' : 'left-0',
+        ]"
+        :style="
+          variant === 'facet' ? { maxWidth: `${facetMaxWidth}px` } : undefined
+        "
         role="listbox"
         data-handdrawn="menu"
       >
@@ -272,6 +353,11 @@ onClickOutside(root, closeMenu)
             aria-hidden="true"
           />
           <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
+          <span
+            v-if="opt.count !== undefined"
+            class="shrink-0 font-mono text-xs font-normal tabular-nums text-[var(--text-tertiary)]"
+            >{{ opt.count }}</span
+          >
           <svg
             v-if="opt.value === model"
             class="shrink-0"
@@ -292,6 +378,16 @@ onClickOutside(root, closeMenu)
 </template>
 
 <style scoped>
+/* Night: pencil-control forces the 9% --outline-variant border, too faint for
+   a transparent dashed chip; use the search inputs' border and fill instead. */
+html.dark .filter-facet.pencil-control {
+  border-color: var(--outline) !important;
+  background-color: var(--surface-container-low);
+}
+html.dark .filter-facet.pencil-control:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
 .fs-pop-enter-active,
 .fs-pop-leave-active {
   transition:
