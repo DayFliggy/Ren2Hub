@@ -235,6 +235,23 @@ watch(
   },
   { immediate: true }
 )
+// A saved ratio without a base price (the built-in audio ratios) has no
+// dollar amount yet; expand it once the base price arrives instead of
+// letting the empty field drop it on save.
+watch(
+  () => prices.input,
+  () => {
+    if (hydrating || !isDecimal(prices.input ?? '')) return
+    const expanded = tokenPrices({
+      ...props.pricing,
+      ModelRatio: tokenPricing({ input: prices.input! }).ModelRatio!,
+    })
+    for (const lane of TOKEN_LANES) {
+      if (enabled[lane.key] && !prices[lane.key] && expanded[lane.key])
+        prices[lane.key] = expanded[lane.key]!
+    }
+  }
+)
 watch(getQuotaPerUnit, () => {
   // Keep edited dollar amounts as user intent. An untouched ratio must instead
   // be reprojected so its displayed price follows the newly published scale.
@@ -282,8 +299,13 @@ function build(): PricingValues {
     result = { ModelPrice: fixed.value }
   } else {
     const usd: Record<string, string> = { input: prices.input ?? '' }
-    for (const lane of TOKEN_LANES)
-      if (enabled[lane.key]) usd[lane.key] = prices[lane.key] ?? ''
+    for (const lane of TOKEN_LANES) {
+      if (!enabled[lane.key]) continue
+      // An enabled lane must carry a price; an empty one would silently
+      // delete the saved ratio.
+      if (!prices[lane.key]?.trim()) throw new Error('invalid')
+      usd[lane.key] = prices[lane.key]!
+    }
     result = tokenPricing(usd)
   }
   if (Object.keys(plugins).length)

@@ -625,6 +625,25 @@ describe('pricing workspace draft lifecycle', () => {
     wrapper.unmount()
   })
 
+  // Built-in audio ratios are not a price: the backend still rejects the model.
+  it('keeps a model with only audio ratios in the unpriced list', async () => {
+    const loaded = config(1, ['gpt-4o-audio-preview'])
+    loaded.entries[0]!.configured = { AudioRatio: '16' }
+    loaded.entries[0]!.effective = { AudioRatio: '16' }
+    mocks.load.mockResolvedValue(loaded)
+    mocks.get.mockResolvedValue(['gpt-4o-audio-preview'])
+    const wrapper = await setup()
+    await wrapper
+      .findAll('[role="radio"]')
+      .find((item) => item.text() === 'Unpriced models')!
+      .trigger('click')
+    await flushPromises()
+    expect(
+      wrapper.findAll('.pricing-model-name').map((item) => item.text())
+    ).toEqual(['gpt-4o-audio-preview'])
+    wrapper.unmount()
+  })
+
   // English renders both keys as "All"; Chinese tells the filter's "全部"
   // apart from the condition tree's "全部满足".
   it('labels the unfiltered billing mode as every mode, not a condition group', async () => {

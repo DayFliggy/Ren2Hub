@@ -129,6 +129,26 @@ describe('manual model price editor', () => {
     expect(wrapper.vm.commit()?.pricing).toMatchObject({ ModelRatio: '5' })
     wrapper.unmount()
   })
+  // A fresh install seeds NewAPI's audio ratios without a base price; adding
+  // the input price must keep them, or audio falls back to the text price.
+  it('keeps built-in audio ratios when the first base price is entered', async () => {
+    const wrapper = setup({ AudioRatio: 16 })
+    const input = wrapper.get('input[inputmode="decimal"]')
+    expect(input.element).toHaveProperty('value', '')
+    await input.setValue('2.5')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '1.25',
+      AudioRatio: '16',
+    })
+    wrapper.unmount()
+  })
+  it('rejects an enabled extra price left empty instead of dropping it', async () => {
+    const wrapper = setup({ ModelRatio: '1', AudioRatio: '2' })
+    const audio = wrapper.get('input[aria-label="Audio input price"]')
+    await audio.setValue('')
+    expect(wrapper.vm.commit()).toBeNull()
+    wrapper.unmount()
+  })
   it('reprojects clean prices on status refresh and preserves edited dollar intent', async () => {
     const wrapper = setup({ ModelRatio: '2' })
     const input = wrapper.get('input[inputmode="decimal"]')

@@ -185,14 +185,22 @@ export function tokenPricing(prices: Record<string, string>): PricingValues {
   }
   return value
 }
+/** A model is callable only with a base price, an expression or a plugin
+    variant; auxiliary ratios such as the built-in audio ratios are not one. */
+export function hasBasePrice(value: PricingValues): boolean {
+  if (pricingMode(value) === 'tiered_expr')
+    return Boolean(String(value['billing_setting.billing_expr'] ?? '').trim())
+  return (
+    value.ModelPrice !== undefined ||
+    value.ModelRatio !== undefined ||
+    Object.keys(value['billing_setting.plugin_billing_expr'] ?? {}).length > 0
+  )
+}
 export function validatePricing(value: PricingValues): void {
   if (!Object.keys(value).length) return
-  if (pricingMode(value) === 'tiered_expr') {
-    if (!String(value['billing_setting.billing_expr'] ?? '').trim())
-      throw new Error('exprRequired')
-  } else if (value.ModelPrice === undefined && value.ModelRatio === undefined) {
-    if (!Object.keys(value['billing_setting.plugin_billing_expr'] ?? {}).length)
-      throw new Error('invalid')
-  }
+  if (!hasBasePrice(value))
+    throw new Error(
+      pricingMode(value) === 'tiered_expr' ? 'exprRequired' : 'invalid'
+    )
   serializePricing(value)
 }

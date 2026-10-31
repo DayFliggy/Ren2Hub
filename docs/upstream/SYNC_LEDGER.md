@@ -26,7 +26,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 798 `upstream_equal`、277 `adapted`、238 `extension`、45 `removed`，`candidate_sha` 为空；参考仓库未 fetch，HEAD 仍为 `206e0fa5c`。
 
-合并到 main 时按用户要求恢复上游音频计费：`AudioRatio`、`AudioCompletionRatio` 的内置表及其 `InitRatioSettings`、首次写入 `defaultPricingMaps`，`tools.go` 末尾的 Gemini 音频输入固定价，`service/text_quota.go` 的原生 Gemini 音频单独计费与日志，`model/model_pricing_conversion.go`、`model/catalog_prices.go` 的 Gemini/OpenAI 音频冲突判断，均恢复为上游原文；`tools.go` 回到 `upstream_equal`。理由：OpenAI 兼容接口只在存在音频倍率时走音频结算，删除内置表后音频模型会按文本价少扣。OpenRouter Claude 反推缓存写入仍删除，它只对内置模型倍率生效。上述文件的音频部分以后照常吸收上游。恢复后来源清单重算为 799 `upstream_equal`、276 `adapted`、253 `extension`、45 `removed`（含用量折扣与系统状态的合并结果），`tools.go` 不再列为本地差异。
+合并到 main 时按用户要求恢复上游音频计费：`AudioRatio`、`AudioCompletionRatio` 的内置表及其 `InitRatioSettings`、首次写入 `defaultPricingMaps`，`tools.go` 末尾的 Gemini 音频输入固定价，`service/text_quota.go` 的原生 Gemini 音频单独计费与日志，`model/model_pricing_conversion.go` 的 Gemini/OpenAI 音频冲突判断，均恢复为上游原文；本地扩展 `model/catalog_prices.go` 的目录投影恢复为 main 中对该冲突判断的接入；`tools.go` 回到 `upstream_equal`。理由：OpenAI 兼容接口只在存在音频倍率时走音频结算，删除内置表后音频模型会按文本价少扣。OpenRouter Claude 反推缓存写入仍删除，它只对内置模型倍率生效。上述文件的音频部分以后照常吸收上游。前端定价页按基础价格判断“未定价”，仅有内置音频倍率的模型仍列为未定价；填写输入价后，编辑器把已有倍率展开为美元单价，启用但为空的单价拒绝保存，不再静默删除倍率。恢复后来源清单重算为 799 `upstream_equal`、276 `adapted`、253 `extension`、45 `removed`（含用量折扣与系统状态的合并结果），`tools.go` 不再列为本地差异。
 
 ## 2026-10-30 用量折扣
 

@@ -12,6 +12,7 @@ import {
   parsePricingJSON,
   fillPriceDraft,
   clonePricing,
+  hasBasePrice,
   validatePricing,
 } from '@/features/pricing/draft'
 import { translateError } from '@/features/pricing/errors'
@@ -125,7 +126,8 @@ const rows = computed(() => {
   const names =
     tab.value === 'unset'
       ? enabledModels.value.filter(
-          (name) => !Object.keys(draft.value[name] ?? {}).length
+          // Built-in audio ratios alone do not price a model.
+          (name) => !hasBasePrice(draft.value[name] ?? {})
         )
       : Object.keys(draft.value)
   return names
