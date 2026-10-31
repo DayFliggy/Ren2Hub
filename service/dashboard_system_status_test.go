@@ -22,18 +22,43 @@ func TestDashboardSystemStatusProjectsObservationWithoutInventingValues(t *testi
 	observation.Status, observation.SampledAt = "warning", &sampledAt
 	observation.Resources.CPU = ObservationResource{Available: true, State: "ok", Scope: "container", Percent: &cpu, Threshold: 90}
 	observation.Resources.Memory = ObservationResource{Available: true, State: "ok", Scope: "host", Percent: &memory, UsedBytes: &used, TotalBytes: &total}
-	observation.Traffic = ObservationTraffic{Scope: "application_http_body", RequestMbps: &up}
-	observation.Series = ObservationSeries{BucketSeconds: 60, Points: []ObservationSeriesPoint{{Ts: 60, RequestMbps: &up, CPU: &cpu}, {Ts: 120}}}
+	observation.Traffic = ObservationTraffic{Scope: "application_listener", InboundMbps: &up}
+	observation.Series = ObservationSeries{BucketSeconds: 60, Points: []ObservationSeriesPoint{{Ts: 60, InboundMbps: &up, CPU: &cpu}, {Ts: 120}}}
 
 	status := newDashboardSystemStatus(observation, nil, DashboardSuccessRate{State: "no_requests"})
 	require.Equal(t, "warning", status.Status)
 	require.Equal(t, DashboardResource{Available: true, State: "ok", Scope: "container", Percent: &cpu}, status.CPU)
 	require.Equal(t, &used, status.Memory.UsedBytes)
 	require.Equal(t, DashboardResource{Scope: "unknown", State: "unknown"}, status.Disk, "unsampled disk stays unknown")
-	require.Nil(t, status.Traffic.ResponseMbps, "a missing direction is not reported as idle")
-	require.Equal(t, []DashboardTrafficPoint{{Ts: 60, RequestMbps: &up}, {Ts: 120}}, status.Traffic.Points, "empty buckets keep their gap")
+	require.Equal(t, &up, status.Traffic.InboundMbps)
+	require.Nil(t, status.Traffic.OutboundMbps, "a missing direction is not reported as idle")
+	require.Equal(t, []DashboardTrafficPoint{{Ts: 60, InboundMbps: &up}, {Ts: 120}}, status.Traffic.Points, "empty buckets keep their gap")
 	require.Nil(t, status.Load)
 	require.Equal(t, "unknown", status.StorageStatus, "no probe verdict is not reported healthy")
+}
+
+func TestDashboardTrafficProjectsExactlyFiveKeys(t *testing.T) {
+	inbound, outbound := 1., 7.
+	observation := emptyPerformanceObservation()
+	observation.Traffic = ObservationTraffic{Scope: "host_interface", Interface: "eth-secret", Reason: "host_interface_missing"}
+	observation.Series = ObservationSeries{BucketSeconds: 60, Points: []ObservationSeriesPoint{{Ts: 60, InboundMbps: &inbound, OutboundMbps: &outbound}}}
+
+	body, err := common.Marshal(newDashboardSystemStatus(observation, nil, DashboardSuccessRate{State: "no_requests"}))
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "eth-secret", "the host interface name stays Root-only")
+	require.NotContains(t, string(body), "host_interface_missing", "the failure reason stays Root-only")
+	var decoded struct {
+		Traffic map[string]any `json:"traffic"`
+	}
+	require.NoError(t, common.Unmarshal(body, &decoded))
+	keys := make([]string, 0, len(decoded.Traffic))
+	for key := range decoded.Traffic {
+		keys = append(keys, key)
+	}
+	require.ElementsMatch(t, []string{"scope", "inbound_mbps", "outbound_mbps", "bucket_seconds", "points"}, keys)
+	require.Equal(t, "host_interface", decoded.Traffic["scope"])
+	require.Equal(t, []any{map[string]any{"ts": 60., "inbound_mbps": 1., "outbound_mbps": 7.}}, decoded.Traffic["points"],
+		"each point carries exactly ts and both directions, unswapped")
 }
 
 func TestDashboardResourceStateCarriesThresholdVerdict(t *testing.T) {

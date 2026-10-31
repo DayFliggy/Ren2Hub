@@ -1,11 +1,17 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -57,22 +64,161 @@ func TestObservationGCBeforeFirstCollectionAndRingWrap(t *testing.T) {
 	require.Equal(t, 11, process.Goroutines)
 }
 
-func TestObservationTrafficFirstResetClockGapAndIdle(t *testing.T) {
+func TestObservationTrafficBaselineRules(t *testing.T) {
 	sampler := trafficSampler{}
 	now := time.Unix(1800000000, 0)
-	first := sampler.sample(now, 100, 200)
-	require.Nil(t, first.RequestMbps)
-	require.Nil(t, first.ResponseMbps)
-	measured := sampler.sample(now.Add(10*time.Second), 1_250_100, 2_500_200)
-	require.Equal(t, 1., *measured.RequestMbps)
-	require.Equal(t, 2., *measured.ResponseMbps)
-	idle := sampler.sample(now.Add(20*time.Second), 1_250_100, 2_500_200)
-	require.Zero(t, *idle.RequestMbps)
-	require.Nil(t, sampler.sample(now.Add(30*time.Second), 1, 1).RequestMbps, "counter reset")
-	require.Nil(t, sampler.sample(now.Add(30*time.Second), 2, 2).RequestMbps, "same timestamp")
-	require.Nil(t, sampler.sample(now.Add(29*time.Second), 3, 3).ResponseMbps, "clock reversal")
-	require.Nil(t, sampler.sample(now.Add(80*time.Second), 4, 4).ResponseMbps, "gap is not a fresh instantaneous sample")
-	require.NotNil(t, sampler.sample(now.Add(90*time.Second), 5, 5).RequestMbps)
+	for _, step := range []struct {
+		name            string
+		at              time.Duration
+		in, out         uint64
+		inMbps, outMbps *float64
+	}{
+		{"the first sample only sets the baseline", 0, 100, 200, nil, nil},
+		{"Mbps is delta bytes x 8 / seconds / 1e6, per direction", 10 * time.Second, 1_250_100, 2_500_200, observationPtr(1.), observationPtr(2.)},
+		{"a real zero delta is idle, not missing", 20 * time.Second, 1_250_100, 2_500_200, observationPtr(0.), observationPtr(0.)},
+		{"a decrease in either counter resets", 30 * time.Second, 1_250_100, 1, nil, nil},
+		{"the next sample measures from the reset", 40 * time.Second, 1_375_100, 250_001, observationPtr(.1), observationPtr(.2)},
+		{"zero elapsed resets", 40 * time.Second, 1_400_000, 300_000, nil, nil},
+		{"clock reversal resets", 35 * time.Second, 1_500_000, 400_000, nil, nil},
+		{"elapsed equal to observationMaxAge still measures", 65 * time.Second, 5_250_000, 400_000, observationPtr(1.), observationPtr(0.)},
+		{"a gap over observationMaxAge resets", 96 * time.Second, 6_000_000, 500_000, nil, nil},
+		{"after the gap a rate needs two samples", 106 * time.Second, 7_250_000, 500_000, observationPtr(1.), observationPtr(0.)},
+	} {
+		inMbps, outMbps := sampler.sample(now.Add(step.at), step.in, step.out, "")
+		require.Equal(t, step.inMbps, inMbps, step.name)
+		require.Equal(t, step.outMbps, outMbps, step.name)
+	}
+}
+
+func writeObservationNetDev(t *testing.T, file, iface string, rx, tx uint64) {
+	t.Helper()
+	content := fmt.Sprintf("Inter-| Receive | Transmit\n face |bytes packets|bytes packets\n%s: %d 0 0 0 0 0 0 0 %d 0 0 0 0 0 0 0\n", iface, rx, tx)
+	require.NoError(t, os.WriteFile(file, []byte(content), 0o644))
+}
+
+// captureObservationLogs collects the SysLog and SysError lines written while
+// the test runs.
+func captureObservationLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buffer bytes.Buffer
+	common.LogWriterMu.Lock()
+	previousOut, previousErr := gin.DefaultWriter, gin.DefaultErrorWriter
+	gin.DefaultWriter, gin.DefaultErrorWriter = &buffer, &buffer
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultWriter, gin.DefaultErrorWriter = previousOut, previousErr
+		common.LogWriterMu.Unlock()
+	})
+	return &buffer
+}
+
+func TestObservationTrafficFailureRequiresNewBaseline(t *testing.T) {
+	logs := captureObservationLogs(t)
+	file := filepath.Join(t.TempDir(), "dev")
+	source := common.TrafficSource{Scope: common.TrafficScopeHostInterface, Interface: "eth0", NetDev: file}
+	sampler := newObservationSampler(1)
+	now := time.Unix(1800000000, 0)
+
+	writeObservationNetDev(t, file, "eth0", 1_000_000, 2_000_000)
+	require.Nil(t, sampler.sampleTraffic(source, now).InboundMbps, "the first sample only sets the baseline")
+	writeObservationNetDev(t, file, "eth0", 2_250_000, 4_500_000)
+	healthy := sampler.sampleTraffic(source, now.Add(10*time.Second))
+	require.Equal(t, ObservationTraffic{Scope: "host_interface", Interface: "eth0", InboundMbps: observationPtr(1.), OutboundMbps: observationPtr(2.)}, healthy,
+		"inbound is host rx and outbound is host tx")
+
+	require.NoError(t, os.Remove(file))
+	unreadable := sampler.sampleTraffic(source, now.Add(20*time.Second))
+	require.Equal(t, ObservationTraffic{Scope: "host_interface", Interface: "eth0", Reason: "host_counters_unreadable"}, unreadable, "a reason means both rates are null")
+	require.Equal(t, "host_counters_unreadable", sampler.sampleTraffic(source, now.Add(25*time.Second)).Reason)
+	writeObservationNetDev(t, file, "eth1", 9_000_000, 9_000_000)
+	missing := sampler.sampleTraffic(source, now.Add(27*time.Second))
+	require.Equal(t, "host_interface_missing", missing.Reason, "another interface is never read instead")
+	require.Nil(t, missing.InboundMbps)
+	require.Nil(t, missing.OutboundMbps)
+
+	// The counters grew during the outage. A rate from the old baseline would
+	// be (3_500_000-2_250_000) bytes over 20 s; recovery must not report it.
+	writeObservationNetDev(t, file, "eth0", 3_500_000, 7_000_000)
+	recovered := sampler.sampleTraffic(source, now.Add(30*time.Second))
+	require.Empty(t, recovered.Reason)
+	require.Nil(t, recovered.InboundMbps, "the first good sample after a failure only sets the baseline")
+	require.Nil(t, recovered.OutboundMbps)
+	writeObservationNetDev(t, file, "eth0", 3_625_000, 7_250_000)
+	measured := sampler.sampleTraffic(source, now.Add(40*time.Second))
+	require.Equal(t, observationPtr(.1), measured.InboundMbps)
+	require.Equal(t, observationPtr(.2), measured.OutboundMbps)
+
+	var transitions []string
+	for _, line := range strings.Split(logs.String(), "\n") {
+		if strings.Contains(line, "host traffic") {
+			transitions = append(transitions, line)
+		}
+	}
+	require.Len(t, transitions, 3, "only entering, changing and recovering are logged: %q", transitions)
+	require.Contains(t, transitions[0], "host_counters_unreadable")
+	require.Contains(t, transitions[1], "host_interface_missing")
+	require.Contains(t, transitions[2], "recovered")
+}
+
+func TestObservationTrafficStaleClearsRatesWithoutTouchingCache(t *testing.T) {
+	now := time.Unix(1800000000, 0)
+	sampler := newObservationSampler(2)
+	observation := emptyPerformanceObservation()
+	observation.SampledAt = observationPtr(now.Unix())
+	observation.Traffic = ObservationTraffic{Scope: "host_interface", Interface: "eth0", InboundMbps: observationPtr(1.5), OutboundMbps: observationPtr(7.)}
+	sampler.record(observation)
+
+	stale, err := sampler.read("1h", now.Add(observationMaxAge+time.Second))
+	require.NoError(t, err)
+	require.True(t, stale.Stale)
+	require.Equal(t, ObservationTraffic{Scope: "host_interface", Interface: "eth0"}, stale.Traffic,
+		"stale withdraws both rates and keeps the source; it is not reported as a host failure")
+
+	fresh, err := sampler.read("1h", now)
+	require.NoError(t, err)
+	require.False(t, fresh.Stale)
+	require.Equal(t, observation.Traffic, fresh.Traffic, "the stale projection did not rewrite the cached sample")
+	point := fresh.Series.Points[len(fresh.Series.Points)-1]
+	require.Equal(t, observationPtr(1.5), point.InboundMbps, "history keeps each direction")
+	require.Equal(t, observationPtr(7.), point.OutboundMbps)
+}
+
+func TestObservationTrafficConcurrentSampleAndRead(t *testing.T) {
+	sampler := newObservationSampler(8)
+	stop := make(chan struct{})
+	var readers sync.WaitGroup
+	for range 4 {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				observation, err := sampler.read("1h", time.Now())
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				_ = newDashboardSystemStatus(observation, nil, DashboardSuccessRate{State: "no_requests"})
+			}
+		}()
+	}
+	for range 20 {
+		sampler.sample(context.Background())
+	}
+	close(stop)
+	readers.Wait()
+	got, err := sampler.read("1h", time.Now())
+	require.NoError(t, err)
+	require.Equal(t, common.CurrentTrafficSource().Scope, got.Traffic.Scope)
+	if got.Traffic.Reason == "" {
+		require.NotNil(t, got.Traffic.InboundMbps, "back-to-back samples report a rate")
+		require.NotNil(t, got.Traffic.OutboundMbps)
+	}
 }
 
 func TestObservationHistoryWindowsGapsEvictionAndStale(t *testing.T) {

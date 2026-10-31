@@ -31,6 +31,12 @@ export const opsMonitorMessages = {
       canceled: '探测已取消',
       threshold_exceeded: '超过资源阈值',
     },
+    trafficReasons: {
+      host_config_invalid: '宿主机流量配置无效',
+      host_counters_unreadable: '无法读取宿主机网卡计数',
+      host_counters_invalid: '宿主机网卡计数格式无效',
+      host_interface_missing: '宿主机网卡计数中没有 {interface}',
+    },
     rootOnly: '仅 Root',
     status: {
       ok: '正常',
@@ -95,9 +101,9 @@ export const opsMonitorMessages = {
       threshold: '阈值 {value}%',
       thresholdOff: '阈值关闭',
       usedOfTotal: '{used} / {total}',
-      network: '应用请求／响应吞吐',
-      up: '响应吞吐',
-      down: '请求吞吐',
+      network: '流量',
+      up: '出站',
+      down: '入站',
       process: '进程',
       goroutines: 'Goroutine',
       heap: '堆内存',
@@ -258,8 +264,15 @@ export const opsMonitorMessages = {
       latencyEWMA: '延迟',
       instanceHistory:
         '后台保留本实例最近 24 小时采样，进程重启后清空；缺测不补零。',
-      trafficScope:
-        '仅统计应用 HTTP 请求与响应 body 字节，不含协议头和 WebSocket 帧，不代表网卡带宽。',
+      trafficScope: {
+        host_interface:
+          '宿主机网卡 {interface} 的全部收发；中转请求同时产生客户端和上游两段流量。',
+        host_interface_unnamed:
+          '宿主机网卡的全部收发；中转请求同时产生客户端和上游两段流量。',
+        application_listener:
+          '主服务端口上的全部连接字节，含 HTTP 头、正文、WebSocket 和健康检查；不含应用主动连接上游的流量和 pprof 端口。',
+      },
+      trafficUnavailable: '{scope}读数不可用：{reason}。',
       runtimeMemory: '运行时保留堆内存：{value}',
       noPublishedChannels: '模型目录中暂无已发布渠道，不代表平台尚未配置渠道。',
       catalogScope: '仅统计模型目录中已发布模型的渠道，不代表全部已配置渠道。',
@@ -332,6 +345,12 @@ export const opsMonitorMessages = {
       canceled: 'Probe canceled',
       threshold_exceeded: 'Resource threshold exceeded',
     },
+    trafficReasons: {
+      host_config_invalid: 'invalid host traffic configuration',
+      host_counters_unreadable: 'host interface counters cannot be read',
+      host_counters_invalid: 'malformed host interface counters',
+      host_interface_missing: 'no {interface} entry in the host counters',
+    },
     rootOnly: 'Root only',
     status: {
       ok: 'Healthy',
@@ -396,9 +415,9 @@ export const opsMonitorMessages = {
       threshold: 'Threshold {value}%',
       thresholdOff: 'Threshold off',
       usedOfTotal: '{used} / {total}',
-      network: 'Application request/response throughput',
-      up: 'Response throughput',
-      down: 'Request throughput',
+      network: 'Traffic',
+      up: 'Outbound',
+      down: 'Inbound',
       process: 'Process',
       goroutines: 'Goroutines',
       heap: 'Heap',
@@ -560,8 +579,15 @@ export const opsMonitorMessages = {
       latencyEWMA: 'Latency',
       instanceHistory:
         'The server retains 24 hours of samples for this instance. Restarting clears history; missing samples remain gaps.',
-      trafficScope:
-        'Application HTTP request and response body bytes only; excludes headers and WebSocket frames. This is not network-interface bandwidth.',
+      trafficScope: {
+        host_interface:
+          'All traffic on host interface {interface}; relayed requests count both client and upstream legs.',
+        host_interface_unnamed:
+          'All traffic on the host interface; relayed requests count both client and upstream legs.',
+        application_listener:
+          "All bytes on the main service port, including headers, bodies, WebSocket and health checks; excludes the app's own upstream connections and the pprof port.",
+      },
+      trafficUnavailable: '{scope} Reading unavailable: {reason}.',
       runtimeMemory: 'Runtime reserved heap: {value}',
       noPublishedChannels:
         'No published channels in the model catalog. Other configured channels may exist.',

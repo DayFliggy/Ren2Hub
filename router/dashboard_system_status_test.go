@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 
@@ -14,6 +15,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+// The traffic source is decided once per process. A host interface with a
+// relative net/dev path is host mode with host_config_invalid, so every
+// observation in this package carries a non-empty interface and reason for the
+// shared projection to withhold.
+const dashboardTestTrafficInterface = "eth-status-test"
+
+func TestMain(m *testing.M) {
+	if err := os.Setenv("TRAFFIC_HOST_INTERFACE", dashboardTestTrafficInterface); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("TRAFFIC_HOST_NET_DEV", "relative/net/dev"); err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
 
 func setupDashboardSystemStatusRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	t.Helper()
@@ -60,6 +77,10 @@ func getSystemStatus(engine *gin.Engine, bearer string) *httptest.ResponseRecord
 
 func TestDashboardSystemStatusIsReadableByEverySignedInRole(t *testing.T) {
 	engine, db := setupDashboardSystemStatusRouter(t)
+	observation, err := service.ReadPerformanceObservation("1h")
+	require.NoError(t, err)
+	require.Equal(t, dashboardTestTrafficInterface, observation.Traffic.Interface, "the Root observation carries an interface to withhold")
+	require.Equal(t, common.TrafficReasonHostConfigInvalid, observation.Traffic.Reason, "the Root observation carries a reason to withhold")
 	require.Equal(t, http.StatusUnauthorized, getSystemStatus(engine, "").Code)
 	for _, test := range []struct {
 		id   int
@@ -75,9 +96,11 @@ func TestDashboardSystemStatusIsReadableByEverySignedInRole(t *testing.T) {
 			require.Contains(t, body, `"success_rate":{"state":`)
 			require.Contains(t, response.Header().Get("Cache-Control"), "no-store")
 			// Root-only diagnostics never reach the shared card.
-			for _, field := range []string{`"storage"`, `"checks"`, `"threshold"`, `"process"`, `"db_pool"`, `"coverage"`, `"latency_ms"`} {
+			require.Contains(t, body, `"traffic":{"scope":"host_interface"`)
+			for _, field := range []string{`"storage"`, `"checks"`, `"threshold"`, `"process"`, `"db_pool"`, `"coverage"`, `"latency_ms"`, `"interface"`, `"reason"`} {
 				require.NotContains(t, body, field)
 			}
+			require.NotContains(t, body, dashboardTestTrafficInterface)
 			// Only the coarse dependency verdict, a bare string, is shared.
 			require.Regexp(t, `"storage_status":"(ok|critical|stale|unknown)"`, body)
 		})

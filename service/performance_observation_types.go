@@ -66,10 +66,16 @@ type ObservationProcess struct {
 	LastGCPauseMs  *float64 `json:"last_gc_pause_ms"`
 }
 
+// ObservationTraffic is seen from the server: inbound is host rx or bytes read
+// on accepted connections, outbound is host tx or bytes written. Scope is the
+// startup decision; a non-empty Reason means both rates are null. Interface is
+// a string, not a slice, because read value-copies the cached sample.
 type ObservationTraffic struct {
 	Scope        string   `json:"scope"`
-	RequestMbps  *float64 `json:"request_mbps"`
-	ResponseMbps *float64 `json:"response_mbps"`
+	InboundMbps  *float64 `json:"inbound_mbps"`
+	OutboundMbps *float64 `json:"outbound_mbps"`
+	Interface    string   `json:"interface"`
+	Reason       string   `json:"reason"`
 }
 
 type ObservationSeries struct {
@@ -83,8 +89,8 @@ type ObservationSeriesPoint struct {
 	CPU            *float64 `json:"cpu"`
 	Memory         *float64 `json:"memory"`
 	Disk           *float64 `json:"disk"`
-	RequestMbps    *float64 `json:"request_mbps"`
-	ResponseMbps   *float64 `json:"response_mbps"`
+	InboundMbps    *float64 `json:"inbound_mbps"`
+	OutboundMbps   *float64 `json:"outbound_mbps"`
 	Goroutines     *float64 `json:"goroutines"`
 	HeapAllocBytes *float64 `json:"heap_alloc_bytes"`
 }

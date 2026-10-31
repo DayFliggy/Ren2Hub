@@ -60,8 +60,9 @@ function systemSnapshot(readings: ResourceReadings = DEFAULT_READINGS) {
     used_bytes: readings.diskUsedGib * 1024 ** 3,
     total_bytes: readings.diskTotalGib * 1024 ** 3,
   })
-  data.traffic.request_mbps = 0.45
-  data.traffic.response_mbps = 0.00042
+  // Server side: the widest figure is outbound (↑), the smallest inbound (↓).
+  data.traffic.outbound_mbps = 0.45
+  data.traffic.inbound_mbps = 0.00042
   return data
 }
 
@@ -185,7 +186,7 @@ async function expectStableTileHeights(card: Locator): Promise<void> {
 }
 
 for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
-  test(`system status keeps CPU and app traffic readable in ${theme} theme`, async ({
+  test(`system status keeps CPU and traffic readable in ${theme} theme`, async ({
     page,
   }) => {
     await configureSystemPage(page, { theme, authenticated: true })
@@ -195,9 +196,14 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     const card = page.locator('[data-system-status-card]')
     await expect(card).toBeVisible()
     await expect(card).toContainText(/4\.6\s*%/)
-    await expect(card).toContainText('应用流量')
+    await expect(card.locator('[data-metric="bandwidth"] [title]')).toHaveText(
+      '流量'
+    )
     await expect(card).toContainText(/↑\s*450 Kbps/)
     await expect(card).toContainText(/↓\s*420 bps/)
+    await expect(
+      card.locator('[data-metric="bandwidth"] [data-metric-scope]')
+    ).toHaveText('服务器网卡，出站 450 Kbps，入站 420 bps')
     await expectMetricValuesToFit(card)
     await expectStableTileHeights(card)
     await expectUnifiedHeadlineNumbers(card)
@@ -215,6 +221,87 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     await expectHeaderFits(card)
     await assertNoHorizontalOverflow(page)
   })
+}
+
+const TRAFFIC_WORDS = {
+  'zh-CN': {
+    title: '流量',
+    host_interface: '服务器网卡，出站 450 Kbps，入站 420 bps',
+    application_listener: '应用连接，出站 450 Kbps，入站 420 bps',
+  },
+  en: {
+    title: 'Traffic',
+    host_interface: 'Server interface, outbound 450 Kbps, inbound 420 bps',
+    application_listener: 'App connections, outbound 450 Kbps, inbound 420 bps',
+  },
+} as const
+
+/** The traffic scope changes only words in the title and screen-reader text:
+ * the arrows, the card and its tiles keep their size in either scope. */
+for (const locale of ['zh-CN', 'en'] as const) {
+  for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
+    test(`both traffic scopes keep the card size in ${locale} ${theme}`, async ({
+      page,
+    }) => {
+      let scope: SystemStatus['traffic']['scope'] = 'host_interface'
+      await configureSystemPage(page, { theme, authenticated: true, locale })
+      await page.route('**/api/user/system-status', (route) => {
+        const data = systemSnapshot()
+        data.traffic.scope = scope
+        return route.fulfill({ json: { success: true, data } })
+      })
+      const words = TRAFFIC_WORDS[locale]
+      const card = page.locator('[data-system-status-card]')
+      const tile = card.locator('[data-metric="bandwidth"]')
+      for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(viewport)
+        const sizes: string[] = []
+        for (const next of [
+          'host_interface',
+          'application_listener',
+        ] as const) {
+          scope = next
+          await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+          await waitForStablePage(page)
+          await expect(tile.locator('[data-metric-scope]')).toHaveText(
+            words[next]
+          )
+          await expect(tile.locator(`[title="${words[next]}"]`)).toHaveText(
+            words.title
+          )
+          await expect(
+            tile.locator('[data-bandwidth-direction="up"]')
+          ).toHaveText(/↑\s*450 Kbps/)
+          await expect(
+            tile.locator('[data-bandwidth-direction="down"]')
+          ).toHaveText(/↓\s*420 bps/)
+          await expectMetricValuesToFit(card)
+          await expectStableTileHeights(card)
+          await assertNoHorizontalOverflow(page)
+          sizes.push(
+            JSON.stringify(
+              await card.evaluate((node) => {
+                const box = (element: Element) => {
+                  const rect = element.getBoundingClientRect()
+                  return [rect.width, rect.height]
+                }
+                return [
+                  box(node),
+                  ...[
+                    ...node.querySelectorAll('[data-system-status-tile]'),
+                  ].map(box),
+                ]
+              })
+            )
+          )
+        }
+        expect(sizes[1], `${viewport.width}px`).toBe(sizes[0])
+      }
+    })
+  }
 }
 
 // English needs the widest header. The card width follows the dashboard grid,
@@ -370,7 +457,7 @@ function monitorOffSnapshot() {
   data.cpu = off
   data.memory = off
   data.disk = { ...off, scope: 'filesystem' }
-  data.traffic.request_mbps = null
+  data.traffic.inbound_mbps = null
   return data
 }
 

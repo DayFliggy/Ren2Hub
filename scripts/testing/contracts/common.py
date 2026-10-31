@@ -79,9 +79,13 @@ def acceptance_target():
     target = json.loads(regular_file(path, private=True).read_text())
     keys = {'app_container', 'postgres_container', 'redis_container', 'mock_container',
             'database_user', 'database_name', 'database_host', 'redis_host', 'network',
-            'run_id', 'container_ids', 'network_id', 'image_id', 'revision', 'ca_path', 'network_guard'}
+            'run_id', 'container_ids', 'network_id', 'image_id', 'revision', 'ca_path', 'network_guard',
+            'traffic_host_interface'}
     require(isinstance(target, dict) and set(target) == keys, 'invalid_candidate_manifest')
     require(re.fullmatch(r'[0-9a-f]{24}', target['run_id']), 'invalid_candidate_run_id')
+    # 空串为监听器模式；非空为宿主网卡模式。
+    require(isinstance(target['traffic_host_interface'], str)
+            and re.fullmatch(r'[A-Za-z0-9_.-]{0,15}', target['traffic_host_interface']), 'invalid_candidate_traffic_mode')
     prefix = 'ren2hub-candidate-local-' + target['run_id']
     for role in ('app', 'postgres', 'redis', 'mock'):
         require(target[role + '_container'] == prefix + '-' + role, 'foreign_candidate_name')
@@ -92,6 +96,24 @@ def acceptance_target():
             and target['database_host'] == 'postgres:5432' and target['redis_host'] == 'redis:6379',
             'candidate_datastore_contract')
     return target
+
+
+def require_candidate_mounts(role, item, target):
+    """app 只允许只读 CA；宿主网卡模式另需恰好一个只读计数文件。其余挂载必须是 tmpfs。"""
+    ca = (target['ca_path'], '/etc/ren2hub/mock-ca.crt', True)
+    counter = ('/proc/1/net/dev', '/host/proc/net/dev', True)
+    counters = 0
+    for mount in item.get('Mounts', []):
+        if role == 'app' and mount.get('Type') == 'bind':
+            actual = (mount.get('Source'), mount.get('Destination'), mount.get('RW') is False)
+            if actual == counter and target['traffic_host_interface']:
+                counters += 1
+            else:
+                require(actual == ca, 'candidate_unexpected_bind_mount')
+        else:
+            require(mount.get('Type') == 'tmpfs', 'candidate_persistent_storage_rejected')
+    if role == 'app' and target['traffic_host_interface']:
+        require(counters == 1, 'candidate_traffic_counter_mount_mismatch')
 
 
 def verify_candidate_database(revision):
@@ -115,12 +137,7 @@ def verify_candidate_database(revision):
         require(not item['HostConfig'].get('Privileged') and not item['HostConfig'].get('CapAdd')
                 and not item['HostConfig'].get('PortBindings')
                 and not any(item['NetworkSettings'].get('Ports', {}).values()), 'candidate_privilege_or_port_exposed')
-        for mount in item.get('Mounts', []):
-            if role == 'app' and mount.get('Type') == 'bind':
-                require(mount['Source'] == target['ca_path'] and mount['Destination'] == '/etc/ren2hub/mock-ca.crt'
-                        and mount.get('RW') is False, 'candidate_unexpected_bind_mount')
-            else:
-                require(mount.get('Type') == 'tmpfs', 'candidate_persistent_storage_rejected')
+        require_candidate_mounts(role, item, target)
         if role == 'app':
             require(item['HostConfig']['NetworkMode'] == 'container:' + target['container_ids']['mock'],
                     'candidate_app_must_share_mock_namespace')
@@ -151,6 +168,11 @@ def verify_candidate_database(revision):
             and len(settings.get('SESSION_SECRET', '')) >= 32 and len(settings.get('CRYPTO_SECRET', '')) >= 32
             and settings.get('TICKET_UPLOAD_DIR') == '/app/ticket-attachments'
             and '/app/ticket-attachments' in app['HostConfig'].get('Tmpfs', {}), 'candidate_storage_or_secrets_invalid')
+    # 与发布合同一致：宿主模式路径为空或固定挂载点，监听器模式两变量都为空，避免读到容器自己的 net/dev。
+    interface = target['traffic_host_interface']
+    require(settings.get('TRAFFIC_HOST_INTERFACE', '') == interface
+            and settings.get('TRAFFIC_HOST_NET_DEV', '') in (('', '/host/proc/net/dev') if interface else ('',)),
+            'candidate_traffic_environment_mismatch')
     namespace = subprocess.run(['sudo', '-n', 'readlink', '/proc/' + str(containers['mock']['State']['Pid']) + '/ns/net'],
                                capture_output=True, text=True, timeout=20)
     require(namespace.returncode == 0 and os.readlink('/proc/self/ns/net') == namespace.stdout.strip(),

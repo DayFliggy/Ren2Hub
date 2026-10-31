@@ -54,9 +54,13 @@ describe('native ops monitoring', () => {
       'disabled'
     )
   })
-  it('keeps unavailable resources, application traffic and GC null rather than using Go heap', () => {
+  it('keeps unavailable resources, unmeasured traffic and GC null rather than using Go heap', () => {
+    const data = performanceFixture()
+    // No baseline yet: a fresh, reason-free snapshot without rates.
+    data.observability.traffic.inbound_mbps = null
+    data.observability.traffic.outbound_mbps = null
     const result = projectOpsOverview(
-      parsePerformanceStats(performanceFixture()),
+      parsePerformanceStats(data),
       routingFixture(),
       '1h',
       [],
@@ -66,7 +70,10 @@ describe('native ops monitoring', () => {
     expect(result.resources?.process.last_gc_pause_ms).toBeNull()
     expect(result.resources?.memory.percent).toBeNull()
     expect(result.resources?.cpu.percent).toBeNull()
-    expect(result.resources?.network.up_mbps).toBeNull()
+    expect(result.resources?.network).toEqual({
+      up_mbps: null,
+      down_mbps: null,
+    })
     expect(result.resources?.disk.percent).toBe(40)
     expect(result.checks.find((row) => row.key === 'cpu')?.status).toBe(
       'unknown'
@@ -248,8 +255,8 @@ describe('native ops monitoring', () => {
           cpu: null,
           memory: null,
           disk: null,
-          request_mbps: null,
-          response_mbps: null,
+          inbound_mbps: null,
+          outbound_mbps: null,
           goroutines: null,
           heap_alloc_bytes: null,
         },
@@ -258,8 +265,8 @@ describe('native ops monitoring', () => {
           cpu: 15,
           memory: 40,
           disk: 40,
-          request_mbps: 1,
-          response_mbps: 2,
+          inbound_mbps: 1,
+          outbound_mbps: 2,
           goroutines: 2.5,
           heap_alloc_bytes: 1024,
         },
@@ -306,13 +313,111 @@ describe('native ops monitoring', () => {
   })
   it.each([
     ['coverage', { measured: 5, total: 4 }],
-    ['traffic', { scope: 'host_network', request_mbps: 0, response_mbps: 0 }],
     ['process', { goroutines: -1 }],
     ['checks', [{ id: 'unknown_probe', status: 'ok', reason: '' }]],
     ['series', { window: '1h', bucket_seconds: 0, points: [] }],
   ])('rejects malformed observation %s', (key, value) => {
     const data = performanceFixture()
     Object.assign(data.observability, { [key]: value })
+    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
+  })
+  it.each([
+    ['host_interface', 'eth0'],
+    ['application_listener', ''],
+  ] as const)(
+    'reads %s traffic from the server side: up is outbound, down inbound',
+    (scope, name) => {
+      const data = performanceFixture()
+      data.observability.traffic = {
+        scope,
+        inbound_mbps: 1,
+        outbound_mbps: 7,
+        interface: name,
+        reason: '',
+      }
+      const result = projectOpsOverview(
+        parsePerformanceStats(data),
+        null,
+        '1h',
+        [],
+        3600
+      )!
+      expect(result.observation!.traffic).toEqual(data.observability.traffic)
+      expect(result.resources!.network).toEqual({ up_mbps: 7, down_mbps: 1 })
+    }
+  )
+  it('accepts a host read failure and a stale snapshot without rates', () => {
+    const failed = performanceFixture()
+    failed.observability.traffic = {
+      scope: 'host_interface',
+      inbound_mbps: null,
+      outbound_mbps: null,
+      interface: 'eth0',
+      reason: 'host_interface_missing',
+    }
+    expect(parsePerformanceStats(failed).observability.traffic.reason).toBe(
+      'host_interface_missing'
+    )
+    const stale = performanceFixture()
+    stale.observability.stale = true
+    stale.observability.traffic.inbound_mbps = null
+    stale.observability.traffic.outbound_mbps = null
+    expect(parsePerformanceStats(stale).observability.traffic).toMatchObject({
+      inbound_mbps: null,
+      outbound_mbps: null,
+    })
+  })
+  const hostTraffic = {
+    scope: 'host_interface',
+    inbound_mbps: 1,
+    outbound_mbps: 7,
+    interface: 'eth0',
+    reason: '',
+  }
+  it.each([
+    [
+      'the retired body scope',
+      { ...hostTraffic, scope: 'application_http_body' },
+    ],
+    ['an unknown scope', { ...hostTraffic, scope: 'host_network' }],
+    [
+      'the retired field names',
+      {
+        scope: 'application_listener',
+        request_mbps: 1,
+        response_mbps: 7,
+        interface: '',
+        reason: '',
+      },
+    ],
+    ['a missing interface', { ...hostTraffic, interface: undefined }],
+    ['a missing reason', { ...hostTraffic, reason: undefined }],
+    ['a negative rate', { ...hostTraffic, inbound_mbps: -1 }],
+    ['a string rate', { ...hostTraffic, outbound_mbps: '7' }],
+    ['a non-finite rate', { ...hostTraffic, outbound_mbps: Infinity }],
+    ['an unknown reason', { ...hostTraffic, reason: 'host_timeout' }],
+    [
+      'a failure reason beside a measured rate',
+      { ...hostTraffic, inbound_mbps: null, reason: 'host_counters_invalid' },
+    ],
+    [
+      'a listener naming an interface',
+      { ...hostTraffic, scope: 'application_listener' },
+    ],
+  ])('rejects traffic with %s', (_name, traffic) => {
+    const data = performanceFixture()
+    Object.assign(data.observability, { traffic })
+    expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
+  })
+  it('rejects history points under the retired field names', () => {
+    const data = performanceFixture()
+    const { inbound_mbps, outbound_mbps, ...point } =
+      data.observability.series.points[0]!
+    data.observability.series.points[0] = {
+      ...point,
+      request_mbps: inbound_mbps,
+      response_mbps: outbound_mbps,
+    } as never
     expect(() => parsePerformanceStats(data)).toThrow('Invalid API response')
   })
   it('rejects an unavailable resource carrying a synthetic zero measurement', () => {

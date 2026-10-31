@@ -78,10 +78,78 @@ describe('SystemStatusCard', () => {
       /218\s*GiB\s*\/\s*512\s*GiB/
     )
     const traffic = wrapper.get('[data-metric="bandwidth"]')
-    expect(traffic.text()).toContain('↑2.1 Mbps')
-    expect(traffic.text()).toContain('↓12.4 Mbps')
+    expect(traffic.text()).toContain('↑12.4 Mbps')
+    expect(traffic.text()).toContain('↓2.1 Mbps')
     expect(traffic.find('[data-bandwidth-sparkline]').exists()).toBe(true)
   })
+  it('shows traffic from the server side: up is outbound, down inbound', () => {
+    const metrics = systemStatusFixture()
+    metrics.traffic.inbound_mbps = 1
+    metrics.traffic.outbound_mbps = 7
+    metrics.traffic.points = [0, 1, 2].map((i) => ({
+      ts: 1_798_539_880 + i * 60,
+      inbound_mbps: 1,
+      outbound_mbps: 7,
+    }))
+    const tile = render(metrics).get('[data-metric="bandwidth"]')
+    const up = tile.get('[data-bandwidth-direction="up"]')
+    const down = tile.get('[data-bandwidth-direction="down"]')
+    expect(up.text()).toBe('↑7 Mbps')
+    expect(down.text()).toBe('↓1 Mbps')
+    // Each figure pairs with the line in its ink; the larger outbound rate
+    // sits at the top of the shared scale (y 2), inbound at the bottom (y 14).
+    const ink = (node: typeof up) =>
+      node
+        .classes()
+        .join(' ')
+        .match(/text-\[(var\(--[a-z-]+\))\]/)![1]
+    const lineTop = (color: string) =>
+      tile
+        .get(`[data-bandwidth-sparkline] path[fill="none"][stroke="${color}"]`)
+        .attributes('d')!
+        .match(/^M[\d.]+ ([\d.]+)/)![1]
+    expect(lineTop(ink(up)!)).toBe('2.00')
+    expect(lineTop(ink(down)!)).toBe('14.00')
+    const words = 'Server interface, outbound 7 Mbps, inbound 1 Mbps'
+    expect(tile.get('[data-metric-scope]').text()).toBe(words)
+    expect(tile.find(`[title="${words}"]`).text()).toBe('Traffic')
+  })
+  it.each([
+    [
+      'host_interface',
+      'en',
+      'Traffic',
+      'Server interface, outbound 12.4 Mbps, inbound 2.1 Mbps',
+    ],
+    [
+      'application_listener',
+      'en',
+      'Traffic',
+      'App connections, outbound 12.4 Mbps, inbound 2.1 Mbps',
+    ],
+    [
+      'host_interface',
+      'zh-CN',
+      '流量',
+      '服务器网卡，出站 12.4 Mbps，入站 2.1 Mbps',
+    ],
+    [
+      'application_listener',
+      'zh-CN',
+      '流量',
+      '应用连接，出站 12.4 Mbps，入站 2.1 Mbps',
+    ],
+  ] as const)(
+    'titles %s traffic in %s and names its scope',
+    async (scope, locale, title, words) => {
+      await setLocale(locale)
+      const metrics = systemStatusFixture()
+      metrics.traffic.scope = scope
+      const tile = render(metrics).get('[data-metric="bandwidth"]')
+      expect(tile.get('[data-metric-scope]').text()).toBe(words)
+      expect(tile.get(`[title="${words}"]`).text()).toBe(title)
+    }
+  )
   it('shows the measured success rate and host load per core', () => {
     const wrapper = render()
     expect(wrapper.find('[data-success-rate-empty]').exists()).toBe(false)
@@ -129,7 +197,7 @@ describe('SystemStatusCard', () => {
     expect(scopes).toEqual([
       'Container',
       'Container',
-      'App HTTP bodies',
+      'Server interface, outbound 12.4 Mbps, inbound 2.1 Mbps',
       'Cache directory filesystem',
     ])
   })
@@ -254,8 +322,8 @@ describe('SystemStatusCard', () => {
     const metrics = systemStatusFixture()
     metrics.traffic.points = [0, 1, 2, 3, 4].map((i) => ({
       ts: 1_798_539_760 + i * 60,
-      request_mbps: i === 2 ? null : 1 + i,
-      response_mbps: i === 2 ? null : 8 + i,
+      inbound_mbps: i === 2 ? null : 1 + i,
+      outbound_mbps: i === 2 ? null : 8 + i,
     }))
     const tile = render(metrics).get('[data-metric="bandwidth"]')
     const line = tile.findAll('[data-bandwidth-sparkline] path[fill="none"]')
@@ -264,13 +332,17 @@ describe('SystemStatusCard', () => {
     for (const path of line)
       expect(path.attributes('d')?.match(/M/g)).toHaveLength(2)
   })
-  it('does not invent a missing traffic direction', () => {
-    const metrics = systemStatusFixture()
-    metrics.traffic.request_mbps = null
-    const tile = render(metrics).get('[data-metric="bandwidth"]')
-    expect(tile.text()).toContain('--')
-    expect(tile.text()).not.toContain('Mbps')
-  })
+  it.each(['inbound_mbps', 'outbound_mbps'] as const)(
+    'does not invent a missing traffic direction (%s null)',
+    (field) => {
+      const metrics = systemStatusFixture()
+      metrics.traffic[field] = null
+      const tile = render(metrics).get('[data-metric="bandwidth"]')
+      expect(tile.get('[data-metric-placeholder]').text()).toBe('--')
+      expect(tile.text()).not.toContain('Mbps')
+      expect(tile.get('[data-metric-scope]').text()).toBe('Server interface')
+    }
+  )
   it('shows a reading with its threshold check off without a tier', () => {
     const metrics = systemStatusFixture()
     metrics.disk = resourceFixture({

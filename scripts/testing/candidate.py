@@ -20,6 +20,9 @@ import threading
 
 LABEL = 'renai.local-test.run'
 STAGES = ('billing', 'ws', 'compact', 'plugin-before', 'plugin-after', 'upstream_sync', 'sdk')
+HOST_INTERFACE = r'[A-Za-z0-9_.-]{1,15}'
+# 除本轮生成的 mock CA 证书外，宿主网卡计数文件是候选唯一允许挂载的宿主文件；它不是数据路径，只读单文件。
+COUNTER_SOURCE, COUNTER_TARGET = '/proc/1/net/dev', '/host/proc/net/dev'
 
 
 class CandidateError(RuntimeError):
@@ -90,8 +93,21 @@ def source_identity(source):
             'working_tree_sha256': digest.hexdigest(), 'files': count, 'dirty': bool(status)}
 
 
+def counter_mounts(container):
+    """归一化为 [type, source, target, read_only]；凡目标在 /host 下或源在 /proc 下都算，可写或错源也照实记录。"""
+    found = []
+    for mount in container.get('Mounts', []):
+        source, target = mount.get('Source', ''), mount.get('Destination', '')
+        if target.startswith('/host/') or source == '/proc' or source.startswith('/proc/'):
+            found.append([mount.get('Type'), source, target, mount.get('RW') is False])
+    return sorted(found)
+
+
 class Candidate:
-    def __init__(self, source, output, image):
+    def __init__(self, source, output, image, traffic_interface=None):
+        require(traffic_interface is None or re.fullmatch(HOST_INTERFACE, traffic_interface),
+                'invalid_traffic_host_interface')
+        self.traffic_interface = traffic_interface or ''
         self.source = Path(source).resolve()
         require(self.source == Path(__file__).resolve().parents[2], 'candidate_source_must_contain_executing_runner')
         self.output = Path(output).absolute()
@@ -244,11 +260,14 @@ class Candidate:
             'LOG_SQL_DSN': '', 'SQLITE_PATH': '', 'MEMORY_CACHE_ENABLED': 'true', 'NODE_TYPE': 'master',
             'CRITICAL_RATE_LIMIT': '200', 'GLOBAL_API_RATE_LIMIT': '1000', 'TRUSTED_PROXIES': 'none',
             'SSL_CERT_FILE': '/etc/ren2hub/mock-ca.crt', 'TICKET_UPLOAD_DIR': '/app/ticket-attachments',
-            'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC'})
+            'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC',
+            **({'TRAFFIC_HOST_INTERFACE': self.traffic_interface} if self.traffic_interface else {})})
+        # 默认不挂载也不设网卡名，应用使用主监听器计数；--mount 的源缺失时容器创建直接失败。
+        counter = ('--mount', 'type=bind,src=' + COUNTER_SOURCE + ',dst=' + COUNTER_TARGET + ',readonly') if self.traffic_interface else ()
         self.start('app', self.image_id, ('--network', 'container:' + self.containers['mock'],
                    '--env-file', str(app_env), '--label', 'org.opencontainers.image.revision=' + revision,
                    '--label', 'org.opencontainers.image.version=' + revision,
-                   '--mount', 'type=bind,src=' + str(certificate) + ',dst=/etc/ren2hub/mock-ca.crt,readonly',
+                   '--mount', 'type=bind,src=' + str(certificate) + ',dst=/etc/ren2hub/mock-ca.crt,readonly', *counter,
                    '--tmpfs', '/app/ticket-attachments:rw,size=128m', '--tmpfs', '/tmp:rw,size=128m',
                    '--stop-timeout', '130', '--health-start-period', '15s',
                    '--health-cmd', 'wget -q -T 3 -O /dev/null http://127.0.0.1:3000/api/status', *health),
@@ -257,10 +276,15 @@ class Candidate:
         target = {role + '_container': self.prefix + '-' + role for role in self.containers}
         target.update(database_user='ren2hub', database_name='ren2hub_candidate', database_host='postgres:5432',
                       redis_host='redis:6379', network=self.network, network_id=self.network_id, run_id=self.run_id,
-                      container_ids=self.containers, image_id=self.image_id, revision=self.revision, ca_path=str(certificate), network_guard=self.network_guard)
+                      container_ids=self.containers, image_id=self.image_id, revision=self.revision, ca_path=str(certificate), network_guard=self.network_guard,
+                      traffic_host_interface=self.traffic_interface)
         private_write(self.private / 'target.json', target)
+        # scope/interface 由管理组从 Root 接口实测后补上；挂载取自运行中容器的 inspect。
+        traffic = {'configured_interface': self.traffic_interface, 'scope': None, 'interface': None,
+                   'mounts': counter_mounts(self.owned('app'))}
         self.report['isolation'] = {'network_id': self.network_id, 'internal': True,
-                                    'container_ids': dict(self.containers), 'published_ports': [], 'storage': 'tmpfs', 'network_guard': self.network_guard}
+                                    'container_ids': dict(self.containers), 'published_ports': [], 'storage': 'tmpfs', 'network_guard': self.network_guard,
+                                    'traffic': traffic}
 
     def namespace(self, role, *command):
         item = self.owned(role)
@@ -345,6 +369,11 @@ class Candidate:
         require(report_file.is_file() and not report_file.is_symlink(), 'candidate_stage_report_missing_' + stage)
         stage_report = json.loads(report_file.read_text())
         self.report['stages'][stage] = stage_report
+        if stage == 'upstream_sync':
+            # manifest 在 cleanup 之后写，必须趁容器还在运行时采集。
+            observed = stage_report.get('traffic') or {}
+            self.report['isolation']['traffic'].update(scope=observed.get('scope'), interface=observed.get('interface'),
+                                                       mounts=counter_mounts(app))
         private_write(self.output / 'candidate.json', self.report)
         require(result.returncode == 0 and stage_report.get('success') is True, 'candidate_stage_failed_' + stage)
 
@@ -367,11 +396,13 @@ class Candidate:
         linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
         complete = len(reports) == len(STAGES) and all(self.report['stages'].get(stage, {}).get('success') is True for stage in STAGES)
         deployable = bool(self.report['success'] and complete and self.report.get('image_matches_clean_source') and workspace_clean and linked)
+        traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
                     'source_sha': self.report.get('image', {}).get('revision'),
                     'workspace_sha': self.workspace_sha, 'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'], 'identity_verification': self.report['identity_verification'],
-                    'image_matches_clean_source': self.report.get('image_matches_clean_source', False)}
+                    'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
+                    'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
 
@@ -402,7 +433,7 @@ def interrupted(_signum, _frame):
     raise CandidateError('candidate_interrupted')
 
 
-def run(source: Path, output: Path, image: str) -> dict:
+def run(source: Path, output: Path, image: str, traffic_interface: str | None = None) -> dict:
     previous_umask = os.umask(0o077)
     candidate = None
     old_handlers = {}
@@ -410,7 +441,7 @@ def run(source: Path, output: Path, image: str) -> dict:
         for signum in (signal.SIGINT, signal.SIGTERM):
             old_handlers[signum] = signal.signal(signum, interrupted)
     try:
-        candidate = Candidate(source, output, image)
+        candidate = Candidate(source, output, image, traffic_interface)
         candidate.prepare()
         for stage in STAGES:
             candidate.stage(stage)
@@ -436,9 +467,11 @@ def main():
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--image', required=True)
+    parser.add_argument('--traffic-host-interface', metavar='NAME',
+                        help='只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
     try:
-        report = run(args.source, args.output, args.image)
+        report = run(args.source, args.output, args.image, args.traffic_host_interface)
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}

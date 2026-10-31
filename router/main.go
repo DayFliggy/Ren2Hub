@@ -13,7 +13,6 @@ import (
 )
 
 func SetRouter(router *gin.Engine, assets WebAssets) {
-	router.Use(middleware.RecordApplicationTraffic())
 	SetApiRouter(router)
 	SetDashboardRouter(router)
 	SetRelayRouter(router)

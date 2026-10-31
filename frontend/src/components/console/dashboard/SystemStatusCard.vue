@@ -151,15 +151,16 @@ function storageReading(
   }
 }
 
-/** The last twelve one-minute buckets. An unmeasured bucket stays a gap in
- * its own line; a stale snapshot shows no history at all. */
+/** The last twelve one-minute buckets, seen from the server: up is outbound,
+ * down is inbound. An unmeasured bucket stays a gap in its own line; a stale
+ * snapshot shows no history at all. */
 function trafficSeries(
   metrics: SystemStatus | null | undefined
 ): { down: (number | null)[]; up: (number | null)[] } | undefined {
   if (!metrics || metrics.stale) return undefined
   const points = metrics.traffic.points.slice(-12)
-  const up = points.map((point) => finiteNonNegative(point.request_mbps))
-  const down = points.map((point) => finiteNonNegative(point.response_mbps))
+  const up = points.map((point) => finiteNonNegative(point.outbound_mbps))
+  const down = points.map((point) => finiteNonNegative(point.inbound_mbps))
   const measured = (series: (number | null)[]) =>
     series.filter((value) => value !== null).length >= 2
   return measured(up) || measured(down) ? { up, down } : undefined
@@ -273,7 +274,7 @@ interface MetricTile {
   /** lucide 24x24 path data */
   icon?: string
   /** Where the reading was measured, or that its check is off; for the tile's
-   * title and accessible label. */
+   * title and accessible label. Traffic adds both directions in words. */
   scope: string
   /** CPU headline, a memory or disk share without byte counts, or the
    * placeholder of a tile without data. */
@@ -308,12 +309,13 @@ const tiles = computed<MetricTile[]>(() => {
   // The badge shows the percent the server judged, not a byte ratio of its own.
   const memoryPercent = observedShare(metrics, metrics?.memory)
   const diskPercent = observedShare(metrics, metrics?.disk)
+  // The server's view on both pages: up is outbound, down is inbound.
   const bandwidthUp = metrics?.stale
     ? null
-    : finiteNonNegative(metrics?.traffic.request_mbps)
+    : finiteNonNegative(metrics?.traffic.outbound_mbps)
   const bandwidthDown = metrics?.stale
     ? null
-    : finiteNonNegative(metrics?.traffic.response_mbps)
+    : finiteNonNegative(metrics?.traffic.inbound_mbps)
   const bandwidth =
     bandwidthUp !== null && bandwidthDown !== null
       ? {
@@ -321,6 +323,9 @@ const tiles = computed<MetricTile[]>(() => {
           down: formatBandwidth(bandwidthDown),
         }
       : undefined
+  const trafficScope = t(
+    `dashboard.systemStatus.scope.${metrics?.traffic.scope ?? 'unknown'}`
+  )
   const cpuTone = verdictTone(metrics?.cpu.state, cpuPercent)
   const memoryTone = verdictTone(metrics?.memory.state, memoryPercent)
   const diskTone = verdictTone(metrics?.disk.state, diskPercent)
@@ -357,7 +362,13 @@ const tiles = computed<MetricTile[]>(() => {
     {
       key: 'bandwidth',
       label: t('dashboard.systemStatus.bandwidth'),
-      scope: t('dashboard.systemStatus.scope.application_http_body'),
+      scope: bandwidth
+        ? t('dashboard.systemStatus.trafficReading', {
+            scope: trafficScope,
+            outbound: bandwidth.up,
+            inbound: bandwidth.down,
+          })
+        : trafficScope,
       value: bandwidth ? '' : '--',
       unit: '',
       bandwidth,
@@ -722,8 +733,10 @@ const successTone = computed(() => rateTone(successRate.value))
           </template>
 
           <!-- Traffic has no ceiling and so no load tier: it stays neutral. Each
-               value shares its line's ink, download primary and solid, upload
-               tertiary and dashed, so values and lines pair without a legend. -->
+               value shares its line's ink, inbound (↓) primary and solid,
+               outbound (↑) tertiary and dashed, so values and lines pair without
+               a legend. The scope text above names both directions in words,
+               so the arrow figures are hidden from assistive technology. -->
           <template v-else-if="tile.key === 'bandwidth'">
             <div class="mt-auto flex min-w-0 flex-col justify-end">
               <p
@@ -733,12 +746,14 @@ const successTone = computed(() => rateTone(successRate.value))
                   <span
                     data-bandwidth-direction="up"
                     class="shrink-0 whitespace-nowrap text-[var(--text-tertiary)]"
+                    aria-hidden="true"
                   >
                     ↑{{ tile.bandwidth.up }}
                   </span>
                   <span
                     data-bandwidth-direction="down"
                     class="shrink-0 whitespace-nowrap text-[var(--text-primary)]"
+                    aria-hidden="true"
                   >
                     ↓{{ tile.bandwidth.down }}
                   </span>

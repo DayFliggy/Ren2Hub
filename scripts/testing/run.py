@@ -280,8 +280,9 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     results = []
     suites = {
         './model': '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess)',
-        './service': '^Test.*(Concurrency|Admission|UsageDiscount)',
+        './service': '^Test(.*(Concurrency|Admission|UsageDiscount)|ObservationTrafficConcurrentSampleAndRead$)',
         './controller': '^TestResponsesWebSocket(ReusesConnectionAndSettlesEachRequest|DisconnectSettlesDeliveredOutputOnce)$',
+        './common': '^TestCountingListenerConcurrentConnections$',
     }
     for index, (package, pattern) in enumerate(suites.items()):
         command = docker + ['run', '--rm', '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
@@ -304,7 +305,13 @@ def main() -> int:
     parser.add_argument('profile', choices=PROFILES)
     parser.add_argument('--output-parent', type=Path, default=SOURCE / '.local-tests')
     parser.add_argument('--image', help='candidate/all 使用已发布的不可变镜像；无默认生产目标')
+    parser.add_argument('--traffic-host-interface', metavar='NAME',
+                        help='candidate/all 只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
+    if args.traffic_host_interface is not None:
+        from candidate import HOST_INTERFACE
+        if not re.fullmatch(HOST_INTERFACE, args.traffic_host_interface):
+            parser.error('--traffic-host-interface 只允许 1-15 个字母、数字、_ . -')
     args.output_parent = args.output_parent.absolute()
     if args.output_parent.is_symlink() or any(p.is_symlink() for p in args.output_parent.parents):
         parser.error('产物目录及父级不可为符号链接')
@@ -356,7 +363,7 @@ def main() -> int:
                 if not args.image:
                     raise RuntimeError('candidate/all 必须显式传入 --image，未运行候选不能算通过')
                 from candidate import run
-                result = run(SOURCE, stage, args.image)
+                result = run(SOURCE, stage, args.image, args.traffic_host_interface)
             report['stages'][profile] = result
             if not result.get('success'):
                 raise RuntimeError(f'{profile} 未通过，查看分层报告')

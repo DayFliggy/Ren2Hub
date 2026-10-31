@@ -5,6 +5,7 @@ import {
   qualityFixture,
   routingFixture,
 } from '../../src/api/__tests__/opsFixtures'
+import type { Observability } from '../../src/api/observability'
 import { createModelMarketFixture } from '../fixtures/modelMarket'
 import {
   assertNoHorizontalOverflow,
@@ -232,6 +233,142 @@ for (const theme of ['light', 'dark'] as const) {
     })
   })
 }
+
+const TRAFFIC: Record<
+  Observability['traffic']['scope'],
+  Observability['traffic']
+> = {
+  host_interface: {
+    scope: 'host_interface',
+    inbound_mbps: 1.5,
+    outbound_mbps: 6.2,
+    interface: 'eth0',
+    reason: '',
+  },
+  application_listener: {
+    scope: 'application_listener',
+    inbound_mbps: 1.5,
+    outbound_mbps: 6.2,
+    interface: '',
+    reason: '',
+  },
+}
+const TRAFFIC_TEXT = {
+  'zh-CN': {
+    up: '出站',
+    down: '入站',
+    title: '流量',
+    host_interface:
+      '宿主机网卡 eth0 的全部收发；中转请求同时产生客户端和上游两段流量。',
+    application_listener:
+      '主服务端口上的全部连接字节，含 HTTP 头、正文、WebSocket 和健康检查；不含应用主动连接上游的流量和 pprof 端口。',
+  },
+  en: {
+    up: 'Outbound',
+    down: 'Inbound',
+    title: 'Traffic',
+    host_interface:
+      'All traffic on host interface eth0; relayed requests count both client and upstream legs.',
+    application_listener:
+      "All bytes on the main service port, including headers, bodies, WebSocket and health checks; excludes the app's own upstream connections and the pprof port.",
+  },
+} as const
+
+async function mockTraffic(
+  page: Page,
+  traffic: () => Observability['traffic']
+) {
+  await page.route('**/api/performance/stats?*', (route) => {
+    const window = new URL(route.request().url()).searchParams.get('window') as
+      '1h' | '6h' | '24h'
+    const data = overview(window)
+    data.observability.traffic = traffic()
+    return route.fulfill(ok(data))
+  })
+}
+
+/** Outbound and inbound read the same in the figures and the trend lines, and
+ * the scope changes only the description: the card keeps its size. */
+for (const locale of ['zh-CN', 'en'] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    test(`traffic scopes read the server side in ${locale} ${theme}`, async ({
+      page,
+    }) => {
+      let scope: Observability['traffic']['scope'] = 'host_interface'
+      await configureStablePage(page, { theme, locale })
+      await mockOps(page)
+      await mockTraffic(page, () => TRAFFIC[scope])
+      const text = TRAFFIC_TEXT[locale]
+      const resources = section(page, 'resources')
+      const traffic = resources.locator('[data-ops-traffic]')
+      const figure = (label: string) =>
+        traffic
+          .locator('.ops-metric')
+          .filter({
+            has: page.getByText(label, { exact: true }),
+          })
+          .locator('.ops-metric-value')
+      for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(viewport)
+        const sizes: string[] = []
+        for (const next of [
+          'host_interface',
+          'application_listener',
+        ] as const) {
+          scope = next
+          await gotoOps(page)
+          await expect(traffic).toHaveAttribute('title', text[next])
+          await expect(traffic).toHaveAttribute('aria-description', text[next])
+          await expect(figure(text.up)).toHaveText(/^6\.2\s*Mbps$/)
+          await expect(figure(text.down)).toHaveText(/^1\.5\s*Mbps$/)
+          // The resource trend comes first, the traffic trend last.
+          const chart = resources.locator('.ops-trend').last()
+          await expect(chart.locator('.ops-trend-title')).toHaveText(text.title)
+          await expect(chart.locator('.ops-legend li')).toHaveText([
+            text.down,
+            text.up,
+          ])
+          await expect(chart.locator('figcaption')).toHaveText(
+            `${text.title}: ${text.down}: 1.5Mbps; ${text.up}: 6.2Mbps`
+          )
+          await assertNoHorizontalOverflow(page)
+          const box = await resources.boundingBox()
+          sizes.push(JSON.stringify([box!.width, box!.height]))
+        }
+        expect(sizes[1], `${viewport.width}px`).toBe(sizes[0])
+      }
+    })
+  }
+}
+
+test('a host read failure names its reason and keeps the figures unavailable', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light' })
+  await mockOps(page)
+  await mockTraffic(page, () => ({
+    ...TRAFFIC.host_interface,
+    inbound_mbps: null,
+    outbound_mbps: null,
+    reason: 'host_counters_unreadable',
+  }))
+  await gotoOps(page)
+  const traffic = section(page, 'resources').locator('[data-ops-traffic]')
+  await expect(traffic).toHaveAttribute(
+    'title',
+    `${TRAFFIC_TEXT['zh-CN'].host_interface}读数不可用：无法读取宿主机网卡计数。`
+  )
+  await expect(traffic.locator('.ops-metric-value').first()).toHaveText(
+    '暂无数据'
+  )
+  await expect(traffic.locator('.ops-metric-value').nth(1)).toHaveText(
+    '暂无数据'
+  )
+  await assertNoHorizontalOverflow(page)
+})
 
 test('overview failure shows an inline retry while other sections load', async ({
   page,

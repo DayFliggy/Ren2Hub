@@ -4,6 +4,7 @@ import {
   requiredBoolean,
   requiredStrictInteger,
   requiredStrictNumber,
+  requiredString,
 } from './contracts'
 
 const endpoint = '/api/performance/stats'
@@ -19,6 +20,27 @@ export type ObservationReason =
   | 'canceled'
   | 'threshold_exceeded'
 export type ResourceScope = 'container' | 'host' | 'filesystem' | 'unknown'
+/** Where traffic is counted, decided once at server start: the host's uplink
+ * interface counters, or the bytes on the app's main listener connections. */
+export type TrafficScope = 'host_interface' | 'application_listener'
+export const TRAFFIC_SCOPES: readonly TrafficScope[] = [
+  'host_interface',
+  'application_listener',
+]
+/** Why a configured host interface has no reading; empty when it has one. */
+export type TrafficReason =
+  | ''
+  | 'host_config_invalid'
+  | 'host_counters_unreadable'
+  | 'host_counters_invalid'
+  | 'host_interface_missing'
+const TRAFFIC_REASONS: readonly TrafficReason[] = [
+  '',
+  'host_config_invalid',
+  'host_counters_unreadable',
+  'host_counters_invalid',
+  'host_interface_missing',
+]
 export type CheckID =
   'cpu' | 'memory' | 'disk' | 'database' | 'log_database' | 'redis'
 export interface ResourceObservation {
@@ -41,8 +63,8 @@ export interface ObservationPoint {
   cpu: number | null
   memory: number | null
   disk: number | null
-  request_mbps: number | null
-  response_mbps: number | null
+  inbound_mbps: number | null
+  outbound_mbps: number | null
   goroutines: number | null
   heap_alloc_bytes: number | null
 }
@@ -76,10 +98,14 @@ export interface Observability {
     gc_count: number
     last_gc_pause_ms: number | null
   } | null
+  /** Rates are seen from the server: inbound is received, outbound is sent. */
   traffic: {
-    scope: 'application_http_body'
-    request_mbps: number | null
-    response_mbps: number | null
+    scope: TrafficScope
+    inbound_mbps: number | null
+    outbound_mbps: number | null
+    /** The configured host interface; empty for the listener scope. */
+    interface: string
+    reason: TrafficReason
   }
   series: {
     window: '1h' | '6h' | '24h'
@@ -146,6 +172,23 @@ function resource(value: unknown): ResourceObservation {
     invalidResponse(endpoint)
   return result
 }
+/** A failed host read carries no rate, and only the host scope names an
+ * interface; any other combination is a server fault, not a reading. */
+function trafficObservation(value: unknown): Observability['traffic'] {
+  const raw = record(value)
+  const result: Observability['traffic'] = {
+    scope: member(raw.scope, TRAFFIC_SCOPES),
+    inbound_mbps: nullable(raw.inbound_mbps),
+    outbound_mbps: nullable(raw.outbound_mbps),
+    interface: requiredString(raw.interface, endpoint),
+    reason: member(raw.reason, TRAFFIC_REASONS),
+  }
+  const hasRate = result.inbound_mbps !== null || result.outbound_mbps !== null
+  if (result.reason !== '' && hasRate) invalidResponse(endpoint)
+  if (result.scope === 'application_listener' && result.interface !== '')
+    invalidResponse(endpoint)
+  return result
+}
 function probe(value: unknown): ProbeObservation {
   const raw = record(value)
   return {
@@ -159,7 +202,6 @@ export function parseObservability(value: unknown): Observability {
   const coverage = record(raw.coverage)
   const resources = record(raw.resources)
   const storage = record(raw.storage)
-  const traffic = record(raw.traffic)
   const series = record(raw.series)
   const process = raw.process === null ? null : record(raw.process)
   if (!Array.isArray(raw.checks) || !Array.isArray(series.points))
@@ -213,11 +255,7 @@ export function parseObservability(value: unknown): Observability {
             gc_count: number(process.gc_count, true),
             last_gc_pause_ms: nullable(process.last_gc_pause_ms),
           },
-    traffic: {
-      scope: member(traffic.scope, ['application_http_body']),
-      request_mbps: nullable(traffic.request_mbps),
-      response_mbps: nullable(traffic.response_mbps),
-    },
+    traffic: trafficObservation(raw.traffic),
     series: {
       window: member(series.window, ['1h', '6h', '24h']),
       bucket_seconds: bucketSeconds,
@@ -228,8 +266,8 @@ export function parseObservability(value: unknown): Observability {
           cpu: nullable(row.cpu),
           memory: nullable(row.memory),
           disk: nullable(row.disk),
-          request_mbps: nullable(row.request_mbps),
-          response_mbps: nullable(row.response_mbps),
+          inbound_mbps: nullable(row.inbound_mbps),
+          outbound_mbps: nullable(row.outbound_mbps),
           goroutines: nullable(row.goroutines),
           heap_alloc_bytes: nullable(row.heap_alloc_bytes),
         }

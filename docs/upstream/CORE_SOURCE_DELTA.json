@@ -3,9 +3,9 @@
   "implementation_base_sha": "0837a03c77ea0d5b7618588d4c9e77781f656590",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 799,
-    "adapted": 276,
-    "extension": 253,
+    "upstream_equal": 800,
+    "adapted": 275,
+    "extension": 254,
     "removed": 45
   },
   "files": [
@@ -83,12 +83,6 @@
       "status": "upstream_equal",
       "upstream_sha256": "922a48d0dc8695fdce5b03e18e977ace4382f010b82ccfb3054379f2f81c8d47",
       "local_sha256": "922a48d0dc8695fdce5b03e18e977ace4382f010b82ccfb3054379f2f81c8d47"
-    },
-    {
-      "path": "common/application_traffic.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "3906f3c0f418dbcf68bbbb4ec7584d0591003c6e74042481f88cc46cb0b79026"
     },
     {
       "path": "common/audio.go",
@@ -503,6 +497,30 @@
       "status": "upstream_equal",
       "upstream_sha256": "74c885b283648d38c13447e96ae4fd9041f0a7804d42a5387f3ad178b2ab74e2",
       "local_sha256": "74c885b283648d38c13447e96ae4fd9041f0a7804d42a5387f3ad178b2ab74e2"
+    },
+    {
+      "path": "common/traffic.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d7770b749ae08e07ee13d26e94a00840719164b11b8eb49b3850af4e165a6626"
+    },
+    {
+      "path": "common/traffic_host.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a54637ab578c30ff368d68cee5a369770c79caa96393a5b31d0553ee7580bb1e"
+    },
+    {
+      "path": "common/traffic_host_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "820a344f4821f3412510ad87425b16da4e2ba426527833262cbd3ede5f4a7296"
+    },
+    {
+      "path": "common/traffic_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "b4a59977d41d8445fd131be78ad6d6547319343199d8c48a470e702c1ba0f78b"
     },
     {
       "path": "common/trusted_proxies.go",
@@ -2107,10 +2125,11 @@
       "path": "main.go",
       "status": "adapted",
       "upstream_sha256": "0431a88661ddac970da9b51e95ea76ca741afb782901cbbd0eb56d8bba14febc",
-      "local_sha256": "0260f785ed5c1191cc7b3c1bb0365cfc2b1cf6866a76568f1285b409c2f224be",
+      "local_sha256": "1af62f626810ca115789d637b6d793bf43c9c31202bb24de5aa3c77cce1d41c2",
       "reasons": [
         "branding",
         "no-builtin-prices",
+        "ops-metrics",
         "retired",
         "single-node",
         "usage-discount",
@@ -2156,18 +2175,6 @@
         "token-routing",
         "usage-discount"
       ]
-    },
-    {
-      "path": "middleware/application_traffic.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "8e61a661f6f5ec14cf87e3ddf35efe139f3979a3e5eb6eaab8f83794d7802e7c"
-    },
-    {
-      "path": "middleware/application_traffic_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "ca1b7fa55170c3aed636b709e361a5d83434621505db65a850a004e65959e2ea"
     },
     {
       "path": "middleware/audit.go",
@@ -7068,7 +7075,7 @@
       "path": "router/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f29f561872e835cd34562b0b4aee045099732b2dc0689c131c9754a5b26442b2"
+      "local_sha256": "745b9aff79744d99c6970a009d99c702505c24a95947c58066ece3c54019dfe6"
     },
     {
       "path": "router/extensions.go",
@@ -7084,12 +7091,9 @@
     },
     {
       "path": "router/main.go",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "f10096d5a680b31baebac11633d1f3b3dc2e31782feb75ca2ec88ff4f81fee72",
-      "local_sha256": "a8ee9eb7fd6aa4ac0a2afabdbb2d82004108a90fcdade1406730542d90374e40",
-      "reasons": [
-        "ops-metrics"
-      ]
+      "local_sha256": "f10096d5a680b31baebac11633d1f3b3dc2e31782feb75ca2ec88ff4f81fee72"
     },
     {
       "path": "router/native_count_test.go",
@@ -7590,13 +7594,13 @@
       "path": "service/dashboard_system_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8e43107ce2bcefb20d33971cd1481b57e1dfe6226ea56f06239db5a1da63a0f5"
+      "local_sha256": "13d76368a2180ec2d0c29c8100750d7439ecddb3ac72074b4d4d513514f6b366"
     },
     {
       "path": "service/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6d9d2f6def98c50a32d7b5187398d5c120c127d69166b31ef682c72f682b3793"
+      "local_sha256": "6968aa158834d9127606a60f420dd5abec40d711b0c2bd8bcb0a8a3dfbfa9799"
     },
     {
       "path": "service/download.go",
@@ -7842,7 +7846,7 @@
       "path": "service/performance_observation.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "cd34f4c8e93b3c2444182c47efd095d9b19130b3115df59e62a6182a87f6cde8"
+      "local_sha256": "9997a8672ff0ebc68623bbe1de391f3eadf79e8fe0d4166dc38332160457a759"
     },
     {
       "path": "service/performance_observation_health.go",
@@ -7860,19 +7864,19 @@
       "path": "service/performance_observation_series.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0f8f79e73605b58a07663f0e211cff08d691fb91ef768c18cc3be67ea518cb34"
+      "local_sha256": "2ed9e938d0d042774065903cf4078d8d5f266c1a58d750d6097d4ae5eeacb7cc"
     },
     {
       "path": "service/performance_observation_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "47b4297c9d4dc095510acdbe2cf0bba22981abb285fd4b97d06054914dbb1ce7"
+      "local_sha256": "4acb99fdcae9dfafa79100d18792794b5cc1966975b88dcfb5131db2914912dc"
     },
     {
       "path": "service/performance_observation_types.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f06a72d8bcb93f5308fbebcae7a0ead0a125d107c682dab3d41f213bdff37f4f"
+      "local_sha256": "9cc83f44382dc4c5b4b5447d60d2ea191757bdd5c6ecc0414fb1cee4cec08bae"
     },
     {
       "path": "service/price_source.go",

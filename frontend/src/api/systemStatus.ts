@@ -6,6 +6,7 @@ import {
   requiredStrictInteger,
   requiredStrictNumber,
 } from './contracts'
+import { TRAFFIC_SCOPES, type TrafficScope } from './observability'
 
 const endpoint = '/api/user/system-status'
 
@@ -30,10 +31,11 @@ export interface SystemResource {
   used_bytes: number | null
   total_bytes: number | null
 }
+/** Rates are seen from the server: inbound is received, outbound is sent. */
 export interface SystemTrafficPoint {
   ts: number
-  request_mbps: number | null
-  response_mbps: number | null
+  inbound_mbps: number | null
+  outbound_mbps: number | null
 }
 /** Host-wide kernel run-queue average; cores is null when unreadable. */
 export interface SystemLoad {
@@ -52,9 +54,9 @@ export interface SystemStatus {
   disk: SystemResource
   load: SystemLoad | null
   traffic: {
-    scope: 'application_http_body'
-    request_mbps: number | null
-    response_mbps: number | null
+    scope: TrafficScope
+    inbound_mbps: number | null
+    outbound_mbps: number | null
     bucket_seconds: number
     points: SystemTrafficPoint[]
   }
@@ -164,16 +166,16 @@ export function parseSystemStatus(value: unknown): SystemStatus {
     disk: resource(raw.disk),
     load: load(raw.load),
     traffic: {
-      scope: member(traffic.scope, ['application_http_body']),
-      request_mbps: nullable(traffic.request_mbps),
-      response_mbps: nullable(traffic.response_mbps),
+      scope: member(traffic.scope, TRAFFIC_SCOPES),
+      inbound_mbps: nullable(traffic.inbound_mbps),
+      outbound_mbps: nullable(traffic.outbound_mbps),
       bucket_seconds: bucketSeconds,
       points: traffic.points.map((value) => {
         const row = record(value)
         return {
           ts: number(row.ts, true),
-          request_mbps: nullable(row.request_mbps),
-          response_mbps: nullable(row.response_mbps),
+          inbound_mbps: nullable(row.inbound_mbps),
+          outbound_mbps: nullable(row.outbound_mbps),
         }
       }),
     },

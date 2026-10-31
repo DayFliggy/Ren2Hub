@@ -31,15 +31,16 @@ export function systemStatusFixture(): SystemStatus {
       total_bytes: 512 * gib,
     }),
     load: { scope: 'host', one: 1.2, five: 0.84, fifteen: 0.5, cores: 4 },
+    // The server sends more than it receives, so a swapped direction shows.
     traffic: {
-      scope: 'application_http_body',
-      request_mbps: 2.1,
-      response_mbps: 12.4,
+      scope: 'host_interface',
+      inbound_mbps: 2.1,
+      outbound_mbps: 12.4,
       bucket_seconds: 60,
       points: [0, 1, 2].map((i) => ({
         ts: 1_798_539_880 + i * 60,
-        request_mbps: 1.1 + i * 0.5,
-        response_mbps: 8.6 + i * 1.9,
+        inbound_mbps: 1.1 + i * 0.5,
+        outbound_mbps: 8.6 + i * 1.9,
       })),
     },
     success_rate: {

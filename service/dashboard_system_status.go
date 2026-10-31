@@ -55,18 +55,20 @@ type DashboardLoad struct {
 	Cores   *int    `json:"cores"`
 }
 
+// DashboardTraffic is projected field by field. The host interface name and
+// the failure reason stay on the Root-only observation.
 type DashboardTraffic struct {
 	Scope         string                  `json:"scope"`
-	RequestMbps   *float64                `json:"request_mbps"`
-	ResponseMbps  *float64                `json:"response_mbps"`
+	InboundMbps   *float64                `json:"inbound_mbps"`
+	OutboundMbps  *float64                `json:"outbound_mbps"`
 	BucketSeconds int64                   `json:"bucket_seconds"`
 	Points        []DashboardTrafficPoint `json:"points"`
 }
 
 type DashboardTrafficPoint struct {
 	Ts           int64    `json:"ts"`
-	RequestMbps  *float64 `json:"request_mbps"`
-	ResponseMbps *float64 `json:"response_mbps"`
+	InboundMbps  *float64 `json:"inbound_mbps"`
+	OutboundMbps *float64 `json:"outbound_mbps"`
 }
 
 // DashboardSuccessRate states why Rate is null: perf metrics disabled, no
@@ -125,12 +127,12 @@ func ReadDashboardSystemStatus(ctx context.Context) (DashboardSystemStatus, erro
 
 func newDashboardSystemStatus(observation PerformanceObservation, load *DashboardLoad, rate DashboardSuccessRate) DashboardSystemStatus {
 	traffic := DashboardTraffic{
-		Scope: observation.Traffic.Scope, RequestMbps: observation.Traffic.RequestMbps,
-		ResponseMbps: observation.Traffic.ResponseMbps, BucketSeconds: observation.Series.BucketSeconds,
+		Scope: observation.Traffic.Scope, InboundMbps: observation.Traffic.InboundMbps,
+		OutboundMbps: observation.Traffic.OutboundMbps, BucketSeconds: observation.Series.BucketSeconds,
 		Points: make([]DashboardTrafficPoint, 0, len(observation.Series.Points)),
 	}
 	for _, point := range observation.Series.Points {
-		traffic.Points = append(traffic.Points, DashboardTrafficPoint{Ts: point.Ts, RequestMbps: point.RequestMbps, ResponseMbps: point.ResponseMbps})
+		traffic.Points = append(traffic.Points, DashboardTrafficPoint{Ts: point.Ts, InboundMbps: point.InboundMbps, OutboundMbps: point.OutboundMbps})
 	}
 	checks := make(map[string]string, len(observation.Checks))
 	for _, check := range observation.Checks {

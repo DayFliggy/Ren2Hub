@@ -3,6 +3,7 @@ import base64
 import hashlib
 import http.server
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -35,6 +36,7 @@ class Experiment:
         self.hold_entered, self.hold_release = threading.Event(), threading.Event()
         self.mock_tls_cert = args.mock_tls_cert
         self.mock_tls_key = args.mock_tls_key
+        self.traffic = None
 
     def rows(self, sql):
         return candidate_query(sql)
@@ -310,7 +312,29 @@ class Experiment:
             self.record('ws_private_route_revalidated_each_create')
         finally:socket.close()
 
+    def traffic_source(self, timeout=45):
+        """Root 流量来源与候选参数一致。候选在 internal 网络里，它的请求不经过宿主网卡，所以不断言计数增长。"""
+        interface = acceptance_target()['traffic_host_interface']
+        expected = ('host_interface', interface) if interface else ('application_listener', '')
+        deadline = time.monotonic() + timeout
+        while True:
+            observation = self.root.api('GET', '/api/performance/stats')['observability']
+            traffic = observation['traffic']
+            require((traffic['scope'], traffic['interface']) == expected, 'traffic_source_mismatch')
+            require(traffic['reason'] == '', 'traffic_reason_reported')
+            # 采样间隔 10 秒，两次采样后才有速率。
+            if traffic['inbound_mbps'] is not None and traffic['outbound_mbps'] is not None:
+                break
+            require(time.monotonic() < deadline, 'traffic_rates_unavailable')
+            time.sleep(2)
+        require(observation['stale'] is False, 'traffic_observation_stale')
+        for rate in (traffic['inbound_mbps'], traffic['outbound_mbps']):
+            require(type(rate) in (int, float) and math.isfinite(rate) and rate >= 0, 'traffic_rate_invalid')
+        self.traffic = {'scope': traffic['scope'], 'interface': traffic['interface']}
+        self.record('traffic_source_matches_configuration')
+
     def management(self):
+        self.traffic_source()
         self.price()
         for path in ['/api/subscription/plans','/api/deployments','/api/system-info','/api/next/admin/users','/api/billing/self/events','/pg/chat/completions']:
             status,_=self.root.request('GET',path);require(status==404,'retired_route_'+path)
@@ -371,6 +395,7 @@ def run_group(group, args):
     finally:
         if experiment:
             report['checks']=experiment.checks
+            if experiment.traffic:report['traffic']=experiment.traffic
             errors=experiment.cleanup()
             if errors:report.update(success=False,cleanup_errors=errors)
         if server:server.shutdown();server.server_close()

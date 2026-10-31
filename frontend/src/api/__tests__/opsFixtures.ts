@@ -160,12 +160,29 @@ export function observationFixture(): Observability {
       gc_count: 8,
       last_gc_pause_ms: null,
     },
+    // Outbound differs from inbound in every sample, so a swapped or renamed
+    // field shows as a wrong figure or an empty line.
     traffic: {
-      scope: 'application_http_body',
-      request_mbps: null,
-      response_mbps: null,
+      scope: 'host_interface',
+      inbound_mbps: 1.5,
+      outbound_mbps: 6.2,
+      interface: 'eth0',
+      reason: '',
     },
-    series: { window: '1h', bucket_seconds: 60, points: [] },
+    series: {
+      window: '1h',
+      bucket_seconds: 60,
+      points: [0, 1, 2].map((i) => ({
+        ts: 3480 + i * 60,
+        cpu: null,
+        memory: null,
+        disk: 40,
+        inbound_mbps: 1.3 + i * 0.1,
+        outbound_mbps: 6 + i * 0.1,
+        goroutines: 32,
+        heap_alloc_bytes: 1_048_576,
+      })),
+    },
   }
 }
 

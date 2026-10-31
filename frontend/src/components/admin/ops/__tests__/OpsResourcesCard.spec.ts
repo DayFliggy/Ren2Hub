@@ -5,8 +5,10 @@ import {
   measuredResource,
   performanceFixture,
 } from '@/api/__tests__/opsFixtures'
+import type { Observability } from '@/api/observability'
 import { projectOpsOverview } from '@/api/opsMonitor'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
+import OpsMetric from '../OpsMetric.vue'
 import OpsResourcesCard from '../OpsResourcesCard.vue'
 import OpsTrendChart from '../OpsTrendChart.vue'
 
@@ -23,8 +25,8 @@ describe('resource history scale', () => {
           cpu,
           memory: null,
           disk: 40,
-          request_mbps: null,
-          response_mbps: null,
+          inbound_mbps: null,
+          outbound_mbps: null,
           goroutines: null,
           heap_alloc_bytes: null,
         },
@@ -110,5 +112,117 @@ describe('resource gauge colours', () => {
     expect(ring.props('indeterminate')).toBe(true)
     expect(ring.props('color')).toBe('var(--text-tertiary)')
     wrapper.unmount()
+  })
+})
+
+describe('traffic readings', () => {
+  function mountTraffic(
+    traffic: Partial<Observability['traffic']>,
+    locale = 'en',
+    edit: (stats: ReturnType<typeof performanceFixture>) => void = () => {}
+  ) {
+    const stats = performanceFixture()
+    Object.assign(stats.observability.traffic, traffic)
+    edit(stats)
+    return mount(OpsResourcesCard, {
+      props: {
+        overview: projectOpsOverview(stats, null, '1h', [], 3600),
+        loading: false,
+        error: '',
+        updatedAt: 3600000,
+      },
+      global: { plugins: [createI18n({ legacy: false, locale })] },
+    })
+  }
+  const metric = (wrapper: ReturnType<typeof mountTraffic>, label: string) =>
+    wrapper
+      .findAllComponents(OpsMetric)
+      .find((node) => node.props('label') === label)!
+
+  it('shows outbound and inbound the same way in the figures and the lines', () => {
+    const wrapper = mountTraffic(
+      { inbound_mbps: 1, outbound_mbps: 7 },
+      'en',
+      (stats) => {
+        stats.observability.series.points = [0, 1].map((i) => ({
+          ...stats.observability.series.points[i]!,
+          inbound_mbps: 1,
+          outbound_mbps: 7,
+        }))
+      }
+    )
+    expect(metric(wrapper, 'Outbound').props('value')).toBe('7')
+    expect(metric(wrapper, 'Inbound').props('value')).toBe('1')
+    const chart = wrapper.findAllComponents(OpsTrendChart)[1]!
+    expect(chart.props('label')).toBe('Traffic')
+    const lines = Object.fromEntries(
+      chart
+        .props('series')
+        .map((line) => [line.name, line.points.map((point) => point.value)])
+    )
+    expect(lines).toEqual({ Outbound: [7, 7], Inbound: [1, 1] })
+    wrapper.unmount()
+  })
+  it('names the host interface it counts', () => {
+    const wrapper = mountTraffic({})
+    const note = wrapper.get('[data-ops-traffic]')
+    expect(note.attributes('title')).toBe(
+      'All traffic on host interface eth0; relayed requests count both client and upstream legs.'
+    )
+    expect(note.attributes('aria-description')).toBe(note.attributes('title'))
+    wrapper.unmount()
+    const zh = mountTraffic({}, 'zh-CN')
+    expect(zh.get('[data-ops-traffic]').attributes('title')).toBe(
+      '宿主机网卡 eth0 的全部收发；中转请求同时产生客户端和上游两段流量。'
+    )
+    zh.unmount()
+  })
+  it('describes the listener scope without an interface', () => {
+    const wrapper = mountTraffic({
+      scope: 'application_listener',
+      interface: '',
+    })
+    expect(wrapper.get('[data-ops-traffic]').attributes('title')).toBe(
+      "All bytes on the main service port, including headers, bodies, WebSocket and health checks; excludes the app's own upstream connections and the pprof port."
+    )
+    wrapper.unmount()
+  })
+  it('appends why a host reading is unavailable and keeps the figures empty', () => {
+    const failure = {
+      inbound_mbps: null,
+      outbound_mbps: null,
+      reason: 'host_interface_missing',
+    } as const
+    const wrapper = mountTraffic(failure)
+    expect(wrapper.get('[data-ops-traffic]').attributes('title')).toBe(
+      'All traffic on host interface eth0; relayed requests count both client and upstream legs. Reading unavailable: no eth0 entry in the host counters.'
+    )
+    expect(metric(wrapper, 'Outbound').props('value')).toBe('No data')
+    expect(metric(wrapper, 'Inbound').props('value')).toBe('No data')
+    wrapper.unmount()
+    const zh = mountTraffic(failure, 'zh-CN')
+    expect(zh.get('[data-ops-traffic]').attributes('title')).toBe(
+      '宿主机网卡 eth0 的全部收发；中转请求同时产生客户端和上游两段流量。读数不可用：宿主机网卡计数中没有 eth0。'
+    )
+    expect(metric(zh, '出站').props('value')).toBe('暂无数据')
+    zh.unmount()
+  })
+  it('leaves no blank interface name when host configuration is invalid', () => {
+    const invalid = {
+      interface: '',
+      inbound_mbps: null,
+      outbound_mbps: null,
+      reason: 'host_config_invalid',
+    } as const
+    const wrapper = mountTraffic(invalid)
+    expect(wrapper.get('[data-ops-traffic]').attributes('title')).toBe(
+      'All traffic on the host interface; relayed requests count both client and upstream legs. Reading unavailable: invalid host traffic configuration.'
+    )
+    wrapper.unmount()
+    const zh = mountTraffic(invalid, 'zh-CN')
+    expect(zh.get('[data-ops-traffic]').attributes('title')).toBe(
+      '宿主机网卡的全部收发；中转请求同时产生客户端和上游两段流量。读数不可用：宿主机流量配置无效。'
+    )
+    zh.unmount()
   })
 })

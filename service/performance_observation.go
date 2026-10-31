@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"sync"
 	"time"
@@ -30,8 +31,10 @@ type observationSampler struct {
 	latest      *PerformanceObservation
 	ring        []ObservationSeriesPoint
 	next, count int
-	traffic     trafficSampler
-	failing     map[string]bool
+	// traffic, trafficReason and failing belong to the single sampling loop.
+	traffic       trafficSampler
+	trafficReason string
+	failing       map[string]bool
 }
 
 func newObservationSampler(capacity int) *observationSampler {
@@ -46,6 +49,7 @@ var stopPerformanceObserver func()
 // cancels outstanding probes and waits for completion before database shutdown.
 func StartPerformanceObserver() func() {
 	performanceObserverOnce.Do(func() {
+		logTrafficSource(common.CurrentTrafficSource())
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
@@ -79,12 +83,11 @@ func (s *observationSampler) sample(ctx context.Context) {
 	status := common.GetSystemStatus()
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	request, response := common.ApplicationTrafficSnapshot()
 	observation := emptyPerformanceObservation()
 	observation.SampledAt = observationPtr(started.Unix())
+	observation.Traffic = s.sampleTraffic(common.CurrentTrafficSource(), started)
 	observation.Resources = observationResources(status, monitor, started)
 	observation.Process = observationProcess(mem, runtime.NumGoroutine())
-	observation.Traffic = s.traffic.sample(started, request, response)
 	observation.Storage = s.probeStorage(ctx)
 	if ctx.Err() == nil {
 		s.record(observation)
@@ -109,8 +112,46 @@ func emptyPerformanceObservation() PerformanceObservation {
 		Scope: "instance", InstanceStartedAt: common.StartTime, Status: "unknown",
 		Resources: ObservationResources{CPU: resource, Memory: resource, Disk: resource},
 		Storage:   ObservationStorage{Database: probe, Redis: probe},
-		Traffic:   ObservationTraffic{Scope: "application_http_body"},
+		Traffic:   trafficView(common.CurrentTrafficSource()),
 	}
+}
+
+// trafficView carries the startup decision without rates; an invalid host
+// configuration is visible before the first sample.
+func trafficView(source common.TrafficSource) ObservationTraffic {
+	return ObservationTraffic{Scope: source.Scope, Interface: source.Interface, Reason: source.Reason}
+}
+
+func logTrafficSource(source common.TrafficSource) {
+	if source.Scope == common.TrafficScopeApplicationListener {
+		common.SysLog("performance observation: no host interface configured, counting the main listener")
+		return
+	}
+	common.SysLog(fmt.Sprintf("performance observation: traffic from host interface %q in %s", source.Interface, source.NetDev))
+}
+
+// sampleTraffic reads the startup source and logs only reason transitions:
+// entering, changing and recovering, not every interval.
+func (s *observationSampler) sampleTraffic(source common.TrafficSource, now time.Time) ObservationTraffic {
+	var in, out uint64
+	var reason string
+	if source.Scope == common.TrafficScopeApplicationListener {
+		in, out = common.ListenerTrafficSnapshot()
+	} else {
+		in, out, reason = common.ReadHostTraffic(source)
+	}
+	if reason != s.trafficReason {
+		if reason == "" {
+			common.SysLog(fmt.Sprintf("performance observation: host traffic recovered (interface %q)", source.Interface))
+		} else {
+			common.SysError(fmt.Sprintf("performance observation: host traffic unavailable (%s, interface %q, file %s)", reason, source.Interface, source.NetDev))
+		}
+		s.trafficReason = reason
+	}
+	traffic := trafficView(source)
+	traffic.Reason = reason
+	traffic.InboundMbps, traffic.OutboundMbps = s.traffic.sample(now, in, out, reason)
+	return traffic
 }
 
 func observationResources(status common.SystemStatus, monitor common.PerformanceMonitorConfig, now time.Time) ObservationResources {
@@ -162,7 +203,7 @@ func observationPoint(observation PerformanceObservation) ObservationSeriesPoint
 	point := ObservationSeriesPoint{
 		Ts: *observation.SampledAt, CPU: observation.Resources.CPU.Percent,
 		Memory: observation.Resources.Memory.Percent, Disk: observation.Resources.Disk.Percent,
-		RequestMbps: observation.Traffic.RequestMbps, ResponseMbps: observation.Traffic.ResponseMbps,
+		InboundMbps: observation.Traffic.InboundMbps, OutboundMbps: observation.Traffic.OutboundMbps,
 	}
 	if observation.Process != nil {
 		point.Goroutines = observationPtr(float64(observation.Process.Goroutines))
@@ -238,7 +279,7 @@ func invalidateObservation(observation *PerformanceObservation) {
 		observation.Storage.LogDatabase = &probe
 	}
 	observation.Process = nil
-	observation.Traffic.RequestMbps, observation.Traffic.ResponseMbps = nil, nil
+	observation.Traffic.InboundMbps, observation.Traffic.OutboundMbps = nil, nil
 }
 
 func observationPtr[T any](value T) *T { return &value }

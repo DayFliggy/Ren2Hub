@@ -56,6 +56,47 @@ describe('parseSystemStatus', () => {
       expect(() => parseSystemStatus(raw)).toThrow('Invalid API response')
     }
   )
+  it.each(['host_interface', 'application_listener'] as const)(
+    'accepts %s traffic with its inbound and outbound rates',
+    (scope) => {
+      const raw = payload()
+      raw.traffic.scope = scope
+      raw.traffic.inbound_mbps = null
+      expect(parseSystemStatus(raw).traffic).toMatchObject({
+        scope,
+        inbound_mbps: null,
+        outbound_mbps: 12.4,
+      })
+    }
+  )
+  it.each([
+    ['the retired body scope', { scope: 'application_http_body' }],
+    ['an unknown scope', { scope: 'host_network' }],
+    ['a negative rate', { outbound_mbps: -0.1 }],
+    ['a string rate', { inbound_mbps: '2.1' }],
+    ['a missing rate', { inbound_mbps: undefined }],
+  ])('rejects traffic with %s', (_name, change) => {
+    const raw = payload()
+    Object.assign(raw.traffic, change)
+    expect(() => parseSystemStatus(raw)).toThrow('Invalid API response')
+  })
+  it('rejects traffic under the retired field names', () => {
+    const raw = payload()
+    const { inbound_mbps, outbound_mbps, ...rest } = raw.traffic
+    raw.traffic = {
+      ...rest,
+      request_mbps: inbound_mbps,
+      response_mbps: outbound_mbps,
+    } as never
+    expect(() => parseSystemStatus(raw)).toThrow('Invalid API response')
+    const point = payload()
+    point.traffic.points[0] = {
+      ts: point.traffic.points[0]!.ts,
+      request_mbps: 1,
+      response_mbps: 2,
+    } as never
+    expect(() => parseSystemStatus(point)).toThrow('Invalid API response')
+  })
   it('rejects Root-only diagnostics in place of the projection', () => {
     const { cpu, ...raw } = payload()
     Object.assign(raw, { resources: { cpu } })

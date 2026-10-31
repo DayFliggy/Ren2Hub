@@ -337,8 +337,8 @@ export interface OpsSeriesPoint {
   disk: number | null
   users: number | null
   channels: number | null
-  request_mbps?: number | null
-  response_mbps?: number | null
+  inbound_mbps?: number | null
+  outbound_mbps?: number | null
 }
 export type OpsSeriesField = Exclude<keyof OpsSeriesPoint, 'ts'>
 export interface OpsOverview {
@@ -508,8 +508,8 @@ export function projectOpsOverview(
               path: typeof path === 'string' ? path : null,
             },
             network: {
-              up_mbps: observation.traffic.response_mbps,
-              down_mbps: observation.traffic.request_mbps,
+              up_mbps: observation.traffic.outbound_mbps,
+              down_mbps: observation.traffic.inbound_mbps,
             },
             process: {
               goroutines: observation.process?.goroutines ?? null,

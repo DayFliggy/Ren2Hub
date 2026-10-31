@@ -4,6 +4,18 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-10-31 流量读数改为宿主网卡或主监听器
+
+流量读数不再统计 HTTP 正文。启动时按 `TRAFFIC_HOST_INTERFACE`、`TRAFFIC_HOST_NET_DEV` 判定一次来源（`common/traffic_host.go`），进程内不切换：两个变量都为空（空串等同未设置）时使用主监听器计数，scope 为 `application_listener`；任一非空即为宿主模式，scope 为 `host_interface`，路径缺省为 `/host/proc/net/dev`。宿主模式每 10 秒重新完整读取 `net/dev`，只取配置的那块网卡的 rx/tx 字节，不汇总，也不改读其他网卡。网卡名或路径不合法、文件打不开、内容格式不对、找不到该网卡时，分别报 `host_config_invalid`、`host_counters_unreadable`、`host_counters_invalid`、`host_interface_missing`，两个方向都为 null，并且不改用监听器。reason 只在进入、切换和恢复时各写一次日志，observer 启动时记录一次所选来源。监听器模式由 `common/traffic.go` 包装主监听器接受的连接：Read 计入入站，Write 计入出站，包含 HTTP 头、正文、WebSocket 帧和健康检查，不含应用主动连接上游的流量和 pprof `:8005`。连接包装内嵌 `net.Conn` 接口值，只覆盖 Read、Write、CloseWrite，不提升 `ReadFrom`、`WriteTo` 等绕过计数的方法；`n>0` 时即使同时返回错误也累计，错误原样返回。
+
+方向统一按服务器视角：`inbound_mbps` 为宿主 rx 或连接 Read，`outbound_mbps` 为宿主 tx 或连接 Write，Mbps = Δ字节 × 8 / 秒 / 1e6。前端两页按此显示 ↑ 出站、↓ 入站，看板原先的 ↑ 请求随之翻转。`observability.traffic` 和 `series.points[]` 的 `request_mbps`、`response_mbps` 改名为 `inbound_mbps`、`outbound_mbps`，`application_http_body` 退役，不保留别名，已打开的旧页面需刷新一次。Root 的 `/api/performance/stats` 另带 `interface`（宿主模式为配置的网卡名，监听器模式为空串）和 `reason`；看板 `/api/user/system-status` 的 `traffic` 逐字段投影 `scope`、两个速率、`bucket_seconds` 和 `points`，不带这两项。基线在首次采样、计数下降、时钟回拨、间隔超过 30 秒或本次带 reason 时重置，恢复后的第一份正常计数只建立基线。快照过期时 `stale` 仍清空两个速率。
+
+原生文件：`main.go` 把 `srv.ListenAndServe()` 换成 `net.Listen` 加 `srv.Serve(common.CountingListener(ln))`，与 go1.26.10 的 `ListenAndServe` 等价，失败文案不变；附带变化是端口被占用时在启动成功日志之前退出。`main.go` 原已 adapted，reasons 增加 `ops-metrics`。`router/main.go` 删除 `middleware.RecordApplicationTraffic()` 后与 `e449cc700` 一致，回到 `upstream_equal`。`middleware/application_traffic.go`、`middleware/application_traffic_test.go` 和 `common/application_traffic.go` 删除，SSE、WebSocket、partial I/O 合同迁到 `common/traffic_test.go` 的真实连接测试。`controller/relay.go`、`controller/responses_websocket.go`、CPU/内存/磁盘采样和过载判断未改。
+
+已知限制：宿主读数是整块网卡的收发，中转请求的客户端和上游两段都计入；同名网卡在两次采样之间被重建且新计数已超过旧值时无法识别，会出一个错误点；非 Linux 上显式配置宿主模式会报 `host_counters_unreadable`。observer 早于监听器启动，监听器模式下这段时间计为真实 0。2026-10-24、2026-10-26 条目中的“HTTP body 吞吐”“应用 HTTP 正文流量”描述当时状态，不改写。
+
+来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 800 `upstream_equal`、275 `adapted`、254 `extension`、45 `removed`，`candidate_sha` 为空。
+
 ## 2026-10-31 Dashboard 系统状态卡片口径统一
 
 系统状态卡片的格子颜色和标题胶囊改用同一套阈值判定。`service/dashboard_system_status.go` 把 `observationHealth` 对 CPU、内存、磁盘的检查结果写入投影的资源 `state`：已测量的资源超过阈值时为 `warning`，阈值关闭时仍为 `ok`，读数保留。前端只按占比显示空闲、正常、关注三档，警告和危险两档只来自 `state`，不再按固定的 75% / 90% 告警。资源检查目前只产出 `warning`，所以资源格子最高到警告档，以前超过 90% 显示的红色不再出现。内存和磁盘格子改用后端的 `percent`，不再由字节数自行换算。`service/performance_observation_health.go` 的资源阈值比较改为浮点比较，90.6% 在 90% 阈值下判为 warning。原生 `common/system_monitor.go` 的过载熔断仍沿用上游的整数比较，从 91% 起才拒绝请求，该文件未修改。

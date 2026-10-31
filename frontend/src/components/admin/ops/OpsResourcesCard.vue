@@ -142,10 +142,11 @@ const trafficTrend = computed(() => {
   if (!overview) return null
   return {
     range: seriesRange(overview),
+    // The server's view: up is outbound, down is inbound, as in the metrics.
     series: (
       [
-        ['request_mbps', 'down', 'accent'],
-        ['response_mbps', 'up', 'signal'],
+        ['inbound_mbps', 'down', 'accent'],
+        ['outbound_mbps', 'up', 'signal'],
       ] as const
     ).map(([field, label, color]) => ({
       name: t(`resources.${label}`),
@@ -156,6 +157,27 @@ const trafficTrend = computed(() => {
       })),
     })),
   }
+})
+/** What the traffic figures count, and why a configured host interface has no
+ * reading; the figures themselves keep the plain "unavailable" text. */
+const trafficNote = computed(() => {
+  const traffic = props.overview?.observation?.traffic
+  if (!traffic) return undefined
+  // Host mode without a name only happens with host_config_invalid.
+  const scopeKey =
+    traffic.scope === 'host_interface' && traffic.interface === ''
+      ? 'host_interface_unnamed'
+      : traffic.scope
+  const scope = t(`native.trafficScope.${scopeKey}`, {
+    interface: traffic.interface,
+  })
+  if (traffic.reason === '') return scope
+  return t('native.trafficUnavailable', {
+    scope,
+    reason: t(`trafficReasons.${traffic.reason}`, {
+      interface: traffic.interface,
+    }),
+  })
 })
 </script>
 
@@ -236,8 +258,9 @@ const trafficTrend = computed(() => {
       </ul>
       <dl
         class="ops-metric-grid ops-metric-grid--3"
-        :aria-description="t('native.trafficScope')"
-        :title="t('native.trafficScope')"
+        :aria-description="trafficNote"
+        :title="trafficNote"
+        data-ops-traffic
       >
         <OpsMetric
           :label="t('resources.up')"

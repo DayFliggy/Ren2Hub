@@ -29,6 +29,7 @@ python3 -B scripts/testing/run.py race
 python3 -B scripts/testing/run.py browser
 python3 -B scripts/testing/run.py ui-contracts
 python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1
+python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1 --traffic-host-interface eth0
 python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 ```
 
@@ -38,7 +39,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 | databases    | 空库初始化、旧账务拒绝、钱包/返利/充值、路由、管理操作、模型目录、任务、日志与迁移 | SQLite + 新 MySQL 8.4 + PostgreSQL 15.19；每个合同独立新库，检查每个方言的运行与通过事件                      |
 | static       | Vue 类型、Lint、格式；三个 Go 模块 vet                                             | 全部退出 0；缺工具是失败                                                                                      |
 | build        | Vue 构建、嵌入资源图、实际 Go 二进制与两个独立模块                                 | 不用 placeholder 代替生产资源验证，记录二进制 SHA256                                                          |
-| race         | 轮询、并发资金、服务准入、WebSocket 结算                                           | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                             |
+| race         | 轮询、并发资金、服务准入、WebSocket 结算、监听器连接计数、流量采样与读取并发       | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                             |
 | browser      | 全新实例真实登录/刷新/注销、权限、Token、邀请归属与设置交互                        | 桌面/手机 × 明/暗，每组独立数据库；不拦截业务 API，不接已有服务器，不接受任意目标地址                         |
 | ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                        | 自动发现该目录全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端，不做像素比较 |
 | candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同              | 全新 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过                            |
@@ -50,6 +51,10 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 ## 隔离、证据与失败
 
 产物默认进入 `.local-tests/run-*`，可用 `--output-parent` 放到仓库外；每轮新目录，禁止覆盖旧证据。记录源码 base SHA、干净时的 candidate SHA、未提交时的内容指纹、工具版本、每层报告、日志哈希与失败原因。私有目录 0700、凭据 0600；不把密钥和生产数据写进仓库。候选 SDK 可通过 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`、`GATEWAY_SDK_NODE_MODULE` 指定现有依赖；未指定时使用仓库内 `.test-tools/` 默认路径。候选在启动容器前检查这三项，缺失时直接以 `explicit_sdk_*` 失败。服务器现行工作区不允许未跟踪目录，正式候选必须指向工作区外的运行时。`success` 只表示各阶段通过，正式更新另需 manifest 的 `deployment_eligible` 为 true（干净源码、镜像修订与 gitlink 一致）；直接运行 `candidate.py` 时 CLI 输出同时给出两者，经 `run.py` 运行时以 `report.json` 的 `stages.candidate` 和 `candidate-manifest.json` 为准。runner 校验运行时版本并记录包元数据哈希，但不保证依赖目录只读或位于仓库外；`.test-tools/` 被 Git 忽略，不属于源码身份。
+
+候选默认不挂载宿主文件，应用使用主监听器计数。`run.py candidate|all` 或 `candidate.py` 传入 `--traffic-host-interface NAME`（`^[A-Za-z0-9_.-]{1,15}$`，非法时在建证据目录前失败）后，候选应用额外得到只读单文件挂载 `/proc/1/net/dev → /host/proc/net/dev` 和 `TRAFFIC_HOST_INTERFACE=NAME`。除本轮生成的 mock CA 证书外，这是候选唯一允许的宿主文件挂载；它是宿主网卡计数，不是数据路径。模式经私有 `target.json` 的 `traffic_host_interface`（监听器模式为空串）传给各合同组；隔离检查只在宿主模式放行这一项，源不对、可写、多出一项或要求时缺失都拒绝，CA 规则不变；`TRAFFIC_HOST_NET_DEV` 在宿主模式只能为空或 `/host/proc/net/dev`，监听器模式两变量都必须为空。
+
+管理组的 `traffic_source_matches_configuration` 最多等约 45 秒，直到两次采样出现速率，再要求 `observability.stale` 为 false、`scope`/`interface` 与参数一致、`reason` 为空、两方向为有限非负数（0 有效）。候选在 internal 网络里，请求不经过宿主网卡，所以不断言计数增长；监听器模式的协议覆盖由 Go 真实连接测试承担。管理报告记录实测的 `traffic`，隔离报告和 `candidate-manifest.json` 记录 `traffic: {scope, interface, mounts}`，挂载在清理前取自运行中容器的 inspect。这些 runner 合同不在 `unit` 层，单独执行 `python3 -B scripts/testing/test_runner.py`。
 
 数据库和候选 runner 自己创建目标，不接收用户提供的 DSN，不继承生产数据库环境变量。容器均带本轮随机 label，清理前核验确切 ID 和 label，不用名称通配符、全局 prune、FLUSHDB 或清空旧库。失败退出非零，保留报告与日志；清理失败也不能算通过。`browser` profile 的真实浏览器实例在只有回环接口的独立 network/PID namespace 内运行，外网请求直接失败；`ui-contracts` 使用同源模拟 API 和独立 loopback Vite 端口，不把这层当作真实网络隔离。
 
