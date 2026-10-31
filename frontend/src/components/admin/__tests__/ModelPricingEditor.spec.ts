@@ -1,3 +1,4 @@
+import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -184,7 +185,41 @@ describe('manual model price editor', () => {
       AudioCompletionRatio: '1',
     })
     await wrapper.get('input[aria-label="Audio output price"]').setValue('10')
+    const updates = wrapper.emitted('update')?.length ?? 0
     expect(wrapper.vm.commit()).toBeNull()
+    await nextTick()
+    expect(wrapper.text()).toContain(
+      'Dependent prices require a nonzero base price.'
+    )
+    expect(wrapper.emitted('update')?.length ?? 0).toBe(updates)
+    // Pricing the kept input ratio converts both lanes from dollars.
+    await wrapper.get('input[aria-label="Audio input price"]').setValue('5')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '1',
+      AudioRatio: '2.5',
+      AudioCompletionRatio: '2',
+    })
+    wrapper.unmount()
+  })
+  it('recomputes kept ratios for each model and keeps them across quota units', async () => {
+    const wrapper = setup({ AudioRatio: 16 })
+    await wrapper.setProps({
+      modelName: 'priced-model',
+      pricing: { ModelRatio: '1', AudioRatio: '2' },
+    })
+    await wrapper.get('input[aria-label="Audio input price"]').setValue('')
+    expect(wrapper.vm.commit()).toBeNull()
+    await wrapper.setProps({
+      modelName: 'audio-model',
+      pricing: { AudioRatio: 16 },
+    })
+    configureQuotaPerUnit(1_000_000)
+    await flushPromises()
+    await wrapper.get('input[inputmode="decimal"]').setValue('2')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '2',
+      AudioRatio: '16',
+    })
     wrapper.unmount()
   })
   it('rejects an enabled extra price left empty instead of dropping it', async () => {
