@@ -37,6 +37,7 @@ describe('console navigation', () => {
       'user-management',
       'redemption-management',
       'order-management',
+      'usage-discount',
       'task-plugins',
       'system-settings',
     ])
@@ -104,6 +105,36 @@ describe('console navigation', () => {
       route: 'system-settings-site',
       rootOnly: true,
     })
+  })
+
+  it('shows the usage discount entry to root users only', () => {
+    const visible = (
+      context: Parameters<typeof getAccessibleConsoleNavGroups>[0]
+    ) =>
+      getAccessibleConsoleNavGroups(context)
+        .flatMap((group) => group.items)
+        .find((item) => item.name === 'usage-discount')
+
+    expect(visible({ isAdmin: false })).toBeUndefined()
+    expect(
+      visible({ isAdmin: true, hasPermission: () => true })
+    ).toBeUndefined()
+    expect(
+      visible({ isAdmin: true, isRoot: true, hasPermission: () => true })
+    ).toMatchObject({
+      route: 'usage-discount-admin',
+      labelKey: 'nav.usageDiscount',
+      feature: 'admin',
+      rootOnly: true,
+    })
+    // The admin capability gates it like the other administrator pages.
+    expect(
+      visible({
+        isAdmin: true,
+        isRoot: true,
+        featureStatus: (feature) => (feature === 'admin' ? 'disabled' : 'live'),
+      })?.disabled
+    ).toBe(true)
   })
 
   it('hides every administrator entry from ordinary users', () => {

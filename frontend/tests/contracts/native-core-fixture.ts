@@ -344,6 +344,22 @@ export async function nativeCoreFixture(
           index % 2 === 0 ? 0 : 2
         ),
       })
+    // Usage discount reads use the bodies generated from the real handlers;
+    // specs that save or fail register their own routes.
+    if (path === '/api/user/usage-discount' && method === 'GET')
+      return route.fulfill({
+        json: nativeFixture('usage-discount-self.get.json'),
+      })
+    if (path === '/api/option/usage_discount' && method === 'GET')
+      return route.fulfill({ json: nativeFixture('usage-discount.get.json') })
+    if (path === '/api/option/usage_discount/status' && method === 'GET')
+      return route.fulfill({
+        json: nativeFixture('usage-discount-status.get.json'),
+      })
+    if (path === '/api/option/usage_discount/estimate' && method === 'POST')
+      return route.fulfill({
+        json: nativeFixture('usage-discount-estimate.post.json'),
+      })
     if (path === '/api/data/self/summary')
       return ok(
         nativeUsageSummary(

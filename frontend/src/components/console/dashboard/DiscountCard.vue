@@ -14,8 +14,10 @@ const props = withDefaults(
   defineProps<{
     discounts: UserDiscounts | null
     loading?: boolean
+    /** The discount request failed; nothing is known about the rate. */
+    error?: string | null
   }>(),
-  { loading: false }
+  { loading: false, error: null }
 )
 
 const { t } = useI18n()
@@ -97,9 +99,26 @@ const tiles = computed<StatTile[]>(() => {
         </div>
       </div>
 
+      <!-- Unreadable usage windows price with the fixed part only. -->
+      <p
+        v-if="discounts.status === 'unavailable'"
+        class="text-xs text-[var(--status-warning-text)]"
+        data-discount-unavailable
+      >
+        {{ t('dashboard.discount.unavailable') }}
+      </p>
+
       <!-- Breakdown: the platform-wide ratio next to the combined depth. -->
       <StatTileGrid :tiles="tiles" :columns="2" />
     </div>
+
+    <EmptyState
+      v-else-if="error"
+      class="grow"
+      :title="t('dashboard.discount.loadFailed')"
+      :hint="error"
+      data-discount-error
+    />
 
     <!-- Contained in the card body: the card keeps its slot in the grid. -->
     <EmptyState

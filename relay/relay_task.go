@@ -301,7 +301,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			}
 			return nil, service.TaskErrorWrapper(runErr, "model_price_error", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}
-		channelRatioInfo, ratioErr := helper.HandleChannelRatio(c)
+		channelRatioInfo, ratioErr := helper.HandleChannelRatio(c, info)
 		if ratioErr != nil {
 			return nil, service.TaskErrorWrapper(ratioErr, "model_price_error", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}

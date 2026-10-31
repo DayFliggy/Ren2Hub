@@ -35,6 +35,8 @@
 
 价格同步在原生 `/api/ratio_sync/fetch` 增量支持固定来源纯解析：请求不带 `upstreams` 和 `channel_ids` 时返回固定来源草稿，每个来源的 `id`、`name` 由后端 `pkg/pricesource.Sources()` 给出，前端按返回值渲染，不另写来源清单；两个来源依次下载、各限 15 秒，前端为这次请求设 45 秒超时。本地来源只有 `sub2api` 和 `axonhub` 两种格式到表达式的转换。价格抓取弹窗里参与同步的上游只有原生预设（basellm、models.dev）和已配置 Key 的 OpenRouter 渠道，其他渠道即使出现在 `/api/ratio_sync/channels` 中也不参与价格同步。草稿给出下载内容的 SHA-256，与来源发布的 `.sha256` 比对结果作为来源级警告，不改变状态。sub2api 中已知但本地不计费的字段（如 `cache_storage_cost_per_token_per_hour`）跳过并在草稿中警告，其他未知计价字段仍然拒收。结果只进入草稿，保存后才生效；渠道上游抓取路径继续保留。抓取失败、部分不可解析和明确零价分别表达，不自动覆盖售价。
 
+用量折扣在 `HandleChannelRatio` 中把基础渠道倍率乘以折扣系数 factor，得到本次计价使用的有效倍率；上表各模式读到的渠道倍率都是有效倍率，只乘一次。违规费按基础渠道倍率。选路、`max_channel_ratio` 和模型目录仍读渠道配置的倍率。详见 [用量折扣](USAGE_DISCOUNT.md)。
+
 渠道倍率无效时，`HandleChannelRatio` 返回错误，`ModelPriceHelper`、`ModelPriceHelperPerCall` 和任务表达式分支都拒绝请求（任务返回 400 `model_price_error`），不预扣、不发上游，也不按 0 计费。
 
 所有金额 API 沿原生数值 quota，不补造旧 `available_quota`、`reserved_quota` 或钱包版本。配置生成、公开展示和排序不能反向决定路由。实际结算以 `relay/helper/price.go`、`service/text_quota.go`、`service/tiered_settle.go`、`service/task_billing.go` 为准。

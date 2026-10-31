@@ -813,16 +813,19 @@ test('statistics trend supports the single-series modes', async ({ page }) => {
   await assertInteractiveCentersVisible(page)
 })
 
-test('RPM and discount placeholders stay unconnected instead of invented', async ({
+test('RPM stays unconnected while the discount card reads the user discount', async ({
   page,
 }) => {
   const rpm = page.locator('[data-overview-kpi] [data-kpi-cell="rpm"]')
   await expect(rpm).toContainText('请求限速')
   await expect(rpm).toContainText('未接入')
   await expect(rpm.locator('.display-number')).toHaveText('--')
+  // usage-discount-self.get.json: factor 0.98, global factor 0.99.
   const discount = page.locator('[data-discount-card]')
   await expect(discount).toHaveCount(1)
-  await expect(discount).toContainText('未接入')
+  await expect(discount).toContainText('0.980×')
+  await expect(discount).toContainText('平台 9.9 折')
+  await expect(discount).not.toContainText('未接入')
   await assertNoHorizontalOverflow(page)
 })
 

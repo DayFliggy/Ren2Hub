@@ -141,6 +141,8 @@ type RelayInfo struct {
 	ParamOverrideAudit        []string
 
 	PriceData hosttypes.PriceData
+	// UsageDiscount is resolved once per logical request by HandleChannelRatio.
+	UsageDiscount *hosttypes.UsageDiscountDecision
 
 	// QuotaClamp is set (non-nil) when a quota conversion saturated at the
 	// supported single-request bound (or NaN fallback) while computing this request's charge.

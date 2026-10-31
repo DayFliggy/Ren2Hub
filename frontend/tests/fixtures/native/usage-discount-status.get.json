@@ -1,0 +1,28 @@
+{
+  "data": {
+    "business_date": "2026-10-30",
+    "cached_users": 0,
+    "config_version": 1,
+    "cutoff_utc": 1793289600,
+    "earliest_hour_utc": null,
+    "health": {
+      "cleanup_failures": {
+        "count": 0,
+        "last_at": 0
+      },
+      "hourly_write_failures": {
+        "count": 2,
+        "last_at": 1793300000
+      },
+      "window_query_failures": {
+        "count": 0,
+        "last_at": 0
+      }
+    },
+    "site_month_quota": 0,
+    "site_tier_rate": "0",
+    "timezone": "Asia/Shanghai"
+  },
+  "message": "",
+  "success": true
+}

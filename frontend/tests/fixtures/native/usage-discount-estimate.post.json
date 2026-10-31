@@ -1,0 +1,15 @@
+{
+  "data": {
+    "capped_revenue_share": "0",
+    "days": 30,
+    "discount_quota": 0,
+    "discount_share": "0",
+    "earliest_hour_utc": null,
+    "from_date": "2026-09-30",
+    "history_complete": false,
+    "revenue_quota": 0,
+    "to_date": "2026-10-29"
+  },
+  "message": "",
+  "success": true
+}
