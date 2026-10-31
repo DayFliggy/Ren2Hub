@@ -281,7 +281,6 @@ onBeforeUnmount(() => controller?.abort())
     <EmptyState
       v-if="!loading && !error && (detailId ? !detail : !models.length)"
       :title="t('emptyPublished')"
-      :hint="t('noDefault')"
     />
   </PublicPage>
 </template>

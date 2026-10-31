@@ -91,7 +91,8 @@ function reloadDialog(wrapper: VueWrapper) {
 async function setup(
   embedded = false,
   stubEditor = true,
-  path = '/models/pricing'
+  path = '/models/pricing',
+  locale = 'en'
 ) {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -113,7 +114,7 @@ async function setup(
       global: {
         plugins: [
           router,
-          createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
+          createI18n({ legacy: false, locale, messages: { [locale]: {} } }),
         ],
         stubs: {
           ModelPricingEditor: stubEditor,
@@ -233,7 +234,7 @@ describe('pricing workspace draft lifecycle', () => {
     await button(wrapper, 'Save model prices').trigger('click')
     await flushPromises()
     expect(mocks.save).toHaveBeenCalledWith([
-      expect.objectContaining({ model_name: 'model-a', reset: true }),
+      { model_name: 'model-a', expected_version: 'v1', pricing: {} },
     ])
     expect(button(wrapper, 'Reload pricing').element.matches(':disabled')).toBe(
       true
@@ -265,7 +266,7 @@ describe('pricing workspace draft lifecycle', () => {
     await saves()[0]!.trigger('click')
     await flushPromises()
     expect(mocks.save).toHaveBeenCalledWith([
-      expect.objectContaining({ model_name: 'model-a', reset: true }),
+      { model_name: 'model-a', expected_version: 'v1', pricing: {} },
     ])
 
     await wrapper
@@ -621,6 +622,16 @@ describe('pricing workspace draft lifecycle', () => {
     wrapper.getComponent(FilterSelect).vm.$emit('update:modelValue', '')
     await flushPromises()
     expect(names()).toEqual(['model-c'])
+    wrapper.unmount()
+  })
+
+  // English renders both keys as "All"; Chinese tells the filter's "全部"
+  // apart from the condition tree's "全部满足".
+  it('labels the unfiltered billing mode as every mode, not a condition group', async () => {
+    const wrapper = await setup(false, true, '/models/pricing', 'zh-CN')
+    const trigger = wrapper.get('[role="combobox"][aria-label="模式"]')
+    expect(trigger.findAll('span').map((item) => item.text())).toContain('全部')
+    expect(trigger.text()).not.toContain('全部满足')
     wrapper.unmount()
   })
 

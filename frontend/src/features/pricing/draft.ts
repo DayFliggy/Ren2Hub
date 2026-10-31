@@ -88,7 +88,6 @@ export function pricingChanges(
           model_name,
           expected_version: previous?.version ?? config.empty_version,
           pricing: clonePricing(pricing),
-          ...(!Object.keys(pricing).length ? { reset: true } : {}),
         },
       ]
     }

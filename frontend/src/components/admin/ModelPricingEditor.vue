@@ -501,7 +501,7 @@ defineExpose({ commit, dirty })
         >
       </div>
       <template v-if="!plugin && mode === 'per-token'">
-        <p class="admin-muted">{{ t('noDefault') }}</p>
+        <p class="admin-muted">{{ t('laneFallback') }}</p>
         <label class="admin-field"
           ><span>{{ t('input') }} · {{ currency }} {{ t('perMillion') }}</span
           ><PricingAmountInput

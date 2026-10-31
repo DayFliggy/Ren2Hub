@@ -207,21 +207,15 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 	var modelRatio float64
 
 	if !success {
-		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
-		if ok {
-			modelPrice = defaultPrice
-			usePrice = true
-		} else {
-			var ratioSuccess bool
-			var matchName string
-			modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
-			acceptUnsetRatio := false
-			if info.UserSetting.AcceptUnsetRatioModel {
-				acceptUnsetRatio = true
-			}
-			if !ratioSuccess && !acceptUnsetRatio {
-				return hosttypes.PriceData{}, modelPriceNotConfiguredError(c, matchName, info.UserId)
-			}
+		var ratioSuccess bool
+		var matchName string
+		modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
+		acceptUnsetRatio := false
+		if info.UserSetting.AcceptUnsetRatioModel {
+			acceptUnsetRatio = true
+		}
+		if !ratioSuccess && !acceptUnsetRatio {
+			return hosttypes.PriceData{}, modelPriceNotConfiguredError(c, matchName, info.UserId)
 		}
 	}
 

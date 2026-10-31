@@ -111,7 +111,9 @@ function save() {
     <div class="tool-header">
       <div>
         <p class="tool-title">{{ t('toolHint') }}</p>
-        <p class="text-xs text-[var(--text-tertiary)]">{{ t('noDefault') }}</p>
+        <p class="text-xs text-[var(--text-tertiary)]">
+          {{ t('toolBuiltinPrice') }}
+        </p>
       </div>
       <div class="tool-actions">
         <ConsoleButton variant="secondary" size="sm" @click="toggle">

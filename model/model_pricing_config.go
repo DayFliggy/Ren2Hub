@@ -29,7 +29,6 @@ type ModelPricingChange struct {
 	ModelName       string        `json:"model_name"`
 	ExpectedVersion string        `json:"expected_version"`
 	Pricing         PricingValues `json:"pricing"`
-	Reset           bool          `json:"reset,omitempty"`
 }
 
 type ModelPricingEntry struct {
@@ -80,15 +79,12 @@ func ModelPricingVersion(values PricingValues) string {
 	return fmt.Sprintf("%x", sha256.Sum256(encoded))
 }
 
-func defaultPricingMaps() map[string]map[string]any {
+// There are no built-in prices: an option row that does not exist yet is an
+// empty map, and a model is priced only by what an administrator saved.
+func emptyPricingMaps() map[string]map[string]any {
 	result := make(map[string]map[string]any, len(modelPricingOptionKeys))
 	for _, key := range modelPricingOptionKeys {
 		result[key] = make(map[string]any)
-	}
-	for key, values := range ratio_setting.GetDefaultPricingMaps() {
-		for name, value := range values {
-			result[key][name] = value
-		}
 	}
 	return result
 }
@@ -98,7 +94,7 @@ func readModelPricingMaps(db *gorm.DB) (map[string]map[string]any, map[string]bo
 	if err := db.Where(map[string]any{"key": modelPricingOptionKeys}).Find(&rows).Error; err != nil {
 		return nil, nil, nil, err
 	}
-	values := defaultPricingMaps()
+	values := emptyPricingMaps()
 	existing := make(map[string]bool)
 	counts := make(map[string]int)
 	for _, row := range rows {
@@ -177,21 +173,7 @@ func effectiveModelPricing(values map[string]map[string]any, name string) Pricin
 			result[key] = value
 		}
 	}
-	mode, _ := result["billing_setting.billing_mode"].(string)
-	if mode == "" {
-		_, hasPrice := result["ModelPrice"]
-		_, hasRatio := result["ModelRatio"]
-		if _, builtin := billing_setting.GetBuiltinBillingExpr(name); builtin && !hasPrice && !hasRatio {
-			mode = "tiered_expr"
-		}
-	}
-	if mode == "tiered_expr" {
-		result["billing_setting.billing_mode"] = mode
-		if _, exists := result["billing_setting.billing_expr"]; !exists {
-			if expression, ok := billing_setting.GetBuiltinBillingExpr(name); ok {
-				result["billing_setting.billing_expr"] = expression
-			}
-		}
+	if result["billing_setting.billing_mode"] == "tiered_expr" {
 		return result
 	}
 	if _, exists := result["ModelPrice"]; exists {
@@ -200,14 +182,8 @@ func effectiveModelPricing(values map[string]map[string]any, name string) Pricin
 	if _, exists := result["ModelRatio"]; !exists && operation_setting.SelfUseModeEnabled {
 		result["ModelRatio"] = float64(37.5)
 	}
-	// Completion ratios include engine-enforced model defaults. Expose their
-	// effective value without persisting them into the editable configuration.
-	var configuredCompletion *float64
-	if ratio, exists := result["CompletionRatio"].(float64); exists {
-		configuredCompletion = &ratio
-	}
-	result["CompletionRatio"] = ratio_setting.ResolveCompletionRatio(name, configuredCompletion).Ratio
 	for key, fallback := range map[string]float64{
+		"CompletionRatio":  ratio_setting.DefaultCompletionRatio,
 		"CacheRatio":       ratio_setting.DefaultCacheRatio,
 		"CreateCacheRatio": ratio_setting.DefaultCreateCacheRatio,
 		"ImageRatio":       ratio_setting.DefaultImageRatio,
@@ -254,9 +230,6 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 				}
 				nameSet[name] = true
 			}
-		}
-		for name := range billing_setting.GetBuiltinBillingExprCopy() {
-			nameSet[name] = true
 		}
 		for name := range nameSet {
 			names = append(names, name)
@@ -319,20 +292,6 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 			}
 		}
 		result.Entries = append(result.Entries, entry)
-	}
-	// Preserve the existing settings editor's full-map interface. Built-in
-	// expressions are display defaults only; per-model writes do not persist them.
-	for name, expression := range billing_setting.GetBuiltinBillingExprCopy() {
-		effective := effectiveModelPricing(values, name)
-		if effective["billing_setting.billing_mode"] != "tiered_expr" {
-			continue
-		}
-		if _, ok := values["billing_setting.billing_mode"][name]; !ok {
-			values["billing_setting.billing_mode"][name] = "tiered_expr"
-		}
-		if _, ok := values["billing_setting.billing_expr"][name]; !ok {
-			values["billing_setting.billing_expr"][name] = expression
-		}
 	}
 	for key, entries := range values {
 		encoded, err := common.Marshal(entries)
@@ -463,9 +422,7 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 	}
 	if values["billing_setting.billing_mode"] == "tiered_expr" {
 		if _, exists := values["billing_setting.billing_expr"]; !exists {
-			if _, builtin := billing_setting.GetBuiltinBillingExpr(name); !builtin {
-				return errors.New("billing expression is required")
-			}
+			return errors.New("billing expression is required")
 		}
 	}
 	return nil
@@ -486,20 +443,16 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 		}
 	}
 	return mutateModelPricingOptions(func(_ *gorm.DB, values map[string]map[string]any) error {
-		defaults := defaultPricingMaps()
 		for _, change := range changes {
 			previous := modelPricingValues(values, change.ModelName)
 			if ModelPricingVersion(previous) != change.ExpectedVersion {
 				return fmt.Errorf("%w: %s", ErrModelPricingConflict, change.ModelName)
 			}
-			pricing := change.Pricing
-			if change.Reset {
-				pricing = modelPricingValues(defaults, change.ModelName)
-			}
-			if err := validateModelPricing(change.ModelName, pricing, previous); err != nil {
+			// An empty pricing removes every saved value; nothing is restored.
+			if err := validateModelPricing(change.ModelName, change.Pricing, previous); err != nil {
 				return err
 			}
-			replaceModelPricing(values, change.ModelName, pricing)
+			replaceModelPricing(values, change.ModelName, change.Pricing)
 		}
 		return nil
 	})
@@ -557,16 +510,11 @@ func mutateModelPricingOptions(mutate func(*gorm.DB, map[string]map[string]any) 
 		if len(duplicated) > 0 {
 			common.SysError(common.LogText("options table has duplicate pricing keys [%s]; the table is missing a primary key", strings.Join(duplicated, ", ")))
 		}
-		defaults := defaultPricingMaps()
 		for _, key := range modelPricingOptionKeys {
 			if existing[key] {
 				continue
 			}
-			encoded, err := common.Marshal(defaults[key])
-			if err != nil {
-				return err
-			}
-			row := Option{Key: key, Value: string(encoded)}
+			row := Option{Key: key, Value: "{}"}
 			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
 				return err
 			}

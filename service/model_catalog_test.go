@@ -67,6 +67,9 @@ func TestModelCatalogSpecializedPricesKeepBillingIdentityAndScaleOnce(t *testing
 		"channel_ratio": "1.25",
 		"model_mapping": `{"gemini-2.5-flash":"provider-audio","claude-sonnet-4-20250514":"provider-cache"}`,
 	}).Error)
+	require.NoError(t, db.Create(&model.Option{Key: "ModelRatio", Value: `{"gemini-2.5-flash":0.5,"claude-sonnet-4-20250514":1.5}`}).Error)
+	require.NoError(t, db.Create(&model.Option{Key: "AudioRatio", Value: `{"gemini-2.5-flash":1}`}).Error)
+	require.NoError(t, db.Create(&model.Option{Key: "CreateCacheRatio", Value: `{"claude-sonnet-4-20250514":1.25}`}).Error)
 	model.InvalidatePricingCache()
 	t.Cleanup(model.InvalidatePricingCache)
 	view, err := BuildModelCatalog(context.Background(), 17, 7)

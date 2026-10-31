@@ -153,15 +153,17 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 				expression, reason string
 			}{
 				{"conversion-defaults", model.PricingValues{"ModelRatio": float64(2)}, `tier("base", p * 4 + c * 4)`, ""},
-				{"gpt-4-32k", model.PricingValues{"ModelRatio": 30.0, "CacheRatio": 1.0}, `tier("base", p * 60 + c * 120)`, ""},
+				// No built-in completion rules: an unset output ratio is 1, and a saved
+				// one is used even for models that NewAPI locks.
+				{"gpt-4-32k", model.PricingValues{"ModelRatio": 30.0, "CacheRatio": 1.0}, `tier("base", p * 60 + c * 60)`, ""},
 				{"conversion-free-cache", model.PricingValues{"ModelRatio": 0.0, "CacheRatio": 0.0}, `tier("base", p * 0 + c * 0 + cr * 0)`, ""},
-				{"claude-3-7-sonnet-20250219", model.PricingValues{"ModelRatio": float64(1.5), "CacheRatio": float64(0.1), "CreateCacheRatio": float64(1.25)}, `tier("base", p * 3 + c * 15 + cr * 0.3 + cc * 3.75 + cc1h * 6)`, ""},
+				{"claude-3-7-sonnet-20250219", model.PricingValues{"ModelRatio": float64(1.5), "CacheRatio": float64(0.1), "CreateCacheRatio": float64(1.25)}, `tier("base", p * 3 + c * 3 + cr * 0.3 + cc * 3.75 + cc1h * 6)`, ""},
 				{"conversion-image-default", model.PricingValues{"ModelRatio": float64(2), "ImageRatio": float64(1)}, `tier("base", p * 4 + c * 4)`, ""},
 				{"conversion-image-free", model.PricingValues{"ModelRatio": float64(2), "ImageRatio": float64(0)}, `tier("base", p * 4 + c * 4 + cr * 4 + img * 0)`, ""},
 				{"deepseek-chat", model.PricingValues{"ModelRatio": float64(0.135), "CacheRatio": float64(0.25)}, `tier("base", p * 0.27 + c * 0.27 + cr * 0.0675)`, ""},
-				{"gpt-4o-custom", model.PricingValues{"ModelRatio": float64(2)}, `tier("base", p * 4 + c * 16)`, ""},
-				{"gemini-2.5-pro-custom", model.PricingValues{"ModelRatio": float64(2)}, `tier("base", p * 4 + c * 32)`, ""},
-				{"vendor/claude-sonnet-4", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(0)}, `tier("base", p * 4 + c * 0 + cr * 4 + cc * 5 + cc1h * 8)`, ""},
+				{"gpt-4o-custom", model.PricingValues{"ModelRatio": float64(2)}, `tier("base", p * 4 + c * 4)`, ""},
+				{"gemini-2.5-pro-custom", model.PricingValues{"ModelRatio": float64(2)}, `tier("base", p * 4 + c * 4)`, ""},
+				{"vendor/claude-sonnet-4", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(0)}, `tier("base", p * 4 + c * 0 + cr * 4 + cc * 4 + cc1h * 6.4)`, ""},
 				{"conversion-custom", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(3), "CacheRatio": float64(0), "CreateCacheRatio": float64(1.5), "ImageRatio": float64(2)}, `tier("base", p * 4 + c * 12 + cr * 0 + cc * 6 + img * 8)`, ""},
 				{"deepseek-reasoner", model.PricingValues{"ModelRatio": 0.275, "CacheRatio": 0.25}, `tier("base", p * 0.55 + c * 0.55 + cr * 0.1375)`, ""},
 				{"gpt-5.6-sol", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(2)}, `tier("base", p * 4 + c * 8)`, ""},
@@ -169,7 +171,7 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 				{"gpt-6-astra", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(2)}, `tier("base", p * 4 + c * 8)`, ""},
 				{"conversion-free", model.PricingValues{"ModelPrice": float64(0)}, `tier("request", fixed(0))`, ""},
 				{"conversion-fixed", model.PricingValues{"ModelPrice": float64(0.25), "ModelRatio": float64(7)}, `tier("request", fixed(0.25))`, ""},
-				{"gpt-4o-2024-05-13", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(99)}, `tier("base", p * 4 + c * 12)`, ""},
+				{"gpt-4o-2024-05-13", model.PricingValues{"ModelRatio": float64(2), "CompletionRatio": float64(99)}, `tier("base", p * 4 + c * 396)`, ""},
 				{"gpt-image-2", model.PricingValues{"ModelPrice": float64(1)}, `tier("image", fixed(1)) * image_count`, ""},
 				// Bailian image models are served by the alibaba task plugin, so their pricing is a task usage expression.
 				{"qwen-image-3.0-pro", model.PricingValues{"ModelPrice": float64(1)}, "", "Task pricing must be converted manually using the task usage schema."},
@@ -201,13 +203,13 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 							cost, _, err := billingexpr.RunExpr(response.Data.Expression, tokens)
 							require.NoError(t, err)
 							assert.Equal(t, float64(750), tokens.P)
-							assert.Equal(t, 3997.5, cost, "image input must remain billed exactly once")
+							assert.Equal(t, 2797.5, cost, "image input must remain billed exactly once")
 						}
 						usage := dto.Usage{PromptTokens: 750, CompletionTokens: 100, UsageSemantic: "anthropic", ClaudeCacheCreation5mTokens: 30, ClaudeCacheCreation1hTokens: 20, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 200, CachedCreationTokens: 50}}
 						tokens := service.BuildTieredTokenParams(&usage, true, billingexpr.UsedVars(response.Data.Expression))
 						cost, _, err := billingexpr.RunExpr(response.Data.Expression, tokens)
 						require.NoError(t, err)
-						assert.Equal(t, 4042.5, cost, "mixed TTLs preserve both legacy cache-write prices")
+						assert.Equal(t, 2842.5, cost, "mixed TTLs preserve both legacy cache-write prices")
 					}
 					if tc.name == "deepseek-chat" {
 						for _, usage := range []dto.Usage{
@@ -359,9 +361,6 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 					Relay(ctx, types.RelayFormatOpenAIImage)
 					assert.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
 				}
-				conflicting, err := model.PreviewModelPricingConversion("gemini-2.5-flash-conflict", model.PricingValues{"ModelRatio": 0.15, "AudioRatio": 10.0})
-				require.NoError(t, err)
-				assert.Contains(t, conflicting.UnsupportedReason, "Gemini and OpenAI audio prices differ")
 				aliName := "z-image-media-conversion"
 				require.NoError(t, (&model.Channel{Name: aliName, Models: aliName, Type: 17, Status: common.ChannelStatusEnabled}).Insert())
 				aliConversion, err := model.PreviewModelPricingConversion(aliName, model.PricingValues{"ModelPrice": 0.04})
@@ -381,13 +380,10 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 					usage   dto.Usage
 					want    float64
 				}{
-					{"gemini-2.5-flash", model.PricingValues{"ModelRatio": 0.15, "CompletionRatio": 2.0, "CacheRatio": 0.1}, dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 100, AudioTokens: 200}}, 473},
-					{"gemini-2.5-flash-zero", model.PricingValues{"ModelRatio": 0.0}, dto.Usage{PromptTokens: 1000, PromptTokensDetails: dto.InputTokenDetails{AudioTokens: 200}}, 200},
 					{"media-audio", model.PricingValues{"ModelRatio": 1.0, "CompletionRatio": 3.0, "AudioRatio": 2.0, "AudioCompletionRatio": 4.0}, dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{TextTokens: 800, AudioTokens: 200}, CompletionTokenDetails: dto.OutputTokenDetails{TextTokens: 50, AudioTokens: 50}}, 3500},
 					{"media-free-audio", model.PricingValues{"ModelRatio": 1.0, "AudioRatio": 0.0}, dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{AudioTokens: 200}, CompletionTokenDetails: dto.OutputTokenDetails{AudioTokens: 100}}, 1600},
 					{"media-audio-cache", model.PricingValues{"ModelRatio": 1.0, "CompletionRatio": 3.0, "AudioRatio": 2.0, "CacheRatio": 0.1}, dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 400, AudioTokens: 200}, CompletionTokenDetails: dto.OutputTokenDetails{AudioTokens: 50}}, 2900},
 					{"media-text-cache", model.PricingValues{"ModelRatio": 1.0, "CompletionRatio": 3.0, "AudioRatio": 2.0, "CacheRatio": 0.1}, dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 400}}, 1880},
-					{"gemini-2.5-flash-overlap", model.PricingValues{"ModelRatio": 1.0}, dto.Usage{PromptTokens: 1000, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 800, AudioTokens: 500}}, 2100},
 				} {
 					t.Run(tc.name, func(t *testing.T) {
 						converted, err := model.PreviewModelPricingConversion(tc.name, tc.pricing)
@@ -741,7 +737,7 @@ export function parseTaskResult() { return {}; }
 				t.Cleanup(func() {
 					snapshot, err := model.GetModelPricingSnapshot([]string{"listing-new"})
 					require.NoError(t, err)
-					require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: "listing-new", ExpectedVersion: snapshot.Entries[0].Version, Reset: true}}))
+					require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: "listing-new", ExpectedVersion: snapshot.Entries[0].Version, Pricing: model.PricingValues{}}}))
 				})
 				require.NoError(t, db.Model(&model.Model{}).Where("model_name = ?", "listing-new").Count(&count).Error)
 				assert.Zero(t, count)
@@ -847,7 +843,7 @@ export function parseTaskResult() { return {}; }
 				assert.Equal(t, 1, successes)
 				assert.Equal(t, 1, conflicts)
 			})
-			t.Run("task_usage_and_builtin_reset", func(t *testing.T) {
+			t.Run("task_usage_and_clear_without_defaults", func(t *testing.T) {
 				snapshot, err := model.GetModelPricingSnapshot([]string{"matrix-task"})
 				require.NoError(t, err)
 				assert.Contains(t, snapshot.Entries[0].UsageSchema, "seconds")
@@ -861,9 +857,9 @@ export function parseTaskResult() { return {}; }
 				change.Pricing["billing_setting.billing_expr"] = `tier("base", u("undeclared") * 1)`
 				assert.Error(t, model.UpdateModelPricing([]model.ModelPricingChange{change}))
 				{
+					// Clearing a saved price leaves the model unpriced: no built-in
+					// ratio, price or expression comes back.
 					const name = "gpt-6-astra"
-					builtin, exists := billing_setting.GetBuiltinBillingExpr(name)
-					require.True(t, exists)
 					before, err := model.GetModelPricingSnapshot([]string{name})
 					require.NoError(t, err)
 					require.Empty(t, before.Entries[0].Configured)
@@ -872,12 +868,14 @@ export function parseTaskResult() { return {}; }
 					custom, err := model.GetModelPricingSnapshot([]string{name})
 					require.NoError(t, err)
 					assert.Equal(t, float64(0), custom.Entries[0].Effective["ModelPrice"])
-					change.ExpectedVersion, change.Pricing, change.Reset = custom.Entries[0].Version, nil, true
+					change.ExpectedVersion, change.Pricing = custom.Entries[0].Version, model.PricingValues{}
 					require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{change}))
-					reset, err := model.GetModelPricingSnapshot([]string{name})
+					cleared, err := model.GetModelPricingSnapshot([]string{name})
 					require.NoError(t, err)
-					assert.Empty(t, reset.Entries[0].Configured)
-					assert.Equal(t, builtin, reset.Entries[0].Effective["billing_setting.billing_expr"])
+					assert.Empty(t, cleared.Entries[0].Configured)
+					for _, key := range []string{"ModelPrice", "ModelRatio", "billing_setting.billing_mode", "billing_setting.billing_expr"} {
+						assert.NotContains(t, cleared.Entries[0].Effective, key)
+					}
 				}
 			})
 			t.Run("concurrent_import_creates_one_record", func(t *testing.T) {
@@ -944,7 +942,7 @@ export function parseTaskResult() { return {}; }
 				assert.Equal(t, float64(0), prices.Entries[0].Configured["ModelPrice"])
 				assert.Empty(t, prices.Entries[1].Configured)
 				require.NoError(t, reloaded.Delete())
-				require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: "matrix-hidden-unpriced", ExpectedVersion: prices.Entries[0].Version, Reset: true}}))
+				require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: "matrix-hidden-unpriced", ExpectedVersion: prices.Entries[0].Version, Pricing: model.PricingValues{}}}))
 				prices, err = model.GetModelPricingSnapshot([]string{"matrix-hidden-unpriced"})
 				require.NoError(t, err)
 				assert.Empty(t, prices.Entries[0].Configured)
@@ -1667,7 +1665,7 @@ export function parseTaskResult(){return {};}
 			assert.Empty(t, final.Entries[0].PluginVariants)
 			assert.Equal(t, base, final.Entries[0].Configured["billing_setting.billing_expr"])
 			// A complete reset removes all provider keys, including models containing ::.
-			require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: final.Entries[0].Version, Reset: true}}))
+			require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: final.Entries[0].Version, Pricing: model.PricingValues{}}}))
 			final, err = model.GetModelPricingSnapshot([]string{name})
 			require.NoError(t, err)
 			assert.Empty(t, final.Entries[0].Configured)

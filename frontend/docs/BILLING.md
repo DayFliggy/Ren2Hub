@@ -69,9 +69,9 @@ Waffo Pancake 设置的“创建店铺和商品”失败时，原生响应在 `d
 
 Root 在 `/models/pricing` 维护价格，旧 `/system-settings/billing/model-pricing` 书签重定向到该页面。保留模型列表与编辑器、手机抽屉、可视化及 JSON 编辑、按 Token/按次/表达式、缓存/图像/音频价格、阶梯与请求条件、任务 usage schema 与插件变体。元数据和价格分别保存。
 
-`GET /api/option/model_pricing` 返回 `entries`、`options`、`empty_version`；`PATCH` 同一路径提交 `changes`，每项含 `model_name`、`expected_version`、`pricing` 与可选 `reset`。这里的版本用于价格配置并发编辑，不是钱包版本；保存冲突保留草稿。十一项配置包括模型价格及辅助倍率、`billing_setting.billing_mode`、`billing_setting.billing_expr`、`billing_setting.plugin_billing_expr`。
+`GET /api/option/model_pricing` 返回 `entries`、`options`、`empty_version`；`PATCH` 同一路径提交 `changes`，每项含 `model_name`、`expected_version` 与 `pricing`；删除或清空某个模型时提交 `pricing: {}`。这里的版本用于价格配置并发编辑，不是钱包版本；保存冲突保留草稿。十一项配置包括模型价格及辅助倍率、`billing_setting.billing_mode`、`billing_setting.billing_expr`、`billing_setting.plugin_billing_expr`。
 
-模型基础价、缺项继承、默认值和舍入沿现行 NewAPI 核心。缺项、默认值、显式零价及不可用分别表达；重置恢复原生默认，不能将空安装描述为所有模型均无价格。工具价格通过通用 option `tool_price_setting.prices` 保存，保留上游内置单价及匹配规则，不能将缺项等同显式免费，或宣称工具初始无默认价。
+模型价格只来自管理员保存的配置，代码不内置模型或表达式价格；新安装的模型价格列表为空。保存空配置后模型回到未定价，请求被拒绝，页面确认框须说明这一后果，不提“恢复默认”。缺项、显式零价及不可用分别表达；未配置的输出、缓存、图像、音频倍率按 1 倍输入价。工具价格通过通用 option `tool_price_setting.prices` 保存，沿用上游内置单价和匹配规则；保存的值覆盖内置价，内置清单以外的工具未配置时不收费。完整规则见[定价合同](../../docs/billing/PRICING.md)。
 
 `POST /api/option/model_pricing/convert` 生成待确认的表达式草稿；`POST /api/option/model_pricing/preview` 解释草稿有效价格。二者不扣费、不保存，正常保存才使价格生效。表达式保留原生语义和文本，不添加历史版本前缀；当前没有价格 `/simulate` 接口。
 
