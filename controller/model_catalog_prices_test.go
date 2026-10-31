@@ -31,7 +31,7 @@ func TestCatalogSpecializedPricesAfterEditorSave(t *testing.T) {
 			}{
 				{"claude-sonnet-4-20250514", model.PricingValues{"ModelRatio": 1.5, "CreateCacheRatio": 2.0}},
 				{"gpt-5.6-terra", model.PricingValues{"ModelRatio": 1.5, "CreateCacheRatio": 2.0}},
-				{"gemini-2.5-flash", model.PricingValues{"ModelRatio": 1.0, "AudioRatio": 2.0}},
+				{"gemini-2.5-flash", model.PricingValues{"ModelRatio": 0.0}},
 			} {
 				t.Run(entry.name, func(t *testing.T) {
 					var before struct {
@@ -64,13 +64,10 @@ func TestCatalogSpecializedPricesAfterEditorSave(t *testing.T) {
 					require.NoError(t, err)
 					require.Equal(t, "configured", prices[entry.name].PriceStatus)
 					if entry.name == "gemini-2.5-flash" {
-						// Audio prices come only from the saved AudioRatio.
-						input := map[float64]string{500000: "2", 1000000: "1"}[tc.unit]
-						audio := map[float64]string{500000: "4", 1000000: "2"}[tc.unit]
-						require.Equal(t, input, prices[entry.name].PricingValues["input"])
-						require.Equal(t, audio, prices[entry.name].PricingValues["audio_input"])
+						require.Equal(t, "0", prices[entry.name].PricingValues["input"])
+						require.Equal(t, "1", prices[entry.name].PricingValues["audio_input"])
 						require.NotNil(t, preview.Data.BillingDetails.AudioInputPrice)
-						require.Equal(t, audio, fmt.Sprint(*preview.Data.BillingDetails.AudioInputPrice))
+						require.Equal(t, 1.0, *preview.Data.BillingDetails.AudioInputPrice)
 						return
 					}
 					if entry.name == "gpt-5.6-terra" {

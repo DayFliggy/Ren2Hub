@@ -79,12 +79,15 @@ func ModelPricingVersion(values PricingValues) string {
 	return fmt.Sprintf("%x", sha256.Sum256(encoded))
 }
 
-// There are no built-in prices: an option row that does not exist yet is an
-// empty map, and a model is priced only by what an administrator saved.
-func emptyPricingMaps() map[string]map[string]any {
+func defaultPricingMaps() map[string]map[string]any {
 	result := make(map[string]map[string]any, len(modelPricingOptionKeys))
 	for _, key := range modelPricingOptionKeys {
 		result[key] = make(map[string]any)
+	}
+	for key, values := range ratio_setting.GetDefaultPricingMaps() {
+		for name, value := range values {
+			result[key][name] = value
+		}
 	}
 	return result
 }
@@ -94,7 +97,7 @@ func readModelPricingMaps(db *gorm.DB) (map[string]map[string]any, map[string]bo
 	if err := db.Where(map[string]any{"key": modelPricingOptionKeys}).Find(&rows).Error; err != nil {
 		return nil, nil, nil, err
 	}
-	values := emptyPricingMaps()
+	values := defaultPricingMaps()
 	existing := make(map[string]bool)
 	counts := make(map[string]int)
 	for _, row := range rows {
@@ -510,11 +513,16 @@ func mutateModelPricingOptions(mutate func(*gorm.DB, map[string]map[string]any) 
 		if len(duplicated) > 0 {
 			common.SysError(common.LogText("options table has duplicate pricing keys [%s]; the table is missing a primary key", strings.Join(duplicated, ", ")))
 		}
+		defaults := defaultPricingMaps()
 		for _, key := range modelPricingOptionKeys {
 			if existing[key] {
 				continue
 			}
-			row := Option{Key: key, Value: "{}"}
+			encoded, err := common.Marshal(defaults[key])
+			if err != nil {
+				return err
+			}
+			row := Option{Key: key, Value: string(encoded)}
 			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
 				return err
 			}

@@ -18,13 +18,15 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 按用户要求删除内置模型价格：模型倍率、按次价、补全、缓存、缓存写入、图像、音频的默认表，DeepSeek 峰谷、`gpt-6-astra`、`gpt-image-2` 等内置计费表达式。工具调用的内置单价按用户要求保留上游原文，数值照搬，智谱、阿里搜索档位的人民币标价同样不换算。模型价格只来自管理员保存的十一项配置，删除或清空某个模型即变为未定价，请求被拒绝。`POST /api/option/rest_model_ratio` 与 `CompletionRatioMeta` 选项随之删除。前端同时修正：清空确认文案说明保存后模型变为未定价；公开倍率提示改为实际路由 `/api/ratio_config`；模式筛选的"全部"不再复用条件树的"全部满足"。
 
-计费行为变化：未配置的补全倍率为 1，管理员保存的 `CompletionRatio` 总是生效，旧的模型锁定规则删除；未配置的缓存写入倍率由 1.25 改为 1；原生 Gemini 接口的音频输入不再按内置音频单价单独计费，留在输入 Token 中按模型倍率计费，也不读 `AudioRatio`（上游对无内置音频价的 Gemini 模型同样如此）；OpenRouter Claude 不再由 `usage.Cost` 反推缓存写入 Token。保留自用模式和 `AcceptUnsetRatioModel` 的 37.5 兜底、Claude 1h 与 OpenAI 12h 缓存写入的固定乘数、DALL-E 尺寸规则。完整规则见 `docs/billing/PRICING.md`。
+计费行为变化：未配置的补全倍率为 1，管理员保存的 `CompletionRatio` 总是生效，旧的模型锁定规则删除；未配置的缓存写入倍率由 1.25 改为 1；音频计费见本节末尾，合并时已恢复为上游；OpenRouter Claude 不再由 `usage.Cost` 反推缓存写入 Token。保留自用模式和 `AcceptUnsetRatioModel` 的 37.5 兜底、Claude 1h 与 OpenAI 12h 缓存写入的固定乘数、DALL-E 尺寸规则。完整规则见 `docs/billing/PRICING.md`。
 
 原生文件：`setting/ratio_setting/model_ratio.go`、`cache_ratio.go`、`setting/billing_setting/tiered_billing.go`、`setting/operation_setting/tools.go`（只删除末尾 Gemini 音频固定价，工具单价与上游一致）由 `upstream_equal` 变为 `adapted`，`builtin_billing.go` 及其测试删除；`controller/option.go`、`controller/pricing.go`、`main.go`、`router/api-router.go`、`middleware/audit.go`、`middleware/access_token_routes.go`、`relay/helper/price.go`、`service/quota.go`、`service/text_quota.go`、`model/model_pricing_config.go`、`model/model_pricing_conversion.go` 原已 adapted，均新增原因 `no-builtin-prices`。
 
 同步成本：截至 `e449cc700`，近 6 个月（2026-04-28 起）上游提交数为 `model_ratio.go` 13、`relay/helper/price.go` 17、`service/text_quota.go` 23、`service/quota.go` 19、`model/model_pricing_config.go` 8、`tiered_billing.go` 7、`tools.go` 6、`cache_ratio.go` 5、`builtin_billing.go` 4。其中多数提交为新模型添加默认价格或新计费维度（GPT-5.6、Claude Opus 4.8、DeepSeek V4.1、Gemini 搜索计费、OpenAI 12h 缓存写入）。以后同步这些文件须逐提交手工合并：丢弃模型默认价格表与内置表达式的增删，只吸收计费维度和计算逻辑；`tools.go` 的工具单价照常吸收；不得整文件复制上游。
 
 来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 798 `upstream_equal`、277 `adapted`、238 `extension`、45 `removed`，`candidate_sha` 为空；参考仓库未 fetch，HEAD 仍为 `206e0fa5c`。
+
+合并到 main 时按用户要求恢复上游音频计费：`AudioRatio`、`AudioCompletionRatio` 的内置表及其 `InitRatioSettings`、首次写入 `defaultPricingMaps`，`tools.go` 末尾的 Gemini 音频输入固定价，`service/text_quota.go` 的原生 Gemini 音频单独计费与日志，`model/model_pricing_conversion.go`、`model/catalog_prices.go` 的 Gemini/OpenAI 音频冲突判断，均恢复为上游原文；`tools.go` 回到 `upstream_equal`。理由：OpenAI 兼容接口只在存在音频倍率时走音频结算，删除内置表后音频模型会按文本价少扣。OpenRouter Claude 反推缓存写入仍删除，它只对内置模型倍率生效。上述文件的音频部分以后照常吸收上游。恢复后来源清单重算为 799 `upstream_equal`、276 `adapted`、253 `extension`、45 `removed`（含用量折扣与系统状态的合并结果），`tools.go` 不再列为本地差异。
 
 ## 2026-10-30 用量折扣
 

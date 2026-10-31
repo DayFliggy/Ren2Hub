@@ -534,6 +534,31 @@ func TestCalculateTextQuotaSummaryUsesGeminiBillingUsageBeforeTopLevelUsage(t *t
 	require.Equal(t, 145, summary.Quota)
 }
 
+// Gemini audio input keeps NewAPI's fixed per-million price: the audio tokens
+// leave the text prompt and bill at $1/M even when the text price is zero.
+func TestCalculateTextQuotaSummaryBillsGeminiAudioInputAtFixedPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatGemini,
+		OriginModelName: "gemini-2.5-flash",
+		PriceData: hosttypes.PriceData{
+			ModelRatio:       0,
+			CompletionRatio:  1,
+			CacheRatio:       1,
+			ChannelRatioInfo: hosttypes.ChannelRatioInfo{ChannelRatio: 2},
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{PromptTokens: 1000, TotalTokens: 1000, PromptTokensDetails: dto.InputTokenDetails{AudioTokens: 200}}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.Equal(t, operation_setting.Gemini25FlashProductionInputAudioPrice, summary.AudioInputPrice)
+	// 200 tokens × $1/M × channel ratio 2 × 500000 quota per USD.
+	require.Equal(t, 200, summary.Quota)
+}
+
 func TestCalculateTextQuotaSummaryUsesOpenAIBillingUsageBeforeTopLevelUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

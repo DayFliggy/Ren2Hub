@@ -147,8 +147,21 @@ func TestCatalogPriceSpecializedOverridesAndExplicitZero(t *testing.T) {
 	require.Equal(t, "0", prices["audio-zero"].PricingValues["audio_output"])
 	require.Equal(t, "2", prices["audio-output-only"].PricingValues["audio_input"])
 	require.Equal(t, "6", prices["audio-output-only"].PricingValues["audio_output"])
-	require.Equal(t, "zero", prices["gemini-2.5-flash"].PriceStatus, "free text has no hidden built-in audio price")
-	require.NotContains(t, prices["gemini-2.5-flash"].PricingValues, "audio_input")
+	require.Equal(t, "0", prices["gemini-2.5-flash"].PricingValues["input"])
+	require.Equal(t, "1", prices["gemini-2.5-flash"].PricingValues["audio_input"])
+	require.NotEqual(t, "zero", prices["gemini-2.5-flash"].PriceStatus, "free text does not make dedicated audio free")
+}
+
+func TestCatalogPriceDoesNotChooseBetweenConflictingAudioProtocols(t *testing.T) {
+	db := setupCatalogPricingTest(t)
+	// No built-in model price exists, so save the text price the conflict needs.
+	require.NoError(t, db.Create(&Option{Key: "ModelRatio", Value: `{"gemini-2.5-flash":0.15}`}).Error)
+	require.NoError(t, db.Create(&Option{Key: "AudioRatio", Value: `{"gemini-2.5-flash":0}`}).Error)
+	prices, err := CatalogPrices(context.Background(), []string{"gemini-2.5-flash"})
+	require.NoError(t, err)
+	require.Equal(t, "unavailable", prices["gemini-2.5-flash"].PriceStatus)
+	require.Equal(t, "protocol_dependent_audio_price", prices["gemini-2.5-flash"].PriceReason)
+	require.Empty(t, prices["gemini-2.5-flash"].PricingValues, "explicit free compatible audio must not hide the native $1 audio path")
 }
 
 func TestCatalogPriceRejectsOverflowingAudioDisplayPrice(t *testing.T) {

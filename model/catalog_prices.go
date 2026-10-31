@@ -77,6 +77,13 @@ func catalogPrice(name string, values, configured PricingValues) CatalogPrice {
 			result.PriceReason = "invalid_audio_price"
 			return result
 		}
+		// A model shared by native Gemini and compatible audio protocols can
+		// have different audio prices. A single catalog price must not choose
+		// one settlement path and present it as unconditional.
+		if details.ConflictingAudioPrices {
+			result.PriceReason = "protocol_dependent_audio_price"
+			return result
+		}
 		result.PricingValues["input"] = input.String()
 		if completion, ok := number("CompletionRatio"); ok {
 			result.PricingValues["output"] = input.Mul(completion).String()

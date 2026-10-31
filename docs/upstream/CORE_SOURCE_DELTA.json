@@ -3,9 +3,9 @@
   "implementation_base_sha": "0837a03c77ea0d5b7618588d4c9e77781f656590",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 798,
-    "adapted": 277,
-    "extension": 252,
+    "upstream_equal": 799,
+    "adapted": 276,
+    "extension": 253,
     "removed": 45
   },
   "files": [
@@ -1112,7 +1112,7 @@
       "path": "controller/model_catalog_prices_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bf1bfea8a77f3352dc9718a073e0ca9eba6170099c834aace4f17db0241f2039"
+      "local_sha256": "6b1cb04a226e274bee9b16862262edba89710d7de24740975c71ea91a7405a78"
     },
     {
       "path": "controller/model_list_test.go",
@@ -1124,7 +1124,7 @@
       "path": "controller/model_management_test.go",
       "status": "adapted",
       "upstream_sha256": "f722866950eb9e9c39d97bf215014ef1715021dd235956c00e338bcfcc72a216",
-      "local_sha256": "8e9562f426befc204042d1f81745ac122ecf976e4bbc904813b166a6609c3ff6"
+      "local_sha256": "9a716d7849b5b3add594fabedbc5b8837ba1a72dedb869becd9a1401256f9c7c"
     },
     {
       "path": "controller/model_meta.go",
@@ -2107,7 +2107,7 @@
       "path": "main.go",
       "status": "adapted",
       "upstream_sha256": "0431a88661ddac970da9b51e95ea76ca741afb782901cbbd0eb56d8bba14febc",
-      "local_sha256": "23a2c35fb70dd88fc99db3f4250dc2959108fc663cfd6157cc594b094ffc919b",
+      "local_sha256": "0260f785ed5c1191cc7b3c1bb0365cfc2b1cf6866a76568f1285b409c2f224be",
       "reasons": [
         "branding",
         "no-builtin-prices",
@@ -2595,13 +2595,13 @@
       "path": "model/catalog_prices.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3002007c526a8f8fd0b526b78f6f8f1d964e9f220aa116175911071dadd1dab3"
+      "local_sha256": "8e004468f956b19d800b5e5f2e3a9c06a35e36a64df4117b5c82ec0587557755"
     },
     {
       "path": "model/catalog_prices_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bbf5099be507ae1e90c52f87e19b2cd321049d243483d27784ebc1d47f9509a7"
+      "local_sha256": "cc8e0d7cf6307125453e0d4515b0440981d7be10741694b23f75900191638ed9"
     },
     {
       "path": "model/channel.go",
@@ -3017,7 +3017,7 @@
       "path": "model/model_pricing_config.go",
       "status": "adapted",
       "upstream_sha256": "3264709d3b8a1d6616a42f6bfa3e3fb2eec44b5cd27a17103cc63b39ae56c12f",
-      "local_sha256": "88f3f52d21ffc8924e350026498005f07c204e58453347760e4ede3c7208e52d",
+      "local_sha256": "6d5e2c7cca203d3d8c39d3daa5c6557053d0ff5557c7e8cae778f946b04f49d2",
       "reasons": [
         "catalog-stats",
         "no-builtin-prices"
@@ -3027,7 +3027,7 @@
       "path": "model/model_pricing_conversion.go",
       "status": "adapted",
       "upstream_sha256": "b5102eec6ce949172a55ae9e9060d66c93e9674f89839460973d358e995a519f",
-      "local_sha256": "32722ef9419575b227e8f6508dd9a97d9863362193bd598cb0974aa04a96bec6",
+      "local_sha256": "6ffa12c4d4fdc87dd7b8db9628f97279df652ba60a4c6f42d424927e02b3bca9",
       "reasons": [
         "catalog-stats",
         "no-builtin-prices"
@@ -8221,7 +8221,7 @@
       "path": "service/text_quota.go",
       "status": "adapted",
       "upstream_sha256": "ba6a6d3f5d44867186c5cbede88cf6be1085324821a17111d369d6bdb3f84dc7",
-      "local_sha256": "b3cec9e88389d5ca722ecb6b2db7ab8ce34433ced5ef03f4c697185beb58a6b0",
+      "local_sha256": "4ec8e3134c4e1e74b288ae098cd501496a6f191df2f2d7dad51e230518248952",
       "reasons": [
         "channel-ratio",
         "group-removal",
@@ -8232,7 +8232,7 @@
       "path": "service/text_quota_test.go",
       "status": "adapted",
       "upstream_sha256": "849332308a0b71f4be5da52de394d87dd3cf47b589734e275fa2ee6f94050c31",
-      "local_sha256": "27e17ec4859dc09ad890b4eb137eeb169ee9984b7e3d3141ab923fe58f1c2c04"
+      "local_sha256": "b34d09e85844df09b367d81ff2906c4b54a173351f41fd9ebe2b2f643ec96e15"
     },
     {
       "path": "service/ticket_notification_failure_test.go",
@@ -8649,12 +8649,9 @@
     },
     {
       "path": "setting/operation_setting/tools.go",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "d8f40274c18adacc91dd317518315823082eaae6a5fec23136c4fe1ec964b6fd",
-      "local_sha256": "f4eb7bccedb1ba44181e8be3d4f7f97049bf4c12e3058a2d999a14942dde0e81",
-      "reasons": [
-        "no-builtin-prices"
-      ]
+      "local_sha256": "d8f40274c18adacc91dd317518315823082eaae6a5fec23136c4fe1ec964b6fd"
     },
     {
       "path": "setting/operation_setting/tools_price_test.go",
@@ -8718,6 +8715,12 @@
       ]
     },
     {
+      "path": "setting/ratio_setting/audio_ratio_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ad9774f1d4495024da00e26965e3829e1f5e142bc54868c2bf2bfe8e863c5df3"
+    },
+    {
       "path": "setting/ratio_setting/cache_ratio.go",
       "status": "adapted",
       "upstream_sha256": "8b81ca3fa0c33ba50392019db73694563af71e1306f8a1ba4c801f4fa61eeca6",
@@ -8754,7 +8757,7 @@
       "path": "setting/ratio_setting/model_ratio.go",
       "status": "adapted",
       "upstream_sha256": "45382d83e32a5c6fcbfa8090fd1a244b13e7e7a9b82884589876b5fea8f624fc",
-      "local_sha256": "aef02d2a73af16fcea6b82b23e30e9bf8ad72ca2aced0adff0c686f7c95794f3",
+      "local_sha256": "d87551fcb84660573d761056467d87d45c34974adc3106776ecdb5fb28d8136f",
       "reasons": [
         "no-builtin-prices"
       ]

@@ -1,6 +1,7 @@
 package ratio_setting
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -10,8 +11,47 @@ import (
 )
 
 // USD converts dollars to ratio units: ModelRatio 1 is $0.002 / 1K tokens,
-// so $1 = 500. Prices come only from administrator configuration.
+// so $1 = 500. Model prices come only from administrator configuration; the
+// audio ratios below are kept verbatim from NewAPI.
 const USD = 500
+
+var defaultAudioRatio = map[string]float64{
+	"gpt-4o-audio-preview":         16,
+	"gpt-4o-mini-audio-preview":    66.67,
+	"gpt-4o-realtime-preview":      8,
+	"gpt-4o-mini-realtime-preview": 16.67,
+	"gpt-4o-mini-tts":              25,
+}
+
+var defaultAudioCompletionRatio = map[string]float64{
+	"gpt-4o-realtime":      2,
+	"gpt-4o-mini-realtime": 2,
+	"gpt-4o-mini-tts":      1,
+	"tts-1":                0,
+	"tts-1-hd":             0,
+	"tts-1-1106":           0,
+	"tts-1-hd-1106":        0,
+}
+
+// InitRatioSettings initializes all model related settings maps
+func InitRatioSettings() {
+	audioRatioMap.AddAll(defaultAudioRatio)
+	audioCompletionRatioMap.AddAll(defaultAudioCompletionRatio)
+}
+
+// GetDefaultPricingMaps returns independent copies for first-write
+// initialization; callers cannot mutate the built-in defaults.
+func GetDefaultPricingMaps() map[string]map[string]float64 {
+	defaults := map[string]map[string]float64{
+		"AudioRatio": defaultAudioRatio, "AudioCompletionRatio": defaultAudioCompletionRatio,
+	}
+	result := make(map[string]map[string]float64, len(defaults))
+	for key, values := range defaults {
+		result[key] = make(map[string]float64, len(values))
+		maps.Copy(result[key], values)
+	}
+	return result
+}
 
 var modelPriceMap = types.NewRWMap[string, float64]()
 var modelRatioMap = types.NewRWMap[string, float64]()

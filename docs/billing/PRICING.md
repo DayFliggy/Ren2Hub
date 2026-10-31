@@ -1,12 +1,12 @@
 # 模型价格与渠道倍率
 
-模型价格只来自管理员保存的配置，代码不内置模型价格；工具调用沿用上游内置单价。用量规范化、舍入和表达式语义沿固定 NewAPI 核心；`setting/ratio_setting/` 保存模型及辅助倍率，`setting/billing_setting/`、`setting/task_pricing_setting/` 和 `pkg/billingexpr/` 提供表达式与原生任务定价。
+模型价格只来自管理员保存的配置，代码不内置模型价格；音频计费和工具调用沿用上游 NewAPI 的内置值。用量规范化、舍入和表达式语义沿固定 NewAPI 核心；`setting/ratio_setting/` 保存模型及辅助倍率，`setting/billing_setting/`、`setting/task_pricing_setting/` 和 `pkg/billingexpr/` 提供表达式与原生任务定价。
 
 本地删除了 NewAPI 的以下内置价格（与上游的差异见[同步账本](../upstream/SYNC_LEDGER.md)）：
 
-- 模型倍率、按次价、补全、缓存、缓存写入、图像、音频的默认表，以及 `POST /api/option/rest_model_ratio`。
+- 模型倍率、按次价、补全、缓存、缓存写入、图像的默认表，以及 `POST /api/option/rest_model_ratio`。
 - 内置计费表达式（DeepSeek 峰谷、gpt-6-astra、gpt-image-2 等）。
-- Gemini 音频输入固定价。
+- OpenRouter Claude 由 `usage.Cost` 反推缓存写入 Token 的规则（它只对内置模型倍率生效）。
 - 补全倍率的模型规则与锁定：管理员保存的 `CompletionRatio` 总是生效，旧 `CompletionRatioMeta` 选项不再返回。
 
 未配置的规则如下：
@@ -14,12 +14,13 @@
 | 项目                                           | 未配置时                                                                               |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
 | 模型（无 `ModelPrice`、`ModelRatio` 或表达式） | 拒绝请求（模型价格未配置）。用户开启“接受未定价模型”或站点处于自用模式时按倍率 37.5 计 |
-| 输出、缓存读、缓存写、图像、音频倍率           | 1，即与输入同价；1h/12h 缓存写入仍按固定倍数放大缓存写入价                             |
+| 输出、缓存读、缓存写、图像倍率                 | 1，即与输入同价；1h/12h 缓存写入仍按固定倍数放大缓存写入价                             |
+| 音频倍率                                       | 上游内置的 `AudioRatio`、`AudioCompletionRatio`；表里没有的模型为 1                    |
 | 工具调用                                       | 内置工具用上游内置单价，其他工具为 0                                                   |
 
-工具内置单价保留上游原文，见 `setting/operation_setting/tools.go` 的 `seedHardcodedToolPrices`，数值按美元计入 quota，智谱、阿里搜索档位的人民币标价也不换算。`tool_price_setting.prices` 保存的值覆盖内置价，0 表示免费；托管工具名只按协议项或厂商用量计数，同名客户端函数不计入。
+工具内置单价保留上游原文（`tools.go` 与上游一致），见 `setting/operation_setting/tools.go` 的 `seedHardcodedToolPrices`，数值按美元计入 quota，智谱、阿里搜索档位的人民币标价也不换算。`tool_price_setting.prices` 保存的值覆盖内置价，0 表示免费；托管工具名只按协议项或厂商用量计数，同名客户端函数不计入。
 
-原生 Gemini 接口按文本结算：音频输入 Token 计入输入 Token，按输入价计费，不读 `AudioRatio`。`AudioRatio`、`AudioCompletionRatio` 只作用于 OpenAI 兼容接口、Responses 和音频接口的音频结算，目录展示的音频价也按这条路径计算。
+音频与上游 NewAPI 一致。`AudioRatio`、`AudioCompletionRatio` 保留上游内置表（`gpt-4o-audio-preview`、`gpt-4o-realtime-preview`、`gpt-4o-mini-tts`、`tts-1` 等），首次保存定价时随其他键写入选项表，之后以选项表为准；OpenAI 兼容接口只在模型存在音频倍率时走音频结算。原生 Gemini 接口按文本结算，`operation_setting.GetGeminiInputAudioPricePerMillionTokens` 给出的模型（Gemini 2.5 Flash、2.0 Flash 等）按上游固定美元单价单独计音频输入，其他模型的音频输入计入输入 Token；同一模型的兼容音频价与原生固定价不一致时，目录不展示价格，转换预览拒绝转换。音频倍率只是附加维度，模型仍须配置基础价格才能调用。
 
 缺项与显式零不同。删除或清空某个模型并保存，等于提交 `pricing: {}`，该模型回到未定价，不恢复任何价格；`ModelPricingChange` 没有 `reset` 字段。
 
