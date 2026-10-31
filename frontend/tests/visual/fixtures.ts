@@ -444,6 +444,35 @@ export function contrastRatio(first: number, second: number): number {
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
 }
 
+function linearChannels(rgb: number[]): [number, number, number] {
+  return rgb.map((channel) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }) as [number, number, number]
+}
+
+export function relativeLuminance(rgb: number[]): number {
+  const [r, g, b] = linearChannels(rgb)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** OKLab distance ×100; about 2 is the smallest difference people notice. */
+export function oklabDistance(first: number[], second: number[]): number {
+  const oklab = (rgb: number[]) => {
+    const [r, g, b] = linearChannels(rgb)
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+    ]
+  }
+  const [a, b] = [oklab(first), oklab(second)]
+  return Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!) * 100
+}
+
 /** Lowest text contrast among the matched elements. */
 export async function minTextContrast(locator: Locator): Promise<number> {
   const measured = await measureLuminance(locator)

@@ -105,6 +105,15 @@
   --load-warning-text: #9d4c00;
   --load-danger: var(--status-danger);
   --load-danger-text: var(--status-danger-text);
+  /* 阈值关闭的读数不进色阶：冷石板灰在常视、绿色盲、红色盲下离五档图形色都
+     ΔE ≥9，数字用正文墨色。暖灰 --text-tertiary 离正常档只有 4.7，不能复用。 */
+  --load-unchecked: #5d5d6b;
+  --load-unchecked-text: var(--text-primary);
+  /* Root 资源趋势线（CPU / 内存 / 磁盘）取色阶以外的蓝、紫、玫瑰，离五档、
+     未判定灰和 --text-tertiary ΔE ≥10，免得折线读成某个档位；对卡片底 ≥3:1。 */
+  --trend-cpu: #224a8d;
+  --trend-memory: #7a6fb1;
+  --trend-disk: #77324b;
   --text-inverse: #f6f3eb;
   --border-default: rgba(56, 55, 43, 0.14);
   --border-subtle: rgba(56, 55, 43, 0.08);
@@ -413,6 +422,10 @@ html.dark {
   --load-warning-text: #fdb171;
   --load-danger: #ed6863;
   --load-danger-text: #fe9b93;
+  --load-unchecked: var(--text-tertiary);
+  --trend-cpu: #6692db;
+  --trend-memory: #cfa1f1;
+  --trend-disk: #bb7e90;
   --text-inverse: #262a34;
   --border-default: rgba(152, 164, 192, 0.13);
   --border-subtle: rgba(152, 164, 192, 0.07);

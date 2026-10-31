@@ -53,7 +53,9 @@ func observationResourceCheck(id string, resource ObservationResource) Observati
 	}
 	switch resource.State {
 	case "ok":
-		if resource.Percent != nil && int(*resource.Percent) > resource.Threshold {
+		// Compare the reading as shown: 90.6% is over a 90% threshold here, even
+		// though the overload guard's integer rule only rejects from 91%.
+		if resource.Percent != nil && *resource.Percent > float64(resource.Threshold) {
 			check.Status, check.Reason = "warning", "threshold_exceeded"
 		}
 	case "disabled", "stale":

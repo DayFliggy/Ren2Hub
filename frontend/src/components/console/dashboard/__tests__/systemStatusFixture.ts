@@ -49,5 +49,6 @@ export function systemStatusFixture(): SystemStatus {
       window_end: 1_798_540_000,
       checked_at: 1_798_540_000,
     },
+    storage_status: 'ok',
   }
 }

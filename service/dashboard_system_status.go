@@ -25,8 +25,16 @@ type DashboardSystemStatus struct {
 	Load        *DashboardLoad       `json:"load"`
 	Traffic     DashboardTraffic     `json:"traffic"`
 	SuccessRate DashboardSuccessRate `json:"success_rate"`
+	// StorageStatus is the worst database/Redis probe verdict: ok, critical,
+	// stale or unknown. It names the cause of a critical status that no tile
+	// shows; the Root-only "storage" object with probe names, reasons and
+	// latencies stays off this projection.
+	StorageStatus string `json:"storage_status"`
 }
 
+// DashboardResource.State is ok, warning or critical for a checked reading,
+// unchecked for a reading whose threshold check is off, or unknown, stale or
+// disabled (monitoring off) without a reading.
 type DashboardResource struct {
 	Available  bool     `json:"available"`
 	State      string   `json:"state"`
@@ -124,16 +132,58 @@ func newDashboardSystemStatus(observation PerformanceObservation, load *Dashboar
 	for _, point := range observation.Series.Points {
 		traffic.Points = append(traffic.Points, DashboardTrafficPoint{Ts: point.Ts, RequestMbps: point.RequestMbps, ResponseMbps: point.ResponseMbps})
 	}
+	checks := make(map[string]string, len(observation.Checks))
+	for _, check := range observation.Checks {
+		checks[check.ID] = check.Status
+	}
 	return DashboardSystemStatus{
 		Status: observation.Status, Stale: observation.Stale, SampledAt: observation.SampledAt,
-		CPU: dashboardResource(observation.Resources.CPU), Memory: dashboardResource(observation.Resources.Memory),
-		Disk: dashboardResource(observation.Resources.Disk), Load: load, Traffic: traffic, SuccessRate: rate,
+		CPU:    dashboardResource(observation.Resources.CPU, checks["cpu"]),
+		Memory: dashboardResource(observation.Resources.Memory, checks["memory"]),
+		Disk:   dashboardResource(observation.Resources.Disk, checks["disk"]),
+		Load:   load, Traffic: traffic, SuccessRate: rate, StorageStatus: dashboardStorageStatus(checks),
 	}
 }
 
-func dashboardResource(resource ObservationResource) DashboardResource {
+var dashboardStorageRank = map[string]int{"ok": 0, "unknown": 1, "stale": 2, "critical": 3}
+
+// dashboardStorageStatus reduces the database and Redis checks to their worst
+// verdict; a disabled Redis is not a dependency. Without a checked database, or
+// with a status it does not know, the verdict is unknown, never ok.
+func dashboardStorageStatus(checks map[string]string) string {
+	if status, ok := checks["database"]; !ok || status == "disabled" {
+		return "unknown"
+	}
+	worst := "ok"
+	for _, id := range []string{"database", "log_database", "redis"} {
+		status, ok := checks[id]
+		if !ok || status == "disabled" {
+			continue
+		}
+		if _, known := dashboardStorageRank[status]; !known {
+			status = "unknown"
+		}
+		if dashboardStorageRank[status] > dashboardStorageRank[worst] {
+			worst = status
+		}
+	}
+	return worst
+}
+
+// dashboardResource carries the health check's verdict on a measured resource,
+// so the tile colour and the status pill come from the same threshold rule.
+// A threshold of 0 turns off the check, not the measurement: the reading stays,
+// marked "unchecked" so it does not pass for a checked "ok".
+func dashboardResource(resource ObservationResource, check string) DashboardResource {
+	state := resource.State
+	if state == "ok" && (check == "warning" || check == "critical") {
+		state = check
+	}
+	if state == "ok" && check == "disabled" {
+		state = "unchecked"
+	}
 	return DashboardResource{
-		Available: resource.Available, State: resource.State, Scope: resource.Scope,
+		Available: resource.Available, State: state, Scope: resource.Scope,
 		Percent: resource.Percent, UsedBytes: resource.UsedBytes, TotalBytes: resource.TotalBytes,
 	}
 }

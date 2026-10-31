@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,81 @@ func TestDashboardSystemStatusProjectsObservationWithoutInventingValues(t *testi
 	require.Nil(t, status.Traffic.ResponseMbps, "a missing direction is not reported as idle")
 	require.Equal(t, []DashboardTrafficPoint{{Ts: 60, RequestMbps: &up}, {Ts: 120}}, status.Traffic.Points, "empty buckets keep their gap")
 	require.Nil(t, status.Load)
+	require.Equal(t, "unknown", status.StorageStatus, "no probe verdict is not reported healthy")
+}
+
+func TestDashboardResourceStateCarriesThresholdVerdict(t *testing.T) {
+	previous := common.GetPerformanceMonitorConfig()
+	t.Cleanup(func() { common.SetPerformanceMonitorConfig(previous) })
+	now := time.Unix(1800000000, 0)
+	observation := emptyPerformanceObservation()
+	observation.SampledAt = observationPtr(now.Unix())
+	measured := func(percent float64, scope string) ObservationResource {
+		return ObservationResource{State: "ok", Available: true, Percent: observationPtr(percent), Scope: scope, SampledAt: observation.SampledAt}
+	}
+	observation.Resources = ObservationResources{CPU: measured(50, "container"), Memory: measured(60, "container"), Disk: measured(92.6, "filesystem")}
+	observation.Storage = ObservationStorage{Database: ObservationProbe{Status: "ok"}, LogShared: true, Redis: ObservationProbe{Status: "disabled", Reason: "disabled"}}
+	sampler := newObservationSampler(1)
+	sampler.record(observation)
+	// Each row moves one threshold, so a verdict wired to the wrong resource fails.
+	for _, tc := range []struct {
+		name                          string
+		cpu, memory, disk             int
+		cpuState, memState, diskState string
+		status                        string
+	}{
+		{"all below their thresholds", 90, 90, 95, "ok", "ok", "ok", "ok"},
+		{"only CPU over", 40, 90, 95, "warning", "ok", "ok", "warning"},
+		{"only memory over", 90, 55, 95, "ok", "warning", "ok", "warning"},
+		{"92.6% is over 92%, not truncated to 92", 90, 90, 92, "ok", "ok", "warning", "warning"},
+		{"a disabled check keeps the reading, marked unchecked", 90, 90, 0, "ok", "ok", "unchecked", "ok"},
+	} {
+		common.SetPerformanceMonitorConfig(common.PerformanceMonitorConfig{Enabled: true, CPUThreshold: tc.cpu, MemoryThreshold: tc.memory, DiskThreshold: tc.disk})
+		got, err := sampler.read("1h", now)
+		require.NoError(t, err)
+		status := newDashboardSystemStatus(got, nil, DashboardSuccessRate{State: "no_requests"})
+		require.Equal(t, tc.status, status.Status, tc.name)
+		require.Equal(t, []string{tc.cpuState, tc.memState, tc.diskState}, []string{status.CPU.State, status.Memory.State, status.Disk.State}, tc.name)
+		require.True(t, status.Disk.Available, tc.name)
+		require.Equal(t, 92.6, *status.Disk.Percent, tc.name)
+	}
+	// Monitoring off withdraws every reading, unlike a single disabled check.
+	common.SetPerformanceMonitorConfig(common.PerformanceMonitorConfig{Enabled: false, CPUThreshold: 90, MemoryThreshold: 90, DiskThreshold: 95})
+	got, err := sampler.read("1h", now)
+	require.NoError(t, err)
+	status := newDashboardSystemStatus(got, nil, DashboardSuccessRate{State: "no_requests"})
+	require.Equal(t, "ok", status.Status)
+	for _, resource := range []DashboardResource{status.CPU, status.Memory, status.Disk} {
+		require.Equal(t, "disabled", resource.State)
+		require.False(t, resource.Available)
+		require.Nil(t, resource.Percent)
+	}
+}
+
+func TestDashboardStorageNamesTheDependencyVerdict(t *testing.T) {
+	ok, redisOff := ObservationProbe{Status: "ok"}, ObservationProbe{Status: "disabled", Reason: "disabled"}
+	for _, tc := range []struct {
+		name         string
+		storage      ObservationStorage
+		want, health string
+	}{
+		{"database up, Redis disabled", ObservationStorage{Database: ok, LogShared: true, Redis: redisOff}, "ok", "ok"},
+		{"Redis down", ObservationStorage{Database: ok, LogShared: true, Redis: ObservationProbe{Status: "critical", Reason: "timeout"}}, "critical", "critical"},
+		{"separate log database down", ObservationStorage{Database: ok, LogDatabase: &ObservationProbe{Status: "critical"}, Redis: ok}, "critical", "critical"},
+		{"stale probes", ObservationStorage{Database: ObservationProbe{Status: "stale"}, LogShared: true, Redis: redisOff}, "stale", "unknown"},
+		{"not yet probed", ObservationStorage{Database: ObservationProbe{Status: "unknown", Reason: "not_sampled"}, LogShared: true, Redis: ok}, "unknown", "unknown"},
+		{"no database checked", ObservationStorage{Database: ObservationProbe{Status: "disabled", Reason: "disabled"}, LogShared: true, Redis: ok}, "unknown", "ok"},
+	} {
+		observation := emptyPerformanceObservation()
+		cpu := 12.
+		observation.Resources.CPU = ObservationResource{Available: true, State: "ok", Scope: "container", Percent: &cpu, Threshold: 90}
+		observation.Storage = tc.storage
+		observation.Checks, _, observation.Status = observationHealth(observation)
+		status := newDashboardSystemStatus(observation, nil, DashboardSuccessRate{State: "no_requests"})
+		require.Equal(t, tc.want, status.StorageStatus, tc.name)
+		require.Equal(t, tc.health, status.Status, tc.name)
+		require.Equal(t, "ok", status.CPU.State, "%s: a dependency failure does not mark a healthy resource", tc.name)
+	}
 }
 
 func TestDashboardSuccessRateDistinguishesEmptyDisabledAndFailedWindows(t *testing.T) {

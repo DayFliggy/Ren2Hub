@@ -246,7 +246,11 @@ describe('historical ops layout with native data', () => {
     await flushPromises()
     const gauge = view.get('[data-ops-gauge="cpu"]')
     expect(gauge.text()).toContain('101.2%')
-    expect(gauge.find('.ops-metric-value--critical').exists()).toBe(true)
+    // The critical figure takes the danger tier's ink, like the dashboard tile.
+    expect(gauge.attributes('data-load-tier')).toBe('danger')
+    expect(gauge.get('.ops-gauge-value').attributes('style')).toContain(
+      'var(--load-danger-text)'
+    )
     expect(gauge.get('circle[transform]').attributes('stroke-dashoffset')).toBe(
       '0'
     )

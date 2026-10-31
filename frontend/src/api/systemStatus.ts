@@ -11,13 +11,19 @@ const endpoint = '/api/user/system-status'
 
 export type SystemHealth = 'ok' | 'warning' | 'critical' | 'stale' | 'unknown'
 export type SystemResourceState =
-  'ok' | 'warning' | 'critical' | 'unknown' | 'disabled' | 'stale'
+  'ok' | 'warning' | 'critical' | 'unchecked' | 'unknown' | 'disabled' | 'stale'
 export type SystemResourceScope =
   'container' | 'host' | 'filesystem' | 'unknown'
 export type SuccessRateState = 'ok' | 'no_requests' | 'disabled' | 'error'
+/** Worst database/Redis probe verdict, without probe names or reasons. */
+export type SystemStorageState = 'ok' | 'critical' | 'stale' | 'unknown'
 
 export interface SystemResource {
   available: boolean
+  /** A measured resource is "ok", or "warning" past the health check's
+   * threshold; the server owns that rule. "critical" is a contract value the
+   * resource checks do not produce yet. "unchecked" is a reading whose
+   * threshold check is off; "disabled" means resource monitoring is off. */
   state: SystemResourceState
   scope: SystemResourceScope
   percent: number | null
@@ -60,6 +66,7 @@ export interface SystemStatus {
     window_end: number | null
     checked_at: number
   }
+  storage_status: SystemStorageState
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -89,6 +96,7 @@ function resource(value: unknown): SystemResource {
       'ok',
       'warning',
       'critical',
+      'unchecked',
       'unknown',
       'disabled',
       'stale',
@@ -170,6 +178,12 @@ export function parseSystemStatus(value: unknown): SystemStatus {
       }),
     },
     success_rate: successRate(raw.success_rate),
+    storage_status: member(raw.storage_status, [
+      'ok',
+      'critical',
+      'stale',
+      'unknown',
+    ]),
   }
 }
 

@@ -163,16 +163,6 @@ export const STATUS_TONES = {
   disabled: 'neutral',
 } as const satisfies Record<OpsStatus, string>
 
-/** Gauge strokes: healthy uses the dashboard's normal-load colour. */
-export const GAUGE_COLORS: Record<OpsStatus, string> = {
-  ok: 'var(--glow)',
-  warning: 'var(--status-warning)',
-  critical: 'var(--status-danger)',
-  unknown: 'var(--text-tertiary)',
-  stale: 'var(--status-warning)',
-  disabled: 'var(--text-tertiary)',
-}
-
 export const STATUS_COLORS: Record<OpsStatus, string> = {
   ok: 'var(--status-success)',
   warning: 'var(--status-warning)',
