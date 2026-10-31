@@ -135,10 +135,20 @@ describe('manual model price editor', () => {
     const wrapper = setup({ AudioRatio: 16 })
     const input = wrapper.get('input[inputmode="decimal"]')
     expect(input.element).toHaveProperty('value', '')
-    await input.setValue('2.5')
+    // Type key by key, through a leading zero, as an administrator would.
+    for (const value of ['0', '0.', '0.2', '0.25']) await input.setValue(value)
     expect(wrapper.vm.commit()?.pricing).toEqual({
-      ModelRatio: '1.25',
+      ModelRatio: '0.125',
       AudioRatio: '16',
+    })
+    wrapper.unmount()
+  })
+  it('keeps a built-in audio output ratio that has no audio input ratio', async () => {
+    const wrapper = setup({ AudioCompletionRatio: 0 })
+    await wrapper.get('input[inputmode="decimal"]').setValue('15')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      ModelRatio: '7.5',
+      AudioCompletionRatio: '0',
     })
     wrapper.unmount()
   })

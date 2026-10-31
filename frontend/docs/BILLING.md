@@ -71,7 +71,7 @@ Root 在 `/models/pricing` 维护价格，旧 `/system-settings/billing/model-pr
 
 `GET /api/option/model_pricing` 返回 `entries`、`options`、`empty_version`；`PATCH` 同一路径提交 `changes`，每项含 `model_name`、`expected_version` 与 `pricing`；删除或清空某个模型时提交 `pricing: {}`。这里的版本用于价格配置并发编辑，不是钱包版本；保存冲突保留草稿。十一项配置包括模型价格及辅助倍率、`billing_setting.billing_mode`、`billing_setting.billing_expr`、`billing_setting.plugin_billing_expr`。
 
-模型价格只来自管理员保存的配置，代码不内置模型或表达式价格；新安装只有上游内置音频倍率的条目，这些模型没有基础价格，仍列在“未定价”里，填写输入价后编辑器按内置倍率展开音频单价。保存空配置后模型回到未定价，请求被拒绝，页面确认框须说明这一后果，不提“恢复默认”。缺项、显式零价及不可用分别表达；未配置的输出、缓存、图像倍率按 1 倍输入价；音频倍率与 Gemini 音频输入单价沿用上游内置值。工具价格通过通用 option `tool_price_setting.prices` 保存，沿用上游内置单价和匹配规则；保存的值覆盖内置价，内置清单以外的工具未配置时不收费。完整规则见[定价合同](../../docs/billing/PRICING.md)。
+模型价格只来自管理员保存的配置，代码不内置模型或表达式价格；新安装只有上游内置音频倍率的条目，这些模型没有基础价格，仍列在“未定价”里，填写输入价并保存时，单价留空的内置音频倍率按原值保留。保存空配置后模型回到未定价，请求被拒绝，页面确认框须说明这一后果，不提“恢复默认”。缺项、显式零价及不可用分别表达；未配置的输出、缓存、图像倍率按 1 倍输入价；音频倍率与 Gemini 音频输入单价沿用上游内置值。工具价格通过通用 option `tool_price_setting.prices` 保存，沿用上游内置单价和匹配规则；保存的值覆盖内置价，内置清单以外的工具未配置时不收费。完整规则见[定价合同](../../docs/billing/PRICING.md)。
 
 `POST /api/option/model_pricing/convert` 生成待确认的表达式草稿；`POST /api/option/model_pricing/preview` 解释草稿有效价格。二者不扣费、不保存，正常保存才使价格生效。表达式保留原生语义和文本，不添加历史版本前缀；当前没有价格 `/simulate` 接口。
 

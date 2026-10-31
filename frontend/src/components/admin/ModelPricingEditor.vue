@@ -68,6 +68,7 @@ const name = ref(''),
   expression = ref('')
 const prices = reactive<Record<string, string>>({ input: '' })
 const enabled = reactive<Record<string, boolean>>({})
+let unpricedRatios: string[] = []
 const pluginExpressions = ref<Record<string, string>>({}),
   plugin = ref('')
 const taskPrices = reactive<Record<string, string>>(
@@ -230,27 +231,15 @@ watch(
     Object.assign(prices, tokenPrices(props.pricing))
     for (const lane of TOKEN_LANES)
       enabled[lane.key] = props.pricing[lane.key] !== undefined
+    // A saved ratio without a base price (NewAPI's built-in audio ratios) has
+    // no dollar amount to show; while its field stays empty it is saved as is.
+    unpricedRatios = TOKEN_LANES.filter(
+      (lane) => enabled[lane.key] && !prices[lane.key]
+    ).map((lane) => lane.key)
     captureDefaultBaseline()
     hydrating = false
   },
   { immediate: true }
-)
-// A saved ratio without a base price (the built-in audio ratios) has no
-// dollar amount yet; expand it once the base price arrives instead of
-// letting the empty field drop it on save.
-watch(
-  () => prices.input,
-  () => {
-    if (hydrating || !isDecimal(prices.input ?? '')) return
-    const expanded = tokenPrices({
-      ...props.pricing,
-      ModelRatio: tokenPricing({ input: prices.input! }).ModelRatio!,
-    })
-    for (const lane of TOKEN_LANES) {
-      if (enabled[lane.key] && !prices[lane.key] && expanded[lane.key])
-        prices[lane.key] = expanded[lane.key]!
-    }
-  }
 )
 watch(getQuotaPerUnit, () => {
   // Keep edited dollar amounts as user intent. An untouched ratio must instead
@@ -299,14 +288,19 @@ function build(): PricingValues {
     result = { ModelPrice: fixed.value }
   } else {
     const usd: Record<string, string> = { input: prices.input ?? '' }
+    const kept: PricingValues = {}
     for (const lane of TOKEN_LANES) {
       if (!enabled[lane.key]) continue
-      // An enabled lane must carry a price; an empty one would silently
-      // delete the saved ratio.
-      if (!prices[lane.key]?.trim()) throw new Error('invalid')
+      if (!prices[lane.key]?.trim()) {
+        // An empty lane keeps only a ratio that never had a price; clearing a
+        // shown price must not silently delete the saved ratio.
+        if (!unpricedRatios.includes(lane.key)) throw new Error('invalid')
+        kept[lane.key] = decimalText(props.pricing[lane.key]!)
+        continue
+      }
       usd[lane.key] = prices[lane.key]!
     }
-    result = tokenPricing(usd)
+    result = { ...tokenPricing(usd), ...kept }
   }
   if (Object.keys(plugins).length)
     result['billing_setting.plugin_billing_expr'] = plugins
