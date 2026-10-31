@@ -120,7 +120,7 @@ for (const theme of ['light', 'dark'] as const) {
       )
       await page.goto('/channels')
       await waitForStablePage(page)
-      await page.getByRole('button', { name: '字段显示', exact: true }).click()
+      await page.getByRole('button', { name: '字段设置', exact: true }).click()
       await page
         .getByRole('button', { name: '单渠道上游同步操作', exact: true })
         .click()

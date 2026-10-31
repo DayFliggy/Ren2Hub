@@ -127,10 +127,13 @@ const {
   page,
   pageSize,
   keyword,
+  modelKeyword,
   type,
   lab,
   labs,
   status,
+  hasFilters,
+  resetFilters,
   sortBy,
   sortOrder,
   loading,
@@ -396,10 +399,21 @@ const typeOptions = computed(() => {
       )
       .map((id) => ({
         value: String(id),
-        label: `${adminChannelTypeMeta(id).label} (${typeCounts.value[id] ?? 0})`,
+        label: adminChannelTypeMeta(id).label,
+        count: typeCounts.value[id] ?? 0,
       })),
   ]
 })
+
+// The unknown and mixed labs arrive as lowercase ids; labDisplayName names them.
+const labOptions = computed(() => [
+  { value: '', label: t('channels.allLabs') },
+  ...labs.value.map((item) => ({
+    value: item.id,
+    label: labDisplayName(item),
+    count: item.count,
+  })),
+])
 
 const statusOptions = computed(() => [
   { value: '', label: t('channels.allStatuses') },
@@ -741,73 +755,15 @@ async function runBulkStatus(
           >
             {{ t('channels.resultCount', { count: total }) }}
           </span>
-          <div class="flex items-center gap-2">
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              :loading="refreshing"
-              :disabled="isBatchBusy || isCrudBusy || isBulkBusy"
-              @click="load({ background: true })"
-            >
-              <RefreshCw v-if="!refreshing" :size="14" />
-              {{ t('channels.refreshList') }}
-            </ConsoleButton>
-            <ConsoleButton
-              v-if="canSensitiveWrite"
-              size="sm"
-              :disabled="!canMutate"
-              @click="openCreate"
-            >
-              <Plus :size="14" />
-              {{ t('channels.createChannel') }}
-            </ConsoleButton>
-          </div>
-        </div>
-      </template>
-    </PageBreadcrumb>
-
-    <ConsoleCard :padded="false">
-      <div
-        class="flex flex-col gap-3 border-b border-[var(--border-subtle)] p-4 xl:flex-row xl:items-center"
-      >
-        <SearchInput
-          v-model="keyword"
-          :placeholder="t('channels.searchPlaceholder')"
-          :aria-label="t('channels.searchPlaceholder')"
-          name="admin-channel-search"
-          class="w-full xl:w-72"
-        />
-        <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:flex-1">
-          <FilterSelect
-            v-model="lab"
-            :options="[
-              { value: '', label: t('channels.allLabs') },
-              ...labs.map((item) => ({
-                value: item.id,
-                label: `${item.name} (${item.count})`,
-              })),
-            ]"
-            :label="t('channels.allLabs')"
-            class="w-full"
-          />
-          <FilterSelect
-            v-model="type"
-            :options="typeOptions"
-            :label="t('channels.typeFilter')"
-            class="w-full"
-          />
-          <FilterSelect
-            v-model="status"
-            :options="statusOptions"
-            :label="t('channels.statusFilter')"
-            class="w-full"
-          />
-          <div class="flex min-w-0 gap-2">
+          <div class="flex items-center gap-2" data-channel-header-actions>
+            <!-- Sort sits beside create as in NewAPI's channel header. -->
             <FilterSelect
               v-model="sortModel"
               :options="sortOptions"
               :label="t('channels.sortLabel')"
-              class="min-w-0 flex-1"
+              :prefix-label="t('channels.sortPrefix')"
+              size="compact"
+              class="w-36 sm:w-40"
             />
             <IconButton
               :label="
@@ -815,27 +771,98 @@ async function runBulkStatus(
                   ? t('channels.sortAscending')
                   : t('channels.sortDescending')
               "
-              class="h-10 w-10 shrink-0 rounded-xl bg-[var(--surface-muted)]"
+              class="pencil-control shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
+              data-handdrawn="control"
               @click="toggleSortOrder"
             >
-              <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="17" />
-              <ArrowDownNarrowWide v-else :size="17" />
+              <ArrowUpNarrowWide v-if="sortOrder === 'asc'" :size="16" />
+              <ArrowDownNarrowWide v-else :size="16" />
             </IconButton>
-            <FieldVisibilityMenu
-              v-model="visibleFields"
-              :all-fields="ADMIN_CHANNEL_OPTIONAL_FIELDS"
-              :default-fields="ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS"
-              :label-for="fieldLabel"
-              :title="t('channels.fieldSettings')"
-              :reset-label="t('channels.resetFields')"
-            />
+            <ConsoleButton
+              v-if="canSensitiveWrite"
+              size="sm"
+              :aria-label="t('channels.createChannel')"
+              :disabled="!canMutate"
+              @click="openCreate"
+            >
+              <Plus :size="14" />
+              <span class="sm:hidden">{{ t('channels.createShort') }}</span>
+              <span class="hidden sm:inline">{{
+                t('channels.createChannel')
+              }}</span>
+            </ConsoleButton>
           </div>
         </div>
-        <div v-if="canOperate" class="md:hidden">
+      </template>
+    </PageBreadcrumb>
+
+    <ConsoleCard :padded="false">
+      <!-- Toolbar row as in NewAPI: searches and filter chips on the left,
+        list actions on the right. -->
+      <div
+        class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] p-4 sm:gap-3"
+        data-channel-toolbar
+      >
+        <SearchInput
+          v-model="keyword"
+          :placeholder="t('channels.searchPlaceholder')"
+          :aria-label="t('channels.searchPlaceholder')"
+          name="admin-channel-search"
+          size="compact"
+          class="w-full sm:w-auto sm:max-w-80 sm:grow sm:basis-60"
+        />
+        <SearchInput
+          v-model="modelKeyword"
+          :placeholder="t('channels.modelSearchPlaceholder')"
+          :aria-label="t('channels.modelSearchPlaceholder')"
+          name="admin-channel-model-search"
+          size="compact"
+          class="w-full sm:w-auto sm:max-w-56 sm:grow sm:basis-40"
+        />
+        <div class="flex flex-wrap items-center gap-2" data-channel-facets>
+          <FilterSelect
+            v-model="status"
+            :options="statusOptions"
+            :label="t('channels.statusFilter')"
+            :prefix-label="t('channels.status')"
+            variant="facet"
+            size="compact"
+          />
+          <FilterSelect
+            v-model="type"
+            :options="typeOptions"
+            :label="t('channels.typeFilter')"
+            :prefix-label="t('channels.type')"
+            variant="facet"
+            size="compact"
+          />
+          <FilterSelect
+            v-model="lab"
+            :options="labOptions"
+            :label="t('channels.labFilter')"
+            :prefix-label="t('channels.lab')"
+            variant="facet"
+            size="compact"
+          />
           <ConsoleButton
+            v-if="hasFilters"
+            variant="ghost"
+            size="sm"
+            @click="resetFilters"
+          >
+            {{ t('channels.resetFilters') }}
+            <X :size="14" aria-hidden="true" />
+          </ConsoleButton>
+        </div>
+        <div
+          class="ml-auto flex w-full items-center gap-2 md:w-auto"
+          data-channel-toolbar-actions
+        >
+          <ConsoleButton
+            v-if="canOperate"
             variant="secondary"
             size="sm"
-            block
+            class="min-w-0 grow md:hidden"
             :disabled="!canRunBatch"
             :aria-label="balanceButtonLabel()"
             @click="runVisibleBalance()"
@@ -854,6 +881,24 @@ async function runBulkStatus(
               }}
             </span>
           </ConsoleButton>
+          <IconButton
+            :label="t('channels.refreshList')"
+            class="pencil-control ml-auto shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
+            data-handdrawn="control"
+            :aria-busy="refreshing"
+            :disabled="refreshing || isBatchBusy || isCrudBusy || isBulkBusy"
+            @click="load({ background: true })"
+          >
+            <RefreshCw :size="16" :class="refreshing ? 'animate-spin' : ''" />
+          </IconButton>
+          <FieldVisibilityMenu
+            v-model="visibleFields"
+            :all-fields="ADMIN_CHANNEL_OPTIONAL_FIELDS"
+            :default-fields="ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS"
+            :label-for="fieldLabel"
+            :title="t('channels.fieldSettings')"
+            :reset-label="t('channels.resetFields')"
+          />
         </div>
       </div>
 

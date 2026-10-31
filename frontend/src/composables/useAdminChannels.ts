@@ -71,6 +71,7 @@ export function useAdminChannels() {
   const page = ref(1)
   const pageSize = ref(20)
   const keyword = ref('')
+  const modelKeyword = ref('')
   const type = ref('')
   const lab = ref('')
   const labs = ref<
@@ -169,7 +170,23 @@ export function useAdminChannels() {
       sort_by: sortBy.value,
       sort_order: sortOrder.value,
       keyword: keyword.value.trim() || undefined,
+      model: modelKeyword.value.trim() || undefined,
     }
+  }
+
+  const hasFilters = computed(() =>
+    [keyword, modelKeyword, type, lab, status].some((filter) =>
+      filter.value.trim()
+    )
+  )
+
+  /** Clears every list filter; sorting is a view preference and stays. */
+  function resetFilters() {
+    keyword.value = ''
+    modelKeyword.value = ''
+    type.value = ''
+    lab.value = ''
+    status.value = ''
   }
 
   async function load(options: { background?: boolean } = {}) {
@@ -180,9 +197,11 @@ export function useAdminChannels() {
     else loading.value = true
     if (rows.value.length === 0) initialError.value = ''
 
-    const endpoint = keyword.value.trim()
-      ? '/api/channel/search'
-      : '/api/channel/'
+    // Native GetAllChannels ignores model; only SearchChannels filters it.
+    const endpoint =
+      keyword.value.trim() || modelKeyword.value.trim()
+        ? '/api/channel/search'
+        : '/api/channel/'
     const result = await listRequest.run(async (signal) => {
       const response = await api.get<unknown>(endpoint, currentParams(), {
         signal,
@@ -217,7 +236,7 @@ export function useAdminChannels() {
     else page.value = 1
   }
 
-  watch(keyword, () => {
+  watch([keyword, modelKeyword], () => {
     window.clearTimeout(searchTimer)
     searchTimer = window.setTimeout(reloadFromFirstPage, 300)
   })
@@ -773,10 +792,13 @@ export function useAdminChannels() {
     page,
     pageSize,
     keyword,
+    modelKeyword,
     type,
     lab,
     labs,
     status,
+    hasFilters,
+    resetFilters,
     sortBy,
     sortOrder,
     loading,

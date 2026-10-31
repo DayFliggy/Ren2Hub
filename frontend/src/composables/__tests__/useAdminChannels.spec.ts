@@ -1,4 +1,4 @@
-import { defineComponent, reactive } from 'vue'
+import { defineComponent, nextTick, reactive } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -153,6 +153,51 @@ describe('native channel management', () => {
       '/api/channel/',
       { mode: 'multi_to_single', multi_key_mode: 'polling', channel: input },
       { signal: expect.any(AbortSignal) }
+    )
+  })
+  it('filters by model through native search, which the plain list ignores', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+    const state = await setup()
+    get.mockClear()
+    vi.useFakeTimers()
+    try {
+      state.modelKeyword.value = ' gpt-5 '
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(300)
+      expect(get).toHaveBeenCalledWith(
+        '/api/channel/search',
+        expect.objectContaining({ model: 'gpt-5', keyword: undefined }),
+        expect.any(Object)
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('resets every list filter back to the plain list and keeps the sort', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+    const state = await setup()
+    state.sortBy.value = 'name'
+    state.keyword.value = 'Native'
+    state.modelKeyword.value = 'gpt-5'
+    state.type.value = '1'
+    state.lab.value = 'openai'
+    state.status.value = 'enabled'
+    expect(state.hasFilters.value).toBe(true)
+    state.resetFilters()
+    expect(state.hasFilters.value).toBe(false)
+    get.mockClear()
+    await state.load()
+    expect(get).toHaveBeenCalledWith(
+      '/api/channel/',
+      expect.objectContaining({
+        keyword: undefined,
+        model: undefined,
+        type: undefined,
+        lab: undefined,
+        status: undefined,
+        sort_by: 'name',
+      }),
+      expect.any(Object)
     )
   })
   it('enforces action-specific permissions and clears results when read permission is lost', async () => {

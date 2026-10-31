@@ -8,8 +8,11 @@ const model = defineModel<string>({ default: '' })
 withDefaults(
   defineProps<{
     placeholder?: string
+    /** 'compact' matches the 32px toolbar buttons from the sm breakpoint and
+        keeps the 44px touch target below it. */
+    size?: 'md' | 'compact'
   }>(),
-  { placeholder: '' }
+  { placeholder: '', size: 'md' }
 )
 
 const attrs = useAttrs()
@@ -52,7 +55,8 @@ const inputAttrs = computed(() => {
       type="search"
       :placeholder="placeholder"
       v-bind="inputAttrs"
-      class="h-11 w-full border-0 border-b-[1.5px] bg-transparent pl-10 pr-4 text-base leading-5 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-hidden focus:border-[var(--accent)] hover:bg-[var(--state-hover-layer)] sm:text-sm"
+      class="w-full border-0 border-b-[1.5px] bg-transparent pl-10 pr-4 text-base leading-5 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-[border-color,background-color,box-shadow] focus:outline-hidden focus:border-[var(--accent)] hover:bg-[var(--state-hover-layer)] sm:text-sm"
+      :class="size === 'compact' ? 'h-11 sm:h-8' : 'h-11'"
       style="border-color: var(--border-default)"
     />
   </div>

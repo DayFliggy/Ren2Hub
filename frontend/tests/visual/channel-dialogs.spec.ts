@@ -196,7 +196,7 @@ for (const theme of [
       ).toHaveCount(0)
 
       await page
-        .locator('[aria-label="测试 Anthropic Lab 分组的渠道响应"]:visible')
+        .locator('[aria-label="测试 Anthropic 渠道的响应"]:visible')
         .click()
       const groupDialog = page.getByRole('dialog', {
         name: '批量测试渠道响应',
