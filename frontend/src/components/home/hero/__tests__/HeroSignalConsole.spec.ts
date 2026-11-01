@@ -97,6 +97,24 @@ describe('HeroSignalConsole trace drawer', () => {
     expect(trigger.attributes('aria-expanded')).toBe('true')
   })
 
+  // The drawer scrolls on its own, so keyboard users tab into it; focus
+  // leaving the trigger for the drawer is still focus within the inspector.
+  it('stays open while keyboard focus moves into the drawer', async () => {
+    wrapper = mountConsole()
+    const { trigger } = parts(wrapper)
+
+    ;(trigger.element as HTMLElement).focus()
+    await trigger.trigger('click')
+    const drawer = wrapper.get('#signal-trace-drawer')
+    expect(drawer.attributes('tabindex')).toBe('0')
+
+    ;(drawer.element as HTMLElement).focus()
+    await vi.advanceTimersByTimeAsync(HOLD_MS)
+
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(document.activeElement).toBe(drawer.element)
+  })
+
   it('re-arms the hover hold once pointer and focus have left', async () => {
     wrapper = mountConsole()
     const { head, trigger } = parts(wrapper)

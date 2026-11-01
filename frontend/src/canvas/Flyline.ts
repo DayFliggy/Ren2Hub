@@ -1,4 +1,4 @@
-import { arcAway } from './arc'
+import { arcAway, type Pt } from './arc'
 import { getCanvasTheme, type CanvasTheme } from './theme'
 
 const FLOW_CHARS = [
@@ -19,37 +19,37 @@ const FLOW_CHARS = [
   'LLM',
 ]
 
-/** Gateway ↔ model packet, advanced by duration rather than frame count. */
+/** Gateway ↔ model packet, advanced by duration rather than frame count.
+ *  `from` and `to` are the live hub and marker: the map rotates and relayouts
+ *  move them mid-flight, so the arc is derived from their current positions. */
 export class Flyline {
   progress = 0
   dead = false
-  private cx: number
-  private cy: number
   private chars: string[] = []
   private static readonly TAIL = 9
 
   constructor(
-    public from: { x: number; y: number },
-    public to: { x: number; y: number },
+    public from: Pt,
+    public to: Pt,
     private getColor: () => string,
     private durationMs: number,
     public onArrive: () => void,
-    centerX: number,
-    centerY: number
+    private getCenter: () => Pt
   ) {
-    const c = arcAway(from, to, { x: centerX, y: centerY }, 0.2)
-    this.cx = c.x
-    this.cy = c.y
     for (let i = 0; i < Flyline.TAIL; i++) {
       this.chars.push(FLOW_CHARS[Math.floor(Math.random() * FLOW_CHARS.length)])
     }
   }
 
-  point(t: number) {
+  private control(): Pt {
+    return arcAway(this.from, this.to, this.getCenter(), 0.2)
+  }
+
+  point(t: number, control: Pt = this.control()): Pt {
     const u = 1 - t
     return {
-      x: u * u * this.from.x + 2 * u * t * this.cx + t * t * this.to.x,
-      y: u * u * this.from.y + 2 * u * t * this.cy + t * t * this.to.y,
+      x: u * u * this.from.x + 2 * u * t * control.x + t * t * this.to.x,
+      y: u * u * this.from.y + 2 * u * t * control.y + t * t * this.to.y,
     }
   }
 
@@ -72,10 +72,11 @@ export class Flyline {
     theme: CanvasTheme = getCanvasTheme('dark')
   ) {
     const color = this.getColor()
+    const control = this.control()
     ctx.save()
     ctx.beginPath()
     ctx.moveTo(this.from.x, this.from.y)
-    ctx.quadraticCurveTo(this.cx, this.cy, this.to.x, this.to.y)
+    ctx.quadraticCurveTo(control.x, control.y, this.to.x, this.to.y)
     ctx.strokeStyle = color
     ctx.globalAlpha = 0.22
     ctx.lineWidth = 1
@@ -91,7 +92,7 @@ export class Flyline {
       for (let i = 0; i < Flyline.TAIL; i++) {
         const tailProgress = this.progress - i * step
         if (tailProgress < 0) break
-        const p = this.point(tailProgress)
+        const p = this.point(tailProgress, control)
         const strength = 1 - i / Flyline.TAIL
         ctx.font = `${7 + strength * 5}px 'JetBrains Mono', monospace`
         ctx.fillStyle = this.rgba(color, 0.15 + strength * 0.65)
@@ -99,7 +100,7 @@ export class Flyline {
       }
     }
 
-    const head = this.point(this.progress)
+    const head = this.point(this.progress, control)
     const glow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 9)
     glow.addColorStop(0, color)
     glow.addColorStop(1, 'transparent')

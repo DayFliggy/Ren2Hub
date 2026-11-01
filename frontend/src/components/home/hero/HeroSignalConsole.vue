@@ -10,6 +10,7 @@
     <div class="signal-console__body">
       <!-- The only interactive part of the rail. It deliberately absorbs map input. -->
       <section
+        ref="traceHeadEl"
         class="signal-console__telemetry-head"
         data-canvas-interaction-boundary
         @pointerenter="onInspectorPointerEnter"
@@ -79,6 +80,7 @@
             id="signal-trace-drawer"
             class="signal-console__trace-drawer"
             role="region"
+            tabindex="0"
             :aria-label="t('signalConsole.traceInspectorLabel')"
           >
             <p class="signal-console__trace-drawer-title" aria-hidden="true">
@@ -257,6 +259,7 @@ const props = defineProps<{
 }>()
 
 const { t, locale } = useI18n()
+const traceHeadEl = ref<HTMLElement | null>(null)
 const traceInspectorEl = ref<HTMLElement | null>(null)
 const traceDrawerOpen = ref(false)
 const pointerWithinInspector = ref(false)
@@ -555,8 +558,10 @@ function onInspectorFocusOut() {
   if (focusCheckTimer) window.clearTimeout(focusCheckTimer)
   focusCheckTimer = window.setTimeout(() => {
     focusCheckTimer = undefined
+    // The scrollable drawer belongs to the inspector too; checking only the
+    // trigger would close the drawer as soon as focus moved into it.
     focusWithinInspector.value = Boolean(
-      traceInspectorEl.value?.contains(document.activeElement)
+      traceHeadEl.value?.contains(document.activeElement)
     )
     syncTraceDrawer()
   }, 0)

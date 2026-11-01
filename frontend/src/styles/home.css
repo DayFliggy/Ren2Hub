@@ -1659,6 +1659,10 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
   outline: 1px solid rgb(var(--accent-rgb) / 0.66);
   outline-offset: 5px;
 }
+.landing-shell .signal-console__trace-drawer:focus-visible {
+  outline: 1px solid rgb(var(--accent-rgb) / 0.66);
+  outline-offset: 2px;
+}
 .landing-shell .signal-console__telemetry-head:focus-visible::after {
   position: absolute;
   top: -5px;

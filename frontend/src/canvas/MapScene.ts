@@ -4,7 +4,7 @@ import { ModelMarker, UserNode, HubNode } from './MapNode'
 import { UserChannel } from './UserChannel'
 import { Flyline } from './Flyline'
 import { ArcPacket, Particle } from './sceneParts'
-import { arcAway } from './arc'
+import { arcAway, type Pt } from './arc'
 import { landnessDeg } from './worldMask'
 import { loadIcon } from './iconLoader'
 import { canStartCanvasRequest } from './requestGate'
@@ -233,16 +233,20 @@ export class MapScene {
   }
 
   /* 运行中跟随系统「减弱动态效果」：开启时停循环并补一帧静态，
-     关闭时恢复 rAF。不进构造快照，避免设置切换后必须刷新页面。 */
+     关闭时恢复 rAF。不进构造快照，避免设置切换后必须刷新页面。
+     `running` 只表示宿主的可见性闸门（start/stop），rAF 仅在
+     running 且未减弱动态时调度，所以切换偏好不会改写闸门状态。 */
   private onReducedMotionChange = (event: MediaQueryListEvent) => {
-    if (this.disposed) return
+    if (this.disposed || event.matches === this.reduced) return
     this.reduced = event.matches
+    this.map.reduced = event.matches
+    this.rain.reduced = event.matches
     if (this.reduced) {
-      this.stop()
+      this.cancelFrame()
       this.draw()
       return
     }
-    if (!this.running) this.start()
+    if (this.running) this.scheduleFirstFrame()
   }
 
   async init(): Promise<void> {
@@ -857,19 +861,16 @@ export class MapScene {
       modelName: marker.name,
       state: 'outbound',
     }))
-    const centerX = this.w / 2
-    const centerY = this.h / 2
     for (const marker of selected) {
       const link = this.links.find((candidate) => candidate.mk === marker)
       if (link) link.activity = 1
       const flyline = new Flyline(
         this.hub,
-        { x: marker.x, y: marker.y },
+        marker,
         () => marker.color,
         group.timing.routeOutboundMs,
         () => this.onOutboundArrived(group, marker),
-        centerX,
-        centerY
+        this.sceneCenter
       )
       this.flylines.push(flyline)
       group.flylines.push(flyline)
@@ -914,16 +915,13 @@ export class MapScene {
       group.processingDueAt.delete(modelId)
       if (!marker || !hop || hop.state !== 'processing') continue
       hop.state = 'returning'
-      const centerX = this.w / 2
-      const centerY = this.h / 2
       const flyline = new Flyline(
-        { x: marker.x, y: marker.y },
+        marker,
         this.hub,
         () => marker.color,
         group.timing.routeReturnMs,
         () => this.onReturnArrived(group, marker),
-        centerX,
-        centerY
+        this.sceneCenter
       )
       this.flylines.push(flyline)
       group.flylines.push(flyline)
@@ -1275,8 +1273,11 @@ export class MapScene {
     ctx.restore()
   }
 
+  /** Flylines and hub links bow away from the same centre so they overlap. */
+  private sceneCenter = (): Pt => ({ x: this.w / 2, y: this.h / 2 })
+
   private drawLinks(ctx: CanvasRenderingContext2D) {
-    const center = { x: this.w / 2, y: this.h / 2 }
+    const center = this.sceneCenter()
     for (const link of this.links) {
       if (!link.mk.visible) continue
       const hub = { x: this.hub.x, y: this.hub.y }
@@ -1329,18 +1330,25 @@ export class MapScene {
   start() {
     if (this.running || this.disposed) return
     this.running = true
+    this.draw()
+    if (!this.reduced) this.scheduleFirstFrame()
+  }
+
+  stop() {
+    this.running = false
+    this.cancelFrame()
+  }
+
+  private scheduleFirstFrame() {
     // Reset the wall-clock anchor on resume. `sceneTimeMs` remains untouched,
     // so document visibility/intersection pauses freeze instead of skipping.
     // 同时清零固定步进的残量，否则长时间暂停后首帧会补跳若干步。
     this.lastFrame = performance.now()
     this.frameAccumulator = 0
-    this.draw()
-    if (this.reduced) return
     this.raf = requestAnimationFrame(this.frame)
   }
 
-  stop() {
-    this.running = false
+  private cancelFrame() {
     if (this.raf) cancelAnimationFrame(this.raf)
     this.raf = 0
   }
