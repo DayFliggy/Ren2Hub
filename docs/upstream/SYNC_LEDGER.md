@@ -4,6 +4,25 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-01 首页审计修正与第二次正式发布
+
+`e3c0b98dc` 于 2026-11-01 19:39 UTC 通过普通更新执行器发布，根提交为 `763ee06a50f3658863c506ab9273d12a7494369d`。镜像为 `ren2hub-test:e3c0b98dcbd743bf1aa9bd9f308872239cb91954-v1`，ID `sha256:0b10be030209b53ff8180f674a7fa443732a32f23a297ccb0af007cab5316fbf`，用 go1.26.10 构建。相对 `63e537495`，这次只改首页前端和一组后端测试，没有数据库或接口变化：
+
+- `fb59d3ef6`：首页第二轮修复。沉浸模式按 `[data-hero-map-immersive-focus]` 重新定位地图，请求跟随实时枢纽；画布 resize 监听在 `scene.init()` 前注册；沉浸开关在滑动、断点和辅助技术退出时交还焦点；`LanguageSelector` 跟随外部语言切换；信号控制台和延迟计文本本地化；删除 `HOME_LAUNCHED_AT` 和无引用的文案键。
+- `7b46c0a6e`：修正 Codex 首页审计的三项问题。轨迹抽屉加 `tabindex="0"`，focusout 改为检查整个 inspector，焦点进入抽屉不再关闭抽屉。飞线两端引用实时枢纽和模型标记，弧线控制点每帧按当前位置计算，重排后不再飞向旧位置。`running` 只表示宿主可见性闸门，rAF 只在可见且未减弱动态时调度；加载时开启“减弱动态效果”、之后关闭，动画会恢复，`WorldMap` 和 `CharRain` 同步该偏好。
+- `e3c0b98dc`：复核发现的飞线问题。飞线引用实时标记后，拖动地图使标记离屏并跨过经度接缝时，飞线头会横跳约 430 像素。飞线现在和常驻连线一样随标记的 `visible`、`edgeAlpha` 隐藏和淡出；隐藏期间照常推进并触发到达。
+- `489d98f8a`、`8fe6bf735`：`TestDashboardSuccessRateCancelledWaiterReturnsContextError` 在 unit 门禁中超时 60 秒。原因是上一个测试留下的 singleflight 调用会被下一个测试的 `DoChan` 加入，新测试自己的查询函数不运行，cleanup 一直等它完成；`-count=400` 可以稳定复现。复核又指出只调用 `Forget` 不够：旧 worker 在查询函数返回后才写缓存，这次写入可能落到下一个测试。测试辅助函数 `resetDashboardSuccessRate(t)` 现在先用同键的空操作 `DoChan` 等在途调用结束（上限 5 秒），再清缓存；cleanup 先重置再恢复替身。生产代码只多了 `dashboardSuccessRateRefreshKey` 常量。
+
+发布前验证：
+- 在 `e3c0b98dc` 的独立 clone 中串行运行 unit、databases、static、build、race、browser、ui-contracts（526 项全过）和 `test_runner.py`（17 项），全部通过。
+- 前端 Vitest 全量 282 个文件、2061 项通过，vue-tsc、eslint、prettier 通过。新增回归测试换回修正前的代码都会失败。仪表盘测试组 `-count=1000` 和 `-race -count=50` 通过。
+- Codex `gpt-6-astra` xhigh 共做三轮：首页审计发现上述三项；第一轮复核发现飞线接缝和测试写回两项；第二轮复核没有发现问题。
+- 候选 `run-k385kprv` 在根 `763ee06`、应用 `e3c0b98dc` 的组合 clone 中运行，使用同一镜像和 `--traffic-host-interface eth0`。七组全部通过，`deployment_eligible=true`，外部请求为 0，数据库为 fresh tmpfs。
+
+切换结果：切换前后任务、Midjourney、充值、GMPay、系统任务和数据库会话都为 0，表数仍为 45。`REN2HUB_VERIFY_OK` 报告 `traffic=host_interface:eth0`，本地和 `https://next.renai.uno` 的只读核验都通过。
+
+来源清单补算了 `service/dashboard_system_status_test.go` 的哈希（`8fe6bf735` 改动时漏算），计数不变：800 `upstream_equal`、275 `adapted`、257 `extension`、45 `removed`。
+
 ## 2026-11-01 正式发布
 
 `63e537495` 于 2026-11-01 14:28 UTC 通过普通更新执行器发布。该提交把本地 main 的首页交互修复与任务渠道缺失退款分支合在一起，根提交为 `299f6581f7e325b1135aa682fa3492369f9384a7`。镜像为 `ren2hub-test:63e5374954346808759e5443a472a9faf60cbf97-v1`，ID `sha256:0e97c34650d0bc5085d0ba4693f31d2dfe4f45dcab5df142b93812dd75b4b4a1`，用 go1.26.10 构建。
