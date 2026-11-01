@@ -21,6 +21,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { SignalLatencyTier } from '@/constants/home/signalConsole'
 
 const props = defineProps<{
@@ -28,6 +29,8 @@ const props = defineProps<{
   tier?: SignalLatencyTier
   eventId?: number
 }>()
+
+const { t } = useI18n()
 
 const isPulsing = ref(false)
 let pulseFrame: number | undefined
@@ -56,8 +59,8 @@ const latencyLabel = computed(() => {
 const ariaLabel = computed(() => {
   const average = props.averageLatencyMs
   return typeof average === 'number'
-    ? `Average request latency ${Math.round(average)} milliseconds`
-    : 'Average request latency pending'
+    ? t('signalConsole.latency.average', { ms: Math.round(average) })
+    : t('signalConsole.latency.averagePending')
 })
 
 const latencyStyle = computed(() => ({

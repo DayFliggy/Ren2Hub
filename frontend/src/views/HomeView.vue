@@ -46,8 +46,9 @@
         </div>
       </div>
 
-      <!-- 两栏内容（桌面：左图右文网格；移动：上舞台留白 + 下海报式直排） -->
+      <!-- 两栏内容（桌面：左图右文网格；移动：上舞台留白 + 下海报式直排；沉浸态整条轨道作地图焦点） -->
       <div
+        data-hero-map-immersive-focus
         class="hero-layout-track site-container relative z-10 flex flex-1 flex-col gap-6 self-stretch py-6 max-lg:gap-4 max-lg:py-4 lg:grid lg:grid-cols-[minmax(18rem,0.78fr)_minmax(34rem,1.22fr)] lg:items-center lg:gap-10 lg:py-14 xl:gap-14 xl:py-16"
       >
         <!-- 左：留空（地图与网关枢纽由全屏背景层透出） -->
@@ -95,6 +96,7 @@
         </div>
         <!-- 右：文本与组件（无卡片，直接落在净底上；pan-y 保证竖滑滚动不被横滑转图劫持；沉浸态淡出） -->
         <div
+          ref="heroCopy"
           class="order-2 flex w-full justify-center [touch-action:pan-y_pinch-zoom] transition-all duration-300 ease-out lg:order-none lg:w-auto lg:justify-end"
           :class="{
             'pointer-events-none invisible translate-y-10 opacity-0': immersive,
@@ -165,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppNavbar from '@/components/layout/AppNavbar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -199,6 +201,7 @@ const {
 
 const stageButton = ref<HTMLButtonElement | null>(null)
 const recallButton = ref<HTMLButtonElement | null>(null)
+const heroCopy = ref<HTMLElement | null>(null)
 
 // After its intro the hint stays tabbable as the immersive toggle and shows
 // itself on keyboard focus. In immersive mode it is inert because the recall
@@ -210,18 +213,36 @@ const stageHintClass = computed(() =>
     : 'pointer-events-none translate-y-1.5 opacity-0 focus-visible:pointer-events-auto focus-visible:translate-y-0 focus-visible:opacity-100'
 )
 
-// Keyboard and assistive activation (click.detail 0) keeps its place when the
-// toggle swaps buttons. A tap or mouse click (detail ≥ 1) leaves focus alone,
-// so the faded hint never comes back with a focus ring. The state changes
-// first so nextTick waits for the render that mounts the target.
+// Whatever ends the mode (button, swipe, or widening past the mobile
+// breakpoint), focus held by the toggle that disappears moves to its
+// counterpart, or to the restored copy when that counterpart is not rendered
+// (short phones and desktop hide the stage hint). Pointer input keeps the
+// browser's focus-visible heuristics, so a tap never brings back a ring.
+watch(immersive, async (value) => {
+  const leaving = value ? stageButton.value : recallButton.value
+  if (!leaving || document.activeElement !== leaving) return
+  await nextTick()
+  const target = value ? recallButton.value : stageButton.value
+  target?.focus()
+  if (document.activeElement !== target) firstCopyControl()?.focus()
+})
+
+function firstCopyControl() {
+  return heroCopy.value?.querySelector<HTMLElement>(
+    'a[href], button:not([disabled])'
+  )
+}
+
+// Keyboard and assistive activation (click.detail 0) may not move DOM focus,
+// so the toggle takes it first and the watcher hands it on.
 function enterImmersive(event: MouseEvent) {
+  if (event.detail === 0) stageButton.value?.focus()
   enter()
-  if (event.detail === 0) nextTick(() => recallButton.value?.focus())
 }
 
 function exitImmersive(event: MouseEvent) {
+  if (event.detail === 0) recallButton.value?.focus()
   exit()
-  if (event.detail === 0) nextTick(() => stageButton.value?.focus())
 }
 
 useHeroScrollChrome()

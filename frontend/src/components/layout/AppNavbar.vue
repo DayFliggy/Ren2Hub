@@ -16,7 +16,7 @@
       <div class="flex min-w-0 items-center gap-2.5 sm:gap-4">
         <RouterLink
           :to="{ name: 'home' }"
-          class="home-brand flex min-h-11 min-w-11 items-center justify-center gap-2.5 transition-transform hover:scale-[1.02] sm:justify-start"
+          class="home-brand flex min-h-11 min-w-11 items-center justify-center gap-2.5 rounded-lg transition-transform hover:scale-[1.02] sm:justify-start"
           :aria-label="`${systemName} ${t('nav.home')}`"
         >
           <img

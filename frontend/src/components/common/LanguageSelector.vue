@@ -145,7 +145,8 @@ const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
 const open = ref(false)
-const current = ref<LocaleCode>(getLocale())
+// Follows the global locale, which sign-in adoption and other selectors change too.
+const current = computed(() => getLocale())
 
 const currentLabel = computed(
   () =>
@@ -185,7 +186,6 @@ function toggle() {
 
 function choose(code: LocaleCode) {
   void chooseLocale(code)
-  current.value = code
   close(true)
 }
 

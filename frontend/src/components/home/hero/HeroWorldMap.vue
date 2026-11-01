@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import type { MapScene, SceneRegion } from '@/canvas/MapScene'
@@ -60,12 +60,21 @@ function readRegion(selector: string): SceneRegion | null {
 }
 
 // The hub sits in the map focus column; model markers hide behind the copy.
+// Immersive mode hides the copy, so the hub re-centres on the whole stage.
 function resizeScene() {
   scene?.resize(
-    readRegion('[data-hero-map-focus]'),
+    readRegion(
+      props.immersive
+        ? '[data-hero-map-immersive-focus]'
+        : '[data-hero-map-focus]'
+    ),
     readRegion('[data-hero-map-copy]')
   )
 }
+watch(
+  () => props.immersive,
+  () => nextTick(resizeScene)
+)
 
 const onResize = useDebounceFn(resizeScene, 180)
 
@@ -329,6 +338,9 @@ onMounted(async () => {
       resolvedTheme.value
     )
     resizeScene()
+    // init() waits for the icons; a viewport change in that window must still
+    // reach the scene, so listen before awaiting it.
+    window.addEventListener('resize', onResize)
     await scene.init()
   } catch (error) {
     // No 2D context (unsupported/constrained env) or init failed. The map is
@@ -344,7 +356,6 @@ onMounted(async () => {
   if (disposed || !scene) return
   ready.value = true // 就绪后整景淡入，模型 Logo/枢纽不再硬弹出
   scene.start()
-  window.addEventListener('resize', onResize)
   // pointermove already covers mouse/pen/touch; a separate mousemove listener
   // would double-run onWindowMove (and its getBoundingClientRect) per mouse move.
   window.addEventListener('pointermove', onWindowMove, { passive: true })

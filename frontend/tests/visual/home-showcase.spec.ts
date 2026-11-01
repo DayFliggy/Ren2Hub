@@ -833,12 +833,21 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
 
-    await page.locator('.app-navbar a[href="/pricing"]').focus()
-    await page.keyboard.press('Shift+Tab')
-    const brand = page.locator('.app-navbar .home-brand')
-    await expect(brand).toBeFocused()
-    await expect(brand).toHaveCSS('outline-style', 'solid')
-    await expect(brand).toHaveCSS('outline-width', '2px')
+    // Public pages share the navbar without the landing reset, so the ring
+    // has to come out rounded there too.
+    for (const path of ['/', '/pricing']) {
+      if (path !== '/') {
+        await page.goto(path, { waitUntil: 'domcontentloaded' })
+        await waitForStablePage(page)
+      }
+      await page.locator('.app-navbar a[href="/pricing"]').focus()
+      await page.keyboard.press('Shift+Tab')
+      const brand = page.locator('.app-navbar .home-brand')
+      await expect(brand).toBeFocused()
+      await expect(brand).toHaveCSS('outline-style', 'solid')
+      await expect(brand).toHaveCSS('outline-width', '2px')
+      await expect(brand).toHaveCSS('border-top-left-radius', '8px')
+    }
   })
 }
 
@@ -881,6 +890,74 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
     await expect(hint).toHaveCSS('opacity', '1')
   })
 }
+
+async function swipe(
+  page: import('@playwright/test').Page,
+  x: number,
+  fromY: number,
+  toY: number
+) {
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: string, y?: number) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: y === undefined ? [] : [{ x, y }],
+    })
+  await touch('touchStart', fromY)
+  for (let step = 1; step <= 6; step++)
+    await touch('touchMove', fromY + ((toY - fromY) * step) / 6)
+  await touch('touchEnd')
+  await cdp.detach()
+}
+
+test.describe('immersive focus hand-off', () => {
+  test.use({ hasTouch: true })
+
+  // Gestures and the desktop breakpoint end the mode without a click, and
+  // used to drop focus to <body> when the focused toggle disappeared.
+  test('focus follows gesture and breakpoint exits; taps show no ring', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await configureStablePage(page, { theme: 'dark', authenticated: true })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+
+    const hint = page.locator('.hero-map-stage .hero-stage-hint')
+    const recall = page.getByRole('button', { name: '展开介绍' })
+    const stage = (await page.locator('.hero-map-stage').boundingBox())!
+
+    await swipe(page, 60, stage.y + 40, stage.y + 140)
+    await expect(recall).toBeVisible()
+    // Chromium swallows a tap that lands within ~50ms of the swipe's touchend
+    // (no click is synthesized, on the base build too); a person never taps
+    // that fast, so leave a realistic gap between the two gestures.
+    await page.waitForTimeout(500)
+    await recall.tap()
+    await expect(recall).toHaveCount(0)
+    expect(await hint.evaluate((el) => el.matches(':focus-visible'))).toBe(
+      false
+    )
+
+    await hint.focus()
+    await page.keyboard.press('Enter')
+    await expect(recall).toBeFocused()
+    await swipe(page, 60, 520, 400)
+    await expect(recall).toHaveCount(0)
+    await expect(hint).toBeFocused()
+
+    await page.keyboard.press('Enter')
+    await expect(recall).toBeFocused()
+    await page.setViewportSize({ width: 1280, height: 844 })
+    await expect(recall).toHaveCount(0)
+    await expect(
+      page
+        .locator('[data-hero-map-copy]')
+        .locator('a[href], button:not([disabled])')
+        .first()
+    ).toBeFocused()
+  })
+})
 
 test('runtime motion starts only when motion is allowed', async ({ page }) => {
   await configureStablePage(page, {

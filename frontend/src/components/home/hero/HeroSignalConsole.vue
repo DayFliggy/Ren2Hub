@@ -41,21 +41,27 @@
             <span class="signal-console__telemetry">
               <span class="signal-console__telemetry-row">
                 <span class="signal-console__telemetry-index">[01]</span>
-                <span class="signal-console__telemetry-label">INBOUND</span>
+                <span class="signal-console__telemetry-label">{{
+                  t('signalConsole.terminal.inbound')
+                }}</span>
                 <span class="signal-console__telemetry-value">{{
                   inboundLine
                 }}</span>
               </span>
               <span class="signal-console__telemetry-row is-target">
                 <span class="signal-console__telemetry-index">[02]</span>
-                <span class="signal-console__telemetry-label">TARGET</span>
+                <span class="signal-console__telemetry-label">{{
+                  t('signalConsole.terminal.target')
+                }}</span>
                 <span class="signal-console__telemetry-value">{{
                   targetLine
                 }}</span>
               </span>
               <span class="signal-console__telemetry-row is-more">
                 <span class="signal-console__telemetry-index">[..]</span>
-                <span class="signal-console__telemetry-label">MORE</span>
+                <span class="signal-console__telemetry-label">{{
+                  t('signalConsole.terminal.more')
+                }}</span>
                 <span class="signal-console__telemetry-value">{{
                   moreLine
                 }}</span>
@@ -75,9 +81,16 @@
             role="region"
             :aria-label="t('signalConsole.traceInspectorLabel')"
           >
-            <p class="signal-console__trace-drawer-title">
-              <span>TRACE INDEX</span>
-              <span>{{ formatIndex(drawerTraces.length) }} RECORDS</span>
+            <p class="signal-console__trace-drawer-title" aria-hidden="true">
+              <span>{{ t('signalConsole.terminal.traceIndex') }}</span>
+              <span>{{ recordsLabel }}</span>
+            </p>
+            <p class="sr-only">
+              {{
+                t('signalConsole.announce.traceCount', {
+                  count: drawerTraces.length,
+                })
+              }}
             </p>
 
             <ol v-if="drawerTraces.length" class="signal-console__trace-list">
@@ -91,10 +104,9 @@
                   'is-pointer': trace.origin === 'pointer',
                 }"
               >
-                <p class="signal-console__trace-meta">
-                  <span
-                    >[{{ trace.origin === 'pointer' ? 'PTR' : 'AUTO' }}]</span
-                  >
+                <p class="sr-only">{{ describeRecord(trace) }}</p>
+                <p class="signal-console__trace-meta" aria-hidden="true">
+                  <span>[{{ originToken(trace) }}]</span>
                   <span>{{ phaseLabel(trace.phase) }}</span>
                   <span
                     v-if="trace.completedAt"
@@ -103,7 +115,7 @@
                     {{ formatLatency(trace.latencyMs) }}
                   </span>
                 </p>
-                <p class="signal-console__trace-chain">
+                <p class="signal-console__trace-chain" aria-hidden="true">
                   <span class="signal-console__trace-source">{{
                     sourceLine(trace)
                   }}</span>
@@ -111,7 +123,7 @@
                     >→</span
                   >
                   <span class="signal-console__trace-hub">{{
-                    trace.hubLabel || 'MODEL GATEWAY'
+                    trace.hubLabel || t('signalConsole.terminal.gateway')
                   }}</span>
                   <template
                     v-for="hop in trace.hops"
@@ -131,14 +143,20 @@
                       >→</span
                     >
                     <span class="signal-console__trace-response"
-                      >RESP {{ formatLatency(trace.latencyMs) }}</span
+                      >{{ t('signalConsole.terminal.response') }}
+                      {{ formatLatency(trace.latencyMs) }}</span
                     >
                   </template>
                 </p>
               </li>
             </ol>
             <p v-else class="signal-console__trace-empty">
-              NO ROUTES BUFFERED // STANDING BY
+              <span aria-hidden="true">{{
+                t('signalConsole.terminal.empty')
+              }}</span>
+              <span class="sr-only">{{
+                t('signalConsole.announce.empty')
+              }}</span>
             </p>
           </div>
         </Transition>
@@ -187,12 +205,13 @@
           />
           <div class="signal-console__baseline-readout">
             <p class="signal-console__origin" :title="countryTitle">
-              <span class="signal-console__origin-label">{{
+              <span class="signal-console__origin-label" aria-hidden="true">{{
                 countryPrefix
               }}</span>
-              <span class="signal-console__origin-value">{{
+              <span class="signal-console__origin-value" aria-hidden="true">{{
                 countryLine
               }}</span>
+              <span class="sr-only">{{ countryTitle }}</span>
             </p>
             <SignalLatencyMeter
               :average-latency-ms="snapshot.averageLatencyMs"
@@ -237,7 +256,7 @@ const props = defineProps<{
   snapshot: SignalConsoleSnapshot
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const traceInspectorEl = ref<HTMLElement | null>(null)
 const traceDrawerOpen = ref(false)
 const pointerWithinInspector = ref(false)
@@ -310,25 +329,44 @@ const countryCodes = computed(() => {
   ]
 })
 
-const countryLine = computed(() => summarizeChain(countryCodes.value, 'GLOBAL'))
+const listFormat = computed(
+  () => new Intl.ListFormat(locale.value, { type: 'conjunction' })
+)
+
+const countryLine = computed(() =>
+  summarizeChain(countryCodes.value, t('signalConsole.terminal.global'))
+)
 const countryPrefix = computed(() =>
-  activeTraces.value.length ? 'FROM' : 'LAST'
+  t(
+    activeTraces.value.length
+      ? 'signalConsole.terminal.from'
+      : 'signalConsole.terminal.last'
+  )
 )
 const countryTitle = computed(() => {
-  if (!countryCodes.value.length) return 'No active request country'
-  return `${countryPrefix.value.toLowerCase()} request country: ${countryCodes.value.join(', ')}`
+  if (!countryCodes.value.length) return t('signalConsole.announce.noCountry')
+  return t(
+    activeTraces.value.length
+      ? 'signalConsole.announce.activeCountry'
+      : 'signalConsole.announce.lastCountry',
+    { countries: listFormat.value.format(countryCodes.value) }
+  )
 })
 
-function sourceLine(trace: SignalRequestTrace) {
-  const labels = trace.sources.map((source) => source.label).filter(Boolean)
-  if (labels.length) return labels.join(' + ')
-  if (trace.sourceCount > 0) return `${formatIndex(trace.sourceCount)} SOURCES`
-  return 'EDGE SOURCE'
-}
+const sourceLabels = (trace: SignalRequestTrace) =>
+  trace.sources.map((source) => source.label).filter(Boolean)
 
-function traceTargetLine(trace: SignalRequestTrace) {
-  const modelNames = trace.hops.map((hop) => hop.modelName).filter(Boolean)
-  return modelNames.length ? modelNames.join(' > ') : 'MODEL GATEWAY'
+const modelNames = (trace: SignalRequestTrace) =>
+  trace.hops.map((hop) => hop.modelName).filter(Boolean)
+
+function sourceLine(trace: SignalRequestTrace) {
+  const labels = sourceLabels(trace)
+  if (labels.length) return labels.join(' + ')
+  if (trace.sourceCount > 0)
+    return t('signalConsole.terminal.sources', {
+      count: formatIndex(trace.sourceCount),
+    })
+  return t('signalConsole.terminal.edgeSource')
 }
 
 /* One-line rows (telemetry, origin, mobile ticker) show the first item and a
@@ -341,59 +379,127 @@ function summarizeChain(items: string[], fallback: string) {
 }
 
 function targetSummary(trace: SignalRequestTrace) {
-  const modelNames = trace.hops.map((hop) => hop.modelName).filter(Boolean)
-  return summarizeChain(modelNames, 'MODEL GATEWAY')
+  return summarizeChain(modelNames(trace), t('signalConsole.terminal.gateway'))
 }
 
 function formatLatency(latency?: number) {
-  return typeof latency === 'number' ? `${Math.round(latency)}MS` : 'PENDING'
+  return typeof latency === 'number'
+    ? `${Math.round(latency)}MS`
+    : t('signalConsole.terminal.pending')
 }
+
+const terminalPair = (left: string, right: string) => `${left} // ${right}`
+
+const originToken = (trace: SignalRequestTrace) =>
+  t(
+    trace.origin === 'pointer'
+      ? 'signalConsole.terminal.pointer'
+      : 'signalConsole.terminal.auto'
+  )
+
+const recordsLabel = computed(() =>
+  t('signalConsole.terminal.records', {
+    count: formatIndex(drawerTraces.value.length),
+  })
+)
 
 const inboundLine = computed(() => {
   const trace = focusedTrace.value
   if (trace) {
-    const labels = trace.sources.map((source) => source.label).filter(Boolean)
-    const sources = summarizeChain(labels, sourceLine(trace))
-    return `${sources} // ${phaseLabel(trace.phase)}`
+    const sources = summarizeChain(sourceLabels(trace), sourceLine(trace))
+    return terminalPair(sources, phaseLabel(trace.phase))
   }
 
   const sourceCount = props.snapshot.sourceCount ?? 0
+  const standby = t('signalConsole.terminal.standby')
   return sourceCount > 0
-    ? `${formatIndex(sourceCount)} SOURCES // STANDBY`
-    : 'EDGE READY // STANDBY'
+    ? terminalPair(
+        t('signalConsole.terminal.sources', {
+          count: formatIndex(sourceCount),
+        }),
+        standby
+      )
+    : terminalPair(t('signalConsole.terminal.edgeReady'), standby)
 })
 
 const targetLine = computed(() => {
   const trace = focusedTrace.value
   if (trace)
-    return `${targetSummary(trace)} // ${formatLatency(trace.latencyMs)}`
+    return terminalPair(targetSummary(trace), formatLatency(trace.latencyMs))
 
   const { modelName, latencyMs, targetCount = 0 } = props.snapshot
-  if (modelName) return `${modelName} // ${formatLatency(latencyMs)}`
-  if (targetCount > 0) return `SELECTING // ${formatIndex(targetCount)} NODES`
-  return 'GATEWAY WARM // READY'
+  if (modelName) return terminalPair(modelName, formatLatency(latencyMs))
+  if (targetCount > 0)
+    return terminalPair(
+      t('signalConsole.terminal.selecting'),
+      t('signalConsole.terminal.nodes', { count: formatIndex(targetCount) })
+    )
+  return terminalPair(
+    t('signalConsole.terminal.gatewayWarm'),
+    t('signalConsole.terminal.ready')
+  )
 })
 
 const moreLine = computed(() => {
   if (traceDrawerOpen.value)
-    return `TRACE INDEX // ${formatIndex(drawerTraces.value.length)} RECORDS`
+    return terminalPair(
+      t('signalConsole.terminal.traceIndex'),
+      recordsLabel.value
+    )
   const traceCount = drawerTraces.value.length
+  const hold = t('signalConsole.terminal.hold')
   return traceCount
-    ? `HOLD 3S // ${formatIndex(traceCount)} TRACES`
-    : 'HOLD 3S // TRACE INDEX'
+    ? terminalPair(
+        hold,
+        t('signalConsole.terminal.traces', { count: formatIndex(traceCount) })
+      )
+    : terminalPair(hold, t('signalConsole.terminal.traceIndex'))
 })
+
+/** One localized sentence per trace for screen readers; the visual terminal
+ *  rows stay aria-hidden. */
+function describeTrace(trace: SignalRequestTrace) {
+  const sources = sourceLabels(trace)
+  const models = modelNames(trace)
+  const latency = trace.latencyMs
+  return t('signalConsole.announce.route', {
+    source: sources.length
+      ? listFormat.value.format(sources)
+      : t('signalConsole.announce.edgeSource'),
+    target: models.length
+      ? listFormat.value.format(models)
+      : t('signalConsole.announce.pendingTarget'),
+    phase: t(`signalConsole.phases.${trace.phase}`),
+    latency:
+      typeof latency === 'number'
+        ? t('signalConsole.latency.measured', { ms: Math.round(latency) })
+        : t('signalConsole.latency.pending'),
+  })
+}
+
+function describeRecord(trace: SignalRequestTrace) {
+  const origin = t(
+    trace.origin === 'pointer'
+      ? 'signalConsole.announce.pointer'
+      : 'signalConsole.announce.auto'
+  )
+  return t('signalConsole.announce.record', {
+    origin,
+    trace: describeTrace(trace),
+  })
+}
 
 const screenReaderStatus = computed(() => {
   const trace = focusedTrace.value
   if (!trace) return t('signalConsole.a11yIdle')
-  return `${t('signalConsole.demo')}: ${sourceLine(trace)} through ${traceTargetLine(trace)}: ${phaseLabel(trace.phase)}, ${formatLatency(trace.latencyMs)}`
+  return t('signalConsole.announce.status', { trace: describeTrace(trace) })
 })
 
 // 移动端 ticker：目标行（模型链或待命）+ 当前延迟
 const tickerTarget = computed(() => {
   const trace = focusedTrace.value
   if (trace) return targetSummary(trace)
-  return props.snapshot.modelName ?? 'GATEWAY READY'
+  return props.snapshot.modelName ?? t('signalConsole.terminal.gatewayReady')
 })
 
 const tickerLatency = computed(() => {
@@ -438,6 +544,9 @@ function onInspectorPointerLeave() {
 }
 
 function onInspectorFocusIn() {
+  // Focus arriving from outside is a fresh keyboard visit, even while the
+  // pointer still rests on the head.
+  if (!focusWithinInspector.value) traceDrawerDismissed = false
   focusWithinInspector.value = true
   syncTraceDrawer()
 }

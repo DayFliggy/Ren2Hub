@@ -123,7 +123,15 @@
         <dt
           class="font-mono text-xl font-bold text-[var(--text-primary)] sm:text-2xl"
         >
-          {{ m.value }}
+          <!-- A status such as "暂无样本" keeps the number's line box so the
+               labels stay aligned, but reads as a note rather than a value. -->
+          <span
+            :class="
+              m.pending &&
+              'align-middle font-sans text-[0.6em] leading-none font-medium text-[var(--text-tertiary)]'
+            "
+            >{{ m.value }}</span
+          >
         </dt>
         <dd
           class="mt-0.5 break-words text-[10px] leading-tight text-[var(--text-tertiary)] sm:text-xs sm:leading-normal"
@@ -160,6 +168,7 @@ const {
   docsLink,
   showDocs,
   modelCountLabel,
+  modelCountState,
   uptimeLabel,
   uptimePercent,
   registerEnabled,
@@ -191,11 +200,25 @@ const latencyLabel = computed(() =>
 // Availability comes only from Uptime Kuma: no item while that source is off
 // or has not measured anything, rather than a permanent "--".
 const metrics = computed(() => [
-  { value: modelCountLabel.value, label: t('hero.metrics.models') },
+  {
+    value: modelCountLabel.value,
+    label: t('hero.metrics.models'),
+    pending: modelCountState.value !== 'ready',
+  },
   ...(uptimePercent.value === null
     ? []
-    : [{ value: uptimeLabel.value, label: t('hero.metrics.uptime') }]),
-  { value: latencyLabel.value, label: t('hero.metrics.latency') },
+    : [
+        {
+          value: uptimeLabel.value,
+          label: t('hero.metrics.uptime'),
+          pending: false,
+        },
+      ]),
+  {
+    value: latencyLabel.value,
+    label: t('hero.metrics.latency'),
+    pending: performance.latency.value === null,
+  },
 ])
 
 /* ===== 标题第二行逐词缩放 =====

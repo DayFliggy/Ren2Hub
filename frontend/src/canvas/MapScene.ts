@@ -81,7 +81,6 @@ interface RequestGroup {
   flylines: Flyline[]
   packets: ArcPacket[]
   markers: ModelMarker[]
-  hub: { x: number; y: number }
   preferredTargetIds: string[]
   trace: SignalRequestTrace
   phase: Exclude<SignalConsolePhase, 'idle'>
@@ -759,7 +758,6 @@ export class MapScene {
       flylines: [],
       packets: [],
       markers: [],
-      hub: { x: this.hub.x, y: this.hub.y },
       preferredTargetIds: [...preferredTargetIds],
       trace,
       phase: 'gather',
@@ -784,7 +782,7 @@ export class MapScene {
       const transmitMs = Math.max(260, timing.gatherMs - delayMs - establishMs)
       const channel = new UserChannel(
         () => user.head(),
-        group.hub,
+        this.hub,
         { establishMs, transmitMs, fadeMs: 640, delayMs },
         () => this.onUserArrivedAtHub(group),
         this.reduced
@@ -834,7 +832,7 @@ export class MapScene {
     if (phase === 'hub_hold') {
       group.phaseEndsAt = now + group.timing.hubHoldMs
       this.hub.pulse = 1
-      this.spawnRipple(group.hub.x, group.hub.y, 0.7)
+      this.spawnRipple(this.hub.x, this.hub.y, 0.7)
     } else if (phase === 'route') {
       group.phaseEndsAt = now + group.timing.routeMs
       this.startRoute(group)
@@ -865,7 +863,7 @@ export class MapScene {
       const link = this.links.find((candidate) => candidate.mk === marker)
       if (link) link.activity = 1
       const flyline = new Flyline(
-        group.hub,
+        this.hub,
         { x: marker.x, y: marker.y },
         () => marker.color,
         group.timing.routeOutboundMs,
@@ -920,7 +918,7 @@ export class MapScene {
       const centerY = this.h / 2
       const flyline = new Flyline(
         { x: marker.x, y: marker.y },
-        group.hub,
+        this.hub,
         () => marker.color,
         group.timing.routeReturnMs,
         () => this.onReturnArrived(group, marker),
@@ -956,7 +954,7 @@ export class MapScene {
     group.trace.latencyMs = group.plannedLatencyMs
     for (const user of group.users) {
       const packet = new ArcPacket(
-        group.hub,
+        this.hub,
         () => user.head(),
         group.timing.respondMs,
         () => user.release()

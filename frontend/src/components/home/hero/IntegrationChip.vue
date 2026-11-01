@@ -28,11 +28,7 @@
         v-if="!hasImgError"
         alt=""
         class="relative z-[1] size-7 object-contain transition-all duration-500"
-        :class="
-          active
-            ? 'opacity-100 grayscale-0'
-            : 'opacity-75 grayscale group-hover:opacity-100 group-hover:grayscale-0'
-        "
+        :class="active ? undefined : inactiveIconClass"
         :src="tool.icon"
         loading="lazy"
         @error="hasImgError = true"
@@ -40,7 +36,6 @@
       <span
         v-else
         class="relative z-[1] flex size-7 items-center justify-center font-mono text-xs font-bold text-[var(--accent)] transition-all duration-500"
-        :class="active ? 'opacity-100' : 'opacity-75 group-hover:opacity-100'"
       >
         {{ tool.name.slice(0, 2).toUpperCase() }}
       </span>
@@ -49,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import type { Integration } from '@/constants/home/integrations'
@@ -58,13 +53,24 @@ import { useAppStore } from '@/stores'
 const { docsLink } = storeToRefs(useAppStore())
 const hasImgError = ref(false)
 
-defineProps<{
+const props = defineProps<{
   tool: Integration
   /** 是否处于聚光灯位（随滚动切换点亮） */
   active?: boolean
   /** 跑马灯的第二组克隆，屏蔽键盘/读屏 */
   clone?: boolean
 }>()
+
+// The chip's opacity is the one dimming layer. A grey single-tone mark vanished
+// on a surface of its own tone, so marks dim to a neutral silhouette (dark grey
+// by day, light grey by night) tuned to read like the greyed plates; plates
+// carry their own background and only lose colour. Hover and the spotlight
+// restore the original colours.
+const inactiveIconClass = computed(() =>
+  props.tool.tone === 'mark'
+    ? 'brightness-0 invert-[0.3] dark:invert-[0.75] group-hover:filter-none'
+    : 'grayscale group-hover:filter-none'
+)
 </script>
 
 <style scoped>

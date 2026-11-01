@@ -123,6 +123,25 @@ describe('account language', () => {
     wrapper.unmount()
   })
 
+  // The selector was mounted before sign-in, so it must follow a locale it did
+  // not set itself instead of keeping the label it read on mount.
+  it('updates an open selector label when sign-in adopts the account language', async () => {
+    const selector = mount(LanguageSelector, {
+      attachTo: document.body,
+      global: { plugins: [pinia, i18n] },
+    })
+    const label = () => selector.get('[data-language-label]').text()
+    expect(label()).toBe('简体中文')
+
+    const adoption = mountAdoption()
+    useAuthStore().persist(user('en'))
+    await flushPromises()
+
+    expect(label()).toBe('English')
+    adoption.unmount()
+    selector.unmount()
+  })
+
   it('keeps the language this device chose on sign-in', async () => {
     localStorage.setItem(LOCALE_STORAGE_KEY, 'zh-CN')
     const wrapper = mountAdoption()
