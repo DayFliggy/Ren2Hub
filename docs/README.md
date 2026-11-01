@@ -8,7 +8,7 @@ Ren2Hub / DayFliggy 是采用 NewAPI 核心的单节点 AI 网关，使用 Vue �
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 安装与发布 | [安装](installation/DOCKER.md)、[宝塔](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md)                                                                                          |
 | 登录与权限 | [认证](authentication.md)、[扩展接口](routing/GATEWAY_API.md)                                                                                                                                 |
-| 路由与协议 | [自动及私有路由](routing/UNIFIED_ROUTING.md)、[协议边界](routing/GATEWAY_SUPPORT_MATRIX.md)、[渠道](channel/TYPES.md)                                                                         |
+| 路由与协议 | [自动及私有路由](routing/UNIFIED_ROUTING.md)、[协议边界](routing/GATEWAY_SUPPORT_MATRIX.md)、[渠道](channel/TYPES.md)、[渠道上游倍率](channel/UPSTREAM_RATIO.md)                              |
 | 钱包与定价 | [实现](billing/IMPLEMENTATION.md)、[API](billing/API.md)、[定价](billing/PRICING.md)、[用量折扣](billing/USAGE_DISCOUNT.md)、[恢复](billing/RECOVERY.md)                                      |
 | 充值       | [原生易支付](billing/EPAY.md)、[GMPay](billing/GMPAY.md)、[支付设置](billing/PAYMENT_SETTINGS.md)                                                                                             |
 | 异步任务   | [插件入口](plugin-api/README.md)、[上游 v1 ABI](plugin-api/v1.md)                                                                                                                             |

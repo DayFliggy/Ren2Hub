@@ -40,6 +40,12 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 合并到 main 时按用户要求恢复上游音频计费：`AudioRatio`、`AudioCompletionRatio` 的内置表及其 `InitRatioSettings`、首次写入 `defaultPricingMaps`，`tools.go` 末尾的 Gemini 音频输入固定价，`service/text_quota.go` 的原生 Gemini 音频单独计费与日志，`model/model_pricing_conversion.go` 的 Gemini/OpenAI 音频冲突判断，均恢复为上游原文；本地扩展 `model/catalog_prices.go` 的目录投影恢复为 main 中对该冲突判断的接入；`tools.go` 回到 `upstream_equal`。理由：OpenAI 兼容接口只在存在音频倍率时走音频结算，删除内置表后音频模型会按文本价少扣。OpenRouter Claude 反推缓存写入仍删除，它只对内置模型倍率生效。上述文件的音频部分以后照常吸收上游。前端定价页按基础价格判断“未定价”，仅有内置音频倍率的模型仍列为未定价；保存时，从未有美元单价的已存倍率在单价留空时原样保留；已显示单价被清空的启用项拒绝保存，不再静默删除倍率。恢复后来源清单重算为 799 `upstream_equal`、276 `adapted`、253 `extension`、45 `removed`（含用量折扣与系统状态的合并结果），`tools.go` 不再列为本地差异。
 
+## 2026-10-30 任务渠道缺失时退还预扣额度
+
+`service/task_polling.go` 的批量任务与视频任务轮询在 `model.CacheGetChannel` 失败时，上游 `e449cc700` 用 `TaskBulkUpdateByID` 直接把这批任务标为 FAILURE，不退还预扣额度。本地改为 `failTasksWithoutChannel` 逐个任务按原状态 CAS 改为 FAILURE，只有赢得 CAS 的调用方执行 `RefundTaskQuota`，与并发轮询不会重复退款；写库错误合并返回。回归测试为 `TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing`，批量路径共用同一函数，没有单独用例。该分支于 2026-10-31 按用户“将这些分支合并到 main 上”的要求合入。它属于与上游相同的多扣缺陷，此前对这类缺陷的处理是保留上游行为（如 Realtime WSS 重复扣费），本次合入是否作为例外保留待用户确认。
+
+已知限制：`controller/midjourney.go` 的渠道缺失路径未改，仍按上游 `MjBulkUpdate` 批量判失败、不退款。`model/channel_cache.go` 的 `InitChannelCache` 与上游一样忽略 `DB.Find` 的错误；启用内存缓存时，一次失败的同步会把渠道表替换为空，下次同步前在途任务都会被判为渠道缺失。上游在这种情况下同样判失败，本地会同时退款，而上游可能已执行并计费，损失由运营方承担。`RefundTaskQuota` 的返回值未检查。原生文件 `service/task_polling.go` 原已 adapted，reasons 增加 `upstream-defect`。
+
 ## 2026-10-30 用量折扣
 
 新增用量折扣：固定折扣、全站阶梯和个人日/周/月阶梯合成一个乘在渠道倍率上的系数，行为见 `docs/billing/USAGE_DISCOUNT.md`。这是 Ren2Hub 扩展，NewAPI 没有对应功能。

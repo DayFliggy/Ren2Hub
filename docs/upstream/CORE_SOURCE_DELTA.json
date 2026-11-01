@@ -8218,7 +8218,8 @@
       "local_sha256": "98a16bdd4fa300817e8632a5da86298d898501f99f4ce2d819a3b0fa9f46331d",
       "reasons": [
         "channel-ratio",
-        "concurrency"
+        "concurrency",
+        "upstream-defect"
       ]
     },
     {
