@@ -4,6 +4,20 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-01 发布前审计修正
+
+发布前用 Codex 对待发布源码做后端和发布交叉审计，复现的问题已修正，每项都有回归测试，修正前失败、修正后通过。任务渠道缺失退款的两处问题记在 2026-10-30 条目。
+
+倍率校验先比较大小、后限制指数。`decimal.Cmp` 比较前会把两边换算到较小的指数，`1e2147483647` 这类短输入因此会构造巨大的整数，修正前 `1e10000000` 一次校验约耗时 2.5 秒、分配 66 MB。新增 `model.ParseBoundedRatio`，在任何比较之前限定长度不超过 64 字符、十进制指数在 -18 到 18 之间。`NormalizeChannelRatio`（渠道倍率和每 Key 的 `max_channel_ratio`，后者普通用户默认可写）和手填上游倍率都改用它。合法取值不变，只有 `0e100000` 这类指数超界的零现在会被拒绝。
+
+上游倍率探测走代理时，受保护拨号器只检查代理地址，目标 URL 没有校验。`upstreamRatioGet` 现在发请求前先调用 `ValidateSSRFProtectedFetchURL`，被禁止的目标不再经代理发出，规则与共享的受保护客户端一致。
+
+前端定价编辑器改任务单价后点“生成任务计价草稿”，原先整条表达式被替换成新的基础价，请求规则和已应用的任务条件倍率（`cond ? m : 1` 形式的乘数）随之丢失，保存后匹配的请求按基础价少收。`repriceTaskExpression` 只替换价格部分，保留顶层乘积中的这些乘数和 `v1:` 前缀；`readTaskPrices` 也改为从去掉乘数后的价格部分回填单价，带条件倍率的表达式重新打开时不再显示空白单价。
+
+`TestModelPriceHelperHasNoBuiltInPrices` 单独运行时因 i18n 未初始化而 panic，已在测试内补 `i18n.Init()`。生产启动本来就会初始化。
+
+来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 800 `upstream_equal`、275 `adapted`、257 `extension`、45 `removed`，`candidate_sha` 为空。
+
 ## 2026-10-31 流量读数改为宿主网卡或主监听器
 
 流量读数不再统计 HTTP 正文。启动时按 `TRAFFIC_HOST_INTERFACE`、`TRAFFIC_HOST_NET_DEV` 判定一次来源（`common/traffic_host.go`），进程内不切换：两个变量都为空（空串等同未设置）时使用主监听器计数，scope 为 `application_listener`；任一非空即为宿主模式，scope 为 `host_interface`，路径缺省为 `/host/proc/net/dev`。宿主模式每 10 秒重新完整读取 `net/dev`，只取配置的那块网卡的 rx/tx 字节，不汇总，也不改读其他网卡。网卡名或路径不合法、文件打不开、内容格式不对、找不到该网卡时，分别报 `host_config_invalid`、`host_counters_unreadable`、`host_counters_invalid`、`host_interface_missing`，两个方向都为 null，并且不改用监听器。reason 只在进入、切换和恢复时各写一次日志，observer 启动时记录一次所选来源。监听器模式由 `common/traffic.go` 包装主监听器接受的连接：Read 计入入站，Write 计入出站，包含 HTTP 头、正文、WebSocket 帧和健康检查，不含应用主动连接上游的流量和 pprof `:8005`。连接包装内嵌 `net.Conn` 接口值，只覆盖 Read、Write、CloseWrite，不提升 `ReadFrom`、`WriteTo` 等绕过计数的方法；`n>0` 时即使同时返回错误也累计，错误原样返回。
@@ -46,7 +60,9 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 2026-11-01 用户要求核对上游是否已有方案并吸收。上游 main `d0abbf6e0d33552a41c402d9b1fadbaff27cf40d` 比 `e449cc700` 多 24 个提交，`task_polling.go` 只增加视频响应脱敏，两条渠道缺失路径仍不退款；相关请求 QuantumNous/new-api#7738 仍为 open，没有合入的修复（#7736 以 not_planned 关闭）。因此改为照搬同一文件 `sweepTimedOutTasks` 的写法：按原状态 CAS 改为 FAILURE 并写 `FinishTime`；`SubmitTime` 早于 `model.TaskRefundLegacyCutoff` 的旧任务随 CAS 清零 quota、不退款；只有赢得 CAS 的调用方在 quota 非零时执行 `RefundTaskQuota`，CAS 失败与已被推进的任务分别记日志。回归测试 `TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing` 与 `TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule` 覆盖两条路径、只退一次、旧任务不退款、`FinishTime` 以及并发轮询持有的旧副本不重复退款。这是与上游相同的多扣缺陷的本地修复，用户确认保留。本次只核对这一项，上述 24 个提交的其余内容未吸收。
 
-已知限制：`controller/midjourney.go` 的渠道缺失路径未改，仍按上游 `MjBulkUpdate` 批量判失败、不退款。`model/channel_cache.go` 的 `InitChannelCache` 与上游一样忽略 `DB.Find` 的错误；启用内存缓存时，一次失败的同步会把渠道表替换为空，下次同步前在途任务都会被判为渠道缺失。上游在这种情况下同样判失败，本地会同时退款，而上游可能已执行并计费，损失由运营方承担。`RefundTaskQuota` 的返回值与上游超时清理一样不检查。原生文件 `service/task_polling.go` 原已 adapted，reasons 为 `channel-ratio`、`concurrency`、`upstream-defect`。
+发布前审计又复现两处资金问题，已修正。第一，`CacheGetChannel` 的任何错误都会触发判失败和退款：关闭内存缓存时一次瞬时的渠道查询失败，或内存缓存漏掉了库中仍存在的渠道，都会把仍在执行的任务判失败并退款。现在 `failTasksWithoutChannel` 先用 `model.GetChannelById` 查库，只有返回 `gorm.ErrRecordNotFound` 才判失败；渠道仍存在或查询出错时任务不变，函数返回错误，下轮轮询重试。第二，`taskM` 按上游任务 ID 建表，不区分渠道。同平台两个渠道出现相同上游 ID 时，后读到的任务会覆盖前者，删除渠道的路径于是对另一个渠道的任务做 CAS 并退款。现在跳过 `ChannelId` 不属于当前渠道的任务，被覆盖的任务本轮不处理，由 72 小时超时清理按同样规则判失败并退款。键冲突本身与上游相同，原生的建表逻辑未改。函数移到扩展文件 `service/task_missing_channel.go`，原生 `task_polling.go` 只保留两处调用。两条原有回归测试一并移入 `service/task_missing_channel_test.go`，新增的 `TestUpdateBatchTasksKeepsTasksWhenChannelReadFails`、`TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel`、`TestFailTasksWithoutChannelSkipsAnotherChannelsTask` 在修正前都失败。
+
+已知限制：`controller/midjourney.go` 的渠道缺失路径未改，仍按上游 `MjBulkUpdate` 批量判失败、不退款。`model/channel_cache.go` 的 `InitChannelCache` 与上游一样忽略 `DB.Find` 的错误；启用内存缓存时，一次失败的同步会把渠道表替换为空，下次同步前上游会把在途任务判为渠道缺失；本地查库确认渠道仍存在，任务保持不变。渠道确实被删除时，上游可能已执行并计费，本地照样退款，这部分损失由运营方承担。`RefundTaskQuota` 的返回值与上游超时清理一样不检查。原生文件 `service/task_polling.go` 原已 adapted，reasons 为 `channel-ratio`、`concurrency`、`upstream-defect`。
 
 ## 2026-10-30 用量折扣
 

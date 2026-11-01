@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bufio"
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -310,8 +313,10 @@ func TestManualUpstreamRatioOnUnsupportedChannel(t *testing.T) {
 	assert.Equal(t, UpstreamRatioKindUnsupported, view.Kind)
 	assert.Equal(t, "0.85", view.Ratio)
 	assert.False(t, view.Stale)
-	_, err = UpdateChannelUpstreamRatio(channel.Id, UpstreamRatioUpdate{Mode: model.UpstreamRatioModeManual, Ratio: "1001", Version: view.Version})
-	assert.ErrorIs(t, err, ErrUpstreamRatioInvalid)
+	for _, ratio := range []string{"1001", "0e100000"} {
+		_, err = UpdateChannelUpstreamRatio(channel.Id, UpstreamRatioUpdate{Mode: model.UpstreamRatioModeManual, Ratio: ratio, Version: view.Version})
+		assert.ErrorIs(t, err, ErrUpstreamRatioInvalid, ratio)
+	}
 }
 
 // 代理地址是拨号目标，必须经过 SSRF 检查：回环代理在开启防护时不能被连接。
@@ -328,6 +333,45 @@ func TestUpstreamRatioProxyDialIsProtected(t *testing.T) {
 		_ = resp.Body.Close()
 	}
 	assert.Error(t, err, "loopback proxy must be refused by the protected dialer")
+}
+
+// 走代理时拨号器只检查代理地址，目标 URL 也必须按 SSRF 规则校验，被禁止的目标不能经代理发出。
+func TestUpstreamRatioProxyTargetIsProtected(t *testing.T) {
+	setupUpstreamRatioTest(t)
+	fetch := system_setting.GetFetchSetting()
+	fetch.EnableSSRFProtection = true
+	fetch.AllowPrivateIp = false
+	fetch.AllowedPorts = []string{"80", "8080"}
+	client, err := newUpstreamRatioHTTPClient("http://8.8.8.8:8080")
+	require.NoError(t, err)
+	defer client.CloseIdleConnections()
+	// 保留受保护拨号器，只把最终 TCP 连接换成内存里的代理，不访问网络。
+	var proxied atomic.Int32
+	dialer := &protectedFetchDialer{resolver: net.DefaultResolver, getProtection: currentFetchProtection,
+		dialContext: func(context.Context, string, string) (net.Conn, error) {
+			clientConn, serverConn := net.Pipe()
+			go func() {
+				defer serverConn.Close()
+				req, err := http.ReadRequest(bufio.NewReader(serverConn))
+				if err != nil {
+					return
+				}
+				proxied.Add(1)
+				_ = req.Body.Close()
+				fmt.Fprint(serverConn, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+			}()
+			return clientConn, nil
+		}}
+	client.Transport.(*http.Transport).DialContext = dialer.DialContext
+
+	_, err = upstreamRatioGet(context.Background(), client, "http://169.254.169.254/v1/sub2api/billing", "sk-test", 1024)
+	require.Error(t, err)
+	assert.Zero(t, proxied.Load(), "a forbidden target must not reach the proxy")
+
+	resp, err := upstreamRatioGet(context.Background(), client, "http://1.1.1.1/v1/sub2api/billing", "sk-test", 1024)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.EqualValues(t, 1, proxied.Load())
 }
 
 func TestUpstreamRatioZonedIPv6HostIsRefused(t *testing.T) {

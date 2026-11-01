@@ -323,11 +323,8 @@ type UpstreamRatioUpdate struct {
 }
 
 func normalizeManualUpstreamRatio(value string) (string, error) {
-	if len(value) == 0 || len(value) > 64 {
-		return "", ErrUpstreamRatioInvalid
-	}
-	ratio, err := decimal.NewFromString(value)
-	if err != nil || ratio.IsNegative() || ratio.GreaterThan(upstreamRatioManualMax) || ratio.Exponent() < -18 {
+	ratio, ok := model.ParseBoundedRatio(value)
+	if !ok || ratio.IsNegative() || ratio.GreaterThan(upstreamRatioManualMax) {
 		return "", ErrUpstreamRatioInvalid
 	}
 	return ratio.String(), nil

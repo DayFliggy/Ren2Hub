@@ -130,7 +130,7 @@ func upstreamRatioFingerprint(channel *model.Channel) string {
 
 // newUpstreamRatioHTTPClient 每次探测新建，不复用中转用的共享 client：拒绝重定向。
 // 所有拨号（直连目标，或代理地址）都经过 SSRF 受保护拨号器，按解析后的 IP 检查。
-// 走代理时目标由代理远端解析，此处只能检查代理自身。
+// 走代理时目标由代理远端解析，拨号器只看到代理，目标 URL 由 upstreamRatioGet 按同一规则校验。
 func newUpstreamRatioHTTPClient(proxy string) (*http.Client, error) {
 	dialer := &protectedFetchDialer{
 		resolver:      net.DefaultResolver,
@@ -166,6 +166,9 @@ type upstreamRatioResponse struct {
 }
 
 func upstreamRatioGet(ctx context.Context, client *http.Client, rawURL, key string, limit int64) (*upstreamRatioResponse, error) {
+	if err := ValidateSSRFProtectedFetchURL(rawURL); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, upstreamRatioRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)

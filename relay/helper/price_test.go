@@ -787,6 +787,7 @@ func (s *priceTestReservation) ReserveBeforeSubmit(quota int) error { return s.R
 // for models whose ratio used to be locked.
 func TestModelPriceHelperHasNoBuiltInPrices(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	require.NoError(t, i18n.Init())
 	savedRatios := ratio_setting.ModelRatio2JSONString()
 	savedCompletion := ratio_setting.CompletionRatio2JSONString()
 	savedPrices := ratio_setting.ModelPrice2JSONString()
