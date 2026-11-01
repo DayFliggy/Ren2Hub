@@ -1,11 +1,13 @@
 package common
 
 import (
+	"io"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"unicode"
 )
 
@@ -84,9 +86,9 @@ func ReadHostTraffic(source TrafficSource) (rx, tx uint64, reason string) {
 	if source.Reason != "" {
 		return 0, 0, source.Reason
 	}
-	content, err := os.ReadFile(source.NetDev)
-	if err != nil {
-		return 0, 0, TrafficReasonHostCountersUnreadable
+	content, reason := readNetDevFile(source.NetDev)
+	if reason != "" {
+		return 0, 0, reason
 	}
 	counters, ok := parseNetDev(content)
 	if !ok {
@@ -97,6 +99,34 @@ func ReadHostTraffic(source TrafficSource) (rx, tx uint64, reason string) {
 		return 0, 0, TrafficReasonHostInterfaceMissing
 	}
 	return counter.rx, counter.tx, ""
+}
+
+// maxNetDevBytes bounds one read; a host with thousands of interfaces stays
+// far below it. procfs reports size 0, so the bound is on bytes read.
+const maxNetDevBytes = 1 << 20
+
+// readNetDevFile reads the counter file without letting a wrong path stall
+// the sampler: the open does not block (a FIFO without a writer), anything
+// other than a regular file is refused (devices such as /dev/zero), and a
+// file larger than maxNetDevBytes is invalid rather than read to the end.
+func readNetDevFile(name string) ([]byte, string) {
+	file, err := os.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, TrafficReasonHostCountersUnreadable
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, TrafficReasonHostCountersUnreadable
+	}
+	content, err := io.ReadAll(io.LimitReader(file, maxNetDevBytes+1))
+	if err != nil {
+		return nil, TrafficReasonHostCountersUnreadable
+	}
+	if len(content) > maxNetDevBytes {
+		return nil, TrafficReasonHostCountersInvalid
+	}
+	return content, ""
 }
 
 type netDevCounter struct{ rx, tx uint64 }

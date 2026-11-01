@@ -10,11 +10,11 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 方向统一按服务器视角：`inbound_mbps` 为宿主 rx 或连接 Read，`outbound_mbps` 为宿主 tx 或连接 Write，Mbps = Δ字节 × 8 / 秒 / 1e6。前端两页按此显示 ↑ 出站、↓ 入站，看板原先的 ↑ 请求随之翻转。`observability.traffic` 和 `series.points[]` 的 `request_mbps`、`response_mbps` 改名为 `inbound_mbps`、`outbound_mbps`，`application_http_body` 退役，不保留别名，已打开的旧页面需刷新一次。Root 的 `/api/performance/stats` 另带 `interface`（宿主模式为配置的网卡名，监听器模式为空串）和 `reason`；看板 `/api/user/system-status` 的 `traffic` 逐字段投影 `scope`、两个速率、`bucket_seconds` 和 `points`，不带这两项。基线在首次采样、计数下降、时钟回拨、间隔超过 30 秒或本次带 reason 时重置，恢复后的第一份正常计数只建立基线。快照过期时 `stale` 仍清空两个速率。
 
-原生文件：`main.go` 把 `srv.ListenAndServe()` 换成 `net.Listen` 加 `srv.Serve(common.CountingListener(ln))`，与 go1.26.10 的 `ListenAndServe` 等价，失败文案不变；附带变化是端口被占用时在启动成功日志之前退出。`main.go` 原已 adapted，reasons 增加 `ops-metrics`。`router/main.go` 删除 `middleware.RecordApplicationTraffic()` 后与 `e449cc700` 一致，回到 `upstream_equal`。`middleware/application_traffic.go`、`middleware/application_traffic_test.go` 和 `common/application_traffic.go` 删除，SSE、WebSocket、partial I/O 合同迁到 `common/traffic_test.go` 的真实连接测试。`controller/relay.go`、`controller/responses_websocket.go`、CPU/内存/磁盘采样和过载判断未改。
+原生文件：`main.go` 把 `srv.ListenAndServe()` 换成 `net.Listen` 加 `srv.Serve(common.CountingListener(ln))`，与 go1.26.10 的 `ListenAndServe` 等价，失败文案不变；附带变化是端口被占用时在启动成功日志之前退出。`main.go` 原已 adapted，reasons 增加 `ops-metrics`。`router/main.go` 删除 `middleware.RecordApplicationTraffic()` 后与 `e449cc700` 一致，回到 `upstream_equal`。`middleware/application_traffic.go`、`middleware/application_traffic_test.go` 和 `common/application_traffic.go` 删除，SSE、WebSocket、partial I/O 合同迁到 `common/traffic_test.go` 的真实连接测试。`controller/relay.go`、`controller/responses_websocket.go`、CPU/内存/磁盘采样和过载判断未改。`.gitignore` 增加 `docker-compose.override.yml`：安装文档让部署方在其中启用宿主网卡计数，它是本地部署文件，不应提交（`.gitignore` 不在来源清单范围内）。
 
-已知限制：宿主读数是整块网卡的收发，中转请求的客户端和上游两段都计入；同名网卡在两次采样之间被重建且新计数已超过旧值时无法识别，会出一个错误点；非 Linux 上显式配置宿主模式会报 `host_counters_unreadable`。observer 早于监听器启动，监听器模式下这段时间计为真实 0。2026-10-24、2026-10-26 条目中的“HTTP body 吞吐”“应用 HTTP 正文流量”描述当时状态，不改写。
+已知限制：宿主读数是整块网卡的收发，中转请求的客户端和上游两段都计入；同名网卡在两次采样之间被重建且新计数已超过旧值时无法识别，会出一个错误点；非 Linux 上显式配置宿主模式会报 `host_counters_unreadable`。计数文件以非阻塞方式打开，只读普通文件且最多 1 MiB：FIFO、设备等报 `host_counters_unreadable`，超过上限报 `host_counters_invalid`，路径配错不会阻塞或拖垮采样（CPU、内存、存储观察共用同一采样循环）。宿主配置无效时启动日志不再打印“traffic from host interface”，由首次采样记录一次原因。observer 早于监听器启动，监听器模式下这段时间计为真实 0。2026-10-24、2026-10-26 条目中的“HTTP body 吞吐”“应用 HTTP 正文流量”描述当时状态，不改写。
 
-来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 800 `upstream_equal`、275 `adapted`、254 `extension`、45 `removed`，`candidate_sha` 为空。
+来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 800 `upstream_equal`、275 `adapted`、255 `extension`、45 `removed`，`candidate_sha` 为空。
 
 ## 2026-10-31 Dashboard 系统状态卡片口径统一
 

@@ -313,7 +313,11 @@ class Experiment:
         finally:socket.close()
 
     def traffic_source(self, timeout=45):
-        """Root 流量来源与候选参数一致。候选在 internal 网络里，它的请求不经过宿主网卡，所以不断言计数增长。"""
+        """Root 流量来源与候选参数一致。
+
+        监听器模式下本组轮询、健康检查都经过主监听器，两个方向必须大于 0，主监听器漏接计数时速率恒为 0。
+        宿主模式下候选在 internal 网络里，它的请求不经过宿主网卡，0 是有效读数。
+        """
         interface = acceptance_target()['traffic_host_interface']
         expected = ('host_interface', interface) if interface else ('application_listener', '')
         deadline = time.monotonic() + timeout
@@ -322,14 +326,17 @@ class Experiment:
             traffic = observation['traffic']
             require((traffic['scope'], traffic['interface']) == expected, 'traffic_source_mismatch')
             require(traffic['reason'] == '', 'traffic_reason_reported')
+            rates = (traffic['inbound_mbps'], traffic['outbound_mbps'])
             # 采样间隔 10 秒，两次采样后才有速率。
-            if traffic['inbound_mbps'] is not None and traffic['outbound_mbps'] is not None:
-                break
-            require(time.monotonic() < deadline, 'traffic_rates_unavailable')
+            if None not in rates:
+                require(all(type(rate) in (int, float) and math.isfinite(rate) and rate >= 0 for rate in rates),
+                        'traffic_rate_invalid')
+                if interface or min(rates) > 0:
+                    break
+            require(time.monotonic() < deadline,
+                    'traffic_rates_unavailable' if None in rates else 'listener_traffic_not_counted')
             time.sleep(2)
         require(observation['stale'] is False, 'traffic_observation_stale')
-        for rate in (traffic['inbound_mbps'], traffic['outbound_mbps']):
-            require(type(rate) in (int, float) and math.isfinite(rate) and rate >= 0, 'traffic_rate_invalid')
         self.traffic = {'scope': traffic['scope'], 'interface': traffic['interface']}
         self.record('traffic_source_matches_configuration')
 

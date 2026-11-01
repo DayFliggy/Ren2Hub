@@ -335,13 +335,19 @@ class HostTrafficCandidateTests(unittest.TestCase):
         experiment = check('eth0', [stats(inbound=None, outbound=None), stats()])
         self.assertEqual((experiment.traffic, experiment.checks),
                          ({'scope': 'host_interface', 'interface': 'eth0'}, ['traffic_source_matches_configuration']))
-        listener = check('', [stats('application_listener', '', 0, 0)])
+        # Host mode: 0 is a valid reading, the candidate's requests never touch the host interface.
+        self.assertEqual(check('eth0', [stats(inbound=0, outbound=0)]).traffic, {'scope': 'host_interface', 'interface': 'eth0'})
+        # Listener mode: the stage's own requests cross the main listener, so it waits for both directions above 0.
+        listener = check('', [stats('application_listener', '', 0, 0), stats('application_listener', '', 0.01, 0.02)])
         self.assertEqual(listener.traffic, {'scope': 'application_listener', 'interface': ''})
+        with self.assertRaisesRegex(RequirementError, 'listener_traffic_not_counted'):
+            check('', [stats('application_listener', '', 0.5, 0)], timeout=0)
         rejected = (
             ('', [stats()], 'traffic_source_mismatch'),
             ('eth1', [stats()], 'traffic_source_mismatch'),
             ('eth0', [stats(inbound=None, outbound=None, reason='host_counters_unreadable')], 'traffic_reason_reported'),
             ('eth0', [stats(inbound=-1)], 'traffic_rate_invalid'),
+            ('', [stats('application_listener', '', -1, 1)], 'traffic_rate_invalid'),
             ('eth0', [stats(inbound=float('inf'))], 'traffic_rate_invalid'),
             ('eth0', [stats(stale=True)], 'traffic_observation_stale'),
         )

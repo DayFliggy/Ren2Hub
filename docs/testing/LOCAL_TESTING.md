@@ -54,7 +54,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 候选默认不挂载宿主文件，应用使用主监听器计数。`run.py candidate|all` 或 `candidate.py` 传入 `--traffic-host-interface NAME`（`^[A-Za-z0-9_.-]{1,15}$`，非法时在建证据目录前失败）后，候选应用额外得到只读单文件挂载 `/proc/1/net/dev → /host/proc/net/dev` 和 `TRAFFIC_HOST_INTERFACE=NAME`。除本轮生成的 mock CA 证书外，这是候选唯一允许的宿主文件挂载；它是宿主网卡计数，不是数据路径。模式经私有 `target.json` 的 `traffic_host_interface`（监听器模式为空串）传给各合同组；隔离检查只在宿主模式放行这一项，源不对、可写、多出一项或要求时缺失都拒绝，CA 规则不变；`TRAFFIC_HOST_NET_DEV` 在宿主模式只能为空或 `/host/proc/net/dev`，监听器模式两变量都必须为空。
 
-管理组的 `traffic_source_matches_configuration` 最多等约 45 秒，直到两次采样出现速率，再要求 `observability.stale` 为 false、`scope`/`interface` 与参数一致、`reason` 为空、两方向为有限非负数（0 有效）。候选在 internal 网络里，请求不经过宿主网卡，所以不断言计数增长；监听器模式的协议覆盖由 Go 真实连接测试承担。管理报告记录实测的 `traffic`，隔离报告和 `candidate-manifest.json` 记录 `traffic: {scope, interface, mounts}`，挂载在清理前取自运行中容器的 inspect。这些 runner 合同不在 `unit` 层，单独执行 `python3 -B scripts/testing/test_runner.py`。
+管理组的 `traffic_source_matches_configuration` 最多等约 45 秒，直到两次采样出现速率，再要求 `observability.stale` 为 false、`scope`/`interface` 与参数一致、`reason` 为空、两方向为有限非负数。监听器模式下本组轮询和健康检查都经过主监听器，继续等到两个方向都大于 0，主监听器漏接计数时报 `listener_traffic_not_counted`；宿主模式下候选在 internal 网络里，请求不经过宿主网卡，0 是有效读数。协议细节（SSE、WebSocket、partial I/O）由 Go 真实连接测试承担。管理报告记录实测的 `traffic`，隔离报告和 `candidate-manifest.json` 记录 `traffic: {scope, interface, mounts}`，挂载在清理前取自运行中容器的 inspect。这些 runner 合同不在 `unit` 层，单独执行 `python3 -B scripts/testing/test_runner.py`。
 
 数据库和候选 runner 自己创建目标，不接收用户提供的 DSN，不继承生产数据库环境变量。容器均带本轮随机 label，清理前核验确切 ID 和 label，不用名称通配符、全局 prune、FLUSHDB 或清空旧库。失败退出非零，保留报告与日志；清理失败也不能算通过。`browser` profile 的真实浏览器实例在只有回环接口的独立 network/PID namespace 内运行，外网请求直接失败；`ui-contracts` 使用同源模拟 API 和独立 loopback Vite 端口，不把这层当作真实网络隔离。
 

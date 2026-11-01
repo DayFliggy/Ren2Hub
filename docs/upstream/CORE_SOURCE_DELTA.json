@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 800,
     "adapted": 275,
-    "extension": 254,
+    "extension": 255,
     "removed": 45
   },
   "files": [
@@ -508,13 +508,19 @@
       "path": "common/traffic_host.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a54637ab578c30ff368d68cee5a369770c79caa96393a5b31d0553ee7580bb1e"
+      "local_sha256": "ef8b47464b8b91ed901cc5b22d83da5500d84252f95d9d76a061d723ba0ba0c5"
+    },
+    {
+      "path": "common/traffic_host_linux_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3db3262ca605ef0febf07118e12ad28f6c678d7c3debd4e890269e9f304b8dc4"
     },
     {
       "path": "common/traffic_host_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "820a344f4821f3412510ad87425b16da4e2ba426527833262cbd3ede5f4a7296"
+      "local_sha256": "14c1e88bb9eb62a82afa256042cccde49fbb218644cc425b60da427f1448ff6f"
     },
     {
       "path": "common/traffic_test.go",
@@ -7846,7 +7852,7 @@
       "path": "service/performance_observation.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9997a8672ff0ebc68623bbe1de391f3eadf79e8fe0d4166dc38332160457a759"
+      "local_sha256": "01e678b91160fc44c369107fece01e189141998e661bf02bb92a1850411f6ea5"
     },
     {
       "path": "service/performance_observation_health.go",

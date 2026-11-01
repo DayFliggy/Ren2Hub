@@ -5,6 +5,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -69,6 +71,39 @@ func TestParseNetDevRejectsMalformedSample(t *testing.T) {
 		require.Zero(t, rx, tc.name)
 		require.Zero(t, tx, tc.name)
 	}
+}
+
+func TestHostTrafficRejectsOversizedCounterFile(t *testing.T) {
+	// Every row is well formed and eth0 comes first, so only the size bound can reject it.
+	var content strings.Builder
+	content.WriteString(netDevHeader + netDevRow("eth0", "100", "200"))
+	for i := 0; content.Len() <= maxNetDevBytes; i++ {
+		content.WriteString(netDevRow(fmt.Sprintf("if%d", i), "1", "1"))
+	}
+	rx, tx, reason := ReadHostTraffic(hostSource("eth0", writeNetDev(t, content.String())))
+	require.Equal(t, TrafficReasonHostCountersInvalid, reason)
+	require.Zero(t, rx)
+	require.Zero(t, tx)
+
+	// A huge regular file is not read to the end: a 64 MiB sparse file costs about the bound, not its size.
+	huge := filepath.Join(t.TempDir(), "huge")
+	require.NoError(t, os.WriteFile(huge, []byte(netDevHeader), 0o644))
+	require.NoError(t, os.Truncate(huge, 64<<20))
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, _, reason = ReadHostTraffic(hostSource("eth0", huge))
+	runtime.ReadMemStats(&after)
+	require.Equal(t, TrafficReasonHostCountersInvalid, reason)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(16<<20))
+
+	// Exactly at the bound is still read: pad the gap between two fields of a valid row.
+	row := netDevRow("eth0", "100", "200")
+	padding := maxNetDevBytes - len(netDevHeader) - len(row)
+	limit := netDevHeader + strings.Replace(row, " 2 ", " "+strings.Repeat(" ", padding)+"2 ", 1)
+	require.Len(t, limit, maxNetDevBytes)
+	rx, tx, reason = ReadHostTraffic(hostSource("eth0", writeNetDev(t, limit)))
+	require.Empty(t, reason)
+	require.Equal(t, [2]uint64{100, 200}, [2]uint64{rx, tx})
 }
 
 func TestHostTrafficReportsReasonWithoutReading(t *testing.T) {

@@ -122,12 +122,15 @@ func trafficView(source common.TrafficSource) ObservationTraffic {
 	return ObservationTraffic{Scope: source.Scope, Interface: source.Interface, Reason: source.Reason}
 }
 
+// logTrafficSource records the startup choice. An invalid host configuration
+// names no usable source; the first sample logs it once with its reason.
 func logTrafficSource(source common.TrafficSource) {
-	if source.Scope == common.TrafficScopeApplicationListener {
+	switch {
+	case source.Scope == common.TrafficScopeApplicationListener:
 		common.SysLog("performance observation: no host interface configured, counting the main listener")
-		return
+	case source.Reason == "":
+		common.SysLog(fmt.Sprintf("performance observation: traffic from host interface %q in %s", source.Interface, source.NetDev))
 	}
-	common.SysLog(fmt.Sprintf("performance observation: traffic from host interface %q in %s", source.Interface, source.NetDev))
 }
 
 // sampleTraffic reads the startup source and logs only reason transitions:
