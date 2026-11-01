@@ -8215,7 +8215,7 @@
       "path": "service/task_polling.go",
       "status": "adapted",
       "upstream_sha256": "22beedd4b79b7c1df8e17ca6741c99632e25c4590dd1e17171c050eb6e595f46",
-      "local_sha256": "98a16bdd4fa300817e8632a5da86298d898501f99f4ce2d819a3b0fa9f46331d",
+      "local_sha256": "292fc53a60d23162c541f807ff0d2805fc98e28fdea8b150634ed5dbdec89982",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -8226,7 +8226,7 @@
       "path": "service/task_polling_test.go",
       "status": "adapted",
       "upstream_sha256": "9ba325676c49fa6a41cf72ac94f363c5bee86ae730fef7600f3549f16001d34f",
-      "local_sha256": "f7da9a50c361517a3dc99a81e4e36c46b5d6f518408d27ecb466ad7b56cdbf81"
+      "local_sha256": "b214f8aea9f4c793b8da74d681d195babe97231ee07c3a94ff37ca4cdb3f5b3c"
     },
     {
       "path": "service/text_quota.go",

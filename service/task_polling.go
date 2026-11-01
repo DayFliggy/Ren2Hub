@@ -240,27 +240,46 @@ func UpdateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, task
 	return nil
 }
 
-// failTasksWithoutChannel ends tasks whose channel can no longer be loaded. A
-// task is refunded only by the caller that wins its status CAS, so a task that
-// a concurrent poll already finished is not refunded twice.
+// failTasksWithoutChannel ends tasks whose channel can no longer be loaded.
+// Upstream marks them FAILURE in bulk without a refund; this follows the
+// per-task CAS and refund rules of sweepTimedOutTasks instead, so only the
+// caller that wins the CAS refunds and legacy tasks stay unrefunded.
 func failTasksWithoutChannel(ctx context.Context, taskIds []string, taskM map[string]*model.Task) error {
+	reason := "Failed to get the channel information. Please contact the administrator"
+	legacyReason := "Failed to get the channel information (a task left by the old system is not refunded; contact the administrator)"
+	now := time.Now().Unix()
 	var errs []error
+
 	for _, upstreamID := range taskIds {
 		task := taskM[upstreamID]
 		if task == nil {
 			continue
 		}
-		fromStatus := task.Status
+		isLegacy := task.SubmitTime > 0 && task.SubmitTime < model.TaskRefundLegacyCutoff
+
+		oldStatus := task.Status
 		task.Status = model.TaskStatusFailure
-		task.FailReason = "Failed to get the channel information. Please contact the administrator"
 		task.Progress = "100%"
-		won, err := task.UpdateWithStatus(fromStatus)
+		task.FinishTime = now
+		if isLegacy {
+			task.FailReason = legacyReason
+			task.Quota = 0
+		} else {
+			task.FailReason = reason
+		}
+
+		won, err := task.UpdateWithStatus(oldStatus)
 		if err != nil {
+			logger.LogError(ctx, common.LogText("failTasksWithoutChannel CAS update error for task %s: %v", task.TaskID, err))
 			errs = append(errs, err)
 			continue
 		}
-		if won {
-			RefundTaskQuota(ctx, task, task.FailReason)
+		if !won {
+			logger.LogInfo(ctx, common.LogText("failTasksWithoutChannel: task %s already transitioned, skip", task.TaskID))
+			continue
+		}
+		if !isLegacy && task.Quota != 0 {
+			RefundTaskQuota(ctx, task, reason)
 		}
 	}
 	return errors.Join(errs...)

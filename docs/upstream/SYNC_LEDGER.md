@@ -42,9 +42,11 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 ## 2026-10-30 任务渠道缺失时退还预扣额度
 
-`service/task_polling.go` 的批量任务与视频任务轮询在 `model.CacheGetChannel` 失败时，上游 `e449cc700` 用 `TaskBulkUpdateByID` 直接把这批任务标为 FAILURE，不退还预扣额度。本地改为 `failTasksWithoutChannel` 逐个任务按原状态 CAS 改为 FAILURE，只有赢得 CAS 的调用方执行 `RefundTaskQuota`，与并发轮询不会重复退款；写库错误合并返回。回归测试为 `TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing`，批量路径共用同一函数，没有单独用例。该分支于 2026-10-31 按用户“将这些分支合并到 main 上”的要求合入。它属于与上游相同的多扣缺陷，此前对这类缺陷的处理是保留上游行为（如 Realtime WSS 重复扣费），本次合入是否作为例外保留待用户确认。
+`service/task_polling.go` 的批量任务与视频任务轮询在 `model.CacheGetChannel` 失败时，上游用 `TaskBulkUpdateByID` 直接把这批任务标为 FAILURE，不退还预扣额度。本地由 `failTasksWithoutChannel` 逐个任务处理，写库错误合并返回。该分支于 2026-10-31 按用户“将这些分支合并到 main 上”的要求合入。
 
-已知限制：`controller/midjourney.go` 的渠道缺失路径未改，仍按上游 `MjBulkUpdate` 批量判失败、不退款。`model/channel_cache.go` 的 `InitChannelCache` 与上游一样忽略 `DB.Find` 的错误；启用内存缓存时，一次失败的同步会把渠道表替换为空，下次同步前在途任务都会被判为渠道缺失。上游在这种情况下同样判失败，本地会同时退款，而上游可能已执行并计费，损失由运营方承担。`RefundTaskQuota` 的返回值未检查。原生文件 `service/task_polling.go` 原已 adapted，reasons 增加 `upstream-defect`。
+2026-11-01 用户要求核对上游是否已有方案并吸收。上游 main `d0abbf6e0d33552a41c402d9b1fadbaff27cf40d` 比 `e449cc700` 多 24 个提交，`task_polling.go` 只增加视频响应脱敏，两条渠道缺失路径仍不退款；相关请求 QuantumNous/new-api#7738 仍为 open，没有合入的修复（#7736 以 not_planned 关闭）。因此改为照搬同一文件 `sweepTimedOutTasks` 的写法：按原状态 CAS 改为 FAILURE 并写 `FinishTime`；`SubmitTime` 早于 `model.TaskRefundLegacyCutoff` 的旧任务随 CAS 清零 quota、不退款；只有赢得 CAS 的调用方在 quota 非零时执行 `RefundTaskQuota`，CAS 失败与已被推进的任务分别记日志。回归测试 `TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing` 与 `TestUpdateBatchTasksMissingChannelRefundsOnceAndKeepsLegacyRule` 覆盖两条路径、只退一次、旧任务不退款、`FinishTime` 以及并发轮询持有的旧副本不重复退款。这是与上游相同的多扣缺陷的本地修复，用户确认保留。本次只核对这一项，上述 24 个提交的其余内容未吸收。
+
+已知限制：`controller/midjourney.go` 的渠道缺失路径未改，仍按上游 `MjBulkUpdate` 批量判失败、不退款。`model/channel_cache.go` 的 `InitChannelCache` 与上游一样忽略 `DB.Find` 的错误；启用内存缓存时，一次失败的同步会把渠道表替换为空，下次同步前在途任务都会被判为渠道缺失。上游在这种情况下同样判失败，本地会同时退款，而上游可能已执行并计费，损失由运营方承担。`RefundTaskQuota` 的返回值与上游超时清理一样不检查。原生文件 `service/task_polling.go` 原已 adapted，reasons 为 `channel-ratio`、`concurrency`、`upstream-defect`。
 
 ## 2026-10-30 用量折扣
 
