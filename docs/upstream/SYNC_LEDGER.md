@@ -4,6 +4,26 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-01 正式发布
+
+`63e537495` 于 2026-11-01 14:28 UTC 通过普通更新执行器发布。该提交把本地 main 的首页交互修复与任务渠道缺失退款分支合在一起，根提交为 `299f6581f7e325b1135aa682fa3492369f9384a7`。镜像为 `ren2hub-test:63e5374954346808759e5443a472a9faf60cbf97-v1`，ID `sha256:0e97c34650d0bc5085d0ba4693f31d2dfe4f45dcab5df142b93812dd75b4b4a1`，用 go1.26.10 构建。
+
+发布前验证：
+- 在独立 clone 中串行运行 unit、databases、static、build、race、browser 和 `test_runner.py`，全部通过。
+- ui-contracts 525 项中 524 项通过。失败的是首页展示的 light mobile 一项：运行时宿主机 CPU 被另一组 Playwright 占用，画布缩放的等待超时。单独重复运行 28 次均通过。
+- 候选 `run-6zryym8e` 使用同一镜像和 `--traffic-host-interface eth0`，七组全部通过，`deployment_eligible=true`。外部请求为 0，数据库为 fresh tmpfs，`traffic` 为 `host_interface/eth0`。
+
+切换结果：
+- 切换前后，任务、Midjourney、充值、GMPay、系统任务和数据库会话都为 0。
+- AutoMigrate 新增三张表，表数从 42 变为 45。
+- `REN2HUB_VERIFY_OK` 报告 `traffic=host_interface:eth0`，本地和 `https://next.renai.uno` 的只读核验都通过。
+
+Codex 第二轮复核还发现两项问题，本次没有改：
+- batch 上游响应里有未请求的任务 ID 时，`updateBatchTasks` 会按平台级 `taskM` 更新另一渠道的任务。
+- Midjourney 轮询（`controller/midjourney.go`，以及 `model/midjourney.go` 的 `MjBulkUpdate`）遇到两个渠道的 `mj_id` 相同时，两条任务会互相覆盖。
+
+这两处代码与上游 `e449cc700` 相同，按“原生文件保持上游”的约定保留。
+
 ## 2026-11-01 发布前审计修正
 
 发布前用 Codex 对待发布源码做后端和发布交叉审计，复现的问题已修正，每项都有回归测试，修正前失败、修正后通过。任务渠道缺失退款的两处问题记在 2026-10-30 条目。
