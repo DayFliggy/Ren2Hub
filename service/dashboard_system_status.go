@@ -98,6 +98,10 @@ var dashboardSuccessRateCache struct {
 	expires time.Time
 }
 var dashboardSuccessRateRefresh singleflight.Group
+
+// dashboardSuccessRateRefreshKey is the only key used with dashboardSuccessRateRefresh.
+const dashboardSuccessRateRefreshKey = "success_rate"
+
 var queryDashboardHourly = perfmetrics.QueryHourlyAll
 
 // Logical cores rarely change at runtime; reading /proc/cpuinfo per poll is
@@ -224,7 +228,7 @@ func dashboardSuccessRate(ctx context.Context) (DashboardSuccessRate, error) {
 	if value, ok := read(); ok {
 		return value, nil
 	}
-	result := dashboardSuccessRateRefresh.DoChan("success_rate", func() (any, error) {
+	result := dashboardSuccessRateRefresh.DoChan(dashboardSuccessRateRefreshKey, func() (any, error) {
 		if value, ok := read(); ok {
 			return value, nil
 		}

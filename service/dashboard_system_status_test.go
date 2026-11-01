@@ -170,13 +170,9 @@ func TestDashboardSuccessRateSharesOneQueryPerTTL(t *testing.T) {
 	previous := queryDashboardHourly
 	t.Cleanup(func() {
 		queryDashboardHourly = previous
-		dashboardSuccessRateCache.Lock()
-		dashboardSuccessRateCache.expires = time.Time{}
-		dashboardSuccessRateCache.Unlock()
+		resetDashboardSuccessRate()
 	})
-	dashboardSuccessRateCache.Lock()
-	dashboardSuccessRateCache.expires = time.Time{}
-	dashboardSuccessRateCache.Unlock()
+	resetDashboardSuccessRate()
 	calls := 0
 	queryDashboardHourly = func(int) (perfmetrics.HourlyResult, error) {
 		calls++
@@ -192,17 +188,12 @@ func TestDashboardSuccessRateSharesOneQueryPerTTL(t *testing.T) {
 
 func TestDashboardSuccessRateBlockedQueryDoesNotHoldWaiters(t *testing.T) {
 	previousQuery, previousWait := queryDashboardHourly, dashboardSuccessRateWait
-	resetCache := func() {
-		dashboardSuccessRateCache.Lock()
-		dashboardSuccessRateCache.expires = time.Time{}
-		dashboardSuccessRateCache.Unlock()
-	}
 	release := make(chan struct{})
 	t.Cleanup(func() {
 		queryDashboardHourly, dashboardSuccessRateWait = previousQuery, previousWait
-		resetCache()
+		resetDashboardSuccessRate()
 	})
-	resetCache()
+	resetDashboardSuccessRate()
 	dashboardSuccessRateWait = 50 * time.Millisecond
 	var calls atomic.Int32
 	done := make(chan struct{})
@@ -240,17 +231,18 @@ func TestDashboardSuccessRateCancelledWaiterReturnsContextError(t *testing.T) {
 	previous := queryDashboardHourly
 	release, done := make(chan struct{}), make(chan struct{})
 	t.Cleanup(func() {
-		// Let the shared query finish before resetting what it writes.
+		// Let the shared query finish before resetting what it writes; a
+		// query that never started fails here instead of hanging the package.
 		close(release)
-		<-done
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("the shared query never ran")
+		}
 		queryDashboardHourly = previous
-		dashboardSuccessRateCache.Lock()
-		dashboardSuccessRateCache.expires = time.Time{}
-		dashboardSuccessRateCache.Unlock()
+		resetDashboardSuccessRate()
 	})
-	dashboardSuccessRateCache.Lock()
-	dashboardSuccessRateCache.expires = time.Time{}
-	dashboardSuccessRateCache.Unlock()
+	resetDashboardSuccessRate()
 	queryDashboardHourly = func(int) (perfmetrics.HourlyResult, error) {
 		defer close(done)
 		<-release
@@ -260,4 +252,15 @@ func TestDashboardSuccessRateCancelledWaiterReturnsContextError(t *testing.T) {
 	cancel()
 	_, err := dashboardSuccessRate(ctx)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// resetDashboardSuccessRate clears the cached value and drops any shared query
+// a previous test left in flight. Without Forget, a call made right after the
+// previous query returned can join that finished call, and the new test's
+// query function never runs.
+func resetDashboardSuccessRate() {
+	dashboardSuccessRateCache.Lock()
+	dashboardSuccessRateCache.expires = time.Time{}
+	dashboardSuccessRateCache.Unlock()
+	dashboardSuccessRateRefresh.Forget(dashboardSuccessRateRefreshKey)
 }

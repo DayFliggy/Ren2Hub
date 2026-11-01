@@ -7600,13 +7600,13 @@
       "path": "service/dashboard_system_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "13d76368a2180ec2d0c29c8100750d7439ecddb3ac72074b4d4d513514f6b366"
+      "local_sha256": "fe7b292ceccb61ec88e714d717498f9e0881c1f69f9be02abb32d42a66204d39"
     },
     {
       "path": "service/dashboard_system_status_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6968aa158834d9127606a60f420dd5abec40d711b0c2bd8bcb0a8a3dfbfa9799"
+      "local_sha256": "88e29e5c3d633b769a5b1811332d96ab9a4fb1d5480162acc46e30a78d94c84d"
     },
     {
       "path": "service/download.go",
