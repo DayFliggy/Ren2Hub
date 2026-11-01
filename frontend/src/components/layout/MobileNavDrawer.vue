@@ -178,7 +178,7 @@
             class="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             @click="close"
           >
-            {{ isAuthenticated ? t('nav.console') : t('nav.login') }}
+            {{ isAuthenticated ? t('nav.openConsole') : t('nav.login') }}
           </RouterLink>
 
           <div class="mt-auto border-t border-[var(--border-subtle)] pt-5">

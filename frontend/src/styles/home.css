@@ -143,6 +143,14 @@ html.light .landing-shell .app-navbar .home-brand {
   box-shadow: none !important;
 }
 
+/* The reset above strips the pencil frame; keyboard focus still needs a ring. */
+html.dark .landing-shell .app-navbar .home-brand:focus-visible,
+html.light .landing-shell .app-navbar .home-brand:focus-visible {
+  border-radius: 0.5rem !important;
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 2px;
+}
+
 .landing-shell .app-navbar .home-brand img {
   border: 0 !important;
   outline: 0 !important;

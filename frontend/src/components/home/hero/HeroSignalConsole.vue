@@ -244,6 +244,9 @@ const pointerWithinInspector = ref(false)
 const focusWithinInspector = ref(false)
 let traceOpenTimer: number | undefined
 let focusCheckTimer: number | undefined
+// An explicit close holds until pointer and focus have both left, so the
+// lingering hover or the trigger's own focus cannot re-arm the 3s auto-open.
+let traceDrawerDismissed = false
 
 const formatIndex = (index: number) =>
   String(Math.max(0, index)).padStart(2, '0')
@@ -410,10 +413,11 @@ function syncTraceDrawer() {
   if (!shouldRemainOpen) {
     clearTraceOpenTimer()
     traceDrawerOpen.value = false
+    traceDrawerDismissed = false
     return
   }
 
-  if (traceDrawerOpen.value || traceOpenTimer) return
+  if (traceDrawerOpen.value || traceOpenTimer || traceDrawerDismissed) return
   traceOpenTimer = window.setTimeout(() => {
     traceOpenTimer = undefined
     if (pointerWithinInspector.value || focusWithinInspector.value)
@@ -422,6 +426,8 @@ function syncTraceDrawer() {
 }
 
 function onInspectorPointerEnter() {
+  // A new hover visit is a fresh request, even if focus stayed on the trigger.
+  traceDrawerDismissed = false
   pointerWithinInspector.value = true
   syncTraceDrawer()
 }
@@ -450,12 +456,14 @@ function onInspectorFocusOut() {
 function closeTraceDrawer() {
   clearTraceOpenTimer()
   traceDrawerOpen.value = false
+  traceDrawerDismissed = true
   nextTick(() => traceInspectorEl.value?.focus())
 }
 
 function toggleTraceDrawer() {
   clearTraceOpenTimer()
   traceDrawerOpen.value = !traceDrawerOpen.value
+  traceDrawerDismissed = !traceDrawerOpen.value
   if (!traceDrawerOpen.value) nextTick(() => traceInspectorEl.value?.focus())
 }
 

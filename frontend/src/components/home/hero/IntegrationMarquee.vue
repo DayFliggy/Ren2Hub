@@ -26,6 +26,8 @@
       </a>
     </div>
 
+    <!-- dragstart.prevent: a native image/link drag fires pointercancel, and the
+         rail would stop following the pointer a few pixels into the drag. -->
     <div
       ref="wrapperRef"
       class="hero-integration-marquee-wrapper -mx-[var(--space-2)] flex min-h-[5.25rem] items-center overflow-hidden py-2 sm:min-h-[5.5rem] sm:py-4"
@@ -40,6 +42,7 @@
       @pointerup="onPointerUp"
       @pointercancel="onPointerCancel"
       @lostpointercapture="onLostPointerCapture"
+      @dragstart.prevent
       @focusin="onFocusIn"
       @focusout="onFocusOut"
       @click.capture="onClickCapture"

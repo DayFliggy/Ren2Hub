@@ -70,16 +70,13 @@
             ref="stageButton"
             type="button"
             class="hero-stage-hint flex items-center gap-1.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1.5 text-[11px] tracking-[0.06em] text-[var(--text-secondary)] shadow-[0_6px_18px_var(--shadow-color)] backdrop-blur-[12px] backdrop-saturate-150 transition-all duration-500 [@media(max-height:700px)_and_(max-width:1023px)]:hidden"
-            :class="
-              showHint
-                ? 'translate-y-0 opacity-100'
-                : 'pointer-events-none translate-y-1.5 opacity-0'
-            "
+            :class="stageHintClass"
+            :inert="immersive"
             data-hero-canvas-boundary
             :aria-expanded="immersive"
             aria-controls="hero-immersive-stage"
             :aria-label="t('hero.stageHint')"
-            @click="enter"
+            @click="enterImmersive"
           >
             <svg
               class="animate-bounce text-[var(--accent)]"
@@ -115,28 +112,36 @@
         leave-to-class="translate-y-2 opacity-0"
         leave-active-class="transition-all duration-200"
       >
-        <button
+        <!-- Placement lives on the wrapper: the day theme gives .hero-stage-hint
+             position: relative for its pencil frame, which overrode `absolute`
+             and pushed the button out of the viewport. -->
+        <div
           v-if="immersive"
-          type="button"
-          class="hero-stage-hint absolute bottom-[max(20px,env(safe-area-inset-bottom))] left-1/2 z-[12] inline-flex -translate-x-1/2 animate-pulse-slow items-center gap-1.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-semibold tracking-[0.04em] text-[var(--text-primary)] shadow-[0_8px_24px_var(--shadow-color)] backdrop-blur-[16px] backdrop-saturate-150 lg:hidden"
-          data-hero-canvas-boundary
-          :aria-label="t('hero.stageRecall')"
-          @click="exitImmersive"
+          class="absolute bottom-[max(20px,env(safe-area-inset-bottom))] left-1/2 z-[12] flex -translate-x-1/2 lg:hidden"
         >
-          <svg
-            class="text-[var(--accent)]"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.4"
-            aria-hidden="true"
+          <button
+            ref="recallButton"
+            type="button"
+            class="hero-stage-hint inline-flex animate-pulse-slow items-center gap-1.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-2.5 text-xs font-semibold tracking-[0.04em] text-[var(--text-primary)] shadow-[0_8px_24px_var(--shadow-color)] backdrop-blur-[16px] backdrop-saturate-150"
+            data-hero-canvas-boundary
+            :aria-label="t('hero.stageRecall')"
+            @click="exitImmersive"
           >
-            <path d="M18 15l-6-6-6 6" />
-          </svg>
-          <span>{{ t('hero.stageRecall') }}</span>
-        </button>
+            <svg
+              class="text-[var(--accent)]"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              aria-hidden="true"
+            >
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+            <span>{{ t('hero.stageRecall') }}</span>
+          </button>
+        </div>
       </Transition>
 
       <!-- 向下滚动提示 -->
@@ -160,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppNavbar from '@/components/layout/AppNavbar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -193,10 +198,30 @@ const {
 } = useImmersiveStage()
 
 const stageButton = ref<HTMLButtonElement | null>(null)
+const recallButton = ref<HTMLButtonElement | null>(null)
 
-function exitImmersive() {
+// After its intro the hint stays tabbable as the immersive toggle and shows
+// itself on keyboard focus. In immersive mode it is inert because the recall
+// button owns the control; inert, unlike visibility, can be lifted and focused
+// in the same tick when leaving immersive mode.
+const stageHintClass = computed(() =>
+  showHint.value
+    ? 'translate-y-0 opacity-100'
+    : 'pointer-events-none translate-y-1.5 opacity-0 focus-visible:pointer-events-auto focus-visible:translate-y-0 focus-visible:opacity-100'
+)
+
+// Keyboard and assistive activation (click.detail 0) keeps its place when the
+// toggle swaps buttons. A tap or mouse click (detail ≥ 1) leaves focus alone,
+// so the faded hint never comes back with a focus ring. The state changes
+// first so nextTick waits for the render that mounts the target.
+function enterImmersive(event: MouseEvent) {
+  enter()
+  if (event.detail === 0) nextTick(() => recallButton.value?.focus())
+}
+
+function exitImmersive(event: MouseEvent) {
   exit()
-  nextTick(() => stageButton.value?.focus())
+  if (event.detail === 0) nextTick(() => stageButton.value?.focus())
 }
 
 useHeroScrollChrome()

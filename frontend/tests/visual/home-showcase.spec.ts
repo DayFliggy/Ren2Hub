@@ -786,6 +786,102 @@ test('homepage display fonts stay scoped away from the console', async ({
   expect(consoleFont).not.toContain('Ren2Home')
 })
 
+// The console message domain used to overwrite these eager home labels as soon
+// as the router started loading it, so the CTA under the pointer shrank from
+// "进入控制台" to "控制台" and kept the console wording after returning.
+test('home navbar labels survive a console round trip', async ({ page }) => {
+  await configureStablePage(page, { theme: 'light', authenticated: true })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await waitForStablePage(page)
+
+  const labels = () =>
+    page.evaluate(() =>
+      [
+        '.app-navbar .home-nav-cta',
+        '.app-navbar a[href="/pricing"]',
+        '.hero-cta-primary',
+      ].map((selector) => {
+        const element = document.querySelector<HTMLElement>(selector)!
+        return {
+          text: element.innerText.trim(),
+          width: Math.round(element.getBoundingClientRect().width),
+        }
+      })
+    )
+  const before = await labels()
+  expect(before.map((label) => label.text)).toEqual([
+    '进入控制台',
+    '定价',
+    '进入控制台',
+  ])
+
+  await page.locator('.app-navbar .home-nav-cta').click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await waitForStablePage(page)
+  await page.goBack()
+  await expect(page.locator('.hero-title')).toBeVisible()
+  await waitForStablePage(page)
+
+  expect(await labels()).toEqual(before)
+})
+
+for (const theme of ['light', 'dark'] as VisualTheme[]) {
+  test(`home brand shows a keyboard focus ring (${theme})`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme, authenticated: true })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+
+    await page.locator('.app-navbar a[href="/pricing"]').focus()
+    await page.keyboard.press('Shift+Tab')
+    const brand = page.locator('.app-navbar .home-brand')
+    await expect(brand).toBeFocused()
+    await expect(brand).toHaveCSS('outline-style', 'solid')
+    await expect(brand).toHaveCSS('outline-width', '2px')
+  })
+}
+
+// The day theme's pencil frame gives .hero-stage-hint position: relative,
+// which once overrode the recall button's absolute placement and pushed it
+// out of the viewport.
+for (const theme of ['light', 'dark'] as VisualTheme[]) {
+  test(`immersive recall button stays on screen and takes keyboard focus (${theme})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await configureStablePage(page, { theme, authenticated: true })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+
+    const hint = page.locator('.hero-map-stage .hero-stage-hint')
+    await page.locator('.app-navbar .home-nav-cta').focus()
+    for (let step = 0; step < 20; step++) {
+      if (await hint.evaluate((element) => element === document.activeElement))
+        break
+      await page.keyboard.press('Tab')
+    }
+    await expect(hint).toBeFocused()
+    await expect(hint).toHaveCSS('opacity', '1')
+    await page.keyboard.press('Enter')
+
+    const recall = page.getByRole('button', { name: '展开介绍' })
+    await expect(recall).toBeFocused()
+    await expect(recall).toBeInViewport({ ratio: 1 })
+    const box = (await recall.boundingBox())!
+    expect(Math.abs(box.x + box.width / 2 - 195)).toBeLessThan(2)
+    expect(
+      await page.evaluate(
+        () => document.getElementById('hero-immersive-stage')!.scrollLeft
+      )
+    ).toBe(0)
+
+    await page.keyboard.press('Enter')
+    await expect(hint).toBeFocused()
+    await expect(hint).toHaveCSS('opacity', '1')
+  })
+}
+
 test('runtime motion starts only when motion is allowed', async ({ page }) => {
   await configureStablePage(page, {
     theme: 'dark',

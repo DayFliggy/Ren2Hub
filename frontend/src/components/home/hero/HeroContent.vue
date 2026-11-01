@@ -172,7 +172,7 @@ const primaryTarget = computed(() => {
   return registerEnabled.value ? { name: 'sign-up' } : { name: 'sign-in' }
 })
 const primaryLabel = computed(() => {
-  if (isAuthenticated.value) return t('nav.console')
+  if (isAuthenticated.value) return t('nav.openConsole')
   return registerEnabled.value ? t('hero.ctaPrimary') : t('nav.login')
 })
 

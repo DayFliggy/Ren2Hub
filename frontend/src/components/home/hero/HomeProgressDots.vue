@@ -3,6 +3,7 @@
     class="home-progress-dots"
     :aria-label="t('showcase.progress.label')"
     data-home-progress-dots
+    data-hero-canvas-boundary
   >
     <button
       v-for="(section, index) in sections"
