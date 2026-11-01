@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 800,
     "adapted": 275,
-    "extension": 255,
+    "extension": 257,
     "removed": 45
   },
   "files": [
@@ -2714,13 +2714,13 @@
       "path": "model/channel_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "aca154728a1f25cf51a9a476271594c8daa5e910373336b42c9012cd7f0d2515"
+      "local_sha256": "87f550c1b6f6706a72544a52d978a67cbc4daf648c13470a68cdd4a458a0ce4a"
     },
     {
       "path": "model/channel_ratio_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "92dd5e33762e521bf2c03653180b1958df0bb7dfeafb132cbc5e79da8cbda171"
+      "local_sha256": "69aba60fb8e87e930b3a28cf76f6ed4ce7126b38826e7ab5f0660644ad27d794"
     },
     {
       "path": "model/channel_satisfy.go",
@@ -5812,7 +5812,7 @@
       "path": "relay/helper/price_test.go",
       "status": "adapted",
       "upstream_sha256": "97ccbc28f075a6c0d0571117940e2f0757b4ade584ef84ea57266035bce10778",
-      "local_sha256": "491e84d4857ca8a2bfb2a6f742da466f78fdd429fa784061ba06525f5b7aa493"
+      "local_sha256": "e46d4a2de1dfeae78a4c7ce1050540bf9387eb498607009a1d109c31a24bffc4"
     },
     {
       "path": "relay/helper/reasoning_suffix.go",
@@ -7486,7 +7486,7 @@
       "path": "service/channel_upstream_ratio_http.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "81e3f459fec563c186cec104c6626164797c64a4893ffedb8f2d1a7c4ebb8f0d"
+      "local_sha256": "4be271f4e92a32fd83f82fe6ac752f6291ae3d278cd6620050eaa40b55ed972c"
     },
     {
       "path": "service/channel_upstream_ratio_newapi.go",
@@ -7498,7 +7498,7 @@
       "path": "service/channel_upstream_ratio_record.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "6af0a3a791d88cdaec210e14b70ce2363f7854e5513863a7841a1072a2f60931"
+      "local_sha256": "531d5649c3b4ac4527d74f7acd345c897e49b99ece00ae8b98f971f22d5ce598"
     },
     {
       "path": "service/channel_upstream_ratio_sub2api.go",
@@ -7510,7 +7510,7 @@
       "path": "service/channel_upstream_ratio_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "98add821c8f6cbdc49164d313283aef48cf03a87ef73b0541d9be1c633f8c70e"
+      "local_sha256": "2693c2787d85abdb90168e9c9169e6c5764b177efced5874f6a49c1160599394"
     },
     {
       "path": "service/codex_channel_models.go",
@@ -8194,6 +8194,18 @@
       "local_sha256": "6c4c62c89009804cc41c544317b62a95b08334feb689b1ca88c85d9e689849e5"
     },
     {
+      "path": "service/task_missing_channel.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4509f3338a2da6c04d7fac7882570280e5428da85df8eed1446f06799d82cf69"
+    },
+    {
+      "path": "service/task_missing_channel_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "759f4df53dfece35bd5f323174ab83a164a41e35373daad50a76f99e3c62fed3"
+    },
+    {
       "path": "service/task_plugin_audit.go",
       "status": "upstream_equal",
       "upstream_sha256": "bc2916746f168be80649d48e4146301988a7f92d8b0bfc16337ede359b00490b",
@@ -8215,7 +8227,7 @@
       "path": "service/task_polling.go",
       "status": "adapted",
       "upstream_sha256": "22beedd4b79b7c1df8e17ca6741c99632e25c4590dd1e17171c050eb6e595f46",
-      "local_sha256": "98a16bdd4fa300817e8632a5da86298d898501f99f4ce2d819a3b0fa9f46331d",
+      "local_sha256": "cc3cc51a0365bb048881e65bcc82d35ae9aacfcf95433a69cab6d3ed76a0f098",
       "reasons": [
         "channel-ratio",
         "concurrency",
@@ -8226,7 +8238,7 @@
       "path": "service/task_polling_test.go",
       "status": "adapted",
       "upstream_sha256": "9ba325676c49fa6a41cf72ac94f363c5bee86ae730fef7600f3549f16001d34f",
-      "local_sha256": "f7da9a50c361517a3dc99a81e4e36c46b5d6f518408d27ecb466ad7b56cdbf81"
+      "local_sha256": "e70009a144003a7755d8e31d98de7795f014bb70606382b7aaedbfa7f49dff8b"
     },
     {
       "path": "service/text_quota.go",

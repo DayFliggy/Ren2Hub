@@ -484,6 +484,51 @@ describe('manual model price editor', () => {
     )
     wrapper.unmount()
   })
+  it('keeps request multipliers when a task price is regenerated', async () => {
+    const rule = '(header("speed") == "fast" ? 3 : 1)'
+    const pricing = tiered(`(tier("base", u("seconds") * 0.4)) * ${rule}`)
+    const wrapper = setup(pricing)
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: pricing,
+        effective: pricing,
+        usage_schema: { seconds: { type: 'number', unit: 'second' } },
+      },
+    })
+    const input = wrapper.get('input[placeholder="Usage unit price"]')
+    expect(input.element).toHaveProperty('value', '0.4')
+    await input.setValue('0.5')
+    await button(wrapper, 'Generate task pricing draft').trigger('click')
+    expect(wrapper.vm.commit()?.pricing['billing_setting.billing_expr']).toBe(
+      `(tier("base", u("seconds") * 0.5)) * ${rule}`
+    )
+    wrapper.unmount()
+  })
+  it('leaves an expression it cannot rebuild unchanged', async () => {
+    const source = 'tier("base", u("seconds") * 0.4) * image_count'
+    const pricing = tiered(source)
+    const wrapper = setup(pricing)
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: pricing,
+        effective: pricing,
+        usage_schema: { seconds: { type: 'number', unit: 'second' } },
+      },
+    })
+    const input = wrapper.get('input[placeholder="Usage unit price"]')
+    expect(input.element).toHaveProperty('value', '')
+    await input.setValue('0.5')
+    await button(wrapper, 'Generate task pricing draft').trigger('click')
+    expect(wrapper.text()).toContain('the generator cannot keep')
+    expect(wrapper.vm.commit()?.pricing['billing_setting.billing_expr']).toBe(
+      source
+    )
+    wrapper.unmount()
+  })
   it('preserves input precision and emits a draft without saving', async () => {
     const save = vi.spyOn(pricingConfigApi, 'save')
     const wrapper = setup({ ModelPrice: '0.000000123456789012' })

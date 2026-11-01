@@ -213,6 +213,8 @@ const zh = {
   allCleared: '已清空价格草稿；保存后所有模型变为未定价。',
   protectedDraft: '填入仅覆盖选中模型的价格。',
   requestRuleInvalid: '请补全条件路径、比较值和有效倍率。',
+  taskPriceUnsupported:
+    '当前表达式含有生成器无法保留的计价项，请直接编辑表达式。',
   schemaValue: '用量字段',
   usagePrice: '用量单价',
   conditionEnd: '结束值',
@@ -512,6 +514,8 @@ const en: Record<keyof typeof zh, string> = {
   protectedDraft: 'Only selected models are overwritten.',
   requestRuleInvalid:
     'Complete condition paths, values, and valid multipliers.',
+  taskPriceUnsupported:
+    'This expression has pricing terms the generator cannot keep. Edit the expression source.',
   schemaValue: 'Usage field',
   usagePrice: 'Usage unit price',
   conditionEnd: 'End value',

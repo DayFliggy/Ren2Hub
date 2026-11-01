@@ -1111,32 +1111,3 @@ func TestUpdateBatchTasksPollClassification(t *testing.T) {
 		})
 	}
 }
-
-func TestUpdateVideoTasksRefundsPreConsumedWhenChannelMissing(t *testing.T) {
-	truncate(t)
-	ctx := context.Background()
-
-	const userID, tokenID, channelID = 21, 21, 21
-	const initQuota, preConsumed, tokenRemain = 10000, 5000, 5000
-
-	seedUser(t, userID, initQuota-preConsumed)
-	seedToken(t, tokenID, userID, "sk-missing-channel", tokenRemain-preConsumed)
-	seedChargedAccounting(t, userID, channelID, tokenID, preConsumed, 1)
-
-	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet)
-	task.PrivateData.UpstreamTaskID = "upstream_missing_channel"
-	task.Status = model.TaskStatusInProgress
-	require.NoError(t, model.DB.Create(task).Error)
-	taskM := map[string]*model.Task{task.GetUpstreamTaskID(): task}
-
-	err := updateVideoTasks(ctx, constant.TaskPlatform("kling"), channelID, []string{task.GetUpstreamTaskID()}, taskM)
-	require.Error(t, err)
-
-	var stored model.Task
-	require.NoError(t, model.DB.Where("id = ?", task.ID).First(&stored).Error)
-	assert.Equal(t, model.TaskStatus(model.TaskStatusFailure), stored.Status)
-	assert.Equal(t, "100%", stored.Progress)
-	assert.Equal(t, 0, stored.Quota, "a refunded task no longer holds pre-consumed quota")
-	assert.Equal(t, initQuota, getUserQuota(t, userID))
-	assert.Equal(t, tokenRemain, getTokenRemainQuota(t, tokenID))
-}

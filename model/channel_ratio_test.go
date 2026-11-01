@@ -1,8 +1,10 @@
 package model
 
 import (
-	"github.com/stretchr/testify/require"
+	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestChannelRatioCanonicalAndInvalidValues(t *testing.T) {
@@ -16,4 +18,17 @@ func TestChannelRatioCanonicalAndInvalidValues(t *testing.T) {
 	value, err = NormalizeChannelRatio("0.333333333333333333")
 	require.NoError(t, err)
 	require.Equal(t, "0.333333333333333333", value)
+}
+
+// Oversized exponents are rejected before a decimal comparison rescales them
+// into a huge integer; the old order spent megabytes on each of these inputs.
+func TestChannelRatioRejectsOversizedExponentsCheaply(t *testing.T) {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for _, value := range []string{"1e10000000", "1e-10000000", "0e10000000"} {
+		_, err := NormalizeChannelRatio(value)
+		require.Error(t, err, value)
+	}
+	runtime.ReadMemStats(&after)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(1<<20))
 }

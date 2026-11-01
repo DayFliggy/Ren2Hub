@@ -27,8 +27,8 @@ import { compileBillingExpression } from '@/features/pricing/lib/billing-express
 import { pricingPreviewRows } from '@/features/pricing/previewRows'
 import {
   readTaskPrices,
+  repriceTaskExpression,
   taskConditionExpression,
-  taskPriceExpression,
 } from '@/features/pricing/taskExpression'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { isRecord } from '@/api/contracts'
@@ -412,7 +412,11 @@ function configureOrdinaryPricing() {
 function createTaskExpression() {
   error.value = ''
   try {
-    activeExpression.value = taskPriceExpression(taskPrices, schema.value ?? {})
+    activeExpression.value = repriceTaskExpression(
+      activeExpression.value,
+      taskPrices,
+      schema.value ?? {}
+    )
   } catch (cause) {
     error.value = translateError(cause, t, te)
   }

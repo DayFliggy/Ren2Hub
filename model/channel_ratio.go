@@ -6,12 +6,25 @@ import (
 	"gorm.io/gorm"
 )
 
-func NormalizeChannelRatio(value string) (string, error) {
+// ParseBoundedRatio parses a ratio string and accepts at most 18 decimal places
+// and a decimal exponent of at most 18. The exponent is checked before any
+// comparison: decimal.Cmp rescales both operands to the smaller exponent, so a
+// short input such as "1e2147483647" would otherwise build a huge big.Int.
+// Callers apply their own sign and maximum on the returned value.
+func ParseBoundedRatio(value string) (decimal.Decimal, bool) {
 	if len(value) == 0 || len(value) > 64 {
-		return "", errors.New("invalid channel ratio")
+		return decimal.Zero, false
 	}
 	r, err := decimal.NewFromString(value)
-	if err != nil || !r.IsPositive() || r.GreaterThan(decimal.NewFromInt(1000)) || r.Exponent() < -18 || r.Exponent() > 18 {
+	if err != nil || r.Exponent() < -18 || r.Exponent() > 18 {
+		return decimal.Zero, false
+	}
+	return r, true
+}
+
+func NormalizeChannelRatio(value string) (string, error) {
+	r, ok := ParseBoundedRatio(value)
+	if !ok || !r.IsPositive() || r.GreaterThan(decimal.NewFromInt(1000)) {
 		return "", errors.New("channel ratio must be greater than 0 and at most 1000, with at most 18 decimal places")
 	}
 	return r.String(), nil

@@ -652,7 +652,9 @@ export function combineBillingExpr(
   const rules = (requestRuleExpr || '').trim()
   if (!base) return ''
   if (!rules) return base
-  return `(${base}) * ${rules}`
+  // The version prefix must stay at the very start of the source.
+  const prefix = base.startsWith('v1:') ? 'v1:' : ''
+  return `${prefix}(${base.slice(prefix.length)}) * ${rules}`
 }
 
 // ---------------------------------------------------------------------------

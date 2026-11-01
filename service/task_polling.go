@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -178,6 +177,13 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 				nullTaskIds = append(nullTaskIds, task.ID)
 				continue
 			}
+			// taskM is keyed by upstream ID across the platform's channels; a
+			// second task with the same ID would receive the first one's result
+			// or refund. Tasks come in id order, so the oldest is polled first
+			// and the others wait for a later round or the timeout sweep.
+			if _, claimed := taskM[upstreamID]; claimed {
+				continue
+			}
 			taskM[upstreamID] = task
 			taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
 		}
@@ -240,32 +246,6 @@ func UpdateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, task
 	return nil
 }
 
-// failTasksWithoutChannel ends tasks whose channel can no longer be loaded. A
-// task is refunded only by the caller that wins its status CAS, so a task that
-// a concurrent poll already finished is not refunded twice.
-func failTasksWithoutChannel(ctx context.Context, taskIds []string, taskM map[string]*model.Task) error {
-	var errs []error
-	for _, upstreamID := range taskIds {
-		task := taskM[upstreamID]
-		if task == nil {
-			continue
-		}
-		fromStatus := task.Status
-		task.Status = model.TaskStatusFailure
-		task.FailReason = "Failed to get the channel information. Please contact the administrator"
-		task.Progress = "100%"
-		won, err := task.UpdateWithStatus(fromStatus)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if won {
-			RefundTaskQuota(ctx, task, task.FailReason)
-		}
-	}
-	return errors.Join(errs...)
-}
-
 func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, channelId int, taskIds []string, taskM map[string]*model.Task) error {
 	logger.LogInfo(ctx, common.LogText("channel #%d has %d unfinished tasks", channelId, len(taskIds)))
 	if ctx.Err() != nil {
@@ -277,7 +257,7 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 	ch, err := model.CacheGetChannel(channelId)
 	if err != nil {
 		common.SysLog(common.LogText("CacheGetChannel: %v", err))
-		return failTasksWithoutChannel(ctx, taskIds, taskM)
+		return failTasksWithoutChannel(ctx, channelId, taskIds, taskM)
 	}
 	proxy := ch.GetSetting().Proxy
 	baseURL := ch.GetBaseURL()
@@ -451,7 +431,7 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	}
 	cacheGetChannel, err := model.CacheGetChannel(channelId)
 	if err != nil {
-		if errFail := failTasksWithoutChannel(ctx, taskIds, taskM); errFail != nil {
+		if errFail := failTasksWithoutChannel(ctx, channelId, taskIds, taskM); errFail != nil {
 			return errFail
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
