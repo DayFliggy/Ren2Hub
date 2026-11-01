@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -149,33 +153,73 @@ func TestUpdateVideoTasksKeepsTasksWhenOnlyTheCacheMissesTheChannel(t *testing.T
 	assert.Equal(t, 5000, getUserQuota(t, userID))
 }
 
-// taskM is keyed by upstream task ID across a platform's channels, so a live
-// channel's task can occupy the slot of a deleted channel's task with the same
-// upstream ID. Ending the deleted channel must not fail or refund the live one.
-func TestFailTasksWithoutChannelSkipsAnotherChannelsTask(t *testing.T) {
-	truncate(t)
-	const missingChannel, liveChannel, preConsumed = 25, 26, 1000
-	for _, id := range []int{missingChannel, liveChannel} {
-		require.NoError(t, model.DB.Create(&model.User{Id: id, Username: fmt.Sprintf("missing_channel_user_%d", id), AffCode: fmt.Sprintf("missing_channel_aff_%d", id), Quota: 5000, Status: common.UserStatusEnabled}).Error)
-	}
-	seedChannel(t, liveChannel)
-	tasks := map[int]*model.Task{}
-	for _, id := range []int{missingChannel, liveChannel} {
-		task := makeTask(id, id, preConsumed, 0, BillingSourceWallet)
-		task.TaskID = fmt.Sprintf("task_missing_channel_%d", id)
-		task.PrivateData.UpstreamTaskID = "shared_upstream_id"
-		require.NoError(t, model.DB.Create(task).Error)
-		tasks[id] = task
-	}
+// failingVideoPollingAdaptor records each fetch and answers it with a 404, so
+// the poll fails and refunds the task it was given.
+type failingVideoPollingAdaptor struct{ taskPollingFetchAdaptor }
 
-	taskM := map[string]*model.Task{"shared_upstream_id": tasks[liveChannel]}
-	require.NoError(t, updateBatchTasks(context.Background(), nil, missingChannel, []string{"shared_upstream_id"}, taskM))
+func (a *failingVideoPollingAdaptor) FetchTask(ctx context.Context, baseURL, key string, task *model.Task, proxy string) (*http.Response, error) {
+	resp, err := a.taskPollingFetchAdaptor.FetchTask(ctx, baseURL, key, task, proxy)
+	if err != nil {
+		return nil, err
+	}
+	_ = resp.Body.Close()
+	return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+}
 
-	for _, id := range []int{missingChannel, liveChannel} {
-		var stored model.Task
-		require.NoError(t, model.DB.First(&stored, tasks[id].ID).Error)
-		assert.EqualValues(t, model.TaskStatusInProgress, stored.Status, "channel %d", id)
-		assert.Equal(t, preConsumed, stored.Quota, "channel %d", id)
-		assert.Equal(t, 5000, getUserQuota(t, id), "channel %d", id)
+// Tasks on two channels share an upstream ID. One poll handles only the oldest
+// task, with its own channel, whether that channel is deleted or answers with a
+// failure; the other task keeps its pre-consumed quota for a later round.
+func TestRunTaskPollingOnceHandlesOneTaskPerUpstreamID(t *testing.T) {
+	for _, firstChannelDeleted := range []bool{true, false} {
+		t.Run(fmt.Sprintf("first channel deleted %v", firstChannelDeleted), func(t *testing.T) {
+			truncate(t)
+			const firstChannel, secondChannel, preConsumed = 27, 28, 1000
+			for _, id := range []int{firstChannel, secondChannel} {
+				require.NoError(t, model.DB.Create(&model.User{Id: id, Username: fmt.Sprintf("shared_upstream_user_%d", id), AffCode: fmt.Sprintf("shared_upstream_aff_%d", id), Quota: 5000, Status: common.UserStatusEnabled}).Error)
+			}
+			if !firstChannelDeleted {
+				seedChannel(t, firstChannel)
+			}
+			seedChannel(t, secondChannel)
+			tasks := map[int]*model.Task{}
+			for _, id := range []int{firstChannel, secondChannel} {
+				task := makeTask(id, id, preConsumed, 0, BillingSourceWallet)
+				task.TaskID = fmt.Sprintf("task_shared_upstream_%d", id)
+				task.Platform = constant.TaskPlatform("kling")
+				task.SubmitTime = time.Now().Unix()
+				task.PrivateData.UpstreamTaskID = "shared_upstream_id"
+				require.NoError(t, model.DB.Create(task).Error)
+				tasks[id] = task
+			}
+
+			adaptor := &failingVideoPollingAdaptor{}
+			previousFactory, previousCache := GetTaskAdaptorFunc, common.MemoryCacheEnabled
+			previousTimeout, previousLimit := constant.TaskTimeoutMinutes, constant.TaskQueryLimit
+			GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return adaptor }
+			common.MemoryCacheEnabled = false
+			constant.TaskTimeoutMinutes = 0
+			constant.TaskQueryLimit = 100
+			t.Cleanup(func() {
+				GetTaskAdaptorFunc, common.MemoryCacheEnabled = previousFactory, previousCache
+				constant.TaskTimeoutMinutes, constant.TaskQueryLimit = previousTimeout, previousLimit
+			})
+			RunTaskPollingOnce(context.Background(), nil)
+
+			var first, second model.Task
+			require.NoError(t, model.DB.First(&first, tasks[firstChannel].ID).Error)
+			require.NoError(t, model.DB.First(&second, tasks[secondChannel].ID).Error)
+			assert.EqualValues(t, model.TaskStatusFailure, first.Status)
+			assert.Zero(t, first.Quota)
+			assert.Equal(t, 5000+preConsumed, getUserQuota(t, firstChannel))
+			assert.EqualValues(t, model.TaskStatusInProgress, second.Status)
+			assert.Equal(t, preConsumed, second.Quota)
+			assert.Equal(t, 5000, getUserQuota(t, secondChannel))
+			assert.Equal(t, int64(1), countLogs(t))
+			wantFetches := 1
+			if firstChannelDeleted {
+				wantFetches = 0
+			}
+			assert.Equal(t, wantFetches, adaptor.fetchCount())
+		})
 	}
 }

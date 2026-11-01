@@ -83,32 +83,46 @@ function isMultiplierFactor(node: ExpressionNode): boolean {
   )
 }
 
-// Splits the top-level product of a saved expression into the source text of
-// its price factors and of its multiplier factors.
-function taskFactors(source: string) {
+// A saved task expression the generator can rebuild: one single-tier price
+// factor and the multipliers around it. A blank or literal source has nothing
+// to keep. Any other shape returns null, since rebuilding it would drop a term
+// such as image_count, a division or another tier.
+function taskParts(source: string, schema: BillingUsageSchema | undefined) {
   const trimmed = source.trim()
-  const compiledSource = trimmed ? compileBillingExpression(trimmed) : null
-  if (compiledSource?.status !== 'ready') return { price: [], multipliers: [] }
+  const prefix = trimmed.startsWith('v1:') ? 'v1:' : ''
+  if (!trimmed) return { prefix, multipliers: [], price: null }
+  const result = compileBillingExpression(trimmed)
+  if (result.status !== 'ready') return null
+  if (result.ast.kind === 'literal')
+    return { prefix, multipliers: [], price: null }
   const text = (node: ExpressionNode) => trimmed.slice(node.start, node.end)
-  const factors = flattenBinary(compiledSource.ast, '*')
+  const factors = flattenBinary(result.ast, '*')
+  const priced = factors.filter((node) => !isMultiplierFactor(node))
+  if (priced.length !== 1) return null
+  const tiers = parseTaskTiersFromExpr(text(priced[0]!), schema)
+  if (tiers.length !== 1 || tiers[0]!.constant) return null
   return {
-    price: factors.filter((node) => !isMultiplierFactor(node)).map(text),
+    prefix,
     multipliers: factors.filter(isMultiplierFactor).map(text),
+    price: tiers[0]!,
   }
 }
 
-// Replaces only the price of a saved task expression. Its multipliers stay,
+// Replaces only the price of a saved task expression and keeps its multipliers,
 // otherwise a matching request would be billed at the bare unit price.
 export function repriceTaskExpression(
   source: string,
   prices: Record<string, string>,
   schema: BillingUsageSchema
 ): string {
+  const parts = taskParts(source, schema)
+  if (!parts) throw new Error('taskPriceUnsupported')
   const base = taskPriceExpression(prices, schema)
-  const { multipliers } = taskFactors(source)
-  if (!multipliers.length) return base
-  const prefix = source.trim().startsWith('v1:') ? 'v1:' : ''
-  return compiled(`${prefix}(${base}) * ${multipliers.join(' * ')}`, 'invalid')
+  if (!parts.multipliers.length) return `${parts.prefix}${base}`
+  return compiled(
+    `${parts.prefix}(${base}) * ${parts.multipliers.join(' * ')}`,
+    'invalid'
+  )
 }
 
 // The unit prices of a saved single-tier task expression, so the generator
@@ -117,14 +131,12 @@ export function readTaskPrices(
   source: string,
   schema: BillingUsageSchema | undefined
 ): Record<string, string> {
-  const { price, multipliers } = taskFactors(source)
-  const priceSource = multipliers.length ? price.join(' * ') : source
-  const tiers = parseTaskTiersFromExpr(priceSource, schema)
-  if (tiers.length !== 1 || tiers[0]!.constant) return {}
+  const price = taskParts(source, schema)?.price
+  if (!price) return {}
   return Object.fromEntries(
-    Object.entries(tiers[0]!.unitPrices).map(([field, price]) => [
+    Object.entries(price.unitPrices).map(([field, value]) => [
       field,
-      decimalText(price),
+      decimalText(value),
     ])
   )
 }

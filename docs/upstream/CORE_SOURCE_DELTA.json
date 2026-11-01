@@ -7486,7 +7486,7 @@
       "path": "service/channel_upstream_ratio_http.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "503176aa8922697388061e0ecf34be6821bcd6875d726aa45ad4042a50340e7b"
+      "local_sha256": "4be271f4e92a32fd83f82fe6ac752f6291ae3d278cd6620050eaa40b55ed972c"
     },
     {
       "path": "service/channel_upstream_ratio_newapi.go",
@@ -7510,7 +7510,7 @@
       "path": "service/channel_upstream_ratio_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "06c39cb3cd34f79f8c3cfed6825021fbb9fd1ffdcdafc0f04e83605cd8770562"
+      "local_sha256": "2693c2787d85abdb90168e9c9169e6c5764b177efced5874f6a49c1160599394"
     },
     {
       "path": "service/codex_channel_models.go",
@@ -8197,13 +8197,13 @@
       "path": "service/task_missing_channel.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "c0c74145a7c87683f5482b060a0e0570899b818a985b2172285ddfe9606b8c1f"
+      "local_sha256": "4509f3338a2da6c04d7fac7882570280e5428da85df8eed1446f06799d82cf69"
     },
     {
       "path": "service/task_missing_channel_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "16249f199c5667b40acb77212812ab02f821f2f5c0656992b2c02b7f465dfcb8"
+      "local_sha256": "759f4df53dfece35bd5f323174ab83a164a41e35373daad50a76f99e3c62fed3"
     },
     {
       "path": "service/task_plugin_audit.go",
@@ -8227,7 +8227,7 @@
       "path": "service/task_polling.go",
       "status": "adapted",
       "upstream_sha256": "22beedd4b79b7c1df8e17ca6741c99632e25c4590dd1e17171c050eb6e595f46",
-      "local_sha256": "65b437dc44f5e1d27509769022ef16139015ed90a4d718c51c8f69e4088ae88d",
+      "local_sha256": "cc3cc51a0365bb048881e65bcc82d35ae9aacfcf95433a69cab6d3ed76a0f098",
       "reasons": [
         "channel-ratio",
         "concurrency",

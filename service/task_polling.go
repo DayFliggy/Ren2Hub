@@ -177,6 +177,13 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 				nullTaskIds = append(nullTaskIds, task.ID)
 				continue
 			}
+			// taskM is keyed by upstream ID across the platform's channels; a
+			// second task with the same ID would receive the first one's result
+			// or refund. Tasks come in id order, so the oldest is polled first
+			// and the others wait for a later round or the timeout sweep.
+			if _, claimed := taskM[upstreamID]; claimed {
+				continue
+			}
 			taskM[upstreamID] = task
 			taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
 		}

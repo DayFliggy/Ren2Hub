@@ -20,9 +20,7 @@ import (
 //
 // A cache miss or a failed read is not proof of deletion: unless the database
 // reports the row as not found, the tasks stay unchanged and the error is
-// returned so the next poll retries. taskM is keyed by upstream task ID across
-// all channels of a platform, so an entry that belongs to another channel is
-// left alone; the timeout sweep still settles the task it displaced.
+// returned so the next poll retries.
 func failTasksWithoutChannel(ctx context.Context, channelId int, taskIds []string, taskM map[string]*model.Task) error {
 	if _, err := model.GetChannelById(channelId, false); !errors.Is(err, gorm.ErrRecordNotFound) {
 		if err == nil {
@@ -38,7 +36,7 @@ func failTasksWithoutChannel(ctx context.Context, channelId int, taskIds []strin
 
 	for _, upstreamID := range taskIds {
 		task := taskM[upstreamID]
-		if task == nil || task.ChannelId != channelId {
+		if task == nil {
 			continue
 		}
 		isLegacy := task.SubmitTime > 0 && task.SubmitTime < model.TaskRefundLegacyCutoff

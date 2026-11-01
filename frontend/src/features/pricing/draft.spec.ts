@@ -15,6 +15,7 @@ import {
   parseVisualBillingDocument,
   serializeVisualBillingDocument,
 } from './lib/billing-expression/visual'
+import { compileBillingExpression } from './lib/billing-expression/parser'
 import { evaluateBillingExpression } from './lib/billing-expression/runtime'
 import {
   buildRequestRuleExpr,
@@ -209,6 +210,15 @@ describe('model pricing draft contracts', () => {
       splitBillingExprAndRequestRules(combineBillingExpr(source, rules))
         .billingExpr
     ).toContain('len <= 200000')
+  })
+  it('keeps the version prefix at the start when request rules are combined', () => {
+    const rule = '(header("speed") == "fast" ? 4 : 1)'
+    const combined = combineBillingExpr(
+      'v1:(tier("base", u("seconds") * 0.5))',
+      rule
+    )
+    expect(combined).toBe(`v1:((tier("base", u("seconds") * 0.5))) * ${rule}`)
+    expect(compileBillingExpression(combined).status).toBe('ready')
   })
   // Ported from upstream 8802113 billing-expression.test.ts.
   it('keeps image quantity outside a condition added to per-image pricing', () => {

@@ -40,15 +40,39 @@ describe('repricing a task expression', () => {
     )
   })
 
-  it('replaces an expression without multipliers', () => {
+  it('replaces a single-tier, blank or literal expression and keeps its prefix', () => {
+    const cases: [string, string][] = [
+      ['', 'tier("base", u("seconds") * 0.5)'],
+      ['0', 'tier("base", u("seconds") * 0.5)'],
+      ['tier("base", u("seconds") * 0.4)', 'tier("base", u("seconds") * 0.5)'],
+      [
+        'v1:tier("base", u("seconds") * 0.4)',
+        'v1:tier("base", u("seconds") * 0.5)',
+      ],
+    ]
+    for (const [source, expected] of cases)
+      expect(repriceTaskExpression(source, price('0.5'), schema)).toBe(expected)
+  })
+
+  // Rebuilding these would drop a quantity, a division, a nested multiplier or
+  // another tier, so a matching request would be billed less.
+  it('refuses shapes it cannot rebuild without losing a term', () => {
+    const base = 'tier("base", u("seconds") * 0.4)'
+    const rule = '(header("speed") == "fast" ? 3 : 1)'
     for (const source of [
-      '',
+      `(${base} * ${rule}) / 1`,
+      `${base} * (header("speed") == "fast" ? 3 * 2 : 1)`,
+      `${base} * image_count * ${rule}`,
+      `(u("seconds") > 10 ? tier("long", u("seconds") * 0.8) : ${base}) * ${rule}`,
       'u("seconds") * 0.4',
-      'tier("base", u("seconds") * 0.4)',
+      'tier("base", u("seconds") * 0.4 + 1)',
+      'not an expression (',
     ]) {
-      expect(repriceTaskExpression(source, price('0.5'), schema)).toBe(
-        'tier("base", u("seconds") * 0.5)'
-      )
+      expect(readTaskPrices(source, schema), source).toEqual({})
+      expect(
+        () => repriceTaskExpression(source, price('0.5'), schema),
+        source
+      ).toThrow('taskPriceUnsupported')
     }
   })
 })

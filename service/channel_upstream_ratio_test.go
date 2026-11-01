@@ -374,6 +374,31 @@ func TestUpstreamRatioProxyTargetIsProtected(t *testing.T) {
 	assert.EqualValues(t, 1, proxied.Load())
 }
 
+// 直连探测只在拨号时、按探测的 context 解析目标；已取消的探测不发起 DNS 查询。
+func TestUpstreamRatioDirectProbeResolvesWithinItsContext(t *testing.T) {
+	setupUpstreamRatioTest(t)
+	fetch := system_setting.GetFetchSetting()
+	fetch.EnableSSRFProtection = true
+	fetch.ApplyIPFilterForDomain = true
+	fetch.AllowPrivateIp = false
+	fetch.AllowedPorts = []string{"80"}
+	previous := net.DefaultResolver
+	var lookups atomic.Int32
+	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(context.Context, string, string) (net.Conn, error) {
+		lookups.Add(1)
+		return nil, fmt.Errorf("offline resolver")
+	}}
+	t.Cleanup(func() { net.DefaultResolver = previous })
+	client, err := newUpstreamRatioHTTPClient("")
+	require.NoError(t, err)
+	defer client.CloseIdleConnections()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = upstreamRatioGet(ctx, client, "http://relay.example.com/v1/sub2api/billing", "", 1024)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Zero(t, lookups.Load())
+}
+
 func TestUpstreamRatioZonedIPv6HostIsRefused(t *testing.T) {
 	setupUpstreamRatioTest(t)
 	fetch := system_setting.GetFetchSetting()
