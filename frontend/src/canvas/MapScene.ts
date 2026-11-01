@@ -867,7 +867,7 @@ export class MapScene {
       const flyline = new Flyline(
         this.hub,
         marker,
-        () => marker.color,
+        marker,
         group.timing.routeOutboundMs,
         () => this.onOutboundArrived(group, marker),
         this.sceneCenter
@@ -918,7 +918,7 @@ export class MapScene {
       const flyline = new Flyline(
         marker,
         this.hub,
-        () => marker.color,
+        marker,
         group.timing.routeReturnMs,
         () => this.onReturnArrived(group, marker),
         this.sceneCenter

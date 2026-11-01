@@ -19,9 +19,18 @@ const FLOW_CHARS = [
   'LLM',
 ]
 
+/** The model end of a flyline, read on every draw. */
+interface FlylineModel {
+  readonly color: string
+  readonly visible: boolean
+  readonly edgeAlpha: number
+}
+
 /** Gateway ↔ model packet, advanced by duration rather than frame count.
  *  `from` and `to` are the live hub and marker: the map rotates and relayouts
- *  move them mid-flight, so the arc is derived from their current positions. */
+ *  move them mid-flight, so the arc is derived from their current positions.
+ *  Like the hub link, it is hidden and faded with its model marker, which
+ *  also hides the jump when the marker wraps across the map seam. */
 export class Flyline {
   progress = 0
   dead = false
@@ -31,7 +40,7 @@ export class Flyline {
   constructor(
     public from: Pt,
     public to: Pt,
-    private getColor: () => string,
+    private model: FlylineModel,
     private durationMs: number,
     public onArrive: () => void,
     private getCenter: () => Pt
@@ -71,14 +80,17 @@ export class Flyline {
     reduced = false,
     theme: CanvasTheme = getCanvasTheme('dark')
   ) {
-    const color = this.getColor()
+    const { color, visible, edgeAlpha } = this.model
+    if (!visible || edgeAlpha <= 0) return
     const control = this.control()
+    ctx.save()
+    ctx.globalAlpha = edgeAlpha
     ctx.save()
     ctx.beginPath()
     ctx.moveTo(this.from.x, this.from.y)
     ctx.quadraticCurveTo(control.x, control.y, this.to.x, this.to.y)
     ctx.strokeStyle = color
-    ctx.globalAlpha = 0.22
+    ctx.globalAlpha = 0.22 * edgeAlpha
     ctx.lineWidth = 1
     ctx.setLineDash([4, 7])
     ctx.lineDashOffset = reduced ? 0 : -t * 0.8
@@ -112,6 +124,7 @@ export class Flyline {
     ctx.beginPath()
     ctx.arc(head.x, head.y, 1.8, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
   }
 
   private rgba(hex: string, alpha: number): string {
