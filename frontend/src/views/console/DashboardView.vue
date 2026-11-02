@@ -27,9 +27,17 @@ import type { StatsRange } from '@/composables/useDashboardStats'
 import { useAuthStore } from '@/stores/auth'
 import { dateInputValue } from '@/utils/format'
 import { greetingBucketForHour } from '@/utils/greeting'
+import type { DashboardScope } from '@/api/dashboard'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+// A page-local choice cannot carry privileged data across accounts or sessions.
+const selectedScope = ref<DashboardScope>('self')
+const scope = computed(() => (auth.isAdmin ? selectedScope.value : 'self'))
+const scopeOptions = computed(() => [
+  { value: 'self', label: t('dashboard.scopeSelf') },
+  { value: 'all', label: t('dashboard.scopeAll') },
+])
 const {
   loading,
   stats,
@@ -43,10 +51,11 @@ const {
   discountsLoading,
   discountsError,
   load,
-} = useDashboard()
+  reset,
+} = useDashboard(scope)
 const resources = useDashboardResources()
-const statsComposable = useDashboardStats()
-const distribution = useUsageDistribution()
+const statsComposable = useDashboardStats(scope)
+const distribution = useUsageDistribution(scope)
 
 onMounted(() => {
   void load()
@@ -85,13 +94,29 @@ const tabs = computed(() => {
     { key: 'overview', label: t('dashboard.tabOverview') },
     { key: 'stats', label: t('dashboard.tabStats') },
   ]
-  if (auth.isAdmin) {
-    items.push({ key: 'autoroute', label: t('dashboard.autoRoute.tabLabel') })
-  }
+  items.push({ key: 'autoroute', label: t('dashboard.autoRoute.tabLabel') })
   return items
 })
 const activeTab = ref('overview')
 const dashboardPanelId = 'dashboard-tab-panel'
+
+watch(
+  [() => auth.user?.id, () => auth.user?.role],
+  () => {
+    selectedScope.value = 'self'
+  },
+  { flush: 'sync' }
+)
+
+watch([scope, () => auth.user?.id, () => auth.user?.role], () => {
+  reset()
+  distribution.reset()
+  statsComposable.reset()
+  if (!auth.user) return
+  void load()
+  void distribution.load()
+  if (activeTab.value === 'stats') void statsComposable.load()
+})
 
 watch(activeTab, (tab) => {
   if (
@@ -139,7 +164,7 @@ const rangeOptions = computed(() => [
 </script>
 
 <template>
-  <div data-dashboard-page>
+  <div data-dashboard-page :data-dashboard-scope="scope">
     <PageHero
       v-model:tab="activeTab"
       :title="greeting"
@@ -151,7 +176,20 @@ const rangeOptions = computed(() => [
       :crumbs="[$t('dashboard.breadcrumb.0'), $t('dashboard.breadcrumb.1')]"
       :tabs="tabs"
       :tab-panel-id="dashboardPanelId"
-    />
+    >
+      <template #actions>
+        <SegmentedToggle
+          v-if="auth.isAdmin && activeTab !== 'autoroute'"
+          class="sm:mt-2"
+          :model-value="scope"
+          :options="scopeOptions"
+          :label="t('dashboard.scopeLabel')"
+          @update:model-value="
+            selectedScope = $event === 'all' ? 'all' : 'self'
+          "
+        />
+      </template>
+    </PageHero>
 
     <div
       :id="dashboardPanelId"
@@ -186,6 +224,7 @@ const rangeOptions = computed(() => [
           <template v-else>
             <!-- 总额度（限速已并入 KPI 条的 RPM 格） -->
             <BalanceCard
+              v-if="scope === 'self'"
               class="min-w-0"
               :quota="stats?.quota ?? null"
               :used-quota="stats?.used_quota ?? null"
@@ -193,7 +232,9 @@ const rangeOptions = computed(() => [
               :month-quota="stats?.month_quota"
               :daily-burn="dailyBurn"
             />
-            <!-- Usage distribution -->
+            <!-- Usage distribution: the calendar and its analytics are both
+                 width-capped, so it keeps two columns and system status fills
+                 the third in either scope. -->
             <UsageDistributionCard
               class="min-w-0 xl:col-span-2"
               :points="distribution.points.value"
@@ -214,7 +255,8 @@ const rangeOptions = computed(() => [
           <!-- Token 使用趋势 -->
           <TokenTrendCard
             v-if="!dashboardError"
-            class="min-w-0 xl:col-span-2"
+            class="min-w-0"
+            :class="scope === 'all' ? 'xl:col-span-3' : 'xl:col-span-2'"
             :points="tokenTrend"
             :loading="loading"
             :unavailable-reason="
@@ -225,6 +267,7 @@ const rangeOptions = computed(() => [
           />
           <!-- 折扣来自独立接口，个人汇总失败时照常显示 -->
           <DiscountCard
+            v-if="scope === 'self'"
             class="min-w-0"
             :discounts="discounts"
             :loading="discountsLoading"
@@ -233,7 +276,8 @@ const rangeOptions = computed(() => [
           <template v-if="!dashboardError">
             <!-- 模型消费分布 -->
             <ModelDistributionCard
-              class="min-w-0 xl:col-span-2"
+              class="min-w-0"
+              :class="scope === 'all' ? 'xl:col-span-3' : 'xl:col-span-2'"
               :items="share"
               :loading="loading"
               :unavailable-reason="
@@ -307,10 +351,7 @@ const rangeOptions = computed(() => [
       <!-- ══════════════════════════════════════════
          Tab: Auto Route
     ══════════════════════════════════════════ -->
-      <div
-        v-else-if="activeTab === 'autoroute' && auth.isAdmin"
-        class="min-w-0"
-      >
+      <div v-else-if="activeTab === 'autoroute'" class="min-w-0">
         <AutoRoutePanel />
       </div>
     </div>

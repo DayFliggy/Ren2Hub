@@ -1,6 +1,10 @@
-import { ref } from 'vue'
+import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getUsageSummary, logRangeLimit } from '@/api/dashboard'
+import {
+  getUsageSummary,
+  logRangeLimit,
+  type DashboardScope,
+} from '@/api/dashboard'
 import { useAppStore } from '@/stores/app'
 import { usageCoverageRange } from '@/utils/usageDistribution'
 import { useLatestRequest } from './useLatestRequest'
@@ -11,7 +15,9 @@ export interface UsageDistributionPoint {
   consume: string
   tokens: number
 }
-export function useUsageDistribution() {
+export function useUsageDistribution(
+  scope: MaybeRefOrGetter<DashboardScope> = 'self'
+) {
   const { t } = useI18n()
   const app = useAppStore()
   const loading = ref(true),
@@ -22,8 +28,19 @@ export function useUsageDistribution() {
     unavailableReason = ref(''),
     request = useLatestRequest(),
     toast = useToast()
+  function reset() {
+    request.cancel()
+    loading.value = false
+    points.value = []
+    coveredFrom.value = ''
+    error.value = ''
+    unavailableReason.value = ''
+  }
   async function load() {
+    const selectedScope = toValue(scope)
     loading.value = true
+    points.value = []
+    coveredFrom.value = ''
     error.value = ''
     unavailableReason.value = ''
     const result = await request.run(async (signal) => {
@@ -32,7 +49,8 @@ export function useUsageDistribution() {
       const summary = await getUsageSummary(
         { range: 'custom', ...range },
         false,
-        signal
+        signal,
+        selectedScope
       )
       return { start: range.start, summary }
     })
@@ -53,5 +71,5 @@ export function useUsageDistribution() {
       toast.error(error.value)
     }
   }
-  return { loading, points, coveredFrom, error, unavailableReason, load }
+  return { loading, points, coveredFrom, error, unavailableReason, load, reset }
 }

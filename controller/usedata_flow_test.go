@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -127,4 +129,67 @@ func TestGetUserFlowQuotaDatesRejectsInvalidTimeRange(t *testing.T) {
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
 	require.False(t, payload.Success)
 	require.Equal(t, "invalid start_timestamp", payload.Message)
+}
+
+func TestAdminQuotaVisibilityProtectsRootAcrossLegacyEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, _ := newAuditTestDatabase(t, "sqlite", "")
+	useLogExportDatabases(t, db, db, common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.QuotaData{}))
+	now := time.Now().Unix()
+	for i, role := range []int{common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser, common.RoleRootUser} {
+		id := i + 1
+		require.NoError(t, db.Create(&model.User{Id: id, Username: fmt.Sprintf("current-%d", id), Role: role, AffCode: fmt.Sprint(id)}).Error)
+		require.NoError(t, db.Create(&model.QuotaData{
+			UserID: id, Username: fmt.Sprintf("historical-%d", id), ModelName: "model", CreatedAt: now - 10,
+			Count: id, Quota: id * 100, TokenUsed: id,
+		}).Error)
+	}
+	require.NoError(t, db.Delete(&model.User{}, 4).Error)
+	query := fmt.Sprintf("start_timestamp=%d&end_timestamp=%d", now-100, now)
+	for _, handler := range []gin.HandlerFunc{GetQuotaDatesByUser, GetAllFlowQuotaDates} {
+		for _, role := range []int{common.RoleAdminUser, common.RoleRootUser} {
+			response := callLogHandler(t, handler, 2, role, query)[0]
+			require.Equal(t, true, response["success"])
+			rows := response["data"].([]any)
+			if role == common.RoleAdminUser {
+				require.Len(t, rows, 2)
+			} else {
+				require.Len(t, rows, 4)
+			}
+			for _, item := range rows {
+				if role == common.RoleAdminUser {
+					require.Contains(t, []string{"historical-1", "historical-2"}, item.(map[string]any)["username"])
+				}
+			}
+		}
+	}
+	for _, handler := range []gin.HandlerFunc{GetAllQuotaDates, GetAllFlowQuotaDates} {
+		for _, id := range []int{3, 4} {
+			filter := query + fmt.Sprintf("&username=historical-%d", id)
+			admin := callLogHandler(t, handler, 2, common.RoleAdminUser, filter)[0]
+			require.Equal(t, true, admin["success"])
+			require.Empty(t, admin["data"])
+			root := callLogHandler(t, handler, 3, common.RoleRootUser, filter)[0]
+			require.Equal(t, true, root["success"])
+			require.Len(t, root["data"], 1)
+		}
+	}
+	// Anonymous aggregates deliberately include all accounts, including Root.
+	all := callLogHandler(t, GetAllQuotaDates, 2, common.RoleAdminUser, query)[0]
+	require.Equal(t, true, all["success"])
+	rows := all["data"].([]any)
+	require.Len(t, rows, 1)
+	require.EqualValues(t, 1000, rows[0].(map[string]any)["quota"])
+	require.Empty(t, rows[0].(map[string]any)["username"])
+	// A Root's own personal endpoint must still return their own history.
+	self := callLogHandler(t, GetUserQuotaDates, 3, common.RoleRootUser, query)[0]
+	require.Equal(t, true, self["success"])
+	require.Len(t, self["data"], 1)
+	// Lookup failures close every route that returns user-specific data.
+	require.NoError(t, db.Migrator().DropTable(&model.User{}))
+	for _, handler := range []gin.HandlerFunc{GetAllQuotaDates, GetQuotaDatesByUser, GetAllFlowQuotaDates} {
+		response := callLogHandler(t, handler, 2, common.RoleAdminUser, query+"&username=historical-3")[0]
+		require.Equal(t, false, response["success"])
+	}
 }

@@ -105,7 +105,7 @@ const cells = computed<Cell[]>(() => [
     value:
       props.stats?.today_requests !== undefined
         ? formatNumber(props.stats.today_requests)
-        : props.stats
+        : props.stats?.total_requests !== undefined
           ? formatNumber(props.stats.total_requests)
           : '--',
     color: 'var(--signal)',

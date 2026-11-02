@@ -3,9 +3,9 @@
   "implementation_base_sha": "0837a03c77ea0d5b7618588d4c9e77781f656590",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 800,
-    "adapted": 275,
-    "extension": 257,
+    "upstream_equal": 798,
+    "adapted": 277,
+    "extension": 261,
     "removed": 45
   },
   "files": [
@@ -976,13 +976,13 @@
       "path": "controller/dashboard_summary.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8b189752b8cfd5b49b8b53ec802248289088ddd187d90eb63a9b6ceaad55fbef"
+      "local_sha256": "8ab481e6af1a21176f2542e026ba3e351f101682be0016339f339048b1192582"
     },
     {
       "path": "controller/dashboard_summary_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "422436c4ad5b58dbfab3339882d4125a9ab2263bfdfd5ee195df4cc526d04dcf"
+      "local_sha256": "0bc8e2e5a983f1a59655740015aa909587a1e38ccba869d7e9ead885f0171599"
     },
     {
       "path": "controller/dashboard_system_status.go",
@@ -1060,16 +1060,23 @@
       "path": "controller/log.go",
       "status": "adapted",
       "upstream_sha256": "045aca343d8014a7be9175c3cd0dcf839316e1d8020c3748e3a6d7495ed1c991",
-      "local_sha256": "d22e1b4c9755a23db41beb9136d6c427397a7e0f400031084dac631e11c85305",
+      "local_sha256": "5036b8c9c5bc98441931996a1fd159a6da427313954b15a50fc358f8595726dc",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "usage-visibility"
       ]
     },
     {
       "path": "controller/log_export_test.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "bffa0cb2bd3f08ed4593bf469235205e465df01435686dd2d3090acbc147feef",
-      "local_sha256": "bffa0cb2bd3f08ed4593bf469235205e465df01435686dd2d3090acbc147feef"
+      "local_sha256": "3ddfd86675f87e78b9533b88e90384e2c98be0c14df4afa52e37218d912be17f"
+    },
+    {
+      "path": "controller/log_visibility_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ec1dad3ae5ce421ea25f659d519084baf898a881b7e684557dd98177f8ea77d2"
     },
     {
       "path": "controller/login_verification.go",
@@ -1916,21 +1923,24 @@
     },
     {
       "path": "controller/usedata.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "aa051c28438f7e78ceb6c147f9b0fc06211b74af2d2cbc0dc3103710faff7c56",
-      "local_sha256": "aa051c28438f7e78ceb6c147f9b0fc06211b74af2d2cbc0dc3103710faff7c56"
+      "local_sha256": "36fe30b71e7b0b0729c6026377f182bce1534a1330a0fdae47ab672a476bf464",
+      "reasons": [
+        "usage-visibility"
+      ]
     },
     {
       "path": "controller/usedata_flow_test.go",
       "status": "adapted",
       "upstream_sha256": "750693423b0399bae60b12aa3626f1646cb6d2480678aad5ffbe176fef26d7a5",
-      "local_sha256": "2e26b3a191dd1b2860e14d3b513c21145172f34bdddee26aa5cd1eca347c1e11"
+      "local_sha256": "442d076decec0a88aa3c2d900c08d5ee4c1bedf9b9b0dc30e2fad108c0e04bb2"
     },
     {
       "path": "controller/user.go",
       "status": "adapted",
       "upstream_sha256": "327ef7512ddccc6b9c0313f53ddf6402f12eb23d1b362dee9e9e31030fe47405",
-      "local_sha256": "a2355855281b5df5c0e6c9e322de9452a7ad90770622d56a29b2f3ba051ca7a5",
+      "local_sha256": "3ff13fda02510384ac0d748987aa68b38673b3eb72012c7a202977601cfd29e8",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -1938,6 +1948,7 @@
         "group-removal",
         "request-limits-summary",
         "retired",
+        "usage-visibility",
         "vue-frontend"
       ]
     },
@@ -1951,7 +1962,7 @@
       "path": "controller/user_manage_test.go",
       "status": "adapted",
       "upstream_sha256": "9ec3f058238615355d9df93d9f9f2a4e0cf657d268b9fa6328235811dafd13f6",
-      "local_sha256": "21f131fdf0f3765f08467ba0804a6aec5864ea89ce6fd31932367b72f71ce7d3"
+      "local_sha256": "9f2806d0d963d6bf05ca1d2bc5fddbfdca1e20c29decd6ef080f78e074e32e22"
     },
     {
       "path": "controller/user_publication.go",
@@ -1973,6 +1984,12 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "24a99f14bbdc301994e7f0b8487af0da4a02d29276b7152e6b753ebaeb954dbb"
+    },
+    {
+      "path": "controller/user_visibility_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6699631eb150987c29532edce5a34f9ca5d8bc804920b5a1ab372c9756fb7896"
     },
     {
       "path": "controller/vendor_meta.go",
@@ -2170,10 +2187,11 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "6d8369b5e86765d65511680bb5ef29a1c94877d9922479f08dca55c3e63f0145",
-      "local_sha256": "64d5aab81e76c5fa9959eb1d48684dc40edef960c67a41b0fab0c3279ff1e361",
+      "local_sha256": "1a1c6f90e41d7fc8f873416bbb204281fccba96080568b64e68cc54200be3f83",
       "reasons": [
         "affiliate",
         "catalog-stats",
+        "dashboard-scope",
         "extension-hook",
         "group-removal",
         "no-builtin-prices",
@@ -2684,7 +2702,7 @@
       "path": "model/channel_metrics_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3ba9c852ff1f6ee62137c53562fe75cad3ffe1b1b30069575f23de32bb9c0f39"
+      "local_sha256": "550a1aa38d1d610d49cbf39cd392504ced148b971b3f0b47b72556c0dfab5175"
     },
     {
       "path": "model/channel_polling.go",
@@ -2789,7 +2807,13 @@
       "path": "model/dashboard_summary.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2e729a0e4a5573957084ceca07c65ef37240821727655a7786962a5894daee68"
+      "local_sha256": "3c750d605dd85a034c94f7e6c0b64be5a8f0180f69702d924599da72f60738db"
+    },
+    {
+      "path": "model/dashboard_summary_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2099f435c3d1333945b0202d6d5d12fdb3730fb47a909553151ae110f4055219"
     },
     {
       "path": "model/db_time.go",
@@ -2927,9 +2951,10 @@
       "path": "model/log.go",
       "status": "adapted",
       "upstream_sha256": "12c22097bb096038c024262b792ff714809a63e969ca674e8f864f448e4f58bf",
-      "local_sha256": "d947945b3d7276acfe4cca552b6e9754ebc9a3b162ed4a0f0b6f6501a5c444f3",
+      "local_sha256": "b826411962934257a6dc2eb060f530c74cebfc41884635f65ddf9c0a5947b331",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "usage-visibility"
       ]
     },
     {
@@ -3490,18 +3515,20 @@
       "path": "model/usedata.go",
       "status": "adapted",
       "upstream_sha256": "0bac4e00b0372ca181cca34c405cc7183796f9a5dab2ed8fa230f916eda59fc8",
-      "local_sha256": "448fe070917a5214b3e9debfc754d11a376bd51882565580d12aaafe6b138857",
+      "local_sha256": "75f721ef00330ddeff1b5a36f607fc11c8001d54640884ceb556283d6845a89f",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "usage-visibility"
       ]
     },
     {
       "path": "model/usedata_flow.go",
       "status": "adapted",
       "upstream_sha256": "e248b0e41101bb5002af179cba23062b7abe7ef0c4f73d0a1f6b79a3b742b935",
-      "local_sha256": "c155e88fb8119b257862e18dfe02b70a4bb66429701e5c1d2cbb7e73a356b35f",
+      "local_sha256": "9c7e3b55269a91f780aced07eedf2f2a56ffcc02f514c39d03ce4395bfc4ac06",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "usage-visibility"
       ]
     },
     {
@@ -3520,13 +3547,14 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "b74b07db9b379a4f4115c7e8f2e97e26430a64e4d67ef340c975e63cfee13964",
-      "local_sha256": "6ee155a8c7c6bb8e1f851ba471be9c85bf3cf2c5c3261b43473892f52877931c",
+      "local_sha256": "70a9242f0cffd316759125ed3b15498ff40d1d614f1c4bb87e352ab18743836c",
       "reasons": [
         "affiliate",
         "concurrency",
         "group-removal",
         "retired",
         "usage-discount",
+        "usage-visibility",
         "vue-frontend"
       ]
     },
@@ -3578,7 +3606,7 @@
       "path": "model/user_pagination_test.go",
       "status": "adapted",
       "upstream_sha256": "bee363ce22d15c77fd77feb54f19c25739f675b5d6fff4135986aaf4af8e0e1e",
-      "local_sha256": "d95b1b53095d176ce27de44b54cb772ce1a8e3f5e2fa8c790b5cfdafa95c2440"
+      "local_sha256": "fdf3e5fe2784c0c2708fdc64bff653bea160c4933ef6e44743551fd3de76906f"
     },
     {
       "path": "model/user_quota_adjustment.go",
@@ -7034,10 +7062,11 @@
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "7cfd94ad4768920203d49bd2f687c1e7e86d7a60715834615613a0295a5f147b",
-      "local_sha256": "3ebe47e342c328dc97783fc1fbfceb6bb231f913ed98d54d9058b26a5a6fd0b8",
+      "local_sha256": "b8278da2d352bb5ff7bcb25c829113753203dc671a47987ba933cdc4a2978414",
       "reasons": [
         "affiliate",
         "catalog-stats",
+        "dashboard-scope",
         "extension-hook",
         "gmpay",
         "group-removal",
@@ -7076,6 +7105,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "5a76e635cffe4ab8d7860eb30928619c5d9df1382c47358eb2641878f69b72f5",
       "local_sha256": "5a76e635cffe4ab8d7860eb30928619c5d9df1382c47358eb2641878f69b72f5"
+    },
+    {
+      "path": "router/dashboard_summary_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "340a4642a9025edc16b134be16b977019f81060c495945729ac3d19328de8826"
     },
     {
       "path": "router/dashboard_system_status_test.go",
@@ -7576,7 +7611,7 @@
       "path": "service/dashboard_summary.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5252cc404be5a85521b7245846705a62d0bb0928d208e062fcaa53af9dd7725e"
+      "local_sha256": "3040c645cd3dd065b1d93f27339079d51b6c37765e7fd554f3b5abddec19cc35"
     },
     {
       "path": "service/dashboard_summary_test.go",

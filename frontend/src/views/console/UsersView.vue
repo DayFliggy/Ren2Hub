@@ -233,7 +233,10 @@ const minTableWidth = computed(() => {
 
 const roleOptions = computed(() => [
   { value: '', label: t('users.allRoles') },
-  ...ADMIN_USER_ROLES.map((item) => ({
+  ...ADMIN_USER_ROLES.filter(
+    (item) =>
+      operator.value?.level === 100 || item < (operator.value?.level ?? 0)
+  ).map((item) => ({
     value: String(item),
     label: t(adminUserRoleLabelKey(item)),
   })),

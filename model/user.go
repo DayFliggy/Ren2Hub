@@ -398,7 +398,48 @@ func GetMaxUserId() int {
 	return user.Id
 }
 
-func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (users []*User, total int64, err error) {
+func CanManageUserRole(viewerRole, targetRole int) bool {
+	return viewerRole == common.RoleRootUser || viewerRole > targetRole
+}
+
+// scopeAdminUsageQuery hides Root's raw and per-user usage from administrators.
+// Resolve identities on the primary database even when query reads LOG_DB;
+// unscoped lookup also protects a soft-deleted Root's retained history.
+func scopeAdminUsageQuery(query *gorm.DB, viewerRole int) (*gorm.DB, error) {
+	if viewerRole < common.RoleAdminUser {
+		return nil, errors.New("administrator role required")
+	}
+	if viewerRole >= common.RoleRootUser {
+		return query, nil
+	}
+	if DB == nil {
+		return nil, errors.New("user database is unavailable")
+	}
+	var rootIDs []int
+	if err := DB.WithContext(query.Statement.Context).Unscoped().Model(&User{}).
+		Where("role >= ?", common.RoleRootUser).Pluck("id", &rootIDs).Error; err != nil {
+		return nil, err
+	}
+	if len(rootIDs) > 0 {
+		query = query.Where("user_id NOT IN ?", rootIDs)
+	}
+	return query, nil
+}
+
+// managedUsersQuery applies the same hierarchy as individual user access, before
+// counting and pagination. Explicit role filters may narrow but never widen it.
+func managedUsersQuery(tx *gorm.DB, viewerRole int) *gorm.DB {
+	query := tx.Unscoped().Model(&User{})
+	if viewerRole < common.RoleAdminUser {
+		return query.Where("1 = 0")
+	}
+	if viewerRole != common.RoleRootUser {
+		query = query.Where("role < ?", viewerRole)
+	}
+	return query
+}
+
+func GetAllUsers(viewerRole int, pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (users []*User, total int64, err error) {
 	// Start transaction
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -411,7 +452,8 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 	}()
 
 	// Get total count within transaction
-	err = tx.Unscoped().Model(&User{}).Count(&total).Error
+	query := managedUsersQuery(tx, viewerRole)
+	err = query.Count(&total).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
@@ -419,7 +461,7 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 
 	// Get paginated users within same transaction
 	order := resolveUserSortOptions(sortOptions)
-	err = order.Apply(tx.Unscoped()).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("password", "access_token").Find(&users).Error
+	err = order.Apply(query).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("password", "access_token").Find(&users).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
@@ -433,7 +475,7 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 	return users, total, nil
 }
 
-func SearchUsers(keyword string, role *int, status *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
+func SearchUsers(viewerRole int, keyword string, role *int, status *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
 	var users []*User
 	var total int64
 	var err error
@@ -450,7 +492,7 @@ func SearchUsers(keyword string, role *int, status *int, startIdx int, num int, 
 	}()
 
 	// 构建基础查询
-	query := tx.Unscoped().Model(&User{})
+	query := managedUsersQuery(tx, viewerRole)
 
 	// 构建搜索条件
 	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ?"

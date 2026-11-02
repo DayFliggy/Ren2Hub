@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -7,6 +7,7 @@ import {
   SUMMARY_MAX_DAYS,
   summaryFits,
   type SummaryRange,
+  type DashboardScope,
 } from '@/api/dashboard'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
@@ -54,7 +55,9 @@ export interface StatsPeriod {
   flow: FlowPoint[]
 }
 
-export function useDashboardStats() {
+export function useDashboardStats(
+  scope: MaybeRefOrGetter<DashboardScope> = 'self'
+) {
   const { t } = useI18n()
   const toast = useToast()
   const app = useAppStore()
@@ -66,6 +69,13 @@ export function useDashboardStats() {
   const error = ref<string | null>(null)
   const statsRequest = useLatestRequest()
 
+  function reset() {
+    statsRequest.cancel()
+    loading.value = false
+    data.value = null
+    error.value = null
+  }
+
   function selectedRange(): SummaryRange {
     if (range.value !== 'custom') return { range: range.value }
     return { range: 'custom', start: customStart.value, end: customEnd.value }
@@ -76,6 +86,7 @@ export function useDashboardStats() {
     error.value = null
     data.value = null
     const request = selectedRange()
+    const selectedScope = toValue(scope)
     // Serialized via useLatestRequest: rapid range switches abort the older
     // request, and a late response can never overwrite the newer period.
     const result = await statsRequest.run((signal) => {
@@ -86,7 +97,7 @@ export function useDashboardStats() {
       }
       // The prior window shares the log limit; drop it rather than the period.
       const comparison = summaryFits(request, limit, true)
-      return getUsageSummary(request, comparison, signal)
+      return getUsageSummary(request, comparison, signal, selectedScope)
     })
     if (result.stale) return
     loading.value = false
@@ -106,5 +117,5 @@ export function useDashboardStats() {
     data.value = result.value
   }
 
-  return { loading, range, customStart, customEnd, data, error, load }
+  return { loading, range, customStart, customEnd, data, error, load, reset }
 }

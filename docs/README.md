@@ -12,7 +12,7 @@ Ren2Hub / DayFliggy 是采用 NewAPI 核心的单节点 AI 网关，使用 Vue �
 | 钱包与定价 | [实现](billing/IMPLEMENTATION.md)、[API](billing/API.md)、[定价](billing/PRICING.md)、[用量折扣](billing/USAGE_DISCOUNT.md)、[恢复](billing/RECOVERY.md)                                      |
 | 充值       | [原生易支付](billing/EPAY.md)、[GMPay](billing/GMPAY.md)、[支付设置](billing/PAYMENT_SETTINGS.md)                                                                                             |
 | 异步任务   | [插件入口](plugin-api/README.md)、[上游 v1 ABI](plugin-api/v1.md)                                                                                                                             |
-| Vue        | [前端](../frontend/README.md)、[模型](console/MODELS.md)、[日志](console/LOGS.md)、[术语](translation-glossary.md)                                                                            |
+| Vue        | [前端](../frontend/README.md)、[仪表盘与数据范围](console/DASHBOARD.md)、[模型](console/MODELS.md)、[日志](console/LOGS.md)、[术语](translation-glossary.md)                                                                            |
 | 验证       | [本地测试方案](testing/LOCAL_TESTING.md)、 [网关](routing/GATEWAY_VALIDATION.md)、[资金](billing/VALIDATION.md)、[单节点边界](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[依赖](dependencies.md) |
 
 启动从 `main.go`、`model/main.go` 阅读；请求沿 `router/` → `middleware/` → `controller/` → `service/` / `model/` 进入 `relay/`。RelayKit 与 TokenKit 是独立 Go 模块。Vue 从 `frontend/src/router/`、`stores/` 和 `api/` 核对入口与真实接口；菜单可见不代替服务端授权。

@@ -134,3 +134,22 @@ it('filters deleted users with the native status -1', async () => {
     wrapper.unmount()
   }
 })
+
+it.each([10, 100])(
+  'only offers visible roles to an operator at level %i',
+  async (level) => {
+    useAuthStore().persist({ ...useAuthStore().user!, role: level })
+    const wrapper = render()
+    try {
+      await flushPromises()
+      const filter = wrapper
+        .findAllComponents(FilterSelect)
+        .find((select) => select.props('label') === 'Role')!
+      expect(filter.props('options').map((option) => option.value)).toEqual(
+        level === 100 ? ['', '0', '1', '10', '100'] : ['', '0', '1']
+      )
+    } finally {
+      wrapper.unmount()
+    }
+  }
+)

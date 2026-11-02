@@ -59,7 +59,7 @@ type DashboardTokenDay struct {
 	CacheCreate int64  `json:"cache_create"`
 }
 
-// DashboardCoverage 说明耗时和成功率能否从本人日志得出；不能时对应值为 null。
+// DashboardCoverage 说明耗时和成功率是否可测；不能时对应值为 null。
 type DashboardCoverage struct {
 	Latency     bool `json:"latency"`
 	SuccessRate bool `json:"success_rate"`
@@ -87,7 +87,7 @@ type DashboardSummary struct {
 }
 
 type dashboardWindow struct {
-	userID     int
+	scope      model.DashboardScope
 	start, end int64
 }
 
@@ -124,12 +124,15 @@ func ParseDashboardRange(rangeName, startDate, endDate string, loc *time.Locatio
 }
 
 // Dashboard 的请求数、token 和额度来自 quota_data（与原生 /api/data/self 同源）；
-// 耗时和成功率只按本人日志计算，日志开关关闭时显式返回 null，不借用全站 perf_metrics。
-func Dashboard(ctx context.Context, userID int, start, end time.Time, includeComparison bool) (DashboardSummary, error) {
+// 耗时和成功率沿用同一范围内日志，日志关闭时显式返回 null，不借用 perf_metrics。
+func Dashboard(ctx context.Context, scope model.DashboardScope, start, end time.Time, includeComparison bool) (DashboardSummary, error) {
 	result := newDashboardSummary(start, end, includeComparison)
-	window := dashboardWindow{userID: userID, start: start.Unix(), end: end.Unix()}
+	if err := scope.Validate(); err != nil {
+		return result, err
+	}
+	window := dashboardWindow{scope: scope, start: start.Unix(), end: end.Unix()}
 	if result.Meta.Available {
-		rows, err := model.ReadDashboardQuota(ctx, userID, window.start, window.end)
+		rows, err := model.ReadDashboardQuota(ctx, scope, window.start, window.end)
 		if err != nil {
 			return result, err
 		}
@@ -137,7 +140,7 @@ func Dashboard(ctx context.Context, userID int, start, end time.Time, includeCom
 			return result, err
 		}
 		if includeComparison {
-			prior := dashboardWindow{userID: userID, start: start.Add(-end.Sub(start)).Unix(), end: window.start}
+			prior := dashboardWindow{scope: scope, start: start.Add(-end.Sub(start)).Unix(), end: window.start}
 			if err := applyDashboardComparison(ctx, &result, prior); err != nil {
 				return result, err
 			}
@@ -170,7 +173,7 @@ func newDashboardSummary(start, end time.Time, includeComparison bool) Dashboard
 }
 
 func applyDashboardComparison(ctx context.Context, result *DashboardSummary, prior dashboardWindow) error {
-	rows, err := model.ReadDashboardQuota(ctx, prior.userID, prior.start, prior.end)
+	rows, err := model.ReadDashboardQuota(ctx, prior.scope, prior.start, prior.end)
 	if err != nil {
 		return err
 	}
@@ -191,7 +194,7 @@ func applyDashboardLatency(ctx context.Context, result *DashboardSummary, window
 	if !result.Meta.Coverage.Latency {
 		return nil
 	}
-	rows, err := model.ReadDashboardLatency(ctx, window.userID, window.start, window.end)
+	rows, err := model.ReadDashboardLatency(ctx, window.scope, window.start, window.end)
 	if err != nil {
 		return err
 	}
@@ -223,7 +226,7 @@ func applyDashboardOutcome(ctx context.Context, result *DashboardSummary, window
 	if !result.Meta.Coverage.SuccessRate {
 		return nil
 	}
-	outcome, err := model.ReadDashboardOutcome(ctx, window.userID, window.start, window.end)
+	outcome, err := model.ReadDashboardOutcome(ctx, window.scope, window.start, window.end)
 	if err != nil {
 		return err
 	}

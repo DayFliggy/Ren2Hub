@@ -1,5 +1,5 @@
 import { useLatestRequest } from './useLatestRequest'
-import { ref } from 'vue'
+import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
@@ -9,6 +9,7 @@ import {
   logRangeLimit,
   summaryFits,
   type SummaryRange,
+  type DashboardScope,
 } from '@/api/dashboard'
 import { usageDiscountApi } from '@/api/usageDiscount'
 import { useToast } from '@/composables/useToast'
@@ -17,13 +18,13 @@ import { useAuthStore } from '@/stores/auth'
 import type { UsageDiscountSelfStatus } from '@/types/usageDiscount'
 
 export interface DashboardStats {
-  quota: string
-  used_quota: string
+  quota?: string
+  used_quota?: string
   today_quota?: string
   month_quota?: string
   today_requests?: number
   today_tokens?: number
-  total_requests: number
+  total_requests?: number
 }
 
 /**
@@ -66,7 +67,7 @@ export function useBalanceVisibility() {
     },
   }
 }
-export function useDashboard() {
+export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
   const { t } = useI18n(),
     toast = useToast(),
     auth = useAuthStore(),
@@ -90,10 +91,30 @@ export function useDashboard() {
   async function load() {
     await Promise.all([loadStats(), loadDiscounts()])
   }
-  async function loadDiscounts() {
-    discountsLoading.value = true
-    discountsError.value = null
+  function reset() {
+    request.cancel()
+    discountRequest.cancel()
+    loading.value = false
+    error.value = null
+    stats.value = null
+    share.value = []
+    flow.value = []
+    tokenTrend.value = []
+    recentOutOfRange.value = null
+    usageUnavailable.value = false
     discounts.value = null
+    discountsLoading.value = false
+    discountsError.value = null
+  }
+  async function loadDiscounts() {
+    discountRequest.cancel()
+    discounts.value = null
+    discountsError.value = null
+    if (toValue(scope) === 'all') {
+      discountsLoading.value = false
+      return
+    }
+    discountsLoading.value = true
     const result = await discountRequest.run((signal) =>
       usageDiscountApi.self(signal)
     )
@@ -113,6 +134,7 @@ export function useDashboard() {
     }
   }
   async function loadStats() {
+    const selectedScope = toValue(scope)
     loading.value = true
     error.value = null
     stats.value = null
@@ -128,12 +150,12 @@ export function useDashboard() {
       // today window and the balance do not depend on it.
       const fitting = (range: SummaryRange) =>
         summaryFits(range, limit, false)
-          ? getUsageSummary(range, false, signal)
+          ? getUsageSummary(range, false, signal, selectedScope)
           : null
       const [recent, month, today] = await Promise.all([
         fitting({ range: '30d' }),
         fitting(currentMonthRange()),
-        getUsageSummary({ range: 'today' }, false, signal),
+        getUsageSummary({ range: 'today' }, false, signal, selectedScope),
       ])
       return { limit, recent, month, today }
     })
@@ -155,9 +177,13 @@ export function useDashboard() {
       (summary) => summary?.meta.available === false
     )
     stats.value = {
-      quota: String(auth.user.quota),
-      used_quota: String(auth.user.used_quota),
-      total_requests: auth.user.request_count,
+      ...(selectedScope === 'self'
+        ? {
+            quota: String(auth.user.quota),
+            used_quota: String(auth.user.used_quota),
+            total_requests: auth.user.request_count,
+          }
+        : {}),
       ...(today.meta.available
         ? {
             today_quota: today.kpi.totalQuota,
@@ -197,5 +223,6 @@ export function useDashboard() {
     discountsLoading,
     discountsError,
     load,
+    reset,
   }
 }

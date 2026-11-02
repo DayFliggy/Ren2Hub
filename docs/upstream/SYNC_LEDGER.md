@@ -4,6 +4,21 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-02 仪表盘范围切换与可见性修复
+
+按用户明确要求，自动路由页签向全部登录角色开放；管理员和 Root 在标题右侧通过“个人 / 全站”切换概览与统计数据。设计和数据边界见[仪表盘说明](../console/DASHBOARD.md)。本轮使用 OpenCode `hjm-g/gemini-4-argon` 交叉设计及最终 diff 审计，并完成全角色桌面/手机、明暗主题视觉审查。
+
+冻结上游仍为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，本地修改基于 `b3a1e01673dfee0002aa5dc61b4047b6dfe32bda`；本轮不升级上游、不 fetch。
+
+- `controller/dashboard_summary.go`、`service/dashboard_summary.go` 与 `model/dashboard_summary.go` 共用显式的个人/全站范围。新 `/api/data/summary` 使用 AdminAuth 和 PAT `log:read`；个人入口固定鉴权 ID，使用 `usage:read`。两者禁用 HTTP 缓存。用量来自 quota_data，耗时/成功率来自日志，成功率按 user_id + request_id 去重；全站包含 Root 和删除账号历史，不返回身份字段。
+- `controller/log.go` 与 `model/log.go` 修复个人统计使用 username LIKE 的越权：`%`、`_`、改名、用户名复用不再影响身份范围。额度和 60 秒 RPM/TPM 共用按 ID 的过滤，原有时间语义保留；列表、导出、统计复用同一日志过滤。
+- `model/user.go` 的查询范围在 Count 和分页之前限制管理员用户列表/search，只返回下级账号；详情和修改沿用同一角色判断。管理员使用日志、对应统计，以及旧 `/api/data/users`、`/api/data/flow` 和指定 username 的 `/api/data/` 排除 Root 与软删除 Root。通过主库 ID 查询后过滤日志库，查询失败返回错误；不带身份的全站聚合仍保留 Root。Gemini4 指出的旧用量接口旁路已纳入同一规则。
+- Vue 复用 PageHero actions 与 SegmentedToggle，范围只存本页内存。切换和身份变化取消旧请求、清空隐藏统计页签的数据；降权恢复个人视图。全站隐藏余额/折扣，不以个人累计请求数兜底，概览的 Token 趋势与模型分布卡片在全站视图下扩展为三列满宽；系统状态继续使用现有快照。新增中英文文案，用户管理筛选只提供可见角色。
+
+必要原生差异：`controller/usedata.go`、`controller/log_export_test.go` 从 upstream_equal 转为 adapted；原有 adapted 的 controller/log.go、controller/user.go、model/log.go、model/user.go、model/usedata.go、model/usedata_flow.go、router/api-router.go、middleware/access_token_routes.go 更新。权限修复理由为 `usage-visibility`，仪表盘路由理由为 `dashboard-scope`；没有 schema 迁移。
+
+来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 798 `upstream_equal`、277 `adapted`、261 `extension`、45 `removed`，`candidate_sha` 为空。
+
 ## 2026-11-01 首页审计修正与第二次正式发布
 
 `e3c0b98dc` 于 2026-11-01 19:39 UTC 通过普通更新执行器发布，根提交为 `763ee06a50f3658863c506ab9273d12a7494369d`。镜像为 `ren2hub-test:e3c0b98dcbd743bf1aa9bd9f308872239cb91954-v1`，ID `sha256:0b10be030209b53ff8180f674a7fa443732a32f23a297ccb0af007cab5316fbf`，用 go1.26.10 构建。相对 `63e537495`，这次只改首页前端和一组后端测试，没有数据库或接口变化：

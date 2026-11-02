@@ -190,3 +190,96 @@ func TestDashboardSummaryComparisonWindow(t *testing.T) {
 		require.Zero(t, queries)
 	})
 }
+
+func TestSiteDashboardSummaryUsesOneScopeForEveryMeasure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, _ := newAuditTestDatabase(t, "sqlite", "")
+	logDB, _ := newAuditTestDatabase(t, "sqlite", "")
+	useLogExportDatabases(t, db, logDB, common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	require.NoError(t, db.AutoMigrate(&model.QuotaData{}))
+	require.NoError(t, logDB.AutoMigrate(&model.Log{}))
+	oldConsume, oldExport, oldErrors := common.LogConsumeEnabled, common.DataExportEnabled, constant.ErrorLogEnabled
+	common.LogConsumeEnabled, common.DataExportEnabled, constant.ErrorLogEnabled = true, true, true
+	settings := operation_setting.GetLogSetting()
+	previousSettings := *settings
+	settings.MaxRangeDays = 365
+	t.Cleanup(func() {
+		common.LogConsumeEnabled, common.DataExportEnabled, constant.ErrorLogEnabled = oldConsume, oldExport, oldErrors
+		*settings = previousSettings
+	})
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	// No users table exists in either database: deleted accounts must still contribute.
+	require.NoError(t, db.Create(&[]model.QuotaData{
+		{UserID: 1, CreatedAt: today.Unix(), Count: 2, Quota: 12, TokenUsed: 4, CacheReadTokens: 1, ModelName: "shared"},
+		{UserID: 2, CreatedAt: today.Unix(), Count: 3, Quota: 18, TokenUsed: 6, CacheCreationTokens: 2, ModelName: "shared"},
+		{UserID: 3, CreatedAt: today.Unix(), Count: 5, Quota: 20, TokenUsed: 10, ModelName: "second"},
+		{UserID: 1, CreatedAt: today.Add(-time.Hour).Unix(), Count: 1, Quota: 5, ModelName: "shared"},
+		{UserID: 3, CreatedAt: today.Add(-time.Hour).Unix(), Count: 4, Quota: 20, ModelName: "second"},
+	}).Error)
+	require.NoError(t, logDB.Create(&[]model.Log{
+		{UserId: 1, CreatedAt: today.Unix() + 1, Type: model.LogTypeConsume, UseTime: 2, ModelName: "shared", RequestId: "same"},
+		{UserId: 2, CreatedAt: today.Unix() + 1, Type: model.LogTypeConsume, UseTime: 4, ModelName: "shared", RequestId: "same"},
+		{UserId: 3, CreatedAt: today.Unix() + 1, Type: model.LogTypeConsume, UseTime: 6, ModelName: "second", RequestId: "third"},
+		{UserId: 3, CreatedAt: today.Unix() + 1, Type: model.LogTypeError, ModelName: "second", RequestId: "same"},
+	}).Error)
+	call := func(params url.Values) (service.DashboardSummary, bool, int) {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Set("id", 2)
+		ctx.Set("role", common.RoleAdminUser)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/api/data/summary?"+params.Encode(), nil)
+		GetSiteDashboardSummary(ctx)
+		var response struct {
+			Success bool                     `json:"success"`
+			Data    service.DashboardSummary `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+		return response.Data, response.Success, recorder.Code
+	}
+	data, success, status := call(url.Values{"range": {"today"}})
+	require.True(t, success)
+	require.Equal(t, http.StatusOK, status)
+	require.EqualValues(t, 50, data.KPI.TotalQuota)
+	require.EqualValues(t, 10, data.KPI.TotalRequests)
+	require.EqualValues(t, 20, data.KPI.TotalTokens)
+	require.Equal(t, 4000.0, *data.KPI.AvgLatency)
+	require.Equal(t, 75.0, *data.KPI.SuccessRate)
+	require.Equal(t, 100.0, *data.Comparison.QuotaDelta)
+	require.Equal(t, 100.0, *data.Comparison.RequestsDelta)
+	require.Len(t, data.Models, 2)
+	require.Equal(t, "shared", data.Models[0].Model)
+	require.EqualValues(t, 30, data.Models[0].Quota)
+	require.EqualValues(t, 5, data.Models[0].Requests)
+	require.Equal(t, 60.0, data.Models[0].Share)
+	require.Equal(t, 3000.0, *data.Models[0].AvgLatency)
+	require.Len(t, data.Hourly, 24)
+	require.EqualValues(t, 50, data.Hourly[0].Quota)
+	require.EqualValues(t, 10, data.Hourly[0].Requests)
+	require.EqualValues(t, 20, data.Hourly[0].Tokens)
+	require.Len(t, data.Flow, 1)
+	require.EqualValues(t, 50, data.Flow[0].Consume)
+	require.Equal(t, data.Flow, data.Distribution)
+	require.EqualValues(t, 20, data.TokenTrend[0].Total)
+	require.EqualValues(t, 1, data.TokenTrend[0].CacheRead)
+	require.EqualValues(t, 2, data.TokenTrend[0].CacheCreate)
+
+	t.Run("disabled measurements remain unknown", func(t *testing.T) {
+		common.LogConsumeEnabled, common.DataExportEnabled, constant.ErrorLogEnabled = false, false, false
+		t.Cleanup(func() {
+			common.LogConsumeEnabled, common.DataExportEnabled, constant.ErrorLogEnabled = true, true, true
+		})
+		data, success, _ := call(url.Values{"range": {"today"}})
+		require.True(t, success)
+		require.False(t, data.Meta.Available)
+		require.False(t, data.Meta.Coverage.Latency)
+		require.False(t, data.Meta.Coverage.SuccessRate)
+		require.Nil(t, data.KPI.AvgLatency)
+		require.Nil(t, data.KPI.SuccessRate)
+		require.Empty(t, data.Hourly)
+	})
+	t.Run("site also enforces the configured range limit", func(t *testing.T) {
+		settings.MaxRangeDays = 7
+		_, success, _ := call(url.Values{"range": {"30d"}, "include_comparison": {"false"}})
+		require.False(t, success)
+	})
+}

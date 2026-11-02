@@ -6,11 +6,20 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
 func GetDashboardSummary(c *gin.Context) {
+	getDashboardSummary(c, model.DashboardUserScope(c.GetInt("id")))
+}
+
+func GetSiteDashboardSummary(c *gin.Context) {
+	getDashboardSummary(c, model.DashboardSiteScope())
+}
+
+func getDashboardSummary(c *gin.Context, scope model.DashboardScope) {
 	includeComparison := true
 	if value := c.Query("include_comparison"); value != "" {
 		parsed, err := strconv.ParseBool(value)
@@ -39,7 +48,7 @@ func GetDashboardSummary(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	result, err := service.Dashboard(c.Request.Context(), c.GetInt("id"), start, end, includeComparison)
+	result, err := service.Dashboard(c.Request.Context(), scope, start, end, includeComparison)
 	if err != nil {
 		common.ApiError(c, err)
 		return

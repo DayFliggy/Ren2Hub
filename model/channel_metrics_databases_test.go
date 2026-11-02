@@ -80,15 +80,15 @@ func TestChannelMetricsDatabases(t *testing.T) {
 				{UserID: 11, ModelName: "model-one", CreatedAt: hour + 3600, Count: 9, Quota: 900, TokenUsed: 900},
 			}
 			require.NoError(t, db.Create(&quota).Error)
-			rows, err := ReadDashboardQuota(context.Background(), 11, start, end)
+			rows, err := ReadDashboardQuota(context.Background(), DashboardUserScope(11), start, end)
 			require.NoError(t, err)
 			require.Len(t, rows, 2)
 			require.Equal(t, DashboardQuotaRow{CreatedAt: hour - 3600, ModelName: "model-one", Requests: 3, Quota: 21, Tokens: 21, CacheReadTokens: 6, CacheCreationTokens: 9}, rows[0])
 			require.Equal(t, DashboardQuotaRow{CreatedAt: hour, ModelName: "model-two", Requests: 1, Quota: 13, Tokens: 20}, rows[1])
-			latency, err := ReadDashboardLatency(context.Background(), 11, start, end)
+			latency, err := ReadDashboardLatency(context.Background(), DashboardUserScope(11), start, end)
 			require.NoError(t, err)
 			require.ElementsMatch(t, []DashboardLatencyRow{{ModelName: "model-one", Requests: 2, UseTime: 12}, {ModelName: "model-two", Requests: 1}}, latency)
-			outcome, err := ReadDashboardOutcome(context.Background(), 11, start, end)
+			outcome, err := ReadDashboardOutcome(context.Background(), DashboardUserScope(11), start, end)
 			require.NoError(t, err)
 			// late-retry 只成功一次；其他区间和其他用户的成功不能改变本区间结果。
 			require.Equal(t, DashboardOutcome{Succeeded: 4, Failed: 1}, outcome)
@@ -98,6 +98,31 @@ func TestChannelMetricsDatabases(t *testing.T) {
 			require.Len(t, home.Buckets, 24)
 			require.EqualValues(t, 3, home.HourlyRequests[0])
 			require.EqualValues(t, 1, home.HourlyRequests[1])
+
+			// 全站读取不连接 users，保留已删除账号留下的历史桶和日志。
+			siteRows, err := ReadDashboardQuota(context.Background(), DashboardSiteScope(), start, end)
+			require.NoError(t, err)
+			require.Len(t, siteRows, 3)
+			require.Equal(t, DashboardQuotaRow{CreatedAt: hour, ModelName: "model-one", Requests: 9, Quota: 900, Tokens: 900}, siteRows[1])
+			siteLatency, err := ReadDashboardLatency(context.Background(), DashboardSiteScope(), start, end)
+			require.NoError(t, err)
+			require.ElementsMatch(t, append(latency, DashboardLatencyRow{Requests: 1, UseTime: 90}), siteLatency)
+			siteOutcome, err := ReadDashboardOutcome(context.Background(), DashboardSiteScope(), start, end)
+			require.NoError(t, err)
+			require.Equal(t, DashboardOutcome{Succeeded: 5, Failed: 2}, siteOutcome)
+
+			// 同一 request_id 的两个用户各算一次，另一个用户的成功不掩盖失败。
+			require.NoError(t, db.Create(&[]Log{
+				{UserId: 13, Type: LogTypeConsume, CreatedAt: start, RequestId: "ok-1"},
+				{UserId: 12, Type: LogTypeError, CreatedAt: start, RequestId: "ok-1"},
+				{UserId: 12, Type: LogTypeError, CreatedAt: start + 1, RequestId: "ok-1"},
+			}).Error)
+			siteOutcome, err = ReadDashboardOutcome(context.Background(), DashboardSiteScope(), start, end)
+			require.NoError(t, err)
+			require.Equal(t, DashboardOutcome{Succeeded: 6, Failed: 3}, siteOutcome)
+			personal, err := ReadDashboardOutcome(context.Background(), DashboardUserScope(12), start, end)
+			require.NoError(t, err)
+			require.Equal(t, DashboardOutcome{Succeeded: 1, Failed: 2}, personal)
 		})
 	}
 }

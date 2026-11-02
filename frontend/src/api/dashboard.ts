@@ -138,6 +138,8 @@ export type SummaryRange =
   | { range: 'today' | '7d' | '30d' }
   | { range: 'custom'; start: string; end: string }
 
+export type DashboardScope = 'self' | 'all'
+
 const PRESET_DAYS = { today: 1, '7d': 7, '30d': 30 } as const
 /** ParseDashboardRange's own cap; it applies even when the log limit is higher. */
 export const SUMMARY_MAX_DAYS = 366
@@ -184,11 +186,12 @@ export function summaryFits(
 export async function getUsageSummary(
   request: SummaryRange,
   includeComparison: boolean,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  scope: DashboardScope = 'self'
 ) {
   return parseUsageSummary(
     await api.get(
-      endpoint,
+      scope === 'all' ? '/api/data/summary' : endpoint,
       {
         tz_offset: viewerTzOffset(),
         ...request,

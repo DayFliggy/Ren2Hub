@@ -44,6 +44,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/user/model-catalog":                accessTokenScopeRule("profile:read"),
 	"GET /api/user/usage-discount":               accessTokenScopeRule("profile:read"),
 	"GET /api/data/self/summary":                 accessTokenScopeRule("usage:read"),
+	"GET /api/data/summary":                      accessTokenScopeRule("log:read"),
 	"GET /api/performance/routing":               accessTokenScopeRule("ops:read"),
 	"GET /api/admin/affiliate/records":           accessTokenScopeRule("user:read"),
 	"GET /api/admin/affiliate/users/:id":         accessTokenScopeRule("user:read"),
