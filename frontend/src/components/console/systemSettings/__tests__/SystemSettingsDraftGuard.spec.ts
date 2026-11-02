@@ -12,13 +12,21 @@ import {
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import SystemSettingsDomainView from '../SystemSettingsDomainView.vue'
+import { parseUsageDiscountSettings } from '@/api/usageDiscount'
+import configResponse from '../../../../../tests/fixtures/native/usage-discount.get.json'
 
 const mocks = vi.hoisted(() => ({
   options: {} as Record<string, string>,
   puts: [] as Array<{ key: string; value: string }>,
   failKey: '',
   refreshStatus: vi.fn(),
+  discountLoad: vi.fn(),
+  discountSave: vi.fn(),
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
+}))
+vi.mock('@/api/usageDiscount', async (original) => ({
+  ...(await original<typeof import('@/api/usageDiscount')>()),
+  usageDiscountApi: { load: mocks.discountLoad, save: mocks.discountSave },
 }))
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ refreshStatus: mocks.refreshStatus }),
@@ -61,6 +69,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   vi.clearAllMocks()
   mocks.refreshStatus.mockResolvedValue(undefined)
+  mocks.discountLoad.mockResolvedValue(
+    parseUsageDiscountSettings(configResponse.data)
+  )
   mocks.options = {
     SystemName: 'Original site',
     Logo: 'https://example.test/old.svg',
@@ -214,6 +225,56 @@ describe('settings draft leave protection', () => {
     expect(
       wrapper.get<HTMLInputElement>('input[type=password]').element.value
     ).toBe('unsaved-test-secret')
+  })
+
+  it('protects system discount drafts once across section changes, and releases the guard after saving', async () => {
+    const { wrapper, router } = await render('billing', 'usage-discount')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const fixed = wrapper.get<HTMLInputElement>('input[id$="-fixed"]')
+    await fixed.setValue('1')
+    await wrapper
+      .findAll('.settings-section-link')
+      .find((button) => button.text() === 'EPay')!
+      .trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe(
+      '/system-settings/billing/usage-discount'
+    )
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(fixed.element.value).toBe('1')
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    let finish!: (value: unknown) => void
+    mocks.discountSave.mockImplementation(
+      (_version, config) =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              ...parseUsageDiscountSettings(configResponse.data),
+              version: 1,
+              config,
+            })
+        })
+    )
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save configuration')!
+      .trigger('click')
+    await router.push('/system-settings/billing/epay')
+    expect(router.currentRoute.value.path).toBe(
+      '/system-settings/billing/usage-discount'
+    )
+    expect(confirm).toHaveBeenCalledOnce()
+    finish(undefined)
+    await flushPromises()
+    await router.push('/system-settings/billing/epay')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/system-settings/billing/epay')
+    expect(confirm).toHaveBeenCalledOnce()
+    const cleanUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(cleanUnload)
+    expect(cleanUnload.defaultPrevented).toBe(false)
   })
 })
 

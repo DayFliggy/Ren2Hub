@@ -8,6 +8,7 @@ import SysSettingsFormCard from '@/components/console/systemSettings/SysSettings
 import SystemSettingsMaintenanceActions from '@/components/console/systemSettings/SystemSettingsMaintenanceActions.vue'
 import SystemSettingsField from '@/components/console/systemSettings/SystemSettingsField.vue'
 import GmpayPanel from '@/components/console/systemSettings/GmpayPanel.vue'
+import UsageDiscountPanel from '@/components/console/systemSettings/UsageDiscountPanel.vue'
 import WaffoPancakePanel from '@/components/console/systemSettings/WaffoPancakePanel.vue'
 import PaymentCompliancePanel from '@/components/console/systemSettings/PaymentCompliancePanel.vue'
 import SystemSettingsOperationsPanel from '@/components/console/systemSettings/SystemSettingsOperationsPanel.vue'
@@ -312,7 +313,9 @@ onMounted(() => load())
         </ConsoleButton>
       </div>
       <SysSettingsFormCard
-        v-if="activeSection.integration !== 'gmpay'"
+        v-if="
+          !['gmpay', 'usage-discount'].includes(activeSection.integration ?? '')
+        "
         :title="t(activeSection.titleKey)"
         :description="t(activeSection.descriptionKey)"
         :saving="saving.value"
@@ -413,6 +416,9 @@ onMounted(() => load())
         />
       </SysSettingsFormCard>
       <GmpayPanel v-if="activeSection.integration === 'gmpay'" />
+      <UsageDiscountPanel
+        v-if="activeSection.integration === 'usage-discount'"
+      />
       <RequestPolicyPanel
         v-if="props.domain === 'security' && activeSection?.id === 'rate-limit'"
       />

@@ -435,8 +435,37 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       await layout(page, '折扣卡片')
       await card.screenshot({ path: info.outputPath('discount-card-live.png') })
       await card.locator('[data-discount-configure]').click()
-      await expect(page).toHaveURL(/\/usage-discount$/)
-      await expect(page.locator('[data-discount-editor]')).toBeVisible()
+      await expect(page).toHaveURL(
+        /\/system-settings\/billing\/usage-discount$/
+      )
+      const editor = page.locator('[data-discount-editor]')
+      await expect(editor).toBeVisible()
+      await expect(page.locator('[data-discount-status]')).toHaveCount(0)
+      await editor.getByLabel('固定折扣', { exact: true }).fill('1.25')
+      const updated = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === '/api/option/usage_discount' &&
+          response.request().method() === 'PATCH'
+      )
+      await editor
+        .getByRole('button', { name: '保存配置', exact: true })
+        .click()
+      const update = await updated
+      expect(update.status()).toBe(200)
+      expect((await update.json()).success).toBe(true)
+      const reloaded = await page.request.get('/api/option/usage_discount', {
+        headers,
+      })
+      expect((await reloaded.json()).data.config.fixed_rate).toBe('0.0125')
+      await page.reload()
+      await expect(editor.getByLabel('固定折扣', { exact: true })).toHaveValue(
+        '1.25'
+      )
+      await editor.getByRole('tab', { name: /近 30 日/ }).click()
+      await layout(page, '系统折扣')
+      await editor.screenshot({
+        path: info.outputPath('system-discounts-live.png'),
+      })
     })
   } finally {
     await context.close()

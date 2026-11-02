@@ -110,7 +110,7 @@ for (const width of [390, 1440])
         await expectAlignedWindows(card)
         await expect(card.locator('[data-discount-configure]')).toHaveAttribute(
           'href',
-          '/usage-discount'
+          '/system-settings/billing/usage-discount'
         )
         const effectiveBox = await card
           .locator('[data-discount-effective]')
@@ -281,7 +281,9 @@ for (const role of [1, 10, 100])
     await expect(shortcut).toHaveCount(role === 100 ? 1 : 0)
     if (role === 100) {
       await shortcut.click()
-      await expect(page).toHaveURL(/\/usage-discount$/)
+      await expect(page).toHaveURL(
+        /\/system-settings\/billing\/usage-discount$/
+      )
       await expect(page.locator('[data-discount-editor]')).toBeVisible()
     }
   })

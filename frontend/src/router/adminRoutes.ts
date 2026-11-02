@@ -53,11 +53,16 @@ export const adminRoutes: RouteRecordRaw[] = [
       nav: 'models-admin',
     },
   },
-  // Root-only, like model pricing: the backend gates it with RootAuth.
+  // Keep existing bookmarks; the editor now belongs to system settings.
   {
     path: '/usage-discount',
     name: 'usage-discount-admin',
-    component: () => import('@/views/admin/UsageDiscountView.vue'),
+    redirect: (to) => ({
+      name: 'system-settings-billing',
+      params: { section: 'usage-discount' },
+      query: to.query,
+      hash: to.hash,
+    }),
     meta: {
       wide: true,
       requiresAdmin: true,

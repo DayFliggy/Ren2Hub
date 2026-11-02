@@ -192,7 +192,7 @@ function discountLabel(rate: string): string {
         </span>
         <RouterLink
           v-if="canConfigure"
-          to="/usage-discount"
+          to="/system-settings/billing/usage-discount"
           class="-mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-ring touch-snappy sm:-mr-1 sm:h-8 sm:w-8"
           :aria-label="t('dashboard.discount.configure')"
           :title="t('dashboard.discount.configure')"

@@ -53,30 +53,29 @@ async function expectNoZoneOverflow(page: Page) {
 
 const copy = {
   'zh-CN': {
-    title: '用量折扣',
-    cutoff: '2026-10-30 00:00 (Asia/Shanghai)',
+    title: '系统折扣',
     site: '全站阶梯',
     month: '个人月阶梯',
     note: '结果是近似值，不是账单。',
     run: '估算当前草稿',
     threshold: '第 1 档阈值（USD）',
-    health: '小时写入失败',
+    monthTab: '近 30 日',
   },
   en: {
-    title: 'Usage discount',
-    cutoff: '2026-10-30 00:00 (Asia/Shanghai)',
+    title: 'System discounts',
     site: 'Site tiers',
     month: 'Personal month tiers',
     note: 'an approximation, not a bill',
     run: 'Estimate this draft',
     threshold: 'Tier 1 threshold (USD)',
-    health: 'Hourly write failures',
+    monthTab: 'Last 30 days',
   },
 } as const
 
 for (const [screen, width] of [
   ['desktop', 1440],
   ['mobile', 390],
+  ['narrow', 320],
 ] as const)
   for (const theme of ['light', 'dark'] as const)
     for (const locale of ['zh-CN', 'en'] as const)
@@ -84,31 +83,43 @@ for (const [screen, width] of [
         page,
       }, testInfo) => {
         await openPage(page, { theme, locale, width })
+        const statusReads: string[] = []
+        page.on('request', (request) => {
+          if (
+            new URL(request.url()).pathname ===
+            '/api/option/usage_discount/status'
+          )
+            statusReads.push(request.url())
+        })
         const text = copy[locale]
-        await page.goto('/usage-discount')
+        await page.goto('/system-settings/billing/usage-discount')
         await waitForStablePage(page)
 
         await expect(page.locator('html')).toHaveClass(
           new RegExp(`\\b${theme}\\b`)
         )
-        const status = page.locator('[data-discount-status]')
-        await expect(status).toContainText('2026-10-30')
-        await expect(status).toContainText(text.cutoff)
-        // usage-discount-status.get.json reports two hourly write failures.
+        await expect(page.locator('[data-discount-status]')).toHaveCount(0)
         await expect(
-          status.locator('[data-health="hourly_write_failures"]')
-        ).toHaveAttribute('data-failing', 'true')
-        await expect(status).toContainText(text.health)
-
+          page.getByRole('heading', { name: text.title, exact: true })
+        ).toBeVisible()
+        await page.screenshot({
+          path: testInfo.outputPath(
+            `settings-top-${screen}-${theme}-${locale}.png`
+          ),
+        })
         const editor = page.locator('[data-discount-editor]')
         await expect(
           editor.getByRole('heading', { name: text.site, exact: true })
         ).toBeVisible()
+        await editor
+          .getByRole('tab', { name: new RegExp(text.monthTab) })
+          .click()
         const month = editor.locator('[data-discount-table="month"]')
         await expect(
           month.getByRole('textbox', { name: text.threshold, exact: true })
         ).toHaveValue('25')
         await expect(month.locator('[data-discount-tier]')).toHaveCount(5)
+        await month.scrollIntoViewIfNeeded()
         await expect(page.locator('[data-discount-estimate]')).toContainText(
           text.note
         )
@@ -116,15 +127,30 @@ for (const [screen, width] of [
         await expectNoZoneOverflow(page)
         // Every tier row stays inside the editor card at phone width.
         const card = (await editor.boundingBox())!
-        for (const row of await editor.locator('[data-discount-tier]').all()) {
+        for (const row of await editor
+          .locator('[data-discount-tier]:visible')
+          .all()) {
           const box = (await row.boundingBox())!
           expect(box.x).toBeGreaterThanOrEqual(card.x)
           expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width + 1)
         }
         await assertInteractiveCentersVisible(page)
+        expect(statusReads).toEqual([])
         await page.screenshot({
           path: testInfo.outputPath(
             `usage-discount-${screen}-${theme}-${locale}.png`
+          ),
+        })
+        await editor
+          .getByRole('button', {
+            name: locale === 'zh-CN' ? '保存配置' : 'Save configuration',
+            exact: true,
+          })
+          .scrollIntoViewIfNeeded()
+        await assertInteractiveCentersVisible(page)
+        await page.screenshot({
+          path: testInfo.outputPath(
+            `settings-bottom-${screen}-${theme}-${locale}.png`
           ),
         })
         await waitForStablePage(page)
@@ -157,13 +183,14 @@ test('edits, estimates and saves the generated PATCH body', async ({
       },
     })
   })
-  await page.goto('/usage-discount')
+  await page.goto('/system-settings/billing/usage-discount')
   await waitForStablePage(page)
   const editor = page.locator('[data-discount-editor]')
   const save = page.getByRole('button', { name: '保存配置', exact: true })
 
   // The edit the backend contract test makes: 1% fixed, month tiers on.
   await editor.getByLabel('固定折扣', { exact: true }).fill('1')
+  await editor.getByRole('tab', { name: /近 30 日/ }).click()
   const month = editor.locator('[data-discount-table="month"]')
   await month
     .getByRole('radiogroup', { name: '个人月阶梯模式' })
@@ -184,6 +211,7 @@ test('edits, estimates and saves the generated PATCH body', async ({
   await expect(save).toBeEnabled()
 
   const estimate = page.locator('[data-discount-estimate]')
+  await estimate.locator('summary').click()
   await estimate.getByRole('button', { name: '估算当前草稿' }).click()
   await expect(estimate).toContainText('2026-09-30 至 2026-10-29（30 天）')
   await expect(estimate).toContainText('不足约 60 天')
@@ -230,7 +258,7 @@ test('a version conflict keeps the draft until the server version is loaded', as
     }
     return route.fulfill({ json: server })
   })
-  await page.goto('/usage-discount')
+  await page.goto('/system-settings/billing/usage-discount')
   await waitForStablePage(page)
   const fixed = page.getByLabel('Fixed discount', { exact: true })
   const save = page.getByRole('button', {
@@ -261,16 +289,26 @@ test('a version conflict keeps the draft until the server version is loaded', as
   await waitForStablePage(page)
 })
 
-test('root users find the page in the admin navigation', async ({ page }) => {
+test('root users find system discounts in billing and old bookmarks redirect', async ({
+  page,
+}) => {
   await openPage(page, { theme: 'light', locale: 'zh-CN' })
-  await page.goto('/dashboard')
+  await page.goto('/system-settings/billing/quota')
   await waitForStablePage(page)
-  const link = page.locator('aside a[data-console-nav-item="usage-discount"]')
-  await expect(link).toHaveText('用量折扣')
-  await expect(link).toHaveAttribute('href', '/usage-discount')
-  await link.click()
-  await expect(page).toHaveURL(/\/usage-discount$/)
+  await expect(
+    page.locator('[data-console-nav-item="usage-discount"]')
+  ).toHaveCount(0)
+  await page
+    .locator('.settings-section-nav')
+    .getByRole('button', { name: '系统折扣', exact: true })
+    .click()
+  await expect(page).toHaveURL(/\/system-settings\/billing\/usage-discount$/)
   await expect(page.locator('[data-discount-editor]')).toBeVisible()
+  await expect(page.locator('.settings-search')).toHaveCount(0)
+  await page.goto('/usage-discount?source=bookmark')
+  await expect(page).toHaveURL(
+    /\/system-settings\/billing\/usage-discount\?source=bookmark$/
+  )
   await waitForStablePage(page)
 })
 
@@ -284,7 +322,7 @@ for (const role of [10, 1])
       )
         reads.push(request.url())
     })
-    await page.goto('/usage-discount')
+    await page.goto('/system-settings/billing/usage-discount')
     await expect(page).toHaveURL(/\/dashboard$/)
     await waitForStablePage(page)
     await expect(

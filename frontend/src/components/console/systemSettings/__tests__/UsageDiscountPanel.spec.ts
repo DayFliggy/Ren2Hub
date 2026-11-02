@@ -6,15 +6,13 @@ import { ApiError } from '@/api/types'
 import {
   parseUsageDiscountEstimate,
   parseUsageDiscountSettings,
-  parseUsageDiscountStatus,
 } from '@/api/usageDiscount'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import type { UsageDiscountSettings } from '@/types/usageDiscount'
-import UsageDiscountView from '../UsageDiscountView.vue'
+import UsageDiscountPanel from '../UsageDiscountPanel.vue'
 // Generated from the real handlers by controller/frontend_contract_test.go.
-import configResponse from '../../../../tests/fixtures/native/usage-discount.get.json'
-import statusResponse from '../../../../tests/fixtures/native/usage-discount-status.get.json'
-import estimateResponse from '../../../../tests/fixtures/native/usage-discount-estimate.post.json'
+import configResponse from '../../../../../tests/fixtures/native/usage-discount.get.json'
+import estimateResponse from '../../../../../tests/fixtures/native/usage-discount-estimate.post.json'
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
@@ -49,9 +47,14 @@ let wrapper: VueWrapper | undefined
 async function setup() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/usage-discount', component: UsageDiscountView }],
+    routes: [
+      {
+        path: '/system-settings/billing/usage-discount',
+        component: UsageDiscountPanel,
+      },
+    ],
   })
-  await router.push('/usage-discount')
+  await router.push('/system-settings/billing/usage-discount')
   wrapper = mount(
     { template: '<RouterView />' },
     {
@@ -88,7 +91,6 @@ beforeEach(() => {
   wrapper?.unmount()
   wrapper = undefined
   mocks.load.mockResolvedValue(loaded)
-  mocks.status.mockResolvedValue(parseUsageDiscountStatus(statusResponse.data))
   mocks.estimate.mockResolvedValue(
     parseUsageDiscountEstimate(estimateResponse.data)
   )
@@ -187,8 +189,7 @@ describe('usage discount editor', () => {
     )
     expect(page.text()).toContain('Saved as version 1')
     expect(page.text()).not.toContain('Unsaved changes')
-    // The saved version changes what the status reports.
-    expect(mocks.status).toHaveBeenCalledTimes(2)
+    expect(mocks.status).not.toHaveBeenCalled()
   })
 
   it('blocks saving and estimating an invalid draft and says why inline', async () => {
@@ -227,19 +228,61 @@ describe('usage discount editor', () => {
     expect(page.get('[data-estimate-result]').classes()).toContain('is-stale')
   })
 
-  it('keeps the editor usable when the status cannot be read', async () => {
-    mocks.status.mockRejectedValue(
-      new ApiError('usage discount status: query timeout', {
-        status: 503,
-        code: 'usage_discount_unavailable',
-      })
-    )
+  it('loads only configuration and never requests runtime diagnostics', async () => {
     const page = await setup()
-
-    const status = page.get('[data-discount-status]').text()
-    expect(status).toContain('Could not read the status.')
-    expect(status).toContain('Usage data is temporarily unreadable.')
+    expect(mocks.load).toHaveBeenCalledOnce()
+    expect(mocks.status).not.toHaveBeenCalled()
+    expect(page.find('[data-discount-status]').exists()).toBe(false)
     await field(page, 'Fixed discount').setValue('1')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(false)
+  })
+
+  it('keeps window drafts and exposes errors when their window is hidden', async () => {
+    const page = await setup()
+    const day = page.get('[data-discount-table="day"]')
+    const amount = day.get<HTMLInputElement>(
+      'input[aria-label="Tier 2 threshold (USD)"]'
+    )
+    await amount.setValue('1')
+    const tabs = page.findAll('[role="tab"]')
+    await tabs[2]!.trigger('click')
+    expect(day.isVisible()).toBe(false)
+    expect(tabs[0]!.text()).toContain('1 to fix')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(true)
+    expect(
+      button(page, 'Estimate this draft').element.matches(':disabled')
+    ).toBe(true)
+    await tabs[2]!.trigger('keydown', { key: 'Home' })
+    expect(tabs[0]!.attributes('aria-selected')).toBe('true')
+    expect(amount.element.value).toBe('1')
+    await amount.setValue('15')
+    expect(tabs[0]!.text()).not.toContain('to fix')
+    await tabs[0]!.trigger('keydown', { key: 'End' })
+    expect(tabs[2]!.attributes('aria-selected')).toBe('true')
+    expect(page.get('[data-discount-table="month"]').isVisible()).toBe(true)
+  })
+
+  it('retains mode edits and invalid tiers when switching windows', async () => {
+    const page = await setup()
+    const tabs = page.findAll('[role="tab"]')
+    const day = page.get('[data-discount-table="day"]')
+    await day.findAll('[role="radio"]')[0]!.trigger('click')
+    await button(day, 'Add tier').trigger('click')
+    await tabs[1]!.trigger('click')
+    expect(tabs[0]!.text()).toContain('to fix')
+    await tabs[0]!.trigger('click')
+    expect(day.findAll('[role="radio"]')[0]!.attributes('aria-checked')).toBe(
+      'true'
+    )
+    expect(day.findAll('[data-discount-tier]')).toHaveLength(6)
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(true)
+    await day.get('[aria-label="Remove tier 6"]').trigger('click')
     expect(
       button(page, 'Save configuration').element.matches(':disabled')
     ).toBe(false)

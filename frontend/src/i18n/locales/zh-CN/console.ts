@@ -390,7 +390,6 @@ export default {
     userManagement: '用户管理',
     redemptionManagement: '兑换码',
     orderManagement: '订单管理',
-    usageDiscount: '用量折扣',
     systemSettings: '系统设置',
     status: '状态',
     buyQuota: '购买额度',
@@ -3099,6 +3098,8 @@ export default {
       customOAuthDescription:
         '通过下方提供商管理面板维护自定义 OAuth/OIDC 登录。',
       quota: '配额与展示',
+      usageDiscount: '系统折扣',
+      usageDiscountDescription: '统一设置固定优惠、全站阶梯和个人用量阶梯。',
       quotaDescription: '新用户配额、预扣倍数、充值入口与货币展示规则。',
       payment: '通用支付与其他网关',
       paymentDescription:

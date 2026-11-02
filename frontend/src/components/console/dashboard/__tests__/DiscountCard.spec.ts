@@ -245,7 +245,7 @@ describe('DiscountCard', () => {
   it('exposes a labelled settings link only when permitted and removes it on permission loss', async () => {
     const wrapper = render(discounts, { canConfigure: true })
     expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe(
-      '/usage-discount'
+      '/system-settings/billing/usage-discount'
     )
     expect(
       wrapper.get('[data-discount-configure]').attributes('aria-label')

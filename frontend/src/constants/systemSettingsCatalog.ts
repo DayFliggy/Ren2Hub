@@ -51,6 +51,7 @@ export interface SystemSettingsSection {
     | 'channel-affinity'
     | 'waffo-pancake'
     | 'gmpay'
+    | 'usage-discount'
     | 'payment-compliance'
     | 'operations-maintenance'
 }
@@ -300,6 +301,13 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     titleKey: 'systemSettings.tabs.billing',
     defaultSection: 'quota',
     sections: [
+      {
+        id: 'usage-discount',
+        titleKey: 'systemSettings.sections.usageDiscount',
+        descriptionKey: 'systemSettings.sections.usageDiscountDescription',
+        fields: [],
+        integration: 'usage-discount',
+      },
       {
         id: 'affiliate',
         titleKey: 'systemSettings.sections.affiliate',

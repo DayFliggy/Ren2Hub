@@ -413,7 +413,6 @@ export default {
     userManagement: 'User management',
     redemptionManagement: 'Redemption codes',
     orderManagement: 'Order management',
-    usageDiscount: 'Usage discount',
     systemSettings: 'System settings',
     status: 'Status',
     buyQuota: 'Buy quota',
@@ -3221,6 +3220,9 @@ export default {
       customOAuthDescription:
         'Manage custom OAuth/OIDC sign-in with the provider panel below.',
       quota: 'Quota and display',
+      usageDiscount: 'System discounts',
+      usageDiscountDescription:
+        'Manage fixed, site-wide and personal usage discounts together.',
       quotaDescription:
         'New-user quota, pre-consumption, top-up access, and currency display.',
       payment: 'Shared payment settings and other gateways',
