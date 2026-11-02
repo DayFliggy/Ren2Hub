@@ -6,7 +6,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 ## 2026-11-02 仪表盘范围切换与可见性修复
 
-按用户明确要求，自动路由页签向全部登录角色开放；管理员和 Root 在标题右侧通过“个人 / 全站”切换概览与统计数据。设计和数据边界见[仪表盘说明](../console/DASHBOARD.md)。本轮使用 OpenCode `hjm-g/gemini-4-argon` 交叉设计及最终 diff 审计，并完成全角色桌面/手机、明暗主题视觉审查。
+`3c506e38e` 于 2026-11-02 03:47 UTC 通过普通更新执行器发布，根提交为 `fb8fb9ec8273338b6020c3219fe4b4ccecd48139`。镜像为 `ren2hub-test:3c506e38e321bac3f8264130ba26985992749547-v1`，ID `sha256:a970a9ddb80085a6b8bd03f17e094e68dbcf7c3c0fae6b50aa75d84c9481f0c2`，用 go1.26.10 构建。按用户明确要求，自动路由页签向全部登录角色开放；管理员和 Root 在标题右侧通过“个人 / 全站”切换概览与统计数据。设计和数据边界见[仪表盘说明](../console/DASHBOARD.md)。本轮使用 OpenCode `hjm-g/gemini-4-argon` 交叉设计及最终 diff 审计，并完成全角色桌面/手机、明暗主题视觉审查。
 
 冻结上游仍为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，本地修改基于 `b3a1e01673dfee0002aa5dc61b4047b6dfe32bda`；本轮不升级上游、不 fetch。
 
@@ -17,7 +17,16 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 必要原生差异：`controller/usedata.go`、`controller/log_export_test.go` 从 upstream_equal 转为 adapted；原有 adapted 的 controller/log.go、controller/user.go、model/log.go、model/user.go、model/usedata.go、model/usedata_flow.go、router/api-router.go、middleware/access_token_routes.go 更新。权限修复理由为 `usage-visibility`，仪表盘路由理由为 `dashboard-scope`；没有 schema 迁移。
 
-来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 798 `upstream_equal`、277 `adapted`、261 `extension`、45 `removed`，`candidate_sha` 为空。
+发布前验证：
+- 定向 Go controller/model/service/router 回归通过（单包 `-timeout=60s`），包括实际三角色路由、PAT scope、旧会话/PAT 降权、伪造查询、分离日志库、个人统计 ID 隔离、Root 明细排除和用户分页。
+- 隔离三库 `TestChannelMetricsDatabases` 与 `TestLogExportDatabaseMatrix` 在 SQLite、MySQL 8.4.11、PostgreSQL 15.19 全部通过；零跳过、失败或清理错误。
+- 前端全量 283 个文件、2070 项 Vitest 全通过；三角色 × 明暗 × 桌面/手机的 Playwright UI 合同 12 项全部通过；仅回环网络 namespace 的真实浏览器冒烟四组通过。
+- 独立组合克隆 `3c506e38e` 的 `static`（`run-zlcym8b7`）与 `build`（`run-d04w7jfx`，产物 SHA256 `cdfa45cceff31e5d9f0d18691d722c5e760258fa085e2cbbb11a51d1d1725c59`）通过。
+- 候选 `run-b8spy8er` 在根 `fb8fb9e`、应用 `3c506e38e` 的组合克隆中运行，使用同一镜像和 `--traffic-host-interface eth0`。七组全部通过，`deployment_eligible=true`，外部请求为 0，数据库为 fresh tmpfs。
+
+切换结果：切换前后任务、Midjourney、充值、GMPay、系统任务和数据库会话都为 0，表数仍为 45。`REN2HUB_VERIFY_OK` 报告 `traffic=host_interface:eth0`，本地和 `https://next.renai.uno` 的只读核验都通过。
+
+来源清单已用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects/new-api` 重算，计数为 798 `upstream_equal`、277 `adapted`、261 `extension`、45 `removed`。
 
 ## 2026-11-01 首页审计修正与第二次正式发布
 
