@@ -1,178 +1,256 @@
-import { mount } from '@vue/test-utils'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-
 import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-import type { UserDiscounts } from '@/composables/useDashboard'
+import type { UsageDiscountSelf } from '@/types/usageDiscount'
+import { configureQuotaPerUnit } from '@/utils/quota'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('en')
 })
-
 afterEach(async () => {
+  configureQuotaPerUnit(500_000)
   await setLocale('en')
 })
 
-/** Platform and effective differ, so each figure can be traced to its ratio. */
-const discounts: UserDiscounts = {
+const discounts: UsageDiscountSelf = {
   status: 'ok',
-  global_ratio: 0.9,
-  effective_ratio: 0.72,
+  factor: '0.95',
+  global_factor: '0.97',
+  fixed_rate: '0.01',
+  site_rate: '0.02',
+  applied_rate: '0.05',
+  cap_rate: '0.05',
+  cap_applied: true,
+  winner_window: 'month',
+  business_date: '2026-11-02',
+  windows: [
+    {
+      window: 'day',
+      quota: '2500000',
+      rate: '0.01',
+      tiers: [
+        { threshold_quota: '2500000', rate: '0.01' },
+        { threshold_quota: '7500000', rate: '0.02' },
+      ],
+    },
+    { window: 'week', quota: '62500000', rate: '0.03', tiers: [] },
+    { window: 'month', quota: '375000000', rate: '0.04', tiers: [] },
+  ],
 }
-
-function render(props: Record<string, unknown> = {}) {
+const neutral: UsageDiscountSelf = {
+  status: 'inactive',
+  factor: '1',
+  global_factor: '1',
+  fixed_rate: '0',
+  site_rate: '0',
+  applied_rate: '0',
+  cap_rate: '0',
+  cap_applied: false,
+  windows: [],
+}
+function render(data: UsageDiscountSelf | null = discounts, extra = {}) {
   return mount(DiscountCard, {
-    props: { discounts, ...props },
-    global: { plugins: [i18n] },
+    props: { discounts: data, ...extra },
+    global: { plugins: [i18n], stubs: { RouterLink: RouterLinkStub } },
   })
-}
-
-/** The tile whose label reads `label`, as label/value/sub text. */
-function tile(wrapper: ReturnType<typeof render>, label: string) {
-  const match = wrapper.findAll('p').find((p) => p.text() === label)
-    ?.element.parentElement
-  if (!match) throw new Error(`no tile labelled ${label}`)
-  return match.textContent ?? ''
 }
 
 describe('DiscountCard', () => {
-  it('shows a not-connected state inside the card when discounts are null', () => {
-    const wrapper = render({ discounts: null })
-    const state = wrapper.find('[data-discount-not-connected]')
-
-    expect(state.exists()).toBe(true)
-    // Contained in the card body rather than floating on the page.
-    expect(
-      wrapper.find('[data-discount-card]').element.contains(state.element)
-    ).toBe(true)
-    expect(state.text()).toContain('Not connected')
-    // No fabricated rate, bar or tiles.
-    expect(wrapper.text()).not.toContain('×')
-    expect(wrapper.find('[data-discount-effective-bar]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Global discount')
-    expect(wrapper.text()).not.toContain('At list price')
-  })
-
-  it('reads 未接入 in Chinese when discounts are null', async () => {
-    await setLocale('zh-CN')
-    const wrapper = render({ discounts: null })
-
-    expect(wrapper.find('[data-discount-not-connected]').text()).toContain(
-      '未接入'
+  it('separates global components, the highest personal tier and the capped server result', () => {
+    const wrapper = render()
+    const global = wrapper.get('[data-discount-global]')
+    expect(global.text()).toContain('3% off')
+    expect(global.get('[data-discount-global-parts]').text()).toBe(
+      'Fixed 1% · Site 2%'
     )
-    expect(wrapper.text()).not.toContain('按原价计费')
+    const personal = wrapper.get('[data-discount-personal]')
+    expect(wrapper.get('[data-discount-personal-rate]').text()).toContain(
+      '4% off'
+    )
+    expect(personal.findAll('[data-discount-window]')).toHaveLength(3)
+    expect(
+      personal.get('[data-selected="true"]').attributes('data-discount-window')
+    ).toBe('month')
+    expect(personal.text()).not.toContain('Selected')
+    expect(
+      personal.get('[aria-current="true"]').attributes('data-discount-window')
+    ).toBe('month')
+    const effective = wrapper.get('[data-discount-effective]')
+    expect(effective.text()).toContain('0.95×')
+    expect(effective.text()).toContain('5% off')
+    expect(effective.text()).not.toContain('7% off')
+    expect(wrapper.get('[data-discount-cap]').text()).toBe('Capped at 5%')
+    const ruler = wrapper.get('[data-discount-ruler]')
+    expect(ruler.findAll('.ruler-seg--global')).toHaveLength(3)
+    expect(ruler.findAll('.ruler-seg--personal')).toHaveLength(2)
+    expect(ruler.findAll('.ruler-seg--overflow')).toHaveLength(2)
   })
-
-  it('renders the platform discount without a plan discount', () => {
-    const wrapper = render()
-
-    expect(wrapper.text()).not.toContain('Personal discount')
-  })
-
-  it('headlines the effective rate and draws its bar from that same rate', () => {
-    const wrapper = render()
-    const bar = wrapper.find('[data-discount-effective-bar]')
-
-    expect(wrapper.text()).toContain('0.720×')
-    // 28% off, scaled so 20% off fills the track.
-    expect(bar.attributes('aria-label')).toBe('28% off')
-    expect((bar.find('div').element as HTMLElement).style.width).toBe('100%')
-  })
-
-  it('keeps the platform ratio and the effective depth in separate tiles', () => {
-    const wrapper = render()
-
-    const platform = tile(wrapper, 'Global discount')
-    expect(platform).toContain('0.90×')
-    expect(platform).toContain('Platform 10% off')
-    expect(platform).not.toContain('28%')
-
-    const effective = tile(wrapper, 'Effective discount')
-    expect(effective).toContain('28% off')
-    expect(effective).not.toContain('10%')
-  })
-
-  it('writes Chinese discounts in 折, not as the percentage off', async () => {
-    await setLocale('zh-CN')
+  it('follows the server winner when multiple windows have equal rates', () => {
     const wrapper = render({
-      discounts: { status: 'ok', global_ratio: 0.88, effective_ratio: 0.88 },
+      ...discounts,
+      windows: discounts.windows.map((w) => ({ ...w, rate: '0.04' })),
     })
-
-    expect(tile(wrapper, '全局折扣')).toContain('平台 8.8 折')
-    expect(tile(wrapper, '综合折扣')).toContain('8.8 折')
-    expect(wrapper.text()).not.toContain('12折')
-    expect(wrapper.text()).not.toContain('12 折')
+    expect(wrapper.findAll('[data-selected="true"]')).toHaveLength(1)
+    expect(wrapper.findAll('[aria-current="true"]')).toHaveLength(1)
+    expect(
+      wrapper.get('[data-selected="true"]').attributes('data-discount-window')
+    ).toBe('month')
   })
-
-  it.each([
-    {
-      locale: 'en',
-      globalCopy: 'No platform discount',
-      effectiveCopy: 'At list price',
-      forbidden: ['0% off'],
-    },
-    {
-      locale: 'zh-CN',
-      globalCopy: '平台暂无折扣',
-      effectiveCopy: '按原价计费',
-      forbidden: ['0 折', '10 折'],
-    },
-  ])(
-    'says there is no discount instead of a zero discount in $locale',
-    async ({ locale, globalCopy, effectiveCopy, forbidden }) => {
+  it('keeps capped global savings distinct from the uncapped components', () => {
+    const wrapper = render({
+      ...discounts,
+      fixed_rate: '0.04',
+      site_rate: '0.03',
+      global_factor: '0.95',
+    })
+    expect(wrapper.get('[data-discount-global]').text()).toContain('5% off')
+    expect(wrapper.get('[data-discount-global-parts]').text()).toBe(
+      'Fixed 4% · Site 3%'
+    )
+    expect(wrapper.get('[data-discount-effective]').text()).toContain('0.95×')
+  })
+  it('does not mark an adopted window when every active window has zero savings', () => {
+    const wrapper = render({
+      ...neutral,
+      status: 'ok',
+      windows: discounts.windows.map((window) => ({ ...window, rate: '0' })),
+    })
+    expect(wrapper.findAll('[data-discount-window]')).toHaveLength(3)
+    expect(wrapper.findAll('[data-selected="true"]')).toHaveLength(0)
+    expect(wrapper.findAll('[aria-current]')).toHaveLength(0)
+    expect(wrapper.get('[data-discount-personal-rate]').text()).toBe(
+      'No discount'
+    )
+    expect(wrapper.get('[data-discount-effective]').text()).toContain('1×')
+  })
+  it.each(['en', 'zh-CN'])(
+    'preserves the smallest supported discount in %s',
+    async (locale) => {
       await setLocale(locale)
       const wrapper = render({
-        discounts: { status: 'inactive', global_ratio: 1, effective_ratio: 1 },
+        ...neutral,
+        status: 'ok',
+        fixed_rate: '0.0001',
+        factor: '0.9999',
+        global_factor: '0.9999',
+        applied_rate: '0.0001',
+        cap_rate: '0.05',
       })
-
-      expect(wrapper.text()).toContain(globalCopy)
-      expect(wrapper.text()).toContain(effectiveCopy)
-      for (const copy of forbidden) expect(wrapper.text()).not.toContain(copy)
-      const bar = wrapper.find('[data-discount-effective-bar] div')
-      expect((bar.element as HTMLElement).style.width).toBe('0%')
-      expect(wrapper.find('[data-discount-unavailable]').exists()).toBe(false)
+      expect(wrapper.get('[data-discount-global]').text()).toContain('0.01%')
+      expect(wrapper.get('[data-discount-effective]').text()).toContain(
+        '0.9999×'
+      )
+      expect(wrapper.get('[data-discount-effective]').text()).toContain('0.01%')
+      expect(
+        wrapper.get('[data-discount-ruler]').findAll('.ruler-seg--global')
+      ).toHaveLength(1)
+      expect(wrapper.text()).not.toContain('10 折')
     }
   )
-
-  it.each([
-    { locale: 'en', note: 'Usage discount is temporarily unavailable' },
-    { locale: 'zh-CN', note: '用量折扣暂不可用' },
-  ])(
-    'keeps the fixed discount when usage data is unavailable in $locale',
-    async ({ locale, note }) => {
-      await setLocale(locale)
-      // Only the 1% fixed part applies while the usage windows are unreadable.
-      const wrapper = render({
-        discounts: {
-          status: 'unavailable',
-          global_ratio: 0.99,
-          effective_ratio: 0.99,
+  it('shows counted usage and a higher-rate target without summing personal tiers', () => {
+    const wrapper = render()
+    const daily = wrapper.get('[data-discount-progress="day"]')
+    expect(daily.text()).toContain('5 USD')
+    expect(daily.text()).toContain('10 USD to 2%')
+    expect(wrapper.get('[data-discount-progress="month"]').text()).toContain(
+      'Max tier reached'
+    )
+  })
+  it('compares large integer thresholds exactly and keeps a one-quota gap', () => {
+    const wrapper = render({
+      ...discounts,
+      winner_window: 'month',
+      windows: [
+        {
+          window: 'month',
+          quota: '999999999999999998',
+          rate: '0.01',
+          tiers: [{ threshold_quota: '999999999999999999', rate: '0.02' }],
         },
-      })
-
-      expect(wrapper.get('[data-discount-unavailable]').text()).toContain(note)
-      expect(wrapper.text()).toContain('0.990×')
-      expect(wrapper.text()).toContain('0.99×')
-      expect(wrapper.find('[data-discount-not-connected]').exists()).toBe(false)
+      ],
+    })
+    expect(wrapper.get('[data-discount-progress="month"]').text()).toContain(
+      '0.000002 USD to 2%'
+    )
+  })
+  it('skips equal-rate thresholds and uses the configured quota unit', () => {
+    configureQuotaPerUnit(100)
+    const wrapper = render({
+      ...discounts,
+      winner_window: 'day',
+      windows: [
+        {
+          window: 'day',
+          quota: '100',
+          rate: '0.01',
+          tiers: [
+            { threshold_quota: '200', rate: '0.01' },
+            { threshold_quota: '300', rate: '0.02' },
+          ],
+        },
+      ],
+    })
+    expect(wrapper.get('[data-discount-progress="day"]').text()).toContain(
+      '2 USD to 2%'
+    )
+  })
+  it.each(['inactive', 'ok'] as const)(
+    'keeps empty personal windows neutral for %s',
+    (status) => {
+      const wrapper = render({ ...neutral, status })
+      expect(wrapper.get('[data-discount-personal-empty]').text()).toBe(
+        'No personal tier discount currently applies.'
+      )
+      expect(wrapper.find('[data-discount-tier-details]').exists()).toBe(false)
+      expect(wrapper.get('[data-discount-personal-rate]').text()).toBe('—')
+      expect(wrapper.get('[data-discount-effective]').text()).toContain('1×')
+      expect(wrapper.text()).not.toMatch(/shadow|excluded|not configured/i)
+      expect(wrapper.find('[data-discount-cap]').exists()).toBe(false)
     }
   )
-
-  it('says the discount could not be read instead of inventing a rate', () => {
-    const wrapper = render({ discounts: null, error: 'Request timed out' })
-    const state = wrapper.get('[data-discount-error]')
-
-    expect(state.text()).toContain('Discount unavailable')
-    expect(state.text()).toContain('Request timed out')
-    expect(wrapper.text()).not.toContain('×')
-    expect(wrapper.text()).not.toContain('Not connected')
+  it('distinguishes unavailable windows from a zero personal discount', () => {
+    const wrapper = render({
+      ...neutral,
+      status: 'unavailable',
+      factor: '0.99',
+      global_factor: '0.99',
+      fixed_rate: '0.01',
+      applied_rate: '0.01',
+      cap_rate: '0.05',
+    })
+    expect(wrapper.get('[data-discount-unavailable]').text()).toContain(
+      'only the fixed discount applies'
+    )
+    expect(wrapper.get('[data-discount-personal-empty]').text()).toContain(
+      'temporarily unavailable'
+    )
+    expect(wrapper.get('[data-discount-personal-rate]').text()).toBe('—')
+    expect(wrapper.get('[data-discount-effective]').text()).toContain('0.99×')
   })
-
-  it('shows the loading skeleton before the discount arrives', () => {
-    const wrapper = render({ discounts: null, loading: true })
-
-    expect(wrapper.find('[data-discount-not-connected]').exists()).toBe(false)
-    expect(wrapper.find('[data-discount-error]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('×')
+  it('never invents a rate when the request fails or has not loaded', () => {
+    const failed = render(null, { error: 'Request timed out' })
+    expect(failed.get('[data-discount-error]').text()).toContain(
+      'Request timed out'
+    )
+    expect(failed.find('[data-discount-effective]').exists()).toBe(false)
+    const pending = render(null, { loading: true })
+    expect(pending.find('[aria-busy="true"]').exists()).toBe(true)
+    expect(pending.text()).not.toContain('×')
+    expect(render(null).find('[data-discount-not-connected]').exists()).toBe(
+      true
+    )
+  })
+  it('exposes a labelled settings link only when permitted and removes it on permission loss', async () => {
+    const wrapper = render(discounts, { canConfigure: true })
+    expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe(
+      '/usage-discount'
+    )
+    expect(
+      wrapper.get('[data-discount-configure]').attributes('aria-label')
+    ).toBe('Configure usage discounts')
+    await wrapper.setProps({ canConfigure: false })
+    expect(wrapper.find('[data-discount-configure]').exists()).toBe(false)
   })
 })

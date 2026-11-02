@@ -15,7 +15,7 @@ import { usageDiscountApi } from '@/api/usageDiscount'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import type { UsageDiscountSelfStatus } from '@/types/usageDiscount'
+import type { UsageDiscountSelf } from '@/types/usageDiscount'
 
 export interface DashboardStats {
   quota?: string
@@ -25,16 +25,6 @@ export interface DashboardStats {
   today_requests?: number
   today_tokens?: number
   total_requests?: number
-}
-
-/**
- * Price multipliers from GET /api/user/usage-discount: 0.95 means 5% off.
- * Display only; billing reads the exact decimal factor on the server.
- */
-export interface UserDiscounts {
-  status: UsageDiscountSelfStatus
-  global_ratio: number // fixed and site parts, e.g. 0.88
-  effective_ratio: number // the factor the next request is priced with
 }
 
 export interface ModelShare {
@@ -83,7 +73,7 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
   const usageUnavailable = ref(false)
-  const discounts = ref<UserDiscounts | null>(null),
+  const discounts = ref<UsageDiscountSelf | null>(null),
     discountsLoading = ref(true),
     discountsError = ref<string | null>(null)
   // The discount has its own request, so a failed or partial usage summary
@@ -127,11 +117,7 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
           : t('common.failed')
       return
     }
-    discounts.value = {
-      status: result.value.status,
-      global_ratio: Number(result.value.global_factor),
-      effective_ratio: Number(result.value.factor),
-    }
+    discounts.value = result.value
   }
   async function loadStats() {
     const selectedScope = toValue(scope)

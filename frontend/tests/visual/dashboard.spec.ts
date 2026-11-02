@@ -823,8 +823,10 @@ test('RPM stays unconnected while the discount card reads the user discount', as
   // usage-discount-self.get.json: factor 0.98, global factor 0.99.
   const discount = page.locator('[data-discount-card]')
   await expect(discount).toHaveCount(1)
-  await expect(discount).toContainText('0.980×')
-  await expect(discount).toContainText('平台 9.9 折')
+  await expect(discount).toContainText('0.98×')
+  await expect(discount.locator('[data-discount-global]')).toContainText(
+    '减免 1%'
+  )
   await expect(discount).not.toContainText('未接入')
   await assertNoHorizontalOverflow(page)
 })

@@ -15,8 +15,13 @@ vi.mock('@/api/client', async (original) => ({
   api: { get: vi.fn() },
 }))
 vi.mock('@/stores/app', () => ({
-  useAppStore: () => ({ status: { log_max_range_days: 365 } }),
+  useAppStore: () => ({
+    status: { log_max_range_days: 365 },
+    isFeatureEnabled: (feature: string) =>
+      feature === 'admin' && adminFeature.enabled,
+  }),
 }))
+const adminFeature = vi.hoisted(() => ({ enabled: true }))
 vi.mock('@/composables/useDashboardResources', () => ({
   useDashboardResources: () => ({
     system: ref(null),
@@ -31,6 +36,7 @@ beforeAll(async () => {
   await setLocale('zh-CN')
 })
 beforeEach(() => {
+  adminFeature.enabled = true
   setActivePinia(createPinia())
   vi.mocked(api.get).mockImplementation(async (path) =>
     dashboardFixture(path === '/api/data/summary' ? 999 : 10)
@@ -93,6 +99,24 @@ function allScope() {
 function statsTab() {
   return wrapper.get('#dashboard-tab-panel-tab-stats')
 }
+
+it.each([1, 10, 100])(
+  'only offers discount settings to Root role %i',
+  async (role) => {
+    await render(role)
+    expect(
+      wrapper.getComponent({ name: 'DiscountCard' }).props('canConfigure')
+    ).toBe(role === 100)
+  }
+)
+
+it('hides the discount settings shortcut when the admin feature is disabled', async () => {
+  adminFeature.enabled = false
+  await render(100)
+  expect(
+    wrapper.getComponent({ name: 'DiscountCard' }).props('canConfigure')
+  ).toBe(false)
+})
 
 it.each([1, 10, 100])('exposes automatic routing to role %i', async (role) => {
   await render(role)

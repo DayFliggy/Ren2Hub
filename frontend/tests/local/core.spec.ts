@@ -98,6 +98,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       })
     })
     let userToken = ''
+    let rootToken = ''
     let tokenId = 0
     await test.step('密码登录、刷新会话与管理员权限拒绝', async () => {
       userToken = await login(page, 'user')
@@ -116,6 +117,21 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       })
       expect(denied.status()).toBe(403)
       expect((await denied.json()).success).toBe(false)
+      const discount = await page.request.get('/api/user/usage-discount', {
+        headers: { Authorization: 'Bearer ' + userToken },
+      })
+      expect(discount.status()).toBe(200)
+      const discountBody = await discount.json()
+      expect(discountBody.success).toBe(true)
+      await expect(page.locator('[data-discount-factor]')).toHaveText(
+        discountBody.data.factor + '×'
+      )
+      await expect(page.locator('[data-discount-configure]')).toHaveCount(0)
+      const discountSettings = await page.request.get(
+        '/api/option/usage_discount',
+        { headers: { Authorization: 'Bearer ' + userToken } }
+      )
+      expect(discountSettings.status()).toBe(403)
       await layout(page, '用户首页')
     })
     await test.step('从页面创建 Token，列表仅返回脱敏 Key，阻止跨用户读取和删除', async () => {
@@ -303,7 +319,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       await expect(page).toHaveURL(/\/sign-in(?:\?|$)/)
     })
     await test.step('管理员空设置保存不发写请求，实际修改可保存', async () => {
-      await login(page, 'root')
+      rootToken = await login(page, 'root')
       const loaded = page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === '/api/option/' &&
@@ -351,6 +367,76 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         path: info.outputPath('settings.png'),
         fullPage: true,
       })
+    })
+    await test.step('折扣卡片读取真实配置、封顶结果与个人窗口，刷新后保持', async () => {
+      const headers = { Authorization: 'Bearer ' + rootToken }
+      const loaded = await page.request.get('/api/option/usage_discount', {
+        headers,
+      })
+      expect(loaded.status()).toBe(200)
+      const settings = await loaded.json()
+      expect(settings.success).toBe(true)
+      const active = (rate: string) => ({
+        mode: 'on',
+        tiers: [{ threshold_quota: '0', rate }],
+      })
+      // Only the runner's isolated instance is writable; no production data.
+      const saved = await page.request.patch('/api/option/usage_discount', {
+        headers,
+        data: {
+          expected_version: settings.data.version,
+          config: {
+            ...settings.data.config,
+            fixed_rate: '0.01',
+            cap_rate: '0.05',
+            excluded_user_ids: [],
+            site: active('0.02'),
+            personal: {
+              day: active('0.01'),
+              week: active('0.03'),
+              month: active('0.04'),
+            },
+          },
+        },
+      })
+      expect(saved.status()).toBe(200)
+      expect((await saved.json()).success).toBe(true)
+      const self = await page.request.get('/api/user/usage-discount', {
+        headers,
+      })
+      expect(self.status()).toBe(200)
+      const result = await self.json()
+      expect(result.success).toBe(true)
+      expect(result.data).toMatchObject({
+        factor: '0.95',
+        global_factor: '0.97',
+        applied_rate: '0.05',
+        cap_applied: true,
+        winner_window: 'month',
+      })
+      await page.goto('/dashboard')
+      const card = page.locator('[data-discount-card]')
+      for (const refresh of [false, true]) {
+        if (refresh) await page.reload()
+        await expect(card.locator('[data-discount-factor]')).toHaveText('0.95×')
+        await expect(card.locator('[data-discount-global-rate]')).toHaveText(
+          '减免 3%'
+        )
+        await expect(card.locator('[data-discount-personal-rate]')).toHaveText(
+          '减免 4%'
+        )
+        await expect(card.locator('[data-discount-cap]')).toContainText('5%')
+        await expect(card.locator('[data-discount-window]')).toHaveCount(3)
+        await expect(card.locator('[data-selected="true"]')).toHaveAttribute(
+          'data-discount-window',
+          'month'
+        )
+      }
+      await layout(page, '折扣卡片')
+      await card.screenshot({ path: info.outputPath('discount-card-live.png') })
+      await card.locator('[data-discount-configure]').click()
+      await expect(page).toHaveURL(/\/usage-discount$/)
+      await expect(page.locator('[data-discount-editor]')).toBeVisible()
     })
   } finally {
     await context.close()

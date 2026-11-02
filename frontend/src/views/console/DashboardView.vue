@@ -25,12 +25,14 @@ import { useDashboardStats } from '@/composables/useDashboardStats'
 import { useUsageDistribution } from '@/composables/useUsageDistribution'
 import type { StatsRange } from '@/composables/useDashboardStats'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 import { dateInputValue } from '@/utils/format'
 import { greetingBucketForHour } from '@/utils/greeting'
 import type { DashboardScope } from '@/api/dashboard'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const app = useAppStore()
 // A page-local choice cannot carry privileged data across accounts or sessions.
 const selectedScope = ref<DashboardScope>('self')
 const scope = computed(() => (auth.isAdmin ? selectedScope.value : 'self'))
@@ -272,6 +274,7 @@ const rangeOptions = computed(() => [
             :discounts="discounts"
             :loading="discountsLoading"
             :error="discountsError"
+            :can-configure="auth.isRoot && app.isFeatureEnabled('admin')"
           />
           <template v-if="!dashboardError">
             <!-- 模型消费分布 -->

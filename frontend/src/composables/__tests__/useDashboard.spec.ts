@@ -189,12 +189,9 @@ describe('usage discount on the overview', () => {
 
     expect(state.error.value).toBe('summary down')
     expect(state.stats.value).toBeNull()
-    // Price multipliers: the fixture is 2% off overall and 1% off globally.
-    expect(state.discounts.value).toEqual({
-      status: 'ok',
-      global_ratio: 0.99,
-      effective_ratio: 0.98,
-    })
+    // Keep exact factors, components and personal tiers from the server.
+    expect(state.discounts.value).toEqual(selfDiscount)
+    expect(state.discounts.value?.windows).toHaveLength(1)
     expect(state.discountsLoading.value).toBe(false)
     expect(state.discountsError.value).toBeNull()
   })
@@ -207,7 +204,7 @@ describe('usage discount on the overview', () => {
     await state.load()
 
     expect(state.recentOutOfRange.value).toBeTruthy()
-    expect(state.discounts.value?.effective_ratio).toBe(0.98)
+    expect(state.discounts.value?.factor).toBe('0.98')
   })
 
   it('reports a failed discount request without touching the usage summary', async () => {
@@ -242,7 +239,7 @@ describe('usage discount on the overview', () => {
 
     expect(state.discounts.value).toMatchObject({
       status: 'unavailable',
-      effective_ratio: 0.99,
+      factor: '0.99',
     })
     // The superseded request was cancelled.
     const [signal] = vi.mocked(usageDiscountApi.self).mock.calls[0]!
