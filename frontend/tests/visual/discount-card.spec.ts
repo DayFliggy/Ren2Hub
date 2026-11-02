@@ -1,6 +1,10 @@
 import { expect, test, type Locator } from '@playwright/test'
 import { nativeFixture } from '../contracts/native-core-fixture'
-import { configureStablePage, waitForStablePage } from './fixtures'
+import {
+  configureStablePage,
+  minTextContrast,
+  waitForStablePage,
+} from './fixtures'
 
 const response = nativeFixture<{ data: Record<string, unknown> }>(
   'usage-discount-self.get.json'
@@ -71,7 +75,66 @@ async function expectAlignedWindows(card: Locator) {
   )
 }
 
-for (const width of [390, 1440])
+async function expectReadableCard(card: Locator) {
+  const wideLabels = await card.evaluate((root) => {
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+    if (root.clientWidth < 34 * rem) return []
+    return [...root.querySelectorAll('.window-name')].map((label) => ({
+      text: label.textContent,
+      height: label.getBoundingClientRect().height,
+      lineHeight: parseFloat(getComputedStyle(label).lineHeight),
+    }))
+  })
+  for (const label of wideLabels) {
+    expect(
+      label.height,
+      `Window label stays on one line in a wide card: ${label.text}`
+    ).toBeLessThanOrEqual(label.lineHeight + 1)
+  }
+  const measurements = await card.evaluate((root) => {
+    const bounds = root.getBoundingClientRect()
+    return [...root.querySelectorAll('*')].flatMap((element) => {
+      if (!element.getClientRects().length) return []
+      const nodes = [...element.childNodes].filter(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+      )
+      if (!nodes.length) return []
+      const style = getComputedStyle(element)
+      const rects = nodes.flatMap((node) => {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        return [...range.getClientRects()]
+      })
+      return [
+        {
+          text: element.textContent?.trim(),
+          fontSize: parseFloat(style.fontSize),
+          ellipsis: style.textOverflow === 'ellipsis',
+          outside: rects.some(
+            (rect) =>
+              rect.left < bounds.left - 1 || rect.right > bounds.right + 1
+          ),
+        },
+      ]
+    })
+  })
+  expect(measurements.length).toBeGreaterThan(0)
+  for (const item of measurements) {
+    expect(item.fontSize, `Readable size: ${item.text}`).toBeGreaterThanOrEqual(
+      12
+    )
+    expect(item.ellipsis, `No hidden copy: ${item.text}`).toBe(false)
+    expect(item.outside, `Text stays inside card: ${item.text}`).toBe(false)
+  }
+  const settings = card.locator('[data-discount-configure]')
+  if (await settings.count()) {
+    const box = await settings.boundingBox()
+    expect(box!.width).toBeGreaterThanOrEqual(44)
+    expect(box!.height).toBeGreaterThanOrEqual(44)
+  }
+}
+
+for (const width of [320, 390, 768, 1280, 1440, 1920])
   for (const theme of ['light', 'dark'] as const)
     for (const locale of ['zh-CN', 'en'])
       test(`discount card ${width} ${theme} ${locale}`, async ({
@@ -108,6 +171,7 @@ for (const width of [390, 1440])
           'month'
         )
         await expectAlignedWindows(card)
+        await expectReadableCard(card)
         await expect(card.locator('[data-discount-configure]')).toHaveAttribute(
           'href',
           '/system-settings/billing/usage-discount'
@@ -132,7 +196,7 @@ for (const width of [390, 1440])
           path: testInfo.outputPath('discount-card.png'),
         })
         if (width === 390 && locale === 'zh-CN') {
-          // The user-supplied attachments are the approved visual baseline.
+          // Reviewed responsive design; retain exact pixel comparison.
           await expect(card).toHaveScreenshot(`discount-card-${theme}.png`, {
             maxDiffPixels: 0,
             threshold: 0,
@@ -368,18 +432,35 @@ for (const theme of ['light', 'dark'] as const)
       await expect(card.locator('[data-discount-window]')).toHaveCount(
         status === 'zero-windows' ? 3 : 0
       )
-      if (!unavailable) {
-        // With no discount anywhere, the summary must not outweigh the
-        // global and personal "no discount" labels below it.
-        const colors = await card
-          .locator(
-            '[data-discount-applied], [data-discount-global-rate], [data-discount-personal-rate]'
+      await expectReadableCard(card)
+      if (status === 'inactive') {
+        await expect(card.locator('[data-discount-empty]')).toContainText(
+          '标准计费'
+        )
+        await expect(card.locator('[data-discount-ruler]')).toHaveCount(0)
+        await expect(card.locator('[data-discount-global]')).toHaveCount(0)
+        expect(
+          await minTextContrast(
+            card.locator(
+              '[data-discount-empty] h3, [data-discount-empty] .standard-copy p, [data-discount-effective] span'
+            )
           )
-          .evaluateAll((items) =>
-            items.map((item) => getComputedStyle(item).color)
-          )
-        expect(colors).toHaveLength(3)
-        expect(new Set(colors).size).toBe(1)
+        ).toBeGreaterThanOrEqual(4.5)
+        expect(
+          await minTextContrast(card.locator('[data-discount-factor]'))
+        ).toBeGreaterThanOrEqual(3)
+        await expect(card).toHaveScreenshot(`discount-standard-${theme}.png`, {
+          maxDiffPixels: 0,
+          threshold: 0,
+        })
+      } else {
+        await expect(card.locator('[data-discount-empty]')).toHaveCount(0)
+        if (status === 'zero-windows') {
+          await expect(card.locator('[data-discount-ruler]')).toHaveCount(0)
+          await expect(
+            card.locator('[data-discount-progress="day"]')
+          ).toContainText('5 USD')
+        }
       }
       await card.screenshot({ path: testInfo.outputPath('discount-state.png') })
       await waitForStablePage(page)
@@ -402,6 +483,7 @@ for (const theme of ['light', 'dark'] as const)
     const card = page.locator('[data-discount-card]')
     await card.scrollIntoViewIfNeeded()
     await expectAlignedWindows(card)
+    await expectReadableCard(card)
     expect(
       await card
         .locator('[data-discount-personal]')
@@ -413,5 +495,122 @@ for (const theme of ['light', 'dark'] as const)
         .evaluate((el) => el.scrollWidth - el.clientWidth)
     ).toBeLessThanOrEqual(1)
     await card.screenshot({ path: testInfo.outputPath('discount-narrow.png') })
+    await waitForStablePage(page)
+  })
+
+for (const theme of ['light', 'dark'] as const)
+  for (const locale of ['zh-CN', 'en'])
+    test(`standard pricing adapts to card widths ${theme} ${locale}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: 1440, height: 1000 })
+      await configureStablePage(page, { theme, locale, user: { role: 1 } })
+      await page.addInitScript(
+        (value) => localStorage.setItem('ren2hub_locale', value),
+        locale
+      )
+      await page.route('**/api/user/usage-discount', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              ...combined,
+              status: 'ok',
+              factor: '1',
+              global_factor: '1',
+              fixed_rate: '0',
+              site_rate: '0',
+              applied_rate: '0',
+              cap_applied: false,
+              winner_window: undefined,
+              windows: [],
+            },
+          },
+        })
+      )
+      await page.goto('/dashboard')
+      await waitForStablePage(page)
+      const card = page.locator('[data-discount-card]')
+      await expect(card.locator('[data-discount-empty]')).toBeVisible()
+      await expect(card.locator('[data-discount-configure]')).toHaveCount(0)
+      for (const width of [260, 320, 420, 560]) {
+        // Exercise the component's container query independently of viewport breakpoints.
+        await card.evaluate((element, value) => {
+          const html = element as HTMLElement
+          html.style.width = `${value}px`
+          html.style.height = '400px'
+          html.style.gridColumn = '1 / -1'
+        }, width)
+        await card.scrollIntoViewIfNeeded()
+        await expectReadableCard(card)
+        const panel = await card.locator('[data-discount-empty]').boundingBox()
+        const effective = await card
+          .locator('[data-discount-effective]')
+          .boundingBox()
+        expect(effective!.y - panel!.y).toBeLessThan(240)
+        await card.screenshot({
+          path: testInfo.outputPath(`standard-${width}.png`),
+        })
+      }
+      await waitForStablePage(page)
+    })
+
+for (const theme of ['light', 'dark'] as const)
+  test(`long amounts and 200 percent text ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 1000 })
+    await configureStablePage(page, {
+      theme,
+      locale: 'en',
+      user: { role: 100 },
+    })
+    await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+    await page.route('**/api/user/usage-discount', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            ...combined,
+            factor: '0.9999',
+            global_factor: '1',
+            fixed_rate: '0',
+            site_rate: '0',
+            applied_rate: '0.0001',
+            cap_applied: false,
+            windows: [
+              {
+                window: 'month',
+                quota: 999999999999999,
+                rate: '0.0001',
+                tiers: [{ threshold_quota: '1000000000000000', rate: '0.02' }],
+              },
+            ],
+          },
+        },
+      })
+    )
+    await page.goto('/dashboard')
+    await waitForStablePage(page)
+    const card = page.locator('[data-discount-card]')
+    await expect(
+      card.locator('[data-discount-progress="month"]')
+    ).toContainText('1999999999.999998 USD')
+    await expect(
+      card.locator('[data-discount-progress="month"]')
+    ).toContainText('0.000002 USD to 2%')
+    await expectReadableCard(card)
+    await card.screenshot({ path: testInfo.outputPath('long-amounts.png') })
+    await page.setViewportSize({ width: 1280, height: 1000 })
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '200%'
+    })
+    expect((await card.boundingBox())!.width).toBeGreaterThan(600)
+    // Keep the full card inside the scroll viewport for visual review.
+    await page.setViewportSize({ width: 1280, height: 2400 })
+    await card.scrollIntoViewIfNeeded()
+    await expectReadableCard(card)
+    await expect(card.locator('[data-discount-factor]')).toHaveText('0.9999×')
+    await card.screenshot({ path: testInfo.outputPath('text-200-percent.png') })
     await waitForStablePage(page)
   })

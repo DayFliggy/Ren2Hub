@@ -4,6 +4,16 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-02 折扣卡片响应式与标准计费空态
+
+按用户后续要求，保留日夜光学毛玻璃视觉并优化字号与容器布局。辅助文字最低 12px，主倍率和窗口名随卡片宽度增长；真实金额与规则说明完整换行，不用省略号隐藏。窄卡改为分行，宽卡同步放大窗口列宽，设置热区至少 44px。概览网格增加可用宽度约束，200% 文字放大时不会因为桌面视口断点而强行保持三列。
+
+无原始／实际优惠、无个人窗口且非统计降级时，显示独立“标准计费”面板与服务端倍率，移除全零台账、空水位尺及误导封顶线。有可达阶梯时继续展示真实进度；仅全局优惠、上限压顶和统计不可用分别保留来源、封顶提示与告警。金额转换、服务端倍率和赢家、后端计价、权限与数据结构不变。
+
+OpenCode `hjm-g/gemini-4-argon` 与 `cn-m/kimi-k3` 完成交叉设计和最终源码／截图审计。Gemini 提出的宽卡英文周期列宽和中间宽度说明折行已修正；Kimi 确认状态边界、金额精度、Root 入口和测试约束无阻断项。按本轮设计重新建立四张零容差快照（有优惠／标准计费 × 日／夜），保留对比度与无溢出断言，新增多容器宽度、长金额和 200% 文字测试。证据在 `/home/work/ren2hub-discount-responsive-20261102/`，正式发布身份与运行验证另记工作区服务器档案。
+
+本地验证通过：前端全量 283 文件／2084 项单测，最终折扣视觉回归 42 项（含四张零容差快照）、相邻仪表盘布局 10 项、真实隔离后端四组日夜桌面／移动冒烟、类型检查、ESLint、格式检查、Vite 构建和两个嵌入资源检查。概览网格的最终改动另以 DashboardView 11 项单测复核。真实后端验证在仅回环网络 namespace 与独立空库运行。
+
 ## 2026-11-02 系统折扣编辑整合
 
 用量折扣统一进入「系统设置 → 计费 → 系统折扣」`/system-settings/billing/usage-discount`，旧地址保留 query/hash 后跳转，删除重复侧栏入口。独立页面改为系统设置内的专用面板，移除运行状态、健康计数及其自动请求；诊断 API 合同保留。编辑区按固定优惠与上限、全站阶梯、个人窗口组织，档位使用紧凑原生表格，日/周/月切换保留全量草稿并显示隐藏窗口错误，排除用户与让利估算按需展开。
@@ -34,6 +44,7 @@ OpenCode `hjm-g/gemini-4-argon` 对附件、组件、请求失效控制和后端
 必要原生差异：`controller/usedata.go`、`controller/log_export_test.go` 从 upstream_equal 转为 adapted；原有 adapted 的 controller/log.go、controller/user.go、model/log.go、model/user.go、model/usedata.go、model/usedata_flow.go、router/api-router.go、middleware/access_token_routes.go 更新。权限修复理由为 `usage-visibility`，仪表盘路由理由为 `dashboard-scope`；没有 schema 迁移。
 
 发布前验证：
+
 - 定向 Go controller/model/service/router 回归通过（单包 `-timeout=60s`），包括实际三角色路由、PAT scope、旧会话/PAT 降权、伪造查询、分离日志库、个人统计 ID 隔离、Root 明细排除和用户分页。
 - 隔离三库 `TestChannelMetricsDatabases` 与 `TestLogExportDatabaseMatrix` 在 SQLite、MySQL 8.4.11、PostgreSQL 15.19 全部通过；零跳过、失败或清理错误。
 - 前端全量 283 个文件、2070 项 Vitest 全通过；三角色 × 明暗 × 桌面/手机的 Playwright UI 合同 12 项全部通过；仅回环网络 namespace 的真实浏览器冒烟四组通过。
@@ -54,6 +65,7 @@ OpenCode `hjm-g/gemini-4-argon` 对附件、组件、请求失效控制和后端
 - `489d98f8a`、`8fe6bf735`：`TestDashboardSuccessRateCancelledWaiterReturnsContextError` 在 unit 门禁中超时 60 秒。原因是上一个测试留下的 singleflight 调用会被下一个测试的 `DoChan` 加入，新测试自己的查询函数不运行，cleanup 一直等它完成；`-count=400` 可以稳定复现。复核又指出只调用 `Forget` 不够：旧 worker 在查询函数返回后才写缓存，这次写入可能落到下一个测试。测试辅助函数 `resetDashboardSuccessRate(t)` 现在先用同键的空操作 `DoChan` 等在途调用结束（上限 5 秒），再清缓存；cleanup 先重置再恢复替身。生产代码只多了 `dashboardSuccessRateRefreshKey` 常量。
 
 发布前验证：
+
 - 在 `e3c0b98dc` 的独立 clone 中串行运行 unit、databases、static、build、race、browser、ui-contracts（526 项全过）和 `test_runner.py`（17 项），全部通过。
 - 前端 Vitest 全量 282 个文件、2061 项通过，vue-tsc、eslint、prettier 通过。新增回归测试换回修正前的代码都会失败。仪表盘测试组 `-count=1000` 和 `-race -count=50` 通过。
 - Codex `gpt-6-astra` xhigh 共做三轮：首页审计发现上述三项；第一轮复核发现飞线接缝和测试写回两项；第二轮复核没有发现问题。
@@ -68,16 +80,19 @@ OpenCode `hjm-g/gemini-4-argon` 对附件、组件、请求失效控制和后端
 `63e537495` 于 2026-11-01 14:28 UTC 通过普通更新执行器发布。该提交把本地 main 的首页交互修复与任务渠道缺失退款分支合在一起，根提交为 `299f6581f7e325b1135aa682fa3492369f9384a7`。镜像为 `ren2hub-test:63e5374954346808759e5443a472a9faf60cbf97-v1`，ID `sha256:0e97c34650d0bc5085d0ba4693f31d2dfe4f45dcab5df142b93812dd75b4b4a1`，用 go1.26.10 构建。
 
 发布前验证：
+
 - 在独立 clone 中串行运行 unit、databases、static、build、race、browser 和 `test_runner.py`，全部通过。
 - ui-contracts 525 项中 524 项通过。失败的是首页展示的 light mobile 一项：运行时宿主机 CPU 被另一组 Playwright 占用，画布缩放的等待超时。单独重复运行 28 次均通过。
 - 候选 `run-6zryym8e` 使用同一镜像和 `--traffic-host-interface eth0`，七组全部通过，`deployment_eligible=true`。外部请求为 0，数据库为 fresh tmpfs，`traffic` 为 `host_interface/eth0`。
 
 切换结果：
+
 - 切换前后，任务、Midjourney、充值、GMPay、系统任务和数据库会话都为 0。
 - AutoMigrate 新增三张表，表数从 42 变为 45。
 - `REN2HUB_VERIFY_OK` 报告 `traffic=host_interface:eth0`，本地和 `https://next.renai.uno` 的只读核验都通过。
 
 Codex 第二轮复核还发现两项问题，本次没有改：
+
 - batch 上游响应里有未请求的任务 ID 时，`updateBatchTasks` 会按平台级 `taskM` 更新另一渠道的任务。
 - Midjourney 轮询（`controller/midjourney.go`，以及 `model/midjourney.go` 的 `MjBulkUpdate`）遇到两个渠道的 `mj_id` 相同时，两条任务会互相覆盖。
 

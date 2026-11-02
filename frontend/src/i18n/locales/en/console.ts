@@ -498,6 +498,9 @@ export default {
       rulerAria: 'Global {global}% off, personal {personal}% off, cap {cap}%',
       rateOff: '{rate}% off',
       noDiscount: 'No discount',
+      standardPricing: 'Standard pricing',
+      standardHint:
+        'No pricing discount currently applies. The original channel multiplier is used.',
       capped: 'Capped at {rate}%',
       combineHint:
         'Global + best personal savings, capped, then applied to the channel multiplier.',

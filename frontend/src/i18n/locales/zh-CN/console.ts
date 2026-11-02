@@ -475,6 +475,8 @@ export default {
       rulerAria: '全局减免 {global}%，个人减免 {personal}%，封顶 {cap}%',
       rateOff: '减免 {rate}%',
       noDiscount: '暂无优惠',
+      standardPricing: '标准计费',
+      standardHint: '当前暂无适用的定价折扣，按渠道原倍率计费。',
       capped: '已按 {rate}% 上限封顶',
       combineHint: '全局与个人最高优惠相加后封顶，再乘渠道基础倍率。',
       configure: '配置用量折扣',

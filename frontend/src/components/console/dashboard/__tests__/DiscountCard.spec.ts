@@ -120,10 +120,9 @@ describe('DiscountCard', () => {
     expect(wrapper.findAll('[data-discount-window]')).toHaveLength(3)
     expect(wrapper.findAll('[data-selected="true"]')).toHaveLength(0)
     expect(wrapper.findAll('[aria-current]')).toHaveLength(0)
-    expect(wrapper.get('[data-discount-personal-rate]').text()).toBe(
-      'No discount'
-    )
     expect(wrapper.get('[data-discount-effective]').text()).toContain('1×')
+    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
+    expect(wrapper.find('[data-discount-ruler]').exists()).toBe(false)
   })
   it.each(['en', 'zh-CN'])(
     'preserves the smallest supported discount in %s',
@@ -196,20 +195,82 @@ describe('DiscountCard', () => {
       '2 USD to 2%'
     )
   })
-  it.each(['inactive', 'ok'] as const)(
-    'keeps empty personal windows neutral for %s',
+  it.each(['inactive', 'ok', 'not_applicable'] as const)(
+    'shows standard pricing without invented progress or zero-value detail for %s',
     (status) => {
-      const wrapper = render({ ...neutral, status })
-      expect(wrapper.get('[data-discount-personal-empty]').text()).toBe(
-        'No personal tier discount currently applies.'
+      const wrapper = render({ ...neutral, status, cap_rate: '0.05' })
+      expect(wrapper.get('[data-discount-empty]').text()).toContain(
+        'Standard pricing'
       )
-      expect(wrapper.find('[data-discount-tier-details]').exists()).toBe(false)
-      expect(wrapper.get('[data-discount-personal-rate]').text()).toBe('—')
       expect(wrapper.get('[data-discount-effective]').text()).toContain('1×')
+      expect(wrapper.find('[data-discount-ruler]').exists()).toBe(false)
+      expect(wrapper.find('[data-discount-global]').exists()).toBe(false)
+      expect(wrapper.find('[data-discount-window]').exists()).toBe(false)
       expect(wrapper.text()).not.toMatch(/shadow|excluded|not configured/i)
       expect(wrapper.find('[data-discount-cap]').exists()).toBe(false)
     }
   )
+  it('keeps reachable tiers at zero savings and never calls an empty tier a maximum', () => {
+    const wrapper = render({
+      ...neutral,
+      status: 'ok',
+      windows: [
+        {
+          window: 'day',
+          quota: '0',
+          rate: '0',
+          tiers: [{ threshold_quota: '2500000', rate: '0.01' }],
+        },
+        { window: 'week', quota: '0', rate: '0', tiers: [] },
+      ],
+    })
+    expect(wrapper.get('[data-discount-progress="day"]').text()).toContain(
+      '5 USD to 1%'
+    )
+    expect(wrapper.get('[data-discount-progress="week"]').text()).toContain(
+      'No discount'
+    )
+    expect(wrapper.text()).not.toContain('Max tier reached')
+    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
+    expect(wrapper.find('[data-discount-ruler]').exists()).toBe(false)
+  })
+  it('does not hide a zero cap that is suppressing actual savings', () => {
+    const wrapper = render({
+      ...neutral,
+      fixed_rate: '0.01',
+      cap_applied: true,
+    })
+    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
+    expect(wrapper.get('[data-discount-global-parts]').text()).toContain(
+      'Fixed 1%'
+    )
+    expect(wrapper.get('[data-discount-cap]').text()).toContain('0%')
+    expect(wrapper.get('[data-discount-factor]').text()).toBe('1×')
+  })
+  it('preserves global savings when no personal window applies', () => {
+    const wrapper = render({
+      ...neutral,
+      status: 'ok',
+      fixed_rate: '0.01',
+      global_factor: '0.99',
+      factor: '0.99',
+      applied_rate: '0.01',
+      cap_rate: '0.05',
+    })
+    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
+    expect(wrapper.get('[data-discount-personal-empty]').text()).toBe(
+      'No personal tier discount currently applies.'
+    )
+    expect(wrapper.get('[data-discount-factor]').text()).toBe('0.99×')
+  })
+  it('never treats unavailable data without a fixed discount as normal standard pricing', () => {
+    const wrapper = render({ ...neutral, status: 'unavailable' })
+    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
+    expect(wrapper.get('[data-discount-unavailable]').text()).toContain(
+      'temporarily unavailable'
+    )
+    expect(wrapper.get('[data-discount-factor]').text()).toBe('1×')
+  })
   it('distinguishes unavailable windows from a zero personal discount', () => {
     const wrapper = render({
       ...neutral,

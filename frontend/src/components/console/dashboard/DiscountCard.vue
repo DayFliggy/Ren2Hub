@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { Settings2, TriangleAlert } from 'lucide-vue-next'
+import { ReceiptText, Settings2, TriangleAlert } from 'lucide-vue-next'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -47,6 +47,21 @@ const rawTotalRate = computed(() => {
   return Math.max(0, fixed + site + personal).toFixed(4)
 })
 
+const hasSavings = computed(
+  () =>
+    Number(props.discounts?.applied_rate ?? '0') > 0 ||
+    Number(rawTotalRate.value) > 0
+)
+// A zero current rate can still have reachable tiers. Only the complete absence
+// of savings and personal windows is a standard-pricing empty state.
+const standardPricing = computed(
+  () =>
+    props.discounts !== null &&
+    props.discounts.status !== 'unavailable' &&
+    !hasSavings.value &&
+    props.discounts.windows.length === 0
+)
+
 /**
  * Allocates the 7 optical water-level segments by exact integer counts so any
  * positive rate lights at least one segment and the cap marker aligns cleanly
@@ -62,7 +77,7 @@ const rulerModel = computed(() => {
   if (applied <= 0 && raw <= 0) {
     return {
       segments: new Array<RulerSegmentKind>(RULER_SEGMENTS).fill('empty'),
-      capPercent: cap > 0 ? Math.min(100, (cap / scaleMax) * 100) : null,
+      capPercent: null,
     }
   }
 
@@ -177,6 +192,9 @@ function discountLabel(rate: string): string {
     class="discount-glass-card"
     data-discount-card
   >
+    <template #title>
+      <h2 class="discount-title">{{ t('dashboard.discount.title') }}</h2>
+    </template>
     <template #action>
       <div class="flex items-center gap-1.5">
         <span
@@ -193,14 +211,14 @@ function discountLabel(rate: string): string {
         <RouterLink
           v-if="canConfigure"
           to="/system-settings/billing/usage-discount"
-          class="-mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-ring touch-snappy sm:-mr-1 sm:h-8 sm:w-8"
+          class="discount-configure text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-ring touch-snappy"
           :aria-label="t('dashboard.discount.configure')"
           :title="t('dashboard.discount.configure')"
           data-handdrawn="control"
           data-discount-configure
         >
           <span class="discount-config-orb" aria-hidden="true">
-            <Settings2 :size="14" />
+            <Settings2 :size="16" />
           </span>
         </RouterLink>
       </div>
@@ -215,277 +233,308 @@ function discountLabel(rate: string): string {
       <SkeletonBlock rounded="md" class="h-36" />
     </div>
 
-    <div
-      v-else-if="discounts"
-      class="discount-body flex grow flex-col justify-between gap-2.5 px-4 pt-2 pb-3.5 sm:px-5"
-    >
-      <div class="glass-chamber">
-        <div class="chamber-hero" data-discount-effective>
-          <div class="min-w-0">
-            <p class="text-[11px] leading-tight text-[var(--text-secondary)]">
-              {{ t('dashboard.discount.effective') }}
-            </p>
-            <div class="mt-1 flex flex-wrap items-baseline gap-1.5">
-              <p
-                class="display-number font-mono text-[1.75rem] leading-none tracking-tight"
-                :class="
-                  Number(discounts.applied_rate) > 0
-                    ? 'text-[var(--accent-text)]'
-                    : 'text-[var(--text-primary)]'
-                "
-                data-discount-factor
-              >
-                {{ discounts.factor }}×
-              </p>
-              <span
-                class="font-mono text-[11px] font-bold whitespace-nowrap tabular-nums"
-                :class="
-                  Number(discounts.applied_rate) > 0
-                    ? 'text-[var(--text-primary)]'
-                    : 'text-[var(--text-tertiary)]'
-                "
-                data-discount-applied
-              >
-                {{ discountLabel(discounts.applied_rate) }}
-              </span>
-            </div>
-          </div>
-
-          <div class="min-w-0">
-            <div
-              class="mb-1.5 flex items-baseline justify-between gap-2 font-mono text-[10px] font-medium whitespace-nowrap text-[var(--text-secondary)]"
-            >
-              <span>
-                {{
-                  t('dashboard.discount.stackTotal', {
-                    rate: rateToPercent(rawTotalRate),
-                  })
-                }}
-              </span>
-              <span v-if="Number(discounts.cap_rate) > 0">
-                {{
-                  t('dashboard.discount.capLimit', {
-                    rate: rateToPercent(discounts.cap_rate),
-                  })
-                }}
-              </span>
-            </div>
-            <div
-              class="ruler-track"
-              role="img"
-              :aria-label="
-                t('dashboard.discount.rulerAria', {
-                  global: rateToPercent(globalRate),
-                  personal: rateToPercent(winner?.rate ?? '0'),
-                  cap: rateToPercent(discounts.cap_rate),
-                })
-              "
-              data-discount-ruler
-            >
-              <span
-                v-for="(seg, idx) in rulerModel.segments"
-                :key="idx"
-                class="ruler-seg"
-                :class="`ruler-seg--${seg}`"
-              />
-              <span
-                v-if="rulerModel.capPercent !== null"
-                class="cap-marker"
-                :style="{ left: `calc(${rulerModel.capPercent}% - 1px)` }"
-                aria-hidden="true"
-              />
-            </div>
-          </div>
+    <div v-else-if="discounts" class="discount-body">
+      <div
+        v-if="standardPricing"
+        class="standard-pricing glass-chamber"
+        data-discount-empty
+      >
+        <div class="standard-icon" aria-hidden="true">
+          <ReceiptText :size="24" />
         </div>
-
-        <div class="chamber-ledger">
-          <div class="ledger-row" data-discount-global>
-            <div class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="ruler-swatch ruler-swatch--global"
-                aria-hidden="true"
-              />
-              <h3 class="shrink-0 text-[11px] font-semibold whitespace-nowrap">
-                {{ t('dashboard.discount.global') }}
-              </h3>
-              <p
-                class="min-w-0 truncate font-mono text-[10px] text-[var(--text-secondary)]"
-                data-discount-global-parts
-              >
-                {{
-                  t('dashboard.discount.globalParts', {
-                    fixed: rateToPercent(discounts.fixed_rate),
-                    site: rateToPercent(discounts.site_rate),
-                  })
-                }}
-              </p>
-            </div>
-            <span
-              class="shrink-0 font-mono text-[11px] font-bold whitespace-nowrap tabular-nums"
-              :class="
-                Number(globalRate) > 0
-                  ? 'text-[var(--accent-text)]'
-                  : 'text-[var(--text-tertiary)]'
-              "
-              data-discount-global-rate
-            >
-              {{ discountLabel(globalRate) }}
-            </span>
-          </div>
-
-          <div class="ledger-row">
-            <div class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="ruler-swatch ruler-swatch--personal"
-                aria-hidden="true"
-              />
-              <h3 class="shrink-0 text-[11px] font-semibold whitespace-nowrap">
-                {{ t('dashboard.discount.personal') }}
-              </h3>
-              <p
-                class="min-w-0 truncate text-[10px] text-[var(--text-secondary)]"
-              >
-                {{ t('dashboard.discount.personalHint') }}
-              </p>
-            </div>
-            <span
-              class="shrink-0 font-mono text-[11px] font-bold whitespace-nowrap tabular-nums"
-              :class="
-                winner && Number(winner.rate) > 0
-                  ? 'text-[var(--accent-text)]'
-                  : 'text-[var(--text-tertiary)]'
-              "
-              data-discount-personal-rate
-            >
-              {{ windows.length ? discountLabel(winner?.rate ?? '0') : '—' }}
-            </span>
-          </div>
+        <div class="standard-copy">
+          <h3>{{ t('dashboard.discount.standardPricing') }}</h3>
+          <p>{{ t('dashboard.discount.standardHint') }}</p>
+        </div>
+        <div class="standard-multiplier" data-discount-effective>
+          <span>{{ t('dashboard.discount.effective') }}</span>
+          <p class="font-mono display-number" data-discount-factor>
+            {{ discounts.factor }}×
+          </p>
         </div>
       </div>
 
-      <p
-        v-if="discounts.status === 'unavailable'"
-        class="flex items-start gap-2 bg-[var(--status-warning-soft)] px-3 py-1.5 text-xs leading-snug text-[var(--status-warning-text)]"
-        style="border-radius: var(--shape-control)"
-        role="status"
-        data-discount-unavailable
-      >
-        <TriangleAlert :size="14" class="mt-0.5 shrink-0" aria-hidden="true" />
-        {{ t('dashboard.discount.unavailable') }}
-      </p>
-
-      <div data-discount-personal>
-        <ul
-          v-if="windows.length"
-          class="window-rows"
-          :aria-label="t('dashboard.discount.personal')"
-        >
-          <li
-            v-for="window in windows"
-            :key="window.window"
-            class="wrow"
-            :class="
-              window.window === discounts.winner_window
-                ? 'wrow--selected'
-                : 'wrow--idle'
-            "
-            :data-discount-window="window.window"
-            :data-selected="window.window === discounts.winner_window"
-            :aria-current="
-              window.window === discounts.winner_window ? 'true' : undefined
-            "
+      <template v-else>
+        <div class="glass-chamber">
+          <div
+            class="chamber-hero"
+            :class="{ 'chamber-hero--plain': !hasSavings }"
+            data-discount-effective
           >
-            <span
-              class="text-xs font-semibold whitespace-nowrap"
-              :class="
-                window.window === discounts.winner_window
-                  ? 'text-[var(--accent-text)]'
-                  : 'text-[var(--text-primary)]'
-              "
-            >
-              {{ t(`dashboard.discount.windows.${window.window}`) }}
-            </span>
-
-            <div class="wrow-mid" :data-discount-progress="window.window">
-              <div
-                class="flex items-baseline justify-between gap-1.5 text-[10px] whitespace-nowrap"
-              >
+            <div class="min-w-0">
+              <p class="discount-caption text-[var(--text-secondary)]">
+                {{ t('dashboard.discount.effective') }}
+              </p>
+              <div class="mt-1 flex flex-wrap items-baseline gap-1.5">
                 <p
-                  class="tabular-nums"
+                  class="discount-factor display-number font-mono leading-none tracking-tight"
                   :class="
-                    window.window === discounts.winner_window
+                    Number(discounts.applied_rate) > 0
                       ? 'text-[var(--accent-text)]'
-                      : 'text-[var(--text-secondary)]'
+                      : 'text-[var(--text-primary)]'
                   "
+                  data-discount-factor
                 >
-                  {{
-                    t('dashboard.discount.windowUsage', {
-                      amount: quotaToAmount(window.quota),
-                    })
-                  }}
+                  {{ discounts.factor }}×
                 </p>
-                <p
-                  v-if="window.next && window.gap !== null"
-                  class="tabular-nums"
+                <span
+                  class="discount-caption font-semibold tabular-nums"
                   :class="
-                    window.window === discounts.winner_window
-                      ? 'text-[var(--accent-text)]'
-                      : 'text-[var(--text-secondary)]'
-                  "
-                >
-                  {{
-                    t('dashboard.discount.nextTier', {
-                      amount: quotaToAmount(window.gap),
-                      rate: rateToPercent(window.next.rate),
-                    })
-                  }}
-                </p>
-                <p
-                  v-else
-                  :class="
-                    window.window === discounts.winner_window
-                      ? 'text-[var(--accent-text)]'
+                    Number(discounts.applied_rate) > 0
+                      ? 'text-[var(--text-primary)]'
                       : 'text-[var(--text-tertiary)]'
                   "
+                  data-discount-applied
                 >
-                  {{ t('dashboard.discount.noHigherTier') }}
-                </p>
+                  {{ discountLabel(discounts.applied_rate) }}
+                </span>
               </div>
-              <div class="bar-track" aria-hidden="true">
-                <div
-                  class="bar-fill"
-                  :style="{ width: `${window.fillPercent}%` }"
+            </div>
+
+            <div v-if="hasSavings" class="min-w-0">
+              <div
+                class="ruler-labels discount-caption text-[var(--text-secondary)]"
+              >
+                <span>
+                  {{
+                    t('dashboard.discount.stackTotal', {
+                      rate: rateToPercent(rawTotalRate),
+                    })
+                  }}
+                </span>
+                <span v-if="Number(discounts.cap_rate) > 0">
+                  {{
+                    t('dashboard.discount.capLimit', {
+                      rate: rateToPercent(discounts.cap_rate),
+                    })
+                  }}
+                </span>
+              </div>
+              <div
+                class="ruler-track"
+                role="img"
+                :aria-label="
+                  t('dashboard.discount.rulerAria', {
+                    global: rateToPercent(globalRate),
+                    personal: rateToPercent(winner?.rate ?? '0'),
+                    cap: rateToPercent(discounts.cap_rate),
+                  })
+                "
+                data-discount-ruler
+              >
+                <span
+                  v-for="(seg, idx) in rulerModel.segments"
+                  :key="idx"
+                  class="ruler-seg"
+                  :class="`ruler-seg--${seg}`"
+                />
+                <span
+                  v-if="rulerModel.capPercent !== null"
+                  class="cap-marker"
+                  :style="{ left: `calc(${rulerModel.capPercent}% - 1px)` }"
+                  aria-hidden="true"
                 />
               </div>
             </div>
+          </div>
 
-            <span
-              class="text-right font-mono text-base font-bold whitespace-nowrap tabular-nums"
-              :class="
-                window.window === discounts.winner_window
-                  ? 'text-[var(--accent-text)]'
-                  : 'text-[var(--text-primary)]'
-              "
-            >
-              {{ rateToPercent(window.rate) }}%
-            </span>
-          </li>
-        </ul>
+          <div v-if="hasSavings" class="chamber-ledger">
+            <div class="ledger-row" data-discount-global>
+              <div class="ledger-source">
+                <span
+                  class="ruler-swatch ruler-swatch--global"
+                  aria-hidden="true"
+                />
+                <h3 class="ledger-title">
+                  {{ t('dashboard.discount.global') }}
+                </h3>
+                <p
+                  class="ledger-description discount-caption text-[var(--text-secondary)]"
+                  data-discount-global-parts
+                >
+                  {{
+                    t('dashboard.discount.globalParts', {
+                      fixed: rateToPercent(discounts.fixed_rate),
+                      site: rateToPercent(discounts.site_rate),
+                    })
+                  }}
+                </p>
+              </div>
+              <span
+                class="ledger-rate discount-caption font-semibold tabular-nums"
+                :class="
+                  Number(globalRate) > 0
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-[var(--text-tertiary)]'
+                "
+                data-discount-global-rate
+              >
+                {{ discountLabel(globalRate) }}
+              </span>
+            </div>
+
+            <div class="ledger-row">
+              <div class="ledger-source">
+                <span
+                  class="ruler-swatch ruler-swatch--personal"
+                  aria-hidden="true"
+                />
+                <h3 class="ledger-title">
+                  {{ t('dashboard.discount.personal') }}
+                </h3>
+                <p
+                  class="ledger-description discount-caption text-[var(--text-secondary)]"
+                >
+                  {{ t('dashboard.discount.personalHint') }}
+                </p>
+              </div>
+              <span
+                class="ledger-rate discount-caption font-semibold tabular-nums"
+                :class="
+                  winner && Number(winner.rate) > 0
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-[var(--text-tertiary)]'
+                "
+                data-discount-personal-rate
+              >
+                {{ windows.length ? discountLabel(winner?.rate ?? '0') : '—' }}
+              </span>
+            </div>
+          </div>
+        </div>
 
         <p
-          v-else
-          class="my-auto py-6 text-center text-xs leading-relaxed text-[var(--text-tertiary)]"
-          data-discount-personal-empty
+          v-if="discounts.status === 'unavailable'"
+          class="discount-caption flex items-start gap-2 bg-[var(--status-warning-soft)] px-3 py-2 text-[var(--status-warning-text)]"
+          style="border-radius: var(--shape-control)"
+          role="status"
+          data-discount-unavailable
         >
-          {{
-            t(
-              discounts.status === 'unavailable'
-                ? 'dashboard.discount.windowsUnavailable'
-                : 'dashboard.discount.noPersonal'
-            )
-          }}
+          <TriangleAlert
+            :size="14"
+            class="mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
+          {{ t('dashboard.discount.unavailable') }}
         </p>
-      </div>
+
+        <div class="personal-section" data-discount-personal>
+          <ul
+            v-if="windows.length"
+            class="window-rows"
+            :aria-label="t('dashboard.discount.personal')"
+          >
+            <li
+              v-for="window in windows"
+              :key="window.window"
+              class="wrow"
+              :class="
+                window.window === discounts.winner_window
+                  ? 'wrow--selected'
+                  : 'wrow--idle'
+              "
+              :data-discount-window="window.window"
+              :data-selected="window.window === discounts.winner_window"
+              :aria-current="
+                window.window === discounts.winner_window ? 'true' : undefined
+              "
+            >
+              <span
+                class="window-name font-semibold"
+                :class="
+                  window.window === discounts.winner_window
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-[var(--text-primary)]'
+                "
+              >
+                {{ t(`dashboard.discount.windows.${window.window}`) }}
+              </span>
+
+              <div class="wrow-mid" :data-discount-progress="window.window">
+                <div class="window-progress-copy discount-caption">
+                  <p
+                    class="tabular-nums"
+                    :class="
+                      window.window === discounts.winner_window
+                        ? 'text-[var(--accent-text)]'
+                        : 'text-[var(--text-secondary)]'
+                    "
+                  >
+                    {{
+                      t('dashboard.discount.windowUsage', {
+                        amount: quotaToAmount(window.quota),
+                      })
+                    }}
+                  </p>
+                  <p
+                    v-if="window.next && window.gap !== null"
+                    class="tabular-nums"
+                    :class="
+                      window.window === discounts.winner_window
+                        ? 'text-[var(--accent-text)]'
+                        : 'text-[var(--text-secondary)]'
+                    "
+                  >
+                    {{
+                      t('dashboard.discount.nextTier', {
+                        amount: quotaToAmount(window.gap),
+                        rate: rateToPercent(window.next.rate),
+                      })
+                    }}
+                  </p>
+                  <p
+                    v-else
+                    :class="
+                      window.window === discounts.winner_window
+                        ? 'text-[var(--accent-text)]'
+                        : 'text-[var(--text-tertiary)]'
+                    "
+                  >
+                    {{
+                      t(
+                        Number(window.rate) > 0
+                          ? 'dashboard.discount.noHigherTier'
+                          : 'dashboard.discount.noDiscount'
+                      )
+                    }}
+                  </p>
+                </div>
+                <div class="bar-track" aria-hidden="true">
+                  <div
+                    class="bar-fill"
+                    :style="{ width: `${window.fillPercent}%` }"
+                  />
+                </div>
+              </div>
+
+              <span
+                class="window-rate text-right font-mono font-bold tabular-nums"
+                :class="
+                  window.window === discounts.winner_window
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-[var(--text-primary)]'
+                "
+              >
+                {{ rateToPercent(window.rate) }}%
+              </span>
+            </li>
+          </ul>
+
+          <p
+            v-else
+            class="personal-note discount-caption"
+            data-discount-personal-empty
+          >
+            {{
+              t(
+                discounts.status === 'unavailable'
+                  ? 'dashboard.discount.windowsUnavailable'
+                  : 'dashboard.discount.noPersonal'
+              )
+            }}
+          </p>
+        </div>
+      </template>
     </div>
 
     <EmptyState
@@ -626,23 +675,129 @@ html.dark .discount-glass-card {
 }
 
 .discount-cap-pill {
-  padding: 2px 8px;
-  font-size: 10px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
   color: var(--accent-text);
   background-color: var(--accent-soft);
   background-image: var(--d2-row-sheen);
   border: 1px solid var(--d2-border-active);
   border-radius: 9999px;
   box-shadow: var(--glass-specular-edge);
-  white-space: nowrap;
+}
+
+.discount-glass-card :deep(header) {
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.75rem 1rem 0;
+}
+
+.discount-title {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.discount-configure {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-right: -0.5rem;
+}
+
+.discount-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+  min-width: 0;
+}
+
+.discount-caption {
+  font-size: clamp(0.75rem, 0.7rem + 0.25cqi, 0.875rem);
+  line-height: 1.45;
+}
+
+.discount-factor {
+  font-size: clamp(1.75rem, 1.35rem + 2cqi, 2.25rem);
+  overflow-wrap: anywhere;
+}
+
+.standard-pricing {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 14rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.standard-icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  border: 1px solid var(--d2-rim);
+  border-radius: 1rem;
+  color: var(--text-secondary);
+  background: var(--d2-glass-row);
+  box-shadow: var(--d2-idle-shadow);
+}
+
+.standard-copy h3 {
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.standard-copy p {
+  margin-top: 0.375rem;
+  max-width: 28ch;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.standard-multiplier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--d2-divider);
+  width: 100%;
+  max-width: 20rem;
+}
+
+.standard-multiplier span {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.standard-multiplier p {
+  font-size: 2rem;
+  line-height: 1.1;
+  color: var(--text-primary);
 }
 
 .discount-config-orb {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 2rem;
+  height: 2rem;
   background-color: var(--d2-glass-row);
   background-image: var(--d2-row-sheen);
   border: 1px solid var(--d2-rim);
@@ -670,10 +825,20 @@ html.dark .discount-glass-card {
 
 .chamber-hero {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 9px 11px 8px;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.ruler-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+  margin-bottom: 0.5rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .ruler-track {
@@ -697,7 +862,7 @@ html.dark .ruler-track {
 }
 
 .ruler-seg {
-  height: 10px;
+  height: 0.6875rem;
   border-radius: 2px;
 }
 
@@ -776,23 +941,46 @@ html.dark .cap-marker {
 .chamber-ledger {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 11px 7px;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
   border-top: 1px solid var(--d2-divider);
   background-color: var(--d2-glass-row);
   box-shadow: inset 0 1px 0 var(--d2-etch-highlight);
 }
 
 .ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.25rem 0.75rem;
+}
+
+.ledger-source {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.ledger-title {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.ledger-description {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ledger-rate {
+  white-space: nowrap;
 }
 
 .ruler-swatch {
-  width: 7.5px;
-  height: 7.5px;
+  width: 0.5rem;
+  height: 0.5rem;
   flex-shrink: 0;
   border-radius: 2px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
@@ -810,19 +998,20 @@ html.dark .cap-marker {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  display: grid;
+  grid-auto-rows: 1fr;
+  gap: 0.5rem;
 }
 
 .wrow {
   position: relative;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name rate' 'progress progress';
   align-items: center;
-  gap: 10px;
-  height: 41px;
-  padding: 0 11px;
+  gap: 0.375rem 0.75rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 11px;
 }
 
@@ -856,15 +1045,53 @@ html.dark .wrow--selected {
 }
 
 .wrow-mid {
+  grid-area: progress;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3.5px;
+  gap: 0.375rem;
+}
+
+.window-name {
+  grid-area: name;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.window-rate {
+  grid-area: rate;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.window-progress-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.125rem 0.75rem;
+}
+
+.window-progress-copy p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.personal-section {
+  min-width: 0;
+}
+
+.personal-note {
+  padding: 0.75rem;
+  color: var(--text-secondary);
+  background-color: var(--d2-glass-row);
+  border: 1px solid var(--d2-rim);
+  border-radius: 0.75rem;
 }
 
 .bar-track {
   position: relative;
-  height: 4.5px;
+  height: 0.3125rem;
   border-radius: 9999px;
   background-color: var(--d2-track);
   box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.08);
@@ -905,15 +1132,94 @@ html.dark .wrow--selected .bar-fill {
   );
 }
 
-@container (max-width: 340px) {
+@container (min-width: 22rem) {
   .chamber-hero {
-    grid-template-columns: 1fr;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+  .chamber-hero--plain {
+    grid-template-columns: minmax(0, 1fr);
   }
   .wrow {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-    gap: 6px;
-    padding: 0 8px;
+    grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+    grid-template-areas: 'name progress rate';
+    min-height: 3rem;
+  }
+}
+
+@container (min-width: 34rem) {
+  .wrow {
+    grid-template-columns: 4rem minmax(0, 1fr) auto;
+  }
+  .chamber-hero,
+  .chamber-ledger {
+    padding: 1rem;
+  }
+  .ledger-source {
+    gap: 0.5rem;
+  }
+  .ledger-title,
+  .window-name {
+    font-size: 0.875rem;
+  }
+}
+
+@container (max-width: 19rem) {
+  .discount-body {
+    padding-inline: 0.75rem;
+  }
+  .standard-pricing {
+    padding: 1.25rem 1rem;
+  }
+}
+
+@container (width < 22rem) {
+  .ledger-source {
+    display: grid;
+    grid-template-columns: 0.5rem minmax(0, 1fr);
+    gap: 0.125rem 0.5rem;
+  }
+  .ledger-description {
+    grid-column: 2;
+  }
+}
+
+/* Text enlargement can leave very few ems inside a desktop grid column. */
+@container (max-width: 16rem) {
+  .discount-body {
+    padding-inline: 0.5rem;
+  }
+  .chamber-hero,
+  .chamber-ledger {
+    padding: 0.5rem;
+  }
+  .ledger-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ledger-rate {
+    padding-left: 1rem;
+    white-space: normal;
+  }
+  .ledger-title,
+  .window-name {
+    overflow-wrap: anywhere;
+  }
+  .wrow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'name' 'rate' 'progress';
+    padding: 0.5rem;
+  }
+  .window-rate {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chamber,
+  .wrow,
+  .personal-note {
+    background-color: var(--surface-solid);
+    background-image: none;
+    backdrop-filter: none;
   }
 }
 </style>

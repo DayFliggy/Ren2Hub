@@ -204,7 +204,7 @@ const rangeOptions = computed(() => [
     ══════════════════════════════════════════ -->
       <div
         v-if="activeTab === 'overview'"
-        class="sibling-space-y-4 sm:sibling-space-y-5"
+        class="dashboard-overview sibling-space-y-4 sm:sibling-space-y-5"
       >
         <!-- KPI strip — 4 clickable chips, jumps to Stats tab -->
         <OverviewKpiStrip
@@ -215,7 +215,7 @@ const rangeOptions = computed(() => [
           @switch-tab="activeTab = $event"
         />
 
-        <div class="grid gap-4 sm:gap-5 xl:grid-cols-3">
+        <div class="dashboard-cards grid gap-4 sm:gap-5 xl:grid-cols-3">
           <!-- 个人汇总失败只替换个人卡片；系统状态来自独立接口，继续显示。 -->
           <EmptyState
             v-if="dashboardError"
@@ -362,3 +362,20 @@ const rangeOptions = computed(() => [
     <ContactFloatBall />
   </div>
 </template>
+
+<style scoped>
+.dashboard-overview {
+  container: dashboard-overview / inline-size;
+}
+
+/* Sidebar width and enlarged text can leave too little space for three cards,
+   even when the viewport still satisfies the desktop media breakpoint. */
+@container dashboard-overview (max-width: 58rem) {
+  .dashboard-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dashboard-cards > * {
+    grid-column: auto;
+  }
+}
+</style>
