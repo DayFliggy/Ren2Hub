@@ -15,9 +15,10 @@ const props = withDefaults(
     title?: string
     subtitle?: string
     ariaLabel?: string
-    size?: 'sm' | 'md' | 'lg' | 'xl'
+    size?: 'sm' | 'md' | 'lg' | 'xl' | 'nav'
     closeDisabled?: boolean
     presentation?: 'modal' | 'drawer'
+    drawerSide?: 'left' | 'right'
     zIndex?: number
   }>(),
   {
@@ -27,6 +28,7 @@ const props = withDefaults(
     size: 'md',
     closeDisabled: false,
     presentation: 'modal',
+    drawerSide: 'right',
     zIndex: 90,
   }
 )
@@ -40,6 +42,7 @@ const widths = {
   md: 'max-w-md',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
+  nav: 'max-w-[min(22rem,calc(100vw-24px))]',
 }
 
 const titleId = useId()
@@ -137,9 +140,13 @@ onBeforeUnmount(() => {
         :style="{ zIndex }"
         :class="
           presentation === 'drawer'
-            ? 'items-stretch justify-end'
+            ? [
+                'items-stretch',
+                drawerSide === 'left' ? 'justify-start' : 'justify-end',
+              ]
             : 'items-center justify-center p-4'
         "
+        :data-drawer-side="presentation === 'drawer' ? drawerSide : undefined"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="title ? titleId : undefined"
@@ -234,6 +241,41 @@ onBeforeUnmount(() => {
   height: 100dvh;
   max-height: 100dvh;
   border-radius: 0 !important;
+}
+.console-drawer-panel {
+  padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
+}
+.modal-enter-active .console-drawer-panel,
+.modal-leave-active .console-drawer-panel {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.modal-enter-from [data-handdrawn='modal'].console-drawer-panel,
+.modal-leave-to [data-handdrawn='modal'].console-drawer-panel {
+  transform: translateX(100%);
+}
+.modal-enter-from[data-drawer-side='left'] .console-drawer-panel,
+.modal-leave-to[data-drawer-side='left'] .console-drawer-panel {
+  transform: translateX(-100%);
+}
+html.dark .pencil-surface-strong[data-handdrawn='modal'] {
+  background: var(--surface-overlay);
+  background-image: none;
+  backdrop-filter: none;
+}
+@media (max-width: 639px) {
+  [data-handdrawn='modal']:not(.console-drawer-panel) {
+    max-height: calc(
+      100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    );
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-enter-active,
+  .modal-leave-active,
+  .modal-enter-active .console-drawer-panel,
+  .modal-leave-active .console-drawer-panel {
+    transition: none;
+  }
 }
 .modal-enter-active,
 .modal-leave-active {

@@ -384,7 +384,32 @@ export async function assertHomeNavbarInitialState(page: Page): Promise<void> {
 
   await page.evaluate(() => window.scrollTo(0, 80))
   await expect(navbar).toHaveAttribute('data-scrolled', 'true')
-  await expect(navbar).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  // Glass is a gradient surface; its computed background-color can be transparent.
+  const surface = await navbar.evaluate((element) => {
+    const dark = document.documentElement.classList.contains('dark')
+    const glass =
+      (CSS.supports('backdrop-filter', 'blur(1px)') ||
+        CSS.supports('-webkit-backdrop-filter', 'blur(1px)')) &&
+      !matchMedia('(prefers-reduced-transparency: reduce)').matches
+    const token = dark
+      ? glass
+        ? '--nav-surface'
+        : '--nav-solid'
+      : '--surface-raised'
+    const probe = document.createElement('span')
+    probe.style.display = 'none'
+    probe.style.background = `var(${token})`
+    element.append(probe)
+    const style = getComputedStyle(probe)
+    const paint = {
+      color: style.backgroundColor,
+      image: style.backgroundImage,
+    }
+    probe.remove()
+    return paint
+  })
+  await expect(navbar).toHaveCSS('background-color', surface.color)
+  await expect(navbar).toHaveCSS('background-image', surface.image)
   await expect(navbar).not.toHaveCSS('box-shadow', 'none')
 
   await page.evaluate(() => window.scrollTo(0, 0))

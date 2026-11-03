@@ -57,7 +57,7 @@ async function onKeydown(event: KeyboardEvent, index: number) {
 
 <template>
   <div
-    class="inline-flex items-center gap-1 rounded-xl bg-[var(--surface-muted)] p-1"
+    class="inline-flex min-w-0 max-w-full items-center gap-1 overflow-x-auto overscroll-x-contain rounded-xl bg-[var(--surface-muted)] p-1"
     role="radiogroup"
     :aria-label="label"
     data-handdrawn="segments"
@@ -71,16 +71,16 @@ async function onKeydown(event: KeyboardEvent, index: number) {
       :tabindex="model === opt.value ? 0 : -1"
       :aria-label="opt.ariaLabel"
       :title="opt.ariaLabel"
-      class="inline-flex items-center justify-center gap-1.5 font-semibold transition-all focus-ring touch-snappy"
+      class="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-semibold transition-all focus-ring touch-snappy"
       :class="[
         size === 'sm'
-          ? 'h-11 px-2.5 text-xs sm:h-8'
-          : 'h-11 px-3.5 text-sm sm:h-10',
+          ? 'h-11 px-2.5 text-xs lg:h-8'
+          : 'h-11 px-3.5 text-sm lg:h-10',
         opt.label
           ? ''
           : size === 'sm'
-            ? 'w-11 px-0 sm:w-8'
-            : 'w-11 px-0 sm:w-10',
+            ? 'w-11 px-0 lg:w-8'
+            : 'w-11 px-0 lg:w-10',
         model === opt.value
           ? 'seg-active text-[var(--text-primary)]'
           : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--state-hover-layer)] rounded-lg',
@@ -112,5 +112,44 @@ async function onKeydown(event: KeyboardEvent, index: number) {
   border-radius: var(--sketch-border-radius-sm);
   box-shadow: var(--elevation-1);
   border: 1px solid var(--border-default);
+}
+
+/* B1 Studio Dark Mode Segmented Controls */
+html.dark [data-handdrawn='segments'] {
+  padding: 3px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--studio-control-track, var(--surface-container-low));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+html.dark [data-handdrawn='segments'] button {
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+html.dark [data-handdrawn='segments'] button:hover:not(.seg-active) {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+html.dark [data-handdrawn='segments'] .seg-active {
+  background: var(--studio-control-thumb, var(--surface-container-highest));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: var(
+    --studio-control-thumb-shadow,
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 6px rgba(4, 7, 14, 0.32)
+  );
+  border-radius: 8px;
+  color: var(--text-primary);
+}
+
+html.dark [data-handdrawn='segments'] :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 </style>

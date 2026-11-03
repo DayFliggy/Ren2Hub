@@ -69,43 +69,127 @@ for (const locale of ['zh-CN', 'en']) {
   }
 }
 
-test('mobile strips mark hidden items and keep the current page in view', async ({
+test('mobile drawer exposes every group with usable targets and real links', async ({
   page,
 }) => {
   await configureStablePage(page, { theme: 'dark' })
   await page.setViewportSize({ width: 375, height: 667 })
-  // Models is the first console entry, so the strip starts unscrolled.
   await page.goto('/models')
   await waitForStablePage(page)
 
-  const strip = page.locator('nav[data-handdrawn="navigation-strip"]')
-  const scroller = strip.locator('[aria-current="page"]').locator('..')
-  for (const item of await scroller.locator(':scope > *').all()) {
+  const trigger = page.locator('[aria-controls="console-mobile-navigation"]')
+  await trigger.click()
+  const drawer = page.locator('[data-console-mobile-navigation]')
+  const items = drawer.locator('[data-console-nav-item]')
+  expect(await items.count()).toBeGreaterThan(15)
+  for (const item of await items.all()) {
     expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(44)
   }
-  // More items than the phone shows: the far edge fades, the near edge does not.
-  await expect(strip.locator('[data-nav-scroll-fade="end"]')).toBeVisible()
-  await expect(strip.locator('[data-nav-scroll-fade="start"]')).toHaveCount(0)
-
-  // Loading the last entry's page centres it as far as the strip scrolls.
-  const last = scroller.locator(':scope > a').last()
+  for (const href of await drawer
+    .locator('a')
+    .evaluateAll((links) => links.map((link) => link.getAttribute('href'))))
+    expect(href).toMatch(/^\//)
+  await expect(
+    drawer.locator('[data-console-nav-item="models"]')
+  ).toHaveAttribute('aria-current', 'page')
+  await expect(drawer.locator('[data-console-nav-item="docs"]')).toBeDisabled()
+  const last = drawer.locator('a[data-console-nav-item]').last()
   const lastName = await last.getAttribute('data-console-nav-item')
   const lastHref = await last.getAttribute('href')
   expect(lastHref).toMatch(/^\//)
-  await page.goto(lastHref!)
+  await last.click()
+  // Settings group routes redirect to their default nested section.
+  await expect(page).toHaveURL(new RegExp(`${lastHref}(?:/|$)`))
   await waitForStablePage(page)
-  const active = strip.locator('[aria-current="page"]')
-  await expect(active).toHaveAttribute('data-console-nav-item', lastName!)
-  const activeBox = (await active.boundingBox())!
-  const stripBox = (await scroller.boundingBox())!
-  expect(activeBox.x).toBeGreaterThanOrEqual(stripBox.x)
-  expect(activeBox.x + activeBox.width).toBeLessThanOrEqual(
-    stripBox.x + stripBox.width
-  )
-  await expect(strip.locator('[data-nav-scroll-fade="start"]')).toBeVisible()
+  await expect(drawer).toHaveCount(0)
+  await trigger.click()
+  await expect(
+    drawer.locator(`[data-console-nav-item="${lastName}"]`)
+  ).toHaveAttribute('aria-current', 'page')
 })
 
-test('revealing mobile navigation shows the current page and preserves manual scrolling', async ({
+for (const theme of ['light', 'dark'] as const) {
+  test(`drawer labels and disabled explanations stay separate with enlarged English text (${theme})`, async ({
+    page,
+  }, testInfo) => {
+    await configureStablePage(page, { theme, locale: 'en' })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/dashboard')
+    await waitForStablePage(page)
+    await page.locator('[aria-controls="console-mobile-navigation"]').click()
+    const drawer = page.locator('[data-console-mobile-navigation]')
+    const docs = drawer.locator('[data-console-nav-item="docs"]')
+    await expect(docs).toBeDisabled()
+    await expect(docs).not.toHaveAttribute('aria-current')
+    await expect(
+      drawer.locator('[data-console-nav-item="dashboard"]')
+    ).toHaveAttribute('aria-current', 'page')
+
+    for (const fontSize of [16, 32]) {
+      await page.evaluate((size) => {
+        document.documentElement.style.fontSize = `${size}px`
+      }, fontSize)
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 })
+        await docs.scrollIntoViewIfNeeded()
+        const geometry = await docs.evaluate((button) => {
+          const box = button.getBoundingClientRect()
+          const ranges = [...button.querySelectorAll('span')]
+            .filter((span) => !span.querySelector('span'))
+            .flatMap((span) => {
+              const range = document.createRange()
+              range.selectNodeContents(span)
+              return [...range.getClientRects()].map((rect) => ({
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom,
+              }))
+            })
+          return {
+            ranges,
+            box: {
+              left: box.left,
+              right: box.right,
+              top: box.top,
+              bottom: box.bottom,
+            },
+            overflow: document.documentElement.scrollWidth - innerWidth,
+          }
+        })
+        const context = `${theme}, ${width}px, font ${fontSize}px`
+        expect(geometry.ranges.length, context).toBeGreaterThanOrEqual(2)
+        expect(geometry.overflow, context).toBeLessThanOrEqual(1)
+        for (const [index, rect] of geometry.ranges.entries()) {
+          expect(rect.left, context).toBeGreaterThanOrEqual(geometry.box.left)
+          expect(rect.right, context).toBeLessThanOrEqual(geometry.box.right)
+          expect(rect.top, context).toBeGreaterThanOrEqual(geometry.box.top)
+          expect(rect.bottom, context).toBeLessThanOrEqual(geometry.box.bottom)
+          for (const other of geometry.ranges.slice(index + 1)) {
+            const intersects =
+              Math.min(rect.right, other.right) -
+                Math.max(rect.left, other.left) >
+                1 &&
+              Math.min(rect.bottom, other.bottom) -
+                Math.max(rect.top, other.top) >
+                1
+            expect(intersects, context).toBe(false)
+          }
+        }
+      }
+    }
+    await page.screenshot({
+      path: testInfo.outputPath(`drawer-${theme}-font200.png`),
+    })
+    await page.keyboard.press('Escape')
+    await expect(drawer).toHaveCount(0)
+    await expect(
+      page.locator('[aria-controls="console-mobile-navigation"]')
+    ).toBeFocused()
+  })
+}
+
+test('mobile drawer preserves manual scrolling until it closes at the desktop boundary', async ({
   page,
 }) => {
   await configureStablePage(page, { theme: 'dark', user: { role: 100 } })
@@ -113,29 +197,21 @@ test('revealing mobile navigation shows the current page and preserves manual sc
   await page.goto('/users')
   await waitForStablePage(page)
 
-  const strip = page.locator('nav[data-handdrawn="navigation-strip"]')
-  const active = strip.locator('[aria-current="page"]')
-  const scroller = active.locator('..')
-  await expect(strip).toBeHidden()
+  const trigger = page.locator('[aria-controls="console-mobile-navigation"]')
+  const drawer = page.locator('[data-console-mobile-navigation]')
+  await expect(trigger).toBeHidden()
   await page.setViewportSize({ width: 768, height: 1024 })
-  await expect(strip).toBeVisible()
-  await expect
-    .poll(() =>
-      active.evaluate((element) => {
-        const item = element.getBoundingClientRect()
-        const viewport = element.parentElement!.getBoundingClientRect()
-        return item.left >= viewport.left && item.right <= viewport.right
-      })
-    )
-    .toBe(true)
-
+  await trigger.click()
+  const active = drawer.locator('[data-console-nav-item="user-management"]')
+  await expect(active).toHaveAttribute('aria-current', 'page')
+  await active.scrollIntoViewIfNeeded()
+  const scroller = drawer.locator('..')
   await scroller.hover()
-  await page.mouse.wheel(-2000, 0)
+  await page.mouse.wheel(0, 180)
   await expect
-    .poll(() => scroller.evaluate((element) => element.scrollLeft))
-    .toBe(0)
-  // A small resize while the strip remains visible must respect the user's
-  // position instead of jumping back to the active page.
+    .poll(() => scroller.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0)
+  const scrollTop = await scroller.evaluate((element) => element.scrollTop)
   await page.setViewportSize({ width: 760, height: 1024 })
   await page.evaluate(
     () =>
@@ -143,7 +219,19 @@ test('revealing mobile navigation shows the current page and preserves manual sc
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
       )
   )
-  expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(0)
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(
+    scrollTop
+  )
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await expect(drawer).toHaveCount(0)
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('[data-console-scroll-zone]')).toHaveCSS(
+    'overflow-y',
+    'auto'
+  )
+  await expect(
+    page.locator('aside a[data-console-nav-item="user-management"]')
+  ).toBeFocused()
 })
 
 test('dashboard content scrolls clear of the floating support button', async ({

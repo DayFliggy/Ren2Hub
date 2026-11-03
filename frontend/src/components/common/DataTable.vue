@@ -135,9 +135,9 @@ const checkboxClass = computed(() =>
     : 'h-4 w-4 accent-[var(--accent)]'
 )
 
-// Pads the 16-17px glyph to a 24px pointer target (WCAG 2.5.8); the negative
-// margin cancels the padding so the glyph and row height do not move.
-const checkboxTargetClass = '-m-1 inline-flex p-1 align-middle'
+// Selection targets occupy their own cell space, including on wide touchscreens.
+const checkboxTargetClass =
+  'data-table-selection-target -m-1 inline-flex items-center justify-center p-1 align-middle'
 
 const rowInteractive = computed(
   () => props.rowClickable || props.rowDblclickable
@@ -508,7 +508,7 @@ onBeforeUnmount(() => {
         :style="{ minWidth: tableLength(minTableWidth) }"
       >
         <colgroup>
-          <col v-if="selectable" style="width: 2.5rem" />
+          <col v-if="selectable" class="data-table-selection-column" />
           <col
             v-for="col in columns"
             :key="col.key"
@@ -517,7 +517,10 @@ onBeforeUnmount(() => {
         </colgroup>
         <thead class="bg-[var(--surface-table-header)]">
           <tr class="text-left text-xs text-[var(--text-secondary)]">
-            <td v-if="selectable" class="w-10 px-3 py-3">
+            <td
+              v-if="selectable"
+              class="data-table-selection-cell px-3 py-3 text-center"
+            >
               <label :class="checkboxTargetClass">
                 <input
                   type="checkbox"
@@ -571,14 +574,13 @@ onBeforeUnmount(() => {
         :style="{ minWidth: tableLength(minTableWidth) }"
       >
         <colgroup>
-          <col v-if="selectable" style="width: 2.5rem" />
+          <col v-if="selectable" class="data-table-selection-column" />
           <col
             v-for="col in columns"
             :key="col.key"
             :style="col.width ? { width: tableLength(col.width) } : undefined"
           />
         </colgroup>
-
         <!-- The visible header is a separate non-scrolling table. This zero-height
              semantic header keeps column associations within the body table. -->
         <thead class="data-table-semantic-head">
@@ -635,7 +637,7 @@ onBeforeUnmount(() => {
             >
               <td
                 v-if="selectable"
-                class="px-3 py-3"
+                class="data-table-selection-cell px-3 py-3"
                 @click.stop
                 @dblclick.stop
               >
@@ -712,6 +714,69 @@ onBeforeUnmount(() => {
 /* Row divider: dashed ledger line by day, solid hairline by night (tokens). */
 .row-divider {
   border-bottom: 1px var(--row-divider-style, dashed) var(--row-divider-color);
+}
+
+.data-table-selection-column {
+  width: 2.75rem;
+}
+
+@media (max-width: 1023px), (pointer: coarse) {
+  .data-table-selection-column {
+    width: 44px;
+  }
+  .data-table-selection-cell {
+    padding: 0;
+  }
+  .data-table-selection-target {
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* B1 Studio Dark Mode Table Refinements */
+html.dark .data-table-shell {
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-solid);
+  box-shadow: var(--card-shadow, var(--elevation-1));
+}
+
+html.dark .data-table-header-clip {
+  background: var(--surface-container-high) !important;
+  border-bottom: 1px solid var(--outline) !important;
+}
+
+html.dark .data-table-header-clip thead td {
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+  font-size: 0.6875rem !important;
+  letter-spacing: 0.06em !important;
+  font-family: inherit !important;
+}
+
+html.dark .data-table-body-viewport tbody > tr {
+  border-bottom: 1px solid rgba(224, 232, 246, 0.08) !important;
+}
+
+html.dark .data-table-body-viewport tr:hover {
+  background: var(--state-hover-layer) !important;
+}
+
+/* Type badge neutralization (from B2/Studio study):
+   Neutralizes auxiliary non-status tags to avoid visual clutter,
+   while operational status chips retain their strict status semantic colors. */
+html.dark [data-key-page] td[headers$='-type'] :deep([data-handdrawn='chip']) {
+  background: var(--surface-muted) !important;
+  color: var(--text-secondary) !important;
+  border-left-color: var(--border-default) !important;
+}
+
+/* Action icons in table cells: calm at rest, responsive on hover */
+html.dark td[headers$='-actions'] button:not(:hover) {
+  color: var(--text-secondary);
 }
 
 .data-table-body-viewport {

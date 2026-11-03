@@ -282,44 +282,52 @@ onMounted(() => void alignLatest())
     class="usage-heatmap relative min-w-0"
     :data-usage-layout="period"
   >
-    <div v-if="period === 'month'" class="usage-month-calendar">
-      <div class="usage-calendar-weekdays" aria-hidden="true">
-        <span v-for="(weekday, index) in weekdays" :key="index">
-          {{ weekday }}
-        </span>
-      </div>
-      <div class="usage-month-grid" role="group" :aria-label="gridLabel">
-        <button
-          v-for="{ cell, column, row } in visibleCells"
-          :key="cell.date"
-          type="button"
-          class="usage-month-cell focus-ring"
-          :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
-          :tabindex="focusDate === cell.date ? 0 : -1"
-          :aria-label="cellLabel(cell)"
-          :aria-describedby="
-            tooltip?.date === cell.date ? tooltipId : undefined
-          "
-          :data-usage-date="cell.date"
-          :data-usage-level="cell.level"
-          :data-usage-uncovered="!cell.covered || undefined"
-          @focus="onCellSelect($event, cell)"
-          @click="onCellSelect($event, cell)"
-          @blur="hideTooltip(cell.date)"
-          @pointerenter="showTooltip($event, cell)"
-          @pointerleave="hideTooltip(cell.date, $event)"
-          @keydown="onCellKeydown($event, cell)"
-        >
-          {{ dayNumber(cell.date) }}
-        </button>
-        <span
-          v-for="placeholder in monthPlaceholders"
-          :key="`placeholder-${placeholder.key}`"
-          class="usage-month-placeholder"
-          :style="{ gridColumn: placeholder.column, gridRow: placeholder.row }"
-          aria-hidden="true"
-          data-usage-placeholder
-        />
+    <div
+      v-if="period === 'month'"
+      class="usage-month-scroll max-w-full overflow-x-auto overscroll-x-contain"
+    >
+      <div class="usage-month-calendar">
+        <div class="usage-calendar-weekdays" aria-hidden="true">
+          <span v-for="(weekday, index) in weekdays" :key="index">
+            {{ weekday }}
+          </span>
+        </div>
+        <div class="usage-month-grid" role="group" :aria-label="gridLabel">
+          <button
+            v-for="{ cell, column, row } in visibleCells"
+            :key="cell.date"
+            type="button"
+            class="usage-month-cell focus-ring"
+            :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
+            :tabindex="focusDate === cell.date ? 0 : -1"
+            :aria-label="cellLabel(cell)"
+            :aria-describedby="
+              tooltip?.date === cell.date ? tooltipId : undefined
+            "
+            :data-usage-date="cell.date"
+            :data-usage-level="cell.level"
+            :data-usage-uncovered="!cell.covered || undefined"
+            @focus="onCellSelect($event, cell)"
+            @click="onCellSelect($event, cell)"
+            @blur="hideTooltip(cell.date)"
+            @pointerenter="showTooltip($event, cell)"
+            @pointerleave="hideTooltip(cell.date, $event)"
+            @keydown="onCellKeydown($event, cell)"
+          >
+            {{ dayNumber(cell.date) }}
+          </button>
+          <span
+            v-for="placeholder in monthPlaceholders"
+            :key="`placeholder-${placeholder.key}`"
+            class="usage-month-placeholder"
+            :style="{
+              gridColumn: placeholder.column,
+              gridRow: placeholder.row,
+            }"
+            aria-hidden="true"
+            data-usage-placeholder
+          />
+        </div>
       </div>
     </div>
     <div
@@ -466,6 +474,18 @@ onMounted(() => void alignLatest())
    Quarter columns stretch inside the grid instead and need no container. */
 .usage-heatmap[data-usage-layout='year'] {
   container-type: inline-size;
+}
+
+.usage-month-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+.usage-month-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.usage-month-scroll::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 4px;
 }
 
 .usage-month-calendar {
@@ -651,6 +671,15 @@ onMounted(() => void alignLatest())
 .usage-dense-cell:focus-visible {
   position: relative;
   z-index: 1;
+}
+
+.usage-month-cell:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.usage-dense-cell:hover,
+.usage-dense-cell:focus-visible {
   transform: translateY(-1px);
 }
 

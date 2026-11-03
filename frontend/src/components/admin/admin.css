@@ -234,10 +234,40 @@
   .admin-field input:not([type='checkbox']),
   .admin-field select,
   .admin-input {
-    min-height: 2.625rem;
+    min-height: 2.75rem;
   }
   .admin-table th,
   .admin-table td {
     padding: 0.5625rem 0.5rem;
   }
+}
+
+/* B1 Studio Dark Mode Refinements for Admin Surfaces */
+html.dark .admin-table {
+  border-color: var(--outline-variant);
+}
+
+html.dark .admin-table th {
+  background: var(--surface-table-header);
+  color: var(--text-secondary);
+}
+
+html.dark .admin-table td {
+  border-bottom-color: var(--outline-variant);
+}
+
+html.dark .admin-table tbody tr:hover td {
+  background: var(--state-hover-layer);
+}
+
+html.dark .admin-table tbody tr[data-active='true'] td {
+  background: var(--state-press-layer);
+}
+
+html.dark .admin-field input:focus-visible,
+html.dark .admin-field select:focus-visible,
+html.dark .admin-field textarea:focus-visible,
+html.dark .admin-input:focus-visible,
+html.dark .admin-tabs a:focus-visible {
+  box-shadow: var(--focus-halo);
 }

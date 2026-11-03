@@ -31,7 +31,7 @@ const ready = ref(false) // 图标就绪前画布透明（下方是干净页面�
 let scene: MapScene | null = null
 let io: IntersectionObserver | null = null
 
-watch(resolvedTheme, (theme) => scene?.setTheme(theme))
+watch(resolvedTheme, (theme) => scene?.setTheme(theme), { flush: 'post' })
 
 /** Reads the first rendered element matching `selector` in canvas coordinates. */
 function readRegion(selector: string): SceneRegion | null {

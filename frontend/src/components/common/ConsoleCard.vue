@@ -91,3 +91,9 @@ const sketch = computed(() => props.variant === 'sketch')
     </div>
   </section>
 </template>
+
+<style scoped>
+html.dark .stamp-watermark-art {
+  display: none !important;
+}
+</style>

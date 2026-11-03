@@ -391,6 +391,7 @@ onBeforeUnmount(() => {
               class="inline-flex h-11 w-11 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
               :aria-label="t('keys.routing')"
               :title="t('keys.routing')"
+              data-handdrawn="control"
             >
               <svg
                 width="16"
@@ -591,5 +592,13 @@ onBeforeUnmount(() => {
   .key-list-cards {
     display: none;
   }
+}
+
+/* B1 Studio: type badge neutralization to prevent visual clutter against status chips */
+html.dark [data-key-page] td[headers$='-type'] :deep([data-handdrawn='chip']),
+html.dark [data-key-page] .key-list-cards :deep([data-handdrawn='chip']) {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  border-left-color: var(--border-default);
 }
 </style>

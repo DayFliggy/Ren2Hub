@@ -68,7 +68,9 @@ export class DotGlobe {
   /** 语义令牌 → 画布色。主题切换后由宿主再调一次。 */
   refreshPalette(): void {
     this.palette = this.resolvePalette()
-    if (this.reduced) this.drawFrame()
+    // Theme snapshots must include the new palette even while the browser's
+    // frame loop is paused for a view transition.
+    this.drawFrame()
   }
 
   private resolvePalette(): Palette {

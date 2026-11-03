@@ -561,4 +561,13 @@ function onFocusOut(event: FocusEvent) {
     padding: 0.8rem 0;
   }
 }
+
+html.dark .matrix-baseline-prices + .matrix-baseline-prices {
+  border-top: 1px solid var(--border-subtle);
+}
+@container model-market (max-width: 720px) {
+  html.dark .matrix-mobile-offer {
+    border-bottom-style: solid;
+  }
+}
 </style>

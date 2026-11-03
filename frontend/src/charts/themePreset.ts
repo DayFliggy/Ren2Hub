@@ -55,7 +55,7 @@ export function lineMood(p: ChartPalette): LineMoodOptions {
       smooth: false,
       symbol: 'circle',
       symbolSize: 5,
-      lineStyle: { width: 2.5 },
+      lineStyle: { width: 2.5, shadowBlur: 0, shadowColor: 'transparent' },
     },
     splitLine: {
       lineStyle: { type: [7, 3, 2, 5], color: p.borderSubtle },

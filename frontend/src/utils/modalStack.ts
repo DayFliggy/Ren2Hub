@@ -30,13 +30,25 @@ export function isTopmostModalDialog(dialog: symbol): boolean {
  * Each holder releases only a lock it took, once.
  */
 const scrollLockHolders = new Set<symbol>()
-let scrollLockOverflow = ''
+const scrollLockStyles = new Map<HTMLElement, string>()
+let inertApp: { element: HTMLElement; previous: boolean } | null = null
 
 export function lockBodyScroll(holder: symbol): void {
   if (scrollLockHolders.has(holder)) return
   if (scrollLockHolders.size === 0) {
-    scrollLockOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const surfaces = [
+      document.body,
+      ...document.querySelectorAll<HTMLElement>('[data-console-scroll-zone]'),
+    ]
+    for (const surface of surfaces) {
+      scrollLockStyles.set(surface, surface.style.overflow)
+      surface.style.overflow = 'hidden'
+    }
+    const app = document.getElementById('app')
+    if (app) {
+      inertApp = { element: app, previous: app.inert }
+      app.inert = true
+    }
   }
   scrollLockHolders.add(holder)
 }
@@ -44,6 +56,10 @@ export function lockBodyScroll(holder: symbol): void {
 export function unlockBodyScroll(holder: symbol): void {
   if (!scrollLockHolders.delete(holder)) return
   if (scrollLockHolders.size === 0) {
-    document.body.style.overflow = scrollLockOverflow
+    for (const [surface, overflow] of scrollLockStyles)
+      surface.style.overflow = overflow
+    scrollLockStyles.clear()
+    if (inertApp) inertApp.element.inert = inertApp.previous
+    inertApp = null
   }
 }

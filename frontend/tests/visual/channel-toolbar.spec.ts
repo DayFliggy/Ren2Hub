@@ -142,16 +142,18 @@ for (const theme of [
       new Set([32])
     )
 
-    // Night pencil-control would otherwise force the 9% outline on the chip.
-    const border = await page
-      .getByRole('combobox', { name: '渠道状态' })
-      .evaluate((element) => getComputedStyle(element).borderTopStyle)
-    expect(border).toBe('dashed')
+    // The ledger keeps dashed facets; Studio uses a solid semantic outline.
+    const status = page.getByRole('combobox', { name: '渠道状态' })
+    await expect(status).toHaveCSS(
+      'border-top-style',
+      theme === 'dark' ? 'solid' : 'dashed'
+    )
     if (theme === 'dark') {
-      const color = await page
-        .getByRole('combobox', { name: '渠道状态' })
-        .evaluate((element) => getComputedStyle(element).borderTopColor)
-      expect(color).toBe('rgba(152, 164, 192, 0.18)')
+      const outline = await status.evaluate((element) =>
+        getComputedStyle(element).getPropertyValue('--outline').trim()
+      )
+      expect(outline).not.toBe('')
+      await expect(status).toHaveCSS('border-top-color', outline)
     }
     await assertNoHorizontalOverflow(page)
   })

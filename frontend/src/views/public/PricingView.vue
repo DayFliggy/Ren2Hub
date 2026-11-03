@@ -333,6 +333,12 @@ onBeforeUnmount(() => controller?.abort())
   align-content: start;
   gap: 0.75rem;
 }
+:global(html.dark .public-pricing-card) {
+  border-color: var(--outline-variant);
+  border-radius: var(--shape-card);
+  background: var(--studio-card-bg, var(--surface-solid));
+  box-shadow: var(--elevation-1);
+}
 h2 {
   font-weight: 600;
   overflow-wrap: anywhere;

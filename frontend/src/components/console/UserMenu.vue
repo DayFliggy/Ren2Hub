@@ -55,6 +55,7 @@ onBeforeUnmount(() => {
   <div ref="root" class="relative">
     <button
       type="button"
+      data-user-menu-trigger
       class="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold transition-shadow hover:ring-2 hover:ring-[var(--border-strong)] focus-ring"
       style="background: var(--accent-soft); color: var(--accent-text)"
       :aria-label="t('nav.profile')"
@@ -67,7 +68,7 @@ onBeforeUnmount(() => {
 
     <div
       v-if="open"
-      class="absolute right-0 top-12 z-40 w-56 overflow-hidden rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] animate-scale-in"
+      class="user-menu-panel absolute right-0 top-full z-40 mt-1 w-56 rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] animate-scale-in"
       data-handdrawn="menu"
     >
       <button
@@ -116,3 +117,12 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.user-menu-panel {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 5rem - env(safe-area-inset-top));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+</style>

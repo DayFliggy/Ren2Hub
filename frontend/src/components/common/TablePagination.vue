@@ -128,7 +128,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
 
     <div
       v-if="variant === 'default' && pageCount > 1"
-      class="hidden items-center gap-1 sm:flex"
+      class="hidden flex-wrap items-center gap-1 sm:flex"
     >
       <button
         type="button"
@@ -199,7 +199,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
     </div>
 
     <div
-      class="flex items-center gap-3 text-[var(--text-tertiary)]"
+      class="flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-2 text-[var(--text-tertiary)]"
       :class="
         variant === 'default'
           ? 'justify-between sm:ml-auto sm:justify-start'
@@ -216,7 +216,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
         :label="t('common.itemsPerPage')"
         direction="up"
         size="sm"
-        class="w-32"
+        class="w-auto min-w-0 max-w-full sm:w-32"
       />
     </div>
 
@@ -231,7 +231,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
       >
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+          class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
           :disabled="page <= 1"
           :aria-label="t('common.prevPage')"
           @click="emit('update:page', page - 1)"
@@ -258,7 +258,7 @@ const pageItems = computed<Array<number | '…'>>(() => {
         </span>
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
+          class="flex h-11 w-11 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors enabled:hover:bg-[var(--state-hover-layer)] enabled:hover:text-[var(--text-primary)] disabled:opacity-40"
           :disabled="page >= pageCount"
           :aria-label="t('common.nextPage')"
           @click="emit('update:page', page + 1)"

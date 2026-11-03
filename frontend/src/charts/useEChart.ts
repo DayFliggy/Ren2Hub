@@ -17,6 +17,7 @@ import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsCoreOption } from 'echarts/core'
 
+import { useTheme } from '@/composables/useTheme'
 import { chartPalette, type ChartPalette } from './palette'
 
 echarts.use([
@@ -50,24 +51,33 @@ export function useEChart(
   let chart: echarts.ECharts | null = null
   let chartTarget: HTMLElement | null = null
   let resizeObserver: ResizeObserver | null = null
-  let themeObserver: MutationObserver | null = null
   let renderedScale = 1
+  const { resolvedTheme } = useTheme()
 
   function layoutScale() {
     const fontSize = getComputedStyle(document.documentElement).fontSize
     return fontSize ? Number.parseFloat(fontSize) / 16 : 1
   }
 
-  function render() {
+  function render(opts?: { isThemeUpdate?: boolean }) {
     if (!chart) return
     renderedScale = layoutScale()
     const option = buildOption(chartPalette(), renderedScale)
-    chart.setOption(
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? { ...option, animation: false }
-        : option,
-      true
-    )
+    const isThemeUpdate = Boolean(opts?.isThemeUpdate)
+    const prefersReducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    ).matches
+
+    if (isThemeUpdate) {
+      // Incremental theme update: do not reset legend/interaction state, flush immediately without animation
+      chart.setOption({ ...option, animation: false }, false)
+    } else {
+      // Data or scale updates preserve existing full replace semantics
+      chart.setOption(
+        prefersReducedMotion ? { ...option, animation: false } : option,
+        true
+      )
+    }
   }
 
   /**
@@ -84,11 +94,18 @@ export function useEChart(
     watch(watchSources, () => render())
   }
 
+  // Watch resolvedTheme post-flush so documentElement tokens and classes are applied.
+  watch(
+    resolvedTheme,
+    () => {
+      render({ isThemeUpdate: true })
+    },
+    { flush: 'post' }
+  )
+
   function detach() {
     resizeObserver?.disconnect()
     resizeObserver = null
-    themeObserver?.disconnect()
-    themeObserver = null
     chart?.dispose()
     chart = null
     chartTarget = null
@@ -109,15 +126,6 @@ export function useEChart(
       if (layoutScale() !== renderedScale) render()
     })
     resizeObserver.observe(target)
-
-    // data-theme changes only on light/dark flips (useTheme), unlike `class`,
-    // which any route/overlay toggle can touch — observing it avoids full
-    // chart rebuilds on unrelated class churn.
-    themeObserver = new MutationObserver(() => render())
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    })
   }
 
   onMounted(() => {

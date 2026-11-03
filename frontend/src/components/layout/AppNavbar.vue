@@ -236,6 +236,30 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+:global(html.dark .app-navbar[data-scrolled='true']) {
+  background: var(--nav-surface);
+  border-bottom-color: var(--nav-border);
+  box-shadow: var(--nav-shadow);
+  -webkit-backdrop-filter: blur(28px) saturate(130%);
+  backdrop-filter: blur(28px) saturate(130%);
+}
+
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :global(html.dark .app-navbar[data-scrolled='true']) {
+    background: var(--nav-solid);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :global(html.dark .app-navbar[data-scrolled='true']) {
+    background: var(--nav-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 @media (max-width: 767px) {
   .app-navbar {
     padding-top: env(safe-area-inset-top);

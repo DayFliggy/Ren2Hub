@@ -7,6 +7,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
 import TopNavMenu from '@/components/console/TopNavMenu.vue'
 import { getVisibleTopNavItems } from '@/constants/navigation/topNav'
+import { consoleNavGroups } from '@/constants/navigation/consoleNav'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
@@ -28,7 +29,10 @@ async function setup(role: number, capabilities: Record<string, string>) {
       ['/activity', 'activity'],
       ['/dashboard', 'dashboard'],
       ['/ops', 'ops-monitor'],
-      ['/keys', 'keys'],
+      ...consoleNavGroups
+        .flatMap((group) => group.items)
+        .filter((item) => item.route)
+        .map((item) => [`/console/${item.route}`, item.route!]),
     ].map(([path, name]) => ({
       path: path!,
       name: name!,
@@ -55,7 +59,7 @@ describe('top navigation', () => {
     expect(desktop.findAll('button')[0]!.attributes()).toHaveProperty(
       'disabled'
     )
-    for (const surface of ['desktop', 'mobile'] as const) {
+    for (const surface of ['desktop', 'drawer'] as const) {
       expect(
         getVisibleTopNavItems({
           isAdmin: true,
@@ -97,10 +101,10 @@ describe('top navigation', () => {
       getVisibleTopNavItems({
         isAdmin: true,
         isRoot: true,
-        surface: 'mobile',
+        surface: 'drawer',
         featureStatus: live,
       }).map((item) => item.name)
-    ).toEqual(['activities', 'dashboard', 'ops', 'console'])
+    ).toEqual(['activities', 'dashboard', 'ops', 'console', 'community'])
   })
 
   it('fails closed when the admin capability is disabled', () => {
@@ -158,8 +162,8 @@ describe('top navigation', () => {
     view.unmount()
   })
 
-  it('renders the mobile strip from the same definition', async () => {
-    const options = await setup(100, { admin: 'live' })
+  it('opens the grouped drawer with the same primary navigation definition', async () => {
+    const options = await setup(100, { admin: 'live', api_tokens: 'live' })
     const topbar = mount(ConsoleTopbar, {
       global: {
         ...options.global,
@@ -169,18 +173,35 @@ describe('top navigation', () => {
           CommandPaletteModal: true,
           LanguageSelector: true,
           ThemeSwitcher: true,
+          teleport: true,
         },
       },
     })
     await flushPromises()
-    const strip = topbar.get('[data-handdrawn="navigation-strip"]')
-    expect(strip.findAll('a').map((item) => item.text())).toEqual([
+    const trigger = topbar.get('[aria-controls="console-mobile-navigation"]')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    const drawer = topbar.get('[data-console-mobile-navigation]')
+    const primary = drawer.get('.drawer-section')
+    expect(primary.findAll('a').map((item) => item.text())).toEqual([
       '活动',
       '仪表盘',
       '运维监控',
       '控制台',
     ])
-    expect(strip.text()).not.toContain('炼金室')
-    expect(strip.get('[aria-current="page"]').attributes('href')).toBe('/ops')
+    expect(drawer.text()).not.toContain('炼金室')
+    expect(primary.get('[aria-current="page"]').attributes('href')).toBe('/ops')
+    expect(
+      drawer.get('[data-console-nav-item="docs"]').attributes('disabled')
+    ).toBeDefined()
+    expect(
+      drawer.get('[data-console-nav-item="docs"]').attributes('aria-current')
+    ).toBeUndefined()
+    await drawer.get('[data-console-nav-item="keys"]').trigger('click')
+    await flushPromises()
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    topbar.unmount()
   })
 })

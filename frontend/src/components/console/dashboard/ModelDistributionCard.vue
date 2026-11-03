@@ -196,7 +196,7 @@ watch(
 
     <div
       v-if="loading"
-      class="grid grow gap-4 lg:gap-5 md:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:grid-cols-[minmax(13rem,15rem)_minmax(0,1fr)]"
+      class="model-distribution-body grid grow gap-4 lg:gap-5 md:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:grid-cols-[minmax(13rem,15rem)_minmax(0,1fr)]"
     >
       <div
         class="h-52 animate-pulse rounded-full bg-[var(--surface-muted)] lg:h-60"
@@ -219,7 +219,7 @@ watch(
 
     <div
       v-else
-      class="grid grow gap-4 lg:gap-5 md:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:grid-cols-[minmax(13rem,15rem)_minmax(0,1fr)]"
+      class="model-distribution-body grid grow gap-4 lg:gap-5 md:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:grid-cols-[minmax(13rem,15rem)_minmax(0,1fr)]"
     >
       <!--
         Donut sized to fill its column rather than sit in a fixed box. min-w-0:
@@ -375,3 +375,17 @@ watch(
     </div>
   </ConsoleCard>
 </template>
+
+<style scoped>
+[data-model-distribution-card] {
+  container: model-distribution / inline-size;
+}
+
+/* Preserve readable table space when a sidebar or enlarged text reduces the
+   card width, even though the viewport still matches a desktop breakpoint. */
+@container model-distribution (max-width: 32rem) {
+  .model-distribution-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

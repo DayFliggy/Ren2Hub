@@ -345,6 +345,11 @@ onMounted(load)
   padding: 0.35rem 1.1rem 0;
   border-top: 1px dashed var(--border-subtle);
 }
+html.dark .market-type-tabs {
+  border-top: 1px solid var(--border-subtle);
+  padding: 0.5rem 1.1rem;
+  gap: 0.5rem;
+}
 .market-type-tab {
   position: relative;
   padding: 0.6rem 0 0.7rem;
@@ -374,6 +379,33 @@ onMounted(load)
   height: 2px;
   background: var(--accent);
   border-radius: 50%;
+}
+
+html.dark .market-type-tab {
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--shape-control);
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+html.dark .market-type-tab::before {
+  display: none;
+}
+html.dark .market-type-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+html.dark .market-type-tab.active {
+  background: var(--studio-control-thumb);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: var(--studio-control-thumb-shadow);
+  color: var(--text-primary);
+}
+html.dark .market-type-tab.active::after {
+  display: none;
 }
 .market-result-meta {
   display: flex;

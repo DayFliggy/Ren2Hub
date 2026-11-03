@@ -182,10 +182,14 @@ for (const theme of [
       await page.goto('/channels', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
 
+      const menuTrigger = page.locator(
+        '[aria-controls="console-mobile-navigation"]'
+      )
+      if (viewport === 'mobile') await menuTrigger.click()
       const navigation =
         viewport === 'desktop'
           ? page.locator('[data-handdrawn="navigation"]')
-          : page.getByRole('navigation', { name: '控制台' })
+          : page.locator('[data-console-mobile-navigation]')
       await expect(navigation).toBeVisible()
       await expect(navigation).toHaveCSS('user-select', 'none')
       await expect(
@@ -194,6 +198,11 @@ for (const theme of [
       await expect(
         navigation.locator('[data-console-nav-item="plan-management"]')
       ).toHaveCount(0)
+      if (viewport === 'mobile') {
+        await page.keyboard.press('Escape')
+        await expect(navigation).toHaveCount(0)
+        await expect(menuTrigger).toBeFocused()
+      }
 
       await page
         .locator('[aria-label="测试 Anthropic 渠道的响应"]:visible')
@@ -286,6 +295,8 @@ for (const theme of [
       await assertNoHorizontalOverflow(page)
       await footer.getByRole('button', { name: '关闭' }).click()
       await expect(channelDialog).toHaveCount(0)
+      // Check the resting page after transient test-result notifications leave.
+      await expect(page.locator('[data-handdrawn="toast"]')).toHaveCount(0)
       await assertInteractiveCentersVisible(page)
     })
   }

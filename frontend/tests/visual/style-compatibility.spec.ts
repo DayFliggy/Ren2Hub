@@ -52,7 +52,13 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       const heading = page.locator('[data-handdrawn="page-hero"] h1')
       await expect(heading).toHaveCSS(
         'line-height',
-        width < 1024 ? '45px' : '48px'
+        theme === 'dark'
+          ? width < 1024
+            ? '36.25px'
+            : '42.5px'
+          : width < 1024
+            ? '45px'
+            : '48px'
       )
     }
   })
@@ -145,31 +151,37 @@ for (const manualScroll of [false, true]) {
     })
     try {
       await page.goto('/system-settings', { waitUntil: 'domcontentloaded' })
+      await page.locator('[aria-controls="console-mobile-navigation"]').click()
       const active = page.locator(
-        'nav[data-handdrawn="navigation-strip"] [aria-current="page"]'
+        '[data-console-mobile-navigation] [data-console-nav-item="system-settings"]'
       )
       await expect(active).toBeVisible()
+      await expect(active).toHaveAttribute('aria-current', 'page')
       await expect
         .poll(() => page.evaluate(() => document.fonts.status))
         .toBe('loading')
-      const scroller = active.locator('..')
+      const scroller = page
+        .locator('[data-console-mobile-navigation]')
+        .locator('..')
       if (manualScroll) {
-        await scroller.hover()
-        await page.mouse.wheel(-2000, 0)
-        await expect
-          .poll(() => scroller.evaluate((element) => element.scrollLeft))
-          .toBe(0)
+        await scroller.evaluate((element) => {
+          element.scrollTop = 0
+        })
+      } else {
+        await active.scrollIntoViewIfNeeded()
       }
       releaseFonts()
       await waitForStablePage(page)
       if (manualScroll) {
-        expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(0)
+        expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
       } else {
         await expect
           .poll(() =>
             active.evaluate((element) => {
               const item = element.getBoundingClientRect()
-              const viewport = element.parentElement!.getBoundingClientRect()
+              const viewport = element
+                .closest('[data-console-mobile-navigation]')!
+                .parentElement!.getBoundingClientRect()
               return item.left >= viewport.left && item.right <= viewport.right
             })
           )

@@ -29,7 +29,7 @@ describe('canvas theme', () => {
   it('falls back instead of leaking an unsupported colour into canvas math', () => {
     document.documentElement.style.setProperty('--accent', 'not-a-color')
 
-    expect(getCanvasTheme('dark').accent).toBe('#e2bc55')
+    expect(getCanvasTheme('dark').accent).toBe('#e4c06b')
   })
 
   it('keeps the protected light canvas palette independent from night tokens', () => {

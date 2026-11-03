@@ -89,19 +89,14 @@ onBeforeUnmount(() => {
     <div v-for="group in navGroups" :key="group.name" class="relative shrink-0">
       <button
         type="button"
-        class="top-nav-item flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all focus-ring"
+        class="top-nav-item flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors focus-ring"
         :class="[
           group.disabled
             ? 'cursor-not-allowed opacity-50'
             : isActive(group)
-              ? ''
+              ? 'top-nav-item--active'
               : 'hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
         ]"
-        :style="
-          isActive(group) && !group.disabled
-            ? 'background:var(--accent);color:var(--accent-contrast)'
-            : 'color:var(--text-secondary)'
-        "
         :disabled="group.disabled"
         :title="group.disabled ? t('nav.comingSoon') : undefined"
         :aria-expanded="group.children ? openGroup === group.name : undefined"
@@ -173,6 +168,41 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.top-nav-item {
+  color: var(--text-secondary);
+}
+.top-nav-item--active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+html.dark .top-nav-item {
+  min-height: 40px;
+  border-radius: var(--shape-control);
+}
+html.dark .top-nav-item--active {
+  position: relative;
+  color: var(--accent-text);
+  background: linear-gradient(
+    180deg,
+    rgba(228, 192, 107, 0.13),
+    rgba(228, 192, 107, 0.06)
+  );
+  box-shadow: inset 0 1px 0 rgba(246, 220, 162, 0.1);
+}
+html.dark .top-nav-item--active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  inset-inline: 30%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+@media (pointer: coarse) {
+  .top-nav-item {
+    min-height: 44px;
+  }
+}
 /* Labels stay on one line (see the width tiers in ConsoleTopbar). In the
    narrowest bar the widest menu only fits with tighter pills. */
 @container console-topbar (max-width: 57.4375rem) {

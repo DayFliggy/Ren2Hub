@@ -51,7 +51,7 @@ onMounted(() => load())
               :to="{ name: tab.key, params: { section: tab.section } }"
               role="tab"
               :aria-selected="activeTab === tab.key"
-              class="flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-all focus-ring sm:min-h-8 sm:text-sm"
+              class="settings-domain-tab flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-ring lg:min-h-10 sm:text-sm"
               :class="
                 activeTab === tab.key
                   ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)] shadow-none'
@@ -71,3 +71,11 @@ onMounted(() => load())
     </main>
   </div>
 </template>
+
+<style scoped>
+@media (pointer: coarse) {
+  .settings-domain-tab {
+    min-height: 2.75rem;
+  }
+}
+</style>

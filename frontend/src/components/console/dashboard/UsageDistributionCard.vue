@@ -184,7 +184,9 @@ const topDaySummary = computed(() => {
           </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div
+          class="usage-controls flex min-w-0 max-w-full flex-wrap items-center gap-2"
+        >
           <SegmentedToggle
             :model-value="period"
             :options="periodOptions"
@@ -274,6 +276,17 @@ const topDaySummary = computed(() => {
 </template>
 
 <style scoped>
+[data-usage-distribution] {
+  container: usage-card / inline-size;
+}
+
+@media (max-width: 639px) {
+  /* Keep both groups together when space permits without shrinking targets. */
+  .usage-controls :deep([data-handdrawn='segments']) {
+    column-gap: 1px;
+  }
+}
+
 /*
  * From sm every period fits one stage height (month 169px, quarter 154px, year
  * within it), so switching periods keeps the card height; from xl this also
@@ -284,6 +297,23 @@ const topDaySummary = computed(() => {
     min-height: 10.625rem;
     /* The month calendar sizes its cells from the stage width. */
     container-type: inline-size;
+  }
+
+  /* A desktop sidebar and enlarged text can leave a phone-sized card.
+     Stack the calendar and analytics based on that available width. */
+  @container usage-card (max-width: 30rem) {
+    .usage-stage {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    [data-usage-analytics] {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      max-width: none;
+      border-left: 0;
+      border-top: 1px solid var(--border-subtle);
+      padding-left: 0;
+      padding-top: 0.75rem;
+    }
   }
 }
 

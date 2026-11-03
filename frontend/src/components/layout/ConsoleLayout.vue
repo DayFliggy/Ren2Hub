@@ -3,7 +3,6 @@ import { computed, onBeforeMount, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
-import ConsoleNavStrip from '@/components/console/ConsoleNavStrip.vue'
 import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
 import { useAppStore } from '@/stores'
 import '@/styles/console.css'
@@ -62,7 +61,6 @@ onBeforeUnmount(() => {
         :class="{ scrolling: isScrolling, 'no-page-scroll': noPageScroll }"
         @scroll.passive="onScroll"
       >
-        <ConsoleNavStrip />
         <div
           v-if="isDisabled"
           class="border-b border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-4 py-2 text-center text-xs font-semibold text-[var(--status-warning-text)] sm:px-6 lg:px-8"

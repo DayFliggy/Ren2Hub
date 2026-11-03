@@ -43,7 +43,7 @@ export interface TopNavAccessContext {
   isAdmin: boolean
   checkinEnabled?: boolean
   isRoot?: boolean
-  surface: 'desktop' | 'mobile'
+  surface: 'desktop' | 'mobile' | 'drawer'
   featureStatus: (feature: string) => FeatureStatus
 }
 
@@ -82,7 +82,7 @@ export function getVisibleTopNavItems(
       (item) =>
         (item.access !== 'admin' || context.isAdmin) &&
         (item.access !== 'root' || context.isRoot === true) &&
-        (context.surface === 'desktop' || !item.desktopOnly)
+        (context.surface !== 'mobile' || !item.desktopOnly)
     )
     .map((item) => ({
       ...item,

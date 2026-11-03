@@ -257,4 +257,11 @@ const channelCount = computed(
     transform: none;
   }
 }
+
+html.dark .market-quote-lane {
+  border-top: 1px solid var(--border-subtle);
+}
+html.dark .market-card-footer {
+  border-top: 1px solid var(--border-subtle);
+}
 </style>

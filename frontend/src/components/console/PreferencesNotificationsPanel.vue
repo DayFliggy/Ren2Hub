@@ -36,7 +36,7 @@ const { t, locale } = useI18n()
 const toast = useToast()
 const auth = useAuthStore()
 const chooseLocale = useLocaleChoice()
-const { preference: themeMode } = useTheme()
+const { preference: themeMode, setThemePreference } = useTheme()
 const { hidden: balanceHidden } = useBalanceVisibility()
 
 const readonlyNotification: NotificationSettings = {
@@ -226,8 +226,8 @@ function changeLocale(value: string): void {
   if (isLocaleCode(value)) void chooseLocale(value)
 }
 
-function changeTheme(value: string): void {
-  themeMode.value = value as ThemePreference
+async function changeTheme(value: string): Promise<void> {
+  await setThemePreference(value as ThemePreference, { animate: true })
 }
 </script>
 
@@ -616,6 +616,16 @@ function changeTheme(value: string): void {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-text);
+}
+
+html.dark .notification-method:not(.notification-method-active) {
+  border-color: var(--outline);
+  background: var(--surface-container-low);
+}
+
+html.dark .notification-method:not(.notification-method-active):hover {
+  border-color: var(--border-strong);
+  background: var(--state-hover-layer);
 }
 
 .settings-field-label {

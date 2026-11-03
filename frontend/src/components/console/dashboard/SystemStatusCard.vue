@@ -486,7 +486,7 @@ const successTone = computed(() => rateTone(successRate.value))
 
     <template #action>
       <div class="flex items-center gap-2">
-        <div class="text-right">
+        <div class="relative text-right">
           <p
             class="success-rate-label text-[0.6875rem] leading-none text-[var(--text-tertiary)]"
             :title="t('dashboard.systemStatus.successRateWindow')"

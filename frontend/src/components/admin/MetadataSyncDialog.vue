@@ -423,21 +423,23 @@ function display(field: string, value: string | number | null) {
               >
                 <tr class="text-[var(--text-secondary)]">
                   <th class="w-12 px-3 py-2">
-                    <input
-                      type="checkbox"
-                      class="checkbox-round"
-                      :checked="
-                        pageSyncable.length > 0 &&
-                        pageChosenCount === pageSyncable.length
-                      "
-                      :indeterminate="
-                        pageChosenCount > 0 &&
-                        pageChosenCount < pageSyncable.length
-                      "
-                      :disabled="busy || !pageSyncable.length"
-                      :aria-label="t('selectPageSyncable')"
-                      @change="chooseModels(pageSyncable, checkedOf($event))"
-                    />
+                    <label class="inline-flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        class="checkbox-round"
+                        :checked="
+                          pageSyncable.length > 0 &&
+                          pageChosenCount === pageSyncable.length
+                        "
+                        :indeterminate="
+                          pageChosenCount > 0 &&
+                          pageChosenCount < pageSyncable.length
+                        "
+                        :disabled="busy || !pageSyncable.length"
+                        :aria-label="t('selectPageSyncable')"
+                        @change="chooseModels(pageSyncable, checkedOf($event))"
+                      />
+                    </label>
                   </th>
                   <th class="px-3 py-2 font-medium">{{ t('model') }}</th>
                   <th class="px-3 py-2 font-medium">
@@ -448,15 +450,21 @@ function display(field: string, value: string | number | null) {
               <tbody class="sync-rows">
                 <tr v-for="item in visible" :key="item.model_name">
                   <td class="px-3 py-2">
-                    <input
+                    <label
                       v-if="syncable(item)"
-                      type="checkbox"
-                      class="checkbox-round"
-                      :checked="isSelected(item)"
-                      :disabled="busy"
-                      :aria-label="t('selectModel', { name: item.model_name })"
-                      @change="chooseModels([item], checkedOf($event))"
-                    />
+                      class="inline-flex items-center justify-center"
+                    >
+                      <input
+                        type="checkbox"
+                        class="checkbox-round"
+                        :checked="isSelected(item)"
+                        :disabled="busy"
+                        :aria-label="
+                          t('selectModel', { name: item.model_name })
+                        "
+                        @change="chooseModels([item], checkedOf($event))"
+                      />
+                    </label>
                   </td>
                   <td
                     class="break-all px-3 py-2 font-mono text-[var(--text-primary)]"
@@ -558,28 +566,30 @@ function display(field: string, value: string | number | null) {
             <tbody class="sync-rows align-top">
               <tr v-for="field in item.fields" :key="field.field">
                 <td class="px-3 py-2">
-                  <input
-                    type="checkbox"
-                    class="checkbox-round"
-                    :checked="
-                      item.kind === 'create' ||
-                      fieldChosen(item.model_name, field.field)
-                    "
-                    :disabled="busy || item.kind === 'create'"
-                    :aria-label="
-                      t('applyField', {
-                        field: fieldLabel(field.field),
-                        name: item.model_name,
-                      })
-                    "
-                    @change="
-                      chooseField(
-                        item.model_name,
-                        field.field,
-                        checkedOf($event)
-                      )
-                    "
-                  />
+                  <label class="inline-flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      class="checkbox-round"
+                      :checked="
+                        item.kind === 'create' ||
+                        fieldChosen(item.model_name, field.field)
+                      "
+                      :disabled="busy || item.kind === 'create'"
+                      :aria-label="
+                        t('applyField', {
+                          field: fieldLabel(field.field),
+                          name: item.model_name,
+                        })
+                      "
+                      @change="
+                        chooseField(
+                          item.model_name,
+                          field.field,
+                          checkedOf($event)
+                        )
+                      "
+                    />
+                  </label>
                 </td>
                 <td class="w-48 px-3 py-2">
                   <span class="text-[var(--text-primary)]">{{

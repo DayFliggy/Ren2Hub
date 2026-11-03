@@ -82,7 +82,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', syncRunning)
 })
 
-watch(resolvedTheme, () => globe?.refreshPalette())
+watch(resolvedTheme, () => globe?.refreshPalette(), { flush: 'post' })
 
 onBeforeUnmount(() => {
   disposed = true

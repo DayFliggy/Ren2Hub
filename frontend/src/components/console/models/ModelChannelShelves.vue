@@ -284,4 +284,17 @@ function offerDomId(kind: 'meta' | 'price', offerId: string) {
     border-bottom: 0;
   }
 }
+
+html.dark .market-shelf-header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+html.dark .market-shelf-item {
+  border-bottom-style: solid;
+}
+html.dark .market-shelf-offer {
+  border-top: 1px solid var(--border-subtle);
+}
+html.dark .market-shelf-statistics {
+  border-top-style: solid;
+}
 </style>

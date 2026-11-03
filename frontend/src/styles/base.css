@@ -24,24 +24,6 @@
   scrollbar-width: thin;
 }
 
-*,
-*::before,
-*::after {
-  transition-duration: 250ms;
-  transition-property:
-    background-color, border-color, color, fill, stroke, box-shadow;
-  transition-timing-function: ease;
-}
-
-html.dark *,
-html.dark *::before,
-html.dark *::after {
-  transition-timing-function: var(
-    --ease-spring-smooth,
-    cubic-bezier(0.25, 1, 0.5, 1)
-  );
-}
-
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -92,9 +74,6 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition:
-    background-color 250ms ease,
-    color 250ms ease;
 }
 
 #app {
@@ -143,12 +122,33 @@ html.dark .focus-ring:focus-visible {
   line-height: 1.5;
 }
 
+html.dark .console-input {
+  border-color: var(--outline);
+  border-radius: var(--shape-control);
+  background-color: var(--studio-control-track);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
 .console-input:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
+/* Touch sizing follows the primary pointer as well as the viewport. A wide
+   tablet must not inherit compact mouse-only controls. */
+@media (max-width: 1023px), (pointer: coarse) {
+  button[data-handdrawn='control'],
+  a[data-handdrawn='control'],
+  [data-control-container],
+  [data-handdrawn='segments'] button,
+  [data-handdrawn='pagination'] button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 html.dark .console-input:focus-visible {
+  border-color: var(--accent);
   box-shadow: var(--focus-halo);
 }
 
@@ -189,17 +189,11 @@ html.dark .console-input:focus-visible {
   background-size: 512px 512px;
 }
 
-/* Night texture belongs to page canvases only. Elevated surfaces remain
-   optically clean so their hierarchy comes from tone, outline and elevation. */
-html.dark .texture-paper {
-  background-image: none;
-}
-
+/* Night texture is suppressed in B1 Studio to maintain clean, deep obsidian surfaces. */
+html.dark .texture-paper,
 html.dark .night-page-texture,
 html.dark .texture-paper[data-handdrawn-scope] {
-  background-image: var(--night-texture-img);
-  background-repeat: repeat;
-  background-size: 512px 512px;
+  background-image: none !important;
 }
 
 /* 展示级标题：衬线字型，仅用于 hero 级大标题与 404 等呼吸区。 */
@@ -708,16 +702,21 @@ html.dark :focus-visible {
 }
 
 html.dark .pencil-surface,
-html.dark .pencil-surface-strong {
+html.dark .pencil-surface-strong,
+html.dark [data-surface-variant='default'],
+html.dark [data-surface-variant='sketch'] {
   border-color: var(--outline-variant) !important;
   border-radius: var(--shape-card) !important;
-  background-color: var(--surface-container);
+  background: var(--studio-card-bg, var(--surface-solid));
+  background-color: var(--surface-solid);
   box-shadow: var(--elevation-1) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-html.dark .pencil-surface-strong {
+html.dark .pencil-surface-strong,
+html.dark [data-surface-variant='sketch'] {
   border-color: var(--outline) !important;
-  background-color: var(--surface-container-high);
   box-shadow: var(--elevation-2) !important;
 }
 
@@ -731,16 +730,6 @@ html.dark .pencil-surface-strong:focus-within {
   box-shadow: var(--elevation-3) !important;
 }
 
-html.dark [data-surface-variant='default'] {
-  background-color: var(--surface-container-low);
-  box-shadow: var(--elevation-0) !important;
-}
-
-html.dark [data-surface-variant='sketch'] {
-  background-color: var(--surface-container-high);
-  box-shadow: var(--elevation-2) !important;
-}
-
 html.dark .pencil-control {
   border-color: var(--outline-variant) !important;
   border-radius: var(--shape-control) !important;
@@ -749,7 +738,8 @@ html.dark .pencil-control {
 html.dark [data-handdrawn='underline'] input {
   border: 1px solid var(--outline) !important;
   border-radius: var(--shape-control);
-  background: var(--surface-container-low);
+  background: var(--studio-control-track);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 html.dark [data-handdrawn='underline'] input:hover {
@@ -758,12 +748,12 @@ html.dark [data-handdrawn='underline'] input:hover {
     var(--outline) 72%,
     var(--text-secondary)
   ) !important;
-  background: var(--surface-container-low);
+  background: var(--studio-control-track);
 }
 
 html.dark [data-handdrawn='underline'] input:focus {
   border-color: var(--accent) !important;
-  background: var(--surface-container-low);
+  background: var(--studio-control-track);
   box-shadow: var(--focus-halo);
 }
 
@@ -778,11 +768,15 @@ html.dark [data-handdrawn='underline'] input[aria-invalid='true']:focus {
 html.dark [data-handdrawn='menu'],
 html.dark [data-handdrawn='modal'],
 html.dark [data-handdrawn='toast'] {
+  --text-tertiary: var(--text-tertiary-overlay);
+  --text-tertiary-base: var(--text-tertiary-overlay);
   border-color: var(--outline) !important;
   border-radius: var(--shape-overlay) !important;
   background-color: var(--surface-container-highest) !important;
   background-image: none !important;
   box-shadow: var(--elevation-5) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 html.dark [data-handdrawn='toast'] {
@@ -799,9 +793,9 @@ html.dark [data-handdrawn='toast']:focus-within {
 }
 
 html.dark [data-handdrawn^='navigation'] {
-  border-color: var(--outline-variant) !important;
-  background-color: var(--surface-container-low) !important;
-  background-image: none !important;
+  border-color: var(--nav-border) !important;
+  background-color: var(--surface-container-low);
+  background-image: none;
 }
 
 html.dark .setup-shell:not(.setup-error-shell) .setup-header {
@@ -829,20 +823,19 @@ html.dark .setup-error-shell .setup-header__inner {
 }
 
 html.dark [data-handdrawn^='navigation'] [aria-current='page'] {
-  border-radius: var(--shape-control) !important;
-  background: var(--state-press-layer) !important;
-  box-shadow: inset 2px 0 0 var(--accent);
-  color: var(--text-primary) !important;
-}
-
-html.dark [data-handdrawn='navigation-strip'] [aria-current='page'] {
-  box-shadow: inset 0 -2px 0 var(--accent);
+  border-radius: var(--shape-control);
+  background: var(--state-hover-layer);
+  color: var(--text-primary);
 }
 
 html.dark [data-handdrawn='navigation-drawer'] {
+  --text-tertiary: var(--text-tertiary-overlay);
+  --text-tertiary-base: var(--text-tertiary-overlay);
   border-color: var(--outline) !important;
   border-radius: var(--shape-overlay) 0 0 var(--shape-overlay) !important;
   background-color: var(--surface-container-highest) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   box-shadow: var(--elevation-5) !important;
 }
 
@@ -863,7 +856,7 @@ html.dark [data-handdrawn='ledger'] {
 }
 
 html.dark [data-handdrawn='ledger'] .data-table-header-clip {
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--outline);
   background: var(--surface-container-high);
 }
 
@@ -878,7 +871,7 @@ html.dark [data-handdrawn='ledger'] tbody tr:hover {
 
 html.dark [data-handdrawn='ledger'] tr[data-selected='true'] {
   background: var(--state-press-layer);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 2.5px 0 0 var(--accent);
 }
 
 html.dark [data-handdrawn='ledger-rows'] > * {
@@ -936,7 +929,7 @@ html.dark .pencil-brand-frame {
 }
 
 /* 细手绘下划线变体：只改形态参数，明暗契约与基础 brush-highlight 一致。
-   日间为贴合字符基线、带微起伏的温润手绘笔墨下划线；夜间为金色发丝线与微光晕。 */
+   日间为贴合字符基线、带微起伏的温润手绘笔墨下划线；夜间为金箔游丝线与微光晕。 */
 .brush-highlight--underline::after {
   left: -4px;
   right: -4px;
@@ -952,14 +945,20 @@ html.dark .pencil-brand-frame {
 
 html.dark .brush-highlight--underline::after {
   left: -2px;
-  right: -2px;
+  right: 2px;
   bottom: -0.12em;
   height: 1.5px;
-  background: var(--accent-text);
+  background: linear-gradient(
+    90deg,
+    rgba(240, 215, 150, 0.2) 0%,
+    var(--accent-text) 18%,
+    var(--accent) 82%,
+    rgba(228, 192, 107, 0.14) 100%
+  );
   border-radius: 9999px;
   transform: none;
-  opacity: 1;
-  box-shadow: 0 0 6px rgba(226, 188, 85, 0.4);
+  opacity: 0.95;
+  box-shadow: 0 1px 6px rgba(228, 192, 107, 0.22);
 }
 
 /* 墨线分隔：日间 AI 干刷笔触；夜间金色 hairline */

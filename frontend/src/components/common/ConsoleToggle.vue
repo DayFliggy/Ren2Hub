@@ -119,15 +119,22 @@ function toggle(event: MouseEvent) {
   box-shadow: 0 0 0 3px var(--state-focus-layer) !important;
 }
 
-/* 触控命中区扩大至 44px（WCAG 规范） */
+/* Keep the compact track while reserving a centred 44px touch target. */
 .console-toggle::after {
   content: '';
   position: absolute;
-  inset: -10px -4px;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  transform: translate(-50%, -50%);
 }
-@media (min-width: 640px) {
+@media (min-width: 1024px) and (pointer: fine) {
   .console-toggle::after {
-    inset: 0;
+    min-width: 0;
+    min-height: 0;
   }
 }
 

@@ -50,12 +50,30 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(
         page.locator('[data-handdrawn="page-hero"] h1')
       ).toBeVisible()
+      const menuTrigger = page.locator(
+        '[aria-controls="console-mobile-navigation"]'
+      )
+      if (viewport === 'mobile') await menuTrigger.click()
+      await expect(
+        page.locator(
+          viewport === 'mobile'
+            ? '[data-console-mobile-navigation]'
+            : 'aside[data-handdrawn="navigation"]'
+        )
+      ).toBeVisible()
       await expect(
         page.locator('[data-console-nav-item="subscription"]')
       ).toHaveCount(0)
       await expect(
         page.locator('[data-console-nav-item="plan-management"]')
       ).toHaveCount(0)
+      if (viewport === 'mobile') {
+        await page.keyboard.press('Escape')
+        await expect(
+          page.locator('[data-console-mobile-navigation]')
+        ).toHaveCount(0)
+        await expect(menuTrigger).toBeFocused()
+      }
       await assertNoHorizontalOverflow(page)
       expect(retiredRequests).toEqual([])
     })

@@ -158,7 +158,9 @@ const cells = computed<Cell[]>(() => [
       visual — a sparkline where the data is a series, a ring for RPM where it is
       a share of a ceiling.
     -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
+    <div
+      class="overview-kpi-grid grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5"
+    >
       <component
         :is="cell.drillDown ? 'button' : 'div'"
         v-for="(cell, i) in cells"
@@ -206,8 +208,9 @@ const cells = computed<Cell[]>(() => [
             />
             <p
               v-else
-              class="display-number mt-1 truncate text-2xl leading-tight tabular-nums tracking-tight"
+              class="display-number mt-1 max-w-full overflow-x-auto scrollbar-none break-all text-xl sm:text-2xl leading-tight tabular-nums tracking-tight"
               :style="{ color: cell.color }"
+              :title="cell.value"
             >
               {{ cell.value }}
             </p>
@@ -238,3 +241,53 @@ const cells = computed<Cell[]>(() => [
     </div>
   </section>
 </template>
+
+<style scoped>
+[data-overview-kpi] {
+  container-type: inline-size;
+}
+
+/* The user's enlarged font can make even a desktop card narrower than a
+   normal phone. Give each value a whole row before it becomes unreadable. */
+@container (max-width: 17.5rem) {
+  .overview-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-kpi-cell] {
+    grid-column: auto;
+  }
+  [data-kpi-cell] > div {
+    display: block;
+  }
+}
+
+html.dark [data-overview-kpi] {
+  border-color: var(--outline-variant) !important;
+  background: var(--surface-solid) !important;
+}
+
+html.dark [data-kpi-cell] {
+  padding: 14px 20px;
+}
+
+html.dark button[data-kpi-cell]:hover {
+  background: var(--state-hover-layer) !important;
+  box-shadow: inset 0 1px 0 rgba(228, 192, 107, 0.16);
+}
+
+html.dark [data-overview-kpi] .display-number {
+  font-weight: 500 !important;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+html.dark [data-kpi-cell] :deep(svg) {
+  overflow: visible;
+}
+
+@media (max-width: 639px) {
+  html.dark [data-kpi-cell] {
+    padding: 10px 14px;
+  }
+}
+</style>

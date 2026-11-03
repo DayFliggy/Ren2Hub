@@ -447,14 +447,16 @@ function close() {
             <thead>
               <tr class="channel-test-head-row">
                 <th class="w-9 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    class="checkbox-round"
-                    :checked="allFilteredSelected"
-                    :disabled="filteredModels.length === 0"
-                    :aria-label="t('channels.selectPage')"
-                    @change="toggleAllFiltered"
-                  />
+                  <label class="inline-flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      class="checkbox-round"
+                      :checked="allFilteredSelected"
+                      :disabled="filteredModels.length === 0"
+                      :aria-label="t('channels.selectPage')"
+                      @change="toggleAllFiltered"
+                    />
+                  </label>
                 </th>
                 <th class="px-2 py-2 text-left">
                   <button
@@ -490,13 +492,15 @@ function close() {
                 class="channel-test-row"
               >
                 <td class="px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    class="checkbox-round"
-                    :checked="selected.includes(model)"
-                    :aria-label="model"
-                    @change="toggleModelSelected(model)"
-                  />
+                  <label class="inline-flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      class="checkbox-round"
+                      :checked="selected.includes(model)"
+                      :aria-label="model"
+                      @change="toggleModelSelected(model)"
+                    />
+                  </label>
                 </td>
                 <td class="px-2 py-2.5">
                   <span

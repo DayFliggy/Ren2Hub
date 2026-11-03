@@ -77,7 +77,7 @@ async function clear() {
       <input
         v-model="confirmed"
         type="checkbox"
-        class="mt-1 h-4 w-4 accent-[var(--accent-solid)]"
+        class="mt-1 h-4 w-4 accent-[var(--accent)]"
         :disabled="disabled"
       />
       <span>{{ t('auth.confirmInviteCode') }}</span>

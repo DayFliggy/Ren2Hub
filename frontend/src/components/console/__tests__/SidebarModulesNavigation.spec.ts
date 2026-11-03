@@ -9,7 +9,7 @@ import { parsePublicStatus } from '@/api/public'
 import type { HttpMethod, RequestOptions } from '@/api/transport'
 import type { ApiResponse } from '@/api/types'
 import CommandPaletteModal from '@/components/console/CommandPaletteModal.vue'
-import ConsoleNavStrip from '@/components/console/ConsoleNavStrip.vue'
+import ConsoleMobileNavDrawer from '@/components/console/ConsoleMobileNavDrawer.vue'
 import ConsoleSidebar from '@/components/console/ConsoleSidebar.vue'
 import { consoleNavGroups } from '@/constants/navigation/consoleNav'
 import { useSystemSettings } from '@/composables/useSystemSettings'
@@ -54,6 +54,7 @@ async function mountNavigation(
     history: createMemoryHistory(),
     routes: [
       { path: '/dashboard', name: 'dashboard', component: EmptyRoute },
+      { path: '/activity', name: 'activity', component: EmptyRoute },
       ...consoleNavGroups
         .flatMap((group) => group.items)
         .filter((item) => item.route)
@@ -67,8 +68,12 @@ async function mountNavigation(
   await router.push('/console/users')
   await router.isReady()
   return mount(navigation, {
-    props,
-    global: { plugins: [router, i18n, pinia] },
+    props:
+      navigation === ConsoleMobileNavDrawer ? { open: true, ...props } : props,
+    global: {
+      plugins: [router, i18n, pinia],
+      stubs: { teleport: navigation === ConsoleMobileNavDrawer },
+    },
   })
 }
 
@@ -104,7 +109,7 @@ describe('SidebarModulesAdmin in the console navigation', () => {
 
   it.each([
     ['sidebar', ConsoleSidebar, {}],
-    ['mobile strip', ConsoleNavStrip, {}],
+    ['mobile drawer', ConsoleMobileNavDrawer, { open: true }],
     ['command palette', CommandPaletteModal, { open: true }],
   ])(
     'keeps the mounted %s current when pre-save status reads finish last',
@@ -214,7 +219,7 @@ describe('SidebarModulesAdmin in the console navigation', () => {
   )
   it.each([
     ['sidebar', ConsoleSidebar],
-    ['mobile strip', ConsoleNavStrip],
+    ['mobile drawer', ConsoleMobileNavDrawer],
   ])('hides a module the option turns off in the %s', async (_, navigation) => {
     await loadMessageDomain('console')
     const wrapper = await mountNavigation(navigation)

@@ -234,4 +234,11 @@ function label(line: MarketPriceLine) {
   border-radius: var(--shape-control);
   font: 0.75rem/1.8 var(--font-mono);
 }
+
+html.dark .market-price-extra {
+  border-top: 1px solid var(--border-subtle);
+}
+html.dark .market-price--full .market-price-lines > div {
+  border-bottom: 1px solid var(--border-subtle);
+}
 </style>

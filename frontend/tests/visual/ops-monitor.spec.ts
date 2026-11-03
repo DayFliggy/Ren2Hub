@@ -91,11 +91,16 @@ for (const theme of ['light', 'dark'] as const) {
       )
       await expect(section(page, 'upstream')).toContainText('雾桥中转')
       await expect(section(page, 'billing')).toHaveCount(0)
-      const nav = page
-        .locator(`[data-top-nav="${mobile ? 'mobile' : 'desktop'}"]`)
-        .locator(
-          mobile ? ':scope > a, :scope > button' : ':scope > div > button'
-        )
+      if (mobile)
+        await page
+          .locator('[aria-controls="console-mobile-navigation"]')
+          .click()
+      const nav = mobile
+        ? page
+            .locator('[data-console-mobile-navigation] .drawer-section')
+            .first()
+            .locator('[data-console-nav-item]')
+        : page.locator('[data-top-nav="desktop"] > div > button')
       await expect(nav.first()).toBeVisible()
       expect(
         (await nav.allInnerTexts())
@@ -103,6 +108,14 @@ for (const theme of ['light', 'dark'] as const) {
           .slice(0, 4)
       ).toEqual(['活动', '仪表盘', '运维监控', '控制台'])
       await expect(nav.nth(2)).toHaveAttribute('aria-current', 'page')
+      if (mobile) {
+        await page.keyboard.press('Escape')
+        // Vue removes the leaving dialog after its animation-frame boundary.
+        await page.clock.runFor(50)
+        await expect(
+          page.locator('[data-console-mobile-navigation]')
+        ).toHaveCount(0)
+      }
       await expect(section(page, 'status')).toContainText('用户在途请求')
       const countdown = section(page, 'status').locator('.ops-countdown-badge')
       await expect(countdown).toHaveAttribute('title', '30s')

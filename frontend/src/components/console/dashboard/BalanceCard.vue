@@ -278,3 +278,46 @@ const monthSpendDisplay = computed(() => {
     </div>
   </ConsoleCard>
 </template>
+
+<style scoped>
+html.dark [data-balance-card] {
+  background: var(
+    --studio-balance-bg,
+    linear-gradient(130deg, #383730 0%, #2b2f38 75%)
+  ) !important;
+  border: 1px solid var(--studio-balance-border, rgba(226, 189, 104, 0.22)) !important;
+  border-radius: var(--shape-card, 16px) !important;
+  box-shadow: var(--elevation-2) !important;
+}
+
+html.dark [data-balance-card] .display-number {
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+html.dark [data-balance-spend-tile] {
+  background: rgba(18, 21, 28, 0.42) !important;
+  border: 1px solid rgba(255, 255, 255, 0.055) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+html.dark [data-balance-usage-meter] > div:last-child {
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+html.dark [data-balance-usage-meter] > div:last-child > div {
+  border-radius: 9999px !important;
+}
+
+@media (max-width: 1023px) {
+  html.dark [data-balance-actions] > :deep(button:first-child) {
+    background: #51452c !important;
+    color: #f6dca2 !important;
+    border: 1px solid rgba(226, 189, 104, 0.35) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 237, 195, 0.09) !important;
+  }
+}
+</style>

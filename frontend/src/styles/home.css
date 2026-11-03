@@ -131,7 +131,27 @@ html.light .landing-shell .app-navbar[data-scrolled='false'] {
 }
 
 html.dark .landing-shell .app-navbar[data-scrolled='true'] {
-  background-color: var(--surface-raised) !important;
+  background: var(--nav-surface) !important;
+  border-bottom-color: var(--nav-border) !important;
+  box-shadow: var(--nav-shadow) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(130%);
+  backdrop-filter: blur(28px) saturate(130%);
+}
+
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  html.dark .landing-shell .app-navbar[data-scrolled='true'] {
+    background: var(--nav-solid) !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.dark .landing-shell .app-navbar[data-scrolled='true'] {
+    background: var(--nav-solid) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }
 
 html.dark .landing-shell .app-navbar .home-brand,

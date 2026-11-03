@@ -295,7 +295,7 @@ function responseDisplay(channel: AdminChannel): {
               <div class="flex min-w-0 items-start gap-2.5">
                 <label
                   v-if="canOperate || canSensitiveWrite"
-                  class="-mx-1 -mb-1 mt-1 flex shrink-0 p-1"
+                  class="flex shrink-0 items-center justify-center"
                   @click.stop
                 >
                   <input

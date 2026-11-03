@@ -31,6 +31,8 @@
 
   <button
     v-else-if="variant === 'console'"
+    data-theme-switcher
+    data-handdrawn="control"
     type="button"
     class="inline-flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
     :aria-label="t('nav.themeDescription', { mode: currentLabel })"
@@ -39,6 +41,7 @@
   >
     <svg
       v-if="preference === 'auto'"
+      data-theme-icon
       width="18"
       height="18"
       viewBox="0 0 24 24"
@@ -52,6 +55,7 @@
     </svg>
     <svg
       v-else-if="preference === 'light'"
+      data-theme-icon
       width="18"
       height="18"
       viewBox="0 0 24 24"
@@ -67,6 +71,7 @@
     </svg>
     <svg
       v-else
+      data-theme-icon
       width="18"
       height="18"
       viewBox="0 0 24 24"
@@ -87,6 +92,8 @@
   >
     <button
       ref="trigger"
+      data-theme-switcher
+      data-handdrawn="control"
       type="button"
       class="theme-switcher__trigger"
       :aria-expanded="open"
@@ -99,6 +106,7 @@
       <svg
         v-if="preference === 'auto'"
         class="theme-switcher__icon"
+        data-theme-icon
         width="17"
         height="17"
         viewBox="0 0 24 24"
@@ -115,6 +123,7 @@
       <svg
         v-else-if="preference === 'light'"
         class="theme-switcher__icon"
+        data-theme-icon
         width="17"
         height="17"
         viewBox="0 0 24 24"
@@ -131,6 +140,7 @@
       <svg
         v-else
         class="theme-switcher__icon"
+        data-theme-icon
         width="17"
         height="17"
         viewBox="0 0 24 24"
@@ -278,10 +288,10 @@ const currentLabel = computed(() => {
   return t(option?.labelKey ?? 'nav.themeAuto')
 })
 
-function cycleCompact() {
+async function cycleCompact() {
   const order: ThemePreference[] = ['auto', 'light', 'dark']
   const index = order.indexOf(preference.value)
-  setThemePreference(order[(index + 1) % order.length])
+  await setThemePreference(order[(index + 1) % order.length], { animate: true })
 }
 
 function close(restoreFocus = false) {
@@ -315,9 +325,9 @@ function toggle() {
   else openMenu()
 }
 
-function choose(value: ThemePreference) {
-  setThemePreference(value)
+async function choose(value: ThemePreference) {
   close(true)
+  await setThemePreference(value, { animate: true })
 }
 
 function onTriggerKeydown(event: KeyboardEvent) {

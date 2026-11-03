@@ -37,6 +37,26 @@ async function layout(page: Page, name: string) {
   )
 }
 
+async function navigateConsole(
+  page: Page,
+  item: 'keys' | 'wallet' | 'tickets'
+) {
+  const path = `/${item}`
+  const menu = page.locator('[aria-controls="console-mobile-navigation"]')
+  if (await menu.isVisible()) {
+    await menu.click()
+    const drawer = page.locator('[data-console-mobile-navigation]')
+    await expect(drawer).toBeVisible()
+    await drawer
+      .locator(`a[data-console-nav-item="${item}"][href="${path}"]`)
+      .click()
+    await expect(drawer).not.toBeVisible()
+  } else {
+    await page.locator(`a[href="${path}"]:visible`).first().click()
+  }
+  await expect(page).toHaveURL((url) => url.pathname === path)
+}
+
 test('真实后端：会话、权限、Key 路由、钱包、工单与设置', async ({
   browser,
 }, info) => {
@@ -135,7 +155,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       await layout(page, '用户首页')
     })
     await test.step('从页面创建 Token，列表仅返回脱敏 Key，阻止跨用户读取和删除', async () => {
-      await page.locator('a[href="/keys"]:visible').first().click()
+      await navigateConsole(page, 'keys')
       await page.getByRole('button', { name: '创建令牌', exact: true }).click()
       const modal = page.getByRole('dialog')
       const name = 'local-browser-' + info.project.name
@@ -238,7 +258,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       }
       page.on('request', recordPayment)
       try {
-        await page.locator('a[href="/wallet"]:visible').first().click()
+        await navigateConsole(page, 'wallet')
         const response = await infoResponse
         expect(response.status()).toBe(200)
         expect((await response.json()).success).toBe(true)
@@ -256,7 +276,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       }
     })
     await test.step('创建工单并读取真实详情和消息', async () => {
-      await page.locator('a[href="/tickets"]:visible').first().click()
+      await navigateConsole(page, 'tickets')
       await page.getByRole('button', { name: '新建工单', exact: true }).click()
       const modal = page.getByRole('dialog', { name: '新建工单', exact: true })
       const title = '本地回归 ' + info.project.name

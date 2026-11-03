@@ -3,6 +3,7 @@
     <button
       ref="trigger"
       type="button"
+      data-handdrawn="control"
       class="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
       :class="
         variant === 'console'
@@ -67,9 +68,17 @@
 
     <transition
       enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0 -translate-y-1 scale-95"
+      :enter-from-class="
+        placement === 'top'
+          ? 'opacity-0 translate-y-1 scale-95'
+          : 'opacity-0 -translate-y-1 scale-95'
+      "
       leave-active-class="transition duration-150 ease-in"
-      leave-to-class="opacity-0 -translate-y-1 scale-95"
+      :leave-to-class="
+        placement === 'top'
+          ? 'opacity-0 translate-y-1 scale-95'
+          : 'opacity-0 -translate-y-1 scale-95'
+      "
     >
       <ul
         v-if="open"
@@ -78,11 +87,16 @@
         role="menu"
         data-handdrawn="menu"
         class="absolute right-0 z-[90] overflow-hidden rounded-xl border bg-[var(--surface-overlay)] backdrop-blur-xl"
-        :class="
+        :class="[
+          placement === 'top'
+            ? 'bottom-full mb-2'
+            : variant === 'console'
+              ? 'top-12'
+              : 'mt-2',
           variant === 'console'
-            ? 'top-12 w-36 border-[var(--overlay-border)] py-1 animate-scale-in'
-            : 'mt-2 w-40 border-[var(--border-subtle)] p-1 '
-        "
+            ? 'w-36 border-[var(--overlay-border)] py-1 animate-scale-in'
+            : 'w-40 border-[var(--border-subtle)] p-1',
+        ]"
         :aria-label="t('nav.language')"
         @keydown="onMenuKeydown"
         @focusout="onMenuFocusout"
@@ -137,10 +151,18 @@ import { availableLocales, getLocale, type LocaleCode } from '@/i18n'
 
 const { t } = useI18n()
 const chooseLocale = useLocaleChoice()
-const props = withDefaults(defineProps<{ variant?: 'landing' | 'console' }>(), {
-  variant: 'landing',
-})
+const props = withDefaults(
+  defineProps<{
+    variant?: 'landing' | 'console'
+    placement?: 'bottom' | 'top'
+  }>(),
+  {
+    variant: 'landing',
+    placement: 'bottom',
+  }
+)
 const variant = computed(() => props.variant)
+const placement = computed(() => props.placement)
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
@@ -196,7 +218,7 @@ function onTriggerKeydown(event: KeyboardEvent) {
   } else if (event.key === 'ArrowUp') {
     event.preventDefault()
     openMenu(-1)
-  } else if (event.key === 'Escape') {
+  } else if (event.key === 'Escape' && open.value) {
     event.preventDefault()
     close(true)
   }

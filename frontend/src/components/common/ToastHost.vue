@@ -35,7 +35,7 @@ const toneVar: Record<ToastType, string> = {
         </p>
         <button
           type="button"
-          class="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring sm:h-6 sm:w-6"
+          class="toast-close -m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring lg:h-6 lg:w-6"
           :aria-label="t('common.close')"
           @click="dismiss(toast.id)"
         >
@@ -56,6 +56,12 @@ const toneVar: Record<ToastType, string> = {
 </template>
 
 <style scoped>
+@media (pointer: coarse) {
+  .toast-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.25s ease;

@@ -211,6 +211,7 @@ onClickOutside(root, closeMenu)
   <div
     ref="root"
     class="relative"
+    data-control-container
     :class="size === 'compact' ? 'h-11 sm:h-8' : size === 'sm' ? 'h-8' : 'h-10'"
   >
     <!-- trigger -->
@@ -378,9 +379,9 @@ onClickOutside(root, closeMenu)
 </template>
 
 <style scoped>
-/* Night: pencil-control forces the 9% --outline-variant border, too faint for
-   a transparent dashed chip; use the search inputs' border and fill instead. */
+/* Studio facets share the search input's solid outline and recessed surface. */
 html.dark .filter-facet.pencil-control {
+  border-style: solid;
   border-color: var(--outline) !important;
   background-color: var(--surface-container-low);
 }

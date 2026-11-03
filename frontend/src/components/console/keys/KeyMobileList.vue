@@ -71,9 +71,7 @@ const { t: configT } = useI18n({
       >
         <header class="flex min-w-0 items-start justify-between gap-3">
           <div class="flex min-w-0 items-start gap-2.5">
-            <!-- The padding makes a 24px pointer target around the glyph; the
-                 negative margins keep the glyph where mt-1 used to put it. -->
-            <label class="-mx-1 -mb-1 flex shrink-0 p-1">
+            <label class="flex shrink-0 items-center justify-center">
               <input
                 type="checkbox"
                 class="checkbox-round"
@@ -113,7 +111,7 @@ const { t: configT } = useI18n({
         <dl class="mt-4 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs">
           <div class="min-w-0">
             <dt class="text-[var(--text-tertiary)]">{{ t('keys.colType') }}</dt>
-            <dd class="mt-1.5">
+            <dd class="mt-1.5" data-token-type>
               <StatusChip :tone="token.type === 'auto' ? 'info' : 'accent'">
                 {{ t(`keys.type.${token.type}`) }}
               </StatusChip>
@@ -158,6 +156,7 @@ const { t: configT } = useI18n({
             class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-8 sm:w-8"
             :aria-label="t('keys.routing')"
             :title="t('keys.routing')"
+            data-handdrawn="control"
           >
             <Route :size="16" />
           </RouterLink>
@@ -199,3 +198,12 @@ const { t: configT } = useI18n({
     </div>
   </div>
 </template>
+
+<style scoped>
+/* B1 Studio: neutralize non-status type badge in dark mode to prevent visual clutter */
+html.dark [data-token-type] :deep([data-handdrawn='chip']) {
+  background: var(--surface-muted) !important;
+  color: var(--text-secondary) !important;
+  border-left-color: var(--border-default) !important;
+}
+</style>

@@ -49,13 +49,13 @@ const accentClass = computed(() => [
 </script>
 
 <template>
-  <div class="mb-8" data-handdrawn="page-hero">
+  <div class="mb-4 lg:mb-8" data-handdrawn="page-hero">
     <!-- breadcrumb -->
     <Breadcrumb :crumbs="crumbs" />
 
     <!-- title row -->
     <div
-      class="gap-4"
+      class="gap-2.5 lg:gap-4"
       :class="
         titleSide === 'right'
           ? 'grid grid-cols-[minmax(0,1fr)_auto] items-start'
@@ -122,10 +122,10 @@ const accentClass = computed(() => [
       v-model="tab"
       :items="tabs"
       :panel-id="tabPanelId!"
-      class="mt-5"
+      class="mt-3 lg:mt-5"
     />
     <!-- breathing ink line below hero when no tabs own the boundary -->
-    <div v-else class="ink-divider mt-6" aria-hidden="true" />
+    <div v-else class="ink-divider mt-4 lg:mt-6" aria-hidden="true" />
   </div>
 </template>
 
@@ -136,5 +136,58 @@ const accentClass = computed(() => [
   max-width: calc(100% - 1em);
   white-space: normal;
   overflow-wrap: break-word;
+}
+
+:global(html.dark [data-handdrawn='page-hero']) {
+  margin-bottom: 20px;
+}
+
+:global(html.dark [data-handdrawn='page-hero'] > nav) {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+:global(html.dark [data-handdrawn='page-hero'] > nav > span:last-of-type) {
+  font-weight: 500;
+}
+
+:global(html.dark [data-handdrawn='page-hero'] h1) {
+  font-family: var(--font-display);
+  font-size: 2.125rem;
+  line-height: 1.25;
+  letter-spacing: -0.022em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+:global(html.dark [data-handdrawn='page-hero'] > .ink-divider) {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(228, 192, 107, 0.34) 0%,
+    rgba(226, 232, 245, 0.11) 46%,
+    transparent 94%
+  );
+  opacity: 1;
+}
+
+@media (max-width: 1023px) {
+  [data-handdrawn='page-hero'] {
+    margin-bottom: 1rem;
+  }
+
+  [data-handdrawn='page-hero'] [data-title-side='left'] {
+    gap: 0.625rem;
+  }
+
+  [data-handdrawn='page-hero'] :deep(.console-tabs) {
+    margin-top: 0.75rem;
+  }
+
+  :global(html.dark [data-handdrawn='page-hero'] h1) {
+    font-size: 1.8125rem;
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+  }
 }
 </style>

@@ -1,4 +1,4 @@
-import { defineComponent, ref, type PropType } from 'vue'
+import { defineComponent, ref, type PropType, type WatchSource } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -39,6 +39,7 @@ vi.mock('echarts/components', () => ({
 }))
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }))
 
+import { useTheme } from '@/composables/useTheme'
 import { useEChart, type OptionBuilder } from '@/charts/useEChart'
 
 const Host = defineComponent({
@@ -48,10 +49,18 @@ const Host = defineComponent({
       type: Function as PropType<OptionBuilder>,
       default: () => ({ series: [] }),
     },
+    watchSource: {
+      type: [Object, Array, Function] as PropType<WatchSource | WatchSource[]>,
+      default: undefined,
+    },
   },
   setup(props) {
     const chartEl = ref<HTMLElement | null>(null)
-    useEChart(chartEl, (palette, scale) => props.optionBuilder(palette, scale))
+    useEChart(
+      chartEl,
+      (palette, scale) => props.optionBuilder(palette, scale),
+      props.watchSource
+    )
     return { chartEl }
   },
   template: '<div><div v-if="!loading" ref="chartEl" class="chart" /></div>',
@@ -154,23 +163,82 @@ describe('useEChart', () => {
     expect(chart.resize).toHaveBeenCalledTimes(4)
     wrapper.unmount()
   })
+
+  it('differentiates theme incremental update (notMerge: false, no animation) from data replacement (notMerge: true)', async () => {
+    const dataRef = ref([10, 20])
+    const theme = useTheme()
+    const oldPreference = theme.preference.value
+    theme.setThemePreference('light')
+    await flushPromises()
+
+    const wrapper = mount(Host, {
+      props: {
+        optionBuilder: (palette) => ({
+          textStyle: { color: palette.textPrimary },
+          series: [{ type: 'line', data: dataRef.value }],
+        }),
+        watchSource: dataRef,
+      },
+    })
+    await flushPromises()
+    const chart = echartsMock.instances[0]!
+
+    // Initial attach uses notMerge = true
+    expect(chart.setOption).toHaveBeenLastCalledWith(
+      expect.objectContaining({ series: [{ type: 'line', data: [10, 20] }] }),
+      true
+    )
+
+    // Data change replaces options with notMerge = true
+    dataRef.value = [30, 40]
+    await flushPromises()
+    expect(chart.setOption).toHaveBeenLastCalledWith(
+      expect.objectContaining({ series: [{ type: 'line', data: [30, 40] }] }),
+      true
+    )
+
+    // Theme flip updates options incrementally with notMerge = false and animation: false
+    theme.setThemePreference('dark')
+    await flushPromises()
+    expect(chart.setOption).toHaveBeenLastCalledWith(
+      expect.objectContaining({ animation: false }),
+      false
+    )
+
+    wrapper.unmount()
+    theme.setThemePreference(oldPreference)
+  })
 })
 
 it('rebuilds chart labels, tooltip and active colors on theme changes and stops after disposal', async () => {
   const root = document.documentElement
+  const theme = useTheme()
+  const oldPreference = theme.preference.value
   const oldTheme = root.dataset.theme
   const oldColor = root.style.getPropertyValue('--text-primary')
   root.style.setProperty('--text-primary', '#112233')
-  root.dataset.theme = 'light'
+  theme.setThemePreference('light')
+  await flushPromises()
+
   const wrapper = mount(Host, {
     props: {
       optionBuilder: (palette) => ({
         textStyle: { color: palette.textPrimary },
         tooltip: { textStyle: { color: palette.textPrimary } },
+        legend: {
+          selected: { 'Model A': true, 'Model B': false },
+        },
         series: [
           {
             type: 'line',
+            name: 'Model A',
             data: [1, 2],
+            emphasis: { label: { color: palette.textPrimary } },
+          },
+          {
+            type: 'line',
+            name: 'Model B',
+            data: [3, 4],
             emphasis: { label: { color: palette.textPrimary } },
           },
         ],
@@ -183,26 +251,42 @@ it('rebuilds chart labels, tooltip and active colors on theme changes and stops 
     expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
       textStyle: { color: '#112233' },
     })
+    // Initial render uses notMerge = true
+    expect(chart.setOption.mock.lastCall?.[1]).toBe(true)
+
     root.style.setProperty('--text-primary', '#ddeeff')
-    root.dataset.theme = 'dark'
+    theme.setThemePreference('dark')
     await flushPromises()
+
     expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
+      animation: false,
       textStyle: { color: '#ddeeff' },
       tooltip: { textStyle: { color: '#ddeeff' } },
-      series: [{ emphasis: { label: { color: '#ddeeff' } } }],
+      series: [
+        { emphasis: { label: { color: '#ddeeff' } } },
+        { emphasis: { label: { color: '#ddeeff' } } },
+      ],
     })
+    // Theme switch uses incremental update (notMerge = false) to preserve legend/zoom states
+    expect(chart.setOption.mock.lastCall?.[1]).toBe(false)
+
     root.style.setProperty('--text-primary', '#112233')
-    root.dataset.theme = 'light'
+    theme.setThemePreference('light')
     await flushPromises()
+
     expect(chart.setOption.mock.lastCall?.[0]).toMatchObject({
+      animation: false,
       textStyle: { color: '#112233' },
     })
+    expect(chart.setOption.mock.lastCall?.[1]).toBe(false)
+
     wrapper.unmount()
     const calls = chart.setOption.mock.calls.length
-    root.dataset.theme = 'dark'
+    theme.setThemePreference('dark')
     await flushPromises()
     expect(chart.setOption).toHaveBeenCalledTimes(calls)
   } finally {
+    theme.setThemePreference(oldPreference)
     if (oldTheme === undefined) delete root.dataset.theme
     else root.dataset.theme = oldTheme
     if (oldColor) root.style.setProperty('--text-primary', oldColor)

@@ -20,6 +20,7 @@ const activityBanner = useThemedAsset(activityDayBanner, activityNightBanner)
     <!-- generated banner art -->
     <img
       :src="activityBanner"
+      data-theme-asset
       alt=""
       aria-hidden="true"
       class="absolute inset-0 h-full w-full object-cover"

@@ -37,7 +37,7 @@ describe('chart mood', () => {
       smooth: false,
       symbol: 'circle',
       symbolSize: 5,
-      lineStyle: { width: 2.5 },
+      lineStyle: { width: 2.5, shadowBlur: 0, shadowColor: 'transparent' },
     })
     expect(mood.splitLine.lineStyle.type).toEqual([7, 3, 2, 5])
     expect(mood.barRadius).toEqual([3, 2, 0, 0])

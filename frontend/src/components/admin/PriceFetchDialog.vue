@@ -365,17 +365,19 @@ onBeforeUnmount(() => controller?.abort())
             <tbody>
               <tr v-for="model in visibleRows" :key="keyFor(model)">
                 <td>
-                  <input
-                    v-model="selected"
-                    type="checkbox"
-                    class="checkbox-round"
-                    :value="keyFor(model)"
-                    :aria-label="`${t('choose')} ${model.model_name} ${model.provider}`"
-                    :disabled="
-                      Boolean(model.unsupported_reason) ||
-                      !Object.keys(model.pricing).length
-                    "
-                  />
+                  <label class="inline-flex items-center justify-center">
+                    <input
+                      v-model="selected"
+                      type="checkbox"
+                      class="checkbox-round"
+                      :value="keyFor(model)"
+                      :aria-label="`${t('choose')} ${model.model_name} ${model.provider}`"
+                      :disabled="
+                        Boolean(model.unsupported_reason) ||
+                        !Object.keys(model.pricing).length
+                      "
+                    />
+                  </label>
                 </td>
                 <td>{{ model.model_name }}</td>
                 <td>{{ model.provider }}</td>

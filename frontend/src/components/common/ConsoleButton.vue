@@ -92,3 +92,59 @@ const classes = computed(() => {
     <slot />
   </button>
 </template>
+
+<style scoped>
+html.dark button[data-handdrawn='control'] {
+  border-radius: var(--shape-control, 10px);
+}
+
+html.dark button[data-handdrawn='control'].bg-\[var\(--accent\)\] {
+  background: var(--studio-primary-btn-bg, var(--accent));
+  color: var(--accent-contrast);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 225, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+html.dark
+  button[data-handdrawn='control'].bg-\[var\(--accent\)\]:enabled:hover {
+  background: var(--studio-primary-btn-hover, var(--accent-hover));
+}
+
+html.dark
+  button[data-handdrawn='control'].bg-\[var\(--accent\)\]:enabled:active {
+  background: var(--accent-active);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+html.dark button[data-handdrawn='control'].bg-\[var\(--surface-solid\)\] {
+  border-color: var(--outline);
+  background: var(--surface-container-low);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+html.dark
+  button[data-handdrawn='control'].bg-\[var\(--surface-solid\)\]:enabled:hover {
+  background: var(--surface-container);
+  border-color: var(--border-strong);
+}
+
+html.dark
+  button[data-handdrawn='control'].bg-\[var\(--surface-solid\)\]:enabled:active {
+  background: var(--state-press-layer);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+html.dark button[data-handdrawn='control'].bg-\[var\(--status-danger\)\] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+html.dark
+  button[data-handdrawn='control'].bg-\[var\(--status-danger\)\]:enabled:active {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+</style>

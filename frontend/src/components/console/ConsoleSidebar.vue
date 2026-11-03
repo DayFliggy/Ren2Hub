@@ -86,14 +86,14 @@ defineExpose({ collapsed })
 
 <template>
   <aside
-    class="sticky top-0 hidden h-full shrink-0 select-none flex-col overflow-hidden border-r border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper transition-[width] duration-[250ms] lg:flex"
+    class="console-sidebar sticky top-0 hidden h-full shrink-0 select-none flex-col overflow-hidden border-r border-[var(--border-subtle)] bg-[var(--surface-solid)] texture-paper transition-[width] duration-[250ms] lg:flex"
     :style="{ width: collapsed ? '4rem' : '13.75rem' }"
     data-handdrawn="navigation"
   >
     <!-- brand header: serif typeface for hand-crafted feel -->
     <RouterLink
       :to="{ name: 'dashboard' }"
-      class="flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)] transition-all"
+      class="console-sidebar__brand flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)] transition-all"
       :class="collapsed ? 'justify-center px-0' : 'gap-2.5 px-6'"
       aria-current-value="false"
       data-console-brand-link
@@ -123,17 +123,18 @@ defineExpose({ collapsed })
         :key="group.key"
         :class="['px-3', { 'mb-5': !collapsed }]"
       >
-        <!-- group label: hand-drawn rust-red tick + wide-tracking text -->
+        <!-- group label: hand-drawn rust-red tick by day, gilded & slate tick by night -->
         <div v-if="!collapsed" class="mb-1 flex items-center gap-2 px-3 py-0.5">
           <!-- bamboo-node style: a cluster of short horizontal rules -->
-          <div class="flex flex-col gap-[3px] shrink-0" aria-hidden="true">
+          <div
+            class="console-sidebar__group-ticks flex shrink-0 flex-col gap-[3px]"
+            aria-hidden="true"
+          >
             <span
-              class="block h-px w-3 rounded-full"
-              style="background: var(--status-danger); opacity: 0.7"
+              class="console-sidebar__tick-primary block h-px w-3 rounded-full"
             />
             <span
-              class="block h-px w-2 rounded-full"
-              style="background: var(--status-danger); opacity: 0.45"
+              class="console-sidebar__tick-secondary block h-px w-2 rounded-full"
             />
           </div>
           <span
@@ -158,12 +159,12 @@ defineExpose({ collapsed })
                   ? 'button'
                   : undefined
               "
-              class="group relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-all focus-ring"
+              class="console-sidebar__item group relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors focus-ring"
               :class="[
                 item.disabled
                   ? 'cursor-not-allowed opacity-40'
                   : activeName === item.name
-                    ? ''
+                    ? 'console-sidebar__item--active'
                     : 'hover:bg-[var(--surface-warm-tile)]',
                 collapsed ? 'justify-center' : '',
               ]"
@@ -186,7 +187,7 @@ defineExpose({ collapsed })
               <!-- active indicator: wider brush-stroke bar with rounded caps -->
               <span
                 v-if="activeName === item.name && !collapsed"
-                class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
+                class="console-sidebar__active-bar absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full"
                 style="background: var(--accent)"
                 aria-hidden="true"
               />
@@ -264,7 +265,7 @@ defineExpose({ collapsed })
                 ? 'button'
                 : undefined
             "
-            class="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium transition-all focus-ring"
+            class="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium transition-colors focus-ring"
             :class="[
               item.disabled
                 ? 'cursor-not-allowed opacity-40'
@@ -306,7 +307,7 @@ defineExpose({ collapsed })
       <!-- collapse toggle -->
       <button
         type="button"
-        class="mt-2 flex h-9 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium text-[var(--text-tertiary)] transition-all hover:bg-[var(--surface-warm-tile)] focus-ring"
+        class="console-sidebar__collapse mt-2 flex h-9 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-warm-tile)] focus-ring"
         :class="collapsed ? 'justify-center' : ''"
         :aria-label="collapsed ? t('nav.expand') : t('nav.collapse')"
         @click="collapsed = !collapsed"
@@ -320,7 +321,7 @@ defineExpose({ collapsed })
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="shrink-0 text-[var(--status-danger-text)] transition-transform duration-[250ms]"
+          class="console-sidebar__collapse-icon shrink-0 text-[var(--status-danger-text)] transition-transform duration-[250ms]"
           :class="collapsed ? 'rotate-180' : ''"
         >
           <path d="m15 6-6 6 6 6" />
@@ -330,3 +331,127 @@ defineExpose({ collapsed })
     </div>
   </aside>
 </template>
+
+<style scoped>
+.console-sidebar__tick-primary {
+  background: var(--status-danger);
+  opacity: 0.7;
+}
+
+.console-sidebar__tick-secondary {
+  background: var(--status-danger);
+  opacity: 0.45;
+}
+
+:global(html.dark .console-sidebar) {
+  margin: 12px 0 12px 12px;
+  height: calc(100% - 24px);
+  border-radius: 16px;
+  background: var(--nav-surface) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(130%);
+  backdrop-filter: blur(28px) saturate(130%);
+  border: 1px solid var(--nav-border) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 0 0 0.5px rgba(228, 192, 107, 0.05),
+    0 14px 36px -6px rgba(3, 6, 14, 0.42),
+    0 4px 12px rgba(3, 6, 14, 0.24) !important;
+}
+
+:global(html.dark .console-sidebar__brand) {
+  border-bottom: 1px solid transparent !important;
+  background-image: linear-gradient(
+    90deg,
+    transparent 8%,
+    rgba(228, 192, 107, 0.18) 36%,
+    rgba(226, 232, 245, 0.08) 72%,
+    transparent 94%
+  );
+  background-size: 100% 1px;
+  background-position: bottom center;
+  background-repeat: no-repeat;
+}
+
+:global(html.dark .console-sidebar__brand .display-title) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+:global(html.dark .console-sidebar__tick-primary) {
+  background: var(--accent);
+  opacity: 0.78;
+}
+
+:global(html.dark .console-sidebar__tick-secondary) {
+  background: var(--signal);
+  opacity: 0.48;
+}
+
+:global(html.dark .console-sidebar__item) {
+  height: auto;
+  min-height: 2.375rem;
+  border-radius: 10px !important;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+
+:global(
+  html.dark
+    .console-sidebar__item:not([aria-current='page']):not(:disabled):hover
+) {
+  background: rgba(228, 192, 107, 0.065) !important;
+  color: var(--text-primary) !important;
+}
+
+:global(html.dark .console-sidebar__item[aria-current='page']) {
+  background: linear-gradient(
+    90deg,
+    rgba(228, 192, 107, 0.14) 0%,
+    rgba(228, 192, 107, 0.05) 100%
+  ) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  box-shadow:
+    inset 2.5px 0 0 var(--accent),
+    inset 0 1px 0 rgba(255, 248, 225, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.16) !important;
+}
+
+:global(html.dark .console-sidebar__active-bar) {
+  display: none;
+}
+
+:global(html.dark .console-sidebar__collapse-icon) {
+  color: var(--text-tertiary);
+}
+
+:global(
+  html.dark .console-sidebar__collapse:hover .console-sidebar__collapse-icon
+) {
+  color: var(--accent-text);
+}
+
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :global(html.dark .console-sidebar) {
+    background: var(--nav-solid) !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :global(html.dark .console-sidebar) {
+    background: var(--nav-solid) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+:global(html.dark[data-material='solid'] .console-sidebar) {
+  background: var(--nav-solid) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+</style>

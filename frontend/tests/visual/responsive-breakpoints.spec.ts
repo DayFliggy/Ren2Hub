@@ -101,7 +101,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await expect(drawer.getByRole('dialog')).toBeVisible()
     })
 
-    test(`console switches between sidebar and navigation strip at the desktop boundary (${setting})`, async ({
+    test(`console switches between sidebar and navigation drawer at the desktop boundary (${setting})`, async ({
       page,
     }) => {
       await configureBrowserFont(page, theme, fontSize)
@@ -110,21 +110,53 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await waitForStablePage(page)
       await expect(page.locator('html')).toHaveCSS('font-size', `${fontSize}px`)
       const sidebar = page.locator('aside[data-handdrawn="navigation"]')
-      const strip = page.locator('nav[data-handdrawn="navigation-strip"]')
+      const menu = page.locator('[aria-controls="console-mobile-navigation"]')
+      const drawer = page.locator('[data-console-mobile-navigation]')
       await expect(sidebar).toBeHidden()
-      await expect(strip).toBeVisible()
-      await expect(strip.locator('a[href="/keys"]')).toBeVisible()
+      await expect(menu).toBeVisible()
+      await menu.click()
+      await expect(
+        drawer.locator('a[data-console-nav-item="keys"]')
+      ).toHaveAttribute('href', '/keys')
+      await expect(
+        drawer.locator('[data-console-nav-item="keys"]')
+      ).toBeVisible()
 
       for (const width of [1024, 1100]) {
         await page.setViewportSize({ width, height: 900 })
         await expect(sidebar).toBeVisible()
-        await expect(strip).toBeHidden()
+        await expect(menu).toHaveAttribute('aria-expanded', 'false')
+        await expect(drawer).toHaveCount(0)
+        const needsDrawer =
+          fontSize === 20 && (width === 1024 || theme === 'dark')
+        if (needsDrawer) {
+          // Enlarged text uses the drawer when the desktop topbar is too narrow.
+          // The full-width light bar has enough room at 1100px; Studio has margins.
+          await expect(menu).toBeVisible()
+          await menu.click()
+          await expect(
+            drawer.locator('a[data-console-nav-item="keys"]')
+          ).toBeVisible()
+          await page.keyboard.press('Escape')
+          await expect(drawer).toHaveCount(0)
+          await expect(menu).toBeFocused()
+        } else {
+          await expect(menu).toBeHidden()
+        }
       }
+
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await expect(sidebar).toBeVisible()
+      await expect(menu).toBeHidden()
+      await expect(drawer).toHaveCount(0)
 
       await page.setViewportSize({ width: 1023, height: 900 })
       await expect(sidebar).toBeHidden()
-      await expect(strip).toBeVisible()
-      await expect(strip.locator('a[href="/keys"]')).toBeVisible()
+      await expect(menu).toBeVisible()
+      await menu.click()
+      await expect(
+        drawer.locator('a[data-console-nav-item="keys"]')
+      ).toBeVisible()
     })
   }
 }

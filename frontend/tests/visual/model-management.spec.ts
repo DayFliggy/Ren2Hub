@@ -136,6 +136,20 @@ async function setupPage(
 const visible = (page: Page, text: string) =>
   page.getByText(text, { exact: true }).filter({ visible: true }).first()
 
+async function revealModelsLink(page: Page, mobile: boolean) {
+  if (mobile)
+    await page.locator('[aria-controls="console-mobile-navigation"]').click()
+  const navigation = page.locator(
+    mobile
+      ? '[data-console-mobile-navigation]'
+      : 'aside[data-handdrawn="navigation"]'
+  )
+  await expect(navigation).toBeVisible()
+  const link = navigation.locator('[data-console-nav-item="models-admin"]')
+  await expect(link).toBeVisible()
+  return link
+}
+
 async function confirmHistoryBack(page: Page, discard: boolean) {
   const confirmation = page.waitForEvent('dialog')
   const navigation = page.goBack()
@@ -159,12 +173,16 @@ for (const language of ['zh-CN', 'en']) {
           page.screenshot({ path: testInfo.outputPath(name), fullPage: true })
         await page.goto('/models/metadata')
         await expect(visible(page, 'gpt-local')).toBeVisible()
-        await expect(
-          page
-            .locator('[data-console-nav-item="models-admin"]')
-            .filter({ visible: true })
-            .first()
-        ).toContainText(zh ? '模型管理' : 'Model management')
+        const modelsLink = await revealModelsLink(page, mobile)
+        await expect(modelsLink).toContainText(
+          zh ? '模型管理' : 'Model management'
+        )
+        if (mobile) {
+          await page.keyboard.press('Escape')
+          await expect(
+            page.locator('[data-console-mobile-navigation]')
+          ).toHaveCount(0)
+        }
         await expect(
           visible(page, zh ? '模型管理' : 'Model management')
         ).toBeVisible()
@@ -354,11 +372,7 @@ for (const theme of ['light', 'dark'] as const) {
       })
       // Stay in one document so Back exercises the Vue route guard.
       await page.goto('/keys')
-      const modelsLink = page
-        .locator('[data-console-nav-item="models-admin"]')
-        .filter({ visible: true })
-        .first()
-      await modelsLink.click()
+      await (await revealModelsLink(page, mobile)).click()
       await expect(page).toHaveURL(/\/models\/metadata$/)
       await page
         .getByRole('button', { name: 'Edit', exact: true })
@@ -376,7 +390,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page).toHaveURL(/\/keys$/)
       await expect(page.getByRole('dialog')).toHaveCount(0)
 
-      await modelsLink.click()
+      await (await revealModelsLink(page, mobile)).click()
       await page.getByRole('tab', { name: 'Vendors', exact: true }).click()
       await expect(page).toHaveURL(/\/models\/vendors$/)
       await page
@@ -430,11 +444,8 @@ test('a pending model save blocks browser history and closes only after success'
     await dialog.accept()
   })
   await page.goto('/keys')
-  await page
-    .locator('[data-console-nav-item="models-admin"]')
-    .filter({ visible: true })
-    .first()
-    .click()
+  await (await revealModelsLink(page, true)).click()
+  await expect(page).toHaveURL(/\/models\/metadata$/)
   await page
     .getByRole('button', { name: 'Edit', exact: true })
     .filter({ visible: true })

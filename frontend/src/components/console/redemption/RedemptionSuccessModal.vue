@@ -63,7 +63,7 @@ function download() {
     <!-- Success header -->
     <div class="mb-4 flex flex-col items-center gap-3 text-center">
       <div
-        class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--status-success-bg)]"
+        class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--status-success-soft)]"
       >
         <CheckCircle
           :size="24"

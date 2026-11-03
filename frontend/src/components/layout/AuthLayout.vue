@@ -76,6 +76,13 @@ const app = useAppStore()
   height: var(--auth-header-height);
 }
 
+:global(html.dark .auth-card) {
+  background: var(--studio-card-bg, var(--surface-solid)) !important;
+  border-color: var(--outline-variant) !important;
+  box-shadow: var(--elevation-3) !important;
+  backdrop-filter: none !important;
+}
+
 /* Sketch radius + elevation come from the theme fork: hand-drawn card by day,
    Material card by night. */
 .auth-card {
