@@ -482,7 +482,25 @@ html.light
   border-color: var(--pencil-line-faint);
 }
 
-html.light [data-handdrawn='ledger'] .data-table-header-clip {
+/* Carry the card's top corners through its slot wrapper only when the table
+   starts the card; tables below a toolbar keep their straight top edge. */
+html.light
+  [data-handdrawn='surface']
+  > div:first-child:has(> .data-table-shell:first-child),
+html.light
+  [data-handdrawn='surface']
+  > div:first-child
+  > .data-table-shell:first-child,
+html.light
+  [data-handdrawn='surface']
+  > div:first-child
+  > .data-table-shell:first-child
+  > .data-table-header {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+html.light [data-handdrawn='ledger'] .data-table-header {
   border-bottom: 0;
   background-image:
     repeating-linear-gradient(
@@ -855,7 +873,7 @@ html.dark [data-handdrawn='ledger'] {
   font-variant-numeric: tabular-nums;
 }
 
-html.dark [data-handdrawn='ledger'] .data-table-header-clip {
+html.dark [data-handdrawn='ledger'] .data-table-header {
   border-bottom: 1px solid var(--outline);
   background: var(--surface-container-high);
 }

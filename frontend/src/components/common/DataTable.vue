@@ -222,6 +222,7 @@ const columnHeaderId = (key: string) => `${tableId}-column-${key}`
  * below the visible header. Both tables use the same colgroup and fixed table
  * layout; horizontal body scrolling is mirrored onto the clipped header.
  */
+const headerSurfaceRef = ref<HTMLElement | null>(null)
 const headerClipRef = ref<HTMLElement | null>(null)
 const headerTableRef = ref<HTMLTableElement | null>(null)
 const bodyViewportRef = ref<HTMLElement | null>(null)
@@ -284,13 +285,13 @@ function minimumUsefulBodyHeight() {
 
 function updateActivation() {
   const viewport = bodyViewportRef.value
-  if (!constrained.value || !headerClipRef.value) {
+  if (!constrained.value || !headerSurfaceRef.value) {
     innerScrollActive.value = false
     return
   }
 
   const reachedBoundary =
-    headerClipRef.value.getBoundingClientRect().top <= stickyBottom + 1
+    headerSurfaceRef.value.getBoundingClientRect().top <= stickyBottom + 1
   if (!reachedBoundary && innerScrollActive.value && viewport) {
     // A direct window scroll can move the list away from its handoff point while
     // the body is midway through its own scroll. Reset before locking it again
@@ -302,7 +303,7 @@ function updateActivation() {
 
 function onBodyFocusIn(event: FocusEvent) {
   const viewport = bodyViewportRef.value
-  const header = headerClipRef.value
+  const header = headerSurfaceRef.value
   const target = event.target instanceof HTMLElement ? event.target : null
   if (
     pointerFocusPending ||
@@ -341,7 +342,7 @@ function onBodyPointerDown() {
 
 function measure() {
   measureFrame = 0
-  const header = headerClipRef.value
+  const header = headerSurfaceRef.value
   const viewport = bodyViewportRef.value
   const table = bodyTableRef.value
   if (!header || !viewport || !table) return
@@ -457,7 +458,7 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(scheduleMeasure)
 
   const observed = [
-    headerClipRef.value,
+    headerSurfaceRef.value,
     bodyViewportRef.value,
     bodyTableRef.value,
     footerRef.value,
@@ -493,63 +494,64 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="data-table-shell" data-handdrawn="ledger">
-    <!-- Visual header: wider tracking + gold-line bottom border for ledger feel -->
-    <div
-      ref="headerClipRef"
-      class="data-table-header-clip overflow-hidden border-b bg-[var(--surface-table-header)]"
-      style="border-color: var(--dec-gold-line)"
-      :style="headerClipStyle"
-      @scroll="onHeaderScroll"
-    >
-      <table
-        ref="headerTableRef"
-        role="presentation"
-        class="w-full table-fixed border-collapse text-sm will-change-transform"
-        :style="{ minWidth: tableLength(minTableWidth) }"
+    <!-- Paint across the scrollbar gutter without widening the aligned columns. -->
+    <div ref="headerSurfaceRef" class="data-table-header">
+      <div
+        ref="headerClipRef"
+        class="data-table-header-clip overflow-hidden"
+        :style="headerClipStyle"
+        @scroll="onHeaderScroll"
       >
-        <colgroup>
-          <col v-if="selectable" class="data-table-selection-column" />
-          <col
-            v-for="col in columns"
-            :key="col.key"
-            :style="col.width ? { width: tableLength(col.width) } : undefined"
-          />
-        </colgroup>
-        <thead class="bg-[var(--surface-table-header)]">
-          <tr class="text-left text-xs text-[var(--text-secondary)]">
-            <td
-              v-if="selectable"
-              class="data-table-selection-cell px-3 py-3 text-center"
-            >
-              <label :class="checkboxTargetClass">
-                <input
-                  type="checkbox"
-                  :class="checkboxClass"
-                  :checked="allChecked"
-                  :disabled="selectionDisabled"
-                  :aria-label="t('common.selectAll')"
-                  @change="toggleAll"
-                />
-              </label>
-            </td>
-            <td
+        <table
+          ref="headerTableRef"
+          role="presentation"
+          class="w-full table-fixed border-collapse text-sm will-change-transform"
+          :style="{ minWidth: tableLength(minTableWidth) }"
+        >
+          <colgroup>
+            <col v-if="selectable" class="data-table-selection-column" />
+            <col
               v-for="col in columns"
               :key="col.key"
-              class="px-3 py-3 font-semibold tracking-[0.12em] uppercase"
-              style="
-                font-size: 0.625rem;
-                font-family: var(--font-display);
-                color: var(--text-tertiary);
-              "
-              :class="alignClass(col.align)"
-            >
-              <slot :name="`header-${col.key}`" :column="col">
-                <span aria-hidden="true">{{ col.label }}</span>
-              </slot>
-            </td>
-          </tr>
-        </thead>
-      </table>
+              :style="col.width ? { width: tableLength(col.width) } : undefined"
+            />
+          </colgroup>
+          <thead>
+            <tr class="text-left text-xs text-[var(--text-secondary)]">
+              <td
+                v-if="selectable"
+                class="data-table-selection-cell px-3 py-3 text-center"
+              >
+                <label :class="checkboxTargetClass">
+                  <input
+                    type="checkbox"
+                    :class="checkboxClass"
+                    :checked="allChecked"
+                    :disabled="selectionDisabled"
+                    :aria-label="t('common.selectAll')"
+                    @change="toggleAll"
+                  />
+                </label>
+              </td>
+              <td
+                v-for="col in columns"
+                :key="col.key"
+                class="px-3 py-3 font-semibold tracking-[0.12em] uppercase"
+                style="
+                  font-size: 0.625rem;
+                  font-family: var(--font-display);
+                  color: var(--text-tertiary);
+                "
+                :class="alignClass(col.align)"
+              >
+                <slot :name="`header-${col.key}`" :column="col">
+                  <span aria-hidden="true">{{ col.label }}</span>
+                </slot>
+              </td>
+            </tr>
+          </thead>
+        </table>
+      </div>
     </div>
 
     <div
@@ -744,9 +746,9 @@ html.dark .data-table-shell {
   box-shadow: var(--card-shadow, var(--elevation-1));
 }
 
-html.dark .data-table-header-clip {
-  background: var(--surface-container-high) !important;
-  border-bottom: 1px solid var(--outline) !important;
+.data-table-header {
+  background: var(--surface-table-header);
+  border-bottom: 1px solid var(--dec-gold-line);
 }
 
 html.dark .data-table-header-clip thead td {
