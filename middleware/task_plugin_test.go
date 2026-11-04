@@ -67,7 +67,7 @@ decodeJob: function(ctx) {
   if (ctx.query.tag.length !== 2 || ctx.query.tag[0] !== "first" || ctx.query.tag[1] !== "second") throw new Error("bad query");
   if (ctx.body.kind !== "json" || !Array.isArray(ctx.body.value) || ctx.body.value[0] !== "prompt") throw new Error("bad body");
   // Decoders read the client's headers, without its gateway credentials.
-  if (ctx.requestHeaders["X-Dashscope-Sse"] !== "enable" || ctx.requestHeaders.Authorization !== undefined || ctx.requestHeaders["X-Private-Secret"] !== undefined) throw new Error("bad headers");
+  if (ctx.requestHeaders["X-Dashscope-Async"] !== "enable" || ctx.requestHeaders.Authorization !== undefined) throw new Error("bad headers");
 	return {kind: "submit", model: "resolved-model", action: "resolved-action", requestBody: {prompt: "normalized"}};
 },
 jobCreated: function(ctx, task) { return task; },
@@ -95,8 +95,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 	})
 	request := httptest.NewRequest(http.MethodPost, "/vendor/jobs/video?tag=first&tag=second", strings.NewReader(`["prompt",2]`))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-DashScope-Sse", "enable")
-	request.Header.Set("X-Private-Secret", "must-not-reach-js")
+	request.Header.Set("X-DashScope-Async", "enable")
 	request.Header.Set("Authorization", "Bearer sk-gateway")
 	recorder := httptest.NewRecorder()
 

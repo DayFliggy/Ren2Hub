@@ -5,7 +5,6 @@ import (
 
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	builtinplugins "github.com/QuantumNous/new-api/plugins"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,26 +19,6 @@ func callBuiltinTaskHook(t *testing.T, key, hook string, ctx map[string]any) (ma
 		return nil, err
 	}
 	return decodePluginValue(t, value), nil
-}
-
-func TestKlingSubmitUsesBilledModeAndModelAfterMetadataMerge(t *testing.T) {
-	ctx := map[string]any{
-		"apiKey":        "test-key",
-		"upstreamModel": "kling-v2-5-turbo",
-		"requestBody": map[string]any{
-			"model": "kling-v2-5-turbo", "prompt": "a cat", "mode": "std",
-			"metadata": map[string]any{"model": "kling-v2-master", "model_name": "kling-v2-master", "mode": "pro"},
-		},
-	}
-	submitted, err := callBuiltinTaskHook(t, "kling", "buildSubmitRequest", ctx)
-	require.NoError(t, err)
-	body := submitted["body"].(map[string]any)
-	assert.NotContains(t, body, "model", "Kling selects its model through model_name")
-	assert.Equal(t, "kling-v2-5-turbo", body["model_name"])
-	assert.Equal(t, "std", body["mode"])
-	facts, err := callBuiltinTaskHook(t, "kling", "extractUsage", ctx)
-	require.NoError(t, err)
-	assert.Equal(t, 1.5, facts["units"])
 }
 
 func TestVeoSubmitValidatesFinalBillingParameters(t *testing.T) {

@@ -1646,18 +1646,20 @@ func TestSubmitContextExposesClientHeadersWithoutCredentials(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/vendor/v1/jobs", nil)
 	c.Request.Header.Set("Content-Type", "application/json")
-	c.Request.Header.Set("User-Agent", "renai-test")
-	c.Request.Header.Set("X-Request-Id", "request-1")
-	for _, name := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key", "X-Goog-Api-Key", "Mj-Api-Secret", "X-Private-Secret", "X-Forwarded-Authorization"} {
+	c.Request.Header.Set("TypeSafe-Danger-Zone-Long-Context", "true")
+	c.Request.Header.Add("X-Trace", "first")
+	c.Request.Header.Add("X-Trace", "second")
+	for _, name := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key", "X-Goog-Api-Key", "Mj-Api-Secret"} {
 		c.Request.Header.Set(name, "gateway-secret")
 	}
 
 	headers := adaptor.submitContext(c, info)["requestHeaders"]
 
 	assert.Equal(t, map[string]string{
-		"Content-Type": "application/json",
-		"User-Agent":   "renai-test",
-		"X-Request-Id": "request-1",
+		"Content-Type":                      "application/json",
+		"Accept":                            "",
+		"Typesafe-Danger-Zone-Long-Context": "true",
+		"X-Trace":                           "first",
 	}, headers)
 	assert.Equal(t, headers, adaptor.submitContext(nil, info)["requestHeaders"], "hooks without a client request see the submission headers")
 }

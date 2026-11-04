@@ -3,8 +3,8 @@
   "implementation_base_sha": "a276b48eaa60ae2ff1e761c21f5ac5fb526a541c",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 796,
-    "adapted": 281,
+    "upstream_equal": 798,
+    "adapted": 279,
     "extension": 274,
     "removed": 45
   },
@@ -3171,7 +3171,7 @@
       "path": "middleware/task_plugin_test.go",
       "status": "adapted",
       "upstream_sha256": "10710e0b93350fad517698fd6af34f7b300ec2770e1b3f1054e0a5a7509819e5",
-      "local_sha256": "b86b10d9c6f12a504a46dcbdad2dc222b0adbbf69f3c5fafc367e9538df6cc06"
+      "local_sha256": "b3d186516fdd554feb34f299177c32453d733ee4b860808ca9bd2f727dd1bfd0"
     },
     {
       "path": "middleware/token_auto_groups_context_test.go",
@@ -5370,7 +5370,7 @@
       "path": "plugins/billing_input_validation_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "49d497fa4f0a01461ab97b9c51ae0bb65cf410d56908da2356d812b231123746"
+      "local_sha256": "99c12895d78484cb7e273cf386987f0dfee3b092232ec8961a6452395a82d3b4"
     },
     {
       "path": "plugins/builtin_plugins_test.go",
@@ -5410,9 +5410,9 @@
     },
     {
       "path": "plugins/kling_responses_test.go",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "b087d5e12c125183757dadd6a2fd2310e503660e970570b25e2ee26400552961",
-      "local_sha256": "b83ef32ebbb6d093a79d36d21488b92224093d0556913fbdaa65b4dc920aca71"
+      "local_sha256": "b087d5e12c125183757dadd6a2fd2310e503660e970570b25e2ee26400552961"
     },
     {
       "path": "plugins/sora_responses_test.go",
@@ -5502,20 +5502,9 @@
     },
     {
       "path": "plugins/tasks/kling/plugin.js",
-      "status": "adapted",
+      "status": "upstream_equal",
       "upstream_sha256": "f4b949679dba31e287d2b21d4b3b4c09980c9bb744da9ede5153f1801cf84240",
-      "local_sha256": "ddc452c03a8e3745546f6e307464c688719dfe6a2fac61d9b4b98530bd2efc1a",
-      "reasons": [
-        "plugin-self-validation"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "metadata 合并后使用与 usage 相同的 outboundMode，固定 model_name 且删除冲突 model 字段；尺寸增加有限数值检查。其余 Kling 4 路由/单价表采用上游。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
-        "counterfactual_evidence": [
-          "plugins/exception-proof.json#kling"
-        ]
-      }
+      "local_sha256": "f4b949679dba31e287d2b21d4b3b4c09980c9bb744da9ede5153f1801cf84240"
     },
     {
       "path": "plugins/tasks/sora/plugin.js",
@@ -6675,17 +6664,17 @@
       "path": "relay/channel/task/jsplugin/adaptor.go",
       "status": "adapted",
       "upstream_sha256": "b036b6703139e2502bbd2ff7ae9822ad0640bf24acd20de42b1156e5298119be",
-      "local_sha256": "3872f3653573a58bb229707bb176782bca2e426ebb6167558623da78166b6267",
+      "local_sha256": "baa1ed71e954213fd0d514f1c5c34bb64adade558b17bdd1b1a91b51c0a301cf",
       "reasons": [
         "concurrency",
-        "task-plugin-header-allowlist"
+        "native-plugin-multipart"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "所有 decoder 与 driver 共用单一 allowlist，目标黑名单会泄漏任意私有头；轮询 context 向 fetch/hook 透传并采用现有任务附件解析。新 SSE detached 生命周期采用目标原文。",
+        "basis": "ClientRequestHeaders 按用户后续要求完整恢复冻结上游凭据头黑名单；仅保留轮询 context 向 fetch/hook 透传及任务 multipart 预算/附件解析，SSE detached 生命周期采用目标原文。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
-          "plugins/verification-summary.json"
+          "core/RESULTS.json"
         ]
       }
     },
@@ -6693,7 +6682,7 @@
       "path": "relay/channel/task/jsplugin/adaptor_test.go",
       "status": "adapted",
       "upstream_sha256": "36ea676027f946419d3428a210716d2a731c12ec6eebbe1053a2728dee99bf5d",
-      "local_sha256": "a80f601688a5b10a747bde7e9cdab69f563318e211d4e7eea44a6d9d1853db54"
+      "local_sha256": "6b88edd50d5f7de3bac3feb76f4c628bcc0f81e89410a05feedd7d3ed400c1fd"
     },
     {
       "path": "relay/channel/task/jsplugin/auth.go",
@@ -11506,11 +11495,6 @@
       "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
       "kind": "verified_fix"
     },
-    "task-plugin-header-allowlist": {
-      "basis": "必要修复：集中请求头白名单，客户端凭据和任意自定义敏感头不得泄漏到插件上游。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
-      "kind": "verified_fix"
-    },
     "task-refund-cas": {
       "basis": "必要修复：仅确认渠道不存在时按任务状态 CAS 失败并退款一次，保留 legacy 截止规则。",
       "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
@@ -11587,7 +11571,7 @@
     },
     "full_validation": "final-source-validation-v3/",
     "candidate": "candidate-final/",
-    "status": "source validation passed; committed source, candidate and publication states are recorded separately in delivery.json",
+    "status": "原全链与候选证据仅绑定 7e4f517fd；请求头与 Kling 后续回源的源码、定向验证和候选状态见 followup，不沿用旧候选准入。",
     "report_sha256": {
       "core/RESULTS.json": "aaeea3b67433a413522712f606c9efd20f07043cfbad94b36814b594adba0c5f",
       "parent-proofs/currency-proof.json": "9c9170ceaa2ee60ccdfc54a5c73747afaf03ebfdad42fb46540002c965c2e15f",
@@ -11610,8 +11594,11 @@
       "final-source-validation-v3/race/run-y9fj7cyr/report.json": "2e26e92a4a46f7512f8ac10a099524709173a0662d5b8686ee47618afb5071e7",
       "final-source-validation-v3/browser/run-yn5qd_5w/report.json": "7f3c9444b475b76a8eaae813445460aefe800c8d87dc4684b24c6aa7421e572f",
       "final-source-validation-v3/ui-contracts/run-5gpufsmr/report.json": "a01698de0223b7fe0e4157e39aceed66773b3217f9b0ac397ff6c4c7e7a5faa7",
-      "candidate-harness-fix.json": "309a172dfb88411dceaf72294d9797ca3edbdb4f0204470522f0b930390c6cbc"
+      "candidate-harness-fix.json": "309a172dfb88411dceaf72294d9797ca3edbdb4f0204470522f0b930390c6cbc",
+      "upstream-followup-headers-kling/validation.json": "e2f8e73922bc4bb67d7bbdf3cecdb45dd252b1b144b77e1dda37b464d62f4245",
+      "upstream-followup-headers-kling/source-convergence.json": "ab4aa1037c67059dbf5863514ff06f423549e02ab51ac5e354250805dbd47739"
     },
-    "delivery": "delivery.json"
+    "delivery": "delivery.json",
+    "followup": "upstream-followup-headers-kling/delivery.json"
   }
 }

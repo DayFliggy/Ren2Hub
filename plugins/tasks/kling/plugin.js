@@ -187,7 +187,7 @@ function sizeDimensions(size) {
   const parts = trimmed(size).toLowerCase().split("x");
   const width = Number(parts[0]);
   const height = Number(parts[1]);
-  if (parts.length !== 2 || !Number.isFinite(width) || !Number.isFinite(height) || !(width > 0) || !(height > 0)) throw new Error("size must be WIDTHxHEIGHT, such as 1280x720");
+  if (parts.length !== 2 || !(width > 0) || !(height > 0)) throw new Error("size must be WIDTHxHEIGHT, such as 1280x720");
   return { width: width, height: height };
 }
 
@@ -551,8 +551,7 @@ export function buildSubmitRequest(ctx) {
     if (action === "text_to_video" && req.size !== undefined && req.size !== null && req.size !== "") body.aspect_ratio = aspectRatio(sizeDimensions(req.size), KLING_ASPECT_RATIOS);
     Object.assign(body, metadata);
     body.model_name = model;
-    delete body.model;
-    body.mode = outboundMode(req);
+    body.mode = klingMode(body.mode);
     body.duration = String(outboundDuration(req));
     if (body.image) body.image = filePlaceholder(body.image);
     if (body.image_tail) body.image_tail = filePlaceholder(body.image_tail);

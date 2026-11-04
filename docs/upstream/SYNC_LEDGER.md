@@ -4,6 +4,18 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 本轮源码冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`，于 2026-11-04 完成窗口核对；原已适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`。这不表示目标 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-04 请求头与 Kling 按后续要求回归上游
+
+用户在全量同步验收后明确要求“将这两项也回归 NewAPI 上游实现”，覆盖此前保留的任务请求头白名单和 Kling 出站参数/计费一致性修复。基于本地 `7e4f517fd5f2c33e6b891dbf1cc651a7d1ce10db`，仍以冻结上游 `ba5f7367797566175a6cd97a748d430af3602a01` 为准，不扩大版本窗口。
+
+- `ClientRequestHeaders` 完整恢复上游：排除六类网关凭据头，其他头按规范名称取首值，始终提供 `Content-Type` 和 `Accept`（未发送时为空）；原生/协议 decoder 与 driver 继续共用该入口。移除本地白名单合同，恢复上游对应回归和插件 API 文档。
+- `plugins/tasks/kling/plugin.js` 整文件恢复上游，撤销 metadata 合并后的本地 `model` 删除、`outboundMode` 强制复用及额外有限尺寸检查。`kling_responses_test.go` 恢复上游原文，删除只约束已撤销 Kling 本地行为的回归；其他插件的计费验证不变。
+- 此次按明确指令接受上游语义：自定义非黑名单头可进入插件，Kling metadata 的模式覆盖与 usage 取值沿上游各自规则。此前复现报告作为历史证据保留，不再作为这两项当前保留理由；也不宣称上游已修复此前差异。
+
+验证：受影响的 plugins、adaptor、插件 runtime、middleware 和 controller 共 880 个 Go 顶层用例通过，另有 2 个嵌入资源顶层用例（10 个含子用例事件）通过；零意外跳过，`GOWORK=off` 且每批超时 60 秒。根模块 `go vet`、后端构建和 diff/格式检查通过。恢复 middleware 的上游头部夹具后仅重跑该包及尚未完成的 controller，前三包未改源码/测试的已通过结果复用；早先失败记录单独保留。前端、数据库 schema、钱包/结算及并发状态实现未改，原对应源码验证作为未变部分的证据；新提交仍须重新构建并运行完整跨版本候选。
+
+验证、源码身份和候选状态统一记录在 `/home/work/ren2hub-sync-20261104-ja5AWnjV/upstream-followup-headers-kling/delivery.json`。此前全链与 `deployment_eligible=true` 候选只对应 `7e4f517fd`，不得用于本次修改后的源码；本次不发布 Git、不切换生产。
+
 ## 2026-11-04 全量回归上游
 
 本轮本地起点为 `a276b48eaa60ae2ff1e761c21f5ac5fb526a541c`，原适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`。只处理该窗口的 33 个提交、188 个变更文件；此后上游提交另行处理。实施在独立 checkout 和专用上游缓存中完成，原工作树保留。正式 Git 发布和生产容器切换不属于本轮授权。

@@ -488,11 +488,6 @@ func TestKling4(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
 			assert.ErrorContains(t, taskErr.Error, "duration must be an integer from 3 to 30")
 		}
-		for _, size := range []string{"1e999x720", "720x1e999"} {
-			_, _, _, _, taskErr := validate(t, openaiVideo, "kling-4.0", map[string]any{"model": "kling-4.0", "prompt": "a cat", "size": size})
-			require.NotNil(t, taskErr)
-			assert.ErrorContains(t, taskErr.Error, "size must be WIDTHxHEIGHT")
-		}
 		_, _, _, _, taskErr := validate(t, openaiVideo, "kling-4.0", map[string]any{"model": "kling-4.0", "prompt": "a cat", "size": "720p"})
 		require.NotNil(t, taskErr)
 		assert.ErrorContains(t, taskErr.Error, "size must be WIDTHxHEIGHT")
