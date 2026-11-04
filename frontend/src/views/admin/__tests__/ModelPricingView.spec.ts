@@ -240,33 +240,54 @@ describe('pricing workspace draft lifecycle', () => {
     expect(editor.vm.dirty()).toBe(true)
     return editor
   }
-  // Copying commits the open editor without switching to another model.
-  async function commitByCopy(wrapper: VueWrapper) {
-    await wrapper.get('input[aria-label="Select model-a"]').setValue(true)
-    await button(wrapper, 'Copy current model pricing').trigger('click')
+  // Each action commits the open editor in place, naming the new model.
+  async function commitInPlace(wrapper: VueWrapper, via: string) {
+    if (via === 'tools')
+      await wrapper
+        .findAll('[role="radio"]')
+        .find((item) => item.text() === 'Tool prices')!
+        .trigger('click')
+    else if (via === 'json') await button(wrapper, 'JSON').trigger('click')
+    else {
+      await wrapper.get('input[aria-label="Select model-a"]').setValue(true)
+      await button(wrapper, 'Copy current model pricing').trigger('click')
+    }
     await flushPromises()
   }
+  function expectFetchedOnce(wrapper: VueWrapper, name: string) {
+    expect(mocks.loadEntry).toHaveBeenCalledTimes(1)
+    expect(mocks.loadEntry).toHaveBeenCalledWith(name, expect.any(AbortSignal))
+    const editor = wrapper.getComponent(ModelPricingEditor)
+    expect(editor.props('modelName')).toBe(name)
+    expect(editor.props('entry')).toEqual(pluginEntry(name))
+    expect(Number(editor.props('pricing').ModelPrice)).toBe(0.5)
+    return editor
+  }
 
-  it('keeps a new pricing editor mounted without fetching metadata when it gets a name', async () => {
+  it('fetches the schema once when a new plugin model is named in place', async () => {
     const wrapper = await setup(false, false)
-    const before = await fillNewModel(wrapper, 'new-task-model')
-    const element = before.element
-    await commitByCopy(wrapper)
-    const after = wrapper.getComponent(ModelPricingEditor)
-    expect(after.element).toBe(element)
-    expect(after.props('modelName')).toBe('new-task-model')
-    expect(mocks.loadEntry).not.toHaveBeenCalled()
-    expect(after.vm.dirty()).toBe(false)
-    // A model switch must not try to recommit the already adopted editor.
-    const updates = after.emitted('update')?.length
-    await button(wrapper, 'model-a').trigger('click')
-    await flushPromises()
-    expect(after.emitted('update')?.length).toBe(updates)
-    expect(wrapper.getComponent(ModelPricingEditor).props('modelName')).toBe(
-      'model-a'
-    )
+    await fillNewModel(wrapper, 'named-task-model')
+    await commitInPlace(wrapper, 'copy')
+    const editor = expectFetchedOnce(wrapper, 'named-task-model')
+    expect(editor.props('entry')?.plugin_variants).toHaveLength(1)
+    expect(editor.vm.dirty()).toBe(false)
     wrapper.unmount()
   })
+
+  it.each(['tools', 'json', 'copy'])(
+    'keeps the named plugin model schema when it reopens after committing via %s',
+    async (via) => {
+      mocks.issues.mockResolvedValue(pluginIssues(['reopened-task-model']))
+      const wrapper = await setup(false, false)
+      await fillNewModel(wrapper, 'reopened-task-model')
+      await commitInPlace(wrapper, via)
+      // The issue link reopens the visual editor from tools or JSON.
+      await button(wrapper, 'reopened-task-model').trigger('click')
+      await flushPromises()
+      expectFetchedOnce(wrapper, 'reopened-task-model')
+      wrapper.unmount()
+    }
+  )
 
   it('fetches metadata for a draft committed by opening another new-model editor', async () => {
     const wrapper = await setup(false, false)
@@ -275,16 +296,9 @@ describe('pricing workspace draft lifecycle', () => {
     await button(wrapper, 'Add model').trigger('click')
     await flushPromises()
     expect(wrapper.getComponent(ModelPricingEditor).props('modelName')).toBe('')
-    expect(mocks.loadEntry).not.toHaveBeenCalled()
     await button(wrapper, 'committed-task-model').trigger('click')
     await flushPromises()
-    const editor = wrapper.getComponent(ModelPricingEditor)
-    expect(editor.props('modelName')).toBe('committed-task-model')
-    expect(mocks.loadEntry).toHaveBeenCalledWith(
-      'committed-task-model',
-      expect.any(AbortSignal)
-    )
-    expect(editor.props('entry')).toEqual(pluginEntry('committed-task-model'))
+    expectFetchedOnce(wrapper, 'committed-task-model')
     wrapper.unmount()
   })
 
@@ -298,15 +312,15 @@ describe('pricing workspace draft lifecycle', () => {
     )
     const wrapper = await setup(false, false, '/models/pricing?model=old-task')
     await fillNewModel(wrapper, 'named-task-model')
-    await commitByCopy(wrapper)
+    await commitInPlace(wrapper, 'copy')
     resolveFirst(pluginEntry('old-task'))
     await flushPromises()
     const editor = wrapper.getComponent(ModelPricingEditor)
-    expect(editor.props('entry')).toBeUndefined()
     expect(editor.props('modelName')).toBe('named-task-model')
+    expect(editor.props('entry')).toEqual(pluginEntry('named-task-model'))
     expect(editor.props('pricing')).toEqual({ ModelPrice: '0.5' })
     expect(editor.vm.dirty()).toBe(false)
-    expect(mocks.loadEntry).toHaveBeenCalledTimes(1)
+    expect(mocks.loadEntry).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
 

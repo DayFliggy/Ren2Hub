@@ -115,7 +115,6 @@ const fetchedEntry = ref<ModelPricingEntry>(),
   entryError = ref('')
 const activeEntry = computed(() => snapshotEntry.value ?? fetchedEntry.value)
 let entryController: AbortController | undefined
-let skipEntryLoadFor: string | undefined
 // Unconfigured plugin models are absent from the all-model snapshot. Fetch
 // their schema separately without replacing the workspace's saved baseline.
 async function loadActiveEntry() {
@@ -123,10 +122,6 @@ async function loadActiveEntry() {
   fetchedEntry.value = undefined
   entryError.value = ''
   entryLoading.value = false
-  const namedDraft = skipEntryLoadFor
-  skipEntryLoadFor = undefined
-  // Naming the mounted new-model editor adopts its draft; it is not a model switch.
-  if (activeName.value && activeName.value === namedDraft) return
   if (!activeName.value || !baseline.value || snapshotEntry.value) return
   const request = new AbortController()
   entryController = request
@@ -281,7 +276,7 @@ async function load(forceSettings = false) {
 function updateDraft(name: string, pricing: PricingValues) {
   draft.value = { ...draft.value, [name]: clonePricing(pricing) }
   if (editing.value === '__new__') {
-    skipEntryLoadFor = name
+    // The draft is committed, so the editor shown under its name is clean.
     editorDirty.value = false
     editing.value = name
   }
@@ -302,10 +297,6 @@ function open(name: string) {
     mode.value = 'visual'
   }
   if (tab.value === 'tools') tab.value = 'models'
-  // An explicit open always loads on demand. The commit above may have just
-  // named a new-model editor; Vue can batch that rename with this switch, so
-  // the watcher would never consume the skip marker.
-  skipEntryLoadFor = undefined
   editing.value = name
   editorDirty.value = false
   revision.value++
