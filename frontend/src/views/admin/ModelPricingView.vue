@@ -302,6 +302,10 @@ function open(name: string) {
     mode.value = 'visual'
   }
   if (tab.value === 'tools') tab.value = 'models'
+  // An explicit open always loads on demand. The commit above may have just
+  // named a new-model editor; Vue can batch that rename with this switch, so
+  // the watcher would never consume the skip marker.
+  skipEntryLoadFor = undefined
   editing.value = name
   editorDirty.value = false
   revision.value++

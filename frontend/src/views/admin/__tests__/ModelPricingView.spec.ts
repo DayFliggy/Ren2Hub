@@ -226,23 +226,32 @@ describe('pricing workspace draft lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('keeps a new pricing editor mounted without fetching metadata when it gets a name', async () => {
-    const wrapper = await setup(false, false)
+  // Fills a new-model editor with a model that is not in the snapshot.
+  async function fillNewModel(wrapper: VueWrapper, name: string) {
     await button(wrapper, 'Add model').trigger('click')
-    const before = wrapper.getComponent(ModelPricingEditor)
-    const element = before.element
-    await field(wrapper, '.pricing-editor', 'Model ID').setValue(
-      'new-task-model'
-    )
-    await before
+    const editor = wrapper.getComponent(ModelPricingEditor)
+    await field(wrapper, '.pricing-editor', 'Model ID').setValue(name)
+    await editor
       .findAll('[role="tab"]')
       .find((item) => item.text() === 'Per-request (deprecated)')!
       .trigger('click')
-    await before.get('input[inputmode="decimal"]').setValue('0.5')
+    await editor.get('input[inputmode="decimal"]').setValue('0.5')
     await flushPromises()
-    expect(before.vm.dirty()).toBe(true)
-    expect(before.vm.commit()).not.toBeNull()
+    expect(editor.vm.dirty()).toBe(true)
+    return editor
+  }
+  // Copying commits the open editor without switching to another model.
+  async function commitByCopy(wrapper: VueWrapper) {
+    await wrapper.get('input[aria-label="Select model-a"]').setValue(true)
+    await button(wrapper, 'Copy current model pricing').trigger('click')
     await flushPromises()
+  }
+
+  it('keeps a new pricing editor mounted without fetching metadata when it gets a name', async () => {
+    const wrapper = await setup(false, false)
+    const before = await fillNewModel(wrapper, 'new-task-model')
+    const element = before.element
+    await commitByCopy(wrapper)
     const after = wrapper.getComponent(ModelPricingEditor)
     expect(after.element).toBe(element)
     expect(after.props('modelName')).toBe('new-task-model')
@@ -256,6 +265,48 @@ describe('pricing workspace draft lifecycle', () => {
     expect(wrapper.getComponent(ModelPricingEditor).props('modelName')).toBe(
       'model-a'
     )
+    wrapper.unmount()
+  })
+
+  it('fetches metadata for a draft committed by opening another new-model editor', async () => {
+    const wrapper = await setup(false, false)
+    await fillNewModel(wrapper, 'committed-task-model')
+    // Add model commits the draft and reopens a blank editor in one event.
+    await button(wrapper, 'Add model').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ModelPricingEditor).props('modelName')).toBe('')
+    expect(mocks.loadEntry).not.toHaveBeenCalled()
+    await button(wrapper, 'committed-task-model').trigger('click')
+    await flushPromises()
+    const editor = wrapper.getComponent(ModelPricingEditor)
+    expect(editor.props('modelName')).toBe('committed-task-model')
+    expect(mocks.loadEntry).toHaveBeenCalledWith(
+      'committed-task-model',
+      expect.any(AbortSignal)
+    )
+    expect(editor.props('entry')).toEqual(pluginEntry('committed-task-model'))
+    wrapper.unmount()
+  })
+
+  it('ignores a late deep-link fetch after a new model is named', async () => {
+    let resolveFirst!: (entry: ModelPricingEntry) => void
+    mocks.loadEntry.mockImplementationOnce(
+      () =>
+        new Promise<ModelPricingEntry>((resolve) => {
+          resolveFirst = resolve
+        })
+    )
+    const wrapper = await setup(false, false, '/models/pricing?model=old-task')
+    await fillNewModel(wrapper, 'named-task-model')
+    await commitByCopy(wrapper)
+    resolveFirst(pluginEntry('old-task'))
+    await flushPromises()
+    const editor = wrapper.getComponent(ModelPricingEditor)
+    expect(editor.props('entry')).toBeUndefined()
+    expect(editor.props('modelName')).toBe('named-task-model')
+    expect(editor.props('pricing')).toEqual({ ModelPrice: '0.5' })
+    expect(editor.vm.dirty()).toBe(false)
+    expect(mocks.loadEntry).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 

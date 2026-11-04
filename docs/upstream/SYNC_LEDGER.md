@@ -33,7 +33,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 - Doubao 时长类型：对齐上游：冻结 `plugins/tasks/doubao/plugin.js:929-930` 的 number/string 类型识别。host 路径共享类型判断，选中非 number/string 值（`true`、`false`、`[6]`、对象、`null` 等）视为未知时长，出站删除 duration，统一预扣 `profile.maxDuration`，即使带 frames 也不用帧数估算；完全未给时长且只给 frames 仍按原规则估算。保留上游 `||` 对非空 metadata 时长的回退；`||` 跳过 `null`、`false` 等假值后若无候选回退，仍按已声明的非标量键处理，避免混同完全缺省后采用 frames。此最大预扣是本地明确要求的保守适配；上游 `:932-933` 会继续尝试 frames，上游提交 `:843-844` 的 parseInt 又可能将 `[6]` 发为 6 秒而按最大值预扣，本地不照搬这处提交/预扣不一致。正常数字、数字字符串、`-1` 和 native `vendorBody` 行为保持原样。decoder 的 Number() 检查不改：Responses 真实 decoder 覆盖全部非标量及带 frames 用例；openai_video 的对象、`false`、`null` seconds 仍在原生范围检查时拒绝，其余可解码值验证无 duration 和最大预扣。
 - Doubao null alias 测试：改用真实 Responses decoder 输入 `seconds:null, duration:6`。该 decoder 只传递 `seconds`，因此与上游一致，提交 body 不添加 duration，预扣最大时长；测试仅记录现行行为，不将不实际可达的直构造 host 状态当成 decoder 合同。
 - Doubao metadata 空字符串：核对冻结上游 `Object.assign` 与出站构造后，`metadata.duration:""` 会原样进入 Ark 请求；Usage 将它作为未知时长预扣最大值（同时带 frames 时按 frames 估算，与上游 `:929-933` 相同），因此没有少扣。本批不修，只登记该与上游一致的行为。
-- 定价编辑器：从 `__new__` 的空模型名提交出名称时保留编辑器实例，清除已经提交的 editorDirty 标记，不因 active name 变化触发多余的单模型查询；列表打开、初始深链接及命名模型切换仍按需读取 schema。
+- 定价编辑器：新建编辑器在原地提交出名称时（例如复制当前定价）保留编辑器实例，清除已经提交的 editorDirty 标记，不因 active name 变化触发多余的单模型查询。跳过查询的标记只由这次改名对应的 watcher 消费；显式 `open()`（列表、再次新增、切换模型）总是先清除它，因为再次点「新增模型」时提交改名与切回 `__new__` 会被 Vue 合并，watcher 不触发。列表打开、初始深链接及命名模型切换仍按需读取 schema，迟到的旧请求被中止且不覆盖当前编辑器。
 
 上游来源对照：模型定价的快照与单模型查询接口来自冻结 NewAPI；Vertex 默认化与按类型保存对齐 React，默认项和非 Vertex 增量保存按 Vue 现有合同适配；Doubao native/decoder 和 metadata 透传对照冻结 `plugins/tasks/doubao/plugin.js`。CORE_SOURCE_DELTA 在所有 Go 测试文件修改后重新生成。
 
