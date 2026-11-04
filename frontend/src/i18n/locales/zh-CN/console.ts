@@ -713,7 +713,7 @@ export default {
       autoDesc: '按优先级、健康、负载和延迟选择全平台渠道',
     },
     advancedTitle: '高级设置',
-    advancedSummary: '模型限制与 IP 限制',
+    advancedSummary: '额度查询、模型与 IP 限制',
     advancedConfigured: '已配置 {count} 项',
     nameLabel: '名称',
     allowUserQuotaQuery: '允许查询账户额度',

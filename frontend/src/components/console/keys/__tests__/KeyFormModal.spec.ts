@@ -1,6 +1,14 @@
 import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeAll, afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  beforeAll,
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import i18n, { loadMessageDomain } from '@/i18n'
@@ -10,6 +18,9 @@ import { configureQuotaDisplay } from '@/utils/format'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
+})
+
+beforeEach(() => {
   i18n.global.locale.value = 'zh-CN'
 })
 
@@ -78,20 +89,23 @@ describe('KeyFormModal', () => {
     const wrapper = mountForm()
     const typeOptions = [...document.body.querySelectorAll('[role="radio"]')]
 
-    expect(
-      document
-        .querySelector('[name="token-allow-user-quota-query"]')
-        ?.getAttribute('aria-checked')
-    ).toBe('true')
     expect(typeOptions).toHaveLength(2)
     expect(typeOptions[0].getAttribute('aria-checked')).toBe('false')
     expect(typeOptions[1].getAttribute('aria-checked')).toBe('true')
     expect(advancedTrigger().getAttribute('aria-expanded')).toBe('false')
     expect(document.querySelector('[name="token-custom-key"]')).toBeNull()
+    expect(
+      document.querySelector('[name="token-allow-user-quota-query"]')
+    ).toBeNull()
     expect(document.querySelector('[name="token-ip-limits"]')).toBeNull()
 
     advancedTrigger().click()
     await nextTick()
+    expect(
+      document
+        .querySelector('[name="token-allow-user-quota-query"]')
+        ?.getAttribute('aria-checked')
+    ).toBe('true')
     expect(document.querySelector('[name="token-custom-key"]')).toBeNull()
     expect(document.querySelector('[name="token-ip-limits"]')).not.toBeNull()
     wrapper.unmount()
@@ -127,6 +141,70 @@ describe('KeyFormModal', () => {
     ).toBe('127.0.0.1')
     expect(document.querySelector('[name="token-rate-limit"]')).toBeNull()
     wrapper.unmount()
+  })
+
+  it('preserves the default balance permission when advanced settings stay closed', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(null)
+    const wrapper = mountForm()
+    try {
+      const name = document.querySelector<HTMLInputElement>(
+        '[name="token-name"]'
+      )!
+      name.value = 'default-balance'
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+      await nextTick()
+      const confirm = [...document.body.querySelectorAll('button')].find(
+        (button) =>
+          button.textContent?.trim() === i18n.global.t('common.confirm')
+      )!
+      confirm.click()
+      await flushPromises()
+      expect(post).toHaveBeenCalledWith(
+        '/api/token/',
+        expect.objectContaining({ allow_user_quota_query: true, type: 'auto' })
+      )
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('reveals a denied balance permission without model or IP restrictions and resets on reopen', async () => {
+    const wrapper = mountForm({
+      id: 8,
+      name: 'private-balance',
+      key_preview: 'sk-****1234',
+      type: 'auto',
+      status: 1,
+      used_quota: '0',
+      remain_quota: 0,
+      unlimited: true,
+      model_limits: [],
+      ip_limits: [],
+      allow_user_quota_query: false,
+      expired_time: -1,
+      created_time: 1,
+    })
+    try {
+      expect(advancedTrigger().getAttribute('aria-expanded')).toBe('true')
+      expect(advancedTrigger().textContent).toContain(
+        i18n.global.t('keys.advancedConfigured', { count: 1 })
+      )
+      await wrapper.setProps({ open: false })
+      await wrapper.setProps({ open: true, editing: null })
+      expect(advancedTrigger().getAttribute('aria-expanded')).toBe('false')
+      expect(advancedTrigger().textContent).not.toContain(
+        i18n.global.t('keys.advancedConfigured', { count: 1 })
+      )
+      advancedTrigger().click()
+      await nextTick()
+      expect(
+        document
+          .querySelector('[name="token-allow-user-quota-query"]')
+          ?.getAttribute('aria-checked')
+      ).toBe('true')
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('saves native numeric budgets and permission without legacy ledger fields', async () => {
@@ -171,6 +249,7 @@ describe('KeyFormModal', () => {
       const changed = put.mock.calls[2][1] as Record<string, unknown>
       expect(changed.name).toBe('renamed')
       expect(changed.allow_user_quota_query).toBe(false)
+      expect(advancedTrigger().getAttribute('aria-expanded')).toBe('true')
       const queryToggle = document.querySelector<HTMLButtonElement>(
         '[name="token-allow-user-quota-query"]'
       )!

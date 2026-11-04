@@ -73,7 +73,10 @@ watch(
 
     vis.expiry = form.expireAt.length > 0
     advancedOpen.value = Boolean(
-      e && (form.model_limits.length > 0 || form.ipText.trim().length > 0)
+      e &&
+      (form.model_limits.length > 0 ||
+        form.ipText.trim().length > 0 ||
+        form.allow_user_quota_query === false)
     )
   },
   { immediate: true }
@@ -92,6 +95,31 @@ const typeCards = computed(() => [
   },
 ])
 
+function onTypeKeydown(event: KeyboardEvent, index: number) {
+  if (props.editing !== null) return
+  const last = typeCards.value.length - 1
+  let next: number
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    next = index === last ? 0 : index + 1
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    next = index === 0 ? last : index - 1
+  } else if (event.key === 'Home') {
+    next = 0
+  } else if (event.key === 'End') {
+    next = last
+  } else {
+    return
+  }
+
+  const option = typeCards.value[next]
+  if (!option) return
+  event.preventDefault()
+  form.type = option.value
+  const group = (event.currentTarget as HTMLElement).parentElement
+  const buttons = group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+  buttons?.[next]?.focus()
+}
+
 /** Native expired_time: -1 never expires, otherwise epoch seconds. */
 function expiredTime(): number {
   if (!vis.expiry) return -1
@@ -108,6 +136,7 @@ const advancedConfiguredCount = computed(() => {
   let count = 0
   if (form.model_limits.length > 0) count++
   if (form.ipText.trim()) count++
+  if (!form.allow_user_quota_query) count++
   return count
 })
 
@@ -174,32 +203,59 @@ async function save() {
           :aria-label="t('keys.type.label')"
         >
           <button
-            v-for="card in typeCards"
+            v-for="(card, index) in typeCards"
             :key="card.value"
             type="button"
             role="radio"
             :aria-checked="form.type === card.value"
+            :tabindex="form.type === card.value ? 0 : -1"
             :disabled="editing !== null"
-            class="rounded-xl border px-3.5 py-3 text-left transition-colors focus-ring disabled:cursor-not-allowed"
+            class="relative rounded-xl border px-3.5 py-3 text-left transition-colors focus-ring disabled:cursor-not-allowed"
             :class="
               form.type === card.value
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                 : 'border-[var(--border-subtle)] bg-[var(--surface-solid)] hover:border-[var(--border-strong)] disabled:opacity-50'
             "
             @click="form.type = card.value"
+            @keydown="onTypeKeydown($event, index)"
           >
+            <div class="flex items-center justify-between gap-2">
+              <span
+                class="block text-sm font-semibold"
+                :class="
+                  form.type === card.value
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-[var(--text-primary)]'
+                "
+              >
+                {{ card.title }}
+              </span>
+              <span
+                class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors"
+                :class="
+                  form.type === card.value
+                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--surface-solid)]'
+                    : 'border-[var(--border-default)] bg-[var(--surface-muted)]'
+                "
+                aria-hidden="true"
+              >
+                <svg
+                  v-if="form.type === card.value"
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
+            </div>
             <span
-              class="block text-sm font-semibold"
-              :class="
-                form.type === card.value
-                  ? 'text-[var(--accent-text)]'
-                  : 'text-[var(--text-primary)]'
-              "
-            >
-              {{ card.title }}
-            </span>
-            <span
-              class="mt-0.5 block text-xs leading-relaxed text-[var(--text-secondary)]"
+              class="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]"
               >{{ card.desc }}</span
             >
           </button>
@@ -229,17 +285,25 @@ async function save() {
             />
           </div>
           <div
-            v-if="vis.expiry"
-            class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
+            :inert="!vis.expiry"
+            :aria-hidden="!vis.expiry"
+            class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+            :class="vis.expiry ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
           >
-            <input
-              v-model="form.expireAt"
-              type="datetime-local"
-              step="1"
-              name="token-expiration"
-              :aria-label="t('keys.expireLabel')"
-              class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-primary)] focus-ring"
-            />
+            <div class="overflow-hidden">
+              <div
+                class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
+              >
+                <input
+                  v-model="form.expireAt"
+                  type="datetime-local"
+                  step="1"
+                  name="token-expiration"
+                  :aria-label="t('keys.expireLabel')"
+                  class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -262,38 +326,27 @@ async function save() {
             </label>
           </div>
           <div
-            v-if="!form.unlimited"
-            class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
+            :inert="form.unlimited"
+            :aria-hidden="form.unlimited"
+            class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+            :class="!form.unlimited ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
           >
-            <input
-              v-model="form.quotaDollars"
-              inputmode="decimal"
-              class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 font-mono text-sm text-[var(--text-primary)] focus-ring"
-              name="token-quota"
-              :aria-label="t('billing.budgetUSD')"
-              placeholder="20"
-            />
+            <div class="overflow-hidden">
+              <div
+                class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
+              >
+                <input
+                  v-model="form.quotaDollars"
+                  inputmode="decimal"
+                  class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 font-mono text-sm text-[var(--text-primary)] focus-ring"
+                  name="token-quota"
+                  :aria-label="t('billing.budgetUSD')"
+                  placeholder="20"
+                />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div
-        class="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3"
-      >
-        <div class="min-w-0">
-          <p class="text-sm font-medium text-[var(--text-secondary)]">
-            {{ t('keys.allowUserQuotaQuery') }}
-          </p>
-          <p class="mt-1 text-xs leading-relaxed text-[var(--text-tertiary)]">
-            {{ t('keys.allowUserQuotaQueryHint') }}
-          </p>
-        </div>
-        <ConsoleToggle
-          v-model="form.allow_user_quota_query"
-          name="token-allow-user-quota-query"
-          :label="t('keys.allowUserQuotaQuery')"
-          :disabled="saving"
-        />
       </div>
 
       <section
@@ -364,24 +417,57 @@ async function save() {
           :id="advancedSectionId"
           class="sibling-space-y-4 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-4"
         >
-          <FormField group :label="t('keys.modelsLabel')">
-            <ChipPicker
-              v-model="form.model_limits"
-              :options="models"
-              :placeholder="t('keys.modelsPlaceholder')"
+          <div
+            class="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3"
+          >
+            <div class="min-w-0">
+              <label
+                :for="advancedSectionId + '-quota-toggle'"
+                class="cursor-pointer text-sm font-medium text-[var(--text-secondary)]"
+              >
+                {{ t('keys.allowUserQuotaQuery') }}
+              </label>
+              <p
+                class="mt-1 text-xs leading-relaxed text-[var(--text-tertiary)]"
+              >
+                {{ t('keys.allowUserQuotaQueryHint') }}
+              </p>
+            </div>
+            <ConsoleToggle
+              :id="advancedSectionId + '-quota-toggle'"
+              v-model="form.allow_user_quota_query"
+              name="token-allow-user-quota-query"
+              :label="t('keys.allowUserQuotaQuery')"
+              :disabled="saving"
             />
-          </FormField>
+          </div>
 
-          <FormField :label="t('keys.ipLabel')">
-            <textarea
-              v-model="form.ipText"
-              rows="2"
-              name="token-ip-limits"
-              :aria-label="t('keys.ipLabel')"
-              :placeholder="t('keys.ipPlaceholder')"
-              class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-2.5 font-mono text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
-            />
-          </FormField>
+          <div
+            class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3"
+          >
+            <FormField group :label="t('keys.modelsLabel')">
+              <ChipPicker
+                v-model="form.model_limits"
+                :options="models"
+                :placeholder="t('keys.modelsPlaceholder')"
+              />
+            </FormField>
+          </div>
+
+          <div
+            class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3"
+          >
+            <FormField :label="t('keys.ipLabel')">
+              <textarea
+                v-model="form.ipText"
+                rows="2"
+                name="token-ip-limits"
+                :aria-label="t('keys.ipLabel')"
+                :placeholder="t('keys.ipPlaceholder')"
+                class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5 font-mono text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
+              />
+            </FormField>
+          </div>
         </div>
       </section>
     </div>

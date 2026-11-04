@@ -748,7 +748,7 @@ export default {
         'Select platform channels by priority, health, load and latency',
     },
     advancedTitle: 'Advanced settings',
-    advancedSummary: 'Model and IP restrictions',
+    advancedSummary: 'Balance queries, model and IP restrictions',
     advancedConfigured: '{count} configured',
     nameLabel: 'Name',
     allowUserQuotaQuery: 'Allow querying account balance',

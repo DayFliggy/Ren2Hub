@@ -74,12 +74,12 @@ const columns = computed<TableColumn[]>(() => [
   { key: 'status', label: t('keys.colStatus'), width: '100px' },
   { key: 'usage', label: t('keys.colUsage'), align: 'right', width: '150px' },
   { key: 'expired_time', label: t('keys.colExpired'), width: '120px' },
-  // Five 32px actions, their gaps and the cell padding.
+  // Five actions: 32px mouse or 44px touch/tablet, plus gaps and cell padding (24px).
   {
     key: 'actions',
     label: t('keys.colActions'),
     align: 'right',
-    width: '200px',
+    width: '264px',
   },
 ])
 
@@ -279,6 +279,7 @@ onBeforeUnmount(() => {
         :skeleton-rows="pageSize"
         adaptive-scroll
         :page-size="pageSize"
+        min-table-width="860px"
         :scroll-region-label="t('keys.breadcrumb.1')"
         selectable
         checkbox-shape="round"
@@ -287,7 +288,12 @@ onBeforeUnmount(() => {
         empty-illustration="empty-keys"
       >
         <template #cell-name="{ row }">
-          <span class="font-medium">{{ (row as TokenSummary).name }}</span>
+          <span
+            class="block min-w-0 max-w-full truncate font-medium"
+            :title="(row as TokenSummary).name"
+          >
+            {{ (row as TokenSummary).name }}
+          </span>
         </template>
 
         <template #cell-type="{ row }">

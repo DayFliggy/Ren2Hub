@@ -31,6 +31,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page
         .getByRole('button', { name: 'Create key', exact: true })
         .click()
+      await page.getByRole('button', { name: /Advanced settings/i }).click()
       const toggle = page.getByRole('switch', {
         name: 'Allow querying account balance',
       })
@@ -53,6 +54,11 @@ for (const theme of ['light', 'dark'] as const) {
         .filter({ visible: true })
         .first()
         .click()
+      const types = page.getByRole('dialog').getByRole('radio')
+      await expect(types).toHaveCount(2)
+      await expect(types.nth(0)).toBeDisabled()
+      await expect(types.nth(1)).toBeDisabled()
+      await page.getByRole('button', { name: /Advanced settings/i }).click()
       await expect(toggle).toHaveAttribute('aria-checked', 'true')
       await toggle.click()
       await expect(toggle).toHaveAttribute('aria-checked', 'false')
