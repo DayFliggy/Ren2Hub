@@ -42,6 +42,19 @@ func TestParamOverrideRegexCacheSkipsOversizedPatterns(t *testing.T) {
 	assert.NotContains(t, paramOverrideRegexCache.values, pattern)
 }
 
+func TestParamOverrideRegexCacheReleasesOldEntries(t *testing.T) {
+	pattern := t.Name() + "-first"
+	first, err := getParamOverrideRegex(pattern)
+	require.NoError(t, err)
+	for i := 0; i < 257; i++ {
+		_, err := getParamOverrideRegex(fmt.Sprintf("%s-%d", t.Name(), i))
+		require.NoError(t, err)
+	}
+	again, err := getParamOverrideRegex(pattern)
+	require.NoError(t, err)
+	require.NotSame(t, first, again, "old administrator patterns must be released from the bounded cache")
+}
+
 func TestApplyParamOverrideTrimPrefix(t *testing.T) {
 	// trim_prefix example:
 	// {"operations":[{"path":"model","mode":"trim_prefix","value":"openai/"}]}
@@ -145,6 +158,73 @@ func TestApplyParamOverrideMixedLegacyAndOperationsConflictPrefersOperations(t *
 		t.Fatalf("ApplyParamOverride returned error: %v", err)
 	}
 	assertJSONEqual(t, `{"model":"op-model","temperature":0.2}`, string(out))
+}
+
+func TestApplyParamOverrideLaterOperationsSeeEarlierEdits(t *testing.T) {
+	input := []byte(`{"model":"gpt-4","messages":[{"type":"text","text":"a"},{"type":"thinking","text":"b"}],"tags":["x"]}`)
+	override := map[string]any{
+		"operations": []any{
+			map[string]any{"mode": "prune_objects", "value": "thinking"},
+			map[string]any{"path": "model", "mode": "set", "value": "gpt-5"},
+			map[string]any{
+				"path":       "reasoning_effort",
+				"mode":       "set",
+				"value":      "high",
+				"conditions": []any{map[string]any{"path": "model", "mode": "full", "value": "gpt-5"}},
+			},
+			map[string]any{"path": "tags", "mode": "append", "value": "y"},
+			map[string]any{"path": "tags.-1", "mode": "to_upper"},
+			map[string]any{"mode": "move", "from": "reasoning_effort", "to": "effort"},
+			map[string]any{"path": "effort", "mode": "set", "value": "low", "keep_origin": true},
+		},
+	}
+
+	out, err := ApplyParamOverride(input, override, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"model":"gpt-5","messages":[{"type":"text","text":"a"}],"tags":["x","Y"],"effort":"high"}`, string(out))
+}
+
+// Object merges and prune_objects edit the body in place: members they do not
+// touch keep their order, number spelling and characters.
+func TestApplyParamOverrideMergeAndPruneKeepMemberOrder(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		op    map[string]any
+		want  string
+	}{
+		{
+			name:  "append merges into the object in place",
+			input: `{"zeta":1.0,"config":{"y":1e2,"b":"<b>&","keep":1},"model":"m"}`,
+			op:    map[string]any{"path": "config", "mode": "append", "value": map[string]any{"keep": 2, "c": true, "a": "x"}},
+			want:  `{"zeta":1.0,"config":{"y":1e2,"b":"<b>&","keep":2,"a":"x","c":true},"model":"m"}`,
+		},
+		{
+			name:  "keep_origin leaves existing members",
+			input: `{"config":{"y":1e2,"keep":1}}`,
+			op:    map[string]any{"path": "config", "mode": "append", "keep_origin": true, "value": map[string]any{"keep": 2, "a": "x"}},
+			want:  `{"config":{"y":1e2,"keep":1,"a":"x"}}`,
+		},
+		{
+			name:  "prune over the whole body",
+			input: `{"zeta":1.0,"messages":[{"type":"text","n":1e2},{"type":"thinking"},{"role":"u","content":[{"type":"thinking"},{"type":"text","b":"<b>&"}]}],"model":"m"}`,
+			op:    map[string]any{"mode": "prune_objects", "value": "thinking"},
+			want:  `{"zeta":1.0,"messages":[{"type":"text","n":1e2},{"role":"u","content":[{"type":"text","b":"<b>&"}]}],"model":"m"}`,
+		},
+		{
+			name:  "prune drops object members",
+			input: `{"a":{"x":{"type":"thinking"},"y":1.0},"b":2}`,
+			op:    map[string]any{"path": "a", "mode": "prune_objects", "value": "thinking"},
+			want:  `{"a":{"y":1.0},"b":2}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := ApplyParamOverride([]byte(tt.input), map[string]any{"operations": []any{tt.op}}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(out))
+		})
+	}
 }
 
 func TestApplyParamOverrideTrimRequiresValue(t *testing.T) {
@@ -610,13 +690,15 @@ func TestApplyParamOverrideMove(t *testing.T) {
 func TestMoveAndCopyValueKeepNestedJSONOrder(t *testing.T) {
 	input := []byte(`{"schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}`)
 
-	copied, err := copyValue(input, "schema", "copy")
-	require.NoError(t, err)
-	assert.Equal(t, `{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}`, gjson.GetBytes(copied, "copy").Raw)
-
-	moved, err := moveValue(input, "schema", "meta.schema")
-	require.NoError(t, err)
-	assert.Equal(t, `{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}`, gjson.GetBytes(moved, "meta.schema").Raw)
+	for _, mode := range []string{"copy", "move"} {
+		t.Run(mode, func(t *testing.T) {
+			out, err := ApplyParamOverride(input, map[string]any{"operations": []any{map[string]any{
+				"mode": mode, "from": "schema", "to": "meta.schema",
+			}}}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, `{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}`, gjson.GetBytes(out, "meta.schema").Raw)
+		})
+	}
 }
 
 func TestParamOverrideAppendKeepsExistingNestedJSONOrder(t *testing.T) {
@@ -2382,6 +2464,17 @@ func TestRemoveDisabledFieldsKeepsNestedSchemaPropertyOrder(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}},"stream_options":{"include_usage":true}}`, string(out))
+}
+
+// Other members keep their bytes and order. A disabled key sent twice is
+// removed in every copy, since upstreams read the last one.
+func TestRemoveDisabledFieldsKeepsUntouchedBytes(t *testing.T) {
+	input := `{"model":"m","service_tier":"flex","temperature":1.0,"max_tokens":1e3,"stop":["<|end|>"],"service\u005ftier":"priority","stream_options":{"include_obfuscation":false}}`
+
+	out, err := RemoveDisabledFields([]byte(input), dto.ChannelOtherSettings{}, false)
+
+	require.NoError(t, err)
+	assert.Equal(t, `{"model":"m","temperature":1.0,"max_tokens":1e3,"stop":["<|end|>"]}`, string(out))
 }
 
 func TestRemoveDisabledFieldsNoControlledFieldsKeepsBody(t *testing.T) {

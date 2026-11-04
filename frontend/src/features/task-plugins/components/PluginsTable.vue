@@ -31,6 +31,7 @@ import PluginConfirmDialog from './PluginConfirmDialog.vue'
 import PluginIcon from './PluginIcon.vue'
 import PluginStatusBadges from './PluginStatusBadges.vue'
 import PluginWebsiteLink from './PluginWebsiteLink.vue'
+import { usePluginChangeNotice } from '../usePluginChangeNotice'
 
 const props = defineProps<{
   plugins: TaskPluginListItem[]
@@ -43,6 +44,7 @@ const emit = defineEmits<{
 }>()
 const { t, locale } = useI18n()
 const toast = useToast()
+const notifyChange = usePluginChangeNotice()
 
 const filter = ref('')
 const viewMode = useLocalStorage<'table' | 'card'>(
@@ -118,10 +120,12 @@ async function setStatus(
   busy.value = true
   statusTarget.value = plugin
   try {
-    await setTaskPluginStatus(plugin.meta.key, enabled, options)
+    const notice = await setTaskPluginStatus(plugin.meta.key, enabled, options)
     statusConfirmation.value = null
     closeBlocked()
     emit('changed')
+    if (enabled)
+      notifyChange(t('taskPlugins.pluginEnabled'), notice?.pricing_issues)
   } catch (error) {
     if (error instanceof TaskPluginUsageError) {
       statusConfirmation.value = null
@@ -139,10 +143,14 @@ async function deleteActive(plugin: TaskPluginListItem, force = false) {
   if (busy.value) return
   busy.value = true
   try {
-    await deleteTaskPluginVersion(plugin.meta.key, plugin.meta.version, force)
+    const notice = await deleteTaskPluginVersion(
+      plugin.meta.key,
+      plugin.meta.version,
+      force
+    )
     deleteTarget.value = null
     closeBlocked()
-    toast.success(t('taskPlugins.versionDeleted'))
+    notifyChange(t('taskPlugins.versionDeleted'), notice?.pricing_issues)
     emit('changed')
   } catch (error) {
     if (error instanceof TaskPluginUsageError) {

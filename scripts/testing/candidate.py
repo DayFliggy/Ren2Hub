@@ -20,6 +20,8 @@ import threading
 
 LABEL = 'renai.local-test.run'
 STAGES = ('billing', 'ws', 'compact', 'plugin-before', 'plugin-after', 'upstream_sync', 'sdk')
+UPGRADE_STAGES = ('upgrade-baseline', 'upgrade-management', 'upgrade-before-seconds',
+                  'upgrade-prepare-p', 'upgrade-resume-p', 'upgrade-after-seconds', 'upgrade-after-p')
 HOST_INTERFACE = r'[A-Za-z0-9_.-]{1,15}'
 # 除本轮生成的 mock CA 证书外，宿主网卡计数文件是候选唯一允许挂载的宿主文件；它不是数据路径，只读单文件。
 COUNTER_SOURCE, COUNTER_TARGET = '/proc/1/net/dev', '/host/proc/net/dev'
@@ -104,7 +106,7 @@ def counter_mounts(container):
 
 
 class Candidate:
-    def __init__(self, source, output, image, traffic_interface=None):
+    def __init__(self, source, output, image, traffic_interface=None, previous_image=None):
         require(traffic_interface is None or re.fullmatch(HOST_INTERFACE, traffic_interface),
                 'invalid_traffic_host_interface')
         self.traffic_interface = traffic_interface or ''
@@ -126,6 +128,9 @@ class Candidate:
         self.containers = {}
         self.network_id = None
         self.image = image
+        self.previous_image = previous_image
+        self.attachment_volume = None
+        self.stages = (*UPGRADE_STAGES, *STAGES) if previous_image else STAGES
         self.workspace_identity = source_identity(self.source.parent)
         self.workspace_sha = self.workspace_identity['git_head']
         self.report = {'success': False, 'layer': 'candidate', 'run_id': self.run_id,
@@ -218,6 +223,20 @@ class Candidate:
         self.report['image'] = {'reference': self.image, 'id': self.image_id, 'revision': revision}
         # 不把现有镜像的测试结果冒充未提交工作树构建结果。
         self.report['image_matches_clean_source'] = self.report['source']['candidate_sha'] == revision
+        self.active_image_id, self.active_revision = self.image_id, self.revision
+        if getattr(self, 'previous_image', None):
+            previous = json.loads(self.docker('image', 'inspect', self.previous_image).stdout)[0]
+            previous_labels = previous['Config'].get('Labels') or {}
+            previous_revision = previous_labels.get('org.opencontainers.image.revision', '')
+            require(re.fullmatch(r'[0-9a-f]{40}', previous_revision)
+                    and previous_labels.get('org.opencontainers.image.version') == previous_revision
+                    and previous_revision != revision, 'distinct_immutable_previous_image_required')
+            self.active_image_id, self.active_revision = previous['Id'], previous_revision
+            self.report['upgrade'] = {'previous_image': {'reference': self.previous_image,
+                                      'id': previous['Id'], 'revision': previous_revision}}
+            self.report['upgrade']['mock_downtime_policy'] = {
+                'TASK_POLL_MAX_FAILURES': 0,
+                'reason': '阶段间模拟供应商计划停服，不把连接失败阈值作为本升级合同；原生任务超时仍生效。'}
         compose = self.source.parent / 'deploy/ren2hub/docker-compose.preview.yml'
         references = {}
         dependencies = {}
@@ -261,30 +280,97 @@ class Candidate:
             'CRITICAL_RATE_LIMIT': '200', 'GLOBAL_API_RATE_LIMIT': '1000', 'TRUSTED_PROXIES': 'none',
             'SSL_CERT_FILE': '/etc/ren2hub/mock-ca.crt', 'TICKET_UPLOAD_DIR': '/app/ticket-attachments',
             'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC',
+            **({'TASK_POLL_MAX_FAILURES': '0'} if getattr(self, 'previous_image', None) else {}),
             **({'TRAFFIC_HOST_INTERFACE': self.traffic_interface} if self.traffic_interface else {})})
         # 默认不挂载也不设网卡名，应用使用主监听器计数；--mount 的源缺失时容器创建直接失败。
         counter = ('--mount', 'type=bind,src=' + COUNTER_SOURCE + ',dst=' + COUNTER_TARGET + ',readonly') if self.traffic_interface else ()
-        self.start('app', self.image_id, ('--network', 'container:' + self.containers['mock'],
-                   '--env-file', str(app_env), '--label', 'org.opencontainers.image.revision=' + revision,
-                   '--label', 'org.opencontainers.image.version=' + revision,
+        storage = ('--tmpfs', '/app/ticket-attachments:rw,size=128m')
+        if getattr(self, 'previous_image', None):
+            self.attachment_volume = self.prefix + '-attachments'
+            self.docker('volume', 'create', '--label', LABEL + '=' + self.run_id, self.attachment_volume)
+            volume = json.loads(self.docker('volume', 'inspect', self.attachment_volume).stdout)[0]
+            require(volume['Name'] == self.attachment_volume and volume.get('Labels', {}).get(LABEL) == self.run_id,
+                    'candidate_attachment_volume_identity_mismatch')
+            storage = ('--mount', 'type=volume,src=' + self.attachment_volume + ',dst=/app/ticket-attachments')
+        self.app_options = ('--network', 'container:' + self.containers['mock'],
+                   '--env-file', str(app_env),
                    '--mount', 'type=bind,src=' + str(certificate) + ',dst=/etc/ren2hub/mock-ca.crt,readonly', *counter,
-                   '--tmpfs', '/app/ticket-attachments:rw,size=128m', '--tmpfs', '/tmp:rw,size=128m',
+                   *storage, '--tmpfs', '/tmp:rw,size=128m',
                    '--stop-timeout', '130', '--health-start-period', '15s',
-                   '--health-cmd', 'wget -q -T 3 -O /dev/null http://127.0.0.1:3000/api/status', *health),
-                   ('--log-dir', '/tmp/ren2hub-local-logs'))
+                   '--health-cmd', 'wget -q -T 3 -O /dev/null http://127.0.0.1:3000/api/status', *health)
+        self.start_app()
         self.wait_healthy('app')
         target = {role + '_container': self.prefix + '-' + role for role in self.containers}
         target.update(database_user='ren2hub', database_name='ren2hub_candidate', database_host='postgres:5432',
                       redis_host='redis:6379', network=self.network, network_id=self.network_id, run_id=self.run_id,
-                      container_ids=self.containers, image_id=self.image_id, revision=self.revision, ca_path=str(certificate), network_guard=self.network_guard,
+                      container_ids=dict(self.containers), image_id=self.active_image_id, revision=self.active_revision, ca_path=str(certificate), network_guard=self.network_guard,
                       traffic_host_interface=self.traffic_interface)
+        if getattr(self, 'attachment_volume', None):
+            target['attachment_volume'] = self.attachment_volume
+        self.target = target
         private_write(self.private / 'target.json', target)
         # scope/interface 由管理组从 Root 接口实测后补上；挂载取自运行中容器的 inspect。
         traffic = {'configured_interface': self.traffic_interface, 'scope': None, 'interface': None,
                    'mounts': counter_mounts(self.owned('app'))}
         self.report['isolation'] = {'network_id': self.network_id, 'internal': True,
-                                    'container_ids': dict(self.containers), 'published_ports': [], 'storage': 'tmpfs', 'network_guard': self.network_guard,
+                                    'container_ids': dict(self.containers), 'published_ports': [],
+                                    'storage': 'tmpfs_and_owned_attachment_volume' if getattr(self, 'attachment_volume', None) else 'tmpfs',
+                                    'network_guard': self.network_guard,
                                     'traffic': traffic}
+
+    def start_app(self):
+        self.start('app', self.active_image_id, (*self.app_options,
+                   '--label', 'org.opencontainers.image.revision=' + self.active_revision,
+                   '--label', 'org.opencontainers.image.version=' + self.active_revision),
+                   ('--log-dir', '/tmp/ren2hub-local-logs'))
+
+    def upgrade_snapshot(self):
+        """只记录本轮合成数据的指纹；轮询中的任务和日志另由行为合同验证。"""
+        self.owned('postgres')
+        tables = ('options', 'users', 'tokens', 'channels', 'top_ups', 'gmpay_orders',
+                  'admin_quota_operations', 'token_route_profiles', 'token_route_entries',
+                  'tickets', 'ticket_messages', 'ticket_attachments')
+        result = {}
+        for table in tables:
+            query = ('BEGIN READ ONLY; SELECT COALESCE(json_agg(value ORDER BY value::text),\'[]\'::json) '
+                     'FROM (SELECT row_to_json(t) AS value FROM ' + table + ' t) s; COMMIT;')
+            raw = self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-t', '-A',
+                              '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode()).stdout
+            result[table] = hashlib.sha256(json.dumps(json.loads(raw), sort_keys=True).encode()).hexdigest()
+        self.owned('app')
+        files = self.docker('exec', self.containers['app'], 'sh', '-c',
+                            'find /app/ticket-attachments -type f -exec sha256sum {} \\; | sort').stdout
+        result['attachments'] = hashlib.sha256(files).hexdigest()
+        return result
+
+    def upgrade(self):
+        require(all(self.report['stages'].get(stage, {}).get('success') is True
+                    for stage in UPGRADE_STAGES[:4]), 'upgrade_preparation_must_pass')
+        previous_target = dict(self.target)
+        previous_target['container_ids'] = dict(self.target['container_ids'])
+        private_write(self.private / 'upgrade-source-target.json', previous_target)
+        before, schema_before = self.upgrade_snapshot(), self.schema_fingerprint()
+        old = self.owned('app')
+        self.docker('stop', '--time', '130', old['Id'], timeout=180)
+        require(self.owned('app')['State']['ExitCode'] == 0, 'upgrade_previous_app_did_not_exit_cleanly')
+        self.docker('rm', old['Id'])
+        del self.containers['app']
+        self.active_image_id, self.active_revision = self.image_id, self.revision
+        self.start_app()
+        self.wait_healthy('app')
+        after = self.upgrade_snapshot()
+        self.report['upgrade'].update(data_before=before, data_after=after, data_preserved=before == after,
+                                      schema_before=schema_before, schema_after=self.schema_fingerprint())
+        require(before == after, 'upgrade_changed_persisted_contract_data')
+        self.target.update(container_ids=dict(self.containers), image_id=self.image_id, revision=self.revision)
+        private_write(self.private / 'target.json', self.target)
+        self.report['isolation']['container_ids'] = dict(self.containers)
+        schema = self.schema_fingerprint()
+        self.docker('restart', '--time', '130', self.containers['app'], timeout=180)
+        self.wait_healthy('app')
+        require(schema == self.schema_fingerprint() and after == self.upgrade_snapshot(),
+                'upgrade_repeated_start_changed_persisted_data')
+        self.report['upgrade']['repeated_start_preserved_data'] = True
 
     def namespace(self, role, *command):
         item = self.owned(role)
@@ -345,7 +431,7 @@ class Candidate:
 
     def stage(self, stage):
         app = self.owned('app')
-        require(app['State']['Running'] and app['Image'] == self.image_id, 'candidate_image_or_state_changed')
+        require(app['State']['Running'] and app['Image'] == self.active_image_id, 'candidate_image_or_state_changed')
         if stage == 'plugin-after':
             before = json.loads((self.output / 'plugin-before.json').read_text())
             require(before.get('success') is True, 'plugin_before_restart_must_pass')
@@ -356,7 +442,7 @@ class Candidate:
             self.report['restart_schema'] = {'before': schema_before, 'after': schema_after, 'unchanged': schema_before == schema_after}
             require(schema_before == schema_after, 'candidate_restart_changed_schema')
         mock = self.owned('mock')
-        configuration = {'private': str(self.private), 'output': str(self.output), 'stage': stage, 'revision': self.revision}
+        configuration = {'private': str(self.private), 'output': str(self.output), 'stage': stage, 'revision': self.active_revision}
         environment = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'PYTHONDONTWRITEBYTECODE': '1',
                        'PYTHONPATH': str(Path(__file__).parent), 'LANG': 'C.UTF-8'}
         environment.update(self.sdk_environment)
@@ -379,7 +465,7 @@ class Candidate:
 
     def manifest(self):
         reports = {}
-        for stage in STAGES:
+        for stage in self.stages:
             path = self.output / (stage + '.json')
             if path.is_file() and not path.is_symlink():
                 group = {'ws': 'websocket', 'upstream_sync': 'management'}.get(stage, stage)
@@ -394,7 +480,7 @@ class Candidate:
         workspace_clean = workspace_end['candidate_sha'] == self.workspace_sha
         gitlink = execute(['git', '-C', str(self.source.parent), 'ls-tree', 'HEAD', 'Ren2Hub']).stdout.decode().split()
         linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
-        complete = len(reports) == len(STAGES) and all(self.report['stages'].get(stage, {}).get('success') is True for stage in STAGES)
+        complete = len(reports) == len(self.stages) and all(self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
         deployable = bool(self.report['success'] and complete and self.report.get('image_matches_clean_source') and workspace_clean and linked)
         traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
@@ -402,6 +488,7 @@ class Candidate:
                     'workspace_sha': self.workspace_sha, 'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'], 'identity_verification': self.report['identity_verification'],
                     'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
+                    'upgrade': self.report.get('upgrade'),
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
@@ -424,6 +511,14 @@ class Candidate:
                 self.docker('network', 'rm', self.network_id)
             except Exception:
                 errors.append('remove_network')
+        if getattr(self, 'attachment_volume', None):
+            try:
+                volume = json.loads(self.docker('volume', 'inspect', self.attachment_volume).stdout)[0]
+                require(volume['Name'] == self.attachment_volume and volume.get('Labels', {}).get(LABEL) == self.run_id,
+                        'candidate_attachment_volume_identity_mismatch')
+                self.docker('volume', 'rm', self.attachment_volume)
+            except Exception:
+                errors.append('remove_attachment_volume')
         self.report['cleanup'] = {'success': not errors, 'removed_containers': removed, 'errors': errors}
         if errors:
             self.report['success'] = False
@@ -433,7 +528,8 @@ def interrupted(_signum, _frame):
     raise CandidateError('candidate_interrupted')
 
 
-def run(source: Path, output: Path, image: str, traffic_interface: str | None = None) -> dict:
+def run(source: Path, output: Path, image: str, traffic_interface: str | None = None,
+        previous_image: str | None = None) -> dict:
     previous_umask = os.umask(0o077)
     candidate = None
     old_handlers = {}
@@ -441,9 +537,11 @@ def run(source: Path, output: Path, image: str, traffic_interface: str | None = 
         for signum in (signal.SIGINT, signal.SIGTERM):
             old_handlers[signum] = signal.signal(signum, interrupted)
     try:
-        candidate = Candidate(source, output, image, traffic_interface)
+        candidate = Candidate(source, output, image, traffic_interface, previous_image)
         candidate.prepare()
-        for stage in STAGES:
+        for stage in candidate.stages:
+            if stage == 'upgrade-resume-p':
+                candidate.upgrade()
             candidate.stage(stage)
         candidate.report['success'] = True
     except Exception as error:
@@ -467,11 +565,12 @@ def main():
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--image', required=True)
+    parser.add_argument('--previous-image', help='普通升级合同使用的固定旧镜像；必须与新镜像修订不同')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
     try:
-        report = run(args.source, args.output, args.image, args.traffic_host_interface)
+        report = run(args.source, args.output, args.image, args.traffic_host_interface, args.previous_image)
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}

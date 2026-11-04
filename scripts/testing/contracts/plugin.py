@@ -245,15 +245,29 @@ class Snapshot:
 class Experiment:
     def __init__(self, args, report):
         self.args, self.report = args, report
-        self.state = {} if args.phase == "before-restart" else private_json(args.state)
+        resumed = getattr(args, 'resume_state', False)
+        self.state = {} if args.phase == "before-restart" and not resumed else private_json(args.state)
         self.fixture_controls_active = True
-        if args.phase == "after-restart":
+        if args.phase == "after-restart" or resumed:
             # Reject foreign state before login or cleanup can act on its IDs.
-            require(self.state.get("format") == 4 and self.state.get("acceptance_target") == acceptance_target()
-                    and self.state.get("phase") == "before-restart-complete"
+            target = acceptance_target()
+            previous = getattr(args, 'previous_target', None)
+            if previous:
+                previous = private_json(previous)
+                expected = dict(target)
+                expected.update(revision=previous['revision'], image_id=previous['image_id'],
+                                container_ids={**target['container_ids'], 'app': previous['container_ids']['app']})
+                require(previous == expected and previous['revision'] != args.revision,
+                        'upgrade_state_target_mismatch')
+                target = previous
+            require(self.state.get("format") == 4 and self.state.get("acceptance_target") == target
+                    and self.state.get("phase") == ("preparing" if resumed else "before-restart-complete")
                     and self.state.get("base") == args.base
-                    and self.state.get("revision") == args.revision,
+                    and self.state.get("revision") == target['revision'],
                     "before_restart_state_mismatch")
+            if resumed:
+                require(self.state.get('resume_ready') is True and set(self.state.get('tasks', {})) == {'complete', 'missing'},
+                        'preparing_state_has_no_confirmed_submissions')
         self.root, self.user = Client(args.base), Client(args.base)
         self.snapshot = Snapshot(args.revision) if args.snapshot else None
         self.server = None
@@ -477,6 +491,14 @@ class Experiment:
             self.after()
 
     def before(self):
+        if getattr(self.args, 'resume_state', False):
+            self.start_mock()
+            self.user.login(self.state['username'], self.state['password'])
+            self.token_status(1)
+            self.channel_status(1)
+            self.finish_before()
+            self.check('preparing_state_resumed_without_resubmission')
+            return
         suffix = secrets.token_hex(5)
         self.state = {"format": 4, "acceptance_target": acceptance_target(), "phase": "preparing", "base": self.args.base,
             "revision": self.args.revision, "plugin": "core-" + suffix,
@@ -540,7 +562,12 @@ class Experiment:
             require(status == 200, "plugin_task_submit_failed")
             self.state["tasks"][case] = json.loads(raw)["task_id"]
             self.save()
-        self.finish_before()
+        if getattr(self.args, 'prepare_only', False):
+            self.state['resume_ready'] = True
+            self.save()
+            self.check('confirmed_submissions_saved_in_preparing_state')
+        else:
+            self.finish_before()
 
     def finish_before(self):
         self.wait(lambda: self.task("missing")["status"] == "SUCCESS", "missing_usage_task_not_terminal")
@@ -623,8 +650,9 @@ class Experiment:
                 self.channel_status(2)
             except Exception:
                 errors.append("channel_cleanup_failed")
-        if controls and self.root.bearer and self.state.get("plugin_created") and (self.args.phase == "after-restart"
-                or self.state.get("phase") != "before-restart-complete"):
+        recoverable = self.state.get('phase') == 'before-restart-complete' or (
+            self.state.get('phase') == 'preparing' and self.state.get('resume_ready') is True)
+        if controls and self.root.bearer and self.state.get("plugin_created") and (self.args.phase == "after-restart" or not recoverable):
             try:
                 self.root.api("POST", "/api/plugin/task/" + self.state["plugin"] + "/status?cascade=true&force=true", {"enabled": False})
             except Exception:
@@ -653,7 +681,7 @@ class Experiment:
             self.server.shutdown()
             self.server.server_close()
             self.report["mock_counts"] = self.server.counts
-            expected = 2 if self.args.phase == "before-restart" else 0
+            expected = 2 if self.args.phase == "before-restart" and not getattr(self.args, 'resume_state', False) else 0
             if self.server.counts["submits"] != expected or self.server.counts["replays"] or self.server.counts["wrong_version"]:
                 errors.append("mock_send_or_version_count_failed")
         self.report["cleanup_errors"] = errors
@@ -669,7 +697,7 @@ def run_plugin(args):
         require(not args.report.exists() and not args.report.is_symlink(), "new_report_path_required")
         require(args.report.resolve() != args.state.resolve() and args.state.resolve() != args.credentials.resolve(),
                 "state_and_credentials_paths_must_differ")
-        if args.phase == "before-restart":
+        if args.phase == "before-restart" and not getattr(args, 'resume_state', False):
             require(not args.state.exists() and not args.state.is_symlink(), "new_state_path_required")
         require(args.snapshot, "native_snapshot_required")
         experiment = Experiment(args, report)

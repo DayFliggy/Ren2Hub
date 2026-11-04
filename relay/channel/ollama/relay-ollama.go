@@ -30,7 +30,8 @@ func toOllamaResponseFormat(responseFormat *dto.ResponseFormat) (any, error) {
 		if len(responseFormat.JsonSchema) == 0 {
 			return nil, nil
 		}
-		// Keep schema bytes intact because models follow property order.
+		// The raw schema keeps the client's property order, which the
+		// model fills the properties in.
 		var jsonSchema struct {
 			Schema common.RawMessage `json:"schema"`
 		}

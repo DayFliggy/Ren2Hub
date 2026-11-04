@@ -424,6 +424,32 @@ func TestStreamScannerHandler_ClientCancelDuringUpstreamRead(t *testing.T) {
 
 type errorWithCompletionBody struct{ data *strings.Reader }
 
+func TestStreamScannerHandler_ClientCancelDuringCallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reader, writer := io.Pipe()
+	t.Cleanup(func() {
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	c, resp, info := setupStreamTest(t, strings.NewReader(""))
+	c.Request = c.Request.WithContext(ctx)
+	resp.Body = reader
+	info.DisablePing = true
+	written := make(chan struct{})
+	go func() {
+		_, _ = io.WriteString(writer, "data: partial\n\n")
+		close(written)
+	}()
+	StreamScannerHandler(c, resp, info, func(_ string, sr *StreamResult) {
+		cancel()
+		sr.Stop(ctx.Err())
+	})
+	<-written
+	require.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	require.ErrorIs(t, info.StreamStatus.EndError, context.Canceled)
+}
+
 func (b *errorWithCompletionBody) Read(p []byte) (int, error) {
 	n, _ := b.data.Read(p)
 	return n, io.ErrUnexpectedEOF

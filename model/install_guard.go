@@ -22,8 +22,8 @@ func rejectLegacyBillingDatabase(db *gorm.DB) error {
 			return errors.New("legacy Ren2Hub billing database is unsupported; initialize a separate empty database")
 		}
 	}
-	// This release intentionally starts from an empty store. A business-group
-	// column identifies the previous routing contract even if every row is empty.
+	// A business-group column identifies the retired routing contract even if
+	// every row is empty. Existing channel-based databases may upgrade in place.
 	for _, table := range []string{"users", "tokens", "channels", "abilities"} {
 		for _, present := range tables {
 			if present != table {

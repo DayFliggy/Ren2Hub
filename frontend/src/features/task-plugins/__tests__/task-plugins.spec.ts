@@ -121,7 +121,11 @@ describe('task plugin page', () => {
       .mockRejectedValueOnce(
         new pluginApi.TaskPluginUsageError('in use', usage)
       )
-      .mockResolvedValue(null)
+      .mockResolvedValue({
+        plugin_enabled: false,
+        disabled_channels: 1,
+        unbound_channels: 0,
+      })
     await wrapper!.get('[aria-label="Enable plugin fixture"]').trigger('click')
     await flushPromises()
     await button('Disable')!.trigger('click')

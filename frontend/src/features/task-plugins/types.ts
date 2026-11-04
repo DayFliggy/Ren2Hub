@@ -6,6 +6,7 @@ import type {
   BillingUsageExample,
   BillingUsageSchema,
 } from '@/features/pricing/types'
+import type { ModelPricingIssue } from '@/api/pricingConfig'
 
 export type TaskPluginProtocolClaim =
   | string
@@ -83,6 +84,7 @@ export type TaskPluginListItem = {
   factory_meta?: TaskPluginMeta
   channel_count: number
   in_flight_count: number
+  skipped_routes?: string[]
 }
 
 export type TaskPluginUsage = {
@@ -96,6 +98,18 @@ export type TaskPluginDetail = {
   source: string
   layer: 'factory' | 'override'
   has_icon?: boolean
+  skipped_routes?: string[]
+  pricing_issues?: ModelPricingIssue[] | null
+}
+
+export type TaskPluginChangeNotice = {
+  pricing_issues?: ModelPricingIssue[] | null
+}
+
+export type TaskPluginStatusResult = TaskPluginChangeNotice & {
+  plugin_enabled: boolean
+  disabled_channels: number
+  unbound_channels: number
 }
 
 /** Bind options from GET /api/task_plugin_options (admin with task_plugin.bind). */

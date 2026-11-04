@@ -34,11 +34,13 @@ import PluginModelList from './PluginModelList.vue'
 import PluginSandbox from './PluginSandbox.vue'
 import SourceDiff from './SourceDiff.vue'
 import UsageSchemaTable from './UsageSchemaTable.vue'
+import { usePluginChangeNotice } from '../usePluginChangeNotice'
 
 const props = defineProps<{ plugin: TaskPluginListItem }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const { t, locale } = useI18n()
 const toast = useToast()
+const notifyChange = usePluginChangeNotice()
 const key = props.plugin.meta.key
 const tab = ref('overview')
 const sandboxVisited = ref(false)
@@ -94,9 +96,9 @@ onBeforeUnmount(() => abort.abort())
 async function activate(version: string) {
   activating.value = true
   try {
-    await activateTaskPlugin(key, version)
+    const notice = await activateTaskPlugin(key, version)
     compareVersion.value = ''
-    toast.success(t('taskPlugins.versionActivated'))
+    notifyChange(t('taskPlugins.versionActivated'), notice?.pricing_issues)
     emit('changed')
     await Promise.all([loadDetail(), loadVersions()])
   } catch (error) {
@@ -214,7 +216,11 @@ const compareOptions = computed(() =>
         />
       </template>
       <template v-if="detail">
-        <PluginMetadataCard v-if="tab === 'overview'" :meta="detail.meta" />
+        <PluginMetadataCard
+          v-if="tab === 'overview'"
+          :meta="detail.meta"
+          :skipped-routes="detail.skipped_routes"
+        />
         <div v-else-if="tab === 'billing'" class="sibling-space-y-6">
           <section
             v-if="showDefaultUsage && detail.meta.usageSchema"

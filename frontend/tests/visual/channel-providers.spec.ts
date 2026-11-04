@@ -35,7 +35,24 @@ for (const theme of ['light', 'dark'] as const) {
         settings: '{}',
       }
       let saved: Record<string, unknown> | undefined
+      let created: typeof channel | undefined
+      const createWrites: unknown[] = []
       await page.route(/\/api\/channel\/(?:\?.*)?$/, (route) => {
+        if (route.request().method() === 'POST') {
+          createWrites.push(route.request().postDataJSON())
+          created = { ...channel, id: 102, name: 'Created Fixture', type: 1 }
+          return route.fulfill({
+            json: {
+              success: true,
+              message: '',
+              data: {
+                id: 102,
+                ids: [102],
+                results: [{ input_index: 0, channel_id: 102 }],
+              },
+            },
+          })
+        }
         if (route.request().method() === 'PUT') {
           saved = route.request().postDataJSON()
           return route.fulfill({ json: { success: true, data: null } })
@@ -44,8 +61,8 @@ for (const theme of ['light', 'dark'] as const) {
           json: {
             success: true,
             data: {
-              items: [channel],
-              total: 1,
+              items: created ? [created, channel] : [channel],
+              total: created ? 2 : 1,
               page: 1,
               page_size: 20,
               type_counts: { [channel.type]: 1 },
@@ -80,7 +97,7 @@ for (const theme of ['light', 'dark'] as const) {
         models: 'gemini-4-argon',
         setting: '{}',
         settings:
-          '{"vertex_project_id":"existing-project","vertex_key_type":"api_key"}',
+          '{"vertex_project_id":"existing-project","vertex_key_type":"api_key","future_provider_setting":{"keep":true}}',
       }
       saved = undefined
       await page.reload()
@@ -88,6 +105,12 @@ for (const theme of ['light', 'dark'] as const) {
       await page.locator('[aria-label="编辑渠道"]:visible').first().click()
       dialog = page.getByRole('dialog', { name: '编辑渠道', exact: true })
       const project = dialog.locator('input[name="channel-vertex-project-id"]')
+      const version = dialog.getByRole('combobox', { name: 'Vertex API 版本' })
+      await expect(version).toHaveValue('')
+      await expect(version.locator('option')).toHaveCount(3)
+      await version.selectOption('v1')
+      await expect(version).toHaveValue('v1')
+      await version.selectOption('v1beta1')
       await expect(project).toHaveValue('existing-project')
       await project.fill('updated-project')
       await dialog.locator('[name="channel-vertex-region"]').fill('eu')
@@ -105,6 +128,51 @@ for (const theme of ['light', 'dark'] as const) {
         'updated-project'
       )
       expect(saved!.other).toBe('eu')
+      expect(JSON.parse(String(saved!.settings))).toMatchObject({
+        vertex_api_version: 'v1beta1',
+        future_provider_setting: { keep: true },
+      })
+
+      await page.getByRole('button', { name: '新建渠道', exact: true }).click()
+      const createDialog = page.getByRole('dialog', {
+        name: '新建渠道',
+        exact: true,
+      })
+      await createDialog
+        .locator('[name="admin-channel-name"]')
+        .fill('Created Fixture')
+      await createDialog
+        .locator('[name="admin-channel-key"]')
+        .fill('fixture-key')
+      const models = createDialog.getByPlaceholder('选择模型或添加自定义模型', {
+        exact: true,
+      })
+      await models.fill('fixture-model')
+      await models.press('Enter')
+      await createDialog
+        .getByRole('button', { name: '保存渠道', exact: true })
+        .click()
+      await expect(createDialog).toHaveCount(0)
+      expect(createWrites).toEqual([
+        expect.objectContaining({
+          mode: 'single',
+          channel: expect.objectContaining({
+            name: 'Created Fixture',
+            key: 'fixture-key',
+            models: 'fixture-model',
+          }),
+        }),
+      ])
+      await expect(page.getByText('渠道已创建', { exact: true })).toBeVisible()
+      await expect(
+        page
+          .getByText('Created Fixture', { exact: true })
+          .filter({ visible: true })
+      ).toBeVisible()
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: test.info().outputPath('channel-created.png'),
+      })
     })
   }
 }

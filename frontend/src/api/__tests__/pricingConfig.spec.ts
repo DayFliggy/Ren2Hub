@@ -18,6 +18,39 @@ vi.mock('@/api/client', () => ({
 describe('model pricing requests', () => {
   afterEach(() => vi.clearAllMocks())
 
+  it('reads provider pricing issues and rejects malformed notices', async () => {
+    const issues = ['unconfigured', 'incompatible', 'stale'].map((reason) => ({
+      model_name: 'shared-model',
+      plugin_key: reason,
+      plugin_name: reason,
+      reason,
+    }))
+    vi.mocked(api.get).mockResolvedValueOnce(issues)
+    const abort = new AbortController()
+    await expect(pricingConfigApi.issues(abort.signal)).resolves.toEqual(issues)
+    expect(api.get).toHaveBeenLastCalledWith(
+      '/api/option/model_pricing/issues',
+      undefined,
+      { signal: abort.signal }
+    )
+    vi.mocked(api.get).mockResolvedValueOnce(null)
+    await expect(pricingConfigApi.issues()).resolves.toEqual([])
+    for (const value of [
+      {},
+      [{ ...issues[0], reason: 'unknown' }],
+      [{ ...issues[0], plugin_key: 7 }],
+    ]) {
+      vi.mocked(api.get).mockResolvedValueOnce(value)
+      await expect(pricingConfigApi.issues()).rejects.toThrow(
+        'Invalid API response'
+      )
+    }
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('pricing unavailable'))
+    await expect(pricingConfigApi.issues()).rejects.toThrow(
+      'pricing unavailable'
+    )
+  })
+
   it('sends editor prices as the numbers the backend accepts', async () => {
     vi.mocked(api.get).mockResolvedValue(pricingResponse.data)
     vi.mocked(api.patch).mockResolvedValue({

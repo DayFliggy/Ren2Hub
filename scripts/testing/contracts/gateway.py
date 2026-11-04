@@ -15,15 +15,46 @@ import traceback
 
 from .common import (RequirementError, acceptance_target, atomic_private,
     native_balances, operation_proof, candidate_query,
-    require, require_charge, save_model_pricing, verify_candidate_database)
+    regular_file, require, require_charge, save_model_pricing, verify_candidate_database)
 from .client import APIError, Client
 from .websocket import WebSocket, credentials, logout_verified
+
+
+def upgrade_attachment_state(args):
+    if getattr(args, 'upgrade_attachment_phase', None) != 'verify':
+        return None
+    path = args.upgrade_attachment_state
+    require(path.is_file(), 'upgrade_attachment_state_required')
+    state = json.loads(regular_file(path, private=True).read_text())
+    previous = json.loads(regular_file(args.previous_target, private=True).read_text())
+    current = acceptance_target()
+    expected = dict(current)
+    expected.update(revision=previous.get('revision'), image_id=previous.get('image_id'),
+                    container_ids={**current['container_ids'], 'app': previous.get('container_ids', {}).get('app')})
+    require(previous == expected and previous.get('revision') != args.revision
+            and state.get('format') == 1 and state.get('acceptance_target') == previous,
+            'upgrade_attachment_target_mismatch')
+    require(type(state.get('ticket_id')) is int and state['ticket_id'] > 0
+            and isinstance(state.get('attachment_path'), str)
+            and re.fullmatch(r'/api/tickets/attachments/[1-9][0-9]*', state['attachment_path'])
+            and isinstance(state.get('sha256'), str) and re.fullmatch(r'[0-9a-f]{64}', state['sha256']),
+            'upgrade_attachment_record_invalid')
+    for role in ('owner', 'foreign'):
+        account = state.get(role, {})
+        require(type(account.get('id')) is int and account['id'] > 0
+                and all(isinstance(account.get(key), str) and account[key] for key in ('username', 'password')),
+                'upgrade_attachment_account_invalid')
+    require(state['owner']['id'] != state['foreign']['id'], 'upgrade_attachment_owner_must_differ')
+    return state
 
 
 class Experiment:
     def __init__(self, args):
         verify_candidate_database(args.revision)
         self.args, self.revision = args, args.revision
+        # Validate provenance before any login or synthetic account creation.
+        self.saved_attachment = upgrade_attachment_state(args)
+        self.upgrade_clients = []
         self.base = 'http://127.0.0.1:3000'
         self.root, self.user, self.other = (Client(self.base) for _ in range(3))
         self.suffix = secrets.token_hex(4)
@@ -66,9 +97,9 @@ class Experiment:
                 'role': 1, 'status': 1, 'display_name': name})
             user = client.login(name, password)
             if client is self.user:
-                self.user_id, self.user_password = user['id'], password
+                self.user_id, self.user_name, self.user_password = user['id'], name, password
             else:
-                self.other_id, self.other_password = user['id'], password
+                self.other_id, self.other_name, self.other_password = user['id'], name, password
         self.root.api('POST', '/api/user/manage', {'id': self.user_id, 'action': 'add_quota', 'mode': 'override',
             'value': 1000000, 'operation_id': f'core-init-{self.suffix}'})
         self.record('native_initialization_login_and_numeric_wallet')
@@ -370,13 +401,59 @@ class Experiment:
         run_extensions(self)
         from .affiliate import run_affiliate
         run_affiliate(self)
+        if getattr(self.args, 'upgrade_attachment_phase', None) == 'capture':
+            self.capture_upgrade_attachment()
+
+    def capture_upgrade_attachment(self):
+        from .extensions import PNG
+        path = self.args.upgrade_attachment_state
+        require(not path.exists() and not path.is_symlink(), 'new_upgrade_attachment_state_required')
+        rows = self.rows(f'SELECT id FROM tickets WHERE user_id={int(self.user_id)} AND deleted_at IS NULL')
+        require(len(rows) == 1, 'upgrade_attachment_ticket_not_unique')
+        ticket_id = int(rows[0]['id'])
+        detail = self.user.api('GET', f'/api/tickets/{ticket_id}')
+        images = [image for message in detail['messages'] for image in message['images']]
+        require(len(images) == 1 and re.fullmatch(r'/api/tickets/attachments/[1-9][0-9]*', images[0]),
+                'upgrade_attachment_fixture_missing')
+        status, content = self.user.request('GET', images[0])
+        require(status == 200 and content == PNG, 'upgrade_attachment_fixture_content_mismatch')
+        state = {'format': 1, 'acceptance_target': acceptance_target(), 'ticket_id': ticket_id,
+                 'attachment_path': images[0], 'sha256': hashlib.sha256(content).hexdigest(),
+                 'owner': {'id': self.user_id, 'username': self.user_name, 'password': self.user_password},
+                 'foreign': {'id': self.other_id, 'username': self.other_name, 'password': self.other_password}}
+        atomic_private(path, json.dumps(state))
+        self.record('old_ticket_attachment_saved_for_upgrade')
+
+    def verify_upgrade_attachment(self):
+        state = self.saved_attachment
+        if state is None:
+            return
+        from .extensions import rejected
+        owner, foreign = Client(self.base), Client(self.base)
+        self.upgrade_clients.extend((owner, foreign))
+        for client, role in ((owner, 'owner'), (foreign, 'foreign')):
+            account = state[role]
+            user = client.login(account['username'], account['password'])
+            require(user['id'] == account['id'], 'upgrade_attachment_account_identity_changed')
+        path = f"/api/tickets/{state['ticket_id']}"
+        detail = owner.api('GET', path)
+        require(detail['ticket']['id'] == state['ticket_id']
+                and detail['ticket']['user_id'] == state['owner']['id']
+                and state['attachment_path'] in [image for message in detail['messages'] for image in message['images']],
+                'upgrade_attachment_mapping_changed')
+        status, content = owner.request('GET', state['attachment_path'])
+        require(status == 200 and hashlib.sha256(content).hexdigest() == state['sha256'],
+                'upgrade_attachment_content_changed')
+        rejected(foreign.request('GET', path), 'upgrade_ticket_cross_user_read', 'NOT_FOUND')
+        rejected(foreign.request('GET', state['attachment_path']), 'upgrade_attachment_cross_user_read', 'NOT_FOUND')
+        self.record('old_ticket_attachment_content_and_owner_boundary_survive_upgrade')
 
     def cleanup(self):
         failures=[]
         for token_id in self.tokens:
             try:self.user.api('PUT','/api/token/?status_only=true',{'id':token_id,'status':2})
             except Exception:failures.append('disable_token')
-        for client in [self.root,self.user,self.other]:
+        for client in [self.root,self.user,self.other,*self.upgrade_clients]:
             if client.bearer:
                 try:logout_verified(client)
                 except Exception:failures.append('revoke_session')
@@ -389,7 +466,9 @@ def run_group(group, args):
     report={'success':False,'group':group,'source_sha':args.revision,'checks':[]}
     experiment=server=None
     try:
-        experiment=Experiment(args);experiment.initialize()
+        experiment=Experiment(args)
+        experiment.verify_upgrade_attachment()
+        experiment.initialize()
         server=http.server.ThreadingHTTPServer(('127.0.0.1',0),experiment.handler())
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         experiment.channel_id=experiment.add_channel(server.server_port)

@@ -123,6 +123,26 @@ async function saveForm() {
 }
 
 describe('native provider configuration round trip', () => {
+  it('round trips the Vertex API version and preserves unknown settings', async () => {
+    const save = await form(
+      41,
+      {},
+      { vertex_api_version: 'v1beta1', provider_future: { enabled: true } }
+    )
+    const version = wrapper!.get('#channel-vertex-api-version')
+    expect((version.element as HTMLSelectElement).value).toBe('v1beta1')
+    await version.setValue('v1')
+    await saveForm()
+    expect(JSON.parse(save.mock.lastCall![0].settings)).toEqual({
+      vertex_api_version: 'v1',
+      provider_future: { enabled: true },
+    })
+    await version.setValue('')
+    await saveForm()
+    expect(JSON.parse(save.mock.lastCall![0].settings).vertex_api_version).toBe(
+      ''
+    )
+  })
   it('validates native channel ratios exactly before saving', async () => {
     const save = await form(1)
     const ratio = wrapper!.get('input[name="channel-ratio"]')
@@ -304,6 +324,9 @@ describe('native provider configuration round trip', () => {
     )
     expect(
       wrapper!.get('#channel-vertex-key-type').attributes('disabled')
+    ).toBeDefined()
+    expect(
+      wrapper!.get('#channel-vertex-api-version').attributes('disabled')
     ).toBeDefined()
     await wrapper!.get('input[name="channel-max-concurrency"]').setValue('4')
     await saveForm()

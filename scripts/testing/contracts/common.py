@@ -81,12 +81,14 @@ def acceptance_target():
             'database_user', 'database_name', 'database_host', 'redis_host', 'network',
             'run_id', 'container_ids', 'network_id', 'image_id', 'revision', 'ca_path', 'network_guard',
             'traffic_host_interface'}
-    require(isinstance(target, dict) and set(target) == keys, 'invalid_candidate_manifest')
+    require(isinstance(target, dict) and set(target) in (keys, keys | {'attachment_volume'}), 'invalid_candidate_manifest')
     require(re.fullmatch(r'[0-9a-f]{24}', target['run_id']), 'invalid_candidate_run_id')
     # 空串为监听器模式；非空为宿主网卡模式。
     require(isinstance(target['traffic_host_interface'], str)
             and re.fullmatch(r'[A-Za-z0-9_.-]{0,15}', target['traffic_host_interface']), 'invalid_candidate_traffic_mode')
     prefix = 'ren2hub-candidate-local-' + target['run_id']
+    if 'attachment_volume' in target:
+        require(target['attachment_volume'] == prefix + '-attachments', 'foreign_candidate_attachment_volume')
     for role in ('app', 'postgres', 'redis', 'mock'):
         require(target[role + '_container'] == prefix + '-' + role, 'foreign_candidate_name')
         require(re.fullmatch(r'[0-9a-f]{64}', target['container_ids'][role]), 'invalid_candidate_container_id')
@@ -99,10 +101,11 @@ def acceptance_target():
 
 
 def require_candidate_mounts(role, item, target):
-    """app 只允许只读 CA；宿主网卡模式另需恰好一个只读计数文件。其余挂载必须是 tmpfs。"""
+    """升级仅允许本轮专用附件卷；其余数据保持 tmpfs，不放宽宿主路径限制。"""
     ca = (target['ca_path'], '/etc/ren2hub/mock-ca.crt', True)
     counter = ('/proc/1/net/dev', '/host/proc/net/dev', True)
     counters = 0
+    attachments = 0
     for mount in item.get('Mounts', []):
         if role == 'app' and mount.get('Type') == 'bind':
             actual = (mount.get('Source'), mount.get('Destination'), mount.get('RW') is False)
@@ -110,10 +113,17 @@ def require_candidate_mounts(role, item, target):
                 counters += 1
             else:
                 require(actual == ca, 'candidate_unexpected_bind_mount')
+        elif role == 'app' and mount.get('Type') == 'volume':
+            require(bool(target.get('attachment_volume')) and mount.get('Name') == target['attachment_volume']
+                    and mount.get('Destination') == '/app/ticket-attachments' and mount.get('RW') is True,
+                    'candidate_attachment_volume_mismatch')
+            attachments += 1
         else:
             require(mount.get('Type') == 'tmpfs', 'candidate_persistent_storage_rejected')
     if role == 'app' and target['traffic_host_interface']:
         require(counters == 1, 'candidate_traffic_counter_mount_mismatch')
+    if role == 'app' and target.get('attachment_volume'):
+        require(attachments == 1, 'candidate_attachment_volume_missing')
 
 
 def verify_candidate_database(revision):
@@ -153,9 +163,16 @@ def verify_candidate_database(revision):
             destination = '/var/lib/postgresql/data' if role == 'postgres' else '/data'
             require(destination in item['HostConfig'].get('Tmpfs', {}), 'candidate_datastore_tmpfs_required')
     app = containers['app']
+    if target.get('attachment_volume'):
+        volume = _inspect(target['attachment_volume'])
+        require(volume.get('Name') == target['attachment_volume']
+                and volume.get('Labels', {}).get(label) == target['run_id'],
+                'candidate_attachment_volume_identity_mismatch')
     require(app['Image'] == target['image_id'] and app['Config']['Labels'].get('org.opencontainers.image.revision') == revision,
             'candidate_image_identity_changed')
     settings = dict(item.split('=', 1) for item in app['Config']['Env'])
+    require(settings.get('TASK_POLL_MAX_FAILURES', '') == ('0' if target.get('attachment_volume') else ''),
+            'candidate_mock_downtime_policy_mismatch')
     dsn = urllib.parse.urlsplit(settings.get('SQL_DSN', ''))
     redis = urllib.parse.urlsplit(settings.get('REDIS_CONN_STRING', ''))
     require((dsn.scheme, dsn.username, dsn.hostname, dsn.port, dsn.path) ==
@@ -167,7 +184,8 @@ def verify_candidate_database(revision):
     require(not settings.get('LOG_SQL_DSN') and not settings.get('SQLITE_PATH')
             and len(settings.get('SESSION_SECRET', '')) >= 32 and len(settings.get('CRYPTO_SECRET', '')) >= 32
             and settings.get('TICKET_UPLOAD_DIR') == '/app/ticket-attachments'
-            and '/app/ticket-attachments' in app['HostConfig'].get('Tmpfs', {}), 'candidate_storage_or_secrets_invalid')
+            and (bool(target.get('attachment_volume'))
+                 or '/app/ticket-attachments' in app['HostConfig'].get('Tmpfs', {})), 'candidate_storage_or_secrets_invalid')
     # 与发布合同一致：宿主模式路径为空或固定挂载点，监听器模式两变量都为空，避免读到容器自己的 net/dev。
     interface = target['traffic_host_interface']
     require(settings.get('TRAFFIC_HOST_INTERFACE', '') == interface

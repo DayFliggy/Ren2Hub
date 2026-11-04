@@ -25,21 +25,21 @@ func callBuiltinTaskHook(t *testing.T, key, hook string, ctx map[string]any) (ma
 func TestKlingSubmitUsesBilledModeAndModelAfterMetadataMerge(t *testing.T) {
 	ctx := map[string]any{
 		"apiKey":        "test-key",
-		"upstreamModel": "kling-v1",
+		"upstreamModel": "kling-v2-5-turbo",
 		"requestBody": map[string]any{
-			"model": "kling-v1", "prompt": "a cat", "mode": "std",
+			"model": "kling-v2-5-turbo", "prompt": "a cat", "mode": "std",
 			"metadata": map[string]any{"model": "kling-v2-master", "model_name": "kling-v2-master", "mode": "pro"},
 		},
 	}
 	submitted, err := callBuiltinTaskHook(t, "kling", "buildSubmitRequest", ctx)
 	require.NoError(t, err)
 	body := submitted["body"].(map[string]any)
-	assert.Equal(t, "kling-v1", body["model"])
-	assert.Equal(t, "kling-v1", body["model_name"])
+	assert.NotContains(t, body, "model", "Kling selects its model through model_name")
+	assert.Equal(t, "kling-v2-5-turbo", body["model_name"])
 	assert.Equal(t, "std", body["mode"])
 	facts, err := callBuiltinTaskHook(t, "kling", "extractUsage", ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1.0, facts["units"])
+	assert.Equal(t, 1.5, facts["units"])
 }
 
 func TestVeoSubmitValidatesFinalBillingParameters(t *testing.T) {

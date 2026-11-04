@@ -29,6 +29,7 @@ python3 -B scripts/testing/run.py race
 python3 -B scripts/testing/run.py browser
 python3 -B scripts/testing/run.py ui-contracts
 python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1
+python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1 --previous-image ren2hub-test:<旧版完整SHA>-v1
 python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1 --traffic-host-interface eth0
 python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 ```
@@ -42,7 +43,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 | race         | 轮询、并发资金、服务准入、WebSocket 结算、监听器连接计数、流量采样与读取并发       | 固定 Go 容器与 CGO；无 race、零跳过、实际用例非空                                                             |
 | browser      | 全新实例真实登录/刷新/注销、权限、Token、邀请归属与设置交互                        | 桌面/手机 × 明/暗，每组独立数据库；不拦截业务 API，不接已有服务器，不接受任意目标地址                         |
 | ui-contracts | `frontend/tests/visual/` 的页面、组件交互、状态及响应式行为                        | 自动发现该目录全部 spec，再逐 ID 核对实际执行；零缺项、跳过、重试；模拟原生 API，不冒充真实后端，不做像素比较 |
-| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同              | 全新 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过                            |
+| candidate    | 不可变镜像的账务、HTTP/SSE/WS/Compact、插件重启、管理/扩展与 SDK 合同；指定旧镜像时增加跨版本普通升级 | 全新隔离 PG、Redis、附件与密钥，internal 网络；精确余额/发送次数断言，分组报告全部通过 |
 
 `unit` 只把数据库矩阵列为转交 `databases`，把嵌入产物测试转交 `build`；不会把它们计入 unit 通过数量。需要真实 VLLM 的可选用例明确不在本地方案内。`unit` 通过不等于 `all` 通过。数据库清单中测试被删除、改名或缺失不能静默减少覆盖。
 
@@ -62,7 +63,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 `ui-contracts` 固定使用专用回环入口 `http://127.0.0.1:41739`，因为邀请链接会真实显示当前 origin。该端口被占用时直接失败，不回退随机端口；同一机器上的完整浏览器验收须串行。历史副本与真实后端 smoke 仍使用各自端口；每轮 `visual-origin.json` 记录实际值。
 
-真实 OAuth、真实付费模型和真实支付不在本地验证范围。SDK 运行时版本必须匹配候选合同要求，缺依赖不能跳过。新库部署不再以旧版本改写新库的回滚演练作为门槛；回退必须连同旧数据库、Redis 和附件整体切回，不能只换镜像。
+真实 OAuth、真实付费模型和真实支付不在本地验证范围。SDK 运行时版本必须匹配候选合同要求，缺依赖不能跳过。普通更新须使用 `--previous-image` 验证已有数据的升级；首次安装的全新库结果不能替代它。该合同不尝试让旧程序改写已经迁移的新库；生产回退仍须连同对应数据库、Redis 和附件整体切回。
 
 本地报告、已发布源码、镜像候选及正式部署分别记录。应用部署仍需仓库对应发布流程；本地 runner 本身不部署、不改正式环境。正式入口只用工作区的 `verify-ren2hub-app.sh` 与 `verify-ren2hub-https.py` 做只读核验。
 
@@ -70,7 +71,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 | 旧资产                                                                    | 新位置与状态                                                                                                                |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境和全部7阶段；旧入口删除                                 |
+| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境；7 个基础阶段，普通升级另加 7 个阶段；旧入口删除 |
 | Go `*_test.go` 与 Vue `src/**/*.spec.ts`                                  | 保留原生行为断言，统一发现并运行；共享SQLite fixture补齐用户硬删除的路由表                                                  |
 | 日期审计 spec 的8组业务回归及必要fixtures                                 | 随 `frontend/tests/contracts/` 退役；`tests/visual/` 继续复用其中的 `native-core-fixture.ts` 与 `channel-core-fixtures.ts`  |
 | 旧 `frontend/tests/live/`                                                 | 新 `frontend/tests/local/` 对实际产物执行登录、权限、Token、邀请与设置；旧页面穷举不再作为现行门槛                          |
@@ -80,4 +81,8 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 数据库 runner 发现读取 DSN/dialect 的测试及其 helper 使用者；明确清单覆盖的项目必须执行，未分类新项目使门槛失败。共享 helper 的其他原生用例单列为 SQLite 覆盖，不能宣称全部三方。当前矩阵使用 MySQL 8.4 与 PostgreSQL 15.19，并记录实际镜像 ID、digest 和服务器版本；不覆盖历史 MySQL 5.7、PostgreSQL 9.6 或 ClickHouse，亦不证明现有生产 PostgreSQL 15.18 的所有版本差异。浏览器网络 namespace 隔离 IP 网络，不是完整文件系统沙箱；不得用不可信二进制或不可信浏览器测试。
 
-插件候选当前只验证同版本重启。旧驱动的 preparing 状态恢复后不重新提交（`--resume-state`）及 usage-quantity `p` 选项没有迁入；这些崩溃恢复/计量分支明确未覆盖。下次普通更新需要另外恢复跨版本迁移与重启合同，不能复用本次全新安装结果。
+普通升级传入不同修订的不可变旧镜像，按 `upgrade-baseline → upgrade-management → upgrade-before-seconds → upgrade-prepare-p → upgrade-resume-p → upgrade-after-seconds → upgrade-after-p` 执行，再运行全部 7 个基础阶段。前四阶段由旧镜像生成合成配置、余额、充值、工单附件和在途任务，随后切换新镜像；`preparing` 状态在确认任务已持久化后落盘，由新版本恢复并继续原任务，不重新提交。`seconds` 与 `p` 两种计量分别验证。
+
+切换时仅替换本轮应用容器，保留同一 PostgreSQL、Redis、网络、密钥及附件卷。附件使用带本轮唯一 label 的专属 Docker volume；合同拒绝其他卷、路径、所有者或可写宿主绑定。应用、数据库和 Redis 均不接生产目录。切换前后比较配置、用户/Token、渠道、充值、路由与工单记录和附件的指纹，重复启动验证迁移幂等；在途任务单独断言恢复后只结算/退款一次、没有重复供应商提交，且旧版签发的产物链接仍可读取。所有阶段通过并清理成功后才可得到 `deployment_eligible=true`，同时还要求新镜像、干净应用提交与根仓库 gitlink 一致。
+
+普通升级候选的模拟供应商会在阶段之间计划停服，因此旧、新容器均显式设置并核验 `TASK_POLL_MAX_FAILURES=0`，避免测试调度等待触发默认失败次数退款；该设置记录在候选报告，不修改生产默认值，原生任务超时仍有效。失败阈值由独立 Go 行为测试验证。`p` 分支指自定义 `u("p")` 数量字段，不将它冒称为 Omni 输入/输出 Token 计量覆盖；Omni 的最终 Token 合同由插件回归单独验证。

@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import { httpTransport } from '@/api/httpTransport'
 import { useAdminChannels } from '@/composables/useAdminChannels'
-import type { AdminChannel, AdminChannelCreateInput } from '@/types/console'
+import type {
+  AdminChannel,
+  AdminChannelCreateInput,
+  AdminChannelCreateOptions,
+} from '@/types/console'
 const permissions = reactive({
   read: true,
   write: true,
@@ -154,6 +158,69 @@ describe('native channel management', () => {
       { mode: 'multi_to_single', multi_key_mode: 'polling', channel: input },
       { signal: expect.any(AbortSignal) }
     )
+  })
+  it.each([
+    {
+      name: 'single',
+      options: undefined,
+      result: {
+        id: 101,
+        ids: [101],
+        results: [{ input_index: 0, channel_id: 101 }],
+      },
+    },
+    {
+      name: 'batch',
+      options: { batchKeys: true },
+      result: {
+        ids: [101, 102],
+        results: [
+          { input_index: 0, channel_id: 101 },
+          { input_index: 1, channel_id: 102 },
+        ],
+      },
+    },
+    {
+      name: 'merged keys',
+      options: { multiKey: true, multiKeyMode: 'polling' },
+      result: {
+        id: 101,
+        ids: [101],
+        results: [{ input_index: 0, channel_id: 101 }],
+      },
+    },
+  ])(
+    'keeps creation feedback and refresh for the native $name ID response',
+    async ({ options, result }) => {
+      const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+      vi.spyOn(api, 'post').mockResolvedValue(result)
+      const state = await setup()
+      get.mockClear()
+      expect(
+        await state.createChannel(
+          input,
+          options as AdminChannelCreateOptions | undefined
+        )
+      ).toBe(true)
+      expect(toast.success).toHaveBeenCalledExactlyOnceWith('channels.created')
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(get).toHaveBeenCalledWith(
+        '/api/channel/',
+        expect.any(Object),
+        expect.any(Object)
+      )
+      expect(state.rows.value[0]?.id).toBe(101)
+    }
+  )
+  it('does not report creation success after the server rolls back a failed batch', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue(page)
+    vi.spyOn(api, 'post').mockRejectedValue(new Error('batch rolled back'))
+    const state = await setup()
+    get.mockClear()
+    expect(await state.createChannel(input, { batchKeys: true })).toBe(false)
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith('Error: batch rolled back')
+    expect(get).not.toHaveBeenCalled()
   })
   it('filters by model through native search, which the plain list ignores', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue(page)

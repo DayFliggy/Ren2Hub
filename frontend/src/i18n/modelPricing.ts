@@ -1,4 +1,10 @@
 const zh = {
+  pricingIssues: '任务模型价格需要处理',
+  pricingIssuesHint:
+    '以下插件无法按已保存的价格计费。请检查模型价格；此提示不会自动填入价格。',
+  pricingIssue_unconfigured: '未设置价格',
+  pricingIssue_incompatible: '价格引用了插件不再提供的用量字段',
+  pricingIssue_stale: '插件不再提供此模型',
   title: '模型定价',
   models: '模型',
   unset: '未定价模型',
@@ -284,6 +290,13 @@ const zh = {
 }
 const en: Record<keyof typeof zh, string> = {
   ...zh,
+  pricingIssues: 'Task model prices need attention',
+  pricingIssuesHint:
+    'These plugins cannot charge using the saved prices. Review the model prices; this notice does not fill prices automatically.',
+  pricingIssue_unconfigured: 'No price set',
+  pricingIssue_incompatible:
+    'The price uses usage the plugin no longer provides',
+  pricingIssue_stale: 'The plugin no longer offers this model',
   title: 'Model pricing',
   models: 'Models',
   unset: 'Unpriced models',

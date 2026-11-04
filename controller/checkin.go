@@ -35,7 +35,8 @@ func GetCheckinStatus(c *gin.Context) {
 			"min_quota": setting.MinQuota,
 			"max_quota": setting.MaxQuota,
 			"stats":     stats,
-			"today":     checkinToday(),
+			// Match HasCheckedInToday's server-local date, independent of the browser clock.
+			"today": time.Now().Format("2006-01-02"),
 		},
 	})
 }

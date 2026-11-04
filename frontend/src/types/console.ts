@@ -94,6 +94,13 @@ export interface AdminChannelCreateOptions {
   multiKeyMode?: 'random' | 'polling'
 }
 
+/** Native channel creation result; input indices refer to the original key input. */
+export interface AdminChannelCreateResult {
+  ids: number[]
+  results: { input_index: number; channel_id: number }[]
+  id?: number
+}
+
 /**
  * Sensitive fields (CHANNEL_SENSITIVE_UPDATE_FIELDS) are optional: an editor
  * without ChannelSensitiveWrite omits them and the backend keeps the stored

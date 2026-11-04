@@ -18,6 +18,7 @@ import ModelPricingView from '../ModelPricingView.vue'
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
+  issues: vi.fn(),
   save: vi.fn(),
   preview: vi.fn(),
   loadSettings: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock('@/api/pricingConfig', async (original) => ({
   ...(await original<typeof import('@/api/pricingConfig')>()),
   pricingConfigApi: {
     load: mocks.load,
+    issues: mocks.issues,
     save: mocks.save,
     preview: mocks.preview,
   },
@@ -148,6 +150,7 @@ function field(wrapper: VueWrapper, scope: string, name: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.load.mockResolvedValue(config())
+  mocks.issues.mockResolvedValue([])
   mocks.preview.mockResolvedValue({ effective: {} })
   mocks.get.mockResolvedValue(['model-a'])
   mocks.loadSettings.mockResolvedValue(true)
@@ -159,6 +162,52 @@ beforeEach(() => {
 })
 
 describe('pricing workspace draft lifecycle', () => {
+  it('shows separate provider issues and refreshes them when pricing reloads', async () => {
+    mocks.issues.mockResolvedValueOnce([
+      {
+        model_name: 'model-a',
+        plugin_key: 'first',
+        plugin_name: 'First',
+        reason: 'unconfigured',
+      },
+      {
+        model_name: 'model-a',
+        plugin_key: 'second',
+        plugin_name: 'Second',
+        reason: 'incompatible',
+      },
+      {
+        model_name: 'old-model',
+        plugin_key: 'removed',
+        plugin_name: '',
+        reason: 'stale',
+      },
+    ])
+    const wrapper = await setup()
+    const notices = wrapper.get('[data-pricing-issues]')
+    expect(notices.text()).toContain('First (first): No price set')
+    expect(notices.text()).toContain('Second (second): The price uses usage')
+    expect(notices.text()).toContain(
+      'removed (removed): The plugin no longer offers'
+    )
+    await button(wrapper, 'Reload pricing').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-pricing-issues]').exists()).toBe(false)
+    expect(mocks.issues).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('reports pricing issue lookup errors instead of showing an empty healthy result', async () => {
+    mocks.issues.mockRejectedValueOnce(new Error('issue service unavailable'))
+    const wrapper = await setup()
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'issue service unavailable'
+    )
+    expect(
+      button(wrapper, 'Save model prices').element.matches(':disabled')
+    ).toBe(true)
+    wrapper.unmount()
+  })
   it('fails closed after settings fail and retries the complete pricing workspace', async () => {
     mocks.loadSettings.mockResolvedValueOnce(false)
     const wrapper = await setup()

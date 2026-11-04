@@ -4,6 +4,7 @@ import {
   pricingConfigApi,
   type ModelPricingChange,
   type ModelPricingConfig,
+  type ModelPricingIssue,
 } from '@/api/pricingConfig'
 import { initialPricingDraft, pricingChanges, type PricingDraft } from './draft'
 import { isPricingConflict } from './errors'
@@ -24,6 +25,7 @@ export function useModelPricingConfig(
   const baseline = ref<ModelPricingConfig | null>(null),
     draft = ref<PricingDraft>({}),
     enabledModels = ref<string[]>([])
+  const issues = ref<ModelPricingIssue[]>([])
   const loading = ref(false),
     saving = ref(false),
     ready = ref(false),
@@ -48,18 +50,21 @@ export function useModelPricingConfig(
     const request = begin()
     loading.value = true
     ready.value = false
+    issues.value = []
     try {
-      const [config, names, settingsLoaded] = await Promise.all([
+      const [config, names, settingsLoaded, pricingIssues] = await Promise.all([
         pricingConfigApi.load(request.signal),
         api.get<string[]>('/api/channel/models_enabled', undefined, {
           signal: request.signal,
         }),
         loadSettings(forceSettings),
+        pricingConfigApi.issues(request.signal),
       ])
       if (request.signal.aborted) return false
       if (!settingsLoaded) throw new Error('loadError')
       apply(config)
       enabledModels.value = names
+      issues.value = pricingIssues
       ready.value = true
       return true
     } catch (cause) {
@@ -81,9 +86,13 @@ export function useModelPricingConfig(
       }
       const request = begin()
       try {
-        const config = await pricingConfigApi.load(request.signal)
+        const [config, pricingIssues] = await Promise.all([
+          pricingConfigApi.load(request.signal),
+          pricingConfigApi.issues(request.signal),
+        ])
         if (request.signal.aborted) return { status: 'aborted' }
         apply(config)
+        issues.value = pricingIssues
         return { status: 'saved' }
       } catch (cause) {
         if (request.signal.aborted) return { status: 'aborted' }
@@ -100,6 +109,7 @@ export function useModelPricingConfig(
     baseline,
     draft,
     enabledModels,
+    issues,
     changes,
     loading,
     saving,

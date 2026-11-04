@@ -2,6 +2,16 @@
 // the task-plugins feature. Ren2Hub-specific copy is marked inline.
 export const taskPluginMessages = {
   'zh-CN': {
+    pluginEnabled: '插件已启用',
+    pricingIssuesHint: '部分任务模型价格需要处理，请前往模型定价检查。',
+    pricingIssueReasons: {
+      unconfigured: '未设置价格',
+      incompatible: '价格引用了插件不再提供的用量字段',
+      stale: '插件不再提供此模型',
+    },
+    addressFormat: '地址形式',
+    vendorPath: '厂商路径',
+    onlyKeyAddress: '此路径仅通过 /{key} 地址提供服务。',
     title: '任务插件',
     enableTaskPlugins: '启用任务插件',
     behaviorHelp: '出厂与自定义插件行为',
@@ -306,6 +316,17 @@ export const taskPluginMessages = {
     // Ren2Hub: the task API has no plugin query, so this filters loaded rows.
   },
   en: {
+    pluginEnabled: 'Plugin enabled',
+    pricingIssuesHint:
+      'Some task model prices need attention. Review them in model pricing.',
+    pricingIssueReasons: {
+      unconfigured: 'No price set',
+      incompatible: 'The price uses usage the plugin no longer provides',
+      stale: 'The plugin no longer offers this model',
+    },
+    addressFormat: 'Address format',
+    vendorPath: 'Vendor path',
+    onlyKeyAddress: 'Only served at the /{key} address.',
     title: 'Task Plugins',
     enableTaskPlugins: 'Enable task plugins',
     behaviorHelp: 'Factory and custom plugin behavior',

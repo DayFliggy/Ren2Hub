@@ -11,7 +11,7 @@ import PluginEndpoints from './PluginEndpoints.vue'
 import PluginModelList from './PluginModelList.vue'
 import PluginWebsiteLink from './PluginWebsiteLink.vue'
 
-const props = defineProps<{ meta: TaskPluginMeta }>()
+const props = defineProps<{ meta: TaskPluginMeta; skippedRoutes?: string[] }>()
 const { t } = useI18n()
 const models = computed(() => props.meta.models ?? [])
 const fields = computed(() => [
@@ -116,7 +116,12 @@ const section = 'rounded-xl border border-[var(--border-subtle)] p-4'
       </p>
     </section>
     <section :class="section" :aria-label="t('taskPlugins.endpoints')">
-      <PluginEndpoints :protocols="meta.protocols" :routes="meta.routes" />
+      <PluginEndpoints
+        :protocols="meta.protocols"
+        :routes="meta.routes"
+        :plugin-key="meta.key"
+        :skipped-routes="skippedRoutes"
+      />
     </section>
   </div>
 </template>

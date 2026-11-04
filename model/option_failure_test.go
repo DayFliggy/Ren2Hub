@@ -75,3 +75,30 @@ func TestUpdateOptionRollsBackCreatedRowWhenSaveFails(t *testing.T) {
 	assert.Zero(t, count, "the row inserted by FirstOrCreate must roll back with the failed save")
 	assert.Equal(t, "kept-name", common.SystemName)
 }
+
+func TestUpstreamSyncOptionPartialReadFailureDoesNotPublish(t *testing.T) {
+	db := useGmpayTestDB(t)
+	oldName := common.SystemName
+	common.OptionMapRWMutex.Lock()
+	oldMap := common.OptionMap
+	common.OptionMap = map[string]string{"SystemName": "runtime-kept"}
+	common.OptionMapRWMutex.Unlock()
+	common.SystemName = "runtime-kept"
+	t.Cleanup(func() {
+		common.SystemName = oldName
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = oldMap
+		common.OptionMapRWMutex.Unlock()
+	})
+	require.NoError(t, db.Create(&Option{Key: "SystemName", Value: "partially-read"}).Error)
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("upstream-sync:partial-options", func(tx *gorm.DB) {
+		if tx.Statement.Table == "options" {
+			tx.AddError(errors.New("read failed after partial rows"))
+		}
+	}))
+	loadOptionsFromDatabase()
+	assert.Equal(t, "runtime-kept", common.SystemName)
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	assert.Equal(t, "runtime-kept", common.OptionMap["SystemName"])
+}

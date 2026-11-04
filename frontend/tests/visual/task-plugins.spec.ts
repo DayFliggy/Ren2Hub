@@ -35,7 +35,12 @@ for (const theme of ['light', 'dark'] as const) {
         models: ['fixture-model'],
         icon: 'text:FD',
         description: { en: 'Image and video tasks', zh: '图片与视频任务' },
+        routes: [
+          { method: 'POST', path: '/v1/video/generate', type: 'submit' },
+        ],
       }
+      let enabled = false
+      const statusWrites: unknown[] = []
       await page.route('**/api/plugin/task**', async (route) => {
         const path = new URL(route.request().url()).pathname
         let data: unknown = []
@@ -47,13 +52,29 @@ for (const theme of ['light', 'dark'] as const) {
               source_hash: 'a'.repeat(64),
               active: true,
               has_icon: true,
-              enabled: true,
-              runtime_status: 'registered',
+              enabled,
+              runtime_status: enabled ? 'registered' : 'disabled',
               channel_count: 1,
               in_flight_count: 2,
             },
           ]
-        else if (path.endsWith('/icon')) {
+        else if (path === '/api/plugin/task/fixture/status') {
+          statusWrites.push(route.request().postDataJSON())
+          enabled = true
+          data = {
+            plugin_enabled: true,
+            disabled_channels: 0,
+            unbound_channels: 0,
+            pricing_issues: [
+              {
+                model_name: 'fixture-model',
+                plugin_key: 'fixture',
+                plugin_name: 'Fixture Driver',
+                reason: 'incompatible',
+              },
+            ],
+          }
+        } else if (path.endsWith('/icon')) {
           expect(route.request().headers()['authorization']).toMatch(/^Bearer /)
           return route.fulfill({ status: 404 })
         } else if (path.endsWith('/marketplace/sources'))
@@ -93,6 +114,7 @@ for (const theme of ['light', 'dark'] as const) {
             meta,
             source: 'export const meta = {};',
             layer: 'override',
+            skipped_routes: ['POST /v1/video/generate'],
           }
         await route.fulfill({ json: { success: true, data } })
       })
@@ -145,12 +167,49 @@ for (const theme of ['light', 'dark'] as const) {
         '插件沙盒',
       ])
         await expect(sheet.getByRole('tab', { name: tab })).toBeVisible()
+      const conflict = sheet.getByText('此路径仅通过 /fixture 地址提供服务。', {
+        exact: true,
+      })
+      await expect(conflict).toBeVisible()
+      await expect(
+        sheet.getByText('/v1/video/generate', { exact: true })
+      ).toBeVisible()
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: test.info().outputPath('route-conflict.png'),
+      })
+      await sheet.getByRole('radio', { name: '/fixture', exact: true }).click()
+      await expect(
+        sheet.getByText('/fixture/v1/video/generate', { exact: true })
+      ).toBeVisible()
+      await expect(conflict).toHaveCount(0)
+      await assertNoHorizontalOverflow(page)
       await sheet.getByRole('tab', { name: '版本历史' }).click()
       await expect(
         sheet.getByRole('button', { name: '激活 / 回滚' })
       ).toBeDisabled()
       await assertNoHorizontalOverflow(page)
       await page.keyboard.press('Escape')
+
+      const enable = page.getByRole('switch', { name: '启用插件 fixture' })
+      await expect(enable).not.toBeChecked()
+      await enable.click()
+      const confirmation = page.getByRole('dialog', { name: '启用插件？' })
+      await confirmation
+        .getByRole('button', { name: '启用', exact: true })
+        .click()
+      await expect(confirmation).toHaveCount(0)
+      await expect(enable).toBeChecked()
+      expect(statusWrites).toEqual([{ enabled: true }])
+      await expect(
+        page.getByText(/插件已启用\. 部分任务模型价格需要处理/)
+      ).toContainText(
+        'fixture-model (Fixture Driver): 价格引用了插件不再提供的用量字段'
+      )
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: test.info().outputPath('plugin-pricing-warning.png'),
+      })
 
       // Marketplace: the index hash does not match the served source.
       await page.getByRole('tab', { name: '插件市场', exact: true }).click()

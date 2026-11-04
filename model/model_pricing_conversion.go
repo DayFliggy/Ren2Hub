@@ -13,7 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
-	hosttypes "github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -351,8 +351,8 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 			{"c", "CompletionRatio", 1},
 			{"cr", "CacheRatio", 1},
 			{"cc", "CreateCacheRatio", 1},
-			{"cc1h", "CreateCacheRatio", hosttypes.ClaudeCacheCreation1hMultiplier},
-			{"cc12h", "CreateCacheRatio", hosttypes.OpenAICacheCreation12hMultiplier},
+			{"cc1h", "CreateCacheRatio", types.ClaudeCacheCreation1hMultiplier},
+			{"cc12h", "CreateCacheRatio", types.OpenAICacheCreation12hMultiplier},
 			{"img", "ImageRatio", 1},
 		} {
 			if ordinaryAudio && !preview.BillingDetails.AudioTextBranches && lane.variable != "c" {

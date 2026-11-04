@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 # 本轮已审计的 NewAPI 核心版本；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
-UPSTREAM_SHA = 'e449cc700eb569cdfc2199cb73e97de46944f43c'
+UPSTREAM_SHA = 'ba5f7367797566175a6cd97a748d430af3602a01'
 
 
 def git(*args, repository=None):
@@ -17,9 +17,9 @@ def git(*args, repository=None):
 
 
 def requires_reasons(row):
-    # 非测试的 adapted 行必须说明保留差异的合同理由；测试文件不强制。
+    # 新增和删除也是本地偏离，不能靠文件分类绕过合同依据检查。
     path = row['path']
-    return (row['status'] == 'adapted' and not path.endswith('_test.go')
+    return (row['status'] in ('adapted', 'extension', 'removed') and not path.endswith('_test.go')
             and '/testdata/' not in path and not path.startswith('testdata/'))
 
 
@@ -33,10 +33,14 @@ data = json.loads(MANIFEST.read_text())
 upstream = UPSTREAM_SHA
 previous = {row['path'] for row in data['files']}
 reasons = {row['path']: row['reasons'] for row in data['files'] if row.get('reasons')}
+reviews = {row['path']: row['review'] for row in data['files'] if row.get('review')}
+contracts = data.get('contracts', {})
 directories = sorted({path.split('/')[0] for path in previous if '/' in path})
 root_files = sorted({path for path in previous if '/' not in path}
                     | {path.name for path in ROOT.glob('*.go')})
 scopes = directories + root_files
+if any(path == 'docs' or path.startswith('docs/') or path in ('.', '..') for path in scopes):
+    raise ValueError('documentation is outside the core manifest scope')
 source_paths = set(git('ls-tree', '-r', '--name-only', '-z', upstream, '--', *scopes, repository=args.upstream_repo)
                    .decode().strip('\0').split('\0'))
 local_paths = set(git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', *scopes)
@@ -56,15 +60,21 @@ for path in sorted((previous | source_paths | local_paths) - {''}):
     # 回到上游一致的文件不再需要理由，旧理由随之丢弃。
     if status != 'upstream_equal' and path in reasons:
         row['reasons'] = reasons[path]
+    if status != 'upstream_equal' and path in reviews:
+        row['review'] = reviews[path]
     rows.append(row)
-missing = [row['path'] for row in rows if requires_reasons(row) and not row.get('reasons')]
+missing = [row['path'] for row in rows if requires_reasons(row) and (
+    not row.get('reasons') or not row.get('review')
+    or any(reason not in contracts for reason in row.get('reasons', []))
+    or row.get('review', {}).get('target') != upstream
+    or not row.get('review', {}).get('basis'))]
 if missing:
-    print('adapted rows without reasons (manifest not written):', file=sys.stderr)
+    print('production differences without reviewed contract reasons (manifest not written):', file=sys.stderr)
     for path in missing:
         print('  ' + path, file=sys.stderr)
     sys.exit(1)
 data.update(upstream_sha=upstream,
-            implementation_base_sha='0837a03c77ea0d5b7618588d4c9e77781f656590',
+            implementation_base_sha='a276b48eaa60ae2ff1e761c21f5ac5fb526a541c',
             history_baseline_sha='9a63062227c31ba54a6346e07ee8b4fd8802f22f',
             reference_newapi_sha=upstream,
             candidate_sha=None, counts=dict(collections.Counter(row['status'] for row in rows)), files=rows)

@@ -2,7 +2,67 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
-当前源码适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，最后一次完整核对日期为 2026-10-28；这不表示该 SHA 仍是上游当前 HEAD。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
+本轮源码冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`，于 2026-11-04 完成窗口核对；原已适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`。这不表示目标 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
+
+## 2026-11-04 全量回归上游
+
+本轮本地起点为 `a276b48eaa60ae2ff1e761c21f5ac5fb526a541c`，原适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`，冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`。只处理该窗口的 33 个提交、188 个变更文件；此后上游提交另行处理。实施在独立 checkout 和专用上游缓存中完成，原工作树保留。正式 Git 发布和生产容器切换不属于本轮授权。
+
+上游实现为默认；残余例外只来自已批准的产品合同或目标替换后可复现的必要修复。全量复核原有 277 个 adapted、261 个 extension、45 个 removed 文件，包含本轮补丁未触及的历史差异。文件哈希、每个非测试差异的依据及合同目录统一维护在 `CORE_SOURCE_DELTA.json`，不把旧 `extension-hook` / `upstream-defect` 标签当永久保留依据。生成器对新增、修改、删除生产文件一视同仁：缺合同、缺冻结目标审查或缺依据直接报错且不写清单。
+
+处置表中的“接入”表示源码及对应定向回归已完成；最终全链门槛和候选身份另见本节验证记录，不能仅凭补丁可应用或文件哈希相同认定验收完成。
+
+| # | 完整来源 SHA | 行为 | 处置 |
+| --- | --- | --- | --- |
+| 1 | `a2defd2a8256abe039e5295bd583aeb2d02f111f` | URL 脱敏尾部标点/括号 | 接入；保留必要的已批准合同接点 |
+| 2 | `9eda50a32fedb9122531d0c7ca0112dd8efdb9a0` | VChart tooltip 与依赖 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 3 | `829f0828a5a9a099f24068d21b99411750ff8037` | 退出卸载受保护布局 | Vue 已有等价行为，保留现有实现并复验 |
+| 4 | `f3660175e06eb05e609d56f1627c160a5a52172e` | Zstd 窗口/内存/提前读请求体限制 | 接入；保留必要的已批准合同接点 |
+| 5 | `4193734a2abf2764375f29c26be8f540e9b9d4db` | 日志轮转后的动态 writer | 接入；保留必要的已批准合同接点 |
+| 6 | `a3851c29e1640d275b47af9ec141d64ae7325d65` | Turnstile 密钥先保存后启用 | Vue 已有等价行为，保留现有实现并复验 |
+| 7 | `3150dfea9cbe7244914291f8724a45c71bc02b85` | go-jose/v4 4.1.4 → 4.1.6 | 接入；保留必要的已批准合同接点 |
+| 8 | `837b8145f875ec2060ede30afa97fa0814367837` | Electron undici 更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 9 | `ee0f0ac78b5395099a8ebb9fa95e2d4bdb8038bb` | Electron 版本更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 10 | `7fa815edb29257d14fe9d4cf7d8672d5e8173d27` | Electron fast-uri 更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 11 | `1695171fa2b14bdafe91bec3b9b6bed1ed367c11` | React tailwind-merge 更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 12 | `cef78205e86b1d17cfe79b532ee04cc3aeea93cb` | React knip 更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 13 | `9fc70bb83451a8c3ffcfcb17c71bb6706c4b52a6` | React Query Devtools 更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 14 | `6e78cb3288bb07d2c3972d83776c8aeeaf6358eb` | marked 升级到 18.1.2 | Vue 升级 marked 18.1.2，保留文档隔离与链接过滤 |
+| 15 | `1e8c707acae93377336a5cc24f167a3e116fb13b` | React CodeMirror language 更新 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 16 | `883eeb87d864a0d657b39ff3703e057ebfaa523b` | 插件计费警告 | 接入；保留必要的已批准合同接点 |
+| 17 | `77436271f4792f99a293b87ed7ab8d2606a411b3` | DOMPurify 升级 | 不吸收：退役 React/Electron 或 Vue 未使用的依赖 |
+| 18 | `37d23dcc86b8eef4972a867582859a85d770c56c` | 个人侧栏设置服从管理员可见性 | 复验 Vue 共享可见性过滤；不新增 React 个人侧栏开关 |
+| 19 | `c59f6fd553921702cb47dacadc9731fa01548e96` | 厂商原生路径、共享候选、原生 SSE 和 artifact | 接入；保留必要的已批准合同接点 |
+| 20 | `8b253de42d2820d2772be8cab3fbd31c31cfecf3` | Kling 4.0 时长和 size 映射 | 接入；保留必要的已批准合同接点 |
+| 21 | `1424ffdd4aef28812a0e9309a465453cbdd034e4` | 显式插件前缀声明去重 | 接入；保留必要的已批准合同接点 |
+| 22 | `fe57cba425b51e113d26333185a2266e448c7651` | Kling 4.0 采用 list_price 扣量 | 接入；保留必要的已批准合同接点 |
+| 23 | `ea343c4a81151bfd537d33b66527c25fa21a1112` | 已转发 SSE 的 Reserve 和 Insert 失败仍计费 | 接入；保留必要的已批准合同接点 |
+| 24 | `d0abbf6e0d33552a41c402d9b1fadbaff27cf40d` | Vertex Gemini Omni Interactions 视频 | 与第 27 项成组接入，只保留最终 Token 计量 |
+| 25 | `70e6af6429824f99de98e96e65254c8c2ef7ee0b` | 引入 github.com/MoeForge/moego v0.1.0-alpha.1；同一 ojson.Doc 完成请求编辑，保留未触及成员顺序/数字拼写；处理受控重复键；媒体与插件 base64 使用 ValidateString/EncodeDataURL/零拷贝读取 | 接入；保留必要的已批准合同接点 |
+| 26 | `651d5a213fc81e7447e88cd35364695ee664bf09` | 把 prompt_tokens_details 和 completion_tokens_details 传入宿主结算，保留 cached_tokens 与推理等细分统计 | 接入；保留必要的已批准合同接点 |
+| 27 | `c046559bbd8b154e88e69905f60e71a5f4f1e5aa` | Omni 计费事实改为 Token | 接入；保留必要的已批准合同接点 |
+| 28 | `45746eee4de25ab1eb75d4b7fbb8de2199483ea3` | 空闲未收帧时发 PING；未应答连接关闭；健康慢请求可继续，已交付数据不自动重放 | 接入；保留必要的已批准合同接点 |
+| 29 | `9b473a3fe4fed8d18980fd8d3c6a8908847a5f25` | 2FA 锁定过期后重置失败窗口 | 接入；保留必要的已批准合同接点 |
+| 30 | `52c173038e3551618ef7c62f2e4db62ca43a8f69` | 支持 continuationToken、mediaProcessing 及 snake_case；CONTINUATION → OpenAI length；Argon 默认 medium、cyber-permissive 默认 high，并支持 thinking-level | 接入；保留必要的已批准合同接点 |
+| 31 | `83b18fe6cc3fcf489fb64772445c8587d71251f1` | 渠道创建返回 ID/输入映射及 panic 回滚修复 | 接入；保留必要的已批准合同接点 |
+| 32 | `94b521664599d416fead8e57d8318717c0e29058` | 渠道 settings.vertex_api_version 只接受空/v1/v1beta1；只改变 Google Gemini/Imagen 请求版本，Claude/OpenSource 路由不变 | 接入；保留必要的已批准合同接点 |
+| 33 | `ba5f7367797566175a6cd97a748d430af3602a01` | 新增 embedding usage DTO；promptTokenCount > 0 时从上游统计与 promptTokenDetails 构造 usage，否则保留估算 | 接入；保留必要的已批准合同接点 |
+
+保留 Vue、品牌、单节点、工单、GMPay、返利、模型目录、统计与运维观测，以及原生计数、请求限制摘要和上游倍率只读展示。每 Token 自动/有序手动路由、渠道倍率及上限、用户/渠道无等待并发仍复用统一入口；钱包、预扣和结算维持原生唯一实现，用量折扣只在 `HandleChannelRatio` 应用一次。模型默认价格和内置表达式不恢复，工具单价、音频倍率与 Gemini 音频固定价照常吸收。业务分组、站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、React/Electron、旧 `/api/next` 和独立账本继续退役。
+
+渠道创建增加 `data.ids`、输入索引映射 `data.results` 和单结果 `data.id`；插件管理同步 pricing issues、skipped routes、原生路径/凭据/SSE/媒体合同，Vue 同批接入；Vertex 增加空值/v1/v1beta1 版本选择，HTTP/2 健康检查默认关闭。moego 最后成组进入请求编辑和 base64 路径，保留数字/未触及原文、受控重复键和缓冲区生命周期，独立模块不反向依赖 host，工具链保持 Go 1.26.10 / Bun 1.4.0。
+
+实际收敛包括删除单调用的 `checkinToday` 文件、恢复直接的缓存切分调用和无必要类型别名、回归多处纯注释/格式漂移、删除 Vidu 旧宽泛校验而采用目标端点约束。真实客户端取消对照证明上游插件 adaptor 的 detached context 已能完成已交付 SSE 的结算，因此删除本轮尝试加入的三处取消 guard 和重复 `WithoutCancel`，仅留下行为回归。F 已吸收上游 schema/JSON 保真逻辑，不再为该部分保留独立本地例外。
+
+必要修复证据位于 `/home/work/ren2hub-sync-20261104-ja5AWnjV/`：`core/RESULTS.json` 关联缓存创建 usage、Compact、双向 prompt_cache_options、multipart 预算和正则缓存淘汰对照；`plugins/verification-summary.json` 关联请求头白名单、Kling 等出站/计费同源、CAS 退款/重复上游 ID、URL 脱敏和流式生命周期；`parent-proofs/currency-proof.json` 关联有限正汇率/额度校验；`vue/counterfactuals/` 关联配置原子性、定价快照并发、支付回调与用户/Root 明细隔离，`vue/usage-flow-result.json` 补充独立 flow 查询对照。每项以目标实现的实际行为断言失败和当前实现通过为依据，编译失败、缺依赖和零用例不能作为缺陷证据。
+
+普通更新验收扩展现有 `candidate --previous-image`：旧镜像生成合成配置、余额、充值、工单附件和在途任务，在同一隔离 PG/Redis/附件目标上替换新镜像；旧 `preparing` 状态由新版本恢复，供应商提交不能重复，完成只结算/退款一次，旧产物与旧工单附件仍可按原权限读取，重复启动的数据/迁移保持一致。`seconds` 与自定义 `u("p")` 数量分别验证；后者不是 Omni 的输入/输出 Token 断言。模拟供应商阶段间计划停服时显式固定 `TASK_POLL_MAX_FAILURES=0` 并报告，失败阈值另由原生测试保护，不改变生产默认值。
+
+验证状态：修改前 Go 2,556 个顶层用例、Vue 2,087 项基线通过，旧 a276 镜像由固定源码构建。最终源码验证位于 `/home/work/ren2hub-sync-20261104-ja5AWnjV/final-source-validation-v3/`：Go 2,631 个顶层用例、Vue 2,100 项（287 文件）通过；68 项数据库合同共 120 组执行通过，覆盖 SQLite、MySQL 8.4.11、PostgreSQL 15.19，无跳过或清理错误；类型、lint、格式、三模块 vet、前后端构建、4 组 race、4 组真实隔离后端浏览器及 629 项 UI 合同（63 文件）全部通过。新增管理行为另有桌面/手机、明/暗 16 张截图的人工检查；UI 合同不等于全站像素对比。
+
+数据库阶段补入 `TestTaskPollingRefundDatabaseMatrix`，复用五项现有退款/重复任务断言验证三种数据库及实际退款日志。此前已通过的生产代码和现有测试均未改动，因此保留 unit 和原 119 组数据库结果，用同一 runner 定向补跑新增合同；对应文件指纹和复用边界见 `validation-reuse.json`。首次文档写入导致指纹变化的运行，以及一次驱动收到 SIGTERM 而未形成完整报告的运行，都保留原始记录，不作为放行证据。
+
+本地应用提交、根 gitlink、镜像、跨版本候选和正式发布状态统一记录在 `/home/work/ren2hub-sync-20261104-ja5AWnjV/delivery.json`；详细候选报告位于同目录 `candidate-final/`。候选必须与真实提交和镜像绑定，14 个阶段全部成功并满足 `deployment_eligible=true`；不把本文件在构建前的记录当作候选通过证据。正式 Git 发布和生产切换不在本轮范围。
 
 ## 2026-11-02 折扣卡片响应式与标准计费空态
 

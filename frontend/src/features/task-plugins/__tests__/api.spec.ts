@@ -5,6 +5,7 @@ import { httpTransport } from '@/api/httpTransport'
 import { ApiError } from '@/api/types'
 
 import {
+  activateTaskPlugin,
   deleteTaskPluginVersion,
   getTaskPluginEnabledOption,
   setTaskPluginEnabledOption,
@@ -21,6 +22,18 @@ import {
 afterEach(() => vi.restoreAllMocks())
 
 describe('task plugin API contract', () => {
+  it('returns pricing notices from successful activation, enabling and deletion', async () => {
+    const notice = {
+      pricing_issues: [
+        { model_name: 'm', plugin_key: 'p', plugin_name: 'P', reason: 'stale' },
+      ],
+    }
+    vi.spyOn(api, 'post').mockResolvedValue(notice)
+    vi.spyOn(api, 'delete').mockResolvedValue(notice)
+    await expect(activateTaskPlugin('p', '1')).resolves.toEqual(notice)
+    await expect(setTaskPluginStatus('p', true)).resolves.toEqual(notice)
+    await expect(deleteTaskPluginVersion('p', '1')).resolves.toEqual(notice)
+  })
   it('sends disable options only for a disable', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(null)
     await setTaskPluginStatus('fixture/key', false, {

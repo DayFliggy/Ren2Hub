@@ -12,6 +12,8 @@ import type {
   TaskPluginOption,
   TaskPluginRecord,
   TaskPluginUsage,
+  TaskPluginChangeNotice,
+  TaskPluginStatusResult,
 } from './types'
 
 const base = '/api/plugin/task'
@@ -144,7 +146,9 @@ export async function updateMarketplaceSources(sources: MarketplaceSource[]) {
 }
 
 export function activateTaskPlugin(key: string, version: string) {
-  return api.post<null>(`${keyPath(key)}/activate`, { version })
+  return api.post<TaskPluginChangeNotice>(`${keyPath(key)}/activate`, {
+    version,
+  })
 }
 
 export function setTaskPluginStatus(
@@ -156,7 +160,10 @@ export function setTaskPluginStatus(
   if (!enabled && options?.cascade) params.set('cascade', 'true')
   if (!enabled && options?.force) params.set('force', 'true')
   const query = params.size ? `?${params}` : ''
-  const request = api.post<null>(`${keyPath(key)}/status${query}`, { enabled })
+  const request = api.post<TaskPluginStatusResult>(
+    `${keyPath(key)}/status${query}`,
+    { enabled }
+  )
   // Only a disable can be blocked by usage; an enable error stays as-is.
   return enabled ? request : withUsage(request)
 }
@@ -169,7 +176,7 @@ export function deleteTaskPluginVersion(
 ) {
   const query = force ? '?force=true' : ''
   return withUsage(
-    api.delete<null>(
+    api.delete<TaskPluginChangeNotice | null>(
       `${keyPath(key)}/versions/${encodeURIComponent(version)}${query}`
     )
   )

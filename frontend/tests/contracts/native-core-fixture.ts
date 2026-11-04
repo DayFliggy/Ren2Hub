@@ -413,6 +413,7 @@ export async function nativeCoreFixture(
         end_time: 0,
       })
 
+    if (path === '/api/option/model_pricing/issues') return ok([])
     if (path === '/api/option/model_pricing')
       return route.fulfill({ json: nativeFixture('model-pricing.get.json') })
     if (path === '/api/option/model_pricing/preview')

@@ -304,7 +304,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('profile', choices=PROFILES)
     parser.add_argument('--output-parent', type=Path, default=SOURCE / '.local-tests')
-    parser.add_argument('--image', help='candidate/all 使用已发布的不可变镜像；无默认生产目标')
+    parser.add_argument('--image', help='candidate/all 使用已构建的不可变镜像；无默认生产目标')
+    parser.add_argument('--previous-image', help='candidate/all 普通升级使用的固定旧镜像')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='candidate/all 只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
@@ -363,7 +364,7 @@ def main() -> int:
                 if not args.image:
                     raise RuntimeError('candidate/all 必须显式传入 --image，未运行候选不能算通过')
                 from candidate import run
-                result = run(SOURCE, stage, args.image, args.traffic_host_interface)
+                result = run(SOURCE, stage, args.image, args.traffic_host_interface, args.previous_image)
             report['stages'][profile] = result
             if not result.get('success'):
                 raise RuntimeError(f'{profile} 未通过，查看分层报告')

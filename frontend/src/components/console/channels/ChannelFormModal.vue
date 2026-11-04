@@ -88,6 +88,7 @@ const settingsError = ref('')
 const awsApiType = ref('invoke_model')
 const awsKeyType = ref('ak_sk')
 const vertexKeyType = ref('json')
+const vertexApiVersion = ref('')
 const vertexProjectId = ref('')
 const vertexRegion = ref('')
 const responsesWebSocket = ref(false)
@@ -567,6 +568,10 @@ watch(
         originalOtherSettings.value.vertex_key_type === 'api_key'
           ? 'api_key'
           : 'json'
+      vertexApiVersion.value =
+        typeof originalOtherSettings.value.vertex_api_version === 'string'
+          ? originalOtherSettings.value.vertex_api_version
+          : ''
       vertexRegion.value = typeof ch?.other === 'string' ? ch.other : ''
       for (const field of CHANNEL_SETTING_FIELDS)
         fieldSettings[field.key] =
@@ -688,6 +693,10 @@ async function submit() {
           otherSettings.aws_key_type = awsKeyType.value
       }
       if (form.type === 41) {
+        if (!['', 'v1', 'v1beta1'].includes(vertexApiVersion.value))
+          throw new Error(t('channels.invalidStoredSettings'))
+        if (vertexApiVersion.value !== (otherSettings.vertex_api_version ?? ''))
+          otherSettings.vertex_api_version = vertexApiVersion.value
         const project =
           vertexKeyType.value === 'api_key' ? vertexProjectId.value.trim() : ''
         if (project !== (otherSettings.vertex_project_id ?? ''))
@@ -955,6 +964,7 @@ async function submit() {
             v-model:aws-api-type="awsApiType"
             v-model:aws-key-type="awsKeyType"
             v-model:vertex-key-type="vertexKeyType"
+            v-model:vertex-api-version="vertexApiVersion"
             v-model:vertex-project-id="vertexProjectId"
             v-model:vertex-region="vertexRegion"
             :channel-type="form.type"

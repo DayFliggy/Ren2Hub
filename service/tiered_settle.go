@@ -5,6 +5,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	hosttypes "github.com/QuantumNous/new-api/types"
 )
 
@@ -35,7 +36,7 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	if usage.UsageSemantic == "anthropic" {
 		// Upstreams may report the cache-write total without a full 5m/1h
 		// split; the unlabelled remainder is billed as 5m writes.
-		split5m, split1h := NormalizeCacheCreationSplit(
+		split5m, split1h := relayconvert.NormalizeCacheCreationSplit(
 			usage.PromptTokensDetails.CacheCreationTokensTotal(),
 			usage.ClaudeCacheCreation5mTokens,
 			usage.ClaudeCacheCreation1hTokens,

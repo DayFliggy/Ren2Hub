@@ -55,6 +55,7 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | backend | production | Go | `github.com/joho/godotenv` | `v1.5.1` | MIT | [29](#license-29) |
 | backend | production | Go | `github.com/klauspost/compress` | `v1.18.3` | BSD-3-Clause; bundled files: Apache-2.0, MIT | [30](#license-30) |
 | backend | production | Go | `github.com/mewkiz/flac` | `v1.0.13` | Unlicense | [31](#license-31) |
+| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.1` | MIT | [82](#license-82) |
 | backend | production | Go | `github.com/nicksnyder/go-i18n/v2` | `v2.6.1` | MIT | [32](#license-32) |
 | backend | production | Go | `github.com/pkg/errors` | `v0.9.1` | BSD-2-Clause | [33](#license-33) |
 | backend | production | Go | `github.com/pquerna/otp` | `v1.5.0` | Apache-2.0 | [4](#license-4) |
@@ -67,7 +68,6 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | backend | production | Go | `github.com/tcolgate/mp3` | `v0.0.0-20170426193717-e79c5a46d300` | MIT | [39](#license-39) |
 | backend | production | Go | `github.com/thanhpk/randstr` | `v1.0.6` | MIT | [40](#license-40) |
 | backend | production | Go | `github.com/tidwall/gjson` | `v1.19.0` | MIT | [41](#license-41) |
-| backend | production | Go | `github.com/tidwall/sjson` | `v1.2.5` | MIT | [41](#license-41) |
 | backend | production | Go | `github.com/tiktoken-go/tokenizer` | `v0.8.1` | MIT | [42](#license-42) |
 | backend | production | Go | `github.com/waffo-com/waffo-go` | `v1.3.2` | MIT | [43](#license-43) |
 | backend | production | Go | `github.com/waffo-com/waffo-pancake-sdk-go` | `v0.3.1` | MIT | [44](#license-44) |
@@ -7861,6 +7861,34 @@ Repository: git+https://github.com/websockets/ws.git
 MIT License
 
 Copyright (c) 2021-present Johnson Chu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### License 82
+
+- `github.com/MoeForge/moego v0.1.0-alpha.1 — LICENSE`
+
+```text
+MIT License
+
+Copyright (c) 2026 Calcium-Ion
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

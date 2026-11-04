@@ -44,7 +44,7 @@ MATRIX_TESTS = {
         "TestAPITokenAuditDatabaseMatrix",
     ),
     "pkg/perf_metrics": ("TestPerformanceAggregationAndFlush",),
-    "service": ("TestFixedPriceBillingDatabaseMatrix",),
+    "service": ("TestFixedPriceBillingDatabaseMatrix", "TestTaskPollingRefundDatabaseMatrix"),
 }
 SINGLE_DIALECT_TESTS = (
     ("model", "TestMigratePrefillGroupUniquenessMySQL", "mysql"),
@@ -66,13 +66,26 @@ SECURITY_TESTS = (
     "TestSecurityEnrollmentProofIsBurnedAfterBusinessFailure",
     "TestSecurityEnrollmentPendingPasskeyRejectsChangedAuthorization",
 )
+CHANNEL_TESTS = (
+    "TestAddChannelReturnsCreatedIDs", "TestAddChannelInvalidVertexBatchDoesNotReturnResults",
+    "TestAddChannelRollbackDoesNotReturnIDs", "TestAddChannelPanicRollsBackWithoutSuccess",
+    "TestMultiKeyEnableRestoresOnlyExhaustedChannels",
+)
+TASK_TESTS = (
+    "TestDoubaoRelayedImageStreamSettlement", "TestImmediateTaskSettlementDatabase",
+    "TestExecuteTaskSubmissionRefundsWhenInsertFails", "TestExecuteTaskSubmissionRefundsWhenFinalReserveFails",
+    "TestExecuteTaskSubmissionCallerCancellationDuringSubmitRefundsBeforeDurableBarrier",
+    "TestProxyTaskMediaReadsArtifactFromJSONContentPath",
+    "TestTaskPluginChangesReportPricingIssuesOfServingPlugin", "TestSwitchedOffPluginPricesAreNotPricingIssues",
+    "TestTaskPluginListAndDetailReportSkippedRoutes", "TestTaskPluginSwitchOnPathsRejectRoutingConflicts",
+)
 PAIRED_TESTS = (
     ("model", "TestUserSessionPreviousRefreshHashMigrationConfiguredDatabases"),
     ("controller", "TestIndependentAuditLogStores"),
 )
 REQUIRED_TESTS = tuple(name for tests in MATRIX_TESTS.values() for name in tests) + tuple(
     name for _, name, _ in SINGLE_DIALECT_TESTS
-) + MANAGE_TESTS + SECURITY_TESTS + tuple(name for _, name in PAIRED_TESTS)
+) + MANAGE_TESTS + SECURITY_TESTS + CHANNEL_TESTS + TASK_TESTS + tuple(name for _, name in PAIRED_TESTS)
 
 
 # 这些 helper 的现有单测默认使用临时 SQLite；逐项报告其外部引擎变体未覆盖。
@@ -82,9 +95,7 @@ DEFERRED_DATABASE_HELPERS = {
     "openTaskDialectDatabase": "任务插件原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
     "setupManageUserTestDB": "非额度管理原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
 }
-DEFERRED_DATABASE_TESTS = {
-    "TestMultiKeyEnableRestoresOnlyExhaustedChannels": "原生单测默认使用临时 SQLite；TEST_CHANNEL_SQL_DSN 变体未纳入本矩阵",
-}
+DEFERRED_DATABASE_TESTS = {}
 
 
 def database_inventory(source: Path, tracked_files: list[str]) -> dict:
@@ -439,18 +450,23 @@ class Runner:
                 self.sql(kind, "DROP DATABASE " + name + suffix + ";")
 
     def suite(self, package: str, test: str, dialects: tuple[str, ...] = DIALECTS,
-              *, nested: bool = True, manage: bool = False, security: bool = False) -> None:
+              *, nested: bool = True, manage: bool = False, security: bool = False,
+              channel: bool = False, task: bool = False) -> None:
         before = {kind: self.database_names(kind) for kind in IMAGES}
         env = self.database_environment()
         if manage:
             env["TEST_MANAGE_USER_DIALECT"] = dialects[0]
         if security:
             env["TEST_SECURITY_DIALECT"] = dialects[0]
+        if channel:
+            env["TEST_CHANNEL_SQL_DSN"] = '' if dialects[0] == 'sqlite' else env['TEST_' + dialects[0].upper() + '_DSN']
+        if task:
+            env["TEST_TASK_DB_DIALECT"] = dialects[0]
         pattern = "^" + test + "$"
         if nested:
             pattern += "/^(" + "|".join(dialects) + ")$"
         args = ["go", "test", "-json", "-buildvcs=false", "-p", "2", "-count=1", "-timeout=60s", "./" + package, "-run", pattern]
-        name = f"{self.sequence:02d}-{test}" + ("-" + dialects[0] if manage or security else "")
+        name = f"{self.sequence:02d}-{test}" + ("-" + dialects[0] if manage or security or channel or task else "")
         started = time.monotonic()
         entry = {"package": package, "test": test, "dialects": list(dialects), "log": name + ".jsonl", "success": False}
         self.report["suites"].append(entry)
@@ -488,6 +504,12 @@ class Runner:
         for test in SECURITY_TESTS:
             for dialect in DIALECTS:
                 self.suite("controller", test, (dialect,), nested=False, security=True)
+        for test in CHANNEL_TESTS:
+            for dialect in DIALECTS:
+                self.suite("controller", test, (dialect,), nested=False, channel=True)
+        for test in TASK_TESTS:
+            for dialect in DIALECTS:
+                self.suite("controller", test, (dialect,), nested=False, task=True)
         self.report["success"] = all(entry["success"] for entry in self.report["suites"])
 
     def cleanup(self) -> None:

@@ -10,7 +10,7 @@ import { AlertTriangle, CircleCheck, Power, Upload } from 'lucide-vue-next'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import { useToast } from '@/composables/useToast'
+import { usePluginChangeNotice } from '../usePluginChangeNotice'
 
 import { activateTaskPlugin, previewTaskPlugin, uploadTaskPlugin } from '../api'
 import {
@@ -37,7 +37,7 @@ const props = withDefaults(defineProps<{ initialKey?: string }>(), {
 })
 const emit = defineEmits<{ close: []; changed: [] }>()
 const { t } = useI18n()
-const toast = useToast()
+const notifyChange = usePluginChangeNotice()
 
 const source = ref('')
 const fileName = ref('')
@@ -164,10 +164,11 @@ async function upload() {
     })
     result.value = detail
     emit('changed')
-    toast.success(
+    notifyChange(
       detail.plugin?.active === false
         ? t('taskPlugins.savedNeedsActivation')
-        : t('taskPlugins.uploaded')
+        : t('taskPlugins.uploaded'),
+      detail.pricing_issues
     )
   } catch (error) {
     // Verbatim: preflight rejections name the conflicting plugin.
@@ -182,10 +183,13 @@ async function activate() {
   activating.value = true
   activationError.value = ''
   try {
-    await activateTaskPlugin(result.value.meta.key, result.value.meta.version)
+    const notice = await activateTaskPlugin(
+      result.value.meta.key,
+      result.value.meta.version
+    )
     activated.value = true
     emit('changed')
-    toast.success(t('taskPlugins.versionActivated'))
+    notifyChange(t('taskPlugins.versionActivated'), notice?.pricing_issues)
   } catch (error) {
     activationError.value =
       error instanceof Error ? error.message : String(error)

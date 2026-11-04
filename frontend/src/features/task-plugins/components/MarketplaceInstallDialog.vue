@@ -12,7 +12,7 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import { useToast } from '@/composables/useToast'
+import { usePluginChangeNotice } from '../usePluginChangeNotice'
 
 import {
   activateTaskPlugin,
@@ -61,7 +61,7 @@ export type MarketplaceInstallTarget = {
 const props = defineProps<{ target: MarketplaceInstallTarget }>()
 const emit = defineEmits<{ close: []; installed: [] }>()
 const { t } = useI18n()
-const toast = useToast()
+const notifyChange = usePluginChangeNotice()
 const plugin = props.target.plugin
 const state = props.target.installState
 const hasInstalled = state.status !== 'not_installed'
@@ -246,19 +246,26 @@ async function install() {
     // Refresh the installed list immediately after the upload. Activation is
     // a separate operation and may fail even though the version was saved.
     emit('installed')
+    let issues = detail.pricing_issues
     if (detail.plugin && !detail.plugin.active) {
       try {
-        await activateTaskPlugin(detail.meta.key, detail.meta.version)
+        const notice = await activateTaskPlugin(
+          detail.meta.key,
+          detail.meta.version
+        )
+        issues = notice?.pricing_issues
+        emit('installed')
       } catch (error) {
         installError.value = message(error)
         return
       }
     }
-    toast.success(
+    notifyChange(
       t('taskPlugins.installedToast', {
         name: detail.meta.name,
         version: detail.meta.version,
-      })
+      }),
+      issues
     )
   } catch (error) {
     // Verbatim: preflight rejections name the conflicting plugin.

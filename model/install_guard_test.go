@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -48,6 +49,35 @@ func TestGroupedDatabaseRejectedEvenWhenEmpty(t *testing.T) {
 			tables, err := db.Migrator().GetTables()
 			require.NoError(t, err)
 			require.Equal(t, []string{table}, tables)
+		})
+	}
+}
+
+func TestUpstreamSyncRootInitializationPropagatesDatabaseFailure(t *testing.T) {
+	for _, stage := range []string{"read", "create"} {
+		t.Run(stage, func(t *testing.T) {
+			db := useGmpayTestDB(t)
+			outage := errors.New("root database unavailable")
+			createAttempts := 0
+			require.NoError(t, db.Callback().Create().Before("gorm:create").Register("upstream-sync:root-create", func(tx *gorm.DB) {
+				if tx.Statement.Table == "users" {
+					createAttempts++
+					if stage == "create" {
+						tx.AddError(outage)
+					}
+				}
+			}))
+			if stage == "read" {
+				require.NoError(t, db.Callback().Query().Before("gorm:query").Register("upstream-sync:root-read", func(tx *gorm.DB) {
+					if tx.Statement.Table == "users" {
+						tx.AddError(outage)
+					}
+				}))
+			}
+			assert.ErrorIs(t, createRootAccountIfNeed(), outage, "a database outage must not be acknowledged as successful initialization")
+			if stage == "read" {
+				assert.Zero(t, createAttempts, "a failed query is not evidence that the installation has no users")
+			}
 		})
 	}
 }

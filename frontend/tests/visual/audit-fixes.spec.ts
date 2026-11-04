@@ -122,7 +122,7 @@ for (const theme of ['light', 'dark'] as const)
       await page.route('**/api/channel/models_enabled', (route) =>
         route.fulfill({ json: { success: true, data: ['precise-model'] } })
       )
-      await page.route('**/api/option/model_pricing**', (route) => {
+      await page.route(/\/api\/option\/model_pricing(?!\/issues)/, (route) => {
         if (route.request().method() === 'PATCH') saves++
         return route.fulfill({
           json: {

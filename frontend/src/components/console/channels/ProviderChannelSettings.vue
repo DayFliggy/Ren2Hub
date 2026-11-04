@@ -8,6 +8,9 @@ defineProps<{ channelType: number; disabled: boolean }>()
 const awsKeyType = defineModel<string>('awsKeyType', { required: true })
 const awsApiType = defineModel<string>('awsApiType', { required: true })
 const vertexKeyType = defineModel<string>('vertexKeyType', { required: true })
+const vertexApiVersion = defineModel<string>('vertexApiVersion', {
+  required: true,
+})
 const vertexProjectId = defineModel<string>('vertexProjectId', {
   required: true,
 })
@@ -47,6 +50,22 @@ const { t } = useI18n({ useScope: 'local', messages: channelProviderMessages })
       </p>
     </template>
     <template v-else>
+      <FormField
+        :label="t('vertexApiVersion')"
+        :hint="t('vertexApiVersionHint')"
+      >
+        <select
+          id="channel-vertex-api-version"
+          v-model="vertexApiVersion"
+          :aria-label="t('vertexApiVersion')"
+          :disabled="disabled"
+          class="h-10 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+        >
+          <option value="">{{ t('vertexApiDefault') }}</option>
+          <option value="v1">v1</option>
+          <option value="v1beta1">v1beta1</option>
+        </select>
+      </FormField>
       <FormField :label="t('vertexKeyType')">
         <select
           id="channel-vertex-key-type"

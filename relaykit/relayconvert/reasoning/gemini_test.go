@@ -8,6 +8,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestArgonReasoningDefaultsAndExplicitLevels(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		want  Effort
+	}{
+		{"gemini-4-argon", EffortMedium},
+		{"gemini-4-argon-preview", EffortMedium},
+		{"gemini-4-argon-cyber-permissive", EffortHigh},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			render, err := RenderGemini(tc.model, Intent{Mode: ModeEnabled}, nil, 0)
+			require.NoError(t, err)
+			require.NotNil(t, render.Config)
+			assert.Empty(t, render.Config.ThinkingLevel, "unspecified effort keeps the provider default")
+			assert.Equal(t, tc.want, render.EffectiveEffort)
+			for _, effort := range []Effort{EffortMinimal, EffortLow, EffortMedium, EffortHigh} {
+				render, err := RenderGemini(tc.model, Intent{Mode: ModeEnabled, Effort: effort}, nil, 0)
+				require.NoError(t, err)
+				want := effort
+				if effort == EffortMinimal {
+					want = EffortLow
+				}
+				assert.Equal(t, string(want), render.Config.ThinkingLevel)
+				assert.Equal(t, want, render.EffectiveEffort)
+			}
+		})
+	}
+}
+
 func TestRenderGeminiMapsAndClampsInsteadOfRejecting(t *testing.T) {
 	t.Parallel()
 

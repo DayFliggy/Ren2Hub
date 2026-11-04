@@ -2,21 +2,30 @@
 // Upstream components/plugin-endpoints.tsx: host protocol endpoints derived
 // from each meta.protocols claim, then the plugin's own native routes. Mode
 // names and paths are wire vocabulary and stay raw.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { HOST_PROTOCOL_ENDPOINTS } from '../lib/host-protocols'
 import type { TaskPluginProtocolClaim, TaskPluginRoute } from '../types'
 import CopyButton from './CopyButton.vue'
 import PluginModelList from './PluginModelList.vue'
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 
 const props = withDefaults(
   defineProps<{
     title?: string
     protocols?: TaskPluginProtocolClaim[] | null
     routes?: TaskPluginRoute[] | null
+    pluginKey?: string
+    skippedRoutes?: string[]
   }>(),
-  { title: '', protocols: undefined, routes: undefined }
+  {
+    title: '',
+    protocols: undefined,
+    routes: undefined,
+    pluginKey: undefined,
+    skippedRoutes: undefined,
+  }
 )
 const { t } = useI18n()
 const claims = computed(() =>
@@ -33,7 +42,35 @@ const claims = computed(() =>
     }
   })
 )
-const routes = computed(() => props.routes ?? [])
+const addressFormat = ref('vendor')
+// The same own-prefix rule as the native routing registry, including /ali
+// for alibaba. Explicit own-prefix declarations do not receive another copy.
+function keyAddress(path: string) {
+  const first = path.split('/')[1] ?? ''
+  return !props.pluginKey || (first && props.pluginKey.startsWith(first))
+    ? undefined
+    : `/${props.pluginKey}${path}`
+}
+const hasKeyAddresses = computed(() =>
+  (props.routes ?? []).some((route) => keyAddress(route.path))
+)
+const addressOptions = computed(() => [
+  { value: 'vendor', label: t('taskPlugins.vendorPath') },
+  { value: 'key', label: `/${props.pluginKey}` },
+])
+const routes = computed(() =>
+  (props.routes ?? []).map((route) => {
+    const pinned = keyAddress(route.path)
+    const path = addressFormat.value === 'key' && pinned ? pinned : route.path
+    return {
+      ...route,
+      displayPath: path,
+      skipped:
+        path === route.path &&
+        props.skippedRoutes?.includes(`${route.method} ${route.path}`),
+    }
+  })
+)
 const modeLabel = (mode: string) =>
   ({
     stream: t('taskPlugins.streaming'),
@@ -139,6 +176,13 @@ const chip =
       <p class="text-xs text-[var(--text-tertiary)]">
         {{ t('taskPlugins.pluginRoutes') }}
       </p>
+      <SegmentedToggle
+        v-if="hasKeyAddresses"
+        v-model="addressFormat"
+        :options="addressOptions"
+        :label="t('taskPlugins.addressFormat')"
+        size="sm"
+      />
       <ul class="sibling-divide-y sibling-divide-[var(--border-subtle)]">
         <li
           v-for="route in routes"
@@ -149,9 +193,16 @@ const chip =
           <div class="min-w-0 sibling-space-y-1.5 pt-1">
             <span
               class="block max-w-full overflow-x-auto whitespace-nowrap font-mono text-xs"
-              :title="route.path"
-              >{{ route.path }}</span
+              :class="{ 'text-[var(--text-tertiary)]': route.skipped }"
+              :title="route.displayPath"
+              >{{ route.displayPath }}</span
             >
+            <p
+              v-if="route.skipped"
+              class="text-xs text-[var(--status-warning-text)]"
+            >
+              {{ t('taskPlugins.onlyKeyAddress', { key: pluginKey }) }}
+            </p>
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="font-mono text-[11px] text-[var(--text-tertiary)]">{{
                 route.type
@@ -167,7 +218,7 @@ const chip =
             </div>
           </div>
           <CopyButton
-            :value="route.path"
+            :value="route.displayPath"
             :label="t('taskPlugins.copyEndpointPath')"
           />
         </li>

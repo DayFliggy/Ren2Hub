@@ -68,6 +68,7 @@ const {
   baseline,
   draft,
   enabledModels,
+  issues,
   changes,
   loading,
   saving,
@@ -444,6 +445,36 @@ onBeforeUnmount(() => {
       >
         <span class="text-[var(--text-secondary)]">{{ message }}</span>
       </div>
+
+      <details
+        v-if="issues.length"
+        open
+        class="mb-4 rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-3.5 text-xs text-[var(--status-warning-text)]"
+        data-pricing-issues
+      >
+        <summary class="cursor-pointer font-medium">
+          {{ t('pricingIssues') }}
+        </summary>
+        <p class="mt-2">{{ t('pricingIssuesHint') }}</p>
+        <ul class="mt-2 sibling-space-y-2">
+          <li
+            v-for="issue in issues"
+            :key="`${issue.model_name}:${issue.plugin_key}:${issue.reason}`"
+            class="break-words"
+          >
+            <button
+              type="button"
+              class="break-all font-mono underline focus-ring"
+              @click="open(issue.model_name)"
+            >
+              {{ issue.model_name }}
+            </button>
+            — {{ issue.plugin_name || issue.plugin_key }} ({{
+              issue.plugin_key
+            }}): {{ t(`pricingIssue_${issue.reason}`) }}
+          </li>
+        </ul>
+      </details>
 
       <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
         <SegmentedToggle

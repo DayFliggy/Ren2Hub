@@ -14,7 +14,7 @@ curl --fail http://127.0.0.1:3000/api/status
 
 完成被授权的管理员初始化，再重新配置渠道、Key和支付商户。代码不内置模型价格：在“模型定价”页录入或用“自动获取”回填并保存后模型才可调用；工具调用沿用上游内置单价；选中渠道倍率在原生计费中应用一次。旧用户、价格、订单和任务不导入。
 
-普通更新先保存配置/备份，构建固定SHA镜像，停止旧应用再用 `up -d --no-deps new-api` 替换。只运行一个应用实例；不使用滚动双活或删除卷的方式更新。PostgreSQL已有卷的口令不会因改环境变量自动轮换。
+普通更新先保存配置/备份并完成旧、新镜像的跨版本候选，构建固定SHA镜像，停止旧应用再用 `up -d --no-deps new-api` 替换。保持同一 PostgreSQL、Redis、附件、密钥与配置，不重新执行管理员初始化或丢弃在途任务。只运行一个应用实例；不使用滚动双活或删除卷的方式更新。PostgreSQL已有卷的口令不会因改环境变量自动轮换。
 
 本地HTTP保持非Secure Cookie；公开HTTPS必须启用 `SESSION_COOKIE_SECURE`、精确 `SESSION_COOKIE_TRUSTED_URL` 和实际 `TRUSTED_PROXIES`，反代支持SSE和WebSocket。认证见[会话合同](../authentication.md)。独立开发栈与正式栈不得共用数据、端口或凭据。
 

@@ -24,6 +24,7 @@ import type {
   AdminChannel,
   AdminChannelCreateInput,
   AdminChannelCreateOptions,
+  AdminChannelCreateResult,
   AdminChannelFetchModelsParams,
   AdminChannelSortBy,
   AdminChannelSortOrder,
@@ -468,7 +469,7 @@ export function useAdminChannels() {
   ): Promise<boolean> {
     if (isRetiredChannelType(input.type)) return Promise.resolve(false)
     return runCrudAction('create', null, async (signal) => {
-      await api.post<AdminChannel>(
+      await api.post<AdminChannelCreateResult>(
         '/api/channel/',
         {
           mode: options?.multiKey

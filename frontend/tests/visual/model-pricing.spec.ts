@@ -43,10 +43,28 @@ for (const theme of ['light', 'dark'] as const)
         resolution: { enum: ['720p', '1080p'], description: 'Resolution' },
       }
       const writes: ModelPricingChange[][] = []
+      let issuesResolved = false
+      let issueReads = 0
+      await page.route('**/api/option/model_pricing/issues', (route) => {
+        issueReads++
+        return route.fulfill({
+          json: {
+            success: true,
+            data: issuesResolved
+              ? []
+              : ['unconfigured', 'incompatible', 'stale'].map((reason) => ({
+                  model_name: 'task-model',
+                  plugin_key: 'provider',
+                  plugin_name: 'Task provider',
+                  reason,
+                })),
+          },
+        })
+      })
       await page.route('**/api/channel/models_enabled', (route) =>
         route.fulfill({ json: { success: true, data: ['task-model'] } })
       )
-      await page.route('**/api/option/model_pricing**', (route) => {
+      await page.route(/\/api\/option\/model_pricing(?!\/issues)/, (route) => {
         const path = new URL(route.request().url()).pathname
         if (path.endsWith('/preview'))
           return route.fulfill({
@@ -54,6 +72,7 @@ for (const theme of ['light', 'dark'] as const)
           })
         if (route.request().method() === 'PATCH') {
           writes.push(route.request().postDataJSON().changes)
+          issuesResolved = true
           return route.fulfill({ json: { success: true } })
         }
         return route.fulfill({
@@ -88,8 +107,20 @@ for (const theme of ['light', 'dark'] as const)
         })
       })
       await page.goto('/models/pricing')
-      await page
+      const issues = page.locator('[data-pricing-issues]')
+      await expect(issues).toContainText('Task model prices need attention')
+      await expect(issues).toContainText('Task provider (provider)')
+      for (const reason of [
+        'No price set',
+        'The price uses usage the plugin no longer provides',
+        'The plugin no longer offers this model',
+      ])
+        await expect(issues).toContainText(reason)
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({ path: testInfo.outputPath('pricing-issues.png') })
+      await issues
         .getByRole('button', { name: 'task-model', exact: true })
+        .first()
         .click()
       const editor = page.locator('.pricing-editor')
       await editor
@@ -142,6 +173,16 @@ for (const theme of ['light', 'dark'] as const)
           provider: expect.stringContaining('u("resolution")'),
         },
       })
+      await expect(issues).toHaveCount(0)
+      expect(issueReads).toBe(2)
+      if (width < 768) await page.keyboard.press('Escape')
+      issuesResolved = false
+      await page
+        .getByRole('button', { name: 'Reload pricing', exact: true })
+        .click()
+      await expect(issues).toContainText('No price set')
+      expect(issueReads).toBe(3)
+      await assertNoHorizontalOverflow(page)
     })
   }
 
@@ -164,52 +205,55 @@ for (const theme of ['light', 'dark'] as const)
           json: { success: true, data: ['test-model', 'task-model'] },
         })
       )
-      await page.route('**/api/option/model_pricing**', async (route) => {
-        const path = new URL(route.request().url()).pathname
-        if (path.endsWith('/preview'))
-          return route.fulfill({
-            json: {
-              success: true,
-              data: { effective: route.request().postDataJSON().pricing },
-            },
-          })
-        if (path.endsWith('/convert'))
+      await page.route(
+        /\/api\/option\/model_pricing(?!\/issues)/,
+        async (route) => {
+          const path = new URL(route.request().url()).pathname
+          if (path.endsWith('/preview'))
+            return route.fulfill({
+              json: {
+                success: true,
+                data: { effective: route.request().postDataJSON().pricing },
+              },
+            })
+          if (path.endsWith('/convert'))
+            return route.fulfill({
+              json: {
+                success: true,
+                data: {
+                  effective: { ModelPrice: 0.2 },
+                  expression: 'fixed(0.2)',
+                },
+              },
+            })
+          if (route.request().method() === 'PATCH') {
+            const changes = route.request().postDataJSON()
+              .changes as ModelPricingChange[]
+            writes.push(changes)
+            entries = changes
+              .filter((change) => !change.reset)
+              .map((change) => ({
+                model_name: change.model_name,
+                version: 'saved',
+                configured: change.pricing,
+                effective: change.pricing,
+              }))
+            return route.fulfill({ json: { success: true, data: null } })
+          }
           return route.fulfill({
             json: {
               success: true,
               data: {
-                effective: { ModelPrice: 0.2 },
-                expression: 'fixed(0.2)',
+                entries,
+                options: Object.fromEntries(
+                  PRICING_KEYS.map((key) => [key, '{}'])
+                ),
+                empty_version: 'empty',
               },
             },
           })
-        if (route.request().method() === 'PATCH') {
-          const changes = route.request().postDataJSON()
-            .changes as ModelPricingChange[]
-          writes.push(changes)
-          entries = changes
-            .filter((change) => !change.reset)
-            .map((change) => ({
-              model_name: change.model_name,
-              version: 'saved',
-              configured: change.pricing,
-              effective: change.pricing,
-            }))
-          return route.fulfill({ json: { success: true, data: null } })
         }
-        return route.fulfill({
-          json: {
-            success: true,
-            data: {
-              entries,
-              options: Object.fromEntries(
-                PRICING_KEYS.map((key) => [key, '{}'])
-              ),
-              empty_version: 'empty',
-            },
-          },
-        })
-      })
+      )
       await mockPriceFetch(page, [
         nativePriceSource({
           id: 'sub2api',
@@ -351,7 +395,7 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
   await page.route('**/api/channel/models_enabled', (route) =>
     route.fulfill({ json: { success: true, data: [] } })
   )
-  await page.route('**/api/option/model_pricing**', (route) => {
+  await page.route(/\/api\/option\/model_pricing(?!\/issues)/, (route) => {
     if (route.request().method() === 'PATCH') {
       saves++
       return route.fulfill({
@@ -414,7 +458,7 @@ test('model pricing is a model management section that guards its draft', async 
   await page.route('**/api/channel/models_enabled', (route) =>
     route.fulfill({ json: { success: true, data: ['test-model'] } })
   )
-  await page.route('**/api/option/model_pricing**', (route) =>
+  await page.route(/\/api\/option\/model_pricing(?!\/issues)/, (route) =>
     route.fulfill({
       json: {
         success: true,

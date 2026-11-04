@@ -77,6 +77,31 @@ export interface ModelPricingChange {
   expected_version: string
   pricing: PricingValues
 }
+export interface ModelPricingIssue {
+  model_name: string
+  plugin_key: string
+  plugin_name: string
+  reason: 'unconfigured' | 'incompatible' | 'stale'
+}
+
+export function parsePricingIssues(value: unknown): ModelPricingIssue[] {
+  const endpoint = '/api/option/model_pricing/issues'
+  if (value === null) return []
+  if (!Array.isArray(value)) invalidResponse(endpoint)
+  return value.map((item) => {
+    if (
+      !isRecord(item) ||
+      !['unconfigured', 'incompatible', 'stale'].includes(String(item.reason))
+    )
+      invalidResponse(endpoint)
+    return {
+      model_name: requiredString(item.model_name, endpoint, false),
+      plugin_key: requiredString(item.plugin_key, endpoint, false),
+      plugin_name: requiredString(item.plugin_name, endpoint),
+      reason: item.reason as ModelPricingIssue['reason'],
+    }
+  })
+}
 export const CACHE_WRITE_MODES = [
   'none',
   'standard',
@@ -418,6 +443,11 @@ export function parseUpstreamPrices(value: unknown): FetchedUpstreamPrices {
   return { models, errors }
 }
 export const pricingConfigApi = {
+  async issues(signal?: AbortSignal) {
+    return parsePricingIssues(
+      await api.get('/api/option/model_pricing/issues', undefined, { signal })
+    )
+  },
   async load(signal?: AbortSignal) {
     return parsePricingConfig(
       await api.get('/api/option/model_pricing', undefined, { signal })

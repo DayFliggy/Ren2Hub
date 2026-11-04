@@ -114,3 +114,95 @@ func TestSettleTopUpRejectsMismatchedReceipt(t *testing.T) {
 	assert.Equal(t, "USD", settled.Currency)
 	assert.Equal(t, "5", settled.PayAmount)
 }
+
+// Replays an already-created order after the operator changes QuotaPerUnit.
+// Each provider must credit the checkout-time amount and only once.
+func TestUpstreamSyncPaidOrderCreditIsFrozenAcrossProviders(t *testing.T) {
+	for _, provider := range []string{PaymentProviderEpay, PaymentProviderStripe, PaymentProviderCreem, PaymentProviderWaffo, PaymentProviderWaffoPancake} {
+		t.Run(provider, func(t *testing.T) {
+			db := useGmpayTestDB(t)
+			old := common.QuotaPerUnit
+			common.QuotaPerUnit = 1000
+			t.Cleanup(func() { common.QuotaPerUnit = old })
+			user := User{Username: "frozen-" + provider, AffCode: "frozen-" + provider, Status: common.UserStatusEnabled}
+			require.NoError(t, db.Create(&user).Error)
+			amount := int64(1)
+			if provider == PaymentProviderCreem {
+				amount = 1000
+			}
+			order := TopUp{UserId: user.Id, TradeNo: "frozen-" + provider, PaymentProvider: provider, PaymentMethod: provider, Status: common.TopUpStatusPending, Amount: amount, Money: 1, Currency: "CNY", PayAmount: "1"}
+			require.NoError(t, order.Insert())
+			require.Equal(t, 1000, order.ExpectedQuota)
+			common.QuotaPerUnit = 2000
+			settle := func() error {
+				switch provider {
+				case PaymentProviderEpay:
+					_, err := RechargeEpay(order.TradeNo, "", "", "1")
+					return err
+				case PaymentProviderStripe:
+					return RechargeWithPayment(order.TradeNo, "", "", "CNY", "1")
+				case PaymentProviderCreem:
+					return RechargeCreem(order.TradeNo, "", "", "")
+				case PaymentProviderWaffo:
+					return RechargeWaffo(order.TradeNo, "")
+				default:
+					return RechargeWaffoPancake(order.TradeNo)
+				}
+			}
+			require.NoError(t, settle())
+			require.NoError(t, db.First(&user, user.Id).Error)
+			assert.Equal(t, 1000, user.Quota, "a changed exchange scale must not change an already-paid order")
+			firstCredit := user.Quota
+			require.NoError(t, settle(), "repeated provider delivery must remain acknowledged")
+			require.NoError(t, db.First(&user, user.Id).Error)
+			assert.Equal(t, firstCredit, user.Quota, "a repeated callback must not credit again")
+		})
+	}
+}
+func TestUpstreamSyncReceiptMismatchNeverCreditsWallet(t *testing.T) {
+	for _, provider := range []string{PaymentProviderEpay, PaymentProviderStripe} {
+		t.Run(provider, func(t *testing.T) {
+			db := useGmpayTestDB(t)
+			user := User{Username: "receipt-" + provider, AffCode: "receipt-" + provider, Status: common.UserStatusEnabled}
+			require.NoError(t, db.Create(&user).Error)
+			order := TopUp{UserId: user.Id, TradeNo: "receipt-" + provider, PaymentProvider: provider, PaymentMethod: provider, Status: common.TopUpStatusPending, Amount: 1, Money: 1, Currency: "CNY", PayAmount: "1"}
+			require.NoError(t, order.Insert())
+			var err error
+			if provider == PaymentProviderEpay {
+				_, err = RechargeEpay(order.TradeNo, "", "", "0.99")
+			} else {
+				err = RechargeWithPayment(order.TradeNo, "", "", "CNY", "0.99")
+			}
+			assert.ErrorIs(t, err, ErrTopUpReceiptMismatch)
+			require.NoError(t, db.First(&user, user.Id).Error)
+			assert.Zero(t, user.Quota, "signature alone cannot authorize an amount different from the created order")
+			assert.Equal(t, common.TopUpStatusPending, GetTopUpByTradeNo(order.TradeNo).Status)
+		})
+	}
+}
+func TestUpstreamSyncPermanentProviderRejectionsDoNotAskForRetry(t *testing.T) {
+	providers := map[string]func(string) error{
+		PaymentProviderEpay:         func(n string) error { _, err := RechargeEpay(n, "", "", "1"); return err },
+		PaymentProviderStripe:       func(n string) error { return RechargeWithPayment(n, "", "", "CNY", "1") },
+		PaymentProviderCreem:        func(n string) error { return RechargeCreem(n, "", "", "") },
+		PaymentProviderWaffo:        func(n string) error { return RechargeWaffo(n, "") },
+		PaymentProviderWaffoPancake: RechargeWaffoPancake,
+	}
+	for provider, settle := range providers {
+		t.Run(provider, func(t *testing.T) {
+			db := useGmpayTestDB(t)
+			err := settle("missing-" + provider)
+			require.Error(t, err)
+			assert.False(t, TopUpCallbackRetryable(err), "missing orders remain permanently missing on retry")
+			outage := errors.New("temporary database unavailable")
+			require.NoError(t, db.Callback().Query().Before("gorm:query").Register("upstream-sync:query-outage", func(tx *gorm.DB) {
+				if tx.Statement.Table == "top_ups" {
+					tx.AddError(outage)
+				}
+			}))
+			err = settle("outage-" + provider)
+			require.Error(t, err)
+			assert.True(t, TopUpCallbackRetryable(err), "transient database failure must still be retried")
+		})
+	}
+}

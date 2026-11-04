@@ -10,6 +10,10 @@ export const channelProviderMessages = {
     awsCredentials:
       '凭证格式：APIKey{separator}Region 或 AccessKey{separator}SecretAccessKey{separator}Region。',
     vertexKeyType: 'Vertex 凭证类型',
+    vertexApiVersion: 'Vertex API 版本',
+    vertexApiDefault: '默认（v1）',
+    vertexApiVersionHint:
+      '仅影响 Gemini 和 Imagen 接口；Claude 和开源模型接口不受影响。',
     serviceAccount: '服务账号 JSON',
     apiKey: 'API Key',
     projectId: 'Vertex 项目 ID（可选）',
@@ -31,6 +35,10 @@ export const channelProviderMessages = {
     awsCredentials:
       'Credentials: APIKey{separator}Region or AccessKey{separator}SecretAccessKey{separator}Region.',
     vertexKeyType: 'Vertex credential type',
+    vertexApiVersion: 'Vertex API version',
+    vertexApiDefault: 'Default (v1)',
+    vertexApiVersionHint:
+      'Applies to Gemini and Imagen only; Claude and open-source model endpoints are unchanged.',
     serviceAccount: 'Service account JSON',
     apiKey: 'API Key',
     projectId: 'Vertex project ID (optional)',
