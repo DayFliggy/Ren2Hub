@@ -5382,7 +5382,7 @@
       "path": "plugins/doubao_duration_validation_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "fb0921236e33b667d77fd4ad5f7137e76693f17afc4d8f15e0815ba3999772b7"
+      "local_sha256": "529d7179c9f08e0ee3d86e0780ddaec1d692ec71cb8a98c0e9b1bf1509e250c5"
     },
     {
       "path": "plugins/doubao_responses_test.go",
@@ -5454,13 +5454,13 @@
       "path": "plugins/tasks/doubao/plugin.js",
       "status": "adapted",
       "upstream_sha256": "58da524648f3b43e6944c34cc14de59b7162123fe046b033037680a0fa4d182b",
-      "local_sha256": "8ab62d660aff0e3708ddb4cf7571f8f5349e0646ca461a351c4326d4aa8189ba",
+      "local_sha256": "0f088f8a2f9093f56b35769651d86f4af73efd1652948cebc6dde87062194ed6",
       "reasons": [
         "plugin-self-validation"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。 本轮共享 requestedVideoDuration 使用上游 || 取值，避免 null/空字符串截断 metadata.duration 的校验；前置数值 0 回退，-1 保留自动时长及最大预扣。",
+        "basis": "host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。 本轮共享 requestedVideoDuration 使用上游 || 取值，避免 null/空字符串截断 metadata.duration 的校验；前置数值 0 回退，-1 保留自动时长及最大预扣。 交叉审计 P3 对齐上游 extractUsage 的 number/string 判别；host 非标量时长不发送 duration 并始终预扣模型最大值（包括带 frames；无回退值的顶层 null/false 等非标量键也保留该语义），与仅 frames 的既有估算区分；不照搬上游 parseInt 对数组的提交/预扣不一致，vendorBody 和 decoder 保持原样。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "plugins/exception-proof.json#doubao",

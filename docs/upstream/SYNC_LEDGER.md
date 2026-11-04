@@ -6,7 +6,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 ## 2026-11-04 同步审计修复
 
-本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`，只执行本轮审计确认的修复。证据统一保存在 `/home/work/ren2hub-audit-fixes-20261104/`；最终本地提交、各层实际命令与结果、不可变镜像和 14 阶段升级验收由该目录的 `delivery.json` 记录。用户限定只在本地提交，Git 推送和正式部署由独立交叉审计后的后续操作负责。
+本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`。审计修复提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 于 2026-11-04 13:18 UTC 发布到生产，跨版本候选 14 阶段通过，Opus 交叉审计无阻塞问题。本节首批源码验证与候选证据保存在 `/home/work/ren2hub-audit-fixes-20261104/delivery.json`；交叉审计后的 P3 修复仅本地提交，未推送、未部署，也未连接生产环境，其证据位于 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`。
 
 - Doubao：新增 `requestedVideoDuration`，校验/预扣与提交共用上游的 `seconds || duration || metadata.duration` 取值。前置 `null`、空字符串和数值 `0` 回退；`-1` 为真值，继续发送自动时长并预扣模型最大值。JavaScript 的末项 `metadata.duration=0` 仍返回 `0`，字符串 `"0"` 也是有效候选，两者由既有正整数校验拒绝。只给 frames 仍按帧数预扣，完全未指定时长仍预扣最大值。回归通过实际 Responses 解码覆盖空值加超长 metadata、duration/frames 冲突，并验证提交参数与 usage 一致；新回归在修复前已实际失败。
 - Vue 模型定价：未进入全量快照的模型通过原生 `?model=<name>` 查询补齐 `plugin_variants` 与 `usage_schema`；使用 AbortSignal 取消旧请求和卸载请求，迟到响应不能覆盖当前模型，失败显示错误并允许重试。该补充读取不替换整页保存基线。确认 tools 标签页与 JSON 模式点击问题项确有入口缺陷；切回模型可视化编辑前提交当前编辑器并解析 JSON 草稿，非法 JSON 显示错误且不切换，工具及模型草稿继续保留。
@@ -24,6 +24,18 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 | 重试切换更高倍率后补扣不足返回 403 | 本地渠道倍率替代上游分组倍率；两者选定重试渠道后的 billing error 均直接终止，预扣不足沿用 403，不改写成上一轮上游错误。 |
 
 验证按定向 Go/Vitest、静态检查、构建、ModelPricingView 浏览器、统一 unit/ui-contracts、已提交镜像候选的顺序执行。数据库 schema、钱包事务和并发实现未改，本批不重复独立 databases/race 层；候选仍执行隔离 PostgreSQL/Redis 的完整 14 阶段普通升级合同。真实供应商、真实支付与生产部署不属于本地测试。`CORE_SOURCE_DELTA.json` 重新计算核心文件指纹并更新每项保留差异依据；Vue 是现有独立扩展，其本批接口及交互边界在本节登记。
+
+## 2026-11-04 交叉审计 P3 修复
+
+本批从已部署提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 继续，冻结上游保持 `ba5f7367797566175a6cd97a748d430af3602a01`。前端/插件生产修复及测试证据、指纹、提交和从生产镜像版本进行的隔离候选结果见 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`。本批只在本地提交，不推送或部署。
+
+- Vertex 表单：对齐上游：冻结 React `web/src/features/channels/lib/channel-form.ts:577-578` 的加载默认化和 `:729-736` 的按类型保存语义。Vue 保留现有空字符串默认项，非法非字符串或未知版本加载为 `''`，不显示版本错误、不阻止直接保存，type 41 保存时修正为该默认值；`null` 同样在 type 41 保存为 `''`；缺省、`''`、`v1`、`v1beta1` 打开后直接保存不改变存量值。删除上一轮打开时设置版本 `settingsError` 的分支，其他存量 JSON 解析错误保持显式阻塞。后端 `controller/channel.go:666` 仅在 type 41 校验版本，因此非 Vertex 沿用 Vue 的增量保存，不像 React 删除旧键，避免无关类型切换改写存量设置；只有 type 41 写入版本。此默认化按用户最新明确要求吸收上游。
+- Doubao 时长类型：对齐上游：冻结 `plugins/tasks/doubao/plugin.js:929-930` 的 number/string 类型识别。host 路径共享类型判断，选中非 number/string 值（`true`、`false`、`[6]`、对象、`null` 等）视为未知时长，出站删除 duration，统一预扣 `profile.maxDuration`，即使带 frames 也不用帧数估算；完全未给时长且只给 frames 仍按原规则估算。保留上游 `||` 对非空 metadata 时长的回退；`||` 跳过 `null`、`false` 等假值后若无候选回退，仍按已声明的非标量键处理，避免混同完全缺省后采用 frames。此最大预扣是本地明确要求的保守适配；上游 `:932-933` 会继续尝试 frames，上游提交 `:843-844` 的 parseInt 又可能将 `[6]` 发为 6 秒而按最大值预扣，本地不照搬这处提交/预扣不一致。正常数字、数字字符串、`-1` 和 native `vendorBody` 行为保持原样。decoder 的 Number() 检查不改：Responses 真实 decoder 覆盖全部非标量及带 frames 用例；openai_video 的对象、`false`、`null` seconds 仍在原生范围检查时拒绝，其余可解码值验证无 duration 和最大预扣。
+- Doubao null alias 测试：改用真实 Responses decoder 输入 `seconds:null, duration:6`。该 decoder 只传递 `seconds`，因此与上游一致，提交 body 不添加 duration，预扣最大时长；测试仅记录现行行为，不将不实际可达的直构造 host 状态当成 decoder 合同。
+- Doubao metadata 空字符串：核对冻结上游 `Object.assign` 与出站构造后，`metadata.duration:""` 会原样进入 Ark 请求；Usage 将它作为未知时长预扣最大值（同时带 frames 时按 frames 估算，与上游 `:929-933` 相同），因此没有少扣。本批不修，只登记该与上游一致的行为。
+- 定价编辑器：从 `__new__` 的空模型名提交出名称时保留编辑器实例，清除已经提交的 editorDirty 标记，不因 active name 变化触发多余的单模型查询；列表打开、初始深链接及命名模型切换仍按需读取 schema。
+
+上游来源对照：模型定价的快照与单模型查询接口来自冻结 NewAPI；Vertex 默认化与按类型保存对齐 React，默认项和非 Vertex 增量保存按 Vue 现有合同适配；Doubao native/decoder 和 metadata 透传对照冻结 `plugins/tasks/doubao/plugin.js`。CORE_SOURCE_DELTA 在所有 Go 测试文件修改后重新生成。
 
 ## 2026-11-04 请求头与 Kling 按后续要求回归上游
 

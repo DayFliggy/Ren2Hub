@@ -194,7 +194,7 @@ describe('editing a type outside the create list', () => {
 
 describe('stored Vertex API versions', () => {
   it.each([null, 1, true, [], {}, 'v1alpha'].map((version) => ({ version })))(
-    'blocks invalid stored version $version before saving',
+    'maps invalid stored version $version to the Vue default on direct save',
     async ({ version }) => {
       const save = await openForm(
         channel({
@@ -203,14 +203,19 @@ describe('stored Vertex API versions', () => {
           settings: JSON.stringify({ vertex_api_version: version }),
         })
       )
-      expect(query('[role="alert"]')?.textContent).toContain(
-        'channels.invalidStoredSettings'
-      )
-      await rename('vertex-renamed')
-      expect(saveButton().disabled).toBe(true)
+      expect(
+        query<HTMLSelectElement>('#channel-vertex-api-version')!.value
+      ).toBe('')
+      expect(
+        document.body.querySelectorAll('[role="dialog"] [role="alert"]')
+      ).toHaveLength(0)
+      expect(saveButton().disabled).toBe(false)
       saveButton().click()
       await flushPromises()
-      expect(save).not.toHaveBeenCalled()
+      expect(save).toHaveBeenCalledOnce()
+      expect(
+        JSON.parse(save.mock.calls[0]![0].settings!).vertex_api_version
+      ).toBe('')
     }
   )
 
@@ -225,7 +230,6 @@ describe('stored Vertex API versions', () => {
         })
       )
       expect(dialogText()).not.toContain('channels.invalidStoredSettings')
-      await rename('vertex-renamed')
       expect(saveButton().disabled).toBe(false)
       saveButton().click()
       await flushPromises()
@@ -233,4 +237,56 @@ describe('stored Vertex API versions', () => {
       expect(save.mock.calls[0]![0]).not.toHaveProperty('settings')
     }
   )
+
+  it('does not block saving a non-Vertex type with an invalid stored Vertex version', async () => {
+    const save = await openForm(
+      channel({
+        type: 41,
+        other: 'global',
+        settings: JSON.stringify({ vertex_api_version: 'v1alpha' }),
+      })
+    )
+    expect(query('[role="alert"]')).toBeNull()
+    typeButton().click()
+    await flushPromises()
+    const option = [...document.body.querySelectorAll('[role="option"]')].find(
+      (item) => item.textContent?.includes('OpenAI')
+    )!
+    ;(option as HTMLElement).click()
+    await rename('openai-renamed')
+    expect(
+      document.body.querySelectorAll('[role="dialog"] [role="alert"]')
+    ).toHaveLength(0)
+    expect(saveButton().disabled).toBe(false)
+    saveButton().click()
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ type: 1 }))
+    expect(save.mock.calls[0]![0]).not.toHaveProperty('settings')
+  })
+
+  it('keeps other stored-settings errors after choosing a valid Vertex version', async () => {
+    const save = await openForm(
+      channel({
+        type: 41,
+        other: 'global',
+        settings: '{',
+      })
+    )
+    expect(query('[role="alert"]')?.textContent).toContain(
+      'channels.invalidStoredSettings'
+    )
+    const versionSelect = query<HTMLSelectElement>(
+      '#channel-vertex-api-version'
+    )!
+    versionSelect.value = 'v1'
+    versionSelect.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(query('[role="alert"]')?.textContent).toContain(
+      'channels.invalidStoredSettings'
+    )
+    expect(saveButton().disabled).toBe(true)
+    saveButton().click()
+    await flushPromises()
+    expect(save).not.toHaveBeenCalled()
+  })
 })

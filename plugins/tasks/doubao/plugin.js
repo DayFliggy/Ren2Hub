@@ -429,7 +429,16 @@ function videoResolution(ctx) {
 }
 
 function requestedVideoDuration(req, metadata) {
-  return req.seconds || req.duration || metadata.duration;
+  const selected = req.seconds || req.duration || metadata.duration;
+  if (selected !== undefined) return selected;
+  // || skips falsy keys such as null or false while looking for a fallback.
+  // Without one, the stated key stays distinct from omission (frames-only).
+  return [req.seconds, req.duration].find(hasNonScalarVideoDuration);
+}
+
+function hasNonScalarVideoDuration(value) {
+  // An absent duration still permits frames-only estimation.
+  return value !== undefined && typeof value !== "number" && typeof value !== "string";
 }
 
 function videoDuration(ctx) {
@@ -449,6 +458,7 @@ function videoDuration(ctx) {
     return Math.min(seconds, 3600);
   }
   const raw = requestedVideoDuration(req, metadata);
+  if (hasNonScalarVideoDuration(raw)) return profile.maxDuration;
   if (raw !== undefined && raw !== null && raw !== "") {
     const seconds = Number(raw);
     if (seconds === -1) {
@@ -895,7 +905,8 @@ export function buildSubmitRequest(ctx) {
   if (Array.isArray(body.content)) body.content = rewriteDraftTaskContent(body.content, ctx.originTasks);
   // -1 lets the model pick the length; extractUsage reserves the longest one.
   const rawDuration = requestedVideoDuration(req, metadata);
-  if (rawDuration !== undefined && rawDuration !== null && rawDuration !== "") body.duration = Number(rawDuration);
+  if (hasNonScalarVideoDuration(rawDuration)) delete body.duration;
+  else if (rawDuration !== undefined && rawDuration !== "") body.duration = Number(rawDuration);
   body.model = ctx.upstreamModel || body.model;
   return {
     url: apiRoot(ctx) + "/api/v3/contents/generations/tasks",

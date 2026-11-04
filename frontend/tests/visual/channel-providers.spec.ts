@@ -133,6 +133,29 @@ for (const theme of ['light', 'dark'] as const) {
         future_provider_setting: { keep: true },
       })
 
+      channel = {
+        ...channel,
+        settings: '{"vertex_api_version":"v1alpha"}',
+      }
+      saved = undefined
+      await page.reload()
+      await waitForStablePage(page)
+      await page.locator('[aria-label="编辑渠道"]:visible').first().click()
+      dialog = page.getByRole('dialog', { name: '编辑渠道', exact: true })
+      const invalidVersion = dialog.getByRole('combobox', {
+        name: 'Vertex API 版本',
+      })
+      await expect(invalidVersion).toHaveValue('')
+      const saveChannel = dialog.getByRole('button', {
+        name: '保存渠道',
+        exact: true,
+      })
+      await expect(dialog.getByRole('alert')).toHaveCount(0)
+      await expect(saveChannel).toBeEnabled()
+      await saveChannel.click()
+      await expect(dialog).toHaveCount(0)
+      expect(JSON.parse(String(saved!.settings)).vertex_api_version).toBe('')
+
       await page.getByRole('button', { name: '新建渠道', exact: true }).click()
       const createDialog = page.getByRole('dialog', {
         name: '新建渠道',

@@ -115,6 +115,7 @@ const fetchedEntry = ref<ModelPricingEntry>(),
   entryError = ref('')
 const activeEntry = computed(() => snapshotEntry.value ?? fetchedEntry.value)
 let entryController: AbortController | undefined
+let skipEntryLoadFor: string | undefined
 // Unconfigured plugin models are absent from the all-model snapshot. Fetch
 // their schema separately without replacing the workspace's saved baseline.
 async function loadActiveEntry() {
@@ -122,6 +123,10 @@ async function loadActiveEntry() {
   fetchedEntry.value = undefined
   entryError.value = ''
   entryLoading.value = false
+  const namedDraft = skipEntryLoadFor
+  skipEntryLoadFor = undefined
+  // Naming the mounted new-model editor adopts its draft; it is not a model switch.
+  if (activeName.value && activeName.value === namedDraft) return
   if (!activeName.value || !baseline.value || snapshotEntry.value) return
   const request = new AbortController()
   entryController = request
@@ -275,7 +280,11 @@ async function load(forceSettings = false) {
 }
 function updateDraft(name: string, pricing: PricingValues) {
   draft.value = { ...draft.value, [name]: clonePricing(pricing) }
-  if (editing.value === '__new__') editing.value = name
+  if (editing.value === '__new__') {
+    skipEntryLoadFor = name
+    editorDirty.value = false
+    editing.value = name
+  }
 }
 function commitOpen() {
   return !editor.value || !editorDirty.value || Boolean(editor.value.commit())

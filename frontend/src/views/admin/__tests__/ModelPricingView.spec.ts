@@ -226,6 +226,54 @@ describe('pricing workspace draft lifecycle', () => {
     wrapper.unmount()
   })
 
+  it('keeps a new pricing editor mounted without fetching metadata when it gets a name', async () => {
+    const wrapper = await setup(false, false)
+    await button(wrapper, 'Add model').trigger('click')
+    const before = wrapper.getComponent(ModelPricingEditor)
+    const element = before.element
+    await field(wrapper, '.pricing-editor', 'Model ID').setValue(
+      'new-task-model'
+    )
+    await before
+      .findAll('[role="tab"]')
+      .find((item) => item.text() === 'Per-request (deprecated)')!
+      .trigger('click')
+    await before.get('input[inputmode="decimal"]').setValue('0.5')
+    await flushPromises()
+    expect(before.vm.dirty()).toBe(true)
+    expect(before.vm.commit()).not.toBeNull()
+    await flushPromises()
+    const after = wrapper.getComponent(ModelPricingEditor)
+    expect(after.element).toBe(element)
+    expect(after.props('modelName')).toBe('new-task-model')
+    expect(mocks.loadEntry).not.toHaveBeenCalled()
+    expect(after.vm.dirty()).toBe(false)
+    // A model switch must not try to recommit the already adopted editor.
+    const updates = after.emitted('update')?.length
+    await button(wrapper, 'model-a').trigger('click')
+    await flushPromises()
+    expect(after.emitted('update')?.length).toBe(updates)
+    expect(wrapper.getComponent(ModelPricingEditor).props('modelName')).toBe(
+      'model-a'
+    )
+    wrapper.unmount()
+  })
+
+  it('still fetches metadata when an unpriced plugin model opens from the list', async () => {
+    mocks.issues.mockResolvedValue(pluginIssues(['task-model']))
+    const wrapper = await setup()
+    await button(wrapper, 'task-model').trigger('click')
+    await flushPromises()
+    expect(mocks.loadEntry).toHaveBeenCalledWith(
+      'task-model',
+      expect.any(AbortSignal)
+    )
+    expect(wrapper.getComponent(ModelPricingEditor).props('entry')).toEqual(
+      pluginEntry('task-model')
+    )
+    wrapper.unmount()
+  })
+
   it.each(['resolve', 'reject'])(
     'aborts model switches and ignores stale %s results',
     async (outcome) => {
