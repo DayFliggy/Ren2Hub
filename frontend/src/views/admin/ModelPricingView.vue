@@ -4,7 +4,12 @@ import { useRoute } from 'vue-router'
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
-import type { PricingValues, FetchedModelPrice } from '@/api/pricingConfig'
+import {
+  pricingConfigApi,
+  type PricingValues,
+  type FetchedModelPrice,
+  type ModelPricingEntry,
+} from '@/api/pricingConfig'
 import {
   pricingChanges,
   pricingMode,
@@ -102,9 +107,38 @@ const page = ref(1),
 const activeName = computed(() =>
   editing.value === '__new__' ? '' : (editing.value ?? '')
 )
-const activeEntry = computed(() =>
+const snapshotEntry = computed(() =>
   baseline.value?.entries.find((entry) => entry.model_name === activeName.value)
 )
+const fetchedEntry = ref<ModelPricingEntry>(),
+  entryLoading = ref(false),
+  entryError = ref('')
+const activeEntry = computed(() => snapshotEntry.value ?? fetchedEntry.value)
+let entryController: AbortController | undefined
+// Unconfigured plugin models are absent from the all-model snapshot. Fetch
+// their schema separately without replacing the workspace's saved baseline.
+async function loadActiveEntry() {
+  entryController?.abort()
+  fetchedEntry.value = undefined
+  entryError.value = ''
+  entryLoading.value = false
+  if (!activeName.value || !baseline.value || snapshotEntry.value) return
+  const request = new AbortController()
+  entryController = request
+  entryLoading.value = true
+  try {
+    const entry = await pricingConfigApi.loadEntry(
+      activeName.value,
+      request.signal
+    )
+    if (!request.signal.aborted) fetchedEntry.value = entry
+  } catch (cause) {
+    if (!request.signal.aborted) entryError.value = translateError(cause, t, te)
+  } finally {
+    if (entryController === request) entryLoading.value = false
+  }
+}
+watch([activeName, baseline], loadActiveEntry)
 const activePricing = computed(() => draft.value[activeName.value] ?? {})
 const siteCurrency = computed(() =>
   String(settings.rawValue('general_setting.custom_currency_symbol', 'USD'))
@@ -248,6 +282,17 @@ function commitOpen() {
 }
 function open(name: string) {
   if (!commitOpen()) return
+  error.value = ''
+  if (mode.value === 'json') {
+    try {
+      draft.value = parsePricingJSON(json.value)
+    } catch (cause) {
+      error.value = translateError(cause, t, te)
+      return
+    }
+    mode.value = 'visual'
+  }
+  if (tab.value === 'tools') tab.value = 'models'
   editing.value = name
   editorDirty.value = false
   revision.value++
@@ -393,6 +438,7 @@ onMounted(() => {
   void load()
 })
 onBeforeUnmount(() => {
+  entryController?.abort()
   if (props.embedded) registerBar?.(null)
 })
 </script>
@@ -404,7 +450,21 @@ onBeforeUnmount(() => {
     :aria-label="t('title')"
   >
     <DefineEditor>
+      <div
+        v-if="entryError"
+        role="alert"
+        class="p-4 text-sm text-[var(--status-danger-text)]"
+      >
+        <p>{{ entryError }}</p>
+        <ConsoleButton class="mt-3" size="sm" @click="loadActiveEntry">{{
+          t('retry')
+        }}</ConsoleButton>
+      </div>
+      <p v-else-if="entryLoading" role="status" class="p-4 text-sm">
+        {{ t('loading') }}
+      </p>
       <ModelPricingEditor
+        v-else
         ref="editor"
         :model-name="activeName"
         :pricing="activePricing"

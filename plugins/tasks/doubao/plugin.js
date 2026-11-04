@@ -428,6 +428,10 @@ function videoResolution(ctx) {
   return resolution;
 }
 
+function requestedVideoDuration(req, metadata) {
+  return req.seconds || req.duration || metadata.duration;
+}
+
 function videoDuration(ctx) {
   const req = ctx.requestBody || {};
   const metadata = req.vendorBody || req.metadata || {};
@@ -444,7 +448,7 @@ function videoDuration(ctx) {
     if (seconds <= 0) seconds = 5;
     return Math.min(seconds, 3600);
   }
-  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
+  const raw = requestedVideoDuration(req, metadata);
   if (raw !== undefined && raw !== null && raw !== "") {
     const seconds = Number(raw);
     if (seconds === -1) {
@@ -890,7 +894,7 @@ export function buildSubmitRequest(ctx) {
   if (trimmed(req.prompt) || !hasReference) body.content.push({ type: "text", text: req.prompt || "" });
   if (Array.isArray(body.content)) body.content = rewriteDraftTaskContent(body.content, ctx.originTasks);
   // -1 lets the model pick the length; extractUsage reserves the longest one.
-  const rawDuration = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
+  const rawDuration = requestedVideoDuration(req, metadata);
   if (rawDuration !== undefined && rawDuration !== null && rawDuration !== "") body.duration = Number(rawDuration);
   body.model = ctx.upstreamModel || body.model;
   return {

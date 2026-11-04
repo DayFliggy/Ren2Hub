@@ -18,6 +18,40 @@ vi.mock('@/api/client', () => ({
 describe('model pricing requests', () => {
   afterEach(() => vi.clearAllMocks())
 
+  it('queries an exact model with its abort signal and keeps plugin metadata', async () => {
+    const entry = {
+      model_name: 'task-model',
+      version: 'empty',
+      configured: {},
+      effective: {},
+      usage_schema: { seconds: { type: 'number' } },
+      plugin_variants: [
+        { plugin_key: 'provider', plugin_name: 'Task provider' },
+      ],
+    }
+    const response = { ...pricingResponse.data, entries: [entry] }
+    vi.mocked(api.get).mockResolvedValueOnce(response)
+    const controller = new AbortController()
+    await expect(
+      pricingConfigApi.loadEntry('task-model', controller.signal)
+    ).resolves.toMatchObject(entry)
+    expect(api.get).toHaveBeenLastCalledWith(
+      '/api/option/model_pricing',
+      { model: 'task-model' },
+      { signal: controller.signal }
+    )
+    for (const entries of [
+      [],
+      [{ ...entry, model_name: 'other-model' }],
+      [entry, { ...entry, model_name: 'other-model' }],
+    ]) {
+      vi.mocked(api.get).mockResolvedValueOnce({ ...response, entries })
+      await expect(pricingConfigApi.loadEntry('task-model')).rejects.toThrow(
+        'Invalid API response'
+      )
+    }
+  })
+
   it('reads provider pricing issues and rejects malformed notices', async () => {
     const issues = ['unconfigured', 'incompatible', 'stale'].map((reason) => ({
       model_name: 'shared-model',

@@ -568,10 +568,16 @@ watch(
         originalOtherSettings.value.vertex_key_type === 'api_key'
           ? 'api_key'
           : 'json'
-      vertexApiVersion.value =
-        typeof originalOtherSettings.value.vertex_api_version === 'string'
-          ? originalOtherSettings.value.vertex_api_version
-          : ''
+      const storedVertexVersion = originalOtherSettings.value.vertex_api_version
+      vertexApiVersion.value = ''
+      if (storedVertexVersion !== undefined) {
+        if (
+          typeof storedVertexVersion === 'string' &&
+          ['', 'v1', 'v1beta1'].includes(storedVertexVersion)
+        )
+          vertexApiVersion.value = storedVertexVersion
+        else settingsError.value = t('channels.invalidStoredSettings')
+      }
       vertexRegion.value = typeof ch?.other === 'string' ? ch.other : ''
       for (const field of CHANNEL_SETTING_FIELDS)
         fieldSettings[field.key] =
@@ -693,8 +699,6 @@ async function submit() {
           otherSettings.aws_key_type = awsKeyType.value
       }
       if (form.type === 41) {
-        if (!['', 'v1', 'v1beta1'].includes(vertexApiVersion.value))
-          throw new Error(t('channels.invalidStoredSettings'))
         if (vertexApiVersion.value !== (otherSettings.vertex_api_version ?? ''))
           otherSettings.vertex_api_version = vertexApiVersion.value
         const project =

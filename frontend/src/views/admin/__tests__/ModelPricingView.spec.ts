@@ -6,6 +6,7 @@ import { ref, type Ref } from 'vue'
 import {
   PRICING_KEYS,
   type ModelPricingConfig,
+  type ModelPricingEntry,
   type PricingValues,
 } from '@/api/pricingConfig'
 import { ApiError } from '@/api/types'
@@ -15,9 +16,12 @@ import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ModelManagementView from '../ModelManagementView.vue'
 import ModelPricingView from '../ModelPricingView.vue'
+import ModelPricingEditor from '@/components/admin/ModelPricingEditor.vue'
+import PricingJsonEditor from '@/components/admin/PricingJsonEditor.vue'
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
+  loadEntry: vi.fn(),
   issues: vi.fn(),
   save: vi.fn(),
   preview: vi.fn(),
@@ -41,6 +45,7 @@ vi.mock('@/api/pricingConfig', async (original) => ({
   ...(await original<typeof import('@/api/pricingConfig')>()),
   pricingConfigApi: {
     load: mocks.load,
+    loadEntry: mocks.loadEntry,
     issues: mocks.issues,
     save: mocks.save,
     preview: mocks.preview,
@@ -82,6 +87,36 @@ const tiered = (expression: string): PricingValues => ({
   'billing_setting.billing_mode': 'tiered_expr',
   'billing_setting.billing_expr': expression,
 })
+function pluginEntry(name: string): ModelPricingEntry {
+  const usage_schema: ModelPricingEntry['usage_schema'] = {
+    seconds: { type: 'number', unit: 'second' },
+  }
+  return {
+    model_name: name,
+    version: 'empty',
+    configured: {},
+    effective: {},
+    usage_schema,
+    plugin_variants: [
+      {
+        plugin_key: 'provider',
+        plugin_name: 'Task provider',
+        usage_schema,
+        configured: '',
+        effective: '',
+        compatible: true,
+      },
+    ],
+  }
+}
+function pluginIssues(names: string[]) {
+  return names.map((model_name) => ({
+    model_name,
+    plugin_key: 'provider',
+    plugin_name: 'Task provider',
+    reason: 'unconfigured',
+  }))
+}
 
 function reloadDialog(wrapper: VueWrapper) {
   const found = wrapper
@@ -150,6 +185,7 @@ function field(wrapper: VueWrapper, scope: string, name: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.load.mockResolvedValue(config())
+  mocks.loadEntry.mockImplementation(async (name: string) => pluginEntry(name))
   mocks.issues.mockResolvedValue([])
   mocks.preview.mockResolvedValue({ effective: {} })
   mocks.get.mockResolvedValue(['model-a'])
@@ -162,6 +198,168 @@ beforeEach(() => {
 })
 
 describe('pricing workspace draft lifecycle', () => {
+  it('loads plugin metadata for an unconfigured deep-linked model', async () => {
+    const wrapper = await setup(
+      false,
+      false,
+      '/models/pricing?model=task-model'
+    )
+    expect(mocks.loadEntry).toHaveBeenCalledWith(
+      'task-model',
+      expect.any(AbortSignal)
+    )
+    expect(wrapper.getComponent(ModelPricingEditor).props('entry')).toEqual(
+      pluginEntry('task-model')
+    )
+    expect(wrapper.get('.pricing-editor').text()).toContain('Task provider')
+    expect(wrapper.get('.pricing-editor').text()).toContain('Task usage')
+    expect(mocks.save).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('uses snapshot entries without an extra request', async () => {
+    const wrapper = await setup(false, true, '/models/pricing?model=model-a')
+    expect(wrapper.getComponent(ModelPricingEditor).props('entry')).toEqual(
+      config().entries[0]
+    )
+    expect(mocks.loadEntry).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['resolve', 'reject'])(
+    'aborts model switches and ignores stale %s results',
+    async (outcome) => {
+      mocks.issues.mockResolvedValue(pluginIssues(['task-a', 'task-b']))
+      let resolveFirst!: (entry: ModelPricingEntry) => void
+      let rejectFirst!: (error: Error) => void
+      mocks.loadEntry.mockImplementationOnce(
+        () =>
+          new Promise<ModelPricingEntry>((resolve, reject) => {
+            resolveFirst = resolve
+            rejectFirst = reject
+          })
+      )
+      const wrapper = await setup()
+      await button(wrapper, 'task-a').trigger('click')
+      const firstSignal = mocks.loadEntry.mock.calls[0]![1] as AbortSignal
+      expect(wrapper.findComponent(ModelPricingEditor).exists()).toBe(false)
+      await button(wrapper, 'task-b').trigger('click')
+      await flushPromises()
+      expect(firstSignal.aborted).toBe(true)
+      if (outcome === 'resolve') resolveFirst(pluginEntry('task-a'))
+      else rejectFirst(new Error('stale failure'))
+      await flushPromises()
+      expect(
+        wrapper.getComponent(ModelPricingEditor).props('entry')?.model_name
+      ).toBe('task-b')
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      wrapper.unmount()
+      expect((mocks.loadEntry.mock.calls[1]![1] as AbortSignal).aborted).toBe(
+        true
+      )
+    }
+  )
+
+  it('shows metadata failures in the mobile editor and allows an explicit retry', async () => {
+    mocks.width.value = 390
+    mocks.issues.mockResolvedValue(pluginIssues(['task-model']))
+    mocks.loadEntry.mockRejectedValueOnce(
+      new Error('plugin metadata unavailable')
+    )
+    const wrapper = await setup()
+    await button(wrapper, 'task-model').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"] [role="alert"]').text()).toContain(
+      'plugin metadata unavailable'
+    )
+    expect(wrapper.findComponent(ModelPricingEditor).exists()).toBe(false)
+    await button(wrapper, 'Fetch again').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ModelPricingEditor).props('entry')).toEqual(
+      pluginEntry('task-model')
+    )
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it.each([0, 390])(
+    'opens issue models from tools without discarding tool drafts at width %s',
+    async (width) => {
+      mocks.width.value = width
+      mocks.issues.mockResolvedValue(pluginIssues(['task-model']))
+      mocks.rawValue.mockImplementation((key: string, fallback: unknown) =>
+        key === 'tool_price_setting.prices' ? '{"web_search":1}' : fallback
+      )
+      const wrapper = await setup()
+      await wrapper
+        .findAll('[role="radio"]')
+        .find((item) => item.text() === 'Tool prices')!
+        .trigger('click')
+      await wrapper
+        .get('.tool-pricing input[inputmode="decimal"]')
+        .setValue('2')
+      await button(wrapper, 'task-model').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('.pricing-panel').attributes('aria-label')).toBe(
+        'Models'
+      )
+      expect(wrapper.getComponent(ModelPricingEditor).props('modelName')).toBe(
+        'task-model'
+      )
+      expect(
+        wrapper.get('.tool-pricing input[inputmode="decimal"]').element
+      ).toHaveProperty('value', '2')
+      wrapper.unmount()
+    }
+  )
+
+  it.each([0, 390])(
+    'preserves JSON changes when an issue opens visual editing at width %s',
+    async (width) => {
+      mocks.width.value = width
+      mocks.issues.mockResolvedValue(pluginIssues(['model-a']))
+      const wrapper = await setup()
+      await button(wrapper, 'JSON').trigger('click')
+      const jsonEditor = wrapper.getComponent(PricingJsonEditor)
+      jsonEditor.vm.$emit('update:modelValue', {
+        ...jsonEditor.props('modelValue'),
+        ModelPrice: '{"model-a":3}',
+      })
+      await button(wrapper, 'model-a').trigger('click')
+      await flushPromises()
+      expect(wrapper.findComponent(PricingJsonEditor).exists()).toBe(false)
+      const editor = wrapper.getComponent(ModelPricingEditor)
+      expect(editor.props('pricing')).toEqual({ ModelPrice: 3 })
+      editor.vm.$emit('update', 'model-a', { ModelPrice: 7 })
+      await button(wrapper, 'Save model prices').trigger('click')
+      await flushPromises()
+      expect(mocks.save).toHaveBeenCalledWith([
+        {
+          model_name: 'model-a',
+          expected_version: 'v1',
+          pricing: { ModelPrice: 7 },
+        },
+      ])
+      wrapper.unmount()
+    }
+  )
+
+  it('keeps invalid JSON visible instead of opening an issue model', async () => {
+    mocks.issues.mockResolvedValue(pluginIssues(['task-model']))
+    const wrapper = await setup()
+    await button(wrapper, 'JSON').trigger('click')
+    await wrapper.get('.pricing-panel textarea').setValue('{')
+    await button(wrapper, 'task-model').trigger('click')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    expect(wrapper.get('.pricing-panel textarea').element).toHaveProperty(
+      'value',
+      '{'
+    )
+    expect(wrapper.findComponent(ModelPricingEditor).exists()).toBe(false)
+    expect(mocks.loadEntry).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('shows separate provider issues and refreshes them when pricing reloads', async () => {
     mocks.issues.mockResolvedValueOnce([
       {

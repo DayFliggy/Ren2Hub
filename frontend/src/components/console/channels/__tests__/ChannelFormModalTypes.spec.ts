@@ -191,3 +191,46 @@ describe('editing a type outside the create list', () => {
     expect(save).not.toHaveBeenCalled()
   })
 })
+
+describe('stored Vertex API versions', () => {
+  it.each([null, 1, true, [], {}, 'v1alpha'].map((version) => ({ version })))(
+    'blocks invalid stored version $version before saving',
+    async ({ version }) => {
+      const save = await openForm(
+        channel({
+          type: 41,
+          other: '{}',
+          settings: JSON.stringify({ vertex_api_version: version }),
+        })
+      )
+      expect(query('[role="alert"]')?.textContent).toContain(
+        'channels.invalidStoredSettings'
+      )
+      await rename('vertex-renamed')
+      expect(saveButton().disabled).toBe(true)
+      saveButton().click()
+      await flushPromises()
+      expect(save).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([undefined, '', 'v1', 'v1beta1'])(
+    'keeps valid stored version %j saveable',
+    async (version) => {
+      const save = await openForm(
+        channel({
+          type: 41,
+          other: '{}',
+          settings: JSON.stringify({ vertex_api_version: version }),
+        })
+      )
+      expect(dialogText()).not.toContain('channels.invalidStoredSettings')
+      await rename('vertex-renamed')
+      expect(saveButton().disabled).toBe(false)
+      saveButton().click()
+      await flushPromises()
+      expect(save).toHaveBeenCalledOnce()
+      expect(save.mock.calls[0]![0]).not.toHaveProperty('settings')
+    }
+  )
+})

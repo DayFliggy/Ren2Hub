@@ -31,7 +31,7 @@ for (const theme of ['light', 'dark'] as const)
       await page.addInitScript(() =>
         localStorage.setItem('ren2hub_locale', 'en')
       )
-      const pricing: PricingValues = {
+      let pricing: PricingValues = {
         'billing_setting.plugin_billing_expr': { provider: 'u("seconds") * 1' },
       }
       const usage_schema = {
@@ -45,6 +45,7 @@ for (const theme of ['light', 'dark'] as const)
       const writes: ModelPricingChange[][] = []
       let issuesResolved = false
       let issueReads = 0
+      let modelReads = 0
       await page.route('**/api/option/model_pricing/issues', (route) => {
         issueReads++
         return route.fulfill({
@@ -65,39 +66,54 @@ for (const theme of ['light', 'dark'] as const)
         route.fulfill({ json: { success: true, data: ['task-model'] } })
       )
       await page.route(/\/api\/option\/model_pricing(?!\/issues)/, (route) => {
-        const path = new URL(route.request().url()).pathname
+        const url = new URL(route.request().url())
+        const path = url.pathname
         if (path.endsWith('/preview'))
           return route.fulfill({
             json: { success: true, data: { effective: pricing } },
           })
         if (route.request().method() === 'PATCH') {
           writes.push(route.request().postDataJSON().changes)
+          pricing = writes.at(-1)![0]!.pricing
           issuesResolved = true
           return route.fulfill({ json: { success: true } })
+        }
+        if (url.searchParams.has('model')) {
+          expect(url.searchParams.getAll('model')).toEqual(['task-model'])
+          modelReads++
         }
         return route.fulfill({
           json: {
             success: true,
             data: {
-              entries: [
-                {
-                  model_name: 'task-model',
-                  version: 'v1',
-                  configured: pricing,
-                  effective: pricing,
-                  usage_schema,
-                  plugin_variants: [
-                    {
-                      plugin_key: 'provider',
-                      plugin_name: 'Task provider',
-                      usage_schema,
-                      configured: 'u("seconds") * 1',
-                      effective: 'u("seconds") * 1',
-                      compatible: true,
-                    },
-                  ],
-                },
-              ],
+              entries:
+                issuesResolved || url.searchParams.has('model')
+                  ? [
+                      {
+                        model_name: 'task-model',
+                        version: 'v1',
+                        configured: issuesResolved ? pricing : {},
+                        effective: issuesResolved ? pricing : {},
+                        usage_schema,
+                        plugin_variants: [
+                          {
+                            plugin_key: 'provider',
+                            plugin_name: 'Task provider',
+                            usage_schema,
+                            configured: issuesResolved
+                              ? pricing['billing_setting.plugin_billing_expr']
+                                  ?.provider
+                              : '',
+                            effective: issuesResolved
+                              ? pricing['billing_setting.plugin_billing_expr']
+                                  ?.provider
+                              : '',
+                            compatible: true,
+                          },
+                        ],
+                      },
+                    ]
+                  : [],
               options: Object.fromEntries(
                 PRICING_KEYS.map((key) => [key, '{}'])
               ),
@@ -123,6 +139,8 @@ for (const theme of ['light', 'dark'] as const)
         .first()
         .click()
       const editor = page.locator('.pricing-editor')
+      await expect(editor).toBeVisible()
+      expect(modelReads).toBe(1)
       await editor
         .getByRole('combobox', { name: 'Plugin pricing', exact: true })
         .selectOption('provider')
@@ -240,11 +258,21 @@ for (const theme of ['light', 'dark'] as const)
               }))
             return route.fulfill({ json: { success: true, data: null } })
           }
+          const model = new URL(route.request().url()).searchParams.get('model')
           return route.fulfill({
             json: {
               success: true,
               data: {
-                entries,
+                entries: model
+                  ? [
+                      entries.find((entry) => entry.model_name === model) ?? {
+                        model_name: model,
+                        version: 'empty',
+                        configured: {},
+                        effective: {},
+                      },
+                    ]
+                  : entries,
                 options: Object.fromEntries(
                   PRICING_KEYS.map((key) => [key, '{}'])
                 ),
@@ -406,13 +434,23 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
         },
       })
     }
+    const model = new URL(route.request().url()).searchParams.get('model')
     return route.fulfill({
       json: {
         success: true,
         data: new URL(route.request().url()).pathname.endsWith('/preview')
           ? { effective: {} }
           : {
-              entries: [],
+              entries: model
+                ? [
+                    {
+                      model_name: model,
+                      version: 'empty',
+                      configured: {},
+                      effective: {},
+                    },
+                  ]
+                : [],
               options: Object.fromEntries(
                 PRICING_KEYS.map((key) => [key, '{}'])
               ),
@@ -447,6 +485,154 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
     editor.getByRole('textbox', { name: 'Expression source', exact: true })
   ).toHaveValue('0')
 })
+
+for (const theme of ['light', 'dark'] as const)
+  for (const width of [1440, 390]) {
+    test(`pricing issues open from tools and preserve JSON drafts ${theme} ${width}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await configureStablePage(page, { theme, locale: 'en' })
+      await page.addInitScript(() =>
+        localStorage.setItem('ren2hub_locale', 'en')
+      )
+      const usage_schema = { seconds: { type: 'number', unit: 'second' } }
+      const writes: ModelPricingChange[][] = []
+      let entries: ModelPricingEntry[] = []
+      const taskEntry: ModelPricingEntry = {
+        model_name: 'task-model',
+        version: 'empty',
+        configured: {},
+        effective: {},
+        usage_schema,
+        plugin_variants: [
+          {
+            plugin_key: 'provider',
+            plugin_name: 'Task provider',
+            usage_schema,
+            configured: '',
+            effective: '',
+            compatible: true,
+          },
+        ],
+      }
+      await page.route('**/api/channel/models_enabled', (route) =>
+        route.fulfill({ json: { success: true, data: ['task-model'] } })
+      )
+      await page.route('**/api/option/model_pricing/issues', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: writes.length
+              ? []
+              : [
+                  {
+                    model_name: 'task-model',
+                    plugin_key: 'provider',
+                    plugin_name: 'Task provider',
+                    reason: 'unconfigured',
+                  },
+                ],
+          },
+        })
+      )
+      await page.route(/\/api\/option\/model_pricing(?!\/issues)/, (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname.endsWith('/preview'))
+          return route.fulfill({
+            json: {
+              success: true,
+              data: { effective: route.request().postDataJSON().pricing },
+            },
+          })
+        if (route.request().method() === 'PATCH') {
+          const changes = route.request().postDataJSON()
+            .changes as ModelPricingChange[]
+          writes.push(changes)
+          entries = changes.map((change) => ({
+            ...taskEntry,
+            model_name: change.model_name,
+            configured: change.pricing,
+            effective: change.pricing,
+          }))
+          return route.fulfill({ json: { success: true } })
+        }
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              entries: url.searchParams.has('model') ? [taskEntry] : entries,
+              options: Object.fromEntries(
+                PRICING_KEYS.map((key) => [key, '{}'])
+              ),
+              empty_version: 'empty',
+            },
+          },
+        })
+      })
+      await page.goto('/models/pricing')
+      await page
+        .getByRole('radio', { name: 'Tool prices', exact: true })
+        .click()
+      const issue = page
+        .locator('[data-pricing-issues]')
+        .getByRole('button', { name: 'task-model', exact: true })
+      await issue.click()
+      const editor = page.locator('.pricing-editor')
+      await expect(editor).toBeVisible()
+      await expect(
+        editor.getByRole('combobox', { name: 'Plugin pricing', exact: true })
+      ).toBeVisible()
+      await expect(
+        page.getByRole('radio', { name: 'Priced', exact: true })
+      ).toHaveAttribute('aria-checked', 'true')
+      if (width < 768) await page.keyboard.press('Escape')
+      await page
+        .getByRole('button', { name: 'JSON', exact: true })
+        .filter({ visible: true })
+        .click()
+      await page
+        .getByLabel('ModelPrice', { exact: true })
+        .fill('{"ordinary-model":0.3}')
+      await issue.click()
+      await expect(editor).toBeVisible()
+      await expect(page.getByLabel('ModelPrice', { exact: true })).toHaveCount(
+        0
+      )
+      await editor
+        .getByRole('combobox', { name: 'Plugin pricing', exact: true })
+        .selectOption('provider')
+      await editor
+        .getByRole('textbox', { name: 'Expression source', exact: true })
+        .fill('u("seconds") * 0.125')
+      await editor
+        .getByRole('button', { name: 'Save model prices', exact: true })
+        .click()
+      await expect(
+        page.getByText('Model prices saved', { exact: true })
+      ).toBeVisible()
+      expect(writes).toHaveLength(1)
+      expect(writes[0]).toEqual(
+        expect.arrayContaining([
+          {
+            model_name: 'ordinary-model',
+            expected_version: 'empty',
+            pricing: { ModelPrice: 0.3 },
+          },
+          {
+            model_name: 'task-model',
+            expected_version: 'empty',
+            pricing: {
+              'billing_setting.plugin_billing_expr': {
+                provider: 'u("seconds") * 0.125',
+              },
+            },
+          },
+        ])
+      )
+      await assertNoHorizontalOverflow(page)
+    })
+  }
 
 test('model pricing is a model management section that guards its draft', async ({
   page,

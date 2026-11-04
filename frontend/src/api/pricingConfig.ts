@@ -453,6 +453,16 @@ export const pricingConfigApi = {
       await api.get('/api/option/model_pricing', undefined, { signal })
     )
   },
+  async loadEntry(modelName: string, signal?: AbortSignal) {
+    const endpoint = '/api/option/model_pricing'
+    const config = parsePricingConfig(
+      await api.get(endpoint, { model: modelName }, { signal })
+    )
+    const [entry] = config.entries
+    if (config.entries.length !== 1 || !entry || entry.model_name !== modelName)
+      invalidResponse(endpoint)
+    return entry
+  },
   save(changes: ModelPricingChange[]) {
     return api.patch('/api/option/model_pricing', {
       changes: changes.map((change) => ({

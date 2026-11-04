@@ -651,7 +651,6 @@ export function buildSubmitRequest(ctx) {
     body = Object.assign({}, vendorBody, { model: model });
   } else {
     const duration = req.duration === undefined ? undefined : Number(req.duration);
-    if (req.duration !== undefined && (!Number.isFinite(duration) || duration <= 0)) throw new Error("duration must be positive");
     validateHailuoCombo(model, duration, outboundResolution(req, model), hasHailuoImage(req, false));
     body = Object.assign(
       {

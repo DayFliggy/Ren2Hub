@@ -4,6 +4,27 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 本轮源码冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`，于 2026-11-04 完成窗口核对；原已适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`。这不表示目标 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-04 同步审计修复
+
+本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`，只执行本轮审计确认的修复。证据统一保存在 `/home/work/ren2hub-audit-fixes-20261104/`；最终本地提交、各层实际命令与结果、不可变镜像和 14 阶段升级验收由该目录的 `delivery.json` 记录。用户限定只在本地提交，Git 推送和正式部署由独立交叉审计后的后续操作负责。
+
+- Doubao：新增 `requestedVideoDuration`，校验/预扣与提交共用上游的 `seconds || duration || metadata.duration` 取值。前置 `null`、空字符串和数值 `0` 回退；`-1` 为真值，继续发送自动时长并预扣模型最大值。JavaScript 的末项 `metadata.duration=0` 仍返回 `0`，字符串 `"0"` 也是有效候选，两者由既有正整数校验拒绝。只给 frames 仍按帧数预扣，完全未指定时长仍预扣最大值。回归通过实际 Responses 解码覆盖空值加超长 metadata、duration/frames 冲突，并验证提交参数与 usage 一致；新回归在修复前已实际失败。
+- Vue 模型定价：未进入全量快照的模型通过原生 `?model=<name>` 查询补齐 `plugin_variants` 与 `usage_schema`；使用 AbortSignal 取消旧请求和卸载请求，迟到响应不能覆盖当前模型，失败显示错误并允许重试。该补充读取不替换整页保存基线。确认 tools 标签页与 JSON 模式点击问题项确有入口缺陷；切回模型可视化编辑前提交当前编辑器并解析 JSON 草稿，非法 JSON 显示错误且不切换，工具及模型草稿继续保留。
+- Vertex 渠道表单：打开时只接受缺省或空字符串、`v1`、`v1beta1`；非法存量值设置现有 `settingsError` 并阻止保存，删除 submit 中无法呈现给用户的 throw。
+- Hailuo：非 H3 路径的 `validateHailuoCombo` 已按模型限定 6 秒或 6/10 秒，必然拒绝非正数、NaN 和 Infinity；删除相邻重复检查，保留该唯一校验及模型错误文案，补充行为回归。
+- Sora：冻结上游没有 `relay/channel/task/sora`，实际实现为 `plugins/tasks/sora/plugin.js`。上游未提供本地 `requestValues` 的冲突校验；两者 Responses decoder 均通过 if/else 仅保留 seconds，因此 Responses 上的冲突检查不会执行，按用户要求只标记，不改行为。multipart 会先复制全部 fields，duration 并未被 if/else 删除；本地 JSON 和 multipart 均在 build/usage 拒绝不一致时长，已用实际 decode → build/extract 调用验证。保留 Sora JS 原样，新增回归防止误删有效校验。上下游对照在 `plugins/sora-upstream-comparison.json`。
+
+以下行为已核对冻结上游，按本批指令仅登记，不追加本地修复，也不声称上游已经解决：
+
+| 行为 | 上游依据与边界 |
+| --- | --- |
+| Jimeng 非 V3 静默使用 5 秒 | `outboundSeconds` 在 V3 校验前直接返回 5；本地沿用此分支。 |
+| Jimeng openai_video 忽略 `metadata.req_key` | decoder 校验时从上下文/请求 model 推导 req_key；提交阶段才读取 metadata。 |
+| Google / Vertex 在 `/v1/videos` 丢失顶层 resolution | decoder 接受顶层 resolution，但 Veo 出站/usage 读取 metadata 或 size，未将顶层值归一到 metadata；Omni 不在此结论内。 |
+| 重试切换更高倍率后补扣不足返回 403 | 本地渠道倍率替代上游分组倍率；两者选定重试渠道后的 billing error 均直接终止，预扣不足沿用 403，不改写成上一轮上游错误。 |
+
+验证按定向 Go/Vitest、静态检查、构建、ModelPricingView 浏览器、统一 unit/ui-contracts、已提交镜像候选的顺序执行。数据库 schema、钱包事务和并发实现未改，本批不重复独立 databases/race 层；候选仍执行隔离 PostgreSQL/Redis 的完整 14 阶段普通升级合同。真实供应商、真实支付与生产部署不属于本地测试。`CORE_SOURCE_DELTA.json` 重新计算核心文件指纹并更新每项保留差异依据；Vue 是现有独立扩展，其本批接口及交互边界在本节登记。
+
 ## 2026-11-04 请求头与 Kling 按后续要求回归上游
 
 用户在全量同步验收后明确要求“将这两项也回归 NewAPI 上游实现”，覆盖此前保留的任务请求头白名单和 Kling 出站参数/计费一致性修复。基于本地 `7e4f517fd5f2c33e6b891dbf1cc651a7d1ce10db`，仍以冻结上游 `ba5f7367797566175a6cd97a748d430af3602a01` 为准，不扩大版本窗口。

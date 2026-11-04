@@ -5,7 +5,7 @@
   "counts": {
     "upstream_equal": 798,
     "adapted": 279,
-    "extension": 274,
+    "extension": 277,
     "removed": 45
   },
   "files": [
@@ -5379,6 +5379,12 @@
       "local_sha256": "ad7f4cd79ba19fa8e134172887dba66393f0ec57b2b69ff3f557b48237444225"
     },
     {
+      "path": "plugins/doubao_duration_validation_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "fb0921236e33b667d77fd4ad5f7137e76693f17afc4d8f15e0815ba3999772b7"
+    },
+    {
       "path": "plugins/doubao_responses_test.go",
       "status": "upstream_equal",
       "upstream_sha256": "e173e59eaed0ad79a72481fc86d665c93ee0a029310054ff0addf083ef390db7",
@@ -5397,6 +5403,12 @@
       "local_sha256": "6dc72aa3f0da1d75a2a8808aead79b246bd7dcae7ec148a4c63e9b8a7c6a6938"
     },
     {
+      "path": "plugins/hailuo_duration_validation_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "4d1fe47704209845ff72db3006c40444e7d532dfc5e8ac2a9afbcdc644bed3ed"
+    },
+    {
       "path": "plugins/hailuo_responses_test.go",
       "status": "adapted",
       "upstream_sha256": "e7ee0be04ed880164e1cf89d522be7d2022f075e3056ec3c0006521c8429a480",
@@ -5413,6 +5425,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "b087d5e12c125183757dadd6a2fd2310e503660e970570b25e2ee26400552961",
       "local_sha256": "b087d5e12c125183757dadd6a2fd2310e503660e970570b25e2ee26400552961"
+    },
+    {
+      "path": "plugins/sora_protocol_validation_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a327704e576fb7de7edf887169b05c60572cd462ddc1babc925669204de1db5f"
     },
     {
       "path": "plugins/sora_responses_test.go",
@@ -5436,16 +5454,17 @@
       "path": "plugins/tasks/doubao/plugin.js",
       "status": "adapted",
       "upstream_sha256": "58da524648f3b43e6944c34cc14de59b7162123fe046b033037680a0fa4d182b",
-      "local_sha256": "12c6b67bbc51a63ae10f8b041a54f0c41e2b50baf0a006d9e2d8dadc3ccab265",
+      "local_sha256": "8ab62d660aff0e3708ddb4cf7571f8f5349e0646ca461a351c4326d4aa8189ba",
       "reasons": [
         "plugin-self-validation"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。",
+        "basis": "host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。 本轮共享 requestedVideoDuration 使用上游 || 取值，避免 null/空字符串截断 metadata.duration 的校验；前置数值 0 回退，-1 保留自动时长及最大预扣。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
-          "plugins/exception-proof.json#doubao"
+          "plugins/exception-proof.json#doubao",
+          "/home/work/ren2hub-audit-fixes-20261104/plugins/doubao-before.log"
         ]
       }
     },
@@ -5470,13 +5489,13 @@
       "path": "plugins/tasks/hailuo/plugin.js",
       "status": "adapted",
       "upstream_sha256": "f5fed7c4c76d8f8d1a03da22f8a87fa61a28fdba577b613c045ec48e6d48b7d9",
-      "local_sha256": "d3ab663846a6bc963f24b056f37ff0f475fafa14377172a75828f99e0e3dd5e3",
+      "local_sha256": "bd51fece8eb5e62ae841fe51ebde043a5f6241a37eb61e76509f0e497e4f25ed",
       "reasons": [
         "plugin-self-validation"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "仅在 host 分支追加有限正时长并复用上游 validateHailuoCombo；native 分支完全沿用上游。目标会接受 host duration=7 并默改模型档位。",
+        "basis": "host 分支复用上游 validateHailuoCombo 校验模型时长/分辨率组合；native 分支完全沿用上游。目标会接受 host duration=7 并默改模型档位。已删除被模型时长枚举覆盖的重复有限正数检查。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "plugins/exception-proof.json#hailuo"
@@ -5516,7 +5535,7 @@
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "将 host duration 归一为 vendor seconds 字符串枚举，build/usage 共享时长尺寸；目标仅发送 duration 而 usage 按其计费造成出站字段与账单不一致。remix 保留上游原样。",
+        "basis": "将 host duration 归一为 vendor seconds 字符串枚举，build/usage 共享时长尺寸；目标仅发送 duration 而 usage 按其计费造成出站字段与账单不一致。remix 保留上游原样。 JSON/multipart decode 保留 duration，冲突检查实际有效；Responses decoder 与冻结上游一致，仅保留 seconds，不额外修复该既有边界。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "plugins/exception-proof.json#sora"
