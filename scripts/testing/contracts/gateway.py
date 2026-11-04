@@ -428,6 +428,9 @@ class Experiment:
         state = self.saved_attachment
         if state is None:
             return
+        rows = self.rows(f"SELECT user_id FROM tickets WHERE id={int(state['ticket_id'])} AND deleted_at IS NULL")
+        require(len(rows) == 1, 'upgrade_attachment_ticket_missing')
+        require(rows[0]['user_id'] == state['owner']['id'], 'upgrade_attachment_owner_changed')
         from .extensions import rejected
         owner, foreign = Client(self.base), Client(self.base)
         self.upgrade_clients.extend((owner, foreign))
@@ -438,7 +441,6 @@ class Experiment:
         path = f"/api/tickets/{state['ticket_id']}"
         detail = owner.api('GET', path)
         require(detail['ticket']['id'] == state['ticket_id']
-                and detail['ticket']['user_id'] == state['owner']['id']
                 and state['attachment_path'] in [image for message in detail['messages'] for image in message['images']],
                 'upgrade_attachment_mapping_changed')
         status, content = owner.request('GET', state['attachment_path'])

@@ -363,6 +363,14 @@ class HostTrafficCandidateTests(unittest.TestCase):
 
 
 class UpgradeCandidateTests(unittest.TestCase):
+    def ticket_detail(self):
+        # User-facing ticketDTO deliberately omits the database owner ID.
+        return {'ticket': {'id': 12, 'title': 'Candidate ticket', 'category': 'api',
+                          'priority': 'normal', 'status': 'open', 'reply_count': 1,
+                          'message_count': 1, 'last_reply_role': 'user', 'created': 1, 'updated': 1},
+                'messages': [{'id': 21, 'role': 'user', 'content': 'Local acceptance request',
+                              'images': ['/api/tickets/attachments/31'], 'created': 1}]}
+
     def attachment_fixture(self, directory):
         from contracts.extensions import PNG
         current = {'revision': 'b' * 40, 'image_id': 'new-image', 'run_id': 'same-run',
@@ -389,7 +397,7 @@ class UpgradeCandidateTests(unittest.TestCase):
             experiment.other_id, experiment.other_name, experiment.other_password = 9, 'old-foreign', 'foreign-secret'
             experiment.checks = []
             experiment.rows = Mock(return_value=[{'id': 12}])
-            experiment.user = SimpleNamespace(api=Mock(return_value={'messages': [{'images': ['/api/tickets/attachments/31']}, {'images': []}]}),
+            experiment.user = SimpleNamespace(api=Mock(return_value=self.ticket_detail()),
                                               request=Mock(return_value=(200, PNG)))
             with patch('contracts.gateway.acceptance_target', return_value={'run_id': 'same-run'}):
                 experiment.capture_upgrade_attachment()
@@ -441,9 +449,9 @@ class UpgradeCandidateTests(unittest.TestCase):
                 experiment = gateway.Experiment.__new__(gateway.Experiment)
                 experiment.saved_attachment, experiment.base = saved, 'http://127.0.0.1:3000'
                 experiment.upgrade_clients, experiment.checks = [], []
+                experiment.rows = Mock(return_value=[{'user_id': 8}])
                 owner = SimpleNamespace(bearer='old-owner-session', login=Mock(return_value={'id': 18 if problem == 'identity' else 8}),
-                    api=Mock(return_value={'ticket': {'id': 12, 'user_id': 8},
-                                          'messages': [{'images': ['/api/tickets/attachments/31']}]}),
+                    api=Mock(return_value=self.ticket_detail()),
                     request=Mock(return_value=(200, b'changed' if problem == 'content' else PNG)))
                 foreign = SimpleNamespace(bearer='old-foreign-session', login=Mock(return_value={'id': 9}),
                     request=Mock(side_effect=[rejected, (200, b'{"success":true}') if problem == 'foreign' else rejected]))
@@ -465,6 +473,21 @@ class UpgradeCandidateTests(unittest.TestCase):
                 with patch('contracts.gateway.logout_verified') as logout:
                     self.assertEqual(experiment.cleanup(), [])
                 self.assertEqual([call.args[0] for call in logout.call_args_list], [owner, foreign])
+
+    def test_upgrade_attachment_rejects_missing_ticket_or_changed_database_owner(self):
+        for rows, code in (([], 'upgrade_attachment_ticket_missing'),
+                            ([{'user_id': 9}], 'upgrade_attachment_owner_changed')):
+            with self.subTest(rows=rows), tempfile.TemporaryDirectory() as directory:
+                args, current, _ = self.attachment_fixture(directory)
+                with patch('contracts.gateway.acceptance_target', return_value=current):
+                    state = gateway.upgrade_attachment_state(args)
+                experiment = gateway.Experiment.__new__(gateway.Experiment)
+                experiment.saved_attachment = state
+                with patch('contracts.gateway.candidate_query', return_value=rows) as query, \
+                        patch('contracts.gateway.Client') as client, self.assertRaisesRegex(RequirementError, code):
+                    experiment.verify_upgrade_attachment()
+                query.assert_called_once_with('SELECT user_id FROM tickets WHERE id=12 AND deleted_at IS NULL')
+                client.assert_not_called()
 
     def test_worker_requires_upgrade_attachment_state_without_affecting_plugin_resume(self):
         for stage, upgrade, phase in (('upgrade-management', True, 'capture'),

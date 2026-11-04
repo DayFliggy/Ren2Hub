@@ -11609,7 +11609,8 @@
       "final-source-validation-v3/build/run-oalk8k9s/report.json": "5aad29c4b55c21d3a3c45a403c692ea08ed65fa42df74ce6ce1733ae706bc92a",
       "final-source-validation-v3/race/run-y9fj7cyr/report.json": "2e26e92a4a46f7512f8ac10a099524709173a0662d5b8686ee47618afb5071e7",
       "final-source-validation-v3/browser/run-yn5qd_5w/report.json": "7f3c9444b475b76a8eaae813445460aefe800c8d87dc4684b24c6aa7421e572f",
-      "final-source-validation-v3/ui-contracts/run-5gpufsmr/report.json": "a01698de0223b7fe0e4157e39aceed66773b3217f9b0ac397ff6c4c7e7a5faa7"
+      "final-source-validation-v3/ui-contracts/run-5gpufsmr/report.json": "a01698de0223b7fe0e4157e39aceed66773b3217f9b0ac397ff6c4c7e7a5faa7",
+      "candidate-harness-fix.json": "309a172dfb88411dceaf72294d9797ca3edbdb4f0204470522f0b930390c6cbc"
     },
     "delivery": "delivery.json"
   }
