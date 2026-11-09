@@ -226,7 +226,6 @@ function responseDisplay(channel: AdminChannel): {
               v-if="canOperate && group.channels.some(supportsBalanceQuery)"
               :label="t('channels.syncSupplier', { supplier: group.supplier })"
               :disabled="!canRunBatch"
-              class="h-7 w-7"
               @click="
                 runSupplierBalance(
                   group.supplier,
@@ -253,7 +252,6 @@ function responseDisplay(channel: AdminChannel): {
                 )
               "
               :label="t('channels.testSupplier', { supplier: group.supplier })"
-              class="h-7 w-7"
               @click="pickSupplierTest(group)"
             >
               <Activity :size="14" />
@@ -268,7 +266,6 @@ function responseDisplay(channel: AdminChannel): {
               :label="t('channels.clearSupplier', { supplier: group.supplier })"
               tone="danger"
               :disabled="!canMutate"
-              class="h-7 w-7"
               @click="clearSupplier(group)"
             >
               <Trash2 :size="14" />
@@ -466,7 +463,7 @@ function responseDisplay(channel: AdminChannel): {
                     "
                     :label="t('channels.refreshBalance')"
                     :disabled="isRowBusy(channel.id)"
-                    class="h-7 w-7 shrink-0"
+                    class="shrink-0"
                     @click="refreshBalance(channel)"
                   >
                     <LoaderCircle
@@ -503,7 +500,7 @@ function responseDisplay(channel: AdminChannel): {
                       visibleFields.includes('rowResponseAction')
                     "
                     :label="t('channels.testChannel')"
-                    class="h-7 w-7 shrink-0"
+                    class="shrink-0"
                     @click="openTest(channel)"
                   >
                     <Activity :size="14" />

@@ -81,10 +81,12 @@ async function chooseEndpointType(wrapper: VueWrapper) {
   await wrapper
     .get('[role="combobox"][aria-label="Group Type"]')
     .trigger('click')
-  const option = wrapper
-    .findAll('[role="option"]')
-    .find((item) => item.text() === 'Endpoint Group')!
-  await option.trigger('click')
+  // The option list is teleported to <body>, outside the wrapper.
+  const option = [
+    ...document.body.querySelectorAll<HTMLElement>('[role="option"]'),
+  ].find((item) => item.textContent?.trim() === 'Endpoint Group')!
+  option.click()
+  await flushPromises()
 }
 
 beforeEach(() => {

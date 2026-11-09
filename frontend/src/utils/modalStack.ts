@@ -24,10 +24,17 @@ export function isTopmostModalDialog(dialog: symbol): boolean {
 }
 
 /**
- * Body scroll lock shared by every overlay. A per-overlay snapshot restores
- * "hidden" when overlays close out of order and freezes the page, so only the
- * first holder snapshots the overflow and only the last release restores it.
- * Each holder releases only a lock it took, once.
+ * Page scroll lock shared by every overlay, including the public navigation
+ * drawer. A per-overlay snapshot restores "hidden" when overlays close out of
+ * order and freezes the page, so only the first holder snapshots the overflow
+ * and only the last release restores it. Each holder releases only a lock it
+ * took, once.
+ *
+ * The root element is locked as well: base.css gives <html> its own
+ * overflow-x, so body overflow no longer propagates to the viewport and public
+ * pages would keep scrolling. Hidden overflow keeps the scroll offset, and the
+ * supported Safari (16.4+) honours it on the root, so no position: fixed
+ * snapshot is needed.
  */
 const scrollLockHolders = new Set<symbol>()
 const scrollLockStyles = new Map<HTMLElement, string>()
@@ -37,6 +44,7 @@ export function lockBodyScroll(holder: symbol): void {
   if (scrollLockHolders.has(holder)) return
   if (scrollLockHolders.size === 0) {
     const surfaces = [
+      document.documentElement,
       document.body,
       ...document.querySelectorAll<HTMLElement>('[data-console-scroll-zone]'),
     ]

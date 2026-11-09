@@ -58,7 +58,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
 
 <template>
   <header
-    class="topbar-header sticky top-0 z-[60] bg-[var(--surface-raised)] backdrop-blur-xl"
+    class="topbar-header sticky top-0 z-[var(--z-topbar)] bg-[var(--surface-raised)] backdrop-blur-xl"
     data-handdrawn="navigation-top"
   >
     <nav

@@ -2,6 +2,8 @@
 import { computed, nextTick, ref, useId } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 
+import { useFloatingPanel } from '@/composables/useFloatingPanel'
+
 /**
  * Multi-select sibling of FilterSelect: same trigger/panel look, aria roles and
  * keyboard model, but backed by a string[] and per-option checkboxes. The
@@ -27,6 +29,7 @@ const props = withDefaults(
     /** text for the footer clear-selection action */
     clearLabel?: string
     direction?: 'down' | 'up'
+    /** height from sm: 'md' 40px or 'sm' 32px; 44px below sm */
     size?: 'sm' | 'md'
   }>(),
   { prefixLabel: '', clearLabel: 'Clear', direction: 'down', size: 'md' }
@@ -142,7 +145,19 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-onClickOutside(root, closeMenu)
+// The panel lives in <body>; taps inside it are not outside the control.
+// It prevents mousedown so focus, and with it the keyboard model and the
+// contained Escape, stay on the trigger while options are picked.
+onClickOutside(root, closeMenu, { ignore: [listRef] })
+const { style: panelStyle, scope: panelScope } = useFloatingPanel(
+  root,
+  listRef,
+  open,
+  {
+    placement: () => props.direction,
+    width: 'min',
+  }
+)
 </script>
 
 <template>
@@ -150,7 +165,7 @@ onClickOutside(root, closeMenu)
     ref="root"
     class="relative"
     data-control-container
-    :class="size === 'sm' ? 'h-8' : 'h-10'"
+    :class="size === 'sm' ? 'h-11 sm:h-8' : 'h-11 sm:h-10'"
   >
     <button
       :id="triggerId"
@@ -195,75 +210,80 @@ onClickOutside(root, closeMenu)
       </svg>
     </button>
 
-    <Transition name="fs-pop">
-      <div
-        v-if="open"
-        :id="listboxId"
-        ref="listRef"
-        class="subtle-scroll absolute left-0 z-40 max-h-72 w-full min-w-[180px] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
-        :class="direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
-        role="listbox"
-        data-handdrawn="menu"
-        aria-multiselectable="true"
-      >
-        <ul>
-          <li
-            v-for="(opt, i) in options"
-            :id="optionId(i)"
-            :key="opt.value"
-            :data-active="i === activeIndex ? 'true' : undefined"
-            role="option"
-            :aria-selected="isChecked(opt.value)"
-            :title="opt.label"
-            class="flex cursor-pointer items-center gap-2.5 px-4 py-2 text-sm transition-colors"
-            :class="[
-              i === activeIndex ? 'bg-[var(--surface-muted)]' : '',
-              isChecked(opt.value)
-                ? 'font-semibold text-[var(--accent-text)]'
-                : 'text-[var(--text-primary)]',
-            ]"
-            @click="toggleValue(opt.value)"
-            @mousemove="activeIndex = i"
-          >
-            <span
-              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors"
-              :class="
-                isChecked(opt.value)
-                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
-                  : 'border-[var(--border-default)]'
-              "
-              aria-hidden="true"
-            >
-              <svg
-                v-if="isChecked(opt.value)"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="3"
-              >
-                <path d="m5 13 4 4L19 7" />
-              </svg>
-            </span>
-            <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
-          </li>
-        </ul>
+    <Teleport to="body">
+      <Transition name="fs-pop">
         <div
-          v-if="selectedCount > 0"
-          class="mt-1 flex justify-end border-t border-[var(--border-subtle)] px-4 pt-1.5"
+          v-if="open"
+          :id="listboxId"
+          ref="listRef"
+          class="subtle-scroll max-h-72 min-w-[180px] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
+          :style="panelStyle"
+          role="listbox"
+          data-handdrawn="menu"
+          data-floating-panel
+          :data-handdrawn-scope="panelScope"
+          aria-multiselectable="true"
+          @mousedown.prevent
         >
-          <button
-            type="button"
-            class="rounded-md px-2 py-1 text-xs font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--accent-text)] focus-ring"
-            @click.stop="clearAll"
+          <ul>
+            <li
+              v-for="(opt, i) in options"
+              :id="optionId(i)"
+              :key="opt.value"
+              :data-active="i === activeIndex ? 'true' : undefined"
+              role="option"
+              :aria-selected="isChecked(opt.value)"
+              :title="opt.label"
+              class="flex cursor-pointer items-center gap-2.5 px-4 py-2 text-sm transition-colors"
+              :class="[
+                i === activeIndex ? 'bg-[var(--surface-muted)]' : '',
+                isChecked(opt.value)
+                  ? 'font-semibold text-[var(--accent-text)]'
+                  : 'text-[var(--text-primary)]',
+              ]"
+              @click="toggleValue(opt.value)"
+              @mousemove="activeIndex = i"
+            >
+              <span
+                class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors"
+                :class="
+                  isChecked(opt.value)
+                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
+                    : 'border-[var(--border-default)]'
+                "
+                aria-hidden="true"
+              >
+                <svg
+                  v-if="isChecked(opt.value)"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                >
+                  <path d="m5 13 4 4L19 7" />
+                </svg>
+              </span>
+              <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
+            </li>
+          </ul>
+          <div
+            v-if="selectedCount > 0"
+            class="mt-1 flex justify-end border-t border-[var(--border-subtle)] px-4 pt-1.5"
           >
-            {{ clearLabel }}
-            <span aria-hidden="true">✕</span>
-          </button>
+            <button
+              type="button"
+              class="min-h-11 rounded-md px-3 text-xs font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--accent-text)] focus-ring sm:min-h-0 sm:px-2 sm:py-1"
+              @click.stop="clearAll"
+            >
+              {{ clearLabel }}
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 

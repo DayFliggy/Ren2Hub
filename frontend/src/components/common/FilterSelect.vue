@@ -2,6 +2,8 @@
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 
+import { useFloatingPanel } from '@/composables/useFloatingPanel'
+
 export interface SelectOption {
   value: string
   label: string
@@ -25,9 +27,9 @@ const props = withDefaults(
     prefixLabel?: string
     /** open the panel upward — use when the control sits near the page bottom */
     direction?: 'down' | 'up'
-    /** control height — 'md' (default 40px), 'sm' (32px, denser toolbars) or
-        'compact' (32px from sm, 44px touch target below it, matching
-        ConsoleButton and IconButton size sm) */
+    /** control height from sm: 'md' (default 40px), 'sm' or 'compact'
+        (both 32px). Below sm every size is a 44px touch target. 'compact'
+        is kept for existing callers and renders the same as 'sm'. */
     size?: 'sm' | 'md' | 'compact'
     /** 'facet' renders a compact dashed chip titled by prefixLabel; it shows
         the selected label as a badge, and the value '' means no filter. */
@@ -48,9 +50,6 @@ const root = ref<HTMLElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 const open = ref(false)
 const activeIndex = ref(-1)
-/** Facet panel placement, measured from the chip each time it opens. */
-const alignEnd = ref(false)
-const facetMaxWidth = ref(288)
 const facetActive = computed(
   () => props.variant === 'facet' && model.value !== ''
 )
@@ -105,23 +104,10 @@ function scrollActiveIntoView() {
 
 function openMenu() {
   if (props.disabled) return
-  if (props.variant === 'facet') placeFacetPanel()
   open.value = true
   const cur = allOptions.value.findIndex((o) => o.value === model.value)
   activeIndex.value = cur >= 0 ? cur : 0
   scrollActiveIntoView()
-}
-
-/** Opens the content-wide facet panel toward the roomier side of the chip and
-    caps its width there, so it never leaves the viewport. */
-function placeFacetPanel() {
-  const chip = root.value?.getBoundingClientRect()
-  if (!chip) return
-  const gutter = 16
-  const toRight = window.innerWidth - chip.left - gutter
-  const toLeft = chip.right - gutter
-  alignEnd.value = toLeft > toRight
-  facetMaxWidth.value = Math.min(288, Math.max(toRight, toLeft))
 }
 
 function closeMenu() {
@@ -204,7 +190,19 @@ watch(
     if (disabled) closeMenu()
   }
 )
-onClickOutside(root, closeMenu)
+// The panel lives in <body>; taps inside it are not outside the control.
+// It prevents mousedown so focus, and with it the keyboard model and the
+// contained Escape, stay on the trigger while options are picked.
+onClickOutside(root, closeMenu, { ignore: [listRef] })
+const { style: panelStyle, scope: panelScope } = useFloatingPanel(
+  root,
+  listRef,
+  open,
+  {
+    placement: () => props.direction,
+    width: props.variant === 'facet' ? 'min' : 'exact',
+  }
+)
 </script>
 
 <template>
@@ -212,7 +210,7 @@ onClickOutside(root, closeMenu)
     ref="root"
     class="relative"
     data-control-container
-    :class="size === 'compact' ? 'h-11 sm:h-8' : size === 'sm' ? 'h-8' : 'h-10'"
+    :class="size === 'md' ? 'h-11 sm:h-10' : 'h-11 sm:h-8'"
   >
     <!-- trigger -->
     <button
@@ -308,73 +306,78 @@ onClickOutside(root, closeMenu)
     </button>
 
     <!-- panel: sketch radius + paper texture by day, uniform + elevation by night -->
-    <Transition name="fs-pop">
-      <ul
-        v-if="open"
-        :id="listboxId"
-        ref="listRef"
-        class="subtle-scroll texture-paper absolute z-[200] max-h-64 overflow-y-auto border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
-        style="
-          border-radius: var(--sketch-border-radius-md);
-          box-shadow: var(--elevation-3);
-        "
-        :class="[
-          direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2',
-          variant === 'facet' ? 'w-max min-w-full' : 'w-full',
-          alignEnd ? 'right-0' : 'left-0',
-        ]"
-        :style="
-          variant === 'facet' ? { maxWidth: `${facetMaxWidth}px` } : undefined
-        "
-        role="listbox"
-        data-handdrawn="menu"
-      >
-        <li
-          v-for="(opt, i) in allOptions"
-          :id="optionId(i)"
-          :key="opt.value"
-          :data-active="i === activeIndex ? 'true' : undefined"
-          role="option"
-          :aria-selected="opt.value === model"
-          :title="opt.label"
-          class="flex cursor-pointer items-center justify-between gap-2 px-4 py-2 text-sm transition-colors"
-          :class="[
-            i === activeIndex ? 'bg-[var(--surface-muted)]' : '',
-            opt.value === model
-              ? 'font-semibold text-[var(--accent-text)]'
-              : 'text-[var(--text-primary)]',
+    <Teleport to="body">
+      <Transition name="fs-pop">
+        <ul
+          v-if="open"
+          :id="listboxId"
+          ref="listRef"
+          class="subtle-scroll texture-paper max-h-64 overflow-y-auto border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
+          :class="
+            variant === 'facet'
+              ? 'w-max max-w-[min(18rem,calc(100vw-1rem))]'
+              : ''
+          "
+          :style="[
+            {
+              borderRadius: 'var(--sketch-border-radius-md)',
+              boxShadow: 'var(--elevation-3)',
+            },
+            panelStyle,
           ]"
-          @click="select(opt)"
-          @mousemove="activeIndex = i"
+          role="listbox"
+          data-handdrawn="menu"
+          data-floating-panel
+          :data-handdrawn-scope="panelScope"
+          @mousedown.prevent
         >
-          <span
-            v-if="opt.tone"
-            class="h-2 w-2 shrink-0 rounded-full"
-            :style="{ background: toneColor(opt.tone) }"
-            aria-hidden="true"
-          />
-          <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
-          <span
-            v-if="opt.count !== undefined"
-            class="shrink-0 font-mono text-xs font-normal tabular-nums text-[var(--text-tertiary)]"
-            >{{ opt.count }}</span
+          <li
+            v-for="(opt, i) in allOptions"
+            :id="optionId(i)"
+            :key="opt.value"
+            :data-active="i === activeIndex ? 'true' : undefined"
+            role="option"
+            :aria-selected="opt.value === model"
+            :title="opt.label"
+            class="flex cursor-pointer items-center justify-between gap-2 px-4 py-2 text-sm transition-colors"
+            :class="[
+              i === activeIndex ? 'bg-[var(--surface-muted)]' : '',
+              opt.value === model
+                ? 'font-semibold text-[var(--accent-text)]'
+                : 'text-[var(--text-primary)]',
+            ]"
+            @click="select(opt)"
+            @mousemove="activeIndex = i"
           >
-          <svg
-            v-if="opt.value === model"
-            class="shrink-0"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            aria-hidden="true"
-          >
-            <path d="m5 13 4 4L19 7" />
-          </svg>
-        </li>
-      </ul>
-    </Transition>
+            <span
+              v-if="opt.tone"
+              class="h-2 w-2 shrink-0 rounded-full"
+              :style="{ background: toneColor(opt.tone) }"
+              aria-hidden="true"
+            />
+            <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
+            <span
+              v-if="opt.count !== undefined"
+              class="shrink-0 font-mono text-xs font-normal tabular-nums text-[var(--text-tertiary)]"
+              >{{ opt.count }}</span
+            >
+            <svg
+              v-if="opt.value === model"
+              class="shrink-0"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              aria-hidden="true"
+            >
+              <path d="m5 13 4 4L19 7" />
+            </svg>
+          </li>
+        </ul>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 

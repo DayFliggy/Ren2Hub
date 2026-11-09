@@ -5,7 +5,7 @@
         v-if="open"
         id="mobile-navigation-drawer"
         class="mobile-nav-drawer fixed inset-0 flex justify-end"
-        style="z-index: 80"
+        style="z-index: var(--z-drawer)"
         data-hero-canvas-boundary
         data-handdrawn-scope="mobile-navigation"
         @keydown="onKeydown"

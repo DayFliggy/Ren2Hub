@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
-import { computed, onBeforeUnmount, ref, useId } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+
+import { useFloatingPanel } from '@/composables/useFloatingPanel'
 
 const { t } = useI18n()
 
@@ -19,6 +21,9 @@ const model = defineModel<string[]>({ default: () => [] })
 const keyword = ref('')
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
+const field = ref<HTMLElement | null>(null)
+const input = ref<HTMLInputElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
 const inputId = useId()
 let blurTimer: number | undefined
 
@@ -48,14 +53,65 @@ function close() {
 
 // Touch scrolling or tapping elsewhere may not blur the input, so outside taps
 // close the panel directly; blur still covers keyboard Tab navigation.
-onClickOutside(root, close)
+onClickOutside(root, close, { ignore: [panel] })
 
+const showPanel = computed(() => open.value && filtered.value.length > 0)
+const { style: panelStyle, scope: panelScope } = useFloatingPanel(
+  field,
+  panel,
+  showPanel,
+  { width: 'exact', gap: 6 }
+)
+
+/** Closes once focus has left both the input and the teleported options. */
 function onBlur() {
   if (blurTimer) window.clearTimeout(blurTimer)
   blurTimer = window.setTimeout(() => {
     blurTimer = undefined
+    const active = document.activeElement
+    if (root.value?.contains(active) || panel.value?.contains(active)) return
     open.value = false
   }, 150)
+}
+
+function optionButtons(): HTMLButtonElement[] {
+  return [...(panel.value?.querySelectorAll('button') ?? [])]
+}
+
+/** The options sit at the end of <body>, so the input hands focus over. */
+function onInputKeydown(event: KeyboardEvent) {
+  const enters =
+    event.key === 'ArrowDown' || (event.key === 'Tab' && !event.shiftKey)
+  if (!enters || !showPanel.value || event.isComposing) return
+  event.preventDefault()
+  optionButtons()[0]?.focus()
+}
+
+function returnToInput(keepOpen: boolean) {
+  input.value?.focus()
+  // Focusing the input reopens the panel; Escape and Tab close it again.
+  if (!keepOpen) close()
+}
+
+async function onOptionKeydown(event: KeyboardEvent, index: number) {
+  const buttons = optionButtons()
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    buttons[(index + step + buttons.length) % buttons.length]?.focus()
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    add(filtered.value[index]!)
+    await nextTick()
+    const next = optionButtons()
+    if (next.length) next[Math.min(index, next.length - 1)]!.focus()
+    else returnToInput(false)
+  } else if (event.key === 'Escape' || event.key === 'Tab') {
+    // Escape must not also close an enclosing dialog.
+    event.preventDefault()
+    event.stopPropagation()
+    returnToInput(event.key === 'Tab' && event.shiftKey)
+  }
 }
 
 function onFocus() {
@@ -71,9 +127,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="root" class="relative">
-    <div class="pencil-control" data-handdrawn="control">
+    <div ref="field" class="pencil-control" data-handdrawn="control">
       <input
         :id="inputId"
+        ref="input"
         v-model="keyword"
         type="text"
         name="chip-picker-search"
@@ -83,24 +140,34 @@ onBeforeUnmount(() => {
         @focus="onFocus"
         @click="onFocus"
         @blur="onBlur"
+        @keydown="onInputKeydown"
       />
     </div>
 
-    <div
-      v-if="open && filtered.length > 0"
-      class="subtle-scroll absolute z-20 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
-      data-handdrawn="menu"
-    >
-      <button
-        v-for="option in filtered"
-        :key="option"
-        type="button"
-        class="block w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--state-hover-layer)]"
-        @pointerdown.prevent="add(option)"
+    <Teleport to="body">
+      <div
+        v-if="showPanel"
+        ref="panel"
+        class="subtle-scroll max-h-56 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] py-1"
+        :style="panelStyle"
+        data-handdrawn="menu"
+        data-floating-panel
+        :data-handdrawn-scope="panelScope"
+        @focusout="onBlur"
       >
-        {{ option }}
-      </button>
-    </div>
+        <button
+          v-for="(option, index) in filtered"
+          :key="option"
+          type="button"
+          class="block w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--state-hover-layer)]"
+          tabindex="-1"
+          @pointerdown.prevent="add(option)"
+          @keydown="onOptionKeydown($event, index)"
+        >
+          {{ option }}
+        </button>
+      </div>
+    </Teleport>
 
     <div v-if="model.length > 0" class="mt-2.5 flex flex-wrap gap-2">
       <span

@@ -182,6 +182,18 @@ html.dark .console-input:focus-visible {
   }
 }
 
+/* Grows a compact, positioned control's hit area to 44×44 below sm without
+   moving its layout; taps on the pseudo-element land on the control. The
+   control must be positioned (relative or absolute) and must not sit inside
+   an overflow-clipping box smaller than 44px. */
+@media (max-width: 639px) {
+  .touch-target::before {
+    content: '';
+    position: absolute;
+    inset: min(0px, calc((100% - 44px) / 2));
+  }
+}
+
 /* Apple / SwiftUI 交互动效与触控实用类 */
 .touch-snappy {
   transition:

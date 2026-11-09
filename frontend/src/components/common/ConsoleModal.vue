@@ -8,6 +8,7 @@ import {
   openModalDialog,
   unlockBodyScroll,
 } from '@/utils/modalStack'
+import { containsWithFloatingPanels, tabbableElements } from '@/utils/focusable'
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +20,7 @@ const props = withDefaults(
     closeDisabled?: boolean
     presentation?: 'modal' | 'drawer'
     drawerSide?: 'left' | 'right'
+    /** Overrides the shared --z-modal layer, e.g. a proof above a form. */
     zIndex?: number
   }>(),
   {
@@ -29,7 +31,7 @@ const props = withDefaults(
     closeDisabled: false,
     presentation: 'modal',
     drawerSide: 'right',
-    zIndex: 90,
+    zIndex: undefined,
   }
 )
 
@@ -51,14 +53,8 @@ const stackEntry = Symbol('ConsoleModal')
 const panel = ref<HTMLElement | null>(null)
 let previouslyFocused: HTMLElement | null = null
 
-const FOCUSABLE =
-  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
-
 function focusableEls(): HTMLElement[] {
-  if (!panel.value) return []
-  return Array.from(
-    panel.value.querySelectorAll<HTMLElement>(FOCUSABLE)
-  ).filter((el) => el.offsetParent !== null || el === document.activeElement)
+  return panel.value ? tabbableElements(panel.value) : []
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -72,6 +68,8 @@ function onKeydown(e: KeyboardEvent) {
     return
   }
   if (e.key === 'Tab') {
+    // A picker inside the dialog already moved focus for this Tab.
+    if (e.defaultPrevented) return
     // Trap focus within the dialog.
     const els = focusableEls()
     if (els.length === 0) {
@@ -82,7 +80,11 @@ function onKeydown(e: KeyboardEvent) {
     const first = els[0]
     const last = els[els.length - 1]
     const active = document.activeElement as HTMLElement
-    if (e.shiftKey && (active === first || !panel.value?.contains(active))) {
+    // A picker panel opened from this dialog handles its own Tab boundary.
+    const inside =
+      !!panel.value && containsWithFloatingPanels(panel.value, active)
+    if (inside && !panel.value?.contains(active)) return
+    if (e.shiftKey && (active === first || !inside)) {
       e.preventDefault()
       last.focus()
     } else if (!e.shiftKey && active === last) {
@@ -137,7 +139,7 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         class="fixed inset-0 flex"
-        :style="{ zIndex }"
+        :style="{ zIndex: zIndex ?? 'var(--z-modal)' }"
         :class="
           presentation === 'drawer'
             ? [

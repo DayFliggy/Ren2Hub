@@ -443,13 +443,13 @@ onBeforeUnmount(() => {
           </div>
 
           <div
-            class="mb-3 grid grid-cols-4 gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1"
+            class="mb-3 grid grid-cols-2 gap-1 rounded-xl sm:grid-cols-4 border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1"
           >
             <button
               v-for="tab in statusTabs"
               :key="tab.value"
               type="button"
-              class="min-w-0 rounded-lg px-2 py-1.5 text-xs font-medium transition-all focus-ring"
+              class="min-h-11 min-w-0 rounded-lg px-2 py-1.5 text-xs font-medium transition-all focus-ring sm:min-h-0"
               :class="
                 status === tab.value
                   ? 'bg-[var(--surface-solid)] text-[var(--accent-text)] font-semibold shadow-none'
@@ -468,7 +468,7 @@ onBeforeUnmount(() => {
             name="admin-ticket-search"
             class="mb-2 w-full"
           />
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <FilterSelect
               v-model="category"
               :options="categoryOptions"
@@ -634,7 +634,7 @@ onBeforeUnmount(() => {
             <div class="flex items-start gap-3">
               <button
                 type="button"
-                class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--state-hover-layer)] focus-ring lg:hidden"
+                class="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full sm:h-8 sm:w-8 text-[var(--text-secondary)] hover:bg-[var(--state-hover-layer)] focus-ring lg:hidden"
                 :aria-label="t('tickets.detail.backToList')"
                 @click="showQueue"
               >

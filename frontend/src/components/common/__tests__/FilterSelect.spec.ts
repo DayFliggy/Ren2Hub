@@ -1,10 +1,19 @@
 import { nextTick } from 'vue'
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DOMWrapper, enableAutoUnmount, mount } from '@vue/test-utils'
 
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import MultiFilterSelect from '@/components/common/MultiFilterSelect.vue'
 import i18n from '@/i18n'
+
+// Teleported panels outlive a test unless the wrapper unmounts first.
+enableAutoUnmount(afterEach)
+
+// Panels are teleported to <body>, outside the mounted wrapper.
+const inBody = (selector: string) =>
+  [...document.body.querySelectorAll<HTMLElement>(selector)].map(
+    (element) => new DOMWrapper(element)
+  )
 
 const options = [
   { value: 'all', label: 'All' },
@@ -23,10 +32,10 @@ describe('hand-drawn filter controls', () => {
     await trigger.trigger('click')
     await nextTick()
 
-    expect(wrapper.get('[role="listbox"]').attributes('data-handdrawn')).toBe(
+    expect(inBody('[role="listbox"]')[0]!.attributes('data-handdrawn')).toBe(
       'menu'
     )
-    await wrapper.findAll('[role="option"]')[1]!.trigger('click')
+    await inBody('[role="option"]')[1]!.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['ready'])
   })
 
@@ -38,7 +47,7 @@ describe('hand-drawn filter controls', () => {
 
     const trigger = wrapper.get('[role="combobox"]')
     await trigger.trigger('click')
-    const option = wrapper.findAll('[role="option"]')[1]!
+    const option = inBody('[role="option"]')[1]!
     expect(trigger.attributes('aria-expanded')).toBe('true')
 
     await wrapper.setProps({ disabled: true })
@@ -62,7 +71,7 @@ describe('hand-drawn filter controls', () => {
     await trigger.trigger('click')
     await nextTick()
 
-    const menu = wrapper.get('[role="listbox"]')
+    const menu = inBody('[role="listbox"]')[0]!
     expect(trigger.attributes('data-handdrawn')).toBe('control')
     expect(menu.attributes('data-handdrawn')).toBe('menu')
     expect(menu.attributes('aria-multiselectable')).toBe('true')
@@ -94,7 +103,7 @@ describe('hand-drawn filter controls', () => {
     expect(trigger.text()).not.toContain('3')
 
     await trigger.trigger('click')
-    const rows = wrapper.findAll('[role="option"]')
+    const rows = inBody('[role="option"]')
     expect(rows[1]!.text()).toBe('Anthropic3')
     await rows[0]!.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])

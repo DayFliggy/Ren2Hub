@@ -543,7 +543,6 @@ function close() {
                     :disabled="
                       testingAll || modelState(model).status === 'running'
                     "
-                    class="h-7 w-7"
                     @click="testSingle(model)"
                   >
                     <LoaderCircle

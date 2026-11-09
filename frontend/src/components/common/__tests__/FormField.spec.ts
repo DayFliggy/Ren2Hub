@@ -30,7 +30,7 @@ describe('FormField', () => {
     const { wrapper, value } = mountSelect(true)
     try {
       await wrapper.get('[role="combobox"]').trigger('click')
-      ;(wrapper.findAll('[role="option"]')[1]!.element as HTMLElement).click()
+      document.body.querySelectorAll<HTMLElement>('[role="option"]')[1]!.click()
       await wrapper.vm.$nextTick()
 
       expect(value.value).toBe('json')

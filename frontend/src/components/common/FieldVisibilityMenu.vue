@@ -3,6 +3,11 @@ import { Check, RotateCcw, SlidersHorizontal } from 'lucide-vue-next'
 import { nextTick, ref, useId } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 
+import {
+  tabLeavesPanel,
+  useFloatingPanel,
+} from '@/composables/useFloatingPanel'
+
 import IconButton from './IconButton.vue'
 
 /**
@@ -61,7 +66,9 @@ function toggleMenu() {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !open.value) return
+  if (!open.value) return
+  const leaving = panel.value && tabLeavesPanel(event, panel.value)
+  if (event.key !== 'Escape' && !leaving) return
   event.preventDefault()
   event.stopPropagation()
   closeMenu({ restoreFocus: true })
@@ -69,12 +76,20 @@ function onKeydown(event: KeyboardEvent) {
 
 function onFocusout() {
   window.requestAnimationFrame(() => {
-    if (root.value?.contains(document.activeElement)) return
+    const active = document.activeElement
+    if (root.value?.contains(active) || panel.value?.contains(active)) return
     closeMenu()
   })
 }
 
-onClickOutside(root, () => closeMenu())
+// The panel lives in <body>; taps inside it are not outside the menu.
+onClickOutside(root, () => closeMenu(), { ignore: [panel] })
+const { style: panelStyle, scope: panelScope } = useFloatingPanel(
+  root,
+  panel,
+  open,
+  { align: 'end' }
+)
 </script>
 
 <template>
@@ -92,62 +107,69 @@ onClickOutside(root, () => closeMenu())
       <SlidersHorizontal :size="17" />
     </IconButton>
 
-    <Transition name="field-menu">
-      <div
-        v-if="open"
-        :id="panelId"
-        ref="panel"
-        role="dialog"
-        aria-modal="false"
-        :aria-labelledby="titleId"
-        class="subtle-scroll absolute right-0 top-full z-50 mt-2 max-h-[min(24rem,calc(100dvh-8rem))] w-64 overflow-y-auto rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5"
-        data-handdrawn="menu"
-      >
-        <div class="flex items-center justify-between gap-2 px-3 py-1.5">
-          <p
-            :id="titleId"
-            class="text-xs font-semibold text-[var(--text-secondary)]"
-          >
-            {{ title }}
-          </p>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring"
-            @click="restoreDefaults"
-          >
-            <RotateCcw :size="13" />
-            {{ resetLabel }}
-          </button>
-        </div>
-
-        <button
-          v-for="field in allFields"
-          :key="field"
-          type="button"
-          class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--surface-hover)] focus-ring"
-          :class="
-            isVisible(field)
-              ? 'text-[var(--text-primary)]'
-              : 'text-[var(--text-tertiary)]'
-          "
-          :aria-pressed="isVisible(field)"
-          @click="toggleField(field)"
+    <Teleport to="body">
+      <Transition name="field-menu">
+        <div
+          v-if="open"
+          :id="panelId"
+          ref="panel"
+          role="dialog"
+          aria-modal="false"
+          :aria-labelledby="titleId"
+          class="subtle-scroll max-h-[min(24rem,calc(100dvh-8rem))] w-64 overflow-y-auto rounded-lg border border-[var(--overlay-border)] bg-[var(--surface-overlay)] py-1.5"
+          :style="panelStyle"
+          data-handdrawn="menu"
+          data-floating-panel
+          :data-handdrawn-scope="panelScope"
+          @keydown="onKeydown"
+          @focusout="onFocusout"
         >
-          <span
-            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border"
+          <div class="flex items-center justify-between gap-2 px-3 py-1.5">
+            <p
+              :id="titleId"
+              class="text-xs font-semibold text-[var(--text-secondary)]"
+            >
+              {{ title }}
+            </p>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring"
+              @click="restoreDefaults"
+            >
+              <RotateCcw :size="13" />
+              {{ resetLabel }}
+            </button>
+          </div>
+
+          <button
+            v-for="field in allFields"
+            :key="field"
+            type="button"
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--surface-hover)] focus-ring"
             :class="
               isVisible(field)
-                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
-                : 'border-[var(--border-default)]'
+                ? 'text-[var(--text-primary)]'
+                : 'text-[var(--text-tertiary)]'
             "
-            aria-hidden="true"
+            :aria-pressed="isVisible(field)"
+            @click="toggleField(field)"
           >
-            <Check v-if="isVisible(field)" :size="12" :stroke-width="3" />
-          </span>
-          <span>{{ labelFor(field) }}</span>
-        </button>
-      </div>
-    </Transition>
+            <span
+              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border"
+              :class="
+                isVisible(field)
+                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
+                  : 'border-[var(--border-default)]'
+              "
+              aria-hidden="true"
+            >
+              <Check v-if="isVisible(field)" :size="12" :stroke-width="3" />
+            </span>
+            <span>{{ labelFor(field) }}</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 

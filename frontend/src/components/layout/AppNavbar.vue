@@ -152,6 +152,7 @@ import StatusDot from '@/components/common/StatusDot.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { lockBodyScroll, unlockBodyScroll } from '@/utils/modalStack'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -169,43 +170,9 @@ const statusLabel = computed(() => {
   return t('nav.checking')
 })
 
-let scrollPosition = 0
-let savedBodyStyles: Record<string, string> | null = null
-let savedHtmlOverflow = ''
-
-function lockPageScroll() {
-  if (savedBodyStyles) return
-
-  const body = document.body
-  scrollPosition = window.scrollY
-  savedBodyStyles = {
-    position: body.style.position,
-    top: body.style.top,
-    left: body.style.left,
-    right: body.style.right,
-    width: body.style.width,
-    overflow: body.style.overflow,
-  }
-  savedHtmlOverflow = document.documentElement.style.overflow
-
-  body.style.position = 'fixed'
-  body.style.top = `-${scrollPosition}px`
-  body.style.left = '0'
-  body.style.right = '0'
-  body.style.width = '100%'
-  body.style.overflow = 'hidden'
-  document.documentElement.style.overflow = 'hidden'
-}
-
-function unlockPageScroll() {
-  if (!savedBodyStyles) return
-
-  const body = document.body
-  Object.assign(body.style, savedBodyStyles)
-  document.documentElement.style.overflow = savedHtmlOverflow
-  savedBodyStyles = null
-  window.scrollTo(0, scrollPosition)
-}
+// The drawer is teleported to <body>, so the shared lock's inert #app only
+// covers the page behind its backdrop.
+const scrollLockHolder = Symbol('AppNavbarDrawer')
 
 function closeMobileMenu() {
   mobileMenuOpen.value = false
@@ -217,11 +184,11 @@ function closeAtDesktopWidth() {
 
 watch(mobileMenuOpen, (isOpen) => {
   if (isOpen) {
-    lockPageScroll()
+    lockBodyScroll(scrollLockHolder)
     return
   }
 
-  unlockPageScroll()
+  unlockBodyScroll(scrollLockHolder)
   requestAnimationFrame(() => menuButton.value?.focus())
 })
 
@@ -231,7 +198,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', closeAtDesktopWidth)
-  unlockPageScroll()
+  unlockBodyScroll(scrollLockHolder)
 })
 </script>
 

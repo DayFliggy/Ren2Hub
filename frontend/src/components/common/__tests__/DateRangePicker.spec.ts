@@ -58,11 +58,11 @@ describe('DateRangePicker keyboard model', () => {
 
     await trigger.trigger('click')
     await nextTick()
-    expect(wrapper.get('[role="dialog"]').attributes('data-handdrawn')).toBe(
-      'menu'
-    )
+    // The popover is teleported to <body>, outside the mounted wrapper.
+    const panel = document.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(panel.dataset.handdrawn).toBe('menu')
     expect(
-      wrapper.get('[data-date-key="2026-07-15"] span').classes()
+      panel.querySelector('[data-date-key="2026-07-15"] span')!.classList
     ).not.toContain('pencil-control')
     const active = document.activeElement as HTMLButtonElement
     expect(active.dataset.dateKey).toBe('2026-07-15')

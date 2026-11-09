@@ -12,6 +12,15 @@
   --space-8: 48px;
   --letter-spacing-wide: 0.12em;
 
+  /* ===== 层级令牌：同一层内按打开顺序叠放 ===== */
+  --z-topbar: 60;
+  --z-drawer: 80;
+  --z-modal: 90;
+  /* Floating panels teleported to <body> must cover the modal that owns them. */
+  --z-popover: 100;
+  --z-toast: 200;
+  --z-tooltip: 300;
+
   /* ===== 字号令牌 ===== */
   --text-label-sm: 14px;
 

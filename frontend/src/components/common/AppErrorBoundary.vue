@@ -2,6 +2,8 @@
 import { defineComponent, onErrorCaptured, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import ConsoleButton from './ConsoleButton.vue'
+
 const { t } = useI18n()
 const hasError = ref(false)
 const retryKey = ref(0)
@@ -61,18 +63,13 @@ function retry() {
       </p>
 
       <div class="mt-7 flex flex-wrap items-center justify-center gap-3">
-        <button
-          type="button"
-          class="pencil-control sketch-sm h-10 bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)] focus-ring"
-          data-handdrawn="control"
-          data-error-retry
-          @click="retry"
-        >
+        <ConsoleButton data-error-retry @click="retry">
           {{ t('common.appError.retry') }}
-        </button>
+        </ConsoleButton>
+        <!-- A link cannot be a ConsoleButton; it mirrors the md secondary size. -->
         <a
           href="/"
-          class="pencil-control sketch-sm inline-flex h-10 items-center justify-center border border-[var(--border-default)] bg-[var(--surface-solid)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--state-hover-layer)] focus-ring"
+          class="pencil-control sketch-sm inline-flex min-h-11 items-center sm:h-10 sm:min-h-10 justify-center border border-[var(--border-default)] bg-[var(--surface-solid)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--state-hover-layer)] focus-ring"
           data-handdrawn="control"
         >
           {{ t('common.appError.home') }}

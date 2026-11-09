@@ -86,7 +86,7 @@
         ref="menu"
         role="menu"
         data-handdrawn="menu"
-        class="absolute right-0 z-[90] overflow-hidden rounded-xl border bg-[var(--surface-overlay)] backdrop-blur-xl"
+        class="absolute right-0 z-[var(--z-popover)] overflow-hidden rounded-xl border bg-[var(--surface-overlay)] backdrop-blur-xl"
         :class="[
           placement === 'top'
             ? 'bottom-full mb-2'

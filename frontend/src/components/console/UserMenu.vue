@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
 
     <div
       v-if="open"
-      class="user-menu-panel absolute right-0 top-full z-40 mt-1 w-56 rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] animate-scale-in"
+      class="user-menu-panel absolute right-0 top-full z-[var(--z-popover)] mt-1 w-56 rounded-2xl border border-[var(--overlay-border)] bg-[var(--surface-overlay)] animate-scale-in"
       data-handdrawn="menu"
     >
       <button

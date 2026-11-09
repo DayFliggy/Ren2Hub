@@ -3,6 +3,11 @@ import { computed, nextTick, ref, useId } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
+import {
+  tabLeavesPanel,
+  useFloatingPanel,
+} from '@/composables/useFloatingPanel'
+
 /**
  * Themed date-range picker (contract: LogsView filter toolbar).
  * Trigger matches FilterSelect's chrome (rounded-xl + --surface-muted, focus
@@ -141,7 +146,14 @@ function toggle() {
 }
 
 const panelRef = ref<HTMLElement | null>(null)
-onClickOutside(root, () => closePanel())
+// The popover lives in <body>; taps inside it are not outside the picker.
+onClickOutside(root, () => closePanel(), { ignore: [panelRef] })
+const { style: popoverStyle, scope: popoverScope } = useFloatingPanel(
+  triggerRef,
+  panelRef,
+  computed(() => open.value && props.presentation === 'popover'),
+  { placement: () => props.direction, align: 'end' }
+)
 
 /* ---------- range selection ---------- */
 const hoverKey = ref('')
@@ -242,6 +254,19 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+/** Keys inside the teleported popover, which no longer bubble to the root. */
+function onPopoverKeydown(e: KeyboardEvent) {
+  if (props.presentation !== 'popover' || !panelRef.value) return
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    e.stopPropagation()
+    closePanel(true)
+  } else if (tabLeavesPanel(e, panelRef.value)) {
+    e.preventDefault()
+    closePanel(true)
+  }
+}
+
 function addMonthsClamped(date: Date, delta: number): Date {
   const target = new Date(date.getFullYear(), date.getMonth() + delta, 1)
   const lastDay = new Date(
@@ -302,262 +327,273 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
 
 <template>
   <div ref="root" class="relative" @keydown="onKeydown">
-    <!-- trigger -->
-    <button
-      ref="triggerRef"
-      type="button"
-      class="pencil-control flex h-10 w-full items-center gap-2 rounded-xl border px-3.5 text-left text-sm transition-colors focus-ring"
-      data-handdrawn="control"
-      :class="[
-        open || hasValue
-          ? 'border-[var(--border-strong)] bg-[var(--surface-solid)]'
-          : 'border-transparent bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)]',
-        hasValue ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]',
-      ]"
-      :style="hasValue ? { paddingRight: '2.75rem' } : undefined"
-      aria-haspopup="dialog"
-      :aria-label="t('logs.selectDateRange')"
-      :aria-expanded="open"
-      :aria-controls="panelId"
-      @click="toggle"
-    >
-      <svg
-        class="shrink-0 text-[var(--text-tertiary)]"
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        aria-hidden="true"
+    <!-- trigger; the wrapper centres the clear button on it alone -->
+    <div class="relative">
+      <button
+        ref="triggerRef"
+        type="button"
+        class="pencil-control flex h-11 w-full items-center gap-2 rounded-xl border px-3.5 sm:h-10 text-left text-sm transition-colors focus-ring"
+        data-handdrawn="control"
+        :class="[
+          open || hasValue
+            ? 'border-[var(--border-strong)] bg-[var(--surface-solid)]'
+            : 'border-transparent bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)]',
+          hasValue
+            ? 'text-[var(--text-primary)]'
+            : 'text-[var(--text-tertiary)]',
+        ]"
+        :style="hasValue ? { paddingRight: '2.75rem' } : undefined"
+        aria-haspopup="dialog"
+        :aria-label="t('logs.selectDateRange')"
+        :aria-expanded="open"
+        :aria-controls="panelId"
+        @click="toggle"
       >
-        <rect x="3" y="5" width="18" height="16" rx="2" />
-        <path d="M8 3v4M16 3v4M3 10h18" />
-      </svg>
-      <span class="min-w-0 flex-1 truncate">{{ triggerLabel }}</span>
-      <svg
-        v-if="!hasValue"
-        class="shrink-0 text-[var(--text-tertiary)] transition-transform"
-        :class="open ? 'rotate-180' : ''"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        aria-hidden="true"
+        <svg
+          class="shrink-0 text-[var(--text-tertiary)]"
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M8 3v4M16 3v4M3 10h18" />
+        </svg>
+        <span class="min-w-0 flex-1 truncate">{{ triggerLabel }}</span>
+        <svg
+          v-if="!hasValue"
+          class="shrink-0 text-[var(--text-tertiary)] transition-transform"
+          :class="open ? 'rotate-180' : ''"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      <button
+        v-if="hasValue"
+        type="button"
+        class="touch-target absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
+        :aria-label="t('logs.clear')"
+        @click="clear"
       >
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </button>
-    <button
-      v-if="hasValue"
-      type="button"
-      class="absolute right-2 top-5 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
-      :aria-label="t('logs.clear')"
-      @click="clear"
-    >
-      <svg
-        width="11"
-        height="11"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.5"
-        aria-hidden="true"
-      >
-        <path d="M18 6 6 18M6 6l12 12" />
-      </svg>
-    </button>
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          aria-hidden="true"
+        >
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
 
-    <!-- popover panel -->
-    <Transition name="drp-pop">
-      <div
-        v-if="open"
-        :id="panelId"
-        ref="panelRef"
-        class="rounded-2xl border bg-[var(--surface-overlay)]"
-        :class="
-          presentation === 'inline'
-            ? 'relative mt-2 w-full'
-            : [
-                'absolute left-1/2 z-50 w-[calc(100vw-2rem)] max-w-[35rem] -translate-x-1/2 overflow-hidden sm:left-auto sm:right-0 sm:w-[35rem] sm:translate-x-0',
-                direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2',
-              ]
-        "
-        style="border-color: var(--overlay-border)"
-        role="dialog"
-        aria-modal="false"
-        data-handdrawn="menu"
-        :aria-labelledby="panelTitleId"
-      >
-        <h2 :id="panelTitleId" class="sr-only">
-          {{ t('logs.selectDateRange') }}
-        </h2>
-        <div class="flex">
-          <!-- preset rail -->
-          <div
-            class="hidden w-32 shrink-0 flex-col gap-0.5 border-r p-2 sm:flex"
-            style="border-color: var(--border-subtle)"
-          >
-            <button
-              v-for="(p, i) in presets"
-              :key="p.label"
-              type="button"
-              class="rounded-lg px-3 py-2 text-left text-sm transition-colors"
-              :class="
-                i === activePreset
-                  ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-text)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)]'
-              "
-              @click="applyPreset(p.s, p.e)"
+    <!-- popover panel; the inline presentation stays in the dialog flow -->
+    <Teleport to="body" :disabled="presentation === 'inline'">
+      <Transition name="drp-pop">
+        <div
+          v-if="open"
+          :id="panelId"
+          ref="panelRef"
+          class="rounded-2xl border bg-[var(--surface-overlay)]"
+          :class="
+            presentation === 'inline'
+              ? 'relative mt-2 w-full'
+              : 'w-[calc(100vw-1rem)] max-w-[35rem] overflow-hidden'
+          "
+          :style="[
+            { borderColor: 'var(--overlay-border)' },
+            presentation === 'popover' ? popoverStyle : {},
+          ]"
+          role="dialog"
+          aria-modal="false"
+          data-handdrawn="menu"
+          :data-floating-panel="presentation === 'popover' ? '' : undefined"
+          :data-handdrawn-scope="
+            presentation === 'popover' ? popoverScope : undefined
+          "
+          :aria-labelledby="panelTitleId"
+          @keydown="onPopoverKeydown"
+        >
+          <h2 :id="panelTitleId" class="sr-only">
+            {{ t('logs.selectDateRange') }}
+          </h2>
+          <div class="flex">
+            <!-- preset rail -->
+            <div
+              class="hidden w-32 shrink-0 flex-col gap-0.5 border-r p-2 sm:flex"
+              style="border-color: var(--border-subtle)"
             >
-              {{ p.label }}
-            </button>
-          </div>
-
-          <!-- calendars -->
-          <div class="min-w-0 flex-1 p-3">
-            <!-- nav header -->
-            <div class="mb-2 flex items-center justify-between px-1">
               <button
+                v-for="(p, i) in presets"
+                :key="p.label"
                 type="button"
-                class="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-7 sm:w-7"
-                :aria-label="t('logs.prevMonth')"
-                @click="shiftAnchor(-1)"
+                class="rounded-lg px-3 py-2 text-left text-sm transition-colors"
+                :class="
+                  i === activePreset
+                    ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-text)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)]'
+                "
+                @click="applyPreset(p.s, p.e)"
               >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="m15 18-6-6 6-6" />
-                </svg>
-              </button>
-              <div
-                class="flex flex-1 items-center justify-around text-sm font-semibold text-[var(--text-primary)]"
-              >
-                <span>{{ monthTitle(anchorYear, anchorMonth) }}</span>
-                <span class="hidden sm:block">{{
-                  monthTitle(rightMonth.year, rightMonth.month)
-                }}</span>
-              </div>
-              <button
-                type="button"
-                class="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-7 sm:w-7"
-                :aria-label="t('logs.nextMonth')"
-                @click="shiftAnchor(1)"
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
+                {{ p.label }}
               </button>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div
-                v-for="(cells, gi) in [leftCells, rightCells]"
-                :key="gi"
-                :class="gi === 1 ? 'hidden sm:block' : ''"
-              >
-                <!-- weekday header -->
-                <div
-                  class="mb-1 grid grid-cols-7 text-center text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
+            <!-- calendars -->
+            <div class="min-w-0 flex-1 p-3">
+              <!-- nav header -->
+              <div class="mb-2 flex items-center justify-between px-1">
+                <button
+                  type="button"
+                  class="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-7 sm:w-7"
+                  :aria-label="t('logs.prevMonth')"
+                  @click="shiftAnchor(-1)"
                 >
-                  <span v-for="w in weekDays" :key="w" class="py-1">{{
-                    w
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                </button>
+                <div
+                  class="flex flex-1 items-center justify-around text-sm font-semibold text-[var(--text-primary)]"
+                >
+                  <span>{{ monthTitle(anchorYear, anchorMonth) }}</span>
+                  <span class="hidden sm:block">{{
+                    monthTitle(rightMonth.year, rightMonth.month)
                   }}</span>
                 </div>
-                <!-- day grid -->
-                <div class="grid grid-cols-7">
-                  <button
-                    v-for="c in cells"
-                    :key="c.key"
-                    type="button"
-                    :data-today="c.isToday ? 'true' : undefined"
-                    :data-date-key="c.key"
-                    :data-in-month="c.inMonth ? 'true' : 'false'"
-                    :tabindex="focusKey === c.key && c.inMonth ? 0 : -1"
-                    class="relative flex h-11 items-center justify-center text-[0.8125rem] transition-colors focus-ring sm:h-9"
-                    :class="[
-                      !c.inMonth
-                        ? 'text-[var(--text-tertiary)] opacity-45'
-                        : 'text-[var(--text-primary)]',
-                      isStart(c.key) || isEnd(c.key)
-                        ? 'font-semibold'
-                        : inRange(c.key)
-                          ? 'bg-[var(--accent-soft)]'
-                          : 'hover:bg-[var(--state-hover-layer)]',
-                    ]"
-                    @click="pick(c.key)"
-                    @focus="focusKey = c.key"
-                    @keydown="onDayKeydown($event, c.key)"
-                    @mouseenter="hoverKey = start && !end ? c.key : hoverKey"
+                <button
+                  type="button"
+                  class="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-7 sm:w-7"
+                  :aria-label="t('logs.nextMonth')"
+                  @click="shiftAnchor(1)"
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
                   >
-                    <span
-                      class="relative z-10 flex h-9 w-9 items-center justify-center rounded-full sm:h-7 sm:w-7"
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+              </div>
+
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div
+                  v-for="(cells, gi) in [leftCells, rightCells]"
+                  :key="gi"
+                  :class="gi === 1 ? 'hidden sm:block' : ''"
+                >
+                  <!-- weekday header -->
+                  <div
+                    class="mb-1 grid grid-cols-7 text-center text-[0.6875rem] font-medium text-[var(--text-tertiary)]"
+                  >
+                    <span v-for="w in weekDays" :key="w" class="py-1">{{
+                      w
+                    }}</span>
+                  </div>
+                  <!-- day grid -->
+                  <div class="grid grid-cols-7">
+                    <button
+                      v-for="c in cells"
+                      :key="c.key"
+                      type="button"
+                      :data-today="c.isToday ? 'true' : undefined"
+                      :data-date-key="c.key"
+                      :data-in-month="c.inMonth ? 'true' : 'false'"
+                      :tabindex="focusKey === c.key && c.inMonth ? 0 : -1"
+                      class="relative flex h-11 items-center justify-center text-[0.8125rem] transition-colors focus-ring sm:h-9"
                       :class="[
+                        !c.inMonth
+                          ? 'text-[var(--text-tertiary)] opacity-45'
+                          : 'text-[var(--text-primary)]',
                         isStart(c.key) || isEnd(c.key)
-                          ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
-                          : '',
-                        c.isToday && !(isStart(c.key) || isEnd(c.key))
-                          ? 'ring-1 ring-[var(--signal)]'
-                          : '',
+                          ? 'font-semibold'
+                          : inRange(c.key)
+                            ? 'bg-[var(--accent-soft)]'
+                            : 'hover:bg-[var(--state-hover-layer)]',
                       ]"
-                      >{{ c.day }}</span
+                      @click="pick(c.key)"
+                      @focus="focusKey = c.key"
+                      @keydown="onDayKeydown($event, c.key)"
+                      @mouseenter="hoverKey = start && !end ? c.key : hoverKey"
                     >
+                      <span
+                        class="relative z-10 flex h-9 w-9 items-center justify-center rounded-full sm:h-7 sm:w-7"
+                        :class="[
+                          isStart(c.key) || isEnd(c.key)
+                            ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+                            : '',
+                          c.isToday && !(isStart(c.key) || isEnd(c.key))
+                            ? 'ring-1 ring-[var(--signal)]'
+                            : '',
+                        ]"
+                        >{{ c.day }}</span
+                      >
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- footer -->
+              <div
+                class="mt-3 flex items-center justify-between border-t pt-3"
+                style="border-color: var(--border-subtle)"
+              >
+                <span
+                  class="min-w-0 truncate text-xs text-[var(--text-tertiary)]"
+                >
+                  {{ hasValue ? triggerLabel : t('logs.selectDateRange') }}
+                </span>
+                <div class="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    class="min-h-11 rounded-lg px-4 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:min-h-0 sm:px-3 sm:py-1.5"
+                    @click="clear"
+                  >
+                    {{ t('logs.clear') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="min-h-11 rounded-lg px-4 text-xs font-medium transition-colors focus-ring sm:min-h-0 sm:px-3 sm:py-1.5"
+                    :class="
+                      start && end
+                        ? 'bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)]'
+                        : 'cursor-not-allowed bg-[var(--surface-muted)] text-[var(--text-tertiary)]'
+                    "
+                    :disabled="!(start && end)"
+                    @click="apply"
+                  >
+                    {{ t('logs.apply') }}
                   </button>
                 </div>
               </div>
             </div>
-
-            <!-- footer -->
-            <div
-              class="mt-3 flex items-center justify-between border-t pt-3"
-              style="border-color: var(--border-subtle)"
-            >
-              <span
-                class="min-w-0 truncate text-xs text-[var(--text-tertiary)]"
-              >
-                {{ hasValue ? triggerLabel : t('logs.selectDateRange') }}
-              </span>
-              <div class="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  class="rounded-lg px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
-                  @click="clear"
-                >
-                  {{ t('logs.clear') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-ring"
-                  :class="
-                    start && end
-                      ? 'bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)]'
-                      : 'cursor-not-allowed bg-[var(--surface-muted)] text-[var(--text-tertiary)]'
-                  "
-                  :disabled="!(start && end)"
-                  @click="apply"
-                >
-                  {{ t('logs.apply') }}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -566,13 +602,11 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
 .drp-pop-leave-active {
   transition:
     opacity 0.18s ease,
-    transform 0.18s cubic-bezier(0.2, 0.6, 0.2, 1),
-    translate 0.18s cubic-bezier(0.2, 0.6, 0.2, 1);
+    transform 0.18s cubic-bezier(0.2, 0.6, 0.2, 1);
 }
 .drp-pop-enter-from,
 .drp-pop-leave-to {
   opacity: 0;
-  translate: initial;
   transform: translateY(-4px);
 }
 </style>

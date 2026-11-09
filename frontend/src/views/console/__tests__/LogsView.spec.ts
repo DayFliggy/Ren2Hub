@@ -59,9 +59,9 @@ describe('LogsView business log filters', () => {
     await flushPromises()
 
     await wrapper.get('button[aria-label="类型"]').trigger('click')
-    const options = wrapper
-      .findAll('[role="option"]')
-      .map((item) => item.text())
+    const options = [...document.body.querySelectorAll('[role="option"]')].map(
+      (item) => item.textContent?.trim()
+    )
 
     expect(options).toEqual(['全部', '消费', '充值', '退款', '错误'])
     expect(options).not.toContain('管理')

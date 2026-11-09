@@ -57,7 +57,7 @@ onBeforeUnmount(() => {
       <div
         ref="scrollZone"
         data-console-scroll-zone
-        class="night-page-texture scroll-zone texture-paper draft-grid min-w-0 flex-1 overflow-y-auto"
+        class="night-page-texture scroll-zone texture-paper draft-grid min-w-0 flex-1 overflow-y-auto overscroll-contain"
         :class="{ scrolling: isScrolling, 'no-page-scroll': noPageScroll }"
         @scroll.passive="onScroll"
       >

@@ -26,7 +26,7 @@ watch(
 
 <template>
   <div
-    class="flex flex-col items-center justify-center px-6 py-16 text-center"
+    class="flex flex-col items-center justify-center px-6 py-10 text-center sm:py-16"
     data-handdrawn="empty-state"
   >
     <img

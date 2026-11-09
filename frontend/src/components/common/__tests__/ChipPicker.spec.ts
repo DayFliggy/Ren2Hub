@@ -22,14 +22,20 @@ describe('ChipPicker', () => {
     const input = wrapper.get('input')
 
     await input.trigger('focus')
-    expect(wrapper.find('[data-handdrawn="menu"]').exists()).toBe(true)
+    expect(Boolean(document.querySelector('[data-handdrawn="menu"]'))).toBe(
+      true
+    )
 
     tapOutside()
     await nextTick()
-    expect(wrapper.find('[data-handdrawn="menu"]').exists()).toBe(false)
+    expect(Boolean(document.querySelector('[data-handdrawn="menu"]'))).toBe(
+      false
+    )
 
     await input.trigger('click')
-    expect(wrapper.find('[data-handdrawn="menu"]').exists()).toBe(true)
+    expect(Boolean(document.querySelector('[data-handdrawn="menu"]'))).toBe(
+      true
+    )
 
     wrapper.unmount()
   })
