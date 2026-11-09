@@ -163,6 +163,25 @@ html.dark .console-input:focus-visible {
   }
 }
 
+/* Prevent iOS Safari from auto-zooming on focus across mobile viewports while
+   respecting user root font-size scaling. !important is required on this
+   narrow selector because shared inputs (TextInput, SearchInput, .console-input)
+   step down at sm (640px) and Vue scoped control classes (such as
+   .channel-form-textarea or .settings-input) carry attribute-scoped specificity
+   (0, 2, 0) that would otherwise override an unlayered base rule below 768px.
+   Controls with intentionally larger mobile font sizes can provide --input-font-size. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='color']
+    ):not([type='file']):not([type='hidden']):not([type='button']):not(
+      [type='submit']
+    ):not([type='reset']):not([type='image']),
+  select,
+  textarea {
+    font-size: max(16px, var(--input-font-size, 1rem)) !important;
+  }
+}
+
 /* Apple / SwiftUI 交互动效与触控实用类 */
 .touch-snappy {
   transition:

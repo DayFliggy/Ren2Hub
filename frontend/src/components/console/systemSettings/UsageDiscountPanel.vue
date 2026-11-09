@@ -610,9 +610,10 @@ onMounted(load)
   gap: 1.5rem;
   margin-top: 1rem;
 }
-.discount-rate-field input {
+.discount-rate-field.admin-field input {
+  --input-font-size: 1.25rem;
   min-height: 3rem;
-  font-size: 1.25rem;
+  font-size: var(--input-font-size);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }

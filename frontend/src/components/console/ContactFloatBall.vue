@@ -258,7 +258,9 @@ const options = computed<ContactOption[]>(() => [
   /* Keep the dashboard's recent-call rows readable on narrow screens. The
      control remains available at the end of the page instead of covering data. */
   .contact-float-ball {
-    position: static;
+    position: relative;
+    right: auto;
+    bottom: auto;
     margin: 1rem 0 0 auto;
   }
   .contact-float-spacer {
