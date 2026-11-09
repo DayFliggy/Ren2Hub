@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onClickOutside } from '@vueuse/core'
 import { computed, onBeforeUnmount, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -17,6 +18,7 @@ const model = defineModel<string[]>({ default: () => [] })
 
 const keyword = ref('')
 const open = ref(false)
+const root = ref<HTMLElement | null>(null)
 const inputId = useId()
 let blurTimer: number | undefined
 
@@ -38,6 +40,16 @@ function remove(option: string) {
   model.value = model.value.filter((o) => o !== option)
 }
 
+function close() {
+  if (blurTimer) window.clearTimeout(blurTimer)
+  blurTimer = undefined
+  open.value = false
+}
+
+// Touch scrolling or tapping elsewhere may not blur the input, so outside taps
+// close the panel directly; blur still covers keyboard Tab navigation.
+onClickOutside(root, close)
+
 function onBlur() {
   if (blurTimer) window.clearTimeout(blurTimer)
   blurTimer = window.setTimeout(() => {
@@ -58,7 +70,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="root" class="relative">
     <div class="pencil-control" data-handdrawn="control">
       <input
         :id="inputId"
@@ -69,6 +81,7 @@ onBeforeUnmount(() => {
         :placeholder="placeholder"
         class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
         @focus="onFocus"
+        @click="onFocus"
         @blur="onBlur"
       />
     </div>

@@ -2,15 +2,9 @@
 
 范围是 Ren2Hub 前端在 ≤767px（Tailwind `md` 断点以下）的交互、组件、样式与视觉回归覆盖，判定基准是 `frontend/docs/THEMES.md`。问题清单最初按 Ren2Hub `05c631c2b` 源码核对，路径相对 `frontend/`；保留的行号是历史定位，不代表当前代码行号。2026-10-13 已复核本轮 Vue 工具链迁移涉及的布局、字体与动画，其他待办仍需按具体页面复现，不能视为本轮全部重验。条目修复并验证后从本页删除。
 
-此前已补共享弹窗、命令面板、渠道模型输入、工单回复的组合按键保护，以及活动倒计时恢复可见时立即校时。自动化合成事件不等同于 iOS/Android 物理输入法实测，ChipPicker 的 blur 与选词时序仍保留待验。
+此前已补共享弹窗、命令面板、渠道模型输入、工单回复的组合按键保护，以及活动倒计时恢复可见时立即校时。自动化合成事件不等同于 iOS/Android 物理输入法实测，ChipPicker 已改为外部点击关闭、blur 只处理键盘离开，物理输入法下的 blur 与选词时序仍保留待验。
 
 本轮修复手机导航在字体加载前按后备字宽居中、字体就绪后当前项再次被截断的问题。自动居中继续走同一入口；字体就绪后仅在组件仍挂载且当前页未发生实际横向滚动时重新定位；点击或键盘选页不会阻断校正，切换页面重新允许校正，选页后的实际横移保留用户位置。保留桌面隐藏后重新显现合同。所有 Tailwind 断点恢复为原像素宽度，浏览器默认字号 16/20px 时与 CSS/JavaScript 布局切换一致；`responsive-breakpoints.spec.ts` 和 `navigation-fonts.spec.ts` 分别保护这些交互。Tailwind 4 迁移按旧生产外观恢复首页容器、嵌套文字行高和动画变换覆盖；`style-compatibility.spec.ts` 覆盖 390/1440、明暗、普通/减少动画，开发服务与压缩生产产物分别验证。生产构建检查不能由开发模式通过替代，Chromium 结果也不能代替移动真机。
-
-## 功能不可用
-
-| 位置                                                  | 问题                                                                                           | 移动端后果                                                                       | 修法                                                                                                   |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `src/components/common/ChipPicker.vue:41-47,61,76-79` | 选项已改 `@pointerdown.prevent`，但关闭仍靠 `@blur` 后 150ms 定时器，全文件无 `onClickOutside` | 滑动页面或点其他区域而输入框未失焦时面板残留；IME 场景下的 blur 时序仍需真机确认 | 关闭逻辑换 `onClickOutside(root, close)`（参照 `FilterSelect.vue:180`），保留 blur 仅处理键盘 Tab 离开 |
 
 ## 共享层
 
@@ -82,7 +76,7 @@
 
 ## 建议顺序
 
-1. 共享层收口：统一 `useBodyScrollLock()`；`FilterSelect` 等五个浮层接 Teleport 与视口夹取，`ChipPicker` 同时换 `onClickOutside`；在 `tokens.css` 落 z-index 分层表；`ConsoleModal` 补安全区与键盘高度处理。
+1. 共享层收口：统一 `useBodyScrollLock()`；`FilterSelect` 等五个浮层接 Teleport 与视口夹取；在 `tokens.css` 落 z-index 分层表；`ConsoleModal` 补安全区与键盘高度处理。
 2. 触控目标：抽出 44px 命中区共享类，按共享层表格逐项替换（`FilterSelect`、`ChannelMobileList`、`TokenRoutingView`、`DateRangePicker`、`TablePagination` 等）。
 3. DataTable 方案：先接 `useTableScrollFade` 与常显滚动条（低成本），再决定是否做 `card` 模式；`TicketsView` 随方案补移动形态。
 4. 首页：`touch-action` 改回 `pan-y` 并重设进入手势；Canvas 补 DPR 分档、`pageshow` 恢复与 `visualViewport` 监听。
