@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
 import { completeOAuth, oauthProviders } from '@/api/oauth'
 import AffiliateAttributionField from '@/components/auth/AffiliateAttributionField.vue'
+import LegalConsent from '@/components/auth/LegalConsent.vue'
 import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
 import TurnstileWidget from '@/components/auth/TurnstileWidget.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -15,6 +16,7 @@ import AuthLayout from '@/components/layout/AuthLayout.vue'
 import { authApi } from '@/api/auth'
 import { ApiError } from '@/api/types'
 import { sanitizeRedirect } from '@/router'
+import { useLegalConsent } from '@/composables/useLegalConsent'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -31,6 +33,11 @@ const route = useRoute()
 const toast = useToast()
 const app = useAppStore()
 const auth = useAuthStore()
+const {
+  agreed: legalAgreed,
+  blocked: legalBlocked,
+  ensureAgreed: ensureLegalAgreed,
+} = useLegalConsent()
 
 // Switching between sign-up and sign-in keeps the protected destination.
 const redirectQuery = computed(() => {
@@ -136,7 +143,7 @@ function validate(): boolean {
 }
 
 async function submit() {
-  if (busy.value || !validate()) return
+  if (busy.value || !validate() || !ensureLegalAgreed()) return
   loading.value = true
   const selectedAffiliateCode = affiliateConfirmed.value
     ? affiliateCode.value.trim()
@@ -179,7 +186,7 @@ async function submit() {
 }
 
 async function signUpWithOAuth(provider: string) {
-  if (busy.value) return
+  if (busy.value || !ensureLegalAgreed()) return
   loading.value = true
   if (affiliateConfirmed.value && affiliateCode.value.trim())
     storeAffiliateAttribution(affiliateCode.value)
@@ -333,6 +340,7 @@ onMounted(() => app.initialize())
         :disabled="busy"
         @changed="errors.affiliate = ''"
       />
+      <LegalConsent v-model="legalAgreed" :disabled="busy" />
       <TurnstileWidget
         v-if="app.turnstileEnabled"
         ref="turnstileWidget"
@@ -346,7 +354,7 @@ onMounted(() => app.initialize())
         size="lg"
         block
         :loading="loading"
-        :disabled="verificationSending || !turnstileSatisfied"
+        :disabled="verificationSending || !turnstileSatisfied || legalBlocked"
       >
         {{ t('auth.continue') }}
       </ConsoleButton>
@@ -381,13 +389,20 @@ onMounted(() => app.initialize())
       {{ t('auth.noRegistrationMethods') }}
     </p>
 
+    <!-- Without a password form, consent sits above the OAuth providers. -->
+    <LegalConsent
+      v-if="!app.passwordRegisterEnabled && providers.length"
+      v-model="legalAgreed"
+      class="mt-4"
+      :disabled="busy"
+    />
     <div v-if="providers.length" class="mt-4 sibling-space-y-2">
       <ConsoleButton
         v-for="provider in providers"
         :key="provider.slug"
         block
         variant="secondary"
-        :disabled="busy"
+        :disabled="busy || legalBlocked"
         :loading="loading"
         @click="signUpWithOAuth(provider.slug)"
         >{{

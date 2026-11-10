@@ -204,3 +204,87 @@ describe('SignInView passkey second factor', () => {
     wrapper.unmount()
   })
 })
+
+describe('SignInView legal consent', () => {
+  function mountWithStatus(status: Record<string, unknown>) {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    app.status = status
+    vi.spyOn(app, 'initialize').mockResolvedValue()
+    const login = vi.spyOn(useAuthStore(), 'login').mockResolvedValue(null)
+    return { wrapper: mountSignIn(pinia), login }
+  }
+  async function fillCredentials(wrapper: ReturnType<typeof mountSignIn>) {
+    const [username, password] = wrapper.findAll('input')
+    await username!.setValue('demo')
+    await password!.setValue('password')
+  }
+
+  it('does not ask for consent when no legal document is published', async () => {
+    const { wrapper, login } = mountWithStatus({})
+    expect(wrapper.find('[data-legal-consent]').exists()).toBe(false)
+    await fillCredentials(wrapper)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(login).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('blocks password sign-in until the published terms are accepted', async () => {
+    const { wrapper, login } = mountWithStatus({
+      user_agreement_enabled: true,
+      privacy_policy_enabled: true,
+    })
+    const consent = wrapper.get('[data-legal-consent]')
+    expect(consent.text()).toBe('我已阅读并同意用户协议和隐私政策')
+    const links = consent
+      .findAll('a')
+      .map((link) => JSON.parse(link.attributes('data-to')!))
+    expect(links).toEqual([
+      { name: 'user-agreement' },
+      { name: 'privacy-policy' },
+    ])
+
+    await fillCredentials(wrapper)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(login).not.toHaveBeenCalled()
+
+    await consent.get('input[type="checkbox"]').setValue(true)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(login).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('disables passkey and OAuth sign-in until consent, with only the published link', async () => {
+    const post = vi.spyOn(api, 'post')
+    const { wrapper } = mountWithStatus({
+      privacy_policy_enabled: true,
+      github_oauth: true,
+      frontend_capabilities: { passkey: 'live' },
+    })
+    const consent = wrapper.get('[data-legal-consent]')
+    expect(consent.findAll('a')).toHaveLength(1)
+    expect(consent.text()).toBe('我已阅读并同意隐私政策')
+    const methodButtons = () =>
+      wrapper
+        .findAll('button')
+        .filter((button) =>
+          ['使用 Passkey 登录', '使用 GitHub 登录'].includes(button.text())
+        )
+    expect(methodButtons()).toHaveLength(2)
+    for (const button of methodButtons())
+      expect(button.attributes('disabled')).toBeDefined()
+    await methodButtons()[0]!.trigger('click')
+    await flushPromises()
+    expect(post).not.toHaveBeenCalled()
+
+    await consent.get('input[type="checkbox"]').setValue(true)
+    for (const button of methodButtons())
+      expect(button.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+})

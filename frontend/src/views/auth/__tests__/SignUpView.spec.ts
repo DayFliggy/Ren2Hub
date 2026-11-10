@@ -476,3 +476,74 @@ describe('SignUpView email verification', () => {
     wrapper.unmount()
   })
 })
+
+describe('SignUpView legal consent', () => {
+  beforeEach(async () => {
+    vi.resetAllMocks()
+    localStorage.clear()
+    route.query.aff = ''
+    await loadMessageDomain('auth')
+    await setLocale('zh-CN')
+  })
+
+  function mountWithStatus(status: Record<string, unknown>) {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const app = useAppStore()
+    app.phase = 'ready'
+    app.status = status
+    return mount(SignUpView, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          AuthLayout: { template: '<div><slot /></div>' },
+          PasswordStrengthMeter: true,
+          RouterLink: true,
+        },
+      },
+    })
+  }
+
+  it('registers only after the published user agreement is accepted', async () => {
+    register.mockResolvedValue(undefined)
+    const wrapper = mountWithStatus({ user_agreement_enabled: true })
+    await flushPromises()
+    await wrapper.find('input[autocomplete="username"]').setValue('demo')
+    for (const input of wrapper.findAll('input[autocomplete="new-password"]'))
+      await input.setValue('password-123')
+    const submit = wrapper.get('button[type="submit"]')
+    expect(submit.attributes('disabled')).toBeDefined()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(register).not.toHaveBeenCalled()
+
+    await wrapper
+      .get('[data-legal-consent] input[type="checkbox"]')
+      .setValue(true)
+    expect(submit.attributes('disabled')).toBeUndefined()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(register).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('asks for consent above OAuth providers when password registration is off', async () => {
+    const wrapper = mountWithStatus({
+      password_register_enabled: false,
+      github_oauth: true,
+      privacy_policy_enabled: true,
+    })
+    await flushPromises()
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.findAll('[data-legal-consent]')).toHaveLength(1)
+    const github = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '使用 GitHub 继续')!
+    expect(github.attributes('disabled')).toBeDefined()
+    await wrapper
+      .get('[data-legal-consent] input[type="checkbox"]')
+      .setValue(true)
+    expect(github.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+})

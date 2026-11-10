@@ -2,6 +2,12 @@ import { securityMessages } from '../../security'
 export default {
   security: securityMessages['zh-CN'],
   auth: {
+    legalConsentBoth: '我已阅读并同意{agreement}和{privacy}',
+    legalConsentAgreement: '我已阅读并同意{agreement}',
+    legalConsentPrivacy: '我已阅读并同意{privacy}',
+    userAgreement: '用户协议',
+    privacyPolicy: '隐私政策',
+    legalConsentRequired: '请先阅读并勾选同意相关协议',
     inviteAttributionHint:
       '仅在本次登录创建新账号时使用。继续前可修改或清除邀请码。',
     confirmInviteCode: '确认使用此邀请码',

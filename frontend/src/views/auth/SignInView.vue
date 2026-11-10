@@ -10,12 +10,14 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
 import AffiliateAttributionField from '@/components/auth/AffiliateAttributionField.vue'
+import LegalConsent from '@/components/auth/LegalConsent.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import TurnstileWidget from '@/components/auth/TurnstileWidget.vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useLegalConsent } from '@/composables/useLegalConsent'
 import { useToast } from '@/composables/useToast'
 import { ApiError } from '@/api/types'
 import { sanitizeRedirect } from '@/router'
@@ -33,6 +35,11 @@ const route = useRoute()
 const auth = useAuthStore()
 const app = useAppStore()
 const toast = useToast()
+const {
+  agreed: legalAgreed,
+  blocked: legalBlocked,
+  ensureAgreed: ensureLegalAgreed,
+} = useLegalConsent()
 
 const challengeMethods = ref<TwoFactorChallenge['methods']>([])
 const rpID = ref('')
@@ -119,6 +126,7 @@ async function submit() {
     } else {
       if (!validateCredentials()) return
       await app.initialize()
+      if (!ensureLegalAgreed()) return
       if (!turnstileReady()) return
       const submittedTurnstileToken = turnstileToken.value
       if (app.turnstileEnabled) {
@@ -161,10 +169,11 @@ async function finishAlternateLogin(value: unknown) {
   await enterDestination()
 }
 async function signInPasskey() {
-  if (loading.value) return
+  // A second-factor passkey continues a sign-in that already had consent.
+  const verifying = Boolean(twoFactorFlowToken.value)
+  if (loading.value || (!verifying && !ensureLegalAgreed())) return
   loading.value = true
   try {
-    const verifying = Boolean(twoFactorFlowToken.value)
     // Second-factor verification continues the password login flow
     // (controller/login_verification.go); primary sign-in is discoverable.
     const prefix = verifying
@@ -197,7 +206,7 @@ async function signInPasskey() {
   }
 }
 async function signInOAuth(provider: string) {
-  if (loading.value) return
+  if (loading.value || !ensureLegalAgreed()) return
   loading.value = true
   if (affiliateConfirmed.value && affiliateCode.value.trim())
     storeAffiliateAttribution(affiliateCode.value)
@@ -324,6 +333,12 @@ async function signInOAuth(provider: string) {
         </RouterLink>
       </div>
 
+      <LegalConsent
+        v-if="!twoFactorFlowToken"
+        v-model="legalAgreed"
+        :disabled="loading"
+      />
+
       <TurnstileWidget
         v-if="app.turnstileEnabled && !twoFactorFlowToken"
         ref="turnstileWidget"
@@ -361,6 +376,14 @@ async function signInOAuth(provider: string) {
       </button>
     </form>
 
+    <!-- Without a password form, consent sits above the remaining methods. -->
+    <LegalConsent
+      v-if="!passwordEnabled && !twoFactorFlowToken"
+      v-model="legalAgreed"
+      class="mt-8"
+      :disabled="loading"
+    />
+
     <AffiliateAttributionField
       v-if="!twoFactorFlowToken && providers.length"
       v-model="affiliateCode"
@@ -395,7 +418,7 @@ async function signInOAuth(provider: string) {
         "
         block
         variant="secondary"
-        :disabled="loading"
+        :disabled="loading || (!twoFactorFlowToken && legalBlocked)"
         @click="signInPasskey"
         >{{ t('security.signInPasskey') }}</ConsoleButton
       >
@@ -405,7 +428,7 @@ async function signInOAuth(provider: string) {
           :key="provider.slug"
           block
           variant="secondary"
-          :disabled="loading"
+          :disabled="loading || legalBlocked"
           @click="signInOAuth(provider.slug)"
           >{{
             t('security.signInProvider', { provider: provider.name })
