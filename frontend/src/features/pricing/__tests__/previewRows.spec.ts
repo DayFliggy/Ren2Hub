@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/types'
 import { isPricingConflict } from '../errors'
-import { pricingPreviewRows } from '../previewRows'
+import { changedPreviewRows, pricingPreviewRows } from '../previewRows'
 
 const values = (rows: ReturnType<typeof pricingPreviewRows>) =>
   rows.map((row) => [row.key, row.value])
@@ -96,5 +96,44 @@ describe('pricing save conflicts', () => {
     ).toBe(false)
     expect(isPricingConflict(new ApiError('bad', { status: 400 }))).toBe(false)
     expect(isPricingConflict(new Error('changed'))).toBe(false)
+  })
+})
+
+describe('changed price lines', () => {
+  const lines = (rows: ReturnType<typeof changedPreviewRows>) =>
+    rows.map((row) => [row.key, row.before, row.after])
+
+  it('lists only the displayed prices that change, old next to new', () => {
+    expect(
+      lines(
+        changedPreviewRows(
+          { ModelRatio: 1.5, CompletionRatio: 4 },
+          { ModelRatio: '1.5', CompletionRatio: '5', CacheRatio: '0.1' }
+        )
+      )
+    ).toEqual([
+      ['output', '$12.000', '$15.000'],
+      ['cache', '', '$0.300'],
+    ])
+  })
+
+  it('compares plugin prices by plugin and reports removed lines', () => {
+    expect(
+      lines(
+        changedPreviewRows(
+          {
+            ModelPrice: 1,
+            'billing_setting.plugin_billing_expr': { a: 'u("seconds")' },
+          },
+          {
+            ModelPrice: 1,
+            'billing_setting.plugin_billing_expr': { b: 'u("seconds") * 2' },
+          }
+        )
+      )
+    ).toEqual([
+      ['plugin:b', '', 'u("seconds") * 2'],
+      ['plugin:a', 'u("seconds")', ''],
+    ])
   })
 })

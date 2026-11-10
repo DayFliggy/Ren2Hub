@@ -1,4 +1,9 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import {
+  flushPromises,
+  mount,
+  type DOMWrapper,
+  type VueWrapper,
+} from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -168,10 +173,28 @@ async function setup(
   await flushPromises()
   return wrapper
 }
-function button(wrapper: VueWrapper, text: string) {
+function button(wrapper: VueWrapper | DOMWrapper<Element>, text: string) {
   const found = wrapper.findAll('button').find((item) => item.text() === text)
   if (!found) throw new Error(`Missing button: ${text}`)
   return found
+}
+function reviewDialog(wrapper: VueWrapper) {
+  return wrapper
+    .findAllComponents(ConfirmDialog)
+    .find((dialog) => dialog.props('title') === 'Confirm price changes')
+}
+// Every model price save opens the change review first; this confirms it.
+async function confirmSave(wrapper: VueWrapper) {
+  await flushPromises()
+  const dialog = reviewDialog(wrapper)
+  if (!dialog) throw new Error('Missing price change review')
+  await button(dialog, 'Confirm and save').trigger('click')
+  await flushPromises()
+}
+// Saves from the page header and confirms the listed changes.
+async function saveAndConfirm(wrapper: VueWrapper) {
+  await button(wrapper, 'Save model prices').trigger('click')
+  await confirmSave(wrapper)
 }
 function field(wrapper: VueWrapper, scope: string, name: string) {
   const found = wrapper.findAll(`${scope} label`).find((item) => {
@@ -444,8 +467,7 @@ describe('pricing workspace draft lifecycle', () => {
       const editor = wrapper.getComponent(ModelPricingEditor)
       expect(editor.props('pricing')).toEqual({ ModelPrice: 3 })
       editor.vm.$emit('update', 'model-a', { ModelPrice: 7 })
-      await button(wrapper, 'Save model prices').trigger('click')
-      await flushPromises()
+      await saveAndConfirm(wrapper)
       expect(mocks.save).toHaveBeenCalledWith([
         {
           model_name: 'model-a',
@@ -496,6 +518,10 @@ describe('pricing workspace draft lifecycle', () => {
     ])
     const wrapper = await setup()
     const notices = wrapper.get('[data-pricing-issues]')
+    // Two providers of model-a count as one model needing attention.
+    expect(notices.get('summary').text()).toBe(
+      'Task model prices need attention: 2 models'
+    )
     expect(notices.text()).toContain('First (first): No price set')
     expect(notices.text()).toContain('Second (second): The price uses usage')
     expect(notices.text()).toContain(
@@ -591,8 +617,7 @@ describe('pricing workspace draft lifecycle', () => {
     )
     const wrapper = await setup()
     await button(wrapper, 'Delete').trigger('click')
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(mocks.save).toHaveBeenCalledWith([
       { model_name: 'model-a', expected_version: 'v1', pricing: {} },
     ])
@@ -624,7 +649,7 @@ describe('pricing workspace draft lifecycle', () => {
     await button(wrapper, 'Delete').trigger('click')
     expect(wrapper.text()).toContain('Unsaved prices')
     await saves()[0]!.trigger('click')
-    await flushPromises()
+    await confirmSave(wrapper)
     expect(mocks.save).toHaveBeenCalledWith([
       { model_name: 'model-a', expected_version: 'v1', pricing: {} },
     ])
@@ -663,8 +688,7 @@ describe('pricing workspace draft lifecycle', () => {
     await field(wrapper, '.price-rule', 'Multiplier').setValue('2')
     expect(wrapper.text()).toContain('Unsaved prices')
     // The page header save is the first of the two save buttons.
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(mocks.save).toHaveBeenCalledWith([
       expect.objectContaining({
         model_name: 'model-a',
@@ -703,8 +727,7 @@ describe('pricing workspace draft lifecycle', () => {
     const wrapper = await setup()
     await button(wrapper, 'Delete').trigger('click')
     mocks.load.mockRejectedValueOnce(new Error('network down'))
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(mocks.save).toHaveBeenCalledTimes(1)
     const alert = wrapper.get('[role="alert"]').text()
     expect(alert).toContain('Prices saved, but refreshing failed')
@@ -731,16 +754,14 @@ describe('pricing workspace draft lifecycle', () => {
         status: 409,
       })
     )
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(wrapper.get('[role="alert"]').text()).toContain(
       'Prices changed on the server'
     )
     mocks.save.mockRejectedValueOnce(
       new ApiError('invalid billing expression', { status: 400 })
     )
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     const alert = wrapper.get('[role="alert"]').text()
     expect(alert).toContain('Saving failed; your draft is preserved.')
     expect(alert).toContain('invalid billing expression')
@@ -774,8 +795,7 @@ describe('pricing workspace draft lifecycle', () => {
           resolveRefresh = resolve
         })
     )
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     const refreshSignal = mocks.load.mock.calls.at(-1)?.[0] as AbortSignal
     expect(refreshSignal).toBeInstanceOf(AbortSignal)
     wrapper.unmount()
@@ -839,8 +859,7 @@ describe('pricing workspace draft lifecycle', () => {
     expect(
       (wrapper.get('.price-tier-line input').element as HTMLInputElement).value
     ).toBe('3')
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(mocks.save).toHaveBeenCalledWith([
       expect.objectContaining({
         pricing: tiered('tier("base", p * 3 + c * 4)'),
@@ -880,8 +899,7 @@ describe('pricing workspace draft lifecycle', () => {
     expect(
       (wrapper.get('.price-tier-line input').element as HTMLInputElement).value
     ).toBe('5')
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(mocks.save).toHaveBeenCalledWith([
       expect.objectContaining({
         pricing: tiered('tier("base", p * 5 + c * 4)'),
@@ -949,8 +967,7 @@ describe('pricing workspace draft lifecycle', () => {
     await button(wrapper, 'model-a').trigger('click')
     await wrapper.get('input[aria-label="Select model-b"]').setValue(true)
     await button(wrapper, 'Copy current model pricing').trigger('click')
-    await button(wrapper, 'Save model prices').trigger('click')
-    await flushPromises()
+    await saveAndConfirm(wrapper)
     expect(mocks.save).toHaveBeenCalledWith([
       expect.objectContaining({
         model_name: 'model-b',
@@ -1025,6 +1042,233 @@ describe('pricing workspace draft lifecycle', () => {
     await flushPromises()
     expect(mocks.saveOptions).toHaveBeenCalledWith({ ExposeRatioEnabled: true })
     expect((toggle.element as HTMLInputElement).checked).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('pricing issue guidance', () => {
+  it.each([
+    [
+      'unconfigured',
+      'No price set',
+      'Choose this plugin under Plugin pricing above, set a price for this model, then save.',
+    ],
+    [
+      'incompatible',
+      'The price uses usage the plugin no longer provides',
+      'Choose this plugin under Plugin pricing above, rewrite its price with the fields listed under Task usage, then save.',
+    ],
+    [
+      'stale',
+      'The plugin no longer offers this model',
+      'Choose this plugin under Plugin pricing above, clear its expression, then save.',
+    ],
+  ])(
+    'tells how to resolve a %s plugin price in the opened editor',
+    async (reason, label, step) => {
+      mocks.issues.mockResolvedValue([
+        {
+          model_name: 'task-model',
+          plugin_key: 'provider',
+          plugin_name: 'Task provider',
+          reason,
+        },
+        {
+          model_name: 'other-model',
+          plugin_key: 'other',
+          plugin_name: 'Other provider',
+          reason: 'unconfigured',
+        },
+      ])
+      const wrapper = await setup(false, false)
+      expect(wrapper.get('[data-pricing-issues] summary').text()).toBe(
+        'Task model prices need attention: 2 models'
+      )
+      await button(wrapper, 'task-model').trigger('click')
+      await flushPromises()
+      const guide = wrapper.get(
+        '.pricing-editor [role="note"][aria-label="Pricing changes needed"]'
+      )
+      expect(guide.text()).toContain(`Task provider: ${label}`)
+      expect(guide.text()).toContain(step)
+      // Only the opened model's issues are explained.
+      expect(guide.text()).not.toContain('Other provider')
+      wrapper.unmount()
+    }
+  )
+
+  it('shows no guidance for a model without pricing issues', async () => {
+    mocks.issues.mockResolvedValue(pluginIssues(['task-model']))
+    const wrapper = await setup(false, false, '/models/pricing?model=model-a')
+    expect(wrapper.find('.pricing-editor [role="note"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('price change review', () => {
+  const rowOf = (wrapper: VueWrapper, name: string) => {
+    const row = wrapper
+      .findAll('tbody tr')
+      .find((item) => item.find('.pricing-model-name').text() === name)
+    if (!row) throw new Error(`Missing row: ${name}`)
+    return row
+  }
+
+  it('keeps a deleted saved price listed as a pending deletion until undone', async () => {
+    const wrapper = await setup()
+    await button(wrapper, 'Delete').trigger('click')
+    const row = rowOf(wrapper, 'model-a')
+    expect(row.get('[data-model-change]').attributes('data-model-change')).toBe(
+      'deleted'
+    )
+    expect(row.find('.pricing-struck').exists()).toBe(true)
+    expect(row.text()).toContain('Pending deletion')
+    expect(row.text()).toContain(
+      'Unpriced after saving; requests will be rejected'
+    )
+    // The struck price stays readable; a pending deletion is not editable.
+    expect(row.get('.pricing-summary').text()).toBe('$1.000 / request')
+    expect(row.find('button.pricing-model-name').exists()).toBe(false)
+    expect(wrapper.text()).toContain('1 model changed')
+
+    await button(row, 'Undo').trigger('click')
+    const restored = rowOf(wrapper, 'model-a')
+    expect(restored.find('[data-model-change]').exists()).toBe(false)
+    expect(button(restored, 'Delete').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Unsaved prices')
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    expect(reviewDialog(wrapper)).toBeUndefined()
+    expect(mocks.save).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('offers Undo instead of Delete on a model that was never saved', async () => {
+    const wrapper = await setup()
+    await button(wrapper, 'Add model').trigger('click')
+    wrapper
+      .getComponent(ModelPricingEditor)
+      .vm.$emit('update', 'new-model', { ModelPrice: '2' })
+    await flushPromises()
+    const row = rowOf(wrapper, 'new-model')
+    expect(row.text()).toContain('Added')
+    expect(row.findAll('button').map((item) => item.text())).toEqual([
+      'new-model',
+      'Undo',
+    ])
+    await button(row, 'Undo').trigger('click')
+    expect(
+      wrapper.findAll('.pricing-model-name').map((item) => item.text())
+    ).toEqual(['model-a'])
+    wrapper.unmount()
+  })
+
+  it('shows the old and new price on a modified row', async () => {
+    const wrapper = await setup(false, true, '/models/pricing?model=model-a')
+    wrapper
+      .getComponent(ModelPricingEditor)
+      .vm.$emit('update', 'model-a', { ModelPrice: '2.5' })
+    await flushPromises()
+    const row = rowOf(wrapper, 'model-a')
+    expect(row.text()).toContain('Changed')
+    expect(row.get('.pricing-change').text()).toBe(
+      'Fixed price $1.000 → $2.500 / request'
+    )
+    wrapper.unmount()
+  })
+
+  it('lists every change before saving and saves nothing when cancelled', async () => {
+    mocks.load.mockResolvedValue(config(1, ['model-a', 'model-b']))
+    const wrapper = await setup(false, true, '/models/pricing?model=model-b')
+    await button(rowOf(wrapper, 'model-a'), 'Delete').trigger('click')
+    wrapper
+      .getComponent(ModelPricingEditor)
+      .vm.$emit('update', 'model-b', { ModelPrice: '3' })
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+
+    const dialog = reviewDialog(wrapper)!
+    expect(dialog.props('open')).toBe(true)
+    expect(dialog.props('message')).toBe(
+      'New prices apply to requests as soon as you save. 2 models change.'
+    )
+    const items = dialog.findAll('[data-pricing-review] > li')
+    expect(items.map((item) => item.attributes('data-model-change'))).toEqual([
+      'deleted',
+      'modified',
+    ])
+    expect(items[0]!.text()).toContain('model-a')
+    expect(items[0]!.text()).toContain(
+      'Unpriced after saving; requests will be rejected'
+    )
+    // The removed price is shown as the current side of the comparison.
+    expect(items[0]!.find('[data-price-change="removed"]').text()).toContain(
+      'ModelPrice'
+    )
+    const modified = items[1]!.findAll('[data-price-change="changed"] dd')
+    expect(modified.map((item) => item.text())).toEqual(['1', '3'])
+    expect(mocks.save).not.toHaveBeenCalled()
+
+    await button(dialog, 'Cancel').trigger('click')
+    await flushPromises()
+    expect(reviewDialog(wrapper)).toBeUndefined()
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Unsaved prices')
+    expect(rowOf(wrapper, 'model-a').text()).toContain('Pending deletion')
+    wrapper.unmount()
+  })
+
+  it('saves the confirmed changes exactly once', async () => {
+    let resolveSave!: () => void
+    mocks.save.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveSave = resolve
+      })
+    )
+    mocks.load.mockResolvedValue(config(1, ['model-a', 'model-b']))
+    const wrapper = await setup(false, true, '/models/pricing?model=model-b')
+    await button(rowOf(wrapper, 'model-a'), 'Delete').trigger('click')
+    wrapper
+      .getComponent(ModelPricingEditor)
+      .vm.$emit('update', 'model-b', { ModelPrice: '3' })
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    const confirm = () => button(reviewDialog(wrapper)!, 'Confirm and save')
+    await confirm().trigger('click')
+    // The review stays open and busy while the request is in flight.
+    expect(confirm().element.matches(':disabled')).toBe(true)
+    await confirm().trigger('click')
+    resolveSave()
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledTimes(1)
+    expect(mocks.save).toHaveBeenCalledWith([
+      { model_name: 'model-a', expected_version: 'v1', pricing: {} },
+      {
+        model_name: 'model-b',
+        expected_version: 'v1',
+        pricing: { ModelPrice: '3' },
+      },
+    ])
+    expect(reviewDialog(wrapper)).toBeUndefined()
+    expect(wrapper.text()).toContain('Model prices saved')
+    wrapper.unmount()
+  })
+
+  it('names a new model in the review as unpriced before saving', async () => {
+    mocks.load.mockResolvedValue(config(1, []))
+    mocks.get.mockResolvedValue([])
+    const wrapper = await setup()
+    await button(wrapper, 'Add model').trigger('click')
+    wrapper
+      .getComponent(ModelPricingEditor)
+      .vm.$emit('update', 'new-model', { ModelPrice: '2' })
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    const item = reviewDialog(wrapper)!.get('[data-pricing-review] > li')
+    expect(item.attributes('data-model-change')).toBe('added')
+    expect(item.text()).toContain('Current price')
+    expect(item.text()).toContain('Unpriced')
+    expect(item.find('[data-price-change="added"] dd').text()).toBe('2')
     wrapper.unmount()
   })
 })

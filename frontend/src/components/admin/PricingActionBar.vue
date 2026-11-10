@@ -22,6 +22,13 @@ const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
       />
       {{ t('dirty') }}
     </span>
+    <span
+      v-if="state.dirty && state.changeCount"
+      class="rounded-full border border-[var(--status-warning)] px-2 py-0.5 text-xs font-medium tabular-nums text-[var(--status-warning-text)]"
+      data-pricing-change-count
+    >
+      {{ t('changeCount', { count: state.changeCount }, state.changeCount) }}
+    </span>
     <ConsoleButton
       variant="ghost"
       size="sm"

@@ -10,6 +10,7 @@ import {
   pricingConfigApi,
   type PricingValues,
   type ModelPricingEntry,
+  type ModelPricingIssue,
   type PricingPreview,
 } from '@/api/pricingConfig'
 import {
@@ -43,6 +44,8 @@ const props = withDefaults(
     saving?: boolean
     siteCurrency?: string
     exchangeRate?: string
+    /** Pricing issues of this model, each with the steps that resolve it. */
+    issues?: ModelPricingIssue[]
   }>(),
   {
     entry: undefined,
@@ -50,6 +53,7 @@ const props = withDefaults(
     saving: false,
     siteCurrency: 'USD',
     exchangeRate: '1',
+    issues: () => [],
   }
 )
 const emit = defineEmits<{
@@ -473,6 +477,30 @@ defineExpose({ commit, dirty })
           </option>
         </select></label
       >
+      <div
+        v-if="issues.length"
+        role="note"
+        :aria-label="t('issueGuideTitle')"
+        class="pricing-issue-guide"
+      >
+        <h3>{{ t('issueGuideTitle') }}</h3>
+        <ul>
+          <li
+            v-for="issue in issues"
+            :key="`${issue.plugin_key}:${issue.reason}`"
+          >
+            <p class="font-medium">
+              {{
+                t('issueGuideReason', {
+                  name: issue.plugin_name || issue.plugin_key,
+                  reason: t(`pricingIssue_${issue.reason}`),
+                })
+              }}
+            </p>
+            <p>{{ t(`issueGuide_${issue.reason}`) }}</p>
+          </li>
+        </ul>
+      </div>
       <label v-if="!plugin" class="admin-field"
         ><span>{{ t('currency') }}</span
         ><select v-model="currency">
@@ -812,6 +840,21 @@ h3 {
   margin: 0;
   font-size: 0.8125rem;
   color: var(--text-secondary);
+}
+.pricing-issue-guide {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--status-warning);
+  border-radius: 0.5rem;
+  background: var(--status-warning-soft);
+  color: var(--status-warning-text);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.pricing-issue-guide ul {
+  display: grid;
+  gap: 0.5rem;
 }
 .pricing-preview {
   padding: 1rem;

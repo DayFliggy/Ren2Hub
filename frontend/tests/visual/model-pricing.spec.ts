@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
 import {
   mockPriceFetch,
@@ -12,6 +12,16 @@ import type {
 } from '../../src/api/pricingConfig'
 
 test.setTimeout(90_000)
+
+// Every model price save lists its changes for confirmation first.
+async function confirmPriceChanges(page: Page) {
+  const review = page.getByRole('dialog', { name: 'Confirm price changes' })
+  await expect(review).toBeVisible()
+  await review
+    .getByRole('button', { name: 'Confirm and save', exact: true })
+    .click()
+  await expect(review).toHaveCount(0)
+}
 
 async function expectInside(part: Locator, container: Locator) {
   await expect(part).toBeVisible()
@@ -183,6 +193,7 @@ for (const theme of ['light', 'dark'] as const)
       // scrolling back after editing the lower sections.
       if (width >= 768) await expect(editorSave).toBeInViewport()
       await editorSave.click()
+      await confirmPriceChanges(page)
       await expect(
         page.getByText('Model prices saved', { exact: true })
       ).toBeVisible()
@@ -351,14 +362,15 @@ for (const theme of ['light', 'dark'] as const)
       await expect(
         page.getByText('1 models filled. Save to apply.')
       ).toBeVisible()
-      // Name, mode, price summary and Delete stay inside the list card at
+      // Name, mode, price summary and Undo stay inside the list card at
       // desktop and phone widths; the table never needs a hidden h-scroll.
+      // A filled model has no saved price, so it offers Undo, not Delete.
       const list = page.locator('.pricing-models')
       const row = list.locator('tbody tr').filter({ hasText: 'test-model' })
       await expect(row.getByText('Expression', { exact: true })).toBeVisible()
       for (const part of [
-        row.locator('.pricing-summary'),
-        row.getByRole('button', { name: 'Delete', exact: true }),
+        row.locator('.pricing-summary').first(),
+        row.getByRole('button', { name: 'Undo', exact: true }),
       ])
         await expectInside(part, list)
       await page
@@ -384,6 +396,7 @@ for (const theme of ['light', 'dark'] as const)
       await editor
         .getByRole('button', { name: 'Save model prices', exact: true })
         .click()
+      await confirmPriceChanges(page)
       await expect(
         page.getByText('Model prices saved', { exact: true })
       ).toBeVisible()
@@ -477,6 +490,7 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
   await editor
     .getByRole('button', { name: 'Save model prices', exact: true })
     .click()
+  await confirmPriceChanges(page)
   await expect(page.getByRole('alert').first()).toContainText(
     'Model changed by another administrator'
   )
@@ -608,6 +622,7 @@ for (const theme of ['light', 'dark'] as const)
       await editor
         .getByRole('button', { name: 'Save model prices', exact: true })
         .click()
+      await confirmPriceChanges(page)
       await expect(
         page.getByText('Model prices saved', { exact: true })
       ).toBeVisible()

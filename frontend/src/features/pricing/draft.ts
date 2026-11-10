@@ -78,11 +78,7 @@ export function pricingChanges(
     (model_name) => {
       const previous = baseline.get(model_name)
       const pricing = draft[model_name] ?? {}
-      if (
-        priceFingerprint(previous?.configured ?? {}) ===
-        priceFingerprint(pricing)
-      )
-        return []
+      if (!pricingChangeKind(previous?.configured ?? {}, pricing)) return []
       return [
         {
           model_name,
@@ -92,6 +88,18 @@ export function pricingChanges(
       ]
     }
   )
+}
+export type PricingChangeKind = 'added' | 'modified' | 'deleted'
+/** What saving does to one model. An empty draft removes its saved price;
+    the comparison is the one pricingChanges uses. */
+export function pricingChangeKind(
+  saved: PricingValues,
+  draft: PricingValues
+): PricingChangeKind | null {
+  if (priceFingerprint(saved) === priceFingerprint(draft)) return null
+  if (!Object.keys(draft).length) return 'deleted'
+  if (!Object.keys(saved).length) return 'added'
+  return 'modified'
 }
 export function fillPriceDraft(
   draft: PricingDraft,

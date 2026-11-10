@@ -8,20 +8,29 @@ import {
   pricingConfigApi,
   type PricingValues,
   type FetchedModelPrice,
+  type ModelPricingChange,
   type ModelPricingEntry,
 } from '@/api/pricingConfig'
+import { pricingDiff } from '@/features/pricing/diff'
 import {
   pricingChanges,
+  pricingChangeKind,
   pricingMode,
   pricingJSON,
   parsePricingJSON,
   fillPriceDraft,
   clonePricing,
   hasBasePrice,
+  initialPricingDraft,
   validatePricing,
+  type PricingChangeKind,
 } from '@/features/pricing/draft'
 import { translateError } from '@/features/pricing/errors'
-import { pricingPreviewRows } from '@/features/pricing/previewRows'
+import {
+  changedPreviewRows,
+  pricingPreviewRows,
+  type PreviewChange,
+} from '@/features/pricing/previewRows'
 import { useModelPricingConfig } from '@/features/pricing/useModelPricingConfig'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { useSystemSettings } from '@/composables/useSystemSettings'
@@ -39,6 +48,7 @@ import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ModelPricingEditor from '@/components/admin/ModelPricingEditor.vue'
+import PriceDiffCell from '@/components/admin/PriceDiffCell.vue'
 import PricingExposeToggle from '@/components/admin/PricingExposeToggle.vue'
 import PricingJsonEditor from '@/components/admin/PricingJsonEditor.vue'
 import PricingToolsPanel from '@/components/admin/PricingToolsPanel.vue'
@@ -97,6 +107,8 @@ const json = ref(pricingJSON({})),
   fetchOpen = ref(false),
   clearOpen = ref(false),
   reloadOpen = ref(false)
+// The changes a save writes, listed for confirmation before they are sent.
+const review = ref<ModelPricingChange[] | null>(null)
 const toolsDirty = ref(false)
 // The ?model= deep link opens its editor after the first load only; later
 // reloads keep the editor the user chose.
@@ -140,6 +152,30 @@ async function loadActiveEntry() {
 }
 watch([activeName, baseline], loadActiveEntry)
 const activePricing = computed(() => draft.value[activeName.value] ?? {})
+const activeIssues = computed(() =>
+  issues.value.filter((issue) => issue.model_name === activeName.value)
+)
+const issueModelCount = computed(
+  () => new Set(issues.value.map((issue) => issue.model_name)).size
+)
+// After a save whose refresh failed, nothing is pending until a reload.
+const changeCount = computed(() =>
+  reloadRequired.value ? 0 : changes.value.length
+)
+// The saved prices every draft change is compared with. After a save whose
+// refresh failed, the server already holds the draft.
+const saved = computed(() =>
+  baseline.value && !reloadRequired.value
+    ? initialPricingDraft(baseline.value)
+    : draft.value
+)
+// A pending deletion still lists its saved price, struck through.
+function shownPricing(name: string): PricingValues {
+  const pending = draft.value[name]
+  return pending && Object.keys(pending).length
+    ? pending
+    : (saved.value[name] ?? {})
+}
 const siteCurrency = computed(() =>
   String(settings.rawValue('general_setting.custom_currency_symbol', 'USD'))
 )
@@ -157,19 +193,25 @@ const dirty = computed(() => {
       JSON.stringify(json.value) !== JSON.stringify(pricingJSON(draft.value)))
   )
 })
+const changeKind = (name: string) =>
+  pricingChangeKind(saved.value[name] ?? {}, draft.value[name] ?? {})
 const rows = computed(() => {
   const names =
     tab.value === 'unset'
       ? enabledModels.value.filter(
-          // Built-in audio ratios alone do not price a model.
-          (name) => !hasBasePrice(draft.value[name] ?? {})
+          // Built-in audio ratios alone do not price a model. A pending
+          // deletion is listed under the priced models, with its undo.
+          (name) =>
+            !hasBasePrice(draft.value[name] ?? {}) &&
+            changeKind(name) !== 'deleted'
         )
-      : Object.keys(draft.value)
+      : // A deleted saved price stays listed, with undo, until saving.
+        [...new Set([...Object.keys(saved.value), ...Object.keys(draft.value)])]
   return names
     .filter(
       (name) =>
         name.toLowerCase().includes(search.value.toLowerCase()) &&
-        (!filter.value || pricingMode(draft.value[name] ?? {}) === filter.value)
+        (!filter.value || pricingMode(shownPricing(name)) === filter.value)
     )
     .sort()
 })
@@ -199,6 +241,7 @@ const barState = computed<PricingBarState>(() => ({
   settingsSaving: settings.saving.value,
   ready: ready.value,
   tab: tab.value,
+  changeCount: changeCount.value,
   reload,
   beginFetch,
   save,
@@ -218,25 +261,58 @@ const columns = computed<TableColumn[]>(() => [
 ])
 
 const tableRows = computed(() =>
-  pageRows.value.map((name) => ({
-    name,
-    mode: pricingMode(draft.value[name] ?? {}),
-    summary: summary(draft.value[name] ?? {}),
-  }))
+  pageRows.value.map((name) => {
+    const before = saved.value[name] ?? {},
+      after = draft.value[name] ?? {},
+      pricing = shownPricing(name)
+    const change = changeKind(name)
+    return {
+      name,
+      change,
+      saved: Object.keys(before).length > 0,
+      priced: Object.keys(pricing).length > 0,
+      mode: pricingMode(pricing),
+      summary: summary(pricing),
+      changes:
+        change === 'modified'
+          ? changedPreviewRows(before, after).map(changeLine)
+          : [],
+    }
+  })
 )
+const reviewRows = computed(() =>
+  (review.value ?? []).map((item) => {
+    const before = saved.value[item.model_name] ?? {}
+    return {
+      name: item.model_name,
+      change: pricingChangeKind(before, item.pricing),
+      fields: pricingDiff(before, item.pricing),
+    }
+  })
+)
+const CHANGE_CHIPS: Record<
+  PricingChangeKind,
+  { label: string; tone: 'warning' | 'danger' }
+> = {
+  // The warning tone matches the header's unsaved marker.
+  added: { label: 'diffadded', tone: 'warning' },
+  modified: { label: 'diffchanged', tone: 'warning' },
+  // Ren2Hub has no built-in price to fall back to: the model is unpriced.
+  deleted: { label: 'pendingDelete', tone: 'danger' },
+}
 
 function modeTone(
   mode: string,
-  name: string
+  priced: boolean
 ): 'accent' | 'neutral' | 'warning' {
-  if (!Object.keys(draft.value[name] ?? {}).length) return 'neutral'
+  if (!priced) return 'neutral'
   if (mode === 'tiered_expr') return 'accent'
   if (mode === 'per-request') return 'warning'
   return 'neutral'
 }
 
-function modeLabel(mode: string, name: string): string {
-  if (!Object.keys(draft.value[name] ?? {}).length) return t('unpriced')
+function modeLabel(mode: string, priced: boolean): string {
+  if (!priced) return t('unpriced')
   if (mode === 'tiered_expr') return t('expression')
   if (mode === 'per-request') return t('perCall')
   return t('perToken')
@@ -252,6 +328,17 @@ function summary(value: PricingValues) {
   const first = pricingPreviewRows(value)[0]
   if (!first) return t('unpriced')
   return first.unit === 'none' ? first.value : `${first.value} ${t(first.unit)}`
+}
+// One changed price line of a modified row: label old → new, the unit after
+// the last price that is set.
+function changeLine(change: PreviewChange): { key: string; text: string } {
+  const label = change.translateLabel ? t(change.label) : change.label
+  const unit = change.unit === 'none' ? '' : ` ${t(change.unit)}`
+  const before = change.before
+    ? change.before + (change.after ? '' : unit)
+    : t('diffUnset')
+  const after = change.after ? change.after + unit : t('diffUnset')
+  return { key: change.key, text: `${label} ${before} → ${after}` }
 }
 // Editor, JSON and revision state follow every newly loaded baseline.
 function resetDrafts() {
@@ -334,7 +421,7 @@ function switchMode() {
     error.value = translateError(cause, t, te)
   }
 }
-async function save() {
+function save() {
   if (!baseline.value || !ready.value || loading.value || saving.value) return
   error.value = ''
   message.value = ''
@@ -355,7 +442,14 @@ async function save() {
     json.value = pricingJSON(draft.value)
     return
   }
+  review.value = pending
+}
+// Sends exactly the changes the administrator confirmed.
+async function confirmSave() {
+  const pending = review.value
+  if (!pending || saving.value) return
   const result = await saveConfig(pending)
+  review.value = null
   if (result.status === 'aborted') return
   if (result.status === 'saved') {
     resetDrafts()
@@ -371,6 +465,7 @@ async function save() {
   editorDirty.value = false
   error.value = `${t('savedReloadFailed')} ${reason}`
 }
+// Deleting a saved price leaves a pending deletion; an unsaved model is gone.
 function remove(name: string) {
   const next = { ...draft.value }
   delete next[name]
@@ -380,6 +475,16 @@ function remove(name: string) {
     editing.value = null
     editorDirty.value = false
   }
+}
+// Puts a model back to its saved price; a model never saved leaves the draft.
+function undo(name: string) {
+  const price = saved.value[name]
+  if (!price) return remove(name)
+  draft.value = { ...draft.value, [name]: clonePricing(price) }
+  if (editing.value !== name) return
+  // An open editor shows the restored price.
+  editorDirty.value = false
+  revision.value++
 }
 function clear() {
   draft.value = {}
@@ -477,6 +582,7 @@ onBeforeUnmount(() => {
         :saving="saving"
         :site-currency="siteCurrency"
         :exchange-rate="exchangeRate"
+        :issues="activeIssues"
         @update="updateDraft"
         @dirty="editorDirty = $event"
         @save="save"
@@ -517,7 +623,7 @@ onBeforeUnmount(() => {
         data-pricing-issues
       >
         <summary class="cursor-pointer font-medium">
-          {{ t('pricingIssues') }}
+          {{ t('pricingIssues', { count: issueModelCount }, issueModelCount) }}
         </summary>
         <p class="mt-2">{{ t('pricingIssuesHint') }}</p>
         <ul class="mt-2 sibling-space-y-2">
@@ -655,35 +761,92 @@ onBeforeUnmount(() => {
                 @update:selected="selected = $event as string[]"
               >
                 <template #cell-name="{ row }">
-                  <div class="grid min-w-0 gap-1.5">
-                    <button
-                      type="button"
-                      class="pricing-model-name font-mono"
-                      @click="open(row.name as string)"
+                  <div
+                    class="grid min-w-0 gap-1.5"
+                    :data-model-change="row.change ?? undefined"
+                  >
+                    <div class="flex min-w-0 flex-wrap items-center gap-2">
+                      <!-- A pending deletion has no draft to edit; it offers undo. -->
+                      <span
+                        v-if="row.change === 'deleted'"
+                        class="pricing-model-name pricing-struck font-mono"
+                        >{{ row.name }}</span
+                      >
+                      <button
+                        v-else
+                        type="button"
+                        class="pricing-model-name font-mono"
+                        @click="open(row.name)"
+                      >
+                        {{ row.name }}
+                      </button>
+                      <StatusChip
+                        v-if="row.change"
+                        class="shrink-0"
+                        :tone="CHANGE_CHIPS[row.change].tone"
+                      >
+                        {{ t(CHANGE_CHIPS[row.change].label) }}
+                      </StatusChip>
+                    </div>
+                    <div
+                      class="flex min-w-0 items-center gap-2"
+                      :class="{ 'pricing-struck': row.change === 'deleted' }"
                     >
-                      {{ row.name }}
-                    </button>
-                    <div class="flex min-w-0 items-center gap-2">
                       <StatusChip
                         class="shrink-0"
-                        :tone="modeTone(row.mode as string, row.name as string)"
+                        :tone="modeTone(row.mode, row.priced)"
                       >
-                        {{ modeLabel(row.mode as string, row.name as string) }}
+                        {{ modeLabel(row.mode, row.priced) }}
                       </StatusChip>
                       <span
                         class="pricing-summary min-w-0 font-mono"
-                        :title="row.summary as string"
+                        :title="row.summary"
                       >
                         {{ row.summary }}
                       </span>
                     </div>
+                    <ul v-if="row.changes.length" class="grid gap-0.5">
+                      <li
+                        v-for="line in row.changes.slice(0, 2)"
+                        :key="line.key"
+                        class="pricing-summary pricing-change font-mono"
+                        :title="line.text"
+                      >
+                        {{ line.text }}
+                      </li>
+                      <li
+                        v-if="row.changes.length > 2"
+                        class="pricing-summary pricing-change"
+                      >
+                        {{
+                          t('moreChanges', { count: row.changes.length - 2 })
+                        }}
+                      </li>
+                    </ul>
+                    <p
+                      v-if="row.change === 'deleted'"
+                      class="text-xs text-[var(--status-danger-text)]"
+                    >
+                      {{ t('deleteResult') }}
+                    </p>
                   </div>
                 </template>
                 <template #cell-actions="{ row }">
+                  <!-- Only a saved price can be deleted, as in NewAPI not from
+                       the unpriced list; undo drops a model never saved. -->
                   <ConsoleButton
+                    v-if="row.change === 'deleted' || row.change === 'added'"
                     variant="ghost"
                     size="sm"
-                    @click="remove(row.name as string)"
+                    @click="undo(row.name)"
+                  >
+                    {{ t('undo') }}
+                  </ConsoleButton>
+                  <ConsoleButton
+                    v-else-if="row.saved && tab !== 'unset'"
+                    variant="ghost"
+                    size="sm"
+                    @click="remove(row.name)"
                   >
                     {{ t('remove') }}
                   </ConsoleButton>
@@ -755,6 +918,57 @@ onBeforeUnmount(() => {
       @fill="fill"
     />
 
+    <!-- Mounted on demand so it stacks above an open editor drawer. -->
+    <ConfirmDialog
+      v-if="review"
+      :open="true"
+      :title="t('reviewTitle')"
+      :message="
+        t('reviewHint', { count: reviewRows.length }, reviewRows.length)
+      "
+      :confirm-text="t('confirmSave')"
+      :cancel-text="t('cancel')"
+      :loading="saving"
+      @confirm="confirmSave"
+      @cancel="review = null"
+    >
+      <ul class="pricing-review" data-pricing-review>
+        <li
+          v-for="item in reviewRows"
+          :key="item.name"
+          :data-model-change="item.change ?? undefined"
+        >
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <span class="pricing-review-name font-mono">{{ item.name }}</span>
+            <StatusChip
+              v-if="item.change"
+              class="shrink-0"
+              :tone="CHANGE_CHIPS[item.change].tone"
+            >
+              {{ t(CHANGE_CHIPS[item.change].label) }}
+            </StatusChip>
+          </div>
+          <div>
+            <p class="pricing-review-label">{{ t('currentPrice') }}</p>
+            <p v-if="item.change === 'added'" class="pricing-review-empty">
+              {{ t('unpriced') }}
+            </p>
+            <PriceDiffCell v-else :fields="item.fields" side="current" />
+          </div>
+          <div>
+            <p class="pricing-review-label">{{ t('afterSave') }}</p>
+            <p
+              v-if="item.change === 'deleted'"
+              class="text-xs font-medium text-[var(--status-danger-text)]"
+            >
+              {{ t('deleteResult') }}
+            </p>
+            <PriceDiffCell v-else :fields="item.fields" side="candidate" />
+          </div>
+        </li>
+      </ul>
+    </ConfirmDialog>
+
     <ConfirmDialog
       :open="clearOpen"
       :title="t('clear')"
@@ -811,16 +1025,18 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   padding: 0;
+}
+button.pricing-model-name {
   cursor: pointer;
 }
-.pricing-model-name:hover {
+button.pricing-model-name:hover {
   /* --accent on the light surface is 2.4:1; the text variant meets 4.5:1. */
   color: var(--accent-text);
   text-decoration: underline;
 }
 /* Matches ConsoleButton: 44px touch targets below the sm breakpoint. */
 @media (max-width: 639px) {
-  .pricing-model-name {
+  button.pricing-model-name {
     min-height: 2.75rem;
   }
 }
@@ -830,6 +1046,51 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+.pricing-struck {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+.pricing-change {
+  color: var(--text-primary);
+}
+.pricing-review {
+  display: grid;
+  width: 100%;
+  margin-top: 1rem;
+  text-align: start;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+}
+.pricing-review > li {
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
+  padding: 0.75rem;
+}
+.pricing-review > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.pricing-review :deep(.price-diff) {
+  min-width: 0;
+  max-width: none;
+}
+.pricing-review-name {
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.pricing-review-label {
+  margin-bottom: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.pricing-review-empty {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text-tertiary);
 }
 .pricing-editor-container {
   min-width: 0;

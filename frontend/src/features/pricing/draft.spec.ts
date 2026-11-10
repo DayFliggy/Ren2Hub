@@ -4,6 +4,7 @@ import {
   fillPriceDraft,
   initialPricingDraft,
   pricingChanges,
+  pricingChangeKind,
   pricingJSON,
   parsePricingJSON,
   tokenPrices,
@@ -143,6 +144,16 @@ describe('model pricing draft contracts', () => {
         model: { ModelRatio: '1.5', CompletionRatio: '2' },
       })
     ).toHaveLength(1)
+  })
+  // An empty draft is how a save removes a saved price; Ren2Hub then has no
+  // price at all for the model.
+  it('names what saving does to each model', () => {
+    const saved = { ModelRatio: 1 }
+    expect(pricingChangeKind(saved, { ModelRatio: '1.0' })).toBeNull()
+    expect(pricingChangeKind(saved, {})).toBe('deleted')
+    expect(pricingChangeKind({}, { ModelPrice: '0' })).toBe('added')
+    expect(pricingChangeKind(saved, { ModelRatio: '2' })).toBe('modified')
+    expect(pricingChangeKind({}, {})).toBeNull()
   })
   it('distinguishes empty expressions from explicit free pricing', () => {
     expect(() =>

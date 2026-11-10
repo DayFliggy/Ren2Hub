@@ -8,9 +8,12 @@ export interface PricingBarState {
   settingsSaving: boolean
   ready: boolean
   tab: string
+  /** Models whose saved price the next save changes. */
+  changeCount: number
   reload: () => void
   beginFetch: () => void
-  save: () => Promise<void>
+  /** Opens the change review; saving waits for its confirmation. */
+  save: () => void
 }
 
 /**

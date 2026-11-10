@@ -1,10 +1,17 @@
 const zh = {
-  pricingIssues: '任务模型价格需要处理',
+  pricingIssues: '{count} 个任务模型的价格需要处理',
   pricingIssuesHint:
     '以下插件无法按已保存的价格计费。请检查模型价格；此提示不会自动填入价格。',
   pricingIssue_unconfigured: '未设置价格',
   pricingIssue_incompatible: '价格引用了插件不再提供的用量字段',
   pricingIssue_stale: '插件不再提供此模型',
+  issueGuideTitle: '需要修改的内容',
+  issueGuideReason: '{name}：{reason}',
+  issueGuide_unconfigured:
+    '在上方“插件定价”中选择该插件，为此模型填写价格后保存。',
+  issueGuide_incompatible:
+    '在上方“插件定价”中选择该插件，按“任务用量”列出的当前字段重新编写价格后保存。',
+  issueGuide_stale: '在上方“插件定价”中选择该插件，清空它的表达式后保存。',
   title: '模型定价',
   models: '模型',
   unset: '未定价模型',
@@ -34,6 +41,16 @@ const zh = {
   select: '选择模型以编辑定价',
   selected: '已选择 {count} 个模型',
   dirty: '有未保存的价格',
+  changeCount: '{count} 个模型有变更',
+  pendingDelete: '待删除',
+  deleteResult: '保存后变为未定价，请求将被拒绝',
+  undo: '撤销',
+  moreChanges: '另有 {count} 项',
+  reviewTitle: '确认价格变更',
+  reviewHint: '保存后新价格立即用于计费，共 {count} 个模型有变更。',
+  confirmSave: '确认保存',
+  currentPrice: '当前价格',
+  afterSave: '保存后价格',
   unsaved: '离开后将丢失未保存的价格草稿。',
   discard: '放弃草稿',
   cancel: '取消',
@@ -290,13 +307,22 @@ const zh = {
 }
 const en: Record<keyof typeof zh, string> = {
   ...zh,
-  pricingIssues: 'Task model prices need attention',
+  pricingIssues:
+    'Task model prices need attention: {count} model | Task model prices need attention: {count} models',
   pricingIssuesHint:
     'These plugins cannot charge using the saved prices. Review the model prices; this notice does not fill prices automatically.',
   pricingIssue_unconfigured: 'No price set',
   pricingIssue_incompatible:
     'The price uses usage the plugin no longer provides',
   pricingIssue_stale: 'The plugin no longer offers this model',
+  issueGuideTitle: 'Pricing changes needed',
+  issueGuideReason: '{name}: {reason}',
+  issueGuide_unconfigured:
+    'Choose this plugin under Plugin pricing above, set a price for this model, then save.',
+  issueGuide_incompatible:
+    'Choose this plugin under Plugin pricing above, rewrite its price with the fields listed under Task usage, then save.',
+  issueGuide_stale:
+    'Choose this plugin under Plugin pricing above, clear its expression, then save.',
   title: 'Model pricing',
   models: 'Models',
   unset: 'Unpriced models',
@@ -326,6 +352,17 @@ const en: Record<keyof typeof zh, string> = {
   select: 'Select a model to edit pricing',
   selected: '{count} models selected',
   dirty: 'Unsaved prices',
+  changeCount: '{count} model changed | {count} models changed',
+  pendingDelete: 'Pending deletion',
+  deleteResult: 'Unpriced after saving; requests will be rejected',
+  undo: 'Undo',
+  moreChanges: '+{count} more',
+  reviewTitle: 'Confirm price changes',
+  reviewHint:
+    'New prices apply to requests as soon as you save. {count} model changes. | New prices apply to requests as soon as you save. {count} models change.',
+  confirmSave: 'Confirm and save',
+  currentPrice: 'Current price',
+  afterSave: 'Price after saving',
   unsaved: 'Leaving will discard unsaved price drafts.',
   discard: 'Discard drafts',
   cancel: 'Cancel',

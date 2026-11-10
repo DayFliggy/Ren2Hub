@@ -130,3 +130,45 @@ export function pricingPreviewRows(
     ...adjustmentRows(details),
   ]
 }
+
+// The preview leaves out plugin prices, so each plugin expression is a line.
+function priceLines(values: PricingValues): PreviewRow[] {
+  const plugins = Object.entries(
+    values['billing_setting.plugin_billing_expr'] ?? {}
+  )
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([plugin, expression]) => ({
+      key: `plugin:${plugin}`,
+      label: plugin,
+      value: expression,
+      unit: 'none' as const,
+      translateLabel: false,
+    }))
+  return [...pricingPreviewRows(values), ...plugins]
+}
+
+export interface PreviewChange extends PreviewRow {
+  /** Empty when the line exists on one side only. */
+  before: string
+  after: string
+}
+/** Displayed price lines that differ, the lines of the new price first. */
+export function changedPreviewRows(
+  before: PricingValues,
+  after: PricingValues
+): PreviewChange[] {
+  const old = new Map(priceLines(before).map((line) => [line.key, line]))
+  const next = priceLines(after)
+  const changes = next
+    .filter((line) => old.get(line.key)?.value !== line.value)
+    .map((line) => ({
+      ...line,
+      before: old.get(line.key)?.value ?? '',
+      after: line.value,
+    }))
+  const kept = new Set(next.map((line) => line.key))
+  for (const line of old.values())
+    if (!kept.has(line.key))
+      changes.push({ ...line, before: line.value, after: '' })
+  return changes
+}
