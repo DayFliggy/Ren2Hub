@@ -98,16 +98,33 @@ for (const theme of ['light', 'dark'] as const)
       await expect(row('gpt-review-modified')).toContainText(
         'Input price $3.000 → $5.000 / 1M tokens'
       )
-      for (const name of ['gpt-review-added', 'gpt-review-removed'])
-        await expect(
-          row(name).getByRole('button', { name: 'Undo', exact: true })
-        ).toBeVisible()
+      // Every change can be undone; only saved prices not pending deletion
+      // can be deleted. Each action names its model for screen readers.
+      const actions = async (name: string) =>
+        (
+          await row(name)
+            .locator('td')
+            .last()
+            .getByRole('button')
+            .allTextContents()
+        ).map((text) => text.trim())
+      expect(await actions('gpt-review-added')).toEqual(['Undo'])
+      expect(await actions('gpt-review-modified')).toEqual(['Undo', 'Delete'])
+      expect(await actions('gpt-review-removed')).toEqual(['Undo'])
+      expect(await actions('gpt-review-unchanged')).toEqual(['Delete'])
       await expect(
-        row('gpt-review-unchanged').getByRole('button', {
-          name: 'Delete',
+        row('gpt-review-modified').getByRole('button', {
+          name: 'Undo the price change of gpt-review-modified',
           exact: true,
         })
       ).toBeVisible()
+      // The mode chip stays readable; only the name and price are struck.
+      await expect(removed.locator('.pricing-struck')).toHaveCount(2)
+      // A changed line wraps rather than hiding the new value.
+      const change = row('gpt-review-modified')
+        .locator('.pricing-change')
+        .first()
+      await expect(change).toHaveCSS('white-space', 'normal')
       await expect(page.locator('[data-pricing-change-count]')).toHaveText(
         '3 models changed'
       )
@@ -141,9 +158,17 @@ for (const theme of ['light', 'dark'] as const)
         'Unpriced'
       )
       await expect(review).not.toContainText('gpt-review-unchanged')
-      const dialogBox = (await review.boundingBox())!
+      const panel = review.locator('[data-handdrawn="modal"]')
+      const dialogBox = (await panel.boundingBox())!
       expect(dialogBox.x).toBeGreaterThanOrEqual(0)
       expect(dialogBox.x + dialogBox.width).toBeLessThanOrEqual(width)
+      // The review uses the wide dialog on desktop so prices sit side by side.
+      if (width >= 768) expect(dialogBox.width).toBeGreaterThan(600)
+      // The summary is read when the dialog opens.
+      const describedBy = await review.getAttribute('aria-describedby')
+      await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+        'New prices apply to requests as soon as you save. 3 models change.'
+      )
       if (shotsDir)
         await page.screenshot({
           path: `${shotsDir}/review-${theme}-${width}.png`,

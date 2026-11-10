@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleButton from './ConsoleButton.vue'
@@ -12,8 +13,16 @@ withDefaults(
     confirmText?: string
     cancelText?: string
     loading?: boolean
+    /** Wider dialogs list their content, such as the price change review. */
+    size?: 'sm' | 'lg'
   }>(),
-  { message: '', confirmText: '', cancelText: '', loading: false }
+  {
+    message: '',
+    confirmText: '',
+    cancelText: '',
+    loading: false,
+    size: 'sm',
+  }
 )
 
 const emit = defineEmits<{
@@ -22,13 +31,15 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const messageId = useId()
 </script>
 
 <template>
   <ConsoleModal
     :open="open"
     :aria-label="title"
-    size="sm"
+    :aria-describedby="message ? messageId : undefined"
+    :size="size"
     :close-disabled="loading"
     @close="emit('cancel')"
   >
@@ -44,6 +55,7 @@ const { t } = useI18n()
         "
       >
         <svg
+          aria-hidden="true"
           width="30"
           height="30"
           viewBox="0 0 24 24"
@@ -58,7 +70,11 @@ const { t } = useI18n()
       <h2 class="mt-4 text-xl font-bold text-[var(--text-primary)]">
         {{ title }}
       </h2>
-      <p v-if="message" class="mt-2 text-sm text-[var(--text-secondary)]">
+      <p
+        v-if="message"
+        :id="messageId"
+        class="mt-2 text-sm text-[var(--text-secondary)]"
+      >
         {{ message }}
       </p>
       <slot />

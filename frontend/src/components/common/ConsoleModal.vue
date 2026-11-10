@@ -16,6 +16,8 @@ const props = withDefaults(
     title?: string
     subtitle?: string
     ariaLabel?: string
+    /** Describes the dialog when its text is in the default slot. */
+    ariaDescribedby?: string
     size?: 'sm' | 'md' | 'lg' | 'xl' | 'nav'
     closeDisabled?: boolean
     presentation?: 'modal' | 'drawer'
@@ -27,6 +29,7 @@ const props = withDefaults(
     title: '',
     subtitle: '',
     ariaLabel: '',
+    ariaDescribedby: '',
     size: 'md',
     closeDisabled: false,
     presentation: 'modal',
@@ -153,7 +156,7 @@ onBeforeUnmount(() => {
         aria-modal="true"
         :aria-labelledby="title ? titleId : undefined"
         :aria-label="!title ? ariaLabel || undefined : undefined"
-        :aria-describedby="subtitle ? subtitleId : undefined"
+        :aria-describedby="subtitle ? subtitleId : ariaDescribedby || undefined"
       >
         <div
           class="absolute inset-0 backdrop-blur-[4px] sm:backdrop-blur-md"

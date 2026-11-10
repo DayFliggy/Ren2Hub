@@ -1086,9 +1086,10 @@ describe('pricing issue guidance', () => {
       )
       await button(wrapper, 'task-model').trigger('click')
       await flushPromises()
-      const guide = wrapper.get(
-        '.pricing-editor [role="note"][aria-label="Pricing changes needed"]'
-      )
+      const guide = wrapper.get('.pricing-editor [role="note"]')
+      // The note is named by its heading, read once by screen readers.
+      const heading = wrapper.get(`#${guide.attributes('aria-labelledby')}`)
+      expect(heading.text()).toBe('Pricing changes needed')
       expect(guide.text()).toContain(`Task provider: ${label}`)
       expect(guide.text()).toContain(step)
       // Only the opened model's issues are explained.
@@ -1174,6 +1175,37 @@ describe('price change review', () => {
     expect(row.get('.pricing-change').text()).toBe(
       'Fixed price $1.000 → $2.500 / request'
     )
+    wrapper.unmount()
+  })
+
+  it('undoes a modified price back to the saved price', async () => {
+    const wrapper = await setup(false, true, '/models/pricing?model=model-a')
+    const editor = wrapper.getComponent(ModelPricingEditor)
+    editor.vm.$emit('update', 'model-a', { ModelPrice: '2.5' })
+    await flushPromises()
+    const row = rowOf(wrapper, 'model-a')
+    // A modified saved price can be undone or deleted, each named for its model.
+    expect(button(row, 'Undo').attributes('aria-label')).toBe(
+      'Undo the price change of model-a'
+    )
+    expect(button(row, 'Delete').attributes('aria-label')).toBe(
+      'Delete the saved price of model-a'
+    )
+    const revision = editor.props('revision')
+    await button(row, 'Undo').trigger('click')
+    await flushPromises()
+    const restored = rowOf(wrapper, 'model-a')
+    expect(restored.find('[data-model-change]').exists()).toBe(false)
+    expect(restored.findAll('button').map((item) => item.text())).not.toContain(
+      'Undo'
+    )
+    // The open editor reloads the saved price instead of the discarded edit.
+    expect(editor.props('pricing')).toEqual({ ModelPrice: 1 })
+    expect(editor.props('revision')).not.toBe(revision)
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    expect(reviewDialog(wrapper)).toBeUndefined()
+    expect(mocks.save).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

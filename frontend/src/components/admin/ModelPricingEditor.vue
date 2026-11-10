@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './admin.css'
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -65,6 +65,7 @@ const { t, te, locale } = useI18n({
   useScope: 'local',
   messages: modelPricingMessages,
 })
+const issueGuideId = useId()
 // prices and fixed hold USD; the display currency only changes the inputs.
 const name = ref(''),
   mode = ref<PricingMode>('tiered_expr'),
@@ -480,10 +481,10 @@ defineExpose({ commit, dirty })
       <div
         v-if="issues.length"
         role="note"
-        :aria-label="t('issueGuideTitle')"
+        :aria-labelledby="issueGuideId"
         class="pricing-issue-guide"
       >
-        <h3>{{ t('issueGuideTitle') }}</h3>
+        <h3 :id="issueGuideId">{{ t('issueGuideTitle') }}</h3>
         <ul>
           <li
             v-for="issue in issues"
@@ -851,6 +852,9 @@ h3 {
   color: var(--status-warning-text);
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
+}
+.pricing-issue-guide h3 {
+  font-weight: 700;
 }
 .pricing-issue-guide ul {
   display: grid;

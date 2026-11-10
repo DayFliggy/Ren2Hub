@@ -22,8 +22,13 @@ const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
         <span v-if="field[side] === null" class="price-diff-absent">{{
           t('diffUnset')
         }}</span>
+        <!-- del/ins carry the removed and added text to assistive tech;
+             the strike and underline stay as the visual cue. -->
         <code v-else
-          ><span
+          ><component
+            :is="
+              segment.changed ? (side === 'current' ? 'del' : 'ins') : 'span'
+            "
             v-for="(segment, index) in field[side]"
             :key="index"
             :data-diff="
@@ -33,7 +38,7 @@ const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
                   : 'added'
                 : undefined
             "
-            >{{ segment.text }}</span
+            >{{ segment.text }}</component
           ><span v-if="!field[side]?.length">""</span></code
         >
       </dd>

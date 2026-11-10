@@ -788,10 +788,9 @@ onBeforeUnmount(() => {
                         {{ t(CHANGE_CHIPS[row.change].label) }}
                       </StatusChip>
                     </div>
-                    <div
-                      class="flex min-w-0 items-center gap-2"
-                      :class="{ 'pricing-struck': row.change === 'deleted' }"
-                    >
+                    <!-- As in NewAPI, only the name and the price are struck
+                         through; the mode chip stays readable. -->
+                    <div class="flex min-w-0 items-center gap-2">
                       <StatusChip
                         class="shrink-0"
                         :tone="modeTone(row.mode, row.priced)"
@@ -800,6 +799,7 @@ onBeforeUnmount(() => {
                       </StatusChip>
                       <span
                         class="pricing-summary min-w-0 font-mono"
+                        :class="{ 'pricing-struck': row.change === 'deleted' }"
                         :title="row.summary"
                       >
                         {{ row.summary }}
@@ -810,7 +810,6 @@ onBeforeUnmount(() => {
                         v-for="line in row.changes.slice(0, 2)"
                         :key="line.key"
                         class="pricing-summary pricing-change font-mono"
-                        :title="line.text"
                       >
                         {{ line.text }}
                       </li>
@@ -832,24 +831,31 @@ onBeforeUnmount(() => {
                   </div>
                 </template>
                 <template #cell-actions="{ row }">
-                  <!-- Only a saved price can be deleted, as in NewAPI not from
-                       the unpriced list; undo drops a model never saved. -->
-                  <ConsoleButton
-                    v-if="row.change === 'deleted' || row.change === 'added'"
-                    variant="ghost"
-                    size="sm"
-                    @click="undo(row.name)"
-                  >
-                    {{ t('undo') }}
-                  </ConsoleButton>
-                  <ConsoleButton
-                    v-else-if="row.saved && tab !== 'unset'"
-                    variant="ghost"
-                    size="sm"
-                    @click="remove(row.name)"
-                  >
-                    {{ t('remove') }}
-                  </ConsoleButton>
+                  <!-- Undo returns any change to the saved price; a model never
+                       saved leaves the draft. Only a saved price can be
+                       deleted, as in NewAPI not from the unpriced list. -->
+                  <div class="flex flex-wrap justify-end gap-1">
+                    <ConsoleButton
+                      v-if="row.change"
+                      variant="ghost"
+                      size="sm"
+                      :aria-label="t('undoFor', { name: row.name })"
+                      @click="undo(row.name)"
+                    >
+                      {{ t('undo') }}
+                    </ConsoleButton>
+                    <ConsoleButton
+                      v-if="
+                        row.saved && row.change !== 'deleted' && tab !== 'unset'
+                      "
+                      variant="ghost"
+                      size="sm"
+                      :aria-label="t('removeFor', { name: row.name })"
+                      @click="remove(row.name)"
+                    >
+                      {{ t('remove') }}
+                    </ConsoleButton>
+                  </div>
                 </template>
                 <template #footer>
                   <TablePagination
@@ -929,6 +935,7 @@ onBeforeUnmount(() => {
       :confirm-text="t('confirmSave')"
       :cancel-text="t('cancel')"
       :loading="saving"
+      size="lg"
       @confirm="confirmSave"
       @cancel="review = null"
     >
@@ -1051,7 +1058,12 @@ button.pricing-model-name:hover {
   text-decoration: line-through;
   color: var(--text-secondary);
 }
+/* A changed line wraps: truncation would hide the new value. */
 .pricing-change {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--text-primary);
 }
 .pricing-review {
@@ -1067,6 +1079,16 @@ button.pricing-model-name:hover {
   gap: 0.625rem;
   min-width: 0;
   padding: 0.75rem;
+}
+/* The wide dialog compares current and after-save prices side by side. */
+@media (min-width: 640px) {
+  .pricing-review > li {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.25rem;
+  }
+  .pricing-review > li > :first-child {
+    grid-column: 1 / -1;
+  }
 }
 .pricing-review > li + li {
   border-top: 1px solid var(--border-subtle);

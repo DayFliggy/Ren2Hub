@@ -370,7 +370,10 @@ for (const theme of ['light', 'dark'] as const)
       await expect(row.getByText('Expression', { exact: true })).toBeVisible()
       for (const part of [
         row.locator('.pricing-summary').first(),
-        row.getByRole('button', { name: 'Undo', exact: true }),
+        row.getByRole('button', {
+          name: 'Undo the price change of test-model',
+          exact: true,
+        }),
       ])
         await expectInside(part, list)
       await page
@@ -702,7 +705,12 @@ test('model pricing is a model management section that guards its draft', async 
   await expectModelsAdminCurrent()
   await assertNoHorizontalOverflow(page)
 
-  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await page
+    .getByRole('button', {
+      name: 'Delete the saved price of test-model',
+      exact: true,
+    })
+    .click()
   await expect(page.getByText('Unsaved prices', { exact: true })).toBeVisible()
   const modelsTab = page.getByRole('tab', { name: 'Models', exact: true })
   page.once('dialog', (dialog) => void dialog.dismiss())

@@ -45,6 +45,8 @@ const zh = {
   pendingDelete: '待删除',
   deleteResult: '保存后变为未定价，请求将被拒绝',
   undo: '撤销',
+  undoFor: '撤销 {name} 的价格变更',
+  removeFor: '删除 {name} 的已保存价格',
   moreChanges: '另有 {count} 项',
   reviewTitle: '确认价格变更',
   reviewHint: '保存后新价格立即用于计费，共 {count} 个模型有变更。',
@@ -154,8 +156,8 @@ const zh = {
   plugin: '插件定价',
   modelDefault: '模型级定价',
   inherited: '留空使用模型级表达式',
-  stale: '插件用量结构已变化，请核对表达式',
-  unavailable: '该插件与当前模型不兼容',
+  stale: '插件已不再提供这个模型，请清空它的表达式后保存',
+  unavailable: '当前价格用到了插件不再提供的用量字段，请按任务用量重新编写',
   sourceTitle: '自动获取模型价格',
   sourceHint:
     '选择一个价格源及模型，将候选价格填入当前草稿；保存模型价格后才生效。',
@@ -356,6 +358,8 @@ const en: Record<keyof typeof zh, string> = {
   pendingDelete: 'Pending deletion',
   deleteResult: 'Unpriced after saving; requests will be rejected',
   undo: 'Undo',
+  undoFor: 'Undo the price change of {name}',
+  removeFor: 'Delete the saved price of {name}',
   moreChanges: '+{count} more',
   reviewTitle: 'Confirm price changes',
   reviewHint:
@@ -475,8 +479,10 @@ const en: Record<keyof typeof zh, string> = {
   plugin: 'Plugin pricing',
   modelDefault: 'Model pricing',
   inherited: 'Empty uses the model expression',
-  stale: 'The plugin usage schema changed. Review the expression.',
-  unavailable: 'This plugin is incompatible with this model',
+  stale:
+    'The plugin no longer offers this model. Clear its expression, then save.',
+  unavailable:
+    'The price uses usage the plugin no longer provides. Rewrite it with the fields under Task usage.',
   sourceTitle: 'Fetch model prices',
   sourceHint:
     'Choose one source and a model range. Fill the draft, then save model prices to apply.',
