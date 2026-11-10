@@ -37,6 +37,8 @@ const {
   agreed: legalAgreed,
   blocked: legalBlocked,
   ensureAgreed: ensureLegalAgreed,
+  consentId: legalConsentId,
+  describedBy: legalDescribedBy,
 } = useLegalConsent()
 
 // Switching between sign-up and sign-in keeps the protected destination.
@@ -340,7 +342,11 @@ onMounted(() => app.initialize())
         :disabled="busy"
         @changed="errors.affiliate = ''"
       />
-      <LegalConsent v-model="legalAgreed" :disabled="busy" />
+      <LegalConsent
+        :id="legalConsentId"
+        v-model="legalAgreed"
+        :disabled="busy"
+      />
       <TurnstileWidget
         v-if="app.turnstileEnabled"
         ref="turnstileWidget"
@@ -355,6 +361,7 @@ onMounted(() => app.initialize())
         block
         :loading="loading"
         :disabled="verificationSending || !turnstileSatisfied || legalBlocked"
+        :aria-describedby="legalDescribedBy"
       >
         {{ t('auth.continue') }}
       </ConsoleButton>
@@ -392,6 +399,7 @@ onMounted(() => app.initialize())
     <!-- Without a password form, consent sits above the OAuth providers. -->
     <LegalConsent
       v-if="!app.passwordRegisterEnabled && providers.length"
+      :id="legalConsentId"
       v-model="legalAgreed"
       class="mt-4"
       :disabled="busy"
@@ -403,6 +411,7 @@ onMounted(() => app.initialize())
         block
         variant="secondary"
         :disabled="busy || legalBlocked"
+        :aria-describedby="legalDescribedBy"
         :loading="loading"
         @click="signUpWithOAuth(provider.slug)"
         >{{

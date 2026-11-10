@@ -39,6 +39,8 @@ const {
   agreed: legalAgreed,
   blocked: legalBlocked,
   ensureAgreed: ensureLegalAgreed,
+  consentId: legalConsentId,
+  describedBy: legalDescribedBy,
 } = useLegalConsent()
 
 const challengeMethods = ref<TwoFactorChallenge['methods']>([])
@@ -335,6 +337,7 @@ async function signInOAuth(provider: string) {
 
       <LegalConsent
         v-if="!twoFactorFlowToken"
+        :id="legalConsentId"
         v-model="legalAgreed"
         :disabled="loading"
       />
@@ -360,9 +363,10 @@ async function signInOAuth(provider: string) {
         :loading="loading"
         :disabled="
           !twoFactorFlowToken &&
-          app.turnstileEnabled &&
-          (!turnstileToken || turnstileUnavailable)
+          (legalBlocked ||
+            (app.turnstileEnabled && (!turnstileToken || turnstileUnavailable)))
         "
+        :aria-describedby="twoFactorFlowToken ? undefined : legalDescribedBy"
       >
         {{ twoFactorFlowToken ? t('auth.verifyTwoFactor') : t('auth.signIn') }}
       </ConsoleButton>
@@ -376,14 +380,6 @@ async function signInOAuth(provider: string) {
       </button>
     </form>
 
-    <!-- Without a password form, consent sits above the remaining methods. -->
-    <LegalConsent
-      v-if="!passwordEnabled && !twoFactorFlowToken"
-      v-model="legalAgreed"
-      class="mt-8"
-      :disabled="loading"
-    />
-
     <AffiliateAttributionField
       v-if="!twoFactorFlowToken && providers.length"
       v-model="affiliateCode"
@@ -391,6 +387,15 @@ async function signInOAuth(provider: string) {
       :error="affiliateError"
       :disabled="loading"
       @changed="affiliateError = ''"
+    />
+
+    <!-- Without a password form, consent sits directly above the methods. -->
+    <LegalConsent
+      v-if="!passwordEnabled && !twoFactorFlowToken"
+      :id="legalConsentId"
+      v-model="legalAgreed"
+      class="mt-4"
+      :disabled="loading"
     />
 
     <div class="mt-4 sibling-space-y-3">
@@ -419,6 +424,7 @@ async function signInOAuth(provider: string) {
         block
         variant="secondary"
         :disabled="loading || (!twoFactorFlowToken && legalBlocked)"
+        :aria-describedby="twoFactorFlowToken ? undefined : legalDescribedBy"
         @click="signInPasskey"
         >{{ t('security.signInPasskey') }}</ConsoleButton
       >
@@ -429,6 +435,7 @@ async function signInOAuth(provider: string) {
           block
           variant="secondary"
           :disabled="loading || legalBlocked"
+          :aria-describedby="legalDescribedBy"
           @click="signInOAuth(provider.slug)"
           >{{
             t('security.signInProvider', { provider: provider.name })

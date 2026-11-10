@@ -387,35 +387,43 @@ onMounted(loadStats)
     <template v-if="kind === 'channel-affinity'">
       <div
         v-if="affinityStats"
-        class="mt-4 rounded-xl border border-[var(--border-subtle)]"
+        class="mt-4 rounded-xl border border-[var(--border-default)]"
         data-affinity-rules
       >
         <div
-          class="border-b border-[var(--border-subtle)] px-3.5 py-2.5 text-xs font-medium text-[var(--text-secondary)]"
+          class="border-b border-[var(--border-default)] px-3.5 py-2.5 text-xs font-medium text-[var(--text-secondary)]"
         >
           {{ t('systemSettings.maintenance.ruleCaches') }}
         </div>
         <ul
           v-if="affinityRules.length"
-          class="divide-y divide-[var(--border-subtle)]"
+          class="divide-y divide-[var(--border-default)]"
         >
           <li
             v-for="[name, count] in affinityRules"
             :key="name"
             class="flex items-center justify-between gap-3 px-3.5 py-2"
           >
+            <!-- Touch screens have no hover title, so long names wrap there. -->
             <span
-              class="min-w-0 truncate font-mono text-xs text-[var(--text-primary)]"
+              class="min-w-0 break-all font-mono text-xs text-[var(--text-primary)] sm:truncate"
               :title="name"
             >
               {{ name }}
             </span>
             <span class="flex shrink-0 items-center gap-3">
-              <span class="font-mono text-xs text-[var(--text-secondary)]">{{
-                t('systemSettings.maintenance.ruleEntries', { count })
-              }}</span>
+              <span
+                class="font-mono text-xs tabular-nums text-[var(--text-secondary)]"
+                >{{
+                  t(
+                    'systemSettings.maintenance.ruleEntries',
+                    { count: count.toLocaleString() },
+                    count
+                  )
+                }}</span
+              >
               <ConsoleButton
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 :disabled="loading || loadingStats"
                 :aria-label="
@@ -428,7 +436,7 @@ onMounted(loadStats)
             </span>
           </li>
         </ul>
-        <p class="px-3.5 py-2.5 text-xs text-[var(--text-tertiary)]">
+        <p class="px-3.5 py-2.5 text-xs text-[var(--text-secondary)]">
           {{
             affinityRules.length
               ? t('systemSettings.maintenance.sharedRulesHint')
@@ -440,7 +448,7 @@ onMounted(loadStats)
         <ConsoleButton
           variant="secondary"
           size="sm"
-          :disabled="loading"
+          :disabled="loading || loadingStats"
           @click="pendingAction = 'clear-affinity'"
         >
           {{ t('systemSettings.maintenance.clearAffinityButton') }}

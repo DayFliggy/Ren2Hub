@@ -4,7 +4,7 @@ import { I18nT, useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 
 const agreed = defineModel<boolean>({ required: true })
-defineProps<{ disabled?: boolean }>()
+defineProps<{ disabled?: boolean; id?: string }>()
 const app = useAppStore()
 const { t } = useI18n()
 // One sentence per document combination keeps word order and spacing
@@ -16,13 +16,15 @@ const keypath = computed(() => {
     ? 'auth.legalConsentAgreement'
     : 'auth.legalConsentPrivacy'
 })
+// Underlined so the links do not rely on colour alone next to body text.
 const linkClass =
-  'rounded-sm font-medium text-[var(--accent-text)] hover:underline focus-ring'
+  'rounded-sm font-medium text-[var(--accent-text)] underline underline-offset-2 focus-ring'
 </script>
 
 <template>
   <label
     v-if="app.userAgreementEnabled || app.privacyPolicyEnabled"
+    :id="id"
     class="flex items-start gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-hover)] p-3 text-xs leading-5 text-[var(--text-secondary)]"
     data-legal-consent
   >

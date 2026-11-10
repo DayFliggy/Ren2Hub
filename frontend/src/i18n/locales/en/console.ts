@@ -3588,7 +3588,7 @@ export default {
       affinityHint:
         'Refreshing updates the counts. Clearing cache makes subsequent requests select channels again.',
       ruleCaches: 'Clear by rule',
-      ruleEntries: '{count} entries',
+      ruleEntries: '{count} entry | {count} entries',
       clearRuleButton: 'Clear cache',
       clearRuleFor: 'Clear cache for {name}',
       clearRule: 'Clear rule cache',

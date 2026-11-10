@@ -247,12 +247,17 @@ describe('SignInView legal consent', () => {
       { name: 'privacy-policy' },
     ])
 
+    const submit = wrapper.get('button[type="submit"]')
+    expect(submit.attributes('disabled')).toBeDefined()
+    expect(submit.attributes('aria-describedby')).toBe(consent.attributes('id'))
     await fillCredentials(wrapper)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(login).not.toHaveBeenCalled()
 
     await consent.get('input[type="checkbox"]').setValue(true)
+    expect(submit.attributes('disabled')).toBeUndefined()
+    expect(submit.attributes('aria-describedby')).toBeUndefined()
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(login).toHaveBeenCalledOnce()

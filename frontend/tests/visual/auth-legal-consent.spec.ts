@@ -62,6 +62,16 @@ for (const [screen, viewport] of Object.entries(viewports)) {
 
         const github = page.getByRole('button', { name: /GitHub/ })
         await expect(github).toBeDisabled()
+        const consentId = await consent.getAttribute('id')
+        expect(consentId).toBeTruthy()
+        await expect(github).toHaveAttribute('aria-describedby', consentId!)
+        // A link inside the label opens the document without toggling consent.
+        const popup = page.context().waitForEvent('page')
+        await consent.getByRole('link', { name: '隐私政策' }).click()
+        await (await popup).close()
+        await expect(
+          consent.locator('input[type="checkbox"]')
+        ).not.toBeChecked()
         await assertNoHorizontalOverflow(page)
         if (shotsDir) {
           mkdirSync(shotsDir, { recursive: true })
@@ -73,6 +83,7 @@ for (const [screen, viewport] of Object.entries(viewports)) {
 
         await consent.locator('input[type="checkbox"]').check()
         await expect(github).toBeEnabled()
+        await expect(github).not.toHaveAttribute('aria-describedby', /.+/)
         if (shotsDir && screen === 'mobile')
           await page.screenshot({
             path: `${shotsDir}/${screen}-${theme}-${path.slice(1)}-checked.png`,

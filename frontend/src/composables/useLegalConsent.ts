@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
@@ -10,6 +10,8 @@ export function useLegalConsent() {
   const { t } = useI18n()
   const toast = useToast()
   const agreed = ref(false)
+  // Gated buttons point here so assistive technology can say why they are off.
+  const consentId = useId()
   const required = computed(
     () => app.userAgreementEnabled || app.privacyPolicyEnabled
   )
@@ -21,5 +23,7 @@ export function useLegalConsent() {
     return false
   }
 
-  return { agreed, required, blocked, ensureAgreed }
+  const describedBy = computed(() => (blocked.value ? consentId : undefined))
+
+  return { agreed, required, blocked, ensureAgreed, consentId, describedBy }
 }

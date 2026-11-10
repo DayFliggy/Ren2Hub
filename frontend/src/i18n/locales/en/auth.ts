@@ -8,7 +8,7 @@ export default {
     legalConsentPrivacy: 'I have read and agree to the {privacy}.',
     userAgreement: 'User Agreement',
     privacyPolicy: 'Privacy Policy',
-    legalConsentRequired: 'Please read and agree to the terms first',
+    legalConsentRequired: 'Please read and accept the published terms first.',
     inviteAttributionHint:
       'Used only if this sign-in creates a new account. You can edit or clear this code before continuing.',
     confirmInviteCode: 'Use this invite code',
