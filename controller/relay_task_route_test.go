@@ -24,7 +24,7 @@ func TestTaskPinnedRouteFailureStopsBeforeReservationAndSend(t *testing.T) {
 		code   string
 	}{
 		{"storage error", http.StatusInternalServerError, "get_channel_failed"},
-		{"disabled original channel", http.StatusForbidden, "access_denied"},
+		{"disabled original channel", http.StatusBadRequest, "origin_task_channel_disabled"},
 		{"original channel full", http.StatusTooManyRequests, "channel_concurrency_exceeded"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestTaskPinnedRouteFailureStopsBeforeReservationAndSend(t *testing.T) {
 						tx.AddError(errors.New("private database failure fixture"))
 					}
 				}))
-			case http.StatusForbidden:
+			case http.StatusBadRequest:
 				require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 1).Update("status", common.ChannelStatusManuallyDisabled).Error)
 			case http.StatusTooManyRequests:
 				require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 1).Update("max_concurrency", 1).Error)

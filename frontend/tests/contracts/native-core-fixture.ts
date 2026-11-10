@@ -490,6 +490,7 @@ export async function nativeCoreFixture(
         model: url.searchParams.get('model'),
         path: url.searchParams.get('path'),
         stream: url.searchParams.get('stream') === 'true',
+        transport: url.searchParams.get('transport') || 'http',
         ordering:
           routing.mode === 'auto' ? 'weighted_random_per_request' : 'manual',
         entries: [

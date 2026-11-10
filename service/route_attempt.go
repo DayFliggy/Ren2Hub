@@ -32,6 +32,12 @@ func currentRouteAttempt(c *gin.Context) *routeAttempt {
 	return attempt
 }
 
+// RouteAttemptWasSent separates transport attempts from local validation and billing errors.
+// Read it before FinishRouteAttempt clears the current attempt.
+func RouteAttemptWasSent(c *gin.Context) bool {
+	return currentRouteAttempt(c) != nil
+}
+
 // ObserveRouteStreamOutput 标记第一个有模型输出的事件：它既是调度延迟的终点，也是熔断
 // 判定流式请求已服务的成功界。原生首字节时钟保持独立，因为重试安全还要看控制帧。
 func ObserveRouteStreamOutput(c *gin.Context, data string) {

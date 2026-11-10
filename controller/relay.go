@@ -467,6 +467,7 @@ func executeTaskSubmissionWith(
 	diagnostics.start(relayInfo)
 	var result *relay.TaskSubmitResult
 	var taskErr *taskdto.TaskError
+	var lastSentTaskErr *taskdto.TaskError
 	durable := false
 	stage := "start"
 	defer func() {
@@ -491,6 +492,9 @@ func executeTaskSubmissionWith(
 	}
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+		relayInfo.StreamStatus = nil
+		relayInfo.PerformanceBusinessRejection = false
+		relayInfo.PerformanceOutputTokens = 0
 		stage = "select_channel"
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
 			diagnostics.cancelled("before_attempt", retryParam.GetRetry()+1)
@@ -501,9 +505,14 @@ func executeTaskSubmissionWith(
 
 		if lockedCh, ok := relayInfo.LockedChannel.(*model.Channel); ok && lockedCh != nil {
 			var acquireErr error
-			channel, acquireErr = service.AcquireOriginTaskRouteChannel(c, lockedCh.Id)
+			channel, acquireErr = service.AcquireOriginTaskRouteChannel(c, lockedCh.Id, relayInfo.OriginModelName)
 			if acquireErr != nil {
-				taskErr = service.PinnedTaskRouteError(acquireErr)
+				if requestErr := c.Request.Context().Err(); requestErr != nil {
+					diagnostics.cancelled("select_channel", retryParam.GetRetry()+1)
+					taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
+				} else {
+					taskErr = service.PinnedTaskRouteError(acquireErr)
+				}
 				break
 			}
 			policy.BeginAttempt(channel)
@@ -518,9 +527,20 @@ func executeTaskSubmissionWith(
 			channel, channelErr = getChannel(c, relayInfo, retryParam)
 			if channelErr != nil {
 				logger.LogError(c, channelErr.Error())
-				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", channelErr.StatusCode)
+				if requestErr := c.Request.Context().Err(); requestErr != nil {
+					diagnostics.cancelled("select_channel", retryParam.GetRetry()+1)
+					taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
+				} else {
+					selectionErr := service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", channelErr.StatusCode)
+					taskErr = service.PreferUpstreamError(lastSentTaskErr, selectionErr)
+				}
 				break
 			}
+		}
+		if requestErr := c.Request.Context().Err(); requestErr != nil {
+			diagnostics.cancelled("select_channel", retryParam.GetRetry()+1)
+			taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
+			break
 		}
 		diagnostics.attempt(retryParam.GetRetry()+1, channel, relayInfo.LockedChannel != nil)
 
@@ -539,6 +559,7 @@ func executeTaskSubmissionWith(
 
 		stage = "submit"
 		result, taskErr = submit(c, relayInfo)
+		attemptSent := service.RouteAttemptWasSent(c)
 		var observationErr *types.NewAPIError
 		if taskErr != nil {
 			if taskErr.LocalError {
@@ -558,6 +579,9 @@ func executeTaskSubmissionWith(
 		}
 
 		taskAPIError := taskSubmissionAPIError(taskErr)
+		if attemptSent {
+			lastSentTaskErr = taskErr
+		}
 		relayInfo.LastError = taskAPIError
 		decision := decideTaskRetry(c, taskErr, common.RetryTimes-retryParam.GetRetry())
 		service.RecordPolicyFailure(c, channel.Id, taskAPIError, decision)

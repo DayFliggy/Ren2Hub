@@ -15,15 +15,51 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func useUserPublicationRedis(t *testing.T) {
+	t.Helper()
+	server := miniredis.RunT(t)
+	previousClient, previousEnabled := common.RDB, common.RedisEnabled
+	client := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1})
+	common.RDB, common.RedisEnabled = client, true
+	t.Cleanup(func() {
+		_ = client.Close()
+		common.RDB, common.RedisEnabled = previousClient, previousEnabled
+	})
+}
+
+func requireCommittedUserCache(t *testing.T, db *gorm.DB, committed *model.User) {
+	t.Helper()
+	cached, err := model.GetUserCache(committed.Id)
+	require.NoError(t, err, "the normal user-cache read recovers from the committed database row")
+	require.Equal(t, committed.MaxConcurrency, cached.MaxConcurrency)
+	require.Equal(t, committed.AuthVersion, cached.AuthVersion)
+	// A second read must use a complete, valid Redis entry rather than silently
+	// passing through the database fallback when cache publication is broken.
+	const callback = "test:verify-user-cache-hit"
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "User" {
+			tx.AddError(errors.New("user database unavailable after cache recovery"))
+		}
+	}))
+	defer func() { require.NoError(t, db.Callback().Query().Remove(callback)) }()
+	hit, err := model.GetUserCache(committed.Id)
+	require.NoError(t, err, "recovered user metadata must be readable from Redis")
+	require.Equal(t, cached.MaxConcurrency, hit.MaxConcurrency)
+	require.Equal(t, cached.AuthVersion, hit.AuthVersion)
+}
 
 func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testing.T) {
 	for index, scenario := range []string{"caller cancelled after update", "auth cache publication fails", "limit publication fails without skipping auth cache"} {
 		t.Run(scenario, func(t *testing.T) {
 			db := setupManageUserTestDB(t)
+			useUserPublicationRedis(t)
 			user := model.User{Id: 801091 + index, Username: "concurrency-managed", Password: "password", Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
 			require.NoError(t, db.Create(&user).Error)
 			require.NoError(t, service.RefreshUserConcurrencyLimit(context.Background(), user.Id))
@@ -49,6 +85,7 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 				}))
 				require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:fail-auth-cache-publication", func(tx *gorm.DB) {
 					if published && tx.Statement.Schema != nil && tx.Statement.Schema.Name == "User" && len(tx.Statement.Selects) != 2 {
+						authCacheAttempted = true
 						tx.AddError(errors.New("auth cache lookup unavailable"))
 					}
 				}))
@@ -79,6 +116,7 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 				require.Contains(t, recorder.Body.String(), `"publication_pending":false`)
 			} else {
 				require.True(t, published)
+				require.True(t, authCacheAttempted, "the enabled auth-cache publication must reach the database")
 				require.Contains(t, recorder.Body.String(), `"publication_pending":true`)
 			}
 			if index == 2 {
@@ -102,9 +140,7 @@ func TestUpdateUserPublishesCommittedConcurrencyBeforeOtherSideEffects(t *testin
 			var committed model.User
 			require.NoError(t, db.First(&committed, user.Id).Error)
 			require.Equal(t, 1, committed.MaxConcurrency)
-			cached, err := model.GetUserCache(user.Id)
-			require.NoError(t, err, "the normal user-cache read recovers from the committed database row")
-			require.Equal(t, 1, cached.MaxConcurrency)
+			requireCommittedUserCache(t, db, &committed)
 			var audits []model.AuditLog
 			require.NoError(t, model.LOG_DB.Where("action = ?", "user.update").Find(&audits).Error)
 			require.Len(t, audits, 1)
@@ -117,6 +153,7 @@ func TestCommittedUserUpdateCompletesEveryActionAndReportsFailures(t *testing.T)
 	for _, failedAction := range []string{"concurrency", "policy", "sessions", "cache"} {
 		t.Run(failedAction, func(t *testing.T) {
 			db := setupManageUserTestDB(t)
+			useUserPublicationRedis(t)
 			require.NoError(t, authz.Init(db))
 			user := model.User{Username: "committed-security", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 2, MaxConcurrency: 1}
 			require.NoError(t, db.Create(&user).Error)
@@ -177,6 +214,7 @@ func TestCommittedUserUpdateCompletesEveryActionAndReportsFailures(t *testing.T)
 				require.True(t, attempted[action], "%s still runs after an earlier failure", action)
 			}
 			require.NoError(t, db.Callback().Query().Remove("test:user-security-publication"))
+			requireCommittedUserCache(t, db, &user)
 			var audits []model.AuditLog
 			require.NoError(t, model.LOG_DB.Where("action = ?", "user.update").Find(&audits).Error)
 			require.Len(t, audits, 1)

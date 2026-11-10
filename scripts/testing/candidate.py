@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -15,11 +16,13 @@ import signal
 import stat
 import subprocess
 import sys
+import tarfile
 import time
 import threading
+import traceback
 
 LABEL = 'renai.local-test.run'
-STAGES = ('billing', 'ws', 'compact', 'plugin-before', 'plugin-after', 'upstream_sync', 'sdk')
+STAGES = ('billing', 'ws', 'compact', 'plugin-before', 'plugin-after', 'upstream_sync', 'sdk', 'routing')
 UPGRADE_STAGES = ('upgrade-baseline', 'upgrade-management', 'upgrade-before-seconds',
                   'upgrade-prepare-p', 'upgrade-resume-p', 'upgrade-after-seconds', 'upgrade-after-p')
 HOST_INTERFACE = r'[A-Za-z0-9_.-]{1,15}'
@@ -86,6 +89,7 @@ def source_identity(source):
         if path.is_symlink():
             digest.update(b'link\0' + os.fsencode(os.readlink(path)))
         elif path.is_file():
+            digest.update(b'executable\0' if path.stat().st_mode & 0o111 else b'regular\0')
             digest.update(hashlib.sha256(path.read_bytes()).digest())
         else:
             digest.update(b'deleted\0')
@@ -105,8 +109,114 @@ def counter_mounts(container):
     return sorted(found)
 
 
+def image_matches_source(labels, source, routing_only=False):
+    """A HEAD label never overrides a recorded build-content fingerprint."""
+    fingerprint = labels.get('io.ren2hub.source-sha256')
+    require(isinstance(fingerprint, str) and re.fullmatch(r'[0-9a-f]{64}', fingerprint)
+            and fingerprint == source['working_tree_sha256'], 'image_source_fingerprint_mismatch')
+    return source['candidate_sha'] == labels.get('org.opencontainers.image.revision')
+
+
+def image_files(docker, image_id, paths):
+    """只从未启动的临时容器读取镜像文件；包括失败路径在内都清理该容器。"""
+    require(re.fullmatch(r'sha256:[0-9a-f]{64}', image_id or ''), 'immutable_image_id_required')
+    identifier = docker('create', '--network', 'none', '--read-only', '--label',
+                        'renai.build-inspection=' + secrets.token_hex(12), image_id).stdout.decode().strip()
+    require(re.fullmatch(r'[0-9a-f]{64}', identifier), 'invalid_image_inspection_container')
+    try:
+        result = {}
+        for path in paths:
+            archive = docker('cp', identifier + ':' + path, '-').stdout
+            with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+                members = tar.getmembers()
+                require(len(members) == 1 and members[0].isfile()
+                        and members[0].name == Path(path).name, 'invalid_image_file_archive')
+                result[path] = tar.extractfile(members[0]).read()
+        return result
+    finally:
+        docker('rm', '-f', identifier)
+
+
+def inspect_build_payload(docker, image_id, artifact):
+    binary_path = '/new-api' if artifact == 'ren2hub' else '/channel-simulator'
+    paths = [binary_path]
+    if artifact == 'ren2hub':
+        paths.append('/etc/ren2hub/build-tools.json')
+    files = image_files(docker, image_id, paths)
+    result = {'binary': {'path': binary_path, 'sha256': hashlib.sha256(files[binary_path]).hexdigest()}}
+    if artifact == 'ren2hub':
+        result['tools'] = json.loads(files['/etc/ren2hub/build-tools.json'])
+    return result
+
+
+def validate_build_identity(manifest, image, artifact, current_source=None, payload=None):
+    """两独立构建入口共享数据合同；不导入或执行模拟器源码。"""
+    require(isinstance(manifest, dict) and type(manifest.get('schema_version')) is int
+            and manifest['schema_version'] == 1 and manifest.get('artifact') == artifact
+            and manifest.get('success') is True and manifest.get('stable') is True,
+            'successful_versioned_build_identity_required')
+    before, after = manifest.get('source_before'), manifest.get('source_after')
+    require(isinstance(before, dict) and before == after
+            and re.fullmatch(r'[0-9a-f]{64}', str(before.get('working_tree_sha256', '')))
+            and type(before.get('dirty')) is bool, 'build_identity_unstable_source')
+    head = before.get('git_head')
+    require((isinstance(head, str) and re.fullmatch(r'[0-9a-f]{40}', head))
+            or (artifact == 'channel-simulator' and head is None and before['dirty']),
+            'build_identity_invalid_base_revision')
+    require(manifest.get('base_revision') == head
+            and 'candidate_sha' in before
+            and before['candidate_sha'] == (None if before['dirty'] else head),
+            'build_identity_invalid_candidate_revision')
+    revision = head if artifact == 'ren2hub' else ('unborn' if head is None else head + ('-dirty' if before['dirty'] else ''))
+    require(manifest.get('revision') == revision, 'build_identity_revision_mismatch')
+    require(re.fullmatch(r'sha256:[0-9a-f]{64}', str(manifest.get('image_id', '')))
+            and manifest['image_id'] == image['Id'], 'build_identity_image_mismatch')
+    labels = image['Config'].get('Labels') or {}
+    prefix = 'io.ren2hub' if artifact == 'ren2hub' else 'io.channel-simulator'
+    require(labels.get(prefix + '.source-sha256') == before['working_tree_sha256']
+            and labels.get('org.opencontainers.image.revision') == revision, 'build_identity_label_mismatch')
+    if artifact == 'ren2hub':
+        require(labels.get('org.opencontainers.image.version') == revision, 'build_identity_label_mismatch')
+        require(current_source is not None and before == current_source, 'build_identity_stale_worktree')
+    else:
+        require(type(manifest.get('protocol_version')) is int and manifest['protocol_version'] == 1
+                and labels.get(prefix + '.protocol') == '1', 'build_identity_protocol_mismatch')
+    binary = manifest.get('binary')
+    expected_path = '/new-api' if artifact == 'ren2hub' else '/channel-simulator'
+    require(isinstance(binary, dict) and binary.get('path') == expected_path
+            and re.fullmatch(r'[0-9a-f]{64}', str(binary.get('sha256', ''))), 'build_identity_binary_required')
+    tools = manifest.get('tools')
+    required_tools = ('go', 'docker_server', 'docker_client', 'python') + (('bun', 'node') if artifact == 'ren2hub' else ())
+    require(isinstance(tools, dict) and all(isinstance(tools.get(key), str) and tools[key].strip()
+            for key in required_tools), 'build_identity_tools_required')
+    if payload is not None:
+        require(payload['binary'] == binary, 'build_identity_binary_mismatch')
+        if artifact == 'ren2hub':
+            require(isinstance(payload.get('tools'), dict) and all(payload['tools'].get(key) == tools[key]
+                    for key in ('go', 'bun', 'node')), 'build_identity_tools_mismatch')
+
+
+def read_build_identity(path):
+    require(path is not None, 'explicit_build_identity_required')
+    path = Path(path)
+    require(path.is_file() and not path.is_symlink() and path.stat().st_nlink == 1,
+            'regular_build_identity_required')
+    raw = path.read_bytes()
+    require(len(raw) <= 1 << 20, 'build_identity_too_large')
+    try:
+        return json.loads(raw), raw
+    except (ValueError, UnicodeDecodeError):
+        raise CandidateError('invalid_build_identity_json') from None
+
+
+def stage_accepted(stage, returncode, report):
+    return (stage == 'routing' and returncode == 2 and report.get('exit_code') == 2
+            and report.get('contracts_success') is True) or (returncode == 0 and report.get('success') is True)
+
+
 class Candidate:
-    def __init__(self, source, output, image, traffic_interface=None, previous_image=None):
+    def __init__(self, source, output, image, traffic_interface=None, previous_image=None, simulator_image=None, routing_only=False,
+                 image_identity=None, simulator_identity=None):
         require(traffic_interface is None or re.fullmatch(HOST_INTERFACE, traffic_interface),
                 'invalid_traffic_host_interface')
         self.traffic_interface = traffic_interface or ''
@@ -129,14 +239,21 @@ class Candidate:
         self.network_id = None
         self.image = image
         self.previous_image = previous_image
+        self.simulator_image = simulator_image
+        self.image_identity_path = image_identity
+        self.simulator_identity_path = simulator_identity
+        self.routing_only = routing_only
+        require(not routing_only or previous_image is None, "routing_does_not_run_upgrade")
+        require(bool(simulator_image), "explicit_simulator_image_required")
         self.attachment_volume = None
-        self.stages = (*UPGRADE_STAGES, *STAGES) if previous_image else STAGES
+        self.stages = ('routing',) if routing_only else ((*UPGRADE_STAGES, *STAGES) if previous_image else STAGES)
         self.workspace_identity = source_identity(self.source.parent)
         self.workspace_sha = self.workspace_identity['git_head']
-        self.report = {'success': False, 'layer': 'candidate', 'run_id': self.run_id,
+        self.report = {'success': False, 'layer': 'routing' if routing_only else 'candidate', 'run_id': self.run_id,
                        'source': source_identity(self.source), 'workspace': self.workspace_identity, 'stages': {}, 'cleanup': {},
                        'external_requests': 0, 'database_lifecycle': 'fresh_tmpfs',
                        'limits': ['本地模拟供应商和支付；不验证真实供应商、真实支付或生产部署。']}
+        self.report['exit_code'] = 1
 
     def docker(self, *arguments, **kwargs):
         return execute(['sudo', '-n', 'docker', '--host', 'unix:///var/run/docker.sock', *arguments], **kwargs)
@@ -212,8 +329,33 @@ class Candidate:
                 'explicit_sdk_node_module_required')
         self.sdk_environment = environment
 
+    def verify_build_identities(self):
+        require(all(re.fullmatch(r'sha256:[0-9a-f]{64}', value or '')
+                    for value in (self.image, self.simulator_image)), 'routing_requires_immutable_image_ids')
+        inputs = [('app', 'ren2hub', self.image, getattr(self, 'image_identity_path', None)),
+                  ('simulator', 'channel-simulator', self.simulator_image, getattr(self, 'simulator_identity_path', None))]
+        loaded = [(name, artifact, image_id, *read_build_identity(path)) for name, artifact, image_id, path in inputs]
+        current = source_identity(self.source)
+        require(current == self.report['source'], 'source_changed_before_identity_verification')
+        verified = {}
+        for name, artifact, image_id, manifest, raw in loaded:
+            image = json.loads(self.docker('image', 'inspect', image_id).stdout)[0]
+            require(image['Id'] == image_id, 'build_identity_image_mismatch')
+            validate_build_identity(manifest, image, artifact, current)
+            payload = inspect_build_payload(self.docker, image_id, artifact)
+            validate_build_identity(manifest, image, artifact, current, payload)
+            copy = self.output / (name + '-build-identity.json')
+            private_write(copy, raw)
+            verified[name] = {'path': str(copy), 'sha256': hashlib.sha256(raw).hexdigest(), 'manifest': manifest}
+        require(source_identity(self.source) == current, 'source_changed_during_identity_verification')
+        self.report['build_identities'] = verified
+        return verified
+
     def prepare(self):
-        self.sdk_runtimes()
+        self.sdk_environment = {}
+        self.verify_build_identities()
+        if not getattr(self, 'routing_only', False):
+            self.sdk_runtimes()
         image = json.loads(self.docker('image', 'inspect', self.image).stdout)[0]
         labels = image['Config'].get('Labels') or {}
         revision = labels.get('org.opencontainers.image.revision', '')
@@ -222,7 +364,9 @@ class Candidate:
         self.image_id, self.revision = image['Id'], revision
         self.report['image'] = {'reference': self.image, 'id': self.image_id, 'revision': revision}
         # 不把现有镜像的测试结果冒充未提交工作树构建结果。
-        self.report['image_matches_clean_source'] = self.report['source']['candidate_sha'] == revision
+        self.report['image_matches_clean_source'] = image_matches_source(
+            labels, self.report['source'], getattr(self, 'routing_only', False))
+        self.report['image']['working_tree_sha256'] = labels.get('io.ren2hub.source-sha256')
         self.active_image_id, self.active_revision = self.image_id, self.revision
         if getattr(self, 'previous_image', None):
             previous = json.loads(self.docker('image', 'inspect', self.previous_image).stdout)[0]
@@ -271,13 +415,18 @@ class Candidate:
         # mock 持有稳定网络命名空间，app 重启不改变本地供应商地址。
         self.start('mock', dependencies['redis'], ('--network', self.network, '--network-alias', 'app',
                    '--entrypoint', '/bin/sh', '--read-only', '--tmpfs', '/data:rw,size=1m'), ('-c', 'exec sleep infinity'))
+        if getattr(self, 'simulator_image', None):
+            from simulator_support import prepare
+            prepare(self)
         self.network_guard = self.lock_network()
         app_env = self.env_file('app.env', {
             'SQL_DSN': 'postgresql://ren2hub:' + passwords['POSTGRES_PASSWORD'] + '@postgres:5432/ren2hub_candidate',
             'REDIS_CONN_STRING': 'redis://:' + passwords['REDIS_PASSWORD'] + '@redis:6379/0',
             'SESSION_SECRET': passwords['SESSION_SECRET'], 'CRYPTO_SECRET': passwords['CRYPTO_SECRET'],
             'LOG_SQL_DSN': '', 'SQLITE_PATH': '', 'MEMORY_CACHE_ENABLED': 'true', 'NODE_TYPE': 'master',
-            'CRITICAL_RATE_LIMIT': '200', 'GLOBAL_API_RATE_LIMIT': '1000', 'TRUSTED_PROXIES': 'none',
+            # Routing configures and reads back every fixture through the API.
+            # Keep rate limiting enabled without throttling this isolated matrix.
+            'CRITICAL_RATE_LIMIT': '200', 'GLOBAL_API_RATE_LIMIT': '10000', 'TRUSTED_PROXIES': 'none',
             'SSL_CERT_FILE': '/etc/ren2hub/mock-ca.crt', 'TICKET_UPLOAD_DIR': '/app/ticket-attachments',
             'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC',
             **({'TASK_POLL_MAX_FAILURES': '0'} if getattr(self, 'previous_image', None) else {}),
@@ -300,14 +449,20 @@ class Candidate:
                    '--health-cmd', 'wget -q -T 3 -O /dev/null http://127.0.0.1:3000/api/status', *health)
         self.start_app()
         self.wait_healthy('app')
-        target = {role + '_container': self.prefix + '-' + role for role in self.containers}
+        target = {role + '_container': self.prefix + '-' + role for role in self.containers if role != 'simulator'}
         target.update(database_user='ren2hub', database_name='ren2hub_candidate', database_host='postgres:5432',
                       redis_host='redis:6379', network=self.network, network_id=self.network_id, run_id=self.run_id,
                       container_ids=dict(self.containers), image_id=self.active_image_id, revision=self.active_revision, ca_path=str(certificate), network_guard=self.network_guard,
                       traffic_host_interface=self.traffic_interface)
         if getattr(self, 'attachment_volume', None):
             target['attachment_volume'] = self.attachment_volume
+        if getattr(self, 'simulator_image', None):
+            from simulator_support import target as simulator_target
+            target['simulator'] = simulator_target(self)
         self.target = target
+        if getattr(self, 'simulator_image', None):
+            from simulator_support import wait_ready
+            wait_ready(self)
         private_write(self.private / 'target.json', target)
         # scope/interface 由管理组从 Root 接口实测后补上；挂载取自运行中容器的 inspect。
         traffic = {'configured_interface': self.traffic_interface, 'scope': None, 'interface': None,
@@ -382,17 +537,26 @@ class Candidate:
     def lock_network(self):
         """规则只写入本轮容器 netns；internal bridge 本身不能隔离宿主 INPUT。"""
         addresses = {}
-        for role in ('postgres', 'redis', 'mock'):
+        for role in ('postgres', 'redis', 'mock', *(['simulator'] if 'simulator' in self.containers else [])):
             info = self.owned(role)
-            addresses[role] = info['NetworkSettings']['Networks'][self.network]['IPAddress']
+            require(info['State']['Running'], 'candidate_' + role + '_exited')
+            address = info['NetworkSettings']['Networks'][self.network]['IPAddress']
+            require(bool(re.fullmatch(r'(?:\d{1,3}\.){3}\d{1,3}', address)),
+                    'candidate_' + role + '_network_address_missing')
+            addresses[role] = address
         rules = {}
         for role in addresses:
             self.namespace(role, '/usr/bin/ip', 'route', 'flush', 'default')
             for family, binary in (('ipv4', '/usr/sbin/iptables'), ('ipv6', '/usr/sbin/ip6tables')):
                 self.namespace(role, binary, '-w', '5', '-P', 'OUTPUT', 'DROP')
                 self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-o', 'lo', '-j', 'ACCEPT')
+                self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-m', 'conntrack',
+                               '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT')
                 if family == 'ipv4':
-                    for address in sorted(addresses.values()):
+                    # Only app/test workers (the mock namespace) initiate peer
+                    # connections. Simulator and datastores only reply.
+                    peers = sorted(addresses.values()) if role == 'mock' else []
+                    for address in peers:
                         self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-d', address + '/32', '-j', 'ACCEPT')
                 self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-j', 'REJECT')
                 raw = self.namespace(role, binary, '-w', '5', '-S', 'OUTPUT').stdout
@@ -411,6 +575,7 @@ class Candidate:
             for role in addresses:
                 self.namespace(role, sys.executable, '-c', probe, gateway, str(port))
         return {'addresses': addresses, 'output_rules_sha256': rules, 'host_probe_blocked': True,
+                'new_peer_connections':{'mock':'owned_addresses','simulator':[],'postgres':[],'redis':[]},
                 'scope': 'owned_container_network_namespaces_only'}
 
     def schema_fingerprint(self):
@@ -430,6 +595,7 @@ class Candidate:
         return hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()
 
     def stage(self, stage):
+        require(source_identity(self.source) == self.report['source'], 'source_changed_before_http_stage')
         app = self.owned('app')
         require(app['State']['Running'] and app['Image'] == self.active_image_id, 'candidate_image_or_state_changed')
         if stage == 'plugin-after':
@@ -461,7 +627,12 @@ class Candidate:
             self.report['isolation']['traffic'].update(scope=observed.get('scope'), interface=observed.get('interface'),
                                                        mounts=counter_mounts(app))
         private_write(self.output / 'candidate.json', self.report)
-        require(result.returncode == 0 and stage_report.get('success') is True, 'candidate_stage_failed_' + stage)
+        require(stage_accepted(stage, result.returncode, stage_report),
+                'candidate_stage_failed_' + stage)
+
+    def diagnostics(self):
+        from diagnostics import run as run_diagnostics
+        self.report['diagnostics'] = run_diagnostics(self.source, self.output / 'diagnostics')
 
     def manifest(self):
         reports = {}
@@ -476,19 +647,25 @@ class Candidate:
         self.report['identity_verification'] = {'stable': stable, 'source_end': source_end, 'workspace_end': workspace_end}
         if not stable:
             self.report['success'] = False
+            self.report['exit_code'] = 1
             self.report['error_code'] = 'source_or_workspace_changed_during_candidate'
         workspace_clean = workspace_end['candidate_sha'] == self.workspace_sha
         gitlink = execute(['git', '-C', str(self.source.parent), 'ls-tree', 'HEAD', 'Ren2Hub']).stdout.decode().split()
         linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
-        complete = len(reports) == len(self.stages) and all(self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
-        deployable = bool(self.report['success'] and complete and self.report.get('image_matches_clean_source') and workspace_clean and linked)
+        complete = (len(reports) == len(self.stages)
+                    and all(self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
+                    and self.report.get('diagnostics', {}).get('success') is True)
+        deployable = bool(not getattr(self, 'routing_only', False) and self.report['success'] and complete and self.report.get('image_matches_clean_source') and workspace_clean and linked)
         traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
                     'source_sha': self.report.get('image', {}).get('revision'),
                     'workspace_sha': self.workspace_sha, 'image_id': self.report.get('image', {}).get('id'),
                     'reports': reports, 'source_worktree': self.report['source'], 'identity_verification': self.report['identity_verification'],
                     'image_matches_clean_source': self.report.get('image_matches_clean_source', False),
-                    'upgrade': self.report.get('upgrade'),
+                    'upgrade': self.report.get('upgrade'), 'simulator': self.report.get('simulator'),
+                    'build_identities': self.report.get('build_identities'),
+                    'diagnostics': {key:self.report.get('diagnostics', {}).get(key)
+                                    for key in ('exit_code','counts','report_path','report_sha256')},
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable
@@ -522,6 +699,7 @@ class Candidate:
         self.report['cleanup'] = {'success': not errors, 'removed_containers': removed, 'errors': errors}
         if errors:
             self.report['success'] = False
+            self.report['exit_code'] = 1
 
 
 def interrupted(_signum, _frame):
@@ -529,7 +707,8 @@ def interrupted(_signum, _frame):
 
 
 def run(source: Path, output: Path, image: str, traffic_interface: str | None = None,
-        previous_image: str | None = None) -> dict:
+        previous_image: str | None = None, simulator_image: str | None = None, routing_only: bool = False,
+        image_identity: Path | None = None, simulator_identity: Path | None = None) -> dict:
     previous_umask = os.umask(0o077)
     candidate = None
     old_handlers = {}
@@ -537,18 +716,25 @@ def run(source: Path, output: Path, image: str, traffic_interface: str | None = 
         for signum in (signal.SIGINT, signal.SIGTERM):
             old_handlers[signum] = signal.signal(signum, interrupted)
     try:
-        candidate = Candidate(source, output, image, traffic_interface, previous_image)
+        candidate = Candidate(source, output, image, traffic_interface, previous_image, simulator_image, routing_only,
+                              image_identity, simulator_identity)
+        candidate.diagnostics()
         candidate.prepare()
         for stage in candidate.stages:
             if stage == 'upgrade-resume-p':
                 candidate.upgrade()
             candidate.stage(stage)
-        candidate.report['success'] = True
+        from routing_result import combined_exit_code
+        code = combined_exit_code([*candidate.report['stages'].values(), candidate.report['diagnostics']])
+        candidate.report.update(success=code == 0, exit_code=code)
     except Exception as error:
         if candidate is None:
             raise
         candidate.report['error_code'] = str(error) if isinstance(error, CandidateError) else 'candidate_execution_failed'
         candidate.report['error_type'] = type(error).__name__
+        candidate.report['failure_location'] = [
+            {'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
+            for frame in traceback.extract_tb(error.__traceback__)[-5:]]
     finally:
         if candidate:
             candidate.cleanup()
@@ -565,12 +751,17 @@ def main():
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--image', required=True)
+    parser.add_argument('--simulator-image', required=True)
+    parser.add_argument('--image-identity', required=True, type=Path)
+    parser.add_argument('--simulator-identity', required=True, type=Path)
+    parser.add_argument('--routing-only', action='store_true')
     parser.add_argument('--previous-image', help='普通升级合同使用的固定旧镜像；必须与新镜像修订不同')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
     args = parser.parse_args()
     try:
-        report = run(args.source, args.output, args.image, args.traffic_host_interface, args.previous_image)
+        report = run(args.source, args.output, args.image, args.traffic_host_interface, args.previous_image, args.simulator_image, args.routing_only,
+                     args.image_identity, args.simulator_identity)
     except Exception as error:
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, CandidateError) else 'candidate_initialization_failed'}
@@ -578,7 +769,7 @@ def main():
     print(json.dumps({'success': report['success'], 'deployment_eligible': report.get('deployment_eligible', False),
                       'error_code': report.get('error_code'),
                       'report': str(args.output / 'candidate.json')}, ensure_ascii=False))
-    return 0 if report['success'] else 1
+    return report.get('exit_code', 0 if report['success'] else 1)
 
 
 if __name__ == '__main__':

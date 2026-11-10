@@ -19,6 +19,10 @@ var ErrConcurrencyFull = errors.New("concurrency limit reached")
 
 var errConcurrencyPublicationPending = errors.New("concurrency limit publication pending")
 
+// errConcurrencyLimitUnavailable 表示读不到有效的并发上限，准入无法判定。它不是满载，
+// 也不是资源已删除；所有入口都按 503 <kind>_concurrency_unavailable 立即返回。
+var errConcurrencyLimitUnavailable = errors.New("concurrency limit unavailable")
+
 // errConcurrencyResourceDeleted 表示删除留下的待确认标记仍在：数据库里没有这个渠道或用户，
 // 删除前取得旧数据的请求不能再准入，也不能重新建立表项。
 var errConcurrencyResourceDeleted = errors.New("concurrency resource deleted")
@@ -298,10 +302,13 @@ func refreshConcurrencyLimitLocked(ctx context.Context, key concurrencyKey) erro
 		return fmt.Errorf("%w: %w", errConcurrencyResourceDeleted, err)
 	}
 	if err != nil {
-		return err
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("%w: %w", errConcurrencyLimitUnavailable, err)
 	}
 	if limit < 0 {
-		return errors.New("invalid concurrency limit")
+		return fmt.Errorf("%w: invalid concurrency limit %d", errConcurrencyLimitUnavailable, limit)
 	}
 	gatewayConcurrency.setLimit(key.kind, key.id, limit)
 	gatewayConcurrency.mu.Lock()

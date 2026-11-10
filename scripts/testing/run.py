@@ -22,7 +22,7 @@ MODULES = ('.', 'relaykit', 'tokenkit')
 # Invitation URLs render window.location.origin. A random transport port changes
 # visible content between reference creation and verification. Fail if occupied.
 UI_CONTRACTS_PORT = 41739
-PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'candidate', 'all')
+PROFILES = ('unit', 'static', 'build', 'databases', 'race', 'browser', 'ui-contracts', 'diagnostics', 'candidate', 'routing', 'all')
 DEFERRED = {
     'TestVLLMStatusLive': '需要真实外部供应商；本地方案不执行',
     'TestProductionEmbeddedAssetGraph': 'build 阶段验证实际前端产物',
@@ -111,7 +111,7 @@ def go_result(text: str, required: list[str]) -> dict:
     missing = set(required) - passed
     if missing or skipped or failed or not passed:
         raise RuntimeError(f'Go 执行不完整：missing={sorted(missing)}, skip={sorted(skipped)}, fail={sorted(failed)}')
-    return {'passed': len(passed), 'top_level_passed': len(required), 'skipped': 0}
+    return {'passed': len(passed), 'top_level_passed': sum('/' not in name for name in passed), 'skipped': 0}
 
 
 def go_unit(source: Path, output: Path, env: dict[str, str]) -> dict:
@@ -122,7 +122,9 @@ def go_unit(source: Path, output: Path, env: dict[str, str]) -> dict:
     for module in MODULES:
         cwd = source / module
         label = 'root' if module == '.' else module
-        packages = execute(['go', 'list', '-f', '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}|{{.Dir}}{{end}}', './...'],
+        # Package discovery needs no VCS stamp. Git-file worktrees can sit
+        # beneath unrelated .git directories; source identity is recorded above.
+        packages = execute(['go', 'list', '-buildvcs=false', '-f', '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}|{{.Dir}}{{end}}', './...'],
                            cwd, output, label + '-packages', env).splitlines()
         for index, entry in enumerate(filter(None, packages)):
             package, directory = entry.split('|', 1)
@@ -305,6 +307,9 @@ def main() -> int:
     parser.add_argument('profile', choices=PROFILES)
     parser.add_argument('--output-parent', type=Path, default=SOURCE / '.local-tests')
     parser.add_argument('--image', help='candidate/all 使用已构建的不可变镜像；无默认生产目标')
+    parser.add_argument('--simulator-image', help='candidate/routing/all 使用的独立供应商模拟器镜像')
+    parser.add_argument('--image-identity', type=Path, help='应用成功构建的版本化 identity.json')
+    parser.add_argument('--simulator-identity', type=Path, help='独立模拟器成功构建的版本化 identity.json')
     parser.add_argument('--previous-image', help='candidate/all 普通升级使用的固定旧镜像')
     parser.add_argument('--traffic-host-interface', metavar='NAME',
                         help='candidate/all 只读挂载宿主 /proc/1/net/dev 并读取该网卡；默认使用主监听器计数')
@@ -323,22 +328,27 @@ def main() -> int:
     os.umask(0o077)
     env = environment(output)
     report = {'schema_version': 1, 'run_id': output.name, 'source': identity(SOURCE),
-              'profile': args.profile, 'success': False, 'stages': {}, 'started_at': time.time()}
+              'profile': args.profile, 'success': False, 'exit_code': 1, 'stages': {}, 'started_at': time.time()}
     print(f'证据目录：{output}', flush=True)
     try:
         tools = {}
-        for command, key in [(['go', 'version'], 'go'), (['bun', '--version'], 'bun'),
-                             (['node', '--version'], 'node')]:
+        tool_commands = ([(['go', 'version'], 'go')] if args.profile in ('routing','diagnostics')
+                         else [(['go', 'version'], 'go'), (['bun', '--version'], 'bun'), (['node', '--version'], 'node')])
+        for command, key in tool_commands:
             tools[key] = execute(command, SOURCE, output, 'version-' + key, env).strip()
         report['tools'] = tools
-        if not re.search(r'\bgo1\.26\.10\b', tools['go']) or tools['bun'] != '1.4.0':
+        if tools and (not re.search(r'\bgo1\.26\.10\b', tools['go']) or ('bun' in tools and tools['bun'] != '1.4.0')):
             raise RuntimeError('要求 Go 1.26.10 与 Bun 1.4.0；不会自动下载或切换工具链')
+        # Candidate runs diagnostics once and merges their failure after its checks.
         profiles = ('unit', 'databases', 'static', 'build', 'race', 'browser', 'ui-contracts', 'candidate') if args.profile == 'all' else (args.profile,)
         for profile in profiles:
             stage = output / profile
             stage.mkdir(mode=0o700)
             print(f'执行 {profile}', flush=True)
-            if profile == 'unit':
+            if profile == 'diagnostics':
+                from diagnostics import run
+                result = run(SOURCE, stage, env)
+            elif profile == 'unit':
                 result = {'go': go_unit(SOURCE, stage, env), 'vue': frontend_unit(SOURCE, stage, env), 'success': True}
             elif profile == 'static':
                 result = static(SOURCE, stage, env)
@@ -361,26 +371,32 @@ def main() -> int:
                     report['stages']['build'] = built
                 result = run(SOURCE, stage, Path(built['binary']))
             else:
-                if not args.image:
-                    raise RuntimeError('candidate/all 必须显式传入 --image，未运行候选不能算通过')
+                if not all((args.image, args.simulator_image, args.image_identity, args.simulator_identity)):
+                    raise RuntimeError('candidate/routing/all 必须显式传入 --image、--simulator-image、--image-identity 和 --simulator-identity')
                 from candidate import run
-                result = run(SOURCE, stage, args.image, args.traffic_host_interface, args.previous_image)
+                result = run(SOURCE, stage, args.image, args.traffic_host_interface, args.previous_image, args.simulator_image, profile == 'routing',
+                             args.image_identity, args.simulator_identity)
             report['stages'][profile] = result
-            if not result.get('success'):
+            if not result.get('success') and result.get('exit_code') != 2:
                 raise RuntimeError(f'{profile} 未通过，查看分层报告')
         if identity(SOURCE)['source_sha256'] != report['source']['source_sha256']:
             raise RuntimeError('运行期间源码改变；证据不可用于发布')
-        report['success'] = True
+        from routing_result import combined_exit_code
+        report['exit_code'] = combined_exit_code(list(report['stages'].values()))
+        report['success'] = report['exit_code'] == 0
     except (Exception, KeyboardInterrupt) as error:
         report['error'] = str(error) or type(error).__name__
         print(report['error'], file=sys.stderr)
     finally:
+        report['source_end'] = identity(SOURCE)
+        if report['source_end']['source_sha256'] != report['source']['source_sha256']:
+            report.update(success=False, exit_code=1, error='运行期间源码改变；证据不可用于发布')
         report['finished_at'] = time.time()
         report['artifacts'] = {str(p.relative_to(output)): hashlib.sha256(p.read_bytes()).hexdigest()
                                for p in output.rglob('*') if p.is_file() and p.suffix in ('.log', '.json', '.jsonl')
                                and 'private' not in str(p.relative_to(output))}
         (output / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
-    return 0 if report['success'] else 1
+    return report['exit_code']
 
 
 if __name__ == '__main__':

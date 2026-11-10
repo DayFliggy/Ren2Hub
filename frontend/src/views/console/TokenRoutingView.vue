@@ -68,6 +68,7 @@ const previewRequest = useLatestRequest()
 const previewModel = ref('')
 const previewPath = ref('/v1/chat/completions')
 const previewStream = ref(false)
+const previewTransport = ref<'http' | 'websocket'>('http')
 const preview = ref<TokenRoutePreview | null>(null)
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -108,6 +109,8 @@ const enabledCount = computed(
 )
 
 function errorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === 'preview_path_unsupported')
+    return t('routing.pathUnsupported')
   return error instanceof Error ? error.message : String(error)
 }
 function reasonLabel(reason?: string): string {
@@ -270,6 +273,7 @@ async function loadPreview(): Promise<void> {
         model: previewModel.value.trim(),
         path: previewPath.value,
         stream: previewStream.value,
+        transport: previewTransport.value,
       },
       signal
     )
@@ -279,7 +283,16 @@ async function loadPreview(): Promise<void> {
   if (result.ok) preview.value = result.value
   else previewError.value = errorMessage(result.error)
 }
-watch([tokenId, previewModel, previewPath, previewStream], invalidatePreview)
+watch(previewTransport, (transport) => {
+  if (transport === 'websocket') {
+    previewPath.value = '/v1/responses'
+    previewStream.value = true
+  }
+})
+watch(
+  [tokenId, previewModel, previewPath, previewStream, previewTransport],
+  invalidatePreview
+)
 watch(canWrite, () => {
   saveRequest.cancel()
   saving.value = false
@@ -686,11 +699,28 @@ watch(
               :aria-label="t('routing.path')"
               :disabled="loading || saving"
             >
-              <option v-for="path in paths" :key="path" :value="path">
+              <option
+                v-for="path in previewTransport === 'websocket'
+                  ? ['/v1/responses']
+                  : paths"
+                :key="path"
+                :value="path"
+              >
                 {{ path }}
               </option>
             </select></FormField
           >
+          <FormField :label="t('routing.transport')">
+            <select
+              v-model="previewTransport"
+              :aria-label="t('routing.transport')"
+              class="h-11 w-full min-w-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+              :disabled="loading || saving"
+            >
+              <option value="http">HTTP</option>
+              <option value="websocket">WebSocket · /v1/responses</option>
+            </select>
+          </FormField>
         </div>
         <label
           class="mt-4 flex w-fit items-center gap-2 text-sm text-[var(--text-secondary)]"
@@ -698,7 +728,7 @@ watch(
             v-model="previewStream"
             :label="t('routing.stream')"
             size="sm"
-            :disabled="loading || saving"
+            :disabled="loading || saving || previewTransport === 'websocket'"
           />{{ t('routing.stream') }}</label
         >
         <ConsoleButton
@@ -733,6 +763,7 @@ watch(
             }}</StatusChip
             ><span class="break-all text-xs text-[var(--text-tertiary)]"
               >{{ preview.model }} · {{ preview.path }} ·
+              {{ preview.transport === 'websocket' ? 'WebSocket' : 'HTTP' }} ·
               {{
                 preview.stream
                   ? t('routing.streaming')

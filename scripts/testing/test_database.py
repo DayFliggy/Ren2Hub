@@ -20,6 +20,19 @@ def events(test, actions):
 
 
 class DatabaseRunnerTests(unittest.TestCase):
+    def test_lock_matrix_runs_every_engine_even_after_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = database.Runner(Path(directory), Path(directory), {})
+            observed = []
+            def suite(package, test, dialects=database.DIALECTS, **kwargs):
+                if test == "TestTokenRouteChannelMutationLockOrderDatabases":
+                    observed.append(dialects)
+                runner.report["suites"].append({"success": dialects != ("mysql",)})
+            with patch.object(runner, "suite", side_effect=suite):
+                runner.execute()
+            self.assertEqual(observed, [("sqlite",), ("mysql",), ("postgres",)])
+            self.assertFalse(runner.report["success"])
+
     def test_shared_endpoint_routing_runs_in_the_database_matrix(self):
         self.assertIn(
             "TestRouteTaskPluginEndpointUsesSelectedChannel",

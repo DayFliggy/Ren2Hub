@@ -142,25 +142,33 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 }
 
 func UpdateAbilityStatus(channelId int, status bool) error {
-	return DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
+	return updateAbilityStatus(DB.Where("channel_id = ?", channelId), status)
 }
 
 func UpdateAbilityStatusByTag(tag string, status bool) error {
-	return DB.Model(&Ability{}).Where("tag = ?", tag).Select("enabled").Update("enabled", status).Error
+	return updateAbilityStatus(DB.Where("tag = ?", tag), status)
+}
+
+func updateAbilityStatus(query *gorm.DB, status bool) error {
+	return query.Model(&Ability{}).Select("enabled").Update("enabled", status).Error
 }
 
 func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uint) error {
-	ability := Ability{}
-	if newTag != nil {
-		ability.Tag = newTag
+	return updateAbilityFields(DB.Where("tag = ?", tag), newTag, priority, weight)
+}
+
+func updateAbilityFields(query *gorm.DB, tag *string, priority *int64, weight *uint) error {
+	values := map[string]any{}
+	if tag != nil {
+		values["tag"] = *tag
 	}
 	if priority != nil {
-		ability.Priority = priority
+		values["priority"] = *priority
 	}
 	if weight != nil {
-		ability.Weight = *weight
+		values["weight"] = *weight
 	}
-	return DB.Model(&Ability{}).Where("tag = ?", tag).Updates(ability).Error
+	return query.Model(&Ability{}).Updates(values).Error
 }
 
 var fixLock = sync.Mutex{}

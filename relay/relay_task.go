@@ -182,15 +182,9 @@ func ApplyChannelPin(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError
 	if !found || pin.RetryMode != dto.PinRetrySameChannel {
 		return nil
 	}
-	ch, err := model.CacheGetChannel(pin.ChannelId)
+	ch, err := service.LoadOriginTaskChannel(pin.ChannelId)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task was not found"), "origin_task_channel_disabled", http.StatusBadRequest)
-		}
 		return service.PinnedTaskRouteError(err)
-	}
-	if ch.Status != common.ChannelStatusEnabled {
-		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "origin_task_channel_disabled", http.StatusBadRequest)
 	}
 	info.LockedChannel = ch
 	return nil

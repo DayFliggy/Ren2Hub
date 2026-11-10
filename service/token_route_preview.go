@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"slices"
@@ -16,9 +15,10 @@ const (
 )
 
 type TokenRoutePreviewQuery struct {
-	Model  string
-	Path   string
-	Stream bool
+	Model     string
+	Path      string
+	Stream    bool
+	Transport string
 }
 
 type TokenRoutePreviewEntry struct {
@@ -29,13 +29,14 @@ type TokenRoutePreviewEntry struct {
 	ChannelRatio string `json:"channel_ratio"`
 }
 type TokenRoutePreview struct {
-	Mode     string                   `json:"mode"`
-	Version  int64                    `json:"version"`
-	Model    string                   `json:"model"`
-	Path     string                   `json:"path"`
-	Stream   bool                     `json:"stream"`
-	Ordering string                   `json:"ordering"`
-	Entries  []TokenRoutePreviewEntry `json:"entries"`
+	Mode      string                   `json:"mode"`
+	Version   int64                    `json:"version"`
+	Model     string                   `json:"model"`
+	Path      string                   `json:"path"`
+	Stream    bool                     `json:"stream"`
+	Transport string                   `json:"transport"`
+	Ordering  string                   `json:"ordering"`
+	Entries   []TokenRoutePreviewEntry `json:"entries"`
 }
 
 func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRoutePreviewQuery) (TokenRoutePreview, error) {
@@ -48,6 +49,12 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 	if err != nil {
 		return out, err
 	}
+	query, filters, fallback, err := resolvePreviewRequest(query)
+	if err != nil {
+		return out, err
+	}
+	modelName = query.Model
+	out.Model, out.Stream, out.Transport = modelName, query.Stream, query.Transport
 	route, err := model.ReadTokenRouting(ctx, tokenID)
 	if err != nil {
 		return out, err
@@ -64,14 +71,19 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 		ids = append(ids, row.Id)
 		byID[row.Id] = row
 	}
-	abilities, err := model.EnabledRouteModels(ctx, ids)
+	abilities, err := model.DeclaredRouteModels(ctx, ids)
 	if err != nil {
 		return out, err
 	}
-	filters := []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: requestPath}}
 	reasons, exactAvailable := map[int]string{}, map[int]bool{}
 	for _, row := range rows {
 		reasons[row.Id], exactAvailable[row.Id] = previewRouteReason(row, scope, modelName, abilities[row.Id], filters)
+	}
+	if fallback.model != "" && fallback.model != modelName && !slices.ContainsFunc(rows, func(row *model.Channel) bool { return reasons[row.Id] == "" }) {
+		modelName, out.Model = fallback.model, fallback.model
+		for _, row := range rows {
+			reasons[row.Id], exactAvailable[row.Id] = previewRouteReason(row, scope, modelName, abilities[row.Id], fallback.filters)
+		}
 	}
 	// 与 routeCandidates 一致：只要有渠道以精确模型名可用，只声明归一化名的渠道不参与。
 	if slices.ContainsFunc(rows, func(row *model.Channel) bool { return exactAvailable[row.Id] }) {
@@ -115,7 +127,12 @@ func PreviewTokenRouting(ctx context.Context, userID, tokenID int, query TokenRo
 		return out, nil
 	}
 	out.Ordering = TokenRouteOrderingWeightedPerRequest
-	orderAutomaticRoutes(rows, "preview", modelName, relayconstant.Path2RelayMode(requestPath), query.Stream)
+	operation := relayconstant.Path2RelayMode(requestPath)
+	// These POST entrypoints receive VideoSubmit from task preparation at runtime.
+	if operation == relayconstant.RelayModeUnknown && (strings.HasPrefix(requestPath, "/v1/tasks/") || requestPath == "/v1/videos" || requestPath == "/v1/video/generations") {
+		operation = relayconstant.RelayModeVideoSubmit
+	}
+	orderAutomaticRoutes(rows, "preview", modelName, operation, query.Stream)
 	for _, row := range rows {
 		item := project(row.Id)
 		if item.Reason != "model_not_allowed" && item.Reason != "model_unavailable" {

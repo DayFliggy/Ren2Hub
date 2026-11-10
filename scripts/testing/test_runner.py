@@ -23,6 +23,69 @@ CA_MOUNT = {'Type': 'bind', 'Source': '/run/candidate/server.crt', 'Destination'
 
 
 class RunnerContractTests(unittest.TestCase):
+    def test_all_runs_other_layers_and_diagnoses_once_without_hiding_failure(self):
+        for diagnostic_code in (1, 2):
+            with self.subTest(diagnostic_code=diagnostic_code), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory)
+                observed = []
+
+                def passed(name, **fields):
+                    def check(*args, **kwargs):
+                        observed.append(name)
+                        return {'success': True, **fields}
+                    return check
+
+                diagnostic = {'success': False, 'exit_code': diagnostic_code,
+                              'cases': [{'name': 'A4', 'status': 'fail'}] if diagnostic_code == 1 else
+                                       [{'name': 'N2', 'status': 'known_upstream'}]}
+
+                def create_candidate(source, stage_output, *args):
+                    observed.append('candidate')
+                    runner = SimpleNamespace(source=source, output=stage_output, stages=('routing',),
+                                             report={'success': False, 'stages': {}})
+                    runner.diagnostics = lambda: candidate.Candidate.diagnostics(runner)
+                    runner.prepare = lambda: observed.append('prepare')
+                    runner.stage = lambda name: runner.report['stages'].update(
+                        {name: {'success': False, 'contracts_success': True, 'exit_code': 2}})
+                    runner.cleanup = lambda: observed.append('cleanup')
+                    runner.manifest = lambda: runner.report.update(deployment_eligible=False)
+                    return runner
+
+                argv = ['run.py', 'all', '--output-parent', directory,
+                        '--image', 'sha256:' + 'a' * 64, '--simulator-image', 'sha256:' + 'b' * 64,
+                        '--image-identity', 'app-identity.json', '--simulator-identity', 'sim-identity.json']
+                with contextlib.ExitStack() as stack:
+                    for target, replacement in (
+                            ('run.go_unit', passed('unit-go')), ('run.frontend_unit', passed('unit-vue')),
+                            ('database.run', passed('databases')), ('run.static', passed('static')),
+                            ('run.build', passed('build', binary=str(output / 'app'))),
+                            ('run.race', passed('race')), ('browser.run', passed('browser')),
+                            ('run.ui_contracts', passed('ui-contracts'))):
+                        stack.enter_context(patch(target, side_effect=replacement))
+                    stack.enter_context(patch.object(sys, 'argv', argv))
+                    stack.enter_context(patch('run.identity', return_value={'source_sha256': 'stable'}))
+                    stack.enter_context(patch('run.environment', return_value={}))
+                    stack.enter_context(patch('run.execute', side_effect=['go version go1.26.10 linux/amd64', '1.4.0', 'v24.0.0']))
+                    stack.enter_context(patch('run.os.umask', return_value=0o022))
+                    stack.enter_context(patch('run.signal.signal'))
+                    stack.enter_context(patch('candidate.Candidate', side_effect=create_candidate,
+                                               diagnostics=candidate.Candidate.diagnostics))
+                    probe = stack.enter_context(patch('diagnostics.run', return_value=diagnostic))
+                    stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                    stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                    code = run.main()
+                self.assertEqual(observed, ['unit-go', 'unit-vue', 'databases', 'static', 'build',
+                                            'race', 'browser', 'ui-contracts', 'candidate', 'prepare', 'cleanup'])
+                probe.assert_called_once()
+                report = json.loads(next(output.glob('run-*/report.json')).read_text())
+                self.assertEqual(list(report['stages']), ['unit', 'databases', 'static', 'build',
+                                                         'race', 'browser', 'ui-contracts', 'candidate'])
+                self.assertEqual(report['stages']['candidate']['diagnostics'], diagnostic)
+                self.assertEqual(report['stages']['candidate']['stages']['routing']['exit_code'], 2)
+                self.assertFalse(report['stages']['candidate']['deployment_eligible'])
+                self.assertEqual(code, diagnostic_code)
+                self.assertEqual(report['exit_code'], diagnostic_code)
+
     def test_ui_runs_keep_origin_stable_after_recent_server_shutdown(self):
         with tempfile.TemporaryDirectory() as directory, socket.socket() as available:
             root = Path(directory)
@@ -158,7 +221,7 @@ class RunnerContractTests(unittest.TestCase):
             for env, code in cases:
                 with self.subTest(code=code), patch.dict('os.environ', env, clear=True), \
                         self.assertRaisesRegex(candidate.CandidateError, code):
-                    runner.prepare()
+                    runner.sdk_runtimes()
             (module / 'package.json').write_text('{}')
             env = {'GATEWAY_SDK_PYTHON': str(python), 'GATEWAY_SDK_NODE': str(python), 'GATEWAY_SDK_NODE_MODULE': str(module)}
             with patch.dict('os.environ', env, clear=True):
@@ -182,9 +245,11 @@ class HostTrafficCandidateTests(unittest.TestCase):
         runner.prefix = 'ren2hub-candidate-local-' + runner.run_id
         runner.containers, runner.image, runner.traffic_interface = {}, 'ren2hub-test:local', interface or ''
         runner.previous_image = None
-        runner.report = {'source': {'candidate_sha': 'a' * 40}}
+        runner.report = {'source': {'candidate_sha': 'a' * 40, 'working_tree_sha256': 'b' * 64}}
+        runner.verify_build_identities = lambda: None
         started = {}
-        labels = {'org.opencontainers.image.revision': 'a' * 40, 'org.opencontainers.image.version': 'a' * 40}
+        labels = {'org.opencontainers.image.revision': 'a' * 40, 'org.opencontainers.image.version': 'a' * 40,
+                  'io.ren2hub.source-sha256': 'b' * 64}
 
         def docker(*argv, **kwargs):
             if argv[:2] == ('image', 'inspect'):
@@ -244,14 +309,17 @@ class HostTrafficCandidateTests(unittest.TestCase):
             return {'go': 'go version go1.26.10 linux/amd64', 'bun': '1.4.0', 'node': 'v24.0.0'}[command[0]]
         for extra, expected in ((['--traffic-host-interface', 'eth0'], 'eth0'), ([], None)):
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory, \
-                    patch.object(sys, 'argv', ['run.py', 'candidate', '--image', 'ren2hub-test:x', '--output-parent', directory, *extra]), \
+                    patch.object(sys, 'argv', ['run.py', 'candidate', '--image', 'ren2hub-test:x', '--simulator-image', 'channel-simulator:x', '--image-identity', 'app-identity.json', '--simulator-identity', 'sim-identity.json', '--output-parent', directory, *extra]), \
                     patch('run.identity', return_value={'source_sha256': 'fixed'}), patch('run.execute', side_effect=execute), \
                     patch('run.signal.signal'), patch('run.os.umask'), contextlib.redirect_stdout(io.StringIO()), \
                     patch('candidate.run', return_value={'success': True}) as runner:
                 self.assertEqual(run.main(), 0)
-                source, stage, image, interface, previous = runner.call_args.args
+                source, stage, image, interface, previous, simulator, routing_only, app_identity, sim_identity = runner.call_args.args
                 self.assertEqual((source, stage.name, image, interface), (run.SOURCE, 'candidate', 'ren2hub-test:x', expected))
                 self.assertIsNone(previous)
+                self.assertEqual(simulator, "channel-simulator:x")
+                self.assertFalse(routing_only)
+                self.assertEqual((app_identity, sim_identity), (Path('app-identity.json'), Path('sim-identity.json')))
 
     def test_run_rejects_invalid_interface_before_creating_evidence(self):
         with tempfile.TemporaryDirectory() as directory, patch('run.signal.signal'), \
@@ -543,8 +611,9 @@ class UpgradeCandidateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             runner = SimpleNamespace(output=Path(directory),
                                      stages=(*candidate.UPGRADE_STAGES, *candidate.STAGES),
-                                     report={'success': False}, revision='old')
+                                     report={'success': False, 'stages': {}}, revision='old')
             runner.prepare = lambda: None
+            runner.diagnostics = lambda: runner.report.update(diagnostics={'success':True,'exit_code':0})
             runner.cleanup = lambda: None
             runner.manifest = lambda: None
 
@@ -553,7 +622,10 @@ class UpgradeCandidateTests(unittest.TestCase):
                 runner.revision = 'new'
 
             runner.upgrade = upgrade
-            runner.stage = lambda stage: observed.append((stage, runner.revision))
+            def stage(name):
+                observed.append((name, runner.revision))
+                runner.report['stages'][name] = {'success': True}
+            runner.stage = stage
             with patch('candidate.Candidate', return_value=runner):
                 report = candidate.run(Path(directory), Path(directory), 'new-image', previous_image='old-image')
             self.assertTrue(report['success'])

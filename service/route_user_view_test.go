@@ -43,6 +43,62 @@ func TestUserRouteViewsHideRuntimeOccupancy(t *testing.T) {
 	require.Equal(t, "channel_concurrency_full", preview.Entries[0].Reason)
 }
 
+// 路由审计 B2：预览先判渠道是否服务所查模型，再判可用性和倍率。与该模型无关的渠道不出现在
+// 自动预览里，也不因禁用或超倍率暴露名称；服务该模型但不可选的渠道仍带原因显示。
+func TestRoutePreviewListsOnlyChannelsServingTheModel(t *testing.T) {
+	db := setupRouteTest(t)
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", 7).Updates(map[string]any{"model_limits_enabled": true, "model_limits": "allowed-model"}).Error)
+	for id, modelName := range map[int]string{11: "allowed-model", 22: "allowed-model", 33: "allowed-model", 44: "allowed-model", 88: "secret-admin-model", 99: "another-model"} {
+		createRouteChannel(t, db, id, modelName)
+	}
+	require.NoError(t, db.Model(&model.Channel{}).Where("id IN ?", []int{22, 88}).Update("channel_ratio", "2").Error)
+	// 生产禁用路径同时把 abilities 置为 disabled（B3），不能只改 status。
+	for _, id := range []int{33, 99} {
+		require.True(t, model.UpdateChannelStatusDetailed(id, "", common.ChannelStatusManuallyDisabled, "admin disabled").Changed)
+	}
+	// 渠道启用但能力行已禁用：选路和目录都按不服务该模型处理，自动预览同样不列出（修复前后一致）。
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", 44).Update("enabled", false).Error)
+	maxRatio := "1"
+	_, err := model.SaveTokenRouting(context.Background(), 17, 7, model.TokenRouting{TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteAuto, MaxChannelRatio: &maxRatio}}, nil)
+	require.NoError(t, err)
+	query := TokenRoutePreviewQuery{Model: "allowed-model", Path: "/v1/chat/completions"}
+
+	reasons := func() map[int]string {
+		t.Helper()
+		preview, err := PreviewTokenRouting(context.Background(), 17, 7, query)
+		require.NoError(t, err)
+		got := map[int]string{}
+		for _, entry := range preview.Entries {
+			got[entry.ChannelID] = entry.Reason
+		}
+		return got
+	}
+	require.Equal(t, map[int]string{11: "eligible", 22: "channel_ratio_exceeded", 33: routeReasonChannelUnavailable}, reasons())
+	c := routeTestContext(t)
+	scope, err := loadRouteScope(c.Request.Context(), 7)
+	require.NoError(t, err)
+	rows, err := routeCandidates(c.Request.Context(), scope, "allowed-model", nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, 11, rows[0].Id, "the only eligible preview entry is the only dispatch candidate")
+
+	// 手动列表保持列表顺序；无关渠道说明为不服务该模型，不报它的倍率或可用性。
+	view, err := model.ReadTokenRouting(context.Background(), 7)
+	require.NoError(t, err)
+	_, err = model.SaveTokenRouting(context.Background(), 17, 7, model.TokenRouting{
+		TokenRouteProfile: model.TokenRouteProfile{Mode: model.TokenRouteManual, Version: view.Version, MaxChannelRatio: &maxRatio},
+		Entries:           []model.TokenRouteEntry{{ChannelID: 88, Enabled: true}, {ChannelID: 33, Enabled: true}, {ChannelID: 22, Enabled: true}, {ChannelID: 11, Enabled: true}},
+	}, map[int]bool{88: true, 33: true, 22: true, 11: true})
+	require.NoError(t, err)
+	preview, err := PreviewTokenRouting(context.Background(), 17, 7, query)
+	require.NoError(t, err)
+	got := make([][2]any, 0, len(preview.Entries))
+	for _, entry := range preview.Entries {
+		got = append(got, [2]any{entry.ChannelID, entry.Reason})
+	}
+	require.Equal(t, [][2]any{{88, "model_unavailable"}, {33, routeReasonChannelUnavailable}, {22, "channel_ratio_exceeded"}, {11, "eligible"}}, got)
+}
+
 // B10: the preview orders with the requested stream bucket and states that
 // automatic ordering is drawn again for every request.
 func TestRoutePreviewUsesRequestedStreamBucket(t *testing.T) {

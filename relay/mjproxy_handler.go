@@ -402,71 +402,16 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 
 	relayInfo.InitChannelMeta(c)
 
-	if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyAction { // midjourney plus，需要从customId中获取任务信息
-		mjErr := service.CoverPlusActionToNormalAction(&midjRequest)
-		if mjErr != nil {
-			return mjErr
-		}
-		relayInfo.RelayMode = relayconstant.RelayModeMidjourneyChange
+	relayMode, mjId, mjErr := service.MidjourneyOriginTaskID(relayInfo.RelayMode, &midjRequest)
+	if mjErr != nil {
+		return mjErr
 	}
-	if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyVideo {
-		midjRequest.Action = constant.MjActionVideo
-	}
-
-	if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyImagine { //绘画任务，此类任务可重复
-		if midjRequest.Prompt == "" {
-			return service.MidjourneyErrorWrapper(constant.MjRequestError, "prompt_is_required")
+	relayInfo.RelayMode = relayMode
+	if mjId != "" { //放大、变换任务，此类任务，如果重复且已有结果，远端api会直接返回最终结果
+		originTask, found := middleware.MidjourneyOriginLookup(c)
+		if !found {
+			originTask = model.GetByMJId(relayInfo.UserId, mjId)
 		}
-		midjRequest.Action = constant.MjActionImagine
-	} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyDescribe { //按图生文任务，此类任务可重复
-		midjRequest.Action = constant.MjActionDescribe
-	} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyEdits { //编辑任务，此类任务可重复
-		midjRequest.Action = constant.MjActionEdits
-	} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyShorten { //缩短任务，此类任务可重复，plus only
-		midjRequest.Action = constant.MjActionShorten
-	} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyBlend { //绘画任务，此类任务可重复
-		midjRequest.Action = constant.MjActionBlend
-	} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyUpload { //绘画任务，此类任务可重复
-		midjRequest.Action = constant.MjActionUpload
-	} else if midjRequest.TaskId != "" { //放大、变换任务，此类任务，如果重复且已有结果，远端api会直接返回最终结果
-		mjId := ""
-		if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyChange {
-			if midjRequest.TaskId == "" {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_id_is_required")
-			} else if midjRequest.Action == "" {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "action_is_required")
-			} else if midjRequest.Index == 0 {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "index_is_required")
-			}
-			//action = midjRequest.Action
-			mjId = midjRequest.TaskId
-		} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneySimpleChange {
-			if midjRequest.Content == "" {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "content_is_required")
-			}
-			params := service.ConvertSimpleChangeParams(midjRequest.Content)
-			if params == nil {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "content_parse_failed")
-			}
-			mjId = params.TaskId
-			midjRequest.Action = params.Action
-		} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyModal {
-			//if midjRequest.MaskBase64 == "" {
-			//	return service.MidjourneyErrorWrapper(constant.MjRequestError, "mask_base64_is_required")
-			//}
-			mjId = midjRequest.TaskId
-			midjRequest.Action = constant.MjActionModal
-		} else if relayInfo.RelayMode == relayconstant.RelayModeMidjourneyVideo {
-			midjRequest.Action = constant.MjActionVideo
-			if midjRequest.TaskId == "" {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_id_is_required")
-			} else if midjRequest.Action == "" {
-				return service.MidjourneyErrorWrapper(constant.MjRequestError, "action_is_required")
-			}
-			mjId = midjRequest.TaskId
-		}
-
-		originTask := model.GetByMJId(relayInfo.UserId, mjId)
 		if originTask == nil {
 			return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_not_found")
 		} else { //原任务的Status=SUCCESS，则可以做放大UPSCALE、变换VARIATION等动作，此时必须使用原来的请求地址才能正确处理
@@ -475,8 +420,10 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 					return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_status_not_success")
 				}
 			}
-			if _, mjErr := acquireMidjourneyOriginChannel(c, relayInfo, originTask.ChannelId); mjErr != nil {
-				return mjErr
+			if !middleware.OriginChannelPrepared(c, originTask.ChannelId) {
+				if _, mjErr := acquireMidjourneyOriginChannel(c, relayInfo, originTask.ChannelId); mjErr != nil {
+					return mjErr
+				}
 			}
 		}
 		midjRequest.Prompt = originTask.Prompt
@@ -692,14 +639,17 @@ func getMjRequestPath(path string) string {
 	return requestURL
 }
 
+// acquireMidjourneyOriginChannel admits an origin task's channel with the
+// origin-task rule: the Key's current manual list does not move the task.
 func acquireMidjourneyOriginChannel(c *gin.Context, info *relaycommon.RelayInfo, channelID int) (*model.Channel, *dto.MidjourneyResponse) {
-	channel, err := service.AcquirePinnedRouteChannel(c, channelID, info.OriginModelName)
+	channel, err := service.AcquireOriginTaskRouteChannel(c, channelID, info.OriginModelName)
 	if err != nil {
 		code := constant.MjRequestError
 		if errors.Is(err, service.ErrConcurrencyFull) {
 			code = 30
 		}
-		return nil, service.MidjourneyErrorWrapper(code, err.Error())
+		taskErr := service.PinnedTaskRouteError(err)
+		return nil, service.MidjourneyErrorWrapper(code, taskErr.Message)
 	}
 	if apiErr := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName); apiErr != nil {
 		return nil, service.MidjourneyErrorWrapper(constant.MjRequestError, apiErr.Error())

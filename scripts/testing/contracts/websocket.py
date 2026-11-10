@@ -140,7 +140,9 @@ class WebSocket:
                     and headers.get("upgrade", "").lower() == "websocket"
                     and "upgrade" in headers.get("connection", "").lower(),
                     "invalid_websocket_upgrade")
-            return cls(connection, reader, True)
+            result = cls(connection, reader, True)
+            result.request_id = headers.get("x-oneapi-request-id")
+            return result
         except Exception:
             reader.close()
             connection.close()

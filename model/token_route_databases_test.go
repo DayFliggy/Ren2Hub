@@ -20,6 +20,8 @@ import (
 	"gorm.io/gorm/schema"
 )
 
+var hardDeleteTables = []any{&User{}, &UserAccessToken{}, &ExternalIdentityClaim{}, &TwoFABackupCode{}, &TwoFA{}, &UserSession{}, &AuthFlow{}, &PasskeyCredential{}, &UserOAuthBinding{}}
+
 func TestTokenRoutingDatabases(t *testing.T) {
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
 		t.Run(dialect, func(t *testing.T) {
@@ -49,15 +51,22 @@ func TestTokenRoutingDatabases(t *testing.T) {
 				sqlDB.SetMaxOpenConns(1)
 			}
 			require.NoError(t, db.AutoMigrate(&Token{}, &TokenRouteProfile{}, &TokenRouteEntry{}, &Channel{}, &Ability{}))
-			previous, redis, cache := DB, common.RedisEnabled, common.MemoryCacheEnabled
+			// 硬删除用户的屏障用例会经过 HardDelete 触及的全部表。
+			require.NoError(t, db.AutoMigrate(hardDeleteTables...))
+			barrier := installRouteBarrier(t, db)
+			previous, redis, cache, databaseType := DB, common.RedisEnabled, common.MemoryCacheEnabled, common.MainDatabaseType()
 			DB = db
 			common.RedisEnabled = false
 			common.MemoryCacheEnabled = false
+			// lockForUpdate 按主库类型决定是否加锁，不设置时 MySQL/PostgreSQL 也会按 SQLite 跳过。
+			common.SetMainDatabaseType(common.DatabaseType(dialect))
 			t.Cleanup(func() {
 				DB = previous
 				common.RedisEnabled = redis
 				common.MemoryCacheEnabled = cache
+				common.SetMainDatabaseType(databaseType)
 				require.NoError(t, db.Migrator().DropTable(&TokenRouteEntry{}, &TokenRouteProfile{}, &Token{}, &Ability{}, &Channel{}))
+				require.NoError(t, db.Migrator().DropTable(hardDeleteTables...))
 				require.NoError(t, sqlDB.Close())
 			})
 			token := Token{UserId: 17, Key: "routing-db-fixture"}
@@ -123,6 +132,8 @@ func TestTokenRoutingDatabases(t *testing.T) {
 			require.Zero(t, count)
 			require.NoError(t, db.Model(&TokenRouteProfile{}).Count(&count).Error)
 			require.Zero(t, count)
+
+			runTokenRouteRaceCases(t, db, barrier)
 		})
 	}
 }

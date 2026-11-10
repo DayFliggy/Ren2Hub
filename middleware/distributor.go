@@ -62,8 +62,8 @@ func Distribute() func(c *gin.Context) {
 			stream = c.Query("alt") == "sse" || strings.Contains(c.Request.URL.Path, "streamGenerateContent")
 		}
 		common.SetContextKey(c, constant.ContextKeyIsStream, stream)
-		_, pinned, _ := constraints.ResolvedPin()
-		if !pinned {
+		pin, pinned, _ := constraints.ResolvedPin()
+		if !pinned || pin.Source == taskdto.PinSourceOriginTask {
 			// Select a channel for the user
 			// check token model mapping
 			modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
@@ -140,6 +140,9 @@ func Distribute() func(c *gin.Context) {
 		if setupErr := SetupContextForSelectedChannel(c, channel, modelRequest.Model); setupErr != nil && channel != nil {
 			abortWithOpenAiMessage(c, setupErr.StatusCode, setupErr.Error(), setupErr.GetErrorCode())
 			return
+		}
+		if channel != nil && pinned && pin.Source == taskdto.PinSourceOriginTask {
+			markOriginChannelPrepared(c, channel.Id)
 		}
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
@@ -435,6 +438,9 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 				}
 			}
 			modelRequest.Model = midjourneyModel
+			if err = lookUpMidjourneyOrigin(c, relayMode); err != nil {
+				return nil, false, err
+			}
 		}
 		c.Set("relay_mode", relayMode)
 	} else if strings.Contains(c.Request.URL.Path, "/v1/videos/") && strings.HasSuffix(c.Request.URL.Path, "/remix") {

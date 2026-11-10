@@ -61,12 +61,15 @@ export function parseTokenRoute(value: unknown): TokenRoute {
     }),
   }
 }
+export type RouteTransport = 'http' | 'websocket'
 export interface TokenRoutePreviewQuery {
+  transport?: RouteTransport
   model: string
   path: string
   stream: boolean
 }
 export interface TokenRoutePreview {
+  transport: RouteTransport
   mode: 'auto' | 'manual'
   version: number
   model: string
@@ -91,12 +94,18 @@ export const tokenRoutingApi = {
     const url = `${endpoint(id)}/preview`
     const value = await api.get<unknown>(
       url,
-      { model: query.model, path: query.path, stream: String(query.stream) },
+      {
+        model: query.model,
+        path: query.path,
+        stream: String(query.stream),
+        transport: query.transport ?? 'http',
+      },
       { signal }
     )
     if (
       !isRecord(value) ||
       (value.mode !== 'auto' && value.mode !== 'manual') ||
+      (value.transport !== 'http' && value.transport !== 'websocket') ||
       (value.ordering !== 'manual' &&
         value.ordering !== 'weighted_random_per_request') ||
       !Array.isArray(value.entries)
@@ -104,6 +113,7 @@ export const tokenRoutingApi = {
       invalidResponse(url)
     return {
       mode: value.mode,
+      transport: value.transport,
       version: requiredStrictInteger(value.version, url),
       model: requiredString(value.model, url),
       path: requiredString(value.path, url),

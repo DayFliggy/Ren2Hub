@@ -509,6 +509,51 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 	}
 }
 
+// B10：修改 Key 后的响应与 GET 一样给出已保存的路由类型，手动路由不能显示成 auto。
+func TestUpdateTokenReturnsSavedRoutingType(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := model.Token{UserId: 1, Name: "manual-before", Key: "manual-route-update-key", Status: common.TokenStatusEnabled, UnlimitedQuota: true, ExpiredTime: -1}
+	require.NoError(t, token.InsertWithRouting(model.TokenRouteManual))
+
+	body := map[string]any{"id": token.Id, "name": "manual-after", "unlimited_quota": true, "expired_time": -1}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+	UpdateToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+	var detail struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+		Key  string `json:"key"`
+	}
+	require.NoError(t, common.Unmarshal(response.Data, &detail))
+	require.Equal(t, model.TokenRouteManual, detail.Type)
+	require.Equal(t, "manual-after", detail.Name)
+	require.Equal(t, token.GetMaskedKey(), detail.Key)
+	require.NotContains(t, recorder.Body.String(), token.Key)
+	var saved model.Token
+	require.NoError(t, db.First(&saved, token.Id).Error)
+	require.Equal(t, "manual-after", saved.Name)
+}
+
+// B10：路由类型读不出来时返回错误，不把手动路由报成 auto；读在写之前，失败时修改不落库。
+func TestUpdateTokenRoutingReadFailureIsAnError(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "routing-read-before", "routing-read-failure-key")
+	require.NoError(t, db.Migrator().DropTable(&model.TokenRouteProfile{}))
+
+	body := map[string]any{"id": token.Id, "name": "routing-read-after", "unlimited_quota": true, "expired_time": -1}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+	UpdateToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.False(t, response.Success)
+	require.NotContains(t, recorder.Body.String(), `"type":"auto"`)
+	var saved model.Token
+	require.NoError(t, db.First(&saved, token.Id).Error)
+	require.Equal(t, "routing-read-before", saved.Name)
+}
+
 func TestGetTokenKeyRequiresOwnershipAndReturnsFullKey(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	token := seedToken(t, db, 1, "owned-token", "owner1234token5678")

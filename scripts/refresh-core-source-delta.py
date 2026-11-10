@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 # 本轮已审计的 NewAPI 核心版本；清单的 upstream_sha 与 reference_newapi_sha 都取这里。
-UPSTREAM_SHA = 'ba5f7367797566175a6cd97a748d430af3602a01'
+UPSTREAM_SHA = '706144769e5bed5a47b78721e3bb11da3cf4c0b9'
 
 
 def git(*args, repository=None):

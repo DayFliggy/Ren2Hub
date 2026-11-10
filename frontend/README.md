@@ -32,7 +32,7 @@ bun run build
 
 `bun run test:visual -- tests/visual/greeting-hero.spec.ts tests/visual/models.spec.ts tests/visual/billing.spec.ts` 使用原生合同的模拟数据验证保留页面。`PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 保留临时截图到 `output/`，不会更新正式基线。设置 `REN2HUB_LOCAL_SESSION` 时，Playwright 只运行隔离后端套件；直接调用 `test:visual` 时运行已有视觉与交互测试。
 
-依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已迁移到 Tailwind CSS 4.3.3 的官方 `@tailwindcss/vite` 集成，移除 Tailwind 3 引入的 braces 和 postcss-selector-parser 6.x 依赖链。`autoprefixer`、直接 `postcss` 依赖、旧 JavaScript Tailwind/PostCSS 配置及三项不再必要的 override 已删除；Vue/Vite 自身使用的 PostCSS 和 ESLint Vue 插件使用的安全版 selector parser 仍保留，详见[同步账本](../docs/upstream/SYNC_LEDGER.md#依赖与构建)。
+依赖审计使用 `bun audit --json`，安装检查使用 `bun install --frozen-lockfile`。2026-10-13 已迁移到 Tailwind CSS 4.3.3 的官方 `@tailwindcss/vite` 集成，移除 Tailwind 3 引入的 braces 和 postcss-selector-parser 6.x 依赖链。`autoprefixer`、直接 `postcss` 依赖、旧 JavaScript Tailwind/PostCSS 配置及三项不再必要的 override 已删除；Vue/Vite 自身使用的 PostCSS 和 ESLint Vue 插件使用的安全版 selector parser 仍保留，当时的依赖记录用 `git show d7095730e^:docs/upstream/SYNC_LEDGER.md` 读取（“依赖与构建”一节）。
 
 ## 样式构建
 

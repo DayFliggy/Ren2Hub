@@ -25,7 +25,8 @@ IMAGES = {"mysql": "mysql:8.4", "postgres": "postgres:15.19"}
 MATRIX_TESTS = {
     "middleware": ("TestRouteTaskPluginEndpointUsesSelectedChannel",),
     "model": (
-        "TestTokenRoutingDatabases", "TestGmpayAndTicketDatabaseContracts",
+        "TestTokenRoutingDatabases", "TestTokenRouteChannelMutationLockOrderDatabases",
+        "TestAuthCacheIntegrityDatabaseMatrix", "TestGmpayAndTicketDatabaseContracts",
         "TestCoreEmptyDatabaseInitialization", "TestAffiliateLedgerMigrationAndIdempotencyDatabases",
         "TestSystemTaskHistoryDatabaseMatrix", "TestAffiliateDeletedInviterDatabases",
         "TestAffiliateMonthlySeriesDatabases", "TestDeleteDisabledChannelIDsDatabases",
@@ -493,7 +494,14 @@ class Runner:
     def execute(self) -> None:
         for package, tests in MATRIX_TESTS.items():
             for test in tests:
-                self.suite(package, test)
+                # The lock matrix includes 23 scenarios per engine. Keep each
+                # backend invocation bounded at 60 seconds without aggregating
+                # three independent engines into one timeout budget.
+                if test == "TestTokenRouteChannelMutationLockOrderDatabases":
+                    for dialect in DIALECTS:
+                        self.suite(package, test, (dialect,))
+                else:
+                    self.suite(package, test)
         for package, test in PAIRED_TESTS:
             self.suite(package, test, ("mysql", "postgres"))
         for package, test, dialect in SINGLE_DIALECT_TESTS:

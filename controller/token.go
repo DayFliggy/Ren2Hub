@@ -387,6 +387,12 @@ func UpdateToken(c *gin.Context) {
 			cleanToken.AllowUserQuotaQuery = *request.AllowUserQuotaQuery
 		}
 	}
+	response := buildMaskedTokenResponse(cleanToken)
+	// 先读路由类型再写库：读取失败时令牌保持原样，不会出现已修改却报告失败。
+	if err := fillTokenRoutingModes([]*tokenResponse{response}); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	err = cleanToken.Update()
 	if err != nil {
 		common.ApiError(c, err)
@@ -421,7 +427,7 @@ func UpdateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildMaskedTokenResponse(cleanToken),
+		"data":    response,
 	})
 }
 

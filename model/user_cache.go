@@ -24,6 +24,18 @@ type UserBase struct {
 	Setting        string `json:"setting"`
 	AuthVersion    int64  `json:"-"`
 	CacheSchema    int    `json:"-"`
+	CacheExpiresAt int64  `json:"-"`
+	CacheMAC       string `json:"-"`
+}
+
+func (user UserBase) cacheMAC() (string, error) {
+	user.Quota = 0
+	return authCacheMAC(getUserCacheKey(user.Id), struct {
+		User           UserBase
+		AuthVersion    int64
+		CacheSchema    int
+		CacheExpiresAt int64
+	}{user, user.AuthVersion, user.CacheSchema, user.CacheExpiresAt})
 }
 
 func (user *UserBase) WriteContext(c *gin.Context) {
@@ -127,6 +139,10 @@ func cacheGetUserBase(userId int) (*UserBase, error) {
 	if userCache.Id != userId || userCache.CacheSchema != userCacheSchemaVersion || userCache.AuthVersion <= 0 {
 		return nil, fmt.Errorf("user cache schema is stale")
 	}
+	mac, err := userCache.cacheMAC()
+	if err != nil || !validAuthCacheMAC(mac, userCache.CacheMAC, userCache.CacheExpiresAt) {
+		return nil, fmt.Errorf("user cache integrity check failed")
+	}
 	floor, err := getUserAuthVersionFloor(userId)
 	if err != nil {
 		return nil, err
@@ -187,35 +203,6 @@ func getUserSettingCache(userId int) (dto.UserSetting, error) {
 		return dto.UserSetting{}, err
 	}
 	return cache.GetSetting(), nil
-}
-
-func updateUserEmailCache(userId int, email string) error {
-	return updateUserCacheField(userId, "Email", email)
-}
-
-func updateUserNameCache(userId int, username string) error {
-	return updateUserCacheField(userId, "Username", username)
-}
-
-func updateUserSettingCache(userId int, setting string) error {
-	return updateUserCacheField(userId, "Setting", setting)
-}
-
-// updateUserCacheField prevents individual cache refreshes from bypassing the
-// auth-version fence. It intentionally does nothing when the complete hash is
-// absent; the next GetUserCache call will repopulate it from the database.
-func updateUserCacheField(userId int, field string, value any) error {
-	if !common.RedisEnabled {
-		return nil
-	}
-	var user User
-	if err := DB.Select("id", "auth_version").Where("id = ?", userId).First(&user).Error; err != nil {
-		return err
-	}
-	if user.AuthVersion <= 0 {
-		return fmt.Errorf("invalid user auth version")
-	}
-	return updateUserCacheFieldAtVersion(userId, field, value, user.AuthVersion)
 }
 
 // GetUserLanguage returns the user's language preference from cache

@@ -3,10 +3,13 @@ export const tokenRoutingMessages = {
     routing: {
       preview: 'Preview saved routing',
       previewHint:
-        'Checks the saved configuration without sending an upstream request or charging quota. Automatic mode lists eligible candidates, not a selected channel. Save edits before previewing them.',
+        'Checks the saved configuration without sending an upstream request or charging quota. Automatic mode lists eligible candidates, not a selected channel. Checks static eligibility only; body-dependent plugin modes are validated when executing. Save edits before previewing them.',
       previewVersion: 'Saved version {version}',
       model: 'Model',
       path: 'API path',
+      transport: 'Transport',
+      pathUnsupported:
+        'This path needs plugin request decoding and cannot be previewed. WebSocket previews support /v1/responses only.',
       stream: 'Streaming request',
       streaming: 'Streaming',
       nonStreaming: 'Non-streaming',
@@ -21,6 +24,8 @@ export const tokenRoutingMessages = {
         unavailable: 'Unavailable channel',
         model_unavailable: 'No channel supports this model',
         protocol_unavailable: 'Protocol unavailable',
+        task_plugin_identity: 'Channel belongs to a different plugin',
+        task_plugin_endpoint: 'Plugin does not serve this endpoint',
         channel_unavailable: 'Channel unavailable',
         invalid_channel_ratio: 'Invalid channel multiplier',
         invalid_ratio_limit: 'Invalid multiplier limit',
@@ -84,10 +89,13 @@ export const tokenRoutingMessages = {
     routing: {
       preview: '预览已保存路由',
       previewHint:
-        '只检查已保存的配置，不发送上游请求、不扣额度。自动模式展示符合条件的候选渠道，不代表最终中选。编辑后需先保存再预览。',
+        '只检查已保存的配置，不发送上游请求、不扣额度。自动模式展示符合条件的候选渠道，不代表最终中选。只证明静态资格，依赖请求体的插件模式在执行时检查。编辑后需先保存再预览。',
       previewVersion: '已保存版本 {version}',
       model: '模型',
       path: 'API 路径',
+      transport: '传输方式',
+      pathUnsupported:
+        '此路径需要插件解码请求，无法静态预览。WebSocket 仅支持 /v1/responses。',
       stream: '流式请求',
       streaming: '流式',
       nonStreaming: '非流式',
@@ -101,6 +109,8 @@ export const tokenRoutingMessages = {
         unavailable: '渠道不可用',
         model_unavailable: '无可用的模型渠道',
         protocol_unavailable: '不支持此协议',
+        task_plugin_identity: '渠道属于其他插件',
+        task_plugin_endpoint: '插件不支持此端点',
         channel_unavailable: '渠道不可用',
         invalid_channel_ratio: '渠道倍率无效',
         invalid_ratio_limit: '倍率上限无效',

@@ -28,6 +28,10 @@ func PinnedRouteError(err error) *types.NewAPIError {
 		status, code = http.StatusTooManyRequests, "channel_concurrency_exceeded"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		status, code = http.StatusRequestTimeout, "request_cancelled"
+	case errors.Is(err, errConcurrencyLimitUnavailable):
+		status, code = ConcurrencyAdmissionError("channel", err)
+		common.SysError(common.LogText("unable to acquire pinned route channel: %v", err))
+		options = append(options, types.ErrOptionWithHideErrMsg("Channel concurrency limit is unavailable"))
 	default:
 		common.SysError(common.LogText("unable to acquire pinned route channel: %v", err))
 		options = append(options, types.ErrOptionWithHideErrMsg("Unable to load pinned channel"))
@@ -37,7 +41,7 @@ func PinnedRouteError(err error) *types.NewAPIError {
 
 // PreferUpstreamError 在重试轮次选不到渠道时保留上一次真实的上游错误；
 // 选路失败本身只记日志。首轮没有上游错误，照常返回选路错误。
-func PreferUpstreamError(last, selection *types.NewAPIError) *types.NewAPIError {
+func PreferUpstreamError[T any](last, selection *T) *T {
 	if last != nil {
 		return last
 	}
@@ -59,10 +63,19 @@ func routeLoadFailure(c *gin.Context, err error) *ChannelSelectError {
 	if errors.Is(err, ErrConcurrencyFull) {
 		return &ChannelSelectError{StatusCode: http.StatusTooManyRequests, Code: "channel_concurrency_exceeded", Message: err.Error()}
 	}
+	if errors.Is(err, errConcurrencyLimitUnavailable) {
+		status, code := ConcurrencyAdmissionError("channel", err)
+		return &ChannelSelectError{StatusCode: status, Code: code, Message: "Channel concurrency limit is unavailable"}
+	}
 	return &ChannelSelectError{StatusCode: http.StatusInternalServerError, Code: types.ErrorCodeGetChannelFailed, Message: "Unable to load token routing"}
 }
 
 func PinnedTaskRouteError(err error) *dto.TaskError {
+	if status, code, message, matched := originTaskRouteFailure(err); matched {
+		taskErr := TaskErrorWrapperLocal(errors.New(message), code, status)
+		taskErr.NoRetry = true
+		return taskErr
+	}
 	taskErr := TaskErrorFromAPIError(PinnedRouteError(err))
 	taskErr.LocalError = true
 	taskErr.NoRetry = true

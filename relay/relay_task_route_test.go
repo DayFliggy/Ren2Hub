@@ -2,6 +2,7 @@ package relay
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -84,6 +85,39 @@ func TestOriginTaskStorageFailuresStayPrivateAndDoNotAcquire(t *testing.T) {
 			require.Nil(t, info.Billing)
 			require.Equal(t, before, service.ChannelInFlight(11))
 			require.False(t, c.Writer.Written())
+		})
+	}
+}
+
+// Writing LockedChannel for a plugin origin pin reads the channel the same
+// way with the memory cache on or off. Before the fix a channel missing only
+// from the cache was a 500 in cache mode.
+func TestApplyChannelPinReadsOriginChannelThroughCache(t *testing.T) {
+	for _, cache := range []bool{false, true} {
+		t.Run(fmt.Sprint("cache=", cache), func(t *testing.T) {
+			db := setupRelayChannelDB(t)
+			common.MemoryCacheEnabled = cache
+			model.InitChannelCache()
+			require.NoError(t, db.Create(&model.Channel{Id: 11, Key: "origin-test", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI}).Error)
+			apply := func() (*relaycommon.RelayInfo, *dto.TaskError) {
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/tasks/continue", nil)
+				service.GetChannelConstraints(c).AddPin(dto.ChannelPin{ChannelId: 11, Source: dto.PinSourceOriginTask, RetryMode: dto.PinRetrySameChannel})
+				info := &relaycommon.RelayInfo{UserId: 17, TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
+				return info, ApplyChannelPin(c, info)
+			}
+
+			info, err := apply()
+			require.Nil(t, err)
+			locked, ok := info.LockedChannel.(*model.Channel)
+			require.True(t, ok)
+			require.Equal(t, 11, locked.Id)
+
+			require.NoError(t, db.Delete(&model.Channel{}, 11).Error)
+			_, err = apply()
+			require.NotNil(t, err)
+			require.Equal(t, http.StatusBadRequest, err.StatusCode)
+			require.Equal(t, "origin_task_channel_disabled", err.Code)
 		})
 	}
 }

@@ -62,6 +62,7 @@ function previewResult(): TokenRoutePreview {
     path: '/v1/chat/completions',
     stream: false,
     ordering: 'manual',
+    transport: 'http',
     entries: [
       {
         channel_id: 7,
@@ -300,7 +301,12 @@ it('keeps read-only previews separate from unsaved edits and clears superseded r
   await flushPromises()
   expect(mocks.preview).toHaveBeenLastCalledWith(
     7,
-    { model: 'other-model', path: '/v1/chat/completions', stream: false },
+    {
+      model: 'other-model',
+      path: '/v1/chat/completions',
+      stream: false,
+      transport: 'http',
+    },
     expect.any(AbortSignal)
   )
   expect(wrapper.text()).toContain('Saved preview channel')
@@ -314,7 +320,12 @@ it('sends the stream toggle, invalidates the shown preview and explains its orde
   await flushPromises()
   expect(mocks.preview).toHaveBeenLastCalledWith(
     7,
-    { model: 'gpt', path: '/v1/chat/completions', stream: false },
+    {
+      model: 'gpt',
+      path: '/v1/chat/completions',
+      stream: false,
+      transport: 'http',
+    },
     expect.any(AbortSignal)
   )
   expect(wrapper.text()).toContain('in the saved order below')
@@ -330,10 +341,15 @@ it('sends the stream toggle, invalidates the shown preview and explains its orde
   await flushPromises()
   expect(mocks.preview).toHaveBeenLastCalledWith(
     7,
-    { model: 'gpt', path: '/v1/chat/completions', stream: true },
+    {
+      model: 'gpt',
+      path: '/v1/chat/completions',
+      stream: true,
+      transport: 'http',
+    },
     expect.any(AbortSignal)
   )
-  expect(wrapper.text()).toContain('/v1/chat/completions · Streaming')
+  expect(wrapper.text()).toContain('/v1/chat/completions · HTTP · Streaming')
   expect(wrapper.text()).toContain('The list below is one sample')
   expect(wrapper.text()).not.toContain('in the saved order below')
   wrapper.unmount()
@@ -485,5 +501,33 @@ it('discards a post-save candidate refresh after navigating to another token', a
   expect(wrapper.text()).toContain('Channel 8')
   expect(wrapper.text()).not.toContain('Channel 99')
   expect(button(wrapper, 'Save').attributes('disabled')).toBeUndefined()
+  wrapper.unmount()
+})
+
+it('previews WebSocket eligibility on Responses and invalidates the old result', async () => {
+  const wrapper = await render()
+  await wrapper.get('input[aria-label="Model"]').setValue('gpt')
+  await button(wrapper, 'Preview saved routing').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('Saved preview channel')
+  await wrapper.get('select[aria-label="Transport"]').setValue('websocket')
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('Saved preview channel')
+  const path = wrapper.get('select[aria-label="API path"]')
+  expect(
+    path.findAll('option').map((option) => option.attributes('value'))
+  ).toEqual(['/v1/responses'])
+  await button(wrapper, 'Preview saved routing').trigger('click')
+  await flushPromises()
+  expect(mocks.preview).toHaveBeenLastCalledWith(
+    7,
+    {
+      model: 'gpt',
+      path: '/v1/responses',
+      stream: true,
+      transport: 'websocket',
+    },
+    expect.any(AbortSignal)
+  )
   wrapper.unmount()
 })

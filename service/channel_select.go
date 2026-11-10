@@ -74,10 +74,9 @@ func pinnedTaskPluginIdentities(c *gin.Context, expected string) ([]int, []strin
 	var generation *jsplugin.RoutingGeneration
 	var candidates []*jsplugin.LoadedPlugin
 	if value, exists := c.Get(jsplugin.ContextKeyPinnedEndpoint); exists {
-		if pinned, ok := value.(jsplugin.PinnedEndpoint); ok && len(pinned.Candidates) > 1 {
-			generation = pinned.Generation
-			for _, candidate := range pinned.Candidates {
-				candidates = append(candidates, candidate.Plugin)
+		if pinned, ok := value.(jsplugin.PinnedEndpoint); ok {
+			if channelTypes, keys := taskPluginEndpointIdentities(pinned, expected); len(keys) > 0 {
+				return channelTypes, keys
 			}
 		}
 	} else if value, exists := c.Get(jsplugin.ContextKeyPinnedRoute); exists {
@@ -89,33 +88,8 @@ func pinnedTaskPluginIdentities(c *gin.Context, expected string) ([]int, []strin
 		}
 	}
 	if generation != nil {
-		expectedFound := false
-		channelTypes := make([]int, 0, len(candidates))
-		pluginKeys := make([]string, 0, len(candidates))
-		seen := make(map[int]struct{}, len(candidates))
-		for _, candidate := range candidates {
-			if candidate == nil {
-				continue
-			}
-			if candidate.Meta.Key == expected {
-				expectedFound = true
-			}
-			pluginKeys = append(pluginKeys, candidate.Meta.Key)
-			for _, channelType := range candidate.Meta.ChannelTypes {
-				if channelType == 0 || channelType == constant.ChannelTypeTaskPlugin {
-					continue
-				}
-				if _, duplicate := seen[channelType]; duplicate {
-					continue
-				}
-				if plugin, indexed := generation.GetByChannelType(channelType); indexed && plugin == candidate {
-					seen[channelType] = struct{}{}
-					channelTypes = append(channelTypes, channelType)
-				}
-			}
-		}
-		if expectedFound {
-			return channelTypes, pluginKeys
+		if channelTypes, keys := taskPluginIdentities(generation, candidates, expected, true); len(keys) > 0 {
+			return channelTypes, keys
 		}
 	}
 	value, exists := c.Get(jsplugin.ContextKeyPinnedPlugin)
@@ -123,14 +97,7 @@ func pinnedTaskPluginIdentities(c *gin.Context, expected string) ([]int, []strin
 	if !exists || !ok || pinned.Generation == nil || pinned.Plugin == nil || pinned.Plugin.Meta.Key != expected {
 		return nil, nil
 	}
-	channelTypes := make([]int, 0, len(pinned.Plugin.Meta.ChannelTypes))
-	for _, channelType := range pinned.Plugin.Meta.ChannelTypes {
-		if channelType == 0 || channelType == constant.ChannelTypeTaskPlugin {
-			continue
-		}
-		channelTypes = append(channelTypes, channelType)
-	}
-	return channelTypes, []string{expected}
+	return taskPluginIdentities(pinned.Generation, []*jsplugin.LoadedPlugin{pinned.Plugin}, expected, false)
 }
 
 // ChannelSelectError explains why SelectChannelForRequest found no channel.
@@ -162,6 +129,9 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 			pin.Source, pin.ChannelId, lost.Source, lost.ChannelId,
 		))
 	}
+	if pinned && pin.Source == dto.PinSourceOriginTask {
+		return selectOriginTaskChannel(c, pin.ChannelId, modelName)
+	}
 	if err := LoadTokenRouteConstraints(c); err != nil {
 		return nil, routeLoadFailure(c, err)
 	}
@@ -177,10 +147,10 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	if channel == nil && pinned {
 		channel, err := model.CacheGetChannel(pin.ChannelId)
 		if err != nil {
-			return nil, pinnedChannelUnavailable(pin, http.StatusBadRequest, i18n.MsgDistributorInvalidChannelId)
+			return nil, &ChannelSelectError{StatusCode: http.StatusBadRequest, MessageID: i18n.MsgDistributorInvalidChannelId}
 		}
 		if channel.Status != common.ChannelStatusEnabled {
-			return nil, pinnedChannelUnavailable(pin, http.StatusForbidden, i18n.MsgDistributorChannelDisabled)
+			return nil, &ChannelSelectError{StatusCode: http.StatusForbidden, MessageID: i18n.MsgDistributorChannelDisabled}
 		}
 		if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, constraints.Filters); !ok {
 			return nil, &ChannelSelectError{
@@ -198,15 +168,6 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		}
 	}
 	return channel, nil
-}
-
-// Origin-task pins report a fixed code so task polling can tell a retired
-// channel from a malformed request.
-func pinnedChannelUnavailable(pin dto.ChannelPin, statusCode int, messageID string) *ChannelSelectError {
-	if pin.Source == dto.PinSourceOriginTask {
-		return &ChannelSelectError{StatusCode: http.StatusBadRequest, Code: "origin_task_channel_disabled", Message: "origin_task_channel_disabled"}
-	}
-	return &ChannelSelectError{StatusCode: statusCode, MessageID: messageID}
 }
 
 // AppendUsedChannel records an attempted channel in the request's channel

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"sort"
 	"strconv"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
@@ -268,7 +270,7 @@ func selectQualifiedChannel(c *gin.Context, modelName string) (*model.Channel, e
 	pin, pinned, _ := GetChannelConstraints(c).ResolvedPin()
 	busy := false
 	for _, channel := range rows {
-		if used[channel.Id] && !(pinned && pin.RetryMode == dto.PinRetrySameChannel) || pinned && channel.Id != pin.ChannelId {
+		if used[channel.Id] || pinned && channel.Id != pin.ChannelId {
 			continue
 		}
 		selected, err := acquireRouteChannel(c, channel)
@@ -325,10 +327,64 @@ func ReacquireSelectedRouteChannel(c *gin.Context, channelID int, modelName stri
 	return channel, nil
 }
 
-// AcquireOriginTaskRouteChannel is only used after the task resolver has
-// verified ownership and pinned its original channel. Current Key preferences
-// do not move an accepted task to another supplier, but capacity still applies.
-func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int) (*model.Channel, error) {
+// errOriginTaskChannelUnavailable: the origin task's channel is deleted (as
+// confirmed by the database), disabled or otherwise not routable.
+var errOriginTaskChannelUnavailable = errors.New("the channel of the origin task is unavailable")
+
+var errOriginTaskChannelRatioExceeded = errors.New("the origin channel exceeds this token's maximum channel multiplier")
+
+// originTaskFilterError: the origin channel fails an explicit request constraint.
+type originTaskFilterError struct{ kind dto.ChannelFilterKind }
+
+func (e *originTaskFilterError) Error() string {
+	return fmt.Sprintf("the channel of the origin task does not satisfy %s", e.kind)
+}
+
+// LoadOriginTaskChannel reads an origin task's channel. A memory-cache miss is
+// not a deletion: only the database's not-found is, and any other database
+// error is a storage failure. A disabled channel is unavailable too.
+func LoadOriginTaskChannel(channelID int) (*model.Channel, error) {
+	channel, err := model.CacheGetChannel(channelID)
+	if err != nil {
+		channel, err = model.GetChannelById(channelID, true)
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("%w: %w", errOriginTaskChannelUnavailable, err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if channel.Status != common.ChannelStatusEnabled {
+		return nil, errOriginTaskChannelUnavailable
+	}
+	return channel, nil
+}
+
+// originTaskFilters keeps the request's explicit constraints (path, WebSocket
+// capability, plugin identity or endpoint naming a plugin). An accepted task
+// does not follow the Key's current manual list, and the ordinary-request
+// default "no type-61 channel" is not a constraint on the task's identity; the
+// task's owner and platform checks are.
+func originTaskFilters(filters []dto.ChannelFilter) []dto.ChannelFilter {
+	kept := make([]dto.ChannelFilter, 0, len(filters))
+	for _, filter := range filters {
+		if filter.Kind == dto.FilterTokenRoute {
+			continue
+		}
+		if filter.Kind == dto.FilterTaskPluginIdentity && filter.TaskPluginKey == "" && len(filter.TaskPluginKeys) == 0 && len(filter.TaskPluginChannelTypes) == 0 {
+			continue
+		}
+		kept = append(kept, filter)
+	}
+	return kept
+}
+
+// AcquireOriginTaskRouteChannel is the one admission rule for continuing an
+// accepted task on its original channel, used after ownership is verified.
+// The Key's manual list is exempt, but its ratio ceiling still applies. The
+// caller (Distribute) checks model limits. The channel must still exist, be
+// routable with a valid ratio, satisfy explicit constraints and have capacity.
+func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, error) {
 	ReleaseRouteChannel(c)
 	BeginRouteObservation(c)
 	if err := c.Request.Context().Err(); err != nil {
@@ -336,18 +392,61 @@ func AcquireOriginTaskRouteChannel(c *gin.Context, channelID int) (*model.Channe
 	}
 	channel, err := model.GetChannelById(channelID, true)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, model.ErrTokenRouteForbidden
+		return nil, fmt.Errorf("%w: %w", errOriginTaskChannelUnavailable, err)
 	}
 	if err != nil {
 		return nil, err
 	}
 	if !model.ChannelRoutable(channel) {
-		return nil, model.ErrTokenRouteForbidden
+		return nil, errOriginTaskChannelUnavailable
 	}
-	if _, err := model.NormalizeChannelRatio(channel.ChannelRatio); err != nil {
+	scope, err := requestRouteScope(c)
+	if err != nil {
 		return nil, err
 	}
-	return acquireRouteChannel(c, channel)
+	if reason := routePolicyReason(channel, scope.route, false); reason != "" {
+		if reason == "channel_ratio_exceeded" {
+			return nil, errOriginTaskChannelRatioExceeded
+		}
+		return nil, fmt.Errorf("invalid origin task channel policy: %s", reason)
+	}
+	if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, originTaskFilters(GetChannelConstraints(c).Filters)); !ok {
+		return nil, &originTaskFilterError{kind: kind}
+	}
+	selected, err := acquireRouteChannel(c, channel)
+	if errors.Is(err, errConcurrencyResourceDeleted) {
+		return nil, fmt.Errorf("%w: %w", errOriginTaskChannelUnavailable, err)
+	}
+	return selected, err
+}
+
+// selectOriginTaskChannel admits an origin-task pin without affinity or
+// ordinary selection.
+func selectOriginTaskChannel(c *gin.Context, channelID int, modelName string) (*model.Channel, *ChannelSelectError) {
+	channel, err := AcquireOriginTaskRouteChannel(c, channelID, modelName)
+	if err == nil {
+		return channel, nil
+	}
+	if status, code, message, matched := originTaskRouteFailure(err); matched {
+		return nil, &ChannelSelectError{StatusCode: status, Code: types.ErrorCode(code), Message: message}
+	}
+	return nil, routeLoadFailure(c, err)
+}
+
+// originTaskRouteFailure maps the origin-task-only admission failures; other
+// failures (capacity, unreadable limit, storage, cancellation) keep the shared
+// mapping.
+func originTaskRouteFailure(err error) (status int, code string, message string, matched bool) {
+	var filterErr *originTaskFilterError
+	switch {
+	case errors.Is(err, errOriginTaskChannelRatioExceeded):
+		return http.StatusBadRequest, "channel_ratio_exceeded", errOriginTaskChannelRatioExceeded.Error(), true
+	case errors.Is(err, errOriginTaskChannelUnavailable):
+		return http.StatusBadRequest, "origin_task_channel_disabled", "the channel of the origin task is unavailable", true
+	case errors.As(err, &filterErr):
+		return http.StatusBadRequest, string(filterErr.kind), filterErr.Error(), true
+	}
+	return 0, "", "", false
 }
 
 func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel, error) {
@@ -367,28 +466,27 @@ func acquireRouteChannel(c *gin.Context, channel *model.Channel) (*model.Channel
 
 // previewRouteReason 只给路由预览用：预览列出全部渠道，所以要逐个说明不可选的原因，
 // 包括渠道是否服务该模型。选路走 routeCandidates，不经过这里。
-// previewRouteReason 判单个渠道；exact 表示它声明了请求的精确模型名。精确一档的取舍由
+// previewRouteReason 判单个渠道；exact 表示它以精确模型名可选。精确一档的取舍由
 // PreviewTokenRouting 在所有渠道判完后统一处理，与 routeCandidates 一致。
-func previewRouteReason(row *model.Channel, scope routeScope, modelName string, abilities []string, filters []dto.ChannelFilter) (reason string, exact bool) {
+// 先判渠道是否声明了该模型（declared 含禁用的能力行），不服务该模型的渠道不报可用性和倍率；
+// 声明了的再按渠道可用性、Key 策略、能力行启用状态和过滤器说明原因。
+func previewRouteReason(row *model.Channel, scope routeScope, modelName string, declared map[string]bool, filters []dto.ChannelFilter) (reason string, exact bool) {
 	if row == nil {
 		return routeReasonChannelUnavailable, false
 	}
 	if !scope.allowsModel(modelName) {
 		return "model_not_allowed", false
 	}
+	exactEnabled, exactDeclared := declared[modelName]
+	routingEnabled, routingDeclared := declared[ratio_setting.RoutingMatchModelName(modelName)]
+	if !exactDeclared && !routingDeclared {
+		return "model_unavailable", false
+	}
 	if reason := routeChannelReason(row, scope.route, true); reason != "" {
 		return reason, false
 	}
-	matched := false
-	for _, ability := range abilities {
-		if ability == modelName {
-			exact = true
-		}
-		if ability == modelName || ability == ratio_setting.RoutingMatchModelName(modelName) {
-			matched = true
-		}
-	}
-	if !matched {
+	// 渠道可用但匹配的能力行都已禁用：与选路和目录一致，按不服务该模型处理。
+	if !exactEnabled && !routingEnabled {
 		return "model_unavailable", false
 	}
 	if ok, kind := model.ChannelSatisfiesFilters(row, modelName, filters); !ok {
@@ -397,7 +495,7 @@ func previewRouteReason(row *model.Channel, scope routeScope, modelName string, 
 		}
 		return string(kind), false
 	}
-	return "", exact
+	return "", exactEnabled
 }
 
 func routeOperation(c *gin.Context) int {

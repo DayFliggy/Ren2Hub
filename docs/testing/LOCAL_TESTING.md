@@ -21,6 +21,7 @@ Ren2Hub 的质量门槛在本地运行，CI 调用同一入口。Go、Vue 的业
 在 Ren2Hub 目录执行：
 
 ```sh
+python3 -B scripts/testing/run.py diagnostics
 python3 -B scripts/testing/run.py unit
 python3 -B scripts/testing/run.py databases
 python3 -B scripts/testing/run.py static
@@ -28,14 +29,15 @@ python3 -B scripts/testing/run.py build
 python3 -B scripts/testing/run.py race
 python3 -B scripts/testing/run.py browser
 python3 -B scripts/testing/run.py ui-contracts
-python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1
-python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1 --previous-image ren2hub-test:<旧版完整SHA>-v1
-python3 -B scripts/testing/run.py candidate --image ren2hub-test:<完整SHA>-v1 --traffic-host-interface eth0
-python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
+python3 -B scripts/testing/run.py candidate --image <应用不可变镜像ID> --image-identity <应用identity.json> --simulator-image <模拟器不可变镜像ID> --simulator-identity <模拟器identity.json>
+python3 -B scripts/testing/run.py candidate --image <应用不可变镜像ID> --image-identity <应用identity.json> --simulator-image <模拟器不可变镜像ID> --simulator-identity <模拟器identity.json> --previous-image ren2hub-test:<旧版完整SHA>-v1
+python3 -B scripts/testing/run.py candidate --image <应用不可变镜像ID> --image-identity <应用identity.json> --simulator-image <模拟器不可变镜像ID> --simulator-identity <模拟器identity.json> --traffic-host-interface eth0
+python3 -B scripts/testing/run.py all --image <应用不可变镜像ID> --image-identity <应用identity.json> --simulator-image <模拟器不可变镜像ID> --simulator-identity <模拟器identity.json>
 ```
 
 | 层           | 实际验证                                                                           | 依赖及通过条件                                                                                                |
 | ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| diagnostics  | 显式白名单 Go 标签诊断、真实失败指纹和标签包 vet | 精确测试名；编译/超时/缺项/跳过/未知失败/意外通过均失败，本地失败不能归为上游 |
 | unit         | Go 三模块、Vue 业务断言；httptest 模拟协议、计费、权限、路由、任务、工单           | 自动发现 Go 用例，每批最多 20 个，单次 `-timeout=60s`；检查 JSON 测试事件，零用例/失败/意外跳过均失败         |
 | databases    | 空库初始化、旧账务拒绝、钱包/返利/充值、路由、管理操作、模型目录、任务、日志与迁移 | SQLite + 新 MySQL 8.4 + PostgreSQL 15.19；每个合同独立新库，检查每个方言的运行与通过事件                      |
 | static       | Vue 类型、Lint、格式；三个 Go 模块 vet                                             | 全部退出 0；缺工具是失败                                                                                      |
@@ -50,6 +52,17 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 工作区部署工具合同使用 `python3 -B scripts/test-local.py infra`，测试临时 Git 管线、安装器门槛、Nginx、生产核验器和密钥转换，不运行正式部署。平台工具缺失而跳过必须使整层不完整。Windows Plink 操作仍按连接技能执行，本地 Linux 结果不代表 Windows 运行验证。
 
 ## 隔离、证据与失败
+
+路由审计使用独立 `channel-simulator` 项目的版本 1 服务镜像；模拟器不访问网关数据库，不实现路由。每个渠道一个端口与独立状态，网关通过原生渠道配置连接，控制接口仅用于故障和事件屏障。新 `routing` 阶段加入完整 candidate；旧独立路由模拟脚本仍退役。
+
+```sh
+python3 -B scripts/testing/build_routing_image.py
+python3 -B scripts/testing/run.py routing --image sha256:<应用镜像ID> --simulator-image sha256:<模拟器镜像ID>
+```
+
+构建脚本从当前工作树复制不可变输入，记录构建前后指纹、base SHA、Go/Docker 版本与镜像 ID；Bun/Node 目前仅由构建文件固定镜像，未写入实际版本输出。未提交源码的 `candidate_sha=null`；不能用现有发布镜像代表修改后代码。`routing` 执行精确 Go 诊断和真实路由合同，不要求无关 SDK 运行时，始终 `deployment_eligible=false`。完整 candidate 同样强制诊断并执行 SDK、升级等原有门槛；`all` 不单独重复诊断，由 candidate 执行一次并合并结果。此前层失败仍按原规则中止，不能把未执行的诊断算成通过。本地失败优先退出 1，只有已知上游及其阻断才退出 2。当前没有发布豁免清单，已知缺陷也不能让完整 candidate 获得发布资格。镜像带内容指纹时，无论 routing 或完整 candidate 都要求与当前工作树一致。
+
+路由报告使用 `pass`、`fail`、`known_upstream`、`blocked`、`not_run`。退出 0 表示所有必测项通过；退出 1 表示本地/未分类失败、缺项、源码变化或清理失败；退出 2 仅表示已确认上游缺陷及其阻断，不能计为通过或发布。供应商到达序号不是状态更新游标，等待挂起完成时保留原游标重复查询；不靠固定 sleep 猜测并发交错。HTTP 请求 ID、供应商实际命中、重试轨迹、状态、预期/实际扣费与并发释放共同构成证据。Go 行锁、精确时间测试单列，不冒充实际 HTTP。必测清单独立于执行列表；已知上游允许表绑定用例名和诊断。成功 WS create 从唯一原生结算日志关联请求 ID，取消及被拒绝的 WS 若不能取得 ID，明确记录缺失并保留供应商/余额证据，不伪造。每个可关联请求核对日志净扣费，零扣费附加短稳定窗口；完整边界随 routing 报告的 limits 保存。
 
 产物默认进入 `.local-tests/run-*`，可用 `--output-parent` 放到仓库外；每轮新目录，禁止覆盖旧证据。记录源码 base SHA、干净时的 candidate SHA、未提交时的内容指纹、工具版本、每层报告、日志哈希与失败原因。私有目录 0700、凭据 0600；不把密钥和生产数据写进仓库。候选 SDK 可通过 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`、`GATEWAY_SDK_NODE_MODULE` 指定现有依赖；未指定时使用仓库内 `.test-tools/` 默认路径。候选在启动容器前检查这三项，缺失时直接以 `explicit_sdk_*` 失败。服务器现行工作区不允许未跟踪目录，正式候选必须指向工作区外的运行时。`success` 只表示各阶段通过，正式更新另需 manifest 的 `deployment_eligible` 为 true（干净源码、镜像修订与 gitlink 一致）；直接运行 `candidate.py` 时 CLI 输出同时给出两者，经 `run.py` 运行时以 `report.json` 的 `stages.candidate` 和 `candidate-manifest.json` 为准。runner 校验运行时版本并记录包元数据哈希，但不保证依赖目录只读或位于仓库外；`.test-tools/` 被 Git 忽略，不属于源码身份。
 
@@ -71,7 +84,7 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 | 旧资产                                                                    | 新位置与状态                                                                                                                |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境；7 个基础阶段，普通升级另加 7 个阶段；旧入口删除 |
+| `scripts/server/ren2hub_*acceptance.py` 与各 `test_*` 薄入口              | 业务断言在 `scripts/testing/contracts/`，由 `candidate` 管理隔离环境；8 个基础阶段，普通升级另加 7 个阶段；旧入口删除 |
 | Go `*_test.go` 与 Vue `src/**/*.spec.ts`                                  | 保留原生行为断言，统一发现并运行；共享SQLite fixture补齐用户硬删除的路由表                                                  |
 | 日期审计 spec 的8组业务回归及必要fixtures                                 | 随 `frontend/tests/contracts/` 退役；`tests/visual/` 继续复用其中的 `native-core-fixture.ts` 与 `channel-core-fixtures.ts`  |
 | 旧 `frontend/tests/live/`                                                 | 新 `frontend/tests/local/` 对实际产物执行登录、权限、Token、邀请与设置；旧页面穷举不再作为现行门槛                          |
@@ -81,8 +94,16 @@ python3 -B scripts/testing/run.py all --image ren2hub-test:<完整SHA>-v1
 
 数据库 runner 发现读取 DSN/dialect 的测试及其 helper 使用者；明确清单覆盖的项目必须执行，未分类新项目使门槛失败。共享 helper 的其他原生用例单列为 SQLite 覆盖，不能宣称全部三方。当前矩阵使用 MySQL 8.4 与 PostgreSQL 15.19，并记录实际镜像 ID、digest 和服务器版本；不覆盖历史 MySQL 5.7、PostgreSQL 9.6 或 ClickHouse，亦不证明现有生产 PostgreSQL 15.18 的所有版本差异。浏览器网络 namespace 隔离 IP 网络，不是完整文件系统沙箱；不得用不可信二进制或不可信浏览器测试。
 
-普通升级传入不同修订的不可变旧镜像，按 `upgrade-baseline → upgrade-management → upgrade-before-seconds → upgrade-prepare-p → upgrade-resume-p → upgrade-after-seconds → upgrade-after-p` 执行，再运行全部 7 个基础阶段。前四阶段由旧镜像生成合成配置、余额、充值、工单附件和在途任务，随后切换新镜像；`preparing` 状态在确认任务已持久化后落盘，由新版本恢复并继续原任务，不重新提交。`seconds` 与 `p` 两种计量分别验证。
+普通升级传入不同修订的不可变旧镜像，按 `upgrade-baseline → upgrade-management → upgrade-before-seconds → upgrade-prepare-p → upgrade-resume-p → upgrade-after-seconds → upgrade-after-p` 执行，再运行全部 8 个基础阶段。前四阶段由旧镜像生成合成配置、余额、充值、工单附件和在途任务，随后切换新镜像；`preparing` 状态在确认任务已持久化后落盘，由新版本恢复并继续原任务，不重新提交。`seconds` 与 `p` 两种计量分别验证。
 
 切换时仅替换本轮应用容器，保留同一 PostgreSQL、Redis、网络、密钥及附件卷。附件使用带本轮唯一 label 的专属 Docker volume；合同拒绝其他卷、路径、所有者或可写宿主绑定。应用、数据库和 Redis 均不接生产目录。切换前后比较配置、用户/Token、渠道、充值、路由与工单记录和附件的指纹，重复启动验证迁移幂等；在途任务单独断言恢复后只结算/退款一次、没有重复供应商提交，且旧版签发的产物链接仍可读取。所有阶段通过并清理成功后才可得到 `deployment_eligible=true`，同时还要求新镜像、干净应用提交与根仓库 gitlink 一致。
 
 普通升级候选的模拟供应商会在阶段之间计划停服，因此旧、新容器均显式设置并核验 `TASK_POLL_MAX_FAILURES=0`，避免测试调度等待触发默认失败次数退款；该设置记录在候选报告，不修改生产默认值，原生任务超时仍有效。失败阈值由独立 Go 行为测试验证。`p` 分支指自定义 `u("p")` 数量字段，不将它冒称为 Omni 输入/输出 Token 计量覆盖；Omni 的最终 Token 合同由插件回归单独验证。
+
+## 本轮构建证据与静态路由资格
+
+包含 routing 的 candidate/all 和独立 routing 入口必须同时提供 `--image-identity` 与 `--simulator-identity`。两个独立构建入口成功后才原子写出 schema_version=1 的 identity.json：artifact、success/stable、不可变 image_id、source_before/after、revision/base_revision、binary 的路径/哈希、实际工具版本；模拟器额外声明协议版本。prepare-only 或失败进度不是成功构建证明。验收核对清单、镜像标签、实际二进制和工具版本并保存原始清单副本及哈希；应用还必须匹配当前工作树，未提交内容的 candidate_sha 为 null。模拟器不导入网关代码，网关不导入模拟器代码。
+
+A4 已成为默认回归；诊断白名单只保留精确确认的上游问题，不按 TestUpstream 前缀匹配。只有 known_upstream/blocked 时退出 2，本地失败/缺项/清理错误退出 1 且优先于 2；当前不增加发布例外。预览使用 transport=http|websocket，WS 必须显式查询，不把 stream=true 当成 WS。普通 HTTP 断开用例检查在途继续、成功后结算和释放各一次，不要求共享实现立即取消退款。
+
+渠道锁序扩展矩阵每个数据库独立执行，全部 23 个场景保留，每次 Go 测试仍为 60 秒超时。205 行夹具采用批量插入并核对 PostgreSQL 反向物理布局；不缩减受测渠道写操作或锁等待屏障。

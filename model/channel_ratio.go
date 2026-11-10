@@ -54,14 +54,10 @@ func (c *Channel) ValidateRoutingFields() error {
 // ChannelRoutingChanged publishes committed admission settings and invalidates old observations.
 var ChannelRoutingChanged func(int) error
 
-// publishChannelRoutingByTag 对按 tag 批量修改的渠道逐个发布路由变更。
-func publishChannelRoutingByTag(tag string) error {
+// publishChannelRoutingIDs 只在提交后发布本次实际修改的渠道。
+func publishChannelRoutingIDs(ids []int) error {
 	if ChannelRoutingChanged == nil {
 		return nil
-	}
-	var ids []int
-	if err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &ids).Error; err != nil {
-		return err
 	}
 	for _, id := range ids {
 		if err := ChannelRoutingChanged(id); err != nil {

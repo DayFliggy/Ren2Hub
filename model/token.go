@@ -28,7 +28,9 @@ type Token struct {
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 	// 允许用此令牌查询所属用户的额度；新建令牌默认开启，已有令牌升级后保持关闭
-	AllowUserQuotaQuery bool `json:"allow_user_quota_query"`
+	AllowUserQuotaQuery bool   `json:"allow_user_quota_query"`
+	CacheExpiresAt      int64  `json:"-" gorm:"-"`
+	CacheMAC            string `json:"-" gorm:"-"`
 }
 
 func (token *Token) Clean() {
@@ -266,8 +268,8 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		return nil, err
 	}
 	if common.RedisEnabled {
-		// 冷缓存时用数据库快照初始化；已存在的哈希只刷新 TTL，
-		// 避免快照覆盖 Redis 中已被原子预扣的余额。初始化失败不影响本次读取。
+		// 用数据库快照初始化或修复元数据，Lua 保留正在使用的额度计数。
+		// 初始化失败不影响本次读取。
 		if _, cacheErr := cacheInitToken(*token); cacheErr != nil {
 			common.SysLog(common.LogText("failed to init token cache: %s", cacheErr.Error()))
 		}
@@ -305,6 +307,11 @@ func (token *Token) Delete() (err error) {
 		common.SysLog(common.LogText("failed to invalidate token cache before delete: %s", cacheErr.Error()))
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		// 与 SaveTokenRouting 同一锁序：先锁 Token 行再删路由，保存不能插在两步之间写入。
+		var locked []int
+		if err := lockForUpdate(tx.Model(&Token{})).Where("id = ?", token.Id).Pluck("id", &locked).Error; err != nil {
+			return err
+		}
 		if err := deleteTokenRouting(tx, []int{token.Id}); err != nil {
 			return err
 		}
@@ -431,7 +438,8 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	tx := DB.Begin()
 
 	var tokens []Token
-	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Find(&tokens).Error; err != nil {
+	// 与 SaveTokenRouting 同一锁序：先锁 Token 行再删路由；多行按 ID 升序，与硬删除用户一致。
+	if err := lockForUpdate(tx).Where("user_id = ? AND id IN (?)", userId, ids).Order("id").Find(&tokens).Error; err != nil {
 		tx.Rollback()
 		return 0, err
 	}

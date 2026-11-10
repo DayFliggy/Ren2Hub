@@ -36,7 +36,10 @@ def execute():
                            previous_target=private / 'upgrade-source-target.json'
                            if (upgrade_plugin and (after or stage == 'upgrade-resume-p')) or attachment_phase == 'verify' else None)
     try:
-        if stage.startswith('plugin-') or upgrade_plugin:
+        if stage == 'routing':
+            from .routing import run_routing
+            report = run_routing(args)
+        elif stage.startswith('plugin-') or upgrade_plugin:
             from .plugin import run_plugin
             report = run_plugin(args)
         else:
@@ -47,4 +50,4 @@ def execute():
         report = {'success': False, 'error_type': type(error).__name__,
                   'error_code': str(error) if isinstance(error, RequirementError) else 'candidate_worker_failed'}
         atomic_private(args.report, json.dumps(report, indent=2))
-    raise SystemExit(0 if report['success'] else 1)
+    raise SystemExit(report.get('exit_code', 0 if report['success'] else 1))

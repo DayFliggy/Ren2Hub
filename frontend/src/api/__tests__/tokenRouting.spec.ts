@@ -25,6 +25,7 @@ const previewResponse = () => ({
   path: '/v1/responses',
   stream: true,
   ordering: 'manual',
+  transport: 'http',
   entries: [
     {
       channel_id: 9,
@@ -76,7 +77,12 @@ describe('native token routing', () => {
     )
     expect(api.get).toHaveBeenCalledWith(
       '/api/token/7/routing/preview',
-      { model: 'fixture', path: '/v1/responses', stream: 'true' },
+      {
+        model: 'fixture',
+        path: '/v1/responses',
+        stream: 'true',
+        transport: 'http',
+      },
       { signal }
     )
     expect(result).toMatchObject({ stream: true, ordering: 'manual' })
@@ -92,6 +98,8 @@ describe('native token routing', () => {
     }
   )
   it.each([
+    { transport: 'invalid' },
+    { transport: undefined },
     { ordering: 'weighted' },
     { ordering: undefined },
     { stream: 'true' },

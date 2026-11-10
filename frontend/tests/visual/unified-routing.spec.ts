@@ -96,6 +96,30 @@ for (const theme of ['light', 'dark'] as const) {
         path: testInfo.outputPath('manual-routing-preview.png'),
         fullPage: true,
       })
+      await page
+        .getByRole('combobox', { name: '传输方式', exact: true })
+        .selectOption('websocket')
+      await expect(
+        page.getByRole('combobox', { name: 'API 路径', exact: true })
+      ).toHaveValue('/v1/responses')
+      const response = page.waitForResponse(
+        (response) =>
+          response.url().includes('/routing/preview') &&
+          response.url().includes('transport=websocket')
+      )
+      await page
+        .getByRole('button', { name: '预览已保存路由', exact: true })
+        .click()
+      await response
+      await expect(routePage).toContainText(
+        'gpt-native · /v1/responses · WebSocket'
+      )
+      await assertNoHorizontalOverflow(page)
+      await assertInteractiveCentersVisible(page)
+      await page.screenshot({
+        path: testInfo.outputPath('websocket-routing-preview.png'),
+        fullPage: true,
+      })
       const writes = fixture.writes.filter(
         (write) => write.path === '/api/token/7/routing'
       )

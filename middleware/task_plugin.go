@@ -557,11 +557,7 @@ func RouteTaskPluginEndpoint() gin.HandlerFunc {
 		defer userPermit.Release()
 		c.Set(contextKeyTaskPluginUserConcurrencyPermit, userPermit)
 
-		filter := dto.ChannelFilter{Kind: dto.FilterTaskPluginEndpoint}
-		for _, candidate := range endpoint.Candidates {
-			filter.TaskPluginKeys = append(filter.TaskPluginKeys, candidate.Plugin.Meta.Key)
-			filter.TaskPluginChannelTypes = append(filter.TaskPluginChannelTypes, candidate.Plugin.Meta.ChannelTypes...)
-		}
+		filter := service.TaskPluginEndpointFilter(endpoint.Candidates)
 		constraints := service.GetChannelConstraints(c)
 		filterIndex := len(constraints.Filters)
 		constraints.AddFilter(filter)
@@ -601,24 +597,7 @@ func RouteTaskPluginEndpoint() gin.HandlerFunc {
 }
 
 func lookupTaskPluginEndpoint(generation *pluginruntime.RoutingGeneration, method, path, modelName string) (pluginruntime.PinnedEndpoint, bool) {
-	lookupModel, pinModel, mappedModel := modelName, modelName, ""
-	if declared, ok := generation.CanonicalModel(modelName); ok {
-		lookupModel, pinModel = declared, declared
-	} else if target, ok := model.ResolveTaskModelAlias(generation, modelName); ok {
-		if target.Declared == "" {
-			return pluginruntime.PinnedEndpoint{}, false
-		}
-		lookupModel, pinModel, mappedModel = target.Declared, target.Alias, target.Declared
-	}
-	candidates := generation.LookupEndpointCandidates(method, path, lookupModel)
-	if len(candidates) == 0 {
-		return pluginruntime.PinnedEndpoint{}, false
-	}
-	binding := candidates[0]
-	return pluginruntime.PinnedEndpoint{
-		Generation: generation, Plugin: binding.Plugin, Protocol: binding.Protocol,
-		Operation: binding.Operation, Model: pinModel, MappedModel: mappedModel, Candidates: candidates,
-	}, true
+	return service.LookupTaskPluginEndpoint(generation, method, path, modelName)
 }
 
 // PinTaskPluginEndpoint decides shared-endpoint ownership without executing
@@ -1370,8 +1349,8 @@ func applyOriginTaskIntent(c *gin.Context, intent map[string]any, meta pluginrun
 		tasks = append(tasks, task)
 	}
 
-	channel, err := model.CacheGetChannel(channelID)
-	if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
+	channel, err := service.LoadOriginTaskChannel(channelID)
+	if err != nil {
 		return &originTaskIntentError{Code: "origin_task_channel_disabled", Message: "origin task channel is disabled", StatusCode: http.StatusBadRequest}
 	}
 	service.GetChannelConstraints(c).AddPin(dto.ChannelPin{
@@ -1611,6 +1590,11 @@ func RespondTaskPluginError(c *gin.Context, taskErr *dto.TaskError) bool {
 		return false
 	}
 	sanitized := sanitizedTaskPluginError(taskErr.StatusCode, taskErr.Message)
+	// Keep the host's price-policy rejection identifiable on native plugin
+	// routes. Other plugin errors retain the upstream sanitization contract.
+	if taskErr.StatusCode == http.StatusBadRequest && taskErr.Code == "channel_ratio_exceeded" {
+		sanitized.Code = taskErr.Code
+	}
 	requestID := c.GetString(common.RequestIdKey)
 	hasRenderer, err := pinned.Plugin.Engine.HasCallablePath(c.Request.Context(), "native", "error")
 	requestValue, exists := c.Get(pluginruntime.ContextKeyRouteRequest)
@@ -1797,26 +1781,12 @@ func PrepareTaskPluginSubmit() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "model is required", "type": "invalid_request_error"}})
 			return
 		}
-		exactOwned := slices.Contains(plugin.Meta.Models, modelName)
-		exactAlias := false
-		if target, resolved := model.ResolveTaskModelAlias(generation, modelName); resolved && target.Alias == modelName && target.PluginKey == plugin.Meta.Key {
-			exactAlias = true
-		}
-		if !exactOwned && !exactAlias {
-			folded := ""
-			if declared, ok := generation.CanonicalModel(modelName); ok && slices.Contains(plugin.Meta.Models, declared) && declared != modelName {
-				folded = declared
-			} else if target, resolved := model.ResolveTaskModelAlias(generation, modelName); resolved && target.PluginKey == plugin.Meta.Key && target.Alias != "" && target.Alias != modelName {
-				folded = target.Alias
+		if normalized := service.NormalizeTaskPluginSubmitModel(generation, plugin, modelName); normalized != modelName {
+			if rewriteErr := rewriteTaskPluginJSONModel(c, normalized); rewriteErr != nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": rewriteErr.Error(), "type": "invalid_request_error"}})
+				return
 			}
-			if folded != "" {
-				if rewriteErr := rewriteTaskPluginJSONModel(c, folded); rewriteErr != nil {
-					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": rewriteErr.Error(), "type": "invalid_request_error"}})
-					return
-				}
-				requestBody["model"] = folded
-				modelName = folded
-			}
+			requestBody["model"], modelName = normalized, normalized
 		}
 		c.Set("task_request", requestBody)
 		if plugin.Meta.PreservesJSONOrder() {

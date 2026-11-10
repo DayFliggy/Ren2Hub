@@ -1,9 +1,11 @@
 package model
 
 import (
+	"slices"
+
 	"github.com/QuantumNous/new-api/common"
-	"github.com/samber/lo"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // DeleteDisabledChannelIDs 删除全部已禁用渠道并返回实际删除的 ID。上游 DeleteDisabledChannel
@@ -14,11 +16,21 @@ func DeleteDisabledChannelIDs() ([]int, error) {
 	var ids []int
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		disabled := []int{common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled}
-		if err := lockForUpdate(tx.Model(&Channel{})).Where("status IN ?", disabled).Pluck("id", &ids).Error; err != nil {
+		var candidates []int
+		if err := tx.Model(&Channel{}).Where("status IN ?", disabled).Pluck("id", &candidates).Error; err != nil {
 			return err
 		}
-		for _, chunk := range lo.Chunk(ids, 200) {
-			if err := tx.Where("id IN ? AND status IN ?", chunk, disabled).Delete(&Channel{}).Error; err != nil {
+		channels, err := lockChannels(tx, candidates, clause.LockingStrengthUpdate)
+		if err != nil {
+			return err
+		}
+		for _, channel := range channels {
+			if slices.Contains(disabled, channel.Status) {
+				ids = append(ids, channel.Id)
+			}
+		}
+		for chunk := range slices.Chunk(ids, 200) {
+			if err := tx.Where("id IN ?", chunk).Delete(&Channel{}).Error; err != nil {
 				return err
 			}
 			if err := tx.Where("channel_id IN ?", chunk).Delete(&Ability{}).Error; err != nil {

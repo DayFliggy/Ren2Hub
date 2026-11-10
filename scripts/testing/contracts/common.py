@@ -81,16 +81,22 @@ def acceptance_target():
             'database_user', 'database_name', 'database_host', 'redis_host', 'network',
             'run_id', 'container_ids', 'network_id', 'image_id', 'revision', 'ca_path', 'network_guard',
             'traffic_host_interface'}
-    require(isinstance(target, dict) and set(target) in (keys, keys | {'attachment_volume'}), 'invalid_candidate_manifest')
+    require(isinstance(target, dict) and keys <= set(target) and set(target) <= keys | {'attachment_volume', 'simulator'}, 'invalid_candidate_manifest')
     require(re.fullmatch(r'[0-9a-f]{24}', target['run_id']), 'invalid_candidate_run_id')
     # 空串为监听器模式；非空为宿主网卡模式。
     require(isinstance(target['traffic_host_interface'], str)
             and re.fullmatch(r'[A-Za-z0-9_.-]{0,15}', target['traffic_host_interface']), 'invalid_candidate_traffic_mode')
     prefix = 'ren2hub-candidate-local-' + target['run_id']
+    if 'simulator' in target:
+        config = Path(target['simulator']['configuration_path'])
+        require(config == Path(path).parent / 'simulator.json', 'foreign_simulator_configuration')
+        regular_file(config, private=True)
+        require(hashlib.sha256(config.read_bytes()).hexdigest() == target['simulator']['configuration_sha256'],
+                'simulator_configuration_changed')
     if 'attachment_volume' in target:
         require(target['attachment_volume'] == prefix + '-attachments', 'foreign_candidate_attachment_volume')
-    for role in ('app', 'postgres', 'redis', 'mock'):
-        require(target[role + '_container'] == prefix + '-' + role, 'foreign_candidate_name')
+    for role in ('app', 'postgres', 'redis', 'mock', *(['simulator'] if 'simulator' in target else [])):
+        require((target['simulator']['container'] if role == 'simulator' else target[role + '_container']) == prefix + '-' + role, 'foreign_candidate_name')
         require(re.fullmatch(r'[0-9a-f]{64}', target['container_ids'][role]), 'invalid_candidate_container_id')
     require(target['network'] == prefix + '-network'
             and re.fullmatch(r'[0-9a-f]{64}', target['network_id']), 'invalid_candidate_network')
@@ -106,6 +112,7 @@ def require_candidate_mounts(role, item, target):
     counter = ('/proc/1/net/dev', '/host/proc/net/dev', True)
     counters = 0
     attachments = 0
+    simulation_configs = 0
     for mount in item.get('Mounts', []):
         if role == 'app' and mount.get('Type') == 'bind':
             actual = (mount.get('Source'), mount.get('Destination'), mount.get('RW') is False)
@@ -113,6 +120,11 @@ def require_candidate_mounts(role, item, target):
                 counters += 1
             else:
                 require(actual == ca, 'candidate_unexpected_bind_mount')
+        elif role == 'simulator' and mount.get('Type') == 'bind':
+            require((mount.get('Source'), mount.get('Destination'), mount.get('RW') is False) ==
+                    (target['simulator']['configuration_path'], '/simulator.json', True),
+                    'simulator_unexpected_bind_mount')
+            simulation_configs += 1
         elif role == 'app' and mount.get('Type') == 'volume':
             require(bool(target.get('attachment_volume')) and mount.get('Name') == target['attachment_volume']
                     and mount.get('Destination') == '/app/ticket-attachments' and mount.get('RW') is True,
@@ -124,6 +136,8 @@ def require_candidate_mounts(role, item, target):
         require(counters == 1, 'candidate_traffic_counter_mount_mismatch')
     if role == 'app' and target.get('attachment_volume'):
         require(attachments == 1, 'candidate_attachment_volume_missing')
+    if role == 'simulator':
+        require(simulation_configs == 1, 'simulator_configuration_mount_missing_or_duplicate')
 
 
 def verify_candidate_database(revision):
@@ -137,11 +151,11 @@ def verify_candidate_database(revision):
     require(network.get('Internal') is True and network['Name'] == target['network']
             and network.get('Labels', {}).get(label) == target['run_id'], 'candidate_internal_network_required')
     containers = {}
-    for role in ('app', 'postgres', 'redis', 'mock'):
+    for role in ('app', 'postgres', 'redis', 'mock', *(['simulator'] if 'simulator' in target else [])):
         item = _inspect(target['container_ids'][role])
         containers[role] = item
         require(item['Id'] == target['container_ids'][role]
-                and item['Name'] == '/' + target[role + '_container']
+                and item['Name'] == '/' + (target['simulator']['container'] if role == 'simulator' else target[role + '_container'])
                 and item['Config'].get('Labels', {}).get(label) == target['run_id']
                 and item['State']['Running'], 'candidate_container_identity_mismatch')
         require(not item['HostConfig'].get('Privileged') and not item['HostConfig'].get('CapAdd')
@@ -162,6 +176,12 @@ def verify_candidate_database(revision):
                     'candidate_datastore_alias_mismatch')
             destination = '/var/lib/postgresql/data' if role == 'postgres' else '/data'
             require(destination in item['HostConfig'].get('Tmpfs', {}), 'candidate_datastore_tmpfs_required')
+    if 'simulator' in target:
+        simulation = containers['simulator']
+        require(simulation['Image'] == target['simulator']['image_id']
+                and simulation['Config']['Labels'].get('io.channel-simulator.protocol') == '1'
+                and simulation['NetworkSettings']['Networks'][target['network']]['IPAddress'] == target['simulator']['address'],
+                'simulator_identity_changed')
     app = containers['app']
     if target.get('attachment_volume'):
         volume = _inspect(target['attachment_volume'])
@@ -195,7 +215,7 @@ def verify_candidate_database(revision):
                                capture_output=True, text=True, timeout=20)
     require(namespace.returncode == 0 and os.readlink('/proc/self/ns/net') == namespace.stdout.strip(),
             'candidate_mock_network_namespace_required')
-    for role in ('postgres', 'redis', 'mock'):
+    for role in ('postgres', 'redis', 'mock', *(['simulator'] if 'simulator' in target else [])):
         info = containers[role]
         address = info['NetworkSettings']['Networks'][target['network']]['IPAddress']
         require(address == target['network_guard']['addresses'][role], 'candidate_network_address_changed')

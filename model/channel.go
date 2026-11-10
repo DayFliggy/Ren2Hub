@@ -16,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
-	"github.com/samber/lo"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -426,25 +425,25 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	// 使用事务 分批删除channel表和abilities表
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return 0, tx.Error
-	}
 	var deletedCount int64
-	for _, chunk := range lo.Chunk(ids, 200) {
-		result := tx.Where("id in (?)", chunk).Delete(&Channel{})
-		if result.Error != nil {
-			tx.Rollback()
-			return 0, result.Error
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		channels, err := lockChannels(tx, ids, clause.LockingStrengthUpdate)
+		if err != nil {
+			return err
 		}
-		deletedCount += result.RowsAffected
-		if err := tx.Where("channel_id in (?)", chunk).Delete(&Ability{}).Error; err != nil {
-			tx.Rollback()
-			return 0, err
+		for chunk := range slices.Chunk(lockedChannelIDs(channels), 200) {
+			result := tx.Where("id IN ?", chunk).Delete(&Channel{})
+			if result.Error != nil {
+				return result.Error
+			}
+			deletedCount += result.RowsAffected
+			if err := tx.Where("channel_id IN ?", chunk).Delete(&Ability{}).Error; err != nil {
+				return err
+			}
 		}
-	}
-	if err := tx.Commit().Error; err != nil {
+		return nil
+	})
+	if err != nil {
 		return 0, err
 	}
 	return deletedCount, nil
@@ -708,14 +707,11 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 }
 
 func EnableChannelByTag(tag string) error {
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusEnabled).Error
-	if err != nil {
-		return err
-	}
-	if err = UpdateAbilityStatusByTag(tag, true); err != nil {
-		return err
-	}
-	return publishChannelRoutingByTag(tag)
+	return updateChannelsByTag(tag, map[string]any{"status": common.ChannelStatusEnabled}, syncChannelAbilityStatus)
+}
+
+func syncChannelAbilityStatus(channel *Channel, tx *gorm.DB) error {
+	return updateAbilityStatus(tx.Where("channel_id = ?", channel.Id), channel.Status == common.ChannelStatusEnabled)
 }
 
 func DisableChannelByTag(tag string) error {
@@ -732,24 +728,18 @@ func DisableChannelByTag(tag string) error {
 			}
 		}
 	}
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusManuallyDisabled).Error
-	if err != nil {
-		return err
-	}
-	if err = UpdateAbilityStatusByTag(tag, false); err != nil {
-		return err
-	}
-	return publishChannelRoutingByTag(tag)
+	// The multi-key prepass owns polling/cache locks and uses global DB. It
+	// must finish before the batch takes row locks; the batch never rewrites
+	// channel_info, so a concurrent key rotation keeps its cursor.
+	return updateChannelsByTag(tag, map[string]any{"status": common.ChannelStatusManuallyDisabled}, syncChannelAbilityStatus)
 }
 
 func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
 	shouldReCreateAbilities := false
-	updatedTag := tag
 	// 如果 newTag 不为空且不等于 tag，则更新 tag
 	if newTag != nil && *newTag != tag {
 		updateData.Tag = newTag
-		updatedTag = *newTag
 	}
 	if modelMapping != nil {
 		updateData.ModelMapping = modelMapping
@@ -771,27 +761,12 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 		updateData.HeaderOverride = headerOverride
 	}
 
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Updates(updateData).Error
-	if err != nil {
-		return err
-	}
-	if shouldReCreateAbilities {
-		channels, err := GetChannelsByTag(updatedTag, false, false)
-		if err != nil {
-			return err
+	return updateChannelsByTag(tag, updateData, func(channel *Channel, tx *gorm.DB) error {
+		if shouldReCreateAbilities {
+			return channel.UpdateAbilities(tx)
 		}
-		for _, channel := range channels {
-			if err = channel.UpdateAbilities(nil); err != nil {
-				return err
-			}
-		}
-	} else {
-		err := UpdateAbilityByTag(tag, newTag, priority, weight)
-		if err != nil {
-			return err
-		}
-	}
-	return publishChannelRoutingByTag(updatedTag)
+		return updateAbilityFields(tx.Where("channel_id = ?", channel.Id), channel.Tag, channel.Priority, channel.Weight)
+	})
 }
 
 func UpdateChannelUsedQuota(id int, quota int) {
@@ -1000,36 +975,19 @@ func GetChannelsByIds(ids []int) ([]*Channel, error) {
 }
 
 func BatchSetChannelTag(ids []int, tag *string) error {
-	// 开启事务
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-
-	// 更新标签
-	err := tx.Model(&Channel{}).Where("id in (?)", ids).Update("tag", tag).Error
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// update ability status
-	channels, err := GetChannelsByIds(ids)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	for _, channel := range channels {
-		err = channel.UpdateAbilities(tx)
+	var changed []int
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		channels, err := lockChannels(tx, ids, clause.LockingStrengthUpdate)
 		if err != nil {
-			tx.Rollback()
 			return err
 		}
+		changed = lockedChannelIDs(channels)
+		return updateLockedChannels(tx, channels, map[string]any{"tag": tag}, (*Channel).UpdateAbilities)
+	})
+	if err != nil {
+		return err
 	}
-
-	// 提交事务
-	return tx.Commit().Error
+	return publishChannelRoutingIDs(changed)
 }
 
 // CountAllChannels returns total channels in DB

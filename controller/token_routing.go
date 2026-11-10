@@ -24,6 +24,8 @@ func tokenRoutingID(c *gin.Context) (int, bool) {
 func tokenRoutingError(c *gin.Context, err error) {
 	status, code, message := http.StatusInternalServerError, "ROUTING_INTERNAL_ERROR", "Unable to read or save token routing"
 	switch {
+	case errors.Is(err, service.ErrPreviewPathUnsupported):
+		status, code, message = http.StatusBadRequest, "preview_path_unsupported", "This path cannot be previewed without decoding a request body"
 	case errors.Is(err, model.ErrTokenRouteInvalid):
 		status, code, message = http.StatusBadRequest, "ROUTING_INVALID", model.ErrTokenRouteInvalid.Error()
 	case errors.Is(err, model.ErrTokenRouteForbidden):
@@ -111,7 +113,7 @@ func GetTokenRoutingPreview(c *gin.Context) {
 	if !ok {
 		return
 	}
-	query := service.TokenRoutePreviewQuery{Model: c.Query("model"), Path: c.Query("path")}
+	query := service.TokenRoutePreviewQuery{Model: c.Query("model"), Path: c.Query("path"), Transport: c.Query("transport")}
 	if value := c.Query("stream"); value != "" {
 		stream, err := strconv.ParseBool(value)
 		if err != nil {

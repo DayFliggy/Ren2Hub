@@ -40,6 +40,8 @@ func TestTokenRouteVersionOwnershipAndEmptyManual(t *testing.T) {
 	ctx := context.Background()
 	token := Token{UserId: 17, Key: "route-test"}
 	require.NoError(t, token.InsertWithRouting(TokenRouteManual))
+	require.NoError(t, db.Create(&Channel{Id: 11, Key: "route-test-11", Status: common.ChannelStatusEnabled, Models: "route-model"}).Error)
+	require.NoError(t, db.Create(&Channel{Id: 22, Key: "route-test-22", Status: common.ChannelStatusManuallyDisabled, Models: "route-model", ChannelRatio: "9"}).Error)
 	view, err := ReadTokenRouting(ctx, token.Id)
 	require.NoError(t, err)
 	require.Equal(t, TokenRouteManual, view.Mode)
@@ -69,6 +71,52 @@ func TestTokenRouteVersionOwnershipAndEmptyManual(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&TokenRouteEntry{}).Count(&count).Error)
 	require.Zero(t, count)
+}
+
+// B5：保存在事务里锁定读最终输入的全部渠道。事务外算出的 allowed 已过期，或已有条目的渠道
+// 在读到旧条目之后被删除，都返回 403 且不写回孤儿条目；只确认渠道行仍在，不看启用和倍率。
+func TestSaveTokenRoutingRejectsDeletedChannels(t *testing.T) {
+	db := tokenRouteTestDB(t)
+	ctx := context.Background()
+	token := Token{UserId: 17, Key: "routing-deleted-channel"}
+	require.NoError(t, token.InsertWithRouting(TokenRouteManual))
+	for _, channel := range []Channel{
+		{Id: 928001, Key: "deleted-1", Status: common.ChannelStatusEnabled, Models: "route-model"},
+		{Id: 928002, Key: "deleted-2", Status: common.ChannelStatusAutoDisabled, Models: "route-model", ChannelRatio: "9"},
+		{Id: 928003, Key: "deleted-3", Status: common.ChannelStatusEnabled, Models: "route-model"},
+	} {
+		require.NoError(t, db.Create(&channel).Error)
+	}
+	allowedFromEarlierRead := map[int]bool{928001: true, 928002: true, 928003: true}
+	view, err := SaveTokenRouting(ctx, 17, token.Id, TokenRouting{
+		TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: 1},
+		Entries:           []TokenRouteEntry{{ChannelID: 928002, Enabled: true}, {ChannelID: 928003, Enabled: true}},
+	}, allowedFromEarlierRead)
+	require.NoError(t, err)
+
+	// 新增条目：渠道在 allowed 计算之后删除并清理（Codex 探针）。
+	require.NoError(t, db.Delete(&Channel{}, 928001).Error)
+	require.NoError(t, DeleteOrphanChannelRouteEntries(ctx))
+	added := TokenRouting{TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: view.Version}, Entries: append(view.Entries, TokenRouteEntry{ChannelID: 928001, Enabled: true})}
+	_, err = SaveTokenRouting(ctx, 17, token.Id, added, allowedFromEarlierRead)
+	require.ErrorIs(t, err, ErrTokenRouteForbidden)
+
+	// 已有条目：渠道已删除但孤儿清理还没执行或失败，旧条目不能凭"已有"被插回。
+	require.NoError(t, db.Delete(&Channel{}, 928003).Error)
+	kept := TokenRouting{TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: view.Version}, Entries: view.Entries}
+	_, err = SaveTokenRouting(ctx, 17, token.Id, kept, nil)
+	require.ErrorIs(t, err, ErrTokenRouteForbidden)
+
+	// 用户从输入里删掉已删除的渠道后可以保存；禁用、超倍率的已有条目仍可编辑。
+	view, err = SaveTokenRouting(ctx, 17, token.Id, TokenRouting{
+		TokenRouteProfile: TokenRouteProfile{Mode: TokenRouteManual, Version: view.Version},
+		Entries:           []TokenRouteEntry{{ChannelID: 928002, Enabled: false}},
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []TokenRouteEntry{{TokenID: token.Id, ChannelID: 928002, Position: 0, Enabled: false}}, view.Entries)
+	var stored []TokenRouteEntry
+	require.NoError(t, db.Where("token_id = ?", token.Id).Find(&stored).Error)
+	require.Equal(t, view.Entries, stored)
 }
 
 func TestRouteChannelRowsQualifiesAllBeforeSelection(t *testing.T) {

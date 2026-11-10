@@ -23,10 +23,14 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 	}
 	full := errors.Is(err, ErrConcurrencyFull)
 	if RequestPolicy(c).SessionMode == "strict" {
+		c.Set(ginKeyChannelAffinitySkipRetry, true)
+		// An unreadable limit says nothing about the bound channel; keep the binding.
+		if errors.Is(err, errConcurrencyLimitUnavailable) {
+			return nil, routeLoadFailure(c, err), true
+		}
 		if !full && !ShouldKeepChannelAffinityOnChannelDisabled() {
 			ClearCurrentChannelAffinityCache(c)
 		}
-		c.Set(ginKeyChannelAffinitySkipRetry, true)
 		status := http.StatusServiceUnavailable
 		if full {
 			status = http.StatusTooManyRequests

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -287,6 +288,9 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 	if skip {
 		return err
 	}
+	if errors.Is(err, errPollChannelDeleted) {
+		return failTasksWithoutChannel(ctx, channelId, taskIds, taskM)
+	}
 	if err != nil {
 		common.SysLog(common.LogText("Get Task Do req error: %v", err))
 		return recordPollFailureForTasks(ctx, adaptor, tasks, pollClassTransport, 0, err.Error())
@@ -498,6 +502,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	resp, skip, err := doPollRequest(ctx, ch, func() (*http.Response, error) { return adaptor.FetchTask(ctx, baseURL, key, task, proxy) })
 	if skip {
 		return err
+	}
+	if errors.Is(err, errPollChannelDeleted) {
+		return failTasksWithoutChannel(ctx, ch.Id, []string{taskId}, taskM)
 	}
 	if err != nil {
 		return recordPollFailure(ctx, adaptor, task, snap.Status, pollClassTransport, 0, err.Error())

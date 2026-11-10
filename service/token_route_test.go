@@ -56,7 +56,7 @@ func TestOriginTaskContinuationKeepsOriginalChannelDespiteRouteEdits(t *testing.
 			createRouteChannel(t, db, 22, "route-model")
 			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("max_concurrency", 1).Error)
 			saveRouteTest(t, 22)
-			require.NoError(t, db.Model(&model.TokenRouteProfile{}).Where("token_id = ?", 7).Update("max_channel_ratio", "0.5").Error)
+			require.NoError(t, db.Model(&model.TokenRouteProfile{}).Where("token_id = ?", 7).Update("max_channel_ratio", "1").Error)
 			common.MemoryCacheEnabled = cache
 			if cache {
 				model.InitChannelCache()
@@ -65,18 +65,18 @@ func TestOriginTaskContinuationKeepsOriginalChannelDespiteRouteEdits(t *testing.
 			_, err := AcquirePinnedRouteChannel(routeTestContext(t), 11, "route-model")
 			require.ErrorIs(t, err, model.ErrTokenRouteForbidden)
 			c := routeTestContext(t)
-			original, err := AcquireOriginTaskRouteChannel(c, 11)
+			original, err := AcquireOriginTaskRouteChannel(c, 11, "route-model")
 			require.NoError(t, err)
 			require.Equal(t, 11, original.Id)
 			require.Equal(t, "1", c.GetString("channel_ratio"))
-			_, err = AcquireOriginTaskRouteChannel(routeTestContext(t), 11)
+			_, err = AcquireOriginTaskRouteChannel(routeTestContext(t), 11, "route-model")
 			require.ErrorIs(t, err, ErrConcurrencyFull)
 			require.Equal(t, 1, ChannelInFlight(11))
 			require.Zero(t, ChannelInFlight(22))
 			ReleaseRouteChannel(c)
 			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Update("status", common.ChannelStatusManuallyDisabled).Error)
-			_, err = AcquireOriginTaskRouteChannel(routeTestContext(t), 11)
-			require.ErrorIs(t, err, model.ErrTokenRouteForbidden)
+			_, err = AcquireOriginTaskRouteChannel(routeTestContext(t), 11, "route-model")
+			require.ErrorIs(t, err, errOriginTaskChannelUnavailable, "a disabled origin channel is the origin task's own error, not a Key denial")
 			require.Zero(t, ChannelInFlight(11))
 		})
 	}
@@ -93,7 +93,10 @@ func TestPinnedRouteAcquisitionErrorsKeepTechnicalFailuresPrivate(t *testing.T) 
 	}))
 	for _, acquire := range []func() error{
 		func() error { _, err := AcquirePinnedRouteChannel(routeTestContext(t), 11, "route-model"); return err },
-		func() error { _, err := AcquireOriginTaskRouteChannel(routeTestContext(t), 11); return err },
+		func() error {
+			_, err := AcquireOriginTaskRouteChannel(routeTestContext(t), 11, "route-model")
+			return err
+		},
 	} {
 		err := acquire()
 		require.ErrorIs(t, err, failure)

@@ -10,11 +10,11 @@
 | `/v1/realtime`、音频、图片、视频及插件路由 | 以 relay/task/video router 真实注册和所选模型能力为准 |
 | `GET/PUT /api/token/:id/routing` | 自有Token偏好；原生 `routing:read/write` 权限 |
 | `GET /api/token/:id/routing/channels` | 当前可选渠道，不含完整渠道密钥和 `in_flight` |
-| `GET /api/token/:id/routing/preview?model=...&path=...&stream=` | 当前配置的只读选择预览，不调用供应商；`stream` 按 `strconv.ParseBool` 解析，非法值 400 `ROUTING_INVALID` |
+| `GET /api/token/:id/routing/preview?model=...&path=...&stream=...&transport=...` | 当前配置的静态资格预览，不调用供应商；transport 为 http（默认）或 websocket，WS 仅 /v1/responses；非法 transport/stream 为 400 ROUTING_INVALID，不支持静态预览的路径为 400 preview_path_unsupported |
 
 路由保存 `{mode:"auto"|"manual",version,entries:[{channel_id,enabled}],max_channel_ratio:null|"1.5"}`，手动顺序由 `entries` 的数组顺序决定，请求中的 `position` 不作为输入，保存时按数组下标重写。响应含 Token、模式、版本、带 `position` 的列表及倍率上限。自动模式不保存自选列表；手动空列表保持为空。非法请求400、未授权渠道403、版本冲突409、不可见Token404；数据库错误500，不以空候选假成功。scoped PAT 创建 `type:"manual"` 的 Token 时，PAT 自身也要带 `routing:write`，否则 403 `ROUTING_FORBIDDEN`。删除业务分组，旧组参数明确拒绝：`/api/channel/*`、`POST|PUT /api/token/`、`/api/user/`、`/api/user/self` 和 `*/routing` 的写请求只要请求体非空，不论 Content-Type 都检查，非 JSON 请求体返回 400 `invalid JSON request`。
 
-预览响应回显 `stream`，并给出 `ordering`：手动模式为 `"manual"`，自动模式为 `"weighted_random_per_request"`，表示加权随机按每个请求单独计算，预览只是其中一次抽样。普通用户视图（模型目录与 `routing/channels` 共用 `service.RouteChannel`）只含 `id`、`name`、`type`、`status`、`models`、`supported_endpoints`、`channel_ratio`、`max_concurrency`、`eligible` 和可选的 `filter_reason`；实时 `in_flight` 只出现在管理端渠道列表、搜索、详情和更新响应里。
+预览响应回显解析后的 `model`、`transport` 和 `stream`（WS 为 true），并给出 `ordering`：手动模式为 `"manual"`，自动模式为 `"weighted_random_per_request"`，表示加权随机按每个请求单独计算，预览只是其中一次抽样。普通用户视图（模型目录与 `routing/channels` 共用 `service.RouteChannel`）只含 `id`、`name`、`type`、`status`、`models`、`supported_endpoints`、`channel_ratio`、`max_concurrency`、`eligible` 和可选的 `filter_reason`；实时 `in_flight` 只出现在管理端渠道列表、搜索、详情和更新响应里。
 
 | 聚合接口 | 合同 |
 | --- | --- |

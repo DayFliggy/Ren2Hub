@@ -2,16 +2,18 @@ FROM oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f
 
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun --version > /build/bun-version && bun install --frozen-lockfile
 
 FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS frontend-builder
 
 WORKDIR /build/frontend
 COPY --from=frontend-dependencies /build/frontend/node_modules ./node_modules
+COPY --from=frontend-dependencies /build/bun-version /build/bun-version
 COPY ./frontend ./
 COPY ./scripts/prepare-frontend-embed.mjs /build/scripts/prepare-frontend-embed.mjs
 COPY ./VERSION /build/VERSION
-RUN node ./node_modules/vue-tsc/bin/vue-tsc.js -b \
+RUN node --version > /build/node-version \
+    && node ./node_modules/vue-tsc/bin/vue-tsc.js -b \
     && VITE_API_MODE=http node ./node_modules/vite/bin/vite.js build \
     && node /build/scripts/prepare-frontend-embed.mjs
 
@@ -35,12 +37,14 @@ RUN go mod download
 
 COPY . .
 COPY --from=frontend-builder /build/frontend/embed-dist ./frontend/embed-dist
+COPY --from=frontend-builder /build/bun-version /build/node-version ./
 RUN go test -timeout 60s -run '^TestProductionEmbeddedAssetGraph$' .
 RUN version="${APP_VERSION:-$(cat VERSION)}" \
     && test -n "$version" \
     && go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api \
     && go version -m new-api | head -n 1 | cut -d' ' -f2 > go-version \
-    && grep -Eq '^go[0-9]+\.[0-9]+' go-version
+    && grep -Eq '^go[0-9]+\.[0-9]+' go-version \
+    && printf '{"go":"%s","bun":"%s","node":"%s"}\n' "$(cat go-version)" "$(cat bun-version)" "$(cat node-version)" > build-tools.json
 
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
@@ -54,6 +58,7 @@ COPY --from=builder2 /build/new-api /
 # read it with
 # docker run --rm --entrypoint cat <image> /etc/ren2hub/go-version
 COPY --from=builder2 /build/go-version /etc/ren2hub/go-version
+COPY --from=builder2 /build/build-tools.json /etc/ren2hub/build-tools.json
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
 EXPOSE 3000
 WORKDIR /data

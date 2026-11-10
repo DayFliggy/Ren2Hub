@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -294,6 +295,80 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
+func TestPluginOriginRouteHonorsPriceLimitBeforeSubmission(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	plugin := compileTaskRoutePlugin(t, `
+export const meta = {
+  apiVersion: 1, key: "origin-price", name: "Origin", version: "1.0.0",
+  author: {name: "Test"}, models: ["resolved-model"], fetchMode: "per_task",
+  routes: [{method: "POST", path: "/vendor/jobs", type: "submit", decode: "decodeJob", render: "jobCreated"}],
+};
+export const native = {
+  decodeJob: function() { return {kind: "submit", model: "resolved-model", originTaskIds: ["task-route"], requestBody: {prompt: "ok"}}; },
+  jobCreated: function(ctx, task) { return task; },
+};
+export function buildSubmitRequest() { return {url: "https://example.com"}; }
+export function parseSubmitResponse() { return {taskId: "one"}; }
+export function buildQueryRequest() { return {url: "https://example.com"}; }
+export function parseTaskResult() { return {status: "SUCCESS"}; }
+`)
+	for _, mode := range []string{model.TokenRouteAuto, model.TokenRouteManual} {
+		for _, ceiling := range []string{"1", "2"} {
+			t.Run(mode+"/limit="+ceiling, func(t *testing.T) {
+				setupOriginTaskDB(t)
+				previousCache, previousRedis := common.MemoryCacheEnabled, common.RedisEnabled
+				common.MemoryCacheEnabled, common.RedisEnabled = false, false
+				t.Cleanup(func() { common.MemoryCacheEnabled, common.RedisEnabled = previousCache, previousRedis })
+				require.NoError(t, model.DB.AutoMigrate(&model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
+				a := insertOriginTaskChannel(t, common.ChannelStatusEnabled)
+				b := insertOriginTaskChannel(t, common.ChannelStatusEnabled)
+				require.NoError(t, model.DB.Model(a).Updates(map[string]any{
+					"type": constant.ChannelTypeTaskPlugin, "setting": `{"task_plugin_key":"origin-price"}`, "channel_ratio": "2",
+				}).Error)
+				insertOriginOwnedTask(t, "task-route", 7, a.Id, "origin-price")
+				token := model.Token{UserId: 7, Key: "origin-price-key", Status: common.TokenStatusEnabled}
+				require.NoError(t, model.DB.Create(&token).Error)
+				var entries []model.TokenRouteEntry
+				if mode == model.TokenRouteManual {
+					entries = []model.TokenRouteEntry{{ChannelID: b.Id, Enabled: true}}
+				}
+				_, err := model.SaveTokenRouting(context.Background(), 7, token.Id, model.TokenRouting{
+					TokenRouteProfile: model.TokenRouteProfile{Mode: mode, MaxChannelRatio: &ceiling},
+					Entries:           entries,
+				}, map[int]bool{b.Id: true})
+				require.NoError(t, err)
+
+				reached := false
+				router := gin.New()
+				router.POST("/vendor/jobs", pinTaskPluginRoute(plugin, 0), func(c *gin.Context) {
+					common.SetContextKey(c, constant.ContextKeyUserId, 7)
+					common.SetContextKey(c, constant.ContextKeyTokenId, token.Id)
+					c.Next()
+				}, PrepareTaskPluginRoute(), Distribute(), func(c *gin.Context) {
+					reached = true
+					assert.Equal(t, a.Id, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
+					c.Status(http.StatusNoContent)
+				})
+				request := httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{"model":"resolved-model"}`))
+				request.Header.Set("Content-Type", "application/json")
+				recorder := httptest.NewRecorder()
+				router.ServeHTTP(recorder, request)
+
+				if ceiling == "1" {
+					assert.False(t, reached, "the submission handler cannot pre-consume or send a rejected continuation")
+					assert.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+					assert.Contains(t, recorder.Body.String(), `"code":"channel_ratio_exceeded"`)
+				} else {
+					assert.True(t, reached)
+					assert.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
+				}
+				assert.Zero(t, service.ChannelInFlight(a.Id))
+				assert.Zero(t, service.ChannelInFlight(b.Id))
+			})
+		}
+	}
+}
+
 func TestPrepareTaskPluginEndpointPinsOriginTaskChannel(t *testing.T) {
 	setupOriginTaskDB(t)
 	channel := insertOriginTaskChannel(t, common.ChannelStatusEnabled)
@@ -385,6 +460,41 @@ func TestDistributeHonorsOriginTaskChannelPin(t *testing.T) {
 	assert.Equal(t, channel.Id, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
 }
 
+func TestPluginOriginPinDoesNotBypassTokenModelLimit(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	for _, allowed := range []bool{false, true} {
+		t.Run(fmt.Sprint("allowed=", allowed), func(t *testing.T) {
+			setupOriginTaskDB(t)
+			channel := insertOriginTaskChannel(t, common.ChannelStatusEnabled)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{"model":"body-alias"}`))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Set("resolved_task_model", "resolved-model")
+			common.SetContextKey(c, constant.ContextKeyUserId, 1)
+			common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, true)
+			limits := map[string]bool{"body-alias": true}
+			if allowed {
+				limits["resolved-model"] = true
+			}
+			common.SetContextKey(c, constant.ContextKeyTokenModelLimit, limits)
+			service.GetChannelConstraints(c).AddPin(dto.ChannelPin{
+				ChannelId: channel.Id, Source: dto.PinSourceOriginTask,
+				Rank: dto.PinRankOriginTask, RetryMode: dto.PinRetrySameChannel,
+			})
+			Distribute()(c)
+			if allowed {
+				assert.False(t, c.IsAborted())
+				assert.Equal(t, channel.Id, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
+			} else {
+				assert.True(t, c.IsAborted())
+				assert.Equal(t, http.StatusForbidden, recorder.Code)
+				assert.Zero(t, service.ChannelInFlight(channel.Id))
+			}
+		})
+	}
+}
+
 func TestDistributeTokenPinBeatsOriginPin(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	setupOriginTaskDB(t)
@@ -452,4 +562,45 @@ func TestDistributePinViolatingIdentityFilterErrors(t *testing.T) {
 	assert.True(t, c.IsAborted())
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), string(dto.FilterTaskPluginIdentity))
+}
+
+// Building the origin pin reads the origin channel the same way with the
+// memory cache on or off: a channel missing only from the cache is still
+// found and a deletion is confirmed by the database. Storage errors retain
+// the upstream preparation-stage 400 response.
+func TestApplyOriginTaskIntentReadsOriginChannelThroughCache(t *testing.T) {
+	for _, cache := range []bool{false, true} {
+		t.Run(fmt.Sprint("cache=", cache), func(t *testing.T) {
+			setupOriginTaskDB(t)
+			previousCache := common.MemoryCacheEnabled
+			common.MemoryCacheEnabled = cache
+			t.Cleanup(func() { common.MemoryCacheEnabled = previousCache })
+			model.InitChannelCache()
+			channel := insertOriginTaskChannel(t, common.ChannelStatusEnabled)
+			insertOriginOwnedTask(t, "task-own", 7, channel.Id, "origin-plugin")
+			meta := jsplugin.Meta{Key: "origin-plugin"}
+			intent := map[string]any{"originTaskIds": []any{"task-own"}}
+
+			c := originTaskTestContext(7)
+			require.Nil(t, applyOriginTaskIntent(c, intent, meta), "a channel created after the cache was built is read from the database")
+			pinnedID, _ := resolvedOriginPin(c)
+			require.Equal(t, channel.Id, pinnedID)
+
+			require.NoError(t, model.DB.Delete(&model.Channel{}, channel.Id).Error)
+			intentErr := applyOriginTaskIntent(originTaskTestContext(7), intent, meta)
+			require.NotNil(t, intentErr)
+			assert.Equal(t, "origin_task_channel_disabled", intentErr.Code)
+
+			require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("test:origin-intent-channel-storage", func(tx *gorm.DB) {
+				if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "Channel" {
+					tx.AddError(fmt.Errorf("private origin channel storage failure"))
+				}
+			}))
+			intentErr = applyOriginTaskIntent(originTaskTestContext(7), intent, meta)
+			require.NotNil(t, intentErr)
+			assert.Equal(t, http.StatusBadRequest, intentErr.StatusCode)
+			assert.Equal(t, "origin_task_channel_disabled", intentErr.Code)
+			assert.NotContains(t, intentErr.Message, "private")
+		})
+	}
 }

@@ -39,7 +39,7 @@ class Client:
             handlers.append(redirect_handler)
         self.opener = urllib.request.build_opener(*handlers)
 
-    def request(self, method, path, body=None, bearer=None, proof=None, headers=None):
+    def request(self, method, path, body=None, bearer=None, proof=None, headers=None, response_headers=False):
         origin = self.base
         headers = {"Content-Type": "application/json", "Origin": origin, **(headers or {})}
         if proof:
@@ -52,15 +52,21 @@ class Client:
                     headers=headers, method=method)
         try:
             with self.opener.open(request, timeout=20) as response:
-                return response.status, response.read()
+                result = (response.status, response.read())
+                return (*result, dict(response.headers)) if response_headers else result
         except urllib.error.HTTPError as error:
-            return error.code, error.read()
+            result = (error.code, error.read())
+            return (*result, dict(error.headers)) if response_headers else result
 
     def api(self, method, path, body=None, proof=None):
         status, raw = self.request(method, path, body, proof=proof)
-        value = json.loads(raw)
-        if status != 200 or not value.get("success"):
-            raise APIError(f"API failed: {method} {urllib.parse.urlsplit(path).path} status={status}")
+        failure = f"API failed: {method} {urllib.parse.urlsplit(path).path} status={status}"
+        try:
+            value = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            raise APIError(failure + " non_json_response") from None
+        if status != 200 or not isinstance(value, dict) or not value.get("success"):
+            raise APIError(failure)
         return value.get("data")
 
     def login(self, username, password):
