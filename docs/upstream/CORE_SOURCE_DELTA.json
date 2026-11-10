@@ -1,11 +1,11 @@
 {
-  "upstream_sha": "ba5f7367797566175a6cd97a748d430af3602a01",
+  "upstream_sha": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
   "implementation_base_sha": "a276b48eaa60ae2ff1e761c21f5ac5fb526a541c",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 797,
-    "adapted": 280,
-    "extension": 276,
+    "upstream_equal": 802,
+    "adapted": 281,
+    "extension": 295,
     "removed": 45
   },
   "files": [
@@ -78,7 +78,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "type 57 / 供应商订阅账号已退役，不恢复 Codex API 分支。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -122,7 +122,7 @@
         "branding"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Ren2Hub / DayFliggy 品牌，以及独有返利系统替代上游邀请赠送常量。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -136,7 +136,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "返回容器内存字节和限制供现有运维观测消费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -162,8 +162,14 @@
     {
       "path": "common/database.go",
       "status": "upstream_equal",
-      "upstream_sha256": "51d5022f9ec8ea83b3eca0312d735fe4772307c110dd79b4a4f4a4212fa33c28",
-      "local_sha256": "51d5022f9ec8ea83b3eca0312d735fe4772307c110dd79b4a4f4a4212fa33c28"
+      "upstream_sha256": "f2174cacb3fa7ee6d084f5a4d768087b242c89f633ee1de1b00b4f4a09170cf8",
+      "local_sha256": "f2174cacb3fa7ee6d084f5a4d768087b242c89f633ee1de1b00b4f4a09170cf8"
+    },
+    {
+      "path": "common/database_test.go",
+      "status": "upstream_equal",
+      "upstream_sha256": "9917e92041c08383b3e910f684995da466c1a2bf30135e0d8130f1a3a8a152d7",
+      "local_sha256": "9917e92041c08383b3e910f684995da466c1a2bf30135e0d8130f1a3a8a152d7"
     },
     {
       "path": "common/disk_cache.go",
@@ -216,7 +222,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Vue SPA 路径回退；打开目录时关闭句柄后读取 index.html。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -236,7 +242,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "供应商订阅账号 / Codex 已退役，删除终端映射。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -262,7 +268,7 @@
         "native-plugin-multipart"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "任务 multipart 允许大文本字段，同时独立限制文件内存预算并保留原始请求重放。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -291,15 +297,15 @@
     {
       "path": "common/init.go",
       "status": "adapted",
-      "upstream_sha256": "68061a7c9125b582a14bd2972bd32ffa6034a14f859aa095ec3ad1e07837a641",
-      "local_sha256": "2a19f58acc2883b8c3d3039101fb000ec083416d591c1d8f9d2b9e179118e6fa",
+      "upstream_sha256": "fbcdb97de061851850a4a6abb052f46a9f1629b5e7f22e8820c676cedf82296e",
+      "local_sha256": "8ce200999ce6f6ba8e5de941b66a79ac5c030cb2fab52bf59798d0ae03e74249",
       "reasons": [
         "single-node"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "显式拒绝 slave 节点模式，保留单节点部署合同。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "显式拒绝 slave 节点模式，保留单节点部署合同。 rc.49 SQLITE_PATH 规范化照目标合入。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -473,7 +479,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内订阅资金已退役，删除 billing preference 归一化。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -493,7 +499,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留 CPU/内存/磁盘/网络指标的来源、可用性、字节及新鲜度。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -525,7 +531,7 @@
         "native-plugin-multipart"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "任务 multipart 文本/文件独立预算、临时文件失败清理及缓存请求体重放；目标实现替换对照失败。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -551,7 +557,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "文件仅包含已退役的充值业务分组倍率表和访问器。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -571,7 +577,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "真实连接字节计数和宿主接口统计；明确指标来源，不用虚构值回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -585,7 +591,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "真实连接字节计数和宿主接口统计；明确指标来源，不用虚构值回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -677,7 +683,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -691,7 +697,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -711,7 +717,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -803,7 +809,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "返利读取、转入钱包、邀请人政策与明细 API；使用当前用户 ID 或管理员目标用户，接现有 model 返利事务。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -829,7 +835,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅删已退役的套餐/分组审计说明，保留原生安全和管理审计。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -837,7 +843,7 @@
     {
       "path": "controller/auth_flow_test.go",
       "status": "adapted",
-      "upstream_sha256": "13144aac525fcbb809011f48a19e6f01911cb1666c695d5471ce617bc25cc934",
+      "upstream_sha256": "98f21cb724e50548fdfceb53e5a85f896e5d14179198d3bbb9e49e2cfda0c7a6",
       "local_sha256": "6b3d8b96e17c8b8f5cd491013a750bc78940c8cade237fd5a88635611400cd99"
     },
     {
@@ -889,7 +895,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "渠道测试重新读取权威渠道快照并取得用户/渠道 permit，defer 释放；测试结算日志使用渠道倍率，移除分组及退役渠道分支。moego 查询应由本轮目标实现覆盖。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -897,8 +903,8 @@
     {
       "path": "controller/channel.go",
       "status": "adapted",
-      "upstream_sha256": "3c6361d85dde791d61bf2d667162151056dd3fcdf974a282fe3981db4ab45117",
-      "local_sha256": "b8da9c69c4e09769b1aa2bd14d444760470e78d0e2e220c5f9b039601f32a20f",
+      "upstream_sha256": "b12eca731ec61f0e8bf799ad4ac8d8c8c2087f109809a6a14d1b2c6078445159",
+      "local_sha256": "0a83ff191e18de8df3bf543ca43d78d36741ebb3ee228cb69958b5580a233159",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -908,9 +914,9 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "管理入口增加渠道倍率、并发上限和只读在途/lab 投影；管理出站受相同 permit 约束；状态、模型和删除操作发布私有路由失效；不保留分组/type 57。本轮生成 ID 与 panic 修复应照目标合入。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "管理入口增加渠道倍率、并发上限和只读在途/lab 投影；管理出站受相同 permit 约束；状态、模型和删除操作发布私有路由失效；不保留分组/type 57。 rc.49 多 Key 自动禁用后重新启用 Key 恢复渠道（433830b4e）照目标合入。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -922,7 +928,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "亲和缓存查询删除已不存在的业务分组维度，保留原生 rule/key_fp 查询。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -939,7 +945,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "channel_ratio 与 settings 同属敏感写权限；max_concurrency 为普通配置；in_flight/lab 只读投影必须丢弃。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -971,7 +977,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "集中复用 AcquireChannelConcurrency 并返回 429；附加实时 in_flight；优先级提交后发布路由失效。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1003,7 +1009,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "以已批准模型目录的供应商/lab 分类过滤与计数；此 lab 不是已退役业务路由 group。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1017,8 +1023,8 @@
     {
       "path": "controller/channel_multi_key_test.go",
       "status": "adapted",
-      "upstream_sha256": "15502136550e599ecea2021ae0ba37a4d72afd4fb9a8c172786903863242c53b",
-      "local_sha256": "824df79146562d9fe7caefc6dd420f762c26731a8380e950cec53729cf5f0420"
+      "upstream_sha256": "68b844e47d3a5df08c0893bf9f6054bdbddf7f8ba2e2857bb1923394d3e21720",
+      "local_sha256": "fb8dcbe8450bf5fa4992901b5d49a4b66b5da8bd7171b96a324159b1430fd675"
     },
     {
       "path": "controller/channel_pin_retry_test.go",
@@ -1035,7 +1041,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "只在优先级重排事务成功后调用路由失效发布，避免 Token 路由使用旧排序。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1049,7 +1055,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "集中拒绝 type 57 写入及上游模型抓取，避免管理员凭据通过另一入口流向退役服务。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1087,7 +1093,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "读取、手动刷新和更新刷新配置的管理 API；显式渠道 ID 校验与归属判定，结果是展示数据而非计费价格来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1103,7 +1109,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "模型探测沿请求/系统任务 context 出站，取得渠道 permit；繁忙不计作上游模型失败，模型提交后发布路由失效；去 type 57。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1129,7 +1135,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留与服务器本地日期一致的 today 字段；删除只调用一次的 checkinToday 包装文件。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1149,7 +1155,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "整个文件仅服务 type 57/Codex 订阅账号使用量，明确退役，继续删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1169,7 +1175,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "个人、全站仪表盘摘要及路由性能响应；根据会话用户、角色和用户视区生成统一摘要查询。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1189,7 +1195,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "受 Root 权限及频率限制的单节点系统状态；复用 service 系统状态采样。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1203,7 +1209,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "io.net 部署控制器已明确退役，继续删除，不能因上游变更恢复。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1236,7 +1242,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "GMPay 下单、验签回调、只读订单、管理配置和连通探测；服务层下单/结算并绑定原生钱包，配置错误不伪装成功。；GMPay 下单经 QuoteTopUp 报价并核对确认金额。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1268,7 +1274,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "业务分组控制器与模型已退役，继续删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1282,7 +1288,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "公共首页时间窗口请求指标通过 service 读取；不另建余额或请求计费口径。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1303,7 +1309,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "日志列表、导出及汇总使用统一筛选；非 Root 管理员不能取得 Root 明细，用户查询绑定当前用户；移除 group 过滤。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -1344,7 +1350,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Midjourney 后台轮询复用 DoChannelRequest；并发满时跳过本轮，不把临时准入失败判为任务失败。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1359,7 +1365,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "status 返回 Vue 功能能力与登录/注册/Passkey 可用状态；删除分组配置暴露。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1388,7 +1394,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "OpenAI 模型列表复用 BuildModelCatalog，端点与权限跟实际私有路由一致；移除 group 和 type 57；仍按原生计费配置过滤未定价模型。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1402,7 +1408,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "模型目录绑定当前身份及 Token ID，复用 BuildModelCatalog 形成一份私有路由能力投影。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1434,7 +1440,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅去元数据关联里的 group 展示和分组过滤，保留原生元数据 CRUD。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1472,7 +1478,7 @@
         "native-count"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Claude 原生计数和 Gemini action 复用 Relay 入口，避免新增绕过鉴权/路由的独立计数请求通道。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1480,22 +1486,22 @@
     {
       "path": "controller/oauth.go",
       "status": "adapted",
-      "upstream_sha256": "a1f7c7ccb743e169de73964a38d34d25c7b30c9ecc41065b9cfa6d7aaaf83997",
+      "upstream_sha256": "5d8179526e2bc7184fa561bbae9c0a18088abe03cb8eeb1f366cf907aff7156d",
       "local_sha256": "0eed6ec63b0d5a010535921fce15d23c1700b0c94c0816cbef9423e901eb7117",
       "reasons": [
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "OAuth 新建用户在既有事务内校验邀请政策并初始化返利字段，统一返回邀请错误。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "OAuth 新建用户在既有事务内校验邀请政策并初始化返利字段，统一返回邀请错误。 rc.49 #8247 补写 InviterId 的一行不吸收：本地 InsertWithTx 在同一事务调用 InitializeAffiliateUserTx 写入邀请人并计数，成功路径回归见 oauth_affiliate_test.go。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
       "path": "controller/oauth_affiliate_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "8c57e75b0eeea2a279219f9ccbe1f33111f16e4f715ec657c2417e6aea6e8acc"
+      "local_sha256": "47da02881204348861d9c76994b196d2f65988e93849e429e0f94a977760d626"
     },
     {
       "path": "controller/option.go",
@@ -1509,7 +1515,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "设置接口移除默认模型价格回退及退役选项，校验返利配置；支付合规确认只能通过专属配置路径写入。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1565,7 +1571,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "性能指标查询删除业务分组维度，保留模型和时间窗。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1579,7 +1585,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "在现有性能响应附加观察窗口、进程/池/系统指标；参数错误直接返回错误。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1593,7 +1599,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "系统资源和数据库池状态只读投影，从统一 performance observation 构建响应。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1613,7 +1619,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "受权限保护的渠道质量/路由性能观察，复用统一采样数据，不参与调度或结算。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1633,7 +1639,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Playground 已明确退役，继续删除其控制器及相关路由。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1701,7 +1707,7 @@
         "price-source"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "固定参考项目价格只作为用户显式导入草稿；拒绝混用 source_ids 与渠道源，非固定源恢复请求体交回原生 ratio_sync。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1724,7 +1730,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "公开价格使用统一 ReadPricing 一致快照，去 group 和内置价格展示；读取失败不能返回部分成功快照。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -1753,7 +1759,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "唯一新增调用是固定价格草稿接入；其余原生渠道/OpenRouter/models.dev 源继续走原生处理。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1773,7 +1779,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "兑换码列表/搜索接收白名单排序，沿原生查询返回分页；非法排序返回 400。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1794,18 +1800,19 @@
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "8fba19dd30e120e7eb9fa92c6cf4e11e29e9ea69596ce4c4df59814f9777a50b",
-      "local_sha256": "1dd627871a82e9b2e088af9bda01dd20004d5d4fde2d1dc68fe970a6f7a5be46",
+      "local_sha256": "110ae5c48ee4134759bcf3ed9b53be5ded333d7c1d4ff5653d287c6bd19fdb69",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "native-count",
         "retired",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "保留统一选择/准入和每次渠道选择后预扣、尝试观测/释放、任务计费快照；SSE 取消的新增三处 guard 与再次 WithoutCancel 已删除，上游 adaptor 自身 detached context 提供等价结算保护。",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "保留统一选择/准入和每次渠道选择后预扣、尝试观测/释放、任务计费快照；SSE 取消的新增三处 guard 与再次 WithoutCancel 已删除，上游 adaptor 自身 detached context 提供等价结算保护。 2026-11-05 路由修复：任务每轮重置观测字段；非锁定重试所有选路失败保留上次真实TaskError，显式取消优先，锁定再准入不套用；实际发送标记区分响应包装错误与未发送的预扣/构造失败。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -1849,13 +1856,25 @@
       "path": "controller/relay_task_plugin_test.go",
       "status": "adapted",
       "upstream_sha256": "1d6a23aa8ee6289dc9f9030eb6cc7ecf173bfb6a2f8c93fbad55b5a944f06827",
-      "local_sha256": "f333b170738e2e12d3e88324e95524264ae7bcbbbedabe0e2b33f99e880c16cf"
+      "local_sha256": "ad3824b467832d1f52de9b1bbd8384b1938a7130e1e0e05da590411e18115714"
+    },
+    {
+      "path": "controller/relay_task_retry_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "9edc63990d5a2776111a3847f29b865e5007f32c6b44e45ae17e56bcfc1e9a00"
     },
     {
       "path": "controller/relay_task_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a1ae9da2be7eabf1c6e4b91ca25a16ded5cb9712ec4d796c9ee8201cff9b684f"
+      "local_sha256": "5e8775289dc08c8a1f9f522e73ab14ba772bff9a25c9ad50026496b6a29e3a95"
+    },
+    {
+      "path": "controller/relay_task_selection_error_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "91a6d0382dc05fd3d396d68276f888b08feca9ff1c14283df4ad63366af8f138"
     },
     {
       "path": "controller/request_policy.go",
@@ -1914,7 +1933,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "密码/OAuth/供应商注册使用同一邀请错误 code 映射，保持既有认证与验证响应，不另设鉴权体系。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1940,7 +1959,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "首次 Root 创建在原生初始化事务内初始化返利身份；普通已安装升级不走新建用户。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1960,7 +1979,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内订阅套餐及资金已明确退役，继续删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1974,7 +1993,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值的 Creem 处理保留。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -1988,7 +2007,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值的 Epay 处理保留。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2002,7 +2021,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值的 Stripe 处理保留。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2016,7 +2035,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内订阅支付通道已明确退役，继续删除；钱包充值通道保留。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2030,7 +2049,7 @@
         "single-node"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "删除原生多实例信息 API；现有运维观测按单节点状态合同提供，不能恢复多实例模型。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2050,7 +2069,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "向原生系统任务 runner 注册附件清理和上游倍率刷新；仍由原生任务锁和状态机调度。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2100,8 +2119,8 @@
     {
       "path": "controller/task_plugin_test.go",
       "status": "adapted",
-      "upstream_sha256": "7c764cb3461aec39bf0df1e77fe52c1633879d22c302ece3ed4d48b258da9870",
-      "local_sha256": "f5d73809bc2ab501fb5314720326c3905d7fefa0f04c6118443a67d9aa3d69b0"
+      "upstream_sha256": "d6190c3b8cc50ba965552744f8a8dd222144e18766ccc96e3bae84764d588968",
+      "local_sha256": "2d1bee436573a5f71a33cc292399c67f8f1fc0f291b0f563070648368ff8b3f0"
     },
     {
       "path": "controller/telegram.go",
@@ -2130,7 +2149,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "工单创建、消息、状态与附件下载绑定当前用户并校验引用对象归属，沿既有身份体系。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2144,7 +2163,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "工单管理员队列、派单、消息及附件保持角色边界和目标用户，复用同一 ticket 模型。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2158,7 +2177,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "上传分段校验数量/大小/内容和随机存储键，提交失败清除暂存文件；下载按工单归属后输出。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2172,7 +2191,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "清理失去数据库引用的托管附件，核对文件是否被并发修改，不删除在用或在途上传附件。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2192,7 +2211,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Linux 上传与清理使用相同文件锁，避免清理尚未完成的上传；这是本地附件生命周期合同。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2206,7 +2225,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "非 Linux 构建提供相同附件锁接口边界，保持可构建；平台行为应按现有测试和部署平台评价。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2227,15 +2246,15 @@
       "path": "controller/token.go",
       "status": "adapted",
       "upstream_sha256": "cfb50e30d730932168ba9a32ebe81033d4e35360f189ae66b980a54a87408ac4",
-      "local_sha256": "8cffe82ebae477a4b034f8d51b8e70433ea477d85bbe37bb033ab550f5ea8c5f",
+      "local_sha256": "04ba82a1ad78311590f82f919a578567c88ae2b243626ca8f1ecf6d64d58d262",
       "reasons": [
         "group-removal",
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "Token API 删除 group/auto_groups，返回自动/手动模式；手动模式创建要求现有 RoutingWrite 权限并原子保存路由。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "更新Token前读取真实路由模式，读取失败不修改令牌。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -2253,7 +2272,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "复用 authz 检查管理会话及 PAT 权限，避免路由 API 另建权限规则。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2268,12 +2287,12 @@
       "path": "controller/token_routing.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "eeb1dfdee1e9c6c418b089cbb68dd54e96097899f03fa867c7e3f3ff7763c2c1",
+      "local_sha256": "0b2e15df830393bbede41ab05bdf21b9a644ea2de48cba63b35e23018c2bf9cc",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Token 所有权、自动/手动配置、渠道候选和预览统一入口；列表返回实际路由模式。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2282,13 +2301,13 @@
       "path": "controller/token_routing_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "95fc0ae332951a7b7413469731fa94ff251534ba8f3abf3add0a14dcf088bbb4"
+      "local_sha256": "35f71626207e1de8cecacdf08a58f4acd28c37f984f298057650d467a63c37dd"
     },
     {
       "path": "controller/token_test.go",
       "status": "adapted",
       "upstream_sha256": "2abc293545ca8a84de350c373741f6362c01ad7305284a375559bf9d5e74ce5e",
-      "local_sha256": "32d6eb5a7d94f05351daa66ca00d292fc3e00b6258519c5af585a566dfb995e9"
+      "local_sha256": "deea917b0b5d7fa8e19859eab7b2917815bbd156e42a9b4114854ef1bedb67a2"
     },
     {
       "path": "controller/topup.go",
@@ -2303,7 +2322,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "GMPay 展示与原生充值同路；删除 group 价格倍率；订单冻结付款金额/币种，Epay 校验回执并脱敏日志，列表复用统一订单查询。；易支付与 GMPay 共用的 getPayMoney 去掉上游 AmountDiscount，经 QuoteTopUp 一次报价并核对用户确认的实付；topup/info 不再返回 discount。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2329,7 +2348,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "冻结商品金额/币种并交统一原生充值事务；退役订阅永久拒绝记审计后 ACK，只有瞬时失败要求重试；日志 URI 需沿集中脱敏。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2347,7 +2366,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "配置读取、版本化保存、状态、估算与本人视图 API，严格 JSON，用户视图绑定当前用户。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2361,7 +2380,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "四个报价渠道共用的报价、确认与订单冻结入口，确认在建单和网关调用前执行。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2389,7 +2408,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "用户/管理订单列表、明细和统计统一解析筛选；绑定当前用户或管理员权限，保持原生 TopUp 唯一订单事实。；管理员订单详情附带冻结的折扣决策。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2419,7 +2438,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "从已验签 Checkout Session 提取原币种 amount_subtotal（含 Adaptive Pricing）与订单冻结值比较；瞬时失败返回 500，永久拒绝 ACK；删除 group/订阅。；Stripe 报价删除上游 AmountDiscount，实扣仍为远端 Price，不接入充值折扣。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2441,7 +2460,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "创建时冻结金额币种，回调通过统一原生充值事务校验；删除 group/订阅，失败状态持久化错误可见，重试只对瞬时错误。；Waffo 原价去掉上游 AmountDiscount，经 QuoteTopUp 报价，实付字符串由 RoundTopUpPay 生成。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2463,7 +2482,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "钱包充值冻结金额币种并校验回调；移除套餐下单，订阅前缀明确永久拒绝；瞬时失败保留供应商重试。；Pancake 原价去掉上游 AmountDiscount，经 QuoteTopUp 报价，实付字符串由 RoundTopUpPay 生成。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2499,7 +2518,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "向配额数据查询传递调用者角色，去 group 汇总，防止管理员绕过角色边界读取 Root 历史。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2529,7 +2548,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "注册接返利；列表/明细按角色层级；self 返回实际并发和统一 request_limits；模型来自目录；更新提交后刷新准入及身份缓存；额度管理带幂等 operation_id。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -2541,7 +2560,7 @@
       "path": "controller/user_concurrency_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "9d37f9fe1fb8ae5068692045feafaa514a33657410b9fc28d506e63bb0721417"
+      "local_sha256": "2d43f741eeed3c40e3922649ae2cf75d5a2d81e56ee5e73cd06262c74684f811"
     },
     {
       "path": "controller/user_manage_test.go",
@@ -2558,7 +2577,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "每用户即时并发扩展的提交后发布接点，共用原生审计、权限刷新、会话撤销和认证缓存发布；逐项执行并区分持久化已提交与发布失败。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2572,7 +2591,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "管理员额度修改使用原生 AdjustUserQuotaWithOperation，并将返利回退纳入同一事务；响应/audit 区分已提交与后续日志失败。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2622,7 +2641,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "微信注册沿统一用户创建事务传递邀请身份，不另行发放旧固定邀请奖励。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2636,7 +2655,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2674,7 +2693,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2731,7 +2750,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2746,7 +2765,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2761,7 +2780,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2775,7 +2794,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2801,7 +2820,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留 Ren2Hub / DayFliggy 产品名称和品牌资源。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。；独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；明确单节点架构，不恢复 slave 模式、多节点注册与实例选主。；独有充值折扣：单笔充值、固定、全站与个人用量阶梯合成一次结账折扣，只降低易支付/GMPay/Waffo/Pancake 的实付，到账足额；调用计价回到上游；小时统计、配置与审计放在扩展文件。；保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2834,7 +2853,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "扩展路由显式标识 session-only，复用原生 AccessTokenRouteRule 登记，避免 PAT 无意继承工单/钱包敏感会话权限。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2857,7 +2876,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "使用原有 PAT scope 为独有接口授权；移除退役分组/订阅接口；新 pricing issues 复用 option:read。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2872,7 +2891,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅删内置价格重置和订阅等已退役操作审计路径，保留原生审计中间件。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2886,7 +2905,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "删除业务 group 解析和 Token group 设置；身份、PAT 与会话原生认证链保持，用户缓存继续写并发 context。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2906,8 +2925,8 @@
     {
       "path": "middleware/auth_test.go",
       "status": "adapted",
-      "upstream_sha256": "89c1ca1d1c04c684fdbca0df96b057162cce8d11417b94bf32839366ed5c6bb0",
-      "local_sha256": "5ee2b655160231bc191b4138d1f65d3975d8b25be7dfb6e5e225ce7ca4326f2e"
+      "upstream_sha256": "8e4b9ab4d7a3ff43c2e59b6edee68d6a1c935a674eee718303d1eb69c68a9b3b",
+      "local_sha256": "95f7e0fc547930a34c178207ad043d0515e31573927a9d27c4b6841ffe010b7b"
     },
     {
       "path": "middleware/body_cleanup.go",
@@ -2936,7 +2955,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Root 高频状态轮询独立 30 次/60 秒准入，沿已有全局速率限制器，不影响 Relay 请求额度。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -2951,19 +2970,20 @@
       "path": "middleware/distributor.go",
       "status": "adapted",
       "upstream_sha256": "8b57a8d4cca4d33405e0a188311c2108de9adbdafc29c5db96fc03c11b642966",
-      "local_sha256": "4627b63c80f23df709e5e933a6d63ad98dcef6126e38c3dd0a8ae5ec773b2c72",
+      "local_sha256": "5a64366038fae0b5223cc969565f9d0a7f01e03064a3350c7eacc804539ced63",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "native-count",
         "retired",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "复用一次用户准入和渠道重新准入，保存流式观测维度，使用统一 Token 模型权限和 Gemini action 解析；不恢复分组/Playground。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "MJ找到原任务时建立原渠道pin并记录已准备渠道；原任务pin仍检查Key模型限制，插件路由按resolved_task_model检查，准备阶段的插件模型归属不能代替Key权限；新增允许/拒绝回归。不扩展共有错误优先级。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -3048,6 +3068,21 @@
       "local_sha256": "8752d50dd6386bc80802bf343e30120fd8a03f89acebc338bde9005c14830fb6"
     },
     {
+      "path": "middleware/mj_origin_task.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "dd7b71415ce03bd2cd9b44543b485a10335539b6a556ba5437b6093504b4739a",
+      "reasons": [
+        "token-routing",
+        "origin-task-continuation"
+      ],
+      "review": {
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "MJ原任务已找到时建立原渠道pin，存储与缺失错误优先级不扩展。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
+      }
+    },
+    {
       "path": "middleware/model-rate-limit.go",
       "status": "adapted",
       "upstream_sha256": "df5b1de817e33856525d64d37fc1d2bb714c9cabb30fabece75916e419b038c9",
@@ -3057,7 +3092,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "实际 Redis/内存限流与 self request_limits 读取同一 CurrentModelRequestLimits；删除分组覆盖，保持原生成功计数。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3113,7 +3148,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "集中拒绝遗留 group 输入而非静默忽略，避免调用方以为旧组隔离仍生效；只扫描相关业务请求字段。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3149,23 +3184,27 @@
       "local_sha256": "5129d15205b7b97dd4d0b14421e5eba497c3e0307ee684c37071fce3327d5bdf"
     },
     {
+      "path": "middleware/task_origin_upstream_probe_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "59898cbd87840f490c31b0a62a68c6f4eef39f639133e5e0842d33aca1b68414"
+    },
+    {
       "path": "middleware/task_plugin.go",
       "status": "adapted",
       "upstream_sha256": "c8a3a8ef81b2f38829e7e937f0a001ae682cd1f96b50d1315b44a5de0f9d7a9e",
-      "local_sha256": "2f49fef864008a3a50e0c66a80e49fac02b335173278ff2fc3d4007efe63945a",
+      "local_sha256": "773211d519b093d50dc8829599339d80bd90687acb4f9ed1d65a7ce73180b52c",
       "reasons": [
         "concurrency",
         "native-plugin-multipart",
         "token-routing",
-        "group-removal"
+        "group-removal",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "在目标原生插件路由上接入同一用户即时准入、Token私有路由与候选绑定，移除业务分组；multipart读取复用受限存储与任务专用解析器，避免退回通用的较小正文预算。本轮原生认证、SSE、媒体和路径合同均已对照接入。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
-        "counterfactual_evidence": [
-          "core/RESULTS.json#historical/multipart"
-        ]
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "保留原渠道缓存miss回源及定制倍率上限宿主码；存储错误仍统一上游400。提取纯metadata endpoint lookup/identity/model normalization供本地预览复用，不改变JS解码和选路后模式检查。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
       }
     },
     {
@@ -3184,7 +3223,7 @@
       "path": "middleware/task_plugin_origin_task_test.go",
       "status": "adapted",
       "upstream_sha256": "209d3a5f14a79a8239b135fc6ea72eea2f945b7adaa8c059a78abf39fa3f2e63",
-      "local_sha256": "7011978bf9a57b63c39ee6c9262ea6e19bcc2bf98fcd55d70ad78f03069d3298"
+      "local_sha256": "d6c5a7b3ccf6fadda42c3dec9fbaf784eaf1f8608328e545c4dba2c422e56041"
     },
     {
       "path": "middleware/task_plugin_test.go",
@@ -3226,15 +3265,15 @@
       "path": "model/ability.go",
       "status": "adapted",
       "upstream_sha256": "e3f191fefb8369909b4e6e1d1ef6b09998b526232636373b6e08f38fa2aa47e2",
-      "local_sha256": "eedb325b2c20bc8301a71b5835b93fa613c2a0e4908498370de9dad270c6217f",
+      "local_sha256": "110691fe0a14868a0c2a8aab3d110c670ff285f17a7aa428e9a1502a13ae69a7",
       "reasons": [
         "group-removal",
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "能力行不再含 group，模型名去空去重；删除原生分组随机候选入口，调度改用共用 Token 路由候选。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "保留原有无分组能力合同；提取接收tx和实际渠道ID的能力更新供批量渠道事务共用，原公开wrapper保留，避免全局DB读写与新tag误选。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
       }
     },
     {
@@ -3247,7 +3286,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "工单/订单管理员展示软删除用户，硬删除保留存储 user_id；数据库错误不能冒充账号不存在。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3267,7 +3306,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "邀请绑定、返利冻结/解冻、转钱包及管理员撤销在原生用户/TopUp 事务内锁定参与者；返利记录是功能明细而非另一个钱包。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3305,7 +3344,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "返利政策与邀请明细使用统一字段和可见性，校验邀请代码/倍率，邀请人姓名脱敏。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3341,6 +3380,18 @@
       "local_sha256": "be41afa7b90d3e8b666601ce2d9c778baa4b202e3645a9c3e9ae5c6b4b908c59"
     },
     {
+      "path": "model/auth_cache_integrity.go",
+      "status": "upstream_equal",
+      "upstream_sha256": "3ec1913edb3a5e87b6f83240dff89a8a4746a879ab1590aa913f741a31e32772",
+      "local_sha256": "3ec1913edb3a5e87b6f83240dff89a8a4746a879ab1590aa913f741a31e32772"
+    },
+    {
+      "path": "model/auth_cache_integrity_test.go",
+      "status": "adapted",
+      "upstream_sha256": "d46a769657ea9875982a5e48331aed3624f864313bb4a6e476a474038b921ac4",
+      "local_sha256": "cf625a4c97df870f9925bbe9cf7a1b8599b4ffb15ce03b51019f5048f60edca4"
+    },
+    {
       "path": "model/auth_flow.go",
       "status": "upstream_equal",
       "upstream_sha256": "dc1bf6e1f3f5d7d4201ab2862a13583178eea8d474a955fd0302fbf9ee77ff41",
@@ -3374,7 +3425,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "模型目录投影已配置价格与表达式，并按明确渠道倍率展示；不填充内置默认模型价。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3388,8 +3439,8 @@
     {
       "path": "model/channel.go",
       "status": "adapted",
-      "upstream_sha256": "e3e3e844f6466fb6439c5a290cc9be53e7c8577aeec43066efea20a8834d3a84",
-      "local_sha256": "3c0eb8002ac22da94e54b1b20ae089f63442b0f9a455891a5fd878626e3fab9c",
+      "upstream_sha256": "ef12d9793776c778ab8156f6dcd2eaf8dc5701fce72201a57277320d4cb7a7f9",
+      "local_sha256": "91a1a23ea691ef6bcff85a9ba9f042bdd6fd6d1abf85ec5237cc4427fefbca83",
       "reasons": [
         "catalog-stats",
         "channel-ratio",
@@ -3398,12 +3449,9 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "模型新增渠道倍率/并发字段及只读投影；更新发布 Token 路由失效；多 Key 从权威轮询状态取 Key；删除 group；本轮批插入 ID/panic 用目标代码。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
-        "counterfactual_evidence": [
-          "vue/counterfactual-summary.json#route-candidate-polling"
-        ]
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "保留既有渠道倍率/并发、目录、退役分组差异；六类可达多行写接入统一升序锁，渠道与能力同事务，提交后实际ID发布。多Key禁用预处理在事务外。上游近六个月文件22次改动，BatchDeleteChannels 1次、EnableChannelByTag 0次，局部接点同步成本低。 rc.49 ada15c050 保留人工禁用的两处守卫落在扩展文件 model/channel_status.go 的 UpdateChannelStatusDetailed，本文件保持本地包装。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -3416,7 +3464,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留 ID→渠道缓存及状态维护，删除 group→model 随机路由缓存与第二选择入口，私有路由统一从候选读取。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3432,7 +3480,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Token 有序渠道 ID、渠道可用性和 native-count provider 类型进入同一过滤规则；compact 能力过滤与实际适配器一致。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3447,12 +3495,12 @@
       "path": "model/channel_delete.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "101c8d3ae4ebc2c30b2f10b0b5e45c302b786ac5f4919c8376452c8da11760a0",
+      "local_sha256": "2b888e78f010f7375dc992f005700146949fce87f97dcc758d05477cf663f768",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "同一事务锁定并删除禁用渠道及其能力行，返回真实 ID 供准入/观察清理，避免另读 ID 与实际删除集合漂移。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -3475,7 +3523,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "模型/渠道供应商识别按元数据与 mapping 链批量投影，保持 vendor 与 lab 展示一致，不创建业务分组。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3485,6 +3533,26 @@
       "status": "extension",
       "upstream_sha256": null,
       "local_sha256": "6a3d5dd836077afc86f46adb006751b1005ba1f18e030c0a6bd36be8185a198a"
+    },
+    {
+      "path": "model/channel_lock.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3f2b7735d3978f13028b3baa546a57b028d0eea074fad8cc67a630da379860c5",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "共享保存与六入口写方按完整ID集升序分块锁定；谓词复核、同事务能力更新和提交后实际ID发布。避免本地新增SHARE与无序多行写成环。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
+      }
+    },
+    {
+      "path": "model/channel_lock_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c48fdacadf85952562ca366618f6ae16b157026a494bab9fb05f0a2d44dbe7ed"
     },
     {
       "path": "model/channel_metrics_databases_test.go",
@@ -3501,7 +3569,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "路由候选是数据库快照，轮询游标必须推进缓存/数据库权威 owner，避免每请求从新快照反复首 Key；游标持久化失败仅影响公平性。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -3531,14 +3599,14 @@
       "path": "model/channel_ratio.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "87f550c1b6f6706a72544a52d978a67cbc4daf648c13470a68cdd4a458a0ce4a",
+      "local_sha256": "665192574b2265fa9415bb580e9b38358b78fdd6c30b6a67f701dedc00bf7958",
       "reasons": [
         "channel-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "渠道倍率使用有限十进制校验，新增渠道默认 1；并发上限非负；tag 批量改动发布路由变化。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "渠道倍率及并发字段验证；批量写在提交后按实际修改ID发布，不按新tag重新选行。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
       }
     },
     {
@@ -3557,7 +3625,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原有业务分组路由满足性函数退役，由 ChannelSatisfiesFilters 与共享 Token 候选覆盖，继续删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3572,21 +3640,21 @@
       "path": "model/channel_status.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "25fff6a065ab8e3d3a9baaedf0591f1a66f4bdf9baf639512e2e2be9b7d43f90",
+      "local_sha256": "1e320c1785433607e8b19dc85f91c28e72108a2cc95749088eab6d7814bc5aaa",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "保留原生状态更新事务/锁行为，仅增加 Changed 与 PublicationPending 分离，以及提交后路由失效发布；不能重复新建状态实现。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "保留原生状态更新事务/锁行为，仅增加 Changed 与 PublicationPending 分离，以及提交后路由失效发布；不能重复新建状态实现。 rc.49 ada15c050：请求失败不得把人工禁用改成自动禁用，缓存与 DB 行各检查一次；上游写在 model/channel.go 的 UpdateChannelStatus。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
       "path": "model/channel_status_test.go",
       "status": "adapted",
-      "upstream_sha256": "a52b65ac36f2bec092f33ed3a481b40850b8a04197a1e7b8147c7bafc6e535c7",
-      "local_sha256": "fd48cdedf65c4f5e64e6e61ba82acbb75872ff15540503421afa0c6944fbf6fa"
+      "upstream_sha256": "90cf9ec6373e2b872b545ea7d77d08999fa9075226e7662cdc03fb8c6226b429",
+      "local_sha256": "b6d9dc943d8ceb0289777a52a5d8783ab2f2d21259ccedab121dcd165e271549"
     },
     {
       "path": "model/channel_upstream_ratio.go",
@@ -3597,7 +3665,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "缓存外部倍率观测及来源身份，检测绑定变化/孤儿记录和刷新到期；只读展示而非新资金价格来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3641,7 +3709,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "统一用户/全站摘要 scope 与时间窗校验，分别读取用量、延迟和结果，供现有仪表盘。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3704,7 +3772,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "商户版本与订单快照冻结，验签回执匹配和 pending→success 原子结算，并使用原生额度写入；重入不能重复到账。；CreateGmpayOrder 事务内写充值折扣审计记录。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3718,7 +3786,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "商户配置以不可变版本保存并原子切换，老订单仍能用创建时版本验证回调。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3756,7 +3824,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "按窗口查询公共请求汇总且支持取消，只返回聚合指标。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3782,7 +3850,7 @@
         "install-guard"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅拒绝无法解释的旧独立账本和旧 group schema；当前无 group 的已部署库允许普通迁移，不能据此要求重建现行数据。旧空库发布说明已过时。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3827,7 +3895,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "日志/汇总/导出共用显式筛选与调用者角色约束，保持 Root 明细隔离；移除 group 字段，不另加资金计算来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -3876,7 +3944,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原生 AutoMigrate 注册本地功能表、删除退役表；首次 Root 创建仅 ErrRecordNotFound 时执行且事务初始化返利；沿迁移前旧账本检查，不重置已部署数据。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -3917,7 +3985,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "删除 group 查询，原生 GetModelQuotaTypes 的读锁原已存在；modelEnableGroupsLock 改名 modelQuotaTypeLock 是删除 group 后命名适配，不是新增必要修复。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3931,7 +3999,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "元数据/渠道关联删除 group 字段和筛选，保持原生 models/priority/weight/tag 与模型所有者策略。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3951,16 +4019,16 @@
     {
       "path": "model/model_pricing_config.go",
       "status": "adapted",
-      "upstream_sha256": "1fc33ae53b9465e349f78a81f376c82640ae64499cd964d829b6ccbf048057b6",
-      "local_sha256": "19e000b8cd0101d4dfc67877596c8b25618f33a52c5013fc90e0dcc55e6a8b18",
+      "upstream_sha256": "7ec628b0c3ed8637b0bb0a12c7fdb60ac3c6d0fb0b2941b8038a355e329a3f10",
+      "local_sha256": "e63cb8c10adbf15adf4f0b657733edf7dc3126c360af1c13f11aee77485c642c",
       "reasons": [
         "catalog-stats",
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "空默认 maps，不合并内置模型价或表达式；配置与运行时统一；插件报价/变体仍沿上游模型定价。目标新增 pricing issues 须随本轮吸收。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "空默认 maps，不合并内置模型价或表达式；配置与运行时统一；插件报价/变体仍沿上游模型定价。 rc.49 72f3dc7da：GetModelPricingIssues 采用上游原文，只为渠道实际服务的模型报未定价/不兼容；快照列出已服务内置价格的部分按 no-builtin-prices 不吸收。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -3973,7 +4041,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "模型目录静态投影沿用原生价格转换，去除内置模型价格回退；无价值 hosttypes 别名已回归。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -3991,7 +4059,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "不读取/写入退役选项，校验货币并归一 Vue 配置；读取错误保留运行内存，单选项创建与保存同事务且提交后才更新内存。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4058,7 +4126,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "性能聚合表/查询移除 group 维度，保留模型与时间 bucket 的原生统计。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4092,7 +4160,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "目录读取价格/供应商/端点必须为同一成功构建的不可变快照；构建数据库错误不能发布半成品，返回外层拷贝避免调用者破坏快照。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4109,7 +4177,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅追加 supplementVendorID，使目录 vendor 默认识别与渠道 lab 一致；没有恢复模型默认价格。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4130,7 +4198,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "刷新失败显式使快照失效并记录错误，下次读取重建，不能维持部分更新结果。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4147,8 +4215,8 @@
     {
       "path": "model/pricing_usage_schema_test.go",
       "status": "adapted",
-      "upstream_sha256": "0e06077bd1814dce5f144d28c8e19eb11dad79e98e31ed178a54d054cdf5337d",
-      "local_sha256": "18df7748cfb8a3bf17bc3b272ec5c58329edee4c3f8563d46375aeb13881520d"
+      "upstream_sha256": "ef73bf535411db70f84f8ad2b7da2b7a2096bac68eb1d2c6b20f3ffbaf5fb06d",
+      "local_sha256": "39ff6d6d65a911936f9bd53f2e4ae8a133551ebd1e0ccef342f213f174a87125"
     },
     {
       "path": "model/quota_reserve.go",
@@ -4171,7 +4239,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "统一列表与搜索排序入口，兑换交易保持原生；错误改为 Message 以支持现行 Vue 中英文回传。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4191,7 +4259,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "为 Vue 管理兑换码表提供字段/方向白名单及稳定 ID 次序，拒绝任意 SQL 排序输入。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4218,14 +4286,14 @@
       "path": "model/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "bc1afc760327a98c74fae2195a1392b4bacceec7acff00c38fa041e56803cef1",
+      "local_sha256": "3ea19bbb0eb2cf63df5d2b9cebd7ff4be3b49e01b86fc55f47f077ac63357a36",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "完整候选查找与目录共用，精确模型名经过所有策略后无候选才回退规范名；过滤 MySQL 大小写等价误命中和已退役渠道，保留 compact 能力一致性。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "自动预览的模型声明事实包含禁用能力行，防止无关渠道出现在模型预览。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -4249,7 +4317,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "站内套餐和订阅资金已明确退役，继续删除，钱包不得双轨。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4275,7 +4343,7 @@
         "single-node"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "多实例心跳与系统实例模型不属于单节点产品，继续删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4289,7 +4357,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅为附件清理和倍率刷新扩展任务类型/状态投影，使用原生 SystemTask 锁与 runner。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4311,7 +4379,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "任务冻结渠道倍率以保证后续恢复结算使用提交时口径；删 group/订阅字段，仍沿原生 Task CAS。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4361,7 +4429,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "工单、消息与附件存储统一用户/管理员 scope；更新、派单与消息写入在同一工单事务约束内。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4381,16 +4449,17 @@
     {
       "path": "model/token.go",
       "status": "adapted",
-      "upstream_sha256": "2883125c0adfb123c89a56cee77f6172dacdb736b51c94b662d5061a2fe3c205",
-      "local_sha256": "295f2bc6ddff3638ecad2b60094ce5a9db2cad1fada99581c5f854e118321d2c",
+      "upstream_sha256": "db42a2d9d3c5a5a6a6a2d019435922629c476498eb3d4cc25a75252ee68c0158",
+      "local_sha256": "7eda9667173df8d26af33f0546b0727fe61796eec564c1208a00221d60a3aa38",
       "reasons": [
         "group-removal",
-        "token-routing"
+        "token-routing",
+        "auth-cache-integrity"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "移除 Token group/auto_groups；Token 删除同事务清理路由配置，保持原生额度和缓存行为。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "已合并#8200全量逻辑对照；保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
+        "method": "three-way review of #8200"
       }
     },
     {
@@ -4402,15 +4471,16 @@
     {
       "path": "model/token_cache.go",
       "status": "adapted",
-      "upstream_sha256": "5fa2809ee055d09fdf4d80489efbec33a3121e4088524eb4f2301da684c29c65",
-      "local_sha256": "d57ecd9f267178e9ae36257804a653729f84659df6d5d7d9d04e5d88d8a957b0",
+      "upstream_sha256": "3bf6f0e833604f6552b38340a83411d1a00a59d4868cade1164a978b3426d580",
+      "local_sha256": "1fb5ab22a16c4d94a2627e7a241f8728ca53659654afd4d80273f5f3dbb84b73",
       "reasons": [
-        "group-removal"
+        "group-removal",
+        "auth-cache-integrity"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "Token 缓存不再序列化或恢复 auto_groups/group，其他原生缓存失效语义保持。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "吸收#8200签名及计数保留；本地差异仅删除退役分组字段并逐项重排Lua ARGV，此文件无MaxConcurrency字段。",
+        "method": "three-way review of #8200"
       }
     },
     {
@@ -4429,27 +4499,39 @@
       "path": "model/token_route.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0acb75be5860ab2150f3a10515304685b7bc7310cd67a127e035f092af7c9caf",
+      "local_sha256": "5746a9d47ed2eae972bcf5b05ffb29ee10f5b6ed7163c0d58f84263ef898c73b",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "每 Token 路由模式、倍率上限和有序渠道列表持久化，验证配置并原子保存，删除 Token/用户时清理路由从属行。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "路由保存先锁Token再按ID共享锁渠道，用户硬删按ID锁含软删Token；渠道多行修改锁序另有诊断，不宣称全部安全。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
+    },
+    {
+      "path": "model/token_route_channel_lock_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "0fbf63a7b33f0be38999097b4b7dfccb7c667d69108d153151239d8d2d898bce"
     },
     {
       "path": "model/token_route_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f9296080b56d1a52fb4b7e157be4b12bb167038c42e85f9971e7976b74c6f408"
+      "local_sha256": "41683fa22298ac642fe0036f871c665167dc7cfbea9388199a73105ae3e3c87d"
+    },
+    {
+      "path": "model/token_route_race_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2a49a2a37583be8b1a452e8bb3e40e4033cdb323102d873859cb6bb55a02ec1f"
     },
     {
       "path": "model/token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e8765a29a5d93fa53f5d0aed2ed457b4067a85d18afbe1e9adc90ce7fd7a468a"
+      "local_sha256": "0576348eb14eadc00fed1abec87b64f1ad0a65350a22c74af9eec93a81829fca"
     },
     {
       "path": "model/topup.go",
@@ -4463,7 +4545,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仍以原生 TopUp 和 User.Quota 为唯一钱包，增加订单冻结额度/金额/币种和统一回执结算，返利随到账事务；不依据回调时间配置重新计算额度。；Insert 在同一事务写订单与充值折扣审计记录。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4480,7 +4562,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "追加式版本化配置，统一校验阶梯、时区与排除名单，所有读取共享快照。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4506,7 +4588,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "订单同事务写入的折扣审计记录与估算用的成功订单查询，回调不读取。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4520,7 +4602,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "按原生已发生用量记小时聚合，供用量阶梯定档；不反向扣费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4535,7 +4617,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "统一 TopUp 查询/统计并关联支付方法与账号展示，分页过滤受 user/role scope 约束，无平行资金账本。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4563,7 +4645,7 @@
         "payment-integrity"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "冻结订单额度、金额、币种；先匹配已验签回执，再通过 pending 状态锁定原生订单并一次更新 User.Quota 与返利；统一永久/瞬时错误分类。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4599,7 +4681,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原生用量聚合删 group 维度，缓存键与数据库条件一致；管理查询统一排除不可见 Root 用户历史。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4617,7 +4699,7 @@
         "usage-visibility"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "用户/管理员/Root 用量流分别投影允许字段，管理员查询复用 Root 隔离规则；移除 group 分组。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -4640,8 +4722,8 @@
     {
       "path": "model/user.go",
       "status": "adapted",
-      "upstream_sha256": "b74b07db9b379a4f4115c7e8f2e97e26430a64e4d67ef340c975e63cfee13964",
-      "local_sha256": "b43ac6b4fe5781752997738330b3884a447409df7614df8219c550d1f312dde7",
+      "upstream_sha256": "cf0a37976508b0e8c5d6e7382e4e799e17316527305f2d390a935e1e349adccd",
+      "local_sha256": "a4001660a3289b392961cc275780c13b13a88ff6d6392316eb30927a9d4857c7",
       "reasons": [
         "affiliate",
         "concurrency",
@@ -4649,11 +4731,12 @@
         "retired",
         "topup-discount",
         "usage-visibility",
-        "vue-frontend"
+        "vue-frontend",
+        "auth-cache-integrity"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "新增返利与并发字段，创建同事务初始化返利，删除清理 Token 路由；用量更新记录小时统计；管理员分页/汇总按角色隔离；部分 self 更新的空 status 保护在冻结目标已有等价实现，不属于本地待保留修复。",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "新增返利与并发字段，创建同事务初始化返利，删除清理 Token 路由；用量更新记录小时统计；管理员分页/汇总按角色隔离；部分 self 更新的空 status 保护在冻结目标已有等价实现，不属于本地待保留修复。 已合并#8200全量逻辑对照：用户缓存整体发布与签名，保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "vue/counterfactual-summary.json#usage-visibility"
@@ -4669,16 +4752,17 @@
     {
       "path": "model/user_auth_cache.go",
       "status": "adapted",
-      "upstream_sha256": "3ba6e8f3157738d66ebefdb01f566c1fe5366d7c912e917b0202b4fa4ec929d2",
-      "local_sha256": "1b04f327277c8b4f9fe9c4d2fc31edcb83fbdc8a10df95049a5540cbe979b3dc",
+      "upstream_sha256": "7c95e5d102dd395d144e06bd4b0e5b08d8a88393870503f6139749a60c42986b",
+      "local_sha256": "56f0b458882cfa220ec4e3d262a52ced508d1c9d892df6e1cee26a233ae98075",
       "reasons": [
         "concurrency",
-        "group-removal"
+        "group-removal",
+        "auth-cache-integrity"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "原生 auth-version Redis 原子发布将 group 替为 MaxConcurrency，保持版本栅栏。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "已合并#8200全量逻辑对照；保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
+        "method": "three-way review of #8200"
       }
     },
     {
@@ -4690,23 +4774,24 @@
     {
       "path": "model/user_cache.go",
       "status": "adapted",
-      "upstream_sha256": "179606ebb28cf890834e5d5f062225373fc40531b0da703f1c21117b617acdf3",
-      "local_sha256": "a830fc02dec735427c8830fbdae84d57781ea32734ee330d4b224e397379c949",
+      "upstream_sha256": "51beac86c2139bcb0e2ca64a64ffebf35dd5e2051baf62724e3010a74abc5228",
+      "local_sha256": "b7ecd72a0093f8dad6b31444068e1338c98af70ee6abfa9d8e4e24cbe8d4862a",
       "reasons": [
         "concurrency",
-        "group-removal"
+        "group-removal",
+        "auth-cache-integrity"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "用户缓存 schema 升为 3 并携带 MaxConcurrency 到鉴权 context，删除 group；升级遇旧 schema 应回数据库重建。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "已合并#8200全量逻辑对照；保留本地MaxConcurrency、退役分组和现有事务/路由接点。",
+        "method": "three-way review of #8200"
       }
     },
     {
       "path": "model/user_cache_auth_version_test.go",
       "status": "adapted",
-      "upstream_sha256": "e6dbcb8fc720abb2adcf812de62368f420b4a3234f11105b823bf5b396196c96",
-      "local_sha256": "b98c1db938e591989e132a15210507c94122b3d6656d8165a77bc883e3bf62b3"
+      "upstream_sha256": "826047fe0be237e53fe9b2dae82657290ac4d8fdfcdc70fb6b64b22c8d1d4a07",
+      "local_sha256": "09c63927e9e7a8268fb4e3b324789f20927c42f676ce3b453d743c09a6055c8c"
     },
     {
       "path": "model/user_oauth_binding.go",
@@ -4729,7 +4814,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "扩展原生管理员钱包调整，以 operation_id 幂等保存并与返利冻结/撤销同事务；只按已提交 delta 更新缓存，不另写钱包。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4737,8 +4822,8 @@
     {
       "path": "model/user_session.go",
       "status": "upstream_equal",
-      "upstream_sha256": "81aa0b84708ff3249d6818f3dd8825da29ce33967b63471a74dbb199356a6314",
-      "local_sha256": "81aa0b84708ff3249d6818f3dd8825da29ce33967b63471a74dbb199356a6314"
+      "upstream_sha256": "62997d24d4eb9c170ff14558888ac89a9e73708fb5c1d5fa05d13311f83cddce",
+      "local_sha256": "62997d24d4eb9c170ff14558888ac89a9e73708fb5c1d5fa05d13311f83cddce"
     },
     {
       "path": "model/user_session_migration_test.go",
@@ -4803,7 +4888,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4889,7 +4974,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "静态解析已配置表达式展示参考价格，不参与执行或写入定价。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4921,7 +5006,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4953,7 +5038,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -4985,7 +5070,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5005,7 +5090,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5019,7 +5104,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5033,7 +5118,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5047,7 +5132,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5061,7 +5146,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5075,7 +5160,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5179,8 +5264,8 @@
     {
       "path": "pkg/jsplugin/routing.go",
       "status": "upstream_equal",
-      "upstream_sha256": "b61c2f3dd1118a0f28377ba35275c8e919ac0c5c29676a63dba5953651c36bd2",
-      "local_sha256": "b61c2f3dd1118a0f28377ba35275c8e919ac0c5c29676a63dba5953651c36bd2"
+      "upstream_sha256": "86e67118c3568c7accd846a2e2f790d737e0a0ad1b3c4bc43b057551fed5780e",
+      "local_sha256": "86e67118c3568c7accd846a2e2f790d737e0a0ad1b3c4bc43b057551fed5780e"
     },
     {
       "path": "pkg/jsplugin/routing_test.go",
@@ -5203,7 +5288,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5217,7 +5302,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5237,7 +5322,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5251,7 +5336,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5271,7 +5356,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5297,7 +5382,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5311,7 +5396,7 @@
         "price-source"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5325,7 +5410,7 @@
         "price-source"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5339,7 +5424,7 @@
         "price-source"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5359,7 +5444,7 @@
         "price-source"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5493,7 +5578,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "host 协议的时长/frames/分辨率/音频字段在重写前校验并与 usage 共用事实；原生 vendorBody 不强制 host 时长规则，保留上游小数时长及未知时长保守预估。 本轮共享 requestedVideoDuration 使用上游 || 取值，避免 null/空字符串截断 metadata.duration 的校验；前置数值 0 回退，-1 保留自动时长及最大预扣。 交叉审计 P3 对齐上游 extractUsage 的 number/string 判别；host 非标量时长不发送 duration 并始终预扣模型最大值（包括带 frames；无回退值的顶层 null/false 等非标量键也保留该语义），与仅 frames 的既有估算区分；不照搬上游 parseInt 对数组的提交/预扣不一致，vendorBody 和 decoder 保持原样。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -5511,7 +5596,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "最终 metadata.durationSeconds 与 usage 共用参数；目标上游 metadata=4 实际发送 4 秒却按 8 秒计费，反事实已复现。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -5528,7 +5613,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "host 分支复用上游 validateHailuoCombo 校验模型时长/分辨率组合；native 分支完全沿用上游。目标会接受 host duration=7 并默改模型档位。已删除被模型时长枚举覆盖的重复有限正数检查。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -5545,7 +5630,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "复用上游 req_key/frames 定义，只补显式 duration 与 121/241 frames 一致性及有限档位校验，不允许静默重写冲突时长。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -5568,7 +5653,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "将 host duration 归一为 vendor seconds 字符串枚举，build/usage 共享时长尺寸；目标仅发送 duration 而 usage 按其计费造成出站字段与账单不一致。remix 保留上游原样。 JSON/multipart decode 保留 duration，冲突检查实际有效；Responses decoder 与冻结上游一致，仅保留 seconds，不额外修复该既有边界。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -5585,15 +5670,15 @@
     {
       "path": "plugins/tasks/vertex-ai/plugin.js",
       "status": "adapted",
-      "upstream_sha256": "90a40af64d7617614b2327f480c8a67b7d22630011f659890b496395d573d910",
-      "local_sha256": "5f18d1d7792191b573352d3de455bfcd79d1acfd3c8fbf296edd726acb05366f",
+      "upstream_sha256": "e4e6813db6c5d77fe8f41eee5607b668deb20c6f1d70f3d710ac74260e5f80b7",
+      "local_sha256": "9f46e4f5e1f13104b193d639af3aec4fe4d2814fea21fa1c404611c126123a7a",
       "reasons": [
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "Veo 最终参数校验与 usage 共用，Omni 分支先执行上游独立 3–10 秒规则和最终 token 计量；不保留 Omni 中间按秒计费版本。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "Veo 最终参数校验与 usage 共用，Omni 分支先执行上游 1.3.0 独立时长规则（1.2 为 3–15 秒，1.1 与首尾帧仍受 Vertex 10 秒限制）和最终 token 计量；不保留 Omni 中间按秒计费版本。 rc.49 #8228 新模型、全部输入图片和错误原因照目标合入。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "plugins/exception-proof.json#vertex-ai"
         ]
@@ -5608,7 +5693,7 @@
         "plugin-self-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已删除旧宽泛 validateViduCombo 并采用目标 endpoint-specific profiles；仅对已列明型号超出 profile 时长边界拒绝，未知型号维持上游兼容行为。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -5631,8 +5716,8 @@
     {
       "path": "plugins/vertex_ai_responses_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "74314c6bc4260ea7c47273e5af8af8470c6c574d66ec2d80ce046ac3bda2b190",
-      "local_sha256": "74314c6bc4260ea7c47273e5af8af8470c6c574d66ec2d80ce046ac3bda2b190"
+      "upstream_sha256": "989354c11641529c7f40ffa05dd1e5b74e0af0b216057c652d17a5d80de569fe",
+      "local_sha256": "989354c11641529c7f40ffa05dd1e5b74e0af0b216057c652d17a5d80de569fe"
     },
     {
       "path": "plugins/video_responses_test_helpers_test.go",
@@ -5661,7 +5746,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5681,15 +5766,15 @@
     {
       "path": "relay/channel/adapter.go",
       "status": "adapted",
-      "upstream_sha256": "a6f82ea8fd01ef850e75d7aff92335f33e3a842112a7a75e5d32f0312796dc25",
-      "local_sha256": "b41602bd7da5d80404d334b4d1ddf8f9dd743b073e8d22d9f750e9af432e87f8",
+      "upstream_sha256": "21f5ec99dbe7820bab689cb719f6032ed914a146bdcf56a2469f040079c734e5",
+      "local_sha256": "a477185d3f4b0e4597c82f288e177feee85f56cf2addbadaf802c5e47648b3d0",
       "reasons": [
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "轮询适配器显式接收请求 context，与现有无等待渠道 permit 生命周期共用，不另建调度。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "轮询适配器显式接收请求 context，与现有无等待渠道 permit 生命周期共用，不另建调度。 rc.49 ResponsesRequestFinalizer 接口照目标合入。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -5785,7 +5870,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "发送前检查取消；统一登记上游尝试和首个有效输出。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5811,8 +5896,8 @@
     {
       "path": "relay/channel/aws/adaptor.go",
       "status": "upstream_equal",
-      "upstream_sha256": "3b7b277d15e9fb6e9ddef083a3480e51689535e5dd43ec6cbd3a5997bca6527b",
-      "local_sha256": "3b7b277d15e9fb6e9ddef083a3480e51689535e5dd43ec6cbd3a5997bca6527b"
+      "upstream_sha256": "d46a25e9309edeba99314860742fd5b0b3163744243dad25589aa22e6d5328c1",
+      "local_sha256": "d46a25e9309edeba99314860742fd5b0b3163744243dad25589aa22e6d5328c1"
     },
     {
       "path": "relay/channel/aws/constants.go",
@@ -5841,7 +5926,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5849,8 +5934,8 @@
     {
       "path": "relay/channel/aws/relay_aws_test.go",
       "status": "adapted",
-      "upstream_sha256": "7aa0caf29d365d769166dc7d27da2c1a09f841088826578054363eb6728b4ae3",
-      "local_sha256": "fa1c65c5a5769e1b20ea5b9f7ebb3f62c8acc84ff103efcf8bf515dff40c036c"
+      "upstream_sha256": "a71b56d6f08369eadb79cb9c02bcb5767b45b90c1406486d7450bd7f3c8ed1f9",
+      "local_sha256": "2caec6900510a8b6d66b5d7d306aa698a8426cf714219469ff50b41b888b9163"
     },
     {
       "path": "relay/channel/baidu/adaptor.go",
@@ -5927,7 +6012,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -5989,7 +6074,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "供应商订阅账号与 type 57 已批准退役，源码及专属测试一并删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6009,7 +6094,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "供应商订阅账号与 type 57 已批准退役，源码及专属测试一并删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6023,7 +6108,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "供应商订阅账号与 type 57 已批准退役，源码及专属测试一并删除。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6055,7 +6140,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6093,7 +6178,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6107,14 +6192,20 @@
     {
       "path": "relay/channel/deepseek/adaptor_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "4fe299db11abc576813c0402e12be9af86295abd9cb92b72e2029e84eada1f76",
-      "local_sha256": "4fe299db11abc576813c0402e12be9af86295abd9cb92b72e2029e84eada1f76"
+      "upstream_sha256": "c792037f0a77eec802c1de6f8e6b22f731ce516e6e2576fb44a83335d09fd090",
+      "local_sha256": "c792037f0a77eec802c1de6f8e6b22f731ce516e6e2576fb44a83335d09fd090"
     },
     {
       "path": "relay/channel/deepseek/constants.go",
       "status": "upstream_equal",
       "upstream_sha256": "d9ca013de39d39902f88f1a468fadd876a40421a2fc8285b31698eaf1f327587",
       "local_sha256": "d9ca013de39d39902f88f1a468fadd876a40421a2fc8285b31698eaf1f327587"
+    },
+    {
+      "path": "relay/channel/deepseek/responses_reasoning.go",
+      "status": "upstream_equal",
+      "upstream_sha256": "febf0b55a74392df3d07655a78ab3d1607c17e919ee1af4be3473619f9aad375",
+      "local_sha256": "febf0b55a74392df3d07655a78ab3d1607c17e919ee1af4be3473619f9aad375"
     },
     {
       "path": "relay/channel/deepseek/web_search.go",
@@ -6149,7 +6240,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6199,7 +6290,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6399,7 +6490,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6419,8 +6510,8 @@
     {
       "path": "relay/channel/openai/adaptor.go",
       "status": "upstream_equal",
-      "upstream_sha256": "79ae4ac316c2684e757805cce42e1104f8db63891dcde3cc8710fa3369d017c7",
-      "local_sha256": "79ae4ac316c2684e757805cce42e1104f8db63891dcde3cc8710fa3369d017c7"
+      "upstream_sha256": "98aecbebbb30ba4fa264f8c8b239fe213d79b44f75e92414d5d6164efe1a9e60",
+      "local_sha256": "98aecbebbb30ba4fa264f8c8b239fe213d79b44f75e92414d5d6164efe1a9e60"
     },
     {
       "path": "relay/channel/openai/audio.go",
@@ -6437,7 +6528,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6463,7 +6554,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6471,8 +6562,8 @@
     {
       "path": "relay/channel/openai/image_edit_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "e1fcb028ae380ceada064a65be51bbe939f47a6ae423ade5c40f4edace579b9b",
-      "local_sha256": "e1fcb028ae380ceada064a65be51bbe939f47a6ae423ade5c40f4edace579b9b"
+      "upstream_sha256": "d5d946896542dac8e60756e4bb5c7d6f24e14a904f101701b1a2835b8d92b987",
+      "local_sha256": "d5d946896542dac8e60756e4bb5c7d6f24e14a904f101701b1a2835b8d92b987"
     },
     {
       "path": "relay/channel/openai/image_stream_test.go",
@@ -6501,7 +6592,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6527,7 +6618,7 @@
         "cache-ttl-billing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Responses compact 必须将缓存创建 token 细分克隆到 billing usage，防止丢失计量。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -6604,7 +6695,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6642,7 +6733,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6720,12 +6811,13 @@
       "local_sha256": "baa1ed71e954213fd0d514f1c5c34bb64adade558b17bdd1b1a91b51c0a301cf",
       "reasons": [
         "concurrency",
-        "native-plugin-multipart"
+        "native-plugin-multipart",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "ClientRequestHeaders 按用户后续要求完整恢复冻结上游凭据头黑名单；仅保留轮询 context 向 fetch/hook 透传及任务 multipart 预算/附件解析，SSE detached 生命周期采用目标原文。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "ClientRequestHeaders 按用户后续要求完整恢复冻结上游凭据头黑名单；仅保留轮询 context 向 fetch/hook 透传及任务 multipart 预算/附件解析，SSE detached 生命周期采用目标原文。本轮：原生 remix 保留 remix 动作，不再按新生成校验。",
+        "method": "upstream content unchanged from ba5f7367 by SHA256; existing contract retained; current local edits separately reviewed",
         "counterfactual_evidence": [
           "core/RESULTS.json"
         ]
@@ -6842,8 +6934,14 @@
     {
       "path": "relay/channel/vertex/service_account.go",
       "status": "upstream_equal",
-      "upstream_sha256": "5ecf0b62900c8465a3f57e5e63828b579bb62420b37117d416de7926ca421c84",
-      "local_sha256": "5ecf0b62900c8465a3f57e5e63828b579bb62420b37117d416de7926ca421c84"
+      "upstream_sha256": "164b07627df086cdb844fc15464d651c0e47fa0764c4ecf452ea739b634140e1",
+      "local_sha256": "164b07627df086cdb844fc15464d651c0e47fa0764c4ecf452ea739b634140e1"
+    },
+    {
+      "path": "relay/channel/vertex/service_account_test.go",
+      "status": "upstream_equal",
+      "upstream_sha256": "06d8a8dea40732bf5a0ceb3dc0d31b43db5746264e5fb83c0e14bdd1e45a5926",
+      "local_sha256": "06d8a8dea40732bf5a0ceb3dc0d31b43db5746264e5fb83c0e14bdd1e45a5926"
     },
     {
       "path": "relay/channel/vertex/url_builder.go",
@@ -6891,7 +6989,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -6971,7 +7069,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7003,7 +7101,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保护上游调用取消、发送记账和有效输出观测，维持每 Token 路由与无等待并发释放；其余代码继续采用上游。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7107,7 +7205,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7134,7 +7232,7 @@
         "override-limits"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "JSON/schema 编辑已采用目标原文；仅保留 256 项/256KiB/4096 字节正则缓存限制及分组上下文删除，目标 sync.Map 对旧/大模式持续持有引用。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -7158,11 +7256,12 @@
         "group-removal",
         "query-credential-redaction",
         "retired",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "已批准字段改造；请求 URL 的日志使用共用 SanitizeURLForLog，目标 ToString 原样记录凭据；BeginUpstreamAttempt 属于每次选路的首输出观测重置。",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "已批准字段改造；请求 URL 的日志使用共用 SanitizeURLForLog，目标 ToString 原样记录凭据；BeginUpstreamAttempt 属于每次选路的首输出观测重置。 2026-11-05：任务信息增加原任务平台和继承倍率两项请求级事实。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "plugins/verification-summary.json"
@@ -7190,7 +7289,7 @@
         "query-credential-redaction"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留 parse 失败不返回原文、异常 query 去掉不可解析值、userinfo/fragment 清除以及 sign/x-goog-credential 掩码；目标异常 URL 实际泄漏测试凭据。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -7261,7 +7360,7 @@
         "native-count"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的原生 token 计数，继续经过现有 Token 鉴权与路由。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7281,7 +7380,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7344,7 +7443,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "路由观测接入：首个有效输出用于延迟与熔断判定，元数据帧不伪作输出。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7364,7 +7463,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7392,7 +7491,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7430,7 +7529,7 @@
         "streaming-lifecycle"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "callback 因实际客户端取消调用 Stop 时交给 scanner 统一归类 client_gone，防止 HandlerStop 先占终态造成失败/观测分类错误。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -7447,7 +7546,7 @@
         "streaming-lifecycle"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "读取中取消归 client_gone；保留 cleanup 前真实读取错误，不能被完成事件覆盖；FlushError 贯穿 Gin 防止重复 flush。目标同一行为测试已失败，保留最小改动。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -7477,17 +7576,18 @@
       "path": "relay/mjproxy_handler.go",
       "status": "adapted",
       "upstream_sha256": "3f6bce93e5c73498a49e6ece12ee11bfbf2e31a94620677a5e3c9dad252a7a68",
-      "local_sha256": "6373bc2834ec241e80495ff9d75d3700673f41db5794fdc027bfe266846bcb28",
+      "local_sha256": "f741f34767c179f41f3023549c569dd5d373dc3f18d2fd94741634535d349e49",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "定制MJ原渠道准入，复用Distribute准备结果和Key；原协议查询、错误封装保留。将原任务ID推导抽为一处供Distribute和handler共用，避免双份规则；Opus逐模式确认语义等价。冻结上游该文件近6个月9次变更，被抽取420-484段0次，改写后的同步成本较低。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -7499,7 +7599,7 @@
         "native-count"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的原生 token 计数，继续经过现有 Token 鉴权与路由。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7534,12 +7634,13 @@
       "upstream_sha256": "bb5defe1dc8dd1dba512fd642996ffa25d2e03c944017a6e738458b3f7b8dc58",
       "local_sha256": "24198050a58b079634d924104d726b69b89c48591e113598d39e9c05a550279c",
       "reasons": [
-        "retired"
+        "retired",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。本轮：getTaskAdaptorForRequest 同时返回构造适配器的插件，查找顺序不变。",
+        "method": "upstream content unchanged from ba5f7367 by SHA256; existing contract retained; current local edits separately reviewed"
       }
     },
     {
@@ -7552,16 +7653,17 @@
       "path": "relay/relay_task.go",
       "status": "adapted",
       "upstream_sha256": "6ab687f070babcf6d6704f9d9f13405908f587e3a22be940f0214a9efa4c0676",
-      "local_sha256": "fd5811d602f0ccd80121882f8e2f584d521b74c74bf86695c12f43650760a7e5",
+      "local_sha256": "81d2f58b50ddd5460a433fb89e515f2ce53f55455e6caececd311fdefc8be77e",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。 2026-11-05：ApplyChannelPin复用原渠道存在性查询；撤回当日共有原生remix修复。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -7569,7 +7671,7 @@
       "path": "relay/relay_task_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0fd87396022b519c20cc4e944719e71ce00d6be3c8a220e87c73fc71b1fb91e0"
+      "local_sha256": "b14ada6d9b1500cc9a09655d4f4a5f45d550e216e7e0303d74e0f3753ffd6b5e"
     },
     {
       "path": "relay/relay_task_test.go",
@@ -7616,8 +7718,14 @@
     {
       "path": "relay/responses_request.go",
       "status": "upstream_equal",
-      "upstream_sha256": "6a3b55fef8b6c9b282e2819329d528ad0f2772669f4523622254a2bd3a35ac4f",
-      "local_sha256": "6a3b55fef8b6c9b282e2819329d528ad0f2772669f4523622254a2bd3a35ac4f"
+      "upstream_sha256": "363726064fa1d863d6bfbe023e015345699fd896ec28415cf328c6dcdd1b119b",
+      "local_sha256": "363726064fa1d863d6bfbe023e015345699fd896ec28415cf328c6dcdd1b119b"
+    },
+    {
+      "path": "relay/responses_request_test.go",
+      "status": "upstream_equal",
+      "upstream_sha256": "172f0bd5d3d2f5ba999f5fe6531011b824642ae0df113e39a81b6495bb357830",
+      "local_sha256": "172f0bd5d3d2f5ba999f5fe6531011b824642ae0df113e39a81b6495bb357830"
     },
     {
       "path": "relay/responses_websocket.go",
@@ -7631,7 +7739,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7659,6 +7767,12 @@
       "status": "upstream_equal",
       "upstream_sha256": "61e58ebca03494d64dcd8fe5c4d7297902621db2a6a1b49797b4ab0b7fbe7226",
       "local_sha256": "61e58ebca03494d64dcd8fe5c4d7297902621db2a6a1b49797b4ab0b7fbe7226"
+    },
+    {
+      "path": "relay/task_upstream_probe_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "41cf36dd6a69b92cb816ba6f34a200f4958df445cdba7a4ddac1ef81bc856ddc"
     },
     {
       "path": "relay/websocket.go",
@@ -7693,7 +7807,7 @@
         "cache-ttl-billing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅有 cache_creation_input_tokens 的上游 usage 仍是有效可计费用量。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -7794,8 +7908,8 @@
     {
       "path": "relaykit/dto/openai_image.go",
       "status": "upstream_equal",
-      "upstream_sha256": "6bc575a746807718cccfbecdf27b01d06eb95cc26bb2380a2f4f803e30ecb68a",
-      "local_sha256": "6bc575a746807718cccfbecdf27b01d06eb95cc26bb2380a2f4f803e30ecb68a"
+      "upstream_sha256": "ce34ecca2b28a0108b44f8982d59bd8168ae55b6ddc233a826a34bbd1a6cc591",
+      "local_sha256": "ce34ecca2b28a0108b44f8982d59bd8168ae55b6ddc233a826a34bbd1a6cc591"
     },
     {
       "path": "relaykit/dto/openai_request.go",
@@ -7806,8 +7920,8 @@
     {
       "path": "relaykit/dto/openai_request_zero_value_test.go",
       "status": "upstream_equal",
-      "upstream_sha256": "f772e140899cf4fd45ec019cba084acd25c7121ad5a66b51bf68737b9790c264",
-      "local_sha256": "f772e140899cf4fd45ec019cba084acd25c7121ad5a66b51bf68737b9790c264"
+      "upstream_sha256": "bc9e4cfdec7752eb17432fe4ee4b8e4b7cc647c08bb857b8a5ecade050716328",
+      "local_sha256": "bc9e4cfdec7752eb17432fe4ee4b8e4b7cc647c08bb857b8a5ecade050716328"
     },
     {
       "path": "relaykit/dto/openai_response.go",
@@ -7902,7 +8016,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "不恢复站内订阅资金偏好字段。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -7928,7 +8042,7 @@
         "toolchain-security"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保持 Go 1.26.10 与独立 RelayKit 模块依赖方向。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8146,7 +8260,7 @@
         "protocol-adaptation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Chat → Responses 转换保留 prompt_cache_options。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -8223,7 +8337,7 @@
         "protocol-adaptation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Responses → Chat 转换保留 prompt_cache_options。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -8708,7 +8822,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "删除 RequestMeta 中业务分组字段。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8739,7 +8853,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原生 API 路由接本地功能控制器和既有权限/PAT 声明，所有旧 group/订阅/部署入口删除；拒绝退役 group 请求。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8760,7 +8874,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "新增 lab 和上游倍率管理路由并复用 channel 权限；删 Codex 使用量/凭据刷新。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8799,7 +8913,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "工单、GMPay 与统计扩展使用既有认证/权限/强校验；session-only 路由同步进入 PAT 规则表。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8817,6 +8931,18 @@
       "local_sha256": "f10096d5a680b31baebac11633d1f3b3dc2e31782feb75ca2ec88ff4f81fee72"
     },
     {
+      "path": "router/mj_origin_route_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "3ebc851b75d280781a860d7092f22c548650be020b45a027098e2d6e3ed1b693"
+    },
+    {
+      "path": "router/mj_origin_upstream_probe_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "faac2bd606e1a8896e1b0247bced42bdaa871475c19253270bfbd0f8a3f3df17"
+    },
+    {
       "path": "router/native_count_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -8831,14 +8957,14 @@
     {
       "path": "router/plugin-router.go",
       "status": "upstream_equal",
-      "upstream_sha256": "94b5e08f6178d925b740181592e2a755415ee16c46d5a264133988dc04ac6095",
-      "local_sha256": "94b5e08f6178d925b740181592e2a755415ee16c46d5a264133988dc04ac6095"
+      "upstream_sha256": "75b125a9a2add3e82b4ad7a142f49c4f8d10d22f2cad8c06647a0183e8feabfd",
+      "local_sha256": "75b125a9a2add3e82b4ad7a142f49c4f8d10d22f2cad8c06647a0183e8feabfd"
     },
     {
       "path": "router/plugin_router_test.go",
       "status": "adapted",
-      "upstream_sha256": "76632d79c502be7f5ac346dfc4b398027e829a43c2399d93f2c3099e6b6ed5cb",
-      "local_sha256": "dd67af289d529e7594017dd92103d550c129f865202ca8efef2cfb065a25a071"
+      "upstream_sha256": "6533fb2856125a3c2b4ec6cb705f26755c8d5be618bd255fc438f91e2dca3569",
+      "local_sha256": "fbfaa397c207e4bb5f5ac7e51f95fbf40ccdde712a32103be0529906e1a7e122"
     },
     {
       "path": "router/relay-router.go",
@@ -8850,7 +8976,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原生计数路由接入既有 TokenAuth/分发/限流入口，删除 Playground，插件路径以目标注册方式收敛。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8865,7 +8991,7 @@
       "path": "router/retired_routes_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2e52a465ad8f83cd9ae62e5a2eaafd8dc9b6783f680e767d45a48becb1ee15b9"
+      "local_sha256": "207aabd7fa0db7d0c32ba7efdbb93700a08c7b0e39a6b0f996d6a580f1f8d2bf"
     },
     {
       "path": "router/task-plugin-protocol-router.go",
@@ -8878,7 +9004,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原生插件协议与标准视频共享用户请求限流链，确保多入口不能绕过 Token 策略或放大请求额度。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8916,7 +9042,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "Token 路由 CRUD/候选/预览复用原生 authz Resource/Action 权限，绑定 Token 所有权。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -8930,10 +9056,22 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "ModelRequestRateLimit 放在视频入口共同链，覆盖原生和插件候选，保持一次计数/准入。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
+    },
+    {
+      "path": "router/video_remix_route_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a1cb0597d9e672889ac77e3ae74499c9d98075afd8d85f6c0057f0611eecc3c2"
+    },
+    {
+      "path": "router/video_remix_upstream_probe_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c04d6d7d26f50d60bfca4dd3a4ced10f15c6a4bde57129894f0ad3e4f13cffd9"
     },
     {
       "path": "router/video_router_test.go",
@@ -8945,15 +9083,15 @@
       "path": "router/web-router.go",
       "status": "adapted",
       "upstream_sha256": "7d6422d43387f9cf251699aab452076b3e979127430b6227b4e6f0f84d100416",
-      "local_sha256": "cedb49a9060480ddecae41116e19641c93a553616bfedf8c07ad6179b5982957",
+      "local_sha256": "e3031cc180182666e7159da4ce7a9b2dc088ff486ff55c7551e90b041d91c34d",
       "reasons": [
         "retired",
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "提供 Vue SPA 静态回退，并对已退役前端路径明确拒绝，避免旧 React/Playground 路由假成功。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "提供 Vue SPA 静态回退，并对已退役前端路径明确拒绝，避免旧 React/Playground 路由假成功。 rc.49 #8241 删除插件 host_namespace 跳过后，retiredFrontendPath 同时拒绝已退役 API 前缀（订阅、部署、system-info、分组、rest_model_ratio），在插件分发前返回 404。",
+        "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -8968,7 +9106,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；独有工单、附件、通知及清理，接现有权限和用户归属。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9031,7 +9169,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9093,7 +9231,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9119,7 +9257,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9134,7 +9272,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9154,7 +9292,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "原生 BillingSession 唯一入口；移除订阅资金分支，保留重试补预扣。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9168,7 +9306,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9195,7 +9333,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留原生预扣/结算/退款状态机；仅删除退役资金和信任免预扣，所有渠道发送前强制余额覆盖。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9221,7 +9359,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9247,7 +9385,7 @@
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9262,16 +9400,17 @@
       "path": "service/channel_select.go",
       "status": "adapted",
       "upstream_sha256": "ca5a9300a12e3e690aeb784ea8ba146f7e5281aa4fa5da7023d88a27da340a53",
-      "local_sha256": "f7d94ada1e151c97b7611e04b287774a3c5cd4f8f15975d2d1466144a0e731a0",
+      "local_sha256": "d9d5a0ffbfe57c2482fea77d0c61ccfcde4b35cca4783ee65df0bac2eb58dcd0",
       "reasons": [
         "concurrency",
         "group-removal",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "替换分组轮询为现有 Token 私有路由资格/排序/准入唯一入口；沿用目标插件候选身份限制和通道重绑定。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "统一自动/有序手动Token候选和原渠道准入；纯身份过滤器由pin上下文与预览共用；删除被本地origin pin提前返回遮盖的不可达上游分支。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
       }
     },
     {
@@ -9295,7 +9434,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9309,7 +9448,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9323,7 +9462,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9337,7 +9476,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9351,7 +9490,7 @@
         "upstream-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "已批准的渠道上游倍率只读展示，不改变 channel_ratio、路由或计费。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9371,7 +9510,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9385,7 +9524,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9399,7 +9538,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9413,7 +9552,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9427,7 +9566,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9441,7 +9580,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9450,14 +9589,14 @@
       "path": "service/concurrency.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "2b690207df795523a58c50e61355bdf9d46773807f60f7eae04b9f9a235390cd",
+      "local_sha256": "0c592d37f5e375a6e1c3de06cb2b6acbe5bdb55263eb6e7f590a9e31f454d995",
       "reasons": [
         "concurrency"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "本地准入错误稳定映射503，避免泄漏底层读取错误。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -9487,7 +9626,7 @@
         "dashboard-scope"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有个人/全站仪表盘，按当前角色切换；全站聚合不暴露用户明细。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9507,7 +9646,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9521,7 +9660,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9535,7 +9674,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9597,7 +9736,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "WalletFunding 与上游相同；删除退役 SubscriptionFunding 及其专用重试。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9611,7 +9750,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9625,7 +9764,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9639,7 +9778,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9659,7 +9798,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9679,7 +9818,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9735,7 +9874,7 @@
         "channel-ratio"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9757,7 +9896,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9780,9 +9919,23 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "service/midjourney_origin.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1a1954cf2c459e205be9c821fb954811cc7013f7f473616358d2d26874743a7d",
+      "reasons": [
+        "origin-task-continuation"
+      ],
+      "review": {
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "共享MJ原任务ID推导及准备标记，仅供定制原渠道接点。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -9794,7 +9947,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9836,6 +9989,12 @@
       "local_sha256": "8fc2e67ad6ee3636189790a0e4b5eb267de95b50213fe01cba28f152fb055dd4"
     },
     {
+      "path": "service/origin_task_route_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e3226d29980ca3c733831fbf4cf05e8a552f5499162274524185a9fc0c34eb9c"
+    },
+    {
       "path": "service/passkey/service.go",
       "status": "upstream_equal",
       "upstream_sha256": "7d7d26f7cf4b8cfe791d1a17e98fdef017a53385f1714ec76180df7d997a7279",
@@ -9862,7 +10021,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9876,7 +10035,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9890,7 +10049,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9904,7 +10063,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9924,7 +10083,7 @@
         "ops-metrics"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9938,7 +10097,7 @@
         "price-source"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有外部价格导入预览，保存到原生 USD 定价配置；不增加第二定价引擎。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9973,7 +10132,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -9994,7 +10153,7 @@
         "pricing-snapshot"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "从目录共用定价快照读取，价格错误向上返回，防止两次读取拼出不一致元数据。 此处是共享快照 API 的最小调用接点，反事实验证对象是共同定价快照不变量。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -10011,7 +10170,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10037,7 +10196,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10076,15 +10235,15 @@
       "path": "service/route_affinity.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "674a5c1e9918dedec81dc19e9162764cb4b637468782587cd2b1361dab0b6a8b",
+      "local_sha256": "bea91564bba2a16089890e85470e73bd3d82a0a61398bca7a6da0707785e1ecc",
       "reasons": [
         "concurrency",
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "严格亲和遇上限存储失败保持绑定并返回503。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -10097,15 +10256,15 @@
       "path": "service/route_attempt.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "e9415d822e1ef6c9bfb4eccc286042686700d1edca426d92569735359e7048db",
+      "local_sha256": "1b706c26e9b9d5d9581f57bb378679d871616cc70696cb1595712f232ae4521a",
       "reasons": [
         "concurrency",
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "统一记录渠道尝试、有效首输出和取消结果，结束时释放同一渠道槽位。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "统一记录渠道尝试、有效首输出和取消结果，结束时释放同一渠道槽位。 只读发送标记供任务重试错误优先级判断，在Finish清除前读取；不增加第二份尝试状态。",
+        "method": "approved local contract; runtime dispatch/preview sharing; Opus cross-review and red-to-green regression"
       }
     },
     {
@@ -10124,7 +10283,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10139,15 +10298,16 @@
       "path": "service/route_candidates.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "622a3809673cfa4880608b6c53f42841c8834e1719f372aa21778977a93520c2",
+      "local_sha256": "fc377154c3885c7ad24f40b2a40f908e9efb81132c1347d1b54323551d5ba73a",
       "reasons": [
         "concurrency",
-        "token-routing"
+        "token-routing",
+        "origin-task-continuation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "原渠道仅豁免手动列表，复用routePolicyReason检查Key倍率上限；保留路径插件过滤和即时容量。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -10160,16 +10320,21 @@
       "path": "service/route_error.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "b1c45f36ab3d98c549bb9fd93a25601a0e1c43b7835074f8e0cdcb6f2653db31",
+      "local_sha256": "54b265fd4d8d2adc2f2a8733fe5d4879acf9b17438b875b1fdaafafcbd2dca49",
       "reasons": [
-        "concurrency",
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "本地已用渠道排除造成重试选路耗尽；用类型安全泛型指针保留既有供应商错误，HTTP/WS行为保持，任务不做有损转换。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
       }
+    },
+    {
+      "path": "service/route_limit_read_failure_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "2a45c55d276a9169c1be92fcbbaa0c4ca020255713e8de0416f9db49901e5b7b"
     },
     {
       "path": "service/route_observation.go",
@@ -10181,7 +10346,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10199,6 +10364,26 @@
       "local_sha256": "a2629edab9d4ea840641d31a9e26df04d91acace6494e10d4ac2b263f8ba37cf"
     },
     {
+      "path": "service/route_request.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "6b8c0d9e46731572968529401d0f670f45dc259fa2b5f6ff54a7efb907dbc5d4",
+      "reasons": [
+        "token-routing"
+      ],
+      "review": {
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "本地预览与实际选路共用插件代际、模型规范化和身份/端点过滤器；transport、受支持静态路径及canonical回退，不运行JS、不占槽。 canonical回退单独追加共用宿主身份过滤。四段原生逻辑迁移与6个月变更频率见SYNC_LEDGER，同步时必须移植委托源函数的新变化。",
+        "method": "approved local contract; runtime dispatch/preview sharing; Opus cross-review and red-to-green regression"
+      }
+    },
+    {
+      "path": "service/route_request_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "97501402476c9d085daaba5e05fcfbaf2bf484793fb65a11bf3f5d2291eddbdb"
+    },
+    {
       "path": "service/route_stream_output.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -10208,7 +10393,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有自动路由的首输出观测，仅识别协议有效 payload，不能以控制帧计算成功/延迟。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10223,15 +10408,15 @@
       "path": "service/route_task_poll.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "f3d571f76fd3ca168d1c415d86ed285a225ef2d18cebe3c8f39f5e9c75742027",
+      "local_sha256": "9e3e00986cad97f39d08d91c9dbfd2371df0661e0be0199acac247f37447e682",
       "reasons": [
         "concurrency",
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "轮询本地容量或上限读取失败只跳本轮，不记录供应商失败。",
+        "method": "scoped current diff review; runtime evidence recorded separately"
       }
     },
     {
@@ -10250,7 +10435,7 @@
       "path": "service/route_user_view_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0c5d1663f44ab830eac1b466215a94db6f0c277c89be0e89026676bc03a71738"
+      "local_sha256": "389f51d06c27cde85e6c7e6bce38f0219526a69cf1d70e10501df4ab9d1e2899"
     },
     {
       "path": "service/security_verification.go",
@@ -10279,7 +10464,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10293,7 +10478,7 @@
         "single-node"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确单节点架构，不恢复 slave 模式、多节点注册与实例选主。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10351,7 +10536,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10371,7 +10556,7 @@
         "task-refund-cas"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "新增 helper 仅复用既有 Task.UpdateWithStatus/RefundTaskQuota，确认真实删除、区分缓存 miss/读失败、遵守旧任务不退款界线；目标 bulk update 会少退 5000 并误终止仍有效任务。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -10410,19 +10595,25 @@
       "local_sha256": "1bfd124c3ba13ce30a4a8c7d94307de97cd7e300aab5a4553a5ad2b8836e6e35"
     },
     {
+      "path": "service/task_poll_admission_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "b44e06508069447e4c4d4c55ad5bde6b1d1ef12fbc72b1f115c055c4addc1d7c"
+    },
+    {
       "path": "service/task_polling.go",
       "status": "adapted",
       "upstream_sha256": "d87fc3a4941ef8cbf5ec6066762a823bb36d72bf192dc2d4b38d5e1d1ddfad12",
-      "local_sha256": "fc4a7936f167e77a1c3c9bc1b4c444ce433511a5c2f3e51979a6a699c18741a1",
+      "local_sha256": "d0f3d7a78d37a140f8bcf78e01cb70893e2fde30296522674578a8c1ea449b5d",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "task-refund-cas"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "通过现有 doPollRequest 准入；渠道缺失须数据库确认、逐任务 CAS 后仅退款一次；同一上游 ID 一轮只处理最早任务防止错退他人余额。sweepTimedOutTasksAt 仅为既有精确 72h 边界合同提供确定时钟，非第二资金实现。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "原渠道确认删除时交现有缺失流程，不将准入故障混为供应商失败。",
+        "method": "scoped current diff review; runtime evidence recorded separately",
         "counterfactual_evidence": [
           "plugins/verification-summary.json"
         ]
@@ -10445,7 +10636,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10471,7 +10662,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有工单、附件、通知及清理，接现有权限和用户归属。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10492,7 +10683,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "仅替换渠道倍率并移除已退役分组刷新；缓存切分恢复直接调用上游 relayconvert 实现。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10518,7 +10709,7 @@
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10533,14 +10724,14 @@
       "path": "service/token_route_preview.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ebd81860b6ddfe154dae3a392a7828653fd4e6c9ac5a24f39529c2d61224eee7",
+      "local_sha256": "e8d37e67312446ff81842559490781547490e6d5ffa8c7505774bd7299b9b776",
       "reasons": [
         "token-routing"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+        "basis": "预览按静态运行时资格过滤，区分HTTP流和WS，保留原模型优先与canonical回退，回传解析后的模型及transport。",
+        "method": "approved local contract; minimal runtime extraction and targeted regression; final evidence reported separately"
       }
     },
     {
@@ -10553,7 +10744,7 @@
       "path": "service/token_route_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "5429f03f57771e9e9997576d3494160f7690a4daa3c996b7b5a76c4b80bcb424"
+      "local_sha256": "df29cf747402d73d66b747fe42b15709ac933c1243686e9e41c245c73b10ae04"
     },
     {
       "path": "service/topup_discount.go",
@@ -10564,7 +10755,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "窗口缓存与公式，on 来源读失败拒绝报价，shadow 失败只记录。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10578,7 +10769,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "按草稿回放近期成功充值，只输出额度等值近似。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10598,7 +10789,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "唯一的充值报价、舍入与确认比较。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10636,7 +10827,7 @@
         "ticket"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "工单文本在 HTML 邮件中转义，原生通知模板和其他通知通道保持原合同。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10656,7 +10847,7 @@
         "catalog-stats"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有模型目录、目录价格投影和统计；读取原生定价快照，不另建可写定价来源。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10678,7 +10869,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10692,7 +10883,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10718,7 +10909,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10738,7 +10929,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10762,7 +10953,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10800,7 +10991,7 @@
         "vue-frontend"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10868,7 +11059,7 @@
         "affiliate"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10888,7 +11079,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10908,7 +11099,7 @@
         "currency-validation"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "必要修复：汇率和 quota 单位必须是有限正数，非法值不得持久化或污染运行配置。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
@@ -10961,7 +11152,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "删除上游 AmountDiscount 字段及默认值，由充值折扣的单笔充值阶梯取代。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -10981,7 +11172,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11031,7 +11222,7 @@
         "gmpay"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "独有 GMPay，金额/订单身份核对后原生钱包幂等入账。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11051,7 +11242,7 @@
         "retired"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11084,7 +11275,7 @@
         "request-limits-summary"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；已批准的请求限制摘要；与实际用户/模型限制共享配置和鉴权。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11104,7 +11295,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11130,7 +11321,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11150,7 +11341,7 @@
         "no-builtin-prices"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11177,7 +11368,7 @@
         "topup-discount"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；payment_setting.amount_discount 随字段删除退役。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11293,7 +11484,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11356,7 +11547,7 @@
         "group-removal"
       ],
       "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
         "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
@@ -11382,7 +11573,7 @@
   ],
   "candidate_sha": null,
   "history_baseline_sha": "9a63062227c31ba54a6346e07ee8b4fd8802f22f",
-  "reference_newapi_sha": "ba5f7367797566175a6cd97a748d430af3602a01",
+  "reference_newapi_sha": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
   "contracts": {
     "affiliate": {
       "basis": "独有邀请返利；返利与充值共用原生钱包事务、幂等源订单和现有权限。",
@@ -11573,15 +11764,27 @@
       "basis": "独有充值折扣：单笔充值、固定、全站与个人用量阶梯合成一次结账折扣，只降低易支付/GMPay/Waffo/Pancake 的实付，到账足额；调用计价回到上游；小时统计、配置与审计放在扩展文件。",
       "authority": "SYNC_LEDGER.md#2026-11-10-充值折扣合并",
       "kind": "approved_contract"
+    },
+    "auth-cache-integrity": {
+      "basis": "吸收已合并#8200缓存签名、旧缓存回源修复、计数CAS保留和会话撤销保护，适配本地MaxConcurrency及已删除分组。",
+      "authority": "SYNC_LEDGER.md#2026-11-05-路由交叉审计修复",
+      "kind": "approved_contract"
+    },
+    "origin-task-continuation": {
+      "basis": "本地原渠道准入合同：只豁免手动列表，不豁免当前Key倍率上限；保留显式过滤器和即时容量。MJ找到原任务后复用准备结果，只占槽和轮换Key一次。共有错误优先级、remix上下文/动作/ID/平台/继承倍率不在本地修复范围。",
+      "authority": "SYNC_LEDGER.md#2026-11-05-路由交叉审计修复",
+      "kind": "approved_contract"
     }
   },
   "review_scope": {
-    "old_upstream": "e449cc700eb569cdfc2199cb73e97de46944f43c",
-    "local_start": "a276b48eaa60ae2ff1e761c21f5ac5fb526a541c",
-    "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+    "old_upstream": "ba5f7367797566175a6cd97a748d430af3602a01",
+    "local_start": "3a05fdc5c",
+    "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+    "target_rule": "上游文件 SHA256 在 old_upstream 与 target 之间未变的行沿用原审阅，只推进 target；窗口内上游变化的文件逐行复核并在 basis 记录 rc.49 处置。",
     "previous_counts": {
-      "adapted": 277,
-      "extension": 261,
+      "upstream_equal": 797,
+      "adapted": 280,
+      "extension": 276,
       "removed": 45
     },
     "production_reason_required": [
@@ -11591,43 +11794,7 @@
     ]
   },
   "verification_evidence": {
-    "root": "/home/work/ren2hub-sync-20261104-ja5AWnjV",
-    "counterfactuals": {
-      "core": "core/RESULTS.json",
-      "plugins": "plugins/verification-summary.json",
-      "management": "vue/counterfactual-summary.json",
-      "currency": "parent-proofs/currency-proof.json"
-    },
-    "full_validation": "final-source-validation-v3/",
-    "candidate": "candidate-final/",
-    "status": "原全链与候选证据仅绑定 7e4f517fd；请求头与 Kling 后续回源的源码、定向验证和候选状态见 followup，不沿用旧候选准入。",
-    "report_sha256": {
-      "core/RESULTS.json": "aaeea3b67433a413522712f606c9efd20f07043cfbad94b36814b594adba0c5f",
-      "parent-proofs/currency-proof.json": "9c9170ceaa2ee60ccdfc54a5c73747afaf03ebfdad42fb46540002c965c2e15f",
-      "plugins/exception-proof.json": "a91e5d2c0994903d9d9a1d04233e99db7fcc61436895c808e64ed79e1f9427ad",
-      "plugins/verification-summary.json": "f524280fdcd06438e584e62f955dd27787ee32b31e1138e3a9e06a539a391847",
-      "vue/counterfactual-summary.json": "d695d859927b2f3330f3df39c1dfb428c8b5bfa6e831274ffffb4bce1c3de123",
-      "vue/ui-targeted/result.json": "d3ac5b66f3fbd192a2a41039fc681a71655347f9b01aad1532d6d7a9c1581c4a",
-      "vue/usage-visibility-result.json": "e743901d552d8b3fb0619117f2faba6ad29bbe6cf0261ca919176eafbb659562",
-      "core/candidate-attachment-review.json": "02a428cd9701ec8b3529f9a65055747235318c1ea57fde159bae3c5af37f4211",
-      "vue/usage-flow-result.json": "0d105f223eeab9f9d0bee700bc6e6747bd9b7a3f3b4ec31f8c8b791162017450",
-      "vue/ui-capture/visual-inspection.json": "e875439d16dc90aa3c28a42a7e50d07c77c8545061760f7ef8830bcf4dc65f3c",
-      "plugins/refund-database-matrix/verification.json": "3ee3c23c3eebf67ef6272cc134e853435aa84e547c9c277cd047c49f61d2e930",
-      "final-source-validation-v3/summary.json": "f6830a85b42a4c9b9e28153e5d9fbb90143d6b14ec3457062c8510682e1b01c5",
-      "final-source-validation-v3/validation-reuse.json": "742896830f9021fb3bdc4b4dba18bb88408e45553027a09264467971f2ad4fef",
-      "final-source-validation-v3/unit/run-2fpow67k/report.json": "cbc2dc09e831c4e09220112d5ccbaa6c22daf8511fd24256ac8e4c5b5d09b1f8",
-      "final-source-validation-v3/databases/run-5tk2xu10/report.json": "eb8b5f3627c46f83fdc37b0632341b6266bf3cc088072787b723fa40f7f6a9f1",
-      "final-source-validation-v3/databases-supplement/report.json": "bcf8ba8020dcf52a724863b363b1d355ee4d07b7dbb1f5763654615669c72e13",
-      "final-source-validation-v3/static/run-fvrjgj16/report.json": "49f775ae998aa9239fc8182c8fe786fd4b969583b684a01b194e1cb7ff772a2f",
-      "final-source-validation-v3/build/run-oalk8k9s/report.json": "5aad29c4b55c21d3a3c45a403c692ea08ed65fa42df74ce6ce1733ae706bc92a",
-      "final-source-validation-v3/race/run-y9fj7cyr/report.json": "2e26e92a4a46f7512f8ac10a099524709173a0662d5b8686ee47618afb5071e7",
-      "final-source-validation-v3/browser/run-yn5qd_5w/report.json": "7f3c9444b475b76a8eaae813445460aefe800c8d87dc4684b24c6aa7421e572f",
-      "final-source-validation-v3/ui-contracts/run-5gpufsmr/report.json": "a01698de0223b7fe0e4157e39aceed66773b3217f9b0ac397ff6c4c7e7a5faa7",
-      "candidate-harness-fix.json": "309a172dfb88411dceaf72294d9797ca3edbdb4f0204470522f0b930390c6cbc",
-      "upstream-followup-headers-kling/validation.json": "e2f8e73922bc4bb67d7bbdf3cecdb45dd252b1b144b77e1dda37b464d62f4245",
-      "upstream-followup-headers-kling/source-convergence.json": "ab4aa1037c67059dbf5863514ff06f423549e02ab51ac5e354250805dbd47739"
-    },
-    "delivery": "delivery.json",
-    "followup": "upstream-followup-headers-kling/delivery.json"
+    "status": "旧外部临时证据已清理，不作为本轮可读验证。当前来源处置与真实请求入口见同步账本和本地测试文档；candidate_sha=null。",
+    "history": "git show ee2600f2885ac879e9be9c7c40495545c5370a40:docs/upstream/CORE_SOURCE_DELTA.json"
   }
 }

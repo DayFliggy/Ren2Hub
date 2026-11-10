@@ -1,6 +1,6 @@
 # Ren2Hub 文档入口
 
-Ren2Hub / DayFliggy 是采用 NewAPI 核心的单节点 AI 网关，使用 Vue 控制台。唯一上游为 `QuantumNous/new-api`，当前源码适配基线为 `ba5f7367797566175a6cd97a748d430af3602a01`；该 SHA 是 2026-11-04 最后核对并吸收的版本，不代表之后的上游 HEAD。来源、必要差异和验证状态见[同步账本](upstream/SYNC_LEDGER.md)；正式运行版本见工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)。Sub2API 与 AxonHub 仅用于问题级参考，不是 Git 上游。
+Ren2Hub / DayFliggy 是采用 NewAPI 核心的单节点 AI 网关，使用 Vue 控制台。唯一上游为 `QuantumNous/new-api`，当前源码适配基线为 `48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0`（`v1.0.0-rc.49`）；该 SHA 是 2026-11-10 核对并吸收的冻结目标，源码适配与发布验收分别记账，不代表之后的上游 HEAD。来源、必要差异和验证状态见[同步账本](upstream/SYNC_LEDGER.md)；正式运行版本见工作区[服务器档案](../../docs/server/SERVER_PROFILE.md)。Sub2API 与 AxonHub 仅用于问题级参考，不是 Git 上游。
 
 钱包、协议、权限及任务生命周期沿用 NewAPI；代码不内置模型和表达式价格，模型价格只来自管理员配置；工具调用沿用上游内置单价。业务分组已删除；每个 Key 采用自动或有序手动渠道路由，支持渠道倍率、最高倍率限制，以及无等待的用户和渠道并发限制。保留工单、GMPay、模型目录、统计及邀请返利扩展。钱包是唯一资金来源，Token 额度是附加消费限制。官方订阅账号、站内订阅套餐、type 57、io.net 部署、Playground、React 和 Electron 已退役；普通 API Key、站点 OAuth 和原生钱包支付仍保留。
 

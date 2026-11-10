@@ -1,6 +1,6 @@
 # 等待上游与本地待办
 
-最后检查：2026-11-05 15:42 UTC。实际适配基线仍为 NewAPI `706144769e5bed5a47b78721e3bb11da3cf4c0b9`（含 #8200）；本轮检查的 HEAD 是 `2de51a19e35a602a0041d380b29be7c9bcd1e0e5`，不能把检查过等同于全量吸收。本表不自动创建 issue、PR 或定时任务。
+最后检查：2026-11-10。实际适配基线为 NewAPI `48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0`（`v1.0.0-rc.49`，含 #8200、#8218）；本轮检查的 HEAD 是 `bd6bb53019fb7e21804b31ab7365c9b2097f4b6c`，其后两个提交按用户决定不在本轮范围，不能把检查过等同于全量吸收。本表不自动创建 issue、PR 或定时任务。
 
 ## 共有问题
 
@@ -24,10 +24,6 @@
 
 普通 HTTP 成功路径采用现行共享合同：客户端断开后供应商在途尝试继续，结束后一次结算和释放。立即取消传播和退款不在本轮范围，也不再作为未决定的测试期望。实际验证以同一源码指纹的最新报告为准；任何本地失败仍为 fail，缺项为 not_run。
 
-## 已合并、下个同步窗口评估
-
-NewAPI #8218 已在检查的 HEAD 中合并，为关联缓存键添加 Redis 同槽标记。本轮不吸收：本地仍为单实例 Redis 客户端及部署，无跨槽触发条件，改名会增加缓存版本下限和 fence 的过渡成本。该项不是等待上游修复，也不表示应用已支持 Redis Cluster。将来启用 Cluster 时还须评估客户端、数据库编号、Pipeline 和真实集群验证。
-
 ## 已吸收
 
-[#8200](https://github.com/QuantumNous/new-api/pull/8200) 已合并进上述完整 SHA；吸收缓存签名、旧缓存修复、撤销会话保护及有效额度保留，适配本地 `MaxConcurrency`。三库/缓存断言和真实 Redis 验证分别记账，不把 miniredis 说成实际 Redis。
+[#8200](https://github.com/QuantumNous/new-api/pull/8200) 与 [#8218](https://github.com/QuantumNous/new-api/pull/8218) 已随 rc.49 吸收：缓存签名、旧缓存修复、撤销会话保护及有效额度保留，适配本地 `MaxConcurrency`；fence/version 键加入同槽标记。生产是单实例 Redis，同槽标记没有功能收益，只保持键结构与上游一致；旧版本键成为无 TTL 残留，清理未授权。这不表示应用已支持 Redis Cluster。三库/缓存断言和真实 Redis 验证分别记账，不把 miniredis 说成实际 Redis。

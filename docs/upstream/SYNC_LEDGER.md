@@ -2,7 +2,38 @@
 
 NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用内部 bare `origin` 不是上游。Ren2Hub checkout 保留 `upstream` 指向 NewAPI；Sub2API（`Wei-Shaw/sub2api`）与 AxonHub（`looplj/axonhub`）仅作具体问题参考，不作为 Git 远端或并列上游。
 
-本轮源码冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`，于 2026-11-04 完成窗口核对；原已适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`。这不表示目标 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
+本轮源码冻结目标为 `48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0`（NewAPI `v1.0.0-rc.49`），于 2026-11-10 完成窗口核对；上一冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`。rc.49 之后的 `8faf1d45e`（React 文案）与 `bd6bb5301`（HOST 监听地址）按用户决定不在本轮范围。这不表示目标 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
+
+## 2026-11-10 NewAPI rc.49 吸收
+
+本批基于 `3a05fdc5c`（生产运行 `b8ed9b982`），窗口为 `ba5f73677..48a6c87f9`，线性 16 个提交。按用户决定：冻结目标停在 rc.49；计费与上游一致；路由交叉审计（2026-11-05，原在 horrible-hyena 工作树未提交）并入本批；登录/注册补齐协议同意；退役路径按上游现状与本地使用情况判断。未推送、未部署，`candidate_sha=null`。
+
+| 上游提交 | 处置 | 本地落点与说明 |
+| --- | --- | --- |
+| `706144769` #8200 鉴权缓存完整性 | 吸收 | 采用 2026-11-05 适配：签名包含本地 `MaxConcurrency`，Token 签名去掉 AutoGroups，Lua 参数重排；`controller/user_concurrency_test.go` 改用 miniredis |
+| `3374f251e` #8208 gpt-image-2.6 字段 | 吸收 | 与上游相同；`frame_count` 不参与预扣，与上游一致 |
+| `e3e74205f` 定价问题引导（React） | Vue 等价 | 问题面板显示待处理模型数（按模型去重），编辑器按原因给出步骤；不吸收默认过滤与工具栏重挂载 |
+| `72f3dc7da` 保存前核对价格变更 | 后端吸收，前端 Vue 等价 | `GetModelPricingIssues` 采用上游原文，只为渠道实际服务的模型报未定价/不兼容；快照列出内置价格部分按 no-builtin-prices 不吸收，新增 `TestModelPricingSnapshotListsOnlySavedPrices`。测试夹具 `openTaskDialectDatabaseNamed` 保留原生表名，因为 `GetEnabledModels` 写死 `abilities`。Vue：删除改为可撤销草稿、修改行显示旧值到新值、未保存数量、保存前确认；待删除行提示保存后变为未定价、请求将被拒绝 |
+| `2de51a19e` #8218 Redis 同槽键 | 吸收 | fence/version 键加 hash tag；旧 `auth:user:version:<id>` 不再读取，成为无 TTL 残留，清理属生产 Redis 写操作，未授权、非必需 |
+| `6fa80abc7` 会话缓存操作（React） | Vue 等价 | 系统设置“渠道亲和”维护区按 `by_rule_name` 列出可单独清空的规则，确认后 `DELETE ?rule_name=`；说明清空后重新选渠道；规则保存后重新读取统计 |
+| `a5a465926` Vertex SA token 缓存 | 吸收 | 与上游相同 |
+| `e03439033` AWS 死代码 | 吸收 | 与上游相同 |
+| `8c8940c99` #8241 插件顶层路径 | 吸收并补退役边界 | 上传插件可注册 `/v1/...`；`retiredFrontendPath` 增加上游仍注册但 Ren2Hub 已删除的 API 前缀（`/api/subscription`、`/api/deployments`、`/api/system-info`、`/api/group`、`/api/user/groups`、`/api/user/self/groups`、`/api/token/auto-groups`、`/api/option/rest_model_ratio`），在插件分发前 404。上游已删除的 Codex OAuth 路由不加入。新增 `TestUploadedPluginCannotClaimSharedTaskEndpoints`：`/v1/responses`、`/v1/videos`、`/v1/video/generations`、`/v1/images/*` 仍由宿主应答 |
+| `433830b4e` 多 Key 恢复 | 吸收 | 与上游相同 |
+| `ada15c050` 保留人工禁用 | 吸收到扩展文件 | 守卫落在 `model/channel_status.go` 的 `UpdateChannelStatusDetailed`，缓存与 DB 行各检查一次；`model/channel.go` 保持本地包装 |
+| `9c2c370a6` SQLITE_PATH | 吸收 | 与上游相同 |
+| `a3fd673bb` #8162 DeepSeek reasoning | 吸收 | 与上游相同 |
+| `dd50ee0a5` #8228 Vertex Omni 1.2 | 吸收 | 插件 1.3.0；本地 Veo 自校验保留。Omni 1.2 没有内置价格，管理员须配置价格，否则价格守卫拒绝；1.1 超过 10 秒的请求由 Vertex 拒绝，预扣按原生失败路径退款 |
+| `e8298df63` #8250 DeepSeek 路径预设（React） | 不吸收 | Vue 入站路径为自由输入，后端已识别 |
+| `48a6c87f9` #8247 OAuth 邀请人 | 不吸收 | 本地 `InsertWithTx` 在同一事务调用 `InitializeAffiliateUserTx` 写入邀请人；上游测试依赖已退役的邀请额度常量。新增 `TestOAuthRegistrationPersistsInviterOnce`（OAuth 与微信两条流程，重复登录不改邀请人、不重复计数），反向修改后失败 |
+
+退役判断：上游 rc.49 仍注册的订阅、部署、多实例信息、业务分组及其倍率接口，Ren2Hub 已按合同删除，本地没有调用方，继续退役并在插件分发前拒绝。上游已删除的 Codex OAuth 不需本地规则。退役清单 `scripts/server/ren2hub-retired-paths.txt` 的 HTTPS 核验口径不变。
+
+登录/注册协议同意：Vue 自 9a63062227 起没有该功能。现按上游 rc.49 行为补齐：管理员发布用户协议或隐私政策后，登录与注册页显示勾选项及已发布文档链接；未勾选时密码登录、Passkey 主登录、OAuth 登录与注册都被阻止并提示。两步验证中的 Passkey 属于已同意的同一次登录，不再要求勾选。未发布文档时不显示。服务端没有对应校验，与上游相同。
+
+来源清单：`scripts/refresh-core-source-delta.py` 的 `UPSTREAM_SHA` 改为 rc.49，全部 `review.target` 推进；窗口内上游变化的 adapted 文件逐行复核并在 basis 记录处置；2026-11-05 新增合同 `auth-cache-integrity`、`origin-task-continuation` 并入，`usage-discount` 不再出现。重算计数为 802 `upstream_equal`、281 `adapted`、295 `extension`、45 `removed`。
+
+验证与交叉审计结果见下文追加记录；未运行的项目不算通过。
 
 ## 2026-11-10 充值折扣合并
 
@@ -47,9 +78,38 @@ GPT 发布审计的 P2：浏览器里还停留在 `177719ae7` 钱包页面的标
 
 切换结果：切换前后任务、Midjourney、充值、GMPay、系统任务和数据库会话都为 0。AutoMigrate 新增 `topup_discount_configs`、`topup_discount_usage_hourly`、`topup_discounts` 三张表，表数从 45 变为 48，三张新表都为空。旧 `usage_discount_configs`、`usage_discount_hourly` 是空表，原样保留，新版本不读取。生产没有 `payment_setting.amount_discount` 选项。`https-verify.json` 显示本地和 `https://next.renai.uno` 的核验都通过；公网 `/api/status` 版本为 `b8ed9b982`，`/api/user/topup-discount` 与 `/api/option/topup_discount` 未登录时返回 401，旧 `usage_discount` 路由返回 404。
 
+## 2026-11-05 路由交叉审计修复
+
+本批基于 `ee2600f2885ac879e9be9c7c40495545c5370a40`。用户随后明确要求共有问题等待上游、撤回今天提前加入的共有修复，并将模拟供应商拆为独立项目。以下是调整后的当前处置，替代本日早期方案。当时未提交；2026-11-10 随 rc.49 吸收并入本地主线，见上一节。
+
+| 范围 | 当前处置 | 主要落点 |
+| --- | --- | --- |
+| 已合并 #8200 | 吸收缓存 MAC、旧缓存回源修复、Lua CAS 保留有效计数和会话撤销保护；把本地 `MaxConcurrency` 纳入签名，不恢复业务分组 | `model/auth_cache_integrity.go`、Token/User/Session 缓存 |
+| N1/N2/N3/A5/A7 与新增原生平台核对 | 撤回今天的共有修复：任务 ID、完整上下文/panic、remix 动作、原模型推导、继承倍率和平台字段。保留 tagged 诊断，具体等待项见[清单](WAITING_UPSTREAM.md) | relay、controller、middleware 混合文件逐段处理 |
+| A1/A1-MJ | 保留原渠道 pin，MJ 找到原任务后复用已经准备的渠道，不重复占槽或轮换 Key。手动列表例外保留，**不豁免 Key 倍率上限**；超限在占槽、预扣、发送之前拒绝，不换渠道 | `service/route_candidates.go`、`service/channel_select.go`、MJ 接点 |
+| A3/B8/B14 | 上限读取失败在普通准入映射 503，轮询只跳过本轮，不记供应商失败；缓存 miss、确认删除与存储失败区分。MJ image-seed 仍有上游错误封装例外 | `service/concurrency.go`、`route_task_poll.go`、`task_polling.go` |
+| B13 | 每轮任务重试重置 StreamStatus 和业务拒绝标志，防止污染后一轮观测；OutputTokens 按 HTTP 循环重置，但任务提交路径没有对应可观察行为 | `controller/relay.go` |
+| B2/B10 | 自动预览只列出声明所查模型的渠道；更新 Token 后保持真实路由模式 | `service/token_route_preview.go`、`controller/token.go` |
+| B5/B11 | 保存路由先锁 Token，再按 ID 共享锁渠道；删除 Token/硬删除用户在删路由前锁 Token，批删 Token 按 ID 排序。未声称解决所有渠道批量修改死锁 | `model/token.go`、`model/token_route.go` |
+| A8/B6/D4 | 保留上游完成时 token 重算模型倍率；待刷新标记之前窗口上界未测；共享端点普通渠道胜出不建插件 pin，候选不按 stream/sync/background 提前过滤 | `UNIFIED_ROUTING.md` |
+
+2026-11-05 修订计划批准四项本地修复。六个可达批量渠道写入口与路由保存按完整 ID 集合统一升序锁定，排序后再分块；tag/status 锁后复核、能力与渠道同事务、提交后按实际 ID 发布。保留原失败证据，真实 PostgreSQL/MySQL 验收必须覆盖反向布局和跨块，SQLite 不证明行锁安全。
+
+A4 的触发来自本地已用渠道排除，已恢复为本地默认回归：非锁定重试在收到实际发送后返回的 TaskError（含本地包装的响应错误）后，无候选、满载、选路存储失败均保留它，实际选路失败记录日志。显式取消和原渠道重新准入保持独立。原 routing_diagnostic 标签条目删除，未把它归为上游问题。插件原任务渠道读取保留缓存未命中回源，存储故障仍沿上游 400。
+
+本轮四段上游逻辑迁入本地 `service/route_request.go`，供运行时和预览共用，避免 service 反向导入 middleware：`RouteTaskPluginEndpoint` 的端点过滤构造 → `TaskPluginEndpointFilter`；`lookupTaskPluginEndpoint` → `LookupTaskPluginEndpoint`；`PrepareTaskPluginSubmit` 的模型折叠 → `NormalizeTaskPluginSubmitModel`；`pinnedTaskPluginIdentities` 的身份集及宿主分支 → `taskPluginIdentities` / `taskPluginEndpointIdentities`。Opus 按冻结上游自 2026-05-05 的函数历史核对，四处分别有 1、2、4、4 次修改；同步时必须把这些函数的上游变化移植到扩展实现，不能仅保留原生文件的一行委托。canonical 回退单独追加插件身份过滤，原拼写阶段仍允许普通渠道。
+
+A4 通过既有传输发送标记区分实际尝试与预扣/请求构造失败，不再按 LocalError 标志猜测；选路后、提交前的显式取消返回 408，不发送，并沿原生命周期退款及释放。容量回归包含无占用时第二渠道确实收到尝试的正向对照。
+
+WS/插件预览改用运行时静态过滤器和模型解析，增加 transport；不执行 JS，依赖请求体的模式仍在执行时检查。普通 HTTP 成功尝试在客户端断开后继续，到供应商结束后结算和释放各一次；不再以立即退款作为待定合同。
+
+构建和验收强制关联版本化应用/模拟器 identity.json、实际二进制和工具版本，应用与当前内容指纹一致，dirty candidate_sha=null。编排按精确诊断白名单分类，上游错误不遮盖本地失败。历史 run-4ab_btd3 的 27 pass/3 fail、A4 红灯及 run-ufnxxq1o 的 PostgreSQL 锁序失败只作为修复前证据；修复后结果以本轮新报告为准，不能引用旧“通过”作为发布门槛。
+
+本轮检查的 NewAPI HEAD 为 `2de51a19e35a602a0041d380b29be7c9bcd1e0e5`，实际适配基线仍为 `706144769e5bed5a47b78721e3bb11da3cf4c0b9`。参考项目 Sub2API `25608d216bb7be04e4a646830cb065cd09b7d7e9` 的升序共享锁/选路错误保留，以及 AxonHub `69f39b8df29e7dbf95655392d1a734dac05a5aec` 的共用协议判断。NewAPI #8218 已合并的同槽键名调整列为下一同步窗口评估，本轮单实例 Redis 不引入键迁移，不声称 Cluster 支持。
+
 ## 2026-11-04 同步审计修复
 
-本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`。审计修复提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 于 2026-11-04 13:18 UTC 发布到生产，跨版本候选 14 阶段通过，Opus 交叉审计无阻塞问题。本节首批源码验证与候选证据保存在 `/home/work/ren2hub-audit-fixes-20261104/delivery.json`；交叉审计后的 P3 修复仅本地提交，未推送、未部署，也未连接生产环境，其证据位于 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`。
+本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`。审计修复提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 于 2026-11-04 13:18 UTC 发布到生产，跨版本候选 14 阶段通过，Opus 交叉审计无阻塞问题。本节首批源码验证与候选证据保存在 `/home/work/ren2hub-audit-fixes-20261104/delivery.json`（保留）。交叉审计后的 P3 修复见下一节，已随 `ee2600f28` 发布。
 
 - Doubao：新增 `requestedVideoDuration`，校验/预扣与提交共用上游的 `seconds || duration || metadata.duration` 取值。前置 `null`、空字符串和数值 `0` 回退；`-1` 为真值，继续发送自动时长并预扣模型最大值。JavaScript 的末项 `metadata.duration=0` 仍返回 `0`，字符串 `"0"` 也是有效候选，两者由既有正整数校验拒绝。只给 frames 仍按帧数预扣，完全未指定时长仍预扣最大值。回归通过实际 Responses 解码覆盖空值加超长 metadata、duration/frames 冲突，并验证提交参数与 usage 一致；新回归在修复前已实际失败。
 - Vue 模型定价：未进入全量快照的模型通过原生 `?model=<name>` 查询补齐 `plugin_variants` 与 `usage_schema`；使用 AbortSignal 取消旧请求和卸载请求，迟到响应不能覆盖当前模型，失败显示错误并允许重试。该补充读取不替换整页保存基线。确认 tools 标签页与 JSON 模式点击问题项确有入口缺陷；切回模型可视化编辑前提交当前编辑器并解析 JSON 草稿，非法 JSON 显示错误且不切换，工具及模型草稿继续保留。
@@ -70,7 +130,7 @@ GPT 发布审计的 P2：浏览器里还停留在 `177719ae7` 钱包页面的标
 
 ## 2026-11-04 交叉审计 P3 修复
 
-本批从已部署提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 继续，冻结上游保持 `ba5f7367797566175a6cd97a748d430af3602a01`。前端/插件生产修复及测试证据、指纹、提交和从生产镜像版本进行的隔离候选结果见 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`。本批只在本地提交，不推送或部署。
+本批从已部署提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 继续，冻结上游保持 `ba5f7367797566175a6cd97a748d430af3602a01`。前端/插件生产修复及测试证据、指纹、提交和从生产镜像版本进行的隔离候选结果见 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`（保留）。最终提交 `ee2600f2885ac879e9be9c7c40495545c5370a40`（根 `7caf18e`）的跨版本候选 14 阶段通过，于 2026-11-04 20:59 UTC 发布到生产，见工作区服务器档案。
 
 - Vertex 表单：对齐上游：冻结 React `web/src/features/channels/lib/channel-form.ts:577-578` 的加载默认化和 `:729-736` 的按类型保存语义。Vue 保留现有空字符串默认项，非法非字符串或未知版本加载为 `''`，不显示版本错误、不阻止直接保存，type 41 保存时修正为该默认值；`null` 同样在 type 41 保存为 `''`；缺省、`''`、`v1`、`v1beta1` 打开后直接保存不改变存量值。删除上一轮打开时设置版本 `settingsError` 的分支，其他存量 JSON 解析错误保持显式阻塞。后端 `controller/channel.go:666` 仅在 type 41 校验版本，因此非 Vertex 沿用 Vue 的增量保存，不像 React 删除旧键，避免无关类型切换改写存量设置；只有 type 41 写入版本。此默认化按用户最新明确要求吸收上游。
 - Doubao 时长类型：对齐上游：冻结 `plugins/tasks/doubao/plugin.js:929-930` 的 number/string 类型识别。host 路径共享类型判断，选中非 number/string 值（`true`、`false`、`[6]`、对象、`null` 等）视为未知时长，出站删除 duration，统一预扣 `profile.maxDuration`，即使带 frames 也不用帧数估算；完全未给时长且只给 frames 仍按原规则估算。保留上游 `||` 对非空 metadata 时长的回退；`||` 跳过 `null`、`false` 等假值后若无候选回退，仍按已声明的非标量键处理，避免混同完全缺省后采用 frames。此最大预扣是本地明确要求的保守适配；上游 `:932-933` 会继续尝试 frames，上游提交 `:843-844` 的 parseInt 又可能将 `[6]` 发为 6 秒而按最大值预扣，本地不照搬这处提交/预扣不一致。正常数字、数字字符串、`-1` 和 native `vendorBody` 行为保持原样。decoder 的 Number() 检查不改：Responses 真实 decoder 覆盖全部非标量及带 frames 用例；openai_video 的对象、`false`、`null` seconds 仍在原生范围检查时拒绝，其余可解码值验证无 duration 和最大预扣。
@@ -90,7 +150,7 @@ GPT 发布审计的 P2：浏览器里还停留在 `177719ae7` 钱包页面的标
 
 验证：受影响的 plugins、adaptor、插件 runtime、middleware 和 controller 共 880 个 Go 顶层用例通过，另有 2 个嵌入资源顶层用例（10 个含子用例事件）通过；零意外跳过，`GOWORK=off` 且每批超时 60 秒。根模块 `go vet`、后端构建和 diff/格式检查通过。恢复 middleware 的上游头部夹具后仅重跑该包及尚未完成的 controller，前三包未改源码/测试的已通过结果复用；早先失败记录单独保留。前端、数据库 schema、钱包/结算及并发状态实现未改，原对应源码验证作为未变部分的证据；新提交仍须重新构建并运行完整跨版本候选。
 
-验证、源码身份和候选状态统一记录在 `/home/work/ren2hub-sync-20261104-ja5AWnjV/upstream-followup-headers-kling/delivery.json`。此前全链与 `deployment_eligible=true` 候选只对应 `7e4f517fd`，不得用于本次修改后的源码；本次不发布 Git、不切换生产。
+此前全链与 `deployment_eligible=true` 候选只对应 `7e4f517fd`，不得用于本次修改后的源码。本批随 `e1dfd5f9e` 发布；当时的验证与候选记录已于 2026-11-05 随本地证据目录清理。
 
 ## 2026-11-04 全量回归上游
 
@@ -142,17 +202,17 @@ GPT 发布审计的 P2：浏览器里还停留在 `177719ae7` 钱包页面的标
 
 实际收敛包括删除单调用的 `checkinToday` 文件、恢复直接的缓存切分调用和无必要类型别名、回归多处纯注释/格式漂移、删除 Vidu 旧宽泛校验而采用目标端点约束。真实客户端取消对照证明上游插件 adaptor 的 detached context 已能完成已交付 SSE 的结算，因此删除本轮尝试加入的三处取消 guard 和重复 `WithoutCancel`，仅留下行为回归。F 已吸收上游 schema/JSON 保真逻辑，不再为该部分保留独立本地例外。
 
-必要修复证据位于 `/home/work/ren2hub-sync-20261104-ja5AWnjV/`：`core/RESULTS.json` 关联缓存创建 usage、Compact、双向 prompt_cache_options、multipart 预算和正则缓存淘汰对照；`plugins/verification-summary.json` 关联请求头白名单、Kling 等出站/计费同源、CAS 退款/重复上游 ID、URL 脱敏和流式生命周期；`parent-proofs/currency-proof.json` 关联有限正汇率/额度校验；`vue/counterfactuals/` 关联配置原子性、定价快照并发、支付回调与用户/Root 明细隔离，`vue/usage-flow-result.json` 补充独立 flow 查询对照。每项以目标实现的实际行为断言失败和当前实现通过为依据，编译失败、缺依赖和零用例不能作为缺陷证据。
+必要修复的反向对照覆盖：核心的缓存创建 usage、Compact、双向 prompt_cache_options、multipart 预算和正则缓存淘汰；插件的请求头白名单、Kling 等出站/计费同源、CAS 退款/重复上游 ID、URL 脱敏和流式生命周期；有限正汇率/额度校验；Vue 的配置原子性、定价快照并发、支付回调与用户/Root 明细隔离，以及独立 flow 查询。对照文件已于 2026-11-05 随本地证据目录清理，`CORE_SOURCE_DELTA.json` 里的 `verification_evidence` 路径不再可读。每项以目标实现的实际行为断言失败和当前实现通过为依据，编译失败、缺依赖和零用例不能作为缺陷证据。
 
 普通更新验收扩展现有 `candidate --previous-image`：旧镜像生成合成配置、余额、充值、工单附件和在途任务，在同一隔离 PG/Redis/附件目标上替换新镜像；旧 `preparing` 状态由新版本恢复，供应商提交不能重复，完成只结算/退款一次，旧产物与旧工单附件仍可按原权限读取，重复启动的数据/迁移保持一致。`seconds` 与自定义 `u("p")` 数量分别验证；后者不是 Omni 的输入/输出 Token 断言。模拟供应商阶段间计划停服时显式固定 `TASK_POLL_MAX_FAILURES=0` 并报告，失败阈值另由原生测试保护，不改变生产默认值。
 
-验证状态：修改前 Go 2,556 个顶层用例、Vue 2,087 项基线通过，旧 a276 镜像由固定源码构建。最终源码验证位于 `/home/work/ren2hub-sync-20261104-ja5AWnjV/final-source-validation-v3/`：Go 2,631 个顶层用例、Vue 2,100 项（287 文件）通过；68 项数据库合同共 120 组执行通过，覆盖 SQLite、MySQL 8.4.11、PostgreSQL 15.19，无跳过或清理错误；类型、lint、格式、三模块 vet、前后端构建、4 组 race、4 组真实隔离后端浏览器及 629 项 UI 合同（63 文件）全部通过。新增管理行为另有桌面/手机、明/暗 16 张截图的人工检查；UI 合同不等于全站像素对比。
+验证状态：修改前 Go 2,556 个顶层用例、Vue 2,087 项基线通过，旧 a276 镜像由固定源码构建。最终源码验证：Go 2,631 个顶层用例、Vue 2,100 项（287 文件）通过；68 项数据库合同共 120 组执行通过，覆盖 SQLite、MySQL 8.4.11、PostgreSQL 15.19，无跳过或清理错误；类型、lint、格式、三模块 vet、前后端构建、4 组 race、4 组真实隔离后端浏览器及 629 项 UI 合同（63 文件）全部通过。新增管理行为另有桌面/手机、明/暗 16 张截图的人工检查；UI 合同不等于全站像素对比。
 
-数据库阶段补入 `TestTaskPollingRefundDatabaseMatrix`，复用五项现有退款/重复任务断言验证三种数据库及实际退款日志。此前已通过的生产代码和现有测试均未改动，因此保留 unit 和原 119 组数据库结果，用同一 runner 定向补跑新增合同；对应文件指纹和复用边界见 `validation-reuse.json`。首次文档写入导致指纹变化的运行，以及一次驱动收到 SIGTERM 而未形成完整报告的运行，都保留原始记录，不作为放行证据。
+数据库阶段补入 `TestTaskPollingRefundDatabaseMatrix`，复用五项现有退款/重复任务断言验证三种数据库及实际退款日志。此前已通过的生产代码和现有测试均未改动，因此保留 unit 和原 119 组数据库结果，用同一 runner 定向补跑新增合同。首次文档写入导致指纹变化的运行，以及一次驱动收到 SIGTERM 而未形成完整报告的运行，都不作为放行证据。
 
-首轮跨版本候选的前 12 阶段通过，管理阶段因验收器错误读取用户工单 DTO 不返回的 `user_id` 而失败。验收器改为从同一受验证的隔离数据库核对 canonical 工单归属，并保留登录身份、附件内容/映射、跨用户拒绝及会话清理断言；25 个 runner 测试通过。生产 Go/Vue 代码及现有测试未变，已通过源码门槛继续有效，完整候选按修正后的新提交和镜像重新执行；失败记录保留，不算作通过。
+首轮跨版本候选的前 12 阶段通过，管理阶段因验收器错误读取用户工单 DTO 不返回的 `user_id` 而失败。验收器改为从同一受验证的隔离数据库核对 canonical 工单归属，并保留登录身份、附件内容/映射、跨用户拒绝及会话清理断言；25 个 runner 测试通过。生产 Go/Vue 代码及现有测试未变，已通过源码门槛继续有效，完整候选按修正后的新提交和镜像重新执行；失败的那次不算作通过。
 
-本地应用提交、根 gitlink、镜像、跨版本候选和正式发布状态统一记录在 `/home/work/ren2hub-sync-20261104-ja5AWnjV/delivery.json`；详细候选报告位于同目录 `candidate-final/`。候选必须与真实提交和镜像绑定，14 个阶段全部成功并满足 `deployment_eligible=true`；不把本文件在构建前的记录当作候选通过证据。正式 Git 发布和生产切换不在本轮范围。
+候选必须与真实提交和镜像绑定，14 个阶段全部成功并满足 `deployment_eligible=true`。本轮源码与上一节的审计修复一起以 `e1dfd5f9e` 发布，候选从 `a276b48ea` 镜像升级 14 阶段通过；当时的交付记录已于 2026-11-05 随本地证据目录清理。
 
 ## 2026-11-02 折扣卡片响应式与标准计费空态
 
