@@ -160,3 +160,52 @@ func TestOAuthAffiliateErrorMappingDiscardsWrappedPrivateDetails(t *testing.T) {
 		})
 	}
 }
+
+// Upstream 48a6c87f9 adds `user.InviterId = inviterId` before InsertWithTx.
+// Ren2Hub does not take that line: InsertWithTx initializes the referral from
+// RegistrationAffCode in the same transaction. This guards that path.
+func TestOAuthRegistrationPersistsInviterOnce(t *testing.T) {
+	for _, flow := range []string{"oauth", "wechat"} {
+		t.Run(flow, func(t *testing.T) {
+			inviter, _ := setupSecurityEnrollmentTest(t)
+			oldRegister, oldQuota := common.RegisterEnabled, common.QuotaForNewUser
+			oldAffiliate := *operation_setting.GetAffiliateSetting()
+			common.RegisterEnabled, common.QuotaForNewUser = true, 0
+			*operation_setting.GetAffiliateSetting() = operation_setting.AffiliateSetting{Enabled: true, RateBps: 2000}
+			t.Cleanup(func() {
+				common.RegisterEnabled, common.QuotaForNewUser = oldRegister, oldQuota
+				*operation_setting.GetAffiliateSetting() = oldAffiliate
+			})
+			require.NoError(t, model.DB.Model(inviter).Updates(map[string]any{"aff_code": "LIVE-CODE", "aff_code_enabled": true}).Error)
+
+			// Codes are normalized to upper case before lookup.
+			response := performAffiliateOAuthRegistration(t, flow, "live-code")
+			require.Contains(t, response.Body.String(), `"success":true`, response.Body.String())
+			var invitee model.User
+			require.NoError(t, model.DB.Where("id <> ?", inviter.Id).First(&invitee).Error)
+			assert.Equal(t, inviter.Id, invitee.InviterId)
+			assert.Positive(t, invitee.InvitedAt)
+			require.NoError(t, model.DB.First(inviter, inviter.Id).Error)
+			assert.Equal(t, 1, inviter.AffCount)
+
+			if flow != "wechat" {
+				// The OAuth test provider never reports its user ID as taken, so
+				// only the WeChat stub can sign the same account in again.
+				return
+			}
+			// Signing in again with the same code finds the existing account and
+			// neither changes the inviter nor counts the referral twice.
+			response = performAffiliateOAuthRegistration(t, flow, "live-code")
+			require.Contains(t, response.Body.String(), `"success":true`, response.Body.String())
+			var count int64
+			require.NoError(t, model.DB.Model(&model.User{}).Count(&count).Error)
+			assert.EqualValues(t, 2, count)
+			var again model.User
+			require.NoError(t, model.DB.First(&again, invitee.Id).Error)
+			assert.Equal(t, inviter.Id, again.InviterId)
+			assert.Equal(t, invitee.InvitedAt, again.InvitedAt)
+			require.NoError(t, model.DB.First(inviter, inviter.Id).Error)
+			assert.Equal(t, 1, inviter.AffCount)
+		})
+	}
+}
