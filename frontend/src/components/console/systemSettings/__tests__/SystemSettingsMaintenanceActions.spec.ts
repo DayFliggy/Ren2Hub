@@ -4,6 +4,7 @@ import { api } from '@/api/console'
 import { performanceFixture } from '@/api/__tests__/opsFixtures'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { useSystemSettings } from '@/composables/useSystemSettings'
 import SystemSettingsMaintenanceActions from '../SystemSettingsMaintenanceActions.vue'
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
@@ -81,7 +82,7 @@ describe('affinity cache statistics', () => {
   async function refresh(wrapper: Awaited<ReturnType<typeof render>>) {
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '刷新')!
+      .find((button) => button.text() === '刷新统计')!
       .trigger('click')
     await flushPromises()
   }
@@ -117,6 +118,109 @@ describe('affinity cache statistics', () => {
     await refresh(wrapper)
     expect(wrapper.text()).toContain('缓存 3 条，容量 20。')
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('affinity cache clearing by rule', () => {
+  const ruleStats = (byRule: Record<string, number>) => ({
+    enabled: true,
+    total: 9,
+    unknown: 1,
+    by_rule_name: byRule,
+    cache_capacity: 100,
+    cache_algo: 'lru',
+  })
+  function ruleRow(wrapper: Awaited<ReturnType<typeof render>>, name: string) {
+    return wrapper
+      .findAll('[data-affinity-rules] li')
+      .find((row) => row.text().includes(name))
+  }
+
+  it('lists only the rules the server counts and clears one after confirmation', async () => {
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValue(ruleStats({ 'codex-session': 5, 'claude-cli': 3 }))
+    const remove = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
+    const wrapper = await render('channel-affinity')
+
+    expect(wrapper.findAll('[data-affinity-rules] li')).toHaveLength(2)
+    expect(ruleRow(wrapper, 'codex-session')!.text()).toContain('5 条')
+    expect(wrapper.text()).toContain('无法单独清空')
+
+    await ruleRow(wrapper, 'codex-session')!
+      .get('button[aria-label="清空“codex-session”的缓存"]')
+      .trigger('click')
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('open')).toBe(true)
+    expect(dialog.props('message')).toBe(
+      '确定清空“codex-session”缓存的会话绑定？后续请求将重新选择渠道。'
+    )
+    expect(remove).not.toHaveBeenCalled()
+
+    get.mockResolvedValue(ruleStats({ 'codex-session': 0, 'claude-cli': 3 }))
+    await dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(remove).toHaveBeenCalledExactlyOnceWith(
+      '/api/option/channel_affinity_cache',
+      { rule_name: 'codex-session' }
+    )
+    expect(ruleRow(wrapper, 'codex-session')!.text()).toContain('0 条')
+    wrapper.unmount()
+  })
+
+  it('cancelling the confirmation clears nothing', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(ruleStats({ 'codex-session': 5 }))
+    const remove = vi.spyOn(api, 'delete')
+    const wrapper = await render('channel-affinity')
+    await ruleRow(wrapper, 'codex-session')!.get('button').trigger('click')
+    await wrapper.getComponent(ConfirmDialog).vm.$emit('cancel')
+    await flushPromises()
+    expect(wrapper.getComponent(ConfirmDialog).props('open')).toBe(false)
+    expect(remove).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('explains that no rule can be cleared alone when none include the rule name', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(ruleStats({}))
+    const wrapper = await render('channel-affinity')
+    expect(wrapper.findAll('[data-affinity-rules] li')).toHaveLength(0)
+    expect(wrapper.get('[data-affinity-rules]').text()).toContain(
+      '没有可单独清空的规则'
+    )
+    wrapper.unmount()
+  })
+
+  it('reads the statistics again after the rules are saved', async () => {
+    const options = [{ key: 'channel_affinity_setting.rules', value: '[]' }]
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url) => {
+      if (url === '/api/option/') return options
+      return ruleStats({})
+    })
+    vi.spyOn(api, 'put').mockResolvedValue(undefined)
+    vi.spyOn(api, 'post').mockResolvedValue(undefined)
+    const settings = useSystemSettings()
+    expect(await settings.load(true)).toBe(true)
+    const wrapper = await render('channel-affinity')
+    const statReads = () =>
+      get.mock.calls.filter(
+        ([url]) => url === '/api/option/channel_affinity_cache'
+      ).length
+    expect(statReads()).toBe(1)
+
+    get.mockImplementation(async (url) => {
+      if (url === '/api/option/') return options
+      return ruleStats({ 'new-rule': 0 })
+    })
+    expect(
+      await settings.saveOptions({
+        'channel_affinity_setting.rules':
+          '[{"name":"new-rule","include_rule_name":true}]',
+      })
+    ).toBe(true)
+    await flushPromises()
+    expect(statReads()).toBe(2)
+    expect(ruleRow(wrapper, 'new-rule')).toBeDefined()
     wrapper.unmount()
   })
 })

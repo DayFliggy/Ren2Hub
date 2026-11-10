@@ -3582,7 +3582,22 @@ export default {
       confirm: 'Run',
       done: 'Done',
       clearAffinity: 'Clear channel affinity cache',
-      clearAffinityMessage: 'Existing user channel bindings will be removed.',
+      clearAffinityMessage:
+        'Clear all cached session bindings? Subsequent requests will select channels again.',
+      refreshStats: 'Refresh statistics',
+      affinityHint:
+        'Refreshing updates the counts. Clearing cache makes subsequent requests select channels again.',
+      ruleCaches: 'Clear by rule',
+      ruleEntries: '{count} entries',
+      clearRuleButton: 'Clear cache',
+      clearRuleFor: 'Clear cache for {name}',
+      clearRule: 'Clear rule cache',
+      clearRuleMessage:
+        'Clear cached session bindings for "{name}"? Subsequent requests will select channels again.',
+      sharedRulesHint:
+        'Rules without "Include rule name" share one cache and cannot be cleared separately. New rules appear here after they are saved.',
+      noRuleCaches:
+        'No rule can be cleared separately. A rule appears here after "Include rule name" is enabled and saved.',
       clearCache: 'Clear disk cache',
       clearCacheMessage: 'Inactive disk cache files will be deleted.',
       resetStats: 'Reset cache statistics',

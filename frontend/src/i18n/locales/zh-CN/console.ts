@@ -3444,7 +3444,22 @@ export default {
       confirm: '确认执行',
       done: '操作已完成',
       clearAffinity: '清空渠道亲和性缓存',
-      clearAffinityMessage: '现有用户的渠道绑定将被移除。',
+      clearAffinityMessage:
+        '确定清空所有缓存的会话绑定？后续请求将重新选择渠道。',
+      refreshStats: '刷新统计',
+      affinityHint:
+        '刷新统计会更新条目数量。清空缓存后，后续请求将重新选择渠道。',
+      ruleCaches: '按规则清空',
+      ruleEntries: '{count} 条',
+      clearRuleButton: '清空缓存',
+      clearRuleFor: '清空“{name}”的缓存',
+      clearRule: '清空规则缓存',
+      clearRuleMessage:
+        '确定清空“{name}”缓存的会话绑定？后续请求将重新选择渠道。',
+      sharedRulesHint:
+        '未开启“包含规则名”的规则使用共享缓存，无法单独清空；新规则保存后才会出现在这里。',
+      noRuleCaches:
+        '没有可单独清空的规则。规则开启“包含规则名”并保存后才会出现在这里。',
       clearCache: '清理磁盘缓存',
       clearCacheMessage: '将删除不活跃的磁盘缓存文件。',
       resetStats: '重置缓存统计',

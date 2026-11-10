@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -9,12 +9,15 @@ import {
   performanceNumber,
   type PerformanceStats,
 } from '@/api/opsMonitor'
+import { useSystemSettings } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
 
 interface ChannelAffinityStats {
   enabled: boolean
   total: number
   unknown: number
+  // Saved rules with include_rule_name; only these can be cleared one by one.
+  by_rule_name?: Record<string, number>
   cache_capacity: number
   cache_algo: string
 }
@@ -30,11 +33,18 @@ const props = defineProps<{
 }>()
 
 type Action =
-  'clear-affinity' | 'clear-cache' | 'reset-stats' | 'gc' | 'cleanup-logs'
+  | 'clear-affinity'
+  | 'clear-rule'
+  | 'clear-cache'
+  | 'reset-stats'
+  | 'gc'
+  | 'cleanup-logs'
 
 const { t } = useI18n()
 const toast = useToast()
+const { rawOptions } = useSystemSettings()
 const pendingAction = ref<Action | null>(null)
+const pendingRule = ref('')
 const loading = ref(false)
 const loadingStats = ref(false)
 const affinityStats = ref<ChannelAffinityStats | null>(null)
@@ -46,6 +56,11 @@ const logCleanupValue = ref(30)
 // GET /api/performance/logs answers enabled:false when no log directory is
 // configured; null means the status is unknown because the read failed.
 const logEnabled = computed(() => logFiles.value?.enabled === true)
+const affinityRules = computed(() =>
+  Object.entries(affinityStats.value?.by_rule_name ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b)
+  )
+)
 
 const actionText = computed(() => {
   switch (pendingAction.value) {
@@ -53,6 +68,13 @@ const actionText = computed(() => {
       return {
         title: t('systemSettings.maintenance.clearAffinity'),
         message: t('systemSettings.maintenance.clearAffinityMessage'),
+      }
+    case 'clear-rule':
+      return {
+        title: t('systemSettings.maintenance.clearRule'),
+        message: t('systemSettings.maintenance.clearRuleMessage', {
+          name: pendingRule.value,
+        }),
       }
     case 'clear-cache':
       return {
@@ -153,6 +175,11 @@ async function runAction() {
       case 'clear-affinity':
         await api.delete('/api/option/channel_affinity_cache', { all: true })
         break
+      case 'clear-rule':
+        await api.delete('/api/option/channel_affinity_cache', {
+          rule_name: pendingRule.value,
+        })
+        break
       case 'clear-cache':
         await api.delete('/api/performance/disk_cache')
         break
@@ -178,6 +205,21 @@ async function runAction() {
     loading.value = false
   }
 }
+
+function confirmClearRule(name: string) {
+  pendingRule.value = name
+  pendingAction.value = 'clear-rule'
+}
+
+// Saving the rules changes which names the server counts, so the statistics
+// are read again; the first options load is not a save.
+watch(
+  () => rawOptions.value['channel_affinity_setting.rules'],
+  (_rules, previous) => {
+    if (props.kind === 'channel-affinity' && previous !== undefined)
+      void loadStats()
+  }
+)
 
 onMounted(loadStats)
 </script>
@@ -233,9 +275,19 @@ onMounted(loadStats)
         :loading="loadingStats"
         @click="loadStats"
       >
-        {{ t('common.refresh') }}
+        {{
+          kind === 'channel-affinity'
+            ? t('systemSettings.maintenance.refreshStats')
+            : t('common.refresh')
+        }}
       </ConsoleButton>
     </div>
+    <p
+      v-if="kind === 'channel-affinity'"
+      class="mt-1 text-xs text-[var(--text-tertiary)]"
+    >
+      {{ t('systemSettings.maintenance.affinityHint') }}
+    </p>
 
     <!-- KPI Metric Cards Grid -->
     <div
@@ -333,10 +385,61 @@ onMounted(loadStats)
     </div>
 
     <template v-if="kind === 'channel-affinity'">
+      <div
+        v-if="affinityStats"
+        class="mt-4 rounded-xl border border-[var(--border-subtle)]"
+        data-affinity-rules
+      >
+        <div
+          class="border-b border-[var(--border-subtle)] px-3.5 py-2.5 text-xs font-medium text-[var(--text-secondary)]"
+        >
+          {{ t('systemSettings.maintenance.ruleCaches') }}
+        </div>
+        <ul
+          v-if="affinityRules.length"
+          class="divide-y divide-[var(--border-subtle)]"
+        >
+          <li
+            v-for="[name, count] in affinityRules"
+            :key="name"
+            class="flex items-center justify-between gap-3 px-3.5 py-2"
+          >
+            <span
+              class="min-w-0 truncate font-mono text-xs text-[var(--text-primary)]"
+            >
+              {{ name }}
+            </span>
+            <span class="flex shrink-0 items-center gap-3">
+              <span class="font-mono text-xs text-[var(--text-secondary)]">{{
+                t('systemSettings.maintenance.ruleEntries', { count })
+              }}</span>
+              <ConsoleButton
+                variant="ghost"
+                size="sm"
+                :disabled="loading || loadingStats"
+                :aria-label="
+                  t('systemSettings.maintenance.clearRuleFor', { name })
+                "
+                @click="confirmClearRule(name)"
+              >
+                {{ t('systemSettings.maintenance.clearRuleButton') }}
+              </ConsoleButton>
+            </span>
+          </li>
+        </ul>
+        <p class="px-3.5 py-2.5 text-xs text-[var(--text-tertiary)]">
+          {{
+            affinityRules.length
+              ? t('systemSettings.maintenance.sharedRulesHint')
+              : t('systemSettings.maintenance.noRuleCaches')
+          }}
+        </p>
+      </div>
       <div class="mt-4 flex flex-wrap gap-2.5">
         <ConsoleButton
           variant="secondary"
           size="sm"
+          :disabled="loading"
           @click="pendingAction = 'clear-affinity'"
         >
           {{ t('systemSettings.maintenance.clearAffinityButton') }}
