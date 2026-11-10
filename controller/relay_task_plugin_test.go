@@ -529,6 +529,14 @@ func taskSubmissionRelayInfo(billing relaycommon.BillingSettler) *relaycommon.Re
 // runs leave a record.
 func openTaskDialectDatabase(t *testing.T, models ...any) (*gorm.DB, common.DatabaseType) {
 	t.Helper()
+	return openTaskDialectDatabaseNamed(t, fmt.Sprintf("tsubmit_%d_", time.Now().UnixNano()), models...)
+}
+
+// openTaskDialectDatabaseNamed lets a test keep native table names. Native
+// queries such as GetEnabledModels use DB.Table("abilities") and ignore any
+// naming-strategy prefix.
+func openTaskDialectDatabaseNamed(t *testing.T, prefix string, models ...any) (*gorm.DB, common.DatabaseType) {
+	t.Helper()
 	dialect := common.DatabaseType(os.Getenv("TEST_TASK_DB_DIALECT"))
 	var driver gorm.Dialector
 	switch dialect {
@@ -544,7 +552,7 @@ func openTaskDialectDatabase(t *testing.T, models ...any) (*gorm.DB, common.Data
 	default:
 		t.Fatalf("unsupported test dialect %q", dialect)
 	}
-	db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: fmt.Sprintf("tsubmit_%d_", time.Now().UnixNano())}})
+	db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: prefix}})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
