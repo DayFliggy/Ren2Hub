@@ -197,6 +197,14 @@ func TestFreshDatabase(t *testing.T) {
             self.assertEqual(result["unclassified"][0]["environment_functions"], ["newDatabase"])
             self.assertTrue(result["missing_required"])
 
+    def test_repository_database_tests_are_all_classified(self):
+        # A renamed fixture changes the environment roots of every caller;
+        # the real repository must stay fully classified.
+        source = Path(__file__).resolve().parents[2]
+        result = database.database_inventory(source, database.database_test_files(source))
+        self.assertEqual(result["unclassified"], [])
+        self.assertEqual(result["missing_required"], [])
+
     def test_readiness_requires_two_consecutive_tcp_successes(self):
         with tempfile.TemporaryDirectory() as directory:
             runner = database.Runner(Path(directory), Path(directory), {})

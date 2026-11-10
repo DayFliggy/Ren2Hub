@@ -18,13 +18,19 @@ type WebAssets struct {
 	IndexPage []byte
 }
 
-// retiredAPIPrefixes are API groups the frozen upstream still registers but
-// Ren2Hub removed on purpose: in-site subscriptions, io.net deployments, the
-// multi-instance list, business groups and the playground relay. Since
-// upstream 8c8940c99 uploaded plugins may claim host namespaces, so these
-// stay 404 here instead of becoming plugin routes. Groups upstream deleted
-// itself (such as the Codex OAuth routes) are left to the upstream rules.
-var retiredAPIPrefixes = []string{"/api/subscription", "/api/deployments", "/api/system-info", "/api/group", "/api/user/groups", "/api/user/self/groups", "/api/token/auto-groups", "/api/option/rest_model_ratio"}
+// retiredAPIPrefixes are API groups Ren2Hub removed on purpose: in-site
+// subscriptions and the Waffo Pancake subscription products, io.net
+// deployments, the multi-instance list, business groups and supplier
+// subscription (Codex) accounts. The frozen upstream still registers most of
+// them, and since upstream 8c8940c99 uploaded plugins may claim host
+// namespaces, so they stay 404 here instead of becoming plugin routes.
+var retiredAPIPrefixes = []string{
+	"/api/subscription", "/api/deployments", "/api/system-info", "/api/group",
+	"/api/user/groups", "/api/user/self/groups", "/api/token/auto-groups",
+	"/api/option/rest_model_ratio", "/api/codex",
+	"/api/option/waffo-pancake/subscription-product",
+	"/api/option/waffo-pancake/subscription-product-options",
+}
 
 func retiredFrontendPath(path string) bool {
 	for _, prefix := range append([]string{"/market", "/console/market", "/pg", "/next", "/playground", "/chat", "/subscription", "/plan-management", "/plans", "/deployments", "/console/subscription", "/console/plan-management", "/console/plans", "/console/playground", "/console/chat", "/console/deployments"}, retiredAPIPrefixes...) {
@@ -32,7 +38,18 @@ func retiredFrontendPath(path string) bool {
 			return true
 		}
 	}
-	return false
+	return retiredChannelCodexPath(path)
+}
+
+// retiredChannelCodexPath matches /api/channel/:id/codex/..., whose prefix
+// contains the channel ID.
+func retiredChannelCodexPath(path string) bool {
+	rest, ok := strings.CutPrefix(path, "/api/channel/")
+	if !ok {
+		return false
+	}
+	_, tail, ok := strings.Cut(rest, "/")
+	return ok && (tail == "codex" || strings.HasPrefix(tail, "codex/"))
 }
 
 func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.HandlerFunc) {

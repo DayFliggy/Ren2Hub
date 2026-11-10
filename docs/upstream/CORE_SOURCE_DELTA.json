@@ -1501,7 +1501,7 @@
       "path": "controller/oauth_affiliate_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "47da02881204348861d9c76994b196d2f65988e93849e429e0f94a977760d626"
+      "local_sha256": "ea2ca6b6107d3f200ebf7b2598262cd05fffe4290bdd68bddbe926ed27aa5f9b"
     },
     {
       "path": "controller/option.go",
@@ -8991,7 +8991,7 @@
       "path": "router/retired_routes_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "207aabd7fa0db7d0c32ba7efdbb93700a08c7b0e39a6b0f996d6a580f1f8d2bf"
+      "local_sha256": "1a19ba02deb1fe5fdadfd064b58f94f449f3afc1187b5b1d96dbb82dd05e2cea"
     },
     {
       "path": "router/task-plugin-protocol-router.go",
@@ -9083,14 +9083,14 @@
       "path": "router/web-router.go",
       "status": "adapted",
       "upstream_sha256": "7d6422d43387f9cf251699aab452076b3e979127430b6227b4e6f0f84d100416",
-      "local_sha256": "e3031cc180182666e7159da4ce7a9b2dc088ff486ff55c7551e90b041d91c34d",
+      "local_sha256": "24c610964a8c027e84dbf06c80020f54b0ef5015caba59a384a76f6dec7129d2",
       "reasons": [
         "retired",
         "vue-frontend"
       ],
       "review": {
         "target": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
-        "basis": "提供 Vue SPA 静态回退，并对已退役前端路径明确拒绝，避免旧 React/Playground 路由假成功。 rc.49 #8241 删除插件 host_namespace 跳过后，retiredFrontendPath 同时拒绝已退役 API 前缀（订阅、部署、system-info、分组、rest_model_ratio），在插件分发前返回 404。",
+        "basis": "提供 Vue SPA 静态回退，并对已退役前端路径明确拒绝，避免旧 React/Playground 路由假成功。 rc.49 #8241 删除插件 host_namespace 跳过后，retiredFrontendPath 同时拒绝已退役 API 前缀（站内订阅含 Pancake 订阅产品、部署、system-info、业务分组、rest_model_ratio、供应商订阅账号 /api/codex 与 /api/channel/:id/codex），在插件分发前返回 404；对照 rc.49 注册路由无遗漏。",
         "method": "rc.49 three-way review (ba5f73677..48a6c87f9); runtime results recorded separately in SYNC_LEDGER"
       }
     },

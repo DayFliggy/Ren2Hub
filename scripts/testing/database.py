@@ -94,6 +94,7 @@ DEFERRED_DATABASE_HELPERS = {
     "setupResponsesWSRequestTest": "WebSocket 集成原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
     "setupSecurityEnrollmentTest": "安全注册原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
     "openTaskDialectDatabase": "任务插件原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
+    "openTaskDialectDatabaseNamed": "任务插件原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
     "setupManageUserTestDB": "非额度管理原生单测使用临时 SQLite；MySQL/PostgreSQL 变体未纳入本矩阵",
 }
 DEFERRED_DATABASE_TESTS = {}

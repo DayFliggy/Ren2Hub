@@ -113,7 +113,7 @@ func performAffiliateOAuthRegistration(t *testing.T, flow, affiliate string) *ht
 		})
 		router.GET("/api/oauth/wechat", WeChatAuth)
 	} else {
-		oauth.Register("affiliate-test", &authFlowTestOAuthProvider{})
+		oauth.Register("affiliate-test", &affiliateTestOAuthProvider{})
 		t.Cleanup(func() { oauth.Unregister("affiliate-test") })
 		router.POST("/api/oauth/state", GenerateOAuthCode)
 		router.GET("/api/oauth/:provider", HandleOAuth)
@@ -188,11 +188,6 @@ func TestOAuthRegistrationPersistsInviterOnce(t *testing.T) {
 			require.NoError(t, model.DB.First(inviter, inviter.Id).Error)
 			assert.Equal(t, 1, inviter.AffCount)
 
-			if flow != "wechat" {
-				// The OAuth test provider never reports its user ID as taken, so
-				// only the WeChat stub can sign the same account in again.
-				return
-			}
 			// Signing in again with the same code finds the existing account and
 			// neither changes the inviter nor counts the referral twice.
 			response = performAffiliateOAuthRegistration(t, flow, "live-code")
@@ -209,3 +204,19 @@ func TestOAuthRegistrationPersistsInviterOnce(t *testing.T) {
 		})
 	}
 }
+
+// affiliateTestOAuthProvider stores its account in oidc_id, so a second
+// sign-in finds the user created by the first one.
+type affiliateTestOAuthProvider struct{ authFlowTestOAuthProvider }
+
+func (*affiliateTestOAuthProvider) IsUserIDTaken(id string) bool {
+	return model.IsOidcIdAlreadyTaken(id)
+}
+func (*affiliateTestOAuthProvider) FillUserByProviderID(user *model.User, id string) error {
+	user.OidcId = id
+	return user.FillUserByOidcId()
+}
+func (*affiliateTestOAuthProvider) SetProviderUserID(user *model.User, id string) {
+	user.OidcId = id
+}
+func (*affiliateTestOAuthProvider) ProviderUserIDColumn() string { return "oidc_id" }

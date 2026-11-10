@@ -18,16 +18,16 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 | `6fa80abc7` 会话缓存操作（React） | Vue 等价 | 系统设置“渠道亲和”维护区按 `by_rule_name` 列出可单独清空的规则，确认后 `DELETE ?rule_name=`；说明清空后重新选渠道；规则保存后重新读取统计 |
 | `a5a465926` Vertex SA token 缓存 | 吸收 | 与上游相同 |
 | `e03439033` AWS 死代码 | 吸收 | 与上游相同 |
-| `8c8940c99` #8241 插件顶层路径 | 吸收并补退役边界 | 上传插件可注册 `/v1/...`；`retiredFrontendPath` 增加上游仍注册但 Ren2Hub 已删除的 API 前缀（`/api/subscription`、`/api/deployments`、`/api/system-info`、`/api/group`、`/api/user/groups`、`/api/user/self/groups`、`/api/token/auto-groups`、`/api/option/rest_model_ratio`），在插件分发前 404。上游已删除的 Codex OAuth 路由不加入。新增 `TestUploadedPluginCannotClaimSharedTaskEndpoints`：`/v1/responses`、`/v1/videos`、`/v1/video/generations`、`/v1/images/*` 仍由宿主应答 |
+| `8c8940c99` #8241 插件顶层路径 | 吸收并补退役边界 | 上传插件可注册 `/v1/...`；`retiredFrontendPath` 增加 Ren2Hub 已删除的 API 前缀，在插件分发前 404：站内订阅 `/api/subscription` 与 Pancake 订阅产品两条接口、`/api/deployments`、`/api/system-info`、业务分组（`/api/group`、`/api/user/groups`、`/api/user/self/groups`、`/api/token/auto-groups`）、`/api/option/rest_model_ratio`、供应商订阅账号（`/api/codex`、`/api/channel/:id/codex/...`）。对照上游 rc.49 实际注册路由，上游有而本地无的 57 条全部落在这些前缀内；`/pg` 已在原前端前缀中。新增 `TestUploadedPluginCannotClaimSharedTaskEndpoints`：`/v1/responses`、`/v1/videos`、`/v1/video/generations`、`/v1/images/*` 仍由宿主应答 |
 | `433830b4e` 多 Key 恢复 | 吸收 | 与上游相同 |
 | `ada15c050` 保留人工禁用 | 吸收到扩展文件 | 守卫落在 `model/channel_status.go` 的 `UpdateChannelStatusDetailed`，缓存与 DB 行各检查一次；`model/channel.go` 保持本地包装 |
 | `9c2c370a6` SQLITE_PATH | 吸收 | 与上游相同 |
 | `a3fd673bb` #8162 DeepSeek reasoning | 吸收 | 与上游相同 |
 | `dd50ee0a5` #8228 Vertex Omni 1.2 | 吸收 | 插件 1.3.0；本地 Veo 自校验保留。Omni 1.2 没有内置价格，管理员须配置价格，否则价格守卫拒绝；1.1 超过 10 秒的请求由 Vertex 拒绝，预扣按原生失败路径退款 |
 | `e8298df63` #8250 DeepSeek 路径预设（React） | 不吸收 | Vue 入站路径为自由输入，后端已识别 |
-| `48a6c87f9` #8247 OAuth 邀请人 | 不吸收 | 本地 `InsertWithTx` 在同一事务调用 `InitializeAffiliateUserTx` 写入邀请人；上游测试依赖已退役的邀请额度常量。新增 `TestOAuthRegistrationPersistsInviterOnce`（OAuth 与微信两条流程，重复登录不改邀请人、不重复计数），反向修改后失败 |
+| `48a6c87f9` #8247 OAuth 邀请人 | 不吸收 | 本地 `InsertWithTx` 在同一事务调用 `InitializeAffiliateUserTx` 写入邀请人；上游测试依赖已退役的邀请额度常量。新增 `TestOAuthRegistrationPersistsInviterOnce`：OAuth 与微信两条流程都覆盖首次注册写入邀请人和计数，以及再次登录找到原账号、不改邀请人、不重复计数；去掉事务内初始化或让提供方认不出原账号时测试失败 |
 
-退役判断：上游 rc.49 仍注册的订阅、部署、多实例信息、业务分组及其倍率接口，Ren2Hub 已按合同删除，本地没有调用方，继续退役并在插件分发前拒绝。上游已删除的 Codex OAuth 不需本地规则。退役清单 `scripts/server/ren2hub-retired-paths.txt` 的 HTTPS 核验口径不变。
+退役判断：上游 rc.49 仍注册的站内订阅（含 Pancake 订阅产品）、部署、多实例信息、业务分组及其倍率、供应商订阅账号用量接口，Ren2Hub 已按合同删除，本地没有调用方，继续退役并在插件分发前拒绝。上游已删除的 Codex OAuth 入口 `/api/codex/oauth/start` 仍按工作区退役清单 `scripts/server/ren2hub-retired-paths.txt` 返回 404，HTTPS 核验口径不变。
 
 登录/注册协议同意：Vue 自 9a63062227 起没有该功能。现按上游 rc.49 行为补齐：管理员发布用户协议或隐私政策后，登录与注册页显示勾选项及已发布文档链接；未勾选时密码登录、Passkey 主登录、OAuth 登录与注册都被阻止并提示。两步验证中的 Passkey 属于已同意的同一次登录，不再要求勾选。未发布文档时不显示。服务端没有对应校验，与上游相同。
 
