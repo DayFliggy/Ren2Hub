@@ -406,6 +406,7 @@ onMounted(loadStats)
           >
             <span
               class="min-w-0 truncate font-mono text-xs text-[var(--text-primary)]"
+              :title="name"
             >
               {{ name }}
             </span>
