@@ -58,7 +58,6 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 		other.SetPublic("model_ratio", info.PriceData.ModelRatio)
 	}
 	other.SetPublic("channel_ratio", FormatChannelRatio(info.PriceData.ChannelRatioInfo.ChannelRatio))
-	appendUsageDiscountInfo(other, info.PriceData.ChannelRatioInfo)
 	if info.IsModelMapped {
 		other.SetPublic("is_model_mapped", true)
 		other.SetPublic("upstream_model_name", info.UpstreamModelName)
@@ -144,7 +143,6 @@ func taskBillingOther(task *model.Task) *model.LogOther {
 			other.SetPublic("model_ratio", bc.ModelRatio)
 		}
 		other.SetPublic("channel_ratio", FormatChannelRatio(bc.ChannelRatio))
-		appendUsageDiscountInfo(other, types.ChannelRatioInfo{ChannelRatio: bc.ChannelRatio, BaseChannelRatio: bc.BaseChannelRatio, UsageDiscount: bc.UsageDiscount})
 		if priceData := taskBillingContextPriceData(bc); priceData != nil {
 			for k, v := range priceData.OtherRatios() {
 				if !other.SetPublic(k, v) {

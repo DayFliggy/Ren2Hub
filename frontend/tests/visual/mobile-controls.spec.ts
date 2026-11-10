@@ -130,7 +130,7 @@ for (const theme of ['light', 'dark'] as const) {
   }, testInfo) => {
     await configureStablePage(page, { theme })
     await page.setViewportSize({ width: 390, height: 900 })
-    await page.goto('/system-settings/billing/usage-discount')
+    await page.goto('/system-settings/billing/topup-discount')
     await waitForStablePage(page)
     const fixedRate = page.getByLabel('固定折扣', { exact: true })
     for (const width of [320, 390, 767, 768, 1440]) {

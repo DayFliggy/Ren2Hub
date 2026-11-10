@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/types"
 )
 
 type TaskStatus string
@@ -168,9 +167,6 @@ type TaskBillingContext struct {
 	OriginModelName string                       `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 	PerCallBilling  bool                         `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
 	TieredSnapshot  *billingexpr.BillingSnapshot `json:"tiered_snapshot,omitempty"`
-	// Display only: ChannelRatio above is already the discounted ratio.
-	BaseChannelRatio float64                      `json:"base_channel_ratio,omitempty"`
-	UsageDiscount    *types.UsageDiscountDecision `json:"usage_discount,omitempty"`
 }
 
 // ResultRetrievable reports whether retrieval surfaces (native query routes,

@@ -1,0 +1,323 @@
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/api/types'
+import {
+  parseTopupDiscountEstimate,
+  parseTopupDiscountSettings,
+} from '@/api/topupDiscount'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import type { TopupDiscountSettings } from '@/types/topupDiscount'
+import TopupDiscountPanel from '../TopupDiscountPanel.vue'
+// Generated from the real handlers by controller/frontend_contract_test.go.
+import configResponse from '../../../../../tests/fixtures/native/topup-discount.get.json'
+import estimateResponse from '../../../../../tests/fixtures/native/topup-discount-estimate.post.json'
+
+const mocks = vi.hoisted(() => ({
+  load: vi.fn(),
+  save: vi.fn(),
+  status: vi.fn(),
+  estimate: vi.fn(),
+}))
+// Only the requests are replaced; the response parsers stay real.
+vi.mock('@/api/topupDiscount', async (original) => ({
+  ...(await original<typeof import('@/api/topupDiscount')>()),
+  topupDiscountApi: {
+    load: mocks.load,
+    save: mocks.save,
+    status: mocks.status,
+    estimate: mocks.estimate,
+  },
+}))
+
+const loaded = parseTopupDiscountSettings(configResponse.data)
+/** The same document saved elsewhere as `version` with another fixed rate. */
+function serverVersion(version: number, fixed: string): TopupDiscountSettings {
+  return {
+    ...loaded,
+    version,
+    created_at: 1793300000,
+    created_by: 2,
+    config: { ...loaded.config, fixed_rate: fixed },
+  }
+}
+
+let wrapper: VueWrapper | undefined
+async function setup() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      {
+        path: '/system-settings/billing/topup-discount',
+        component: TopupDiscountPanel,
+      },
+    ],
+  })
+  await router.push('/system-settings/billing/topup-discount')
+  wrapper = mount(
+    { template: '<RouterView />' },
+    {
+      global: {
+        plugins: [
+          router,
+          createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
+        ],
+        stubs: { teleport: true },
+      },
+    }
+  )
+  await flushPromises()
+  return wrapper
+}
+function button(
+  scope: VueWrapper | ReturnType<VueWrapper['get']>,
+  text: string
+) {
+  const found = scope.findAll('button').find((item) => item.text() === text)
+  if (!found) throw new Error(`Missing button: ${text}`)
+  return found
+}
+function field(scope: VueWrapper, caption: string) {
+  const label = scope
+    .findAll('label[for]')
+    .find((item) => item.text() === caption)
+  if (!label) throw new Error(`Missing field: ${caption}`)
+  return scope.get<HTMLInputElement>(`#${label.attributes('for')}`)
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  wrapper?.unmount()
+  wrapper = undefined
+  mocks.load.mockResolvedValue(loaded)
+  mocks.estimate.mockResolvedValue(
+    parseTopupDiscountEstimate(estimateResponse.data)
+  )
+})
+
+describe('top-up discount editor', () => {
+  it('keeps the draft through a version conflict and adopts the server version only on reload', async () => {
+    const page = await setup()
+    await field(page, 'Fixed discount').setValue('1')
+    mocks.save.mockRejectedValueOnce(
+      new ApiError('topup_discount_version_conflict', {
+        status: 409,
+        code: 'topup_discount_version_conflict',
+      })
+    )
+    mocks.load.mockResolvedValue(serverVersion(3, '0.02'))
+
+    await button(page, 'Save configuration').trigger('click')
+    await flushPromises()
+
+    expect(mocks.save).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ fixed_rate: '0.01' })
+    )
+    expect(page.get('[data-discount-conflict]').text()).toContain(
+      'now version 3'
+    )
+    expect(field(page, 'Fixed discount').element.value).toBe('1')
+    expect(page.text()).toContain('Unsaved changes')
+    // Saving again would only repeat the conflict against version 0.
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(true)
+
+    await button(page, 'Load server version').trigger('click')
+    const dialog = page.getComponent(ConfirmDialog)
+    expect(dialog.props('open')).toBe(true)
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+
+    expect(page.find('[data-discount-conflict]').exists()).toBe(false)
+    expect(field(page, 'Fixed discount').element.value).toBe('2')
+    expect(page.text()).not.toContain('Unsaved changes')
+    expect(page.text()).toContain('Version 3')
+  })
+
+  it('reports a configuration the server rejects and keeps the draft for another try', async () => {
+    const page = await setup()
+    await field(page, 'Fixed discount').setValue('1')
+    mocks.save.mockRejectedValueOnce(
+      new ApiError('topup_discount_invalid_config: timezone', {
+        status: 400,
+        code: 'topup_discount_invalid_config',
+      })
+    )
+    await button(page, 'Save configuration').trigger('click')
+    await flushPromises()
+
+    const alert = page.get('[role="alert"]').text()
+    expect(alert).toContain('Saving failed; your draft is kept.')
+    expect(alert).toContain('The server rejected this configuration.')
+    expect(alert).toContain('topup_discount_invalid_config: timezone')
+    expect(page.find('[data-discount-conflict]').exists()).toBe(false)
+    expect(field(page, 'Fixed discount').element.value).toBe('1')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(false)
+  })
+
+  it('saves a top-up amount tier as its own table next to the usage tiers', async () => {
+    const page = await setup()
+    const amount = page.get('[data-discount-table="amount"]')
+    expect(amount.text()).toContain('Top-up amount tiers')
+    expect(amount.text()).toContain('Stripe and Creem do not take part')
+    await button(amount, 'Add tier').trigger('click')
+    await amount
+      .get('input[aria-label="Tier 1 threshold (USD)"]')
+      .setValue('100')
+    await amount.get('input[aria-label="Tier 1 discount (%)"]').setValue('2')
+    await amount.findAll('[role="radio"]')[2]!.trigger('click')
+    mocks.save.mockImplementation(async (_version, config) => ({
+      ...loaded,
+      version: 1,
+      created_at: 1793300000,
+      created_by: 1,
+      config,
+    }))
+
+    await button(page, 'Save configuration').trigger('click')
+    await flushPromises()
+
+    expect(mocks.save).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({
+        amount: {
+          mode: 'on',
+          tiers: [{ threshold_quota: '50000000', rate: '0.02' }],
+        },
+      })
+    )
+  })
+
+  it('saves a tier entered in USD and percent with the loaded version', async () => {
+    const page = await setup()
+    const site = page.get('[data-discount-table="site"]')
+    await button(site, 'Add tier').trigger('click')
+    await site.get('input[aria-label="Tier 1 threshold (USD)"]').setValue('25')
+    await site.get('input[aria-label="Tier 1 discount (%)"]').setValue('1.5')
+    await site.findAll('[role="radio"]')[2]!.trigger('click')
+    mocks.save.mockImplementation(async (_version, config) => ({
+      ...loaded,
+      version: 1,
+      created_at: 1793300000,
+      created_by: 1,
+      config,
+    }))
+
+    await button(page, 'Save configuration').trigger('click')
+    await flushPromises()
+
+    expect(mocks.save).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({
+        site: {
+          mode: 'on',
+          tiers: [{ threshold_quota: '12500000', rate: '0.015' }],
+        },
+      })
+    )
+    expect(page.text()).toContain('Saved as version 1')
+    expect(page.text()).not.toContain('Unsaved changes')
+    expect(mocks.status).not.toHaveBeenCalled()
+  })
+
+  it('blocks saving and estimating an invalid draft and says why inline', async () => {
+    const page = await setup()
+    await field(page, 'Fixed discount').setValue('6')
+
+    expect(page.text()).toContain('Cannot exceed the 5% cap.')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(true)
+    expect(
+      button(page, 'Estimate this draft').element.matches(':disabled')
+    ).toBe(true)
+    expect(page.text()).toContain(
+      'Fix the errors in the draft before saving or estimating.'
+    )
+  })
+
+  it('marks an estimate stale as soon as the draft changes', async () => {
+    const page = await setup()
+    await button(page, 'Estimate this draft').trigger('click')
+    await flushPromises()
+
+    expect(mocks.estimate).toHaveBeenCalledWith(
+      loaded.config,
+      expect.anything()
+    )
+    const estimate = page.get('[data-discount-estimate]')
+    expect(estimate.text()).toContain('approximation, not a bill')
+    expect(estimate.text()).toContain('2026-09-30 to 2026-10-29 (30 days)')
+    expect(estimate.text()).toContain('Under about 60 days')
+    expect(page.find('[data-estimate-stale]').exists()).toBe(false)
+
+    await field(page, 'Discount cap').setValue('6')
+    expect(page.find('[data-estimate-stale]').exists()).toBe(true)
+    expect(page.get('[data-estimate-result]').classes()).toContain('is-stale')
+  })
+
+  it('loads only configuration and never requests runtime diagnostics', async () => {
+    const page = await setup()
+    expect(mocks.load).toHaveBeenCalledOnce()
+    expect(mocks.status).not.toHaveBeenCalled()
+    expect(page.find('[data-discount-status]').exists()).toBe(false)
+    await field(page, 'Fixed discount').setValue('1')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(false)
+  })
+
+  it('keeps window drafts and exposes errors when their window is hidden', async () => {
+    const page = await setup()
+    const day = page.get('[data-discount-table="day"]')
+    const amount = day.get<HTMLInputElement>(
+      'input[aria-label="Tier 2 threshold (USD)"]'
+    )
+    await amount.setValue('1')
+    const tabs = page.findAll('[role="tab"]')
+    await tabs[2]!.trigger('click')
+    expect(day.isVisible()).toBe(false)
+    expect(tabs[0]!.text()).toContain('1 to fix')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(true)
+    expect(
+      button(page, 'Estimate this draft').element.matches(':disabled')
+    ).toBe(true)
+    await tabs[2]!.trigger('keydown', { key: 'Home' })
+    expect(tabs[0]!.attributes('aria-selected')).toBe('true')
+    expect(amount.element.value).toBe('1')
+    await amount.setValue('15')
+    expect(tabs[0]!.text()).not.toContain('to fix')
+    await tabs[0]!.trigger('keydown', { key: 'End' })
+    expect(tabs[2]!.attributes('aria-selected')).toBe('true')
+    expect(page.get('[data-discount-table="month"]').isVisible()).toBe(true)
+  })
+
+  it('retains mode edits and invalid tiers when switching windows', async () => {
+    const page = await setup()
+    const tabs = page.findAll('[role="tab"]')
+    const day = page.get('[data-discount-table="day"]')
+    await day.findAll('[role="radio"]')[0]!.trigger('click')
+    await button(day, 'Add tier').trigger('click')
+    await tabs[1]!.trigger('click')
+    expect(tabs[0]!.text()).toContain('to fix')
+    await tabs[0]!.trigger('click')
+    expect(day.findAll('[role="radio"]')[0]!.attributes('aria-checked')).toBe(
+      'true'
+    )
+    expect(day.findAll('[data-discount-tier]')).toHaveLength(6)
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(true)
+    await day.get('[aria-label="Remove tier 6"]').trigger('click')
+    expect(
+      button(page, 'Save configuration').element.matches(':disabled')
+    ).toBe(false)
+  })
+})

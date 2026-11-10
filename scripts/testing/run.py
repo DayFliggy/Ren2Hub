@@ -280,7 +280,7 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     results = []
     suites = {
         './model': '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess)',
-        './service': '^Test(.*(Concurrency|Admission|UsageDiscount)|ObservationTrafficConcurrentSampleAndRead$)',
+        './service': '^Test(.*(Concurrency|Admission|TopUpDiscount)|ObservationTrafficConcurrentSampleAndRead$)',
         './controller': '^TestResponsesWebSocket(ReusesConnectionAndSettlesEachRequest|DisconnectSettlesDeliveredOutputOnce)$',
         './common': '^TestCountingListenerConcurrentConnections$',
     }

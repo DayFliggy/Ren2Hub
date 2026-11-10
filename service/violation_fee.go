@@ -113,8 +113,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 		return false
 	}
 
-	// A violation fee is a penalty, not usage: it is never discounted.
-	channelRatio := relayInfo.PriceData.ChannelRatioInfo.BaseRatio()
+	channelRatio := relayInfo.PriceData.ChannelRatioInfo.ChannelRatio
 	feeQuota := calcViolationFeeQuota(settings.ViolationDeductionAmount, channelRatio)
 	if feeQuota <= 0 {
 		return false

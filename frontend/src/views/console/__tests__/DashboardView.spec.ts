@@ -4,11 +4,11 @@ import { ref } from 'vue'
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import { dashboardFixture } from '@/api/__tests__/dashboardFixture'
-import { parseUsageDiscountSelf, usageDiscountApi } from '@/api/usageDiscount'
+import { parseTopupDiscountSelf, topupDiscountApi } from '@/api/topupDiscount'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import DashboardView from '@/views/console/DashboardView.vue'
-import selfResponse from '../../../../tests/fixtures/native/usage-discount-self.get.json'
+import selfResponse from '../../../../tests/fixtures/native/topup-discount-self.get.json'
 
 vi.mock('@/api/client', async (original) => ({
   ...(await original<typeof import('@/api/client')>()),
@@ -41,8 +41,8 @@ beforeEach(() => {
   vi.mocked(api.get).mockImplementation(async (path) =>
     dashboardFixture(path === '/api/data/summary' ? 999 : 10)
   )
-  vi.spyOn(usageDiscountApi, 'self').mockResolvedValue(
-    parseUsageDiscountSelf(selfResponse.data)
+  vi.spyOn(topupDiscountApi, 'self').mockResolvedValue(
+    parseTopupDiscountSelf(selfResponse.data)
   )
 })
 afterEach(() => {
@@ -138,7 +138,7 @@ it.each([10, 100])(
       'xl:col-span-2'
     )
     vi.mocked(api.get).mockClear()
-    vi.mocked(usageDiscountApi.self).mockClear()
+    vi.mocked(topupDiscountApi.self).mockClear()
     await allScope().trigger('click')
     await flushPromises()
     expect(wrapper.attributes('data-dashboard-scope')).toBe('all')
@@ -150,7 +150,7 @@ it.each([10, 100])(
     expect(wrapper.find('model-distribution-card-stub').classes()).toContain(
       'xl:col-span-3'
     )
-    expect(usageDiscountApi.self).not.toHaveBeenCalled()
+    expect(topupDiscountApi.self).not.toHaveBeenCalled()
     expect(api.get).toHaveBeenCalledTimes(4)
     expect(
       vi

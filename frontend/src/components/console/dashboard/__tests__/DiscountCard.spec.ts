@@ -2,7 +2,7 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-import type { UsageDiscountSelf } from '@/types/usageDiscount'
+import type { TopupDiscountSelf } from '@/types/topupDiscount'
 import { configureQuotaPerUnit } from '@/utils/quota'
 
 beforeAll(async () => {
@@ -14,17 +14,19 @@ afterEach(async () => {
   await setLocale('en')
 })
 
-const discounts: UsageDiscountSelf = {
+const discounts: TopupDiscountSelf = {
   status: 'ok',
   factor: '0.95',
-  global_factor: '0.97',
   fixed_rate: '0.01',
   site_rate: '0.02',
+  personal_rate: '0.04',
+  raw_rate: '0.07',
   applied_rate: '0.05',
   cap_rate: '0.05',
   cap_applied: true,
   winner_window: 'month',
   business_date: '2026-11-02',
+  amount_tiers: [],
   windows: [
     {
       window: 'day',
@@ -39,18 +41,20 @@ const discounts: UsageDiscountSelf = {
     { window: 'month', quota: '375000000', rate: '0.04', tiers: [] },
   ],
 }
-const neutral: UsageDiscountSelf = {
+const neutral: TopupDiscountSelf = {
   status: 'inactive',
   factor: '1',
-  global_factor: '1',
   fixed_rate: '0',
   site_rate: '0',
+  personal_rate: '0',
+  raw_rate: '0',
   applied_rate: '0',
   cap_rate: '0',
   cap_applied: false,
+  amount_tiers: [],
   windows: [],
 }
-function render(data: UsageDiscountSelf | null = discounts, extra = {}) {
+function render(data: TopupDiscountSelf | null = discounts, extra = {}) {
   return mount(DiscountCard, {
     props: { discounts: data, ...extra },
     global: { plugins: [i18n], stubs: { RouterLink: RouterLinkStub } },
@@ -98,18 +102,20 @@ describe('DiscountCard', () => {
       wrapper.get('[data-selected="true"]').attributes('data-discount-window')
     ).toBe('month')
   })
-  it('keeps capped global savings distinct from the uncapped components', () => {
+  it('shows the uncapped component sum and leaves the cap to the server factor', () => {
     const wrapper = render({
       ...discounts,
       fixed_rate: '0.04',
       site_rate: '0.03',
-      global_factor: '0.95',
+      raw_rate: '0.11',
     })
-    expect(wrapper.get('[data-discount-global]').text()).toContain('5% off')
+    expect(wrapper.get('[data-discount-global]').text()).toContain('7% off')
     expect(wrapper.get('[data-discount-global-parts]').text()).toBe(
       'Fixed 4% · Site 3%'
     )
     expect(wrapper.get('[data-discount-effective]').text()).toContain('0.95×')
+    expect(wrapper.get('[data-discount-effective]').text()).toContain('Sum 11%')
+    expect(wrapper.get('[data-discount-cap]').text()).toBe('Capped at 5%')
   })
   it('does not mark an adopted window when every active window has zero savings', () => {
     const wrapper = render({
@@ -132,8 +138,8 @@ describe('DiscountCard', () => {
         ...neutral,
         status: 'ok',
         fixed_rate: '0.0001',
+        raw_rate: '0.0001',
         factor: '0.9999',
-        global_factor: '0.9999',
         applied_rate: '0.0001',
         cap_rate: '0.05',
       })
@@ -195,12 +201,12 @@ describe('DiscountCard', () => {
       '2 USD to 2%'
     )
   })
-  it.each(['inactive', 'ok', 'not_applicable'] as const)(
+  it.each(['inactive', 'ok'] as const)(
     'shows standard pricing without invented progress or zero-value detail for %s',
     (status) => {
       const wrapper = render({ ...neutral, status, cap_rate: '0.05' })
       expect(wrapper.get('[data-discount-empty]').text()).toContain(
-        'Standard pricing'
+        'Full price'
       )
       expect(wrapper.get('[data-discount-effective]').text()).toContain('1×')
       expect(wrapper.find('[data-discount-ruler]').exists()).toBe(false)
@@ -238,6 +244,7 @@ describe('DiscountCard', () => {
     const wrapper = render({
       ...neutral,
       fixed_rate: '0.01',
+      raw_rate: '0.01',
       cap_applied: true,
     })
     expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
@@ -252,7 +259,7 @@ describe('DiscountCard', () => {
       ...neutral,
       status: 'ok',
       fixed_rate: '0.01',
-      global_factor: '0.99',
+      raw_rate: '0.01',
       factor: '0.99',
       applied_rate: '0.01',
       cap_rate: '0.05',
@@ -263,32 +270,21 @@ describe('DiscountCard', () => {
     )
     expect(wrapper.get('[data-discount-factor]').text()).toBe('0.99×')
   })
-  it('never treats unavailable data without a fixed discount as normal standard pricing', () => {
-    const wrapper = render({ ...neutral, status: 'unavailable' })
-    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
-    expect(wrapper.get('[data-discount-unavailable]').text()).toContain(
-      'temporarily unavailable'
-    )
-    expect(wrapper.get('[data-discount-factor]').text()).toBe('1×')
-  })
-  it('distinguishes unavailable windows from a zero personal discount', () => {
+  it('lists order-dependent amount tiers and never calls them standard pricing', () => {
     const wrapper = render({
       ...neutral,
-      status: 'unavailable',
-      factor: '0.99',
-      global_factor: '0.99',
-      fixed_rate: '0.01',
-      applied_rate: '0.01',
+      status: 'ok',
       cap_rate: '0.05',
+      amount_tiers: [
+        { threshold_quota: '50000000', rate: '0.02' },
+        { threshold_quota: '250000000', rate: '0.04' },
+      ],
     })
-    expect(wrapper.get('[data-discount-unavailable]').text()).toContain(
-      'only the fixed discount applies'
+    expect(wrapper.find('[data-discount-empty]').exists()).toBe(false)
+    expect(wrapper.get('[data-discount-amount-tiers]').text()).toBe(
+      'Larger top-ups also get: 2% off from 100 USD · 4% off from 500 USD'
     )
-    expect(wrapper.get('[data-discount-personal-empty]').text()).toContain(
-      'temporarily unavailable'
-    )
-    expect(wrapper.get('[data-discount-personal-rate]').text()).toBe('—')
-    expect(wrapper.get('[data-discount-effective]').text()).toContain('0.99×')
+    expect(wrapper.get('[data-discount-factor]').text()).toBe('1×')
   })
   it('never invents a rate when the request fails or has not loaded', () => {
     const failed = render(null, { error: 'Request timed out' })
@@ -306,11 +302,11 @@ describe('DiscountCard', () => {
   it('exposes a labelled settings link only when permitted and removes it on permission loss', async () => {
     const wrapper = render(discounts, { canConfigure: true })
     expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe(
-      '/system-settings/billing/usage-discount'
+      '/system-settings/billing/topup-discount'
     )
     expect(
       wrapper.get('[data-discount-configure]').attributes('aria-label')
-    ).toBe('Configure usage discounts')
+    ).toBe('Configure top-up discounts')
     await wrapper.setProps({ canConfigure: false })
     expect(wrapper.find('[data-discount-configure]').exists()).toBe(false)
   })

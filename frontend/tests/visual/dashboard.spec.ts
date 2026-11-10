@@ -820,7 +820,7 @@ test('RPM stays unconnected while the discount card reads the user discount', as
   await expect(rpm).toContainText('请求限速')
   await expect(rpm).toContainText('未接入')
   await expect(rpm.locator('.display-number')).toHaveText('--')
-  // usage-discount-self.get.json: factor 0.98, global factor 0.99.
+  // topup-discount-self.get.json: factor 0.98, fixed 1% and site 0%.
   const discount = page.locator('[data-discount-card]')
   await expect(discount).toHaveCount(1)
   await expect(discount).toContainText('0.98×')

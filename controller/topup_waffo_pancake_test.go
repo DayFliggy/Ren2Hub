@@ -1,29 +1,30 @@
 package controller
 
 import (
-	"maps"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFormatWaffoPancakeAmount_UsesDisplayPriceString(t *testing.T) {
+func TestRoundTopUpPayUsesDisplayPriceString(t *testing.T) {
 	testCases := []struct {
 		name     string
-		amount   float64
+		amount   string
 		expected string
 	}{
-		{name: "whole amount", amount: 29, expected: "29.00"},
-		{name: "decimal amount", amount: 29.9, expected: "29.90"},
-		{name: "round half up to cents", amount: 29.999, expected: "30.00"},
+		{name: "whole amount", amount: "29", expected: "29.00"},
+		{name: "decimal amount", amount: "29.9", expected: "29.90"},
+		{name: "round half up to cents", amount: "29.995", expected: "30.00"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, formatWaffoPancakeAmount(tc.amount))
+			require.Equal(t, tc.expected, service.RoundTopUpPay(decimal.RequireFromString(tc.amount), "USD"))
 		})
 	}
 }
@@ -31,53 +32,42 @@ func TestFormatWaffoPancakeAmount_UsesDisplayPriceString(t *testing.T) {
 func TestGetWaffoPancakePayMoney(t *testing.T) {
 	originalUnitPrice := setting.WaffoPancakeUnitPrice
 	originalQuotaDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
-	originalDiscounts := make(map[int]float64, len(operation_setting.GetPaymentSetting().AmountDiscount))
-	maps.Copy(originalDiscounts, operation_setting.GetPaymentSetting().AmountDiscount)
-
 	t.Cleanup(func() {
 		setting.WaffoPancakeUnitPrice = originalUnitPrice
 		operation_setting.GetGeneralSetting().QuotaDisplayType = originalQuotaDisplayType
-		operation_setting.GetPaymentSetting().AmountDiscount = originalDiscounts
 	})
-
 	setting.WaffoPancakeUnitPrice = 2.5
-	operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{
-		10:                           0.8,
-		int(common.QuotaPerUnit * 3): 0.5,
-		20:                           0,
-	}
 
 	testCases := []struct {
 		name             string
 		amount           int64
 		quotaDisplayType string
-		expected         float64
+		expected         string
 	}{
-		{
-			name:             "currency display applies unit price and discount ",
-			amount:           10,
-			quotaDisplayType: operation_setting.QuotaDisplayTypeUSD,
-			expected:         20,
-		},
-		{
-			name:             "tokens display converts quota to display units before pricing",
-			amount:           int64(common.QuotaPerUnit * 3),
-			quotaDisplayType: operation_setting.QuotaDisplayTypeTokens,
-			expected:         3.75,
-		},
-		{
-			name:             "non-positive discount falls back to no discount",
-			amount:           20,
-			quotaDisplayType: operation_setting.QuotaDisplayTypeUSD,
-			expected:         50,
-		},
+		{name: "currency display applies unit price", amount: 10, quotaDisplayType: operation_setting.QuotaDisplayTypeUSD, expected: "25"},
+		{name: "tokens display converts quota to display units before pricing", amount: int64(common.QuotaPerUnit * 3), quotaDisplayType: operation_setting.QuotaDisplayTypeTokens, expected: "7.5"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			operation_setting.GetGeneralSetting().QuotaDisplayType = tc.quotaDisplayType
-			actual := getWaffoPancakePayMoney(tc.amount)
-			require.InDelta(t, tc.expected, actual, 0.000001)
+			require.Equal(t, tc.expected, getWaffoPancakePayMoney(tc.amount).String())
 		})
 	}
+}
+
+func TestGetWaffoPayMoneyStaysDecimalUnderTokens(t *testing.T) {
+	originalUnitPrice, originalQuotaPerUnit := setting.WaffoUnitPrice, common.QuotaPerUnit
+	originalQuotaDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	t.Cleanup(func() {
+		setting.WaffoUnitPrice, common.QuotaPerUnit = originalUnitPrice, originalQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = originalQuotaDisplayType
+	})
+	setting.WaffoUnitPrice, common.QuotaPerUnit = 0.01, 1.1
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeTokens
+	// 33 / 1.1 is exactly 30; float division gives 29.999999999999996, which
+	// after a 5% discount rounds 0.285 down to 0.28 instead of up to 0.29.
+	list := getWaffoPayMoney(33)
+	require.Equal(t, "0.3", list.String())
+	require.Equal(t, "0.29", service.RoundTopUpPay(list.Mul(decimal.RequireFromString("0.95")), "USD"))
 }

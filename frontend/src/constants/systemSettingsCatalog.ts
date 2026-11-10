@@ -18,7 +18,6 @@ export type SystemSettingFieldKind =
   | 'select'
   | 'role'
   | 'amount-list'
-  | 'discount'
 
 export interface SystemSettingOption {
   value: string
@@ -51,7 +50,7 @@ export interface SystemSettingsSection {
     | 'channel-affinity'
     | 'waffo-pancake'
     | 'gmpay'
-    | 'usage-discount'
+    | 'topup-discount'
     | 'payment-compliance'
     | 'operations-maintenance'
 }
@@ -143,8 +142,6 @@ const select = (
 })
 const amountList = (key: string, label: string, description?: string) =>
   field('amount-list', key, label, '[]', description)
-const discount = (key: string, label: string, description?: string) =>
-  field('discount', key, label, '{}', description)
 
 export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
   {
@@ -302,11 +299,11 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
     defaultSection: 'quota',
     sections: [
       {
-        id: 'usage-discount',
-        titleKey: 'systemSettings.sections.usageDiscount',
-        descriptionKey: 'systemSettings.sections.usageDiscountDescription',
+        id: 'topup-discount',
+        titleKey: 'systemSettings.sections.topupDiscount',
+        descriptionKey: 'systemSettings.sections.topupDiscountDescription',
         fields: [],
-        integration: 'usage-discount',
+        integration: 'topup-discount',
       },
       {
         id: 'affiliate',
@@ -428,11 +425,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             'payment_setting.amount_options',
             'amountOptions',
             'amountOptionsHint'
-          ),
-          discount(
-            'payment_setting.amount_discount',
-            'discount',
-            'discountHint'
           ),
           secret('WaffoSandboxApiKey', 'waffoSandboxApiKey'),
           secret('WaffoSandboxPrivateKey', 'waffoSandboxPrivateKey'),

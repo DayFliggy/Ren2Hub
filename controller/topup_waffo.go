@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/thanhpk/randstr"
 	waffo "github.com/waffo-com/waffo-go"
 	"github.com/waffo-com/waffo-go/config"
@@ -72,36 +73,19 @@ func buildWaffoTopUpGoodsInfo(amount int64) *order.GoodsInfo {
 	}
 }
 
-// zeroDecimalCurrencies 零小数位币种，金额不能带小数点
-var zeroDecimalCurrencies = map[string]bool{
-	"IDR": true, "JPY": true, "KRW": true, "VND": true,
-}
-
-func formatWaffoAmount(amount float64, currency string) string {
-	if zeroDecimalCurrencies[currency] {
-		return fmt.Sprintf("%.0f", amount)
-	}
-	return fmt.Sprintf("%.2f", amount)
-}
-
 // getWaffoPayMoney converts the user-facing amount to USD for Waffo payment.
 // Waffo only accepts USD, so this function handles the conversion from different
 // display types (USD/CNY/TOKENS) to the actual USD amount to charge.
-func getWaffoPayMoney(amount float64) float64 {
-	originalAmount := amount
+func getWaffoPayMoney(amount int64) decimal.Decimal {
+	dAmount := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		amount = amount / common.QuotaPerUnit
+		dAmount = dAmount.Div(decimal.NewFromFloat(common.QuotaPerUnit))
 	}
-	discount := 1.0
-	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]; ok {
-		if ds > 0 {
-			discount = ds
-		}
-	}
-	return amount * setting.WaffoUnitPrice * discount
+	return dAmount.Mul(decimal.NewFromFloat(setting.WaffoUnitPrice))
 }
 
 type WaffoPayRequest struct {
+	service.TopUpQuoteExpectation
 	Amount         int64  `json:"amount"`
 	PayMethodIndex *int   `json:"pay_method_index"` // 服务端支付方式列表的索引，nil 表示由 Waffo 自动选择
 	PayMethodType  string `json:"pay_method_type"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
@@ -125,13 +109,16 @@ func RequestWaffoAmount(c *gin.Context) {
 		return
 	}
 
-	payMoney := getWaffoPayMoney(float64(req.Amount))
-	if payMoney <= 0.01 {
+	quote := quoteTopUp(c, req.Amount, getWaffoPayMoney(req.Amount), getWaffoCurrency())
+	if quote == nil {
+		return
+	}
+	if quote.PayDecimal().InexactFloat64() <= 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": strconv.FormatFloat(payMoney, 'f', 2, 64)})
+	respondTopUpQuote(c, quote)
 }
 
 // RequestWaffoPay 创建 Waffo 支付订单
@@ -193,9 +180,16 @@ func RequestWaffoPay(c *gin.Context) {
 		}
 	}
 	// resolvedPayMethodType/Name 为空时，Waffo 自动选择支付方式
-	payMoney := getWaffoPayMoney(float64(req.Amount))
+	quote := quoteTopUp(c, req.Amount, getWaffoPayMoney(req.Amount), getWaffoCurrency())
+	if quote == nil {
+		return
+	}
+	payMoney := quote.PayDecimal().InexactFloat64()
 	if payMoney < 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
+		return
+	}
+	if !confirmTopUpQuote(c, req.TopUpQuoteExpectation, quote) {
 		return
 	}
 
@@ -211,17 +205,19 @@ func RequestWaffoPay(c *gin.Context) {
 
 	// 创建本地订单
 	topUp := &model.TopUp{
-		Currency: getWaffoCurrency(), PayAmount: formatWaffoAmount(payMoney, getWaffoCurrency()),
 		UserId:          id,
 		Amount:          amount,
-		Money:           payMoney,
 		TradeNo:         merchantOrderId,
 		PaymentMethod:   model.PaymentMethodWaffo,
 		PaymentProvider: model.PaymentProviderWaffo,
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
-	if err := topUp.Insert(); err != nil {
+	err = attachTopUpQuote(topUp, quote)
+	if err == nil {
+		err = topUp.Insert()
+	}
+	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo failed to create top-up order user_id=%d trade_no=%s amount=%d error=%q", id, merchantOrderId, req.Amount, err.Error()))
 		paymentError(c, common.NewMessage("Failed to create order"))
 		return
@@ -248,12 +244,12 @@ func RequestWaffoPay(c *gin.Context) {
 		returnUrl = setting.WaffoReturnUrl
 	}
 
-	currency := getWaffoCurrency()
+	currency := quote.Currency
 	goodsInfo := buildWaffoTopUpGoodsInfo(req.Amount)
 	createParams := &order.CreateOrderParams{
 		PaymentRequestID: paymentRequestId,
 		MerchantOrderID:  merchantOrderId,
-		OrderAmount:      formatWaffoAmount(payMoney, currency),
+		OrderAmount:      quote.PayAmount,
 		OrderCurrency:    currency,
 		OrderDescription: goodsInfo.GoodsName,
 		OrderRequestedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),

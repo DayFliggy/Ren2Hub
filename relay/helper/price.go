@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -37,22 +36,13 @@ func modelPriceNotConfiguredError(c *gin.Context, modelName string, userId int) 
 
 // HandleChannelRatio uses the selected channel's validated decimal multiplier.
 // Every pricing entry must stop on the error: an invalid ratio never bills as 0.
-// It is the only place the usage discount factor is applied; the decision is
-// kept on info so retries and repricing of the same request reuse it.
-func HandleChannelRatio(ctx *gin.Context, info *relaycommon.RelayInfo) (hosttypes.ChannelRatioInfo, error) {
+func HandleChannelRatio(ctx *gin.Context) (hosttypes.ChannelRatioInfo, error) {
 	value, err := model.NormalizeChannelRatio(ctx.GetString("channel_ratio"))
 	if err != nil {
 		return hosttypes.ChannelRatioInfo{}, fmt.Errorf("selected channel ratio is invalid: %w", err)
 	}
-	base, _ := decimal.NewFromString(value)
-	if info.UsageDiscount == nil {
-		info.UsageDiscount = service.ResolveUsageDiscount(info.UserId, info.IsChannelTest)
-	}
-	return hosttypes.ChannelRatioInfo{
-		ChannelRatio:     base.Mul(info.UsageDiscount.Factor).InexactFloat64(),
-		BaseChannelRatio: base.InexactFloat64(),
-		UsageDiscount:    info.UsageDiscount,
-	}, nil
+	ratio, _ := decimal.NewFromString(value)
+	return hosttypes.ChannelRatioInfo{ChannelRatio: ratio.InexactFloat64()}, nil
 }
 
 // isFreeModel is the single free-model rule. Channel ratios are always
@@ -77,7 +67,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	billingModelName := info.GetBillingModelName()
 	modelPrice, usePrice := ratio_setting.GetModelPrice(billingModelName, false)
 
-	channelRatioInfo, err := HandleChannelRatio(c, info)
+	channelRatioInfo, err := HandleChannelRatio(c)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
@@ -207,7 +197,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
-	channelRatioInfo, err := HandleChannelRatio(c, info)
+	channelRatioInfo, err := HandleChannelRatio(c)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}

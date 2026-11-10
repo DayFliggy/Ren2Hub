@@ -2,6 +2,7 @@ import {
   invalidResponse,
   isRecord,
   requiredBoolean,
+  requiredQuota,
   requiredStrictInteger,
   requiredString,
 } from './contracts'
@@ -10,6 +11,12 @@ import { httpTransport } from './httpTransport'
 import { ApiError } from './types'
 import { getLocale } from '@/i18n'
 import { serverResponseMessage } from '@/i18n/serverMessages'
+import {
+  TOPUP_DISCOUNT_WINDOWS,
+  type TopupDiscountWindow,
+} from '@/types/topupDiscount'
+import { compareDecimal, isDecimal } from '@/utils/decimal'
+import type { Quota } from '@/utils/quota'
 export interface PayMethod {
   type: string
   name: string
@@ -44,7 +51,6 @@ export interface TopupInfo {
   waffo_min_topup: number
   waffo_pancake_min_topup: number
   amount_options: number[]
-  discount: Record<string, number>
   topup_link: string
 }
 export interface GmpayAsset {
@@ -155,15 +161,78 @@ export function parseTopupInfo(value: unknown): TopupInfo {
         : invalidResponse(endpoint)
   result.creem_products = requiredString(value.creem_products, endpoint)
   result.topup_link = requiredString(value.topup_link, endpoint)
+  return result
+}
+
+/**
+ * service.TopUpQuote.PublicView: the server's price for one Epay, GMPay, Waffo
+ * or Waffo Pancake top-up. Amounts and rates are exact decimal strings.
+ */
+export interface TopupQuote {
+  expected_quota: Quota
+  currency: string
+  list_pay_amount: string
+  pay_amount: string
+  factor: string
+  applied_rate: string
+  amount_rate: string
+  fixed_rate: string
+  site_rate: string
+  personal_rate: string
+  cap_applied: boolean
+  winner_window?: TopupDiscountWindow
+}
+/** Pay error code: no order exists and the response carries the new quote. */
+const TOPUP_QUOTE_CHANGED = 'topup_quote_changed'
+function requiredDecimal(value: unknown, endpoint: string): string {
+  if (!isDecimal(value)) invalidResponse(endpoint)
+  return value
+}
+function requiredPayAmount(value: unknown, endpoint: string): string {
+  const amount = requiredDecimal(value, endpoint)
+  if (compareDecimal(amount, '0') <= 0) invalidResponse(endpoint)
+  return amount
+}
+export function parseTopupQuote(value: unknown, endpoint: string): TopupQuote {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const expectedQuota = requiredQuota(value.expected_quota, endpoint)
+  const currency = requiredString(value.currency, endpoint)
+  const window = value.winner_window
   if (
-    !isRecord(value.discount) ||
-    Object.values(value.discount).some(
-      (v) => typeof v !== 'number' || !Number.isFinite(v) || v <= 0
-    )
+    BigInt(expectedQuota) <= 0n ||
+    !/^[A-Z]{3}$/.test(currency) ||
+    (window !== undefined &&
+      !TOPUP_DISCOUNT_WINDOWS.includes(window as TopupDiscountWindow))
   )
     invalidResponse(endpoint)
-  result.discount = value.discount as Record<string, number>
-  return result
+  return {
+    expected_quota: expectedQuota,
+    currency,
+    list_pay_amount: requiredPayAmount(value.list_pay_amount, endpoint),
+    pay_amount: requiredPayAmount(value.pay_amount, endpoint),
+    factor: requiredDecimal(value.factor, endpoint),
+    applied_rate: requiredDecimal(value.applied_rate, endpoint),
+    amount_rate: requiredDecimal(value.amount_rate, endpoint),
+    fixed_rate: requiredDecimal(value.fixed_rate, endpoint),
+    site_rate: requiredDecimal(value.site_rate, endpoint),
+    personal_rate: requiredDecimal(value.personal_rate, endpoint),
+    cap_applied: requiredBoolean(value.cap_applied, endpoint),
+    ...(window === undefined
+      ? {}
+      : { winner_window: window as TopupDiscountWindow }),
+  }
+}
+/** The server's new quote when a pay request was rejected for a price change. */
+export function quoteChangedFrom(error: unknown): TopupQuote | null {
+  if (
+    !(error instanceof ApiError) ||
+    error.code !== TOPUP_QUOTE_CHANGED ||
+    !isRecord(error.data) ||
+    !isRecord(error.data.quote)
+  )
+    return null
+  // paymentRequest sets this data only after parseTopupQuote succeeds.
+  return error.data.quote as unknown as TopupQuote
 }
 export function parseCreemProducts(text: string): CreemProduct[] {
   let value: unknown
@@ -214,7 +283,7 @@ export async function paymentRequest<T>(
   payload: unknown,
   signal?: AbortSignal,
   method: 'POST' | 'GET' = 'POST'
-): Promise<{ data: T; url?: string }> {
+): Promise<{ data: T; url?: string; quote?: TopupQuote }> {
   const response: unknown = await httpTransport.request<T>(method, path, {
     data: payload,
     signal,
@@ -228,6 +297,7 @@ export async function paymentRequest<T>(
     // GMPay puts its order fields at the top level and the Pancake pair puts
     // its failure inside data, so the two shapes cannot overlap.
     const pairFailure = parseWaffoPancakePairFailure(response.data)
+    const code = typeof response.code === 'string' ? response.code : undefined
     throw new ApiError(
       serverResponseMessage(getLocale(), {
         ...response,
@@ -238,7 +308,11 @@ export async function paymentRequest<T>(
       }) || 'Payment failed',
       {
         business: true,
-        data: parseCreationFailure(response) ?? pairFailure,
+        code,
+        data:
+          code === TOPUP_QUOTE_CHANGED
+            ? { quote: parseTopupQuote(response.quote, path) }
+            : (parseCreationFailure(response) ?? pairFailure),
       }
     )
   }
@@ -250,6 +324,9 @@ export async function paymentRequest<T>(
   return {
     data: response.data as T,
     ...(typeof response.url === 'string' ? { url: response.url } : {}),
+    ...(response.quote === undefined
+      ? {}
+      : { quote: parseTopupQuote(response.quote, path) }),
   }
 }
 
@@ -323,19 +400,28 @@ export const topupApi = {
       await api.get<unknown>('/api/user/topup/info', undefined, { signal })
     )
   },
-  async quote(method: string, amount: number, signal?: AbortSignal) {
+  /** Stripe answers a bare payable amount; the discounted providers a quote. */
+  async quote(
+    method: string,
+    amount: number,
+    signal?: AbortSignal
+  ): Promise<{ pay_amount: string; quote: TopupQuote | null }> {
     const provider = paymentProvider(method)
     const prefix =
       provider === 'gmpay' || provider === 'epay'
         ? ''
         : `${provider.replaceAll('_', '-')}/`
-    return (
-      await paymentRequest<string>(
-        `/api/user/${prefix}amount`,
-        { amount, payment_method: method },
-        signal
-      )
-    ).data
+    const path = `/api/user/${prefix}amount`
+    const response = await paymentRequest<unknown>(
+      path,
+      { amount, payment_method: method },
+      signal
+    )
+    if (provider === 'stripe')
+      return { pay_amount: requiredPayAmount(response.data, path), quote: null }
+    if (!response.quote || response.data !== response.quote.pay_amount)
+      invalidResponse(path)
+    return { pay_amount: response.quote.pay_amount, quote: response.quote }
   },
   pay(method: string, payload: Record<string, unknown>, signal?: AbortSignal) {
     const provider = paymentProvider(method)

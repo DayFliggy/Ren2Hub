@@ -137,7 +137,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       })
       expect(denied.status()).toBe(403)
       expect((await denied.json()).success).toBe(false)
-      const discount = await page.request.get('/api/user/usage-discount', {
+      const discount = await page.request.get('/api/user/topup-discount', {
         headers: { Authorization: 'Bearer ' + userToken },
       })
       expect(discount.status()).toBe(200)
@@ -148,7 +148,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       )
       await expect(page.locator('[data-discount-configure]')).toHaveCount(0)
       const discountSettings = await page.request.get(
-        '/api/option/usage_discount',
+        '/api/option/topup_discount',
         { headers: { Authorization: 'Bearer ' + userToken } }
       )
       expect(discountSettings.status()).toBe(403)
@@ -390,7 +390,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
     })
     await test.step('折扣卡片读取真实配置、封顶结果与个人窗口，刷新后保持', async () => {
       const headers = { Authorization: 'Bearer ' + rootToken }
-      const loaded = await page.request.get('/api/option/usage_discount', {
+      const loaded = await page.request.get('/api/option/topup_discount', {
         headers,
       })
       expect(loaded.status()).toBe(200)
@@ -401,7 +401,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         tiers: [{ threshold_quota: '0', rate }],
       })
       // Only the runner's isolated instance is writable; no production data.
-      const saved = await page.request.patch('/api/option/usage_discount', {
+      const saved = await page.request.patch('/api/option/topup_discount', {
         headers,
         data: {
           expected_version: settings.data.version,
@@ -421,7 +421,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       })
       expect(saved.status()).toBe(200)
       expect((await saved.json()).success).toBe(true)
-      const self = await page.request.get('/api/user/usage-discount', {
+      const self = await page.request.get('/api/user/topup-discount', {
         headers,
       })
       expect(self.status()).toBe(200)
@@ -429,7 +429,10 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       expect(result.success).toBe(true)
       expect(result.data).toMatchObject({
         factor: '0.95',
-        global_factor: '0.97',
+        fixed_rate: '0.01',
+        site_rate: '0.02',
+        personal_rate: '0.04',
+        raw_rate: '0.07',
         applied_rate: '0.05',
         cap_applied: true,
         winner_window: 'month',
@@ -456,7 +459,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       await card.screenshot({ path: info.outputPath('discount-card-live.png') })
       await card.locator('[data-discount-configure]').click()
       await expect(page).toHaveURL(
-        /\/system-settings\/billing\/usage-discount$/
+        /\/system-settings\/billing\/topup-discount$/
       )
       const editor = page.locator('[data-discount-editor]')
       await expect(editor).toBeVisible()
@@ -464,7 +467,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       await editor.getByLabel('固定折扣', { exact: true }).fill('1.25')
       const updated = page.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === '/api/option/usage_discount' &&
+          new URL(response.url()).pathname === '/api/option/topup_discount' &&
           response.request().method() === 'PATCH'
       )
       await editor
@@ -473,7 +476,7 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
       const update = await updated
       expect(update.status()).toBe(200)
       expect((await update.json()).success).toBe(true)
-      const reloaded = await page.request.get('/api/option/usage_discount', {
+      const reloaded = await page.request.get('/api/option/topup_discount', {
         headers,
       })
       expect((await reloaded.json()).data.config.fixed_rate).toBe('0.0125')
@@ -482,9 +485,9 @@ test('真实后端：会话、权限、Key 路由、钱包、工单与设置', a
         '1.25'
       )
       await editor.getByRole('tab', { name: /近 30 日/ }).click()
-      await layout(page, '系统折扣')
+      await layout(page, '充值折扣')
       await editor.screenshot({
-        path: info.outputPath('system-discounts-live.png'),
+        path: info.outputPath('topup-discounts-live.png'),
       })
     })
   } finally {

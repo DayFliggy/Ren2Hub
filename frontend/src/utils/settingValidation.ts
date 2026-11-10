@@ -78,9 +78,7 @@ export function validateSetting(
       ? null
       : 'shape'
   if (
-    !['json', 'list', 'key-value', 'ratio', 'amount-list', 'discount'].includes(
-      field.kind
-    )
+    !['json', 'list', 'key-value', 'ratio', 'amount-list'].includes(field.kind)
   )
     return null
   let parsed: unknown
@@ -179,18 +177,6 @@ export function validateSetting(
     return object(parsed) &&
       Object.values(parsed).every(
         (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0
-      )
-      ? null
-      : 'range'
-  if (field.kind === 'discount')
-    return object(parsed) &&
-      Object.entries(parsed).every(
-        ([k, v]) =>
-          Number.isSafeInteger(Number(k)) &&
-          Number(k) > 0 &&
-          typeof v === 'number' &&
-          v > 0 &&
-          v <= 1
       )
       ? null
       : 'range'

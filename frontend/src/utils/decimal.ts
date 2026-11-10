@@ -97,6 +97,16 @@ export function shiftDecimal(value: string, places: number): string {
     ? render(parsed.coefficient * 10n ** BigInt(-scale), 0)
     : render(parsed.coefficient, scale)
 }
+export function addDecimal(left: string, right: string): string {
+  const a = parts(left),
+    b = parts(right),
+    scale = Math.max(a.scale, b.scale)
+  return render(
+    a.coefficient * 10n ** BigInt(scale - a.scale) +
+      b.coefficient * 10n ** BigInt(scale - b.scale),
+    scale
+  )
+}
 export function compareDecimal(left: string, right: string): number {
   const a = parts(left),
     b = parts(right),

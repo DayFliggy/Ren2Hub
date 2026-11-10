@@ -322,9 +322,9 @@ func InitResources() error {
 		}
 	}
 	model.InitOptionMap()
-	// Pricing applies the saved fixed discount; never serve without it.
-	if _, err = model.CurrentUsageDiscountSettings(); err != nil {
-		common.FatalLog(common.LogText("failed to load usage discount config: %s", err.Error()))
+	// Top-up quotes apply the saved discount; never serve without it.
+	if _, err = model.CurrentTopUpDiscountSettings(); err != nil {
+		common.FatalLog(common.LogText("failed to load top-up discount config: %s", err.Error()))
 		return err
 	}
 

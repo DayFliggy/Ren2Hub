@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDecimal,
   formatDecimal,
   formatDecimalUSD,
   formatUnitPriceUSD,
@@ -16,6 +17,11 @@ describe('billing presentation precision', () => {
     )
     expect(divideDecimal('1', '3')).toBe('0.333333333333333333')
     expect(() => divideDecimal('1', '0')).toThrow('Zero exchange rate')
+  })
+  it('adds rates of any scale exactly', () => {
+    expect(addDecimal('0.0001', '0.02')).toBe('0.0201')
+    expect(addDecimal('0.00000001', '0')).toBe('0.00000001')
+    expect(addDecimal('0.1', '0.2')).toBe('0.3')
   })
   it('retains significant digits for very small prices', () => {
     expect(divideDecimalSignificant('0.00000000000000001', '7')).toBe(

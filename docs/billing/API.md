@@ -6,7 +6,7 @@
 | --- | --- |
 | `GET /api/user/self` | 当前用户 `quota`、`used_quota`、权限与设置 |
 | `GET/POST /api/token/`、`PUT /api/token/` | API Key 原生预算、模型及 IP 限制；路由由 `/routing` 子接口管理 |
-| `GET /api/user/topup/info` | 当前启用支付方式、最低金额和折扣；含 GMPay 开关及资产 |
+| `GET /api/user/topup/info` | 当前启用支付方式和最低金额；含 GMPay 开关及资产 |
 | `POST /api/user/amount` | 原生充值金额计算，结果为格式化金额字符串 |
 | `GET /api/user/topup/self` | 本人原生充值记录；`start_time` 早于 30 天截止点时截到截止点 |
 | `GET /api/user/topup`、`POST /api/user/topup/complete` | 管理员查询与人工补单 |

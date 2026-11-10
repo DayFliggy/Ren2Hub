@@ -3,9 +3,9 @@
   "implementation_base_sha": "a276b48eaa60ae2ff1e761c21f5ac5fb526a541c",
   "scope": "冻结上游核心复制范围及相同源码目录的本地新增文件，包含本轮新增 Go 回归；Vue、根发布自动化与文档分别审阅。当前内容哈希不代表已提交或候选验收通过。",
   "counts": {
-    "upstream_equal": 798,
-    "adapted": 279,
-    "extension": 277,
+    "upstream_equal": 797,
+    "adapted": 280,
+    "extension": 276,
     "removed": 45
   },
   "files": [
@@ -1230,13 +1230,14 @@
       "path": "controller/gmpay.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "682d468b75c9eb01b6bf001f967a0a2c3dc18c9c9fe6bab5d12cbdbe04efd5b9",
+      "local_sha256": "43d8a9c930bddf577c06e8c701c261b722bc515776e01c966af67b49e8889de1",
       "reasons": [
-        "gmpay"
+        "gmpay",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "GMPay 下单、验签回调、只读订单、管理配置和连通探测；服务层下单/结算并绑定原生钱包，配置错误不伪装成功。",
+        "basis": "GMPay 下单、验签回调、只读订单、管理配置和连通探测；服务层下单/结算并绑定原生钱包，配置错误不伪装成功。；GMPay 下单经 QuoteTopUp 报价并核对确认金额。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -1256,7 +1257,7 @@
       "path": "controller/gmpay_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "19d621302b67f54db5c2601fe0973e7d7611f8987db4ffa931f3dc67df2bc0d5"
+      "local_sha256": "6f8f5671b0f719e77acb1538486742082a99f9f244a1f69e693d12d3f044b36b"
     },
     {
       "path": "controller/group.go",
@@ -1647,7 +1648,7 @@
       "path": "controller/plugin_native_e2e_test.go",
       "status": "adapted",
       "upstream_sha256": "2046f630660b84e3c24862ca4170728d955b3eb5fb8c12ee8e3990c75dcaaeb6",
-      "local_sha256": "4098c4b5f8714ca32fe9f6b19d68a4b134325632934691e4030c2235c1725709"
+      "local_sha256": "f05c7e6818e1a96149a3817c90446f425540a116a4fcc9155feafbb0f615fd15"
     },
     {
       "path": "controller/plugin_protocol.go",
@@ -1793,15 +1794,14 @@
       "path": "controller/relay.go",
       "status": "adapted",
       "upstream_sha256": "8fba19dd30e120e7eb9fa92c6cf4e11e29e9ea69596ce4c4df59814f9777a50b",
-      "local_sha256": "49cbe860b670ced631ad3b7778f0d896cd1e6ba193547e452ec10c8a114aacb6",
+      "local_sha256": "1dd627871a82e9b2e088af9bda01dd20004d5d4fde2d1dc68fe970a6f7a5be46",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
         "native-count",
         "retired",
-        "token-routing",
-        "usage-discount"
+        "token-routing"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
@@ -2294,16 +2294,17 @@
       "path": "controller/topup.go",
       "status": "adapted",
       "upstream_sha256": "d8fcd357d4fcf8666143e171b051ba7bfe7d1165972762a94ace33bc6efa5393",
-      "local_sha256": "19ea3dddcf64063f49e494172363d00bb809fc41788bc5443f37fe8d286e9682",
+      "local_sha256": "e1881c4a3f7eb00e99086070f505ad0d0c65de1a0c59c97219cc56570166b5b8",
       "reasons": [
         "affiliate",
         "gmpay",
         "group-removal",
-        "payment-integrity"
+        "payment-integrity",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "GMPay 展示与原生充值同路；删除 group 价格倍率；订单冻结付款金额/币种，Epay 校验回执并脱敏日志，列表复用统一订单查询。",
+        "basis": "GMPay 展示与原生充值同路；删除 group 价格倍率；订单冻结付款金额/币种，Epay 校验回执并脱敏日志，列表复用统一订单查询。；易支付与 GMPay 共用的 getPayMoney 去掉上游 AmountDiscount，经 QuoteTopUp 一次报价并核对用户确认的实付；topup/info 不再返回 discount。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "vue/counterfactual-summary.json#payment-wallet",
@@ -2338,6 +2339,40 @@
       }
     },
     {
+      "path": "controller/topup_discount.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "a9345a4becf341a2e5aa3115754b5daa57c362e1e4764416bcaa03b6945e714d",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "配置读取、版本化保存、状态、估算与本人视图 API，严格 JSON，用户视图绑定当前用户。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "controller/topup_discount_pay.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "b4325954157cd7366130f1ff05cfc87dc23b552c3f6b37004547baaa5cb0a3e0",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "四个报价渠道共用的报价、确认与订单冻结入口，确认在建单和网关调用前执行。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "controller/topup_discount_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "67800ff7a10e9a46925aa5a59c4a76bc5792aacb593bca519b6cf5a4c0135599"
+    },
+    {
       "path": "controller/topup_logging_test.go",
       "status": "extension",
       "upstream_sha256": null,
@@ -2347,14 +2382,15 @@
       "path": "controller/topup_query.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "0b8c3a38f2499af34f5c17e0f79b347d34a3cbcdd64556b0e31c85eb2f4aff02",
+      "local_sha256": "1d94327452225bb4f1863a41c56434158b58ff708c256a86788cedbc593efefd",
       "reasons": [
         "affiliate",
-        "gmpay"
+        "gmpay",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "用户/管理订单列表、明细和统计统一解析筛选；绑定当前用户或管理员权限，保持原生 TopUp 唯一订单事实。",
+        "basis": "用户/管理订单列表、明细和统计统一解析筛选；绑定当前用户或管理员权限，保持原生 TopUp 唯一订单事实。；管理员订单详情附带冻结的折扣决策。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -2362,7 +2398,7 @@
       "path": "controller/topup_query_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "a873b6e0d73d22e46726bb6cbf36b98265e0676e557a1624433c5a49970bdb36"
+      "local_sha256": "e68a97ca4198a63172c5dfb3bc5ee2ab54f51928ac09a0ed5694ef95f49015f2"
     },
     {
       "path": "controller/topup_quota_limit_test.go",
@@ -2374,16 +2410,17 @@
       "path": "controller/topup_stripe.go",
       "status": "adapted",
       "upstream_sha256": "b544c2b3dab224ea4d06baf197ecca9de53ac0cfa93d30c5bb3b30d2b90d1333",
-      "local_sha256": "91008a88d504965d6d2cfdb4cdf4aca8c87acc3fe7e46dacededf0f05799defc",
+      "local_sha256": "7bcdac0bc927eca2381d771caf7dec6c178f1358a83bd96f7fd901c74c274847",
       "reasons": [
         "affiliate",
         "group-removal",
         "payment-integrity",
-        "retired"
+        "retired",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "从已验签 Checkout Session 提取原币种 amount_subtotal（含 Adaptive Pricing）与订单冻结值比较；瞬时失败返回 500，永久拒绝 ACK；删除 group/订阅。",
+        "basis": "从已验签 Checkout Session 提取原币种 amount_subtotal（含 Adaptive Pricing）与订单冻结值比较；瞬时失败返回 500，永久拒绝 ACK；删除 group/订阅。；Stripe 报价删除上游 AmountDiscount，实扣仍为远端 Price，不接入充值折扣。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "vue/counterfactual-summary.json#payment-wallet",
@@ -2395,16 +2432,17 @@
       "path": "controller/topup_waffo.go",
       "status": "adapted",
       "upstream_sha256": "8a20566d4c8db5e61d36c5e2b21e3c43952c2480fd0a569bdb31047f1a2e6bb4",
-      "local_sha256": "4e446a4918da1cf38b719a99059f74e9de8662b13d712097adc540da1bdebb02",
+      "local_sha256": "5927a9133b4286a374efa4d4e3e0a1e1c3cfcb0ce243df82d9e4a60a58ea04d7",
       "reasons": [
         "affiliate",
         "group-removal",
         "payment-integrity",
-        "retired"
+        "retired",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "创建时冻结金额币种，回调通过统一原生充值事务校验；删除 group/订阅，失败状态持久化错误可见，重试只对瞬时错误。",
+        "basis": "创建时冻结金额币种，回调通过统一原生充值事务校验；删除 group/订阅，失败状态持久化错误可见，重试只对瞬时错误。；Waffo 原价去掉上游 AmountDiscount，经 QuoteTopUp 报价，实付字符串由 RoundTopUpPay 生成。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "vue/counterfactual-summary.json#payment-wallet",
@@ -2416,16 +2454,17 @@
       "path": "controller/topup_waffo_pancake.go",
       "status": "adapted",
       "upstream_sha256": "d9ba173d4f68acae5288300aace18200e52a38474b8b5d0b629ec7f71a9d1833",
-      "local_sha256": "88048fcfdf75b6dfc7ce0eded6e41c687668068e5086fa74cbcba6431585f5b2",
+      "local_sha256": "4c796f155e3c80f7826d8a75fef54695fc42f790eee6856eb118a0be59f22d2c",
       "reasons": [
         "affiliate",
         "group-removal",
         "payment-integrity",
-        "retired"
+        "retired",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "钱包充值冻结金额币种并校验回调；移除套餐下单，订阅前缀明确永久拒绝；瞬时失败保留供应商重试。",
+        "basis": "钱包充值冻结金额币种并校验回调；移除套餐下单，订阅前缀明确永久拒绝；瞬时失败保留供应商重试。；Pancake 原价去掉上游 AmountDiscount，经 QuoteTopUp 报价，实付字符串由 RoundTopUpPay 生成。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "vue/counterfactual-summary.json#payment-wallet",
@@ -2437,7 +2476,7 @@
       "path": "controller/topup_waffo_pancake_test.go",
       "status": "adapted",
       "upstream_sha256": "4a64c6c1c95feceadbd577198119a2a85f6a45ab95745c27f4f9a8d0f02741bd",
-      "local_sha256": "5a10ca419eec92ce0ae66ca48132046521d5a622761d534586db720ad0cce899"
+      "local_sha256": "1b368b8f4c49480e8431393d912643f6f3d3c0c262d97d13831bb5eb8f546754"
     },
     {
       "path": "controller/twofa.go",
@@ -2450,26 +2489,6 @@
       "status": "upstream_equal",
       "upstream_sha256": "07ae3ad91c63842907f974ef0488b557b59b2717d91282f3486f0d46109752f5",
       "local_sha256": "07ae3ad91c63842907f974ef0488b557b59b2717d91282f3486f0d46109752f5"
-    },
-    {
-      "path": "controller/usage_discount.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "9ef141211d00be9311d157924235d14d29e5c3dae8616011e1f94514111d3a65",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "配置草稿校验、保存、当前状态与估算 API 复用统一 UsageDiscountSettings；用户视图绑定当前用户。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
-    },
-    {
-      "path": "controller/usage_discount_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "77eda48d0854e658d3240ba543557e308f404f7c05986b3812f9af7b8e758702"
     },
     {
       "path": "controller/usedata.go",
@@ -2771,19 +2790,19 @@
       "path": "main.go",
       "status": "adapted",
       "upstream_sha256": "4a8445427054fd4adff1e2c08f35331ecfc627526db04be5ba629d73d13b7976",
-      "local_sha256": "4e51034ec9339d3207759a120bfc9dfd8bf47e54fb6bc777bc356f0a3d41331f",
+      "local_sha256": "0e7f9b0aef253144c2c9441a51eb448db5084a8eb33e9abee85afd76fc49077e",
       "reasons": [
         "branding",
         "no-builtin-prices",
         "ops-metrics",
         "retired",
         "single-node",
-        "usage-discount",
+        "topup-discount",
         "vue-frontend"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "保留 Ren2Hub / DayFliggy 产品名称和品牌资源。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。；独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；明确单节点架构，不恢复 slave 模式、多节点注册与实例选主。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。；保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
+        "basis": "保留 Ren2Hub / DayFliggy 产品名称和品牌资源。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。；独有单节点运维观测，使用真实计数及来源/新鲜度，不伪造降级值。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；明确单节点架构，不恢复 slave 模式、多节点注册与实例选主。；独有充值折扣：单笔充值、固定、全站与个人用量阶梯合成一次结账折扣，只降低易支付/GMPay/Waffo/Pancake 的实付，到账足额；调用计价回到上游；小时统计、配置与审计放在扩展文件。；保留 Vue 页面和既有接口兼容、配置/签到/排序及现行视觉。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -2824,7 +2843,7 @@
       "path": "middleware/access_token_routes.go",
       "status": "adapted",
       "upstream_sha256": "015744f2d86817145e3686b3bd5cef770256adafa59e13ba661ee075a8cc89d1",
-      "local_sha256": "a83daee0999505bd7e55dabea91ac037ba55a693c1d79c053f93beff33213e5f",
+      "local_sha256": "c30098b5b928d188b72a56e1734654ce96cb280fa78cc600910a3355a7897e86",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -2834,8 +2853,8 @@
         "retired",
         "ticket",
         "token-routing",
-        "upstream-ratio",
-        "usage-discount"
+        "topup-discount",
+        "upstream-ratio"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
@@ -3313,7 +3332,7 @@
       "path": "model/audit_option_compat_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "adf7ff452da2764d518664f18e6bc0d7be1e47a75c16b8aec04c9ddf9c7c558f"
+      "local_sha256": "36f6076e7b88b893fdc7c0c42566576e3605a3f6ea245fc4a3fbce41585af4df"
     },
     {
       "path": "model/audit_other.go",
@@ -3679,13 +3698,14 @@
       "path": "model/gmpay.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "00b5bdd5c68bfd7cc9cc9a46e2a6f81bc2904d6f0c1b5718f926d685b23eec46",
+      "local_sha256": "13ffb51d40ce696d384b9e25e9eb133121400c745d9269ca447743e0f603ed99",
       "reasons": [
-        "gmpay"
+        "gmpay",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "商户版本与订单快照冻结，验签回执匹配和 pending→success 原子结算，并使用原生额度写入；重入不能重复到账。",
+        "basis": "商户版本与订单快照冻结，验签回执匹配和 pending→success 原子结算，并使用原生额度写入；重入不能重复到账。；CreateGmpayOrder 事务内写充值折扣审计记录。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -3751,7 +3771,7 @@
       "path": "model/install_databases_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "3ed191612558b26818e3e461326749f839690b206cd716d3a85b176c010a5354"
+      "local_sha256": "cc157b4407223bc051f9595b258a60136b95fd974b6c80fc33ed8912b29938d7"
     },
     {
       "path": "model/install_guard.go",
@@ -3843,7 +3863,7 @@
       "path": "model/main.go",
       "status": "adapted",
       "upstream_sha256": "36d2ef0c7dd4124b0a07e0e5972830da44f5fc72e39b90703472ace43746a1e1",
-      "local_sha256": "71bda5051deef81aa81a35796cc6bfde3b05d18faf9beb534e40d07835dda143",
+      "local_sha256": "f92c526952b2b40daa5177f9f8e472532444860fa613d2673f40ed1e16161ca5",
       "reasons": [
         "affiliate",
         "gmpay",
@@ -3853,7 +3873,7 @@
         "retired",
         "ticket",
         "token-routing",
-        "usage-discount"
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
@@ -4284,16 +4304,15 @@
       "path": "model/task.go",
       "status": "adapted",
       "upstream_sha256": "67a41371388754226959757eb54ad9b01cde70bac621eb957103cee9d5f09d5c",
-      "local_sha256": "4ec8e2dd0cf6969481adfb8e3b430292ac13412631be462541f6e3da3aef62b5",
+      "local_sha256": "2a4064511d30a6603cf8a1e83c5cd4e4867842dd6bc18bc63c2125af40df9937",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired",
-        "usage-discount"
+        "retired"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "任务冻结渠道倍率/用量折扣以保证后续恢复结算使用提交时口径；删 group/订阅字段，仍沿原生 Task CAS。",
+        "basis": "任务冻结渠道倍率以保证后续恢复结算使用提交时口径；删 group/订阅字段，仍沿原生 Task CAS。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -4436,19 +4455,74 @@
       "path": "model/topup.go",
       "status": "adapted",
       "upstream_sha256": "6bdecb2b21b897f49187aa3f3e8f70ab10f960b451bc12b587332cde95b8bf52",
-      "local_sha256": "640f36d2fbac539aca00275ecb563da1c6eded2f1481bd20f0a311085c8a7629",
+      "local_sha256": "2e4d62003efc6a5c0d75dce676feb1eaf5f7b30f5143fced401e8be7915c1b0e",
       "reasons": [
         "affiliate",
         "gmpay",
-        "payment-integrity"
+        "payment-integrity",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "仍以原生 TopUp 和 User.Quota 为唯一钱包，增加订单冻结额度/金额/币种和统一回执结算，返利随到账事务；不依据回调时间配置重新计算额度。",
+        "basis": "仍以原生 TopUp 和 User.Quota 为唯一钱包，增加订单冻结额度/金额/币种和统一回执结算，返利随到账事务；不依据回调时间配置重新计算额度。；Insert 在同一事务写订单与充值折扣审计记录。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER",
         "counterfactual_evidence": [
           "vue/counterfactual-summary.json#payment-wallet"
         ]
+      }
+    },
+    {
+      "path": "model/topup_discount_config.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "cd45bee6655b428cfe4dc1d3d82f6066210c85769eafa22062e2ce4fd86df102",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "追加式版本化配置，统一校验阶梯、时区与排除名单，所有读取共享快照。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "model/topup_discount_config_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "49a352d901f8342cf3ed2289718f2f6f772ff9242463f4968769a6550e382260"
+    },
+    {
+      "path": "model/topup_discount_databases_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "178493238cd7acba70c86de2bff952266b74ff72bffc9025708e5bb1e09f70b3"
+    },
+    {
+      "path": "model/topup_discount_record.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "c60db8a0b47a69dc1fcb949b6d9e2118532ec7340ee23b129ea55805209722bd",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "订单同事务写入的折扣审计记录与估算用的成功订单查询，回调不读取。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "model/topup_discount_usage.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "d0615e86d66992959798a1626d66bdb002e6f02d554b0da0cda5624ee7a0a43a",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "按原生已发生用量记小时聚合，供用量阶梯定档；不反向扣费。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
     {
@@ -4516,46 +4590,6 @@
       "local_sha256": "a7e18bada4ce9fae61a1a9407a7fafb0f90f98f66e23da90b75a8cc2c7cd5148"
     },
     {
-      "path": "model/usage_discount.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "96ad2e28c135733efd211e15ce1ee6b3825ad449503a89406fc1ee3a5c121b1f",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "按原生已发生用量记小时聚合，跨表读取用于折扣窗口；不反向扣费，单点折扣仍在原生结算入口。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
-    },
-    {
-      "path": "model/usage_discount_config.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "c414c1ed63529e6faa24f8650e77a1dd7e74281628c9d78fe503c564eedc459c",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "统一校验折扣表、时区、窗口与排除模型，配置版本化及原子保存，所有读取共享缓存。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
-    },
-    {
-      "path": "model/usage_discount_databases_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "3e35ef63d1a6eb457ecd9af2ce505f64001621489579380c8747b4dbba1b36f0"
-    },
-    {
-      "path": "model/usage_discount_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "fbce0bc3aa31eeaeec1b5d810b8fe9022487ae289449cf45c1ef81aa95474059"
-    },
-    {
       "path": "model/usedata.go",
       "status": "adapted",
       "upstream_sha256": "0bac4e00b0372ca181cca34c405cc7183796f9a5dab2ed8fa230f916eda59fc8",
@@ -4607,13 +4641,13 @@
       "path": "model/user.go",
       "status": "adapted",
       "upstream_sha256": "b74b07db9b379a4f4115c7e8f2e97e26430a64e4d67ef340c975e63cfee13964",
-      "local_sha256": "70a9242f0cffd316759125ed3b15498ff40d1d614f1c4bb87e352ab18743836c",
+      "local_sha256": "b43ac6b4fe5781752997738330b3884a447409df7614df8219c550d1f312dde7",
       "reasons": [
         "affiliate",
         "concurrency",
         "group-removal",
         "retired",
-        "usage-discount",
+        "topup-discount",
         "usage-visibility",
         "vue-frontend"
       ],
@@ -7118,14 +7152,13 @@
       "path": "relay/common/relay_info.go",
       "status": "adapted",
       "upstream_sha256": "5e4fa4920928daabe0747e16c188e11fe4d194c2083e83b2dc3d5e7070d4faed",
-      "local_sha256": "015e1f0d8e7b8eaf14e596464f56d3e100352a01d7e15d11ea4fecc4cba48492",
+      "local_sha256": "a8f3ca750039891bf917be99d5bb738728099593fab7dad83503f8f09676d872",
       "reasons": [
         "channel-ratio",
         "group-removal",
         "query-credential-redaction",
         "retired",
-        "token-routing",
-        "usage-discount"
+        "token-routing"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
@@ -7352,16 +7385,15 @@
       "path": "relay/helper/price.go",
       "status": "adapted",
       "upstream_sha256": "9fff94958ffb64b581fe1f02e3ddb6195132441a39252112c2e55c0d53d20430",
-      "local_sha256": "96a7622287ff52c91f0b370f6dfa7f8ac3c5f22c18343fdaab43df74b813fd91",
+      "local_sha256": "ee768277a7759dc7098e9016f368f3c36532e9016bff5be20075dedc6c4caaa6",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "no-builtin-prices",
-        "usage-discount"
+        "no-builtin-prices"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确改造：无模型默认价格/内置表达式；工具单价、音频倍率及 Gemini 音频固定价照常吸收。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -7428,12 +7460,6 @@
       "status": "adapted",
       "upstream_sha256": "5b8394261f6412ba64be1813d7a40e38b6b940062a024ead077770c42ce7f397",
       "local_sha256": "6c5397f562be31797fa434557b7f3db90f75e451c6a8144d888ff1a89131e312"
-    },
-    {
-      "path": "relay/helper/usage_discount_price_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "16427a19843d3d575261660cdf2b7c508096068c834586a2fcf33cd5f0055ae6"
     },
     {
       "path": "relay/helper/valid_request.go",
@@ -7526,17 +7552,16 @@
       "path": "relay/relay_task.go",
       "status": "adapted",
       "upstream_sha256": "6ab687f070babcf6d6704f9d9f13405908f587e3a22be940f0214a9efa4c0676",
-      "local_sha256": "40869d04a95ca5fa3fde9ece51676ad973c6a3c0472cb74457ed64bd2c8f3b9c",
+      "local_sha256": "fd5811d602f0ccd80121882f8e2f584d521b74c74bf86695c12f43650760a7e5",
       "reasons": [
         "channel-ratio",
         "concurrency",
         "group-removal",
-        "token-routing",
-        "usage-discount"
+        "token-routing"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确改造：用户与渠道无等待并发，共用准入入口并在取消、失败、流结束时释放。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确每 Token 自动或有序手动渠道路由；空手动列表不得静默自动回退。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -8698,7 +8723,7 @@
       "path": "router/api-router.go",
       "status": "adapted",
       "upstream_sha256": "15db3f0f3280b4a9491385b6a22af81184057ca15ba64afb4a4e6b534e520033",
-      "local_sha256": "f3e2f0b6f1374b2d4fba96b5ac6d791104ad3370fb9aac1571ef3524d5efdda8",
+      "local_sha256": "61cf312dfcdf78d607d6ecce1b59553806da50cfc9f746f328682afc936c98cf",
       "reasons": [
         "affiliate",
         "catalog-stats",
@@ -8710,8 +8735,8 @@
         "retired",
         "ticket",
         "token-routing",
-        "upstream-ratio",
-        "usage-discount"
+        "topup-discount",
+        "upstream-ratio"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
@@ -9725,16 +9750,15 @@
       "path": "service/log_info_generate.go",
       "status": "adapted",
       "upstream_sha256": "3edada64e5d203a41998c0e7469fdfa72c303d104a128abb959bfb6d67fdf4be",
-      "local_sha256": "f83fa2d51fcd1a2b4c0f0ba268817c031ee911df6a3dc23d1091b9cafa34d7c5",
+      "local_sha256": "77c5fce28a6178bbe626d2b62a5b8078138f27384f90b53abf6a7fee2de6127f",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired",
-        "usage-discount"
+        "retired"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -10320,16 +10344,15 @@
       "path": "service/task_billing.go",
       "status": "adapted",
       "upstream_sha256": "a2ac29108b2cfdb80fd0e343914754392907da5acab3f81bf7e3ff10850abeca",
-      "local_sha256": "d5315ad02ba563cc012a9446e27c974a66a50b5ae4f450520526a2f4b0bc6a03",
+      "local_sha256": "26ce46610ae53fdb118f62e060c4c481bc9ea6268a8f587f249ded953e4a5436",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired",
-        "usage-discount"
+        "retired"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -10360,7 +10383,7 @@
       "path": "service/task_missing_channel_database_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "dd1ddb5c596c051f5b38d6434bba530cfb4946519dfcf99efcf5574dcfa99a49"
+      "local_sha256": "d7ba01bb1505f1ece2cbc8e3908d87520b764076034c26d82c724bcc59ba0152"
     },
     {
       "path": "service/task_missing_channel_test.go",
@@ -10533,6 +10556,60 @@
       "local_sha256": "5429f03f57771e9e9997576d3494160f7690a4daa3c996b7b5a76c4b80bcb424"
     },
     {
+      "path": "service/topup_discount.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "e317cbd2c3be083a1117f1923fc78d10b5b16bcc742ce15db19415c6657a1c3b",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "窗口缓存与公式，on 来源读失败拒绝报价，shadow 失败只记录。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "service/topup_discount_estimate.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "dd61ecd977ce5b8c17512002bf3ad25bec18797ef8420a7e0679c44c68557cc7",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "按草稿回放近期成功充值，只输出额度等值近似。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "service/topup_discount_estimate_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "ee9359bf522f457cc2afaaa9c30b6fccb9ecfd9059ae07c17482489d5ba75014"
+    },
+    {
+      "path": "service/topup_discount_quote.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "54fa97942d9f0a9b638369cf76a9faa424b15ae833a4c5937adc1fd827d0258a",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "唯一的充值报价、舍入与确认比较。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
+    },
+    {
+      "path": "service/topup_discount_test.go",
+      "status": "extension",
+      "upstream_sha256": null,
+      "local_sha256": "1ad56aa469c00b9f02c24036f6884a10c8753365cadb892898197027dbea0b27"
+    },
+    {
       "path": "service/twofa.go",
       "status": "upstream_equal",
       "upstream_sha256": "478b81e9e287e65d072293c95197a11325585256ff63290f21e861932da7d144",
@@ -10542,67 +10619,7 @@
       "path": "service/upstream_usage_billing_test.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "da96e9fc22ae80a5ec124eb78e732020dc6a359a5cca43ec0966c99e89f7e8b5"
-    },
-    {
-      "path": "service/usage_discount.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "20d2b04b8c52462c35e569165ab666540d3fd135bc4703c4ce757f867598df6a",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
-    },
-    {
-      "path": "service/usage_discount_estimate.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "32c73e43584681bdf4bd2c1936b2ca92fd5e54700efb36219b99533a17a59da9",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
-    },
-    {
-      "path": "service/usage_discount_estimate_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "47f049f59035f72af75975c30a7b7f27003e2cf35bda0eb3bf8103cc9a474250"
-    },
-    {
-      "path": "service/usage_discount_log.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "3696e64a4919a58558b2bd8b7cfcae94651b37089249b60b34c737068150efcd",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
-    },
-    {
-      "path": "service/usage_discount_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "1466ccf07a467f20b1d4f37aa067598d75d382fa48128f852c35771dceb5df8e"
-    },
-    {
-      "path": "service/usage_discount_violation_fee_test.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "e8101541ec990996d46e38a3f647a3ca89db025fa7bb4a750ea0ccda937b1bd5"
+      "local_sha256": "0c4ea95623c8507fff3c5bd23a45e307e9b0b020246bca10097328cd292c4739"
     },
     {
       "path": "service/usage_helpr.go",
@@ -10654,16 +10671,15 @@
       "path": "service/violation_fee.go",
       "status": "adapted",
       "upstream_sha256": "ee38f6a2b2243f41f05f44bd81c0ef39250cafc1d3d5f2031715d90987014f88",
-      "local_sha256": "af5aad37b94c8a9e32f23e7609ddc6ee4ef914e0363b74afa7d1c79ba75ba58c",
+      "local_sha256": "c2e9c0e6fe6289a8e943dea781c31c8a04e3a9e803efb77f3c91a892fca230a7",
       "reasons": [
         "channel-ratio",
         "group-removal",
-        "retired",
-        "usage-discount"
+        "retired"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -10938,9 +10954,17 @@
     },
     {
       "path": "setting/operation_setting/payment_setting.go",
-      "status": "upstream_equal",
+      "status": "adapted",
       "upstream_sha256": "589bd0c71cf8c116cb96a37998dc19b6b212f01734de83d0576dc996583d96b0",
-      "local_sha256": "589bd0c71cf8c116cb96a37998dc19b6b212f01734de83d0576dc996583d96b0"
+      "local_sha256": "27fb594e150c4a634df5993eeb4cd730adcca14df05afd2ecd78da861f5e8711",
+      "reasons": [
+        "topup-discount"
+      ],
+      "review": {
+        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
+        "basis": "删除上游 AmountDiscount 字段及默认值，由充值折扣的单笔充值阶梯取代。",
+        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
+      }
     },
     {
       "path": "setting/operation_setting/payment_setting_old.go",
@@ -11147,13 +11171,14 @@
       "path": "setting/retired_business_options.go",
       "status": "extension",
       "upstream_sha256": null,
-      "local_sha256": "ac95114d8e9f2fc053ccd2cdd69a0677f73523d269875864ec19eac9e3f2005d",
+      "local_sha256": "ea601e8d7aacd7957a3f1395a5f06bc3299f621948bda08d71bd0c7cc5b3d944",
       "reasons": [
-        "retired"
+        "retired",
+        "topup-discount"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。",
+        "basis": "明确退役站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、旧前端和 api/next。；payment_setting.amount_discount 随字段删除退役。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -11325,15 +11350,14 @@
       "path": "types/price_data.go",
       "status": "adapted",
       "upstream_sha256": "1cec62351b2bd4250b4d67ad4d6523aa31751b99514960c0789b449004be8702",
-      "local_sha256": "3e8178f4f0f6060d3991fa005b9a5b6e360ee5c1ad502fe79934b1047dcb0925",
+      "local_sha256": "c6d51cbc6b56776f73fbf0e53334cc08dbeb7566afd5056c3a6e0715b4765e5d",
       "reasons": [
         "channel-ratio",
-        "group-removal",
-        "usage-discount"
+        "group-removal"
       ],
       "review": {
         "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。；独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
+        "basis": "明确改造：以选中渠道倍率替代业务分组；重试发送前补足预扣，资金共用唯一 BillingSession。；明确删除业务分组及其 schema、查询、倍率和 API；不恢复分组旁路。",
         "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
       }
     },
@@ -11354,20 +11378,6 @@
       "status": "upstream_equal",
       "upstream_sha256": "869f71f2ddda2bc662bdd9486106e9cd93f40a3c844581c66048eb44b83614d7",
       "local_sha256": "869f71f2ddda2bc662bdd9486106e9cd93f40a3c844581c66048eb44b83614d7"
-    },
-    {
-      "path": "types/usage_discount.go",
-      "status": "extension",
-      "upstream_sha256": null,
-      "local_sha256": "1902703f741a0d77c50564e3b6d4671bcd37dc0662625805fc34939fffea2acd",
-      "reasons": [
-        "usage-discount"
-      ],
-      "review": {
-        "target": "ba5f7367797566175a6cd97a748d430af3602a01",
-        "basis": "独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
-        "method": "three-way source review; runtime results recorded separately in SYNC_LEDGER"
-      }
     }
   ],
   "candidate_sha": null,
@@ -11539,11 +11549,6 @@
       "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
       "kind": "approved_contract"
     },
-    "usage-discount": {
-      "basis": "独有用量折扣只在 HandleChannelRatio 单点应用，保留小时统计与决策快照。",
-      "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
-      "kind": "approved_contract"
-    },
     "usage-visibility": {
       "basis": "明确用户数据隔离：按用户 ID，管理员不能读取 Root 或删除 Root 的明细。",
       "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
@@ -11563,6 +11568,11 @@
       "basis": "必要修复：初始化必须区分空表与查询失败，Root 创建失败向上传递。",
       "authority": "SYNC_LEDGER.md#2026-11-04-全量回归上游",
       "kind": "verified_fix"
+    },
+    "topup-discount": {
+      "basis": "独有充值折扣：单笔充值、固定、全站与个人用量阶梯合成一次结账折扣，只降低易支付/GMPay/Waffo/Pancake 的实付，到账足额；调用计价回到上游；小时统计、配置与审计放在扩展文件。",
+      "authority": "SYNC_LEDGER.md#2026-11-10-充值折扣合并",
+      "kind": "approved_contract"
     }
   },
   "review_scope": {

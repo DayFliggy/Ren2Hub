@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import quoteResponse from '../../../tests/fixtures/native/topup-quote.post.json'
+import quoteChangedResponse from '../../../tests/fixtures/native/topup-quote-changed.post.json'
 import { httpTransport } from '../httpTransport'
 import {
   checkoutTarget,
   parseCreationFailure,
   parseGmpayConfig,
   parseTopupInfo,
+  parseTopupQuote,
   parseWaffoPancakePairFailure,
   paymentRequest,
+  quoteChangedFrom,
   topupApi,
 } from '../topup'
 import { topupInputAmounts, validTopupAmount } from '@/utils/topupAmount'
@@ -40,8 +44,11 @@ describe('native payment contracts', () => {
   it('uses the amount endpoint and keeps the complete asset and network method', async () => {
     const request = vi
       .spyOn(httpTransport, 'request')
-      .mockResolvedValue({ message: 'success', data: '73.00' } as never)
-    expect(await topupApi.quote('gmpay:usdt.tron', 10)).toBe('73.00')
+      .mockResolvedValue(quoteResponse as never)
+    expect(await topupApi.quote('gmpay:usdt.tron', 10)).toEqual({
+      pay_amount: '693.50',
+      quote: { ...quoteResponse.quote, expected_quota: '50000000' },
+    })
     expect(request).toHaveBeenLastCalledWith('POST', '/api/user/amount', {
       data: { amount: 10, payment_method: 'gmpay:usdt.tron' },
       signal: undefined,
@@ -57,6 +64,105 @@ describe('native payment contracts', () => {
       signal: undefined,
     })
     expect(request).toHaveBeenCalledTimes(2)
+  })
+  it('requires a server quote matching data from discounted providers only', async () => {
+    const request = vi.spyOn(httpTransport, 'request')
+    for (const [method, path] of [
+      ['alipay', '/api/user/amount'],
+      ['waffo', '/api/user/waffo/amount'],
+      ['waffo_pancake', '/api/user/waffo-pancake/amount'],
+    ] as const) {
+      request.mockResolvedValue({ message: 'success', data: '73.00' } as never)
+      await expect(topupApi.quote(method, 10)).rejects.toMatchObject({
+        code: 'INVALID_RESPONSE',
+      })
+      request.mockResolvedValue({ ...quoteResponse, data: '730.00' } as never)
+      await expect(topupApi.quote(method, 10)).rejects.toMatchObject({
+        code: 'INVALID_RESPONSE',
+      })
+      expect(request).toHaveBeenLastCalledWith('POST', path, expect.anything())
+    }
+    // Stripe charges its remote price and is never discounted.
+    request.mockResolvedValue({ message: 'success', data: '10.00' } as never)
+    expect(await topupApi.quote('stripe', 10)).toEqual({
+      pay_amount: '10.00',
+      quote: null,
+    })
+    expect(request).toHaveBeenLastCalledWith(
+      'POST',
+      '/api/user/stripe/amount',
+      expect.anything()
+    )
+  })
+  it('reads every quote field exactly and rejects malformed quotes', () => {
+    const endpoint = '/api/user/amount'
+    const quote = { ...quoteResponse.quote, winner_window: 'week' }
+    expect(parseTopupQuote(quote, endpoint)).toEqual({
+      ...quote,
+      expected_quota: '50000000',
+    })
+    for (const patch of [
+      { expected_quota: '50000000' },
+      { expected_quota: 0 },
+      { expected_quota: 1.5 },
+      { currency: 'cny' },
+      { currency: '' },
+      { pay_amount: 693.5 },
+      { pay_amount: '0' },
+      { pay_amount: '-1' },
+      { list_pay_amount: '1e3' },
+      { applied_rate: 0.05 },
+      { factor: undefined },
+      { cap_applied: 'false' },
+      { winner_window: 'year' },
+    ])
+      expect(() => parseTopupQuote({ ...quote, ...patch }, endpoint)).toThrow(
+        `Invalid API response: ${endpoint}`
+      )
+  })
+  it('keeps the code and new quote of a changed price, and only then', async () => {
+    const request = vi
+      .spyOn(httpTransport, 'request')
+      .mockResolvedValue(quoteChangedResponse as never)
+    const error = await topupApi
+      .pay('alipay', {
+        amount: 10,
+        expected_pay_amount: '730.00',
+        expected_currency: 'CNY',
+      })
+      .catch((cause: unknown) => cause)
+    expect(request).toHaveBeenLastCalledWith('POST', '/api/user/pay', {
+      data: {
+        amount: 10,
+        expected_pay_amount: '730.00',
+        expected_currency: 'CNY',
+        payment_method: 'alipay',
+      },
+      signal: undefined,
+    })
+    expect(error).toMatchObject({ business: true, code: 'topup_quote_changed' })
+    expect(quoteChangedFrom(error)).toEqual({
+      ...quoteChangedResponse.quote,
+      expected_quota: '50000000',
+    })
+    request.mockResolvedValue({
+      ...quoteChangedResponse,
+      quote: { ...quoteChangedResponse.quote, currency: 'cny' },
+    } as never)
+    await expect(topupApi.pay('alipay', { amount: 10 })).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
+    request.mockResolvedValue({
+      message: 'error',
+      data: 'Top-up discount is temporarily unavailable, please try again',
+      message_key:
+        'Top-up discount is temporarily unavailable, please try again',
+    } as never)
+    const unavailable = await topupApi
+      .pay('alipay', { amount: 10 })
+      .catch((cause: unknown) => cause)
+    expect(unavailable).toMatchObject({ business: true, code: undefined })
+    expect(quoteChangedFrom(unavailable)).toBeNull()
   })
   it('preserves a durable failed order while retaining business failure', async () => {
     // controller/gmpay.go gmpayCreationError

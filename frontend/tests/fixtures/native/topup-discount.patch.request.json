@@ -1,0 +1,102 @@
+{
+  "config": {
+    "amount": {
+      "mode": "on",
+      "tiers": [
+        {
+          "rate": "0.02",
+          "threshold_quota": "50000000"
+        }
+      ]
+    },
+    "cap_rate": "0.05",
+    "excluded_user_ids": [
+      1
+    ],
+    "fixed_rate": "0.01",
+    "personal": {
+      "day": {
+        "mode": "shadow",
+        "tiers": [
+          {
+            "rate": "0.01",
+            "threshold_quota": "2500000"
+          },
+          {
+            "rate": "0.02",
+            "threshold_quota": "7500000"
+          },
+          {
+            "rate": "0.03",
+            "threshold_quota": "25000000"
+          },
+          {
+            "rate": "0.04",
+            "threshold_quota": "75000000"
+          },
+          {
+            "rate": "0.05",
+            "threshold_quota": "250000000"
+          }
+        ]
+      },
+      "month": {
+        "mode": "on",
+        "tiers": [
+          {
+            "rate": "0.01",
+            "threshold_quota": "12500000"
+          },
+          {
+            "rate": "0.02",
+            "threshold_quota": "37500000"
+          },
+          {
+            "rate": "0.03",
+            "threshold_quota": "125000000"
+          },
+          {
+            "rate": "0.04",
+            "threshold_quota": "375000000"
+          },
+          {
+            "rate": "0.05",
+            "threshold_quota": "1250000000"
+          }
+        ]
+      },
+      "week": {
+        "mode": "shadow",
+        "tiers": [
+          {
+            "rate": "0.01",
+            "threshold_quota": "6250000"
+          },
+          {
+            "rate": "0.02",
+            "threshold_quota": "18750000"
+          },
+          {
+            "rate": "0.03",
+            "threshold_quota": "62500000"
+          },
+          {
+            "rate": "0.04",
+            "threshold_quota": "187500000"
+          },
+          {
+            "rate": "0.05",
+            "threshold_quota": "625000000"
+          }
+        ]
+      }
+    },
+    "schema_version": 1,
+    "site": {
+      "mode": "off",
+      "tiers": []
+    },
+    "timezone": "Asia/Shanghai"
+  },
+  "expected_version": 0
+}

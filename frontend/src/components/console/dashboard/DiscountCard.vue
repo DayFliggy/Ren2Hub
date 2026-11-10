@@ -2,14 +2,14 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { ReceiptText, Settings2, TriangleAlert } from 'lucide-vue-next'
+import { ReceiptText, Settings2 } from 'lucide-vue-next'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
-import { quotaToAmount, rateToPercent } from '@/features/usage-discount/amount'
-import type { UsageDiscountSelf } from '@/types/usageDiscount'
-import { compareDecimal } from '@/utils/decimal'
+import { quotaToAmount, rateToPercent } from '@/features/topup-discount/amount'
+import type { TopupDiscountSelf } from '@/types/topupDiscount'
+import { addDecimal, compareDecimal } from '@/utils/decimal'
 import { quotaRatio } from '@/utils/quota'
 
 const RULER_SEGMENTS = 7
@@ -18,7 +18,7 @@ type RulerSegmentKind = 'global' | 'personal' | 'overflow' | 'empty'
 
 const props = withDefaults(
   defineProps<{
-    discounts: UsageDiscountSelf | null
+    discounts: TopupDiscountSelf | null
     loading?: boolean
     error?: string | null
     canConfigure?: boolean
@@ -28,38 +28,26 @@ const props = withDefaults(
 
 const { t } = useI18n()
 
-// Rates have at most four decimal places. Restore that precision only for
-// this display subtraction; the server's final factor is rendered unchanged.
+// Every rate comes from the server; the card only lays them out.
 const globalRate = computed(() =>
-  Math.max(0, 1 - Number(props.discounts?.global_factor ?? '1')).toFixed(4)
-)
-
-const winner = computed(() =>
-  props.discounts?.windows.find(
-    (window) => window.window === props.discounts?.winner_window
+  addDecimal(
+    props.discounts?.fixed_rate ?? '0',
+    props.discounts?.site_rate ?? '0'
   )
 )
-
-const rawTotalRate = computed(() => {
-  const fixed = Number(props.discounts?.fixed_rate ?? '0')
-  const site = Number(props.discounts?.site_rate ?? '0')
-  const personal = Number(winner.value?.rate ?? '0')
-  return Math.max(0, fixed + site + personal).toFixed(4)
-})
+const rawTotalRate = computed(() => props.discounts?.raw_rate ?? '0')
 
 const hasSavings = computed(
-  () =>
-    Number(props.discounts?.applied_rate ?? '0') > 0 ||
-    Number(rawTotalRate.value) > 0
+  () => compareDecimal(props.discounts?.raw_rate ?? '0', '0') > 0
 )
 // A zero current rate can still have reachable tiers. Only the complete absence
-// of savings and personal windows is a standard-pricing empty state.
+// of savings, personal windows and amount tiers is a standard-pricing state.
 const standardPricing = computed(
   () =>
     props.discounts !== null &&
-    props.discounts.status !== 'unavailable' &&
     !hasSavings.value &&
-    props.discounts.windows.length === 0
+    props.discounts.windows.length === 0 &&
+    props.discounts.amount_tiers.length === 0
 )
 
 /**
@@ -210,7 +198,7 @@ function discountLabel(rate: string): string {
         </span>
         <RouterLink
           v-if="canConfigure"
-          to="/system-settings/billing/usage-discount"
+          to="/system-settings/billing/topup-discount"
           class="discount-configure text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-ring touch-snappy"
           :aria-label="t('dashboard.discount.configure')"
           :title="t('dashboard.discount.configure')"
@@ -316,7 +304,7 @@ function discountLabel(rate: string): string {
                 :aria-label="
                   t('dashboard.discount.rulerAria', {
                     global: rateToPercent(globalRate),
-                    personal: rateToPercent(winner?.rate ?? '0'),
+                    personal: rateToPercent(discounts.personal_rate),
                     cap: rateToPercent(discounts.cap_rate),
                   })
                 "
@@ -391,31 +379,37 @@ function discountLabel(rate: string): string {
               <span
                 class="ledger-rate discount-caption font-semibold tabular-nums"
                 :class="
-                  winner && Number(winner.rate) > 0
+                  Number(discounts.personal_rate) > 0
                     ? 'text-[var(--accent-text)]'
                     : 'text-[var(--text-tertiary)]'
                 "
                 data-discount-personal-rate
               >
-                {{ windows.length ? discountLabel(winner?.rate ?? '0') : '—' }}
+                {{
+                  windows.length ? discountLabel(discounts.personal_rate) : '—'
+                }}
               </span>
             </div>
           </div>
         </div>
 
         <p
-          v-if="discounts.status === 'unavailable'"
-          class="discount-caption flex items-start gap-2 bg-[var(--status-warning-soft)] px-3 py-2 text-[var(--status-warning-text)]"
-          style="border-radius: var(--shape-control)"
-          role="status"
-          data-discount-unavailable
+          v-if="discounts.amount_tiers.length"
+          class="personal-note discount-caption"
+          data-discount-amount-tiers
         >
-          <TriangleAlert
-            :size="14"
-            class="mt-0.5 shrink-0"
-            aria-hidden="true"
-          />
-          {{ t('dashboard.discount.unavailable') }}
+          {{
+            t('dashboard.discount.amountTiers', {
+              tiers: discounts.amount_tiers
+                .map((tier) =>
+                  t('dashboard.discount.amountTier', {
+                    amount: quotaToAmount(tier.threshold_quota),
+                    rate: rateToPercent(tier.rate),
+                  })
+                )
+                .join(' · '),
+            })
+          }}
         </p>
 
         <div class="personal-section" data-discount-personal>
@@ -525,13 +519,7 @@ function discountLabel(rate: string): string {
             class="personal-note discount-caption"
             data-discount-personal-empty
           >
-            {{
-              t(
-                discounts.status === 'unavailable'
-                  ? 'dashboard.discount.windowsUnavailable'
-                  : 'dashboard.discount.noPersonal'
-              )
-            }}
+            {{ t('dashboard.discount.noPersonal') }}
           </p>
         </div>
       </template>

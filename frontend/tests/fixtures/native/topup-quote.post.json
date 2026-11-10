@@ -1,0 +1,17 @@
+{
+  "data": "693.50",
+  "message": "success",
+  "quote": {
+    "amount_rate": "0.04",
+    "applied_rate": "0.05",
+    "cap_applied": false,
+    "currency": "CNY",
+    "expected_quota": 50000000,
+    "factor": "0.95",
+    "fixed_rate": "0.01",
+    "list_pay_amount": "730.00",
+    "pay_amount": "693.50",
+    "personal_rate": "0",
+    "site_rate": "0"
+  }
+}

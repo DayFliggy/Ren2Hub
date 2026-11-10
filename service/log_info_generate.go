@@ -189,7 +189,6 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other *model.LogOther) 
 	if relayInfo.BillingSource != "" {
 		other.SetPublic("billing_source", relayInfo.BillingSource)
 	}
-	appendUsageDiscountInfo(other, relayInfo.PriceData.ChannelRatioInfo)
 }
 
 func appendRequestConversionChain(relayInfo *relaycommon.RelayInfo, other *model.LogOther) {
@@ -280,7 +279,6 @@ func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData hosttypes.P
 	other := model.NewLogOther()
 	other.SetPublic("model_price", priceData.ModelPrice)
 	other.SetPublic("channel_ratio", FormatChannelRatio(priceData.ChannelRatioInfo.ChannelRatio))
-	appendUsageDiscountInfo(other, priceData.ChannelRatioInfo)
 	appendRequestPath(nil, relayInfo, other)
 	return other
 }

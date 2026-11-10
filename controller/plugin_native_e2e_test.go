@@ -21,11 +21,9 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -120,7 +118,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	require.NoError(t, err)
 	sqlDB, err := database.DB()
 	require.NoError(t, err)
-	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Task{}, &model.Log{}, &model.UsageDiscountHourly{}, &model.UsageDiscountConfigVersion{}))
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Task{}, &model.Log{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{}))
 	model.DB = database
 	model.LOG_DB = database
 	common.MemoryCacheEnabled = false
@@ -306,7 +304,7 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 	previousRedisEnabled := common.RedisEnabled
 	previousDeadline := constant.TaskPluginProtocolTimeoutSeconds
 	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
-	database, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}, &model.UsageDiscountHourly{}, &model.UsageDiscountConfigVersion{})
+	database, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}, &model.TopUpDiscountUsageHourly{}, &model.TopUpDiscountConfigVersion{})
 	model.DB = database
 	model.LOG_DB = database
 	common.SetDatabaseTypes(dialect, dialect)
@@ -397,17 +395,17 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 		// billed images or store the task.
 		{"reserve_fails", image, 10_000},
 		{"insert_fails", image, 10_000},
-		{"discounted_finished", image, 16_000},
-		{"discounted_reserve_fails", image, 16_000},
-		{"discounted_insert_fails", image, 16_000},
-		{"discounted_broken", image, 48_000},
+		{"ratio2_finished", image, 20_000},
+		{"ratio2_reserve_fails", image, 20_000},
+		{"ratio2_insert_fails", image, 20_000},
+		{"ratio2_broken", image, 60_000},
 	} {
 		t.Run(tc.prompt, func(t *testing.T) {
 			require.NoError(t, database.Model(&model.User{}).Where("id = ?", 7).Update("quota", 1_000_000).Error)
 			require.NoError(t, database.Where("type = ?", model.LogTypeConsume).Delete(&model.Log{}).Error)
-			upstreamPrompt := strings.TrimPrefix(tc.prompt, "discounted_")
+			upstreamPrompt := strings.TrimPrefix(tc.prompt, "ratio2_")
 			channel.ChannelRatio = "1"
-			if strings.HasPrefix(tc.prompt, "discounted_") {
+			if strings.HasPrefix(tc.prompt, "ratio2_") {
 				channel.ChannelRatio = "2"
 			}
 			require.NoError(t, database.Model(&channel).Update("channel_ratio", channel.ChannelRatio).Error)
@@ -436,11 +434,8 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 			relayInfo := &relaycommon.RelayInfo{UserId: 7, UserQuota: 1_000_000, OriginModelName: seedream, Billing: billing,
 				TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: c.GetString("task_action"), PublicTaskID: "task_" + tc.prompt, LockedChannel: &channel}}
 
-			if strings.HasPrefix(tc.prompt, "discounted_") {
+			if strings.HasPrefix(tc.prompt, "ratio2_") {
 				c.Set("channel_ratio", "2")
-				decision := hosttypes.NeutralUsageDiscount(hosttypes.UsageDiscountOK, "")
-				decision.Active, decision.Factor = true, decimal.RequireFromString("0.8")
-				relayInfo.UsageDiscount = decision
 			}
 			started := time.Now()
 			outcome, taskErr := executeTaskSubmissionWith(c, relayInfo, relay.RelayTaskSubmit)
@@ -469,9 +464,8 @@ func TestDoubaoRelayedImageStreamSettlement(t *testing.T) {
 			require.NoError(t, database.Where("type = ?", model.LogTypeConsume).Find(&consumeLogs).Error)
 			require.Len(t, consumeLogs, 1)
 			assert.Equal(t, tc.wantQuota, consumeLogs[0].Quota)
-			if strings.HasPrefix(tc.prompt, "discounted_") {
-				assert.InDelta(t, 1.6, relayInfo.PriceData.ChannelRatioInfo.ChannelRatio, 1e-12)
-				assert.Equal(t, "0.8", relayInfo.PriceData.ChannelRatioInfo.UsageDiscount.Factor.String())
+			if strings.HasPrefix(tc.prompt, "ratio2_") {
+				assert.InDelta(t, 2.0, relayInfo.PriceData.ChannelRatioInfo.ChannelRatio, 1e-12)
 			}
 		})
 	}

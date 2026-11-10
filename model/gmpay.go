@@ -153,7 +153,10 @@ func CreateGmpayOrder(ctx context.Context, topUp *TopUp, snapshot *GmpayOrder, m
 		if snapshot.Status == "" {
 			snapshot.Status = GmpayStatusCreating
 		}
-		return tx.Create(snapshot).Error
+		if err := tx.Create(snapshot).Error; err != nil {
+			return err
+		}
+		return insertTopUpDiscountTx(tx, topUp)
 	})
 }
 

@@ -65,7 +65,7 @@ func TestTaskPollingRefundDatabaseMatrix(t *testing.T) {
 			tables := []any{
 				&model.Task{}, &model.User{}, &model.Token{}, &model.Log{}, &model.Channel{},
 				&model.Midjourney{}, &model.TopUp{}, &model.SystemTask{}, &model.SystemTaskLock{},
-				&model.UsageDiscountHourly{},
+				&model.TopUpDiscountUsageHourly{},
 			}
 			t.Cleanup(func() { assert.NoError(t, db.Migrator().DropTable(tables...)) })
 			require.NoError(t, db.AutoMigrate(tables...))

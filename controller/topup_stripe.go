@@ -405,19 +405,11 @@ func getStripeCreditedQuota(amount int64) decimal.Decimal {
 }
 
 func getStripePayMoney(amount float64) float64 {
-	originalAmount := amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		amount = amount / common.QuotaPerUnit
 	}
 	// Using float64 for monetary calculations is acceptable here due to the small amounts involved
-	// apply optional preset discount by the original request amount (if configured), default 1.0
-	discount := 1.0
-	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]; ok {
-		if ds > 0 {
-			discount = ds
-		}
-	}
-	payMoney := amount * setting.StripeUnitPrice * discount
+	payMoney := amount * setting.StripeUnitPrice
 	return payMoney
 }
 

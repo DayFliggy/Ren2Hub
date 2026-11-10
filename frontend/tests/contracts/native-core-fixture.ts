@@ -236,7 +236,6 @@ export async function nativeCoreFixture(
     waffo_min_topup: 1,
     waffo_pancake_min_topup: 1,
     amount_options: [10, 20],
-    discount: {},
     topup_link: '',
   }
   const emptyPage = { page: 1, page_size: 20, total: 0, items: [] }
@@ -344,21 +343,21 @@ export async function nativeCoreFixture(
           index % 2 === 0 ? 0 : 2
         ),
       })
-    // Usage discount reads use the bodies generated from the real handlers;
+    // Top-up discount reads use the bodies generated from the real handlers;
     // specs that save or fail register their own routes.
-    if (path === '/api/user/usage-discount' && method === 'GET')
+    if (path === '/api/user/topup-discount' && method === 'GET')
       return route.fulfill({
-        json: nativeFixture('usage-discount-self.get.json'),
+        json: nativeFixture('topup-discount-self.get.json'),
       })
-    if (path === '/api/option/usage_discount' && method === 'GET')
-      return route.fulfill({ json: nativeFixture('usage-discount.get.json') })
-    if (path === '/api/option/usage_discount/status' && method === 'GET')
+    if (path === '/api/option/topup_discount' && method === 'GET')
+      return route.fulfill({ json: nativeFixture('topup-discount.get.json') })
+    if (path === '/api/option/topup_discount/status' && method === 'GET')
       return route.fulfill({
-        json: nativeFixture('usage-discount-status.get.json'),
+        json: nativeFixture('topup-discount-status.get.json'),
       })
-    if (path === '/api/option/usage_discount/estimate' && method === 'POST')
+    if (path === '/api/option/topup_discount/estimate' && method === 'POST')
       return route.fulfill({
-        json: nativeFixture('usage-discount-estimate.post.json'),
+        json: nativeFixture('topup-discount-estimate.post.json'),
       })
     if (path === '/api/data/self/summary')
       return ok(
@@ -505,15 +504,27 @@ export async function nativeCoreFixture(
         ],
       })
     if (path === '/api/user/topup/info') return ok(topup)
+    // Stripe is never discounted and answers a bare payable amount.
+    if (path === '/api/user/stripe/amount')
+      return route.fulfill({ json: { message: 'success', data: '73.00' } })
     if (
       [
         '/api/user/amount',
-        '/api/user/stripe/amount',
         '/api/user/waffo/amount',
         '/api/user/waffo-pancake/amount',
       ].includes(path)
-    )
-      return route.fulfill({ json: { message: 'success', data: '73.00' } })
+    ) {
+      const response = nativeFixture<{ quote: Record<string, unknown> }>(
+        'topup-quote.post.json'
+      )
+      // Epay and GMPay quote CNY; both Waffo fixtures are configured in USD.
+      return route.fulfill({
+        json:
+          path === '/api/user/amount'
+            ? response
+            : { ...response, quote: { ...response.quote, currency: 'USD' } },
+      })
+    }
     if (path === '/api/user/gmpay/pay')
       return route.fulfill({
         json: {

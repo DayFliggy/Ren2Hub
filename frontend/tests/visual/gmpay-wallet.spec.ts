@@ -1,5 +1,28 @@
 import { expect, test } from '@playwright/test'
+import { nativeFixture } from '../contracts/native-core-fixture'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
+
+// The server quote for an undiscounted CNY top-up of amount USD.
+function quoted(amount: number) {
+  const payAmount = (amount * 7.3).toFixed(2)
+  const { quote } = nativeFixture<{ quote: Record<string, unknown> }>(
+    'topup-quote.post.json'
+  )
+  return {
+    message: 'success',
+    data: payAmount,
+    quote: {
+      ...quote,
+      expected_quota: amount * 500000,
+      list_pay_amount: payAmount,
+      pay_amount: payAmount,
+      factor: '1',
+      applied_rate: '0',
+      amount_rate: '0',
+      fixed_rate: '0',
+    },
+  }
+}
 
 test('wallet reports unified payment configuration failure and recovers explicitly', async ({
   page,
@@ -77,7 +100,6 @@ for (const theme of ['light', 'dark'] as const) {
               waffo_min_topup: 1,
               waffo_pancake_min_topup: 1,
               amount_options: [10, 20, 50, 100],
-              discount: {},
               waffo_pay_methods: null,
               creem_products: '[]',
               topup_link: '',
@@ -97,13 +119,15 @@ for (const theme of ['light', 'dark'] as const) {
         return route.fulfill({
           json: failQuote
             ? { message: 'error', data: '模拟虚拟币报价失败' }
-            : { message: 'success', data: (input.amount * 7.3).toFixed(2) },
+            : quoted(input.amount),
         })
       })
       await page.route('**/api/user/gmpay/pay', async (route) => {
         orderWrites++
         expect(route.request().postDataJSON()).toEqual({
           amount: 20,
+          expected_pay_amount: '146.00',
+          expected_currency: 'CNY',
           payment_method: 'gmpay:usdt.tron',
         })
         await pendingOrder

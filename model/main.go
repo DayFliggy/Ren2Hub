@@ -390,8 +390,9 @@ func migrateDB() error {
 		&TicketMessage{},
 		&TicketAttachment{},
 		&ChannelUpstreamRatio{},
-		&UsageDiscountHourly{},
-		&UsageDiscountConfigVersion{},
+		&TopUpDiscountUsageHourly{},
+		&TopUpDiscountConfigVersion{},
+		&TopUpDiscount{},
 	)
 	if err != nil {
 		return err

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -28,31 +27,40 @@ func GmpayPay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Top-up amount cannot be less than {{min}}", map[string]any{"min": getMinTopup()}))
 		return
 	}
-	quota, err := validateTopUpQuota(request.Amount)
-	if err == nil {
-		err = model.ValidateTopUpQuotaCapacity(c.GetInt("id"), quota)
-	}
-	if err != nil {
-		paymentError(c, err)
-		return
-	}
 	config, err := service.LoadGmpayConfig(c.Request.Context())
 	if err != nil || !config.Enabled || !operation_setting.IsPaymentComplianceConfirmed() {
 		paymentError(c, common.NewMessage("Payment method is unavailable"))
 		return
 	}
-	money := getPayMoney(request.Amount)
+	quote := quoteTopUp(c, request.Amount, getPayMoney(request.Amount), "CNY")
+	if quote == nil {
+		return
+	}
+	// The quote's ExpectedQuota is the only credited amount of this request.
+	if err := model.ValidateTopUpQuotaCapacity(c.GetInt("id"), quote.ExpectedQuota); err != nil {
+		paymentError(c, err)
+		return
+	}
+	money := quote.PayDecimal().InexactFloat64()
 	if math.IsNaN(money) || math.IsInf(money, 0) || money <= 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
+		return
+	}
+	if !confirmTopUpQuote(c, request.TopUpQuoteExpectation, quote) {
 		return
 	}
 	amount := request.Amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		amount = decimal.NewFromInt(amount).Div(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
 	}
+	topUp := &model.TopUp{UserId: c.GetInt("id"), Amount: amount, PaymentMethod: request.PaymentMethod}
+	if err := attachTopUpQuote(topUp, quote); err != nil {
+		paymentError(c, common.NewMessage("Failed to create the payment order"))
+		return
+	}
 	order, err := service.CreateGmpayTopUp(c.Request.Context(), service.GmpayOrderRequest{
-		Order:         &model.TopUp{UserId: c.GetInt("id"), Amount: amount, Money: money, PaymentMethod: request.PaymentMethod},
-		ExpectedQuota: quota, PayAmount: strconv.FormatFloat(money, 'f', 2, 64), ReturnURL: paymentReturnPath("/wallet"),
+		Order:         topUp,
+		ExpectedQuota: quote.ExpectedQuota, PayAmount: quote.PayAmount, ReturnURL: paymentReturnPath("/wallet"),
 	}, config)
 	if err != nil {
 		logger.LogWarn(c.Request.Context(), common.LogText("GMPay order creation failed reason=%s", service.GmpayFailureCode(err)))
@@ -64,7 +72,7 @@ func GmpayPay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Failed to create the payment order"))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "url": url, "data": gin.H{"trade_no": order.Order.TradeNo, "payment_method": request.PaymentMethod, "currency": "CNY", "pay_amount": gmpay.FormatFiatAmount(order.Payment.AmountMinor), "expected_quota": quota, "token": order.Payment.Token, "network": order.Payment.Network}})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "url": url, "data": gin.H{"trade_no": order.Order.TradeNo, "payment_method": request.PaymentMethod, "currency": "CNY", "pay_amount": gmpay.FormatFiatAmount(order.Payment.AmountMinor), "expected_quota": quote.ExpectedQuota, "token": order.Payment.Token, "network": order.Payment.Network}})
 }
 
 func gmpayCreationError(c *gin.Context, order *service.GmpayCreatedOrder) {

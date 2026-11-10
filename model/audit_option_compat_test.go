@@ -32,10 +32,15 @@ func TestLegacyConsoleOptionsNormalizeWithoutMaskingInvalidJSON(t *testing.T) {
 		require.NoError(t, updateOptionMap(fullKey, "{broken"))
 		assert.Equal(t, "{broken", common.OptionMap[fullKey], "invalid nonempty JSON must remain visible for repair")
 	}
-	key := "quota_setting.trust_quota_usd"
-	common.OptionMap[key] = "10"
-	require.NoError(t, updateOptionMap(key, "20"))
-	assert.NotContains(t, common.OptionMap, key)
-	assert.NotContains(t, config.GlobalConfig.ExportAllConfigs(), key)
-	require.Error(t, validateOptionValue(key, "20"))
+	// Removed fields are rejected instead of being stored and ignored.
+	for key, value := range map[string]string{
+		"quota_setting.trust_quota_usd":   "20",
+		"payment_setting.amount_discount": `{"100":0.9}`,
+	} {
+		common.OptionMap[key] = "stale"
+		require.NoError(t, updateOptionMap(key, value))
+		assert.NotContains(t, common.OptionMap, key)
+		assert.NotContains(t, config.GlobalConfig.ExportAllConfigs(), key)
+		require.Error(t, validateOptionValue(key, value))
+	}
 }

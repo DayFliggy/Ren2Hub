@@ -439,8 +439,7 @@ describe('capability route guard', () => {
       '/models/vendors',
       '/models/pricing',
       '/models/prefill-groups',
-      '/usage-discount',
-      '/system-settings/billing/usage-discount',
+      '/system-settings/billing/topup-discount',
       '/ops',
       '/system-info',
     ]) {
@@ -610,24 +609,17 @@ describe('capability route guard', () => {
     }
   })
 
-  it('opens system discounts for root only and preserves old bookmark queries', async () => {
+  it('opens top-up discounts for root only', async () => {
     for (const role of [1, 10]) {
       useAuthStore().user!.role = role
-      for (const path of [
-        '/usage-discount',
-        '/system-settings/billing/usage-discount',
-      ]) {
-        await router.push(path)
-        expect(router.currentRoute.value.name, `${role}: ${path}`).toBe(
-          'dashboard'
-        )
-      }
+      await router.push('/system-settings/billing/topup-discount')
+      expect(router.currentRoute.value.name, `${role}`).toBe('dashboard')
     }
     useAuthStore().user!.role = 100
-    await router.push('/usage-discount?audit=1#rules')
+    await router.push('/system-settings/billing/topup-discount?audit=1#rules')
     expect(router.currentRoute.value.name).toBe('system-settings-billing')
     expect(router.currentRoute.value.path).toBe(
-      '/system-settings/billing/usage-discount'
+      '/system-settings/billing/topup-discount'
     )
     expect(router.currentRoute.value.meta.nav).toBe('system-settings-site')
     expect(router.currentRoute.value.query.audit).toBe('1')

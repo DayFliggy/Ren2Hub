@@ -7,15 +7,16 @@ import {
 } from './fixtures'
 
 const response = nativeFixture<{ data: Record<string, unknown> }>(
-  'usage-discount-self.get.json'
+  'topup-discount-self.get.json'
 )
 // Exercise the documented wire contract with all three active windows.
 const combined = {
   ...response.data,
   factor: '0.95',
-  global_factor: '0.97',
   fixed_rate: '0.01',
   site_rate: '0.02',
+  personal_rate: '0.04',
+  raw_rate: '0.07',
   applied_rate: '0.05',
   cap_applied: true,
   winner_window: 'month',
@@ -146,7 +147,7 @@ for (const width of [320, 390, 768, 1280, 1440, 1920])
           (value) => localStorage.setItem('ren2hub_locale', value),
           locale
         )
-        await page.route('**/api/user/usage-discount', (route) =>
+        await page.route('**/api/user/topup-discount', (route) =>
           route.fulfill({ json: { success: true, data: combined } })
         )
         await page.goto('/dashboard')
@@ -174,7 +175,7 @@ for (const width of [320, 390, 768, 1280, 1440, 1920])
         await expectReadableCard(card)
         await expect(card.locator('[data-discount-configure]')).toHaveAttribute(
           'href',
-          '/system-settings/billing/usage-discount'
+          '/system-settings/billing/topup-discount'
         )
         const effectiveBox = await card
           .locator('[data-discount-effective]')
@@ -346,7 +347,7 @@ for (const role of [1, 10, 100])
     if (role === 100) {
       await shortcut.click()
       await expect(page).toHaveURL(
-        /\/system-settings\/billing\/usage-discount$/
+        /\/system-settings\/billing\/topup-discount$/
       )
       await expect(page.locator('[data-discount-editor]')).toBeVisible()
     }
@@ -356,17 +357,19 @@ test('empty personal windows remain neutral and tiny discounts stay visible', as
   page,
 }) => {
   await configureStablePage(page, { theme: 'dark', user: { role: 1 } })
-  await page.route('**/api/user/usage-discount', (route) =>
+  await page.route('**/api/user/topup-discount', (route) =>
     route.fulfill({
       json: {
         success: true,
         data: {
           ...response.data,
           factor: '0.9999',
-          global_factor: '0.9999',
           fixed_rate: '0.0001',
+          personal_rate: '0',
+          raw_rate: '0.0001',
           applied_rate: '0.0001',
           winner_window: undefined,
+          amount_tiers: [],
           windows: [],
         },
       },
@@ -386,25 +389,26 @@ test('empty personal windows remain neutral and tiny discounts stay visible', as
 })
 
 for (const theme of ['light', 'dark'] as const)
-  for (const status of ['inactive', 'unavailable', 'zero-windows'] as const)
+  for (const status of ['inactive', 'zero-windows'] as const)
     test(`discount state ${status} ${theme}`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width: 390, height: 1000 })
       await configureStablePage(page, { theme, user: { role: 1 } })
-      const unavailable = status === 'unavailable'
-      await page.route('**/api/user/usage-discount', (route) =>
+      await page.route('**/api/user/topup-discount', (route) =>
         route.fulfill({
           json: {
             success: true,
             data: {
               ...combined,
               status: status === 'zero-windows' ? 'ok' : status,
-              factor: unavailable ? '0.99' : '1',
-              global_factor: unavailable ? '0.99' : '1',
-              fixed_rate: unavailable ? '0.01' : '0',
+              factor: '1',
+              fixed_rate: '0',
               site_rate: '0',
-              applied_rate: unavailable ? '0.01' : '0',
+              personal_rate: '0',
+              raw_rate: '0',
+              applied_rate: '0',
               cap_applied: false,
               winner_window: undefined,
+              amount_tiers: [],
               windows:
                 status === 'zero-windows'
                   ? combined.windows.map((window) => ({
@@ -422,20 +426,17 @@ for (const theme of ['light', 'dark'] as const)
       const card = page.locator('[data-discount-card]')
       await card.scrollIntoViewIfNeeded()
       await expect(card.locator('[data-discount-effective]')).toContainText(
-        unavailable ? '0.99×' : '1×'
+        '1×'
       )
       await expect(card.locator('[data-selected="true"]')).toHaveCount(0)
       await expect(card.locator('[data-discount-cap]')).toHaveCount(0)
-      await expect(card.locator('[data-discount-unavailable]')).toHaveCount(
-        unavailable ? 1 : 0
-      )
       await expect(card.locator('[data-discount-window]')).toHaveCount(
         status === 'zero-windows' ? 3 : 0
       )
       await expectReadableCard(card)
       if (status === 'inactive') {
         await expect(card.locator('[data-discount-empty]')).toContainText(
-          '标准计费'
+          '原价充值'
         )
         await expect(card.locator('[data-discount-ruler]')).toHaveCount(0)
         await expect(card.locator('[data-discount-global]')).toHaveCount(0)
@@ -475,7 +476,7 @@ for (const theme of ['light', 'dark'] as const)
       user: { role: 100 },
     })
     await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-    await page.route('**/api/user/usage-discount', (route) =>
+    await page.route('**/api/user/topup-discount', (route) =>
       route.fulfill({ json: { success: true, data: combined } })
     )
     await page.goto('/dashboard')
@@ -509,7 +510,7 @@ for (const theme of ['light', 'dark'] as const)
         (value) => localStorage.setItem('ren2hub_locale', value),
         locale
       )
-      await page.route('**/api/user/usage-discount', (route) =>
+      await page.route('**/api/user/topup-discount', (route) =>
         route.fulfill({
           json: {
             success: true,
@@ -517,12 +518,14 @@ for (const theme of ['light', 'dark'] as const)
               ...combined,
               status: 'ok',
               factor: '1',
-              global_factor: '1',
               fixed_rate: '0',
               site_rate: '0',
+              personal_rate: '0',
+              raw_rate: '0',
               applied_rate: '0',
               cap_applied: false,
               winner_window: undefined,
+              amount_tiers: [],
               windows: [],
             },
           },
@@ -566,16 +569,17 @@ for (const theme of ['light', 'dark'] as const)
       user: { role: 100 },
     })
     await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-    await page.route('**/api/user/usage-discount', (route) =>
+    await page.route('**/api/user/topup-discount', (route) =>
       route.fulfill({
         json: {
           success: true,
           data: {
             ...combined,
             factor: '0.9999',
-            global_factor: '1',
             fixed_rate: '0',
             site_rate: '0',
+            personal_rate: '0.0001',
+            raw_rate: '0.0001',
             applied_rate: '0.0001',
             cap_applied: false,
             windows: [

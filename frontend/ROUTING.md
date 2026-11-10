@@ -23,7 +23,7 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 
 ## 兼容边界
 
-系统折扣位于 Root 的「系统设置 → 计费 → 系统折扣」`/system-settings/billing/usage-discount`，侧栏和仪表盘配置入口统一指向系统设置。旧 `/usage-discount` 书签保留 query/hash 后跳转到该分区。该编辑器使用独立的版本化折扣 API；切换设置分区前会保护未保存草稿，保存期间阻止离开。
+充值折扣位于 Root 的「系统设置 → 计费 → 充值折扣」`/system-settings/billing/topup-discount`，侧栏和仪表盘配置入口统一指向系统设置。该编辑器使用独立的版本化折扣 API；切换设置分区前会保护未保存草稿，保存期间阻止离开。
 
 - `src/router/legacyRoutes.ts` 集中转换旧书签、日志 tab 和设置 section，守卫保留 query/hash。未知页面落入 404，不将未知控制台路径当作首页。
 - 系统实例页的旧路径 `/system-info`、`/admin/system-info` 及其 `/console/` 前缀进入 `/ops`。

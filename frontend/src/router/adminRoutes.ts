@@ -53,24 +53,6 @@ export const adminRoutes: RouteRecordRaw[] = [
       nav: 'models-admin',
     },
   },
-  // Keep existing bookmarks; the editor now belongs to system settings.
-  {
-    path: '/usage-discount',
-    name: 'usage-discount-admin',
-    redirect: (to) => ({
-      name: 'system-settings-billing',
-      params: { section: 'usage-discount' },
-      query: to.query,
-      hash: to.hash,
-    }),
-    meta: {
-      wide: true,
-      requiresAdmin: true,
-      requiresRoot: true,
-      feature: 'admin',
-      protected: true,
-    },
-  },
   {
     path: '/models/prefill-groups',
     name: 'prefill-admin',

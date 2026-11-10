@@ -6,10 +6,12 @@ import {
   enabledPayMethods,
   parseCreationFailure,
   parseCreemProducts,
+  quoteChangedFrom,
   rememberGmpayOrder,
   topupApi,
   type CreemProduct,
   type TopupInfo,
+  type TopupQuote,
 } from '@/api/topup'
 import { ApiError } from '@/api/types'
 import AmountInput from '@/components/common/AmountInput.vue'
@@ -20,6 +22,8 @@ import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { nativePaymentMessages } from '@/i18n/nativePayment'
+import { rateToPercent } from '@/features/topup-discount/amount'
+import { compareDecimal } from '@/utils/decimal'
 import { addQuota } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
 import { topupInputAmounts, validTopupAmount } from '@/utils/topupAmount'
@@ -93,20 +97,45 @@ const invalidAmount = computed(
     amount.value !== null &&
     !validTopupAmount(amount.value, amounts.value)
 )
+// server is the discounted providers' quote, confirmed back on pay; Stripe and
+// Creem prices are not discounted and carry none.
 const quote = ref<{
   pay_amount: string
   currency: string
   expected_quota: string | null
+  server: TopupQuote | null
 } | null>(null)
 const quoteLoading = ref(false)
 const quoteError = ref('')
-const quoteSymbol = computed(() =>
-  quote.value?.currency === 'CNY'
-    ? '¥'
-    : quote.value?.currency === 'USD'
-      ? '$'
-      : ''
-)
+const quoteChanged = ref(false)
+const quoteSymbol = computed(() => {
+  const currency = quote.value?.currency ?? ''
+  if (currency === 'CNY') return '¥'
+  if (currency === 'USD') return '$'
+  return currency ? `${currency} ` : ''
+})
+const payLabel = computed(() => {
+  const currency = quote.value?.currency
+  if (currency === 'CNY') return t('wallet.summaryPayNow')
+  if (currency === 'USD') return t('wallet.summaryPayNowUsd')
+  return paymentT('nativePayment.due')
+})
+const discount = computed(() => {
+  const server = quote.value?.server
+  if (!server || compareDecimal(server.applied_rate, '0') <= 0) return null
+  return {
+    listPayAmount: server.list_pay_amount,
+    rate: rateToPercent(server.applied_rate),
+  }
+})
+function serverQuote(value: TopupQuote) {
+  return {
+    pay_amount: value.pay_amount,
+    currency: value.currency,
+    expected_quota: value.expected_quota,
+    server: value,
+  }
+}
 let quoteSequence = 0
 let quoteController: AbortController | null = null
 let configController: AbortController | null = null
@@ -145,7 +174,10 @@ async function topup(): Promise<void> {
   if (!canSubmit.value || submittingTopup.value) return
   submittingTopup.value = true
   paymentError.value = ''
+  quoteChanged.value = false
   const selected = method.value
+  const server = quote.value?.server
+  const sequence = quoteSequence
   try {
     const response = await topupApi.pay(
       selected,
@@ -153,6 +185,12 @@ async function topup(): Promise<void> {
         ? { product_id: product.value }
         : {
             amount: amount.value!,
+            ...(server
+              ? {
+                  expected_pay_amount: server.pay_amount,
+                  expected_currency: server.currency,
+                }
+              : {}),
             ...(selected === 'waffo' && submethod.value !== ''
               ? { pay_method_index: Number(submethod.value) }
               : {}),
@@ -194,6 +232,16 @@ async function topup(): Promise<void> {
     toast.success(t('wallet.callbackNote'))
     emit('done')
   } catch (error) {
+    // No order exists yet: show the new price and wait for another click.
+    const changed = quoteChangedFrom(error)
+    if (changed) {
+      // A newer quote for changed input wins over this rejection.
+      if (!disposed && sequence === quoteSequence) {
+        quote.value = serverQuote(changed)
+        quoteChanged.value = true
+      }
+      return
+    }
     const failure =
       error instanceof ApiError ? parseCreationFailure(error.data) : undefined
     if (selected.startsWith('gmpay:')) {
@@ -215,6 +263,7 @@ async function refreshQuote(): Promise<void> {
   quoteController?.abort()
   quote.value = null
   quoteError.value = ''
+  quoteChanged.value = false
   quoteLoading.value = false
   if (method.value === 'creem') {
     if (selectedProduct.value)
@@ -222,6 +271,7 @@ async function refreshQuote(): Promise<void> {
         pay_amount: String(selectedProduct.value.price),
         currency: selectedProduct.value.currency,
         expected_quota: String(selectedProduct.value.quota),
+        server: null,
       }
     return
   }
@@ -236,19 +286,17 @@ async function refreshQuote(): Promise<void> {
   quoteLoading.value = true
   const currentAmount = amount.value
   try {
-    const due = await topupApi.quote(
+    const result = await topupApi.quote(
       method.value,
       currentAmount,
       controller.signal
     )
     if (sequence !== quoteSequence || controller.signal.aborted) return
-    if (
-      typeof due !== 'string' ||
-      !/^\d+(?:\.\d+)?$/.test(due) ||
-      Number(due) <= 0 ||
-      !Number.isFinite(Number(due))
-    )
-      throw new Error(t('wallet.quoteFailed'))
+    if (result.quote) {
+      quote.value = serverQuote(result.quote)
+      return
+    }
+    // Stripe answers only the payable amount; credit follows the request.
     const scale = app.status.quota_per_unit
     const credited =
       typeof scale === 'number' && Number.isSafeInteger(scale) && scale > 0
@@ -257,23 +305,20 @@ async function refreshQuote(): Promise<void> {
           : currentAmount * scale
         : null
     quote.value = {
-      pay_amount: due,
-      currency:
-        isCrypto.value ||
-        !['stripe', 'waffo', 'waffo_pancake'].includes(method.value)
-          ? 'CNY'
-          : method.value === 'waffo_pancake'
-            ? 'USD'
-            : '',
+      pay_amount: result.pay_amount,
+      currency: '',
       expected_quota:
         credited !== null && Number.isSafeInteger(credited)
           ? String(credited)
           : null,
+      server: null,
     }
   } catch (error) {
     if (sequence === quoteSequence && !controller.signal.aborted)
       quoteError.value =
-        error instanceof ApiError ? error.message : t('wallet.quoteFailed')
+        error instanceof ApiError && error.code !== 'INVALID_RESPONSE'
+          ? error.message
+          : t('wallet.quoteFailed')
   } finally {
     if (sequence === quoteSequence) quoteLoading.value = false
   }
@@ -441,16 +486,29 @@ onUnmounted(() => {
       <div
         class="mt-5 sibling-space-y-2 border-t border-[var(--border-subtle)] pt-4"
       >
+        <template v-if="discount">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-secondary)]">{{
+              t('wallet.summaryListPrice')
+            }}</span>
+            <span class="tabular-nums text-[var(--text-tertiary)] line-through"
+              >{{ quoteSymbol }}{{ discount.listPayAmount }}</span
+            >
+          </div>
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-secondary)]">{{
+              t('wallet.summaryDiscount')
+            }}</span>
+            <span
+              class="font-semibold tabular-nums text-[var(--status-success-text)]"
+              >{{
+                t('wallet.summaryDiscountRate', { rate: discount.rate })
+              }}</span
+            >
+          </div>
+        </template>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-[var(--text-secondary)]">{{
-            !quote?.currency
-              ? paymentT('nativePayment.due')
-              : t(
-                  quote.currency === 'USD'
-                    ? 'wallet.summaryPayNowUsd'
-                    : 'wallet.summaryPayNow'
-                )
-          }}</span>
+          <span class="text-[var(--text-secondary)]">{{ payLabel }}</span>
           <span class="font-semibold tabular-nums text-[var(--text-primary)]">
             {{ quote?.pay_amount ? `${quoteSymbol}${quote.pay_amount}` : '—' }}
           </span>
@@ -497,6 +555,13 @@ onUnmounted(() => {
           {{ t('wallet.retryQuote') }}
         </ConsoleButton>
       </div>
+      <p
+        v-if="quoteChanged"
+        role="status"
+        class="mt-3 text-xs text-[var(--status-warning-text)]"
+      >
+        {{ t('wallet.quoteChanged') }}
+      </p>
       <p
         v-if="paymentBlocked"
         role="status"

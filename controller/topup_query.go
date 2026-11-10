@@ -55,13 +55,26 @@ func GetTopUpDetail(c *gin.Context) {
 	}
 	common.ApiSuccess(c, result)
 }
+
+// adminTopUpDetail adds the frozen discount decision, which may carry shadow
+// rates and reasons, so it is never part of the owner's detail.
+type adminTopUpDetail struct {
+	*model.TopUpDetail
+	Discount *model.TopUpDiscount `json:"discount"`
+}
+
 func GetAdminTopUpDetail(c *gin.Context) {
 	result, err := model.GetTopUpDetail(c.Param("trade_no"), 0)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, result)
+	discount, err := model.GetTopUpDiscountRecord(result.Id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, adminTopUpDetail{TopUpDetail: result, Discount: discount})
 }
 func GetTopUpStatistics(c *gin.Context) {
 	filter, err := topUpRequestFilter(c, 0)

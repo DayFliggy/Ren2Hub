@@ -29,9 +29,7 @@ const entries = ref<Array<{ key: string; value: string }>>([])
 const rawMode = ref(false)
 const draftError = ref('')
 const collectionValid = ref(true)
-const map = computed(() =>
-  ['key-value', 'ratio', 'discount'].includes(props.field.kind)
-)
+const map = computed(() => ['key-value', 'ratio'].includes(props.field.kind))
 const structured = computed(
   () => map.value || ['list', 'amount-list'].includes(props.field.kind)
 )
@@ -213,9 +211,7 @@ function remove(index: number) {
           :value="entry.value"
           class="settings-input"
           :type="
-            ['ratio', 'discount', 'amount-list'].includes(field.kind)
-              ? 'number'
-              : 'text'
+            ['ratio', 'amount-list'].includes(field.kind) ? 'number' : 'text'
           "
           :aria-label="`${label} ${t('editor.value')} ${index + 1}`"
           :placeholder="t('editor.value')"

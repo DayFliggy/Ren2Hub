@@ -62,7 +62,7 @@ describe('system settings catalog', () => {
     expect(keys).toContain('WorkerAllowHttpImageRequestEnabled')
     expect(keys).toContain('perf_metrics_setting.retention_days')
     expect(keys).not.toContain('billing_setting.billing_expr')
-    expect(keys).toContain('payment_setting.amount_discount')
+    expect(keys).not.toContain('payment_setting.amount_discount')
     expect(keys).toContain('channel_affinity_setting.rules')
     expect(keys).toContain('global.chat_completions_to_responses_policy')
     expect(keys).not.toContain('grok.reasoning_effort')

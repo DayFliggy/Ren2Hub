@@ -133,7 +133,6 @@ func GetTopUpInfo(c *gin.Context) {
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
-		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,
 	}
 	common.ApiSuccess(c, data)
@@ -142,6 +141,7 @@ func GetTopUpInfo(c *gin.Context) {
 type EpayRequest struct {
 	Amount        int64  `json:"amount"`
 	PaymentMethod string `json:"payment_method"`
+	service.TopUpQuoteExpectation
 }
 
 type AmountRequest struct {
@@ -162,7 +162,7 @@ func GetEpayClient() *epay.Client {
 	return withUrl
 }
 
-func getPayMoney(amount int64) float64 {
+func getPayMoney(amount int64) decimal.Decimal {
 	dAmount := decimal.NewFromInt(amount)
 	// 充值金额以“展示类型”为准：
 	// - USD/CNY: 前端传 amount 为金额单位；TOKENS: 前端传 tokens，需要换成 USD 金额
@@ -172,18 +172,7 @@ func getPayMoney(amount int64) float64 {
 	}
 
 	dPrice := decimal.NewFromFloat(operation_setting.Price)
-	// apply optional preset discount by the original request amount (if configured), default 1.0
-	discount := 1.0
-	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(amount)]; ok {
-		if ds > 0 {
-			discount = ds
-		}
-	}
-	dDiscount := decimal.NewFromFloat(discount)
-
-	payMoney := dAmount.Mul(dPrice).Mul(dDiscount)
-
-	return payMoney.InexactFloat64()
+	return dAmount.Mul(dPrice)
 }
 
 func getMinTopup() int64 {
@@ -303,7 +292,11 @@ func RequestEpay(c *gin.Context) {
 	if rejectInvalidTopUpQuota(c, id, req.Amount) {
 		return
 	}
-	payMoney := getPayMoney(req.Amount)
+	quote := quoteTopUp(c, req.Amount, getPayMoney(req.Amount), "CNY")
+	if quote == nil {
+		return
+	}
+	payMoney := quote.PayDecimal().InexactFloat64()
 	if payMoney < 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
@@ -311,6 +304,9 @@ func RequestEpay(c *gin.Context) {
 
 	if !operation_setting.ContainsPayMethod(req.PaymentMethod) {
 		paymentError(c, common.NewMessage("Payment method does not exist"))
+		return
+	}
+	if !confirmTopUpQuote(c, req.TopUpQuoteExpectation, quote) {
 		return
 	}
 
@@ -328,7 +324,7 @@ func RequestEpay(c *gin.Context) {
 		Type:           req.PaymentMethod,
 		ServiceTradeNo: tradeNo,
 		Name:           fmt.Sprintf("TUC%d", req.Amount),
-		Money:          strconv.FormatFloat(payMoney, 'f', 2, 64),
+		Money:          quote.PayAmount,
 		Device:         epay.PC,
 		NotifyUrl:      notifyUrl,
 		ReturnUrl:      returnUrl,
@@ -345,17 +341,18 @@ func RequestEpay(c *gin.Context) {
 		amount = dAmount.Div(dQuotaPerUnit).IntPart()
 	}
 	topUp := &model.TopUp{
-		Currency: "CNY", PayAmount: strconv.FormatFloat(payMoney, 'f', 2, 64),
 		UserId:          id,
 		Amount:          amount,
-		Money:           payMoney,
 		TradeNo:         tradeNo,
 		PaymentMethod:   req.PaymentMethod,
 		PaymentProvider: model.PaymentProviderEpay,
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
-	err = topUp.Insert()
+	err = attachTopUpQuote(topUp, quote)
+	if err == nil {
+		err = topUp.Insert()
+	}
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Epay failed to create top-up order user_id=%d trade_no=%s payment_method=%s amount=%d error=%q", id, tradeNo, req.PaymentMethod, req.Amount, err.Error()))
 		paymentError(c, common.NewMessage("Failed to create order"))
@@ -517,12 +514,15 @@ func RequestAmount(c *gin.Context) {
 	if rejectInvalidTopUpQuota(c, id, req.Amount) {
 		return
 	}
-	payMoney := getPayMoney(req.Amount)
-	if payMoney <= 0.01 {
+	quote := quoteTopUp(c, req.Amount, getPayMoney(req.Amount), "CNY")
+	if quote == nil {
+		return
+	}
+	if quote.PayDecimal().InexactFloat64() <= 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": strconv.FormatFloat(payMoney, 'f', 2, 64)})
+	respondTopUpQuote(c, quote)
 }
 
 func GetUserTopUps(c *gin.Context) { listTopUps(c, c.GetInt("id")) }

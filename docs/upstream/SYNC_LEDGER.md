@@ -4,6 +4,22 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 本轮源码冻结目标为 `ba5f7367797566175a6cd97a748d430af3602a01`，于 2026-11-04 完成窗口核对；原已适配基线为 `e449cc700eb569cdfc2199cb73e97de46944f43c`。这不表示目标 SHA 仍是上游当前 HEAD，源码接入与运行验收状态分别记账。2026-10-23/24 的专项报告已于 2026-10-29 从工作树清理；可在 Ren2Hub 仓库用 `git show 85a34bc6bb94e69a323f80a137c3f09effb7e474:docs/upstream/<路径>` 读取清理前版本。旧条目中的“待上游”、`candidate_sha=null` 和缺陷状态只描述当时输入与工作阶段；不得作为当前待办，重新启动时须按最新上游复核。
 
+## 2026-11-10 充值折扣合并
+
+按用户要求把上游 `payment_setting.amount_discount` 与 2026-10-30 的用量折扣合并为充值折扣，全部作用在充值实付上，用量阶梯作为单笔充值阶梯的自动补充。行为见 `docs/billing/TOPUP_DISCOUNT.md`。该功能此前没有真正上线，按全新部署处理：不做 schema 迁移，不保留旧 `/usage-discount` 跳转、历史日志渲染或回滚兼容层。用户确认的政策为：单笔充值阶梯按阈值匹配，各分量相加后统一封顶，上限初值 5%，Stripe 与 Creem 不打折，接受囤积与并发同档，返利基数保持足额。
+
+调用计价回到上游。`relay/helper/price.go` 的 `HandleChannelRatio(ctx)` 恢复上游签名和返回值；`types/price_data.go`、`relay/common/relay_info.go`、`model/task.go`、`controller/relay.go`、`relay/relay_task.go`、`service/log_info_generate.go`、`service/task_billing.go`、`service/violation_fee.go` 中的折扣代码块按 `4f5ab2596` 的逆补丁删除。这些文件去掉 `usage-discount` 理由，其余已批准差异不变。
+
+充值报价放在扩展文件 `service/topup_discount_quote.go` 中，四个渠道共用的入口是 `controller/topup_discount_pay.go`。原生充值文件的接入如下：
+
+- `getPayMoney`、Waffo、Pancake 去掉上游 `AmountDiscount`，每个请求调用一次 `QuoteTopUp`，pay 请求在建单和网关调用前核对 `expected_pay_amount`/`expected_currency`。
+- Stripe 报价只删除 `AmountDiscount` 代码块。
+- `TopUp.Insert` 与 GMPay `CreateGmpayOrder` 在同一事务里写 `topup_discounts` 审计记录。
+- `topup/info` 删除 `discount` 键。
+- `PaymentSetting.AmountDiscount` 字段删除，`payment_setting.amount_discount` 加入退役键。
+
+小时表、配置表、服务与接口统一改名为 `topup_discount*`，`/api/option/topup_discount` 和 `/api/user/topup-discount`。来源清单用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects-live-20261104/new-api` 重算，计数为 797 `upstream_equal`、280 `adapted`、276 `extension`、45 `removed`，合同 `usage-discount` 替换为 `topup-discount`，`candidate_sha` 为空。
+
 ## 2026-11-04 同步审计修复
 
 本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`。审计修复提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 于 2026-11-04 13:18 UTC 发布到生产，跨版本候选 14 阶段通过，Opus 交叉审计无阻塞问题。本节首批源码验证与候选证据保存在 `/home/work/ren2hub-audit-fixes-20261104/delivery.json`；交叉审计后的 P3 修复仅本地提交，未推送、未部署，也未连接生产环境，其证据位于 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`。
@@ -93,7 +109,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 | 32 | `94b521664599d416fead8e57d8318717c0e29058` | 渠道 settings.vertex_api_version 只接受空/v1/v1beta1；只改变 Google Gemini/Imagen 请求版本，Claude/OpenSource 路由不变 | 接入；保留必要的已批准合同接点 |
 | 33 | `ba5f7367797566175a6cd97a748d430af3602a01` | 新增 embedding usage DTO；promptTokenCount > 0 时从上游统计与 promptTokenDetails 构造 usage，否则保留估算 | 接入；保留必要的已批准合同接点 |
 
-保留 Vue、品牌、单节点、工单、GMPay、返利、模型目录、统计与运维观测，以及原生计数、请求限制摘要和上游倍率只读展示。每 Token 自动/有序手动路由、渠道倍率及上限、用户/渠道无等待并发仍复用统一入口；钱包、预扣和结算维持原生唯一实现，用量折扣只在 `HandleChannelRatio` 应用一次。模型默认价格和内置表达式不恢复，工具单价、音频倍率与 Gemini 音频固定价照常吸收。业务分组、站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、React/Electron、旧 `/api/next` 和独立账本继续退役。
+保留 Vue、品牌、单节点、工单、GMPay、返利、模型目录、统计与运维观测，以及原生计数、请求限制摘要和上游倍率只读展示。每 Token 自动/有序手动路由、渠道倍率及上限、用户/渠道无等待并发仍复用统一入口；钱包、预扣和结算维持原生唯一实现；调用计价与上游一致，充值折扣只在充值下单时报价一次（2026-11-10 起）。模型默认价格和内置表达式不恢复，工具单价、音频倍率与 Gemini 音频固定价照常吸收。业务分组、站内订阅/套餐、供应商订阅账号、type 57、io.net、Playground、React/Electron、旧 `/api/next` 和独立账本继续退役。
 
 渠道创建增加 `data.ids`、输入索引映射 `data.results` 和单结果 `data.id`；插件管理同步 pricing issues、skipped routes、原生路径/凭据/SSE/媒体合同，Vue 同批接入；Vertex 增加空值/v1/v1beta1 版本选择，HTTP/2 健康检查默认关闭。moego 最后成组进入请求编辑和 base64 路径，保留数字/未触及原文、受控重复键和缓冲区生命周期，独立模块不反向依赖 host，工具链保持 Go 1.26.10 / Bun 1.4.0。
 

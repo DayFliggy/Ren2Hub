@@ -21,6 +21,7 @@ import (
 
 type WaffoPancakePayRequest struct {
 	Amount int64 `json:"amount"`
+	service.TopUpQuoteExpectation
 }
 
 func RequestWaffoPancakeAmount(c *gin.Context) {
@@ -39,31 +40,25 @@ func RequestWaffoPancakeAmount(c *gin.Context) {
 		return
 	}
 
-	payMoney := getWaffoPancakePayMoney(req.Amount)
-	if payMoney <= 0.01 {
+	quote := quoteTopUp(c, req.Amount, getWaffoPancakePayMoney(req.Amount), "USD")
+	if quote == nil {
+		return
+	}
+	if quote.PayDecimal().InexactFloat64() <= 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": fmt.Sprintf("%.2f", payMoney)})
+	respondTopUpQuote(c, quote)
 }
 
-func getWaffoPancakePayMoney(amount int64) float64 {
+func getWaffoPancakePayMoney(amount int64) decimal.Decimal {
 	dAmount := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		dAmount = dAmount.Div(decimal.NewFromFloat(common.QuotaPerUnit))
 	}
 
-	discount := 1.0
-	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(amount)]; ok && ds > 0 {
-		discount = ds
-	}
-
-	payMoney := dAmount.
-		Mul(decimal.NewFromFloat(setting.WaffoPancakeUnitPrice)).
-		Mul(decimal.NewFromFloat(discount))
-
-	return payMoney.InexactFloat64()
+	return dAmount.Mul(decimal.NewFromFloat(setting.WaffoPancakeUnitPrice))
 }
 
 func normalizeWaffoPancakeTopUpAmount(amount int64) int64 {
@@ -78,10 +73,6 @@ func normalizeWaffoPancakeTopUpAmount(amount int64) int64 {
 		return 1
 	}
 	return normalized
-}
-
-func formatWaffoPancakeAmount(payMoney float64) string {
-	return decimal.NewFromFloat(payMoney).StringFixed(2)
 }
 
 func getWaffoPancakeBuyerEmail(user *model.User) string {
@@ -261,25 +252,34 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		return
 	}
 
-	payMoney := getWaffoPancakePayMoney(req.Amount)
+	quote := quoteTopUp(c, req.Amount, getWaffoPancakePayMoney(req.Amount), "USD")
+	if quote == nil {
+		return
+	}
+	payMoney := quote.PayDecimal().InexactFloat64()
 	if payMoney < 0.01 {
 		paymentError(c, common.NewMessage("Payment amount is too low"))
+		return
+	}
+	if !confirmTopUpQuote(c, req.TopUpQuoteExpectation, quote) {
 		return
 	}
 
 	tradeNo := fmt.Sprintf("WAFFO_PANCAKE-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
 	topUp := &model.TopUp{
-		Currency: "USD", PayAmount: formatWaffoPancakeAmount(payMoney),
 		UserId:          id,
 		Amount:          normalizeWaffoPancakeTopUpAmount(req.Amount),
-		Money:           payMoney,
 		TradeNo:         tradeNo,
 		PaymentMethod:   model.PaymentMethodWaffoPancake,
 		PaymentProvider: model.PaymentProviderWaffoPancake,
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
-	if err := topUp.Insert(); err != nil {
+	err = attachTopUpQuote(topUp, quote)
+	if err == nil {
+		err = topUp.Insert()
+	}
+	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Waffo Pancake failed to create top-up order user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))
 		paymentError(c, common.NewMessage("Failed to create order"))
 		return
@@ -290,7 +290,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		ProductID:     setting.WaffoPancakeProductID,
 		BuyerIdentity: getWaffoPancakeBuyerIdentity(user),
 		PriceSnapshot: &service.WaffoPancakePriceSnapshot{
-			Amount:      formatWaffoPancakeAmount(payMoney),
+			Amount:      quote.PayAmount,
 			TaxCategory: "saas",
 		},
 		BuyerEmail:              getWaffoPancakeBuyerEmail(user),

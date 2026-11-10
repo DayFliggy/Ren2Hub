@@ -11,11 +11,11 @@ import {
   type SummaryRange,
   type DashboardScope,
 } from '@/api/dashboard'
-import { usageDiscountApi } from '@/api/usageDiscount'
+import { topupDiscountApi } from '@/api/topupDiscount'
 import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import type { UsageDiscountSelf } from '@/types/usageDiscount'
+import type { TopupDiscountSelf } from '@/types/topupDiscount'
 
 export interface DashboardStats {
   quota?: string
@@ -73,7 +73,7 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     // Set when the 30-day window exceeds the log limit; names that limit.
     recentOutOfRange = ref<string | null>(null)
   const usageUnavailable = ref(false)
-  const discounts = ref<UsageDiscountSelf | null>(null),
+  const discounts = ref<TopupDiscountSelf | null>(null),
     discountsLoading = ref(true),
     discountsError = ref<string | null>(null)
   // The discount has its own request, so a failed or partial usage summary
@@ -106,7 +106,7 @@ export function useDashboard(scope: MaybeRefOrGetter<DashboardScope> = 'self') {
     }
     discountsLoading.value = true
     const result = await discountRequest.run((signal) =>
-      usageDiscountApi.self(signal)
+      topupDiscountApi.self(signal)
     )
     if (result.stale) return
     discountsLoading.value = false

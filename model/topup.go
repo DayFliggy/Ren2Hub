@@ -27,6 +27,8 @@ type TopUp struct {
 	ExpectedQuota      int     `json:"expected_quota" gorm:"type:bigint;not null;default:0"`
 	CreditedQuota      int     `json:"credited_quota" gorm:"type:bigint;not null;default:0"`
 	AffiliateBaseQuota int     `json:"affiliate_base_quota" gorm:"type:bigint;not null;default:0"`
+	// Discount is written with the order and never serialized with it.
+	Discount *TopUpDiscount `json:"-" gorm:"-"`
 }
 
 const (
@@ -61,9 +63,12 @@ func (topUp *TopUp) Insert() error {
 	if err := FreezeTopUpQuota(topUp); err != nil {
 		return err
 	}
-	var err error
-	err = DB.Create(topUp).Error
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(topUp).Error; err != nil {
+			return err
+		}
+		return insertTopUpDiscountTx(tx, topUp)
+	})
 }
 
 func topUpQuotaMaxCurrent(creditedQuota int) (int, error) {
