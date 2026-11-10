@@ -20,6 +20,33 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 小时表、配置表、服务与接口统一改名为 `topup_discount*`，`/api/option/topup_discount` 和 `/api/user/topup-discount`。来源清单用 `scripts/refresh-core-source-delta.py --upstream-repo /home/work/reference-projects-live-20261104/new-api` 重算，计数为 797 `upstream_equal`、280 `adapted`、276 `extension`、45 `removed`，合同 `usage-discount` 替换为 `topup-discount`，`candidate_sha` 为空。
 
+### 2026-11-10 正式发布
+
+`b8ed9b982` 于 2026-11-10 09:40 UTC 通过普通更新执行器从 `177719ae7` 升级发布，根提交为 `ee2cf9ffb66f8aef054c537be133a974ffaab426`。镜像为 `ren2hub-test:b8ed9b982b5e5942dac4ae8a5e7f76a237a854c4-v1`，ID `sha256:e3a9de5c9082d1b15130611a79547b95d4ae0a3acc313024bb92b72325753c46`，用 go1.26.10 构建。相对 `177719ae7`，这次包含尚未部署的移动端共享层 `b951eaa0f` 和充值折扣合并。调用计价不再打折，充值实付按新规则计算。
+
+发布前验证：
+
+- run.py 门禁都在独立 clone 中运行。unit、databases（sqlite/mysql/postgres）、race、static 和 build 在 `743232656` 上通过。这个提交与 `b8ed9b982` 只差 2 个控制器测试文件。unit、build 和 browser 在 `b8ed9b982` 上重新运行并通过。
+- Codex `gpt-6-astra` 做了三轮审计：
+  - 实现审计第一轮发现 4 项 P2 和 3 项 P3，都已修复。GMPay 报价额度被覆盖、Waffo TOKENS 浮点换算、估算按固定 24 小时归日、零阈值金额阶梯进入概览这四项有回归测试；不可用错误码与错误原文泄露有回归测试；启动日志旧名只核对了文案。
+  - 第二轮复核没有发现新问题。
+  - 发布审计覆盖 `177719ae7..b8ed9b982`，结论 PASS WITH NOTES，见下文 P2。
+- 候选 `run-d5xdi65y` 在根 `ee2cf9f`、应用 `b8ed9b982` 的组合 clone 中运行，使用同一镜像和 `--traffic-host-interface eth0`，并以 `177719ae7` 镜像为旧版本做跨版本升级。14 个阶段全部通过，`deployment_eligible=true`，外部请求为 0。
+- 发布镜像另起一个一次性实例（新库，只走 loopback，不连外网）做充值折扣模拟，35 项检查全部通过：
+  - 默认配置：版本为 0，金额阶梯关闭，`topup/info` 没有 `discount` 键，`payment_setting.amount_discount` 已退役。
+  - 编辑器：保存后版本变为 1，旧版本保存冲突。
+  - 报价：固定优惠、金额阶梯、更高档位，以及 shadow 分量不出现在报价中。
+  - 本人概览：因子不含金额阶梯，也不显示 shadow 月度分量。
+  - 支付确认：报价变化和只传半套确认字段都被拒绝，且不建单。
+  - Epay 建单：冻结实付金额；用户详情里没有折扣决策，管理员详情有，并记录 shadow。
+  - Epay 回调：错误金额被拒绝且钱包不变；正确回调足额入账；重放回调幂等。
+  - 并发与渠道：5 笔并发建单；Pancake 以 USD 报价，并核对报价变化；Stripe 不打折；Waffo 用零小数位 JPY。
+  - 其他：排除用户保留固定优惠与金额阶梯；估算只重放完整业务日；状态接口能读到小时表。
+
+GPT 发布审计的 P2：浏览器里还停留在 `177719ae7` 钱包页面的标签页，重新请求充值配置时，旧解析器要求已删除的 `discount` 字段，会显示支付渠道不可用，整页刷新后恢复。已经加载报价的旧页面提交时不带 `expected_*`，服务端会按新价格建单。这种情况不会出现 5xx 或白屏。发布时生产 2 小时内没有 `topup/info` 请求。后续如需防护，可加前端版本失配检测，不应恢复已退役的字段。审计同时保留两项既有边界：Waffo 与 Pancake 回调不核对回执金额，按签名、成功事件和冻结额度入账；任务终态 CAS 与资金结算分离，依赖执行器的在途排空门槛。
+
+切换结果：切换前后任务、Midjourney、充值、GMPay、系统任务和数据库会话都为 0。AutoMigrate 新增 `topup_discount_configs`、`topup_discount_usage_hourly`、`topup_discounts` 三张表，表数从 45 变为 48，三张新表都为空。旧 `usage_discount_configs`、`usage_discount_hourly` 是空表，原样保留，新版本不读取。生产没有 `payment_setting.amount_discount` 选项。`https-verify.json` 显示本地和 `https://next.renai.uno` 的核验都通过；公网 `/api/status` 版本为 `b8ed9b982`，`/api/user/topup-discount` 与 `/api/option/topup_discount` 未登录时返回 401，旧 `usage_discount` 路由返回 404。
+
 ## 2026-11-04 同步审计修复
 
 本批从 `b9ffeda2fa185b52cf4d8ce44c4a3c665a7271a2` 开始，冻结上游仍为 `ba5f7367797566175a6cd97a748d430af3602a01`。审计修复提交 `e1dfd5f9e19e6e3e644c6fc9c412fc179b12afb1` 于 2026-11-04 13:18 UTC 发布到生产，跨版本候选 14 阶段通过，Opus 交叉审计无阻塞问题。本节首批源码验证与候选证据保存在 `/home/work/ren2hub-audit-fixes-20261104/delivery.json`；交叉审计后的 P3 修复仅本地提交，未推送、未部署，也未连接生产环境，其证据位于 `/home/work/ren2hub-p3-fixes-20261104/delivery.json`。
