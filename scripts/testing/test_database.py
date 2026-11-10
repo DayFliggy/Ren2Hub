@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import queue
+import statistics
 import subprocess
 import socket
 import threading
@@ -243,40 +245,66 @@ func TestFreshDatabase(t *testing.T) {
             socket.create_connection(address, timeout=1)
         self.assertFalse(proxy.errors)
 
-    def test_proxy_forwards_split_writes_without_ack_delay(self):
-        # SQL 客户端常把一条报文分两次写出；代理不得因 Nagle 等待对端延迟 ACK。
+    def test_proxy_forwards_split_messages_without_ack_delay(self):
+        # 数据库客户端和服务端都会把一条报文分段写出。代理任一方向保留 Nagle 时，
+        # 第二段要等对端约 40ms 的延迟 ACK；每轮两个方向各分段一次。
         rounds = 10
         upstream = socket.socket()
         upstream.bind(("127.0.0.1", 0))
         upstream.listen(1)
-        def reply():
-            connection, _ = upstream.accept()
-            with connection:
-                connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                for _ in range(rounds):
-                    received = b""
-                    while len(received) < 2:
-                        received += connection.recv(2 - len(received))
-                    connection.sendall(b"x")
-        thread = threading.Thread(target=reply, daemon=True)
+        request_started, reply_started = queue.Queue(), queue.Queue()
+        errors: list[BaseException] = []
+
+        def read_exact(connection, size):
+            received = b""
+            while len(received) < size:
+                chunk = connection.recv(size - len(received))
+                if not chunk:
+                    raise ConnectionError("proxy closed the stream early")
+                received += chunk
+            return received
+
+        def serve():
+            try:
+                connection, _ = upstream.accept()
+                with connection:
+                    connection.settimeout(2)
+                    connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    for _ in range(rounds):
+                        read_exact(connection, 1)
+                        request_started.put(True)
+                        read_exact(connection, 1)
+                        connection.sendall(b"x")
+                        reply_started.get(timeout=2)
+                        connection.sendall(b"y")
+            except BaseException as error:
+                errors.append(error)
+
+        thread = threading.Thread(target=serve, daemon=True)
         thread.start()
         proxy = database.LoopbackProxy(upstream.getsockname())
+        durations = []
         try:
             with socket.create_connection(proxy.server_address, timeout=2) as client:
                 client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                started = time.monotonic()
                 for _ in range(rounds):
+                    started = time.monotonic()
                     client.sendall(b"a")
-                    time.sleep(0.001)
+                    # The proxy has forwarded the first segment before the second.
+                    request_started.get(timeout=2)
                     client.sendall(b"b")
-                    self.assertEqual(client.recv(1), b"x")
-                elapsed = time.monotonic() - started
+                    self.assertEqual(read_exact(client, 1), b"x")
+                    reply_started.put(True)
+                    self.assertEqual(read_exact(client, 1), b"y")
+                    durations.append(time.monotonic() - started)
         finally:
             proxy.close()
             upstream.close()
             thread.join(timeout=2)
-        # 未关闭 Nagle 时每轮约 42ms（实测 10 轮约 0.42 秒）。
-        self.assertLess(elapsed, 0.25)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        # 去掉任一方向的 TCP_NODELAY，每轮至少多等 40ms；中位数不受个别调度抖动影响。
+        self.assertLess(statistics.median(durations), 0.02)
         self.assertFalse(proxy.errors)
 
     def test_output_symlink_and_existing_report_are_rejected(self):
