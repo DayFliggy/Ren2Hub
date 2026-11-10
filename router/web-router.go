@@ -18,8 +18,16 @@ type WebAssets struct {
 	IndexPage []byte
 }
 
+// retiredAPIPrefixes are API groups the frozen upstream still registers but
+// Ren2Hub removed on purpose: in-site subscriptions, io.net deployments, the
+// multi-instance list, business groups and the playground relay. Since
+// upstream 8c8940c99 uploaded plugins may claim host namespaces, so these
+// stay 404 here instead of becoming plugin routes. Groups upstream deleted
+// itself (such as the Codex OAuth routes) are left to the upstream rules.
+var retiredAPIPrefixes = []string{"/api/subscription", "/api/deployments", "/api/system-info", "/api/group", "/api/user/groups", "/api/user/self/groups", "/api/token/auto-groups", "/api/option/rest_model_ratio"}
+
 func retiredFrontendPath(path string) bool {
-	for _, prefix := range []string{"/market", "/console/market", "/pg", "/next", "/playground", "/chat", "/subscription", "/plan-management", "/plans", "/deployments", "/console/subscription", "/console/plan-management", "/console/plans", "/console/playground", "/console/chat", "/console/deployments"} {
+	for _, prefix := range append([]string{"/market", "/console/market", "/pg", "/next", "/playground", "/chat", "/subscription", "/plan-management", "/plans", "/deployments", "/console/subscription", "/console/plan-management", "/console/plans", "/console/playground", "/console/chat", "/console/deployments"}, retiredAPIPrefixes...) {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}

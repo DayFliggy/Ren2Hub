@@ -475,6 +475,53 @@ func TestTopLevelRoutesSkipOnlyHostRoutesAndOtherKeys(t *testing.T) {
 	assert.Contains(t, routingErrors["suno"], `plugin key "suno" is a prefix owned by built-in plugin sunoapi`)
 }
 
+// Since upstream 8c8940c99 an uploaded plugin may serve top-level host
+// namespaces, but the shared task endpoints remain host routes: requests keep
+// reaching RouteTaskPluginEndpoint, where token routing lets ordinary and
+// plugin channels compete, instead of becoming the plugin's own native route.
+func TestUploadedPluginCannotClaimSharedTaskEndpoints(t *testing.T) {
+	outer := gin.New()
+	SetApiRouter(outer)
+	SetDashboardRouter(outer)
+	SetRelayRouter(outer)
+	SetTaskPluginProtocolRouter(outer)
+	SetVideoRouter(outer)
+	SetTaskRouter(outer)
+	registry := jsplugin.NewRegistry()
+	shared := []struct{ method, path string }{
+		{http.MethodPost, "/v1/responses"},
+		{http.MethodPost, "/v1/videos"},
+		{http.MethodPost, "/v1/video/generations"},
+		{http.MethodPost, "/v1/images/generations"},
+		{http.MethodPost, "/v1/images/edits"},
+	}
+	routes := make([]string, 0, len(shared)+1)
+	for _, route := range shared {
+		routes = append(routes, `{method: "`+route.method+`", path: "`+route.path+`", type: "submit"}`)
+	}
+	routes = append(routes, `{method: "POST", path: "/v1/systemone", type: "submit"}`)
+	uploaded := compileRouterPlugin(t, "shared-claim", "1.0.0", "["+strings.Join(routes, ",")+"]")
+	require.NoError(t, registry.ReplaceOverrides([]*jsplugin.LoadedPlugin{uploaded}))
+	builder := newPluginGenerationBuilder(outer.Routes(), nil, testPluginRouteHandlers(
+		func(c *gin.Context, _ *jsplugin.RoutingGeneration, binding jsplugin.RouteBinding) {
+			c.String(http.StatusOK, binding.Plugin.Meta.Key)
+		},
+	))
+	require.NoError(t, registry.SetGenerationPreparer(builder.prepare))
+
+	skipped := map[string]string{}
+	for _, route := range registry.Generation().SkippedRoutes() {
+		skipped[route.Route.Method+" "+route.Route.Path] = route.Reason
+	}
+	for _, route := range shared {
+		assert.Equal(t, "host_route", skipped[route.method+" "+route.path], route.method+" "+route.path)
+	}
+	assert.NotContains(t, skipped, http.MethodPost+" /v1/systemone")
+	outer.NoRoute((&pluginRouteDispatcher{registry: registry}).dispatch, controller.RelayNotFound)
+	assert.Equal(t, "shared-claim", performPluginRequest(outer, http.MethodPost, "/v1/systemone").Body.String())
+	assert.Equal(t, "shared-claim", performPluginRequest(outer, http.MethodPost, "/shared-claim/v1/videos").Body.String())
+}
+
 // Plugins declaring the same path shape share one registration whose
 // candidates are all of them; each candidate reads the parameters under the
 // names it declares, and /{key} reaches one plugin only.
