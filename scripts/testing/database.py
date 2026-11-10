@@ -238,6 +238,10 @@ class ProxyConnection(socketserver.BaseRequestHandler):
     def handle(self) -> None:
         try:
             with socket.create_connection(self.server.target, timeout=5) as upstream:
+                # 转发会把一条 SQL 报文拆成多次小写入；Nagle 遇上对端延迟 ACK，
+                # 每次往返多等约 40ms，200 行锁序用例因此超过 15 秒预算。
+                for endpoint in (self.request, upstream):
+                    endpoint.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 upstream.settimeout(5)
                 self.request.settimeout(5)
                 while not self.server.stopping.is_set():

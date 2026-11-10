@@ -7,6 +7,7 @@ import subprocess
 import socket
 import threading
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -240,6 +241,42 @@ func TestFreshDatabase(t *testing.T) {
             thread.join(timeout=2)
         with self.assertRaises(OSError):
             socket.create_connection(address, timeout=1)
+        self.assertFalse(proxy.errors)
+
+    def test_proxy_forwards_split_writes_without_ack_delay(self):
+        # SQL 客户端常把一条报文分两次写出；代理不得因 Nagle 等待对端延迟 ACK。
+        rounds = 10
+        upstream = socket.socket()
+        upstream.bind(("127.0.0.1", 0))
+        upstream.listen(1)
+        def reply():
+            connection, _ = upstream.accept()
+            with connection:
+                connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                for _ in range(rounds):
+                    received = b""
+                    while len(received) < 2:
+                        received += connection.recv(2 - len(received))
+                    connection.sendall(b"x")
+        thread = threading.Thread(target=reply, daemon=True)
+        thread.start()
+        proxy = database.LoopbackProxy(upstream.getsockname())
+        try:
+            with socket.create_connection(proxy.server_address, timeout=2) as client:
+                client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                started = time.monotonic()
+                for _ in range(rounds):
+                    client.sendall(b"a")
+                    time.sleep(0.001)
+                    client.sendall(b"b")
+                    self.assertEqual(client.recv(1), b"x")
+                elapsed = time.monotonic() - started
+        finally:
+            proxy.close()
+            upstream.close()
+            thread.join(timeout=2)
+        # 未关闭 Nagle 时每轮约 42ms（实测 10 轮约 0.42 秒）。
+        self.assertLess(elapsed, 0.25)
         self.assertFalse(proxy.errors)
 
     def test_output_symlink_and_existing_report_are_rejected(self):
