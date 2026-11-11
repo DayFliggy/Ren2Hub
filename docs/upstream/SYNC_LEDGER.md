@@ -13,7 +13,7 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 | `706144769` #8200 鉴权缓存完整性 | 吸收 | 采用 2026-11-05 适配：签名包含本地 `MaxConcurrency`，Token 签名去掉 AutoGroups，Lua 参数重排；`controller/user_concurrency_test.go` 改用 miniredis |
 | `3374f251e` #8208 gpt-image-2.6 字段 | 吸收 | 与上游相同；`frame_count` 不参与预扣，与上游一致 |
 | `e3e74205f` 定价问题引导（React） | Vue 等价 | 问题面板显示待处理模型数（按模型去重），编辑器按原因给出步骤；不吸收默认过滤与工具栏重挂载 |
-| `72f3dc7da` 保存前核对价格变更 | 后端吸收，前端 Vue 等价 | `GetModelPricingIssues` 采用上游原文，只为渠道实际服务的模型报未定价/不兼容；快照列出内置价格部分按 no-builtin-prices 不吸收，新增 `TestModelPricingSnapshotListsOnlySavedPrices`。测试夹具 `openTaskDialectDatabaseNamed` 保留原生表名，因为 `GetEnabledModels` 写死 `abilities`。Vue：删除改为可撤销草稿、修改行显示旧值到新值、未保存数量、保存前确认；待删除行提示保存后变为未定价、请求将被拒绝 |
+| `72f3dc7da` 保存前核对价格变更 | 后端吸收，前端 Vue 等价 | `GetModelPricingIssues` 采用上游原文，只为渠道实际服务的模型报未定价/不兼容；快照列出内置价格部分按 no-builtin-prices 不吸收，新增 `TestModelPricingSnapshotListsOnlySavedPrices`。测试夹具 `openTaskDialectDatabaseNamed` 保留原生表名，因为 `GetEnabledModels` 写死 `abilities`。Vue：删除改为可撤销草稿、修改行显示旧值到新值、未保存数量、保存前用宽版确认框左右对照当前与保存后价格；待删除行提示保存后变为未定价、请求将被拒绝。与上游不同，已修改行也可撤销回已保存价格（上游只对待删除行提供撤销） |
 | `2de51a19e` #8218 Redis 同槽键 | 吸收 | fence/version 键加 hash tag；旧 `auth:user:version:<id>` 不再读取，成为无 TTL 残留，清理属生产 Redis 写操作，未授权、非必需 |
 | `6fa80abc7` 会话缓存操作（React） | Vue 等价 | 系统设置“渠道亲和”维护区按 `by_rule_name` 列出可单独清空的规则，确认后 `DELETE ?rule_name=`；说明清空后重新选渠道；规则保存后重新读取统计 |
 | `a5a465926` Vertex SA token 缓存 | 吸收 | 与上游相同 |
@@ -33,7 +33,14 @@ NewAPI（`QuantumNous/new-api`）是 Ren2Hub 唯一上游；项目发布所用�
 
 来源清单：`scripts/refresh-core-source-delta.py` 的 `UPSTREAM_SHA` 改为 rc.49，全部 `review.target` 推进；窗口内上游变化的 adapted 文件逐行复核并在 basis 记录处置；2026-11-05 新增合同 `auth-cache-integrity`、`origin-task-continuation` 并入，`usage-discount` 不再出现。重算计数为 802 `upstream_equal`、281 `adapted`、295 `extension`、45 `removed`。
 
-验证与交叉审计结果见下文追加记录；未运行的项目不算通过。
+验证与交叉审计（未运行的项目不算通过）：
+
+- Codex `gpt-6-astra`（xhigh）三轮后端审计。第一轮审 `039e47e86`，结论 BLOCK：数据库分类器漏登记新夹具（P1），Pancake 订阅产品两条接口可被插件接管（P2），OAuth 重复登录回归只覆盖微信（P2）。`bcd612ca6` 修正，每项先在修正前复现失败；同时按 rc.49 与本地 `engine.Routes()` 对照补齐供应商订阅账号前缀。第二轮审 `bcd612ca6`，PASS WITH NOTES，误伤检查覆盖本地 398 条路由。第三轮审 `695a80ddc` 的数据库代理修正，PASS WITH NOTES，确认根因与修法对症；其两项测试 P2 与一项 P3 由 `aa612dce0` 处理，去掉任一侧 `TCP_NODELAY` 测试都会失败。
+- 前端界面交给 OpenCode Gemini 4（`hjm-g/gemini-4-argon`）与 Gemini 3.8（`muyu-g/gemini-3.8-flash`）审计，两批都是 PASS WITH NOTES。登录协议与亲和缓存（审 `f9afdd7b3`）由 `15241d7c4` 处置；模型定价引导与保存前核对（审 `695a80ddc`）由 `55e654a1c` 处置。模型给出的对比度均为截图估算，处置前在真实页面按计算样式实测；低于标准的说法均不成立。
+- `databases` 在 `15241d7c4` 上曾有 2/124 失败：MySQL `over_200/batch_set_tag` 超过 15 秒预算，`TestRouteTaskPluginEndpointUsesSelectedChannel` 超过 60 秒包超时。纯路由移植 `2e3057aa2` 上同样失败，不是 rc.49 吸收引入。根因在本地验证设施：宿主到 Docker 数据库的 loopback 转发代理没有关闭 Nagle，SQL 报文分段写出后每次往返多等约 40ms 延迟 ACK；该用例在一个事务内逐渠道重建能力（与上游 `BatchSetChannelTag` 相同），205 个渠道累计超时。`f09e7f9b5` 让代理两端设置 `TCP_NODELAY`，超时预算不变；同一子测试从 15.7 秒降到 0.33 秒。生产不经过该代理。
+- run.py 门槛都在独立 clone 中运行。`databases`（SQLite、MySQL 8.4、PostgreSQL 15.19）在 `f09e7f9b5` 上 124/124 套件、1720 个用例通过，`run-io71q7ru`。`race` 在 `695a80ddc` 上 4 组 84 个用例通过、零跳过，`run-a9fu6dsc`。此后 Go 代码未改。最终提交 `55e654a1c` 上：unit（Go 181 批，Vue 290 个文件 2171 项，`run-t0va7zbn`）、static（`run-rnbu55bg`）、build（二进制 SHA256 `d66b1e1a7b4d9ef864f210441014d5980b626f5015b0169b0a3d6f060bd91278`，`run-wzsf99s5`）、browser（桌面/手机 × 明/暗，loopback 网络命名空间，`run-1iiionhp`）通过；来源清单重算无变化。
+- `ui-contracts` 在 `55e654a1c` 上未通过：669 项中 668 项通过（`run-3sitvq80`），`home-showcase` 的 dark mobile 用例失败，首页请求总数停在 `--`。另一次被会话中断的运行（`run-y440m0pw`）在 `log-export` dark desktop 失败一项，日期格只有 90% 在视口内。两项在 `2e3057aa2` 上同样复现：home-showcase 60 次失败 1 次，log-export 20 次失败 1 次。该提交的前端相对生产基线 `3a05fdc5c` 只多一行路由夹具，本批也没有改动这两处页面和测试，判为既有的不稳定用例，根因未查明。按规则不计通过，也没有用重试掩盖。
+- 未运行：`candidate` 与 `routing`（需要构建不可变镜像，本轮未要求发布）。
 
 ## 2026-11-10 充值折扣合并
 
