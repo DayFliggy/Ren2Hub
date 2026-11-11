@@ -18,9 +18,13 @@ const showcase = useHomeShowcase(startTime, {
   initiallyVisible: !observesVisibility,
 })
 
+// One callback can carry several records for the same element, e.g. the
+// initial hidden state and the visible one after a scroll; the last record is
+// the current state.
 const { stop } = useIntersectionObserver(
   root,
-  ([entry]) => showcase.setSectionVisible(Boolean(entry?.isIntersecting)),
+  (entries) =>
+    showcase.setSectionVisible(Boolean(entries.at(-1)?.isIntersecting)),
   { threshold: 0 }
 )
 

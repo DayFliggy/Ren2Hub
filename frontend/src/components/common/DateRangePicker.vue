@@ -609,4 +609,12 @@ function onDayKeydown(event: KeyboardEvent, key: string): void {
   opacity: 0;
   transform: translateY(-4px);
 }
+/* The global rule only drops the transition; the enter offset would stay
+   until Vue's next frame and skew keyboard scrolling by the same 4px. */
+@media (prefers-reduced-motion: reduce) {
+  .drp-pop-enter-from,
+  .drp-pop-leave-to {
+    transform: none;
+  }
+}
 </style>

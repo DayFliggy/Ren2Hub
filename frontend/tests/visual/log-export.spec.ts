@@ -125,7 +125,17 @@ for (const theme of ['light', 'dark'] as const) {
         .locator('[data-date-key="2026-07-31"][data-in-month="true"]')
         .click()
       await expect(calendar).not.toBeVisible()
-      await dialog.getByRole('button', { name: '选择日期范围' }).click()
+      // With reduced motion the calendar sits in place from its first frame,
+      // before Vue removes the enter class, so keyboard scrolling is exact.
+      const firstFrame = await dialog
+        .getByRole('button', { name: '选择日期范围' })
+        .evaluate(async (trigger: HTMLElement) => {
+          trigger.click()
+          for (let tick = 0; tick < 3; tick++) await Promise.resolve()
+          const panel = document.querySelector('.drp-pop-enter-from')
+          return panel ? getComputedStyle(panel).transform : 'not entering'
+        })
+      expect(firstFrame).toBe('none')
       await page.keyboard.press('ArrowRight')
       await expect(
         calendar.locator('[data-date-key="2026-07-02"][data-in-month="true"]')
