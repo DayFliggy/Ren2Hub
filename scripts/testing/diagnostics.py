@@ -16,6 +16,14 @@ import time
 GO = 'go'
 MODULE = 'github.com/QuantumNous/new-api/'
 STATUSES = ('pass', 'fail', 'known_upstream', 'blocked', 'not_run')
+
+
+def _verify_probe_registry():
+    """探针清单与 routing_result.DIAGNOSTIC_PROBES 必须逐项一致，发布复算不能另有一份。"""
+    from routing_result import DIAGNOSTIC_PROBES
+    actual = tuple((probe.package, probe.test, probe.fingerprint) for probe in PROBES)
+    if actual != DIAGNOSTIC_PROBES:
+        raise RuntimeError('diagnostic probe registry diverged from routing_result.DIAGNOSTIC_PROBES')
 BLOCKED = ('outbound_id', 'plugin_action', 'context_mapping', 'platform', 'billing', 'retry')
 N2_MARKER = ('known_upstream=N2; blocker=nil_ChannelMeta_in_ResolveOriginTask; '
              'blocked=' + ','.join(BLOCKED))
@@ -64,6 +72,8 @@ PROBES = (
     Probe('router', 'TestUpstreamMidjourneyContinuationLookupFailureIsPrivate500',
           'mj_origin_upstream_probe_test.go', 'mj_storage'),
 )
+
+_verify_probe_registry()
 
 
 @dataclass(frozen=True)

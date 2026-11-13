@@ -1,6 +1,23 @@
 """路由审计的结果合同；已知上游缺陷不能计为通过。"""
 STATUSES = ('pass', 'fail', 'known_upstream', 'blocked', 'not_run')
 
+# 与 diagnostics.PROBES 逐项一致的探针清单；(package, test, fingerprint)。
+# diagnostics.py 在导入时核对，改一边而不改另一边会在测试启动时失败。
+DIAGNOSTIC_PROBES = (
+    ('middleware', 'TestUpstreamPluginOriginChannelStorageFailureIsPrivate500', 'plugin_storage'),
+    ('relay', 'TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate', 'A7'),
+    ('relay', 'TestUpstreamRemixResolvesVendorTaskID', 'N1'),
+    ('relay', 'TestUpstreamRemixAdaptorPreservesAction', 'N3'),
+    ('router', 'TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext', 'N2'),
+    ('router', 'TestUpstreamNativeRemixRouteLegacyTaskUsesPublicIDAndDataRatios', 'N2'),
+    ('router', 'TestUpstreamNativeRemixRouteOnTaskPluginChannel', 'N2'),
+    ('router', 'TestUpstreamNativeRemixRouteChecksKeyModelLimitAgainstOriginModel', 'A5'),
+    ('router', 'TestUpstreamNativeRemixRouteRejectsOriginChannelOfAnotherPlatform', 'N2'),
+    ('router', 'TestUpstreamNativeRemixRouteRetryDoesNotCompoundInheritedRatios', 'N2'),
+    ('router', 'TestUpstreamMidjourneyContinuationOfMissingOrForeignTaskIsNotFoundFirst', 'mj_priority'),
+    ('router', 'TestUpstreamMidjourneyContinuationLookupFailureIsPrivate500', 'mj_storage'),
+)
+
 # Version 1: independent inventory of the approved HTTP matrix. Removing a
 # runner case must leave a missing requirement, not silently shrink coverage.
 REQUIRED_CASES = (
@@ -47,8 +64,7 @@ def evaluate(cases, required, cleanup_errors=()):
 
 
 # 2026-11-13 用户批准的发布豁免，只覆盖已精确确认的上游缺陷。
-# 字面量必须与根仓库 scripts/server/ren2hub_release.py 的同名常量逐项一致；
-# 发布校验器按路径加载本函数复核，两边不能各自放宽。
+# 发布校验器按已验证的 source_sha 加载本函数复核，规则只有这一处来源。
 RELEASE_EXEMPT_DIAGNOSTICS = (
     ('middleware/TestUpstreamPluginOriginChannelStorageFailureIsPrivate500', 'plugin_storage'),
     ('relay/TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate', 'A7'),
@@ -70,12 +86,50 @@ RELEASE_EXEMPT_ROUTING_BLOCKED = (
 )
 
 
+class _Probe:
+    def __init__(self, package, test, fingerprint):
+        self.name = package + '/' + test
+        self.fingerprint = fingerprint
+
+
+def diagnostics_complete(diagnostics, probes=None):
+    """复算诊断报告的完整性，不信任报告自带的汇总字段。
+
+    通过项与未运行项在汇总里不可区分，所以这里按探针清单逐项点名。
+    """
+    probes = probes or tuple(_Probe(*item) for item in DIAGNOSTIC_PROBES)
+    if not isinstance(diagnostics, dict) or not probes:
+        return False
+    cases = diagnostics.get('cases')
+    preflight = diagnostics.get('preflight')
+    if not isinstance(cases, list) or not isinstance(preflight, list) or not preflight:
+        return False
+    if not all(isinstance(item, dict) for item in (*cases, *preflight)):
+        return False
+    names = [case.get('name') for case in cases]
+    expected = [probe.name for probe in probes]
+    expected += [probe.name + '#' + assertion for probe in probes if probe.fingerprint == 'N2'
+                 for assertion in RELEASE_EXEMPT_BLOCKED]
+    if names != expected:
+        return False
+    if not all(isinstance(item.get('name'), str) and item.get('name') for item in preflight):
+        return False
+    counts = {status: sum(case.get('status') == status for case in cases) for status in STATUSES}
+    # 本地失败与未运行在汇总里与通过项无法区分，必须逐项排除。
+    if counts['fail'] or counts['not_run']:
+        return False
+    known = counts['known_upstream']
+    code = 2 if known else 0
+    return (diagnostics.get('exit_code') == code and diagnostics.get('contracts_success') is (code != 1)
+            and diagnostics.get('counts') == counts)
+
+
 def release_exemption(diagnostics, routing):
     """未通过项与登记的上游缺陷完全一致时返回记录；否则返回 None。
 
     豁免不把缺陷计为通过。调用方必须另行确认其余阶段全部通过。
     """
-    if not isinstance(diagnostics, dict) or not isinstance(routing, dict):
+    if not diagnostics_complete(diagnostics) or not routing_complete(routing):
         return None
     if diagnostics.get('exit_code') != 2 or diagnostics.get('contracts_success') is not True:
         return None
@@ -121,6 +175,30 @@ def release_exemption(diagnostics, routing):
         return None
     return {'diagnostics': [list(item) for item in RELEASE_EXEMPT_DIAGNOSTICS],
             'routing': KNOWN_UPSTREAM['upstream_native_remix_probe']['diagnosis']}
+
+
+def registered_probes():
+    """登记的诊断探针，字段与 diagnostics.PROBES 一致。
+
+    内联而不是导入：发布校验器按文件路径加载本模块，不能依赖 diagnostics 的导入路径。
+    diagnostics.py 启动时核对两边一致，探针清单不能在这里单独放宽。
+    """
+    return tuple(_Probe(*item) for item in DIAGNOSTIC_PROBES)
+
+
+def routing_complete(routing):
+    """复算路由报告的完整性，不信任报告自带的汇总字段。"""
+    if not isinstance(routing, dict):
+        return False
+    cases = routing.get('cases')
+    if not isinstance(cases, list) or not all(isinstance(case, dict) for case in cases):
+        return False
+    names = [case.get('name') for case in cases]
+    if names != list(REQUIRED_CASES):
+        return False
+    recomputed = evaluate(cases, REQUIRED_CASES, routing.get('cleanup_errors') or ())
+    return all(routing.get(key) == recomputed[key]
+               for key in ('success', 'contracts_success', 'exit_code', 'counts', 'missing_cases'))
 
 
 def combined_exit_code(results):
