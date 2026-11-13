@@ -60,7 +60,7 @@ python3 -B scripts/testing/build_routing_image.py
 python3 -B scripts/testing/run.py routing --image sha256:<应用镜像ID> --simulator-image sha256:<模拟器镜像ID>
 ```
 
-构建脚本从当前工作树复制不可变输入，记录构建前后指纹、base SHA、Go/Docker 版本与镜像 ID；Bun/Node 目前仅由构建文件固定镜像，未写入实际版本输出。未提交源码的 `candidate_sha=null`；不能用现有发布镜像代表修改后代码。`routing` 执行精确 Go 诊断和真实路由合同，不要求无关 SDK 运行时，始终 `deployment_eligible=false`。完整 candidate 同样强制诊断并执行 SDK、升级等原有门槛；`all` 不单独重复诊断，由 candidate 执行一次并合并结果。此前层失败仍按原规则中止，不能把未执行的诊断算成通过。本地失败优先退出 1，只有已知上游及其阻断才退出 2。当前没有发布豁免清单，已知缺陷也不能让完整 candidate 获得发布资格。镜像带内容指纹时，无论 routing 或完整 candidate 都要求与当前工作树一致。
+构建脚本从当前工作树复制不可变输入，记录构建前后指纹、base SHA、Go/Docker 版本与镜像 ID；Bun/Node 目前仅由构建文件固定镜像，未写入实际版本输出。未提交源码的 `candidate_sha=null`；不能用现有发布镜像代表修改后代码。`routing` 执行精确 Go 诊断和真实路由合同，不要求无关 SDK 运行时，始终 `deployment_eligible=false`。完整 candidate 同样强制诊断并执行 SDK、升级等原有门槛；`all` 不单独重复诊断，由 candidate 执行一次并合并结果。此前层失败仍按原规则中止，不能把未执行的诊断算成通过。本地失败优先退出 1，只有已知上游及其阻断才退出 2。2026-11-13 起完整 candidate 有一条精确发布豁免：未通过项必须与 `routing_result.py` 登记的上游缺陷及其阻断逐项一致，其余阶段全部通过，manifest 记录 `upstream_exemption`，发布校验器按同一函数复核。多一项、少一项、诊断变了或本地失败都不豁免，routing 单独运行始终 `deployment_eligible=false`。镜像带内容指纹时，无论 routing 或完整 candidate 都要求与当前工作树一致。
 
 路由报告使用 `pass`、`fail`、`known_upstream`、`blocked`、`not_run`。退出 0 表示所有必测项通过；退出 1 表示本地/未分类失败、缺项、源码变化或清理失败；退出 2 仅表示已确认上游缺陷及其阻断，不能计为通过或发布。供应商到达序号不是状态更新游标，等待挂起完成时保留原游标重复查询；不靠固定 sleep 猜测并发交错。HTTP 请求 ID、供应商实际命中、重试轨迹、状态、预期/实际扣费与并发释放共同构成证据。Go 行锁、精确时间测试单列，不冒充实际 HTTP。必测清单独立于执行列表；已知上游允许表绑定用例名和诊断。成功 WS create 从唯一原生结算日志关联请求 ID，取消及被拒绝的 WS 若不能取得 ID，明确记录缺失并保留供应商/余额证据，不伪造。每个可关联请求核对日志净扣费，零扣费附加短稳定窗口；完整边界随 routing 报告的 limits 保存。
 
@@ -104,6 +104,6 @@ python3 -B scripts/testing/run.py routing --image sha256:<应用镜像ID> --simu
 
 包含 routing 的 candidate/all 和独立 routing 入口必须同时提供 `--image-identity` 与 `--simulator-identity`。两个独立构建入口成功后才原子写出 schema_version=1 的 identity.json：artifact、success/stable、不可变 image_id、source_before/after、revision/base_revision、binary 的路径/哈希、实际工具版本；模拟器额外声明协议版本。prepare-only 或失败进度不是成功构建证明。验收核对清单、镜像标签、实际二进制和工具版本并保存原始清单副本及哈希；应用还必须匹配当前工作树，未提交内容的 candidate_sha 为 null。模拟器不导入网关代码，网关不导入模拟器代码。
 
-A4 已成为默认回归；诊断白名单只保留精确确认的上游问题，不按 TestUpstream 前缀匹配。只有 known_upstream/blocked 时退出 2，本地失败/缺项/清理错误退出 1 且优先于 2；当前不增加发布例外。预览使用 transport=http|websocket，WS 必须显式查询，不把 stream=true 当成 WS。普通 HTTP 断开用例检查在途继续、成功后结算和释放各一次，不要求共享实现立即取消退款。
+A4 已成为默认回归；诊断白名单只保留精确确认的上游问题，不按 TestUpstream 前缀匹配。只有 known_upstream/blocked 时退出 2，本地失败/缺项/清理错误退出 1 且优先于 2；发布例外只有上一节登记的那一条精确集合。预览使用 transport=http|websocket，WS 必须显式查询，不把 stream=true 当成 WS。普通 HTTP 断开用例检查在途继续、成功后结算和释放各一次，不要求共享实现立即取消退款。
 
 渠道锁序扩展矩阵每个数据库独立执行，全部 23 个场景保留，每次 Go 测试仍为 60 秒超时。205 行夹具采用批量插入并核对 PostgreSQL 反向物理布局；不缩减受测渠道写操作或锁等待屏障。

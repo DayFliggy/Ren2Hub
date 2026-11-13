@@ -634,5 +634,50 @@ class UpgradeCandidateTests(unittest.TestCase):
             self.assertTrue(all(revision == 'new' for stage, revision in observed[4:]))
 
 
+
+class ReleaseExemptionManifestTests(unittest.TestCase):
+    """完整候选只有在未通过项恰好是登记的上游缺陷时才可发布。"""
+
+    def manifest_for(self, diagnostics, routing, *, exit_code=2, billing_success=True):
+        from test_routing_result import ReleaseExemptionTests
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = candidate.Candidate.__new__(candidate.Candidate)
+            runner.output = root
+            runner.routing_only = False
+            runner.stages = candidate.STAGES
+            identity = {'git_head': 'b' * 40, 'candidate_sha': 'b' * 40}
+            runner.source = root / 'Ren2Hub'
+            runner.workspace_identity, runner.workspace_sha = identity, 'b' * 40
+            runner.report = {'success': exit_code == 0, 'exit_code': exit_code, 'stages': {},
+                             'source': identity, 'image': {'revision': 'a' * 40, 'id': 'sha256:image'},
+                             'image_matches_clean_source': True, 'diagnostics': diagnostics,
+                             'isolation': {'traffic': {'scope': 'host_interface', 'interface': 'eth0', 'mounts': []}}}
+            for stage in candidate.STAGES:
+                report = routing if stage == 'routing' else {'success': billing_success, 'group': stage}
+                (root / (stage + '.json')).write_text(json.dumps(report))
+                runner.report['stages'][stage] = report
+            with patch('candidate.execute', return_value=SimpleNamespace(
+                    stdout=('160000 commit ' + 'a' * 40 + '\tRen2Hub\n').encode())), \
+                    patch('candidate.source_identity', return_value=identity):
+                runner.manifest()
+            return json.loads((root / 'candidate-manifest.json').read_text())
+
+    def test_exact_upstream_set_is_deployable_and_deviations_are_not(self):
+        from test_routing_result import ReleaseExemptionTests
+        diagnostics, routing = ReleaseExemptionTests().reports()
+        approved = self.manifest_for(diagnostics, routing)
+        self.assertTrue(approved['deployment_eligible'])
+        self.assertTrue(approved['success'])
+        self.assertFalse(approved['candidate_success'])
+        self.assertIsNotNone(approved['upstream_exemption'])
+        failed_billing = self.manifest_for(diagnostics, routing, billing_success=False)
+        self.assertFalse(failed_billing['deployment_eligible'])
+        clean = self.manifest_for({'success': True, 'exit_code': 0, 'cases': []},
+                                  {'success': True, 'exit_code': 0, 'cases': []}, exit_code=0)
+        self.assertTrue(clean['deployment_eligible'])
+        self.assertIsNone(clean['upstream_exemption'])
+
+
 if __name__ == '__main__':
     unittest.main()

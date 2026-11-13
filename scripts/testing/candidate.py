@@ -652,10 +652,17 @@ class Candidate:
         workspace_clean = workspace_end['candidate_sha'] == self.workspace_sha
         gitlink = execute(['git', '-C', str(self.source.parent), 'ls-tree', 'HEAD', 'Ren2Hub']).stdout.decode().split()
         linked = len(gitlink) == 4 and gitlink[:3] == ['160000', 'commit', self.report.get('image', {}).get('revision')]
-        complete = (len(reports) == len(self.stages)
-                    and all(self.report['stages'].get(stage, {}).get('success') is True for stage in self.stages)
-                    and self.report.get('diagnostics', {}).get('success') is True)
-        deployable = bool(not getattr(self, 'routing_only', False) and self.report['success'] and complete and self.report.get('image_matches_clean_source') and workspace_clean and linked)
+        from routing_result import release_exemption
+        exemption = release_exemption(self.report.get('diagnostics'), self.report['stages'].get('routing'))
+        exempted = exemption is not None and self.report.get('exit_code') == 2
+        # 豁免只替换 routing 与诊断两处的通过要求；其余阶段仍必须逐项 success。
+        stages_ok = all(self.report['stages'].get(stage, {}).get('success') is True
+                        for stage in self.stages if not (exempted and stage == 'routing'))
+        complete = (len(reports) == len(self.stages) and stages_ok
+                    and (self.report.get('diagnostics', {}).get('success') is True or exempted))
+        deployable = bool(not getattr(self, 'routing_only', False) and complete
+                          and (self.report['success'] or exempted)
+                          and self.report.get('image_matches_clean_source') and workspace_clean and linked)
         traffic = self.report.get('isolation', {}).get('traffic')
         manifest = {'success': deployable, 'candidate_success': self.report['success'], 'deployment_eligible': deployable,
                     'source_sha': self.report.get('image', {}).get('revision'),
@@ -666,6 +673,7 @@ class Candidate:
                     'build_identities': self.report.get('build_identities'),
                     'diagnostics': {key:self.report.get('diagnostics', {}).get(key)
                                     for key in ('exit_code','counts','report_path','report_sha256')},
+                    'upstream_exemption': exemption if exempted else None,
                     'traffic': {key: traffic[key] for key in ('scope', 'interface', 'mounts')} if traffic else None}
         private_write(self.output / 'candidate-manifest.json', manifest)
         self.report['deployment_eligible'] = deployable

@@ -78,3 +78,57 @@ class PanicIdentityTests(unittest.TestCase):
             self.assertIsNone(origin_panic_frame(trace, source))
         self.assertIsNone(origin_panic_frame(b'/app/relay/relay_task.go:2 ', source.replace('ResolveOriginTask','Other')))
         self.assertIsNone(origin_panic_frame(b'/app/relay/relay_task.go:2 ', source + source))
+
+
+class ReleaseExemptionTests(unittest.TestCase):
+    """发布豁免只在未通过项与登记的上游缺陷逐项一致时成立。"""
+
+    def reports(self):
+        from routing_result import RELEASE_EXEMPT_BLOCKED, RELEASE_EXEMPT_DIAGNOSTICS, RELEASE_EXEMPT_ROUTING_BLOCKED
+        diagnostics = {'exit_code': 2, 'contracts_success': True, 'preflight': [{'name': 'go_toolchain', 'status': 'pass'}],
+                       'cases': [{'name': name, 'status': 'known_upstream', 'upstream': 'QuantumNous/new-api',
+                                  'diagnosis': diagnosis} for name, diagnosis in RELEASE_EXEMPT_DIAGNOSTICS]}
+        diagnostics['cases'].extend(
+            {'name': name + '#' + assertion, 'status': 'blocked', 'blocked_by': name, 'reason': 'origin_resolution_panic'}
+            for name, diagnosis in RELEASE_EXEMPT_DIAGNOSTICS if diagnosis == 'N2' for assertion in RELEASE_EXEMPT_BLOCKED)
+        routing = {'exit_code': 2, 'contracts_success': True, 'cleanup_errors': [], 'missing_cases': [],
+                   'cases': [{'name': name, 'status': 'pass'} for name in REQUIRED_CASES]}
+        for case in routing['cases']:
+            if case['name'] in KNOWN_UPSTREAM:
+                case.update(status='known_upstream', **KNOWN_UPSTREAM[case['name']])
+            elif case['name'] in RELEASE_EXEMPT_ROUTING_BLOCKED:
+                case.update(status='blocked', blocked_by='upstream_native_remix_probe')
+        return diagnostics, routing
+
+    def test_approved_set_is_exempted_and_any_deviation_is_not(self):
+        import copy
+        from routing_result import release_exemption
+        diagnostics, routing = self.reports()
+        self.assertIsNotNone(release_exemption(diagnostics, routing))
+        deviations = []
+        extra_fail = copy.deepcopy(diagnostics)
+        extra_fail['cases'].append({'name': 'local/Probe', 'status': 'fail'})
+        deviations.append(extra_fail)
+        missing = copy.deepcopy(diagnostics)
+        missing['cases'] = [case for case in missing['cases'] if case['status'] != 'known_upstream' or case['diagnosis'] != 'N1']
+        deviations.append(missing)
+        changed = copy.deepcopy(diagnostics)
+        next(case for case in changed['cases'] if case['diagnosis'] == 'N1')['diagnosis'] = 'other'
+        deviations.append(changed)
+        passed = copy.deepcopy(diagnostics)
+        next(case for case in passed['cases'] if case['status'] == 'known_upstream')['status'] = 'pass'
+        deviations.append(passed)
+        preflight = copy.deepcopy(diagnostics)
+        preflight['preflight'][0]['status'] = 'fail'
+        deviations.append(preflight)
+        for report in deviations:
+            with self.subTest(report=report['cases'][-1].get('name')):
+                self.assertIsNone(release_exemption(report, routing))
+        routing_extra = copy.deepcopy(routing)
+        routing_extra['cases'].append({'name': 'new_case', 'status': 'blocked', 'blocked_by': 'upstream_native_remix_probe'})
+        routing_cleanup = copy.deepcopy(routing)
+        routing_cleanup['cleanup_errors'] = ['restore_request_policy']
+        for report in (routing_extra, routing_cleanup):
+            self.assertIsNone(release_exemption(diagnostics, report))
+        self.assertIsNone(release_exemption(None, routing))
+        self.assertIsNone(release_exemption({**diagnostics, 'exit_code': 1}, routing))

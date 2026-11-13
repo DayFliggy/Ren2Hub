@@ -46,6 +46,83 @@ def evaluate(cases, required, cleanup_errors=()):
             'counts': counts, 'missing_cases': sorted(set(required) - set(names))}
 
 
+# 2026-11-13 用户批准的发布豁免，只覆盖已精确确认的上游缺陷。
+# 字面量必须与根仓库 scripts/server/ren2hub_release.py 的同名常量逐项一致；
+# 发布校验器按路径加载本函数复核，两边不能各自放宽。
+RELEASE_EXEMPT_DIAGNOSTICS = (
+    ('middleware/TestUpstreamPluginOriginChannelStorageFailureIsPrivate500', 'plugin_storage'),
+    ('relay/TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate', 'A7'),
+    ('relay/TestUpstreamRemixResolvesVendorTaskID', 'N1'),
+    ('relay/TestUpstreamRemixAdaptorPreservesAction', 'N3'),
+    ('router/TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext', 'N2'),
+    ('router/TestUpstreamNativeRemixRouteLegacyTaskUsesPublicIDAndDataRatios', 'N2'),
+    ('router/TestUpstreamNativeRemixRouteOnTaskPluginChannel', 'N2'),
+    ('router/TestUpstreamNativeRemixRouteChecksKeyModelLimitAgainstOriginModel', 'A5'),
+    ('router/TestUpstreamNativeRemixRouteRejectsOriginChannelOfAnotherPlatform', 'N2'),
+    ('router/TestUpstreamNativeRemixRouteRetryDoesNotCompoundInheritedRatios', 'N2'),
+    ('router/TestUpstreamMidjourneyContinuationOfMissingOrForeignTaskIsNotFoundFirst', 'mj_priority'),
+    ('router/TestUpstreamMidjourneyContinuationLookupFailureIsPrivate500', 'mj_storage'),
+)
+RELEASE_EXEMPT_BLOCKED = ('outbound_id', 'plugin_action', 'context_mapping', 'platform', 'billing', 'retry')
+RELEASE_EXEMPT_ROUTING_BLOCKED = (
+    'native_remix_upstream_id', 'native_remix_plugin_action', 'native_remix_inherited_billing',
+    'native_remix_platform', 'native_remix_expression_usage', 'native_remix_unsupported_provider',
+)
+
+
+def release_exemption(diagnostics, routing):
+    """未通过项与登记的上游缺陷完全一致时返回记录；否则返回 None。
+
+    豁免不把缺陷计为通过。调用方必须另行确认其余阶段全部通过。
+    """
+    if not isinstance(diagnostics, dict) or not isinstance(routing, dict):
+        return None
+    if diagnostics.get('exit_code') != 2 or diagnostics.get('contracts_success') is not True:
+        return None
+    if routing.get('exit_code') != 2 or routing.get('contracts_success') is not True:
+        return None
+    if routing.get('cleanup_errors') or routing.get('missing_cases'):
+        return None
+    if any(item.get('status') != 'pass' for item in diagnostics.get('preflight', [])):
+        return None
+    known, blocked = {}, {}
+    for case in diagnostics.get('cases', []):
+        status = case.get('status')
+        if status == 'known_upstream':
+            if case.get('upstream') != 'QuantumNous/new-api':
+                return None
+            known[case.get('name')] = case.get('diagnosis')
+        elif status == 'blocked':
+            if case.get('reason') != 'origin_resolution_panic':
+                return None
+            blocked.setdefault(case.get('blocked_by'), set()).add(case.get('name'))
+        else:
+            return None
+    if known != dict(RELEASE_EXEMPT_DIAGNOSTICS):
+        return None
+    n2 = [name for name, diagnosis in RELEASE_EXEMPT_DIAGNOSTICS if diagnosis == 'N2']
+    if set(blocked) != set(n2) or any(
+            blocked[name] != {name + '#' + assertion for assertion in RELEASE_EXEMPT_BLOCKED} for name in n2):
+        return None
+    routed, routed_blocked = {}, set()
+    for case in routing.get('cases', []):
+        status = case.get('status')
+        if status == 'pass':
+            continue
+        if status == 'known_upstream':
+            routed[case.get('name')] = {'upstream': case.get('upstream'), 'diagnosis': case.get('diagnosis')}
+        elif status == 'blocked':
+            if case.get('blocked_by') not in KNOWN_UPSTREAM:
+                return None
+            routed_blocked.add(case.get('name'))
+        else:
+            return None
+    if routed != KNOWN_UPSTREAM or routed_blocked != set(RELEASE_EXEMPT_ROUTING_BLOCKED):
+        return None
+    return {'diagnostics': [list(item) for item in RELEASE_EXEMPT_DIAGNOSTICS],
+            'routing': KNOWN_UPSTREAM['upstream_native_remix_probe']['diagnosis']}
+
+
 def combined_exit_code(results):
     """Local/incomplete failure (1) outranks the known-only status (2)."""
     if not results or any(row.get('exit_code', 0 if row.get('success') else 1) not in (0,2)
