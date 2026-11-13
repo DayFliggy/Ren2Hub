@@ -60,7 +60,7 @@ python3 -B scripts/testing/build_routing_image.py
 python3 -B scripts/testing/run.py routing --image sha256:<应用镜像ID> --simulator-image sha256:<模拟器镜像ID>
 ```
 
-研究构建脚本从当前工作树复制不可变输入，记录构建前后指纹、base SHA、镜像 ID，以及实际 Go/Bun/Node/Docker 版本与二进制哈希。正式候选构建使用根工作区 `scripts/server/build-ren2hub-test.sh <已发布SHA> --output-dir <新的空目录>`，从内部 bare 创建干净检出；两个入口复用相同 schema 1 身份验证，均要求镜像内容指纹。未提交源码的 `candidate_sha=null`；不能用现有发布镜像代表修改后代码。`routing` 执行精确 Go 诊断和真实路由合同，不要求无关 SDK 运行时，始终 `deployment_eligible=false`。完整 candidate 同样强制诊断并执行 SDK、升级等原有门槛；`all` 不单独重复诊断，由 candidate 执行一次并合并结果。此前层失败仍按原规则中止，不能把未执行的诊断算成通过。本地失败优先退出 1，只有已知上游及其阻断才退出 2。2026-11-13 起完整 candidate 有一条精确发布豁免：未通过项必须与 `routing_result.py` 登记的上游缺陷及其阻断逐项一致，其余阶段全部通过，manifest 记录 `upstream_exemption`，发布校验器按同一函数复核。多一项、少一项、诊断变了或本地失败都不豁免，routing 单独运行始终 `deployment_eligible=false`。镜像带内容指纹时，无论 routing 或完整 candidate 都要求与当前工作树一致。
+研究构建脚本从当前工作树复制不可变输入，记录构建前后指纹、base SHA、镜像 ID，以及实际 Go/Bun/Node/Docker 版本与二进制哈希。正式候选构建使用根工作区 `sh scripts/server/build-ren2hub-test.sh <已发布SHA> --output-dir <新的空目录>`，从内部 bare 创建干净检出；两个入口复用相同 schema 1 身份验证，均要求镜像内容指纹。未提交源码的 `candidate_sha=null`；不能用现有发布镜像代表修改后代码。`routing` 执行精确 Go 诊断和真实路由合同，不要求无关 SDK 运行时，始终 `deployment_eligible=false`。完整 candidate 同样强制诊断并执行 SDK、升级等原有门槛；`all` 不单独重复诊断，由 candidate 执行一次并合并结果。此前层失败仍按原规则中止，不能把未执行的诊断算成通过。本地失败优先退出 1，只有已知上游及其阻断才退出 2。2026-11-13 起完整 candidate 有一条精确发布豁免：未通过项必须与 `routing_result.py` 登记的上游缺陷及其阻断逐项一致，其余阶段全部通过，manifest 记录 `upstream_exemption`，发布校验器按同一函数复核。多一项、少一项、诊断变了或本地失败都不豁免，routing 单独运行始终 `deployment_eligible=false`。镜像带内容指纹时，无论 routing 或完整 candidate 都要求与当前工作树一致。
 
 诊断执行器与发布复核共用 `routing_result.py` 中的完整探针清单；新增执行探针不会自动加入已批准的豁免集合。完整候选的 manifest 中，`success` 表示可发布，`candidate_success` 表示测试是否全部通过；存在精确豁免时后者仍为 false，不能把已知缺陷和阻断计入通过数。
 

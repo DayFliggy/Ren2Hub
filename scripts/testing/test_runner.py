@@ -1,6 +1,7 @@
 """保护统一入口的证据判定与环境隔离，避免退出 0 冒充完整测试。"""
 import contextlib
 import errno
+import hashlib
 import io
 import json
 import re
@@ -318,7 +319,7 @@ class RunnerContractTests(unittest.TestCase):
 
 
 class HostTrafficCandidateTests(unittest.TestCase):
-    def prepared(self, root, interface):
+    def prepared(self, root, interface, simulator_address=None, guard_address=None):
         """用记录参数的假 docker 跑一次 prepare；app 的 Mounts 由实际传入的 --mount 推导。"""
         (root / 'deploy/ren2hub').mkdir(parents=True, exist_ok=True)
         (root / 'deploy/ren2hub/docker-compose.preview.yml').write_text(
@@ -329,6 +330,7 @@ class HostTrafficCandidateTests(unittest.TestCase):
         runner.prefix = 'ren2hub-candidate-local-' + runner.run_id
         runner.containers, runner.image, runner.traffic_interface = {}, 'ren2hub-test:local', interface or ''
         runner.previous_image = None
+        runner.simulator_image = 'simulator-image' if simulator_address else None
         runner.report = {'source': {'candidate_sha': 'a' * 40, 'working_tree_sha256': 'b' * 64}}
         runner.verify_build_identities = lambda: None
         started = {}
@@ -346,6 +348,8 @@ class HostTrafficCandidateTests(unittest.TestCase):
             runner.containers[role] = str(len(started)) * 64
 
         def owned(role):
+            if role == 'simulator':
+                return {'NetworkSettings': {'Networks': {runner.network: {'IPAddress': simulator_address}}}}
             options = started[role]
             mounts = []
             for spec in (options[index + 1] for index, value in enumerate(options) if value == '--mount'):
@@ -356,13 +360,35 @@ class HostTrafficCandidateTests(unittest.TestCase):
 
         runner.docker, runner.start, runner.owned = docker, start, owned
         runner.sdk_runtimes, runner.wait_healthy = lambda: None, lambda role: None
-        runner.tls, runner.lock_network = lambda: root / 'private/server.crt', lambda: {'addresses': {}}
+        runner.tls = lambda: root / 'private/server.crt'
+        runner.lock_network = lambda: {'addresses': {'simulator': guard_address or simulator_address} if simulator_address else {}}
         runner.inspect = lambda identifier: {'Internal': True, 'Labels': {candidate.LABEL: runner.run_id}}
-        runner.prepare()
+        def prepare_simulator(runner):
+            runner.start('simulator', 'simulator-image')
+            candidate.private_write(root / 'private/simulator.json', {})
+        def simulator_target(runner):
+            return {'container': runner.prefix + '-simulator', 'address': simulator_address,
+                    'configuration_path': str(root / 'private/simulator.json'),
+                    'configuration_sha256': hashlib.sha256((root / 'private/simulator.json').read_bytes()).hexdigest()}
+        with patch('simulator_support.prepare', side_effect=prepare_simulator), \
+                patch('simulator_support.target', side_effect=simulator_target), \
+                patch('simulator_support.wait_ready'):
+            runner.prepare()
         env = dict(line.split('=', 1) for line in (root / 'private/app.env').read_text().splitlines())
         with patch.dict('os.environ', {'REN2HUB_ACCEPTANCE_TARGET': str(root / 'private/target.json')}):
             target = acceptance_target()
         return started['app'], env, target, runner.report['isolation']['traffic']
+
+    def test_simulator_proxy_bypass_uses_only_the_verified_owned_address(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, env, target, _ = self.prepared(Path(directory), None, '192.168.176.5')
+            self.assertEqual(env['NO_PROXY'], 'localhost,127.0.0.1,postgres,redis,192.168.176.5')
+            self.assertEqual(target['simulator']['address'], '192.168.176.5')
+            self.assertEqual(env['HTTP_PROXY'], 'http://127.0.0.1:41749')
+            self.assertEqual(env['HTTPS_PROXY'], env['HTTP_PROXY'])
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(candidate.CandidateError, 'candidate_simulator_network_address_changed'):
+                self.prepared(Path(directory), None, '192.168.176.5', '192.168.176.6')
 
     def test_host_interface_adds_only_one_readonly_counter_mount_and_env(self):
         with tempfile.TemporaryDirectory() as directory:

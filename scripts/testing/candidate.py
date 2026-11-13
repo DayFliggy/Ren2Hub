@@ -420,6 +420,14 @@ class Candidate:
             from simulator_support import prepare
             prepare(self)
         self.network_guard = self.lock_network()
+        # Only this run's independently owned supplier bypasses the local
+        # marketplace proxy; private ranges and unrelated hosts stay proxied.
+        simulator_address = None
+        if 'simulator' in self.containers:
+            simulator_address = self.owned('simulator')['NetworkSettings']['Networks'][self.network]['IPAddress']
+            require(simulator_address == self.network_guard['addresses']['simulator'],
+                    'candidate_simulator_network_address_changed')
+        from contracts.common import candidate_no_proxy
         app_env = self.env_file('app.env', {
             'SQL_DSN': 'postgresql://ren2hub:' + passwords['POSTGRES_PASSWORD'] + '@postgres:5432/ren2hub_candidate',
             'REDIS_CONN_STRING': 'redis://:' + passwords['REDIS_PASSWORD'] + '@redis:6379/0',
@@ -431,7 +439,7 @@ class Candidate:
             'SSL_CERT_FILE': '/etc/ren2hub/mock-ca.crt', 'TICKET_UPLOAD_DIR': '/app/ticket-attachments',
             'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC',
             'HTTP_PROXY': 'http://127.0.0.1:41749', 'HTTPS_PROXY': 'http://127.0.0.1:41749',
-            'NO_PROXY': 'localhost,127.0.0.1,postgres,redis',
+            'NO_PROXY': candidate_no_proxy(simulator_address),
             **({'TASK_POLL_MAX_FAILURES': '0'} if getattr(self, 'previous_image', None) else {}),
             **({'TRAFFIC_HOST_INTERFACE': self.traffic_interface} if self.traffic_interface else {})})
         # 默认不挂载也不设网卡名，应用使用主监听器计数；--mount 的源缺失时容器创建直接失败。

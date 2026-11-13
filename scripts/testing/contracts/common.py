@@ -1,6 +1,7 @@
 """Shared isolated target, private-file, account, pricing and settlement-evidence contracts."""
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,19 @@ class RequirementError(RuntimeError):
 def require(condition, code):
     if not condition:
         raise RequirementError(code)
+
+
+def candidate_no_proxy(simulator_address=None):
+    hosts = ['localhost', '127.0.0.1', 'postgres', 'redis']
+    if simulator_address is not None:
+        try:
+            address = ipaddress.IPv4Address(simulator_address)
+        except ipaddress.AddressValueError:
+            require(False, 'candidate_simulator_proxy_address_invalid')
+        require(str(address) == simulator_address and not address.is_unspecified
+                and not address.is_multicast, 'candidate_simulator_proxy_address_invalid')
+        hosts.append(simulator_address)
+    return ','.join(hosts)
 
 
 def protect_private(path, directory=False):
@@ -192,7 +206,7 @@ def verify_candidate_database(revision):
             'candidate_image_identity_changed')
     settings = dict(item.split('=', 1) for item in app['Config']['Env'])
     require(settings.get('HTTP_PROXY') == settings.get('HTTPS_PROXY') == 'http://127.0.0.1:41749'
-            and settings.get('NO_PROXY') == 'localhost,127.0.0.1,postgres,redis'
+            and settings.get('NO_PROXY') == candidate_no_proxy(target.get('simulator', {}).get('address'))
             and target['network_guard'].get('dns_forwarding_blocked') is True,
             'candidate_external_network_guard_missing')
     require(settings.get('TASK_POLL_MAX_FAILURES', '') == ('0' if target.get('attachment_volume') else ''),
