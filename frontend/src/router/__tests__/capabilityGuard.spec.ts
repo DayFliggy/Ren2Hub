@@ -27,7 +27,7 @@ vi.mock('@/api/publicCatalog', () => ({
 }))
 vi.mock('@/api/setup', () => ({ setupApi }))
 
-import { clearAuthBundle } from '@/api/authSession'
+import { clearAuthBundle, setAuthBundle } from '@/api/authSession'
 import { ApiError } from '@/api/types'
 import router from '@/router'
 import { sanitizeSetupRedirect, sanitizeRedirect } from '@/router'
@@ -36,6 +36,7 @@ import { guardPublicModule } from '@/router/publicRoutes'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
+import { takePluginLoginCallback } from '@/features/channels/lib/plugin-login-callback'
 
 function setSessionHint(present: boolean) {
   document.cookie = present
@@ -108,6 +109,113 @@ beforeEach(async () => {
 })
 
 describe('capability route guard', () => {
+  const callbackPath = '/oauth/plugin/fixture/callback'
+  const callbackSecrets = '?state=guard-flow&code=guard-secret#guard-fragment'
+
+  it('cleans plugin callback parameters before the first asynchronous setup check', async () => {
+    useAuthStore().user!.role = 100
+    setAuthBundle({
+      ...sessionBundle(useAuthStore().user!),
+      token_type: 'Bearer',
+    })
+    const setup = useSetupStore()
+    setup.phase = 'idle'
+    setup.status = null
+    window.history.replaceState(null, '', callbackPath + callbackSecrets)
+    setupApi.status.mockImplementationOnce(async () => {
+      expect(window.location.search).toBe('')
+      expect(window.location.hash).toBe('')
+      return { status: true, root_init: true, database_type: 'sqlite' }
+    })
+    await router.push(callbackPath + callbackSecrets)
+    expect(router.currentRoute.value.fullPath).toBe(callbackPath)
+    expect(takePluginLoginCallback(callbackPath)?.params).toEqual({
+      state: 'guard-flow',
+      code: 'guard-secret',
+    })
+    expect(takePluginLoginCallback(callbackPath)).toBeUndefined()
+  })
+
+  it('binds a fresh callback tab to the session restored by the normal auth guard', async () => {
+    const auth = useAuthStore()
+    const root = { ...auth.user!, role: 100 }
+    auth.persist(null)
+    auth.checked = false
+    authApi.refreshSession.mockResolvedValueOnce(sessionBundle(root))
+    await router.push(callbackPath + callbackSecrets)
+    expect(router.currentRoute.value.fullPath).toBe(callbackPath)
+    expect(takePluginLoginCallback(callbackPath)?.params.code).toBe(
+      'guard-secret'
+    )
+  })
+
+  it('discards pending callback parameters if the account changes during setup', async () => {
+    const auth = useAuthStore()
+    auth.user!.role = 100
+    setAuthBundle({ ...sessionBundle(auth.user!), token_type: 'Bearer' })
+    const setup = useSetupStore()
+    setup.phase = 'idle'
+    setup.status = null
+    setupApi.status.mockImplementationOnce(async () => {
+      const other = { ...auth.user!, id: 2 }
+      auth.acceptLogin({ ...sessionBundle(other), token_type: 'Bearer' })
+      return { status: true, root_init: true, database_type: 'sqlite' }
+    })
+    await router.push(callbackPath + callbackSecrets)
+    expect(router.currentRoute.value.fullPath).toBe(callbackPath)
+    expect(takePluginLoginCallback(callbackPath)).toBeUndefined()
+  })
+
+  it.each([0, 1, 10])(
+    'discards plugin callback credentials when role %s cannot enter',
+    async (role) => {
+      const auth = useAuthStore()
+      if (role) auth.user!.role = role
+      else auth.persist(null)
+      await router.push(callbackPath + callbackSecrets)
+      expect(router.currentRoute.value.name).toBe(
+        role ? 'dashboard' : 'sign-in'
+      )
+      if (!role)
+        expect(router.currentRoute.value.query.redirect).toBe(callbackPath)
+      expect(window.location.href).not.toContain('guard-secret')
+      expect(JSON.stringify(window.history.state)).not.toContain('guard-secret')
+      expect(takePluginLoginCallback(callbackPath)).toBeUndefined()
+    }
+  )
+
+  it('keeps setup error redirect clean and discards the pending callback', async () => {
+    const setup = useSetupStore()
+    setup.phase = 'idle'
+    setup.status = null
+    setupApi.status.mockRejectedValueOnce(new Error('setup unavailable'))
+    await router.push(callbackPath + callbackSecrets)
+    expect(router.currentRoute.value.name).toBe('setup-error')
+    expect(router.currentRoute.value.query.redirect).toBe(callbackPath)
+    expect(takePluginLoginCallback(callbackPath)).toBeUndefined()
+  })
+
+  it.each([
+    'navigation unavailable',
+    'Failed to fetch dynamically imported module',
+  ])('keeps failed navigation retries clean: %s', async (message) => {
+    useAuthStore().user!.role = 100
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    sessionStorage.setItem('ren2hub_chunk_reload', '1')
+    const failure = new Error(message)
+    vi.spyOn(useAppStore(), 'initialize').mockRejectedValueOnce(failure)
+    await expect(router.push(callbackPath + callbackSecrets)).rejects.toBe(
+      failure
+    )
+    expect(navigationError.value?.href).toBe(callbackPath)
+    expect(takePluginLoginCallback(callbackPath)).toBeUndefined()
+    expect(JSON.stringify(window.history.state)).not.toContain('guard-secret')
+    expect(
+      JSON.stringify({ ...sessionStorage, ...localStorage })
+    ).not.toContain('guard-secret')
+    sessionStorage.removeItem('ren2hub_chunk_reload')
+  })
+
   it('blocks the sign-up route when global registration is disabled', async () => {
     const auth = useAuthStore()
     auth.persist(null)

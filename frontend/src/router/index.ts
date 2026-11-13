@@ -21,6 +21,13 @@ import { adminRoutes } from '@/router/adminRoutes'
 import { canonicalLegacyLocation } from '@/router/legacyRoutes'
 import { navigationError } from '@/router/navigationState'
 import { ApiError } from '@/api/types'
+import { getAuthSessionSnapshot } from '@/api/authSession'
+import {
+  bindPluginLoginCallbackSession,
+  discardPluginLoginCallback,
+  prepareInitialPluginLoginCallback,
+  preparePluginLoginCallback,
+} from '@/features/channels/lib/plugin-login-callback'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
@@ -73,6 +80,8 @@ export function sanitizeRedirect(value: unknown): string | null {
     return null
   }
 }
+
+prepareInitialPluginLoginCallback(import.meta.env.BASE_URL)
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -423,6 +432,17 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // Secrets must leave the address before setup/auth checks or lazy imports can
+  // fail, redirect, or offer a retry URL. The component consumes memory once.
+  if (
+    preparePluginLoginCallback(
+      to.path,
+      stringifyQuery(to.query),
+      to.hash,
+      router.resolve({ path: to.path }).href
+    )
+  )
+    return { path: to.path, replace: true }
   const canonical = canonicalLegacyLocation(to.path, to.query)
   if (
     canonical.path !== to.path ||
@@ -481,6 +501,7 @@ router.beforeEach(async (to) => {
     return true
 
   const auth = useAuthStore()
+  const sessionBeforeAuthCheck = getAuthSessionSnapshot()
   if (to.meta.requiresAuth) await auth.ensureSession()
   else await auth.ensureVisitorSession()
 
@@ -504,6 +525,7 @@ router.beforeEach(async (to) => {
   ) {
     return CONSOLE_ENTRY
   }
+  bindPluginLoginCallbackSession(to.path, sessionBeforeAuthCheck)
   return true
 })
 
@@ -512,6 +534,7 @@ const CHUNK_LOAD_ERROR =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 router.onError((error, to) => {
+  discardPluginLoginCallback()
   navigationError.value = {
     kind:
       error instanceof ApiError && error.status === 429
@@ -534,7 +557,10 @@ router.onError((error, to) => {
 })
 
 router.afterEach((_to, _from, failure) => {
-  if (failure) return
+  if (failure) {
+    discardPluginLoginCallback()
+    return
+  }
   navigationError.value = null
   try {
     window.sessionStorage.removeItem(CHUNK_RELOAD_KEY)

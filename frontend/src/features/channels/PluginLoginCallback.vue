@@ -6,14 +6,22 @@ import {
   PLUGIN_LOGIN_BROADCAST_CHANNEL,
   submitPluginLoginCallback,
 } from './lib/plugin-login'
+import {
+  isPluginLoginCallbackSessionCurrent,
+  takePluginLoginCallback,
+} from './lib/plugin-login-callback'
 const { t } = useI18n()
 const route = useRoute()
 const error = ref('')
 const pending = ref(true)
 const request = new AbortController()
 const plugin = String(route.params.key ?? '')
-const params = Object.fromEntries(new URLSearchParams(window.location.search))
-window.history.replaceState(window.history.state, '', window.location.pathname)
+const callback = takePluginLoginCallback(route.path)
+const params = callback?.params ?? {}
+const current = () =>
+  !request.signal.aborted &&
+  callback &&
+  isPluginLoginCallbackSessionCurrent(callback.session)
 function broadcast(message: unknown) {
   if (typeof BroadcastChannel === 'undefined') return
   const channel = new BroadcastChannel(PLUGIN_LOGIN_BROADCAST_CHANNEL)
@@ -32,13 +40,16 @@ async function finish() {
       params,
       request.signal
     )
-    if (!request.signal.aborted) broadcast({ ...result, state: params.state })
+    if (current()) broadcast({ ...result, state: params.state })
   } catch (cause) {
-    if (request.signal.aborted) return
+    if (!current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
     if (params.state) broadcast({ state: params.state, error: error.value })
   } finally {
-    if (!request.signal.aborted) pending.value = false
+    if (!request.signal.aborted) {
+      pending.value = false
+      if (!current()) error.value = t('pluginExtensions.callbackFailed')
+    }
   }
 }
 onBeforeUnmount(() => request.abort())

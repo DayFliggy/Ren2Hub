@@ -87,11 +87,31 @@ async function noOverflow(page: Page) {
   ).toBeLessThanOrEqual(1)
 }
 
+async function noCallbackSecrets(page: Page) {
+  const persisted = await page.evaluate(() =>
+    JSON.stringify({
+      href: location.href,
+      history: history.state,
+      local: { ...localStorage },
+      session: { ...sessionStorage },
+    })
+  )
+  for (const value of [
+    'guard-secret',
+    'guard-flow',
+    'guard-fragment',
+    'late-flow',
+    'late-secret',
+  ])
+    expect(persisted).not.toContain(value)
+}
+
 test('插件适配：权限、请求处理、provider 配置和登录回调（隔离接口契约）', async ({
   browser,
 }, info) => {
   test.setTimeout(240_000)
   const violations: string[] = []
+  let releaseLateCallback: (() => void) | undefined
   const contextOptions = {
     baseURL: session.baseURL,
     viewport: info.project.use.viewport,
@@ -112,8 +132,36 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       violations
     )
     const user = await userContext.newPage()
+    let deniedCallbackSubmissions = 0
+    await userContext.route('**/api/channel/plugin_login/callback', (route) => {
+      deniedCallbackSubmissions++
+      return route.abort('blockedbyclient')
+    })
+    const deniedCallbackPath = '/oauth/plugin/local-provider/callback'
+    const deniedCallback = `${deniedCallbackPath}?code=guard-secret&state=guard-flow#guard-fragment`
+    await test.step('未登录回调清参后进入登录页，不在 redirect 或浏览器存储保留凭证', async () => {
+      await user.goto(deniedCallback)
+      await expect(user).toHaveURL(
+        (url) =>
+          url.pathname === '/sign-in' &&
+          url.searchParams.get('redirect') === deniedCallbackPath
+      )
+      await noCallbackSecrets(user)
+      expect(deniedCallbackSubmissions).toBe(0)
+      await user.reload()
+      await noCallbackSecrets(user)
+      expect(deniedCallbackSubmissions).toBe(0)
+      await user.screenshot({
+        path: info.outputPath('plugin-callback-unauthenticated.png'),
+        fullPage: true,
+      })
+    })
     await test.step('真实用户权限不能进入请求处理或写入实例', async () => {
       const token = await login(user, 'user')
+      await user.goto(deniedCallback)
+      await expect(user).toHaveURL(/\/dashboard$/)
+      await noCallbackSecrets(user)
+      expect(deniedCallbackSubmissions).toBe(0)
       await user.goto('/request-processing')
       await expect(user).toHaveURL(/\/dashboard$/)
       await expect(user.locator('a[href="/request-processing"]')).toHaveCount(0)
@@ -340,10 +388,20 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       '**/api/channel/plugin_login/callback',
       async (route) => {
         callbackSubmissions++
-        expect(route.request().postDataJSON()).toEqual({
+        const payload = route.request().postDataJSON()
+        const late = payload.params.state === 'late-flow'
+        expect(payload).toEqual({
           plugin: 'local-provider',
-          params: { state: 'local-flow', code: 'local-once' },
+          params: late
+            ? { state: 'late-flow', code: 'late-secret' }
+            : { state: 'local-flow', code: 'local-once' },
         })
+        if (late) {
+          await new Promise<void>((resolve) => {
+            releaseLateCallback = resolve
+          })
+          if (route.request().failure()) return
+        }
         loggedIn = true
         await route.fulfill({
           json: {
@@ -463,9 +521,56 @@ test('插件适配：权限、请求处理、provider 配置和登录回调（�
       await expect(
         editor.getByText('Local account', { exact: true })
       ).toBeVisible()
+      await editor.getByRole('button', { name: '取消', exact: true }).click()
+    })
+    await test.step('回调提交期间真实注销使请求取消，迟到完成不广播也不重放', async () => {
+      const broadcasts: unknown[] = []
+      await context.exposeBinding('recordLatePluginCallback', (_, value) =>
+        broadcasts.push(value)
+      )
+      const latePage = await context.newPage()
+      await latePage.addInitScript(() => {
+        const channel = new BroadcastChannel('ren2hub-plugin-login')
+        channel.addEventListener('message', (event) => {
+          const record = (
+            window as unknown as {
+              recordLatePluginCallback: (value: unknown) => void
+            }
+          ).recordLatePluginCallback
+          record(event.data)
+        })
+      })
+      await latePage.goto(
+        '/oauth/plugin/local-provider/callback?state=late-flow&code=late-secret'
+      )
+      await expect.poll(() => callbackSubmissions).toBe(2)
+      const cancelled = latePage.waitForEvent('requestfailed', {
+        predicate: (request) =>
+          new URL(request.url()).pathname ===
+          '/api/channel/plugin_login/callback',
+      })
+      await page.getByRole('button', { name: '个人中心', exact: true }).click()
+      const logout = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === '/api/user/auth/logout'
+      )
+      await page.getByRole('button', { name: '退出登录', exact: true }).click()
+      expect((await logout).status()).toBe(200)
+      await expect(latePage).toHaveURL((url) => url.pathname === '/sign-in')
+      await cancelled
+      releaseLateCallback?.()
+      await noCallbackSecrets(latePage)
+      expect(broadcasts).toEqual([])
+      expect(callbackSubmissions).toBe(2)
+      await latePage.screenshot({
+        path: info.outputPath('plugin-callback-session-expired.png'),
+        fullPage: true,
+      })
+      await latePage.close()
     })
     expect(violations).toEqual([])
   } finally {
+    releaseLateCallback?.()
     await context.close()
     await userContext.close()
   }
