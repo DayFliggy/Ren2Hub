@@ -28,7 +28,8 @@ MATRIX_TESTS = {
         "TestTokenRoutingDatabases", "TestTokenRouteChannelMutationLockOrderDatabases",
         "TestAuthCacheIntegrityDatabaseMatrix", "TestGmpayAndTicketDatabaseContracts",
         "TestCoreEmptyDatabaseInitialization", "TestAffiliateLedgerMigrationAndIdempotencyDatabases",
-        "TestSystemTaskHistoryDatabaseMatrix", "TestAffiliateDeletedInviterDatabases",
+        "TestSystemTaskHistoryDatabaseMatrix", "TestDeleteFinishedSystemTasksDatabaseMatrix",
+        "TestJSONColumnDatabaseRoundTrip", "TestTaskPluginGatewayIDConvergesUnderConcurrentCreation", "TestAffiliateDeletedInviterDatabases",
         "TestAffiliateMonthlySeriesDatabases", "TestDeleteDisabledChannelIDsDatabases",
         "TestChannelMetricsDatabases", "TestChannelPriorityDatabaseMatrix",
         "TestInferencePresetSettingsAndDatabaseRoundTrip", "TestAuditLogSortIndexDatabaseMatrix",
@@ -37,7 +38,7 @@ MATRIX_TESTS = {
         "TestTopUpQueryDatabases", "TestTopUpDiscountDatabaseMatrix", "TestChannelUpstreamRatioDatabases",
     ),
     "controller": (
-        "TestModelPricingConversionDatabaseMatrix", "TestModelManagementDatabaseMatrix",
+        "TestModelPricingConversionDatabaseMatrix", "TestProviderChannelManagementDatabaseMatrix", "TestModelManagementDatabaseMatrix",
         "TestVendorManagementDatabaseMatrix", "TestModelDeletionDatabaseMatrix",
         "TestSharedModelPluginPricingDatabaseMatrix", "TestDeleteRedemptionBatch",
         "TestAuditDatabaseMatrix", "TestPreConsumePolicyDatabaseMatrix",
@@ -84,9 +85,98 @@ PAIRED_TESTS = (
     ("model", "TestUserSessionPreviousRefreshHashMigrationConfiguredDatabases"),
     ("controller", "TestIndependentAuditLogStores"),
 )
+PROVIDER_TESTS = (
+    ('controller', 'TestEpayRSAModeSignsOrdersAndVerifiesCallbacks'),
+    ('controller', 'TestUpdateOptionValidatesEpaySignSettings'),
+    ("service", "TestBumpSyncTopicAddsAPendingTask"),
+    ("service", "TestLocalSyncFinishesOnlyAppliedRevisions"),
+    ("service", "TestNodeSyncAppliesStoredOption"),
+    ("service", "TestNodeSyncCapsLocalErrorState"),
+    ("service", "TestNodeSyncReloadsATopicWhoseStartupLoadFailed"),
+    ("service", "TestNodeSyncReloadsTopicsWhoseRevisionChanged"),
+    ("service", "TestNodeSyncWithoutStartupRevisionsReportsEveryTopicUnapplied"),
+    ("service", "TestOAuthProviderWritesBumpTheirTopicInTheSameTransaction"),
+
+    ('service', 'TestPluginLoginRedirect'),
+    ('service', 'TestPluginLoginPaste'),
+    ('service', 'TestPluginLoginPasteRejectsBadAddresses'),
+    ('service', 'TestPluginLoginDevice'),
+    ('service', 'TestPluginLoginDeviceExpires'),
+    ('service', 'TestPluginLoginFields'),
+    ('service', 'TestPluginLoginRejectsInputOfAnotherStep'),
+    ('service', 'TestPluginLoginCallbackRejections'),
+    ('service', 'TestPluginLoginVendorErrorCodeIsSanitized'),
+    ('service', 'TestPluginLoginExpiredFlow'),
+    ('service', 'TestPluginLoginFlowLivesFifteenMinutes'),
+    ('service', 'TestPluginLoginDoneConsumesTheFlow'),
+    ('service', 'TestPluginLoginConcurrentSubmitRunsThePluginOnce'),
+    ('service', 'TestPluginLoginThrowLeavesTheStepUsable'),
+    ('service', 'TestPluginLoginInvalidStepIsRejected'),
+    ('service', 'TestPluginLoginKeepsSecretsOutOfViewsAndLogs'),
+    ('service', 'TestPluginLoginOnExistingCredential'),
+    ('service', 'TestPluginLoginOneAccountPerPlugin'),
+    ('service', 'TestPluginLoginConcurrentLoginsHoldOneAccountOnce'),
+    ('service', 'TestPluginLoginAddsLineInMultiKeyMode'),
+    ('service', 'TestPluginLoginSingleKeyReplacesTheKey'),
+    ('service', 'TestPluginLoginAddAccount'),
+    ('service', 'TestPluginLoginAddAccountKeepsAKeyThatNeedsLoginDisabled'),
+    ('service', 'TestPluginLoginEnablesOnlyWhatTheHostDisabled'),
+    ('service', 'TestPluginLoginRefusesJSONArrayKeys'),
+    ('service', 'TestPluginLoginNeedsALoginPlugin'),
+    ('service', 'TestPluginLoginFlowFollowsTheChannel'),
+    ('service', 'TestRefreshConcurrentRequestsMakeOnePluginCall'),
+    ('service', 'TestRefreshTwoNodesMakeOnePluginCall'),
+    ('service', 'TestRefreshPluginCallHoldsNoChannelLock'),
+    ('service', 'TestRefreshRotatedTokenIsNeverSentAgain'),
+    ('service', 'TestRefreshMergesItsResult'),
+    ('service', 'TestRefreshFailuresKeepTheCredential'),
+    ('service', 'TestRefreshRemovedCredential'),
+    ('service', 'TestRefreshReloginDisablesAndNotifies'),
+    ('service', 'TestBackgroundScanRefreshesOnlyWhatExpiresSoon'),
+    ('service', 'TestRevokeRunsInTheBackgroundForRemovedLines'),
+    ('service', 'TestRevokeFailureIsOnlyLogged'),
+    ('service', 'TestCredentialHooksVerifyTLSEvenWhenTheChannelSkipsIt'),
+    ('service', 'TestPluginModelListKey'),
+    ('service', 'TestCheckSubmittedPluginCredentials'),
+    ('service', 'TestDropPluginCredentials'),
+    ('service', 'TestScheduledCredentialBalanceAndNodeSync'),
+    ('service', 'TestScheduledRunsOncePerKey'),
+    ('service', 'TestScheduledStaleRemovedAndManualKeys'),
+    ('service', 'TestScheduledInvalidResultsWriteNothing'),
+    ('service', 'TestScheduledDisabledTriggerAndThrottle'),
+    ('service', 'TestScheduledNextFailureAndIdleCost'),
+    ('service', 'TestScheduledPoolBoundsAndRunningKey'),
+    ('service', 'TestScheduledDisableHonorsChannelSwitchAndDoesNotRecurse'),
+    ('service', 'TestScheduledCancellationAndTLSKeepStoredState'),
+    ('service', 'TestScheduledReplacementKeysGetAnInitialRun'),
+    ('service', 'TestScheduledScanRunsOnlyOnMaster'),
+    ('service', 'TestScheduledHookDoesNotBlockKeySelection'),
+    ('service', 'TestScheduledScanDetectsDisabledTransitionOnce'),
+    ('service', 'TestScheduledSyncSkipsIdleAndFollowerNodes'),
+    ('service', 'TestScheduledSyncRetriesFailedQuery'),
+    ('service', 'TestScheduledOwnDisableSyncDuringCommitDoesNotRecurse'),
+    ('service', 'TestScheduledSyncBeforeMasterDisableDoesNotDuplicate'),
+    ('service', 'TestScheduledFollowerSkipsEveryTrigger'),
+    ('service', 'TestScheduledChangedKeyDiscardsAllResults'),
+    ('service', 'TestScheduledDisableDuringTimerRunsOnNextScan'),
+    ('service', 'TestScheduledOwnDisableDoesNotBecomeScanTrigger'),
+    ('model', 'TestUpdateAuthFlowPayloadSwapsOnlyTheExpectedPayload'),
+    ('model', 'TestUpdateChannelLocked'),
+    ('model', 'TestProviderChannelSelectionFollowsRelayRoutes'),
+    ('model', 'TestPricingProviderChannelUsesRelayRoutes'),
+    ('model', 'TestPricingConversionOfProviderChannelModels'),
+    ('model', 'TestScheduledChannelLockedStatus'),
+    ('model', 'TestScheduledChannelLockedMultiKey'),
+    ('model', 'TestScheduledChannelLockedCancellation'),
+    ('model', 'TestChannelOtherInfoWritesKeepConcurrentChanges'),
+    ('model', 'TestLockedCredentialWritesPublishCommittedChanges'),
+    ('model', 'TestMigrateSensitiveWords'),
+    ('model', 'TestMigrateSensitiveWordsWithoutWords'),
+)
+PROVIDER_ROW_LOCK_TESTS = (('model', 'TestScheduledChannelDatabaseRowLock'),)
 REQUIRED_TESTS = tuple(name for tests in MATRIX_TESTS.values() for name in tests) + tuple(
     name for _, name, _ in SINGLE_DIALECT_TESTS
-) + MANAGE_TESTS + SECURITY_TESTS + CHANNEL_TESTS + TASK_TESTS + tuple(name for _, name in PAIRED_TESTS)
+) + MANAGE_TESTS + SECURITY_TESTS + CHANNEL_TESTS + TASK_TESTS + tuple(name for _, name in (*PAIRED_TESTS, *PROVIDER_TESTS, *PROVIDER_ROW_LOCK_TESTS))
 
 
 # 这些 helper 的现有单测默认使用临时 SQLite；逐项报告其外部引擎变体未覆盖。
@@ -523,6 +613,12 @@ class Runner:
         for test in TASK_TESTS:
             for dialect in DIALECTS:
                 self.suite("controller", test, (dialect,), nested=False, task=True)
+        for package, test in PROVIDER_TESTS:
+            for dialect in DIALECTS:
+                self.suite(package, test, (dialect,), nested=False, task=True)
+        for package, test in PROVIDER_ROW_LOCK_TESTS:
+            for dialect in ("mysql", "postgres"):
+                self.suite(package, test, (dialect,), nested=False, task=True)
         self.report["success"] = all(entry["success"] for entry in self.report["suites"])
 
     def cleanup(self) -> None:

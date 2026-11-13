@@ -36,8 +36,8 @@ func LookupTaskPluginEndpoint(g *jsplugin.RoutingGeneration, method, path, model
 		Operation: binding.Operation, Model: pinModel, MappedModel: mappedModel, Candidates: candidates}, true
 }
 
-func TaskPluginEndpointFilter(candidates []jsplugin.ProtocolBinding) dto.ChannelFilter {
-	filter := dto.ChannelFilter{Kind: dto.FilterTaskPluginEndpoint}
+func TaskPluginEndpointFilter(candidates []jsplugin.ProtocolBinding, requestPath string) dto.ChannelFilter {
+	filter := dto.ChannelFilter{Kind: dto.FilterTaskPluginEndpoint, RequestPath: requestPath}
 	for _, candidate := range candidates {
 		filter.TaskPluginKeys = append(filter.TaskPluginKeys, candidate.Plugin.Meta.Key)
 		filter.TaskPluginChannelTypes = append(filter.TaskPluginChannelTypes, candidate.Plugin.Meta.ChannelTypes...)
@@ -146,17 +146,17 @@ func resolvePreviewRequest(query TokenRoutePreviewQuery) (TokenRoutePreviewQuery
 		}
 		query.Model = NormalizeTaskPluginSubmitModel(generation, plugin, query.Model)
 		types, keys := taskPluginIdentities(generation, []*jsplugin.LoadedPlugin{plugin}, key, false)
-		return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity, TaskPluginKey: key,
+		return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path, TaskPluginKey: key,
 			TaskPluginChannelTypes: types, TaskPluginKeys: keys}), previewFallback{}, nil
 	}
 	if _, _, host := jsplugin.LookupHostProtocolOperation(http.MethodPost, query.Path); host {
 		if endpoint, ok := LookupTaskPluginEndpoint(generation, http.MethodPost, query.Path, query.Model); ok {
 			// Dispatch tries the original spelling before canonical fallback; an
 			// ordinary relay channel may serve that spelling exactly.
-			filters = append(filters, TaskPluginEndpointFilter(endpoint.Candidates))
+			filters = append(filters, TaskPluginEndpointFilter(endpoint.Candidates, query.Path))
 			types, keys := taskPluginEndpointIdentities(endpoint, endpoint.Plugin.Meta.Key)
 			fallback := previewFallback{model: endpoint.Model, filters: append(slices.Clone(filters), dto.ChannelFilter{
-				Kind: dto.FilterTaskPluginIdentity, TaskPluginKey: endpoint.Plugin.Meta.Key,
+				Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path, TaskPluginKey: endpoint.Plugin.Meta.Key,
 				TaskPluginChannelTypes: types, TaskPluginKeys: keys,
 			})}
 			return query, filters, fallback, nil
@@ -164,7 +164,7 @@ func resolvePreviewRequest(query TokenRoutePreviewQuery) (TokenRoutePreviewQuery
 	} else if !ordinaryPreviewPath(query.Path) {
 		return query, nil, previewFallback{}, ErrPreviewPathUnsupported
 	}
-	return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity}), previewFallback{}, nil
+	return query, append(filters, dto.ChannelFilter{Kind: dto.FilterTaskPluginIdentity, RequestPath: query.Path}), previewFallback{}, nil
 }
 
 // These are body-independent POST entrypoints. Custom plugin routes require

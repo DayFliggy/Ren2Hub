@@ -30,6 +30,7 @@ import {
   readTaskPrices,
   repriceTaskExpression,
   taskConditionExpression,
+  taskExpressionCompatible,
 } from '@/features/pricing/taskExpression'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { isRecord } from '@/api/contracts'
@@ -106,6 +107,22 @@ let baseline = '',
 const variant = computed(() =>
   props.entry?.plugin_variants?.find((item) => item.plugin_key === plugin.value)
 )
+const variantCompatible = computed(() => {
+  const current = variant.value
+  if (!current) return true
+  const separate = Boolean(pluginExpressions.value[current.plugin_key]?.trim())
+  if (!separate && mode.value !== 'tiered_expr')
+    return !current.relay || mode.value === 'per-request'
+  return (
+    taskExpressionCompatible(
+      separate
+        ? pluginExpressions.value[current.plugin_key]!
+        : expression.value,
+      current.usage_schema,
+      !separate && current.relay
+    ) ?? current.compatible
+  )
+})
 const schema = computed(
   () => variant.value?.usage_schema ?? props.entry?.usage_schema
 )
@@ -591,7 +608,7 @@ defineExpose({ commit, dirty })
       /></label>
       <template v-else>
         <p v-if="variant?.stale" class="admin-error">{{ t('stale') }}</p>
-        <p v-if="variant && !variant.compatible" class="admin-error">
+        <p v-if="variant && !variantCompatible" class="admin-error">
           {{ t('unavailable') }}
         </p>
         <p v-if="plugin" class="admin-muted">{{ t('inherited') }}</p>

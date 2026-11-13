@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { localizedText } from '@/utils/localizedText'
 
 import { ApiError } from '@/api/types'
 import {
@@ -21,6 +22,9 @@ import {
   normalizeBaseUrlValue,
 } from '@/features/channels/lib/task-plugin-base-url'
 import { getTaskPluginOptions } from '@/features/task-plugins/api'
+import PluginConfigEditor from '@/features/task-plugins/components/PluginConfigEditor.vue'
+import PluginCredentials from '@/features/channels/components/PluginCredentials.vue'
+import ChannelRequestPlugins from '@/features/channels/components/ChannelRequestPlugins.vue'
 import type { TaskPluginOption } from '@/features/task-plugins/types'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
@@ -77,7 +81,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const auth = useAuthStore()
 const saving = ref(false)
@@ -131,8 +135,10 @@ const canSensitiveWrite = computed(
     (form.type !== 61 || hasTaskPluginBind.value)
 )
 const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
-const supportsResponsesWebSocket = computed(() =>
-  [1, 3, 58, 59, 60].includes(form.type)
+const supportsResponsesWebSocket = computed(
+  () =>
+    [1, 3, 58, 59, 60].includes(form.type) ||
+    (form.type === 61 && boundTaskPlugin.value?.responsesWebsocket === true)
 )
 // The binding lives in the sensitive setting field, so it needs both
 // permissions, in upstream's order.
@@ -148,13 +154,18 @@ const validAdvancedConfig = computed(() => {
     return false
   }
 })
+const pluginConfig = ref<Record<string, unknown>>({})
+const requestPlugins = ref<string[]>([])
+const pluginConfigValid = ref(true)
 const pluginOptions = ref<TaskPluginOption[]>([])
 const pluginKeys = ref<string[]>([])
 const pluginError = ref('')
 let pluginOptionsRequest: AbortController | null = null
 const availablePlugins = computed(() =>
   pluginOptions.value.filter(
-    (item) => form.type !== 60 || item.upstreams?.includes('new_api')
+    (item) =>
+      (item.task !== false || item.provider === true) &&
+      (form.type !== 60 || item.upstreams?.includes('new_api'))
   )
 )
 watch(
@@ -185,6 +196,7 @@ const boundTaskPlugin = computed(() =>
     ? pluginOptions.value.find((item) => item.key === pluginKeys.value[0])
     : undefined
 )
+const loginPlugin = computed(() => boundTaskPlugin.value?.login === true)
 const taskPluginBaseUrlTrust = computed(() =>
   form.type === 61 ? assessBaseUrlTrust(form.baseUrl) : null
 )
@@ -194,6 +206,7 @@ let boundKeyBeforeChange: string | undefined
 function selectPluginKeys() {
   if (form.type !== 61) return
   pluginKeys.value = pluginKeys.value.slice(-1)
+  if (pluginKeys.value[0] !== boundKeyBeforeChange) pluginConfig.value = {}
   const previous = pluginOptions.value.find(
     (item) => item.key === boundKeyBeforeChange
   )
@@ -498,12 +511,15 @@ const typeLocked = computed(
 const valid = computed(
   () =>
     !settingsError.value &&
+    pluginConfigValid.value &&
     !mappingError.value &&
     validAdvancedConfig.value &&
     validOverrides.value &&
     form.name.trim().length > 0 &&
     (![60, 61, 62, 63].includes(form.type) || form.baseUrl.trim().length > 0) &&
-    (props.editing !== null || form.key.trim().length > 0) &&
+    (props.editing !== null ||
+      loginPlugin.value ||
+      form.key.trim().length > 0) &&
     modelTags.value.length > 0 &&
     (form.type !== 41 || vertexRegion.value.trim().length > 0) &&
     Number.isSafeInteger(form.type) &&
@@ -519,10 +535,17 @@ const valid = computed(
     form.max_concurrency >= 0
 )
 
+watch(loginPlugin, (value) => {
+  if (value) {
+    form.key = ''
+    form.addMode = 'single'
+  }
+})
+
 // ── Reset on open ──────────────────────────────────────────────────────────
 watch(
-  () => props.open,
-  (open) => {
+  () => [props.open, props.editing?.id] as const,
+  ([open]) => {
     fetchEpoch++
     fetchingUpstream.value = false
     modelPickerOpen.value = false
@@ -550,6 +573,17 @@ watch(
     try {
       const setting = parseChannelObject(ch?.setting)
       originalSetting.value = setting
+      pluginConfig.value =
+        setting.plugin_config &&
+        typeof setting.plugin_config === 'object' &&
+        !Array.isArray(setting.plugin_config)
+          ? structuredClone(setting.plugin_config as Record<string, unknown>)
+          : {}
+      requestPlugins.value = Array.isArray(setting.request_plugins)
+        ? setting.request_plugins.filter(
+            (id): id is string => typeof id === 'string'
+          )
+        : []
       originalOtherSettings.value = parseChannelObject(ch?.settings)
       awsApiType.value =
         typeof originalOtherSettings.value.aws_api_type === 'string' &&
@@ -668,6 +702,15 @@ async function submit() {
           props.editing?.type
         )
       : settings
+    if (canBindPlugin.value) {
+      if (requestPlugins.value.length || 'request_plugins' in settings)
+        nextSetting.request_plugins = requestPlugins.value
+      if (
+        form.type === 61 &&
+        (Object.keys(pluginConfig.value).length || 'plugin_config' in settings)
+      )
+        nextSetting.plugin_config = pluginConfig.value
+    }
     // validateChannel reads task_plugin_key from the request before it loads
     // the stored channel, so every type 61 update that carries the sensitive
     // group resends the full setting, changed or not.
@@ -730,7 +773,7 @@ async function submit() {
     if (props.editing === null) {
       const input: AdminChannelCreateInput = {
         ...base,
-        key: form.key.trim(),
+        key: loginPlugin.value ? '' : form.key.trim(),
         status: form.enabled ? 1 : 2,
       }
       const created = await props.save(input, {
@@ -745,7 +788,7 @@ async function submit() {
 
     // The key rides along only when actually replaced, so admins without
     // ChannelSensitiveWrite can still save routing-level edits.
-    const replacementKey = form.key.trim()
+    const replacementKey = loginPlugin.value ? '' : form.key.trim()
     if (canSensitiveWrite.value && replacementKey) base.key = replacementKey
     if (canSensitiveWrite.value && replacementKey && existingMultiKey.value)
       base.key_mode = keyMode.value
@@ -1053,8 +1096,43 @@ async function submit() {
             </p>
           </FormField>
 
+          <fieldset
+            v-if="form.type === 61 && boundTaskPlugin"
+            :disabled="!canBindPlugin || saving"
+            class="sibling-space-y-2"
+          >
+            <legend class="text-sm font-medium">
+              {{ t('pluginExtensions.channelConfig') }}
+            </legend>
+            <PluginConfigEditor
+              :key="boundTaskPlugin.key"
+              v-model="pluginConfig"
+              :schema="boundTaskPlugin.channelConfig"
+              @validity="pluginConfigValid = $event"
+            />
+          </fieldset>
+          <div v-if="loginPlugin" class="sibling-space-y-2">
+            <PluginCredentials
+              v-if="
+                editing &&
+                formTaskPluginKeys(editing.type, originalSetting)[0] ===
+                  boundTaskPlugin?.key
+              "
+              :channel-id="editing.id"
+              :can-write="canSensitiveWrite && !saving"
+            />
+            <p v-else class="text-sm text-[var(--text-secondary)]">
+              {{ t('pluginExtensions.saveBeforeLogin') }}
+            </p>
+          </div>
           <!-- Add mode selector (batch keys apply to creation only) -->
-          <div>
+          <div v-if="!loginPlugin">
+            <p
+              v-if="boundTaskPlugin?.keyHint"
+              class="text-xs text-[var(--text-secondary)]"
+            >
+              {{ localizedText(boundTaskPlugin.keyHint, locale) }}
+            </p>
             <div
               v-if="editing === null"
               class="mb-1.5 flex flex-wrap items-center justify-between gap-2"
@@ -1513,6 +1591,11 @@ async function submit() {
               :label="t('channels.tlsInsecureSkipVerify')"
               :disabled="saving || !canSensitiveWrite"
           /></FormField>
+          <ChannelRequestPlugins
+            v-if="hasTaskPluginBind"
+            v-model="requestPlugins"
+            :disabled="saving || !canSensitiveWrite"
+          />
           <FormField
             :label="t('channels.parameterOverrides')"
             :hint="t('channels.jsonOverridesHint')"

@@ -216,6 +216,19 @@ const compareOptions = computed(() =>
         />
       </template>
       <template v-if="detail">
+        <div
+          v-if="detail.transform"
+          class="mb-4 rounded-xl border border-[var(--border-subtle)] p-3 text-sm"
+        >
+          <RouterLink
+            to="/request-processing"
+            class="text-[var(--accent)] underline"
+            >{{ t('pluginExtensions.title') }}</RouterLink
+          >
+          <p class="mt-2 font-mono text-xs">
+            {{ detail.transform_hooks?.join(' → ') }}
+          </p>
+        </div>
         <PluginMetadataCard
           v-if="tab === 'overview'"
           :meta="detail.meta"

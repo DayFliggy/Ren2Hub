@@ -15,7 +15,7 @@ const { t } = useI18n({
       policy: {
         title: '请求策略',
         edit: '查看和编辑策略',
-        hint: '统一管理上游重试、敏感词、渠道自动禁用及会话亲和策略。值保留为字符串；保存由服务端校验并原子更新。',
+        hint: '统一管理上游重试、渠道自动禁用及会话亲和策略。值保留为字符串；保存由服务端校验并原子更新。',
         save: '保存请求策略',
         reload: '重新读取',
       },
@@ -24,7 +24,7 @@ const { t } = useI18n({
       policy: {
         title: 'Request policy',
         edit: 'View and edit policy',
-        hint: 'Manage retries, sensitive words, automatic channel disabling and session affinity. Values remain strings; the server validates and atomically applies changes.',
+        hint: 'Manage retries, automatic channel disabling and session affinity. Values remain strings; the server validates and atomically applies changes.',
         save: 'Save request policy',
         reload: 'Reload',
       },
@@ -126,6 +126,11 @@ watch(settings.rawOptions, () => {
 })
 </script>
 <template>
+  <RouterLink
+    to="/request-processing"
+    class="mb-3 inline-block text-sm text-[var(--accent)] underline"
+    >{{ globalT('pluginExtensions.title') }}</RouterLink
+  >
   <ConsoleCard :title="t('policy.title')" class="mt-6">
     <ErrorBanner
       v-if="error"

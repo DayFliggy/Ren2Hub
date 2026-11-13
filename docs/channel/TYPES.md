@@ -4,13 +4,13 @@
 
 保留普通API Key的OpenAI兼容、Claude、Gemini、Azure、Vertex、AWS及其他原生适配器，以及NewAPI类型60的网关互联和任务插件绑定。AWS支持原生Bedrock/Mantle设置，Vertex API Key使用显式project设置；具体字段必须按当前DTO及管理UI提交。
 
-官方订阅账号渠道、type57和io.net已退役，不能创建或通过旧隐藏路由继续使用。站点OAuth登录与普通供应商API Key是不同产品边界，继续保留。渠道默认值、代理、密钥池、模型映射、参数/请求头覆盖采用上游规则；保留渠道倍率和无等待并发上限，不恢复供应商订阅额度窗口。
+旧 Codex/type 57 专用渠道和io.net已退役，不能创建或通过旧隐藏路由继续使用。站点OAuth登录与普通供应商API Key是不同产品边界，继续保留。渠道默认值、代理、密钥池、模型映射、参数/请求头覆盖采用上游规则；保留渠道倍率和无等待并发上限，不恢复供应商订阅额度窗口。
 
 实际可执行性由 Token 自动/有序手动路由、模型、端点、渠道状态、倍率上限、原生约束及插件声明共同决定，不再使用业务分组。Token私有列表只缩小范围，见[路由](../routing/UNIFIED_ROUTING.md)。对余额查询、模型发现或错误处理的额外声明应以当前控制器及回归为依据，不能复用旧版本的验收结论。
 
 创建渠道成功响应保留 `success` 等原字段，并返回 `data.ids` 和 `data.results[{input_index, channel_id}]`；只有一个创建结果时同时返回 `data.id`。批量输入按原输入位置关联结果，合并多 Key 只产生一条渠道。校验失败、数据库错误或事务 panic 不返回成功或半套 ID。
 
-控制台只对 `controller/channel-billing.go` 有实际查询分支的类型（1、8、10、12、13、20、25、40、43、58、59、60）显示余额查询，多 Key 渠道一律不显示；其他类型后端返回“Not implemented yet”，type 61 和多 Key 渠道被 `UpdateChannelBalance` 直接拒绝。判断写在前端 `supportsBalanceQuery()`，行内按钮、分组按钮和批量查询共用。
+余额能力由原生适配器和提供商插件声明共同决定。type 61 插件导出余额能力时可查询，插件多 Key 返回逐项摘要；普通不支持余额查询的类型仍拒绝。更新全部余额创建系统后台任务，通过 `/api/channel/update_balance/task/:task_id` 查询进度。通用插件支持账号登录、凭据摘要、刷新和后台维护；旧 Codex 专用渠道不恢复。
 
 任务插件绑定需要 `channel.sensitive_write` 和 `task_plugin.bind` 两项权限，缺任一项时表单不显示绑定选择，缺 bind 时类型列表不提供 type 61。`UpdateChannel` 拒绝任何不带 bind 却携带 type 61 的请求，所以没有 bind 的管理员编辑 type 61 渠道时，表单不发送类型、`setting` 等敏感字段，存储值保持不变；有完整权限时，type 61 每次都重发完整 `setting`，因为 `validateChannel` 在读取库内渠道前就检查 `task_plugin_key`。type 60 的绑定集合是 `task_plugin_key` 与 `task_extend_plugin_keys` 的并集（`ChannelSettings.TaskPluginBindings`），表单按并集回填，只有集合变化时才改写这两个字段，并保留 `setting` 的其他键。
 

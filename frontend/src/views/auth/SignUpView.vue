@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/auth/PasswordInput.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -307,8 +308,9 @@ onMounted(() => app.initialize())
         </div>
       </div>
       <FormField :label="t('auth.newPassword')" :hint="t('auth.passwordHint')">
-        <TextInput
+        <PasswordInput
           v-model="password"
+          aria-describedby="signup-password-feedback"
           type="password"
           :placeholder="t('auth.newPassword')"
           autocomplete="new-password"
@@ -320,9 +322,13 @@ onMounted(() => app.initialize())
           {{ errors.password }}
         </span>
       </FormField>
-      <PasswordStrengthMeter :password="password" />
+      <PasswordStrengthMeter
+        id="signup-password-feedback"
+        :password="password"
+        :confirmation="confirm"
+      />
       <FormField :label="t('auth.confirmPassword')">
-        <TextInput
+        <PasswordInput
           v-model="confirm"
           type="password"
           :placeholder="t('auth.confirmPassword')"

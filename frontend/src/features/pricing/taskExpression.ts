@@ -3,6 +3,10 @@ import { decimalText } from './draft'
 import { parseTaskTiersFromExpr } from './lib/billing-expr'
 import { flattenBinary } from './lib/billing-expression/display'
 import { compileBillingExpression } from './lib/billing-expression/parser'
+import {
+  BILLING_VARIABLES,
+  visitExpression,
+} from './lib/billing-expression/types'
 import type { ExpressionNode } from './lib/billing-expression/types'
 import type { BillingUsageSchema } from './types'
 
@@ -139,4 +143,31 @@ export function readTaskPrices(
       decimalText(value),
     ])
   )
+}
+
+/** Chat counters never price asynchronous task usage; the server remains authoritative. */
+export function taskExpressionCompatible(
+  expression: string,
+  schema: BillingUsageSchema,
+  relaysModel = false
+): boolean | undefined {
+  if (!expression.trim()) return false
+  const compiled = compileBillingExpression(expression)
+  if (compiled.status !== 'ready') return undefined
+  let compatible =
+    !compiled.functions.has('fixed') &&
+    !BILLING_VARIABLES.some((name) => compiled.variables.has(name)) &&
+    (!relaysModel || compiled.functions.has('u'))
+  visitExpression(compiled.ast, (node) => {
+    if (node.kind !== 'call' || node.name !== 'u') return
+    const key = node.args[0]
+    if (
+      !key ||
+      key.kind !== 'literal' ||
+      typeof key.value !== 'string' ||
+      !Object.hasOwn(schema, key.value)
+    )
+      compatible = false
+  })
+  return compatible
 }

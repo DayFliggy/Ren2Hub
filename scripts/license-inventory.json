@@ -73,8 +73,9 @@
     "area": "backend",
     "scope": "production",
     "ecosystem": "Go",
-    "name": "github.com/Calcium-Ion/moejs",
-    "license": "Apache-2.0"
+    "name": "github.com/MoeForge/moejs",
+    "license": "Apache-2.0",
+    "version": "v0.1.0"
   },
   {
     "area": "backend",
@@ -712,5 +713,32 @@
     "ecosystem": "npm",
     "name": "vue-tsc",
     "license": "MIT"
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/HugoSmits86/nativewebp",
+    "version": "",
+    "license": "MIT",
+    "text_refs": []
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/MoeForge/moego",
+    "version": "",
+    "license": "MIT",
+    "text_refs": []
+  },
+  {
+    "area": "backend",
+    "scope": "production",
+    "ecosystem": "Go",
+    "name": "github.com/ledongthuc/pdf",
+    "version": "",
+    "license": "BSD-3-Clause",
+    "text_refs": []
   }
 ]

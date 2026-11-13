@@ -174,7 +174,7 @@ func runChannelMutationPredicateRecheck(t *testing.T, db *gorm.DB, operation str
 						return err
 					}
 				}
-				return nil
+				return writer.Model(&Channel{}).Where("id = ?", 2).Update("key", "rotated-credential-fixture").Error
 			}
 			for id, tag := range map[int]string{1: "other", 3: "selected"} {
 				if err := writer.Model(&Channel{}).Where("id = ?", id).Update("tag", tag).Error; err != nil {
@@ -193,9 +193,11 @@ func runChannelMutationPredicateRecheck(t *testing.T, db *gorm.DB, operation str
 		}
 	}))
 	if operation == "delete_disabled" {
-		ids, err := DeleteDisabledChannelIDs()
+		deleted, err := DeleteDisabledChannels()
 		require.NoError(t, err)
-		require.Equal(t, []int{2}, ids, "re-enabled and newly disabled rows were not in the locked predicate set")
+		require.Len(t, deleted, 1, "re-enabled and newly disabled rows were not in the locked predicate set")
+		require.Equal(t, 2, deleted[0].Id)
+		require.Equal(t, "rotated-credential-fixture", deleted[0].Key, "revoke must use the credential from the locked deletion, not an earlier snapshot")
 	} else {
 		require.NoError(t, mutateChannelLockFixture(operation, "selected", []int{2, 1}))
 		require.Equal(t, []int{2}, *published)

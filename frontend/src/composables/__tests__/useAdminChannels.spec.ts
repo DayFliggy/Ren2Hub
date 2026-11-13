@@ -351,11 +351,11 @@ describe('native channel management', () => {
     const unsupported = [
       { ...channel, id: 103, type: 3 },
       { ...channel, id: 104, type: 14 },
-      { ...channel, id: 105, type: 61 },
       multiKey,
     ]
     const supported = [
       channel,
+      { ...channel, id: 105, type: 61 },
       { ...channel, id: 106, type: 43 },
       { ...channel, id: 107, type: 58 },
     ]
@@ -378,6 +378,7 @@ describe('native channel management', () => {
       request.mock.calls.map(([method, path]) => `${method} ${path}`)
     ).toEqual([
       'GET /api/channel/update_balance/101',
+      'GET /api/channel/update_balance/105',
       'GET /api/channel/update_balance/106',
       'GET /api/channel/update_balance/107',
     ])

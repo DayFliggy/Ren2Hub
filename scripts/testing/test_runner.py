@@ -3,6 +3,7 @@ import contextlib
 import errno
 import io
 import json
+import re
 from pathlib import Path
 import socket
 import sys
@@ -12,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import candidate
+import browser
 from contracts import gateway, worker
 from contracts.common import RequirementError, acceptance_target, require_candidate_mounts
 import run
@@ -23,6 +25,88 @@ CA_MOUNT = {'Type': 'bind', 'Source': '/run/candidate/server.crt', 'Destination'
 
 
 class RunnerContractTests(unittest.TestCase):
+    def test_browser_fixture_changes_only_critical_limit_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            process = Mock()
+            process.poll.return_value = 1
+            with patch.dict('os.environ', {'CRITICAL_RATE_LIMIT': '9999',
+                                          'CRITICAL_RATE_LIMIT_ENABLE': 'false',
+                                          'CRITICAL_RATE_LIMIT_DURATION': '1200'}), \
+                    patch('browser.subprocess.Popen', return_value=process) as popen:
+                result = browser.exercise(root, root, root / 'backend', 'desktop-light')
+            self.assertFalse(result['success'])
+            settings = popen.call_args.kwargs['env']
+            self.assertEqual(settings['CRITICAL_RATE_LIMIT_DURATION'], '1')
+            self.assertNotIn('CRITICAL_RATE_LIMIT', settings)
+            self.assertNotIn('CRITICAL_RATE_LIMIT_ENABLE', settings)
+            self.assertEqual(settings['SQLITE_PATH'], str(root / 'desktop-light-private/app.db'))
+
+    def test_credential_race_group_is_independent_and_requires_all_ten_cases(self):
+        credentials = (
+            'TestRefreshConcurrentRequestsMakeOnePluginCall', 'TestRefreshTwoNodesMakeOnePluginCall',
+            'TestRefreshPluginCallHoldsNoChannelLock', 'TestRefreshRotatedTokenIsNeverSentAgain',
+            'TestRefreshMergesItsResult', 'TestRefreshRemovedCredential',
+            'TestPluginLoginConcurrentSubmitRunsThePluginOnce', 'TestPluginLoginConcurrentLoginsHoldOneAccountOnce',
+            'TestScheduledStaleRemovedAndManualKeys', 'TestScheduledCancellationAndTLSKeepStoredState',
+        )
+        for completed, valid in ((credentials, True), (credentials[:-1], False)):
+            with self.subTest(valid=valid), tempfile.TemporaryDirectory() as directory:
+                root, commands = Path(directory), []
+                def execute(command, *_args, **_kwargs):
+                    if command[:2] == ['go', 'env']:
+                        return str(root / command[-1])
+                    if '-race' not in command:
+                        return ''
+                    commands.append(command)
+                    tests = completed if len(commands) == 5 else ['TestExistingContract']
+                    return '\n'.join(json.dumps({'Action': 'pass', 'Test': name}) for name in tests)
+                with patch('run.subprocess.run', return_value=SimpleNamespace(returncode=0)), \
+                        patch('run.execute', side_effect=execute):
+                    if valid:
+                        self.assertTrue(run.race(root, root, {})['success'])
+                    else:
+                        with self.assertRaises(RuntimeError):
+                            run.race(root, root, {})
+                self.assertEqual([command[-1] for command in commands],
+                                 ['./model', './service', './controller', './common', './service'])
+                for command in commands:
+                    self.assertIn('-timeout=60s', command)
+                    self.assertEqual(command[command.index('--network') + 1], 'none')
+                pattern = commands[-1][commands[-1].index('-run') + 1]
+                self.assertTrue(all(re.fullmatch(pattern, name) for name in credentials))
+                self.assertIsNone(re.fullmatch(pattern, credentials[0] + 'Unrelated'))
+
+    def test_network_evidence_reports_real_counters_and_rejects_resets(self):
+        runner = candidate.Candidate.__new__(candidate.Candidate)
+        runner.network_guard = {'addresses': {'mock': '172.19.0.2'},
+                                'initial_rejected_packets': {'mock_ipv4': 2, 'mock_ipv6': 0}}
+        runner.report = {'stages': {'upstream_sync': {'marketplace': {
+            'reports_received': 1, 'proxy_rejections': 0}}}}
+        runner.network_rejections = lambda roles: {'mock_ipv4': 7, 'mock_ipv6': 1}
+        runner.network_evidence()
+        self.assertEqual(runner.report['external_requests']['rejected_packets'], 6)
+        self.assertEqual(runner.report['external_requests']['marketplace_local_reports'], 1)
+        self.assertFalse(runner.report['external_requests']['public_destinations_allowed'])
+        runner.network_rejections = lambda roles: {'mock_ipv4': 1, 'mock_ipv6': 0}
+        with self.assertRaisesRegex(candidate.CandidateError, 'candidate_rejection_counters_reset'):
+            runner.network_evidence()
+
+    def test_network_rejections_require_every_dns_and_default_reject_rule(self):
+        runner = candidate.Candidate.__new__(candidate.Candidate)
+        def namespace(role, binary, *args):
+            rules = ['[2:80] -A OUTPUT -p udp --dport 53 -j REJECT --reject-with icmp-port-unreachable',
+                     '[3:120] -A OUTPUT -p tcp --dport 53 -j REJECT --reject-with icmp-port-unreachable',
+                     '[5:200] -A OUTPUT -j REJECT --reject-with icmp-port-unreachable']
+            if binary.endswith('/iptables-save'):
+                rules.append('[7:280] -A OUTPUT -d 127.0.0.11/32 -j REJECT --reject-with icmp-port-unreachable')
+            return SimpleNamespace(stdout='\n'.join(rules).encode())
+        runner.namespace = namespace
+        self.assertEqual(runner.network_rejections(('mock',)), {'mock_ipv4': 17, 'mock_ipv6': 10})
+        runner.namespace = lambda *args: SimpleNamespace(stdout=b'')
+        with self.assertRaisesRegex(candidate.CandidateError, 'candidate_rejection_counters_missing'):
+            runner.network_rejections(('mock',))
+
     def test_all_runs_other_layers_and_diagnoses_once_without_hiding_failure(self):
         for diagnostic_code in (1, 2):
             with self.subTest(diagnostic_code=diagnostic_code), tempfile.TemporaryDirectory() as directory:

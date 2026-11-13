@@ -11,11 +11,15 @@ import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 
+import { pluginSite } from '../lib/plugin-site'
+import { localizedText } from '@/utils/localizedText'
 import { listMarketplaceSources } from '../api'
 import {
   DEFAULT_MARKETPLACE_INDEX_URL,
   deriveInstallState,
   fetchMarketplaceIndex,
+  findPluginByCode,
+  marketplaceSourceKind,
   indexHasIntegrityHashes,
   isDefaultMarketplaceSource,
 } from '../lib/marketplace'
@@ -34,7 +38,7 @@ import PluginAlert from './PluginAlert.vue'
 
 const props = defineProps<{ installed: TaskPluginListItem[] }>()
 const emit = defineEmits<{ changed: [] }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const sources = ref<MarketplaceSource[] | null>(null)
 const sourcesError = ref('')
@@ -44,6 +48,34 @@ const indexLoading = ref(false)
 const indexError = ref('')
 const sourcesOpen = ref(false)
 const sourcesLoading = ref(false)
+const installCode = ref('')
+const codeLoading = ref(false)
+const codeRequest = new AbortController()
+async function resolveCode() {
+  if (codeLoading.value) return
+  codeLoading.value = true
+  indexError.value = ''
+  try {
+    const found = await findPluginByCode(
+      installCode.value,
+      sources.value ?? [],
+      codeRequest.signal
+    )
+    if (codeRequest.signal.aborted) return
+    if (!found) throw new Error(t('common.noResults'))
+    installTarget.value = {
+      ...found,
+      version: found.plugin.latest,
+      installState: deriveInstallState(found.plugin, props.installed),
+    }
+  } catch (cause) {
+    if (!codeRequest.signal.aborted)
+      indexError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    codeLoading.value = false
+  }
+}
+onBeforeUnmount(() => codeRequest.abort())
 const installTarget = ref<MarketplaceInstallTarget | null>(null)
 let controller: AbortController | undefined
 
@@ -113,7 +145,7 @@ async function loadIndex() {
   }
 }
 
-watch(() => selected.value?.index_url, loadIndex)
+watch(() => [selected.value?.index_url, pluginSite.value], loadIndex)
 void loadSources()
 onBeforeUnmount(() => controller?.abort())
 
@@ -131,6 +163,31 @@ function onInstalled() {
 
 <template>
   <div class="sibling-space-y-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <label for="plugin-site">{{ t('pluginExtensions.site') }}</label
+      ><select
+        id="plugin-site"
+        v-model="pluginSite"
+        class="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2 text-sm"
+      >
+        <option value="ai">www.newapi.ai</option>
+        <option value="pro">www.newapi.pro</option>
+      </select>
+    </div>
+    <template v-for="entry in index?.revoked ?? []" :key="entry.sha256"
+      ><PluginAlert
+        v-if="
+          installed.some(
+            (plugin) => plugin.source_hash?.toLowerCase() === entry.sha256
+          )
+        "
+        tone="danger"
+        >{{
+          t('pluginExtensions.revoked', { name: entry.key || entry.sha256 })
+        }}
+        {{ localizedText(entry.reason, locale) }}</PluginAlert
+      ></template
+    >
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-[var(--text-secondary)]">
         {{ t('taskPlugins.marketHint') }}
@@ -156,6 +213,31 @@ function onInstalled() {
         </ConsoleButton>
       </div>
     </div>
+    <form
+      class="flex flex-wrap items-center gap-2"
+      @submit.prevent="resolveCode"
+    >
+      <label for="plugin-install-code" class="text-sm">{{
+        t('pluginExtensions.installCode')
+      }}</label>
+      <input
+        id="plugin-install-code"
+        v-model="installCode"
+        inputmode="numeric"
+        pattern="[0-9]{8}"
+        maxlength="8"
+        :placeholder="t('pluginExtensions.installCodeHint')"
+        class="min-w-0 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2 text-sm"
+      />
+      <ConsoleButton
+        type="submit"
+        size="sm"
+        :disabled="
+          codeLoading || !/^\d{8}$/.test(installCode) || !sources?.length
+        "
+        >{{ t('pluginExtensions.importCode') }}</ConsoleButton
+      >
+    </form>
     <SkeletonBlock v-if="sources === null" rounded="xl" class="h-24" />
     <p
       v-if="sourcesError"
@@ -202,6 +284,11 @@ function onInstalled() {
           v-if="isDefaultMarketplaceSource(selected.index_url)"
           tone="neutral"
           >{{ t('taskPlugins.official') }}</StatusChip
+        >
+        <StatusChip
+          v-else-if="marketplaceSourceKind(selected.index_url) === 'community'"
+          tone="neutral"
+          >{{ t('pluginExtensions.community') }}</StatusChip
         >
         <StatusChip v-else tone="danger">{{
           t('taskPlugins.thirdPartyRisk')

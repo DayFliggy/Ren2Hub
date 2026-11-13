@@ -159,7 +159,9 @@ export const useAuthStore = defineStore('auth', () => {
         setAuthBundle(bundle)
         persist(bundle.user)
         checked.value = true
-        if (publish) publishCurrentSession('authenticated', bundle.session.sid)
+        // Restoring this tab from the shared cookie is not a new login.
+        // Broadcasting here would invalidate other tabs' active operations,
+        // including the plugin flow whose callback opened this tab.
         return true
       }
       const fresh = await api.self()

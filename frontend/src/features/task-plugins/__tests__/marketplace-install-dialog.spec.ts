@@ -133,6 +133,7 @@ describe('marketplace install dialog', () => {
     expect(pluginApi.installMarketplacePlugin).toHaveBeenCalledWith({
       source,
       sourceSha256: digest,
+      marketplaceIndexUrl: 'https://plugins.example/index.json',
       remark: 'Fixture source v2.0.0',
       icon: undefined,
     })

@@ -2,6 +2,41 @@ import type { RouteRecordRaw } from 'vue-router'
 
 export const adminRoutes: RouteRecordRaw[] = [
   {
+    path: '/system-settings/request-policies/filtering',
+    redirect: '/request-processing',
+  },
+  {
+    path: '/system-settings/security/sensitive',
+    redirect: '/request-processing',
+  },
+  {
+    path: '/system-settings/security/sensitive-words',
+    redirect: '/request-processing',
+  },
+  {
+    path: '/request-processing',
+    name: 'request-processing',
+    component: () => import('@/features/task-plugins/RequestProcessing.vue'),
+    meta: {
+      requiresAdmin: true,
+      requiresRoot: true,
+      feature: 'taskPlugins',
+      requiresPermission: { resource: 'plugin', action: 'write' },
+      protected: true,
+    },
+  },
+  {
+    path: '/oauth/plugin/:key/callback',
+    name: 'plugin-login-callback',
+    component: () => import('@/features/channels/PluginLoginCallback.vue'),
+    meta: {
+      requiresAdmin: true,
+      requiresPermission: { resource: 'channel', action: 'sensitive_write' },
+      feature: 'admin',
+      protected: true,
+    },
+  },
+  {
     path: '/task-plugins',
     name: 'task-plugins',
     component: () => import('@/views/console/TaskPluginsView.vue'),

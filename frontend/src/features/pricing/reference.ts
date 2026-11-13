@@ -104,7 +104,11 @@ export function publicPricingReferences(
 ): ReferencePrice[] {
   const ratio = '1'
   if (model.billing_mode === 'tiered_expr') {
-    if (Object.keys(model.billing_usage_schema ?? {}).length) return []
+    if (
+      !model.ordinary_pricing &&
+      Object.keys(model.billing_usage_schema ?? {}).length
+    )
+      return []
     return expressionReferencePrices(model.billing_expr ?? '', ratio)
   }
   return catalogPrices(model, 'M').map((line) => ({

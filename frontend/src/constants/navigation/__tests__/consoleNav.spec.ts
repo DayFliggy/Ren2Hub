@@ -37,6 +37,7 @@ describe('console navigation', () => {
       'user-management',
       'redemption-management',
       'order-management',
+      'request-processing',
       'task-plugins',
       'system-settings',
     ])

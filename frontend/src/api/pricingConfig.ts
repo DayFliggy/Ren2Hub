@@ -55,6 +55,7 @@ export interface PluginPriceVariant {
   configured: string
   effective: string
   compatible: boolean
+  relay?: boolean
   stale?: boolean
 }
 export interface ModelPricingEntry {

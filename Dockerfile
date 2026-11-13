@@ -41,7 +41,7 @@ COPY --from=frontend-builder /build/bun-version /build/node-version ./
 RUN go test -timeout 60s -run '^TestProductionEmbeddedAssetGraph$' .
 RUN version="${APP_VERSION:-$(cat VERSION)}" \
     && test -n "$version" \
-    && go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api \
+    && go build -pgo="$(go list -m -f '{{.Dir}}' github.com/MoeForge/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api \
     && go version -m new-api | head -n 1 | cut -d' ' -f2 > go-version \
     && grep -Eq '^go[0-9]+\.[0-9]+' go-version \
     && printf '{"go":"%s","bun":"%s","node":"%s"}\n' "$(cat go-version)" "$(cat bun-version)" "$(cat node-version)" > build-tools.json

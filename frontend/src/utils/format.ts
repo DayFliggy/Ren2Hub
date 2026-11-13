@@ -1,3 +1,4 @@
+import { evaluatePasswordStrength } from './password-strength'
 import { reactive } from 'vue'
 import { formatDecimalUSD } from './decimal'
 import { configureQuotaPerUnit, quotaToDecimal } from './quota'
@@ -234,17 +235,9 @@ export function maskKey(key: string): string {
   return `${value.slice(0, 6)}••••${value.slice(-4)}`
 }
 
-export function passwordStrength(pw: string): 0 | 1 | 2 | 3 {
-  if (!pw) return 0
-  let score = 0
-  if (pw.length >= 8) score++
-  if (pw.length >= 12) score++
-  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
-  if (/\d/.test(pw)) score++
-  if (/[^a-zA-Z0-9]/.test(pw)) score++
-  if (score <= 2) return 1
-  if (score <= 4) return 2
-  return 3
+/** Compatibility score for existing consumers; length alone controls acceptance. */
+export function passwordStrength(password: string): 0 | 1 | 2 | 3 {
+  return Math.min(evaluatePasswordStrength(password).score, 3) as 0 | 1 | 2 | 3
 }
 
 /**

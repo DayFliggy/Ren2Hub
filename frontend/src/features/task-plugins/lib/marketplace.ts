@@ -2,13 +2,15 @@
 // on the index origin only (upstream also admits plain HTTP).
 import type {
   MarketplaceIndex,
+  MarketplaceDocument,
+  MarketplaceSource,
   MarketplaceIndexVersion,
   MarketplacePlugin,
   MarketplacePluginIcon,
   TaskPluginListItem,
 } from '../types'
 import { parseProtocolClaims } from './plugin-meta-preview'
-import { fetchPluginBytes } from './plugin-url'
+import { PluginSourceFetchError, fetchPluginBytes } from './plugin-url'
 import { getPluginWebsite } from './plugin-website'
 
 const MAX_INDEX_BYTES = 2 * 1024 * 1024
@@ -25,7 +27,7 @@ export async function fetchMarketplaceIndex(
 
 export const SUPPORTED_INDEX_VERSION = 1
 
-/** The gateway only runs task plugins; other kinds are filtered out. */
+/** The index kind remains task for task, provider and transform exports. */
 export const SUPPORTED_PLUGIN_KIND = 'task'
 
 /**
@@ -77,9 +79,31 @@ export function parseMarketplaceIndex(payload: unknown): MarketplaceIndex {
     }
   }
   return {
+    revoked: Array.isArray(raw.revoked)
+      ? raw.revoked.flatMap((entry) => {
+          if (
+            !entry ||
+            typeof entry !== 'object' ||
+            typeof entry.sha256 !== 'string' ||
+            !/^[a-f0-9]{64}$/i.test(entry.sha256.trim())
+          )
+            return []
+          return [
+            {
+              sha256: entry.sha256.trim().toLowerCase(),
+              key: typeof entry.key === 'string' ? entry.key : undefined,
+              reason: parseDescription(entry.reason),
+            },
+          ]
+        })
+      : [],
     indexVersion,
     name: typeof raw.name === 'string' ? raw.name : '',
     plugins: plugins.sort((left, right) => {
+      if (left.recommended !== right.recommended)
+        return left.recommended ? -1 : 1
+      if ((right.installs30d ?? 0) !== (left.installs30d ?? 0))
+        return (right.installs30d ?? 0) - (left.installs30d ?? 0)
       const difference = (right.sortPriority ?? 0) - (left.sortPriority ?? 0)
       if (difference !== 0) return difference
       if (left.key === right.key) return 0
@@ -107,6 +131,8 @@ function parseVersion(candidate: unknown): MarketplaceIndexVersion | null {
       ? Number(raw.minApiVersion)
       : undefined,
     kind: kind || undefined,
+    readme: parseDocument(raw.readme),
+    changelog: parseDocument(raw.changelog),
     allowedHosts: stringArray(raw.allowedHosts),
     baseUrl: text(raw.baseUrl) || undefined,
     auth: typeof raw.auth === 'string' ? raw.auth : undefined,
@@ -149,6 +175,25 @@ function parseMarketplacePlugin(entry: unknown): MarketplacePlugin | null {
   const sortPriority = raw.sortPriority
   return {
     key,
+    code: /^\d{8}$/.test(text(raw.code)) ? text(raw.code) : undefined,
+    recommended: raw.recommended === true,
+    installs30d:
+      typeof raw.installs30d === 'number' &&
+      Number.isSafeInteger(raw.installs30d) &&
+      raw.installs30d >= 0
+        ? raw.installs30d
+        : undefined,
+    author:
+      raw.author &&
+      typeof raw.author === 'object' &&
+      typeof (raw.author as Record<string, unknown>).login === 'string'
+        ? {
+            login: String((raw.author as Record<string, unknown>).login),
+            url: getPluginWebsite((raw.author as Record<string, unknown>).url),
+          }
+        : undefined,
+    repo: getPluginWebsite(raw.repo),
+    name_i18n: parseDescription(raw.name_i18n),
     sortPriority:
       typeof sortPriority === 'number' &&
       Number.isInteger(sortPriority) &&
@@ -296,4 +341,83 @@ export function isDefaultMarketplaceSource(indexUrl: string): boolean {
     normalized === DEFAULT_MARKETPLACE_INDEX_URL ||
     normalized === GITHUB_MARKETPLACE_INDEX_URL
   )
+}
+
+export const COMMUNITY_MARKETPLACE_INDEX_URL =
+  'https://www.newapi.ai/api/v1/community/index.json'
+export function marketplaceSourceKind(url: string) {
+  return isDefaultMarketplaceSource(url)
+    ? 'official'
+    : url.trim() === COMMUNITY_MARKETPLACE_INDEX_URL
+      ? 'community'
+      : 'third_party'
+}
+function parseDocument(value: unknown): MarketplaceDocument | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined
+  const raw = value as Record<string, unknown>
+  if (
+    !text(raw.path) ||
+    (raw.sha256 !== undefined && !/^[a-f0-9]{64}$/i.test(text(raw.sha256)))
+  )
+    return undefined
+  const translations: NonNullable<MarketplaceDocument['translations']> = {}
+  if (raw.translations && typeof raw.translations === 'object')
+    for (const [locale, entry] of Object.entries(raw.translations)) {
+      const document = parseDocument(entry)
+      if (document) translations[locale] = document
+    }
+  return {
+    path: text(raw.path),
+    sha256: text(raw.sha256) || undefined,
+    sourceUrl: getPluginWebsite(raw.sourceUrl),
+    translations,
+  }
+}
+export async function findPluginByCode(
+  code: string,
+  sources: MarketplaceSource[],
+  signal?: AbortSignal
+) {
+  const wanted = code.trim()
+  if (!/^\d{8}$/.test(wanted)) throw new Error('Enter an 8-digit install code')
+  let failure: unknown
+  for (const source of sources.filter((item) =>
+    isDefaultMarketplaceSource(item.index_url)
+  )) {
+    try {
+      const index = await fetchMarketplaceIndex(source.index_url, signal)
+      const plugin = index.plugins.find((item) => item.code === wanted)
+      if (plugin) return { source, plugin }
+    } catch (cause) {
+      signal?.throwIfAborted()
+      failure = cause
+    }
+  }
+  const source = sources.find(
+    (item) => item.index_url === COMMUNITY_MARKETPLACE_INDEX_URL
+  )
+  if (source) {
+    const url = new URL('resolve', COMMUNITY_MARKETPLACE_INDEX_URL)
+    url.searchParams.set('code', wanted)
+    try {
+      const index = await fetchMarketplaceIndex(url.href, signal)
+      const plugin = index.plugins[0]
+      if (plugin) return { source, plugin }
+    } catch (cause) {
+      signal?.throwIfAborted()
+      if (!(cause instanceof PluginSourceFetchError && cause.status === 404))
+        throw cause
+    }
+  }
+  if (failure) throw failure
+  return null
+}
+
+export function isCanonicalLanguageTag(value: string): boolean {
+  try {
+    return Intl.getCanonicalLocales(value)[0] === value
+  } catch {
+    return false
+  }
 }

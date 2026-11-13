@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -811,6 +814,16 @@ func TestDeclarativeRouteValidationProtectsNamespacesAndCanonicalSyntax(t *testi
 			expectedError: "reserved namespace /console",
 		},
 		{
+			name:          "request processing page",
+			route:         Route{Method: "GET", Path: "/request-processing", Type: RouteTypeQuery, Render: "native"},
+			expectedError: "reserved namespace /request-processing",
+		},
+		{
+			name:          "security page",
+			route:         Route{Method: "GET", Path: "/security/:section", Type: RouteTypeQuery, Render: "native"},
+			expectedError: "reserved namespace /security",
+		},
+		{
 			name:          "dynamic root can claim reserved subtree",
 			route:         Route{Method: "POST", Path: "/:root/jobs", Type: RouteTypeSubmit},
 			expectedError: "intersects reserved namespace",
@@ -1221,4 +1234,34 @@ func routingProtocolExport(name string) string {
 		renderEvents: function() { return {events: [], state: null, done: false}; },
 		renderFinal: function(ctx, task) { return task; }
 	}};`, name)
+}
+
+// Every console page is a reserved namespace, so a plugin route cannot
+// answer a reload or a direct visit of the page.
+func TestReservedRouteNamespacesCoverConsolePages(t *testing.T) {
+	// Read the actual Vue routes so a new console page cannot silently become
+	// a plugin endpoint. Dynamic public routes are listed explicitly below.
+	paths := map[string]bool{"/about": true, "/privacy-policy": true, "/user-agreement": true,
+		"/401": true, "/403": true, "/404": true, "/500": true, "/503": true}
+	pattern := regexp.MustCompile(`\bpath:\s*['"](/[^'"]+)['"]`)
+	for _, source := range []string{"index.ts", "adminRoutes.ts", "publicRoutes.ts"} {
+		body, err := os.ReadFile("../../frontend/src/router/" + source)
+		require.NoError(t, err)
+		for _, match := range pattern.FindAllStringSubmatch(string(body), -1) {
+			root := strings.Split(strings.TrimPrefix(match[1], "/"), "/")[0]
+			if root != "" && !strings.HasPrefix(root, ":") {
+				paths["/"+root] = true
+			}
+		}
+	}
+	require.Greater(t, len(paths), 30, "Vue route source must be available")
+	for path := range paths {
+		t.Run(path, func(t *testing.T) {
+			source := routingTestPluginSource("reserved-console", 0, `["model"]`,
+				`routes: [{method: "GET", path: "`+path+`/plugin", type: "query", render: "renderResult"}],`, `export const native = {renderResult: function(ctx, task) { return task; }};`)
+			_, err := CompilePlugin(source, Options{})
+			require.Error(t, err, "a plugin must not claim console namespace %s", path)
+			assert.Contains(t, err.Error(), "reserved")
+		})
+	}
 }

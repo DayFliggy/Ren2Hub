@@ -280,13 +280,28 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
     cache = Path(execute(['go', 'env', 'GOCACHE'], source, output, 'race-cache', env).strip())
     cache.mkdir(parents=True, exist_ok=True)
     results = []
-    suites = {
-        './model': '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess)',
-        './service': '^Test(.*(Concurrency|Admission|TopUpDiscount)|ObservationTrafficConcurrentSampleAndRead$)',
-        './controller': '^TestResponsesWebSocket(ReusesConnectionAndSettlesEachRequest|DisconnectSettlesDeliveredOutputOnce)$',
-        './common': '^TestCountingListenerConcurrentConnections$',
-    }
-    for index, (package, pattern) in enumerate(suites.items()):
+    credential_tests = (
+        'TestRefreshConcurrentRequestsMakeOnePluginCall',
+        'TestRefreshTwoNodesMakeOnePluginCall',
+        'TestRefreshPluginCallHoldsNoChannelLock',
+        'TestRefreshRotatedTokenIsNeverSentAgain',
+        'TestRefreshMergesItsResult',
+        'TestRefreshRemovedCredential',
+        'TestPluginLoginConcurrentSubmitRunsThePluginOnce',
+        'TestPluginLoginConcurrentLoginsHoldOneAccountOnce',
+        'TestScheduledStaleRemovedAndManualKeys',
+        'TestScheduledCancellationAndTLSKeepStoredState',
+    )
+    # Keep the credential group separate: each invocation retains the same
+    # 60-second test deadline, including the original service contracts.
+    suites = (
+        ('./model', '^Test(Polling|AffiliateConcurrentAdminAndTransferOperations|RedeemConcurrentSingleSuccess)', ()),
+        ('./service', '^Test(.*(Concurrency|Admission|TopUpDiscount)|ObservationTrafficConcurrentSampleAndRead$)', ()),
+        ('./controller', '^TestResponsesWebSocket(ReusesConnectionAndSettlesEachRequest|DisconnectSettlesDeliveredOutputOnce)$', ()),
+        ('./common', '^TestCountingListenerConcurrentConnections$', ()),
+        ('./service', '^(' + '|'.join(credential_tests) + ')$', credential_tests),
+    )
+    for index, (package, pattern, required) in enumerate(suites):
         command = docker + ['run', '--rm', '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
                             '-v', f'{source}:/src:ro', '-v', f'{modcache}:/go/pkg/mod:ro',
                             '-v', f'{cache}:/cache', '-w', '/src', '-e', 'GOCACHE=/cache',
@@ -295,7 +310,7 @@ def race(source: Path, output: Path, env: dict[str, str]) -> dict:
                             'golang:1.26.10-bookworm', 'go', 'test', '-buildvcs=false', '-race', '-json',
                             '-timeout=60s', '-count=1', '-p=2', '-run', pattern, package]
         raw = execute(command, source, output, f'race-{index}', env, 600)
-        results.append(go_result(raw, []))
+        results.append(go_result(raw, required))
     return {'success': True, 'suites': results}
 
 

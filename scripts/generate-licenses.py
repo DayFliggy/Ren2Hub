@@ -46,7 +46,7 @@ header='''# Third-Party Licenses
 
 This file records the direct third-party dependencies of Ren2Hub and their supplied license texts. Keep it with `LICENSE` and `NOTICE` in Docker images, standalone binary distributions, and frontend distributions.
 
-Inventory checked on 2026-10-22 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
+Inventory checked on 2026-11-13 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
 
 The inventory covers direct dependencies, including additional license files supplied alongside their top-level license. It is not a complete inventory of the transitive dependency graph, operating-system packages, or browser/runtime components. Preserve notices shipped by those components. Independent asset notices are outside this direct-package inventory and must be retained with their assets. No React dependency inventory is used.
 

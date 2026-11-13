@@ -1,6 +1,8 @@
+import { pluginExtensionMessages } from '../../pluginExtensions'
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
 export default {
+  pluginExtensions: pluginExtensionMessages['zh-CN'],
   taskPlugins: taskPluginMessages['zh-CN'],
   security: securityMessages['zh-CN'],
   billing: {

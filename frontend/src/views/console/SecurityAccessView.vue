@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/auth/PasswordInput.vue'
 import {
   AlertTriangle,
   AtSign,
@@ -1225,7 +1226,7 @@ onBeforeUnmount(() => {
           :label="t('auth.newPassword')"
           :hint="t('auth.passwordHint')"
         >
-          <TextInput
+          <PasswordInput
             v-model="newPassword"
             type="password"
             autocomplete="new-password"

@@ -22,7 +22,7 @@ func setupRouteTest(t *testing.T) *gorm.DB {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.SystemTask{}, &model.Token{}, &model.TokenRouteProfile{}, &model.TokenRouteEntry{}))
 	require.NoError(t, db.Create(&model.Token{Id: 7, UserId: 17, Key: "route-fixture"}).Error)
 	model.DB = db
 	common.MemoryCacheEnabled = false

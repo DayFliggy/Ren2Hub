@@ -68,6 +68,7 @@ class Experiment:
         self.mock_tls_cert = args.mock_tls_cert
         self.mock_tls_key = args.mock_tls_key
         self.traffic = None
+        self.marketplace = None
 
     def rows(self, sql):
         return candidate_query(sql)
@@ -403,6 +404,17 @@ class Experiment:
         run_affiliate(self)
         if getattr(self.args, 'upgrade_attachment_phase', None) == 'capture':
             self.capture_upgrade_attachment()
+            from .request_processing import seed_sensitive_migration
+            seed_sensitive_migration(self)
+        else:
+            from .request_processing import run_request_processing, run_provider_login, verify_migrated_filter
+            if getattr(self.args, 'upgrade_attachment_phase', None) == 'verify':
+                verify_migrated_filter(self)
+            run_request_processing(self)
+            run_provider_login(self)
+            from .payment_runtime import run_epay_rsa, run_system_retention
+            run_epay_rsa(self)
+            run_system_retention(self)
 
     def capture_upgrade_attachment(self):
         from .extensions import PNG
@@ -484,6 +496,7 @@ def run_group(group, args):
         if experiment:
             report['checks']=experiment.checks
             if experiment.traffic:report['traffic']=experiment.traffic
+            if experiment.marketplace:report['marketplace']=experiment.marketplace
             errors=experiment.cleanup()
             if errors:report.update(success=False,cleanup_errors=errors)
         if server:server.shutdown();server.server_close()

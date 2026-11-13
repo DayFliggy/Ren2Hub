@@ -70,6 +70,17 @@ const runtime = computed(() => {
     :title="plugin.runtime_error || undefined"
     >{{ runtime.label }}</StatusChip
   >
+  <template v-if="part === 'runtime'">
+    <StatusChip v-if="plugin.task !== false" tone="neutral">{{
+      t('pluginExtensions.task')
+    }}</StatusChip>
+    <StatusChip v-if="plugin.provider" tone="neutral">{{
+      t('pluginExtensions.provider')
+    }}</StatusChip>
+    <StatusChip v-if="plugin.transform" tone="neutral">{{
+      t('pluginExtensions.transform')
+    }}</StatusChip>
+  </template>
   <p
     v-if="part === 'runtime' && plugin.runtime_error"
     class="mt-1 max-w-full break-words text-xs text-[var(--status-danger-text)]"

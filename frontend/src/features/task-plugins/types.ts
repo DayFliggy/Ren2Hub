@@ -8,6 +8,17 @@ import type {
 } from '@/features/pricing/types'
 import type { ModelPricingIssue } from '@/api/pricingConfig'
 
+export type LocalizedTextValue = string | Record<string, string>
+export type TaskPluginParts = {
+  task?: boolean
+  provider?: boolean
+  transform?: boolean
+  transform_hooks?: string[]
+  login?: boolean
+  refresh?: boolean
+  balance?: boolean
+}
+
 export type TaskPluginProtocolClaim =
   | string
   | {
@@ -25,6 +36,15 @@ export type TaskPluginRoute = {
 }
 
 export type TaskPluginMeta = {
+  name_i18n?: LocalizedTextValue
+  relay?: Array<{
+    incoming_path: string
+    upstream_path: string
+    converter?: string
+    models?: string[]
+  }>
+  configSchema?: RequestPluginConfigSchema
+  samples?: RequestPluginSample[]
   sortPriority?: number
   website?: string
   apiVersion: number
@@ -71,7 +91,7 @@ export type TaskPluginRuntimeStatus =
   | 'disabled_fallback'
   | 'not_registered'
 
-export type TaskPluginListItem = {
+export type TaskPluginListItem = TaskPluginParts & {
   meta: TaskPluginMeta
   source: 'factory' | 'override' | 'override_over_factory'
   enabled: boolean
@@ -92,7 +112,7 @@ export type TaskPluginUsage = {
   in_flight_count: number
 }
 
-export type TaskPluginDetail = {
+export type TaskPluginDetail = TaskPluginParts & {
   plugin?: TaskPluginRecord
   meta: TaskPluginMeta
   source: string
@@ -113,7 +133,16 @@ export type TaskPluginStatusResult = TaskPluginChangeNotice & {
 }
 
 /** Bind options from GET /api/task_plugin_options (admin with task_plugin.bind). */
-export type TaskPluginOption = {
+export type TaskPluginOption = TaskPluginParts & {
+  channelConfig?: RequestPluginConfigSchema
+  keyHint?: LocalizedTextValue
+  relayPaths?: string[]
+  responsesWebsocket?: boolean
+  checkKey?: boolean
+
+  configSchema?: RequestPluginConfigSchema
+  name_i18n?: LocalizedTextValue
+  samples?: RequestPluginSample[]
   key: string
   name: string
   description?: Record<string, string>
@@ -146,7 +175,19 @@ export type MarketplaceSource = {
 }
 
 /** One installable version from a marketplace index. */
+export type MarketplaceDocument = {
+  path: string
+  sha256?: string
+  sourceUrl?: string
+  translations?: Record<
+    string,
+    { path: string; sha256?: string; sourceUrl?: string }
+  >
+}
+
 export type MarketplaceIndexVersion = {
+  readme?: MarketplaceDocument
+  changelog?: MarketplaceDocument
   version: string
   path: string
   sha256?: string
@@ -164,6 +205,12 @@ export type MarketplacePluginIcon = {
 }
 
 export type MarketplacePlugin = {
+  code?: string
+  recommended?: boolean
+  installs30d?: number
+  author?: { login: string; url?: string }
+  repo?: string
+  name_i18n?: LocalizedTextValue
   protocols?: TaskPluginProtocolClaim[]
   sortPriority?: number
   website?: string
@@ -182,6 +229,7 @@ export type MarketplaceIndex = {
   indexVersion: number
   name: string
   plugins: MarketplacePlugin[]
+  revoked?: Array<{ sha256: string; key?: string; reason?: LocalizedTextValue }>
 }
 
 /** A missing source property is distinct from an empty value or an unreadable one. */
@@ -207,4 +255,116 @@ export type PluginMetaPreview = {
       PluginPreviewValues[Key]
     >
   }
+}
+
+export type RequestPluginConfigField = {
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object'
+  title: LocalizedTextValue
+  description?: LocalizedTextValue
+  default?: unknown
+  examples?: unknown[]
+  enum?: (string | number)[]
+  enumTitles?: LocalizedTextValue[]
+  minimum?: number
+  maximum?: number
+  /** Display unit of a number; byte values are entered in B, KB or MB. */
+  unit?: 'byte' | 'pixel' | 'character' | 'second'
+  /**
+   * The field shows only while every listed sibling holds one of its
+   * values. A hidden field keeps its value.
+   */
+  visibleWhen?: Record<string, (string | number | boolean)[]>
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  /** keywords is a keyword list, one per line, edited like textarea. */
+  format?: 'textarea' | 'keywords' | 'regex' | 'json' | 'url' | 'password'
+  items?: RequestPluginConfigField
+  minItems?: number
+  maxItems?: number
+  uniqueItems?: boolean
+  properties?: Record<string, RequestPluginConfigField>
+  required?: string[]
+  /**
+   * A value per model: an object without `properties` whose keys are model
+   * names and whose values all follow this scalar field.
+   */
+  additionalProperties?: RequestPluginConfigField
+}
+
+export type RequestPluginConfigSchema = {
+  type: 'object'
+  properties: Record<string, RequestPluginConfigField>
+  required?: string[]
+}
+
+/**
+ * One configured use of a request processing plugin. `global` is its own scope; channels bind instances by id. `models` limits it to the
+ * models clients ask for; empty means every model.
+ */
+export type RequestPluginInstance = {
+  id: string
+  name: string
+  plugin: string
+  enabled: boolean
+  global: boolean
+  models: string[]
+  config: Record<string, unknown>
+}
+
+/**
+ * A request a plugin offers for trying it out. The body is text only: the
+ * string "[sample-image]" as an item of a content or parts list stands for
+ * the console's own sample image.
+ */
+export type RequestPluginSample = {
+  name: LocalizedTextValue
+  /** The base language of its text, such as "en" or "zh"; absent fits any. */
+  lang?: string
+  format: 'openai' | 'openai_responses' | 'claude' | 'gemini'
+  body: Record<string, unknown>
+  /** An answer from the model, for plugins that check replies. */
+  reply?: string
+}
+
+export type RequestPluginDryRunRequest = {
+  format: string
+  path?: string
+  model: string
+  channel_id?: number
+  body: unknown
+  /** An unsaved instance to run alone instead of the saved ones. */
+  instance?: RequestPluginInstance
+  /** An answer from the model for the reply checks to read. */
+  reply?: string
+}
+
+export type RequestPluginDryRunStep = {
+  instance: string
+  name: string
+  plugin: string
+  stage: string
+  action: string
+  effects: number
+  findings?: Array<{ rule: string; category?: string; count: number }> | null
+  duration_ms: number
+  error?: string
+}
+
+export type RequestPluginDryRunResult = {
+  rejected: { code: string; message: string; instance: string } | null
+  failed: { instance: string; error: string } | null
+  steps: RequestPluginDryRunStep[] | null
+  body: unknown
+  headers?: { set?: Record<string, string> | null; remove?: string[] | null }
+  reasoning_effort?: string
+  /** The effort the request had before any plugin ran; empty when none. */
+  reasoning_effort_before?: string
+  /** The reply checks' result, when the run had a reply; `text` is masked. */
+  reply?: {
+    text: string
+    stopped: { instance: string; code: string; message: string } | null
+  } | null
+  /** What the log owner would see about this request in their logs. */
+  record?: Record<string, unknown>[] | null
 }

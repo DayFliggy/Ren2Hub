@@ -251,7 +251,7 @@ class Candidate:
         self.workspace_sha = self.workspace_identity['git_head']
         self.report = {'success': False, 'layer': 'routing' if routing_only else 'candidate', 'run_id': self.run_id,
                        'source': source_identity(self.source), 'workspace': self.workspace_identity, 'stages': {}, 'cleanup': {},
-                       'external_requests': 0, 'database_lifecycle': 'fresh_tmpfs',
+                       'external_requests': None, 'database_lifecycle': 'fresh_tmpfs',
                        'limits': ['本地模拟供应商和支付；不验证真实供应商、真实支付或生产部署。']}
         self.report['exit_code'] = 1
 
@@ -306,7 +306,8 @@ class Candidate:
         require(bool(openssl), 'openssl_required_for_local_tls')
         key, certificate = self.private / 'server.key', self.private / 'server.crt'
         execute([openssl, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '2',
-                 '-subj', '/CN=Ren2Hub Local Contract', '-addext', 'subjectAltName=IP:127.0.0.1',
+                 '-subj', '/CN=Ren2Hub Local Contract', '-addext',
+                 'subjectAltName=IP:127.0.0.1,DNS:www.newapi.ai,DNS:www.newapi.pro',
                  '-addext', 'basicConstraints=critical,CA:TRUE', '-keyout', str(key), '-out', str(certificate)])
         os.chmod(key, 0o600)
         os.chmod(certificate, 0o600)
@@ -429,6 +430,8 @@ class Candidate:
             'CRITICAL_RATE_LIMIT': '200', 'GLOBAL_API_RATE_LIMIT': '10000', 'TRUSTED_PROXIES': 'none',
             'SSL_CERT_FILE': '/etc/ren2hub/mock-ca.crt', 'TICKET_UPLOAD_DIR': '/app/ticket-attachments',
             'SESSION_COOKIE_SECURE': 'false', 'SESSION_COOKIE_TRUSTED_URL': '', 'TZ': 'UTC',
+            'HTTP_PROXY': 'http://127.0.0.1:41749', 'HTTPS_PROXY': 'http://127.0.0.1:41749',
+            'NO_PROXY': 'localhost,127.0.0.1,postgres,redis',
             **({'TASK_POLL_MAX_FAILURES': '0'} if getattr(self, 'previous_image', None) else {}),
             **({'TRAFFIC_HOST_INTERFACE': self.traffic_interface} if self.traffic_interface else {})})
         # 默认不挂载也不设网卡名，应用使用主监听器计数；--mount 的源缺失时容器创建直接失败。
@@ -474,29 +477,38 @@ class Candidate:
                                     'traffic': traffic}
 
     def start_app(self):
+        # Avoid Docker's loopback DNS forwarder: every permitted hostname has
+        # an exact entry, and all DNS traffic is blocked in this namespace.
+        hosts = '\n'.join(address + ' ' + role for role, address in self.network_guard['addresses'].items())
         self.start('app', self.active_image_id, (*self.app_options,
+                   '--entrypoint', '/bin/sh',
                    '--label', 'org.opencontainers.image.revision=' + self.active_revision,
                    '--label', 'org.opencontainers.image.version=' + self.active_revision),
-                   ('--log-dir', '/tmp/ren2hub-local-logs'))
+                   ('-c', 'printf "%s\\n" "$1" >> /etc/hosts; shift; exec /new-api "$@"',
+                    'candidate-start', hosts, '--log-dir', '/tmp/ren2hub-local-logs'))
 
-    def upgrade_snapshot(self):
+    def upgrade_snapshot(self, include_options=False):
         """只记录本轮合成数据的指纹；轮询中的任务和日志另由行为合同验证。"""
         self.owned('postgres')
         tables = ('options', 'users', 'tokens', 'channels', 'top_ups', 'gmpay_orders',
                   'admin_quota_operations', 'token_route_profiles', 'token_route_entries',
                   'tickets', 'ticket_messages', 'ticket_attachments')
-        result = {}
+        result, options = {}, None
         for table in tables:
             query = ('BEGIN READ ONLY; SELECT COALESCE(json_agg(value ORDER BY value::text),\'[]\'::json) '
                      'FROM (SELECT row_to_json(t) AS value FROM ' + table + ' t) s; COMMIT;')
             raw = self.docker('exec', '-i', self.containers['postgres'], 'psql', '-X', '-q', '-t', '-A',
                               '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub', '-d', 'ren2hub_candidate', stdin=query.encode()).stdout
-            result[table] = hashlib.sha256(json.dumps(json.loads(raw), sort_keys=True).encode()).hexdigest()
+            rows = json.loads(raw)
+            result[table] = hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
+            if table == 'options' and include_options:
+                from upgrade_contract import option_values
+                options = option_values(rows)
         self.owned('app')
         files = self.docker('exec', self.containers['app'], 'sh', '-c',
                             'find /app/ticket-attachments -type f -exec sha256sum {} \\; | sort').stdout
         result['attachments'] = hashlib.sha256(files).hexdigest()
-        return result
+        return (result, options) if include_options else result
 
     def upgrade(self):
         require(all(self.report['stages'].get(stage, {}).get('success') is True
@@ -504,7 +516,8 @@ class Candidate:
         previous_target = dict(self.target)
         previous_target['container_ids'] = dict(self.target['container_ids'])
         private_write(self.private / 'upgrade-source-target.json', previous_target)
-        before, schema_before = self.upgrade_snapshot(), self.schema_fingerprint()
+        before, options_before = self.upgrade_snapshot(include_options=True)
+        schema_before = self.schema_fingerprint()
         old = self.owned('app')
         self.docker('stop', '--time', '130', old['Id'], timeout=180)
         require(self.owned('app')['State']['ExitCode'] == 0, 'upgrade_previous_app_did_not_exit_cleanly')
@@ -513,10 +526,16 @@ class Candidate:
         self.active_image_id, self.active_revision = self.image_id, self.revision
         self.start_app()
         self.wait_healthy('app')
-        after = self.upgrade_snapshot()
-        self.report['upgrade'].update(data_before=before, data_after=after, data_preserved=before == after,
+        after, options_after = self.upgrade_snapshot(include_options=True)
+        self.report['upgrade'].update(data_before=before, data_after=after, data_preserved=False,
                                       schema_before=schema_before, schema_after=self.schema_fingerprint())
-        require(before == after, 'upgrade_changed_persisted_contract_data')
+        require({key: value for key, value in before.items() if key != 'options'} ==
+                {key: value for key, value in after.items() if key != 'options'},
+                'upgrade_changed_persisted_contract_data')
+        from upgrade_contract import verify_options_migration
+        migration = verify_options_migration(options_before, options_after)
+        self.report['upgrade'].update(data_preserved=True, sensitive_word_migration=migration,
+                                     rollback_limit='old_image_does_not_restore_retired_sensitive_options')
         self.target.update(container_ids=dict(self.containers), image_id=self.image_id, revision=self.revision)
         private_write(self.private / 'target.json', self.target)
         self.report['isolation']['container_ids'] = dict(self.containers)
@@ -526,6 +545,83 @@ class Candidate:
         require(schema == self.schema_fingerprint() and after == self.upgrade_snapshot(),
                 'upgrade_repeated_start_changed_persisted_data')
         self.report['upgrade']['repeated_start_preserved_data'] = True
+        self.verify_rollback_copy()
+
+    def verify_rollback_copy(self):
+        """旧镜像只启动于本轮数据库副本和独立网络命名空间。"""
+        self.report['upgrade']['rollback_copy'] = {'success': False}
+        candidate_before = self.upgrade_snapshot()
+        postgres = self.containers['postgres']
+        self.owned('postgres')
+        dump = self.docker('exec', postgres, 'pg_dump', '-U', 'ren2hub', '-d', 'ren2hub_candidate',
+                           '--no-owner', '--no-privileges', timeout=120).stdout
+        self.docker('exec', postgres, 'createdb', '-U', 'ren2hub', 'ren2hub_rollback')
+        self.docker('exec', '-i', postgres, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'ren2hub',
+                    '-d', 'ren2hub_rollback', stdin=dump, timeout=120)
+        del dump
+        app = self.owned('app')
+        settings = dict(item.split('=', 1) for item in app['Config']['Env'])
+        # Reuse the local PostgreSQL role, but never the candidate database,
+        # Redis database, keys, attachment volume, or listener namespace.
+        settings = {key: value for key, value in settings.items() if key in {
+            'SQL_DSN', 'REDIS_CONN_STRING', 'SSL_CERT_FILE', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'}}
+        settings['SQL_DSN'] = settings['SQL_DSN'].replace('/ren2hub_candidate', '/ren2hub_rollback')
+        settings['REDIS_CONN_STRING'] = settings['REDIS_CONN_STRING'].split('/0')[0] + '/15'
+        settings.update(SESSION_SECRET=secrets.token_hex(32), CRYPTO_SECRET=secrets.token_hex(32),
+                        LOG_SQL_DSN='', SQLITE_PATH='', TASK_POLL_MAX_FAILURES='0',
+                        TICKET_UPLOAD_DIR='/app/ticket-attachments', NODE_TYPE='master', TZ='UTC')
+        env = self.env_file('rollback.env', settings)
+        dependency = self.report['dependency_images']['redis']['id']
+        self.start('rollback_mock', dependency, ('--network', self.network, '--entrypoint', '/bin/sh',
+                   '--read-only', '--tmpfs', '/data:rw,size=1m'), ('-c', 'exec sleep infinity'))
+        self.namespace('rollback_mock', '/usr/bin/ip', 'route', 'flush', 'default')
+        for binary in ('/usr/sbin/iptables', '/usr/sbin/ip6tables'):
+            self.namespace('rollback_mock', binary, '-w', '5', '-P', 'OUTPUT', 'DROP')
+            if binary.endswith('/iptables'):
+                self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT',
+                               '-d', '127.0.0.11/32', '-j', 'REJECT')
+            for protocol in ('udp', 'tcp'):
+                self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-p', protocol,
+                               '--dport', '53', '-j', 'REJECT')
+            self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-o', 'lo', '-j', 'ACCEPT')
+            if binary.endswith('/iptables'):
+                for role in ('postgres', 'redis'):
+                    self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-d',
+                                   self.network_guard['addresses'][role] + '/32', '-j', 'ACCEPT')
+            self.namespace('rollback_mock', binary, '-w', '5', '-A', 'OUTPUT', '-j', 'REJECT')
+        hosts = '\n'.join(self.network_guard['addresses'][role] + ' ' + role for role in ('postgres', 'redis'))
+        old = self.report['upgrade']['previous_image']
+        self.start('rollback_app', old['id'], ('--network', 'container:' + self.containers['rollback_mock'],
+                   '--entrypoint', '/bin/sh', '--env-file', str(env),
+                   '--tmpfs', '/app/ticket-attachments:rw,size=128m', '--tmpfs', '/tmp:rw,size=128m',
+                   '--health-cmd', 'wget -q -T 3 -O /dev/null http://127.0.0.1:3000/api/status',
+                   '--health-interval', '2s', '--health-timeout', '3s', '--health-retries', '50'),
+                   ('-c', 'printf "%s\\n" "$1" >> /etc/hosts; shift; exec /new-api "$@"',
+                    'candidate-rollback', hosts, '--log-dir', '/tmp/ren2hub-local-logs'))
+        self.wait_healthy('rollback_app')
+        from upgrade_contract import INSTANCES_KEY, SENSITIVE_KEYS
+        keys = sorted((*SENSITIVE_KEYS, INSTANCES_KEY))
+        query = ('BEGIN READ ONLY; SELECT COALESCE(json_agg(t),\'[]\'::json) FROM '
+                 '(SELECT key,value FROM options WHERE key IN (' + ','.join("'" + key + "'" for key in keys) + ')) t; COMMIT;')
+        raw = self.docker('exec', '-i', postgres, 'psql', '-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1',
+                          '-U', 'ren2hub', '-d', 'ren2hub_rollback', stdin=query.encode()).stdout
+        rows = json.loads(raw)
+        require(not ({row['key'] for row in rows} & SENSITIVE_KEYS),
+                'rollback_unexpectedly_restored_retired_sensitive_options')
+        require(INSTANCES_KEY in {row['key'] for row in rows}, 'rollback_removed_migrated_filter')
+        self.report['upgrade']['rollback_copy'] = {
+            'success': False, 'old_image_id': old['id'], 'old_revision': old['revision'],
+            'database': 'ren2hub_rollback', 'redis_database': 15,
+            'isolated_network_namespace': True, 'retired_options_restored': False,
+            'migrated_filter_remains': True,
+            'rejected_packets': self.network_rejections(('rollback_mock',)),
+        }
+        for role in ('rollback_app', 'rollback_mock'):
+            self.docker('rm', '-f', self.owned(role)['Id'])
+            del self.containers[role]
+        self.docker('exec', postgres, 'dropdb', '-U', 'ren2hub', 'ren2hub_rollback')
+        require(candidate_before == self.upgrade_snapshot(), 'rollback_copy_changed_candidate_data')
+        self.report['upgrade']['rollback_copy'].update(success=True, candidate_data_unchanged=True)
 
     def namespace(self, role, *command):
         item = self.owned(role)
@@ -549,6 +645,14 @@ class Candidate:
             self.namespace(role, '/usr/bin/ip', 'route', 'flush', 'default')
             for family, binary in (('ipv4', '/usr/sbin/iptables'), ('ipv6', '/usr/sbin/ip6tables')):
                 self.namespace(role, binary, '-w', '5', '-P', 'OUTPUT', 'DROP')
+                # Docker DNAT rewrites port 53 before filter/OUTPUT. Block its
+                # loopback resolver address as well as plain DNS ports.
+                if family == 'ipv4':
+                    self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT',
+                                   '-d', '127.0.0.11/32', '-j', 'REJECT')
+                for protocol in ('udp', 'tcp'):
+                    self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-p', protocol,
+                                   '--dport', '53', '-j', 'REJECT')
                 self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-o', 'lo', '-j', 'ACCEPT')
                 self.namespace(role, binary, '-w', '5', '-A', 'OUTPUT', '-m', 'conntrack',
                                '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT')
@@ -574,9 +678,38 @@ class Candidate:
                      'sys.exit(1 if s.connect_ex((sys.argv[1],int(sys.argv[2]))) == 0 else 0)')
             for role in addresses:
                 self.namespace(role, sys.executable, '-c', probe, gateway, str(port))
+        counters = self.network_rejections(addresses)
         return {'addresses': addresses, 'output_rules_sha256': rules, 'host_probe_blocked': True,
+                'dns_forwarding_blocked': True, 'initial_rejected_packets': counters,
                 'new_peer_connections':{'mock':'owned_addresses','simulator':[],'postgres':[],'redis':[]},
                 'scope': 'owned_container_network_namespaces_only'}
+
+    def network_rejections(self, roles):
+        counters = {}
+        for role in roles:
+            for family, binary in (('ipv4', '/usr/sbin/iptables-save'), ('ipv6', '/usr/sbin/ip6tables-save')):
+                raw = self.namespace(role, binary, '-c', '-t', 'filter').stdout.decode()
+                values = re.findall(r'^\[(\d+):\d+\] -A OUTPUT\b.* -j REJECT\b', raw, re.M)
+                require(len(values) == (4 if family == 'ipv4' else 3), 'candidate_rejection_counters_missing')
+                counters[role + '_' + family] = sum(int(value) for value in values)
+        return counters
+
+    def network_evidence(self):
+        if not getattr(self, 'network_guard', None):
+            return
+        initial = self.network_guard['initial_rejected_packets']
+        final = self.network_rejections(self.network_guard['addresses'])
+        require(set(initial) == set(final) and all(final[key] >= initial[key] for key in final),
+                'candidate_rejection_counters_reset')
+        market = self.report['stages'].get('upstream_sync', {}).get('marketplace', {})
+        self.report['external_requests'] = {
+            'rejected_packets': sum(final[key] - initial[key] for key in final),
+            'rejected_packets_by_namespace': {key: final[key] - initial[key] for key in final},
+            'marketplace_local_reports': market.get('reports_received'),
+            'marketplace_proxy_rejections': market.get('proxy_rejections'),
+            'dns_forwarding_blocked': True,
+            'public_destinations_allowed': False,
+        }
 
     def schema_fingerprint(self):
         self.owned('postgres')
@@ -681,6 +814,10 @@ class Candidate:
     def cleanup(self):
         errors = []
         removed = []
+        try:
+            self.network_evidence()
+        except Exception:
+            errors.append('network_evidence')
         for role in reversed(self.containers):
             try:
                 info = self.owned(role)

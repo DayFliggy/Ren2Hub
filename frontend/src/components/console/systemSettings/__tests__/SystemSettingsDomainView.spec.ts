@@ -32,7 +32,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   const offline = () => Promise.reject(new Error('offline'))
   const hidden = /(?:Token|Secret|Key|secret|api_key)$/
   // GetRequestPolicy answers GET and PATCH with the full stored snapshot.
-  const policyKey = /^(?:RetryTimes|CheckSensitive\w*Enabled|SensitiveWords)$/
+  const policyKey = /^(?:RetryTimes|AutomaticDisableChannelEnabled)$/
   const policy = () => ({
     options: Object.fromEntries(
       Object.entries(backend.options).filter(([key]) => policyKey.test(key))
@@ -119,6 +119,11 @@ async function render(
         name: `system-settings-${domain}`,
         component: SystemSettingsDomainView,
         props: { domain },
+      },
+      {
+        path: '/request-processing',
+        name: 'request-processing',
+        component: { render: () => null },
       },
       { path: '/ops', name: 'ops-monitor', component: { render: () => null } },
     ],
@@ -455,7 +460,7 @@ describe('Email settings page', () => {
 })
 
 describe('request policy panel', () => {
-  it.each(['sensitive', 'ssrf', 'token-limits'])(
+  it.each(['ssrf', 'token-limits'])(
     'does not repeat the policy editor in security/%s',
     async (section) => {
       const wrapper = await render('security', section)
@@ -465,34 +470,23 @@ describe('request policy panel', () => {
       wrapper.unmount()
     }
   )
-  it('shows a policy saved in the panel on the settings form', async () => {
-    await serve({
-      CheckSensitiveEnabled: 'false',
-      SensitiveWords: 'old',
-      RetryTimes: '2',
-    })
+  it('saves current request policy keys and exposes the separate request processing page', async () => {
+    await serve({ RetryTimes: '2' })
     const wrapper = await render('security', 'rate-limit')
     const policy = wrapper.get('textarea[aria-label="Request policy"]')
-    const draft = JSON.parse((policy.element as HTMLTextAreaElement).value)
-    await policy.setValue(
-      JSON.stringify({ ...draft, CheckSensitiveEnabled: 'true' })
-    )
+    await policy.setValue(JSON.stringify({ RetryTimes: '4' }))
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Save request policy')!
       .trigger('click')
     await flushPromises()
-    expect(backend.patches).toEqual([{ CheckSensitiveEnabled: 'true' }])
-    await wrapper.vm.$router.push('/security/sensitive')
-    await flushPromises()
-    expect(wrapper.find('textarea[aria-label="Request policy"]').exists()).toBe(
-      false
-    )
+    expect(backend.patches).toEqual([{ RetryTimes: '4' }])
+    expect(wrapper.find('a[href="/request-processing"]').exists()).toBe(true)
     expect(
       wrapper
-        .get('[role="switch"][aria-label="Enable sensitive word detection"]')
-        .attributes('aria-checked')
-    ).toBe('true')
+        .find('[role="switch"][aria-label="Enable sensitive word detection"]')
+        .exists()
+    ).toBe(false)
     wrapper.unmount()
   })
 
@@ -501,7 +495,7 @@ describe('request policy panel', () => {
     const policy = wrapper.get('textarea[aria-label="Request policy"]')
     await policy.setValue('{"RetryTimes":"4"}')
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    await wrapper.vm.$router.push('/security/sensitive')
+    await wrapper.vm.$router.push('/security/ssrf')
     await flushPromises()
     expect(confirm).toHaveBeenCalledOnce()
     expect(wrapper.vm.$router.currentRoute.value.params.section).toBe(
@@ -512,7 +506,7 @@ describe('request policy panel', () => {
         .element.value
     ).toBe('{"RetryTimes":"4"}')
     confirm.mockReturnValue(true)
-    await wrapper.vm.$router.push('/security/sensitive')
+    await wrapper.vm.$router.push('/security/ssrf')
     await flushPromises()
     expect(wrapper.find('textarea[aria-label="Request policy"]').exists()).toBe(
       false

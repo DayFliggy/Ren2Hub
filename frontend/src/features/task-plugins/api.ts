@@ -111,11 +111,13 @@ export function installMarketplacePlugin(request: {
   sourceSha256?: string
   remark: string
   icon?: string
+  marketplaceIndexUrl?: string
 }) {
   return api.post<TaskPluginDetail>(base, {
     source: request.source,
     sourceSha256: request.sourceSha256 || undefined,
     enabled: true,
+    marketplaceIndexUrl: request.marketplaceIndexUrl,
     remark: request.remark,
     icon: request.icon || undefined,
   })
@@ -212,4 +214,68 @@ export function setTaskPluginEnabledOption(enabled: boolean) {
     key: 'TaskPluginEnabled',
     value: String(enabled),
   })
+}
+
+function parseRequestPluginInstances(
+  result: unknown
+): import('./types').RequestPluginInstance[] {
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !('instances' in result) ||
+    (result.instances !== null && !Array.isArray(result.instances))
+  )
+    throw new Error('Invalid request plugin instances response')
+  return (result.instances ?? []).map((instance: unknown) => {
+    if (!instance || typeof instance !== 'object')
+      throw new Error('Invalid request plugin instance')
+    const row = instance as Record<string, unknown>
+    if (
+      typeof row.id !== 'string' ||
+      typeof row.name !== 'string' ||
+      typeof row.plugin !== 'string' ||
+      typeof row.enabled !== 'boolean' ||
+      typeof row.global !== 'boolean' ||
+      (row.models != null &&
+        (!Array.isArray(row.models) ||
+          row.models.some((model) => typeof model !== 'string'))) ||
+      (row.config != null &&
+        (typeof row.config !== 'object' || Array.isArray(row.config)))
+    )
+      throw new Error('Invalid request plugin instance')
+    // Non-root bind reads redact config; Go may also encode absent maps/lists as null.
+    return {
+      id: row.id,
+      name: row.name,
+      plugin: row.plugin,
+      enabled: row.enabled,
+      global: row.global,
+      models: (row.models ?? []) as string[],
+      config: (row.config ?? {}) as Record<string, unknown>,
+    }
+  })
+}
+export async function listRequestPluginInstances(signal?: AbortSignal) {
+  return parseRequestPluginInstances(
+    await api.get('/api/request_plugin/instances', undefined, { signal })
+  )
+}
+export async function saveRequestPluginInstances(
+  instances: import('./types').RequestPluginInstance[],
+  signal?: AbortSignal
+) {
+  return parseRequestPluginInstances(
+    await api.put('/api/request_plugin/instances', { instances }, { signal })
+  )
+}
+
+export function dryRunRequestPlugins(
+  request: import('./types').RequestPluginDryRunRequest,
+  signal?: AbortSignal
+) {
+  return api.post<import('./types').RequestPluginDryRunResult>(
+    '/api/request_plugin/dry_run',
+    request,
+    { signal }
+  )
 }

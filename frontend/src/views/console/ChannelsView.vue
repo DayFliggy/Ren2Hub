@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ChannelBalanceDetails from '@/features/channels/components/ChannelBalanceDetails.vue'
+import BalanceUpdateTask from '@/features/channels/components/BalanceUpdateTask.vue'
 import { useStorage } from '@vueuse/core'
 import {
   Activity,
@@ -82,7 +84,7 @@ import type {
   AdminChannelSortOrder,
   AdminChannelUpdateInput,
 } from '@/types/console'
-import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
+import { formatQuota, relativeTime } from '@/utils/format'
 import { formatDecimal } from '@/utils/decimal'
 
 interface SupplierTableRow extends Record<string, unknown> {
@@ -881,6 +883,10 @@ async function runBulkStatus(
               }}
             </span>
           </ConsoleButton>
+          <BalanceUpdateTask
+            v-if="canOperate"
+            @complete="load({ background: true })"
+          />
           <IconButton
             :label="t('channels.refreshList')"
             class="pencil-control ml-auto shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)]"
@@ -1345,13 +1351,9 @@ async function runBulkStatus(
           <template #cell-upstream="{ row }">
             <div class="flex items-center justify-between gap-1">
               <div class="min-w-0 sibling-space-y-0.5 text-xs">
-                <p class="font-semibold tabular-nums">
-                  {{
-                    formatMoney(
-                      channelFromRow(row as AdminChannelTableRow).balance
-                    )
-                  }}
-                </p>
+                <ChannelBalanceDetails
+                  :channel="channelFromRow(row as AdminChannelTableRow)"
+                />
                 <button
                   v-if="
                     upstreamRatios[

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/auth/PasswordInput.vue'
+import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
 import UserPermissionsEditor from './UserPermissionsEditor.vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -242,7 +244,7 @@ async function submit() {
       </FormField>
 
       <FormField v-if="editing === null" :label="t('users.initialPassword')">
-        <TextInput
+        <PasswordInput
           v-model="form.password"
           type="password"
           name="admin-user-password"
@@ -250,6 +252,10 @@ async function submit() {
           autocomplete="new-password"
         />
       </FormField>
+      <PasswordStrengthMeter
+        v-if="editing === null"
+        :password="form.password"
+      />
 
       <div>
         <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">

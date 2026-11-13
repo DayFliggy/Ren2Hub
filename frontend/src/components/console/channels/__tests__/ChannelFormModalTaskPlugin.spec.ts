@@ -44,6 +44,7 @@ const pluginOptions = vi.hoisted(() =>
   )
 )
 vi.mock('@/features/task-plugins/api', () => ({
+  listRequestPluginInstances: vi.fn().mockResolvedValue([]),
   getTaskPluginOptions: vi.fn().mockResolvedValue(pluginOptions),
 }))
 

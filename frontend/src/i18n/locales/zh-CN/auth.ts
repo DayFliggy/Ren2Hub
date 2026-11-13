@@ -48,7 +48,7 @@ export default {
     goSignIn: '直接登录',
     showPassword: '显示密码',
     hidePassword: '隐藏密码',
-    passwordHint: '12 个字母和数字组合',
+    passwordHint: '8–128 个字符，建议至少 15 个字符',
     strength: ['弱密码', '中等', '强密码'],
     resetSent: '重置链接已发送，请查收邮箱',
     registerSuccess: '账户已创建，请登录。',

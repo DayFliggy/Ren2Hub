@@ -80,9 +80,9 @@ const zh = {
   perRequest: '/ 次',
   perImage: '/ 张',
   imagePrice: '每张图片价格',
-  ordinaryPricing: '配置普通 OpenAI 价格',
+  ordinaryPricing: '配置普通价格',
   ordinaryPricingHint:
-    '普通渠道也能参与此模型的共享端点。继承模型表达式的插件会先保存为各自的插件价格，再把模型级价格改为普通 OpenAI 价格；保存后生效。',
+    '普通渠道也能参与此模型的共享端点。继承模型表达式的插件会先保存为各自的插件价格，再把模型级价格改为普通价格；保存后生效。',
   catalogTokenMode: '按 Token',
   catalogRequestMode: '按次',
   fixed: '固定价格',
@@ -99,7 +99,7 @@ const zh = {
   invalid: '请填写有效的非负价格；留空不表示免费。',
   dependency: '输出或附加单价需要非零基础输入单价；基础价为零时请使用表达式。',
   exprRequired: '请输入表达式，或显式输入 0 表示免费。',
-  ordinaryPriceRequired: '请先填写普通 OpenAI 价格；如需免费，请显式输入 0。',
+  ordinaryPriceRequired: '请先填写普通价格；如需免费，请显式输入 0。',
   exprSource: '表达式源码',
   exprVisual: '可视化阶梯',
   exprAdvanced: '此表达式不能完整表示为可视化阶梯，请继续编辑源码。',
@@ -396,9 +396,9 @@ const en: Record<keyof typeof zh, string> = {
   perRequest: '/ request',
   perImage: '/ image',
   imagePrice: 'Price per image',
-  ordinaryPricing: 'Configure ordinary OpenAI pricing',
+  ordinaryPricing: 'Configure ordinary pricing',
   ordinaryPricingHint:
-    'Ordinary channels can also serve this model on shared endpoints. Plugins that inherit the model expression first keep it as their own price, then the model price becomes the ordinary OpenAI price. Changes take effect when you save.',
+    'Ordinary channels can also serve this model on shared endpoints. Plugins that inherit the model expression first keep it as their own price, then the model price becomes the ordinary price. Changes take effect when you save.',
   catalogTokenMode: 'Per token',
   catalogRequestMode: 'Per request',
   fixed: 'Fixed price',
@@ -418,7 +418,7 @@ const en: Record<keyof typeof zh, string> = {
     'Dependent prices require a nonzero base price. Use an expression for a zero base.',
   exprRequired: 'Enter an expression, or explicitly enter 0 for free pricing.',
   ordinaryPriceRequired:
-    'Set the ordinary OpenAI price first, or explicitly enter 0 for free pricing.',
+    'Set the ordinary price first, or explicitly enter 0 for free pricing.',
   exprSource: 'Expression source',
   exprVisual: 'Visual tiers',
   exprAdvanced:

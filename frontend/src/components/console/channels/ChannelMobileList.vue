@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ChannelBalanceDetails from '@/features/channels/components/ChannelBalanceDetails.vue'
 import {
   Activity,
   Gauge,
@@ -29,7 +30,7 @@ import {
   supportsBalanceQuery,
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
-import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
+import { formatQuota, relativeTime } from '@/utils/format'
 import { formatDecimal } from '@/utils/decimal'
 
 import ChannelInlineNumber from './ChannelInlineNumber.vue'
@@ -449,11 +450,7 @@ function responseDisplay(channel: AdminChannel): {
                 </dt>
                 <dd class="mt-1 flex items-center justify-between gap-1">
                   <div class="min-w-0">
-                    <p
-                      class="font-semibold tabular-nums text-[var(--text-primary)]"
-                    >
-                      {{ formatMoney(channel.balance) }}
-                    </p>
+                    <ChannelBalanceDetails :channel="channel" />
                   </div>
                   <IconButton
                     v-if="

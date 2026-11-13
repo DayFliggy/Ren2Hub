@@ -2,7 +2,7 @@
 
 This file records the direct third-party dependencies of Ren2Hub and their supplied license texts. Keep it with `LICENSE` and `NOTICE` in Docker images, standalone binary distributions, and frontend distributions.
 
-Inventory checked on 2026-10-22 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
+Inventory checked on 2026-11-13 against direct `require` entries in `go.mod`, `relaykit/go.mod` and `tokenkit/go.mod`, using versions resolved by the root Go module; Vue versions come from `frontend/bun.lock`, verified against package metadata after frozen-lockfile installation. Go license identifiers were checked against the module-cache license files. Local RelayKit and TokenKit replacements are first-party source and are excluded. Development/test dependencies are identified separately.
 
 The inventory covers direct dependencies, including additional license files supplied alongside their top-level license. It is not a complete inventory of the transitive dependency graph, operating-system packages, or browser/runtime components. Preserve notices shipped by those components. Independent asset notices are outside this direct-package inventory and must be retained with their assets. No React dependency inventory is used.
 
@@ -27,8 +27,8 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | backend | production | Go | `github.com/aws/smithy-go` | `v1.24.2` | Apache-2.0 | [5](#license-5) |
 | backend | production | Go | `github.com/Azure/go-ntlmssp` | `v0.1.1` | MIT | [6](#license-6) |
 | backend | production | Go | `github.com/bytedance/gopkg` | `v0.1.3` | Apache-2.0 | [4](#license-4) |
-| backend | production | Go | `github.com/Calcium-Ion/go-epay` | `v0.0.5` | MIT | [7](#license-7) |
-| backend | production | Go | `github.com/Calcium-Ion/moejs` | `v0.1.0-alpha.7` | Apache-2.0 | [4](#license-4) |
+| backend | production | Go | `github.com/Calcium-Ion/go-epay` | `v0.0.6` | MIT | [7](#license-7) |
+| backend | production | Go | `github.com/MoeForge/moejs` | `v0.1.0` | Apache-2.0 | [4](#license-4) |
 | backend | production | Go | `github.com/casbin/casbin/v2` | `v2.135.0` | Apache-2.0 | [8](#license-8) |
 | backend | production | Go | `github.com/ClickHouse/clickhouse-go/v2` | `v2.46.0` | Apache-2.0 | [9](#license-9) |
 | backend | production | Go | `github.com/coreos/go-oidc/v3` | `v3.21.0` | Apache-2.0 | [8](#license-8) |
@@ -53,9 +53,8 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | backend | production | Go | `github.com/jfreymuth/oggvorbis` | `v1.0.5` | MIT | [27](#license-27) |
 | backend | production | Go | `github.com/jinzhu/copier` | `v0.4.0` | MIT | [28](#license-28) |
 | backend | production | Go | `github.com/joho/godotenv` | `v1.5.1` | MIT | [29](#license-29) |
-| backend | production | Go | `github.com/klauspost/compress` | `v1.18.3` | BSD-3-Clause; bundled files: Apache-2.0, MIT | [30](#license-30) |
+| backend | production | Go | `github.com/klauspost/compress` | `v1.18.7` | BSD-3-Clause; bundled files: Apache-2.0, MIT | [30](#license-30) |
 | backend | production | Go | `github.com/mewkiz/flac` | `v1.0.13` | Unlicense | [31](#license-31) |
-| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.1` | MIT | [82](#license-82) |
 | backend | production | Go | `github.com/nicksnyder/go-i18n/v2` | `v2.6.1` | MIT | [32](#license-32) |
 | backend | production | Go | `github.com/pkg/errors` | `v0.9.1` | BSD-2-Clause | [33](#license-33) |
 | backend | production | Go | `github.com/pquerna/otp` | `v1.5.0` | Apache-2.0 | [4](#license-4) |
@@ -68,6 +67,7 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | backend | production | Go | `github.com/tcolgate/mp3` | `v0.0.0-20170426193717-e79c5a46d300` | MIT | [39](#license-39) |
 | backend | production | Go | `github.com/thanhpk/randstr` | `v1.0.6` | MIT | [40](#license-40) |
 | backend | production | Go | `github.com/tidwall/gjson` | `v1.19.0` | MIT | [41](#license-41) |
+| backend | production | Go | `github.com/tidwall/sjson` | `v1.2.5` | MIT | [41](#license-41) |
 | backend | production | Go | `github.com/tiktoken-go/tokenizer` | `v0.8.1` | MIT | [42](#license-42) |
 | backend | production | Go | `github.com/waffo-com/waffo-go` | `v1.3.2` | MIT | [43](#license-43) |
 | backend | production | Go | `github.com/waffo-com/waffo-pancake-sdk-go` | `v0.3.1` | MIT | [44](#license-44) |
@@ -95,7 +95,7 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | frontend | production | npm | `axios` | `1.20.0` | MIT | [56](#license-56) |
 | frontend | production | npm | `echarts` | `6.1.0` | Apache-2.0; d3 portions: BSD-3-Clause | [57](#license-57), [58](#license-58) |
 | frontend | production | npm | `lucide-vue-next` | `1.0.0` | ISC; Feather portions: MIT | [59](#license-59) |
-| frontend | production | npm | `marked` | `18.0.5` | MIT; Markdown portions: BSD-3-Clause | [60](#license-60) |
+| frontend | production | npm | `marked` | `18.1.2` | MIT; Markdown portions: BSD-3-Clause | [60](#license-60) |
 | frontend | production | npm | `pinia` | `4.0.2` | MIT | [61](#license-61) |
 | frontend | production | npm | `qrcode.vue` | `3.11.0` | MIT | [62](#license-62) |
 | frontend | production | npm | `vue` | `3.5.43` | MIT | [63](#license-63) |
@@ -120,6 +120,9 @@ MPL-2.0 sections 3.1–3.4 require distributors of its executable form to make t
 | frontend | development | npm | `vite` | `8.1.5` | MIT | [79](#license-79) |
 | frontend | development | npm | `vitest` | `4.1.11` | MIT | [80](#license-80) |
 | frontend | development | npm | `vue-tsc` | `3.3.8` | MIT | [81](#license-81) |
+| backend | production | Go | `github.com/HugoSmits86/nativewebp` | `v1.3.0` | MIT | [82](#license-82) |
+| backend | production | Go | `github.com/MoeForge/moego` | `v0.1.0-alpha.2` | MIT | [7](#license-7) |
+| backend | production | Go | `github.com/ledongthuc/pdf` | `v0.0.0-20261020125853-5e46805f718e` | BSD-3-Clause | [83](#license-83) |
 
 ## Supplied license texts
 
@@ -211,7 +214,7 @@ SOFTWARE.
 - `github.com/aws/aws-sdk-go-v2/credentials v1.19.10 — LICENSE.txt`
 - `github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4 — LICENSE.txt`
 - `github.com/bytedance/gopkg v0.1.3 — LICENSE`
-- `github.com/Calcium-Ion/moejs v0.1.0-alpha.7 — LICENSE`
+- `github.com/MoeForge/moejs v0.1.0 — LICENSE`
 - `github.com/pquerna/otp v1.5.0 — LICENSE`
 - `github.com/prometheus/common v0.62.0 — LICENSE`
 - `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 — LICENSE.txt`
@@ -631,7 +634,8 @@ SOFTWARE.
 
 ### License 7
 
-- `github.com/Calcium-Ion/go-epay v0.0.5 — LICENSE`
+- `github.com/Calcium-Ion/go-epay v0.0.6 — LICENSE`
+- `github.com/MoeForge/moego v0.1.0-alpha.2 — LICENSE`
 
 ```text
 MIT License
@@ -2387,7 +2391,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ### License 30
 
-- `github.com/klauspost/compress v1.18.3 — LICENSE`
+- `github.com/klauspost/compress v1.18.7 — LICENSE`
 
 ```text
 Copyright (c) 2012 The Go Authors. All rights reserved.
@@ -4006,7 +4010,7 @@ SOFTWARE.
 
 ### License 60
 
-- `marked 18.0.5 — LICENSE`
+- `marked 18.1.2 — LICENSE`
 
 ```text
 # License information
@@ -7883,12 +7887,12 @@ SOFTWARE.
 
 ### License 82
 
-- `github.com/MoeForge/moego v0.1.0-alpha.1 — LICENSE`
+- `github.com/HugoSmits86/nativewebp v1.3.0 — LICENSE`
 
 ```text
 MIT License
 
-Copyright (c) 2026 Calcium-Ion
+Copyright (c) 2024 Hugo Smits
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -7907,4 +7911,38 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+### License 83
+
+- `github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e — LICENSE`
+
+```text
+Copyright (c) 2009 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```

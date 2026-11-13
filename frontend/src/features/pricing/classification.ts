@@ -33,11 +33,15 @@ function expressionMode(expression: string): 'request' | 'token' | null {
   return null
 }
 
-/** Classify pricing with task schemas taking precedence over expression shape. */
+/** Shared provider/task models keep ordinary prices when the server marks them. */
 export function pricingCatalogMode(
   model: PricingModelContract
 ): PricingCatalogMode {
-  if (Object.keys(model.billing_usage_schema ?? {}).length) return 'task'
+  if (
+    !model.ordinary_pricing &&
+    Object.keys(model.billing_usage_schema ?? {}).length
+  )
+    return 'task'
   if (model.billing_mode === 'unconfigured') return 'unconfigured'
 
   if (model.billing_mode === 'tiered_expr') {

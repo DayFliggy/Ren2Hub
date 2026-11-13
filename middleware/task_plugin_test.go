@@ -379,6 +379,9 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 }
 
 func TestBuildTaskPluginRouteRequestBodyUnion(t *testing.T) {
+	previous := common.GetDiskCacheConfig()
+	common.SetDiskCacheConfig(common.DiskCacheConfig{Enabled: true, ThresholdMB: 0, MaxSizeMB: 16, Path: t.TempDir()})
+	t.Cleanup(func() { common.SetDiskCacheConfig(previous) })
 	tests := []struct {
 		name        string
 		contentType string
@@ -397,6 +400,7 @@ func TestBuildTaskPluginRouteRequestBodyUnion(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			t.Cleanup(func() { common.CleanupBodyStorage(c) })
 			c.Request = httptest.NewRequest(http.MethodPost, "/body", strings.NewReader(testCase.body))
 			if testCase.contentType != "" {
 				c.Request.Header.Set("Content-Type", testCase.contentType)
@@ -423,6 +427,7 @@ func TestBuildTaskPluginRouteRequestBodyUnion(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/body", bytes.NewReader(multipartBody.Bytes()))
 	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	t.Cleanup(func() { common.CleanupBodyStorage(c) })
 	requestContext, err := buildTaskPluginRouteRequest(c)
 	require.NoError(t, err)
 	decodedBody := requestContext.Body.(map[string]any)
@@ -463,6 +468,38 @@ func TestBuildTaskPluginRouteRequestReplaysConsumedMultipart(t *testing.T) {
 	assert.Equal(t, []string{"a replayable request"}, decoded["fields"].(map[string][]string)["prompt"])
 	require.Len(t, second.Files, 1)
 	assert.EqualValues(t, len("image bytes"), second.Files[0]["size"])
+}
+
+func TestTaskPluginModelRewriteKeepsBorrowedBodies(t *testing.T) {
+	previous := common.GetDiskCacheConfig()
+	t.Cleanup(func() { common.SetDiskCacheConfig(previous) })
+	for _, disk := range []bool{false, true} {
+		t.Run(fmt.Sprintf("disk=%t", disk), func(t *testing.T) {
+			common.SetDiskCacheConfig(common.DiskCacheConfig{Enabled: disk, ThresholdMB: 0, MaxSizeMB: 16, Path: t.TempDir()})
+			const original = `{"model":"original","input":{"text":"hello","enabled":false}}`
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/body", strings.NewReader(original))
+			c.Request.Header.Set("Content-Type", "application/json")
+			t.Cleanup(func() { common.CleanupBodyStorage(c) })
+			request, err := buildTaskPluginRouteRequest(c)
+			require.NoError(t, err)
+			contexts := []jsplugin.RouteRequestContext{request}
+			models := []string{"original", "first-channel", "retry-channel"}
+			for _, model := range models[1:] {
+				require.NoError(t, rewriteTaskPluginJSONModel(c, model))
+				request, err := buildTaskPluginRouteRequest(c)
+				require.NoError(t, err)
+				contexts = append(contexts, request)
+			}
+			for i, request := range contexts {
+				value := request.Body.(map[string]any)["value"].(map[string]any)
+				assert.Equal(t, models[i], value["model"])
+				assert.Equal(t, map[string]any{"text": "hello", "enabled": false}, value["input"])
+				assert.JSONEq(t, fmt.Sprintf(`{"model":%q,"input":{"text":"hello","enabled":false}}`, models[i]), string(request.BodyText))
+			}
+			assert.Equal(t, original, string(contexts[0].BodyText))
+		})
+	}
 }
 
 func TestBuildTaskPluginRouteRequestRejectsUnsafeBodies(t *testing.T) {

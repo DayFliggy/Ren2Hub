@@ -146,6 +146,10 @@ def exercise(source: Path, output: Path, binary: Path, project: str) -> dict:
     env.update(PORT=str(port), SQLITE_PATH=str(private / "app.db"), SESSION_SECRET=secrets.token_hex(32),
                CRYPTO_SECRET=secrets.token_hex(32), SESSION_COOKIE_SECURE="false", GIN_MODE="release",
                TICKET_UPLOAD_DIR=str(private / "attachments"), DEFAULT_LANGUAGE="en")
+    # UI suites share these synthetic accounts. Keep critical rate limiting
+    # enabled at its native threshold, but avoid a preceding suite consuming
+    # the next suite's entire 20-minute window in this isolated fixture.
+    env["CRITICAL_RATE_LIMIT_DURATION"] = "1"
     result = {"project": project, "success": False, "fresh_database": True}
     server = None
     browser = None

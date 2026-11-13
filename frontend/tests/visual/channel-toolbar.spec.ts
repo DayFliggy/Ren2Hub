@@ -98,7 +98,8 @@ function controlBoxes(page: Page, selector: string) {
         return {
           name:
             element.getAttribute('aria-label') ??
-            (element as HTMLInputElement).placeholder,
+            (element as HTMLInputElement).placeholder ??
+            element.textContent?.trim(),
           top: Math.round(box.top),
           height: Math.round(box.height),
           left: box.left,
@@ -124,6 +125,7 @@ for (const theme of [
       '渠道状态',
       '渠道类型',
       '渠道厂商',
+      '更新全部渠道余额',
       '刷新列表',
       '字段设置',
     ])

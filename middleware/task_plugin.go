@@ -26,6 +26,7 @@ import (
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	taskjsplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relay/requestplugin"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -557,7 +558,7 @@ func RouteTaskPluginEndpoint() gin.HandlerFunc {
 		defer userPermit.Release()
 		c.Set(contextKeyTaskPluginUserConcurrencyPermit, userPermit)
 
-		filter := service.TaskPluginEndpointFilter(endpoint.Candidates)
+		filter := service.TaskPluginEndpointFilter(endpoint.Candidates, c.Request.URL.Path)
 		constraints := service.GetChannelConstraints(c)
 		filterIndex := len(constraints.Filters)
 		constraints.AddFilter(filter)
@@ -710,11 +711,10 @@ func jsonBodyBoolFlags(c *gin.Context) (stream, background bool) {
 	if err != nil {
 		return false, false
 	}
-	requestBody, err := storage.Bytes()
+	values, err := common.ReadBodyJSONFields(storage, "stream", "background")
 	if err != nil {
 		return false, false
 	}
-	values := ojson.GetManyBytes(requestBody, "stream", "background")
 	return values[0].Type == ojson.True, values[1].Type == ojson.True
 }
 
@@ -810,13 +810,7 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			abortWithOpenAiMessage(c, status, err.Error())
 			return
 		}
-		if body, ok := requestContext.Body.(map[string]any); ok {
-			if fields, ok := body["fields"].(map[string][]string); ok {
-				if values := fields["model"]; len(values) > 0 && values[0] != pinned.Model {
-					fields["model"][0] = pinned.Model
-				}
-			}
-		}
+		pinTaskPluginFormModel(requestContext, pinned.Model)
 		bodyObject, _ := requestContext.Body.(map[string]any)
 		bodyKind, _ := bodyObject["kind"].(string)
 		allowedBody := false
@@ -1003,6 +997,70 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 	}
 }
 
+// RefreshTaskPluginRequest decodes a task submission again after a request
+// plugin changed its stored body, so validation, pricing and the upstream
+// body read the changed body: the route request the decode hooks read, the
+// request body of the /v1/tasks entry, and a flag that makes the task
+// adaptor run the plugin's decoder again.
+func RefreshTaskPluginRequest(c *gin.Context) *dto.TaskError {
+	c.Set(pluginruntime.ContextKeyRequestRefreshed, true)
+	if value, exists := c.Get(pluginruntime.ContextKeyRouteRequest); exists {
+		previous, _ := value.(pluginruntime.RouteRequestContext)
+		requestContext, err := buildTaskPluginRouteRequest(c)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		requestContext.Params, requestContext.RequestBody = previous.Params, previous.RequestBody
+		if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedEndpoint); exists {
+			pinned, _ := pinnedValue.(pluginruntime.PinnedEndpoint)
+			pinTaskPluginFormModel(requestContext, pinned.Model)
+			if protocolValue, exists := c.Get(pluginruntime.ContextKeyProtocolRequest); exists {
+				if protocolContext, ok := protocolValue.(pluginruntime.ProtocolRequestContext); ok {
+					protocolContext.RouteRequestContext = requestContext
+					c.Set(pluginruntime.ContextKeyProtocolRequest, protocolContext)
+				}
+			}
+		}
+		c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
+		return nil
+	}
+	value, _ := c.Get("task_request")
+	if _, entry := value.(map[string]any); !entry {
+		return nil
+	}
+	var requestBody map[string]any
+	if err := common.UnmarshalBodyReusable(c, &requestBody); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", invalidRequestStatus(err))
+	}
+	c.Set("task_request", requestBody)
+	if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedPlugin); exists {
+		if pinned, ok := pinnedValue.(pluginruntime.PinnedPlugin); ok && pinned.Plugin != nil && pinned.Plugin.Meta.PreservesJSONOrder() {
+			storage, err := common.GetBodyStorage(c)
+			var raw []byte
+			if err == nil {
+				raw, err = storage.Bytes()
+			}
+			if err != nil {
+				return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+			}
+			c.Set(pluginruntime.ContextKeyRequestBodyText, json.RawMessage(raw))
+		}
+	}
+	return nil
+}
+
+// pinTaskPluginFormModel sets the model field of a form body to the model the
+// endpoint was pinned to.
+func pinTaskPluginFormModel(requestContext pluginruntime.RouteRequestContext, model string) {
+	if body, ok := requestContext.Body.(map[string]any); ok {
+		if fields, ok := body["fields"].(map[string][]string); ok {
+			if values := fields["model"]; len(values) > 0 && values[0] != model {
+				fields["model"][0] = model
+			}
+		}
+	}
+}
+
 func buildTaskPluginRouteRequest(c *gin.Context) (pluginruntime.RouteRequestContext, error) {
 	requestContext := pluginruntime.RouteRequestContext{
 		Path:    c.Request.URL.Path,
@@ -1057,7 +1115,7 @@ func buildTaskPluginRouteRequest(c *gin.Context) (pluginruntime.RouteRequestCont
 			return requestContext, fmt.Errorf("JSON body must be valid UTF-8")
 		}
 		var value any
-		if err = common.Unmarshal(raw, &value); err != nil {
+		if err = common.UnmarshalNoCopy(raw, &value); err != nil {
 			return requestContext, err
 		}
 		requestContext.Body = map[string]any{"kind": string(pluginruntime.BodyJSON), "value": value}
@@ -1097,7 +1155,12 @@ func buildTaskPluginRouteRequest(c *gin.Context) (pluginruntime.RouteRequestCont
 		if storageErr != nil {
 			return requestContext, storageErr
 		}
-		reader := multipart.NewReader(storage, boundary)
+		body, readErr := storage.NewReader()
+		if readErr != nil {
+			return requestContext, readErr
+		}
+		defer body.Close()
+		reader := multipart.NewReader(body, boundary)
 		partCount := 0
 		fileCount := 0
 		fieldCount := 0
@@ -1594,6 +1657,11 @@ func RespondTaskPluginError(c *gin.Context, taskErr *dto.TaskError) bool {
 	// routes. Other plugin errors retain the upstream sanitization contract.
 	if taskErr.StatusCode == http.StatusBadRequest && taskErr.Code == "channel_ratio_exceeded" {
 		sanitized.Code = taskErr.Code
+	}
+	if requestplugin.Stopped(taskErr) {
+		// A request plugin's stop keeps its code and message, as on chat
+		// routes.
+		sanitized.Code, sanitized.Message, sanitized.Retryable = taskErr.Code, taskErr.Message, false
 	}
 	requestID := c.GetString(common.RequestIdKey)
 	hasRenderer, err := pinned.Plugin.Engine.HasCallablePath(c.Request.Context(), "native", "error")

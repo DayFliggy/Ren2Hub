@@ -76,3 +76,21 @@ describe('repricing a task expression', () => {
     }
   })
 })
+
+describe('provider and task price inheritance', () => {
+  it('keeps chat counters and relay constants out of inherited task prices', async () => {
+    const { taskExpressionCompatible } = await import('../taskExpression')
+    const schema = {
+      seconds: { type: 'number' as const, unit: 'second' as const },
+    }
+    expect(taskExpressionCompatible('p * 2 + c * 4', schema)).toBe(false)
+    expect(taskExpressionCompatible('image_count * 2', schema)).toBe(false)
+    expect(taskExpressionCompatible('tier("base", 2)', schema, true)).toBe(
+      false
+    )
+    expect(
+      taskExpressionCompatible('tier("base", u("seconds") * 2)', schema, true)
+    ).toBe(true)
+    expect(taskExpressionCompatible('u("missing")', schema)).toBe(false)
+  })
+})

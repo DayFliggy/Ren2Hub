@@ -50,7 +50,11 @@ const label = 'select-none text-[11px] font-medium text-[var(--text-tertiary)]'
           :size="20"
         />
         <div class="min-w-0">
-          <div class="truncate text-sm font-medium">{{ plugin.meta.name }}</div>
+          <div class="truncate text-sm font-medium">
+            {{
+              localizedText(plugin.meta.name_i18n, locale) || plugin.meta.name
+            }}
+          </div>
           <div class="truncate font-mono text-xs text-[var(--text-tertiary)]">
             {{ plugin.meta.key }}
           </div>

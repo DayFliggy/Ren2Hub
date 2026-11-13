@@ -33,7 +33,8 @@ const labels: Record<string, string> = {
     <ReferencePrices
       v-if="
         pricing.billing_mode === 'tiered_expr' &&
-        !Object.keys(pricing.billing_usage_schema ?? {}).length
+        (pricing.ordinary_pricing ||
+          !Object.keys(pricing.billing_usage_schema ?? {}).length)
       "
       :prices="references"
       :unit="unit"

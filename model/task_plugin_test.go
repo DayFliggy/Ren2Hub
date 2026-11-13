@@ -17,7 +17,7 @@ func setupTaskPluginModelTest(t *testing.T) {
 	var err error
 	DB, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, DB.AutoMigrate(&TaskPlugin{}))
+	require.NoError(t, DB.AutoMigrate(&TaskPlugin{}, &SystemTask{}))
 }
 
 func TestTaskPluginVersionActivationAndSourceImmutability(t *testing.T) {

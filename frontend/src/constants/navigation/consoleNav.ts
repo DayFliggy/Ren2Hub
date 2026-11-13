@@ -154,6 +154,14 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 3h6v4H9zM9 12h6M9 16h6',
       },
       {
+        name: 'request-processing',
+        labelKey: 'pluginExtensions.title',
+        route: 'request-processing',
+        feature: 'taskPlugins',
+        rootOnly: true,
+        icon: 'M4 6h16M4 12h16M4 18h16',
+      },
+      {
         name: 'task-plugins',
         labelKey: 'taskPlugins.title',
         route: 'task-plugins',

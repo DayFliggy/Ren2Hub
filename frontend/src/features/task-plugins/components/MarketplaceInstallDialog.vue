@@ -45,6 +45,7 @@ import type {
 import JavaScriptViewer from './JavaScriptViewer.vue'
 import MarketplaceCapabilities from './MarketplaceCapabilities.vue'
 import PluginAlert from './PluginAlert.vue'
+import PluginReadmePanel from './PluginReadmePanel.vue'
 import PluginChangelogPanel from './PluginChangelogPanel.vue'
 import PluginConfirmDialog from './PluginConfirmDialog.vue'
 import PluginIcon from './PluginIcon.vue'
@@ -215,6 +216,7 @@ const tabs = computed(() => [
     ? [{ key: 'diff', label: t('taskPlugins.versionDifferences') }]
     : []),
   { key: 'source', label: t('taskPlugins.fullSource') },
+  { key: 'readme', label: t('pluginExtensions.readme') },
   { key: 'changelog', label: t('taskPlugins.changelog') },
 ])
 
@@ -239,6 +241,7 @@ async function install() {
   try {
     const detail = await installMarketplacePlugin({
       source: source.text,
+      marketplaceIndexUrl: props.target.source.index_url,
       sourceSha256: version.sha256,
       remark: `${props.target.source.name} v${selectedVersion.value}`,
       icon: source.icon ?? undefined,
@@ -392,6 +395,12 @@ async function install() {
           :value="fetched.text"
           :label="t('taskPlugins.fullSource')"
           class="h-[min(22rem,35vh)]"
+        />
+        <PluginReadmePanel
+          v-else-if="reviewTab === 'readme'"
+          :plugin="plugin"
+          :index-url="target.source.index_url"
+          :version="selectedVersion"
         />
         <PluginChangelogPanel
           v-else-if="reviewTab === 'changelog'"

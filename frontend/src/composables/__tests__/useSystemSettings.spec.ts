@@ -307,3 +307,45 @@ describe('committed settings status propagation', () => {
     expect(settings.rawValue('SystemName')).toBe('After old read')
   })
 })
+
+describe('RSA payment option transition', () => {
+  it('stores both RSA keys before enabling and never retains key values', async () => {
+    const settings = await setup()
+    vi.mocked(api.put).mockResolvedValue(null)
+    expect(
+      await settings.saveOptions({
+        'payment_setting.epay_sign_type': 'RSA',
+        'payment_setting.epay_merchant_private_key': 'private-fixture',
+        'payment_setting.epay_platform_public_key': 'public-fixture',
+      })
+    ).toBe(true)
+    expect(
+      vi
+        .mocked(api.put)
+        .mock.calls.map(([, body]) => (body as { key: string }).key)
+    ).toEqual([
+      'payment_setting.epay_merchant_private_key',
+      'payment_setting.epay_platform_public_key',
+      'payment_setting.epay_sign_type',
+    ])
+    expect(settings.rawValue('payment_setting.epay_merchant_private_key')).toBe(
+      ''
+    )
+    expect(settings.rawValue('payment_setting.epay_platform_public_key')).toBe(
+      ''
+    )
+    vi.mocked(api.put).mockClear()
+    await settings.saveOptions({
+      'payment_setting.epay_merchant_private_key': 'replacement-fixture',
+      'payment_setting.epay_sign_type': 'MD5',
+    })
+    expect(
+      vi
+        .mocked(api.put)
+        .mock.calls.map(([, body]) => (body as { key: string }).key)
+    ).toEqual([
+      'payment_setting.epay_sign_type',
+      'payment_setting.epay_merchant_private_key',
+    ])
+  })
+})

@@ -191,6 +191,10 @@ def verify_candidate_database(revision):
     require(app['Image'] == target['image_id'] and app['Config']['Labels'].get('org.opencontainers.image.revision') == revision,
             'candidate_image_identity_changed')
     settings = dict(item.split('=', 1) for item in app['Config']['Env'])
+    require(settings.get('HTTP_PROXY') == settings.get('HTTPS_PROXY') == 'http://127.0.0.1:41749'
+            and settings.get('NO_PROXY') == 'localhost,127.0.0.1,postgres,redis'
+            and target['network_guard'].get('dns_forwarding_blocked') is True,
+            'candidate_external_network_guard_missing')
     require(settings.get('TASK_POLL_MAX_FAILURES', '') == ('0' if target.get('attachment_volume') else ''),
             'candidate_mock_downtime_policy_mismatch')
     dsn = urllib.parse.urlsplit(settings.get('SQL_DSN', ''))

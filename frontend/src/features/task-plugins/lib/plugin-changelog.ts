@@ -1,3 +1,5 @@
+import { fetchFromPluginSite } from './plugin-site'
+import { resolvePluginDocumentFiles } from './plugin-document'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -266,7 +268,7 @@ async function fetchChangelogFile(
   signal: AbortSignal
 ): Promise<string | null> {
   signal.throwIfAborted()
-  const response = await fetch(url, {
+  const response = await fetchFromPluginSite(url, {
     signal,
     credentials: 'omit',
     redirect: 'error',
@@ -308,11 +310,20 @@ export async function fetchPluginChangelog(options: {
   language: string
   signal: AbortSignal
 }): Promise<PluginChangelog | null> {
-  const url = resolvePluginChangelogUrl(
-    options.indexUrl,
-    options.plugin,
-    options.version
-  )
+  const listed = options.plugin.versions.find(
+    (entry) => entry.version === options.version
+  )?.changelog
+  const files = listed
+    ? resolvePluginDocumentFiles(
+        options.indexUrl,
+        listed,
+        'CHANGELOG',
+        changelogLocale(options.language)
+      )
+    : null
+  const url =
+    files?.canonical?.url ??
+    resolvePluginChangelogUrl(options.indexUrl, options.plugin, options.version)
   if (!url) throw new Error('No changelog path for the selected version')
   const signal = AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
   const text = await fetchChangelogFile(url, signal)
@@ -322,18 +333,23 @@ export async function fetchPluginChangelog(options: {
     version: options.version,
     locale: 'en',
   }
-  const canonical = parsePluginChangelog(text, identity, url)
+  const canonical = parsePluginChangelog(
+    text,
+    identity,
+    files?.canonical?.sourceUrl ?? url
+  )
   const locale = changelogLocale(options.language)
   const filename = canonical.translations[locale]
-  if (filename) {
+  if (filename || files?.translation) {
     try {
-      const translatedUrl = new URL(filename, url).href
+      const translatedUrl =
+        files?.translation?.url ?? new URL(filename!, url).href
       const translation = await fetchChangelogFile(translatedUrl, signal)
       if (translation !== null) {
         const translated = parsePluginChangelog(
           translation,
           { ...identity, locale },
-          translatedUrl
+          files?.translation?.sourceUrl ?? translatedUrl
         )
         if (
           translated.document.sections.length ===

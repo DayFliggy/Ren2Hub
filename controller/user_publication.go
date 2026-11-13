@@ -21,6 +21,7 @@ func finishCommittedUserUpdate(c *gin.Context, previous, updated *model.User, au
 	}
 	var policyErr, sessionErr error
 	if authzTouched {
+		model.BumpSyncTopic(model.SyncTopicAuthz)
 		policyErr = authz.ReloadPolicy()
 	}
 	if updated.AuthVersion > previous.AuthVersion {

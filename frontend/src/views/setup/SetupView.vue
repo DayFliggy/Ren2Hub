@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
 import { computed, onMounted, ref } from 'vue'
 import {
   Check,
@@ -131,8 +132,11 @@ function validateStep(step = currentStep.value): boolean {
     fieldError.value = t('setup.usernameTooLong')
     return false
   }
-  if (setupCharacterLength(setup.values.password) < 8) {
-    fieldError.value = t('setup.passwordTooShort')
+  if (
+    setupCharacterLength(setup.values.password) < 8 ||
+    setupCharacterLength(setup.values.password) > 128
+  ) {
+    fieldError.value = t('passwordFeedback.passwordLength')
     return false
   }
   if (setup.values.password !== setup.values.confirmPassword) {
@@ -477,6 +481,10 @@ onMounted(async () => {
                   </div>
                 </div>
                 <div class="sm:col-span-2">
+                  <PasswordStrengthMeter
+                    :password="setup.values.password"
+                    :confirmation="setup.values.confirmPassword"
+                  />
                   <label
                     for="setup-confirm-password"
                     class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"

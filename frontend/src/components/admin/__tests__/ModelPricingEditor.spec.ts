@@ -382,11 +382,11 @@ describe('manual model price editor', () => {
         ],
       },
     })
-    await button(wrapper, 'Configure ordinary OpenAI pricing').trigger('click')
+    await button(wrapper, 'Configure ordinary pricing').trigger('click')
     // The zero placeholder must be priced before it can be saved.
     expect(wrapper.vm.commit()).toBeNull()
     await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('Set the ordinary OpenAI price first')
+    expect(wrapper.text()).toContain('Set the ordinary price first')
     await button(wrapper, 'Visual tiers').trigger('click')
     await field(wrapper, '.price-tier', 'Price per image (USD)').setValue(
       '0.02'
@@ -395,7 +395,7 @@ describe('manual model price editor', () => {
       ...tiered('tier("image", fixed(0.02)) * image_count'),
       'billing_setting.plugin_billing_expr': { provider: shared },
     })
-    expect(wrapper.text()).not.toContain('Configure ordinary OpenAI pricing')
+    expect(wrapper.text()).not.toContain('Configure ordinary pricing')
     wrapper.unmount()
   })
   it('offers ordinary pricing for a u() default whose plugins all have prices', async () => {
@@ -424,7 +424,7 @@ describe('manual model price editor', () => {
         ],
       },
     })
-    await button(wrapper, 'Configure ordinary OpenAI pricing').trigger('click')
+    await button(wrapper, 'Configure ordinary pricing').trigger('click')
     // The zero placeholder is a visual tier, so its source is one click away.
     await button(wrapper, 'Expression source').trigger('click')
     await wrapper.get('textarea').setValue('tier("base", p * 2 + c * 4)')

@@ -23,6 +23,7 @@ import type {
   ChannelModelTestOptions,
   ChannelModelTestResult,
 } from '@/composables/useAdminChannels'
+import { getTaskPluginOptions } from '@/features/task-plugins/api'
 import { CHANNEL_TEST_ENDPOINT_OPTIONS } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
 
@@ -289,7 +290,43 @@ function modelState(model: string): ModelTestState {
   return states.value[model] ?? { status: 'idle' }
 }
 
-const endpointOptions = computed(() => [...CHANNEL_TEST_ENDPOINT_OPTIONS])
+const relayPaths = ref<string[] | null>(null)
+const pluginOptionsError = ref('')
+let optionsRequest: AbortController | undefined
+watch(
+  () => [props.open, props.channel?.id] as const,
+  async ([open]) => {
+    optionsRequest?.abort()
+    relayPaths.value = null
+    pluginOptionsError.value = ''
+    if (!open || props.channel?.type !== 61) return
+    const request = new AbortController()
+    optionsRequest = request
+    try {
+      const settings = JSON.parse(
+        typeof props.channel.setting === 'string' ? props.channel.setting : '{}'
+      ) as {
+        task_plugin_key?: string
+      }
+      const options = await getTaskPluginOptions(request.signal)
+      if (!request.signal.aborted)
+        relayPaths.value =
+          options.find((item) => item.key === settings.task_plugin_key)
+            ?.relayPaths ?? null
+    } catch (cause) {
+      if (!request.signal.aborted)
+        pluginOptionsError.value =
+          cause instanceof Error ? cause.message : String(cause)
+    }
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => optionsRequest?.abort())
+const endpointOptions = computed(() =>
+  CHANNEL_TEST_ENDPOINT_OPTIONS.filter(
+    (option) => !relayPaths.value || relayPaths.value.includes(option.path)
+  )
+)
 
 const modalTitle = computed(() =>
   t('channels.testModalTitle', { name: props.channel?.name ?? '' })
@@ -302,6 +339,13 @@ function close() {
 
 <template>
   <ConsoleModal :open="open" :title="modalTitle" size="xl" @close="close">
+    <p
+      v-if="pluginOptionsError"
+      role="alert"
+      class="text-sm text-[var(--status-danger)]"
+    >
+      {{ pluginOptionsError }}
+    </p>
     <div class="sibling-space-y-5 text-left">
       <!-- ══ 测试配置 ══════════════════════════════════════════════════ -->
       <section class="channel-test-config">

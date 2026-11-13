@@ -95,6 +95,7 @@ func SupportsResponsesCompact(channelType, apiType int) bool {
 	switch apiType {
 	case constant.APITypeOpenAI,
 		constant.APITypeAdvancedCustom,
+		constant.APITypeProviderPlugin,
 		constant.APITypeSub2API,
 		constant.APITypeNewAPI:
 		return true

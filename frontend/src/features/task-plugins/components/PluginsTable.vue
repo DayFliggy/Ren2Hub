@@ -252,7 +252,10 @@ function channelSummary(plugin: TaskPluginListItem) {
           />
           <div class="min-w-0">
             <div class="truncate text-sm font-medium">
-              {{ row.plugin.meta.name }}
+              {{
+                localizedText(row.plugin.meta.name_i18n, locale) ||
+                row.plugin.meta.name
+              }}
             </div>
             <div class="truncate font-mono text-xs text-[var(--text-tertiary)]">
               {{ row.plugin.meta.key }}

@@ -34,6 +34,7 @@ const emptyJsonListOptions = new Set([
 ])
 
 function savePhase(key: string, value: SystemSettingValue): number {
+  if (key === 'payment_setting.epay_sign_type') return value === 'RSA' ? 2 : 0
   if (!dependentEnableKeys.has(key)) return 1
   if (String(value) === 'false') return 0
   if (String(value) === 'true') return 2
@@ -61,7 +62,7 @@ let _fetchPromise: Promise<boolean> | null = null
 let _savePromise: Promise<boolean> | null = null
 
 function isSensitiveOption(key: string): boolean {
-  return /(?:Token|Secret|Key|Cert|Certificate|Password|secret|api_key)$/.test(
+  return /(?:Token|Secret|Key|Cert|Certificate|Password|secret|api_key|private_key|public_key)$/.test(
     key
   )
 }

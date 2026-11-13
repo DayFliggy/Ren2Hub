@@ -85,6 +85,7 @@ const inputAttrs = computed(() => {
       @compositionstart="startComposition"
       @compositionend="finishComposition"
       @change="finishComposition"
+      @blur="finishComposition"
     />
   </div>
 </template>

@@ -1,3 +1,4 @@
+import { fetchFromPluginSite } from './plugin-site'
 // Mirrors upstream lib/plugin-url.ts. Ren2Hub keeps its stricter fetch: HTTPS
 // only, no credentials, referrer or redirects, and a streamed byte cap.
 
@@ -68,7 +69,7 @@ export async function fetchPluginBytes(
     throw new PluginSourceFetchError('unreachable')
   let response: Response
   try {
-    response = await fetch(url, {
+    response = await fetchFromPluginSite(url, {
       signal,
       cache: 'no-cache',
       credentials: 'omit',

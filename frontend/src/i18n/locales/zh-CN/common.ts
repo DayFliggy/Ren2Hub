@@ -1,4 +1,6 @@
+import { passwordFeedback } from '../../passwordFeedback'
 export default {
+  passwordFeedback: passwordFeedback['zh-CN'],
   common: {
     search: '搜索',
     all: '全部',

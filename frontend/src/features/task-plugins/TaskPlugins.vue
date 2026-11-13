@@ -30,6 +30,16 @@ import type { TaskPluginListItem } from './types'
 const { t } = useI18n()
 const toast = useToast()
 const tab = ref('installed')
+const kind = ref('all')
+const visiblePlugins = computed(() =>
+  plugins.value.filter(
+    (plugin) =>
+      kind.value === 'all' ||
+      (kind.value === 'task' && plugin.task !== false) ||
+      (kind.value === 'provider' && plugin.provider) ||
+      (kind.value === 'transform' && plugin.transform)
+  )
+)
 const tabs = computed(() => [
   { key: 'installed', label: t('taskPlugins.installed') },
   { key: 'marketplace', label: t('taskPlugins.marketplace') },
@@ -180,6 +190,20 @@ const overrides = computed(() =>
       :aria-labelledby="`task-plugins-panel-tab-${tab}`"
     >
       <template v-if="tab === 'installed'">
+        <select
+          v-model="kind"
+          :aria-label="t('pluginExtensions.plugin')"
+          class="mb-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2 text-sm"
+        >
+          <option value="all">{{ t('common.all') }}</option>
+          <option
+            v-for="value in ['task', 'provider', 'transform']"
+            :key="value"
+            :value="value"
+          >
+            {{ t(`pluginExtensions.${value}`) }}
+          </option>
+        </select>
         <ErrorBanner
           v-if="pluginsError"
           class="mb-3"
@@ -187,7 +211,7 @@ const overrides = computed(() =>
           @retry="loadPlugins"
         />
         <PluginsTable
-          :plugins="plugins"
+          :plugins="visiblePlugins"
           :loading="pluginsLoading"
           @details="detail = $event"
           @upload="upload = { key: $event }"

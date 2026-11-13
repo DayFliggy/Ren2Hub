@@ -13,7 +13,22 @@ import (
 // 残留；这里在同一事务内锁住并删除同一批行。同时删除这些渠道的能力行，与单个删除一致，
 // 避免孤儿能力被复用同一 ID 的新渠道继承。
 func DeleteDisabledChannelIDs() ([]int, error) {
+	channels, err := DeleteDisabledChannels()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int, len(channels))
+	for index, channel := range channels {
+		ids[index] = channel.Id
+	}
+	return ids, nil
+}
+
+// DeleteDisabledChannels returns the rows actually deleted while locked, so
+// credential revocation and routing cleanup share the committed deletion set.
+func DeleteDisabledChannels() ([]*Channel, error) {
 	var ids []int
+	var deleted []*Channel
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		disabled := []int{common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled}
 		var candidates []int
@@ -27,6 +42,8 @@ func DeleteDisabledChannelIDs() ([]int, error) {
 		for _, channel := range channels {
 			if slices.Contains(disabled, channel.Status) {
 				ids = append(ids, channel.Id)
+				copy := channel
+				deleted = append(deleted, &copy)
 			}
 		}
 		for chunk := range slices.Chunk(ids, 200) {
@@ -42,5 +59,6 @@ func DeleteDisabledChannelIDs() ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ids, nil
+	BumpSyncTopic(SyncTopicChannels)
+	return deleted, nil
 }

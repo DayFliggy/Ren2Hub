@@ -85,6 +85,30 @@ const label = 'select-none text-[11px] font-medium text-[var(--text-tertiary)]'
     class="flex h-full min-w-0 flex-col gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-3"
     data-marketplace-plugin-card
   >
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+      <StatusChip v-if="plugin.recommended" tone="accent">{{
+        t('pluginExtensions.recommended')
+      }}</StatusChip
+      ><span v-if="plugin.installs30d !== undefined">{{
+        t('pluginExtensions.installs', { count: plugin.installs30d })
+      }}</span
+      ><span v-if="plugin.code" class="font-mono">{{ plugin.code }}</span
+      ><a
+        v-if="plugin.author?.url"
+        :href="plugin.author.url"
+        target="_blank"
+        rel="noopener noreferrer"
+        >{{ plugin.author.login }}</a
+      ><span v-else-if="plugin.author">{{ plugin.author.login }}</span>
+    </div>
+    <a
+      v-if="plugin.repo"
+      :href="plugin.repo"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="truncate text-xs text-[var(--accent)]"
+      >{{ plugin.repo }}</a
+    >
     <div class="flex items-start justify-between gap-2">
       <div class="flex min-w-0 flex-1 items-center gap-2.5">
         <PluginIcon
@@ -93,7 +117,9 @@ const label = 'select-none text-[11px] font-medium text-[var(--text-tertiary)]'
           :size="20"
         />
         <div class="min-w-0">
-          <h3 class="truncate text-sm font-medium">{{ plugin.name }}</h3>
+          <h3 class="truncate text-sm font-medium">
+            {{ localizedText(plugin.name_i18n, locale) || plugin.name }}
+          </h3>
           <div class="truncate font-mono text-xs text-[var(--text-tertiary)]">
             {{ plugin.key }}
           </div>

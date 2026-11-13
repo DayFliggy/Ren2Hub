@@ -228,8 +228,9 @@ export function supportsBalanceQuery(
   channel: Pick<AdminChannel, 'type' | 'channel_info'>
 ): boolean {
   return (
-    BALANCE_QUERY_TYPES.has(channel.type) &&
-    channel.channel_info?.is_multi_key !== true
+    channel.type === 61 ||
+    (BALANCE_QUERY_TYPES.has(channel.type) &&
+      channel.channel_info?.is_multi_key !== true)
   )
 }
 
@@ -336,22 +337,46 @@ export function adminChannelResponseText(
 export const CHANNEL_TEST_ENDPOINT_OPTIONS: ReadonlyArray<{
   value: string
   label: string
+  path: string
 }> = [
-  { value: 'openai', label: 'OpenAI (/v1/chat/completions)' },
-  { value: 'openai-response', label: 'OpenAI Responses (/v1/responses)' },
+  {
+    value: 'openai',
+    path: '/v1/chat/completions',
+    label: 'OpenAI (/v1/chat/completions)',
+  },
+  {
+    value: 'openai-response',
+    path: '/v1/responses',
+    label: 'OpenAI Responses (/v1/responses)',
+  },
   {
     value: 'openai-response-compact',
+    path: '/v1/responses/compact',
     label: 'OpenAI Response Compaction (/v1/responses/compact)',
   },
-  { value: 'anthropic', label: 'Anthropic (/v1/messages)' },
+  {
+    value: 'anthropic',
+    path: '/v1/messages',
+    label: 'Anthropic (/v1/messages)',
+  },
   {
     value: 'gemini',
+    path: '/v1beta/models/{model}:generateContent',
     label: 'Gemini (/v1beta/models/{model}:generateContent)',
   },
-  { value: 'jina-rerank', label: 'Jina Rerank (/v1/rerank)' },
+  {
+    value: 'jina-rerank',
+    path: '/v1/rerank',
+    label: 'Jina Rerank (/v1/rerank)',
+  },
   {
     value: 'image-generation',
+    path: '/v1/images/generations',
     label: 'Image Generation (/v1/images/generations)',
   },
-  { value: 'embeddings', label: 'Embeddings (/v1/embeddings)' },
+  {
+    value: 'embeddings',
+    path: '/v1/embeddings',
+    label: 'Embeddings (/v1/embeddings)',
+  },
 ]

@@ -440,6 +440,30 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('PayAddress', 'epayAddress'),
           text('EpayId', 'merchantId'),
           secret('EpayKey', 'merchantSecret', 'secretHint'),
+          {
+            ...secretTextarea(
+              'payment_setting.epay_merchant_private_key',
+              'merchantSecret'
+            ),
+            labelKey: 'pluginExtensions.rsaPrivate',
+          },
+          {
+            ...secretTextarea(
+              'payment_setting.epay_platform_public_key',
+              'merchantSecret'
+            ),
+            labelKey: 'pluginExtensions.rsaPublic',
+          },
+          {
+            key: 'payment_setting.epay_sign_type',
+            labelKey: 'pluginExtensions.epayVersion',
+            kind: 'select',
+            defaultValue: 'MD5',
+            options: [
+              { value: 'MD5', labelKey: 'pluginExtensions.md5' },
+              { value: 'RSA', labelKey: 'pluginExtensions.rsa' },
+            ],
+          },
           { ...number('Price', 'epayPrice', 7.3), min: 0 },
           {
             ...number('MinTopUp', 'minimumUsd', 1),
@@ -668,16 +692,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         ],
       },
       {
-        id: 'sensitive',
-        titleKey: 'systemSettings.sections.sensitive',
-        descriptionKey: 'systemSettings.sections.sensitiveDescription',
-        fields: [
-          toggle('CheckSensitiveEnabled', 'sensitiveCheck'),
-          toggle('CheckSensitiveOnPromptEnabled', 'sensitiveCheckPrompt'),
-          textarea('SensitiveWords', 'sensitiveWords'),
-        ],
-      },
-      {
         id: 'ssrf',
         titleKey: 'systemSettings.sections.ssrf',
         descriptionKey: 'systemSettings.sections.ssrfDescription',
@@ -787,6 +801,21 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
               365,
               'logMaxRangeDaysHint'
             ),
+            min: 1,
+            integer: true,
+          },
+        ],
+      },
+      {
+        id: 'system-tasks',
+        titleKey: 'pluginExtensions.retention',
+        descriptionKey: 'pluginExtensions.retention',
+        fields: [
+          {
+            key: 'system_task_setting.retention_days',
+            kind: 'number',
+            labelKey: 'pluginExtensions.retention',
+            defaultValue: 30,
             min: 1,
             integer: true,
           },

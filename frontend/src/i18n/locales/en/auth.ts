@@ -51,7 +51,7 @@ export default {
     goSignIn: 'Sign in',
     showPassword: 'Show password',
     hidePassword: 'Hide password',
-    passwordHint: 'A mix of 12+ letters and digits',
+    passwordHint: '8–128 characters; 15 or more recommended',
     strength: ['Weak', 'Medium', 'Strong'],
     resetSent: 'Reset link sent. Check your inbox.',
     registerSuccess: 'Account created. Please sign in.',

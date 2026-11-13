@@ -68,6 +68,19 @@ function setSessionHint(present: boolean) {
 describe('visitor and protected session checks', () => {
   beforeEach(() => setSessionHint(false))
 
+  it.each(['ensureSession', 'ensureVisitorSession'] as const)(
+    '%s restores the tab without broadcasting a new login to its peers',
+    async (check) => {
+      setSessionHint(true)
+      mocks.authApi.refreshSession.mockResolvedValueOnce(bundle)
+      const auth = useAuthStore()
+      await auth[check]()
+      expect(auth.isAuthenticated).toBe(true)
+      expect(getAuthBundle()?.session.sid).toBe('session-1')
+      expect(mocks.publishAuthSessionEvent).not.toHaveBeenCalled()
+    }
+  )
+
   it('settles a hintless visitor as a guest without a refresh', async () => {
     const auth = useAuthStore()
 
@@ -140,6 +153,23 @@ describe('visitor and protected session checks', () => {
 })
 
 describe('authentication store', () => {
+  it.each(['session-1', 'session-2'])(
+    'an explicit login to %s invalidates old flows and synchronizes peers',
+    (sid) => {
+      setAuthBundle(bundle)
+      const generation = getAuthSessionGeneration()
+      useAuthStore().acceptLogin({
+        ...bundle,
+        session: { ...bundle.session, sid },
+      })
+      expect(getAuthSessionGeneration()).toBeGreaterThan(generation)
+      expect(mocks.publishAuthSessionEvent).toHaveBeenCalledExactlyOnceWith(
+        'authenticated',
+        sid
+      )
+    }
+  )
+
   it('invalidates the local session and broadcasts when self returns 401', async () => {
     setAuthBundle(bundle)
     const auth = useAuthStore()

@@ -1,0 +1,3719 @@
+{
+  "upstream_base_sha": "48a6c87f9e7757fdc58e5be9bcb4f8281ad0dfd0",
+  "upstream_target_sha": "b20e0566b235716383da42450c6c536689de9b43",
+  "implementation_base_sha": "ded6fb6beab069f8e80b6e62ad75cbdec4926daa",
+  "candidate_sha": null,
+  "verification": "Source disposition only; candidate and audit identities are recorded separately in final-delivery.json",
+  "counts": {
+    "adapted": 107,
+    "excluded": 9,
+    "absorbed": 144,
+    "vue_equivalent": 203
+  },
+  "files": [
+    {
+      "path": ".env.example",
+      "upstream_change": "M",
+      "upstream_sha256": "a4c3a3377db61676e6ba9cacc5dad1bbf2789f7896f36bb6f4e90ecbf9f65545",
+      "local_sha256": "8b01719412b622a3881d66cf488a63eb0a06fdfb05e7b1dc49474c451d1a8bef",
+      "disposition": "adapted",
+      "basis": "吸收HOST和插件内存限制，保留现行本地环境说明。"
+    },
+    {
+      "path": ".github/workflows/electron-build.yml",
+      "upstream_change": "M",
+      "upstream_sha256": "4f325b664eedc2f7b8df0c703b1d8ae55ee342c0e3821e25382d567a54afb6d2",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "Electron产品已退役，工作流和依赖不恢复。"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "upstream_change": "M",
+      "upstream_sha256": "81eb0b8f6a7ab8bbce45dcf50b0eb2c41638c8d5dce3a2f3f5d0e34c653f0882",
+      "local_sha256": "7e89c7558248299b098abd72634da9bd232bd97b0151c9c369e505e8ce0863e8",
+      "disposition": "adapted",
+      "basis": "PGO改MoeForge并附带三份许可，保留Vue/Node发布流程。"
+    },
+    {
+      "path": "Dockerfile",
+      "upstream_change": "M",
+      "upstream_sha256": "39a2a908cb8ce5a33bb4012f38e2c943d4df7137dddce76615e6f341298ad1f2",
+      "local_sha256": "9779ba500e3fbaffd46d17f254f3a19b036313a558a0e539b2637d8cc0a80266",
+      "disposition": "adapted",
+      "basis": "PGO模块路径更新；保留Vue嵌入和不可变版本工具信息。"
+    },
+    {
+      "path": "THIRD-PARTY-LICENSES.md",
+      "upstream_change": "M",
+      "upstream_sha256": "fd57b6315a6294967a8515899533b5e3e31f4ba9b03d7023d14967abe57b73bf",
+      "local_sha256": "9e03ddb64f9ba0a414450bc6172ae05008ce7094caa5bd2692b30e1b2e7814e0",
+      "disposition": "adapted",
+      "basis": "依据实际锁定Go和Vue依赖重新生成105项直接依赖许可证；不导入React清单。"
+    },
+    {
+      "path": "common/api_type.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ee14dc8c3969a89123f6f5724350aa0fb4d3b3156cba18521fba7a7c10601765",
+      "local_sha256": "04b18c15482ff33e1f8eba0d874170637af5779e2d068c0769c6b78b51180265",
+      "disposition": "adapted",
+      "basis": "新增提供商类型分发保留；type 57 在原生分发前继续拒绝。"
+    },
+    {
+      "path": "common/body_storage.go",
+      "upstream_change": "M",
+      "upstream_sha256": "3bd89eb5a74265e88dffdcd6e185d8b065827cc9866943de101aa2c51dc4445c",
+      "local_sha256": "3bd89eb5a74265e88dffdcd6e185d8b065827cc9866943de101aa2c51dc4445c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "common/body_storage_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0e829f4e09f7cf36fd88187d416c8d1a0d948b7272ab0b0c763c3a61fbab5910",
+      "local_sha256": "0e829f4e09f7cf36fd88187d416c8d1a0d948b7272ab0b0c763c3a61fbab5910",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "common/gin.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e4980272724c772dd95cae5f1ac3af062c3ab16654ba5ee999ab92d6a8ae01ab",
+      "local_sha256": "65403d56356312f40ebd9c40bd78f8ff3a791a4b595179e8ba5f11eebcf79723",
+      "disposition": "adapted",
+      "basis": "使用上游独立 NewReader；保留任务 multipart 文本/文件分离预算和失败清理错误。"
+    },
+    {
+      "path": "common/init.go",
+      "upstream_change": "M",
+      "upstream_sha256": "cf245ac952d04df23ddf9dbfb28864a65caac838e7c2d7b3edecddad718dcfa5",
+      "local_sha256": "ef7963857694715cca1bf8eb62cf4d009cb23f5097fab079d2804b5f302ee820",
+      "disposition": "adapted",
+      "basis": "HOST 配置照收；节点运行仍固定单节点。"
+    },
+    {
+      "path": "common/json.go",
+      "upstream_change": "M",
+      "upstream_sha256": "a2c19c23b1871e2994fe75466cdd201d82d776e387045a8a99cd869f8eeca855",
+      "local_sha256": "a2c19c23b1871e2994fe75466cdd201d82d776e387045a8a99cd869f8eeca855",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "common/json_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "581fd053554c4ae46c12dff92f3b4d60d17acbe94776f26fdf6937d8ec192056",
+      "local_sha256": "581fd053554c4ae46c12dff92f3b4d60d17acbe94776f26fdf6937d8ec192056",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "common/log_text.zh-CN.json",
+      "upstream_change": "M",
+      "upstream_sha256": "043c1e8d6e47f17366bcde90b9f223a1c442b8c535b9e0ea36a4a8c995291a02",
+      "local_sha256": "043c1e8d6e47f17366bcde90b9f223a1c442b8c535b9e0ea36a4a8c995291a02",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "common/sys_log.go",
+      "upstream_change": "M",
+      "upstream_sha256": "384dcf79f6b9653da55befa79d9394ba667d86de02a16aa3e85da4151ac3db98",
+      "local_sha256": "384dcf79f6b9653da55befa79d9394ba667d86de02a16aa3e85da4151ac3db98",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "constant/api_type.go",
+      "upstream_change": "M",
+      "upstream_sha256": "c63f963f6c160baeeb9e290849875d94e3d7f89c0d9a2f4a12b2a9f00df8c62a",
+      "local_sha256": "c63f963f6c160baeeb9e290849875d94e3d7f89c0d9a2f4a12b2a9f00df8c62a",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "constant/context_key.go",
+      "upstream_change": "M",
+      "upstream_sha256": "28178c39c5639923ca705b5c859c7c340b69041970863f7a3197251f3b5443e5",
+      "local_sha256": "a1946a683d91190cc8107eb3d583c32eb1c21ffd7f7d6b58a7193a5362c740ea",
+      "disposition": "adapted",
+      "basis": "保留插件上下文键，删除业务分组上下文键。"
+    },
+    {
+      "path": "constant/env.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d94f0829adcc5638b47702bdf2eb627ca4cc40c69a36f3e309e15085903f1c7a",
+      "local_sha256": "d94f0829adcc5638b47702bdf2eb627ca4cc40c69a36f3e309e15085903f1c7a",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/channel-billing.go",
+      "upstream_change": "M",
+      "upstream_sha256": "59bd8dfbb2fdbf25bf3b87a5b89d04c8013f11856612839fed2fc8a585b68927",
+      "local_sha256": "59bd8dfbb2fdbf25bf3b87a5b89d04c8013f11856612839fed2fc8a585b68927",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/channel-test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "2854ae6987e4f6d458de553dca6a06c48c0f88cced1ed608e5bb29f0f382a4d0",
+      "local_sha256": "a333a78bbe1beec6396554f95f60999bf7d5b1cd3a463485995bfbccf20c89eb",
+      "disposition": "adapted",
+      "basis": "提供商模型/余额测试复用原生凭据；保留本地路由、倍率和即时并发入口。"
+    },
+    {
+      "path": "controller/channel.go",
+      "upstream_change": "M",
+      "upstream_sha256": "acd8081b1208f6bba858062a6b248a602c78aa5124e913a143ec69ab53126c6f",
+      "local_sha256": "12ee008ed1ebba152393c7c55274d4b45720ab9a1fd771cfb1b137361fc2ff0f",
+      "disposition": "adapted",
+      "basis": "插件配置、凭据与登录校验接原生事务；删除返回锁内实际渠道快照，保留本地路由发布与渠道倍率。"
+    },
+    {
+      "path": "controller/channel_authz.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b12bfb34de9dfd7c646c09e50a2dee79ffce74766236f777ef34b41dd8359672",
+      "local_sha256": "a2ff64b6cfb0f685abafc4b86cb9f361caf849ec165bc4dbdc7f1d20fc56ecdb",
+      "disposition": "adapted",
+      "basis": "新增插件管理权限沿用原生ChannelRead/SensitiveWrite；保留渠道倍率和并发字段授权。"
+    },
+    {
+      "path": "controller/channel_balance.go",
+      "upstream_change": "A",
+      "upstream_sha256": "fa98c7594204882b33ec9218b52e20db4650286afa50fb32f110b887dfbe86ff",
+      "local_sha256": "fa98c7594204882b33ec9218b52e20db4650286afa50fb32f110b887dfbe86ff",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/channel_plugin_gaps_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "998e34d960d739a86ef6ab7bda6263e9f963574a99441ba185a489ef4330e178",
+      "local_sha256": "998e34d960d739a86ef6ab7bda6263e9f963574a99441ba185a489ef4330e178",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/channel_task_plugin_validation_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "4b8174cecf5e612aa15f3f4279cb1265b24231f1c7f8572bec57524d382e7ff6",
+      "local_sha256": "4b8174cecf5e612aa15f3f4279cb1265b24231f1c7f8572bec57524d382e7ff6",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/channel_upstream_update.go",
+      "upstream_change": "M",
+      "upstream_sha256": "7dd46eb7b98d12f9bd93475ff1a3208120107c3c70b8c4feaa475c27b70b6aab",
+      "local_sha256": "e5e0a844331441fede5a2da1cc128e0a9b566a3e378cd96ec9a9aff61281f7bb",
+      "disposition": "adapted",
+      "basis": "提供商检查与凭据摘要对齐原生；保留本地模型目录失效和并发/路由发布。"
+    },
+    {
+      "path": "controller/codex_usage.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d615efe18b4a263a387aadc3fa3240bedb624946bff4a926eb195d627d4eba80",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "旧 Codex 专用接入继续退役；通用提供商登录已在 provider_plugin.go 开放。"
+    },
+    {
+      "path": "controller/model_meta.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d27cec27d53d18d7960eefca0ed6b71eb9b4954f773fde92984cdfafcad44ae2",
+      "local_sha256": "f8175ac9a6d7e5ae1211dfbbc03190e4a073f7c735b9ab5c60bfc2d57977fc87",
+      "disposition": "adapted",
+      "basis": "模型元数据同步修订吸收；业务分组的查询输入保持删除。"
+    },
+    {
+      "path": "controller/option.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1b3cfdd34c15c04d123059743c949113170e5c4531cf0e7503376ab4684f6724",
+      "local_sha256": "6ff6a4a8a02895ce811681c9a615ba33dded3db05e4398af908677ebce21c301",
+      "disposition": "adapted",
+      "basis": "通用option入口拒绝写插件实例，必须走专用权限与校验；保留退役键、返利、折扣和合规锁校验。"
+    },
+    {
+      "path": "controller/payment_webhook_availability.go",
+      "upstream_change": "M",
+      "upstream_sha256": "4cd9259e0bf497c387f63d97db5aa38db91e4e0066b1ac6d3caf5c571482f585",
+      "local_sha256": "4cd9259e0bf497c387f63d97db5aa38db91e4e0066b1ac6d3caf5c571482f585",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/payment_webhook_availability_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "836e5e97e3e874d0aa78308def9a08affb12a55408219e894dfbcdd6b93e1ebd",
+      "local_sha256": "c3eaebf2e7f540666bca62397bbcab8a372cee9b2504080a00ac939823befaca",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "controller/plugin_native_e2e_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e44dcc9d9fc3369890abe2153b2edfa340009a0b4e84f046d947546302b2beff",
+      "local_sha256": "caaaf0dc4651c2ebc5274e6df346388b18d8934e174ad67102928f84090eab4b",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "controller/plugin_protocol.go",
+      "upstream_change": "M",
+      "upstream_sha256": "94f1b7449f3bc415d9ff860926ac9fed39f2db2861b1b3fda040963de5d88bbf",
+      "local_sha256": "94f1b7449f3bc415d9ff860926ac9fed39f2db2861b1b3fda040963de5d88bbf",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/plugin_protocol_image.go",
+      "upstream_change": "M",
+      "upstream_sha256": "02bada0519a00bc30f425fe4fbf5180b012a6dd2228a99eccf1499b051d2324f",
+      "local_sha256": "02bada0519a00bc30f425fe4fbf5180b012a6dd2228a99eccf1499b051d2324f",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/provider_plugin.go",
+      "upstream_change": "A",
+      "upstream_sha256": "2ec3b7d6722f5bd7a0f60d58108e968bce44c82be87e8d1832515ab02150289b",
+      "local_sha256": "2ec3b7d6722f5bd7a0f60d58108e968bce44c82be87e8d1832515ab02150289b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/provider_plugin_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "1d1e206dca999b9772dfafb92c7a0c0f6699be7dc10202c21c6ae381a650195d",
+      "local_sha256": "70735d4b988e1b8ce2d038561c56aad83350883c358ccf19325341fa096e5339",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "controller/relay.go",
+      "upstream_change": "M",
+      "upstream_sha256": "478c7d453db4e6e64bfb440eab14fda1c31d6e9d493f6231aaf73c9f5f8c64d6",
+      "local_sha256": "3a5058137c9a62d5de8a3437aa9e1e89aa73974cba0e54f81a9af13394822aed",
+      "disposition": "adapted",
+      "basis": "沿原生插件 ingress/reply/report 顺序接入；预扣仍在选路后，失败统一退款、渠道槽释放与本地原任务准入保持。"
+    },
+    {
+      "path": "controller/request_plugin.go",
+      "upstream_change": "A",
+      "upstream_sha256": "09a6166de5a6908e983a389e7be3028b69913431ae8002f1ed1bba879f620c07",
+      "local_sha256": "6ed75a21ad3ba19050e930d3aaad0c7c9e75968cb34b17b57757154629fc6b4e",
+      "disposition": "adapted",
+      "basis": "原生请求插件实例/试运行接口及scope保持，仅去掉业务分组输入。"
+    },
+    {
+      "path": "controller/responses_websocket_plugin_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "9edba2c470bae2cc70309c8cc9e1458e5eaabc9ea7d2822e14337007fd8b8866",
+      "local_sha256": "9edba2c470bae2cc70309c8cc9e1458e5eaabc9ea7d2822e14337007fd8b8866",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/system_info.go",
+      "upstream_change": "M",
+      "upstream_sha256": "38f688a1f7766ec368e130dcb74b9295fc7dea3ceee41a221246b122992118c5",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "不恢复多节点管理入口；本地系统任务仍处理缓存修订。"
+    },
+    {
+      "path": "controller/system_task_handlers.go",
+      "upstream_change": "M",
+      "upstream_sha256": "449b018b236c4af1a88416d30685cc8485c938985ba5a203aa487aa1be4c3e57",
+      "local_sha256": "959e91bf0d2e4e7097c90fbc8cf9ba436e5901726d68777e17a6a80763c1d07b",
+      "disposition": "adapted",
+      "basis": "吸收历史清理处理器，保留工单清理与渠道倍率后台任务。"
+    },
+    {
+      "path": "controller/task.go",
+      "upstream_change": "M",
+      "upstream_sha256": "48e17591b5d22b4551023e92110d54264f63237ec684252fe95d338994419607",
+      "local_sha256": "48e17591b5d22b4551023e92110d54264f63237ec684252fe95d338994419607",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/task_plugin.go",
+      "upstream_change": "M",
+      "upstream_sha256": "3f018e3f476c460613fa7a886ca4cc81db3caa4bdea967a66383159c0b653e9b",
+      "local_sha256": "3f018e3f476c460613fa7a886ca4cc81db3caa4bdea967a66383159c0b653e9b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "controller/task_plugin_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d6542e96a6c3db192a2c09a9f77a0736b73e1b9c70c2ade162c2db03e566edb8",
+      "local_sha256": "7e052dc6e50d5e256294c287ca70cc94d02bd5d2af22ebaee9b21a46894e3191",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "controller/topup.go",
+      "upstream_change": "M",
+      "upstream_sha256": "9783bd086179f2432194eb02ce457bd54efb6f4590e4d4cc471483e0879b8a23",
+      "local_sha256": "e36ef799909ed4850318aa79720bec3eb708b54e9ad284c29e78536a6e31d3d1",
+      "disposition": "adapted",
+      "basis": "RSA原生client构造接现有单次QuoteTopUp；不恢复AmountDiscount或站内订阅结算。"
+    },
+    {
+      "path": "controller/user.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b02c6be9055ed0767e5667882eaaed84132388f9c436437459d80f54e76e4b08",
+      "local_sha256": "314d82284720f29bcd767f391ab95b3b3bf2bc12bafc9f4cc6cc6b8d7ac12b4c",
+      "disposition": "adapted",
+      "basis": "用户权限变化记录sync revision；已有事务后发布helper负责缓存、会话与并发同步。"
+    },
+    {
+      "path": "docs/plugin-api/v1.d.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "ee180149ec4f1c4e65a6e404e6b2734656b7c3d6f94e1b63187e53dea53e3256",
+      "local_sha256": "224a9914946d7a4c6443f6763ecf6df01a6e54f24d36edb45b96e1ea6c01238b",
+      "disposition": "adapted",
+      "basis": "吸收通用provider和hook API；文档删业务分组合同并明确单节点、旧专用接入退役。"
+    },
+    {
+      "path": "docs/plugin-api/v1.md",
+      "upstream_change": "M",
+      "upstream_sha256": "e5b9b5ea4314a16bc9933c53763e91a09ba3f2a0faf9b92c868dd2c592b62f75",
+      "local_sha256": "836fa409f71368c8c065fbc4a829ced96c099df889e0eba5ffcba8e9e83677c3",
+      "disposition": "adapted",
+      "basis": "吸收通用provider和hook API；文档删业务分组合同并明确单节点、旧专用接入退役。"
+    },
+    {
+      "path": "docs/plugin-api/v1.schema.json",
+      "upstream_change": "M",
+      "upstream_sha256": "515e95536104270bbd22a5c60b187c78175fe8a8df141102827394d0557a104c",
+      "local_sha256": "515e95536104270bbd22a5c60b187c78175fe8a8df141102827394d0557a104c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "electron/build.sh",
+      "upstream_change": "M",
+      "upstream_sha256": "33fa7f493cf03b3b834ec5ea09da2a6501f9f02dc791b8aaebfcac144e132e21",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "Electron产品已退役，工作流和依赖不恢复。"
+    },
+    {
+      "path": "go.mod",
+      "upstream_change": "M",
+      "upstream_sha256": "f86d950cf220f6e6529703e09325dd46d72e5a5862c125937151a1b61a306022",
+      "local_sha256": "f86d950cf220f6e6529703e09325dd46d72e5a5862c125937151a1b61a306022",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "go.sum",
+      "upstream_change": "M",
+      "upstream_sha256": "0755957a6ac782d3640529fb60aea3e6f6ff8c53072b667edb9964a1545a7097",
+      "local_sha256": "0755957a6ac782d3640529fb60aea3e6f6ff8c53072b667edb9964a1545a7097",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "i18n/keys.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f81a83e536580e1d6cc05a6ef4241fcaad282f9df29c3055d1b970fcb0259e49",
+      "local_sha256": "f81a83e536580e1d6cc05a6ef4241fcaad282f9df29c3055d1b970fcb0259e49",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "i18n/locales/en.yaml",
+      "upstream_change": "M",
+      "upstream_sha256": "964fef79807261242365e6710a6fc42caba39ab5c5304f9276dae106fa479a00",
+      "local_sha256": "c0105bc23916ba45c19a8ca3f7aa7ed8b347e09657032d88327bf4aeba25a6a3",
+      "disposition": "adapted",
+      "basis": "吸收插件后台通知与Root合规提示；保留工单翻译，删除业务分组文案。"
+    },
+    {
+      "path": "i18n/locales/zh-CN.yaml",
+      "upstream_change": "M",
+      "upstream_sha256": "11fb196c28c93ed153cd4f46ad702e9967c87e73f9a7a3a12955bacf6b467d68",
+      "local_sha256": "c35452045d9e943734cec7a6929324d97bcf360a4e85699d3de6977a9e10ee85",
+      "disposition": "adapted",
+      "basis": "吸收插件后台通知与Root合规提示；保留工单翻译，删除业务分组文案。"
+    },
+    {
+      "path": "i18n/locales/zh-TW.yaml",
+      "upstream_change": "M",
+      "upstream_sha256": "eff2ee1fe16db2756052493e46538e25b8970d6f475ce24bf421844b9bbd9e19",
+      "local_sha256": "9cdd967779df1e0f1b3a716b8e16c213b6446a264a7493acfe202de421004554",
+      "disposition": "adapted",
+      "basis": "吸收插件后台通知与Root合规提示；保留工单翻译，删除业务分组文案。"
+    },
+    {
+      "path": "main.go",
+      "upstream_change": "M",
+      "upstream_sha256": "abbdc28ddc8588d0c6e499339959220ee7fed226fcbde573091cf34cf42ff8e9",
+      "local_sha256": "c943f4886dded236ba269333ec922e2a4b314cbcd582a16959ad263b88f7fa5f",
+      "disposition": "adapted",
+      "basis": "新增插件凭据刷新、系统任务清理与本地缓存主题；敏感词迁移失败阻止启动，保持单节点/Vue/无订阅/空模型默认价。"
+    },
+    {
+      "path": "middleware/access_token_routes.go",
+      "upstream_change": "M",
+      "upstream_sha256": "93645286579fe496b594c7b0e528f77dedc5bec4d1f2eaa18edae46cdcf8d6f0",
+      "local_sha256": "bb36ceda620f18b5554ee7171ee707cda59c12d16668dee3818469e138e54647",
+      "disposition": "adapted",
+      "basis": "新接口使用上游PAT scopes，不重新暴露退役系统实例和Codex路由；本地扩展scope保持。"
+    },
+    {
+      "path": "middleware/distributor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "2c88d6af026b67e2305e315184fa6e059673aca928ce56292d4c76fd1d88e8e9",
+      "local_sha256": "24eb52b76ab2d1a03631f5a758b63432f6414a8776f22ede01bf2776cc0f0c0b",
+      "disposition": "adapted",
+      "basis": "字段扫描用独立请求体reader并拒绝重复model；仅删除group字段解析，保留stream metadata和本地选路/并发。"
+    },
+    {
+      "path": "middleware/distributor_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "37c104745ec7b0b651692e8d22845a866224d1e771f6ecf2c075d3379ab381ef",
+      "local_sha256": "11ba89043ca2e51c933f5af707826f008c3600916c0de19c97babebd1c9c8581",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "middleware/task_plugin.go",
+      "upstream_change": "M",
+      "upstream_sha256": "fd0f9d8922762268154cbe031d44d14dba8ef98bb399b10b13572e5a3f295ed1",
+      "local_sha256": "0f72f019152b67294e0fc955670886183db0c15b022fa302ab6b80c13840fda7",
+      "disposition": "adapted",
+      "basis": "原生请求处理错误语义与重放接本地共享端点；实际RequestPath传入提供商筛选，倍率上限和原任务约束保持。"
+    },
+    {
+      "path": "middleware/task_plugin_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "6e411c356bf9d297d9657e208dd61280d9c65e28aabc19187e5f47673c953bde",
+      "local_sha256": "f79efd619e53ed68f58a97aa8e79c860c6e543644a438d000b3ce88448ce51e0",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/ability.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f76b14d0f52ffff833b1dbdce142eef8810a72aa4c3c1059b7b56c7f3f53c761",
+      "local_sha256": "737b7f7889d2f19ce5caeb27afd8554818ebe1216ba7f7bcc5a54cfa5d3e17fd",
+      "disposition": "adapted",
+      "basis": "sync修订接无分组渠道能力表，保留Token路由查询。"
+    },
+    {
+      "path": "model/auth_flow.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ef3dffff283640a1138b9e47ba8c3c40d296f722df9d5f22e1f4e7362fe3bdc3",
+      "local_sha256": "ef3dffff283640a1138b9e47ba8c3c40d296f722df9d5f22e1f4e7362fe3bdc3",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/channel.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0be8b50a95f88bc460507f4d000d6cdc5b21acadab00f8e7f22d7fed11ff0ae7",
+      "local_sha256": "c2821e4999eb6a30e89c77c71ef762165e8d8ffeacf876562854fda07e3f21bf",
+      "disposition": "adapted",
+      "basis": "通用凭据类型与更新原生化；保留渠道倍率/即时容量及路由缓存发布。"
+    },
+    {
+      "path": "model/channel_balance.go",
+      "upstream_change": "A",
+      "upstream_sha256": "f9e171ef8f9d636990e82828ac7d0d2fcfdcd7c6a7c77ed9ecde83e09453c0e1",
+      "local_sha256": "f9e171ef8f9d636990e82828ac7d0d2fcfdcd7c6a7c77ed9ecde83e09453c0e1",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/channel_cache.go",
+      "upstream_change": "M",
+      "upstream_sha256": "123f8c4cc847ea0bd23843cfe135191dc601d568584fb401271ec01e7ed191e1",
+      "local_sha256": "012fd515ddf3fc1b2f8813f8b7161201ebf0dc47cbc470c4bb80997524f54f51",
+      "disposition": "adapted",
+      "basis": "新增插件relay配置查询；缓存仍为单节点无分组渠道视图。"
+    },
+    {
+      "path": "model/channel_constraint.go",
+      "upstream_change": "M",
+      "upstream_sha256": "561963328568b42608d0ef5f7a18e84fe30060c85250d7e7d4f51787297e9750",
+      "local_sha256": "2a7379ad6d573a39d61aadef0325ecbdfb43c0292ce2b2c8f9e03e335bb3bcb6",
+      "disposition": "adapted",
+      "basis": "提供商relay按真实path/model判断；保留原有WS、退役类型及Token过滤规则。"
+    },
+    {
+      "path": "model/channel_constraint_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5f58da2f831d6bdb2b423f18dc4c6c28e05e151d4ce114a13cfceda6eecd8eee",
+      "local_sha256": "bf76291bfb833def58e4bcf7bf4c56ec7e10e90bf9ee9386b67acfc8d8c3a38c",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/channel_plugin_credential.go",
+      "upstream_change": "A",
+      "upstream_sha256": "d0733a5981dd2637b45a8d14e0cd4dcf1e8111e87a51b1bfc20603c34e7cffc3",
+      "local_sha256": "f8823b80663e4533d2a7159911a5181ed6ece255fddd7ae57ecdeeb0422a048e",
+      "disposition": "adapted",
+      "basis": "沿原生短事务/CAS锁；提交后发布本地路由状态，SQL日志不泄漏凭据；人工禁用与账户身份保护保持。"
+    },
+    {
+      "path": "model/channel_plugin_credential_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "0d0811e0ab6652bc47d36206a1037ca3bd1e78bcfda009c9b7ce759cedcf8a24",
+      "local_sha256": "ad72f0ed6a1981cfa527aba0ae47e1508b07f4a6829f724baaa09bfd6157c000",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/channel_priority.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ead30aa454b9b746cd0b7110f2b2ba0a9bcabce164325c61e8e5d00a59f1cdfa",
+      "local_sha256": "ead30aa454b9b746cd0b7110f2b2ba0a9bcabce164325c61e8e5d00a59f1cdfa",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/channel_status_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "be1abe021579c2dd4bfa21d3ba0e0ad363f217de477e50f8cd76d17665afbd20",
+      "local_sha256": "bee1a3ed32408b5a0dac1751f849837444cd64f5725c3d155e9a2c9a36ff5e1f",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/custom_oauth_provider.go",
+      "upstream_change": "M",
+      "upstream_sha256": "565977f997875b4e96c406c76ed6aacc664e4fcdf82ce288f839c5f147a066d0",
+      "local_sha256": "565977f997875b4e96c406c76ed6aacc664e4fcdf82ce288f839c5f147a066d0",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/json_column_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "98537a276d6eec0e25d59b8ad19c3ca15cb5c530025f9d0ed62c04d9cf4765b2",
+      "local_sha256": "98537a276d6eec0e25d59b8ad19c3ca15cb5c530025f9d0ed62c04d9cf4765b2",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/log.go",
+      "upstream_change": "M",
+      "upstream_sha256": "405448720fdbfc44ea01d16d67ad5ae465f16ea6b1a1c8e302b6485b7e207bb9",
+      "local_sha256": "dc9e0188a340b992ec79d96b2dc3e154e63c1c42d5d73c3be9ce4d2def93bf3b",
+      "disposition": "adapted",
+      "basis": "插件步骤与记录吸收；无业务分组，维持用户明细隔离。"
+    },
+    {
+      "path": "model/model_meta.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ca7fd2c1a4ef5084a6ac005a51c910a3e10ba8f2803a2cae1530f957093fdeda",
+      "local_sha256": "1f56b8ed80a40ec58444df281010a72b4c2733efa5255b77c4776769dec98324",
+      "disposition": "adapted",
+      "basis": "元数据修订吸收；去除业务分组投影。"
+    },
+    {
+      "path": "model/model_metadata_sync.go",
+      "upstream_change": "M",
+      "upstream_sha256": "96c7b8bfd087334d388c007b6b24465d2f14c4687a4d28ffa664490600f9493d",
+      "local_sha256": "96c7b8bfd087334d388c007b6b24465d2f14c4687a4d28ffa664490600f9493d",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/model_pricing_config.go",
+      "upstream_change": "M",
+      "upstream_sha256": "11603f7e5e31e67902ddb1377aa61a8d5af9df523d387fcbf8fbdcd19c52c7f5",
+      "local_sha256": "3a412793ea73482591e9d29978b73e787050359784e41caf80a20f6510039e65",
+      "disposition": "adapted",
+      "basis": "插件relay/task价格schema吸收；模型默认价格/内置表达式保持排除。"
+    },
+    {
+      "path": "model/model_pricing_conversion.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0a16e0dcdbb1eb7e19c6e5d12193277ab7fe9dc213339f9c9a45a52ee2030123",
+      "local_sha256": "db9168ca99a43faee08133170e9f91208d93a149f23295602455ca1ce56a8b67",
+      "disposition": "adapted",
+      "basis": "转换支持插件计费字段；不恢复默认模型价格。"
+    },
+    {
+      "path": "model/option.go",
+      "upstream_change": "M",
+      "upstream_sha256": "918b344f1c4810e5b5467669fad3b4886455102b07ac881aeae3b57e6b7fcd39",
+      "local_sha256": "b83f395c5147f061c6d5c437ff7e55ac125c8295b4d7185a61a07e2ea9ecbcaa",
+      "disposition": "adapted",
+      "basis": "原生LoadOptionsFromDatabase返回错误、RSA和retention校验吸收；保留配置事务、共享锁、折扣和退役键拒绝。"
+    },
+    {
+      "path": "model/option_auto_group_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1842c1f6ce0a35151ddfbfcacb413c1e162818f113346fc008ff2606ecc4eb1f",
+      "local_sha256": "3986d5d41c9b076e2a3e4f0b548ef94c50860bf9ec9fa0cf19655fe31df7dcbd",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/option_task_plugin_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "fba619af9a0989581679441772af1bf5c28f37255577c3ffdccbd91cff0be45a",
+      "local_sha256": "fba619af9a0989581679441772af1bf5c28f37255577c3ffdccbd91cff0be45a",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/passkey_option.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b503a36b224fb80b7a0f38c8fb3073c9ade3d39ccbae61c6f4c34894dbe727c9",
+      "local_sha256": "b503a36b224fb80b7a0f38c8fb3073c9ade3d39ccbae61c6f4c34894dbe727c9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/pricing.go",
+      "upstream_change": "M",
+      "upstream_sha256": "a39a08008553700746a0a49a1cb06741e7fc2c5e65d356fd80491886cdcbef48",
+      "local_sha256": "c320f70f7e248eddba966bfb635beaab7ed1bc254ed8d80635bbeaad57d56352",
+      "disposition": "adapted",
+      "basis": "提供商端点来自plugin relay配置，缓存与DB两路径一致；无分组/内置模型价，维持批量读取失败与原子快照。"
+    },
+    {
+      "path": "model/pricing_usage_schema_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1bd475a3b860e11376fc972b5ea9e3e4cda5c687f2c8f529be88b938500d4499",
+      "local_sha256": "2b283372ed1ac0c475d04bb2def849bd5cb843be7c6844ad370d7518a6c5401e",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/request_policy.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e9ca46a2ba5ffc576e9f0b096b1122f8933f8b66c3e58f85b49209e111996a90",
+      "local_sha256": "e9ca46a2ba5ffc576e9f0b096b1122f8933f8b66c3e58f85b49209e111996a90",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/request_policy_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e6365a60a2f0819ba40783811a9b05e40e910383433e3a3ddcd187c2ccc23184",
+      "local_sha256": "e6365a60a2f0819ba40783811a9b05e40e910383433e3a3ddcd187c2ccc23184",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/sensitive_word_migration.go",
+      "upstream_change": "A",
+      "upstream_sha256": "20d1bfbac685fce14d0b2e42c781bcf7848d426f53251ec73990df7499453d34",
+      "local_sha256": "96926ad2cb5b699b9ae78dcb18f32a1895b75dac49b43aaa35c7408ba94835a2",
+      "disposition": "adapted",
+      "basis": "采用原生事务迁移五个旧键与过滤实例；实例不含已删除groups字段。"
+    },
+    {
+      "path": "model/sensitive_word_migration_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "b0e2d837d8215629afc6d641c1d859f6e801a8b043208bddf5b929a2da1e183f",
+      "local_sha256": "e5e49018a5dfe6d3aae860f65278e5c68842f50e0b964357a3894d4acd1ec180",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "model/subscription.go",
+      "upstream_change": "M",
+      "upstream_sha256": "bb05034aa35b195c042d4add83c0047bc7a3ae7b8a15dba5ac20507fc5adbc70",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "站内订阅及其后台处理不恢复，钱包是唯一资金源。"
+    },
+    {
+      "path": "model/system_sync_task.go",
+      "upstream_change": "A",
+      "upstream_sha256": "49e9ec6e13fb50e14696b106ad16da1cd466315c8765993c3722d5837dc889ef",
+      "local_sha256": "2e5743b0dd3f355985cb5a1011d784464ea8d1c259117af9f3a476973c35b6ca",
+      "disposition": "adapted",
+      "basis": "保留本地主题修订与任务记录，不依赖已退役system_instances表。"
+    },
+    {
+      "path": "model/system_task.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0e143667f3a903a70ac6fa58e909652ba1b0c233c7dad6a25ef1c8759f3d65bd",
+      "local_sha256": "f50fb767710aae958e4e000074f72a01de89e1ba80eb56eeb9fb0dd431697d4b",
+      "disposition": "adapted",
+      "basis": "默认30天历史清理及在途保护吸收；保留本地工单任务类型。"
+    },
+    {
+      "path": "model/system_task_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "cf9d9b20eb681c375e61129925af5023ebcad607ce9e14dddd95714f7a8e5e59",
+      "local_sha256": "cf9d9b20eb681c375e61129925af5023ebcad607ce9e14dddd95714f7a8e5e59",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "model/task.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5286e8381f10262f4192b012b5955c8786bfff0ad46d3134fdb280c353cacb66",
+      "local_sha256": "7f87e5e1b7ef4f4432551b314e7da67a56512a3a58e561272f73ee95c06c1e4b",
+      "disposition": "adapted",
+      "basis": "账户归属与请求插件报告快照吸收；无分组/订阅ID，沿用渠道倍率快照。"
+    },
+    {
+      "path": "model/task_plugin.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0272dc7f99e4b5e005e7a17a6453d748a5d52868fd964f89b1987a9f2230f1f9",
+      "local_sha256": "0272dc7f99e4b5e005e7a17a6453d748a5d52868fd964f89b1987a9f2230f1f9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "oauth/generic.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1733780c76afb2207c397a52a79e048340afccd8466532b31e8e4be62508fac9",
+      "local_sha256": "1733780c76afb2207c397a52a79e048340afccd8466532b31e8e4be62508fac9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "oauth/registry.go",
+      "upstream_change": "M",
+      "upstream_sha256": "2a7d8f2f6bedf437a372955462f1ffe48aa95aa47e5255eb7dadd6aedee04e74",
+      "local_sha256": "2a7d8f2f6bedf437a372955462f1ffe48aa95aa47e5255eb7dadd6aedee04e74",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/billingexpr/compile.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b769ddc3aa185f23a607f97cbeec3de43e144d37c4ff591e8ac2ef31ac3d7461",
+      "local_sha256": "b769ddc3aa185f23a607f97cbeec3de43e144d37c4ff591e8ac2ef31ac3d7461",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/billingexpr/expr.md",
+      "upstream_change": "M",
+      "upstream_sha256": "dca884acc90e3a92a746f740cbe87d35d2133dd4226b37f00d09d0ec0d10e149",
+      "local_sha256": "dca884acc90e3a92a746f740cbe87d35d2133dd4226b37f00d09d0ec0d10e149",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/channel_config_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "c15567df2931dc52c76dabc1e1b8d1e99be77c2704ac1a4d72625ad78e06ffb5",
+      "local_sha256": "c15567df2931dc52c76dabc1e1b8d1e99be77c2704ac1a4d72625ad78e06ffb5",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/config_schema.go",
+      "upstream_change": "A",
+      "upstream_sha256": "efc678b7af3cc53a47b266896958823d1c4c73df65aa6c116cfcdb46327b52f7",
+      "local_sha256": "efc678b7af3cc53a47b266896958823d1c4c73df65aa6c116cfcdb46327b52f7",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/engine.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e9058bebd901e2af0daa16d3b37d2d4cb6f3e1b82151eb26416a725836eade1b",
+      "local_sha256": "e9058bebd901e2af0daa16d3b37d2d4cb6f3e1b82151eb26416a725836eade1b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/engine_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "65c18f0d63df5e3c191a61153aec61f9e45e0cb0b887bed12572ced27f895807",
+      "local_sha256": "65c18f0d63df5e3c191a61153aec61f9e45e0cb0b887bed12572ced27f895807",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/fetch.go",
+      "upstream_change": "M",
+      "upstream_sha256": "a46232c310cfdfed5e22e3ace439af4c4d1febf9dc020354f22b06a9b4ef50c8",
+      "local_sha256": "a46232c310cfdfed5e22e3ace439af4c4d1febf9dc020354f22b06a9b4ef50c8",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/json_state.go",
+      "upstream_change": "M",
+      "upstream_sha256": "25a698ee7451c767b89e78c3960246829e5754b39fa2cd69d8370ac823213933",
+      "local_sha256": "25a698ee7451c767b89e78c3960246829e5754b39fa2cd69d8370ac823213933",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/keywords.go",
+      "upstream_change": "A",
+      "upstream_sha256": "12316ed6d8163b67479940d2ee809aaf4edd638eaeb674f0568a28f1f5e5ba4f",
+      "local_sha256": "12316ed6d8163b67479940d2ee809aaf4edd638eaeb674f0568a28f1f5e5ba4f",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/keywords_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "b85f132720403097de625a5724a87326ac18b284d20b09006ce20b85dc5b710d",
+      "local_sha256": "b85f132720403097de625a5724a87326ac18b284d20b09006ce20b85dc5b710d",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/media.go",
+      "upstream_change": "A",
+      "upstream_sha256": "e7aa9842c522d4f5bb75fc8ee9e691d2a778e48e08d0370f1464d2d859850949",
+      "local_sha256": "e7aa9842c522d4f5bb75fc8ee9e691d2a778e48e08d0370f1464d2d859850949",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/provider.go",
+      "upstream_change": "A",
+      "upstream_sha256": "85be6c3b6900c127838c5568ce9779be5cbb0ef52f25feca3330cfeb98fbed7e",
+      "local_sha256": "85be6c3b6900c127838c5568ce9779be5cbb0ef52f25feca3330cfeb98fbed7e",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/provider_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "407ff23887d35d6f98bfd72f8dfdd14165f685dd97917bc43e1db821bcab9ad2",
+      "local_sha256": "f7d27de289e0ab9f63063ea4a459d441a3973f3539fbd82c8f8bb9f11bf7d4ad",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "pkg/jsplugin/registry.go",
+      "upstream_change": "M",
+      "upstream_sha256": "33db8989ae5d046202a9a840151c47929d3a58626206268cabad286e2afacb88",
+      "local_sha256": "33db8989ae5d046202a9a840151c47929d3a58626206268cabad286e2afacb88",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/registry_master_enabled_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "05fa37dce778569b60f87c3b6b2f17d5d396e64ef517266723356129cbd8f3cb",
+      "local_sha256": "05fa37dce778569b60f87c3b6b2f17d5d396e64ef517266723356129cbd8f3cb",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/registry_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "431e11d4b23f452e1f3bbd211ec5fce367f3314d8b10aa61a7559484f9673359",
+      "local_sha256": "431e11d4b23f452e1f3bbd211ec5fce367f3314d8b10aa61a7559484f9673359",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/request.go",
+      "upstream_change": "M",
+      "upstream_sha256": "2bcbd59547ca09d1d015236a15def72ccd8749ee5f7ed71e3fd8ac2888bcd5c6",
+      "local_sha256": "2bcbd59547ca09d1d015236a15def72ccd8749ee5f7ed71e3fd8ac2888bcd5c6",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/routing.go",
+      "upstream_change": "M",
+      "upstream_sha256": "712ba8263848d9dcc9743501df3b6f11bbb7270b59e20e14d8025b0235f0a5eb",
+      "local_sha256": "c3f948bab3a3724bc2b1b222d93e18b8b98927182f4432b371d956351c70a92a",
+      "disposition": "adapted",
+      "basis": "保留原生插件路由索引与保留命名空间，额外保护实际Vue的activity/home/invite/ops/orders/settings/ticket-management/tickets入口；插件不能抢占页面。"
+    },
+    {
+      "path": "pkg/jsplugin/routing_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "7cda7f0a009ce9004eccbdabfd8c025d6f747fe217e327ee5a18f2d365f053f7",
+      "local_sha256": "2ea6c09364b825ee2adb577279858db531f37820489b0953ed07f4041121560b",
+      "disposition": "adapted",
+      "basis": "测试夹具适配本地合同；保持原始行为断言。"
+    },
+    {
+      "path": "pkg/jsplugin/sample.go",
+      "upstream_change": "A",
+      "upstream_sha256": "90336d92460a3c9d22af438402ac9b17d4a3bd7a70934fabf862476a36326a68",
+      "local_sha256": "90336d92460a3c9d22af438402ac9b17d4a3bd7a70934fabf862476a36326a68",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/jsplugin/transform.go",
+      "upstream_change": "A",
+      "upstream_sha256": "0a31d30fcb7119aff403bb660e5668636a09c666a42ee99639fe68210c96aa7e",
+      "local_sha256": "139cba050387f8680afe7cc65c6234cd55a436f2e3f5775d2666eb36556cba8b",
+      "disposition": "adapted",
+      "basis": "保留全部原生hook上下文，仅删除ctx.group输入与投影。"
+    },
+    {
+      "path": "pkg/jsplugin/utils.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d859acf65f03e85178342f8379f4d87c2d76ea14a82fa53349eab0e65ee1e5a8",
+      "local_sha256": "d859acf65f03e85178342f8379f4d87c2d76ea14a82fa53349eab0e65ee1e5a8",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/requestpatch/patch.go",
+      "upstream_change": "A",
+      "upstream_sha256": "274dc25394c387eebe1e9ed07c74bb02e47030ee39172b1ee184eb97fa556787",
+      "local_sha256": "274dc25394c387eebe1e9ed07c74bb02e47030ee39172b1ee184eb97fa556787",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "pkg/requestpatch/patch_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "fcab48371d266073eddce75579b4bcb8ab0f3f686752dc42242fea41d587ddb3",
+      "local_sha256": "fcab48371d266073eddce75579b4bcb8ab0f3f686752dc42242fea41d587ddb3",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/builtin_plugins_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "10e33216c43b889a92f71917b3e1e1880b30f69ef15167791c39dada032c63dd",
+      "local_sha256": "10e33216c43b889a92f71917b3e1e1880b30f69ef15167791c39dada032c63dd",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/request_plugins_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "465f753b1bee5961171e0e449ca682d04db6cbfb2cee36cbad4e9fd68fd73e6d",
+      "local_sha256": "ffc96284e34f9d087a5712c87e94f3dd32b0701577837a1058388b1cacff2405",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "plugins/tasks/auto-reasoning/icon.svg",
+      "upstream_change": "A",
+      "upstream_sha256": "32dafc5f3574fa2b2e2c36387f2894f7d10b583f6adf6c27b46207491d761022",
+      "local_sha256": "32dafc5f3574fa2b2e2c36387f2894f7d10b583f6adf6c27b46207491d761022",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/auto-reasoning/plugin.js",
+      "upstream_change": "A",
+      "upstream_sha256": "9cdcd8c5a89670172d155c53c4135b48d5848c4b83683ba017f7434de2d44b1a",
+      "local_sha256": "9cdcd8c5a89670172d155c53c4135b48d5848c4b83683ba017f7434de2d44b1a",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/content-moderation/icon.svg",
+      "upstream_change": "A",
+      "upstream_sha256": "0b9b979ca60a42521ebf78233b07b92a4a509c21e0e3379259a0e9c1b344f193",
+      "local_sha256": "0b9b979ca60a42521ebf78233b07b92a4a509c21e0e3379259a0e9c1b344f193",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/content-moderation/plugin.js",
+      "upstream_change": "A",
+      "upstream_sha256": "898ccc77ca26668d9a8eb970894ab9ddbb32ec17aa5721becab67f39f890df0e",
+      "local_sha256": "898ccc77ca26668d9a8eb970894ab9ddbb32ec17aa5721becab67f39f890df0e",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/image-compress/icon.svg",
+      "upstream_change": "A",
+      "upstream_sha256": "9817d76fd4af0d5d018ea4be403869a7a0f774b865730956390ca8fbf3896f81",
+      "local_sha256": "9817d76fd4af0d5d018ea4be403869a7a0f774b865730956390ca8fbf3896f81",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/image-compress/plugin.js",
+      "upstream_change": "A",
+      "upstream_sha256": "c3ad30dbcb9676cbce6aaa20a5bb24c372e918525db33adb037f707ec7cd5f77",
+      "local_sha256": "c3ad30dbcb9676cbce6aaa20a5bb24c372e918525db33adb037f707ec7cd5f77",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/param-override/icon.svg",
+      "upstream_change": "A",
+      "upstream_sha256": "ae8bddd8f22197d8def73e217a2b650c2231726cd2064e59bc9589f96064908c",
+      "local_sha256": "ae8bddd8f22197d8def73e217a2b650c2231726cd2064e59bc9589f96064908c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/param-override/plugin.js",
+      "upstream_change": "A",
+      "upstream_sha256": "eebca4cd4863597ad0646d3d56f82c7d96a0d9cf92d98363eec2188e1662f20f",
+      "local_sha256": "eebca4cd4863597ad0646d3d56f82c7d96a0d9cf92d98363eec2188e1662f20f",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/request-filter/icon.svg",
+      "upstream_change": "A",
+      "upstream_sha256": "b65d1d2553a64421bdac8eb0e3275520c850643fea5113a194505c4c25e5cf5a",
+      "local_sha256": "b65d1d2553a64421bdac8eb0e3275520c850643fea5113a194505c4c25e5cf5a",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/request-filter/plugin.js",
+      "upstream_change": "A",
+      "upstream_sha256": "db47c87a60f813cdeb2d4fbf7b933fc1424fa5b62ff6a85fcdfa58323b0bdb17",
+      "local_sha256": "db47c87a60f813cdeb2d4fbf7b933fc1424fa5b62ff6a85fcdfa58323b0bdb17",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/request-redact/icon.svg",
+      "upstream_change": "A",
+      "upstream_sha256": "4fef21599e57c7ce82f13bcfea16f7746ff005ff90478aca7c98a9dd27e0286b",
+      "local_sha256": "4fef21599e57c7ce82f13bcfea16f7746ff005ff90478aca7c98a9dd27e0286b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/request-redact/plugin.js",
+      "upstream_change": "A",
+      "upstream_sha256": "4edd19826e51b19a612d749d9d8ff116e902174f8d47b4ee10c5696d39410d0a",
+      "local_sha256": "4edd19826e51b19a612d749d9d8ff116e902174f8d47b4ee10c5696d39410d0a",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "plugins/tasks/vertex-ai/plugin.js",
+      "upstream_change": "M",
+      "upstream_sha256": "6efae5949e8f5ab8225c9a900c24d8daae34688c45505290a1d3dae3d7bb9257",
+      "local_sha256": "c2de877a10d354692421cabc15ff8f53d808046cfc627dd0e4f124738b9181c9",
+      "disposition": "adapted",
+      "basis": "吸收1.3.1渠道Other区域读取；已批准插件出站/计费参数一致性保留。"
+    },
+    {
+      "path": "plugins/vertex_ai_region_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "162ecaaa3cbe51a320cb3e80a90c961489cee2a8a51fc38e02b246434ce0d24b",
+      "local_sha256": "162ecaaa3cbe51a320cb3e80a90c961489cee2a8a51fc38e02b246434ce0d24b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/alpha_search_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "744fa8da2a530d575e03b5a65c7d7e57fe0650c7a46fe871a282dfeb0c492e09",
+      "local_sha256": "398306a90d801b1242e120421d62c143d924e33bff3ea5876b658369e9156c92",
+      "disposition": "adapted",
+      "basis": "请求插件钩子吸收；退役专用接入限制保持。"
+    },
+    {
+      "path": "relay/channel/advancedcustom/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "dd1cf2f3339964a5a716a9668e33b286686f66022801a43d17984340fc53cb65",
+      "local_sha256": "dd1cf2f3339964a5a716a9668e33b286686f66022801a43d17984340fc53cb65",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/advancedcustom/adaptor_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0093fbd579dd9e29ce14536656b1dda87fb3c2b624d7168f2b96e3c199977fa9",
+      "local_sha256": "0093fbd579dd9e29ce14536656b1dda87fb3c2b624d7168f2b96e3c199977fa9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/api_request.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d7d2eedb5359cd0ea2f5d47126b0d67d94f4c8c2f2cca05281ee15c1cb5db3bb",
+      "local_sha256": "f9c98f2c7e5271c845cf97e3779906f2cae6a5a2dbcd8a8a182b736003066677",
+      "disposition": "adapted",
+      "basis": "上游独立游标/透传重试/提前关闭全量吸收；仅保留发起与响应的本地路由观测。"
+    },
+    {
+      "path": "relay/channel/api_request_getbody_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "94c303a8c6f33d796435061bc10a05311db53cc1c6ea449238fac5f788e80bbb",
+      "local_sha256": "94c303a8c6f33d796435061bc10a05311db53cc1c6ea449238fac5f788e80bbb",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/deepseek/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "db8503cb66c5740b2fd739846b2505ca726f0190b80dea611ec331a4325fb7d8",
+      "local_sha256": "db8503cb66c5740b2fd739846b2505ca726f0190b80dea611ec331a4325fb7d8",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/gemini/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "3543d609e5f03a23637e21c429edd989014c08a806a41672ad9a927e224c5e54",
+      "local_sha256": "3543d609e5f03a23637e21c429edd989014c08a806a41672ad9a927e224c5e54",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/mistral/text.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5d1dff85c8bbaa77c81ea6065d97392e3cda289b383005ddaf038e701c790765",
+      "local_sha256": "5d1dff85c8bbaa77c81ea6065d97392e3cda289b383005ddaf038e701c790765",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/openai/relay_realtime.go",
+      "upstream_change": "M",
+      "upstream_sha256": "cf5786a01f4d3058850887dd072b57f082e48efc35ff4607e4c6048eea3fe312",
+      "local_sha256": "8ea4420326066258f43e65150797fd1aff8d1fb3561a289319300a59f5def9f6",
+      "disposition": "adapted",
+      "basis": "WS请求回复插件接入，保留本地槽位生命周期和流量观测。"
+    },
+    {
+      "path": "relay/channel/providerplugin/adaptor.go",
+      "upstream_change": "A",
+      "upstream_sha256": "2623e15bb8de10bdea1099e83c6decd2d216df9cc48d9353f7e7373657eb8802",
+      "local_sha256": "2623e15bb8de10bdea1099e83c6decd2d216df9cc48d9353f7e7373657eb8802",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/providerplugin/chain.go",
+      "upstream_change": "A",
+      "upstream_sha256": "d75339dd06f7195c1cd686bf11d2fee37a3f6e467ec3c5811976000f8e737d22",
+      "local_sha256": "d75339dd06f7195c1cd686bf11d2fee37a3f6e467ec3c5811976000f8e737d22",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/providerplugin/eventstream.go",
+      "upstream_change": "A",
+      "upstream_sha256": "c1e6190a19872071c7a13d345841673221e95fdcddcc38ab803d5d8cfb401e7c",
+      "local_sha256": "c1e6190a19872071c7a13d345841673221e95fdcddcc38ab803d5d8cfb401e7c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/providerplugin/eventstream_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "d41e4ba583590abad20b906c950c1d22388cdf2db2e7ff633f3449238a2ebe54",
+      "local_sha256": "d41e4ba583590abad20b906c950c1d22388cdf2db2e7ff633f3449238a2ebe54",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/providerplugin/management.go",
+      "upstream_change": "A",
+      "upstream_sha256": "2a5702026b8a131d35fc1c17e08253e58d8c63bafbb051ef77f2f5b450d703fa",
+      "local_sha256": "2a5702026b8a131d35fc1c17e08253e58d8c63bafbb051ef77f2f5b450d703fa",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/providerplugin/management_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "3c551569122d69406b4aef576a7138f7e4f462db3fb33d011f477e2ec719f4b0",
+      "local_sha256": "3c551569122d69406b4aef576a7138f7e4f462db3fb33d011f477e2ec719f4b0",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/providerplugin/stream.go",
+      "upstream_change": "A",
+      "upstream_sha256": "0f599fb4874b5f4bf9b54cf5417b9b6c6477bc52fb9c527d5ab3568338a20893",
+      "local_sha256": "0f599fb4874b5f4bf9b54cf5417b9b6c6477bc52fb9c527d5ab3568338a20893",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/replicate/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "3779b48a77c0537794679338b0cbb22b3c9eb11f67d30c0153ec6ad3d6d7254e",
+      "local_sha256": "6dee81014f28c8a7942759f58808baf2290c562dc3fde85e3a85e09ac9aaa219",
+      "disposition": "adapted",
+      "basis": "最终num_outputs计数吸收；保留请求上下文取消。"
+    },
+    {
+      "path": "relay/channel/siliconflow/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "a1da90230b2b3f0cd15ba82ab17e3db0f241cb2c8f88d025c28de0ca4cda0b3e",
+      "local_sha256": "a1da90230b2b3f0cd15ba82ab17e3db0f241cb2c8f88d025c28de0ca4cda0b3e",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/task/jsplugin/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b94f0f43451f218768215ce48bb995cb8a38aaea3c60c656064185831242b6ec",
+      "local_sha256": "4ca8ea01f82431a0914566072f3101a750d68c62f80fb3c604bd9a24fd94f914",
+      "disposition": "adapted",
+      "basis": "原生账号归属、签名与刷新吸收；FetchTask/Batch/解析沿本地ctx取消并保留multipart预算。"
+    },
+    {
+      "path": "relay/channel/task/jsplugin/channel_context_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "a89ba3c1f732008fd57586b7d555a6da055374b6b7dfba96d730bb695bfc2c6f",
+      "local_sha256": "fa715e42c4738e8363b67552600ccafdc6a3cd39e806a5d592c25d63d66f6331",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/channel/task/jsplugin/credential.go",
+      "upstream_change": "A",
+      "upstream_sha256": "f50744a07802d33696b477062e699e84a8f2561e14b719adbeac9db498819d74",
+      "local_sha256": "f50744a07802d33696b477062e699e84a8f2561e14b719adbeac9db498819d74",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/channel/task/jsplugin/credential_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "92694a25a2e0a806c6795df42a61653da1a10ba091206625e112b5f34802189d",
+      "local_sha256": "ff34baf06ab3a40cf1903045dcc22c91e65f4aac389b9d510aa19ea7985ab0ff",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/channel/vertex/adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "c61e39e3313d5cffaaecf932f18cd3382a6b8f844d4531cc1974df862e8c5422",
+      "local_sha256": "c61e39e3313d5cffaaecf932f18cd3382a6b8f844d4531cc1974df862e8c5422",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/chat_completions_via_responses.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5c075fe3ac098efc37ac94063ba3039d192e564a3263f59ae7b778afd918fea5",
+      "local_sha256": "5c075fe3ac098efc37ac94063ba3039d192e564a3263f59ae7b778afd918fea5",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/claude_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "21aa677f6954a7e7a641206564841aae2c0fcda2032a3dd047594f4c2a692ad1",
+      "local_sha256": "21aa677f6954a7e7a641206564841aae2c0fcda2032a3dd047594f4c2a692ad1",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/common/outbound_body.go",
+      "upstream_change": "M",
+      "upstream_sha256": "c1d546bb82de59d9b7bd98f5c91323b183239d54794327a2c3f0d9602878844b",
+      "local_sha256": "c1d546bb82de59d9b7bd98f5c91323b183239d54794327a2c3f0d9602878844b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/common/override.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f11f928a9b34fd0bdf9f8a16fcc4a71650c457e9a9e6a4e503deb2fb0f60671f",
+      "local_sha256": "28a1d1005eafe8ea2512f0c15ef03690ad257d4854f8e071879bcfb52be761cb",
+      "disposition": "adapted",
+      "basis": "使用MoeForge正则与JSON封装；不恢复using_group条件，保留有界缓存。"
+    },
+    {
+      "path": "relay/common/override_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f479020d1079d57c5e81eb70a2a65753e38f981023942ea5197c074ca4a50359",
+      "local_sha256": "99e7b3be48c77cd54c3e8e7c72202eaea2041a3562978f13d33f2311924c46b6",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/common/relay_info.go",
+      "upstream_change": "M",
+      "upstream_sha256": "4ea60dbc4a9d203eb9a7c158789520077b301fc1bdcb5e9bb3ec2923a83b3023",
+      "local_sha256": "f7fdbe64a6a6d8d9d705aecdb0ed1d42fc5c37d17eae13d9e461450a15c7afea",
+      "disposition": "adapted",
+      "basis": "插件步骤/报告/头部字段吸收；本地渠道倍率和路由指标保留，无分组和订阅字段。"
+    },
+    {
+      "path": "relay/common/request_plugin.go",
+      "upstream_change": "A",
+      "upstream_sha256": "48b3238569e94df421a029ab5daf8c3c569803763dc6a4b6601450d3147c7444",
+      "local_sha256": "48b3238569e94df421a029ab5daf8c3c569803763dc6a4b6601450d3147c7444",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/compatible_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "9c4d52d99f8d48ca8457e4b5cc9096c898546871d273fbb92e0c3983730e8696",
+      "local_sha256": "9c4d52d99f8d48ca8457e4b5cc9096c898546871d273fbb92e0c3983730e8696",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/convert_request_error.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b9030b1ed0c547b5c8ad97cfecce550dd99187eca24dae2642aa3e4ec9fd46a5",
+      "local_sha256": "b9030b1ed0c547b5c8ad97cfecce550dd99187eca24dae2642aa3e4ec9fd46a5",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/convert_request_error_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "bf4fb017fa16eb879b88f679ca543b5effabd9ff21e7e706073f87cd9861f89a",
+      "local_sha256": "caf530a2435cead3dc6bf645cd18aafd86ed71359b6e03aa9351c918c17da383",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/deepseek_tools_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "bb6c3db9e82300cb4fd9e1beb7dd3afd018f4584f359123645e5a431ccb13918",
+      "local_sha256": "bb6c3db9e82300cb4fd9e1beb7dd3afd018f4584f359123645e5a431ccb13918",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/embedding_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "39027fe19c743c4eccdfa38a3ea4b4d834503199de489da22f083528d1bd7ac8",
+      "local_sha256": "39027fe19c743c4eccdfa38a3ea4b4d834503199de489da22f083528d1bd7ac8",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/gemini_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "7b675734ca4768a59af22832c1455eedf0556212e432e63aae15e1bebd8e1b59",
+      "local_sha256": "7b675734ca4768a59af22832c1455eedf0556212e432e63aae15e1bebd8e1b59",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/helper/billing_expr_request.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ba987dc8a4861e922b40ed8efb036abf1c5bd24a6f12166c518fd567a47c031d",
+      "local_sha256": "ba987dc8a4861e922b40ed8efb036abf1c5bd24a6f12166c518fd567a47c031d",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/helper/billing_expr_request_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "af61ec6d28c91958c3f08d03ce7d31d42ba5a492161a6bdf55534c20b598dc5c",
+      "local_sha256": "af61ec6d28c91958c3f08d03ce7d31d42ba5a492161a6bdf55534c20b598dc5c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/helper/common.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5a2e376cc467367d75005848ff73afb2c52a3b8f44c6d66f21199a874685fbaf",
+      "local_sha256": "d12cee6c7489af7416ba122b0586c02dbe37d62c0cdaabe470ee0a48f4b40235",
+      "disposition": "adapted",
+      "basis": "插件首响应检测吸收；保留有效输出驱动本地路由观测。"
+    },
+    {
+      "path": "relay/helper/price.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ee1b6fc28c948d4196e922630638f3a2aaf0f1689a631f9acdb9408eea39925d",
+      "local_sha256": "6ac1a1ee653d1747dc910a631bf2fc8be10fd9c659039e4407fe00211b9c768a",
+      "disposition": "adapted",
+      "basis": "原生插件价格适配，渠道倍率替代group multiplier，无内置模型价格。"
+    },
+    {
+      "path": "relay/helper/reasoning_suffix.go",
+      "upstream_change": "M",
+      "upstream_sha256": "db10c3c6ee1e97ca53b6212ae55e6fef2f653fed37e7daf6e6e8caf36944f61f",
+      "local_sha256": "db10c3c6ee1e97ca53b6212ae55e6fef2f653fed37e7daf6e6e8caf36944f61f",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/helper/reasoning_suffix_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f4417c8488773f6e54a19878aa0e59deac84465f7d34ebf13b36681432cd9cbf",
+      "local_sha256": "f4417c8488773f6e54a19878aa0e59deac84465f7d34ebf13b36681432cd9cbf",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/helper/stream_scanner.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0ce0797e4ab920313591f21456f029ee23f9e2c59c126f68c01f952481cbc59f",
+      "local_sha256": "d4ae864895911339e6a6aa51fb469415f44cacbdebda0f1da660e8815dbe513b",
+      "disposition": "adapted",
+      "basis": "上游扫描上下文更新；原有取消/读写失败传播不降级。"
+    },
+    {
+      "path": "relay/helper/valid_request.go",
+      "upstream_change": "M",
+      "upstream_sha256": "c6e756f264260927d4dff3abb55fab3765ea756f8506d81cfbdfae74d0bbd119",
+      "local_sha256": "c6e756f264260927d4dff3abb55fab3765ea756f8506d81cfbdfae74d0bbd119",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/image_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "480b358f96c3d9fb02809dc5bfa845853cb452f373322e45c5fde8a6e41d9797",
+      "local_sha256": "480b358f96c3d9fb02809dc5bfa845853cb452f373322e45c5fde8a6e41d9797",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/relay_adaptor.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0144912a73268b0f951766e0c1e61e6cb1954f3c386d064777a2703a8c746d71",
+      "local_sha256": "f644ee01a864d0f59e5fd0154ba9d4f6d8231cc5a7d68025bd71d326409e73b8",
+      "disposition": "adapted",
+      "basis": "增加provider adaptor；退役type 57继续拒绝，任务接口保留ctx。"
+    },
+    {
+      "path": "relay/relay_task.go",
+      "upstream_change": "M",
+      "upstream_sha256": "0ba590b7879418eafd07e049627aee88690f21f3f3e22e9c5e96709466a2ffa2",
+      "local_sha256": "f737ba16ca2428844088314956a153e719202fa26d46ee5295e910f8967d19e2",
+      "disposition": "adapted",
+      "basis": "插件通用任务钩子与计价来源吸收；渠道倍率、原渠道准入、取消和钱包结算沿本地合同。"
+    },
+    {
+      "path": "relay/relay_task_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "03060cd1274d7a6aad61cc52460ed4fd9f3ca544414449bf578350a708ce7660",
+      "local_sha256": "75f256d82057820cf05d3df22a4a3e22e733107e7c97986e5f4b9218a88c1794",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/request_billing.go",
+      "upstream_change": "M",
+      "upstream_sha256": "3e00b8610b2b1b0abf42e3de0d8250a867678b7262043b58813be3a77cad81d4",
+      "local_sha256": "3e00b8610b2b1b0abf42e3de0d8250a867678b7262043b58813be3a77cad81d4",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/request_clone_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "91f5d11e7f8baf2937ebbee6e3179b53bdd6aa0bad16fb5f89322f5b878fb058",
+      "local_sha256": "91f5d11e7f8baf2937ebbee6e3179b53bdd6aa0bad16fb5f89322f5b878fb058",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/attachments.go",
+      "upstream_change": "A",
+      "upstream_sha256": "3d587256375f5635b3b75430a142f5e16bcfdbef040060cdf206cb927ef4e55b",
+      "local_sha256": "3d587256375f5635b3b75430a142f5e16bcfdbef040060cdf206cb927ef4e55b",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/attachments_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "122776a39604b85d1ab485e2d1e774d0d143d5b1c01a9201ba115549d79620d3",
+      "local_sha256": "122776a39604b85d1ab485e2d1e774d0d143d5b1c01a9201ba115549d79620d3",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/extract.go",
+      "upstream_change": "A",
+      "upstream_sha256": "54302bb38f0ee44b6d0647e5051378925d3604c81b647851d7afc65367518529",
+      "local_sha256": "54302bb38f0ee44b6d0647e5051378925d3604c81b647851d7afc65367518529",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/form.go",
+      "upstream_change": "A",
+      "upstream_sha256": "11f9dd670323b261eed9fe389930a9da7b5ec8759e514bf568799e137ee40617",
+      "local_sha256": "11f9dd670323b261eed9fe389930a9da7b5ec8759e514bf568799e137ee40617",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/media.go",
+      "upstream_change": "A",
+      "upstream_sha256": "7ae9f14f28bf1e1b1dbda1b56fefcddd9f38a8477ab22dea2dc4ccc0adf724e9",
+      "local_sha256": "7ae9f14f28bf1e1b1dbda1b56fefcddd9f38a8477ab22dea2dc4ccc0adf724e9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/param_override.go",
+      "upstream_change": "A",
+      "upstream_sha256": "7e5c7c57c3790a1a5798e72342eb9bca0d0cf34b0febf0b31b96b32f7334fcf0",
+      "local_sha256": "df71e6ddaaeb3c49ddf7e33c1cd08f0256ea538293d08d961ecdd03daef28d19",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/requestplugin/pdf.go",
+      "upstream_change": "A",
+      "upstream_sha256": "928ffc07fd20d73b1b4e58f515715d155f4ca3e650be5fcea8f6d4cd28b98897",
+      "local_sha256": "928ffc07fd20d73b1b4e58f515715d155f4ca3e650be5fcea8f6d4cd28b98897",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/pdf_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "2bac3c0d74dbc3aef13473a07da984fbd27c65cb3b0270d95464eea4a6ad93f9",
+      "local_sha256": "2bac3c0d74dbc3aef13473a07da984fbd27c65cb3b0270d95464eea4a6ad93f9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/plan.go",
+      "upstream_change": "A",
+      "upstream_sha256": "3294d507948d99c654949d285ee2fce6b7992b6d9d74d9164a5c879f3c44ab49",
+      "local_sha256": "44ca4700b363c5f0491176cd461a3ed3d384f9c3b801a160030aa7c797ccfeaa",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/requestplugin/record.go",
+      "upstream_change": "A",
+      "upstream_sha256": "32904639b87b3e863ecb9afb9a0c047dc13387ad85d79f5b43722b157aeed48f",
+      "local_sha256": "32904639b87b3e863ecb9afb9a0c047dc13387ad85d79f5b43722b157aeed48f",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/requestplugin/relay.go",
+      "upstream_change": "A",
+      "upstream_sha256": "e6193aaf2bcdc3dea75230f368b98e875b4203e90ed03fbfeb2122db006afdd0",
+      "local_sha256": "6a6b1f36da341f72b14c053b57ba3d1ff639ccd987cb9f1fa3489cd146c3521a",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/requestplugin/reply.go",
+      "upstream_change": "A",
+      "upstream_sha256": "3883dc21357d6f899d7debbe105cd3b26946a6cf7a792925c07b2ed9cf2c5f3f",
+      "local_sha256": "446232fd56c5f8007e5d1f7150159c592672ee01acabcc04a2a691a563bfe040",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/requestplugin/report.go",
+      "upstream_change": "A",
+      "upstream_sha256": "75af7fa41d30c49c9f86ff2e053c215184298142a9ed44289d935446eb71e76b",
+      "local_sha256": "bf11a96b6c5b7840564c3ca95c62c39464c9ae2be793b14cedfde05a6ccfefb7",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/requestplugin/requestplugin_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "d2098dc4c1a060ed7cb47feaaa1a0de291bcc2b31cfc67b6fc32a5f0471a8755",
+      "local_sha256": "dfe2c7afddbe68363598d7cb9e342703bf591b96c83878ed6c232db87508c8d9",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/requestplugin/socket.go",
+      "upstream_change": "A",
+      "upstream_sha256": "e51025f3e4f3867704b512bb5e905c8d159b6f6889cacfdb345173bf1feb1feb",
+      "local_sha256": "812aee28a50bf4a8404e1a59a3c7be16a4f650ef8800973e95011ff0696bc199",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/requestplugin/socket_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "c3842bcd5cd4a09a60fa3317b32c3fbe2dbd650d6d1315ccc5f2f9d71c5ec2ce",
+      "local_sha256": "39d666b6999de9828eedc94c943ecec3c5e665055c464ee00356194e3476d481",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "relay/requestplugin/task_report.go",
+      "upstream_change": "A",
+      "upstream_sha256": "ac7e2adfa31c968c35b4af5342f66a6fadd3e036e0ce48e027d66ad252b8e15a",
+      "local_sha256": "ee15aa3ea964320023569392866cce7e6eba6802a92a0dbc3f6b9e7b8eef8a29",
+      "disposition": "adapted",
+      "basis": "原生请求/回复/报告钩子行为吸收；仅删除group输入、作用域匹配和输出，保留global/channel/models顺序与失败语义。"
+    },
+    {
+      "path": "relay/rerank_handler.go",
+      "upstream_change": "M",
+      "upstream_sha256": "556273cad919c55decc411d344d4b9c967dd030d2dd3d6c4c5d27d509b26da2e",
+      "local_sha256": "556273cad919c55decc411d344d4b9c967dd030d2dd3d6c4c5d27d509b26da2e",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/responses_request.go",
+      "upstream_change": "M",
+      "upstream_sha256": "2fa37ac2a80b410160280b79f7cb79fb2640650d4bf2abe333b968eace7e0816",
+      "local_sha256": "2fa37ac2a80b410160280b79f7cb79fb2640650d4bf2abe333b968eace7e0816",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/responses_request_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "68ba0809efa11f5008779b65794438d21ba7253fb920765c31af0aa034832767",
+      "local_sha256": "68ba0809efa11f5008779b65794438d21ba7253fb920765c31af0aa034832767",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relay/responses_websocket.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5eff80a23e4c69573bb6598fec1a14205a59202833abdce7b8033557395a5b07",
+      "local_sha256": "78d546a01f9911d357fbabe11d312520f5e820dd619ce5fe57c13e29e1e19c27",
+      "disposition": "adapted",
+      "basis": "原生WS ingress/reply/report吸收；保留本地选路后计费、渠道倍率和并发释放。"
+    },
+    {
+      "path": "relaykit/dto/channel_settings.go",
+      "upstream_change": "M",
+      "upstream_sha256": "b00b29a9376c183843739fe20ba0b83c0354bfabc4e941c25232d9849baf2330",
+      "local_sha256": "b00b29a9376c183843739fe20ba0b83c0354bfabc4e941c25232d9849baf2330",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/dto/channel_settings_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "97ee7b7e1d90fde253b95e463741cae1259b06eb0ae85afa9103058932d24010",
+      "local_sha256": "97ee7b7e1d90fde253b95e463741cae1259b06eb0ae85afa9103058932d24010",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/dto/sensitive.go",
+      "upstream_change": "D",
+      "upstream_sha256": null,
+      "local_sha256": null,
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/go.mod",
+      "upstream_change": "M",
+      "upstream_sha256": "8dffb0a4e631986df51a49c2dd485958e5bb1dd5bc71321488201afc40faa4b0",
+      "local_sha256": "5295b83bbd4a82e03c9c43e625201cd26ca778c95b3d13af57330c50d7769180",
+      "disposition": "adapted",
+      "basis": "MoeForge moego更新；独立模块保持Go1.26.10，不反向依赖根模块。"
+    },
+    {
+      "path": "relaykit/go.sum",
+      "upstream_change": "M",
+      "upstream_sha256": "968958f13c189ae63bda51e03ce66a64165f898e25c0e8d034b36ba65c0feba9",
+      "local_sha256": "968958f13c189ae63bda51e03ce66a64165f898e25c0e8d034b36ba65c0feba9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/relayconvert/kitutil/json.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f80f93a0c0676cb9a06fdf6be1c18bb277195f48718e535576a8ccf65d3d9413",
+      "local_sha256": "f80f93a0c0676cb9a06fdf6be1c18bb277195f48718e535576a8ccf65d3d9413",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/relayconvert/kitutil/json_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "643e499ce93c6af229dbf070fdf5e500572c725493129e599f084d48d7adba80",
+      "local_sha256": "643e499ce93c6af229dbf070fdf5e500572c725493129e599f084d48d7adba80",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/relayconvert/kitutil/mask.go",
+      "upstream_change": "M",
+      "upstream_sha256": "7647c427377fd103f926278f0854e272dedcf8aa522d115ecfd4cc9aa380d4db",
+      "local_sha256": "7647c427377fd103f926278f0854e272dedcf8aa522d115ecfd4cc9aa380d4db",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/relayconvert/reasoning/suffix.go",
+      "upstream_change": "M",
+      "upstream_sha256": "80d3c2ea0f01d21b546dd2a004186da82f061364a19576ce17d25b10f716335c",
+      "local_sha256": "80d3c2ea0f01d21b546dd2a004186da82f061364a19576ce17d25b10f716335c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "relaykit/types/error.go",
+      "upstream_change": "M",
+      "upstream_sha256": "91338f820f7d84bb47618fd34361ddf91b935928a9e001f096eceae668b0ebd6",
+      "local_sha256": "91338f820f7d84bb47618fd34361ddf91b935928a9e001f096eceae668b0ebd6",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "router/api-router.go",
+      "upstream_change": "M",
+      "upstream_sha256": "a6ec29bf1844cb7d2100467937be3872ff1cc0437f354aeaaed017da3e6a96d7",
+      "local_sha256": "676fac4bfcd54f8665ec060e5b5a80191758dcae15e880a85e6c02c97d53c3fe",
+      "disposition": "adapted",
+      "basis": "新增请求插件路由与原生权限；仅不注册多节点/订阅/旧专用接口。"
+    },
+    {
+      "path": "router/channel-router.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1348d7ba466b1a62be8e291f017fce72b11b19cc2f0a929226b9aabd3dcac240",
+      "local_sha256": "aadea500d350ca2d41e2e48cacc936ac809d2c68647c3af7211fef8e338f0d4d",
+      "disposition": "adapted",
+      "basis": "插件login/continue/credentials及余额任务状态吸收，保留倍率扩展，不注册Codex。"
+    },
+    {
+      "path": "router/channel_router_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e43b4287de7dca2d09f1fe818ffbf2a4873e867a01c26e3c4cf945358f9a62f6",
+      "local_sha256": "e43b4287de7dca2d09f1fe818ffbf2a4873e867a01c26e3c4cf945358f9a62f6",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "router/provider_plugin_gaps_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "45242601d3d67663f18b7b87fd03a969c4d40a53bf0ca3bbf21619a97fa30db7",
+      "local_sha256": "45242601d3d67663f18b7b87fd03a969c4d40a53bf0ca3bbf21619a97fa30db7",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "router/provider_plugin_relay_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "3a4d55b86f1d1aa719e3118a177dc1a4fbfdd7b8771443a4e64a47126caa00e4",
+      "local_sha256": "e8bb6bc7bc4d92fe6c27ed0a155a0afdbeef5a0b386a2589a63f17b05f3521cc",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "service/channel.go",
+      "upstream_change": "M",
+      "upstream_sha256": "ad965578496918b6c9f6e8c9bd70bdb5808b71ff035fe751deeec5cc50d7f49c",
+      "local_sha256": "ad965578496918b6c9f6e8c9bd70bdb5808b71ff035fe751deeec5cc50d7f49c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/channel_affinity.go",
+      "upstream_change": "M",
+      "upstream_sha256": "461f61015e8c70b9ae44ed34c130e1c454d10f6a4784b6d6b457b5d0d5f83585",
+      "local_sha256": "d429566679184ddb32f320cd00f9a34ea42377e1c89c66823d61efe9db288292",
+      "disposition": "adapted",
+      "basis": "正则封装更新；亲和性无业务分组维度。"
+    },
+    {
+      "path": "service/channel_affinity_template_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "949705bbe4c89ba36d40a2bad78702cc5ed338492c49dd9b0581d76e534b0e70",
+      "local_sha256": "e344423824171f879ccebd6933f8cd3737227d4faba4a8e0283e94dda2bfa5ac",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "service/channel_select.go",
+      "upstream_change": "M",
+      "upstream_sha256": "aa425048996ac7f7d1b35e777717d705b3fef3aa44e8b196a048d3acfce35c60",
+      "local_sha256": "12e30a7d12f9fe683da66338884791fc733ae20b675f94251656a80d62de7836",
+      "disposition": "adapted",
+      "basis": "插件relay筛选吸收；沿本地有序手动/自动路由、倍率上限和无等待并发。"
+    },
+    {
+      "path": "service/codex_credential_refresh.go",
+      "upstream_change": "M",
+      "upstream_sha256": "70de64f86377a3a412e681a385aeca680b0f155a77a62ff1dda379c4a1c8f2c3",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "旧专用后台刷新退役；新的provider_plugin刷新任务开放。"
+    },
+    {
+      "path": "service/log_info_generate.go",
+      "upstream_change": "M",
+      "upstream_sha256": "aa9443a1a8a607dfe9bb3297bfb34c1949b8015ade379756e9006dc7a97b9398",
+      "local_sha256": "ac0f777b2667f6ba6eb66af90eb4e1a343d2a3496fed8fe2ba686b921c527725",
+      "disposition": "adapted",
+      "basis": "插件步骤和报告记录吸收；无分组与订阅金额，渠道倍率保持。"
+    },
+    {
+      "path": "service/node_sync.go",
+      "upstream_change": "A",
+      "upstream_sha256": "e8876296d140fbcb610956b034e924ad17bc2e6e4f1e04c86ee6b10318cb8269",
+      "local_sha256": "30070930afaef1bef3d6d970a0a7a8aac902dcf6e454178c2094676695c5e214",
+      "disposition": "adapted",
+      "basis": "只对本进程已注册主题应用revision并完成任务；不恢复节点注册、实例列表或跨节点完成判定。"
+    },
+    {
+      "path": "service/node_sync_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "e868e1a66884059883f16496c6395f0be05f54445d5cf86812c22f466f4c6f9d",
+      "local_sha256": "014bb3fceeeed07da1820da58acc3011d45fb9b47947c16d81bf25732c9806da",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "service/openai_chat_responses_mode.go",
+      "upstream_change": "M",
+      "upstream_sha256": "f9b492fd0fd966f7617bd36ffdad66a116a93f96d6859694c4ed34d9f6d71e6c",
+      "local_sha256": "f9b492fd0fd966f7617bd36ffdad66a116a93f96d6859694c4ed34d9f6d71e6c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/provider_plugin.go",
+      "upstream_change": "A",
+      "upstream_sha256": "b0c083c73648c188dc1b5873f4d9f9d5f022296f47688c6abada6139c962ed27",
+      "local_sha256": "b0c083c73648c188dc1b5873f4d9f9d5f022296f47688c6abada6139c962ed27",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/provider_plugin_balance.go",
+      "upstream_change": "A",
+      "upstream_sha256": "b1767cdd0a55f35a7faad86c27a209d6ce2d85017b6098c94e449f418850d09c",
+      "local_sha256": "b1767cdd0a55f35a7faad86c27a209d6ce2d85017b6098c94e449f418850d09c",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/provider_plugin_login.go",
+      "upstream_change": "A",
+      "upstream_sha256": "4b856e0d8781b32e56439dbefbc57f3f8c91647bfa89374f882c08fad9cb4561",
+      "local_sha256": "4b856e0d8781b32e56439dbefbc57f3f8c91647bfa89374f882c08fad9cb4561",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/provider_plugin_login_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "3068bf8cb989c49926005f60587aba24b865dc5a5da3cf732be807bbbc26c056",
+      "local_sha256": "3068bf8cb989c49926005f60587aba24b865dc5a5da3cf732be807bbbc26c056",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/provider_plugin_scheduled.go",
+      "upstream_change": "A",
+      "upstream_sha256": "f01c424b983c87b40a49f72b6daf20350b03813dd08fa4aa8a64969560bb61b9",
+      "local_sha256": "f01c424b983c87b40a49f72b6daf20350b03813dd08fa4aa8a64969560bb61b9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/provider_plugin_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "406b1b9e59736988b5c79ae83b83affda3189b20df0ba5a00c4d55fbd180b7ef",
+      "local_sha256": "59d3477ff8af51bf21bdd38360f0f08f326541ffa28737842426f58dba086f38",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "service/provider_plugin_token_test.go",
+      "upstream_change": "A",
+      "upstream_sha256": "9c347d9d7121b0381a051eafbaa284313880c7ea0e1a0666be3b2b80a4b5b8a1",
+      "local_sha256": "9c347d9d7121b0381a051eafbaa284313880c7ea0e1a0666be3b2b80a4b5b8a1",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/quota.go",
+      "upstream_change": "M",
+      "upstream_sha256": "e6e7edfb401a83bcd68f4f4cbdd38b7f9c2eec2c5f37b04e3a079cc57a18bb17",
+      "local_sha256": "817822c4ca6300f2aba0f00b214a8cd94791937275b12afb907db5587735292e",
+      "disposition": "adapted",
+      "basis": "原生插件usage处理吸收；渠道倍率、无默认价、钱包唯一资金源。"
+    },
+    {
+      "path": "service/relay_error.go",
+      "upstream_change": "M",
+      "upstream_sha256": "5f1bbfa45a7a8c875a501b8a8fe174435c102af29af94c64dd72bcf102fd99a5",
+      "local_sha256": "bde8401f7389b823334bd1703961ae4c980949f4cae75254c1c4f48b481a3a70",
+      "disposition": "adapted",
+      "basis": "复用原生RecordRelayErrorLog与插件报告，日志签名不含业务分组。"
+    },
+    {
+      "path": "service/sensitive.go",
+      "upstream_change": "D",
+      "upstream_sha256": null,
+      "local_sha256": null,
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/system_instance.go",
+      "upstream_change": "M",
+      "upstream_sha256": "3d4d9212adb50f695c335ae7decebce4851a2ca2a7e3122fcf07b9abd5e09003",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "多节点实例后台报告继续退役。"
+    },
+    {
+      "path": "service/system_task.go",
+      "upstream_change": "M",
+      "upstream_sha256": "9dedf4fb80a72f1ac588ae3e2659b12d2a134092daa55c18575cfed1281fe870",
+      "local_sha256": "9dedf4fb80a72f1ac588ae3e2659b12d2a134092daa55c18575cfed1281fe870",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "service/task_billing.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1f41e2e6a0b5f375220fda35838c537285e2fde7b292cf97dfbd4da16ff91646",
+      "local_sha256": "7626a96ad1cea5f640a0dabb6b91dbb3485e3807e07ef964129b1a2fee2823b6",
+      "disposition": "adapted",
+      "basis": "原生任务报告钩子吸收；只结算一次，使用渠道倍率且无订阅资金。"
+    },
+    {
+      "path": "service/task_polling.go",
+      "upstream_change": "M",
+      "upstream_sha256": "00a2d2579fa82aa485a269e90d489ee34a7056c3c7755c00937e7bc4fa94f24d",
+      "local_sha256": "d95e2605112a46d20cbb46c5783fe3267d5c2636584b0d3799f5435b4b0ca8d4",
+      "disposition": "adapted",
+      "basis": "按CredentialAccount分批轮询与最终报告吸收；保留取消、即时准入、确证渠道删除CAS退款和重复上游ID隔离。"
+    },
+    {
+      "path": "service/task_polling_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1a83ba518813f97757dc1394e2ac72719d1ed66d312a48962216a80ea8474693",
+      "local_sha256": "f7bd2a9feb997e04b364c60b54c7d5ade8aa41ab974add62d504bbd194f752fc",
+      "disposition": "adapted",
+      "basis": "将上游测试适配到无业务分组、钱包唯一资金源及本地选路/ctx接口；保留实际协议/金额/错误断言，测试替换见同步账本。"
+    },
+    {
+      "path": "setting/billing_setting/tiered_billing.go",
+      "upstream_change": "M",
+      "upstream_sha256": "28a5abb54c8e4746ac77eb736846c4989382043c044e426ab58211f6cffba9f3",
+      "local_sha256": "a128315d0c45dc984337a7c45c8344e06e0366b6b0af8af6a8695eb240b5b947",
+      "disposition": "adapted",
+      "basis": "插件定价能力吸收；内置模型计费表达式继续排除。"
+    },
+    {
+      "path": "setting/billing_setting/tiered_billing_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "6865abcd14145ab5a14b26280455d12948f15ce9a4f4c3b6a6822247a58c7c01",
+      "local_sha256": "6865abcd14145ab5a14b26280455d12948f15ce9a4f4c3b6a6822247a58c7c01",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/console_setting/validation.go",
+      "upstream_change": "M",
+      "upstream_sha256": "7832ebf02f7dd0f42074ba5c64f47aa2c9f09703c6a4e1d55206859aefbc2b26",
+      "local_sha256": "7832ebf02f7dd0f42074ba5c64f47aa2c9f09703c6a4e1d55206859aefbc2b26",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/model_setting/global.go",
+      "upstream_change": "M",
+      "upstream_sha256": "bd1459ad988d112c72086cbece70e6997f50e1da3390f76ae9010fdc26676691",
+      "local_sha256": "bd1459ad988d112c72086cbece70e6997f50e1da3390f76ae9010fdc26676691",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/operation_setting/payment_setting.go",
+      "upstream_change": "M",
+      "upstream_sha256": "2043337a79fcf1f3aa542ca0c512e600ee1d42262cebdf8b22d3454e77fd69ce",
+      "local_sha256": "2fe35ca7478ea8e64bb63143fec497f04fba6409ed7461d190c9bb1f6f9b03e1",
+      "disposition": "adapted",
+      "basis": "MD5/RSA选择和密钥校验吸收；不恢复AmountDiscount，充值折扣共用一次报价。"
+    },
+    {
+      "path": "setting/operation_setting/system_task_setting.go",
+      "upstream_change": "A",
+      "upstream_sha256": "74f225ec4305e1e678e94e91fe5d73dcfdd64678f7d8ff5a998c852a209df94f",
+      "local_sha256": "74f225ec4305e1e678e94e91fe5d73dcfdd64678f7d8ff5a998c852a209df94f",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/request_plugin_setting/config.go",
+      "upstream_change": "A",
+      "upstream_sha256": "a2da0cfeef8d689714bd326d128ecf2a8b5ef08272ec4b5380621a4e665987ca",
+      "local_sha256": "e210cbec307add3b19d91f370ff562d187758f87a974f07f6baebef24c45a009",
+      "disposition": "adapted",
+      "basis": "实例全局/渠道/模型范围保留；非空groups配置显式拒绝，避免静默扩大作用域。"
+    },
+    {
+      "path": "setting/sensitive.go",
+      "upstream_change": "D",
+      "upstream_sha256": null,
+      "local_sha256": null,
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/system_setting/task_artifact_store.go",
+      "upstream_change": "M",
+      "upstream_sha256": "1a1fc5af381283ed5a6bb8c8885020d1d4c1ed0f05ac46ac02f3a9da11561023",
+      "local_sha256": "1a1fc5af381283ed5a6bb8c8885020d1d4c1ed0f05ac46ac02f3a9da11561023",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/task_plugin.go",
+      "upstream_change": "M",
+      "upstream_sha256": "76118cb9e160ddf297e64590c6a07c3e8ff43bc69718fc0deda61f386c9ad260",
+      "local_sha256": "76118cb9e160ddf297e64590c6a07c3e8ff43bc69718fc0deda61f386c9ad260",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "setting/task_plugin_test.go",
+      "upstream_change": "M",
+      "upstream_sha256": "d55f9c1127721397245c9c6193bba288082d9226104d71183897658a01ff83f9",
+      "local_sha256": "d55f9c1127721397245c9c6193bba288082d9226104d71183897658a01ff83f9",
+      "disposition": "absorbed",
+      "basis": "目标文件字节一致；删除项双方均不存在。"
+    },
+    {
+      "path": "web/bun.lock",
+      "upstream_change": "M",
+      "upstream_sha256": "2cf9c934aedd2380842893ff1fb96ce159d87bc5d14868b3d5758f8499aceb9b",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "React/TanStack依赖不适用，Vue依赖不随其升级。"
+    },
+    {
+      "path": "web/package.json",
+      "upstream_change": "M",
+      "upstream_sha256": "a6e0f495149b53b53481ac69f0d9407cb353e8e228c499b7d076e9ab726b01a0",
+      "local_sha256": null,
+      "disposition": "excluded",
+      "basis": "React/TanStack依赖不适用，Vue依赖不随其升级。"
+    },
+    {
+      "path": "web/src/components/__tests__/command-menu.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "2656c5649c5f368915984c514d8164b84ff6e9c26156672404e37ca6a6697b4d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/__tests__/password-input.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "3649a6f3b20b0e86c8dd020e584b53fd5170ce8523fdbf28307157ed35a168a5",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/__tests__/password-strength.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "dcaccba96eddfbc8ce908c18a3512a64a1a89e93a73e9a6ddd8d8c3e5b6f5b82",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/auto-group-order-item.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "873bc48d146fc77a3e35763071a01db95049a916a67e9a96cca40a8364761acc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/confirm-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "e66ac2ba856a5ba516d939a22f7b76289a03ca13a8a351860f7a76a804e8238d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/password-input.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "51b9e0f976833b6041d5705e13ef33814c62325459b0f8e000e9dfa6d87a5847",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/password-strength-utils.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "5d7b89fbfadca542747b21aa3b9bad58320a6164e94c3effa1bcc9c2791538d0",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/password-strength.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "91cb97ecc419eb677fd66e2087e828afc603f6068b5eefd1f5a6038b133fdc57",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/risk-acknowledgement-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "48d8e3816187b7d096b332106441797cc0ae4e85eeca06b7b5f3fdd38901c3ce",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/risk-acknowledgement-dialog/__tests__/confirmation.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "512d9b75f5e8641ad99473dab21ba60bc71878a8e9403a956085ff0c0e2cddcb",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/components/ui/form.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "5986fd4a6d08b3305fbbd78faff052bf621eb3a0a9f46d30955e0178993d94bb",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/auth/components/legal-consent.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "895acfa24b95c54cc6659851ae8cee34d84d8a6fade4b93ebf1ac15a4124e8dd",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/auth/components/terms-footer.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "eebfdd4bbb5398b4d5878104aed1ce2e6c08b7d4014bbb06effa5b2479f44c6a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/auth/constants.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "0a80a471526069d7c3bb49871a61c8752bea937db377a3a2d86ffdff8c9ce53d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/auth/index.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "e52317f3b2a01b714d41e66cd03857d1c186305d069c6afffbc29b2583426904",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/auth/sign-up/components/sign-up-form.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "40ba827314ee549d88e32d9f19de0b1080f55dcfa1d57f415b3c68a7e2c1f4e6",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/api.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "fc678b2ffe76b9fd99bfaebd8639b2319d7bd15210636cc5e6ffbea8a0ec1edd",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/channel-balance-cell.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "53149d34d7c22fc4798fc67af3ae7f6bae1c7e39d8dc2cf922f9be8a56cce106",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/channel-configuration.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "c567409d0aa183ff82b33159226b1eeab44666ebe2dad8579fcd87fc74f95269",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/channel-plugin-config-fields.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "f3c4f68ee0a4fa6ad77e6dd7d97fdd512ad5ac599d65c4b59f91cf24c75983da",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/channel-test-dialog-endpoints.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "4f98bea56fb0f6b86f6bbae7350c79776ebc4b27312e0bc6951c9e016396a8dc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/multi-key-manage-dialog.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "f433e60862ac6cd3fba57bf943f7a34f53e6076848e8f36839eda27eedc005f8",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/plugin-login-callback.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "96a554c37801cc7e9a49adef5f9bb23222e2ef456d11273ad2625d2d03d01c4c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/plugin-login-dialog.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "703389bd7eedfd68a5741359542054b0696ebd32da578a0cce288efd6be4e1b6",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/__tests__/row-actions-query-balance.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "743f4801363a66b21265b07eea647ed982d2cb5850351dc80ab81b13e8d15af5",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/channel-balance-details.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "36a0752d451767115dc99b5eeb2ae459fc44a18f50a3d199ea2f4309e614751c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/channel-quick-options.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "5e7917a85b66e7f19f5f91f7ff41ee904cd7e60ce1aee1c668647ecc99f57d72",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/channel-type-badge.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "4fe578513d5c0547dbf7328c0fab4d9efcd083354741027950995945da34e531",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/channel-type-badge.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "9ef5e037e1b08125eb897d936754173c1d3be0909f7abb8a6cbe7b8a663dc28b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/channels-columns.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "56c604e78c3972b4e3162f0b5d9936cfe0c2c8c30f68e07eea0b42e6a8968321",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/channels-primary-buttons.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "50f1a2d877afa8de6eefc7a1fe983b4d4c14752245a78463bfef5171782fa562",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/data-table-row-actions.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "c4b3cd6f691f9a8bd8477713d588b2fdea171cda1864cce17488cd80a721ec19",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/dialogs/balance-query-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "89999542647691a6eb54aef1509eb7c290d6e61a2f8d43908bf3080424e886bc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/dialogs/channel-test-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "b5b97ed04fb597811b3661444bc65cba241e990dd9ed568c0366fcae954ca152",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/dialogs/multi-key-manage-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "7d4817bcaf87aeccd60ed9a50a891d0679917a3fd393b7785c8a365238affa68",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/dialogs/plugin-login-dialog.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "39ec58fac918177c463374ae2e62a429ed508371faeba165e3d750b7b0a74383",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/dialogs/plugin-login-steps.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "0430cbac65540c98ae5db80b6cc62dd60adc27830e38ddc5fb7f43c94d9a478c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/drawers/channel-mutate-drawer.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "e927098cc6df1b5443e96f36f05c3fe497cd031867d34bf25131ff242301631f",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/drawers/channel-plugin-config-fields.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "3cea5bb330cf1e0a8e407704148953f90104638ece0c1856a0ccf60e9de6161e",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/drawers/channel-request-plugins-field.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "8aa500fe94acdcb22b0783cbd5705e5430c84601e38cdad647dfb7a9c7694f25",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/drawers/plugin-credential-panel.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "28349695defa23195f8b5a2db6292f9f677cf49f3f74ec2c54e2b15c9374d52a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/plugin-login-callback.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "07de5625b96b739436ddc2b07d32013beace61dcb808712a7f2f705c19d1edb2",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/components/responses-websocket-setting.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "e7b7bc5e2863d4057099ab26a52af995ddc4202fc748353c107871971b2f4416",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/constants.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "88399a9b0090e09acf812c6724643d46832d25499b68f2d166dd2a2814ae9116",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/hooks/use-channel-mutate-form.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "d532c4a7d2dc50921cb0fe1fb167a9c7bbf1198d284d443786cea9bba3091109",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/hooks/use-plugin-login.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "5020bea69b0ddb05be0e5da672e0db8c7c70a87df57df838074f4c52b5d196ae",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/hooks/use-task-plugin-option.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "57c8ab6b5f35609ec2aa3a3056b9614e3ea394ae5492d46858dc4a8cc1cd609c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/__tests__/plugin-login.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "509066e130819d6f0c1d8f5c9d020c785c983a107bada9d8beda3a1dddc5a9d2",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/__tests__/task-plugin-channel-settings.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "bb163ab9e5a769de136c2f2b758eea72e8f3c274852b36d2c409dabe7014d5a1",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/__tests__/update-all-balances.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "5e8c80e9ad5b58f82d4cf09ace482f5d48e2501ecf7b91699d02e5d97ecaad0d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/channel-actions.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "227916d7553c040f46825145a6da14b8d4eb50da0fba6f230c4536550099cfba",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/channel-balance.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "63942cdc252209afd6438f46dab9f3d6d5c1bff14556d6c6b51b30922d8580bb",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/channel-configuration.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "d5b1e4c73c2c4ec83c915cb0cfc8fe0721d8664c51f5951385a70d4afa58b216",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/channel-form.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "9eaa78cd7a9df24e4976833bd238acc85790b2518b6482c3124d2a2fbc1d10d5",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/lib/plugin-login.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "d264e6b038c016c9b52df687966070a500916675d3467500c42e67204e802d6b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/channels/types.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "2d6a5db94f10bd988f920ddbf0e8acfad95e0dad973c38d51d82d19833ce6aac",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/model-pricing/api.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "cd3402f0dbd3506f57ce1b80f2b0568b8b3b234d29d3d31795aea224b576f34a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/model-pricing/model-pricing-panel.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "6061f95af4e62d64fb1f95f2e0b4648fa6498b8bbafff91b6450802a7e685364",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/__tests__/pricing-controls.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "b60b732913f26f731e8f2f85278f3bbeb71691a13c94e0b38f9a9fafa9605d2f",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/__tests__/sorting.test.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "5692afee47259f30fe9647243b4cc084c6e4fe392d768765f769a1c464be328e",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/__tests__/task-price-display.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "b5bcd98b359220ea5688cd8af1819c553cce5904fb181d9adb6aa1448dc9d0c2",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/components/cached-price-cell.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "a4e57f3e4dd56c2e9df958763310b06a01666f09b50019133577dba6bce66d1d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/components/model-card.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "19209528d247429095ff491b1ee0fdbcfc8f7364554a9d1fc18770f584737c64",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/components/model-details.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "2bb534543cb40503fcd3f5a67838140169ae44bcd35454e28be67cd77aa13d56",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/components/model-price-cell.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "bf47e32d3421af2e14e4d2ee58cd50a159ff095caecdc0b1c6fd0c3e29ce2060",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/lib/billing-mode.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "a067134e8f3810e68438e70e876d735778d8d63b6af938240fab35038507cf20",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/lib/filters.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "04930e4fa566b5406c8a48f68b717b8391bc9eb7a5e204935f2f47c68e02b0b8",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/lib/plugin-pricing.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "a56f4307f59204e28e03631fcf24bd2fc5bb09fb86ba8e56d242f0cfbf4141db",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/pricing/types.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "2a5a4ffd7a9fdb5cae3ea1dfb35de284c9d5c7b73d7ce7bdafe2c456f89e459a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/request-processing/__tests__/request-processing.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "4b7a431f627366f300936b7c85969f8467fb8c1e9566afd8e90054e04292cad9",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/request-processing/index.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "40f748676f1664754af8c0b02e3b592d1e139cb60d523581a99de8dfc3d17c1d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/security/__tests__/account-security.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "19a150fa4ad0202de89e9488d883a80bf03092b94796d6e83b5c2349e76bb555",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/security/components/dialogs/change-password-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "698c5dbe0eca7169bca9552fc344e7b1d86879e8b110824a35dc06218c6e13c3",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/setup/components/__tests__/admin-step.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "27548c74700045a22fa4dee746a2bd5d7547b57c9b10e02528c2ffec8a5c0a56",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/setup/components/admin-step.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "3c3f18f68dd1afc9a60773e5cf973d3ea4deb7248a02846406bb0ffcf8839e11",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/__tests__/node-sync-indicator.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "3551f3e1b1ceff17c51a11d3a4dceaaf627b094d203f523b6b66e46a4b4d4350",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/__tests__/system-instances-panel.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "1b2a9e1885221180ce561989bf1f95436cc6b4150076d90f110c80ae614708aa",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/api.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "8f420bdce1c6abf083c6e45ba55a0ecaf1e31a71b0f20b77e3b76c6847b3fc86",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/components/node-sync-indicator.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "05031cddec56ba1f5f7fd874ebb1d285f2fbe405a62ca5895be892341dcf5676",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/components/system-instances-panel.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "cc5d41f356c15449030a95f5e0ee380460eefbf11d302f429ebc1b18ed538e2d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/constants.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "01651b105ccb04f0084a8bdd4822e75c3ba7cbfbb300b33fc46ba737b026e63d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/hooks/use-node-sync.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "75d834f92b08bd5d5dac205051333cb8c4cdd2f5bae23e8221ccc8aa277034bf",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/lib/node-sync.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "2ac0acb966a299da137c6f1bf7382d977bbb72ce66f29c90d5d817a1e4315dfe",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-info/types.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "11bdd8612ea93c115ab78603065baf97c0fc3ca1aaae2f14caa4d56995b498fb",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/billing/index.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "765b662705355f000ff91d75722e45ff28030122fa2cce582f3f09d8820c8fee",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/billing/section-registry.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "7607b2a12e8791416475505563aaae8a51d1128ea727c4d83a6bb9ed5c97f18e",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/integrations/__tests__/epay-sign-settings.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "8ea97bfbc43044693def6a8d1712d580f24ba6aff7f1de8542a28554748c9464",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/integrations/payment-settings-section.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "671108fe6e69aca2cc1c20cf3561a4fef8b5e5d2d759065ee0a2be3eb75d44c9",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/maintenance/__tests__/log-settings.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "82db093210210e3985c8e45ce2cac1371565b3e006d4536ff6813ed0fc1d61c3",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/maintenance/log-settings-section.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "3edb4253e1de669c822a6d901e07322f75635ea4cf4582d3093e4a217a1284a7",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/models/__tests__/plugin-pricing.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "fe0628ae36e74be1b139c1be3f59d66775d84a82f4fa5b6f2c9125c04d2d9fd6",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/models/model-pricing-core.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "aed04cdd0bfef7757413a667b1b7cce93b4d65f038bdb76fbaf6e8649d7922b4",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/models/model-pricing-sheet.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "cd2fff30f96d8ff2c7407705308c13c55d2bbce093138752368a1858a81fd89a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/models/task-plugin-pricing-editor.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "31f16d61e6bc89ebdc7a43f91e3fd39cb3468cbd0b0de2fc6a2a796b1c22af82",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/operations/index.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "e7692d3c4c65f79c08ffa141925ba326f85a63857f73985568af2960684dad29",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/operations/section-registry.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "81acce390e8d8ce91c55de04c79464cbe7f9b3010f619c61100f82e6c8f12925",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/request-policies/__tests__/settings.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "037c13bbbf0995c7642c8de25752ef4b8bad9097839e71e3f34cf7474fa78c30",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/request-policies/defaults.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "0ba5fa228bbecb29f8937e8049796ff207f11511fa7b23429b43fc5bc5ff2859",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/request-policies/request-checks-section.tsx",
+      "upstream_change": "D",
+      "upstream_sha256": null,
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/request-policies/section-registry.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "55416400fe6389d650d7a4ec2c7e025b4241f080845746eb2cca42ddeb6774a0",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/security/index.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "97aab7d26cd5ef4c6b78545af408947ea5451456ba3c62e4cf3e4ac2ef1c5964",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/system-settings/types.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "83ced9c7d106a25694d3103835eab6abccf552f51b3520a1a70e1f79bb8e24dd",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/marketplace-install-dialog.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "792debf48321d832a93729d9337645b87d4d7019524ac181223805aea14eee79",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/marketplace-panel.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "bc007f83238a63ef5e857c5f409344d244b437f1f50c6a5fc4c724374e0415f5",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/marketplace-plugin-logo.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "8bbfb29f74df2663df14b6b7e49e40caa5cc201dc612073da180ec869f6667fe",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/marketplace.test.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "4b424bc91f7b92e71b54475ac8b6e86b61973bcb8b3b64a83e28c034d0c57eae",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-card.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "d804dffa54a480f594a8723f73bc1a7df847953826382b4e4d3e1aec5a3a7445",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-changelog-panel.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "057a8a21f32353aaf049b7d9b63f806f66ad2c6cc0bd73aa51db2b5915bebd28",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-changelog.test.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "f58a9678a16b635b4f330ec1e9f65d91706e40caf85b6df3783e88be0ed0b1c5",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-detail-sheet.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "9581d18d474afd0638f9e5ff1c80428ff6f71722131918e01117888f84d257d6",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-icon-file.test.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "9f8da1a5b51555a3cc1db0a3f0d4f940c2756fef55a5d2c62c89af8043d21c67",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-kinds.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "d92393371fd0bb4fb61162c4a744f912f6f527b760f00962f21f897e0f440d0f",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-meta-preview.test.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "2d8512f8bbd75c5982512ad1c801cb98d12fa0aee65d70241c10266c82b43aff",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-readme-section.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "9dc19ac862f719c802689e71aeefaff98396741135555b1ebc1767dc9ae07249",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-readme.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "f2ccc9a995d33ec49de35b6aa29f7855e2b6e71ec8d7a0927ed304580f0876d4",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugin-site.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "a49b1596e7228d3081bdcb193f76ae640984f509a68cbbf50d7d34dc0dd46211",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/plugins-table.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "d1f4a9dea80a65c57d97f18b9a35245f85703a8f654c99d2a3f85a780cdb4655",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/request-plugin-config-form.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "8ae83a28cdebba01c68f2683c4c89b2d4bdd89b861de0447378a815ad0a2750d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/request-plugin-dry-run.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "da5fac053c8920840cc5ba4697371e414490619f46579b1c085fbcb53917fdfc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/request-plugin-run-line.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "fbc9dabd5f4fc7e3d07cfe16bc94373b60f7a036c36b5ecd9981973869f15aba",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/request-plugin-samples.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "f30cbb45e86e9e827e74fc243b1902925ab1c7174b72af5f9d99b5bbe786c2e3",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/request-plugin-try-panel.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "62c8928625b1e8033dfbe9ebce421627f98d16179d98608a5c4689b2bc4130a9",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/text-diff.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "7d561299e2acf05930ab66d151429fc16c152351865af76dad4e3e90eb1a5e2a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/upload-dialog.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "244428ff32fc9fcdebe229a5a63ced26cdeab48159e6d0042527c1309ec6abc2",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/__tests__/website.test.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "f6168c4b0822546a4e635d707f32776a8723ab2371d4527fabffb16a1a4e4829",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/api.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "2a241641556fd15eb19db98fa0fabe1b398ecf57dcad1ca1c6d6fd4970ef7ef3",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/community-plugin-reach.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "f69bd127a433588c2fc7ddc57be21e85221d8b14b6e2570c5d51bd10f7b0e328",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/marketplace-capabilities.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "5ad0b08c7cf1877c51d181ca0fba1e9808304ee2fd4d7e93df4dd9be6d670d89",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/marketplace-install-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "5a5d26dc5b30d37659185dfddc45c59d9eb634c4e3a46c73ed264be27b1a926a",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/marketplace-panel.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "362379dbff63658470b3863b296fdab485ec48c22595ec1d704e7acfff1c02ce",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/marketplace-plugin-card.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "8db2c8b2b8a8b23ad4eca27da10c0c1fcef61b83850d47b08922d19281027d09",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/marketplace-source-menu.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "a74478c780616592abcfab0a92c14b1a827d42b41bbd54e74745555442b27101",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/marketplace-sources-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "363c7e282a32a0bf818f36b8f2a05f28392c1cc9a275ce00408bff2310e0eacc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-card.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "9870ccb813bc36be3f09feb3544c4e1b75f56d6f7e8961e92576d4d72880c07c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-changelog-panel.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "6094bce8cff8f272dadb84d6c0556e5517f9d236ed927d788ee10dba45e18af4",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-code-lookup.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "1eec5ca0fe6a0fc782eb1a07fd3c258e5d0a19da4dd675e055af43bf0311583b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-detail-sheet.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "7ee5db03d379f0b01f94a75c070cbf8d3fb26b329376871515060dc5db31663f",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-integrity-check.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "00bc5b207294aac6de172aebbd2525c1db1f6b86bd6742466d79a1fd0c2c66fa",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-kind-switch.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "81d23aa79ef7d8415893f9baec8be7305729b15d3e6c002772e775417be87915",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-metadata-card.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "94135b3aab65310914b9241b8bce89edae7f3819211a2f38a041c63505202f58",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-parts-badges.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "78ed1f296a1adf70b305ff5afa170e74fdea21abf92ca2cd36f321307aabf9e8",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-readme-section.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "a0e89613206e2c94f1c55cfd712553be796eaf4b25dfb7681a8a97dd5ac1524c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-relay-routes.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "cf9fd30175cdc83c06fbbd384082c3d85ef23486b028b5576cf24ce3770a385e",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-transform-section.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "0202d0350c8bc83fc19b0653a318448adc539810814ab24c31e314e69e18afb1",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugin-url-import-field.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "59216fbc6ee163f12ade73415f07f6685850b8fa395576af9f86ce7d51b610d2",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/plugins-table.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "5f874b2f38631d4d25fc8870525a4328b2ff5373d5f5367d1a459d66b38e9126",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-config-field.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "5240e1f93b1f363471f27862ab8466374776ccc055b685dfaae0b2acd9b021dc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-config-form.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "22f449660de57fc04b2db95c81664b7e3c6ec7e901216bdfcd4bac5d606b9faa",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-config-model-values.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "0255d853d69bfdc3f8fbf4e8d208b0d06dbf1ed9836e2f0d0f151078189ac3d9",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-config-rows.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "fefadca4e1c2e1a7146d0edd605c4844d781b0db8f11760d26d7f70856b2fa5b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-dry-run-dialog.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "d10b1bd4a45c4881c61456c3515d8e7163441f2030965627ac88f9cf92e5a78f",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-field-hint.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "ebecdbb5ec41c9f1cebc4d6b00379e7ac7b4be58ae81a41a583c32c3fbab1e26",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-instance-editor.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "ffbf5029807b4fc20b05193187537fc9ade6a56fc860876bd29f89f1f5972ad3",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-picker.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "e44920ae2fa228345ca51739af0c02d2b007830ba765b3f2195200647b8e2d9e",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-summary.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "5283183463856f9204e2e4e5bf9c701df5b27ba29144bb57d2182e4fb634609b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/request-plugin-try-panel.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "5799ec54a677a4cab62a806a072ce3f3326b12e41b3dc8181f7fabdd1b899058",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/revoked-plugin-warning.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "94bb69b4b7baba3cbd848ed022a305b1a9af0a39b91c19cec1b1bef860745680",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/source-diff.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "55f7ed5d427fac85b21deca30a2e8c09ea85d8a1a02def2fcc6e86497f1dee00",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/components/upload-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "ceda98a8997f7c7fbbd82822ab912ca347be602c1180757875a9bfc25272bd87",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/index.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "321399a79fc8cae1231449c5efd328328948c44a4f8e2c13adccee0d2f8c33fc",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/marketplace.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "02100692925ae17cc49ebcb6ea6062bc84ba332299cec366a3f2974f07785177",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-changelog.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "9c0dd4f1273d5a8c40982e03cfdb273e7aeedd5075083b43abe66ae00759aa2b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-document-problem.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "61e993495a7197a9ce93a08106810b91b6c70703439dfc9ecb426725f0733a70",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-document.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "797c8ca71edd3db090546c54265d40c79488ac0ed5ce4fdcc6a95b31865935f4",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-icon-file.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "e27c61a24d71ca429e7f73a7eb73045bb4fd8e9ded6eaebff1e09748d7f2f4db",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-kinds.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "12acb92b99ed4d3f1f4ff486755aff7f61f49467e8326447719aff9c735ff6a3",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-meta-preview.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "c39d8072c6df13513b46118e67921ab4955dfd9d3ddc817c90f9833f0f367309",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-name.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "f1e8fff37264ced2e3a6438718a06838ca0eee4e987565a9cab391a2dfed2269",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-parts.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "478ccba09c98676d4d6701b80328c7d4579fad37ffebb70c43dedca6891cfee5",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-readme.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "efc81ccf343db322ead4fb03d41ff24cddaef07500930687e9488b12a58afb6c",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-site.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "37631c3f6738d5468328e21b2e8532c521331b68500af9d2b483b92b085e2b89",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/plugin-url.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "073540c121ea557c1d793ed6d42b7a3a0b9f61ac69a1cf13463b4a718acea6ab",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/request-plugin-samples.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "295520bf3616596df70a9772d2c85eededd9a2df9f7a407f1893f4a47155e6a6",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/request-plugins.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "65bfa7c3faa3706f1118e341f88b065b43fa2df8b4bf7fb8efe17cfab6e63dc9",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/lib/text-diff.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "096f642bff1cfecfca65ce7243b908f0d2360d50d3aa22a7f48a6ff2b6520458",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/task-plugins/types.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "e506fb7487bbb9ed6e60fb0ba9524df3e20e1439cb7e454caa22efae2d484a87",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/usage-logs/components/__tests__/request-plugin-record.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "55bb677a6fe6e9d7a367f3e9b653ed3ad07949adcc782a69c5d07b2f5eef8ef7",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/usage-logs/components/columns/common-logs-columns.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "1d3ac21221463aeea61edb046372e3bca7cde167a108a8980a84f11d4d793a65",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/usage-logs/components/dialogs/details-dialog.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "5ffbb6fcd28ddf620c12127c440fbfc08f35cb1b1c0ed0c2e5a220d839778ec0",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/usage-logs/components/request-plugin-record.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "2f3cd0502a62081696a24767f1b64658deec00de3a50d9078299287b139a698f",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/usage-logs/types.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "dc8cef28164de28d220be56cc688d17148ae84936851a18fd44110accbf65465",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/users/components/__tests__/password-feedback.test.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "fd77dec1d36dc1b9b1baabfe2794ff9513681f1a971ac45e59171a8651922105",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/features/users/components/users-mutate-drawer.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "c69cbd84c542be31bd0eaf7cbdbf60ff4e1decaf4485967f60ca091beca1b4b6",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/hooks/use-sidebar-data.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "ac32e7adfa080c18981c159933d204a41d37b35ed2523eb6e3845e833bac2317",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/en.json",
+      "upstream_change": "M",
+      "upstream_sha256": "65e64b1e8f03c7566bf16194e8ac5d14bf83ca0b5bd464cee634b59f9506d807",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/fr.json",
+      "upstream_change": "M",
+      "upstream_sha256": "08394ed842bb393895c103ca81a37d1cacfa08d5ac5ff5c5b8212e493a15de2d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/ja.json",
+      "upstream_change": "M",
+      "upstream_sha256": "7fa27b1264ddcd9de6bac3a490f13df42d854b32d3a0e35d4275be58927098dd",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/ru.json",
+      "upstream_change": "M",
+      "upstream_sha256": "288c2815dd2da6e361925f74e37c1c66ff940a16ba7e3949245000c981d7b1e4",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/vi.json",
+      "upstream_change": "M",
+      "upstream_sha256": "c19bbf19ebc64ed674fcc7ece3e4e161a916d80c5484db02d87557fad37c219d",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/zh-TW.json",
+      "upstream_change": "M",
+      "upstream_sha256": "179f49e83b2b47f1ad0fc4fa02372286b9fd8e0172f5a6892ac69763c9f2066b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/locales/zh.json",
+      "upstream_change": "M",
+      "upstream_sha256": "fa9240f05ce3fc0d4440470e3e0145a73a5d21494b45e8bad09c204830bcebb2",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/i18n/static-keys.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "e03d3b9ffde3c23c90414e6c6573691eb7df436478065f3c9c636a73969a4922",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/lib/__tests__/format-bytes.test.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "047608f91288c5889907fc6590652e66ef41c8f5ca9f2a6308107b3c2c0024c7",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/lib/format.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "54d84548b610e97027e394bdb3887edecd26bb1b0716e479b6ca56df24cfb0d0",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/lib/password-policy.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "3f28ad1fb790800f38050b1864fb620148a37cd6cb2018871b1d4c3d9e658115",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/lib/query-client.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "5efff7be221797301cc502d49124374cb5e3ce2ee1d0bf0843de7b61f7ebd004",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/routeTree.gen.ts",
+      "upstream_change": "M",
+      "upstream_sha256": "decbfa9e26cb04c2612a3070f6c2f00f9914df08a4e34621f5c5d5d34b10df32",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/routes/_authenticated/oauth/plugin/$key/callback.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "948f7337495a3fa94a5e551df74edbffdb2abbf8ad3197f68a0031b87f27f2cf",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/routes/_authenticated/request-processing/index.tsx",
+      "upstream_change": "A",
+      "upstream_sha256": "5aa97cf336a923ea374e458f7ec6171f9e298ecd3b0bc4b36cfe9322adc267cd",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/routes/_authenticated/system-settings/request-policies/$section.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "a96a390eb318af1eba169dd2e4ffcc13343aa512cad53b3356a3621fd7360f39",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/routes/_authenticated/system-settings/security/$section.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "eed339f7f4952b8922b484352ed32ef5d6bc2630fba2fef5771bc528ddf21cac",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/routes/_authenticated/task-plugins/index.tsx",
+      "upstream_change": "M",
+      "upstream_sha256": "3786768210d7ea805b1de60e4238fa05fb978b36d982389167a93fbec3f2cf4b",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    },
+    {
+      "path": "web/src/stores/plugin-site-store.ts",
+      "upstream_change": "A",
+      "upstream_sha256": "8eb6fbeb8f82a2d0c6a7af3a79df6f5ed0637868cfc3c46f1dd78b4f57b5b1e9",
+      "local_sha256": null,
+      "disposition": "vue_equivalent",
+      "basis": "Vue行为映射见 frontend/UPSTREAM_ADAPTATION_B20.md；不恢复React源码。"
+    }
+  ]
+}

@@ -6,4 +6,6 @@
 
 GMPay 使用独立 `GmpayConfigSecret` 配置项，通过专用 Root 会话接口保存；内容为 `pay_address`、`merchant_id`、`secret_key`、`assets` 和 `enabled`。通用 option 列表不得暴露其密钥，专用读取只给 `has_secret`。停用阻止新下单，已有单仍按绑定商户版本接收合法通知。
 
+易支付支持 MD5/RSA：RSA 商户私钥和平台公钥先分别校验保存，切换签名方式时校验完整配置，私钥不回显。
+
 原生金额计算与 GMPay CNY 支付合同分别见[账务 API](API.md)和[GMPay](GMPAY.md)。首次采用新核心时，用户、渠道、密钥、价格和商户全部重新配置，不从旧库导入；实际外部支付与回调迁移须先满足旧订单归零门槛。

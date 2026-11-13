@@ -1,13 +1,11 @@
 package model
 
 import (
-	"bytes"
 	"errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,20 +13,19 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// 写库失败时 UpdateOption 返回错误且不改内存；读库失败时同步保留内存配置并记录错误。
+// 写库失败时 UpdateOption 返回错误且不改内存；读库失败时同步保留内存配置并返回错误。
 func TestOptionDatabaseFailuresKeepMemory(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "options.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Option{}))
-	oldDB, oldName, oldWriter := DB, common.SystemName, gin.DefaultErrorWriter
+	oldDB, oldName := DB, common.SystemName
 	common.OptionMapRWMutex.Lock()
 	oldMap := common.OptionMap
 	common.OptionMap = map[string]string{"SystemName": "kept-name"}
 	common.OptionMapRWMutex.Unlock()
-	var logs bytes.Buffer
-	DB, common.SystemName, gin.DefaultErrorWriter = db, "kept-name", &logs
+	DB, common.SystemName = db, "kept-name"
 	t.Cleanup(func() {
-		DB, common.SystemName, gin.DefaultErrorWriter = oldDB, oldName, oldWriter
+		DB, common.SystemName = oldDB, oldName
 		common.OptionMapRWMutex.Lock()
 		common.OptionMap = oldMap
 		common.OptionMapRWMutex.Unlock()
@@ -41,9 +38,8 @@ func TestOptionDatabaseFailuresKeepMemory(t *testing.T) {
 	assert.Equal(t, "kept-name", common.SystemName)
 	assert.Equal(t, "kept-name", common.OptionMap["SystemName"])
 
-	loadOptionsFromDatabase()
+	require.Error(t, LoadOptionsFromDatabase())
 	assert.Equal(t, "kept-name", common.OptionMap["SystemName"])
-	assert.Contains(t, logs.String(), "failed to load options from database")
 }
 
 // 键不存在时 FirstOrCreate 先插入空值行；随后 Save 失败要整体回滚，否则下一轮同步会把
@@ -96,7 +92,7 @@ func TestUpstreamSyncOptionPartialReadFailureDoesNotPublish(t *testing.T) {
 			tx.AddError(errors.New("read failed after partial rows"))
 		}
 	}))
-	loadOptionsFromDatabase()
+	require.Error(t, LoadOptionsFromDatabase())
 	assert.Equal(t, "runtime-kept", common.SystemName)
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()

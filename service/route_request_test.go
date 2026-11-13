@@ -178,3 +178,32 @@ export function buildContentRequest() { return {}; }
 		require.Equal(t, 22, p.Entries[0].ChannelID, path)
 	}
 }
+
+func TestRoutePreviewProviderUsesDeclaredPathAndModel(t *testing.T) {
+	db := setupRouteTest(t)
+	key := "preview-provider"
+	_, err := jsplugin.DefaultRegistry.Register(`export const meta = {
+	  apiVersion: 1, key: "preview-provider", name: "Preview provider", version: "1.0.0", author: {name: "Test"},
+	  relay: [{incoming_path: "/v1/chat/completions", upstream_path: "/chat", models: ["provider-model"]}]
+	};`, jsplugin.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(key)) })
+	createRouteChannel(t, db, 11, "provider-model,other-model")
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 11).Updates(map[string]any{
+		"type": constant.ChannelTypeTaskPlugin, "setting": `{"task_plugin_key":"preview-provider"}`,
+	}).Error)
+	for _, testCase := range []struct {
+		path, model string
+		eligible    bool
+	}{
+		{"/v1/chat/completions", "provider-model", true},
+		{"/v1/embeddings", "provider-model", false},
+		{"/v1/chat/completions", "other-model", false},
+	} {
+		preview, err := PreviewTokenRouting(context.Background(), 17, 7, TokenRoutePreviewQuery{Path: testCase.path, Model: testCase.model})
+		require.NoError(t, err)
+		require.Len(t, preview.Entries, 1)
+		require.Equal(t, testCase.eligible, preview.Entries[0].Eligible, "%s %s", testCase.path, testCase.model)
+		require.Zero(t, ChannelInFlight(11), "preview does not acquire capacity")
+	}
+}

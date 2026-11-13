@@ -1,4 +1,6 @@
+import { passwordFeedback } from '../../passwordFeedback'
 export default {
+  passwordFeedback: passwordFeedback['en'],
   common: {
     search: 'Search',
     all: 'All',

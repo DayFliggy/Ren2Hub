@@ -46,6 +46,17 @@ const section = 'rounded-xl border border-[var(--border-subtle)] p-4'
 
 <template>
   <div class="min-w-0 sibling-space-y-4">
+    <section v-if="meta.relay?.length" :class="section">
+      <h3 class="mb-2 font-medium">{{ t('pluginExtensions.provider') }}</h3>
+      <div
+        v-for="route in meta.relay"
+        :key="route.incoming_path"
+        class="break-all font-mono text-xs"
+      >
+        {{ route.incoming_path }} → {{ route.upstream_path
+        }}<span v-if="route.converter"> · {{ route.converter }}</span>
+      </div>
+    </section>
     <section :class="section" :aria-label="t('taskPlugins.pluginMetadata')">
       <h3 class="mb-4 text-sm font-semibold">
         {{ t('taskPlugins.pluginMetadata') }}

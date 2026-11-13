@@ -67,6 +67,7 @@ export interface PricingModelContract {
   image_ratio?: number
   audio_ratio?: number
   audio_completion_ratio?: number
+  ordinary_pricing?: boolean
   billing_mode?: string
   billing_expr?: string
   billing_usage_schema?: import('@/features/pricing/types').BillingUsageSchema
@@ -132,6 +133,10 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
             : result.model_ratio === undefined
     )
       invalidResponse(endpoint)
+    if (item.ordinary_pricing !== undefined) {
+      if (typeof item.ordinary_pricing !== 'boolean') invalidResponse(endpoint)
+      result.ordinary_pricing = item.ordinary_pricing
+    }
     if (item.billing_usage_schema !== undefined) {
       if (!isRecord(item.billing_usage_schema)) invalidResponse(endpoint)
       result.billing_usage_schema =

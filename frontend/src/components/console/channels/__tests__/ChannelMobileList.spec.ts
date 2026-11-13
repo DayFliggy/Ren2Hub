@@ -127,16 +127,18 @@ describe('channel mobile list balance actions', () => {
     ])
 
     const buttons = balanceButtons(wrapper)
-    expect(buttons).toHaveLength(2)
+    expect(buttons).toHaveLength(3)
     for (const button of buttons) await button.trigger('click')
-    expect(refreshBalance.mock.calls.map(([item]) => item.id)).toEqual([1, 5])
+    expect(refreshBalance.mock.calls.map(([item]) => item.id)).toEqual([
+      1, 3, 5,
+    ])
     expect(groupBalanceButton(wrapper)).toBeDefined()
   })
 
   it('hides the group balance action when no channel supports it', () => {
     const { wrapper } = mountList([
       channel({ id: 2, type: 14 }),
-      channel({ id: 3, type: 61 }),
+      channel({ id: 3, type: 3 }),
     ])
 
     expect(balanceButtons(wrapper)).toHaveLength(0)

@@ -57,7 +57,7 @@ describe('TextInput string model contract', () => {
     }
   )
 
-  it.each(['compositionend', 'change'])(
+  it.each(['compositionend', 'change', 'blur'])(
     'defers Chinese composition until %s and preserves an in-progress edit during parent rendering',
     async (finish) => {
       const { wrapper, value, unrelated, warnings } = mountParent('text')
