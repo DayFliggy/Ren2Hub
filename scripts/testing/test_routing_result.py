@@ -174,3 +174,18 @@ class ReleaseExemptionTests(unittest.TestCase):
                 self.assertIsNone(release_exemption(report, routing))
         with self.subTest(deviation='object_case_name'):
             self.assertIsNone(release_exemption(diagnostics, object_case_name))
+
+    def test_registering_a_probe_does_not_automatically_approve_an_exemption(self):
+        from unittest.mock import patch
+        import routing_result as rules
+        from diagnostics import summarize
+
+        diagnostics, routing = self.reports()
+        added = rules.Probe('router', 'TestNewUpstreamContract', 'new_probe_test.go', 'unapproved')
+        with patch.object(rules, 'DIAGNOSTIC_PROBES', (*rules.DIAGNOSTIC_PROBES, added)):
+            self.assertFalse(rules.diagnostics_complete(diagnostics))
+            diagnostics['cases'].append({'name': added.name, 'status': 'known_upstream',
+                                         'upstream': 'QuantumNous/new-api', 'diagnosis': added.fingerprint})
+            diagnostics.update(summarize(diagnostics['cases'], diagnostics['preflight']))
+            self.assertTrue(rules.diagnostics_complete(diagnostics))
+            self.assertIsNone(rules.release_exemption(diagnostics, routing))

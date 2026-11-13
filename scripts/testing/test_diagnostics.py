@@ -171,6 +171,33 @@ class ClassificationTests(unittest.TestCase):
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_generated_report_matches_independently_loaded_release_rules(self):
+        import importlib.util
+
+        # 发布器按文件加载规则，不导入诊断执行器，也不要求把规则登记到 sys.modules。
+        spec = importlib.util.spec_from_file_location(
+            'standalone_release_rules', Path(d.__file__).with_name('routing_result.py'))
+        rules = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rules)
+
+        def execute(argv, cwd, path, env, timeout):
+            path.write_text('go version go1.26.10 linux/amd64\n' if argv[1] == 'version' else '')
+            return d.CommandResult(1 if argv[1] == 'test' else 0, path)
+
+        def classify(probe, result, source):
+            return {'name': probe.name, 'status': 'known_upstream',
+                    'upstream': 'QuantumNous/new-api', 'diagnosis': probe.fingerprint}
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(d, 'command', side_effect=execute), patch.object(d, 'classify', side_effect=classify):
+                report = d.run(root, root / 'evidence', {})
+            self.assertTrue(rules.diagnostics_complete(report))
+            # 删除执行器生成的一个探针，即使重新汇总也不能变成完整报告。
+            report['cases'] = report['cases'][1:]
+            report.update(d.summarize(report['cases'], report['preflight']))
+            self.assertFalse(rules.diagnostics_complete(report))
+
     def test_exact_whitelist_excludes_payments_and_rejects_suffix_matches(self):
         payment_names = ('TestUpstreamSyncStripeRetriesTransientWalletFailure',
                          'TestUpstreamSyncWaffoAcknowledgesOnlyPermanentFailures',

@@ -13,67 +13,12 @@ import signal
 import subprocess
 import time
 
+from routing_result import DIAGNOSTIC_PROBES as PROBES, Probe, RELEASE_EXEMPT_BLOCKED as BLOCKED, STATUSES
+
 GO = 'go'
 MODULE = 'github.com/QuantumNous/new-api/'
-STATUSES = ('pass', 'fail', 'known_upstream', 'blocked', 'not_run')
-
-
-def _verify_probe_registry():
-    """探针清单与 routing_result.DIAGNOSTIC_PROBES 必须逐项一致，发布复算不能另有一份。"""
-    from routing_result import DIAGNOSTIC_PROBES
-    actual = tuple((probe.package, probe.test, probe.fingerprint) for probe in PROBES)
-    if actual != DIAGNOSTIC_PROBES:
-        raise RuntimeError('diagnostic probe registry diverged from routing_result.DIAGNOSTIC_PROBES')
-BLOCKED = ('outbound_id', 'plugin_action', 'context_mapping', 'platform', 'billing', 'retry')
 N2_MARKER = ('known_upstream=N2; blocker=nil_ChannelMeta_in_ResolveOriginTask; '
              'blocked=' + ','.join(BLOCKED))
-
-
-@dataclass(frozen=True)
-class Probe:
-    package: str
-    test: str
-    file: str
-    fingerprint: str
-    leaves: tuple[str, ...] = ('',)
-    tag: str = 'upstream_probe'
-
-    @property
-    def name(self):
-        return self.package + '/' + self.test
-
-
-# 完整测试名是合同；不能把支付、余额或其他 TestUpstream* 吸收入等待列表。
-PROBES = (
-    Probe('middleware', 'TestUpstreamPluginOriginChannelStorageFailureIsPrivate500',
-          'task_origin_upstream_probe_test.go', 'plugin_storage'),
-    Probe('relay', 'TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate',
-          'task_upstream_probe_test.go', 'A7'),
-    Probe('relay', 'TestUpstreamRemixResolvesVendorTaskID', 'task_upstream_probe_test.go', 'N1'),
-    Probe('relay', 'TestUpstreamRemixAdaptorPreservesAction', 'task_upstream_probe_test.go', 'N3'),
-    Probe('router', 'TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext',
-          'video_remix_upstream_probe_test.go', 'N2'),
-    Probe('router', 'TestUpstreamNativeRemixRouteLegacyTaskUsesPublicIDAndDataRatios',
-          'video_remix_upstream_probe_test.go', 'N2', ('1', '55')),
-    Probe('router', 'TestUpstreamNativeRemixRouteOnTaskPluginChannel',
-          'video_remix_upstream_probe_test.go', 'N2'),
-    Probe('router', 'TestUpstreamNativeRemixRouteChecksKeyModelLimitAgainstOriginModel',
-          'video_remix_upstream_probe_test.go', 'A5'),
-    Probe('router', 'TestUpstreamNativeRemixRouteRejectsOriginChannelOfAnotherPlatform',
-          'video_remix_upstream_probe_test.go', 'N2', (
-              'kling_task_on_a_channel_now_typed_openai',
-              'sora_task_on_a_plugin_channel_rebound_to_kling')),
-    Probe('router', 'TestUpstreamNativeRemixRouteRetryDoesNotCompoundInheritedRatios',
-          'video_remix_upstream_probe_test.go', 'N2'),
-    Probe('router', 'TestUpstreamMidjourneyContinuationOfMissingOrForeignTaskIsNotFoundFirst',
-          'mj_origin_upstream_probe_test.go', 'mj_priority', tuple(
-              owner + '/' + condition for owner in ('missing', 'foreign')
-              for condition in ('empty_manual_list', 'all_candidates_full', 'model_not_allowed'))),
-    Probe('router', 'TestUpstreamMidjourneyContinuationLookupFailureIsPrivate500',
-          'mj_origin_upstream_probe_test.go', 'mj_storage'),
-)
-
-_verify_probe_registry()
 
 
 @dataclass(frozen=True)

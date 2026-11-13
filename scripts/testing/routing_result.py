@@ -1,22 +1,52 @@
 """路由审计的结果合同；已知上游缺陷不能计为通过。"""
+from typing import NamedTuple
+
 STATUSES = ('pass', 'fail', 'known_upstream', 'blocked', 'not_run')
 
-# 与 diagnostics.PROBES 逐项一致的探针清单；(package, test, fingerprint)。
-# diagnostics.py 在导入时核对，改一边而不改另一边会在测试启动时失败。
+# 执行器与发布复核共用完整清单；本模块按路径独立加载，只依赖标准库。
+class Probe(NamedTuple):
+    package: str
+    test: str
+    file: str
+    fingerprint: str
+    leaves: tuple[str, ...] = ('',)
+    tag: str = 'upstream_probe'
+
+    @property
+    def name(self):
+        return self.package + '/' + self.test
+
+
+# 完整测试名是合同；不能把支付、余额或其他 TestUpstream* 吸收入等待列表。
 DIAGNOSTIC_PROBES = (
-    ('middleware', 'TestUpstreamPluginOriginChannelStorageFailureIsPrivate500', 'plugin_storage'),
-    ('relay', 'TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate', 'A7'),
-    ('relay', 'TestUpstreamRemixResolvesVendorTaskID', 'N1'),
-    ('relay', 'TestUpstreamRemixAdaptorPreservesAction', 'N3'),
-    ('router', 'TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext', 'N2'),
-    ('router', 'TestUpstreamNativeRemixRouteLegacyTaskUsesPublicIDAndDataRatios', 'N2'),
-    ('router', 'TestUpstreamNativeRemixRouteOnTaskPluginChannel', 'N2'),
-    ('router', 'TestUpstreamNativeRemixRouteChecksKeyModelLimitAgainstOriginModel', 'A5'),
-    ('router', 'TestUpstreamNativeRemixRouteRejectsOriginChannelOfAnotherPlatform', 'N2'),
-    ('router', 'TestUpstreamNativeRemixRouteRetryDoesNotCompoundInheritedRatios', 'N2'),
-    ('router', 'TestUpstreamMidjourneyContinuationOfMissingOrForeignTaskIsNotFoundFirst', 'mj_priority'),
-    ('router', 'TestUpstreamMidjourneyContinuationLookupFailureIsPrivate500', 'mj_storage'),
+    Probe('middleware', 'TestUpstreamPluginOriginChannelStorageFailureIsPrivate500',
+          'task_origin_upstream_probe_test.go', 'plugin_storage'),
+    Probe('relay', 'TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate',
+          'task_upstream_probe_test.go', 'A7'),
+    Probe('relay', 'TestUpstreamRemixResolvesVendorTaskID', 'task_upstream_probe_test.go', 'N1'),
+    Probe('relay', 'TestUpstreamRemixAdaptorPreservesAction', 'task_upstream_probe_test.go', 'N3'),
+    Probe('router', 'TestUpstreamNativeRemixRouteSendsUpstreamRemixWithOriginChannelContext',
+          'video_remix_upstream_probe_test.go', 'N2'),
+    Probe('router', 'TestUpstreamNativeRemixRouteLegacyTaskUsesPublicIDAndDataRatios',
+          'video_remix_upstream_probe_test.go', 'N2', ('1', '55')),
+    Probe('router', 'TestUpstreamNativeRemixRouteOnTaskPluginChannel',
+          'video_remix_upstream_probe_test.go', 'N2'),
+    Probe('router', 'TestUpstreamNativeRemixRouteChecksKeyModelLimitAgainstOriginModel',
+          'video_remix_upstream_probe_test.go', 'A5'),
+    Probe('router', 'TestUpstreamNativeRemixRouteRejectsOriginChannelOfAnotherPlatform',
+          'video_remix_upstream_probe_test.go', 'N2', (
+              'kling_task_on_a_channel_now_typed_openai',
+              'sora_task_on_a_plugin_channel_rebound_to_kling')),
+    Probe('router', 'TestUpstreamNativeRemixRouteRetryDoesNotCompoundInheritedRatios',
+          'video_remix_upstream_probe_test.go', 'N2'),
+    Probe('router', 'TestUpstreamMidjourneyContinuationOfMissingOrForeignTaskIsNotFoundFirst',
+          'mj_origin_upstream_probe_test.go', 'mj_priority', tuple(
+              owner + '/' + condition for owner in ('missing', 'foreign')
+              for condition in ('empty_manual_list', 'all_candidates_full', 'model_not_allowed'))),
+    Probe('router', 'TestUpstreamMidjourneyContinuationLookupFailureIsPrivate500',
+          'mj_origin_upstream_probe_test.go', 'mj_storage'),
 )
+
 
 # Version 1: independent inventory of the approved HTTP matrix. Removing a
 # runner case must leave a missing requirement, not silently shrink coverage.
@@ -64,7 +94,8 @@ def evaluate(cases, required, cleanup_errors=()):
 
 
 # 2026-11-13 用户批准的发布豁免，只覆盖已精确确认的上游缺陷。
-# 发布校验器按已验证的 source_sha 加载本函数复核，规则只有这一处来源。
+# 该批准集合独立于执行清单：新增探针不能自动扩大豁免范围。
+# 发布校验器按已验证的 source_sha 加载本函数复核。
 RELEASE_EXEMPT_DIAGNOSTICS = (
     ('middleware/TestUpstreamPluginOriginChannelStorageFailureIsPrivate500', 'plugin_storage'),
     ('relay/TestUpstreamRemixPreservesInheritedRatiosUnderAdaptorEstimate', 'A7'),
@@ -86,25 +117,19 @@ RELEASE_EXEMPT_ROUTING_BLOCKED = (
 )
 
 
-class _Probe:
-    def __init__(self, package, test, fingerprint):
-        self.name = package + '/' + test
-        self.fingerprint = fingerprint
-
-
 # 诊断 preflight 的固定项：工具链与每个探针的 vet。运行中源码变化才会追加完整性项。
 DIAGNOSTIC_PREFLIGHT = ('go_toolchain',) + tuple(
-    'vet-' + 'upstream_probe' + '-' + package for package in dict.fromkeys(
-        item[0] for item in DIAGNOSTIC_PROBES))
+    'vet-' + tag + '-' + package for tag, package in dict.fromkeys(
+        (probe.tag, probe.package) for probe in DIAGNOSTIC_PROBES))
 
 
-def diagnostics_complete(diagnostics, probes=None):
+def diagnostics_complete(diagnostics):
     """复算诊断报告的完整性，不信任报告自带的汇总字段。
 
     按集合核对而不是按顺序：真实报告把 blocked 项紧跟在对应探针后面，
     与清单顺序不同。preflight、状态与 blocked 关联逐项核验。
     """
-    probes = probes or tuple(_Probe(*item) for item in DIAGNOSTIC_PROBES)
+    probes = DIAGNOSTIC_PROBES
     if not isinstance(diagnostics, dict) or not probes:
         return False
     cases = diagnostics.get('cases')
@@ -212,15 +237,6 @@ def release_exemption(diagnostics, routing):
         return None
     return {'diagnostics': [list(item) for item in RELEASE_EXEMPT_DIAGNOSTICS],
             'routing': KNOWN_UPSTREAM['upstream_native_remix_probe']['diagnosis']}
-
-
-def registered_probes():
-    """登记的诊断探针，字段与 diagnostics.PROBES 一致。
-
-    内联而不是导入：发布校验器按文件路径加载本模块，不能依赖 diagnostics 的导入路径。
-    diagnostics.py 启动时核对两边一致，探针清单不能在这里单独放宽。
-    """
-    return tuple(_Probe(*item) for item in DIAGNOSTIC_PROBES)
 
 
 def routing_complete(routing):
