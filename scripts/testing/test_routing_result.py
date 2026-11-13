@@ -160,10 +160,17 @@ class ReleaseExemptionTests(unittest.TestCase):
         unknown_status['cases'][0]['status'] = 'unexpected'
         dangling_block = copy.deepcopy(diagnostics)
         next(case for case in dangling_block['cases'] if case.get('status') == 'blocked')['blocked_by'] = 'not-a-probe'
+        # 名字不是字符串时必须拒绝而不是抛 TypeError。
+        list_name = copy.deepcopy(diagnostics)
+        list_name['preflight'][0]['name'] = ['not', 'a', 'string']
+        object_case_name = copy.deepcopy(routing)
+        object_case_name['cases'][0]['name'] = {'not': 'a string'}
         named = (('duplicated', duplicated), ('empty_preflight', empty_preflight),
                  ('dropped_pass', dropped_pass), ('nested', nested), ('stale_counts', stale_counts),
                  ('failed_preflight', failed_preflight), ('blocked_preflight', blocked_preflight), ('unknown_status', unknown_status),
-                 ('dangling_block', dangling_block))
+                 ('dangling_block', dangling_block), ('list_name', list_name))
         for label, report in named:
             with self.subTest(deviation=label):
                 self.assertIsNone(release_exemption(report, routing))
+        with self.subTest(deviation='object_case_name'):
+            self.assertIsNone(release_exemption(diagnostics, object_case_name))

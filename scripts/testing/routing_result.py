@@ -146,7 +146,8 @@ def diagnostics_complete(diagnostics, probes=None):
         if case.get('reason') != 'origin_resolution_panic':
             return False
     preflight_names = [item.get('name') for item in preflight]
-    if len(preflight_names) != len(set(preflight_names)):
+    # 名字必须是字符串；列表或对象进集合会抛 TypeError，发布路径上应拒绝而不是异常。
+    if not all(isinstance(name, str) for name in preflight_names) or len(preflight_names) != len(set(preflight_names)):
         return False
     if not set(DIAGNOSTIC_PREFLIGHT) <= set(preflight_names):
         return False
@@ -233,7 +234,8 @@ def routing_complete(routing):
     if not isinstance(cases, list) or not all(isinstance(case, dict) for case in cases):
         return False
     names = [case.get('name') for case in cases]
-    if len(names) != len(set(names)) or set(names) != set(REQUIRED_CASES):
+    # 名字必须是字符串；列表或对象进集合会抛 TypeError，发布路径上应拒绝而不是异常。
+    if not all(isinstance(name, str) for name in names) or len(names) != len(set(names)) or set(names) != set(REQUIRED_CASES):
         return False
     recomputed = evaluate(cases, REQUIRED_CASES, routing.get('cleanup_errors') or ())
     return all(routing.get(key) == recomputed[key]
