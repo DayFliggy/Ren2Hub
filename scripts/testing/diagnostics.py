@@ -282,6 +282,7 @@ def classify(probe, result, origin_source=''):
 
 
 def summarize(cases, preflight=()):
+    """逐项判定汇总；完整性复算在 routing_result.diagnostics_complete，两边的退出码规则一致。"""
     names = [case['name'] for case in cases]
     known = {case['name'] for case in cases if case.get('status') == 'known_upstream'}
     invalid = not cases or len(names) != len(set(names))

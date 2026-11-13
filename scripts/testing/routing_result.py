@@ -92,10 +92,17 @@ class _Probe:
         self.fingerprint = fingerprint
 
 
+# 诊断 preflight 的固定项：工具链与每个探针的 vet。运行中源码变化才会追加完整性项。
+DIAGNOSTIC_PREFLIGHT = ('go_toolchain',) + tuple(
+    'vet-' + 'upstream_probe' + '-' + package for package in dict.fromkeys(
+        item[0] for item in DIAGNOSTIC_PROBES))
+
+
 def diagnostics_complete(diagnostics, probes=None):
     """复算诊断报告的完整性，不信任报告自带的汇总字段。
 
-    通过项与未运行项在汇总里不可区分，所以这里按探针清单逐项点名。
+    按集合核对而不是按顺序：真实报告把 blocked 项紧跟在对应探针后面，
+    与清单顺序不同。preflight、状态与 blocked 关联逐项核验。
     """
     probes = probes or tuple(_Probe(*item) for item in DIAGNOSTIC_PROBES)
     if not isinstance(diagnostics, dict) or not probes:
@@ -106,22 +113,51 @@ def diagnostics_complete(diagnostics, probes=None):
         return False
     if not all(isinstance(item, dict) for item in (*cases, *preflight)):
         return False
-    names = [case.get('name') for case in cases]
-    expected = [probe.name for probe in probes]
-    expected += [probe.name + '#' + assertion for probe in probes if probe.fingerprint == 'N2'
-                 for assertion in RELEASE_EXEMPT_BLOCKED]
-    if names != expected:
+    by_name = {}
+    for case in cases:
+        name = case.get('name')
+        if not isinstance(name, str) or name in by_name:
+            return False
+        by_name[name] = case
+    probe_names = {probe.name for probe in probes}
+    if not probe_names <= set(by_name):
         return False
-    if not all(isinstance(item.get('name'), str) and item.get('name') for item in preflight):
+    # blocked 项只在探针为 known_upstream 且指纹为 N2 时产生；全绿报告没有 blocked 项。
+    known = set()
+    for probe in probes:
+        case = by_name[probe.name]
+        status = case.get('status')
+        if status not in ('pass', 'known_upstream'):
+            return False
+        if status == 'known_upstream':
+            if case.get('upstream') != 'QuantumNous/new-api' or case.get('diagnosis') != probe.fingerprint:
+                return False
+            known.add(probe.name)
+    blocked_names = {probe.name + '#' + assertion for probe in probes
+                     if probe.name in known and probe.fingerprint == 'N2'
+                     for assertion in RELEASE_EXEMPT_BLOCKED}
+    if set(by_name) != probe_names | blocked_names:
+        return False
+    for name in blocked_names:
+        case = by_name[name]
+        parent = name.split('#', 1)[0]
+        if case.get('status') != 'blocked' or case.get('blocked_by') != parent or parent not in known:
+            return False
+        if case.get('reason') != 'origin_resolution_panic':
+            return False
+    preflight_names = [item.get('name') for item in preflight]
+    if len(preflight_names) != len(set(preflight_names)):
+        return False
+    if not set(DIAGNOSTIC_PREFLIGHT) <= set(preflight_names):
+        return False
+    if any(item.get('status') not in STATUSES or not isinstance(item.get('name'), str) for item in preflight):
         return False
     counts = {status: sum(case.get('status') == status for case in cases) for status in STATUSES}
-    # 本地失败与未运行在汇总里与通过项无法区分，必须逐项排除。
-    if counts['fail'] or counts['not_run']:
-        return False
-    known = counts['known_upstream']
-    code = 2 if known else 0
-    return (diagnostics.get('exit_code') == code and diagnostics.get('contracts_success') is (code != 1)
-            and diagnostics.get('counts') == counts)
+    # preflight 只有 pass 是健康状态；blocked 与 known_upstream 在这里没有定义的含义。
+    invalid = counts['fail'] or counts['not_run'] or any(item.get('status') != 'pass' for item in preflight)
+    code = 1 if invalid else (2 if counts['known_upstream'] else 0)
+    return (diagnostics.get('exit_code') == code and diagnostics.get('success') is (code == 0)
+            and diagnostics.get('contracts_success') is (code != 1) and diagnostics.get('counts') == counts)
 
 
 def release_exemption(diagnostics, routing):
@@ -187,14 +223,17 @@ def registered_probes():
 
 
 def routing_complete(routing):
-    """复算路由报告的完整性，不信任报告自带的汇总字段。"""
+    """复算路由报告的完整性，不信任报告自带的汇总字段。
+
+    按集合核对：真实执行顺序与 REQUIRED_CASES 的登记顺序不同，顺序不是合同。
+    """
     if not isinstance(routing, dict):
         return False
     cases = routing.get('cases')
     if not isinstance(cases, list) or not all(isinstance(case, dict) for case in cases):
         return False
     names = [case.get('name') for case in cases]
-    if names != list(REQUIRED_CASES):
+    if len(names) != len(set(names)) or set(names) != set(REQUIRED_CASES):
         return False
     recomputed = evaluate(cases, REQUIRED_CASES, routing.get('cleanup_errors') or ())
     return all(routing.get(key) == recomputed[key]

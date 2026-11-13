@@ -84,26 +84,26 @@ class ReleaseExemptionTests(unittest.TestCase):
     """发布豁免只在未通过项与登记的上游缺陷逐项一致时成立。"""
 
     def reports(self):
-        from diagnostics import PROBES
-        from routing_result import RELEASE_EXEMPT_BLOCKED, RELEASE_EXEMPT_DIAGNOSTICS, RELEASE_EXEMPT_ROUTING_BLOCKED
-        # 用例顺序与探针清单一致，完整性复算按清单点名。
-        diagnostics = {'preflight': [{'name': 'go_toolchain', 'status': 'pass'}],
-                       'cases': [{'name': probe.name, 'status': 'known_upstream', 'upstream': 'QuantumNous/new-api',
-                                  'diagnosis': probe.fingerprint} for probe in PROBES]}
-        diagnostics['cases'].extend(
-            {'name': probe.name + '#' + assertion, 'status': 'blocked', 'blocked_by': probe.name,
-             'reason': 'origin_resolution_panic'}
-            for probe in PROBES if probe.fingerprint == 'N2' for assertion in RELEASE_EXEMPT_BLOCKED)
-        routing = {'cleanup_errors': [], 'cases': [{'name': name, 'status': 'pass'} for name in REQUIRED_CASES]}
+        from diagnostics import BLOCKED, PROBES, summarize
+        from routing_result import DIAGNOSTIC_PREFLIGHT, RELEASE_EXEMPT_ROUTING_BLOCKED
+        # 按真实报告的组装顺序：blocked 项紧跟在对应 N2 探针后面，不按清单顺序。
+        cases = []
+        for probe in PROBES:
+            cases.append({'name': probe.name, 'status': 'known_upstream', 'upstream': 'QuantumNous/new-api',
+                          'diagnosis': probe.fingerprint})
+            if probe.fingerprint == 'N2':
+                cases.extend({'name': probe.name + '#' + assertion, 'status': 'blocked',
+                              'blocked_by': probe.name, 'reason': 'origin_resolution_panic'}
+                             for assertion in BLOCKED)
+        preflight = [{'name': name, 'status': 'pass'} for name in DIAGNOSTIC_PREFLIGHT]
+        diagnostics = {'preflight': preflight, 'cases': cases, **summarize(cases, preflight)}
+        routing = {'cleanup_errors': [], 'cases': [{'name': name, 'status': 'pass'} for name in reversed(REQUIRED_CASES)]}
         for case in routing['cases']:
             if case['name'] in KNOWN_UPSTREAM:
                 case.update(status='known_upstream', **KNOWN_UPSTREAM[case['name']])
             elif case['name'] in RELEASE_EXEMPT_ROUTING_BLOCKED:
                 case.update(status='blocked', blocked_by='upstream_native_remix_probe')
-        from routing_result import STATUSES, evaluate
-        diagnostics['counts'] = {status: sum(case.get('status') == status for case in diagnostics['cases'])
-                                 for status in STATUSES}
-        diagnostics.update(exit_code=2, contracts_success=True)
+        from routing_result import evaluate
         routing.update(evaluate(routing['cases'], REQUIRED_CASES))
         return diagnostics, routing
 
@@ -149,6 +149,21 @@ class ReleaseExemptionTests(unittest.TestCase):
         nested = copy.deepcopy(diagnostics)
         nested['cases'][0] = 'not-a-dict'
         stale_counts = copy.deepcopy(diagnostics)
-        stale_counts['counts'] = {**stale_counts['counts'], 'known_upstream': 0, 'pass': len(RELEASE_EXEMPT_DIAGNOSTICS)}
-        for report in (duplicated, empty_preflight, dropped_pass, nested, stale_counts):
-            self.assertIsNone(release_exemption(report, routing))
+        stale_counts['counts'] = {**stale_counts['counts'], 'known_upstream': 0}
+        stale_counts['success'] = True
+        failed_preflight = copy.deepcopy(diagnostics)
+        failed_preflight['preflight'][0]['status'] = 'fail'
+        # preflight 只有 pass 合法；blocked 与 known_upstream 在这里没有定义的含义。
+        blocked_preflight = copy.deepcopy(diagnostics)
+        blocked_preflight['preflight'][0]['status'] = 'blocked'
+        unknown_status = copy.deepcopy(diagnostics)
+        unknown_status['cases'][0]['status'] = 'unexpected'
+        dangling_block = copy.deepcopy(diagnostics)
+        next(case for case in dangling_block['cases'] if case.get('status') == 'blocked')['blocked_by'] = 'not-a-probe'
+        named = (('duplicated', duplicated), ('empty_preflight', empty_preflight),
+                 ('dropped_pass', dropped_pass), ('nested', nested), ('stale_counts', stale_counts),
+                 ('failed_preflight', failed_preflight), ('blocked_preflight', blocked_preflight), ('unknown_status', unknown_status),
+                 ('dangling_block', dangling_block))
+        for label, report in named:
+            with self.subTest(deviation=label):
+                self.assertIsNone(release_exemption(report, routing))
