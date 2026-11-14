@@ -235,6 +235,7 @@ func runChannelMutationAbilityRollback(t *testing.T, db *gorm.DB, operation stri
 	require.NoError(t, db.Order("id").Find(&beforeChannels).Error)
 	require.NoError(t, db.Order("channel_id").Find(&beforeAbilities).Error)
 	published := recordChannelPublications(t, nil)
+	beforeRevision := channelsRevision(t)
 	injected := errors.New("ability write failure fixture")
 	fail := func(tx *gorm.DB) {
 		if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "Ability" {
@@ -252,6 +253,7 @@ func runChannelMutationAbilityRollback(t *testing.T, db *gorm.DB, operation stri
 	require.Equal(t, beforeChannels, channels, "channel writes must roll back with ability writes")
 	require.Equal(t, beforeAbilities, abilities)
 	require.Empty(t, *published, "failed transactions must not publish")
+	require.Equal(t, beforeRevision, channelsRevision(t), "rolled-back mutations must not publish a sync task")
 }
 
 func runChannelMutationModelsRebuild(t *testing.T, db *gorm.DB) {
@@ -262,7 +264,8 @@ func runChannelMutationModelsRebuild(t *testing.T, db *gorm.DB) {
 	require.NoError(t, db.Create(&other).Error)
 	require.NoError(t, other.AddAbilities(db))
 	require.NoError(t, updateAbilityStatus(db.Where("channel_id = ?", 3), false))
-	models, priority, weight := " beta,alpha,beta ", int64(0), uint(0)
+	// Whitespace normalization is separately preserved as a restored-native diagnostic.
+	models, priority, weight := "beta,alpha,beta", int64(0), uint(0)
 	published := recordChannelPublications(t, func(id int) error {
 		// This read uses global DB deliberately: publication must be after commit,
 		// also on SQLite's single connection, and must see both durable tables.
@@ -393,4 +396,83 @@ func runChannelSaveOrphanCleanup(t *testing.T, db *gorm.DB, stage string) {
 	require.NoError(t, cleanupErr)
 	assert.Equal(t, []string{"B", "A"}, fixture.entryLabels(t))
 	requireNoOrphanRoutes(t, db)
+}
+
+// Exercise the public tag entrypoints through the same database fixture as the
+// lock matrix. Publication errors remain errors after the durable commit.
+func runChannelMutationSyncTopic(t *testing.T, db *gorm.DB, operation, outcome string) {
+	t.Helper()
+	status := common.ChannelStatusEnabled
+	if operation == "enable_tag" {
+		status = common.ChannelStatusManuallyDisabled
+	}
+	if outcome != "no_match" {
+		seedChannelMutationRows(t, db, status, "selected")
+	}
+	beforeRevision := channelsRevision(t)
+	injected := errors.New("tag sync publication fixture")
+	published := recordChannelPublications(t, func(id int) error {
+		if outcome != "publication_failure" {
+			return nil
+		}
+		// A global-DB read here also proves the mutation has committed.
+		var channel Channel
+		require.NoError(t, db.First(&channel, id).Error)
+		require.Greater(t, channelsRevision(t), beforeRevision, "sync task must precede fallible local publication")
+		return injected
+	})
+	bumpAttempts := 0
+	if outcome == "bump_failure" {
+		const callback = "test:fail_tag_sync_task"
+		require.NoError(t, db.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
+			if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "SystemTask" {
+				bumpAttempts++
+				tx.AddError(injected)
+			}
+		}))
+		t.Cleanup(func() { assert.NoError(t, db.Callback().Create().Remove(callback)) })
+	}
+	err := mutateChannelLockFixture(operation, "selected", nil)
+	if outcome == "publication_failure" {
+		require.ErrorIs(t, err, injected, "retain the existing post-commit publication error")
+		require.Equal(t, []int{1}, *published, "publication still stops at its first error")
+	} else {
+		require.NoError(t, err)
+	}
+	if outcome == "bump_failure" {
+		require.Equal(t, 1, bumpAttempts)
+		require.Equal(t, beforeRevision, channelsRevision(t))
+		require.Equal(t, []int{1, 2}, *published, "failed best-effort bump does not skip routing publication")
+	} else {
+		require.Greater(t, channelsRevision(t), beforeRevision, "successful empty or nonempty tag write must bump the native topic")
+		var tasks []SystemTask
+		require.NoError(t, db.Where("type = ? AND id > ?", SyncTaskType(SyncTopicChannels), beforeRevision).Find(&tasks).Error)
+		require.Len(t, tasks, 1)
+		require.Equal(t, SystemTaskStatusPending, tasks[0].Status)
+	}
+	var channels []Channel
+	var abilities []Ability
+	require.NoError(t, db.Order("id").Find(&channels).Error)
+	require.NoError(t, db.Order("channel_id").Find(&abilities).Error)
+	if outcome == "no_match" {
+		require.Empty(t, channels)
+		require.Empty(t, abilities)
+		require.Empty(t, *published)
+		return
+	}
+	require.Len(t, channels, 2)
+	require.Len(t, abilities, 2)
+	for i, channel := range channels {
+		switch operation {
+		case "disable_tag":
+			require.Equal(t, common.ChannelStatusManuallyDisabled, channel.Status)
+			require.False(t, abilities[i].Enabled)
+		case "enable_tag":
+			require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+			require.True(t, abilities[i].Enabled)
+		case "edit_tag":
+			require.EqualValues(t, 7, channel.GetPriority())
+			require.EqualValues(t, 7, *abilities[i].Priority)
+		}
+	}
 }

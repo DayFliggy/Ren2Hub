@@ -10,13 +10,19 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 	if info.ChannelMeta == nil {
 		info.ChannelMeta = &relaycommon.ChannelMeta{}
 	}
-	name, mapped, err := relaycommon.ResolveMappedModelName(info.OriginModelName, c.GetString("model_mapping"))
+	result, err := relaycommon.ResolveModelMapping(info.OriginModelName, c.GetString("model_mapping"))
+	if result.Mapped {
+		info.IsModelMapped = true
+	}
 	if err != nil {
 		return err
 	}
-	info.IsModelMapped = mapped
-	if mapped {
-		info.UpstreamModelName = name
+	if result.DirectSelfMapping {
+		info.IsModelMapped = false
+		return nil
+	}
+	if result.MappingConfigured && info.IsModelMapped {
+		info.UpstreamModelName = result.Name
 	}
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)

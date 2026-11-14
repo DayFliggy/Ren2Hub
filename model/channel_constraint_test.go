@@ -186,10 +186,18 @@ func TestProviderChannelCompactPathUsesDeclaredModelRoute(t *testing.T) {
 	}
 	ok, _ := ChannelSatisfiesFilters(channel, "supported", filters)
 	require.True(t, ok)
-	ok, kind := ChannelSatisfiesFilters(channel, "other", filters)
+	ok, _ = ChannelSatisfiesFilters(channel, "other", filters)
 	require.False(t, ok)
-	require.Equal(t, dto.FilterRequestPath, kind)
 	channel.SetSetting(kitdto.ChannelSettings{TaskPluginKey: "uninstalled"})
 	ok, _ = ChannelSatisfiesFilters(channel, "supported", filters)
 	require.False(t, ok)
+}
+
+func TestProviderCompactUsesNativeFilterOrder(t *testing.T) {
+	channel := &Channel{Type: constant.ChannelTypeTaskPlugin, Status: common.ChannelStatusEnabled}
+	channel.SetSetting(kitdto.ChannelSettings{TaskPluginKey: "round3-uninstalled"})
+	filters := []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: "/v1/responses/compact"}, {Kind: dto.FilterTaskPluginIdentity, RequestPath: "/v1/responses/compact"}}
+	ok, kind := ChannelSatisfiesFilters(channel, "m", filters)
+	require.False(t, ok)
+	require.Equal(t, dto.FilterTaskPluginIdentity, kind)
 }

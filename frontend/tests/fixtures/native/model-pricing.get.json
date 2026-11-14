@@ -12,7 +12,7 @@
         "effective": {
           "CacheRatio": 1,
           "CompletionRatio": 4,
-          "CreateCacheRatio": 1,
+          "CreateCacheRatio": 1.25,
           "ImageRatio": 1,
           "ModelRatio": 2.5
         },

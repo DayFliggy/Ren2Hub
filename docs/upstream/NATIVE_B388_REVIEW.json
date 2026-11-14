@@ -4,7 +4,7 @@
   "upstream": "b388140acfd80369ec6243b16869daff1b4051f4",
   "candidate_sha": null,
   "scope": "原始逐段处置完整；每段保留理由、恢复内容和验证接点保留原审查文本，裁定通过显式overlay覆盖。此文件只绑定代码，不声明测试通过。",
-  "merged_review_sha256": "c11cc4dc31ef6521e29a0b96f84fa1f8fef163823eff82e33916a9ad24181cdf",
+  "merged_review_sha256": "c559c2759be2d3b6bd0e391e77321006899bc01f59e274388ca6c0c2624683e1",
   "inputs": {
     "root-review.json": "aa04d8bd9f0191b2073da4079173de48bc58e20eea3ac06727a7d93147bbe873",
     "data-review.json": "eba52d18d26402c2601620b2b147120dfd1731c3fd0d7a1d8e02ddfe4d1943c5",
@@ -13,12 +13,15 @@
     "control-routing-review.json": "fcc75d3828d71d8843d47a02d48ad1880f11430e65629fe0387d8d6ec7608d00",
     "control-service-setting-review.json": "9fd72e1b34c5cca89b6bc10c4d3b1ef5cd268bc3f131007245a17b83ed4f13c5",
     "adjudications.json": "b67c92cc80efcd72a0d60ae94fc24853428f6dafba152a045ad2e0f36a4395f1",
-    "final-audit-adjudications.json": "00b7539dbebf65a149e9ed44f2b40402af06d91bf09f83d807cf00406da92fae"
+    "final-audit-adjudications.json": "00b7539dbebf65a149e9ed44f2b40402af06d91bf09f83d807cf00406da92fae",
+    "round3-audit-adjudications.json": "0e0b6645fe75d3be1d1c5495c01e86bd285487ef3e242e1d68cd296940f40232",
+    "round4-audit-adjudications.json": "62997ac0c9a98598a987d6d546a775e0533bef9ea45dcf7fd30b986ba3f049e1",
+    "round5-audit-adjudications.json": "082a1278369e7106459260353365745b2620e688664f03ad8db28cb14a94b290"
   },
   "counts": {
-    "retain_contract": 889,
+    "retain_contract": 873,
     "restore_native": 169,
-    "split": 51
+    "split": 67
   },
   "errors": [],
   "missing_hunks": [],
@@ -619,7 +622,7 @@
     },
     {
       "path": "controller/relay.go",
-      "local_sha256": "3a5058137c9a62d5de8a3437aa9e1e89aa73974cba0e54f81a9af13394822aed",
+      "local_sha256": "df6cf1e65b5e1ec1a49f4bdd2fab228c294436093cb3d43a9f34dbb2534f644a",
       "upstream_sha256": "478c7d453db4e6e64bfb440eab14fda1c31d6e9d493f6231aaf73c9f5f8c64d6",
       "upstream_equal": false,
       "original_hunks": [
@@ -1225,7 +1228,7 @@
     },
     {
       "path": "model/ability.go",
-      "local_sha256": "d9250bf0264227e2df1abfb7abe710b2b3f0a85fe6db5c3c117e7bad798ef621",
+      "local_sha256": "c8a06fb8be5e1ef73920bc91d62057165a53d72454fa5b6c2deece59231b3ddb",
       "upstream_sha256": "f76b14d0f52ffff833b1dbdce142eef8810a72aa4c3c1059b7b56c7f3f53c761",
       "upstream_equal": false,
       "original_hunks": [
@@ -1275,7 +1278,7 @@
     },
     {
       "path": "model/channel.go",
-      "local_sha256": "b0941c36a8be89d93a6be23e2349b329c9be3a03382d247f8d24f53e89488739",
+      "local_sha256": "0270404ec9eb1b5dd69c139e004ec81ecd6ef8d68ba84c51ec88ab1a4b780398",
       "upstream_sha256": "0be8b50a95f88bc460507f4d000d6cdc5b21acadab00f8e7f22d7fed11ff0ae7",
       "upstream_equal": false,
       "original_hunks": [
@@ -1314,7 +1317,7 @@
     },
     {
       "path": "model/channel_constraint.go",
-      "local_sha256": "2a7379ad6d573a39d61aadef0325ecbdfb43c0292ce2b2c8f9e03e335bb3bcb6",
+      "local_sha256": "f5f36dc7df3ed7d98dd920459cf117b57a652ebc5b2351320a8b2d33935b8cf6",
       "upstream_sha256": "561963328568b42608d0ef5f7a18e84fe30060c85250d7e7d4f51787297e9750",
       "upstream_equal": false,
       "original_hunks": [
@@ -1345,7 +1348,7 @@
     },
     {
       "path": "model/channel_lock.go",
-      "local_sha256": "3f2b7735d3978f13028b3baa546a57b028d0eea074fad8cc67a630da379860c5",
+      "local_sha256": "36b40af452e471d7de4a69e86de57e3bf5bd601d15c02765a55423e022bf07ef",
       "upstream_sha256": null,
       "upstream_equal": false,
       "original_hunks": [
@@ -1398,7 +1401,7 @@
     },
     {
       "path": "model/channel_status.go",
-      "local_sha256": "f55a88a0a45f04519ee11ae760e7db20a6bc3021856aaf9467737a45b2b7a140",
+      "local_sha256": "0f8ddfc7b4751de52a433c620e317a389f4e70e908b55d47fc32253872f19d27",
       "upstream_sha256": null,
       "upstream_equal": false,
       "original_hunks": [
@@ -1660,7 +1663,7 @@
     },
     {
       "path": "model/route_candidates.go",
-      "local_sha256": "3ea19bbb0eb2cf63df5d2b9cebd7ff4be3b49e01b86fc55f47f077ac63357a36",
+      "local_sha256": "7dae4a60f43725b00892ccf35861e63a6bacd9e11b4d2a1aec687374e5f32f33",
       "upstream_sha256": null,
       "upstream_equal": false,
       "original_hunks": [
@@ -2470,7 +2473,7 @@
     },
     {
       "path": "relay/common/model_mapping.go",
-      "local_sha256": "dd11ea4ca1ba4e0eb184660650afbd963d1039107bb63fa362583c18a4cfab1c",
+      "local_sha256": "8924d70064c06fc27af18e9bfea8309cb4a2ca503b262ecf88d55202b1cc9178",
       "upstream_sha256": null,
       "upstream_equal": false,
       "original_hunks": [
@@ -2536,7 +2539,7 @@
     },
     {
       "path": "relay/helper/common.go",
-      "local_sha256": "d12cee6c7489af7416ba122b0586c02dbe37d62c0cdaabe470ee0a48f4b40235",
+      "local_sha256": "0b59efbf274446caa47c7e094bce49bd6c791cceb8174cee51868fb1a5837192",
       "upstream_sha256": "5a2e376cc467367d75005848ff73afb2c52a3b8f44c6d66f21199a874685fbaf",
       "upstream_equal": false,
       "original_hunks": [
@@ -2551,7 +2554,7 @@
     },
     {
       "path": "relay/helper/model_mapped.go",
-      "local_sha256": "3c006a54ed798cbc0f16af65843422617e506e460d2855f41f161a8e402dedd5",
+      "local_sha256": "c46da50dea1680a89d1db17b70950bda3d1d3db172e1a875eb51479174ed4dd0",
       "upstream_sha256": "37a439eaec748f0efc04f223e552bd97b7ddf8dab1e556c04884e5baa4ee0d55",
       "upstream_equal": false,
       "original_hunks": [
@@ -3437,7 +3440,7 @@
     },
     {
       "path": "service/route_affinity.go",
-      "local_sha256": "bea91564bba2a16089890e85470e73bd3d82a0a61398bca7a6da0707785e1ecc",
+      "local_sha256": "8bbdc1642e3a264caf226643368957fc60faa06610ec2cc21a1a24673cd118d4",
       "upstream_sha256": null,
       "upstream_equal": false,
       "original_hunks": [
@@ -3832,7 +3835,7 @@
     },
     {
       "path": "setting/ratio_setting/cache_ratio.go",
-      "local_sha256": "ab78137e5cad9ae4fa9735f88002700ebbab73d68a58d0649195a0d0d743f89c",
+      "local_sha256": "e11e01e9b4b833bfde7794e540c2dddc286241d4df95e6afeeaeb81b443af17e",
       "upstream_sha256": "8b81ca3fa0c33ba50392019db73694563af71e1306f8a1ba4c801f4fa61eeca6",
       "upstream_equal": false,
       "original_hunks": [
@@ -8183,7 +8186,7 @@
     {
       "id": "controller/relay.go#8",
       "hunk_sha256": "3c3a77931a85133074dc1ebf927b6dbb7deac4f0495549227b56cc4076eb1636",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "controller/relay.go#8",
@@ -8203,6 +8206,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "controller/relay.go#8",
+        "hunk_sha256": "3c3a77931a85133074dc1ebf927b6dbb7deac4f0495549227b56cc4076eb1636",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "恢复SwapFace原生default请求插件入口，仅删除外层两行绕过；保留RelayMidjourneyTaskImageSeed传入同一RelayInfo的原任务接点。计费和内层分派不改。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-swapface-fix/hunk-disposition-proposal.json",
+            "sha256": "0b1d7f9bcef7f52cbd91b6975eb521b69484904cef397ea3b511df4591833a5d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-swapface-fix/frozen-before-current.json",
+            "sha256": "e104b535a8421c641f46b4a7fe982fd425d324a53e581d82a3cd3658eadfe08f"
+          }
+        ]
       }
     },
     {
@@ -13519,12 +13540,30 @@
         "review_method": "read_diff",
         "disposition": "split",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "split",
+      "round3_adjudication": {
+        "id": "model/ability.go#4",
+        "hunk_sha256": "0880b21546aa3046ef6f6f86cd3b7b55014fa413e0cf14c26b5d0bd4cb8e10ae",
+        "old_disposition": "split",
+        "new_disposition": "split",
+        "basis": "沿用先前恢复 GetAllEnableAbilities 与去group候选裁剪；AddAbilities 删除 trim/空名过滤，恢复原生模型字面值；不恢复业务组。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
       "id": "model/ability.go#5",
       "hunk_sha256": "6bd2c8b614d2acae53a28c9a3a76f25f5530c5297ace503bd7fc5888ed4327e3",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/ability.go#5",
@@ -13543,12 +13582,30 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "model/ability.go#5",
+        "hunk_sha256": "6bd2c8b614d2acae53a28c9a3a76f25f5530c5297ace503bd7fc5888ed4327e3",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "UpdateAbilities去group保持，删除 trim/空名过滤恢复原生模型字面值。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
       "id": "model/ability.go#6",
       "hunk_sha256": "b017bdb3e53dd64b38b24b7c490a7767177ad38a155c34674231a9c448c38261",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/ability.go#6",
@@ -13573,6 +13630,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "model/ability.go#6",
+        "hunk_sha256": "b017bdb3e53dd64b38b24b7c490a7767177ad38a155c34674231a9c448c38261",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "public UpdateAbilityByTag 恢复原生struct Updates；保留本地六入口批量事务内部 updateAbilityFields map零值写、updateAbilityStatus。不能把public接口修复套用批量事务合同。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
@@ -13793,7 +13868,7 @@
     {
       "id": "model/channel.go#13",
       "hunk_sha256": "a27f1cfd65dc9161ac3374979ac9e222c5c38b96110124ee3a3735c13db45043",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel.go#13",
@@ -13815,12 +13890,30 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "model/channel.go#13",
+        "hunk_sha256": "a27f1cfd65dc9161ac3374979ac9e222c5c38b96110124ee3a3735c13db45043",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "EnableChannelByTag保留有序锁和同事务能力更新；原生BumpSyncTopic由共享tag事务成功后恢复，不以本地即时缓存发布替代它。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round4-control/review.json",
+            "sha256": "64f8890ab2b252c9263ea3762b5c512ddd7ce714bbc4031009dab8893add671a"
+          }
+        ]
       }
     },
     {
       "id": "model/channel.go#14",
       "hunk_sha256": "71c673f5c4e7fc44ce618a7759d8394d1c4ad2d698d33837c78db6a234c9e71e",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel.go#14",
@@ -13842,6 +13935,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "model/channel.go#14",
+        "hunk_sha256": "71c673f5c4e7fc44ce618a7759d8394d1c4ad2d698d33837c78db6a234c9e71e",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "DisableChannelByTag保留多Key前置及批量锁事务；恢复共享helper中的原生channels主题递增，不恢复业务分组。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round4-control/review.json",
+            "sha256": "64f8890ab2b252c9263ea3762b5c512ddd7ce714bbc4031009dab8893add671a"
+          }
+        ]
       }
     },
     {
@@ -13870,7 +13981,7 @@
     {
       "id": "model/channel.go#16",
       "hunk_sha256": "2ebdd124cc32a34fc40fb0b5a82938035b84c7ac28934a895460f3a5e12bb06d",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel.go#16",
@@ -13892,6 +14003,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "model/channel.go#16",
+        "hunk_sha256": "2ebdd124cc32a34fc40fb0b5a82938035b84c7ac28934a895460f3a5e12bb06d",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "EditChannelByTag保留锁后实际ID、同事务能力重建与失效；恢复原生channels主题递增，以触发计划插件扫描。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round4-control/review.json",
+            "sha256": "64f8890ab2b252c9263ea3762b5c512ddd7ce714bbc4031009dab8893add671a"
+          }
+        ]
       }
     },
     {
@@ -14041,7 +14170,7 @@
     {
       "id": "model/channel.go#5",
       "hunk_sha256": "de63ee1524392cabcb4f506524f77251fa4cf3e34805c2fa26b70431caeae057",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel.go#5",
@@ -14061,6 +14190,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "model/channel.go#5",
+        "hunk_sha256": "de63ee1524392cabcb4f506524f77251fa4cf3e34805c2fa26b70431caeae057",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "保留路由快照使用权威轮询cursor的接点；读取cursor失败的NewError恢复原生ErrOptionWithSkipRetry，不更改游标持久化失败继续发送的原生边界。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round4-control/review.json",
+            "sha256": "64f8890ab2b252c9263ea3762b5c512ddd7ce714bbc4031009dab8893add671a"
+          }
+        ]
       }
     },
     {
@@ -14261,7 +14408,7 @@
     {
       "id": "model/channel_constraint.go#1",
       "hunk_sha256": "32d62a8f2710cc500d8bf799acc075d40a61aa892cac4f7af1c5006f1dd5d99a",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel_constraint.go#1",
@@ -14283,6 +14430,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "model/channel_constraint.go#1",
+        "hunk_sha256": "32d62a8f2710cc500d8bf799acc075d40a61aa892cac4f7af1c5006f1dd5d99a",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "仅删除 compact 分支使用的 strings 导入；FilterTokenRoute 和 native-count relayconstant 导入保留。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
@@ -14315,7 +14480,7 @@
     {
       "id": "model/channel_constraint.go#3",
       "hunk_sha256": "e7d5330c2302054f43b64965013cbd8fb256c9fa840dda96f16391c74feed9d6",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel_constraint.go#3",
@@ -14337,6 +14502,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "model/channel_constraint.go#3",
+        "hunk_sha256": "e7d5330c2302054f43b64965013cbd8fb256c9fa840dda96f16391c74feed9d6",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "保留 TokenRoute/native-count 和原生 AdvancedCustom/plugin identity；删除 compact provider 提前归因及普通类型 SupportsResponsesCompact 前置筛选，原生普通请求路径返回true。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
@@ -14459,6 +14642,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "model/channel_lock.go#1",
+        "hunk_sha256": "4a95d74bce145cbe3238b61169532982ce1e76141c22734e2e6d9d63eb9f905f",
+        "old_disposition": "retain_contract",
+        "new_disposition": "retain_contract",
+        "basis": "保留六个入口的有序锁、同事务能力更新和实际ID发布；tag事务成功后必须恢复原生channels主题递增，发布失败和空成功事务也递增，回滚不递增。不重构既有提交后返回错误。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round4-control/review.json",
+            "sha256": "64f8890ab2b252c9263ea3762b5c512ddd7ce714bbc4031009dab8893add671a"
+          }
+        ]
       }
     },
     {
@@ -14774,7 +14975,7 @@
     {
       "id": "model/channel_status.go#1",
       "hunk_sha256": "5d1f234533c3e53f4fa70bca0230420754f822c31568c60a4ffb26e79e916230",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/channel_status.go#1",
@@ -14795,6 +14996,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "model/channel_status.go#1",
+        "hunk_sha256": "5d1f234533c3e53f4fa70bca0230420754f822c31568c60a4ffb26e79e916230",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "移除失败后 InitChannelCache 回滚加固并把 written 直接作为Changed；UpdateChannelOtherInfo已经与原生相同，无返回true同时error路径；保留提交后Changed/PublicationPending/路由发布及状态锁和ability更新。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
@@ -17480,7 +17699,7 @@
     {
       "id": "model/route_candidates.go#1",
       "hunk_sha256": "e3122a35e9b9eb53d0051c4113a53747d88809305c83f2f567b546a106fe6cb6",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-review.json",
       "detail": {
         "id": "model/route_candidates.go#1",
@@ -17501,6 +17720,24 @@
         "review_method": "read_diff",
         "disposition": "retain_contract",
         "review_owner": "/root/ren2hub_architecture"
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "model/route_candidates.go#1",
+        "hunk_sha256": "e3122a35e9b9eb53d0051c4113a53747d88809305c83f2f567b546a106fe6cb6",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "保留批准无组 Token 自动/手动候选、精确名/归一名、native-count接点；删除 channelServesRequestPath 的 compact 能力预过滤，恢复普通原生候选行为。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
@@ -22902,7 +23139,7 @@
     {
       "id": "relay/common/model_mapping.go#1",
       "hunk_sha256": "680977d85b6803180b1bbe23433ad7249680e65592adaef167baa126e90b07cd",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "data-review.json",
       "detail": {
         "id": "relay/common/model_mapping.go#1",
@@ -22922,6 +23159,24 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "relay/common/model_mapping.go#1",
+        "hunk_sha256": "680977d85b6803180b1bbe23433ad7249680e65592adaef167baa126e90b07cd",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "保留分发和路由观测共用唯一映射解析/遍历；解析恢复rootcommon.Unmarshal，详细结果保留原生直接自映射早退及已映射状态语义。三元包装继续供现有三个观察/选择消费者使用。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-model-mapping-r5/review.json",
+            "sha256": "775cde3d38df86df9f0bbb790429c1c6e3848c88aa87992a3211a8df1da88d83"
+          }
+        ]
       }
     },
     {
@@ -23478,7 +23733,7 @@
     {
       "id": "relay/helper/common.go#4",
       "hunk_sha256": "93234bfc9090a1bbf7a67ad5731195bb8313600c8d59461a2afc8d8de1515555",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "data-review.json",
       "detail": {
         "id": "relay/helper/common.go#4",
@@ -23499,6 +23754,29 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "round5_previous_disposition": "retain_contract",
+      "round5_adjudication": {
+        "id": "relay/helper/common.go#4",
+        "hunk_sha256": "93234bfc9090a1bbf7a67ad5731195bb8313600c8d59461a2afc8d8de1515555",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "保留成功序列化及flush成功后的有效输出观测；序列化错误分支恢复原生FlushWriter，返回nil及取消提前退出不变。只补缺失原生行为，不新增通用加固或允许名单。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-medium-diffs-parent-review.json",
+            "sha256": "1adb1cff6f353675086830674edd8898c0f93f84ef40f1fcf010ee87908f409c"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-medium-diffs-claude-flush/proposal.json",
+            "sha256": "8575944c5fad5bc90a21773910f094e69c8abd00152f50cfd2d1c6a5e5ee89c5"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-medium-diffs-claude-flush/execution-round1/summary.json",
+            "sha256": "e0d10dc486aa3734e8055920a735031f3093f0788b10a397981072532a70b7ed"
+          }
+        ],
+        "independent_opus_recheck_pending": true
       }
     },
     {
@@ -23602,12 +23880,30 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "relay/helper/model_mapped.go#1",
+        "hunk_sha256": "3f8b91ce129a411ee778f3c581c6ff1cc47a6f95fe26f8ef13b688f95262703a",
+        "old_disposition": "retain_contract",
+        "new_disposition": "retain_contract",
+        "basis": "共享映射实现的最小import接点保留；JSON解析在共享resolver采用原生common封装，不在helper重复解析。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-model-mapping-r5/review.json",
+            "sha256": "775cde3d38df86df9f0bbb790429c1c6e3848c88aa87992a3211a8df1da88d83"
+          }
+        ]
       }
     },
     {
       "id": "relay/helper/model_mapped.go#2",
       "hunk_sha256": "603b9670d6cf0ee5032e40988f83792b1ab0b5e12b21d3d2daebd738c6ddafa4",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "data-review.json",
       "detail": {
         "id": "relay/helper/model_mapped.go#2",
@@ -23627,6 +23923,24 @@
         ],
         "related_diagnostics": [],
         "runtime_validation": "not_run"
+      },
+      "round4_previous_disposition": "retain_contract",
+      "round4_adjudication": {
+        "id": "relay/helper/model_mapped.go#2",
+        "hunk_sha256": "603b9670d6cf0ee5032e40988f83792b1ab0b5e12b21d3d2daebd738c6ddafa4",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "保留唯一共享映射来源；恢复原生空配置、已配置无命中、直接自映射、链尾自映射与循环失败时IsModelMapped/UpstreamModelName/请求setter的时序，不因统一映射改变原生请求状态。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit/extension-packets-04-05-07-conclusion.md",
+            "sha256": "355924a44e1430615409850a5d8641ebf55dcc53a2ca62bcecba85f2f0d9547d"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-model-mapping-r5/review.json",
+            "sha256": "775cde3d38df86df9f0bbb790429c1c6e3848c88aa87992a3211a8df1da88d83"
+          }
+        ]
       }
     },
     {
@@ -30201,7 +30515,7 @@
     {
       "id": "service/route_affinity.go#1",
       "hunk_sha256": "01aa139ef7d73f415cbee30f103326c0e4026791679f9098db8ac7ba95298a1a",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-service-setting-review.json",
       "detail": {
         "id": "service/route_affinity.go#1",
@@ -30219,6 +30533,24 @@
           ],
           "execution_status": "not_run"
         }
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "service/route_affinity.go#1",
+        "hunk_sha256": "01aa139ef7d73f415cbee30f103326c0e4026791679f9098db8ac7ba95298a1a",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "strict 错误形状恢复 native Code空/strict_session_binding_unavailable，不额外写SkipRetry；本地资格/倍率/限额消费、满载429、limit读取失败503保持绑定和prefer fallback保留。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/review.json",
+            "sha256": "3b0152884bd6e041117d82a6a26f266011578f1a98de0bdb5800ccee2fd5acfc"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+            "sha256": "c9bcb28b1bfe6e21222e29434529fb38b3b2d4731a6e03e05614534ea45ce50a"
+          }
+        ]
       }
     },
     {
@@ -32550,7 +32882,7 @@
     {
       "id": "setting/ratio_setting/cache_ratio.go#1",
       "hunk_sha256": "140086d830fb90614161ac4152ee785f9afc7274b705be502ec4f677b0b88363",
-      "disposition": "retain_contract",
+      "disposition": "split",
       "review_file": "control-service-setting-review.json",
       "detail": {
         "id": "setting/ratio_setting/cache_ratio.go#1",
@@ -32569,6 +32901,24 @@
           ],
           "execution_status": "not_run"
         }
+      },
+      "round3_previous_disposition": "retain_contract",
+      "round3_adjudication": {
+        "id": "setting/ratio_setting/cache_ratio.go#1",
+        "hunk_sha256": "140086d830fb90614161ac4152ee785f9afc7274b705be502ec4f677b0b88363",
+        "old_disposition": "retain_contract",
+        "new_disposition": "split",
+        "basis": "通用缓存写缺省恢复1.25；默认每模型价格表继续为空，显式管理员倍率和存量表达式不重写。去默认模型表不要求通用fallback=1。",
+        "sources": [
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-funds/review.json",
+            "sha256": "d2c40043b63770351ba70ce7b08e5838d660a3b810865ceb3631950cf734ef16"
+          },
+          {
+            "path": "/home/work/ren2hub-native-b388-20261114/audit-round3-funds/case-proposal-v2.json",
+            "sha256": "7674d60f3b49a2c113b304e311aa50abff4b05966cff440ccbe66b2769d8c5ed"
+          }
+        ]
       }
     },
     {
@@ -32868,9 +33218,24 @@
       }
     }
   ],
-  "final_audit_adjudication_count": 10,
+  "final_audit_adjudication_count": 20,
   "previous_merged_review": {
     "path": "merged-review.json",
     "sha256": "4f664ab92c57606982278c5e64786d2387f547076875dda803fc796b8201c7b9"
-  }
+  },
+  "round3_adjudication_count": 10,
+  "round3_previous_merged_review": {
+    "path": "merged-review-v2.json",
+    "sha256": "c11cc4dc31ef6521e29a0b96f84fa1f8fef163823eff82e33916a9ad24181cdf"
+  },
+  "round4_adjudication_count": 8,
+  "round4_previous_merged_review": {
+    "path": "/home/work/ren2hub-native-b388-20261114/inventory/merged-review-v3.json",
+    "sha256": "1aaa68d498ae7696bfd6b5ab068069c64e2a83430acce6b9f9798046947dbc79"
+  },
+  "round5_previous_merged_review": {
+    "path": "/home/work/ren2hub-native-b388-20261114/inventory/merged-review-v4.json",
+    "sha256": "86c8535a5fc8396932c41aa9973acc49b02ca88f041059df7c46f995b23151fc"
+  },
+  "round5_adjudication_count": 1
 }

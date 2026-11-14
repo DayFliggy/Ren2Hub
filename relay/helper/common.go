@@ -228,6 +228,7 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 	jsonData, err := common.Marshal(resp)
 	if err != nil {
 		common.SysError(common.LogText("error marshalling stream response: %s", err.Error()))
+		_ = FlushWriter(c)
 	} else {
 		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})

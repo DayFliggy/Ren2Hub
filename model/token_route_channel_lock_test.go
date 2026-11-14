@@ -63,6 +63,13 @@ func TestTokenRouteChannelMutationLockOrderDatabases(t *testing.T) {
 					runChannelMutationAbilityRollback(t, openChannelMutationDatabase(t, driver, dialect), operation)
 				})
 			}
+			for _, operation := range []string{"disable_tag", "enable_tag", "edit_tag"} {
+				for _, outcome := range []string{"no_match", "publication_failure", "bump_failure"} {
+					t.Run("sync_topic/"+operation+"/"+outcome, func(t *testing.T) {
+						runChannelMutationSyncTopic(t, openChannelMutationDatabase(t, driver, dialect), operation, outcome)
+					})
+				}
+			}
 			t.Run("models_rebuild", func(t *testing.T) {
 				runChannelMutationModelsRebuild(t, openChannelMutationDatabase(t, driver, dialect))
 			})
@@ -90,7 +97,7 @@ func openChannelMutationDatabase(t *testing.T, driver gorm.Dialector, dialect st
 	if dialect == "sqlite" {
 		sqlDB.SetMaxOpenConns(1)
 	}
-	tables := []any{&Token{}, &TokenRouteProfile{}, &TokenRouteEntry{}, &Channel{}, &Ability{}}
+	tables := []any{&Token{}, &TokenRouteProfile{}, &TokenRouteEntry{}, &Channel{}, &Ability{}, &SystemTask{}}
 	require.NoError(t, db.AutoMigrate(tables...))
 	previousDB, redis, cache, previousDialect := DB, common.RedisEnabled, common.MemoryCacheEnabled, common.MainDatabaseType()
 	DB, common.RedisEnabled, common.MemoryCacheEnabled = db, false, false
@@ -129,6 +136,7 @@ func runChannelMutationLockRace(t *testing.T, db *gorm.DB, operation string) {
 		require.Equal(t, []int{highID, lowID}, physicalOrder, "reverse heap layout is a required diagnostic premise")
 	}
 
+	beforeRevision := channelsRevision(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	DB = db.WithContext(ctx)
@@ -172,6 +180,9 @@ func runChannelMutationLockRace(t *testing.T, db *gorm.DB, operation string) {
 	<-mutationDone
 	DB = db
 	t.Logf("local_lock_diagnostic operation=%s rows=2 dialect=%s save_err=%v mutation_err=%v", operation, common.MainDatabaseType(), saveErr, mutationErr)
+	if mutationErr == nil && (operation == "disable_tag" || operation == "enable_tag" || operation == "edit_tag") {
+		assert.Greater(t, channelsRevision(t), beforeRevision, "committed tag mutations must publish the native channels sync topic")
+	}
 
 	// Check transaction effects before rejecting deadlocks, so failures retain
 	// evidence of rollback and of route/ability integrity.

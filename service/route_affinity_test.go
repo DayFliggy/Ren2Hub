@@ -150,7 +150,6 @@ func TestStrictAffinityStillRejectsUnavailableBoundChannel(t *testing.T) {
 			_, selectErr := SelectChannelForRequest(c, "route-model", nil)
 			require.NotNil(t, selectErr)
 			require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
-			require.EqualValues(t, "session_channel_unavailable", selectErr.Code)
 		})
 	}
 }
@@ -183,4 +182,34 @@ func TestReacquireSelectedRouteChannelForgetsLostAffinityUse(t *testing.T) {
 	ReleaseRouteChannel(c)
 	require.Equal(t, 1, ChannelInFlight(22))
 	require.Zero(t, ChannelInFlight(11))
+}
+
+func TestStrictAffinityUnavailableUsesNativeError(t *testing.T) {
+	db := setupAffinityChannels(t)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	c, _ := enableRouteAffinity(t, "strict", 22)
+	selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, selected)
+	require.NotNil(t, selectErr)
+	require.Equal(t, http.StatusServiceUnavailable, selectErr.StatusCode)
+	require.Empty(t, selectErr.Code)
+	require.Equal(t, "strict_session_binding_unavailable", selectErr.Message)
+}
+
+func TestStrictAffinityFullChannelKeepsBindingAndReturns429(t *testing.T) {
+	db := setupAffinityChannels(t)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 22).Update("max_concurrency", 1).Error)
+	holder, err := AcquireChannelConcurrency(context.Background(), &model.Channel{Id: 22, MaxConcurrency: 1})
+	require.NoError(t, err)
+	defer holder.Release()
+	c, key := enableRouteAffinity(t, "strict", 22)
+	selected, selectErr := SelectChannelForRequest(c, "route-model", nil)
+	require.Nil(t, selected)
+	require.NotNil(t, selectErr)
+	require.Equal(t, http.StatusTooManyRequests, selectErr.StatusCode)
+	bound, found := affinityBinding(t, key)
+	require.True(t, found)
+	require.Equal(t, 22, bound)
+	require.Equal(t, 1, ChannelInFlight(22), "only the pre-existing borrower holds a slot")
+	require.Zero(t, ChannelInFlight(11), "strict binding cannot switch to another channel")
 }

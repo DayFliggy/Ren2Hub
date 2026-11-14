@@ -247,7 +247,7 @@ def endpoint_eligibility(e):
         # Claude supports Responses conversion, but not Responses compaction.
         e.check(['claude'], path='/v1/responses', body={'model':e.model,'input':'endpoint fixture'})
         e.route(['claude'])
-        e.check([], status=503, amount=0, path='/v1/responses/compact',
+        e.check([], status=400, amount=0, path='/v1/responses/compact',
                 body={'model':e.model,'input':'unsupported compaction'})
     finally:
         e.configure('claude',models='claude-sonnet-4-5')

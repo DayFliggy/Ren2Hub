@@ -347,8 +347,6 @@ func RelayMidjourney(c *gin.Context) {
 		mjErr = relay.RelayMidjourneyTask(c, relayInfo.RelayMode)
 	case relayconstant.RelayModeMidjourneyTaskImageSeed:
 		mjErr = relay.RelayMidjourneyTaskImageSeed(c, relayInfo)
-	case relayconstant.RelayModeSwapFace:
-		mjErr = relay.RelaySwapFace(c, relayInfo)
 	default:
 		if reportErr = midjourneyRequestPlugins(c, relayInfo); reportErr != nil {
 			code := constant.MjRequestError

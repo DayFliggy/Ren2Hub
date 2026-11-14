@@ -47,10 +47,6 @@ func (channel *Channel) AddAbilities(tx *gorm.DB) error {
 	abilitySet := make(map[string]struct{})
 	abilities := make([]Ability, 0, len(models_))
 	for _, model := range models_ {
-		model = strings.TrimSpace(model)
-		if model == "" {
-			continue
-		}
 		if _, exists := abilitySet[model]; exists {
 			continue
 		}
@@ -110,10 +106,6 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 	abilitySet := make(map[string]struct{})
 	abilities := make([]Ability, 0, len(models_))
 	for _, model := range models_ {
-		model = strings.TrimSpace(model)
-		if model == "" {
-			continue
-		}
 		if _, exists := abilitySet[model]; exists {
 			continue
 		}
@@ -154,7 +146,17 @@ func updateAbilityStatus(query *gorm.DB, status bool) error {
 }
 
 func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uint) error {
-	return updateAbilityFields(DB.Where("tag = ?", tag), newTag, priority, weight)
+	ability := Ability{}
+	if newTag != nil {
+		ability.Tag = newTag
+	}
+	if priority != nil {
+		ability.Priority = priority
+	}
+	if weight != nil {
+		ability.Weight = *weight
+	}
+	return DB.Model(&Ability{}).Where("tag = ?", tag).Updates(ability).Error
 }
 
 func updateAbilityFields(query *gorm.DB, tag *string, priority *int64, weight *uint) error {

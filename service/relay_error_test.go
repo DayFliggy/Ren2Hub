@@ -277,3 +277,19 @@ func TestRequestPolicyEventsReachLogAdminInfo(t *testing.T) {
 	AppendRelayLogAdminInfo(untouched, nil, other)
 	assert.NotContains(t, other.Snapshot()["admin_info"], "request_policy", "requests without decisions do not carry an empty record")
 }
+
+func TestPollingReadFailureStopsRelayRetry(t *testing.T) {
+	previous := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() { common.MemoryCacheEnabled = previous })
+	// A negative ID cannot belong to a stored channel; this exercises the real
+	// polling cache lookup without adding another database test fixture.
+	channel := model.Channel{Id: -927104, Key: "fixture-a\nfixture-b", ChannelInfo: model.ChannelInfo{
+		IsMultiKey: true, MultiKeySize: 2, MultiKeyMode: constant.MultiKeyModePolling,
+	}}
+	_, _, apiErr := channel.GetNextEnabledKey()
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeGetChannelFailed, apiErr.GetErrorCode())
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	require.Equal(t, PolicyDecision{Action: "stop", Reason: "non_retryable_error", Source: "system"}, DecideRelayRetry(c, apiErr, 2))
+}

@@ -32,9 +32,6 @@ func TestChannelSatisfiesFiltersOwnsRoutability(t *testing.T) {
 	found, err := RouteChannelRows(context.Background(), "routable-model", nil)
 	require.NoError(t, err)
 	require.Equal(t, []int{920001, 920004}, channelIDs(found))
-	found, err = RouteChannelRows(context.Background(), "routable-model", []dto.ChannelFilter{{Kind: dto.FilterRequestPath, RequestPath: "/v1/responses/compact"}})
-	require.NoError(t, err)
-	require.Equal(t, []int{920001}, channelIDs(found), "request filters are applied by the row query itself")
 }
 
 // 与上游 GetChannel 和内存缓存相同：声明精确模型名的渠道优先，只有精确候选全部被过滤掉时

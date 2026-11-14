@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -196,4 +197,35 @@ func TestPollingCursorPersistenceFailureStillSelectsKey(t *testing.T) {
 	require.Nil(t, err)
 	assert.Equal(t, "key-a", key)
 	assert.Equal(t, 0, index)
+}
+
+func TestPollingReadFailureSkipsRetry(t *testing.T) {
+	for _, failure := range []string{"cache_owner_missing", "database_row_missing", "database_query_failure"} {
+		t.Run(failure, func(t *testing.T) {
+			channel := pollingTestChannel(t, failure == "cache_owner_missing")
+			switch failure {
+			case "cache_owner_missing":
+				channelSyncLock.Lock()
+				delete(channelsIDM, channel.Id)
+				channelSyncLock.Unlock()
+			case "database_row_missing":
+				require.NoError(t, DB.Delete(&Channel{}, channel.Id).Error)
+			case "database_query_failure":
+				const callback = "test:fail_polling_cursor_read"
+				require.NoError(t, DB.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+					if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "Channel" {
+						tx.AddError(errors.New("injected polling cursor read failure"))
+					}
+				}))
+				t.Cleanup(func() { assert.NoError(t, DB.Callback().Query().Remove(callback)) })
+			}
+			key, index, apiErr := channel.GetNextEnabledKey()
+			require.NotNil(t, apiErr)
+			require.Empty(t, key)
+			require.Zero(t, index)
+			require.Equal(t, types.ErrorCodeGetChannelFailed, apiErr.GetErrorCode())
+			require.Equal(t, 500, apiErr.StatusCode)
+			require.True(t, types.IsSkipRetryError(apiErr), "polling cursor lookup errors retain the native non-retryable flag")
+		})
+	}
 }

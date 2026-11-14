@@ -114,11 +114,8 @@ func UpdateChannelStatusDetailed(channelId int, usingKey string, status int, rea
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		common.SysLog(common.LogText("failed to update channel status: channel_id=%d, status=%d, error=%v", channelId, status, err))
 	}
-	result.Changed = written && err == nil
+	result.Changed = written
 	if err != nil {
-		if common.MemoryCacheEnabled {
-			InitChannelCache()
-		}
 		return result
 	}
 	if result.Changed && ChannelRoutingChanged != nil {

@@ -206,6 +206,12 @@ RESTORED_DATABASE_TESTS[("service", "TestTaskPollingRefundDatabaseMatrix")] = (
 RESTORED_DATABASE_TESTS[("model", "TestRestoredNativeControlChannelPostCommitReadFailure")] = (
     "docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json"
 )
+for test in (
+    "TestRestoredRound3AbilityModelNormalization",
+    "TestRestoredRound3ChannelStatusFailureRestoresCache",
+    "TestRestoredRound3PublicAbilityZeroWeight",
+):
+    RESTORED_DATABASE_TESTS[("model", test)] = "docs/upstream/NATIVE_B388_TEST_MIGRATIONS.json"
 
 
 def database_inventory(source: Path, tracked_files: list[str]) -> dict:
@@ -618,7 +624,7 @@ class Runner:
     def execute(self) -> None:
         for package, tests in MATRIX_TESTS.items():
             for test in tests:
-                # The lock matrix includes 23 scenarios per engine. Keep each
+                # The lock matrix includes 32 scenarios per engine. Keep each
                 # backend invocation bounded at 60 seconds without aggregating
                 # three independent engines into one timeout budget.
                 if test == "TestTokenRouteChannelMutationLockOrderDatabases":

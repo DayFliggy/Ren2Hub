@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "created_at": 1794678220.3587036,
+  "source_baseline": "db9f16442f76bccd984bf8067c54e2d50d39df2d",
+  "new_frozen_cases": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/manifest-case-proposals.json",
+  "frozen_before_current": "/home/work/ren2hub-native-b388-20261114/audit-round3-control/frozen-before-current.json",
+  "archives": [
+    {
+      "original": "model/channel_constraint_test.go",
+      "original_sha256": "bf76291bfb833def58e4bcf7bf4c56ec7e10e90bf9ee9386b67acfc8d8c3a38c",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control_round3/archive/model__channel_constraint_test.go.txt",
+      "archive_sha256": "bf76291bfb833def58e4bcf7bf4c56ec7e10e90bf9ee9386b67acfc8d8c3a38c"
+    },
+    {
+      "original": "model/channel_lock_test.go",
+      "original_sha256": "f8f09365daebb981faba56c3e92af242891fad91e7738099ab1a00cd81fc5c35",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control_round3/archive/model__channel_lock_test.go.txt",
+      "archive_sha256": "f8f09365daebb981faba56c3e92af242891fad91e7738099ab1a00cd81fc5c35"
+    },
+    {
+      "original": "service/route_affinity_test.go",
+      "original_sha256": "3670e54056ba763e1e80cc1aae398a825f34e363b5f8c4cff382a542c3b384ca",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control_round3/archive/service__route_affinity_test.go.txt",
+      "archive_sha256": "3670e54056ba763e1e80cc1aae398a825f34e363b5f8c4cff382a542c3b384ca"
+    },
+    {
+      "original": "service/route_endpoint_test.go",
+      "original_sha256": "a1830de9b8364d45750eff5c99b564ed447654190c970875fee02290a52cf3fe",
+      "archive": "scripts/testing/fixtures/known_upstream_restored/control_round3/archive/service__route_endpoint_test.go.txt",
+      "archive_sha256": "a1830de9b8364d45750eff5c99b564ed447654190c970875fee02290a52cf3fe"
+    }
+  ],
+  "assertions": [
+    {
+      "original": "model/channel_constraint_test.go::TestProviderChannelCompactPathUsesDeclaredModelRoute",
+      "preserved_normal": "supported/unsupported/missing-plugin boolean decisions unchanged",
+      "diagnostic": "TestRestoredRound3ProviderCompactFilterAttribution",
+      "transferred": "request_path attribution; native uses task_plugin_identity"
+    },
+    {
+      "original": "model/channel_lock_test.go::runChannelMutationModelsRebuild",
+      "preserved_normal": "all transaction, zero priority/weight, ability count, ownership, rollback and publication assertions; fixture models are beta,alpha,beta",
+      "diagnostic": "TestRestoredRound3AbilityModelNormalization",
+      "transferred": "historical whitespace normalization preserved across add/update and empty-name boundaries"
+    },
+    {
+      "original": "service/route_affinity_test.go::TestStrictAffinityStillRejectsUnavailableBoundChannel",
+      "preserved_normal": "disabled/deleted branch and HTTP503 assertions preserved; added actual full429 binding-retention case",
+      "diagnostic": "TestRestoredRound3StrictAffinityErrorShape",
+      "transferred": "historical custom code and human message retained in positive diagnostic"
+    },
+    {
+      "original": "service/route_endpoint_test.go::TestCompactRequestsSkipChannelsWithoutCompactSupport",
+      "preserved_normal": "native-count/AdvancedCustom/provider tests remain outside this removed top",
+      "diagnostic": "TestRestoredRound3CompactSelectionSkipsUnsupported",
+      "transferred": "complete old compact priority selection, ordinary response priority and no-supported-channel error assertions"
+    }
+  ],
+  "additional_diagnostics": [
+    "TestRestoredRound3ChannelStatusFailureRestoresCache",
+    "TestRestoredRound3PublicAbilityZeroWeight"
+  ],
+  "no_historical_assertion_reversed": true
+}

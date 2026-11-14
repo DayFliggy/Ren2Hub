@@ -1,39 +1,61 @@
 package common
 
 import (
-	"encoding/json"
 	"errors"
 
+	rootcommon "github.com/QuantumNous/new-api/common"
 	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
 )
 
-// ResolveMappedModelName is shared by dispatch and routing observations. The
-// channel mapping, including its reasoning aliases, defines the upstream model.
+// ModelMappingResolution retains the native helper's control-flow state as well
+// as the model used by dispatch and routing observations.
+type ModelMappingResolution struct {
+	Name              string
+	MappingConfigured bool
+	Mapped            bool
+	DirectSelfMapping bool
+}
+
+// ResolveMappedModelName is shared by routing observations and native counts.
+// Callers that update a request use ResolveModelMapping's native exit metadata.
 func ResolveMappedModelName(origin, mapping string) (string, bool, error) {
-	if mapping == "" || mapping == "{}" {
-		return origin, false, nil
+	result, err := ResolveModelMapping(origin, mapping)
+	if err != nil {
+		return "", false, err
+	}
+	return result.Name, result.Mapped, nil
+}
+
+// ResolveModelMapping is the single parser and traversal for channel mappings.
+// Mapped remains true when a later edge detects a cycle, matching the native
+// helper's state before it returns that error.
+func ResolveModelMapping(origin, mapping string) (ModelMappingResolution, error) {
+	result := ModelMappingResolution{Name: origin, MappingConfigured: mapping != "" && mapping != "{}"}
+	if !result.MappingConfigured {
+		return result, nil
 	}
 	var models map[string]string
-	if err := json.Unmarshal([]byte(mapping), &models); err != nil {
-		return "", false, errors.New("unmarshal_model_mapping_failed")
+	if err := rootcommon.Unmarshal([]byte(mapping), &models); err != nil {
+		return result, errors.New("unmarshal_model_mapping_failed")
 	}
-	current := origin
-	visited := map[string]bool{current: true}
+	visited := map[string]bool{origin: true}
 	for {
-		next, exists := models[current]
-		if base := hostreasoning.BaseModelName(current); (!exists || next == "") && base != current {
+		next, exists := models[result.Name]
+		if base := hostreasoning.BaseModelName(result.Name); (!exists || next == "") && base != result.Name {
 			next, exists = models[base]
 		}
 		if !exists || next == "" {
-			return current, current != origin, nil
+			return result, nil
 		}
 		if visited[next] {
-			if next == current {
-				return current, current != origin, nil
+			if next == result.Name {
+				result.DirectSelfMapping = result.Name == origin
+				return result, nil
 			}
-			return "", false, errors.New("model_mapping_contains_cycle")
+			return result, errors.New("model_mapping_contains_cycle")
 		}
 		visited[next] = true
-		current = next
+		result.Mapped = true
+		result.Name = next
 	}
 }

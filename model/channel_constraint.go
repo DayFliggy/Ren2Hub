@@ -2,7 +2,6 @@ package model
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
@@ -52,11 +51,8 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 		if filter.RequestPath == "" {
 			return true
 		}
-		if ch.Type == constant.ChannelTypeTaskPlugin && strings.HasPrefix(filter.RequestPath, "/v1/responses/compact") {
-			return providerChannelServes(ch, filter.RequestPath, modelName)
-		}
 		if !constant.IsAdvancedCustomChannel(ch.Type) {
-			return channelServesRequestPath(ch, filter.RequestPath)
+			return true
 		}
 		config := ch.GetOtherSettings().AdvancedCustom
 		return config != nil && config.SupportsPathForModel(filter.RequestPath, modelName)

@@ -110,14 +110,22 @@ func TestCatalogPriceNativeSpecializedDimensions(t *testing.T) {
 // Self-use mode is the only source of the "default" status: its 37.5
 // fallback ratio prices models that have no saved price.
 func TestCatalogPriceSelfUseFallbackIsDefault(t *testing.T) {
-	setupCatalogPricingTest(t)
+	db := setupCatalogPricingTest(t)
 	previous := operation_setting.SelfUseModeEnabled
 	operation_setting.SelfUseModeEnabled = true
 	t.Cleanup(func() { operation_setting.SelfUseModeEnabled = previous })
 	prices, err := CatalogPrices(context.Background(), []string{"not-configured"})
 	require.NoError(t, err)
 	require.Equal(t, "default", prices["not-configured"].PriceStatus)
-	require.Equal(t, map[string]string{"input": "75", "output": "75", "cache": "75", "cache_create": "75", "image": "75"}, prices["not-configured"].PricingValues)
+	require.Equal(t, map[string]string{"input": "75", "output": "75", "cache": "75", "cache_create": "93.75", "image": "75"}, prices["not-configured"].PricingValues)
+	// A saved cache-write override is still authoritative, even when the base
+	// input price comes from self-use mode rather than a saved model price.
+	require.NoError(t, db.Create(&Option{Key: "CreateCacheRatio", Value: `{"not-configured":1}`}).Error)
+	configured, err := CatalogPrices(context.Background(), []string{"not-configured"})
+	require.NoError(t, err)
+	require.Equal(t, "configured", configured["not-configured"].PriceStatus)
+	require.Equal(t, map[string]string{"input": "75", "output": "75", "cache": "75", "cache_create": "75", "image": "75"}, configured["not-configured"].PricingValues)
+
 }
 
 func TestCatalogPriceProjectsOpenAITwelveHourCacheWritePrice(t *testing.T) {

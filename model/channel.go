@@ -238,7 +238,7 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 	case constant.MultiKeyModePolling:
 		index, err := advanceChannelPolling(channel.Id, len(keys), enabledIdx)
 		if err != nil {
-			return "", 0, types.NewError(err, types.ErrorCodeGetChannelFailed)
+			return "", 0, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 		}
 		return keys[index], index, nil
 	default:

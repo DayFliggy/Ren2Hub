@@ -4,10 +4,9 @@ import (
 	"github.com/QuantumNous/new-api/types"
 )
 
-// Unconfigured cache reads and writes are priced like input tokens.
 const (
 	DefaultCacheRatio       = 1.0
-	DefaultCreateCacheRatio = 1.0
+	DefaultCreateCacheRatio = 1.25
 )
 
 var cacheRatioMap = types.NewRWMap[string, float64]()

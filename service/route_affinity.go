@@ -23,7 +23,6 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 	}
 	full := errors.Is(err, ErrConcurrencyFull)
 	if RequestPolicy(c).SessionMode == "strict" {
-		c.Set(ginKeyChannelAffinitySkipRetry, true)
 		// An unreadable limit says nothing about the bound channel; keep the binding.
 		if errors.Is(err, errConcurrencyLimitUnavailable) {
 			return nil, routeLoadFailure(c, err), true
@@ -35,7 +34,7 @@ func selectAffinityChannel(c *gin.Context, modelName string) (channel *model.Cha
 		if full {
 			status = http.StatusTooManyRequests
 		}
-		return nil, &ChannelSelectError{StatusCode: status, Code: "session_channel_unavailable", Message: "Bound session channel is unavailable"}, true
+		return nil, &ChannelSelectError{StatusCode: status, Message: "strict_session_binding_unavailable"}, true
 	}
 	if full {
 		return nil, nil, false

@@ -84,5 +84,6 @@ func updateChannelsByTag(tag string, values any, syncAbilities func(*Channel, *g
 	if err != nil {
 		return err
 	}
+	BumpSyncTopic(SyncTopicChannels)
 	return publishChannelRoutingIDs(ids)
 }

@@ -1,0 +1,51 @@
+{
+  "data": {
+    "empty_version": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "entries": [
+      {
+        "billing_details": {},
+        "cache_write_mode": "none",
+        "configured": {
+          "CompletionRatio": 4,
+          "ModelRatio": 2.5
+        },
+        "effective": {
+          "CacheRatio": 1,
+          "CompletionRatio": 4,
+          "CreateCacheRatio": 1,
+          "ImageRatio": 1,
+          "ModelRatio": 2.5
+        },
+        "model_name": "contract-chat",
+        "version": "7dc00326c6f0e9443a078c6d171ff865c479ccb5bc4a2d25b306292d5d12a468"
+      },
+      {
+        "billing_details": {},
+        "cache_write_mode": "none",
+        "configured": {
+          "ModelPrice": 0.04
+        },
+        "effective": {
+          "ModelPrice": 0.04
+        },
+        "model_name": "contract-image",
+        "version": "7a09f4aa86ddd2cac0104733d1d9ba17f33b575bd0bb5d0833b1654e029369b0"
+      }
+    ],
+    "options": {
+      "AudioCompletionRatio": "{}",
+      "AudioRatio": "{}",
+      "CacheRatio": "{}",
+      "CompletionRatio": "{\"contract-chat\":4}",
+      "CreateCacheRatio": "{}",
+      "ImageRatio": "{}",
+      "ModelPrice": "{\"contract-image\":0.04}",
+      "ModelRatio": "{\"contract-chat\":2.5}",
+      "billing_setting.billing_expr": "{}",
+      "billing_setting.billing_mode": "{}",
+      "billing_setting.plugin_billing_expr": "{}"
+    }
+  },
+  "message": "",
+  "success": true
+}
